@@ -28,11 +28,12 @@ import type { WorkingNode } from './recovery'
 import { blueprintInternals } from '../internal/contract'
 import { EMPTY_ISSUES } from '../issue'
 import { createWidgetSystemRuntime } from '../runtime/index'
+import { freezeIssueSnapshot } from '../runtime/issues'
 import { resolveDependencies } from './deps'
 import { runGraphAnalysis } from './graph'
 import { computeSemanticOrder, recoverBlueprint } from './recovery'
 import { runStructureValidation } from './structure'
-import { createNavigator } from './view'
+import { createCompileFacade, createNavigator } from './view'
 
 function finalizeIssuesByNode(
 	nodeIdByPublicNode: ReadonlyMap<BlueprintWidgetNode, InternalNodeId>,
@@ -93,16 +94,28 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 	const { nodes, rootNodeId, nodeIdByPublicNode, nodeIdsByWidgetId, finalIssues, issuesByNode } = recovery
 
 	const semanticOrder = computeSemanticOrder(nodes, rootNodeId)
+	// `navigator` (full public nodes) backs only the *finalized* Blueprint's own navigation methods
+	// below. Compile-time callbacks (`validateStructure`, `registerDeps`) never see it directly — they
+	// receive `compileFacade.view`, a genuinely restricted and frozen runtime facade, so a JS/`any`
+	// callback cannot reach `getIssues()` or corrupt the view for later callbacks in this compile pass.
 	const navigator = createNavigator<Plugins>(nodes, nodeIdByPublicNode, nodeIdsByWidgetId, rootNodeId)
+	const compileFacade = createCompileFacade<Plugins>(nodes, nodeIdByPublicNode, nodeIdsByWidgetId, rootNodeId)
 
-	runStructureValidation(system as unknown as WidgetSystem<AnyWidgetPluginTuple>, nodes, semanticOrder, nodeIdByPublicNode, navigator, finalIssues)
+	runStructureValidation(system as unknown as WidgetSystem<AnyWidgetPluginTuple>, nodes, semanticOrder, compileFacade, finalIssues)
 
-	const { edges, directWriteSeeds } = resolveDependencies(nodes, semanticOrder, rootNodeId, nodeIdsByWidgetId, navigator, finalIssues)
+	const { edges, directWriteSeeds } = resolveDependencies(nodes, semanticOrder, rootNodeId, nodeIdsByWidgetId, compileFacade, finalIssues)
 
 	const analysis = runGraphAnalysis(nodes, semanticOrder, edges, directWriteSeeds, finalIssues)
 
 	finalizeIssuesByNode(nodeIdByPublicNode, finalIssues, issuesByNode)
-	Object.freeze(finalIssues)
+
+	// Blueprint diagnostics are an immutable compiled snapshot: freeze every per-node issue array (the
+	// same array `node.getIssues()` closures over) plus the aggregate array, deep-freezing each issue and
+	// its framework-owned `source` structure exactly once (idempotent — the same issue object commonly
+	// appears in both places). Caller/plugin-owned payload values (e.g. config `input`) are left alone.
+	for (const list of issuesByNode.values())
+		freezeIssueSnapshot(list)
+	freezeIssueSnapshot(finalIssues)
 
 	const status: WidgetSystemBlueprintStatus = finalIssues.length === 0 ? 'valid' : 'invalid'
 	const compiledNodes = buildCompiledNodes(nodes, issuesByNode)

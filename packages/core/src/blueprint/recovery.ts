@@ -108,11 +108,14 @@ function buildNode(
 	}
 	const publicNode = shell as unknown as BlueprintWidgetNode
 
-	const location: WidgetLocation = placement.kind === 'root'
+	// `WidgetLocation` is framework-owned topology metadata, not caller-owned source data (unlike
+	// `rawDefinition`): `getLocation()` returns this exact object, so it is frozen up front rather than
+	// left mutable (Blueprint immutability contract).
+	const location: WidgetLocation = Object.freeze(placement.kind === 'root'
 		? { type: 'root' }
 		: placement.kind === 'slot'
 			? { type: 'slot', parent: parentPublicNode as ResolvedBlueprintWidgetNode, slot: placement.slot, index: placement.index }
-			: { type: 'raw-slot', parent: parentPublicNode!, slot: placement.slot, index: placement.index }
+			: { type: 'raw-slot', parent: parentPublicNode!, slot: placement.slot, index: placement.index })
 
 	const working: WorkingNode = {
 		nodeId,

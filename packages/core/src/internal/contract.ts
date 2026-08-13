@@ -236,15 +236,17 @@ export type WidgetLocationView<Plugins extends AnyWidgetPluginTuple = AnyWidgetP
  * Read-only semantic view handed to compile-time callbacks (`validateStructure`, `registerDeps`).
  *
  * It intentionally exposes no `getIssues()`, no final status, and no runtime machinery, because
- * compilation is still in progress.
+ * compilation is still in progress. Every field is `readonly` — the concrete runtime object the
+ * compiler hands out is additionally frozen, so plugin code cannot reassign a navigation method to
+ * corrupt the view later callbacks in the same compile pass see.
  */
 export interface BlueprintCompileView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly root: BlueprintWidgetNodeView<Plugins>
-	getWidget: (id: WidgetId) => BlueprintWidgetNodeView<Plugins> | null
-	getParent: (node: BlueprintWidgetNodeView<Plugins>) => BlueprintWidgetNodeView<Plugins> | null
-	getLocation: (node: BlueprintWidgetNodeView<Plugins>) => WidgetLocationView<Plugins> | null
-	getChildren: (node: BlueprintWidgetNodeView<Plugins>) => readonly BlueprintWidgetNodeView<Plugins>[]
-	getChildrenAt: (node: BlueprintWidgetNodeView<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNodeView<Plugins>[]
+	readonly getWidget: (id: WidgetId) => BlueprintWidgetNodeView<Plugins> | null
+	readonly getParent: (node: BlueprintWidgetNodeView<Plugins>) => BlueprintWidgetNodeView<Plugins> | null
+	readonly getLocation: (node: BlueprintWidgetNodeView<Plugins>) => WidgetLocationView<Plugins> | null
+	readonly getChildren: (node: BlueprintWidgetNodeView<Plugins>) => readonly BlueprintWidgetNodeView<Plugins>[]
+	readonly getChildrenAt: (node: BlueprintWidgetNodeView<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNodeView<Plugins>[]
 }
 
 /**

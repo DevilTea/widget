@@ -19,6 +19,97 @@ export function toIssueSnapshot<Issue>(issues: readonly Issue[]): readonly Issue
 	return issues.length > 0 ? issues : EMPTY_ISSUES
 }
 
+// -------------------------------------------------------------------------------------------------
+// Shared issue-snapshot immutability helpers
+//
+// A completed non-empty issue snapshot is an immutable final artifact (issue #10 issue-snapshot
+// contract): it is stored as a primitive's latest `getIssues()` state *and* returned as
+// `ExecutionResult.failure.issues` for the very same call (Runtime side), or as a node's diagnostic
+// snapshot (Blueprint side), so an external mutation through one view must not silently corrupt the
+// other. `deepFreezeIssue`/`freezeIssueSnapshot` are intentionally generic (`unknown`-shaped, no
+// Runtime-only or Blueprint-only type) so both the Runtime issue-construction path (this module) and
+// the Blueprint issue-finalization path can share one canonical implementation.
+// -------------------------------------------------------------------------------------------------
+
+/** Freezes `value` in place when it is an array; a no-op otherwise (including `undefined`). */
+function freezeIfArray(value: unknown): void {
+	if (Array.isArray(value))
+		Object.freeze(value)
+}
+
+/** Freezes `value` in place when it is a non-null object; a no-op otherwise. */
+function freezeIfObject(value: unknown): void {
+	if (typeof value === 'object' && value !== null)
+		Object.freeze(value)
+}
+
+/**
+ * Freezes the `related` array itself and each location/reference wrapper object inside it (shallowly —
+ * a wrapper's own further-nested fields, e.g. a Blueprint node a location wrapper merely references,
+ * belong to whichever layer owns that object and are left untouched here).
+ */
+function freezeRelatedField(related: unknown): void {
+	if (!Array.isArray(related))
+		return
+	for (const location of related)
+		freezeIfObject(location)
+	Object.freeze(related)
+}
+
+/**
+ * Freezes a compiled `BlueprintDependencyReference` structural wrapper: the reference object itself
+ * plus its nested `target`/`operation` wrapper objects. Never touches anything beyond that shape.
+ */
+function freezeDependencyField(dependency: unknown): void {
+	if (typeof dependency !== 'object' || dependency === null)
+		return
+	const record = dependency as Record<string, unknown>
+	freezeIfObject(record.target)
+	freezeIfObject(record.operation)
+	Object.freeze(dependency)
+}
+
+/**
+ * Recursively freezes the framework-owned *diagnostic structure* of one Issue: the issue object
+ * itself, its `source` object, and the known framework-owned structural wrapper fields inside
+ * `source` — `path` (an array of `PropertyKey`s), `related` (an array of location/reference wrapper
+ * objects) and `dependency` (a compiled dependency reference, plus its nested `target`/`operation`
+ * wrappers).
+ *
+ * Deliberately does **not** freeze arbitrary caller/plugin-owned payload values carried purely for
+ * diagnostic display — `candidate`, `result`, `args`, `input`, `received` — nor any object a
+ * structural wrapper merely *references* but does not own (e.g. a Blueprint node embedded in a
+ * location wrapper, or a Blueprint node stored directly on a `source`). Idempotent: freezing an
+ * already-frozen value is a safe no-op, so this may be called more than once on the same issue.
+ */
+export function deepFreezeIssue<T>(issue: T): T {
+	if (typeof issue !== 'object' || issue === null)
+		return issue
+
+	const source = (issue as { source?: unknown }).source
+	if (typeof source === 'object' && source !== null) {
+		const sourceRecord = source as Record<string, unknown>
+		freezeIfArray(sourceRecord.path)
+		freezeRelatedField(sourceRecord.related)
+		freezeDependencyField(sourceRecord.dependency)
+		Object.freeze(source)
+	}
+
+	return Object.freeze(issue)
+}
+
+/**
+ * Freezes an entire completed issue snapshot in place: every issue via {@link deepFreezeIssue}, then
+ * the array itself. Returns the very same array reference (never a copy), since callers rely on that
+ * identity (e.g. `getIssues()` returning the exact array stored in a signal / the exact array also
+ * returned as `ExecutionResult.failure.issues`).
+ */
+export function freezeIssueSnapshot<T>(issues: readonly T[]): readonly T[] {
+	for (const issue of issues)
+		deepFreezeIssue(issue)
+	return Object.freeze(issues)
+}
+
 export function buildStateValidationIssue(
 	widgetId: WidgetId,
 	key: WidgetMemberKey,

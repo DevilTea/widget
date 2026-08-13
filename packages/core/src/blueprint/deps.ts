@@ -14,9 +14,10 @@ import type {
 	ResolvedBlueprintWidgetNode,
 } from '../internal/contract'
 import type { BlueprintDependencyMember, BlueprintDependencyReference, BlueprintIssue } from '../issue'
+import type { AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetId } from '../types'
 import type { WorkingNode } from './recovery'
-import type { Navigator } from './view'
+import type { CompileFacade } from './view'
 import { createDependencyBuilder, isDepExpression, readDepExpression } from '../dep'
 import { compiledDependencyBrand } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
@@ -221,7 +222,7 @@ export function resolveDependencies(
 	semanticOrder: readonly InternalNodeId[],
 	rootNodeId: InternalNodeId,
 	nodeIdsByWidgetId: ReadonlyMap<WidgetId, readonly InternalNodeId[]>,
-	navigator: Navigator,
+	compileFacade: CompileFacade<AnyWidgetPluginTuple>,
 	finalIssues: BlueprintIssue[],
 ): DependencyResolutionResult {
 	const edges = new Map<string, GraphEdge>()
@@ -251,8 +252,8 @@ export function resolveDependencies(
 			let rawDeps: unknown = {}
 			if (propertyDefinition.registerDeps !== undefined) {
 				rawDeps = propertyDefinition.registerDeps({
-					widget: node.publicNode,
-					blueprint: navigator,
+					widget: compileFacade.facadeForNodeId(nodeId),
+					blueprint: compileFacade.view,
 					dep,
 					...configFrag,
 				})
@@ -281,8 +282,8 @@ export function resolveDependencies(
 			let rawDeps: unknown = {}
 			if (methodDefinition.registerDeps !== undefined) {
 				rawDeps = methodDefinition.registerDeps({
-					widget: node.publicNode,
-					blueprint: navigator,
+					widget: compileFacade.facadeForNodeId(nodeId),
+					blueprint: compileFacade.view,
 					dep,
 					...configFrag,
 				})

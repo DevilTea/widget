@@ -40,6 +40,27 @@
  * only reachable via a JS/`any` contract escape); the latter must throw as a plugin implementation bug
  * instead of being silently accepted as empty deps.
  *
+ * finding 3773890334 (blueprint/view.ts:23): the round-2 compile-view type fix had no runtime
+ * counterpart — compile-time callbacks physically received the original navigator and full public
+ * nodes, so a JS/`any` callback could still call `getIssues()` mid-compilation, and the navigator
+ * object itself was neither restricted nor frozen, so plugin code could reassign a navigation method
+ * (`ctx.blueprint.getWidget = ...`) and corrupt the view every later callback in the same compile pass
+ * receives. `createCompileFacade` (`./view.ts`) now builds a real, frozen, restricted facade (no
+ * `getIssues` anywhere, slots/`getLocation().parent` are themselves facades) shared by every
+ * compile-time callback in one `compileBlueprint()` call.
+ *
+ * finding 3773890344 (blueprint/recovery.ts:111): `WidgetLocation` records were left mutable even
+ * though `getLocation()` returns the exact stored object; a caller casting away `readonly` could
+ * mutate topology metadata observed by every later `getLocation()` call. Now frozen at construction.
+ *
+ * finding 3773890349 (blueprint/index.ts:105): freezing only the aggregate `finalIssues` array left
+ * per-node `getIssues()` arrays, and the issue/`source` objects themselves, mutable — a caller could
+ * permanently rewrite a node's diagnostic snapshot or its structured `source` fields through either
+ * view. Now both `issuesByNode`'s per-node arrays and the aggregate array are frozen via the
+ * Runtime-side `freezeIssueSnapshot`/`deepFreezeIssue` helpers (shared, generic, imported from
+ * `../runtime/issues`), which freeze the framework-owned diagnostic structure without touching
+ * caller/plugin-owned payload values.
+ *
  * Only the public entry (`../index`) is used; no internal module or `blueprintInternals` access.
  */
 
@@ -684,5 +705,236 @@ describe('registerDeps: present-but-malformed output vs an omitted callback (fin
 
 		expect(blueprint.status)
 			.toBe('valid')
+	})
+})
+
+// -------------------------------------------------------------------------------------------------
+// finding 3773890334 — real, frozen, restricted runtime compile facade
+// -------------------------------------------------------------------------------------------------
+
+describe('the compile-time facade is genuinely restricted and frozen at runtime, not just narrowly typed (finding 3773890334)', () => {
+	it('physically has no getIssues anywhere: widget, blueprint.root, slot children, and getLocation(...).parent', () => {
+		const checks: Record<string, boolean> = {}
+
+		interface LeafInterfaces {}
+
+		const leafPlugin = createWidgetPlugin('facade-leaf')
+			.interfaces<LeafInterfaces>()
+			.done()
+
+		interface ListInterfaces {
+			slots: 'items'
+		}
+
+		const listPlugin = createWidgetPlugin('facade-list')
+			.interfaces<ListInterfaces>()
+			.slots(
+				{
+					items: {
+						validateStructure: (ctx) => {
+							checks.slotWidgetHasNoGetIssues = (ctx.widget as unknown as { getIssues?: unknown }).getIssues === undefined
+							checks.slotChildrenHaveNoGetIssues = ctx.children.every(child => (child as unknown as { getIssues?: unknown }).getIssues === undefined)
+						},
+					},
+				},
+				(ctx) => {
+					checks.pluginWidgetHasNoGetIssues = (ctx.widget as unknown as { getIssues?: unknown }).getIssues === undefined
+					checks.rootHasNoGetIssues = (ctx.blueprint.root as unknown as { getIssues?: unknown }).getIssues === undefined
+
+					const firstChild = ctx.blueprint.getChildrenAt(ctx.widget, 'items')[0]
+					if (firstChild !== undefined) {
+						const location = ctx.blueprint.getLocation(firstChild)
+						checks.locationParentHasNoGetIssues = location !== null
+							&& location.type !== 'root'
+							&& (location.parent as unknown as { getIssues?: unknown }).getIssues === undefined
+					}
+				},
+			)
+			.done()
+
+		const system = createWidgetSystem({ plugins: [listPlugin, leafPlugin] })
+		system.createBlueprint({
+			id: 'root',
+			type: 'facade-list',
+			slots: { items: [{ id: 'child', type: 'facade-leaf' }] },
+		})
+
+		expect(checks.slotWidgetHasNoGetIssues)
+			.toBe(true)
+		expect(checks.slotChildrenHaveNoGetIssues)
+			.toBe(true)
+		expect(checks.pluginWidgetHasNoGetIssues)
+			.toBe(true)
+		expect(checks.rootHasNoGetIssues)
+			.toBe(true)
+		expect(checks.locationParentHasNoGetIssues)
+			.toBe(true)
+	})
+
+	it('is frozen: reassigning a navigation method throws, and later callbacks in the same compile pass see the unpolluted view', () => {
+		let assignmentThrew = false
+		let laterCallbackSawWorkingGetWidget: boolean | undefined
+
+		interface ContainerInterfaces {
+			slots: 'child'
+		}
+
+		const containerPlugin = createWidgetPlugin('facade-freeze-container')
+			.interfaces<ContainerInterfaces>()
+			.slots(
+				{ child: {} },
+				(ctx) => {
+					try {
+						// Only reachable through a JS/`any` contract escape: the type is `readonly`.
+						;(ctx.blueprint as unknown as { getWidget: unknown }).getWidget = () => null
+					}
+					catch (error) {
+						assignmentThrew = error instanceof TypeError
+					}
+				},
+			)
+			.done()
+
+		interface LeafInterfaces {
+			properties: {
+				probe: boolean
+			}
+		}
+
+		const leafPlugin = createWidgetPlugin('facade-freeze-leaf')
+			.interfaces<LeafInterfaces>()
+			.properties(section => section.probe({
+				// `registerDeps` runs in a later compile pipeline stage than structure validation, but
+				// shares the exact same frozen facade instance for the whole `compileBlueprint()` call.
+				registerDeps: ({ blueprint }) => {
+					laterCallbackSawWorkingGetWidget = blueprint.getWidget('root') !== null
+					return {}
+				},
+				compute: () => true,
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [containerPlugin, leafPlugin] })
+		system.createBlueprint({
+			id: 'root',
+			type: 'facade-freeze-container',
+			slots: { child: [{ id: 'leaf', type: 'facade-freeze-leaf' }] },
+		})
+
+		expect(assignmentThrew)
+			.toBe(true)
+		expect(laterCallbackSawWorkingGetWidget)
+			.toBe(true)
+	})
+})
+
+// -------------------------------------------------------------------------------------------------
+// finding 3773890344 — WidgetLocation records are frozen
+// -------------------------------------------------------------------------------------------------
+
+describe('widgetLocation records are frozen (finding 3773890344)', () => {
+	interface ContainerInterfaces {
+		slots: 'child'
+	}
+
+	interface LeafInterfaces {}
+
+	const containerPlugin = createWidgetPlugin('location-freeze-container')
+		.interfaces<ContainerInterfaces>()
+		.slots({ child: {} })
+		.done()
+
+	const leafPlugin = createWidgetPlugin('location-freeze-leaf')
+		.interfaces<LeafInterfaces>()
+		.done()
+
+	const system = createWidgetSystem({ plugins: [containerPlugin, leafPlugin] })
+
+	it('is frozen, rejects mutation through a cast, and getLocation stays consistent afterward', () => {
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'location-freeze-container',
+			slots: { child: [{ id: 'leaf', type: 'location-freeze-leaf' }] },
+		})
+		const child = blueprint.getChildrenAt(blueprint.root, 'child')[0]!
+		const location = blueprint.getLocation(child)
+
+		expect(location)
+			.not.toBeNull()
+		expect(Object.isFrozen(location))
+			.toBe(true)
+
+		expect(() => {
+			(location as unknown as { slot: string }).slot = 'other'
+		})
+			.toThrow(TypeError)
+
+		const locationAgain = blueprint.getLocation(child)
+		expect(locationAgain)
+			.toBe(location)
+		expect(locationAgain?.type === 'slot' ? locationAgain.slot : undefined)
+			.toBe('child')
+	})
+})
+
+// -------------------------------------------------------------------------------------------------
+// finding 3773890349 — Blueprint issue/source structures are immutable
+// -------------------------------------------------------------------------------------------------
+
+describe('blueprint issue/source structures are immutable (finding 3773890349)', () => {
+	interface LeafInterfaces {}
+
+	const leafPlugin = createWidgetPlugin('issue-freeze-leaf')
+		.interfaces<LeafInterfaces>()
+		.done()
+
+	const system = createWidgetSystem({ plugins: [leafPlugin] })
+
+	it('freezes per-node getIssues() arrays, the aggregate array, and the issue/source structures, at both entry points', () => {
+		const blueprint = system.createBlueprint({ type: 'issue-freeze-leaf' })
+
+		expect(blueprint.status)
+			.toBe('invalid')
+
+		const nodeIssues = blueprint.root.getIssues()
+		expect(nodeIssues.length)
+			.toBeGreaterThan(0)
+		expect(Object.isFrozen(nodeIssues))
+			.toBe(true)
+		expect(() => (nodeIssues as unknown as unknown[]).push({}))
+			.toThrow(TypeError)
+
+		const aggregateIssues = blueprint.getCollectedIssues()
+		expect(Object.isFrozen(aggregateIssues))
+			.toBe(true)
+		expect(() => (aggregateIssues as unknown as unknown[]).push({}))
+			.toThrow(TypeError)
+
+		const issue = nodeIssues[0]!
+		expect(Object.isFrozen(issue))
+			.toBe(true)
+		expect(Object.isFrozen(issue.source))
+			.toBe(true)
+		expect(() => {
+			(issue as unknown as { message: string }).message = 'mutated'
+		})
+			.toThrow(TypeError)
+		expect(() => {
+			(issue.source as unknown as Record<string, unknown>).path = ['mutated']
+		})
+			.toThrow(TypeError)
+
+		const path = (issue.source as unknown as { path?: unknown[] }).path
+		if (path !== undefined) {
+			expect(Object.isFrozen(path))
+				.toBe(true)
+			expect(() => path.push('extra'))
+				.toThrow(TypeError)
+		}
+
+		// The same issue object is shared identically between the node-local and aggregate views (a
+		// mutation through either would otherwise silently corrupt the other).
+		expect(aggregateIssues)
+			.toContain(issue)
 	})
 })

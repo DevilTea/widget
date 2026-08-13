@@ -25,7 +25,7 @@ import type { MethodPrimitive } from './method'
 import type { PropertyPrimitive } from './property'
 import type { StatePrimitive } from './state'
 import { isCompiledDependency } from '../internal/contract'
-import { buildMethodDependencyIssue, buildPropertyDependencyIssue } from './issues'
+import { buildMethodDependencyIssue, buildPropertyDependencyIssue, deepFreezeIssue, freezeIssueSnapshot } from './issues'
 import { assertSyncValue } from './sync'
 
 export interface PrimitiveRegistryEntry {
@@ -188,8 +188,13 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 				const refined = applyRefinements(raw, leaf.refinements)
 				if (!refined.ok) {
 					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
+					// Deep-freeze both the issue and the single-element array *before* inserting it into
+					// the active collector and returning it to plugin code — otherwise plugin code could
+					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
+					// object would then get committed as the consumer's own latest snapshot.
+					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
 					reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, refined.received))
-					return { success: false, issues: [issue] } satisfies ExecutionResult<never, unknown>
+					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
 			}
@@ -225,8 +230,13 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 				const refined = applyRefinements(targetResult.value, leaf.refinements)
 				if (!refined.ok) {
 					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
+					// Deep-freeze both the issue and the single-element array *before* inserting it into
+					// the active collector and returning it to plugin code — otherwise plugin code could
+					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
+					// object would then get committed as the consumer's own latest snapshot.
+					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
 					reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, refined.received))
-					return { success: false, issues: [issue] } satisfies ExecutionResult<never, unknown>
+					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
 			}
@@ -247,8 +257,13 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 				const refined = applyRefinements(targetResult.value, leaf.refinements)
 				if (!refined.ok) {
 					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
+					// Deep-freeze both the issue and the single-element array *before* inserting it into
+					// the active collector and returning it to plugin code — otherwise plugin code could
+					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
+					// object would then get committed as the consumer's own latest snapshot.
+					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
 					reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, refined.received))
-					return { success: false, issues: [issue] } satisfies ExecutionResult<never, unknown>
+					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
 			}
@@ -267,11 +282,21 @@ function wrapTargetFailure(
 	related: RuntimeIssueLocation,
 	leafId: number,
 ): readonly [unknown, ...unknown[]] {
-	const wrapped = targetIssues.map((targetIssue) => {
+	// Build + deep-freeze every wrapped issue (and pair it with its dedupe anchor) before reporting any
+	// of them to the active collector or returning the array to plugin code — same ordering rationale
+	// as the refinement-rejection branches above: nothing outside this function ever observes a
+	// not-yet-frozen wrapped issue.
+	const pairs = targetIssues.map((targetIssue) => {
 		const issue = consumerDependencyIssue(params, reference, targetIssue.message, undefined, related)
-		reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, targetIssue))
-		return issue
+		deepFreezeIssue(issue)
+		return { issue, targetIssue }
 	})
+	const wrapped = pairs.map(pair => pair.issue)
+	freezeIssueSnapshot(wrapped)
+
+	for (const { issue, targetIssue } of pairs)
+		reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, targetIssue))
+
 	return wrapped as unknown as readonly [unknown, ...unknown[]]
 }
 

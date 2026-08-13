@@ -14,7 +14,7 @@ import type { CompiledBlueprint, InternalNodeId } from '../internal/contract'
 import type { RuntimeLevelIssue } from '../issue'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import { readWidgetPluginDefinition } from '../plugin'
-import { buildKeyStateOverrideIssue, buildTopLevelStateOverrideIssue, buildWidgetStateOverrideIssue } from './issues'
+import { buildKeyStateOverrideIssue, buildTopLevelStateOverrideIssue, buildWidgetStateOverrideIssue, freezeIssueSnapshot } from './issues'
 
 export interface OverrideResolution {
 	readonly runtimeLevelIssues: readonly RuntimeLevelIssue[]
@@ -34,11 +34,21 @@ export function resolveStateOverrides(
 	const candidatesByNodeId = new Map<InternalNodeId, Map<WidgetMemberKey, unknown>>()
 
 	if (overrideStateDefaults === undefined)
-		return { runtimeLevelIssues, candidatesByNodeId }
+		// `runtimeLevelIssues` becomes `OverrideResolution.runtimeLevelIssues`, which the Runtime factory
+		// stores as-is and later returns directly from `runtime.getIssues()`; canonicalize it here (deep
+		// -freeze the array and every issue's framework-owned structure) so no caller mutation can ever
+		// corrupt that shared reference after Runtime creation (issue #10 Runtime diagnostic snapshot
+		// semantics).
+		return { runtimeLevelIssues: freezeIssueSnapshot(runtimeLevelIssues), candidatesByNodeId }
 
 	if (!isPlainRecord(overrideStateDefaults)) {
 		runtimeLevelIssues.push(buildTopLevelStateOverrideIssue('The "overrideStateDefaults" option is not a usable override record.'))
-		return { runtimeLevelIssues, candidatesByNodeId }
+		// `runtimeLevelIssues` becomes `OverrideResolution.runtimeLevelIssues`, which the Runtime factory
+		// stores as-is and later returns directly from `runtime.getIssues()`; canonicalize it here (deep
+		// -freeze the array and every issue's framework-owned structure) so no caller mutation can ever
+		// corrupt that shared reference after Runtime creation (issue #10 Runtime diagnostic snapshot
+		// semantics).
+		return { runtimeLevelIssues: freezeIssueSnapshot(runtimeLevelIssues), candidatesByNodeId }
 	}
 
 	for (const widgetId of Object.keys(overrideStateDefaults)) {

@@ -19,6 +19,7 @@
  */
 
 import type { IssueCollector } from '../issue'
+import { freezeIssueSnapshot } from './issues'
 
 type CollectorEntry<RelativeInput, FinalIssue>
 	= | { readonly kind: 'relative', readonly input: RelativeInput }
@@ -63,15 +64,11 @@ export function createOperationCollector<RelativeInput, FinalIssue>(): Operation
 			// A completed non-empty issue snapshot is an immutable final artifact (issue #10 issue-
 			// snapshot contract): it is stored as the primitive's latest `getIssues()` state *and*
 			// returned as `ExecutionResult.failure.issues` for the very same call, so an external
-			// mutation of one must not silently corrupt the other. Each individual issue object is
-			// frozen too (cheap, and closes the same hazard one level down); `Object.freeze` on a
-			// non-object value is a documented no-op, so this stays safe even if `FinalIssue` were ever
-			// a primitive.
-			const finalized = entries.map((entry) => {
-				const issue = entry.kind === 'relative' ? toFinalIssue(entry.input) : entry.issue
-				return Object.freeze(issue)
-			})
-			return Object.freeze(finalized)
+			// mutation of one must not silently corrupt the other. `freezeIssueSnapshot` deep-freezes
+			// each issue's framework-owned structure (not just the top-level issue object) plus the
+			// array itself.
+			const finalized = entries.map(entry => entry.kind === 'relative' ? toFinalIssue(entry.input) : entry.issue)
+			return freezeIssueSnapshot(finalized)
 		},
 	}
 }
