@@ -29,6 +29,7 @@ import { createMethodPrimitive } from './method'
 import { resolveStateOverrides } from './override'
 import { createPropertyPrimitive } from './property'
 import { createStatePrimitive } from './state'
+import { assertSyncValue } from './sync'
 import { buildRuntimeWidget } from './widget'
 
 export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
@@ -107,6 +108,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			}
 			else if (member.definition.default) {
 				candidate = member.definition.default(buildConfigFragment())
+				assertSyncValue(candidate, `State "${key}"'s default`)
 				hasCandidate = true
 			}
 

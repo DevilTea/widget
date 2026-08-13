@@ -30,6 +30,7 @@ import type { WidgetSystem } from '../system'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import { EMPTY_ISSUES } from '../issue'
 import { readWidgetPluginDefinition } from '../plugin'
+import { assertSyncValue } from '../runtime/sync'
 import { configIssue, createCollector, definitionIssue, widgetLocation } from './issues'
 
 /**
@@ -179,15 +180,19 @@ function buildNode(
 		if (definition.config !== null) {
 			const hasConfig = hasOwn(raw, 'config')
 			if (!hasConfig) {
+				const resolved = definition.config.resolve(null)
+				assertSyncValue(resolved, 'config.resolve')
 				working.rawConfig = null
-				working.config = definition.config.resolve(null)
+				working.config = resolved
 			}
 			else {
 				const rawConfigValue = raw.config
 				const { collector, items } = createCollector<{ message: string, path?: readonly PropertyKey[] }>()
 				let ok = false
 				try {
-					ok = definition.config.validate(rawConfigValue, collector)
+					const rawValidateResult: unknown = definition.config.validate(rawConfigValue, collector)
+					assertSyncValue(rawValidateResult, 'config.validate')
+					ok = rawValidateResult as boolean
 				}
 				catch (error) {
 					finalizeShell(shell, working)
@@ -196,8 +201,10 @@ function buildNode(
 				}
 
 				if (ok && items.length === 0) {
+					const resolved = definition.config.resolve(rawConfigValue)
+					assertSyncValue(resolved, 'config.resolve')
 					working.rawConfig = rawConfigValue
-					working.config = definition.config.resolve(rawConfigValue)
+					working.config = resolved
 				}
 				else {
 					if (items.length === 0)
@@ -206,8 +213,10 @@ function buildNode(
 					for (const item of items)
 						localIssues.push(configIssue(publicNode as ResolvedBlueprintWidgetNode, item.message, rawConfigValue, item.path))
 
+					const resolved = definition.config.resolve(null)
+					assertSyncValue(resolved, 'config.resolve')
 					working.rawConfig = null
-					working.config = definition.config.resolve(null)
+					working.config = resolved
 				}
 			}
 		}
@@ -291,13 +300,18 @@ function recoverSlots(
 		const slotValue = rawSlotsValue[slotName]
 		const isDeclared = declaredSlots !== null && declaredSlots.has(slotName)
 
+		// "not declared" and "malformed value" are independent facts (COMMENT amendment on
+		// coexisting definition diagnostics): a resolved plugin that has slots capability but does not
+		// declare this particular slot name still gets its own ['slots', slotName] issue even when the
+		// raw value is also malformed. Neither issue suppresses the other, and a malformed value never
+		// recovers children regardless.
+		if (declaredSlots !== null && !isDeclared)
+			localIssues.push(definitionIssue(publicNode, `Widget slot "${slotName}" is not declared by its plugin.`, ['slots', slotName]))
+
 		if (!Array.isArray(slotValue)) {
 			localIssues.push(definitionIssue(publicNode, `Widget slot "${slotName}" must be an array.`, ['slots', slotName]))
 			continue
 		}
-
-		if (declaredSlots !== null && !isDeclared)
-			localIssues.push(definitionIssue(publicNode, `Widget slot "${slotName}" is not declared by its plugin.`, ['slots', slotName]))
 
 		const childNodeIds: InternalNodeId[] = []
 		const placementKind = isDeclared ? 'slot' as const : 'raw-slot' as const
@@ -326,7 +340,11 @@ function finalizeSlotsAndFreeze(ctx: BuildContext): void {
 	for (const node of ctx.nodes) {
 		const shell = node.publicNode as unknown as Record<string, unknown>
 		if (node.resolved) {
-			const slots: Record<string, readonly BlueprintWidgetNode[]> = {}
+			// Slot names are plugin-declared, arbitrary strings, including special JavaScript names
+			// (`__proto__`, `constructor`, ...); `Object.create(null)` keeps every slot an own,
+			// prototype-safe data property on the public semantic `.slots` map (same rationale as
+			// `blueprint/deps.ts`'s `walkDeps` object branch).
+			const slots: Record<string, readonly BlueprintWidgetNode[]> = Object.create(null)
 			for (const [slotName, childIds] of node.semanticSlots)
 				slots[slotName] = Object.freeze(childIds.map(id => ctx.nodes[id]!.publicNode))
 

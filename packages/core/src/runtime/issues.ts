@@ -102,12 +102,23 @@ export function buildMethodResultIssue(
 	return { source, message: input.message }
 }
 
+/**
+ * Presence-carrying box for the dependency `received` field: `undefined` is itself a valid rejected
+ * value, so field presence must be tracked separately from the value it carries — an omitted box means
+ * "no `received` field at all" (a wrapped target failure); a box whose `value` happens to be
+ * `undefined` still means "emit `received: undefined` as an own property" (a refinement rejecting an
+ * actual `undefined` candidate).
+ */
+export interface ReceivedBox {
+	readonly value: unknown
+}
+
 export interface DependencyIssueParams {
 	readonly widgetId: WidgetId
 	readonly name: WidgetMemberKey
 	readonly dependency: BlueprintDependencyReference
 	readonly message: string
-	readonly received?: unknown
+	readonly received?: ReceivedBox
 	readonly related: RuntimeIssueLocation
 }
 
@@ -127,7 +138,7 @@ export function buildPropertyDependencyIssue(params: DependencyIssueParams): Run
 		widgetId: params.widgetId,
 		name: params.name,
 		dependency: params.dependency,
-		...(params.received === undefined ? {} : { received: params.received }),
+		...(params.received === undefined ? {} : { received: params.received.value }),
 		related: [params.related],
 	}
 	return { source, message: params.message }
@@ -139,7 +150,7 @@ export function buildMethodDependencyIssue(params: DependencyIssueParams): Runti
 		widgetId: params.widgetId,
 		name: params.name,
 		dependency: params.dependency,
-		...(params.received === undefined ? {} : { received: params.received }),
+		...(params.received === undefined ? {} : { received: params.received.value }),
 		related: [params.related],
 	}
 	return { source, message: params.message }

@@ -5,8 +5,8 @@
 
 import type {
 	BlueprintPropertyIssueLocation,
-	BlueprintStructureIssueLocation,
 	BlueprintStructureIssueSource,
+	RelativeStructureIssueLocation,
 	RelativeSystemStructureIssueInput,
 	WidgetInterfaces,
 } from '../index'
@@ -213,11 +213,14 @@ describe('structure validation scopes', () => {
 })
 
 describe('type contract: structure locations', () => {
-	it('system-level location/related accept only widget, slot, and slot-child locations', () => {
+	// Regression for finding 3773310859: a system-level `validateStructure` author only ever holds
+	// compile-time node views (from `ctx.blueprint`'s queries), which have no `getIssues()`; the
+	// location/related types accept exactly that view shape, not the full finalized node shape.
+	it('system-level location/related accept only widget, slot, and slot-child locations, carrying compile-time node views', () => {
 		expectTypeOf<RelativeSystemStructureIssueInput['location']>()
-			.toEqualTypeOf<BlueprintStructureIssueLocation>()
+			.toEqualTypeOf<RelativeStructureIssueLocation>()
 		expectTypeOf<NonNullable<RelativeSystemStructureIssueInput['related']>[number]>()
-			.toEqualTypeOf<BlueprintStructureIssueLocation>()
+			.toEqualTypeOf<RelativeStructureIssueLocation>()
 
 		const propertyLocation = { type: 'property', node: {}, name: 'x' } as BlueprintPropertyIssueLocation
 

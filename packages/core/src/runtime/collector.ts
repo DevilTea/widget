@@ -8,9 +8,14 @@
  * result through `finalize()` once the callback has returned and the operation's final payload
  * (candidate / args / result) is known.
  *
+ * `addFinalizedIssue` accepts an optional `dedupeKey`: repeated reads of the same failing dependency
+ * within one execution scope resolve to the same key, so only the first insertion is kept while each
+ * call's own returned `ExecutionResult` failure is unaffected.
+ *
  * Normative source: issue #10 consolidated handoff §12/§15/§16 ("local execution collectors",
  * "finalize pending ... diagnostics", "automatically insert wrapped consumer Issues into the active
- * operation-local collector").
+ * operation-local collector", "repeated reads of the same failing dependency ... avoid duplicating the
+ * same dependency issue insertion").
  */
 
 import type { IssueCollector } from '../issue'
@@ -22,9 +27,11 @@ type CollectorEntry<RelativeInput, FinalIssue>
 export interface OperationCollector<RelativeInput, FinalIssue> extends IssueCollector<RelativeInput> {
 	/**
 	 * Inserts an already-finalized issue (a wrapped dependency-target failure or refinement
-	 * rejection) while preserving relative-call order.
+	 * rejection) while preserving relative-call order. When `dedupeKey` is given and was already seen
+	 * by this collector instance, the insertion is skipped (the caller's own returned failure is
+	 * unaffected either way).
 	 */
-	addFinalizedIssue: (issue: FinalIssue) => void
+	addFinalizedIssue: (issue: FinalIssue, dedupeKey?: string) => void
 	/**
 	 * Resolves every pending relative entry into its final issue via `toFinalIssue`, in original call
 	 * order, and returns the merged final list. Framework-internal only; never exposed to plugin
@@ -35,12 +42,18 @@ export interface OperationCollector<RelativeInput, FinalIssue> extends IssueColl
 
 export function createOperationCollector<RelativeInput, FinalIssue>(): OperationCollector<RelativeInput, FinalIssue> {
 	const entries: CollectorEntry<RelativeInput, FinalIssue>[] = []
+	const seenDedupeKeys = new Set<string>()
 
 	return {
 		addIssue(input: RelativeInput) {
 			entries.push({ kind: 'relative', input })
 		},
-		addFinalizedIssue(issue: FinalIssue) {
+		addFinalizedIssue(issue: FinalIssue, dedupeKey?: string) {
+			if (dedupeKey !== undefined) {
+				if (seenDedupeKeys.has(dedupeKey))
+					return
+				seenDedupeKeys.add(dedupeKey)
+			}
 			entries.push({ kind: 'final', issue })
 		},
 		hasAnyIssue() {

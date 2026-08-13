@@ -20,6 +20,7 @@ import type { Navigator } from './view'
 import { createDependencyBuilder, isDepExpression, readDepExpression } from '../dep'
 import { compiledDependencyBrand } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
+import { assertSyncValue } from '../runtime/sync'
 import { dependencyIssue, widgetLocation } from './issues'
 
 export interface GraphEdge {
@@ -55,7 +56,13 @@ function walkDeps(value: unknown, resolveLeaf: (leaf: AnyDepExpression) => Compi
 		return Object.freeze(value.map(item => walkDeps(item, resolveLeaf))) as CompiledDependencyTree
 
 	if (typeof value === 'object' && value !== null) {
-		const result: Record<string, CompiledDependencyTree> = {}
+		// A `registerDeps` container's keys are arbitrary plugin-authored strings, including special
+		// JavaScript names (`__proto__`, `constructor`, ...). A plain `{}` plus bracket assignment would
+		// let a `"__proto__"` key mutate this object's own `[[Prototype]]` instead of creating an own
+		// member, after which prototype delegation would make the smuggled leaf visible through every
+		// other key via `isCompiledDependency`. `Object.create(null)` keeps every key an own,
+		// prototype-safe data property (COMMENT amendment: builder/member-key special-name safety).
+		const result: Record<string, CompiledDependencyTree> = Object.create(null)
 		for (const key of Object.keys(value))
 			result[key] = walkDeps((value as Record<string, unknown>)[key], resolveLeaf)
 		return Object.freeze(result)
@@ -92,6 +99,17 @@ function resolveLeaf(
 	const { target, operation } = reference
 	const owner = nodes[ownerNodeId]!
 	const ownerPublicNode = owner.publicNode as ResolvedBlueprintWidgetNode
+
+	// A Property-owned `state-set` expression is impossible through the legitimate dep grammar (the
+	// fluent builder never exposes `.set` to a property consumer); reaching this is only possible via a
+	// JS / `any` contract escape (COMMENT 31 §10 amendment). Property members must stay transitively
+	// side-effect free, so this is a plugin implementation bug, never a silently-accepted resolved edge
+	// or a normal Blueprint diagnostic.
+	if (operation.type === 'state-set' && member.type === 'property') {
+		throw new TypeError(
+			'registerDeps() produced a state-set dependency owned by a Property; Property members must remain side-effect free. This is a plugin implementation bug.',
+		)
+	}
 
 	const absent = (): CompiledDependency => ({
 		[compiledDependencyBrand]: true,
@@ -215,12 +233,14 @@ export function resolveDependencies(
 		const configFrag = configFragment(node)
 		for (const [name, propertyDefinition] of definition.properties) {
 			const dep = createDependencyBuilder<never, 'property'>()
-			const rawDeps = propertyDefinition.registerDeps?.({
+			const registerDepsResult = propertyDefinition.registerDeps?.({
 				widget: node.publicNode,
 				blueprint: navigator,
 				dep,
 				...configFrag,
-			}) ?? {}
+			})
+			assertSyncValue(registerDepsResult, `Property "${name}"'s registerDeps`)
+			const rawDeps = registerDepsResult ?? {}
 
 			const member: BlueprintDependencyMember = { type: 'property', name }
 			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, member, leaf))
@@ -239,12 +259,14 @@ export function resolveDependencies(
 		const configFrag = configFragment(node)
 		for (const [name, methodDefinition] of definition.methods) {
 			const dep = createDependencyBuilder<never, 'method'>()
-			const rawDeps = methodDefinition.registerDeps?.({
+			const registerDepsResult = methodDefinition.registerDeps?.({
 				widget: node.publicNode,
 				blueprint: navigator,
 				dep,
 				...configFrag,
-			}) ?? {}
+			})
+			assertSyncValue(registerDepsResult, `Method "${name}"'s registerDeps`)
+			const rawDeps = registerDepsResult ?? {}
 
 			const member: BlueprintDependencyMember = { type: 'method', name }
 			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, member, leaf))

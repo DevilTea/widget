@@ -9,7 +9,7 @@
  * inside `source`, and `message` is human-readable only (never a machine protocol).
  */
 
-import type { BlueprintWidgetNode, ResolvedBlueprintWidgetNode } from './internal/contract'
+import type { BlueprintWidgetNode, BlueprintWidgetNodeView, ResolvedBlueprintWidgetNode, ResolvedBlueprintWidgetNodeView } from './internal/contract'
 import type { AnyWidgetPluginTuple } from './plugin'
 import type { NonEmptyReadonlyArray, WidgetId, WidgetMemberKey } from './types'
 
@@ -87,12 +87,35 @@ export type RelativePluginStructureIssueInput<SlotName extends WidgetMemberKey =
 	}
 
 /**
+ * Compile-time view of {@link BlueprintStructureIssueLocation}: same widget / slot / slot-child shape,
+ * but carrying the compile-time node view (no `getIssues()`) since that is what a compile-time
+ * `validateStructure` author actually holds (from `ctx.blueprint`'s queries). The framework converts
+ * these into the framework-owned, full-node `BlueprintStructureIssueLocation` when finalizing.
+ */
+export type RelativeStructureIssueLocation<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
+	= | {
+		readonly type: 'widget'
+		readonly node: BlueprintWidgetNodeView<Plugins>
+	}
+	| {
+		readonly type: 'slot'
+		readonly node: ResolvedBlueprintWidgetNodeView<Plugins>
+		readonly slot: WidgetMemberKey
+	}
+	| {
+		readonly type: 'slot-child'
+		readonly node: ResolvedBlueprintWidgetNodeView<Plugins>
+		readonly slot: WidgetMemberKey
+		readonly index: number
+	}
+
+/**
  * System-level `validateStructure` input. No implicit current widget, so the location is explicit.
  */
 export interface RelativeSystemStructureIssueInput<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly message: string
-	readonly location: BlueprintStructureIssueLocation<Plugins>
-	readonly related?: NonEmptyReadonlyArray<BlueprintStructureIssueLocation<Plugins>>
+	readonly location: RelativeStructureIssueLocation<Plugins>
+	readonly related?: NonEmptyReadonlyArray<RelativeStructureIssueLocation<Plugins>>
 }
 
 /**

@@ -55,8 +55,9 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 			}
 
 			const validArgs = params.definition.validateArgs(args, argsCtx)
+			assertSyncValue(validArgs, `Method "${params.name}"'s validateArgs`)
 
-			if (!validArgs) {
+			if (!validArgs || argsCollector.hasAnyIssue()) {
 				const finalized = argsCollector.finalize(input => buildMethodArgsIssue(params.widgetId, params.name, args, input))
 				const issues = finalized.length > 0 ? finalized : [buildDefaultMethodArgsIssue(params.widgetId, params.name, args)]
 				issuesSignal(issues)
@@ -65,7 +66,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 
 			const execCollector = createOperationCollector<RelativeValueIssueInput, RuntimeMethodIssue>()
 			const sink: ActiveIssueSink = {
-				addFinalizedIssue: issue => execCollector.addFinalizedIssue(issue as RuntimeMethodIssue),
+				addFinalizedIssue: (issue, dedupeKey) => execCollector.addFinalizedIssue(issue as RuntimeMethodIssue, dedupeKey),
 			}
 
 			const executeCtx = {

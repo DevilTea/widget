@@ -95,7 +95,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 	const semanticOrder = computeSemanticOrder(nodes, rootNodeId)
 	const navigator = createNavigator<Plugins>(nodes, nodeIdByPublicNode, nodeIdsByWidgetId, rootNodeId)
 
-	runStructureValidation(system as unknown as WidgetSystem<AnyWidgetPluginTuple>, nodes, semanticOrder, navigator, finalIssues)
+	runStructureValidation(system as unknown as WidgetSystem<AnyWidgetPluginTuple>, nodes, semanticOrder, nodeIdByPublicNode, navigator, finalIssues)
 
 	const { edges, directWriteSeeds } = resolveDependencies(nodes, semanticOrder, rootNodeId, nodeIdsByWidgetId, navigator, finalIssues)
 
@@ -148,16 +148,28 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 		return attachInternalsAndFreeze(blueprint, compiled)
 	}
 
+	// The finalized (non-compile-time) Blueprint surface exposes full nodes (with `getIssues()`); the
+	// Navigator/BlueprintCompileView type is intentionally narrower (COMMENT: compile-view contract), so
+	// this reinterprets the same underlying navigation functions/objects under the finalized shape.
+	const invalidNavigator = navigator as unknown as {
+		root: BlueprintWidgetNode<Plugins>
+		getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins> | null
+		getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins> | null
+		getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins> | null
+		getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins>[]
+		getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins>[]
+	}
+
 	const blueprint: InvalidWidgetSystemBlueprint<Plugins> = {
 		system,
 		rawDefinition: definition,
 		status: 'invalid',
-		root: navigator.root,
-		getWidget: navigator.getWidget,
-		getParent: navigator.getParent,
-		getLocation: navigator.getLocation,
-		getChildren: navigator.getChildren,
-		getChildrenAt: navigator.getChildrenAt,
+		root: invalidNavigator.root,
+		getWidget: invalidNavigator.getWidget,
+		getParent: invalidNavigator.getParent,
+		getLocation: invalidNavigator.getLocation,
+		getChildren: invalidNavigator.getChildren,
+		getChildrenAt: invalidNavigator.getChildrenAt,
 		getCollectedIssues: () => finalIssues,
 		recompile: next => system.createBlueprint(next),
 	}

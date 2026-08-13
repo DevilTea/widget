@@ -9,8 +9,9 @@
 import type { DependencyBuilder, DependencyConsumer, EmptyRegisteredDeps, RegisteredDeps, ToExecutedDeps } from './dep'
 import type {
 	BlueprintCompileView,
-	BlueprintWidgetNode,
+	BlueprintWidgetNodeView,
 	SelfBlueprintWidgetNode,
+	SelfBlueprintWidgetNodeView,
 	ValidBlueprintView,
 } from './internal/contract'
 import type {
@@ -162,9 +163,9 @@ export type WidgetSlotValidateStructureContext<
 	SlotName extends WidgetMemberKey,
 >
 	= & {
-		readonly widget: SelfBlueprintWidgetNode<Interfaces>
+		readonly widget: SelfBlueprintWidgetNodeView<Interfaces>
 		readonly slot: SlotName
-		readonly children: readonly BlueprintWidgetNode[]
+		readonly children: readonly BlueprintWidgetNodeView[]
 		readonly blueprint: BlueprintCompileView
 	}
 	& IssueCollector<RelativeSlotStructureIssueInput>
@@ -172,7 +173,7 @@ export type WidgetSlotValidateStructureContext<
 
 export type WidgetPluginValidateStructureContext<Interfaces extends WidgetInterfaces>
 	= & {
-		readonly widget: SelfBlueprintWidgetNode<Interfaces>
+		readonly widget: SelfBlueprintWidgetNodeView<Interfaces>
 		readonly blueprint: BlueprintCompileView
 	}
 	& IssueCollector<RelativePluginStructureIssueInput<WidgetSlotNameOf<Interfaces>>>
@@ -187,7 +188,7 @@ export type WidgetRegisterDepsContext<
 	Consumer extends DependencyConsumer,
 >
 	= & {
-		readonly widget: SelfBlueprintWidgetNode<Interfaces>
+		readonly widget: SelfBlueprintWidgetNodeView<Interfaces>
 		readonly blueprint: BlueprintCompileView
 		readonly dep: DependencyBuilder<Interfaces, Consumer>
 	}

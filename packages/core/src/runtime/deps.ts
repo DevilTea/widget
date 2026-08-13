@@ -4,7 +4,10 @@
  * Materialization happens once per Property/Method member at Runtime construction and produces
  * stable, reusable callables: each callable closes over the shared primitive registry (populated
  * progressively while the Runtime is built) and looks the target primitive up lazily at invocation
- * time, so materialization may run before every primitive exists.
+ * time — inside the callable body, never while building the callable — so materialization may run
+ * before every primitive exists. Runtime correctness must not depend on member/widget declaration
+ * order: a forward `Property -> later Property`, any `Property -> read-only Method`, a dependency on a
+ * later widget, and a valid Method-only cycle (`A <-> B`) must all materialize and invoke correctly.
  *
  * Normative source: issue #10 consolidated handoff §12 (target-failure 1:1 wrapping,
  * `property-dependency`/`method-dependency`), U1 handoff §5 (resolved/absent x
@@ -14,9 +17,10 @@
 import type { DependencyConsumer, DependencyRefinement } from '../dep'
 import type { ExecutionResult } from '../execution-result'
 import type { CompiledDependency, CompiledDependencyTree, CompiledWidgetNode } from '../internal/contract'
-import type { BlueprintDependencyReference, RuntimeIssueLocation, RuntimeMethodDependencyIssue, RuntimeMethodIssue, RuntimePropertyDependencyIssue, RuntimePropertyIssue } from '../issue'
+import type { BlueprintDependencyReference, RuntimeIssueLocation, RuntimeMethodDependencyIssue, RuntimePropertyDependencyIssue } from '../issue'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
+import type { ReceivedBox } from './issues'
 import type { MethodPrimitive } from './method'
 import type { PropertyPrimitive } from './property'
 import type { StatePrimitive } from './state'
@@ -42,7 +46,7 @@ function consumerDependencyIssue(
 	params: DepsMaterializeParams,
 	dependency: BlueprintDependencyReference,
 	message: string,
-	received: unknown,
+	received: ReceivedBox | undefined,
 	related: RuntimeIssueLocation,
 ): RuntimePropertyDependencyIssue | RuntimeMethodDependencyIssue {
 	const base = {
@@ -56,9 +60,46 @@ function consumerDependencyIssue(
 	return params.consumer === 'property' ? buildPropertyDependencyIssue(base) : buildMethodDependencyIssue(base)
 }
 
-function reportDependencyIssue(params: DepsMaterializeParams, issue: RuntimePropertyDependencyIssue | RuntimeMethodDependencyIssue): void {
+function reportDependencyIssue(
+	params: DepsMaterializeParams,
+	issue: RuntimePropertyDependencyIssue | RuntimeMethodDependencyIssue,
+	dedupeKey: string,
+): void {
 	params.context.getActiveCollector()
-		?.addFinalizedIssue(issue)
+		?.addFinalizedIssue(issue, dedupeKey)
+}
+
+/**
+ * Per-dependency-leaf unique id, assigned once when a leaf's callable is materialized and closed over
+ * for the callable's lifetime. Combined with a failure-identity token to dedupe repeated insertion of
+ * the same dependency failure into one execution scope's collector (issue #10 §12: "repeated reads of
+ * the same failing dependency ... avoid duplicating the same dependency issue insertion").
+ */
+let nextLeafId = 0
+
+/**
+ * Stable per-instance identity tokens for arbitrary values, used only to build a dedupe key — never
+ * exposed, never used for equality of application semantics.
+ */
+const identityTokens = new WeakMap<object, number>()
+let nextIdentityToken = 1
+
+function identityTokenOf(value: unknown): string {
+	if (value === null)
+		return 'null'
+	if (typeof value !== 'object' && typeof value !== 'function')
+		return `p:${typeof value}:${String(value)}`
+
+	let token = identityTokens.get(value as object)
+	if (token === undefined) {
+		token = nextIdentityToken++
+		identityTokens.set(value as object, token)
+	}
+	return `o:${token}`
+}
+
+function dependencyDedupeKey(leafId: number, message: string, failureAnchor: unknown): string {
+	return `${leafId}|${message}|${identityTokenOf(failureAnchor)}`
 }
 
 /**
@@ -107,28 +148,39 @@ function materializeAbsentLeaf(operation: BlueprintDependencyReference['operatio
 	}
 }
 
+function missingRegistryEntry(targetNodeId: number): never {
+	throw new Error(`widget-core: internal error — dependency target node ${targetNodeId} has no primitive registry entry.`)
+}
+
+/**
+ * Looks up the target node's registry entry. Called lazily, inside each returned callable, never while
+ * building the callable: the registry is populated progressively while the Runtime is constructed, so
+ * a target node's own entry (and the primitive inside it) may not exist yet at materialization time —
+ * only by the time the callable is actually invoked, after `createRuntime()` has finished.
+ */
+function resolveEntry(params: DepsMaterializeParams, targetNodeId: number): PrimitiveRegistryEntry {
+	return params.registry.get(targetNodeId) ?? missingRegistryEntry(targetNodeId)
+}
+
 function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved' }, params: DepsMaterializeParams): unknown {
 	const { reference } = leaf
 	const { operation } = reference
 	const targetWidgetId = resolveTargetWidgetId(params.nodes, leaf.targetNodeId)
 	const related = locationOf(operation, targetWidgetId)
-	const entry = params.registry.get(leaf.targetNodeId)
-
-	if (entry === undefined)
-		throw new Error(`widget-core: internal error — dependency target node ${leaf.targetNodeId} has no primitive registry entry.`)
+	const leafId = nextLeafId++
 
 	switch (operation.type) {
 		case 'state-get': {
-			const target = entry.state.get(operation.key)
-			if (target === undefined)
-				throw new Error(`widget-core: internal error — resolved state-get target "${operation.key}" is missing.`)
-
 			return () => {
+				const target = resolveEntry(params, leaf.targetNodeId).state.get(operation.key)
+				if (target === undefined)
+					throw new Error(`widget-core: internal error — resolved state-get target "${operation.key}" is missing.`)
+
 				const raw = target.internal.get()
 				const refined = applyRefinements(raw, leaf.refinements)
 				if (!refined.ok) {
-					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', refined.received, related)
-					reportDependencyIssue(params, issue)
+					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
+					reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, refined.received))
 					return { success: false, issues: [issue] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
@@ -136,40 +188,36 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 		}
 
 		case 'state-set': {
-			const target = entry.state.get(operation.key)
-			if (target === undefined)
-				throw new Error(`widget-core: internal error — resolved state-set target "${operation.key}" is missing.`)
-
 			return (candidate: unknown) => {
+				const target = resolveEntry(params, leaf.targetNodeId).state.get(operation.key)
+				if (target === undefined)
+					throw new Error(`widget-core: internal error — resolved state-set target "${operation.key}" is missing.`)
+
 				const result = target.internal.attemptSet(candidate)
 				if (result.success)
 					return { success: true, value: candidate }
 
-				const wrapped = result.issues.map((targetIssue) => {
-					const issue = consumerDependencyIssue(params, reference, targetIssue.message, undefined, related)
-					reportDependencyIssue(params, issue)
-					return issue
-				})
-				return { success: false, issues: wrapped as unknown as readonly [unknown, ...unknown[]] }
+				const wrapped = wrapTargetFailure(params, reference, result.issues, related, leafId)
+				return { success: false, issues: wrapped }
 			}
 		}
 
 		case 'property-get': {
-			const target = entry.properties.get(operation.name)
-			if (target === undefined)
-				throw new Error(`widget-core: internal error — resolved property-get target "${operation.name}" is missing.`)
-
 			return () => {
+				const target = resolveEntry(params, leaf.targetNodeId).properties.get(operation.name)
+				if (target === undefined)
+					throw new Error(`widget-core: internal error — resolved property-get target "${operation.name}" is missing.`)
+
 				const targetResult = target.internal.getResult()
 				if (!targetResult.success) {
-					const wrapped = wrapTargetFailure(params, reference, targetResult.issues, related)
+					const wrapped = wrapTargetFailure(params, reference, targetResult.issues, related, leafId)
 					return { success: false, issues: wrapped }
 				}
 
 				const refined = applyRefinements(targetResult.value, leaf.refinements)
 				if (!refined.ok) {
-					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', refined.received, related)
-					reportDependencyIssue(params, issue)
+					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
+					reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, refined.received))
 					return { success: false, issues: [issue] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
@@ -177,21 +225,21 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 		}
 
 		case 'method-invoke': {
-			const target = entry.methods.get(operation.name)
-			if (target === undefined)
-				throw new Error(`widget-core: internal error — resolved method-invoke target "${operation.name}" is missing.`)
-
 			return (...args: readonly unknown[]) => {
+				const target = resolveEntry(params, leaf.targetNodeId).methods.get(operation.name)
+				if (target === undefined)
+					throw new Error(`widget-core: internal error — resolved method-invoke target "${operation.name}" is missing.`)
+
 				const targetResult = target.public(...args)
 				if (!targetResult.success) {
-					const wrapped = wrapTargetFailure(params, reference, targetResult.issues, related)
+					const wrapped = wrapTargetFailure(params, reference, targetResult.issues, related, leafId)
 					return { success: false, issues: wrapped }
 				}
 
 				const refined = applyRefinements(targetResult.value, leaf.refinements)
 				if (!refined.ok) {
-					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', refined.received, related)
-					reportDependencyIssue(params, issue)
+					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
+					reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, refined.received))
 					return { success: false, issues: [issue] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
@@ -203,12 +251,17 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 function wrapTargetFailure(
 	params: DepsMaterializeParams,
 	reference: BlueprintDependencyReference,
-	targetIssues: readonly (RuntimePropertyIssue | RuntimeMethodIssue)[],
+	// State-set wraps `RuntimeStateIssue`; property-get/method-invoke wrap `RuntimePropertyIssue` /
+	// `RuntimeMethodIssue`. Only `.message` (preserved 1:1) and the issue's own identity (as a dedupe
+	// anchor) are needed here, so the parameter stays structurally minimal rather than importing every
+	// concrete target-issue type.
+	targetIssues: readonly { readonly message: string }[],
 	related: RuntimeIssueLocation,
+	leafId: number,
 ): readonly [unknown, ...unknown[]] {
 	const wrapped = targetIssues.map((targetIssue) => {
 		const issue = consumerDependencyIssue(params, reference, targetIssue.message, undefined, related)
-		reportDependencyIssue(params, issue)
+		reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, targetIssue))
 		return issue
 	})
 	return wrapped as unknown as readonly [unknown, ...unknown[]]
@@ -228,7 +281,10 @@ export function materializeDependencyTree(tree: CompiledDependencyTree, params: 
 	if (Array.isArray(tree))
 		return tree.map(item => materializeDependencyTree(item as CompiledDependencyTree, params))
 
-	const result: Record<string, unknown> = {}
+	// `Object.keys(tree)` may include special names such as "__proto__"; bracket-assigning those into
+	// plain `{}` would mutate the object's prototype instead of creating an own member, so the
+	// container is built on a null-prototype record instead.
+	const result: Record<string, unknown> = Object.create(null)
 	for (const key of Object.keys(tree))
 		result[key] = materializeDependencyTree((tree as Record<string, CompiledDependencyTree>)[key]!, params)
 

@@ -15,7 +15,7 @@ import { WidgetSystemRuntimeDisposedError } from '../issue'
  * plain save/restore bookkeeping mirroring alien-signals' own `getActiveSub`/`setActiveSub` seam.
  */
 export interface ActiveIssueSink {
-	addFinalizedIssue: (issue: unknown) => void
+	addFinalizedIssue: (issue: unknown, dedupeKey?: string) => void
 }
 
 export interface RuntimeContext {

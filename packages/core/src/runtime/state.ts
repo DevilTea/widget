@@ -17,6 +17,7 @@ import { EMPTY_ISSUES } from '../issue'
 import { createTrackedSubscription } from './adapter'
 import { createOperationCollector } from './collector'
 import { buildDefaultStateValidationIssue, buildStateValidationIssue } from './issues'
+import { assertSyncValue } from './sync'
 
 export interface StatePrimitiveInternal {
 	/** Tracked raw value read. `null` when never successfully initialized/written. */
@@ -56,13 +57,19 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		}
 
 		const isValid = params.definition.validate(candidate, ctx)
+		assertSyncValue(isValid, `State "${params.key}"'s validate`)
 
-		if (!isValid) {
+		if (!isValid || collector.hasAnyIssue()) {
 			const finalized = collector.finalize(input => buildStateValidationIssue(params.widgetId, params.key, candidate, input))
 			const issues = finalized.length > 0 ? finalized : [buildDefaultStateValidationIssue(params.widgetId, params.key, candidate)]
 			issuesSignal(issues)
 			return { success: false, issues: issues as readonly [RuntimeStateIssue, ...RuntimeStateIssue[]] }
 		}
+
+		// Top-level semantic execution values (state values included) must not be `PromiseLike`; a
+		// candidate that would otherwise be accepted must not become the live State value if it is
+		// thenable (issue #10 amendment "synchronous core boundary and future async seams").
+		assertSyncValue(candidate, `State "${params.key}"'s value`)
 
 		valueSignal(candidate)
 		issuesSignal(EMPTY_ISSUES)

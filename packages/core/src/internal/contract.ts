@@ -42,6 +42,7 @@ import type {
 	WidgetMemberKey,
 	WidgetMethodKeyOf,
 	WidgetMethodOf,
+	WidgetMethodsOf,
 	WidgetPropertiesOf,
 	WidgetPropertyKeyOf,
 	WidgetPropertyValueOf,
@@ -131,6 +132,36 @@ export type BlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidget
 export type SelfBlueprintWidgetNode<Interfaces extends WidgetInterfaces> = ResolvedBlueprintWidgetNodeFor<WidgetPlugin<string, Interfaces>>
 
 /**
+ * Distributes `Omit<_, 'getIssues'>` over an already-substituted union (`Node` is the naked type
+ * parameter tested by the conditional, which is what makes this distribute member-by-member instead
+ * of collapsing the union).
+ */
+type OmitGetIssues<Node> = Node extends any ? Omit<Node, 'getIssues'> : never
+
+/**
+ * Compile-time view of {@link BlueprintWidgetNode}: identical navigation shape minus `getIssues()`.
+ *
+ * Used only for the types compile-time callbacks (`validateStructure`, `registerDeps`) and
+ * {@link BlueprintCompileView} see. The underlying object is not changed at runtime — the very same
+ * node object keeps `getIssues` once it is later exposed through the finalized Blueprint — only the
+ * static type these compile-time surfaces expose omits it, because compilation is still in progress
+ * and no final issue snapshot exists yet.
+ */
+export type BlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = OmitGetIssues<BlueprintWidgetNode<Plugins>>
+
+/**
+ * The resolved-only subset of {@link BlueprintWidgetNodeView}, for compile-time locations that are
+ * only reachable from a resolved node (slot / slot-child).
+ */
+export type ResolvedBlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = Extract<BlueprintWidgetNodeView<Plugins>, { readonly resolved: true }>
+
+/**
+ * Compile-time view of {@link SelfBlueprintWidgetNode}, for the same reason as
+ * {@link BlueprintWidgetNodeView}.
+ */
+export type SelfBlueprintWidgetNodeView<Interfaces extends WidgetInterfaces> = Omit<SelfBlueprintWidgetNode<Interfaces>, 'getIssues'>
+
+/**
  * Topology/navigation placement of a recovered node.
  *
  * `slot` is a confirmed semantic slot edge; `raw-slot` is a recovered source edge that was not
@@ -160,12 +191,12 @@ export type WidgetLocation<Plugins extends AnyWidgetPluginTuple = AnyWidgetPlugi
  * compilation is still in progress.
  */
 export interface BlueprintCompileView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
-	readonly root: BlueprintWidgetNode<Plugins>
-	getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins> | null
-	getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins> | null
-	getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins> | null
-	getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins>[]
-	getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins>[]
+	readonly root: BlueprintWidgetNodeView<Plugins>
+	getWidget: (id: WidgetId) => BlueprintWidgetNodeView<Plugins> | null
+	getParent: (node: BlueprintWidgetNodeView<Plugins>) => BlueprintWidgetNodeView<Plugins> | null
+	getLocation: (node: BlueprintWidgetNodeView<Plugins>) => WidgetLocation<Plugins> | null
+	getChildren: (node: BlueprintWidgetNodeView<Plugins>) => readonly BlueprintWidgetNodeView<Plugins>[]
+	getChildrenAt: (node: BlueprintWidgetNodeView<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNodeView<Plugins>[]
 }
 
 /**
@@ -307,7 +338,14 @@ export type RuntimePropertySurface<Interfaces extends WidgetInterfaces> = [Widge
 			}
 		}
 
-export type RuntimeMethodSurface<Interfaces extends WidgetInterfaces> = [WidgetMethodKeyOf<Interfaces>] extends [never]
+/**
+ * Gated on capability presence (`WidgetMethodsOf`), not on the declared member-key union: an
+ * explicitly-declared-empty `methods: {}` capability is present (and therefore exposes an empty
+ * `methods` surface), matching Runtime assembly's `definition.methods !== null` check. Gating on
+ * `WidgetMethodKeyOf` instead would collapse "declared empty" into "absent" because both have an
+ * empty key union.
+ */
+export type RuntimeMethodSurface<Interfaces extends WidgetInterfaces> = [WidgetMethodsOf<Interfaces>] extends [never]
 	? unknown
 	: {
 			readonly methods: {
