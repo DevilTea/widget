@@ -72,7 +72,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 
 			const execCollector = createOperationCollector<RelativeValueIssueInput, RuntimeMethodIssue>()
 			const sink: ActiveIssueSink = {
-				addFinalizedIssue: (issue, dedupeKey) => execCollector.addFinalizedIssue(issue as RuntimeMethodIssue, dedupeKey),
+				addFinalizedIssue: (issue, dedupe) => execCollector.addFinalizedIssue(issue as RuntimeMethodIssue, dedupe),
 			}
 
 			const executeCtx = {

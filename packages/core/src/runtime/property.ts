@@ -52,7 +52,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	const resultComputed = computed<ExecutionResult<unknown, RuntimePropertyIssue>>(() => {
 		const collector = createOperationCollector<RelativeValueIssueInput, RuntimePropertyIssue>()
 		const sink: ActiveIssueSink = {
-			addFinalizedIssue: (issue, dedupeKey) => collector.addFinalizedIssue(issue as RuntimePropertyIssue, dedupeKey),
+			addFinalizedIssue: (issue, dedupe) => collector.addFinalizedIssue(issue as RuntimePropertyIssue, dedupe),
 		}
 
 		const ctx = {

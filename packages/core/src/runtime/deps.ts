@@ -19,6 +19,7 @@ import type { ExecutionResult } from '../execution-result'
 import type { CompiledDependency, CompiledDependencyTree, CompiledWidgetNode } from '../internal/contract'
 import type { BlueprintDependencyReference, RuntimeIssueLocation, RuntimeMethodDependencyIssue, RuntimePropertyDependencyIssue } from '../issue'
 import type { WidgetId, WidgetMemberKey } from '../types'
+import type { DedupeDescriptor } from './collector'
 import type { RuntimeContext } from './context'
 import type { ReceivedBox } from './issues'
 import type { MethodPrimitive } from './method'
@@ -64,43 +65,29 @@ function consumerDependencyIssue(
 function reportDependencyIssue(
 	params: DepsMaterializeParams,
 	issue: RuntimePropertyDependencyIssue | RuntimeMethodDependencyIssue,
-	dedupeKey: string,
+	dedupe: DedupeDescriptor,
 ): void {
 	params.context.getActiveCollector()
-		?.addFinalizedIssue(issue, dedupeKey)
+		?.addFinalizedIssue(issue, dedupe)
 }
 
 /**
  * Per-dependency-leaf unique id, assigned once when a leaf's callable is materialized and closed over
- * for the callable's lifetime. Combined with a failure-identity token to dedupe repeated insertion of
- * the same dependency failure into one execution scope's collector (issue #10 §12: "repeated reads of
- * the same failing dependency ... avoid duplicating the same dependency issue insertion").
+ * for the callable's lifetime. Combined with the failure message and a raw failure-identity anchor to
+ * dedupe repeated insertion of the same dependency failure into one execution scope's collector (issue
+ * #10 §12: "repeated reads of the same failing dependency ... avoid duplicating the same dependency
+ * issue insertion").
  */
 let nextLeafId = 0
 
 /**
- * Stable per-instance identity tokens for arbitrary values, used only to build a dedupe key — never
- * exposed, never used for equality of application semantics.
+ * Builds the dedupe descriptor for one dependency-leaf failure. `anchor` is passed through to the
+ * collector as the *raw* value (never stringified): the collector compares it via `Set` SameValueZero
+ * membership, which is collision-free for every JS value — including two distinct `Symbol`s that share
+ * a description, which a `typeof`+`String()` encoding would incorrectly conflate.
  */
-const identityTokens = new WeakMap<object, number>()
-let nextIdentityToken = 1
-
-function identityTokenOf(value: unknown): string {
-	if (value === null)
-		return 'null'
-	if (typeof value !== 'object' && typeof value !== 'function')
-		return `p:${typeof value}:${String(value)}`
-
-	let token = identityTokens.get(value as object)
-	if (token === undefined) {
-		token = nextIdentityToken++
-		identityTokens.set(value as object, token)
-	}
-	return `o:${token}`
-}
-
-function dependencyDedupeKey(leafId: number, message: string, failureAnchor: unknown): string {
-	return `${leafId}|${message}|${identityTokenOf(failureAnchor)}`
+function dependencyDedupeDescriptor(leafId: number, message: string, failureAnchor: unknown): DedupeDescriptor {
+	return { scope: `${leafId}|${message}`, anchor: failureAnchor }
 }
 
 /**
@@ -193,7 +180,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
 					// object would then get committed as the consumer's own latest snapshot.
 					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
-					reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, refined.received))
+					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, issue.message, refined.received))
 					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
@@ -235,7 +222,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
 					// object would then get committed as the consumer's own latest snapshot.
 					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
-					reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, refined.received))
+					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, issue.message, refined.received))
 					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
@@ -262,7 +249,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
 					// object would then get committed as the consumer's own latest snapshot.
 					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
-					reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, refined.received))
+					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, issue.message, refined.received))
 					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
@@ -295,7 +282,7 @@ function wrapTargetFailure(
 	freezeIssueSnapshot(wrapped)
 
 	for (const { issue, targetIssue } of pairs)
-		reportDependencyIssue(params, issue, dependencyDedupeKey(leafId, issue.message, targetIssue))
+		reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, issue.message, targetIssue))
 
 	return wrapped as unknown as readonly [unknown, ...unknown[]]
 }

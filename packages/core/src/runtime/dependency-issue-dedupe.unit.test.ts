@@ -156,3 +156,119 @@ describe('operation-local collector dedupes repeated dependency-issue insertion'
 			.toHaveLength(1)
 	})
 })
+
+describe('dedupe anchor identity is collision-free for Symbols (review finding 3774271404)', () => {
+	interface SymbolDedupeInterfaces {
+		methods: {
+			distinctSymbol: () => symbol
+			stableSymbol: () => symbol
+			viaDistinctSymbolTwice: () => number
+			viaStableSymbolTwice: () => number
+		}
+	}
+
+	function createSymbolHarness() {
+		// One stable instance, reused by `stableSymbol` on every call — the dedupe control group.
+		const stableSymbol = Symbol('x')
+
+		const plugin = createWidgetPlugin('symbol-dedupe')
+			.interfaces<SymbolDedupeInterfaces>()
+			.methods(methods => methods
+				// A fresh `Symbol('x')` every call: same description, different instance each time.
+				.distinctSymbol({
+					validateArgs: (args): args is [] => args.length === 0,
+					execute: () => Symbol('x'),
+				})
+				.stableSymbol({
+					validateArgs: (args): args is [] => args.length === 0,
+					execute: () => stableSymbol,
+				})
+				// A refinement that unconditionally rejects, so every read's rejected value (a fresh or
+				// stable Symbol, depending on which target it depends on) becomes `source.received`.
+				.viaDistinctSymbolTwice({
+					registerDeps: ({ dep }) => ({
+						sym: dep.self.methods.invoke('distinctSymbol')
+							.validate((_value): _value is never => false),
+					}),
+					validateArgs: (args): args is [] => args.length === 0,
+					execute: ({ deps }) => {
+						deps.sym()
+						deps.sym()
+						return 0
+					},
+				})
+				.viaStableSymbolTwice({
+					registerDeps: ({ dep }) => ({
+						sym: dep.self.methods.invoke('stableSymbol')
+							.validate((_value): _value is never => false),
+					}),
+					validateArgs: (args): args is [] => args.length === 0,
+					execute: ({ deps }) => {
+						deps.sym()
+						deps.sym()
+						return 0
+					},
+				}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'symbol-dedupe' })
+		if (blueprint.status !== 'valid')
+			throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('root')
+		if (widget === null)
+			throw new Error('Expected the "root" widget to exist.')
+
+		return { widget }
+	}
+
+	it('rejecting two distinct same-description Symbols within one execution keeps both consumer issues, each with its own `received`', () => {
+		const { widget } = createSymbolHarness()
+
+		const result = widget.methods.viaDistinctSymbolTwice()
+
+		expect(result.success)
+			.toBe(false)
+		if (result.success)
+			throw new Error('Expected a failure result.')
+
+		// Not deduped: two distinct Symbol instances are two distinct failures, even though a
+		// `typeof`+`String()` encoding would have stringified both to the same `"symbol:Symbol(x)"`.
+		expect(result.issues)
+			.toHaveLength(2)
+
+		const received = result.issues.map((issue) => {
+			if (issue.source.type !== 'method-dependency')
+				throw new Error('Expected a method-dependency issue.')
+			return issue.source.received
+		})
+
+		expect(typeof received[0])
+			.toBe('symbol')
+		expect(typeof received[1])
+			.toBe('symbol')
+		// Two fresh `Symbol('x')` calls never produce the same value, even with an identical description.
+		expect(received[0])
+			.not.toBe(received[1])
+	})
+
+	it('rejecting the same Symbol instance twice within one execution still dedupes to exactly one issue', () => {
+		const { widget } = createSymbolHarness()
+
+		const result = widget.methods.viaStableSymbolTwice()
+
+		expect(result.success)
+			.toBe(false)
+		if (result.success)
+			throw new Error('Expected a failure result.')
+
+		expect(result.issues)
+			.toHaveLength(1)
+		if (result.issues[0]!.source.type !== 'method-dependency')
+			throw new Error('Expected a method-dependency issue.')
+		expect(typeof result.issues[0]!.source.received)
+			.toBe('symbol')
+	})
+})

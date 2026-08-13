@@ -7,6 +7,7 @@
  * bookkeeping).
  */
 
+import type { DedupeDescriptor } from './collector'
 import { WidgetSystemRuntimeDisposedError } from '../issue'
 
 /**
@@ -15,7 +16,7 @@ import { WidgetSystemRuntimeDisposedError } from '../issue'
  * plain save/restore bookkeeping mirroring alien-signals' own `getActiveSub`/`setActiveSub` seam.
  */
 export interface ActiveIssueSink {
-	addFinalizedIssue: (issue: unknown, dedupeKey?: string) => void
+	addFinalizedIssue: (issue: unknown, dedupe?: DedupeDescriptor) => void
 }
 
 export interface RuntimeContext {
