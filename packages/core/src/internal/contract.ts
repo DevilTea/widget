@@ -132,14 +132,43 @@ export type BlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidget
 export type SelfBlueprintWidgetNode<Interfaces extends WidgetInterfaces> = ResolvedBlueprintWidgetNodeFor<WidgetPlugin<string, Interfaces>>
 
 /**
- * Distributes `Omit<_, 'getIssues'>` over an already-substituted union (`Node` is the naked type
- * parameter tested by the conditional, which is what makes this distribute member-by-member instead
- * of collapsing the union).
+ * Compile-time view of {@link BlueprintSemanticSlots}: same complete declared-slot map, but every
+ * child is a {@link BlueprintWidgetNodeView} instead of a full node — the view is recursive all the
+ * way down, not just at the top level.
  */
-type OmitGetIssues<Node> = Node extends any ? Omit<Node, 'getIssues'> : never
+export type BlueprintSemanticSlotsView<
+	Interfaces extends WidgetInterfaces,
+	Plugins extends AnyWidgetPluginTuple,
+> = {
+	readonly [Name in WidgetSlotNameOf<Interfaces>]: readonly BlueprintWidgetNodeView<Plugins>[]
+}
 
 /**
- * Compile-time view of {@link BlueprintWidgetNode}: identical navigation shape minus `getIssues()`.
+ * Compile-time view of {@link ResolvedBlueprintWidgetNodeFor}: no `getIssues()`, and `.slots`'
+ * children are themselves views (recursive), not full nodes.
+ */
+export type ResolvedBlueprintWidgetNodeViewFor<
+	Plugin extends AnyWidgetPlugin,
+	Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple,
+>
+	= & Omit<ResolvedBlueprintWidgetNodeFor<Plugin, Plugins>, 'getIssues' | 'slots'>
+		& {
+			readonly slots: BlueprintSemanticSlotsView<WidgetInterfacesOf<Plugin>, Plugins>
+		}
+
+/**
+ * The resolved-only compile-time node view, distributed over the registered plugin tuple, for
+ * compile-time locations that are only reachable from a resolved node (slot / slot-child).
+ */
+export type ResolvedBlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = Plugins[number] extends infer Plugin
+	? Plugin extends AnyWidgetPlugin
+		? ResolvedBlueprintWidgetNodeViewFor<Plugin, Plugins>
+		: never
+	: never
+
+/**
+ * Compile-time view of {@link BlueprintWidgetNode}: same navigation shape, but with `getIssues()`
+ * removed recursively — including through `.slots`' children — not just at the top level.
  *
  * Used only for the types compile-time callbacks (`validateStructure`, `registerDeps`) and
  * {@link BlueprintCompileView} see. The underlying object is not changed at runtime — the very same
@@ -147,19 +176,15 @@ type OmitGetIssues<Node> = Node extends any ? Omit<Node, 'getIssues'> : never
  * static type these compile-time surfaces expose omits it, because compilation is still in progress
  * and no final issue snapshot exists yet.
  */
-export type BlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = OmitGetIssues<BlueprintWidgetNode<Plugins>>
-
-/**
- * The resolved-only subset of {@link BlueprintWidgetNodeView}, for compile-time locations that are
- * only reachable from a resolved node (slot / slot-child).
- */
-export type ResolvedBlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = Extract<BlueprintWidgetNodeView<Plugins>, { readonly resolved: true }>
+export type BlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
+	= | Omit<UnresolvedBlueprintWidgetNode<Plugins>, 'getIssues'>
+		| ResolvedBlueprintWidgetNodeView<Plugins>
 
 /**
  * Compile-time view of {@link SelfBlueprintWidgetNode}, for the same reason as
  * {@link BlueprintWidgetNodeView}.
  */
-export type SelfBlueprintWidgetNodeView<Interfaces extends WidgetInterfaces> = Omit<SelfBlueprintWidgetNode<Interfaces>, 'getIssues'>
+export type SelfBlueprintWidgetNodeView<Interfaces extends WidgetInterfaces> = ResolvedBlueprintWidgetNodeViewFor<WidgetPlugin<string, Interfaces>>
 
 /**
  * Topology/navigation placement of a recovered node.
@@ -185,6 +210,29 @@ export type WidgetLocation<Plugins extends AnyWidgetPluginTuple = AnyWidgetPlugi
 	}
 
 /**
+ * Compile-time view of {@link WidgetLocation}: same topology shape, but `parent` is a
+ * {@link BlueprintWidgetNodeView} / {@link ResolvedBlueprintWidgetNodeView} rather than a full node —
+ * a `validateStructure`/`registerDeps` author reaching a location through `BlueprintCompileView`
+ * cannot get from there to `getIssues()` either.
+ */
+export type WidgetLocationView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
+	= | {
+		readonly type: 'root'
+	}
+	| {
+		readonly type: 'slot'
+		readonly parent: ResolvedBlueprintWidgetNodeView<Plugins>
+		readonly slot: WidgetMemberKey
+		readonly index: number
+	}
+	| {
+		readonly type: 'raw-slot'
+		readonly parent: BlueprintWidgetNodeView<Plugins>
+		readonly slot: string
+		readonly index: number
+	}
+
+/**
  * Read-only semantic view handed to compile-time callbacks (`validateStructure`, `registerDeps`).
  *
  * It intentionally exposes no `getIssues()`, no final status, and no runtime machinery, because
@@ -194,7 +242,7 @@ export interface BlueprintCompileView<Plugins extends AnyWidgetPluginTuple = Any
 	readonly root: BlueprintWidgetNodeView<Plugins>
 	getWidget: (id: WidgetId) => BlueprintWidgetNodeView<Plugins> | null
 	getParent: (node: BlueprintWidgetNodeView<Plugins>) => BlueprintWidgetNodeView<Plugins> | null
-	getLocation: (node: BlueprintWidgetNodeView<Plugins>) => WidgetLocation<Plugins> | null
+	getLocation: (node: BlueprintWidgetNodeView<Plugins>) => WidgetLocationView<Plugins> | null
 	getChildren: (node: BlueprintWidgetNodeView<Plugins>) => readonly BlueprintWidgetNodeView<Plugins>[]
 	getChildrenAt: (node: BlueprintWidgetNodeView<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNodeView<Plugins>[]
 }

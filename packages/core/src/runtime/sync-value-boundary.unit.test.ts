@@ -250,3 +250,130 @@ describe('an accepted thenable candidate must not become the live State value', 
 			.toBeUndefined()
 	})
 })
+
+describe('a function-valued thenable is a sync-boundary violation too (round-2 finding 3773696016)', () => {
+	function makeCallableThenable(): (() => void) & { then: (...args: unknown[]) => unknown } {
+		const fn = (() => {}) as (() => void) & { then?: unknown }
+		// `PromiseLike` is a structural contract; a function value with a `.then` property is still
+		// thenable. `typeof fn === 'function'`, not `'object'`, so a guard that only checks
+		// `typeof value === 'object'` misses this entirely.
+		fn.then = () => {}
+		return fn as (() => void) & { then: (...args: unknown[]) => unknown }
+	}
+
+	interface AcceptsAnythingInterfaces {
+		state: {
+			anything: unknown
+		}
+	}
+
+	it('an accepted callable-thenable candidate must not become the live State value', () => {
+		const plugin = createWidgetPlugin('accepts-anything-fn')
+			.interfaces<AcceptsAnythingInterfaces>()
+			.state(state => state.anything({
+				validate: (_input): _input is unknown => true,
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'accepts-anything-fn' })
+		if (blueprint.status !== 'valid')
+			throw new Error('test fixture: expected a valid blueprint')
+
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('root')
+		if (widget === null)
+			throw new Error('test fixture: expected the root widget to resolve')
+
+		widget.state.anything.set(1)
+		const { caught, threw } = captureThrow(() => widget.state.anything.set(makeCallableThenable()))
+
+		expect(threw)
+			.toBe(true)
+		expectPlainException(caught)
+		expect(widget.state.anything.get())
+			.toBe(1)
+	})
+
+	it('a callback (method.execute) returning a callable thenable throws synchronously', () => {
+		interface CallableThenableMethodInterfaces {
+			methods: {
+				run: () => unknown
+			}
+		}
+
+		const plugin = createWidgetPlugin('callable-thenable-execute')
+			.interfaces<CallableThenableMethodInterfaces>()
+			.methods(methods => methods.run({
+				validateArgs: (args): args is [] => args.length === 0,
+				execute: () => makeCallableThenable() as unknown,
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'callable-thenable-execute' })
+		if (blueprint.status !== 'valid')
+			throw new Error('test fixture: expected a valid blueprint')
+
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('root')
+		if (widget === null)
+			throw new Error('test fixture: expected the root widget to resolve')
+
+		const { caught, threw } = captureThrow(() => widget.methods.run())
+
+		expect(threw)
+			.toBe(true)
+		expectPlainException(caught)
+	})
+})
+
+describe('a dependency .validate() refinement returning a thenable is a sync-boundary violation (round-2 finding 3773696018)', () => {
+	interface RefinementInterfaces {
+		state: {
+			count: number
+		}
+		properties: {
+			viaAsyncRefinement: number
+		}
+	}
+
+	it('throws synchronously via the consuming Property\'s .get(), instead of treating the truthy Promise as an accepted refinement', () => {
+		const plugin = createWidgetPlugin('async-refinement')
+			.interfaces<RefinementInterfaces>()
+			.state(state => state.count({
+				validate: (input): input is number => typeof input === 'number',
+				default: () => 5,
+			}))
+			.properties(properties => properties.viaAsyncRefinement({
+				registerDeps: ({ dep }) => ({
+					count: dep.self.state.get('count')
+						// A `Promise` is truthy, so `if (!refine(value))` alone would read this as an
+						// *accepted* refinement rather than a sync-boundary violation.
+						.validate((_value): _value is never => Promise.resolve(false) as unknown as boolean),
+				}),
+				compute: ({ deps }) => {
+					const result = deps.count()
+					return result.success ? 1 : 0
+				},
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'async-refinement' })
+		if (blueprint.status !== 'valid')
+			throw new Error('test fixture: expected a valid blueprint')
+
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('root')
+		if (widget === null)
+			throw new Error('test fixture: expected the root widget to resolve')
+
+		const { caught, threw, returned } = captureThrow(() => widget.properties.viaAsyncRefinement.get())
+
+		if (!threw) {
+			expect.fail(`suspected implementation bug: a thenable-returning dependency refinement was expected to throw synchronously, but it returned: ${JSON.stringify(returned)}`)
+		}
+		expectPlainException(caught)
+	})
+})

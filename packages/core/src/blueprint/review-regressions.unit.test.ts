@@ -29,6 +29,17 @@
  * `runtime/deps.ts` / `runtime/widget.ts`) is owned by a different unit but exercised here through the
  * public API.
  *
+ * finding 3773695993 (blueprint/deps.ts:47): `edgeKey()`'s naive template-literal concatenation of the
+ * six graph-identity components is not injective over the `WidgetMemberKey = string` domain (member
+ * names may themselves contain `:` / `->`), so two semantically distinct edges can serialize to the
+ * same string and the later one silently disappears from graph analysis — including a
+ * Property -> writeful-Method edge, which would let purity analysis miss a hard invariant violation.
+ *
+ * finding 3773696006 (blueprint/deps.ts:241): `registerDepsResult ?? {}` conflated "callback omitted"
+ * (legitimate empty deps) with "callback present but returned `undefined`/`null`" (malformed output,
+ * only reachable via a JS/`any` contract escape); the latter must throw as a plugin implementation bug
+ * instead of being silently accepted as empty deps.
+ *
  * Only the public entry (`../index`) is used; no internal module or `blueprintInternals` access.
  */
 
@@ -474,5 +485,204 @@ describe('registerDeps container keyed by a special JavaScript name stays protot
 			.toEqual({ success: true, value: 7 })
 		expect(widget.methods.viaMethod())
 			.toEqual({ success: true, value: 7 })
+	})
+})
+
+// -------------------------------------------------------------------------------------------------
+// finding 3773695993 — edgeKey() collision across delimiter-rich member names
+// -------------------------------------------------------------------------------------------------
+
+describe('edge identity collision across delimiter-rich member names (finding 3773695993)', () => {
+	interface CollisionInterfaces {
+		state: {
+			count: number
+		}
+		properties: {
+			'a->method:0:b': number
+			'a': number
+			'c': number
+		}
+		methods: {
+			'b->property:0:c': () => number
+		}
+	}
+
+	const plugin = createWidgetPlugin('edge-key-collision')
+		.interfaces<CollisionInterfaces>()
+		.state(section => section.count({
+			validate: (input): input is number => typeof input === 'number',
+			default: () => 0,
+		}))
+		.properties((section) => {
+			// Declaration order matters: under the old buggy `edgeKey()`, whichever edge is registered
+			// first "wins" the colliding key and the second is silently dropped. Declaring the
+			// property->property edge (A) before the property->method edge (B) makes B — the one with
+			// the real safety consequence — the one that would disappear under the bug.
+			const afterWeird = section['a->method:0:b']({
+				// Edge A: Property "a->method:0:b" -> Property "c" (property-get). Old key:
+				// `property:0:a->method:0:b->property:0:c`.
+				registerDeps: ({ dep }) => ({ target: dep.self.properties.get('c') }),
+				compute: ({ deps }) => {
+					const result = deps.target()
+					return result.success ? (result.value ?? -1) : -1
+				},
+			})
+			const afterA = afterWeird.a({
+				// Edge B: Property "a" -> Method "b->property:0:c" (method-invoke). Old key:
+				// `property:0:a->method:0:b->property:0:c` — identical to Edge A's, even though the two
+				// edges are semantically unrelated.
+				registerDeps: ({ dep }) => ({ target: dep.self.methods.invoke('b->property:0:c') }),
+				compute: ({ deps }) => {
+					const result = deps.target()
+					return result.success ? (result.value ?? -1) : -1
+				},
+			})
+			return afterA.c({
+				// Cycle back to "a->method:0:b" so a dropped Edge A would also be independently
+				// detectable (cycle detection between "a->method:0:b" and "c" requires both directions).
+				registerDeps: ({ dep }) => ({ target: dep.self.properties.get('a->method:0:b') }),
+				compute: ({ deps }) => {
+					const result = deps.target()
+					return result.success ? (result.value ?? -1) : -1
+				},
+			})
+		})
+		.methods(section => section['b->property:0:c']({
+			registerDeps: ({ dep }) => ({ setCount: dep.self.state.set('count') }),
+			validateArgs: (args): args is [] => args.length === 0,
+			execute: ({ deps }) => {
+				deps.setCount(1)
+				return 1
+			},
+		}))
+		.done()
+
+	const system = createWidgetSystem({ plugins: [plugin] })
+
+	it('keeps the Property -> writeful-Method edge (B) distinct: purity analysis still catches it', () => {
+		const blueprint = system.createBlueprint({ id: 'root', type: 'edge-key-collision' })
+
+		expect(blueprint.status)
+			.toBe('invalid')
+
+		const purityIssue = blueprint.getCollectedIssues()
+			.find(issue =>
+				issue.source.type === 'dependency'
+				&& issue.source.member.type === 'property'
+				&& issue.source.member.name === 'a'
+				&& issue.source.dependency?.operation.type === 'method-invoke')
+
+		if (purityIssue === undefined || purityIssue.source.type !== 'dependency')
+			throw new Error('test fixture: expected a Property "a" dependency issue naming the method-invoke edge')
+
+		const related = purityIssue.source.related
+		expect(related?.some(location => location.type === 'method' && location.name === 'b->property:0:c'))
+			.toBe(true)
+	})
+
+	it('keeps the Property <-> Property edge (A) distinct: the evaluation cycle is still detected on both ends', () => {
+		const blueprint = system.createBlueprint({ id: 'root', type: 'edge-key-collision' })
+
+		const cycleIssues = blueprint.getCollectedIssues()
+			.filter(issue =>
+				issue.source.type === 'dependency'
+				&& issue.source.member.type === 'property'
+				&& (issue.source.member.name === 'a->method:0:b' || issue.source.member.name === 'c')
+				&& issue.source.dependency === undefined)
+
+		// One cycle diagnostic per Property participant in the cyclic SCC (COMMENT 18).
+		expect(cycleIssues)
+			.toHaveLength(2)
+
+		const weirdIssue = cycleIssues.find(issue => issue.source.type === 'dependency' && issue.source.member.name === 'a->method:0:b')
+		const cIssue = cycleIssues.find(issue => issue.source.type === 'dependency' && issue.source.member.name === 'c')
+
+		if (weirdIssue === undefined || weirdIssue.source.type !== 'dependency' || cIssue === undefined || cIssue.source.type !== 'dependency')
+			throw new Error('test fixture: expected cycle issues on both "a->method:0:b" and "c"')
+
+		expect(weirdIssue.source.related?.some(location => location.type === 'property' && location.name === 'c'))
+			.toBe(true)
+		expect(cIssue.source.related?.some(location => location.type === 'property' && location.name === 'a->method:0:b'))
+			.toBe(true)
+	})
+})
+
+// -------------------------------------------------------------------------------------------------
+// finding 3773696006 — registerDeps omitted vs present-but-malformed output
+// -------------------------------------------------------------------------------------------------
+
+describe('registerDeps: present-but-malformed output vs an omitted callback (finding 3773696006)', () => {
+	it('throws when a Property\'s registerDeps is present but returns undefined (JS/any escape)', () => {
+		interface MalformedInterfaces {
+			properties: {
+				value: number
+			}
+		}
+
+		const plugin = createWidgetPlugin('malformed-register-deps-property')
+			.interfaces<MalformedInterfaces>()
+			.properties(section => section.value({
+
+				// implementation bug reached only through a JS/`any` contract escape.
+				registerDeps: (): any => undefined,
+				compute: () => 0,
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const { caught, threw } = captureThrow(() => system.createBlueprint({ id: 'root', type: 'malformed-register-deps-property' }))
+
+		expect(threw)
+			.toBe(true)
+		expect(caught)
+			.toBeInstanceOf(TypeError)
+	})
+
+	it('throws when a Method\'s registerDeps is present but returns null (JS/any escape)', () => {
+		interface MalformedInterfaces {
+			methods: {
+				run: () => number
+			}
+		}
+
+		const plugin = createWidgetPlugin('malformed-register-deps-method')
+			.interfaces<MalformedInterfaces>()
+			.methods(section => section.run({
+
+				// implementation bug reached only through a JS/`any` contract escape.
+				registerDeps: (): any => null,
+				validateArgs: (args): args is [] => args.length === 0,
+				execute: () => 0,
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const { caught, threw } = captureThrow(() => system.createBlueprint({ id: 'root', type: 'malformed-register-deps-method' }))
+
+		expect(threw)
+			.toBe(true)
+		expect(caught)
+			.toBeInstanceOf(TypeError)
+	})
+
+	it('does not throw and synthesizes empty deps when registerDeps is omitted entirely', () => {
+		interface OmittedInterfaces {
+			properties: {
+				value: number
+			}
+		}
+
+		const plugin = createWidgetPlugin('omitted-register-deps')
+			.interfaces<OmittedInterfaces>()
+			.properties(section => section.value({
+				compute: () => 0,
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'omitted-register-deps' })
+
+		expect(blueprint.status)
+			.toBe('valid')
 	})
 })

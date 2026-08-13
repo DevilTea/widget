@@ -23,6 +23,7 @@ import type { PrimitiveRegistryEntry } from './deps'
 import { readCompiledBlueprint } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
 import { createRuntimeAggregate } from './aggregate'
+import { buildBlueprintView } from './blueprint-view'
 import { createRuntimeContext } from './context'
 import { materializeDependencyTree } from './deps'
 import { createMethodPrimitive } from './method'
@@ -38,6 +39,9 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 ): WidgetSystemRuntime<Plugins> {
 	const compiled: CompiledBlueprint<Plugins> = readCompiledBlueprint(blueprint)
 	const context = createRuntimeContext()
+	// A real restricted facade, not the full Blueprint object: `compute`/`execute` must not be able to
+	// reach `createRuntime`/`recompile`/`getCollectedIssues`/`system`/`rawDefinition` through JS/`any`.
+	const blueprintView = buildBlueprintView(blueprint)
 
 	const registry = new Map<InternalNodeId, PrimitiveRegistryEntry & {
 		state: Map<string, ReturnType<typeof createStatePrimitive>>
@@ -146,7 +150,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				definition: member.definition,
 				buildConfigFragment,
 				selfNode: node.publicNode,
-				blueprintView: blueprint,
+				blueprintView,
 				deps,
 			})
 			entry.properties.set(name, primitive)
@@ -168,7 +172,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				definition: member.definition,
 				buildConfigFragment,
 				selfNode: node.publicNode,
-				blueprintView: blueprint,
+				blueprintView,
 				deps,
 			})
 			entry.methods.set(name, primitive)

@@ -34,8 +34,8 @@ export interface OperationCollector<RelativeInput, FinalIssue> extends IssueColl
 	addFinalizedIssue: (issue: FinalIssue, dedupeKey?: string) => void
 	/**
 	 * Resolves every pending relative entry into its final issue via `toFinalIssue`, in original call
-	 * order, and returns the merged final list. Framework-internal only; never exposed to plugin
-	 * callbacks.
+	 * order, and returns the merged final list, frozen. Framework-internal only; never exposed to
+	 * plugin callbacks.
 	 */
 	finalize: (toFinalIssue: (input: RelativeInput) => FinalIssue) => readonly FinalIssue[]
 }
@@ -60,7 +60,18 @@ export function createOperationCollector<RelativeInput, FinalIssue>(): Operation
 			return entries.length > 0
 		},
 		finalize(toFinalIssue: (input: RelativeInput) => FinalIssue) {
-			return entries.map(entry => entry.kind === 'relative' ? toFinalIssue(entry.input) : entry.issue)
+			// A completed non-empty issue snapshot is an immutable final artifact (issue #10 issue-
+			// snapshot contract): it is stored as the primitive's latest `getIssues()` state *and*
+			// returned as `ExecutionResult.failure.issues` for the very same call, so an external
+			// mutation of one must not silently corrupt the other. Each individual issue object is
+			// frozen too (cheap, and closes the same hazard one level down); `Object.freeze` on a
+			// non-object value is a documented no-op, so this stays safe even if `FinalIssue` were ever
+			// a primitive.
+			const finalized = entries.map((entry) => {
+				const issue = entry.kind === 'relative' ? toFinalIssue(entry.input) : entry.issue
+				return Object.freeze(issue)
+			})
+			return Object.freeze(finalized)
 		},
 	}
 }

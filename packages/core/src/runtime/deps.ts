@@ -26,6 +26,7 @@ import type { PropertyPrimitive } from './property'
 import type { StatePrimitive } from './state'
 import { isCompiledDependency } from '../internal/contract'
 import { buildMethodDependencyIssue, buildPropertyDependencyIssue } from './issues'
+import { assertSyncValue } from './sync'
 
 export interface PrimitiveRegistryEntry {
 	readonly state: ReadonlyMap<WidgetMemberKey, StatePrimitive>
@@ -105,13 +106,20 @@ function dependencyDedupeKey(leafId: number, message: string, failureAnchor: unk
 /**
  * Applies `.validate()` refinements, in order, to a successfully-produced value. Returns the refined
  * success value or a rejection carrying the offending `received` value.
+ *
+ * `.validate()` is a semantic callback like every other framework-owned predicate, so its return value
+ * is captured as `unknown` and passed through the sync-boundary guard *before* being interpreted as a
+ * boolean — a `Promise.resolve(false)` escape hatch is truthy and would otherwise make a rejection look
+ * like an accepted refinement.
  */
 function applyRefinements(
 	value: unknown,
 	refinements: readonly DependencyRefinement[],
 ): { readonly ok: true, readonly value: unknown } | { readonly ok: false, readonly received: unknown } {
 	for (const refine of refinements) {
-		if (!refine(value))
+		const accepted: unknown = refine(value)
+		assertSyncValue(accepted, 'A dependency .validate() refinement')
+		if (!accepted)
 			return { ok: false, received: value }
 	}
 	return { ok: true, value }

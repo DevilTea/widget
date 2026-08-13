@@ -61,7 +61,10 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 
 		if (!isValid || collector.hasAnyIssue()) {
 			const finalized = collector.finalize(input => buildStateValidationIssue(params.widgetId, params.key, candidate, input))
-			const issues = finalized.length > 0 ? finalized : [buildDefaultStateValidationIssue(params.widgetId, params.key, candidate)]
+			// `finalize()` already returns a frozen array; the generic-fallback branch builds a fresh
+			// array here and needs the same immutable-snapshot treatment (issue #10 issue-snapshot
+			// contract).
+			const issues = finalized.length > 0 ? finalized : Object.freeze([Object.freeze(buildDefaultStateValidationIssue(params.widgetId, params.key, candidate))])
 			issuesSignal(issues)
 			return { success: false, issues: issues as readonly [RuntimeStateIssue, ...RuntimeStateIssue[]] }
 		}

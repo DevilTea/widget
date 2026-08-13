@@ -44,8 +44,17 @@ function configFragment(node: WorkingNode): Record<string, unknown> {
 		: {}
 }
 
+/**
+ * `WidgetMemberKey = string` is an arbitrary finite string domain (member names may themselves
+ * contain `:` / `->`), so naive template-literal concatenation of the six identity components is not
+ * injective: e.g. a from-name of `"a->method:0:b"` paired with a to-name of `"c"` serializes to the
+ * same string as a from-name of `"a"` paired with a to-name of `"b->property:0:c"`. `JSON.stringify`
+ * of the component tuple is injective over strings/numbers (it round-trips exactly through
+ * `JSON.parse`), so two distinct tuples can never collide regardless of what characters member names
+ * contain.
+ */
 function edgeKey(fromKind: string, fromNodeId: InternalNodeId, fromName: string, toKind: string, toNodeId: InternalNodeId, toName: string): string {
-	return `${fromKind}:${fromNodeId}:${fromName}->${toKind}:${toNodeId}:${toName}`
+	return JSON.stringify([fromKind, fromNodeId, fromName, toKind, toNodeId, toName])
 }
 
 function walkDeps(value: unknown, resolveLeaf: (leaf: AnyDepExpression) => CompiledDependency): CompiledDependencyTree {
@@ -233,14 +242,22 @@ export function resolveDependencies(
 		const configFrag = configFragment(node)
 		for (const [name, propertyDefinition] of definition.properties) {
 			const dep = createDependencyBuilder<never, 'property'>()
-			const registerDepsResult = propertyDefinition.registerDeps?.({
-				widget: node.publicNode,
-				blueprint: navigator,
-				dep,
-				...configFrag,
-			})
-			assertSyncValue(registerDepsResult, `Property "${name}"'s registerDeps`)
-			const rawDeps = registerDepsResult ?? {}
+
+			// A present callback returning `undefined`/`null` (only reachable via a JS/`any` contract
+			// escape) is malformed callback output, not the same as the callback being omitted; only an
+			// *omitted* callback synthesizes empty deps. `walkDeps` already throws on any non-expression,
+			// non-container value (including `null`/`undefined`), so a present callback's result is
+			// always routed through it unmodified.
+			let rawDeps: unknown = {}
+			if (propertyDefinition.registerDeps !== undefined) {
+				rawDeps = propertyDefinition.registerDeps({
+					widget: node.publicNode,
+					blueprint: navigator,
+					dep,
+					...configFrag,
+				})
+				assertSyncValue(rawDeps, `Property "${name}"'s registerDeps`)
+			}
 
 			const member: BlueprintDependencyMember = { type: 'property', name }
 			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, member, leaf))
@@ -259,14 +276,18 @@ export function resolveDependencies(
 		const configFrag = configFragment(node)
 		for (const [name, methodDefinition] of definition.methods) {
 			const dep = createDependencyBuilder<never, 'method'>()
-			const registerDepsResult = methodDefinition.registerDeps?.({
-				widget: node.publicNode,
-				blueprint: navigator,
-				dep,
-				...configFrag,
-			})
-			assertSyncValue(registerDepsResult, `Method "${name}"'s registerDeps`)
-			const rawDeps = registerDepsResult ?? {}
+
+			// Same "omitted vs malformed" distinction as the properties loop above.
+			let rawDeps: unknown = {}
+			if (methodDefinition.registerDeps !== undefined) {
+				rawDeps = methodDefinition.registerDeps({
+					widget: node.publicNode,
+					blueprint: navigator,
+					dep,
+					...configFrag,
+				})
+				assertSyncValue(rawDeps, `Method "${name}"'s registerDeps`)
+			}
 
 			const member: BlueprintDependencyMember = { type: 'method', name }
 			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, member, leaf))

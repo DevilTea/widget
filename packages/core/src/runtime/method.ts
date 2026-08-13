@@ -59,7 +59,10 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 
 			if (!validArgs || argsCollector.hasAnyIssue()) {
 				const finalized = argsCollector.finalize(input => buildMethodArgsIssue(params.widgetId, params.name, args, input))
-				const issues = finalized.length > 0 ? finalized : [buildDefaultMethodArgsIssue(params.widgetId, params.name, args)]
+				// `finalize()` already returns a frozen array; the generic-fallback branch builds a
+				// fresh array here and needs the same immutable-snapshot treatment (issue #10
+				// issue-snapshot contract).
+				const issues = finalized.length > 0 ? finalized : Object.freeze([Object.freeze(buildDefaultMethodArgsIssue(params.widgetId, params.name, args))])
 				issuesSignal(issues)
 				return { success: false, issues: issues as readonly [RuntimeMethodIssue, ...RuntimeMethodIssue[]] }
 			}
