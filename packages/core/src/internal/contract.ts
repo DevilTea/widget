@@ -171,10 +171,12 @@ export type ResolvedBlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple
  * removed recursively — including through `.slots`' children — not just at the top level.
  *
  * Used only for the types compile-time callbacks (`validateStructure`, `registerDeps`) and
- * {@link BlueprintCompileView} see. The underlying object is not changed at runtime — the very same
- * node object keeps `getIssues` once it is later exposed through the finalized Blueprint — only the
- * static type these compile-time surfaces expose omits it, because compilation is still in progress
- * and no final issue snapshot exists yet.
+ * {@link BlueprintCompileView} see. Backed by a genuinely restricted, frozen runtime facade object —
+ * not the same node object the finalized Blueprint later exposes — so a facade never physically has
+ * `getIssues()` and no callback can reassign a navigation method to corrupt the view later callbacks in
+ * the same compile pass observe. Facade identity is snapshot-local to one compile pass; the finalized
+ * Blueprint's nodes (which do carry `getIssues()`) are separate full-node objects built once
+ * compilation completes, because no final issue snapshot exists yet while compilation is in progress.
  */
 export type BlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
 	= | Omit<UnresolvedBlueprintWidgetNode<Plugins>, 'getIssues'>

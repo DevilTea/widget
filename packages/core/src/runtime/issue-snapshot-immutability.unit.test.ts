@@ -401,4 +401,239 @@ describe('runtime.getIssues() exposes an immutable runtime-level snapshot (round
 		expect(runtime.getCollectedIssues())
 			.not.toContain(fake)
 	})
+
+	it('a normal best-effort path (unknown widget id, valid top-level record) also produces a frozen runtime-level snapshot (round-4 finding 3774140630)', () => {
+		const plugin = createWidgetPlugin('override-probe-normal')
+			.interfaces<OverrideProbeInterfaces>()
+			.state(state => state.count({
+				validate: (input): input is number => typeof input === 'number',
+				default: () => 0,
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'override-probe-normal' })
+		if (blueprint.status !== 'valid')
+			throw new Error('test fixture: expected a valid blueprint')
+
+		// A *valid top-level record* whose only problem is an unknown widget id: this reaches the
+		// function's final return, not either early-return branch (`undefined` / malformed top-level).
+		const runtime = blueprint.createRuntime({ overrideStateDefaults: { 'does-not-exist': { count: 1 } } })
+
+		const issues = runtime.getIssues()
+		expect(issues.length)
+			.toBeGreaterThan(0)
+		expect(Object.isFrozen(issues))
+			.toBe(true)
+
+		const fake = { source: { type: 'forged' }, message: 'forged' }
+		expect(() => (issues as unknown as unknown[]).push(fake))
+			.toThrow(TypeError)
+		expect(runtime.getIssues())
+			.toBe(issues)
+		expect(runtime.getCollectedIssues())
+			.not.toContain(fake)
+	})
+
+	it('an unknown state key on a known widget (also the final-return path) produces a frozen runtime-level snapshot too', () => {
+		const plugin = createWidgetPlugin('override-probe-unknown-key')
+			.interfaces<OverrideProbeInterfaces>()
+			.state(state => state.count({
+				validate: (input): input is number => typeof input === 'number',
+				default: () => 0,
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'override-probe-unknown-key' })
+		if (blueprint.status !== 'valid')
+			throw new Error('test fixture: expected a valid blueprint')
+
+		const runtime = blueprint.createRuntime({ overrideStateDefaults: { root: { doesNotExist: 1 } } })
+
+		const issues = runtime.getIssues()
+		expect(issues.length)
+			.toBeGreaterThan(0)
+		expect(Object.isFrozen(issues))
+			.toBe(true)
+
+		const fake = { source: { type: 'forged' }, message: 'forged' }
+		expect(() => (issues as unknown as unknown[]).push(fake))
+			.toThrow(TypeError)
+		expect(runtime.getIssues())
+			.toBe(issues)
+	})
+})
+
+describe('deepFreezeIssue freezes the Blueprint dependency-issue `member` wrapper too (round-4 finding 3774140636)', () => {
+	interface MemberProbeInterfaces {
+		properties: {
+			probe: unknown
+		}
+	}
+
+	it('(issue.source.member as any).name = "forged" throws, and `member` stays canonical', () => {
+		const plugin = createWidgetPlugin('member-freeze-prober')
+			.interfaces<MemberProbeInterfaces>()
+			.properties(properties => properties.probe({
+				// `dep.parent` with no parent on the root widget: a required dependency with target
+				// cardinality 0, producing a Blueprint `dependency` issue owned by this Property member.
+				registerDeps: ({ dep }) => ({ probe: dep.parent.properties.get('anything') }),
+				compute: () => null,
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'member-freeze-prober' })
+
+		expect(blueprint.status)
+			.toBe('invalid')
+		if (blueprint.status !== 'invalid')
+			throw new Error('test fixture: expected an invalid blueprint')
+
+		const dependencyIssue = blueprint.getCollectedIssues()
+			.find(issue => issue.source.type === 'dependency')
+		if (dependencyIssue === undefined || dependencyIssue.source.type !== 'dependency')
+			throw new Error('test fixture: expected a dependency issue.')
+
+		const { member } = dependencyIssue.source
+		expect(member)
+			.toEqual({ type: 'property', name: 'probe' })
+		expect(Object.isFrozen(member))
+			.toBe(true)
+
+		expect(() => {
+			(member as unknown as Record<string, unknown>).name = 'forged'
+		})
+			.toThrow(TypeError)
+
+		expect(dependencyIssue.source.member)
+			.toEqual({ type: 'property', name: 'probe' })
+		// Re-read through a fresh `getCollectedIssues()` call to confirm the mutation attempt didn't
+		// leave any lasting trace, in case `member` is shared across issues.
+		const dependencyIssueAgain = blueprint.getCollectedIssues()
+			.find(issue => issue.source.type === 'dependency')
+		if (dependencyIssueAgain === undefined || dependencyIssueAgain.source.type !== 'dependency')
+			throw new Error('test fixture: expected a dependency issue on re-read.')
+		expect(dependencyIssueAgain.source.member)
+			.toEqual({ type: 'property', name: 'probe' })
+	})
+})
+
+describe('a Property\'s cached ExecutionResult wrapper is frozen (round-4 finding 3774140642)', () => {
+	interface CachedResultInterfaces {
+		state: {
+			count: number
+		}
+		properties: {
+			doubled: number
+			viaDoubled: number
+		}
+	}
+
+	function createHarness() {
+		const plugin = createWidgetPlugin('cached-result-probe')
+			.interfaces<CachedResultInterfaces>()
+			.state(state => state.count({
+				validate: (input): input is number => typeof input === 'number',
+				default: () => 5,
+			}))
+			.properties(properties => properties
+				.doubled({
+					registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
+					compute: ({ deps }) => {
+						const result = deps.count()
+						return result.success ? (result.value ?? 0) * 2 : -1
+					},
+				})
+				.viaDoubled({
+					registerDeps: ({ dep }) => ({ doubled: dep.self.properties.get('doubled') }),
+					compute: ({ deps }) => {
+						const result = deps.doubled()
+						return result.success ? result.value ?? -1 : -1
+					},
+				}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'cached-result-probe' })
+		if (blueprint.status !== 'valid')
+			throw new Error('test fixture: expected a valid blueprint')
+
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('root')
+		if (widget === null)
+			throw new Error('test fixture: expected the root widget to resolve')
+		return { widget }
+	}
+
+	it('mutating a cached success result throws, and a later get() / dependency read still observes the canonical value (no recompute)', () => {
+		const { widget } = createHarness()
+
+		const first = widget.properties.doubled.get()
+		expect(first)
+			.toEqual({ success: true, value: 10 })
+		expect(Object.isFrozen(first))
+			.toBe(true)
+
+		expect(() => {
+			(first as unknown as Record<string, unknown>).value = 999
+		})
+			.toThrow(TypeError)
+
+		// Same cached object (no recompute triggered by the failed mutation attempt): still canonical.
+		const second = widget.properties.doubled.get()
+		expect(second)
+			.toBe(first)
+		expect(second)
+			.toEqual({ success: true, value: 10 })
+
+		// A dependent Property reading through the dependency graph also observes the canonical value,
+		// not a forged one.
+		expect(widget.properties.viaDoubled.get())
+			.toEqual({ success: true, value: 10 })
+	})
+
+	it('mutating a cached failure result throws and getIssues()/get() stay canonical', () => {
+		interface FlakyInterfaces {
+			properties: {
+				flaky: number
+			}
+		}
+
+		const plugin = createWidgetPlugin('cached-failure-probe')
+			.interfaces<FlakyInterfaces>()
+			.properties(properties => properties.flaky({
+				compute: ({ addIssue }) => {
+					addIssue({ message: 'flaky failed' })
+					return 0
+				},
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'cached-failure-probe' })
+		if (blueprint.status !== 'valid')
+			throw new Error('test fixture: expected a valid blueprint')
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('root')
+		if (widget === null)
+			throw new Error('test fixture: expected the root widget to resolve')
+
+		const result = widget.properties.flaky.get()
+		expect(result.success)
+			.toBe(false)
+		expect(Object.isFrozen(result))
+			.toBe(true)
+
+		expect(() => {
+			(result as unknown as Record<string, unknown>).success = true
+		})
+			.toThrow(TypeError)
+
+		expect(widget.properties.flaky.get())
+			.toBe(result)
+		expect(widget.properties.flaky.get().success)
+			.toBe(false)
+	})
 })

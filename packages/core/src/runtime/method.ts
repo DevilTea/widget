@@ -64,7 +64,10 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				// issue-snapshot contract).
 				const issues = finalized.length > 0 ? finalized : freezeIssueSnapshot([buildDefaultMethodArgsIssue(params.widgetId, params.name, args)])
 				issuesSignal(issues)
-				return { success: false, issues: issues as readonly [RuntimeMethodIssue, ...RuntimeMethodIssue[]] }
+				// `invoke()` doesn't cache its return value, so mutating it can't corrupt a later call
+				// the way Property's cached computed result could — freezing the wrapper here is a
+				// consistency/defense-in-depth measure, not a fix for a persistence hazard.
+				return Object.freeze({ success: false, issues: issues as readonly [RuntimeMethodIssue, ...RuntimeMethodIssue[]] })
 			}
 
 			const execCollector = createOperationCollector<RelativeValueIssueInput, RuntimeMethodIssue>()
@@ -88,9 +91,13 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 			const issues = execCollector.finalize(input => buildMethodResultIssue(params.widgetId, params.name, value, input))
 			issuesSignal(toIssueSnapshot(issues))
 
-			return issues.length > 0
+			// Same consistency rationale as the validateArgs-failure branch above: not a persistence
+			// hazard (each `invoke()` builds a fresh wrapper), but freezing it keeps every
+			// `ExecutionResult` returned to plugin/consumer code equally immutable.
+			const result: ExecutionResult<unknown, RuntimeMethodIssue> = issues.length > 0
 				? { success: false, issues: issues as readonly [RuntimeMethodIssue, ...RuntimeMethodIssue[]] }
 				: { success: true, value }
+			return Object.freeze(result)
 		}
 		finally {
 			endBatch()

@@ -73,8 +73,10 @@ function freezeDependencyField(dependency: unknown): void {
  * Recursively freezes the framework-owned *diagnostic structure* of one Issue: the issue object
  * itself, its `source` object, and the known framework-owned structural wrapper fields inside
  * `source` — `path` (an array of `PropertyKey`s), `related` (an array of location/reference wrapper
- * objects) and `dependency` (a compiled dependency reference, plus its nested `target`/`operation`
- * wrappers).
+ * objects), `dependency` (a compiled dependency reference, plus its nested `target`/`operation`
+ * wrappers) and `member` (a Blueprint `{ type, name }` owner-member wrapper; multiple issues may share
+ * the exact same `member` object, so freezing it here is both idempotent and safe to apply once per
+ * issue that references it).
  *
  * Deliberately does **not** freeze arbitrary caller/plugin-owned payload values carried purely for
  * diagnostic display — `candidate`, `result`, `args`, `input`, `received` — nor any object a
@@ -92,6 +94,7 @@ export function deepFreezeIssue<T>(issue: T): T {
 		freezeIfArray(sourceRecord.path)
 		freezeRelatedField(sourceRecord.related)
 		freezeDependencyField(sourceRecord.dependency)
+		freezeIfObject(sourceRecord.member)
 		Object.freeze(source)
 	}
 

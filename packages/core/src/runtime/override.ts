@@ -86,5 +86,9 @@ export function resolveStateOverrides(
 			candidatesByNodeId.set(nodeId!, perWidget)
 	}
 
-	return { runtimeLevelIssues, candidatesByNodeId }
+	// Same canonicalization as the two early returns above: this is the normal best-effort path (an
+	// unknown widget/key, malformed per-widget fragment, or a valid record with no problems at all) and
+	// was previously left unfrozen here, so `runtime.getIssues()` still exposed a mutable array for
+	// every "normal" `overrideStateDefaults` shape (issue #10 Runtime diagnostic snapshot semantics).
+	return { runtimeLevelIssues: freezeIssueSnapshot(runtimeLevelIssues), candidatesByNodeId }
 }

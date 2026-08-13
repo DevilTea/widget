@@ -70,9 +70,15 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		const issues = collector.finalize(input => buildPropertyResultIssue(params.widgetId, params.name, value, input))
 		issuesSignal(toIssueSnapshot(issues))
 
-		return issues.length > 0
+		// The alien computed caches this exact object as its reactive value and reuses it for every
+		// `.get()`/dependency read until the next actual recompute; shallow-freeze the wrapper so
+		// external code cannot rewrite `.value`/`.success` in place with no invalidation. `issues` is
+		// already deep-frozen (via `finalize()`); `value` is the plugin's own payload and is
+		// deliberately left untouched.
+		const result: ExecutionResult<unknown, RuntimePropertyIssue> = issues.length > 0
 			? { success: false, issues: issues as readonly [RuntimePropertyIssue, ...RuntimePropertyIssue[]] }
 			: { success: true, value }
+		return Object.freeze(result)
 	})
 
 	const internal: PropertyPrimitiveInternal = {
