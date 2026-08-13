@@ -1,0 +1,13 @@
+{
+	"extends": "@deviltea/tsconfig/neutral",
+	"compilerOptions": {
+		"composite": true
+	},
+	"include": [
+		"./src/**/*.ts"
+	],
+	"exclude": [
+		"./src/**/*.unit.test.ts",
+		"./src/**/*.test-d.ts"
+	]
+}
