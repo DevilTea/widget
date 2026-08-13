@@ -73,21 +73,29 @@ function reportDependencyIssue(
 
 /**
  * Per-dependency-leaf unique id, assigned once when a leaf's callable is materialized and closed over
- * for the callable's lifetime. Combined with the failure message and a raw failure-identity anchor to
- * dedupe repeated insertion of the same dependency failure into one execution scope's collector (issue
- * #10 §12: "repeated reads of the same failing dependency ... avoid duplicating the same dependency
- * issue insertion").
+ * for the callable's lifetime. Combined with a raw failure-identity anchor to dedupe repeated insertion
+ * of the same dependency failure into one execution scope's collector (issue #10 §12: "repeated reads
+ * of the same failing dependency ... avoid duplicating the same dependency issue insertion").
  */
 let nextLeafId = 0
 
 /**
- * Builds the dedupe descriptor for one dependency-leaf failure. `anchor` is passed through to the
- * collector as the *raw* value (never stringified): the collector compares it via `Set` SameValueZero
- * membership, which is collision-free for every JS value — including two distinct `Symbol`s that share
- * a description, which a `typeof`+`String()` encoding would incorrectly conflate.
+ * Builds the dedupe descriptor for one dependency-leaf failure.
+ *
+ * `scope` identifies the dependency *leaf* only (`leafId`) — never the failure's `message`. Message is
+ * human-readable-only per issue #10 ("`message` is human-readable only, never a machine protocol") and
+ * must not participate in identity/machine logic; stuffing it into `scope` would make two occurrences
+ * of literally the same failure fail to dedupe if the message text ever varied, and — more subtly —
+ * would never actually help distinguish genuinely different failures either, since that job already
+ * belongs entirely to `anchor`.
+ *
+ * `anchor` is passed through to the collector as the *raw* value (never stringified): the collector
+ * compares it via `Set` SameValueZero membership, which is collision-free for every JS value —
+ * including two distinct `Symbol`s that share a description, which a `typeof`+`String()` encoding would
+ * incorrectly conflate.
  */
-function dependencyDedupeDescriptor(leafId: number, message: string, failureAnchor: unknown): DedupeDescriptor {
-	return { scope: `${leafId}|${message}`, anchor: failureAnchor }
+export function dependencyDedupeDescriptor(leafId: number, failureAnchor: unknown): DedupeDescriptor {
+	return { scope: `${leafId}`, anchor: failureAnchor }
 }
 
 /**
@@ -180,7 +188,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
 					// object would then get committed as the consumer's own latest snapshot.
 					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
-					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, issue.message, refined.received))
+					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, refined.received))
 					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
@@ -222,7 +230,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
 					// object would then get committed as the consumer's own latest snapshot.
 					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
-					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, issue.message, refined.received))
+					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, refined.received))
 					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
@@ -249,7 +257,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
 					// object would then get committed as the consumer's own latest snapshot.
 					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
-					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, issue.message, refined.received))
+					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, refined.received))
 					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
 				}
 				return { success: true, value: refined.value }
@@ -282,7 +290,7 @@ function wrapTargetFailure(
 	freezeIssueSnapshot(wrapped)
 
 	for (const { issue, targetIssue } of pairs)
-		reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, issue.message, targetIssue))
+		reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, targetIssue))
 
 	return wrapped as unknown as readonly [unknown, ...unknown[]]
 }

@@ -206,7 +206,7 @@ primitive in detail.
 
 ## License
 
-[MIT](https://github.com/DevilTea/deviltea-labs/blob/main/packages/widget/core/LICENSE) License © 2023-PRESENT [DevilTea](https://github.com/DevilTea)
+[MIT](https://github.com/DevilTea/deviltea-labs/blob/main/LICENSE) License © 2023-PRESENT [DevilTea](https://github.com/DevilTea)
 
 <!-- Badges -->
 
