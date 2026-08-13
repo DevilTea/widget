@@ -260,17 +260,29 @@ function recoverSlots(
 	localIssues: BlueprintIssue[],
 ): void {
 	const publicNode = working.publicNode
-	if (!hasOwn(raw, 'slots'))
+	const definition = plugin !== null ? readWidgetPluginDefinition(plugin) : null
+	const declaredSlots = definition?.slots ?? null
+
+	function fillMissingDeclaredSlots(): void {
+		if (declaredSlots === null)
+			return
+		for (const slotName of declaredSlots.keys()) {
+			if (!working.semanticSlots.has(slotName))
+				working.semanticSlots.set(slotName, [])
+		}
+	}
+
+	if (!hasOwn(raw, 'slots')) {
+		fillMissingDeclaredSlots()
 		return
+	}
 
 	const rawSlotsValue = raw.slots
 	if (!isRecoverableObject(rawSlotsValue)) {
 		localIssues.push(definitionIssue(publicNode, 'Widget "slots" must be a plain object.', ['slots']))
+		fillMissingDeclaredSlots()
 		return
 	}
-
-	const definition = plugin !== null ? readWidgetPluginDefinition(plugin) : null
-	const declaredSlots = definition?.slots ?? null
 
 	if (plugin !== null && declaredSlots === null)
 		localIssues.push(definitionIssue(publicNode, 'Widget declares "slots" but its plugin has no slots capability.', ['slots']))
@@ -299,12 +311,7 @@ function recoverSlots(
 			working.semanticSlots.set(slotName, childNodeIds)
 	}
 
-	if (declaredSlots !== null) {
-		for (const slotName of declaredSlots.keys()) {
-			if (!working.semanticSlots.has(slotName))
-				working.semanticSlots.set(slotName, [])
-		}
-	}
+	fillMissingDeclaredSlots()
 }
 
 function flushIssues(ctx: BuildContext, issues: readonly BlueprintIssue[]): void {

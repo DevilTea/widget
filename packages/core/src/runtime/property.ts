@@ -21,7 +21,7 @@ import { computed, signal } from 'alien-signals'
 import { EMPTY_ISSUES } from '../issue'
 import { createTrackedSubscription } from './adapter'
 import { createOperationCollector } from './collector'
-import { buildPropertyResultIssue } from './issues'
+import { buildPropertyResultIssue, toIssueSnapshot } from './issues'
 import { assertSyncValue } from './sync'
 
 export interface PropertyPrimitiveInternal {
@@ -68,7 +68,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		assertSyncValue(value, `Property "${params.name}"'s compute`)
 
 		const issues = collector.finalize(input => buildPropertyResultIssue(params.widgetId, params.name, value, input))
-		issuesSignal(issues)
+		issuesSignal(toIssueSnapshot(issues))
 
 		return issues.length > 0
 			? { success: false, issues: issues as readonly [RuntimePropertyIssue, ...RuntimePropertyIssue[]] }
