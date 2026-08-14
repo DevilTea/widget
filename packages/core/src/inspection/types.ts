@@ -213,8 +213,11 @@ export interface RuntimeInspection<Plugins extends AnyWidgetPluginTuple = AnyWid
 
 	/**
 	 * For every `InspectionNodeId` obtained from this `RuntimeInspection`'s `blueprint`, returns its
-	 * corresponding `RuntimeWidgetInspection`. `null` when the supplied value is out of this snapshot's
-	 * domain (forged/foreign values). Never throws for an ordinary lookup miss.
+	 * corresponding `RuntimeWidgetInspection`. `null` when the supplied value does not designate a node
+	 * in this snapshot (forged/out-of-domain values). An `InspectionNodeId` minted by a *different*
+	 * snapshot is outside this identifier's defined domain — no cross-snapshot rejection is promised, and
+	 * the implementation is not required to detect a value that happens to collide numerically with a
+	 * node in this snapshot. Never throws for an ordinary lookup miss.
 	 */
 	getWidget: (nodeId: InspectionNodeId) => RuntimeWidgetInspection<Plugins> | null
 }

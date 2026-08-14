@@ -56,7 +56,27 @@ const configuredPlugin = createWidgetPlugin('configured')
 	})
 	.done()
 
-const system = createWidgetSystem({ plugins: [leafPlugin, containerPlugin, zebraApplePlugin, configuredPlugin] })
+interface ExplicitEmptyInterfaces {
+	state: Record<never, never>
+	properties: Record<never, never>
+	methods: Record<never, never>
+}
+
+/**
+ * `state`/`properties`/`methods` are all *declared* (each builder phase is actually invoked) but with
+ * zero member keys — the "explicitly declared empty" capability shape distinct from "capability not
+ * declared at all" (issue #10 amendment "builder/member-key" — `Record<never, never>` is this codebase's
+ * established spelling for a declared-but-empty capability, matching `compile-view-typing.unit.test.ts`
+ * and `plugin-typestate.unit.test.ts`).
+ */
+const explicitEmptyPlugin = createWidgetPlugin('explicit-empty')
+	.interfaces<ExplicitEmptyInterfaces>()
+	.state(state => state)
+	.properties(properties => properties)
+	.methods(methods => methods)
+	.done()
+
+const system = createWidgetSystem({ plugins: [leafPlugin, containerPlugin, zebraApplePlugin, configuredPlugin, explicitEmptyPlugin] })
 
 function widgetIdOf(node: { readonly node: { readonly resolved: boolean, readonly id?: string } }): string | null {
 	return node.node.resolved ? (node.node.id as string) : null
@@ -239,6 +259,27 @@ describe('capability distinction', () => {
 			.toBe(false)
 		expect(root.capabilities.methods)
 			.toBe(false)
+		expect(root.state)
+			.toEqual([])
+		expect(root.properties)
+			.toEqual([])
+		expect(root.methods)
+			.toEqual([])
+	})
+
+	it('capabilities.state/properties/methods are true (not absent) for a declared-but-explicitly-empty capability, with inventories staying [] (review round 1, finding 5)', () => {
+		const blueprint = system.createBlueprint({ id: 'root', type: 'explicit-empty' })
+		const inspection = inspectBlueprint(blueprint)
+		const root = inspection.getNode(inspection.rootNodeId)!
+		if (!root.resolved)
+			throw new Error('test fixture: expected a resolved root')
+
+		expect(root.capabilities.state)
+			.toBe(true)
+		expect(root.capabilities.properties)
+			.toBe(true)
+		expect(root.capabilities.methods)
+			.toBe(true)
 		expect(root.state)
 			.toEqual([])
 		expect(root.properties)

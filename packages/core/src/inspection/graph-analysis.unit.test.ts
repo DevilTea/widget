@@ -215,6 +215,22 @@ describe('invalid SCC projection', () => {
 			.toEqual(['method:m', 'property:p'])
 	})
 
+	it('invalidCycles[].members follows the normative semantic member order verbatim — properties before methods, declaration order — never sorted away (review round 1, finding 5)', () => {
+		const { inspection: mixedInspection, root: mixedRoot } = inspectRootOf('graph-prop-method-cycle')
+		expect(mixedInspection.invalidCycles[0]!.members)
+			.toEqual([
+				{ nodeId: mixedRoot.nodeId, member: { type: 'property', name: 'p' } },
+				{ nodeId: mixedRoot.nodeId, member: { type: 'method', name: 'm' } },
+			])
+
+		const { inspection: propPropInspection, root: propPropRoot } = inspectRootOf('graph-prop-prop-cycle')
+		expect(propPropInspection.invalidCycles[0]!.members)
+			.toEqual([
+				{ nodeId: propPropRoot.nodeId, member: { type: 'property', name: 'p1' } },
+				{ nodeId: propPropRoot.nodeId, member: { type: 'property', name: 'p2' } },
+			])
+	})
+
 	it('a Property<->Property cycle is present with both members', () => {
 		const { inspection } = inspectRootOf('graph-prop-prop-cycle')
 		expect(inspection.invalidCycles)

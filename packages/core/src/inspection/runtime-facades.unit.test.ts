@@ -229,6 +229,58 @@ describe('property inspection subscribe truth table', () => {
 		expect(() => unsubscribe()).not.toThrow()
 		expect(() => unsubscribe()).not.toThrow()
 	})
+
+	it('a listener that rereads the same Property inside the notification observes the just-completed result with no extra compute (review round 1, finding 1)', () => {
+		const { widget, runtime, setControlledValue, getComputeSpyCount } = createHarness()
+		setControlledValue(7)
+		const propertyInspection = inspectRuntime(runtime)
+			.getWidget(rootIdOf(runtime))!.getProperty('controlled')!
+
+		let observedInsideListener: unknown
+		let computeCountInsideListener = -1
+		propertyInspection.subscribe(() => {
+			// Reread the ordinary Runtime Property surface synchronously, from inside the notification. If
+			// the inspection fact were published before alien-signals committed the computed's own cache,
+			// this could observe the previous cached result (or trigger a second, unwanted recompute).
+			observedInsideListener = widget.properties.controlled.get()
+			computeCountInsideListener = getComputeSpyCount()
+		})
+
+		const result = widget.properties.controlled.get()
+
+		expect(observedInsideListener)
+			.toEqual(result)
+		// One compute for the outer `.get()`; the listener's reread must hit the already-committed cache.
+		expect(computeCountInsideListener)
+			.toBe(1)
+		expect(getComputeSpyCount())
+			.toBe(1)
+	})
+
+	it('a listener that subscribes a new listener during notification does not deliver the current publication to it (review round 1, finding 3)', () => {
+		const { widget, runtime, setMode, setControlledValue } = createHarness()
+		const propertyInspection = inspectRuntime(runtime)
+			.getWidget(rootIdOf(runtime))!.getProperty('controlled')!
+
+		const bCalls: unknown[] = []
+		propertyInspection.subscribe(() => {
+			propertyInspection.subscribe(snapshot => bCalls.push(snapshot))
+		})
+
+		setMode('success')
+		setControlledValue(1)
+		widget.properties.controlled.get()
+		// B subscribed during A's notification for this exact completion; B must not receive it.
+		expect(bCalls)
+			.toEqual([])
+
+		widget.state.count.set(99)
+		setControlledValue(2)
+		const resultC = widget.properties.controlled.get()
+		// The *next* real completion after B's subscription does reach B.
+		expect(bCalls)
+			.toEqual([{ status: 'completed', result: resultC }])
+	})
 })
 
 describe('state inspection passive read + notification truth table', () => {
@@ -283,6 +335,27 @@ describe('state inspection passive read + notification truth table', () => {
 		widget.state.count.set(5)
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
+	})
+
+	it('a listener that subscribes a new listener during notification does not deliver the current publication to it (review round 1, finding 3)', () => {
+		const { widget, runtime } = createHarness()
+		const stateInspection = inspectRuntime(runtime)
+			.getWidget(rootIdOf(runtime))!.getState('count')!
+
+		const bCalls: unknown[] = []
+		stateInspection.subscribe(() => {
+			stateInspection.subscribe(snapshot => bCalls.push(snapshot))
+		})
+
+		widget.state.count.set(1)
+		// B subscribed during A's notification for this exact change; B must not receive it.
+		expect(bCalls)
+			.toEqual([])
+
+		widget.state.count.set(2)
+		// The *next* authoritative change after B's subscription does reach B.
+		expect(bCalls)
+			.toEqual([{ value: 2 }])
 	})
 
 	it('getSnapshot() before any write reflects the retained default: never a null-vs-uninitialized ambiguity beyond the documented T | null', () => {

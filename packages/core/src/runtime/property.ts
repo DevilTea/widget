@@ -36,10 +36,10 @@ export type PropertyInspectionSnapshot
 const NEVER_EVALUATED_SNAPSHOT: PropertyInspectionSnapshot = Object.freeze({ status: 'never-evaluated' })
 
 /**
- * One retained-fact channel for the readonly `@deviltea/widget-core/inspection` subpath. Same
- * fact-commit-point discipline as `StateInspectionChannel` in `./state`: published directly from inside
- * the computed body at the exact point a natural recompute actually completes, never by wrapping
- * `getResult()` in a second alien-signals effect.
+ * One retained-fact channel for the readonly `@deviltea/widget-core/inspection` subpath. Published only
+ * after `resultComputed()` has returned — see `getResultWithInspectionPublish` below for why publishing
+ * from inside the computed getter body is wrong — and never by wrapping `getResult()` in a second
+ * alien-signals effect.
  */
 export interface PropertyInspectionChannel {
 	getSnapshot: () => PropertyInspectionSnapshot
@@ -74,15 +74,23 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	const issuesSignal = signal<readonly RuntimePropertyIssue[]>(EMPTY_ISSUES)
 
 	let inspectionSnapshot: PropertyInspectionSnapshot = NEVER_EVALUATED_SNAPSHOT
-	// Plain lazy-allocated set, same rationale as the State inspection channel: never a global registry.
-	let inspectionListeners: Set<(snapshot: PropertyInspectionSnapshot) => void> | null = null
+	// Plain lazy-allocated registration list (not a `Set` keyed by the listener function itself — two
+	// independent `subscribe(sameFn)` calls must stay two independent registrations, exactly like the
+	// alien-signals-effect-backed `createTrackedSubscription` never dedupes by listener identity either).
+	interface ListenerEntry { readonly listener: (snapshot: PropertyInspectionSnapshot) => void }
+	let inspectionListeners: ListenerEntry[] | null = null
+	let lastPublishedResult: ExecutionResult<unknown, RuntimePropertyIssue> | null = null
 
 	function publishInspectionCompletion(result: ExecutionResult<unknown, RuntimePropertyIssue>): void {
 		inspectionSnapshot = Object.freeze({ status: 'completed', result })
 		if (inspectionListeners === null)
 			return
-		for (const listener of inspectionListeners)
-			invokeListenerIsolated(listener, inspectionSnapshot)
+		// Iterate a stable snapshot taken at publication start: a listener that itself calls `subscribe()`
+		// during this loop must not have its new registration visited by *this* publication (future-changes
+		// -only / no-immediate-emission), which a live-array/live-Set iteration could otherwise do.
+		const listenersSnapshot = inspectionListeners.slice()
+		for (const entry of listenersSnapshot)
+			invokeListenerIsolated(entry.listener, inspectionSnapshot)
 	}
 
 	const resultComputed = computed<ExecutionResult<unknown, RuntimePropertyIssue>>(() => {
@@ -107,35 +115,59 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		issuesSignal(toIssueSnapshot(issues))
 
 		// The alien computed caches this exact object as its reactive value and reuses it for every
-		// `.get()`/dependency read until the next actual recompute; shallow-freeze the wrapper so
-		// external code cannot rewrite `.value`/`.success` in place with no invalidation. `issues` is
-		// already deep-frozen (via `finalize()`); `value` is the plugin's own payload and is
-		// deliberately left untouched.
+		// `.get()`/dependency read until the next actual recompute; shallow-freeze the wrapper so external
+		// code cannot rewrite `.value`/`.success` in place with no invalidation. `issues` is already
+		// deep-frozen (via `finalize()`); `value` is the plugin's own payload and is deliberately left
+		// untouched.
 		const result: ExecutionResult<unknown, RuntimePropertyIssue> = issues.length > 0
 			? { success: false, issues: issues as readonly [RuntimePropertyIssue, ...RuntimePropertyIssue[]] }
 			: { success: true, value }
-		const frozenResult = Object.freeze(result)
-
-		// Published from directly inside the computed body — the exact fact-commit point of a natural
-		// recompute (issue #10 inspection amendment "runtime inspection, materialization, disposal,
-		// conformance") — never by wrapping `getResult()`/`resultComputed()` in a second alien-signals
-		// effect. Every actual recompute publishes unconditionally, success or semantic failure alike,
-		// with no deep-equality suppression: two real completions notify twice even when equal.
-		publishInspectionCompletion(frozenResult)
-
-		return frozenResult
+		return Object.freeze(result)
 	})
 
+	/**
+	 * Reads the computed result through the exact same call every existing consumer already makes, then
+	 * publishes the inspection fact only *after* that call has returned.
+	 *
+	 * In pinned alien-signals@3.2.1 a computed's cache assignment happens as `c.value = c.getter(...)`:
+	 * the getter runs to completion *before* the assignment to `c.value` takes effect. Publishing from
+	 * inside the getter body (as an earlier revision did) therefore ran before alien-signals had committed
+	 * the fresh result to its own cache — a synchronous inspection listener that read the same Property
+	 * back through the ordinary `.get()`/computed path during that window could observe the *previous*
+	 * cached result (or an inconsistent one on the very first evaluation). Reading `resultComputed()` to
+	 * completion here first, and only then comparing/publishing, means the cache is already committed by
+	 * the time any listener runs. This is not a second alien-signals effect and creates no new tracked
+	 * read: it is a plain post-return identity check on the same synchronous call `getResult()` already
+	 * made. Every actual recompute produces a brand-new frozen `ExecutionResult` literal (see above), so
+	 * comparing by reference — never by value — still notifies twice for two equal-value completions while
+	 * never re-publishing a merely-re-read, already-cached result.
+	 */
+	function getResultWithInspectionPublish(): ExecutionResult<unknown, RuntimePropertyIssue> {
+		const result = resultComputed()
+		if (result !== lastPublishedResult) {
+			lastPublishedResult = result
+			publishInspectionCompletion(result)
+		}
+		return result
+	}
+
 	const internal: PropertyPrimitiveInternal = {
-		getResult: () => resultComputed(),
+		getResult: getResultWithInspectionPublish,
 		getIssues: () => issuesSignal(),
 		inspection: {
 			getSnapshot: () => inspectionSnapshot,
 			subscribe: (listener) => {
+				const entry: ListenerEntry = { listener }
 				if (inspectionListeners === null)
-					inspectionListeners = new Set()
-				inspectionListeners.add(listener)
-				return () => inspectionListeners?.delete(listener)
+					inspectionListeners = []
+				inspectionListeners.push(entry)
+				return () => {
+					if (inspectionListeners === null)
+						return
+					const index = inspectionListeners.indexOf(entry)
+					if (index !== -1)
+						inspectionListeners.splice(index, 1)
+				}
 			},
 		},
 	}

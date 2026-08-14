@@ -168,7 +168,10 @@ describe('immutability', () => {
 		.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
 		.properties(properties => properties.p({
 			registerDeps: ({ dep }) => ({ v: dep.self.state.get('value') }),
-			compute: () => null,
+			compute: ({ deps }) => {
+				const result = deps.v()
+				return result.success ? result.value : null
+			},
 		}))
 		.methods(methods => methods.m({
 			registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p') }),
@@ -188,7 +191,22 @@ describe('immutability', () => {
 		.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
 		.done()
 
-	const system = createWidgetSystem({ plugins: [immutContainerPlugin, immutLeafPlugin] })
+	interface ImmutCycleInterfaces {
+		properties: {
+			loop: unknown
+		}
+	}
+
+	/** A Property self-loop, used only to populate `invalidCycles` for the nested-member-freeze test. */
+	const immutCyclePlugin = createWidgetPlugin('immut-cycle')
+		.interfaces<ImmutCycleInterfaces>()
+		.properties(properties => properties.loop({
+			registerDeps: ({ dep }) => ({ self: dep.self.properties.get('loop') }),
+			compute: () => null,
+		}))
+		.done()
+
+	const system = createWidgetSystem({ plugins: [immutContainerPlugin, immutLeafPlugin, immutCyclePlugin] })
 
 	it('every framework-owned inspection structure is frozen: nodes, slots, members, dependencies, paths, cycles', () => {
 		const blueprint = system.createBlueprint({
@@ -229,13 +247,88 @@ describe('immutability', () => {
 			.toBe(true)
 		expect(Object.isFrozen(dep.path))
 			.toBe(true)
+		expect(Object.isFrozen(dep.reference))
+			.toBe(true)
+		expect(Object.isFrozen(dep.reference.target))
+			.toBe(true)
+		expect(Object.isFrozen(dep.reference.operation))
+			.toBe(true)
 
 		const methodDep = root.methods[0]!.dependencies[0]!
 		expect(Object.isFrozen(methodDep))
 			.toBe(true)
+		expect(Object.isFrozen(methodDep.reference))
+			.toBe(true)
+		expect(Object.isFrozen(methodDep.reference.target))
+			.toBe(true)
+		expect(Object.isFrozen(methodDep.reference.operation))
+			.toBe(true)
 
 		expect(Object.isFrozen(inspection.invalidCycles))
 			.toBe(true)
+	})
+
+	it('a resolved dependency reference (including nested target/operation) is a frozen, independent clone — mutation throws and cannot influence Runtime behavior (review round 1, finding 2)', () => {
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'immut-container',
+			slots: { items: [] },
+		})
+		const inspection = inspectBlueprint(blueprint)
+		const root = inspection.getNode(inspection.rootNodeId)!
+		if (!root.resolved)
+			throw new Error('test fixture: expected a resolved root')
+
+		const dep = root.properties[0]!.dependencies[0]!
+		expect(dep.status)
+			.toBe('resolved')
+
+		expect(() => {
+			(dep.reference.operation as unknown as { key: string }).key = 'corrupted'
+		})
+			.toThrow()
+		expect(() => {
+			(dep.reference.target as unknown as { type: string }).type = 'corrupted'
+		})
+			.toThrow()
+		// The attempted mutations above throw (frozen), so the reference itself never actually changes —
+		// asserted here for completeness rather than because a successful mutation was ever possible.
+		expect(dep.reference)
+			.toEqual({ target: { type: 'self' }, operation: { type: 'state-get', key: 'value' } })
+
+		if (blueprint.status !== 'valid')
+			throw new Error('test fixture: expected a valid blueprint')
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('root')!
+		if (widget.type !== 'immut-container')
+			throw new Error('test fixture: expected the "immut-container" widget')
+		widget.state.value.set(41)
+		// Runtime dependency resolution for `p` (the same declared dependency the inspection snapshot
+		// above projects) still resolves correctly against the real, compiler-owned `reference` object —
+		// proof the inspection-exposed clone was never aliased into Runtime materialization.
+		expect(widget.properties.p.get())
+			.toEqual({ success: true, value: 41 })
+		expect(widget.properties.p.getIssues())
+			.toEqual([])
+	})
+
+	it('invalidCycles[].members[].member is a frozen, independent clone (review round 1, finding 4)', () => {
+		const blueprint = system.createBlueprint({ id: 'root', type: 'immut-cycle' })
+		const inspection = inspectBlueprint(blueprint)
+
+		expect(inspection.invalidCycles)
+			.toHaveLength(1)
+		const memberRef = inspection.invalidCycles[0]!.members[0]!
+		expect(Object.isFrozen(memberRef))
+			.toBe(true)
+		expect(Object.isFrozen(memberRef.member))
+			.toBe(true)
+		expect(() => {
+			(memberRef.member as unknown as { name: string }).name = 'intruder'
+		})
+			.toThrow()
+		expect(memberRef.member)
+			.toEqual({ type: 'property', name: 'loop' })
 	})
 
 	it('mutating a frozen inspection array/object throws in strict mode or is a silent no-op, and never corrupts the snapshot', () => {

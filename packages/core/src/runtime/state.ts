@@ -65,17 +65,24 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	const issuesSignal = signal<readonly RuntimeStateIssue[]>(EMPTY_ISSUES)
 
 	let inspectionSnapshot: Readonly<{ value: unknown }> = Object.freeze({ value: null })
-	// Plain lazy-allocated set (issue #10 inspection amendment "runtime inspection, materialization,
-	// disposal, conformance"): never a global registry, allocated only once something actually
-	// subscribes.
-	let inspectionListeners: Set<(snapshot: Readonly<{ value: unknown }>) => void> | null = null
+	// Plain lazy-allocated registration list (issue #10 inspection amendment "runtime inspection,
+	// materialization, disposal, conformance"): never a global registry, allocated only once something
+	// actually subscribes. Not a `Set` keyed by the listener function itself — two independent
+	// `subscribe(sameFn)` calls must stay two independent registrations, exactly like the
+	// alien-signals-effect-backed `createTrackedSubscription` never dedupes by listener identity either.
+	interface ListenerEntry { readonly listener: (snapshot: Readonly<{ value: unknown }>) => void }
+	let inspectionListeners: ListenerEntry[] | null = null
 
 	function publishInspectionSnapshot(value: unknown): void {
 		inspectionSnapshot = Object.freeze({ value })
 		if (inspectionListeners === null)
 			return
-		for (const listener of inspectionListeners)
-			invokeListenerIsolated(listener, inspectionSnapshot)
+		// Iterate a stable snapshot taken at publication start: a listener that itself calls `subscribe()`
+		// during this loop must not have its new registration visited by *this* publication (future-changes
+		// -only / no-immediate-emission), which a live-array/live-Set iteration could otherwise do.
+		const listenersSnapshot = inspectionListeners.slice()
+		for (const entry of listenersSnapshot)
+			invokeListenerIsolated(entry.listener, inspectionSnapshot)
 	}
 
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateIssue> {
@@ -124,10 +131,17 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		inspection: {
 			getSnapshot: () => inspectionSnapshot,
 			subscribe: (listener) => {
+				const entry: ListenerEntry = { listener }
 				if (inspectionListeners === null)
-					inspectionListeners = new Set()
-				inspectionListeners.add(listener)
-				return () => inspectionListeners?.delete(listener)
+					inspectionListeners = []
+				inspectionListeners.push(entry)
+				return () => {
+					if (inspectionListeners === null)
+						return
+					const index = inspectionListeners.indexOf(entry)
+					if (index !== -1)
+						inspectionListeners.splice(index, 1)
+				}
 			},
 		},
 	}

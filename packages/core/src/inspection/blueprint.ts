@@ -43,6 +43,23 @@ import { readWidgetPluginDefinition } from '../plugin'
 // Dependency flattening
 // -------------------------------------------------------------------------------------------------
 
+/**
+ * Projects a compiler-owned `BlueprintDependencyReference` into an independent, deep-frozen structural
+ * clone (`target`/`operation` included).
+ *
+ * The compiler's own `reference` object (and its nested `target`/`operation` wrappers) is not guaranteed
+ * frozen for resolved/absent leaves — only issue finalization freezes it, and resolved/absent leaves
+ * never produce an Issue of their own. Runtime dependency-callable closures (`../runtime/deps.ts`)
+ * capture that *same* object; aliasing it directly into the public inspection snapshot would let a
+ * consumer mutate `dependency.reference.operation`/`.target` through `as any` and corrupt later Runtime
+ * lookups/diagnostics — a live inspection-to-semantics channel the readonly contract must not allow.
+ */
+function freezeClonedReference(reference: BlueprintDependencyReference): BlueprintDependencyReference {
+	const target = Object.freeze({ ...reference.target }) as BlueprintDependencyReference['target']
+	const operation = Object.freeze({ ...reference.operation }) as BlueprintDependencyReference['operation']
+	return Object.freeze({ target, operation })
+}
+
 function buildMemberRef(nodeId: InternalNodeId, operation: BlueprintDependencyReference['operation']): BlueprintInspectionMemberRef {
 	const member = operation.type === 'state-get' || operation.type === 'state-set'
 		? { type: 'state' as const, name: operation.key }
@@ -58,12 +75,13 @@ function buildMemberRef(nodeId: InternalNodeId, operation: BlueprintDependencyRe
 
 function projectDependency(leaf: CompiledDependency, path: readonly (string | number)[]): BlueprintInspectionDependency {
 	const frozenPath = Object.freeze(path)
+	const reference = freezeClonedReference(leaf.reference)
 
 	if (leaf.status === 'resolved') {
 		return Object.freeze({
 			status: 'resolved',
 			path: frozenPath,
-			reference: leaf.reference,
+			reference,
 			target: buildMemberRef(leaf.targetNodeId, leaf.reference.operation),
 		})
 	}
@@ -72,14 +90,14 @@ function projectDependency(leaf: CompiledDependency, path: readonly (string | nu
 		return Object.freeze({
 			status: 'absent',
 			path: frozenPath,
-			reference: leaf.reference,
+			reference,
 		})
 	}
 
 	return Object.freeze({
 		status: 'invalid',
 		path: frozenPath,
-		reference: leaf.reference,
+		reference,
 		...(leaf.targetNodeId === undefined ? {} : { targetNodeId: leaf.targetNodeId as InspectionNodeId }),
 	})
 }
@@ -234,7 +252,10 @@ function buildInvalidCycles(compiled: CompiledBlueprint): readonly BlueprintInsp
 	return Object.freeze(compiled.analysis.invalidCycles.map(cycle => Object.freeze({
 		members: Object.freeze(cycle.map(ref => Object.freeze({
 			nodeId: ref.nodeId as InspectionNodeId,
-			member: ref.member,
+			// `ref.member` is a plain, unfrozen compiler-owned object (`CompiledGraphAnalysis` is never
+			// frozen) reused verbatim across every read of this cached snapshot; clone + freeze it so the
+			// nested wrapper is externally immutable too, not just the outer cycle/member-ref objects.
+			member: Object.freeze({ ...ref.member }),
 		}))),
 	})))
 }
