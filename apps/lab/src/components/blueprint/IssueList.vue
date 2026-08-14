@@ -6,8 +6,9 @@
  * `input`, `slot`/`index`, dependency `member`/`dependency` reference, `related` locations) —
  * `message` is never parsed to infer taxonomy or ownership.
  */
-import type { BlueprintDependencyOperation, BlueprintDependencyReference, BlueprintDependencyTarget, BlueprintIssue, BlueprintIssueLocation, BlueprintWidgetNode, IssuePath } from '@deviltea/widget-core'
+import type { BlueprintIssue, BlueprintIssueLocation, BlueprintWidgetNode } from '@deviltea/widget-core'
 import type { BlueprintInspection, InspectionNodeId } from '@deviltea/widget-core/inspection'
+import { formatDependencyReference, formatIssuePath } from '../../lib/issue-format'
 
 defineProps<{
 	issues: readonly BlueprintIssue[]
@@ -20,46 +21,6 @@ const emit = defineEmits<{
 
 function nodeIdOf(node: BlueprintWidgetNode, inspection: BlueprintInspection): InspectionNodeId | null {
 	return inspection.getNodeId(node)
-}
-
-/** `[a, 0, 'b']` -> `a[0].b`. `IssuePath` segments stay verbatim (never dot-joined into a lossy string). */
-function formatIssuePath(path: IssuePath | undefined): string | null {
-	if (path === undefined || path.length === 0)
-		return null
-	return path
-		.map(segment => typeof segment === 'number' ? `[${segment}]` : `.${String(segment)}`)
-		.join('')
-		.replace(/^\./, '')
-}
-
-function formatDependencyTarget(target: BlueprintDependencyTarget): string {
-	switch (target.type) {
-		case 'self':
-			return 'self'
-		case 'root':
-			return 'root'
-		case 'parent':
-			return target.optional ? 'parent (optional)' : 'parent'
-		case 'widget':
-			return `widget("${target.widgetId}")${target.optional ? ' (optional)' : ''}`
-	}
-}
-
-function formatDependencyOperation(operation: BlueprintDependencyOperation): string {
-	switch (operation.type) {
-		case 'state-get':
-			return `state.get("${operation.key}")`
-		case 'state-set':
-			return `state.set("${operation.key}")`
-		case 'property-get':
-			return `properties.get("${operation.name}")`
-		case 'method-invoke':
-			return `methods.invoke("${operation.name}")`
-	}
-}
-
-function formatDependencyReference(reference: BlueprintDependencyReference): string {
-	return `${formatDependencyTarget(reference.target)} -> ${formatDependencyOperation(reference.operation)}`
 }
 
 function relatedLocationLabel(location: BlueprintIssueLocation): string {

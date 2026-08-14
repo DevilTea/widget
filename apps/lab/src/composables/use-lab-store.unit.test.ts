@@ -80,3 +80,41 @@ describe('createLabStore() dispose()', () => {
 			.toBe(true)
 	})
 })
+
+/**
+ * PR #18 review 4939584651, finding 1: Dependency Graph filter preferences are the persistent
+ * counterpart to panel-local *snapshot-bound* selections (e.g. `useGraphEdgeSelection`'s edge selection,
+ * which does reset on Apply — see `use-graph-edge-selection.unit.test.ts`). `graphShowAbsent`/
+ * `graphShowIsolatedMembers` live as plain refs on the `LabStore` object itself, never derived from
+ * `session`, so a successful Apply — valid or invalid — must never touch them.
+ */
+describe('createLabStore() graph filter preferences', () => {
+	it('survive a successful Apply to a new valid Blueprint', async () => {
+		const store = createLabStore()
+		store.graphShowAbsent.value = true
+		store.graphShowIsolatedMembers.value = true
+
+		store.setDraftSourceText(store.draftSourceText.value)
+		await store.apply()
+
+		expect(store.graphShowAbsent.value)
+			.toBe(true)
+		expect(store.graphShowIsolatedMembers.value)
+			.toBe(true)
+	})
+
+	it('survive an Apply that lands on an invalid Blueprint', async () => {
+		const store = createLabStore()
+		store.graphShowAbsent.value = true
+
+		await store.applyPreset('invalid-semantic')
+
+		expect(store.session.active.runtime)
+			.toBeNull()
+		expect(store.graphShowAbsent.value)
+			.toBe(true)
+		// The other preference was never touched, so it must still read its untouched default.
+		expect(store.graphShowIsolatedMembers.value)
+			.toBe(false)
+	})
+})

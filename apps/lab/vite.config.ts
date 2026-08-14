@@ -12,4 +12,10 @@ export default defineConfig({
 		}),
 		Vue(),
 	],
+	// The persistent ELK layout Worker (`src/graph/layout.worker.ts`, issue #13 Phase 5 "Dependency
+	// Graph worker loading" comment) is a native Vite module Worker — `format: 'es'` keeps its own
+	// `elkjs` import going through normal ESM bundling rather than being wrapped for classic workers.
+	worker: {
+		format: 'es',
+	},
 })

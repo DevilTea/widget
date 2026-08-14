@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, onUnmounted, provide } from 'vue'
 import LabHeader from './components/LabHeader.vue'
 import Workbench from './components/Workbench.vue'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
+import { disposeLayoutWorker } from './graph/layout-client'
 import 'dockview-vue/dist/styles/dockview.css'
 import './styles/dockview-theme.css'
 
@@ -25,6 +26,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 // `onBeforeUnmount` fires before children unmount, which would dispose the Runtime while Preview's
 // widget bridges may still be live.
 onUnmounted(() => store.dispose())
+// Worker shutdown is app lifecycle cleanup (issue #13 Phase 5 "Dependency Graph worker loading"
+// comment) — unrelated to widget-core Runtime ownership/disposal, which `store.dispose()` already owns.
+onUnmounted(() => disposeLayoutWorker())
 </script>
 
 <template>
