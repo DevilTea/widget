@@ -114,6 +114,7 @@ export type {
 	RuntimeStateIssue,
 	RuntimeStateOverrideIssueSource,
 	RuntimeStateValidationIssueSource,
+	RuntimeWidgetIssue,
 	WidgetSystemRuntimeIssue,
 } from './issue'
 

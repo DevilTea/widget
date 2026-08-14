@@ -185,7 +185,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		const node = compiled.nodes[nodeId]
 		if (node === undefined || !node.resolved)
 			continue
-		runtimeWidgetsByNodeId.set(nodeId, buildRuntimeWidget(node, entry))
+		runtimeWidgetsByNodeId.set(nodeId, buildRuntimeWidget(context, node, entry))
 	}
 
 	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelIssues)

@@ -439,10 +439,20 @@ export type RuntimeMethodIssue = Issue<RuntimeMethodArgsIssueSource | RuntimeMet
 export type RuntimeLevelIssue = Issue<RuntimeStateOverrideIssueSource>
 
 /**
+ * Aggregate `RuntimeWidget` diagnostic snapshot element: the union of issues owned by that widget's own
+ * primitives (state/property/method). Never includes {@link RuntimeLevelIssue}, even when its source
+ * happens to carry the same `widgetId` — a Runtime-level issue has no natural primitive owner.
+ *
+ * Normative source: issue #10 amendment "RuntimeWidget aggregate issue surface".
+ */
+export type RuntimeWidgetIssue
+	= | RuntimeStateIssue
+		| RuntimePropertyIssue
+		| RuntimeMethodIssue
+
+/**
  * Aggregate Runtime diagnostic snapshot element.
  */
 export type WidgetSystemRuntimeIssue
 	= | RuntimeLevelIssue
-		| RuntimeStateIssue
-		| RuntimePropertyIssue
-		| RuntimeMethodIssue
+		| RuntimeWidgetIssue

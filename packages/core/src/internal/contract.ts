@@ -22,6 +22,7 @@ import type {
 	RuntimeMethodIssue,
 	RuntimePropertyIssue,
 	RuntimeStateIssue,
+	RuntimeWidgetIssue,
 	WidgetSystemRuntimeIssue,
 } from '../issue'
 import type {
@@ -413,6 +414,14 @@ export type RuntimeWidgetFor<
 		readonly id: WidgetId
 		readonly type: WidgetPluginTypeOf<Plugin>
 		readonly blueprint: ResolvedBlueprintWidgetNodeFor<Plugin, Plugins>
+		/**
+		 * This widget's own aggregate diagnostic snapshot: state members -> property members -> method
+		 * members, declaration order within each capability, each primitive's own local issue order.
+		 * Present regardless of declared capabilities (a widget with none aggregates to `[]`). Never
+		 * includes Runtime-level issues.
+		 */
+		getIssues: () => readonly RuntimeWidgetIssue[]
+		subscribeIssues: (listener: (issues: readonly RuntimeWidgetIssue[]) => void) => () => void
 	}
 	& RuntimeStateSurface<WidgetInterfacesOf<Plugin>>
 	& RuntimePropertySurface<WidgetInterfacesOf<Plugin>>
