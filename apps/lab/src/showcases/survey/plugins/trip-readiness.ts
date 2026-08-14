@@ -26,6 +26,18 @@
  * is genuinely semantically ready — required answers *and* derived metric/domain validity — never just
  * "every required field happens to be non-null" (checkpoint §1 "required answers + conditional family
  * requirement + derived metric validity → readiness").
+ *
+ * `familyPriority` is declared as an unconditional dependency edge (the *static* Blueprint dependency
+ * graph never changes based on runtime state), but `deps.familyPriority()` — the callable that actually
+ * performs the read and runs its `.validate()` refinement — is only ever *invoked* when
+ * `childrenCount > 0`. This is deliberate and locked (checkpoint §3 "hiding does not mutate source
+ * topology and does not reset the child ... `TripReadiness` simply stops requiring the hidden branch"):
+ * when the family section is hidden (`children === 0`), `TripReadiness` must not require *or judge* that
+ * answer at all, so an edited-but-domain-invalid value left over in a hidden `family-priority` must never
+ * affect `ready`. Reading it unconditionally (as this Property used to) would run the refinement
+ * regardless of `children`, failing `ready` even while the field is hidden and unrequired — invoking the
+ * dependency read only inside the `childrenCount > 0` branch in `compute` is what keeps a hidden domain-
+ * invalid value inert while still failing readiness the moment that branch becomes visible.
  */
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
@@ -110,7 +122,6 @@ export const TripReadinessPlugin = createWidgetPlugin('TripReadiness')
 				const budget = deps.budget()
 				const destination = deps.destination()
 				const travelStyle = deps.travelStyle()
-				const familyPriority = deps.familyPriority()
 				// Read (but do not re-report): a `TripMetrics.tripDays` failure automatically becomes a
 				// `property-dependency` Issue on this Property via core's dependency propagation.
 				deps.tripDays()
@@ -131,8 +142,15 @@ export const TripReadinessPlugin = createWidgetPlugin('TripReadiness')
 					addIssue({ message: 'Travel style is required.' })
 
 				const childrenCount = children.success && typeof children.value === 'number' ? children.value : 0
-				if (childrenCount > 0 && (!familyPriority.success || familyPriority.value === null))
-					addIssue({ message: 'Family priority is required when traveling with children.' })
+				// `deps.familyPriority()` is intentionally only invoked in this branch — see the file
+				// header. When the family section is hidden (`childrenCount === 0`), this Property must
+				// never read (and so never judge, via the dependency's own `.validate()` refinement) the
+				// hidden `family-priority` answer at all.
+				if (childrenCount > 0) {
+					const familyPriority = deps.familyPriority()
+					if (!familyPriority.success || familyPriority.value === null)
+						addIssue({ message: 'Family priority is required when traveling with children.' })
+				}
 
 				// Only ever observed on the success path (checkpoint C1); a not-ready survey's failure is
 				// carried entirely by the `addIssue(...)` calls above.

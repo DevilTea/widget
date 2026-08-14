@@ -166,8 +166,26 @@ describe('tripReadiness.ready (C1)', () => {
 			.toBe(true)
 	})
 
-	it('fails when family-priority is an edited-but-domain-invalid option value, even while children is 0 (unrequired)', () => {
+	// PR #19 review 4940630249 (final blocker): checkpoint §3 locks "hiding does not mutate source
+	// topology and does not reset the child ... TripReadiness simply stops requiring the hidden branch".
+	// While `children === 0` the family section (and `family-priority`) is hidden, so TripReadiness must
+	// not judge that answer at all — including rejecting a domain-invalid value left over in it. This is
+	// the flip side of the "visible + domain-invalid" case below: hidden state is retained but inert.
+	it('succeeds when children is 0 (family section hidden) even though family-priority holds a domain-invalid value', () => {
 		const runtime = createRuntime({ 'family-priority': 'lunar-base' })
+		const familyPriority = widgetOfType(runtime, 'family-priority', 'SurveyChoiceQuestion')
+		// Confirms the hidden answer is genuinely retained (not reset/cleared) — the point of the
+		// regression is that TripReadiness must stop requiring/judging it, not that it disappears.
+		expect(familyPriority.state.answer.get())
+			.toBe('lunar-base')
+
+		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
+		expect(readiness.properties.ready.get())
+			.toEqual({ success: true, value: true })
+	})
+
+	it('fails when children > 0 (family section visible) and family-priority holds a domain-invalid value', () => {
+		const runtime = createRuntime({ 'children': 2, 'family-priority': 'lunar-base' })
 		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
 
 		const result = readiness.properties.ready.get()
