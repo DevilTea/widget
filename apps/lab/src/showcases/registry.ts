@@ -14,6 +14,9 @@ import type { Component } from 'vue'
 import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
 import { SandboxRenderer } from '../sandbox/renderers'
 import { sandboxSystem } from '../sandbox/system'
+import { crmPresets, defaultCrmPreset } from './crm/presets'
+import { CrmRenderer } from './crm/renderers'
+import { crmSystem } from './crm/system'
 import { defaultSurveyPreset, surveyPresets } from './survey/presets'
 import { SurveyRenderer } from './survey/renderers'
 import { surveySystem } from './survey/system'
@@ -57,6 +60,14 @@ export const showcases: readonly ShowcaseEntry[] = [
 		renderer: SurveyRenderer as unknown as Component,
 		presets: surveyPresets,
 		defaultPreset: defaultSurveyPreset,
+	},
+	{
+		id: 'crm',
+		label: 'Product Prototype',
+		system: crmSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
+		renderer: CrmRenderer as unknown as Component,
+		presets: crmPresets,
+		defaultPreset: defaultCrmPreset,
 	},
 ]
 
