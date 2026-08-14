@@ -27,6 +27,10 @@ interface HostInterfaces {
 	state: {
 		answer: string | null
 		evenOnly: number
+		/** Drives `poisoned`, whose recompute throws on one specific value. */
+		poison: number
+		/** Drives `healthy`, which is never involved in a throw. */
+		other: number
 	}
 	properties: {
 		/** Fails via `addIssue` while `answer` is `null`. */
@@ -47,9 +51,15 @@ interface HostInterfaces {
 		/** Sibling dependents of the State member's value. */
 		stateLeafA: number
 		stateLeafB: number
+		/** Its recompute throws when `poison` is `13`; used to throw *during* a deferred release. */
+		poisoned: number
+		/** Independent of everything above: proves later operations still flush after such a throw. */
+		healthy: number
 	}
 	methods: {
 		probe: () => number
+		/** Writeful, so the state write lands inside the invocation's own batch. */
+		setPoison: (next: number) => number
 	}
 }
 
@@ -64,6 +74,14 @@ function createHarness() {
 			.evenOnly({
 				validate: (input): input is number => typeof input === 'number' && input % 2 === 0,
 				default: () => 0,
+			})
+			.poison({
+				validate: (input): input is number => typeof input === 'number',
+				default: () => 1,
+			})
+			.other({
+				validate: (input): input is number => typeof input === 'number',
+				default: () => 1,
 			}))
 		.properties(properties => properties
 			.upstream({
@@ -153,6 +171,31 @@ function createHarness() {
 					const answer = deps.answer()
 					return answer.success && answer.value !== null ? answer.value.length * 2 : -2
 				},
+			})
+			.poisoned({
+				registerDeps: ({ dep }) => ({ poison: dep.self.state.get('poison') }),
+				compute: ({ deps }) => {
+					// Reads the dependency *before* throwing, so the throw happens with the dependency edge
+					// already recorded — an implementation-contract violation raised mid-recompute, not a
+					// dependency-registration accident.
+					const poison = deps.poison()
+					const value = poison.success ? poison.value ?? 0 : 0
+					if (value === 13)
+						throw new Error('poisoned: compute boom')
+					return value * 2
+				},
+			})
+			.healthy({
+				registerDeps: ({ dep }) => ({ other: dep.self.state.get('other') }),
+				compute: ({ deps, addIssue }) => {
+					const other = deps.other()
+					const value = other.success ? other.value ?? 0 : 0
+					if (value < 0) {
+						addIssue({ message: 'healthy: other is negative' })
+						return 0
+					}
+					return value
+				},
 			}))
 		.methods(methods => methods
 			.probe({
@@ -167,6 +210,16 @@ function createHarness() {
 						return 0
 					}
 					return answer.value.length
+				},
+			})
+			.setPoison({
+				registerDeps: ({ dep }) => ({ setPoison: dep.self.state.set('poison') }),
+				validateArgs: (args): args is [number] => typeof args[0] === 'number',
+				// The whole invocation is one alien batch, so this write's propagation is still queued when
+				// the invocation ends: the queued Property subscription is run by the deferred release.
+				execute: ({ args, deps }) => {
+					deps.setPoison(args[0])
+					return args[0]
 				},
 			}))
 		.done()
@@ -508,5 +561,63 @@ describe('property value propagation under a State issues-subscription', () => {
 			.toEqual([])
 		expect(issueEventLengths)
 			.toEqual([1, 0])
+	})
+})
+
+describe('deferred issue propagation released after a throw', () => {
+	it('leaves later independent operations flushing normally', () => {
+		const { widget } = createHarness()
+
+		// `healthy` shares nothing with the throwing Property: it is the independent witness that the
+		// Runtime is still able to propagate and notify afterwards.
+		const healthyValues: unknown[] = []
+		const healthyIssueLengths: number[] = []
+		widget.properties.healthy.subscribe(result => healthyValues.push(result))
+		widget.properties.healthy.subscribeIssues(issues => healthyIssueLengths.push(issues.length))
+		// Subscribed so its recompute is a *queued* effect run by the deferred release, not by the write.
+		widget.properties.poisoned.subscribe(() => {})
+
+		expect(widget.properties.healthy.get())
+			.toEqual({ success: true, value: 1 })
+		expect(widget.properties.poisoned.get())
+			.toEqual({ success: true, value: 2 })
+
+		// A Method invocation batches its state write, so the queued `poisoned` recompute only runs when
+		// the deferred issue propagation is released — and that recompute throws (an implementation
+		// contract violation, isolated for external listeners but never for a tracked read).
+		let caught: unknown
+		try {
+			widget.methods.setPoison(13)
+		}
+		catch (error) {
+			caught = error
+		}
+
+		expect(caught)
+			.toBeInstanceOf(Error)
+		expect((caught as Error).message)
+			.toBe('poisoned: compute boom')
+
+		healthyValues.length = 0
+		healthyIssueLengths.length = 0
+
+		// Both channels of a completely unrelated Property must still fire, twice in a row: if the throw
+		// had left the release bookkeeping pinned, later operations would look nested, nothing would ever
+		// be released again, and alien-signals would stay batched with these notifications suspended.
+		widget.state.other.set(-1)
+
+		expect(healthyValues)
+			.toHaveLength(1)
+		expect(healthyIssueLengths)
+			.toEqual([1])
+
+		widget.state.other.set(2)
+
+		expect(healthyValues)
+			.toHaveLength(2)
+		expect(healthyIssueLengths)
+			.toEqual([1, 0])
+		expect(widget.properties.healthy.get())
+			.toEqual({ success: true, value: 2 })
 	})
 })

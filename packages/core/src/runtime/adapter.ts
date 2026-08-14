@@ -10,8 +10,8 @@
  * 2. invoke external listeners with no active alien subscriber, so listener code reading other Runtime
  *    primitives cannot silently extend the dependency graph;
  * 3. isolate listener exceptions outside the current alien-signals flush;
- * 4. hold an issue-snapshot commit performed *during* an evaluation inside an alien batch until the
- *    current Runtime operation is over, so its propagation can never re-enter alien-signals' flush
+ * 4. hold an issue-snapshot commit performed *during* an evaluation inside an alien batch until the call
+ *    that drove that evaluation has returned, so its propagation can never re-enter alien-signals' flush
  *    while a computed is still mid-evaluation (see {@link writeDeferringFlush}).
  *
  * None of this is a parallel reactive engine: it is a pure call-order wrapper around `effect()`,
@@ -50,9 +50,10 @@ export function invokeListenerIsolated<Value>(listener: (value: Value) => void, 
 }
 
 /**
- * Nesting depth of the Runtime operations that can drive an `alien-signals` evaluation/flush:
- * `RuntimeState`'s `attemptSet`, `RuntimeMethod`'s `invoke` and the tracked read of a Property's result
- * computed. Only the outermost frame releases the flushes {@link writeDeferringFlush} deferred.
+ * Nesting depth of the calls that can drive an `alien-signals` evaluation/flush and therefore have to be
+ * back out of the reactive graph before a deferred propagation is safe to release: `RuntimeState`'s
+ * `attemptSet`, `RuntimeMethod`'s `invoke` and the tracked read of a Property's result computed. Purely
+ * local bookkeeping for {@link writeDeferringFlush}, not a semantic boundary of its own.
  */
 let operationDepth = 0
 
@@ -83,11 +84,14 @@ function releaseDeferredFlushes(): void {
 }
 
 /**
- * Runs `fn` as one Runtime operation boundary and, if it is the outermost one, releases every flush
- * {@link writeDeferringFlush} deferred inside it.
+ * Tracks one nesting level of the calls that can drive an evaluation, and releases every flush
+ * {@link writeDeferringFlush} deferred inside it once the outermost level is leaving.
  *
- * The release happens while the depth is still `1`, so a listener that the release's own flush invokes
- * and that starts a nested Runtime operation cannot re-enter the drain loop.
+ * The release runs while the depth is still `1`, so a listener that the release's own flush invokes and
+ * that re-enters the Runtime cannot re-enter the drain loop. The decrement is unconditional: a Property
+ * recompute that throws inside the release's flush (`createTrackedSubscription` isolates the external
+ * listener, never the tracked read) must not leave the depth pinned above `0`, or every later call would
+ * look nested and no release would ever run again.
  */
 export function runRuntimeOperation<Result>(fn: () => Result): Result {
 	++operationDepth
@@ -95,15 +99,20 @@ export function runRuntimeOperation<Result>(fn: () => Result): Result {
 		return fn()
 	}
 	finally {
-		if (operationDepth === 1)
-			releaseDeferredFlushes()
-		--operationDepth
+		try {
+			if (operationDepth === 1)
+				releaseDeferredFlushes()
+		}
+		finally {
+			--operationDepth
+		}
 	}
 }
 
 /**
  * Performs a signal write whose propagation must not be flushed while a computed may still be
- * mid-evaluation, by holding an alien batch open until the current Runtime operation boundary.
+ * mid-evaluation, by holding an alien batch open until the outermost {@link runRuntimeOperation} frame on
+ * the stack is leaving — i.e. until nothing that could still be evaluating remains.
  *
  * Why this is required in pinned alien-signals@3.2.1 (`esm/index.mjs` / `esm/system.mjs`):
  *
@@ -132,11 +141,13 @@ export function runRuntimeOperation<Result>(fn: () => Result): Result {
  * time the operation's `ExecutionResult` is observable" true. Only the *notification* moves — never past
  * the end of the operation that produced it.
  *
- * The open batch also covers whatever else the operation still does, which is the same coalescing window
- * `RuntimeMethod.invoke` has always had (issue #10 amendment "RuntimeMethod invocation as alien-signals
- * batch boundary"): two writes to the *same* signal inside one operation notify its subscribers once,
- * with the final value. Every actual completed recompute still notifies each of its own subscribers
- * exactly once — alien-signals, not this module, decides which recomputes happen.
+ * One consequence of using an alien batch as the deferral mechanism, rather than a normative rule about
+ * Runtime operations: while a level is open, alien-signals coalesces as it does inside any batch, so two
+ * writes to the *same* signal before the release notify its subscribers once, with the final value. This
+ * is not a new Runtime semantic — it is the ordinary behavior of the batching alien-signals already owns,
+ * already observable inside `RuntimeMethod.invoke`'s batch. Every actual completed recompute still
+ * notifies each of its own subscribers exactly once; alien-signals, not this module, decides which
+ * recomputes happen.
  */
 export function writeDeferringFlush(write: () => void): void {
 	if (operationDepth === 0) {

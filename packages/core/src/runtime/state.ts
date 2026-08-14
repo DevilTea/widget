@@ -86,11 +86,11 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	}
 
 	/**
-	 * One Runtime operation boundary. The value write below is what makes the whole dependent Property
-	 * graph recompute, and those recomputes commit their own issue snapshots from inside their evaluators;
-	 * this frame is the point at which every propagation they deferred is released (see
-	 * `runRuntimeOperation`/`writeDeferringFlush`), i.e. still inside the very `set()` call that caused
-	 * them and before its `ExecutionResult` reaches the caller.
+	 * The value write below is what makes the whole dependent Property graph recompute, and those
+	 * recomputes commit their own issue snapshots from inside their evaluators. Wrapping the pipeline in
+	 * `runRuntimeOperation` is only what tells `writeDeferringFlush` when those evaluators are all back
+	 * out of the graph, so the propagations they deferred are released here: still inside the very `set()`
+	 * call that caused them, before its `ExecutionResult` reaches the caller.
 	 */
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateIssue> {
 		return runRuntimeOperation(() => attemptSetWithinOperation(candidate))

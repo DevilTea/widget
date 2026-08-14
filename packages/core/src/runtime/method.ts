@@ -10,7 +10,8 @@
  * further out: a Property may declare a dependency on a write-free Method, so `invoke` can run inside a
  * Property evaluator, and there the invocation's own `endBatch()` must not be the frame that flushes —
  * doing so re-enters alien-signals' propagation while the evaluating computed is uncommitted (the helper
- * documents the mechanism). The release then happens at the enclosing Runtime operation boundary.
+ * documents the mechanism). The still-open deferral level keeps this `endBatch()` from reaching depth `0`,
+ * and the flush happens once the outermost enclosing read/write call is leaving instead.
  *
  * Normative source: issue #10 consolidated handoff §15, amendment "RuntimeMethod invocation as
  * alien-signals batch boundary".
