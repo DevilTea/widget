@@ -1,37 +1,27 @@
 <script setup lang="ts">
-import { useWidget } from '@deviltea/widget-vue'
 /**
  * Thin presentation only: every value/issue comes from `useProperties()`/`usePropertyIssues()`. The
  * date-order cross-field check (checkpoint §4.2) lives in `TripMetrics.tripDays`'s own `compute`; this
- * component only renders whatever issues that Property (or a downstream Property reading it) reports.
- *
- * Deliberately does NOT call `usePropertyIssues()` for `tripDays`/`travelerCount`: both have downstream
- * same-widget Property dependents (`budgetPerPersonPerDay`/`estimatedBaselineCost`, via
- * `dep.self.properties.get(...)`), and an active issues-subscription on an *upstream* Property whose
- * own alien-signals computed also writes its sibling issues signal has been observed to suppress
- * value-subscription updates on *downstream* Properties that depend on it — a reactivity interaction
- * this Property primitive does not document as safe. `budgetPerPersonPerDay`/`estimatedBaselineCost`
- * have no such downstream dependents, and their own `property-dependency` failures already carry the
- * same underlying message 1:1 (issue #10 §12 wrapping), so subscribing only to their issues still
- * surfaces the date-order diagnostic without the interaction.
+ * component renders whatever issues `tripDays` and every Property reading it (`travelerCount` is
+ * independent; `budgetPerPersonPerDay`/`estimatedBaselineCost` both read `tripDays`) report — no
+ * per-Property opt-out is needed here (issue #20 fixed the core reactivity gap that used to make an
+ * upstream Property's issues-subscription suppress a downstream sibling's own value-subscription
+ * updates; `@deviltea/widget-core`/`@deviltea/widget-vue` are pinned to the fixed versions).
  */
+import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
 import { TripMetricsPlugin } from '../plugins/trip-metrics'
 
 const { useProperties, usePropertyIssues } = useWidget(TripMetricsPlugin)
 const { tripDays, travelerCount, budgetPerPersonPerDay, estimatedBaselineCost } = useProperties()
-const { budgetPerPersonPerDay: budgetPerPersonPerDayIssues, estimatedBaselineCost: estimatedBaselineCostIssues } = usePropertyIssues()
+const { tripDays: tripDaysIssues, travelerCount: travelerCountIssues, budgetPerPersonPerDay: budgetPerPersonPerDayIssues, estimatedBaselineCost: estimatedBaselineCostIssues } = usePropertyIssues()
 
-const allIssues = computed(() => {
-	const seen = new Set<string>()
-	const combined = [...budgetPerPersonPerDayIssues.value, ...estimatedBaselineCostIssues.value]
-	return combined.filter((issue) => {
-		if (seen.has(issue.message))
-			return false
-		seen.add(issue.message)
-		return true
-	})
-})
+const allIssues = computed(() => [
+	...tripDaysIssues.value,
+	...travelerCountIssues.value,
+	...budgetPerPersonPerDayIssues.value,
+	...estimatedBaselineCostIssues.value,
+])
 </script>
 
 <template>
@@ -62,8 +52,8 @@ const allIssues = computed(() => {
 			:class="pika({ margin: '8px 0 0', paddingLeft: '16px' })"
 		>
 			<li
-				v-for="issue in allIssues"
-				:key="issue.message"
+				v-for="(issue, index) in allIssues"
+				:key="index"
 				:class="pika({ fontSize: '11px', color: 'var(--lab-color-danger)' })"
 			>
 				{{ issue.message }}

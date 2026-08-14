@@ -1,17 +1,15 @@
 // @vitest-environment happy-dom
 /**
- * Regression coverage for a reactivity interaction discovered while manually verifying the dev server
- * (see the implementation report): once something (e.g. Vue's `usePropertyIssues()`) subscribes to an
- * upstream* Property's issues channel, a *downstream* same-widget Property that reads the upstream
- * Property's value via `dep.self.properties.get(...)` stopped receiving live updates through its own
- * value* subscription after the upstream Property later flipped from success to failure — even though
- * a fresh `.get()` pull always returned the correct (failing) result. `TripMetricsRenderer.vue` works
- * around this by never calling `usePropertyIssues()` for `tripDays`/`travelerCount` (both have
- * `budgetPerPersonPerDay`/`estimatedBaselineCost` as downstream dependents); it only subscribes to the
- * downstream Properties' own issues, which already carry the same message via `property-dependency`
- * wrapping (issue #10 §12, "message preserved 1:1"). This suite exercises the real component end to end
- * against a real Runtime/Blueprint (no mocked core) to guard the workaround — see the widget-lab
- * implementation report for the isolated core-level repro this was root-caused with.
+ * Regression coverage for the `@deviltea/widget-core` issue #20 fix (PR #21, "keep sibling property
+ * dependents live under issue subscriptions"): before that fix, once something (e.g. Vue's
+ * `usePropertyIssues()`) subscribed to an upstream Property's issues channel, a downstream same-widget
+ * Property reading the upstream Property's value via `dep.self.properties.get(...)` stopped receiving
+ * live updates through its own value subscription after the upstream Property later flipped from
+ * success to failure — even a fresh `.get()` pull could remain stale. `TripMetricsRenderer.vue` used to
+ * work around this by never calling `usePropertyIssues()` for `tripDays`/`travelerCount`; now that core
+ * is fixed, it subscribes to every Property's own issues channel directly (the natural design), and
+ * this suite proves — against the real Runtime/Blueprint, no mocked core — that `budgetPerPersonPerDay`/
+ * `estimatedBaselineCost` (both downstream of `tripDays`) stay live without any renderer-side workaround.
  */
 import { createWidgetVueRenderer, useWidget } from '@deviltea/widget-vue'
 import { mount } from '@vue/test-utils'
@@ -88,13 +86,20 @@ describe('tripMetricsRenderer', () => {
 		returnQuestion.state.answer.set('2027-04-05') // before departure (2027-04-10)
 		await wrapper.vm.$nextTick()
 
+		// All three affected Properties (tripDays directly, budgetPerPersonPerDay/estimatedBaselineCost
+		// as its downstream dependents) must reflect the failure — no stale value survives.
 		expect(wrapper.text())
 			.not.toContain('120.00')
 		expect(wrapper.text())
 			.toContain('0.00')
+		// Each of tripDays' own failure and the two downstream `property-dependency` wraps of it
+		// (issue #10 §12: message preserved 1:1) renders its own list item — three occurrences of the
+		// same human-readable text is expected and correct here, not a bug: `TripMetricsRenderer`
+		// deliberately does not invent a message-based dedupe (issue #10 defines `message` as
+		// human-readable only, never a machine identity).
 		const diagnosticCount = wrapper.text()
 			.split('Return date must be strictly after the departure date.').length - 1
 		expect(diagnosticCount)
-			.toBe(1)
+			.toBe(3)
 	})
 })
