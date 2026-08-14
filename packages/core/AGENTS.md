@@ -29,6 +29,7 @@ pnpm build       # tsdown (includes publint)
 - Core stays minimal: editor operations, persistence envelopes/versioning/migration, metadata, and renderer/UI concerns stay out of this package.
 - All framework-owned semantic callbacks are synchronous; a returned Promise/thenable is an implementation contract violation, not an Issue.
 - The `src/inspection/` subpath is strictly readonly: it must never activate lazy Properties, execute Methods, mutate State, or otherwise widen the alien-signals reactive graph. It projects facts from compiler/runtime-authoritative data only — never by reconstructing status from Issues, and never by running its own SCC/write-effect analysis.
+- Capability presence (`config`/`slots`/`state`/`properties`/`methods`) is required-key *declaration*, independent of the capability's own payload type (issue #10 amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`"). Use `HasWidgetCapability<Interfaces, Key>` for any presence gate; never derive presence from `[WidgetCapabilityOf<Interfaces, Key>] extends [never]` — a legitimately-present capability can itself have payload `never` (`slots: never` is the canonical explicit-empty spelling). A completed `WidgetPlugin` exposes these facts at runtime as `plugin.capabilities`.
 
 ## Unit-test standard
 

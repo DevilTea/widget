@@ -132,6 +132,7 @@ export type {
 	WidgetMethodsSection,
 	WidgetMethodValidateArgsContext,
 	WidgetPlugin,
+	WidgetPluginCapabilities,
 	WidgetPluginConfigPhase,
 	WidgetPluginDonePhase,
 	WidgetPluginInterfacesPhase,

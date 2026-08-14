@@ -37,7 +37,6 @@ import type {
 	InspectionNodeId,
 } from './types'
 import { isCompiledDependency, readCompiledBlueprint } from '../internal/contract'
-import { readWidgetPluginDefinition } from '../plugin'
 
 // -------------------------------------------------------------------------------------------------
 // Dependency flattening
@@ -186,15 +185,16 @@ function buildMethodMembers(compiledNode: CompiledResolvedWidgetNode): readonly 
 	return Object.freeze(result)
 }
 
+/**
+ * Reuses the plugin's own public `capabilities` fact object (issue #10 amendment "declaration-presence
+ * semantics and public `WidgetPlugin.capabilities`") rather than re-deriving presence from the erased
+ * definition: `plugin.capabilities` is already the compiler/builder-authoritative declaration-presence
+ * source, and `BlueprintInspectionCapabilities` is intentionally the same shape. No object-identity
+ * relationship between the two is part of either contract — reusing the reference here is an internal
+ * implementation choice, not something callers may rely on.
+ */
 function buildCapabilities(compiledNode: CompiledResolvedWidgetNode): BlueprintInspectionCapabilities {
-	const definition = readWidgetPluginDefinition(compiledNode.plugin)
-	return Object.freeze({
-		config: definition.config !== null,
-		slots: definition.slots !== null,
-		state: definition.state !== null,
-		properties: definition.properties !== null,
-		methods: definition.methods !== null,
-	})
+	return compiledNode.plugin.capabilities
 }
 
 function buildNode<Plugins extends AnyWidgetPluginTuple>(compiledNode: CompiledWidgetNode<Plugins>, nodeId: InternalNodeId): BlueprintInspectionNode<Plugins> {

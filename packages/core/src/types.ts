@@ -56,13 +56,22 @@ export type WidgetCapabilityOf<
 
 /**
  * `true` when the capability is declared, `false` otherwise.
+ *
+ * The authoritative presence predicate (issue #10 amendment "declaration-presence semantics and public
+ * `WidgetPlugin.capabilities`"): presence is required-key *declaration*, independent of the capability's
+ * own payload type. It must never be implemented by testing whether `WidgetCapabilityOf<...>` is
+ * `never` — a legitimately-present capability can itself have payload `never` (the canonical
+ * explicit-empty spelling for `slots`, e.g. `slots: never`), which would otherwise be indistinguishable
+ * from a capability that was never declared at all. `Interfaces extends Record<Key, unknown>` checks
+ * required-property presence directly: an optional inherited declaration (`config?: X` left unnarrowed)
+ * is not assignable to a shape requiring `Key`, so it correctly stays `false`.
  */
 export type HasWidgetCapability<
 	Interfaces extends WidgetInterfaces,
 	Key extends keyof WidgetInterfaces,
-> = [WidgetCapabilityOf<Interfaces, Key>] extends [never]
-	? false
-	: true
+> = Interfaces extends Record<Key, unknown>
+	? true
+	: false
 
 /**
  * Indexes a declared member record without requiring the key to be statically provable.
@@ -157,7 +166,7 @@ type SyncMethodReturnViolation<Interfaces extends WidgetInterfaces> = WidgetMeth
 				: never
 	: never
 
-type SlotDomainViolation<Interfaces extends WidgetInterfaces> = [WidgetCapabilityOf<Interfaces, 'slots'>] extends [never]
+type SlotDomainViolation<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'slots'> extends false
 	? never
 	: WidgetMemberKey extends WidgetCapabilityOf<Interfaces, 'slots'>
 		? `'slots' must be a finite union of string literals`

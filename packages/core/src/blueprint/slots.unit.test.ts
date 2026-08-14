@@ -25,7 +25,22 @@ const containerPlugin = createWidgetPlugin('container')
 	})
 	.done()
 
-const system = createWidgetSystem({ plugins: [containerPlugin, leafPlugin] })
+interface EmptySlotsInterfaces extends WidgetInterfaces {
+	slots: never
+}
+
+/**
+ * The canonical explicit-empty slots spelling (issue #10 amendment "declaration-presence semantics and
+ * public `WidgetPlugin.capabilities`"): the slots capability is present (`plugin.capabilities.slots ===
+ * true`) with zero declared slot names, distinct from `leafPlugin` above, which never declares slots at
+ * all.
+ */
+const emptySlotsPlugin = createWidgetPlugin('empty-slots')
+	.interfaces<EmptySlotsInterfaces>()
+	.slots({})
+	.done()
+
+const system = createWidgetSystem({ plugins: [containerPlugin, leafPlugin, emptySlotsPlugin] })
 
 function getContainerRoot(definition: unknown) {
 	const blueprint = system.createBlueprint(definition)
@@ -226,5 +241,52 @@ describe('plugin without slots capability', () => {
 			.toEqual(['slots'])
 		expect(source.node)
 			.toBe(root)
+	})
+})
+
+describe('explicit-empty slots capability, distinct from an absent slots capability (issue #10 amendment "declaration-presence semantics")', () => {
+	it('resolved semantic .slots stays {} for an explicit-empty slots plugin, same as a plugin without slots capability', () => {
+		const blueprint = system.createBlueprint({ id: 'root', type: 'empty-slots' })
+		const root = blueprint.root
+		if (!root.resolved || root.type !== 'empty-slots')
+			throw new Error('expected a resolved empty-slots root')
+
+		expect(root.slots)
+			.toEqual({})
+		expect(blueprint.status)
+			.toBe('valid')
+	})
+
+	it('an unknown raw slot key on an explicit-empty slots plugin reports "not declared", never "no slots capability"', () => {
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'empty-slots',
+			slots: { mystery: [{ id: 'child', type: 'leaf' }] },
+		})
+		const root = blueprint.root
+		if (root.resolved !== true)
+			throw new Error('expected a resolved root')
+
+		expect(blueprint.status)
+			.toBe('invalid')
+		const issues = blueprint.getCollectedIssues()
+		expect(issues)
+			.toHaveLength(1)
+		expect(issues[0]!.message)
+			.toBe('Widget slot "mystery" is not declared by its plugin.')
+
+		// Contrast: the exact same raw shape against `leafPlugin` (genuinely absent slots capability)
+		// reports the other diagnostic instead — proving the two are mechanically distinguishable, not
+		// just distinguishable by capability-presence booleans alone.
+		const absentBlueprint = system.createBlueprint({
+			id: 'root',
+			type: 'leaf',
+			slots: { mystery: [{ id: 'child', type: 'leaf' }] },
+		})
+		const absentIssues = absentBlueprint.getCollectedIssues()
+		expect(absentIssues)
+			.toHaveLength(1)
+		expect(absentIssues[0]!.message)
+			.toBe('Widget declares "slots" but its plugin has no slots capability.')
 	})
 })

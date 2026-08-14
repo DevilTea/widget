@@ -76,13 +76,43 @@ interface WidgetInterfaces {
 
 Every section is a capability:
 
-- absent (the key is not declared) → that capability does not exist, and its
-  builder phase is skipped entirely
-- present → the builder requires that capability to be implemented completely
+- absent (the key is not declared as a required property) → that capability
+  does not exist, and its builder phase is skipped entirely
+- present (the key is declared as a required property) → the builder requires
+  that capability to be implemented completely
+
+Presence is a declaration fact, independent of whether the capability's own
+member/name domain is empty. `slots: never` (zero declared slot names),
+`state: Record<never, never>` (zero declared state keys) and their
+`properties`/`methods` equivalents are all **present, explicitly-empty**
+capabilities — distinct from not declaring the section at all — and each
+still requires (and exposes) its builder phase, completed with an empty
+argument (`.slots({})`, `.state(state => state)`, ...).
 
 There is no `pluginConfig` / `globalConfig`. Plugin-specific integration
 options are ordinary factory options captured by closure around
 `createWidgetPlugin(...)`, not a framework-owned config layer.
+
+### Reading capability presence at runtime: `plugin.capabilities`
+
+A completed `WidgetPlugin` exposes its own declaration-presence facts as a
+plain, immutable object — renderer-agnostic core metadata, not an
+inspection/DevTools API:
+
+```ts
+const plugin = createWidgetPlugin('counter') /* ... */
+	.done()
+
+plugin.capabilities
+// { config: boolean, slots: boolean, state: boolean, properties: boolean, methods: boolean }
+```
+
+A consumer that already holds the exact plugin object (for example a renderer
+adapter's `useWidget(plugin)`) reads `plugin.capabilities` for capability
+presence instead of inferring it from Blueprint object shape or importing
+`@deviltea/widget-core/inspection`. The shape intentionally matches the
+inspection subpath's `BlueprintInspectionCapabilities`, but no object-identity
+relationship between the two is part of the contract.
 
 ### Builder phase order
 

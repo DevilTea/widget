@@ -76,6 +76,43 @@ interface EmptyStateCapabilityInterfaces extends WidgetInterfaces {
 	state: Record<never, never>
 }
 
+interface EmptyPropertiesCapabilityInterfaces extends WidgetInterfaces {
+	properties: Record<never, never>
+}
+
+interface EmptyMethodsCapabilityInterfaces extends WidgetInterfaces {
+	methods: Record<never, never>
+}
+
+/**
+ * The canonical explicit-empty slots spelling (issue #10 amendment "declaration-presence semantics and
+ * public `WidgetPlugin.capabilities`"). Unlike `state`/`properties`/`methods` (whose empty spelling is
+ * the object type `Record<never, never>`), `slots`' own payload domain is a plain string/string-literal
+ * union, so its only possible "declared with zero names" spelling is the payload `never` itself — which
+ * is exactly why `HasWidgetCapability` must be a declaration-presence predicate and must not merely ask
+ * whether the extracted payload is `never`.
+ */
+interface EmptySlotsCapabilityInterfaces extends WidgetInterfaces {
+	slots: never
+}
+
+interface AllCapabilitiesInterfaces extends WidgetInterfaces {
+	config: {
+		raw: Record<string, never>
+		resolved: Record<string, never>
+	}
+	slots: 'a'
+	state: {
+		s: number
+	}
+	properties: {
+		p: number
+	}
+	methods: {
+		m: () => number
+	}
+}
+
 declare const symbolStateKey: unique symbol
 
 interface BroadStateIndexInterfaces extends WidgetInterfaces {
@@ -372,6 +409,98 @@ describe('section keyed-chain typestate (state section, representative of proper
 		expect(plugin.type)
 			.toBe('empty-state-capability')
 		expect(Object.isFrozen(plugin))
+			.toBe(true)
+	})
+})
+
+describe('explicit-empty slots capability (`slots: never`), distinct from an absent slots capability (review round 2, issue #10 amendment "declaration-presence semantics")', () => {
+	it('exposes the .slots phase for `slots: never`, which completes via .slots({})', () => {
+		const afterInterfaces = createWidgetPlugin('empty-slots-capability')
+			.interfaces<EmptySlotsCapabilityInterfaces>()
+		expectTypeOf(afterInterfaces)
+			.toHaveProperty('slots')
+
+		const plugin = afterInterfaces.slots({})
+			.done()
+
+		expect(plugin.type)
+			.toBe('empty-slots-capability')
+		expect(plugin.capabilities.slots)
+			.toBe(true)
+		expect(Object.isFrozen(plugin))
+			.toBe(true)
+	})
+
+	it('skips the .slots phase entirely for a plugin that never declares slots', () => {
+		const afterInterfaces = createWidgetPlugin('no-slots-capability')
+			.interfaces<EmptyInterfaces>()
+		expectTypeOf(afterInterfaces).not.toHaveProperty('slots')
+
+		const plugin = afterInterfaces.done()
+		expect(plugin.capabilities.slots)
+			.toBe(false)
+	})
+})
+
+describe('plugin.capabilities (review round 2, issue #10 amendment "declaration-presence semantics and public WidgetPlugin.capabilities")', () => {
+	it('is all-false, frozen, for a plugin declaring no capabilities', () => {
+		const plugin = createWidgetPlugin('caps-none')
+			.interfaces<EmptyInterfaces>()
+			.done()
+
+		expect(plugin.capabilities)
+			.toEqual({ config: false, slots: false, state: false, properties: false, methods: false })
+		expect(Object.isFrozen(plugin.capabilities))
+			.toBe(true)
+	})
+
+	it('is all-true for a plugin declaring every capability', () => {
+		const plugin = createWidgetPlugin('caps-all')
+			.interfaces<AllCapabilitiesInterfaces>()
+			.config({
+				validate: (input): input is Record<string, never> => typeof input === 'object' && input !== null,
+				resolve: () => ({}),
+			})
+			.slots({ a: {} })
+			.state(state => state.s({ validate: (input): input is number => typeof input === 'number' }))
+			.properties(properties => properties.p({ compute: () => 0 }))
+			.methods(methods => methods.m({
+				validateArgs: (args): args is [] => args.length === 0,
+				execute: () => 0,
+			}))
+			.done()
+
+		expect(plugin.capabilities)
+			.toEqual({ config: true, slots: true, state: true, properties: true, methods: true })
+	})
+
+	it('is true, with an empty inventory, for each explicitly-declared-empty capability', () => {
+		const statePlugin = createWidgetPlugin('caps-empty-state')
+			.interfaces<EmptyStateCapabilityInterfaces>()
+			.state(state => state)
+			.done()
+		expect(statePlugin.capabilities.state)
+			.toBe(true)
+
+		const propertiesPlugin = createWidgetPlugin('caps-empty-properties')
+			.interfaces<EmptyPropertiesCapabilityInterfaces>()
+			.properties(properties => properties)
+			.done()
+		expect(propertiesPlugin.capabilities.properties)
+			.toBe(true)
+
+		const methodsPlugin = createWidgetPlugin('caps-empty-methods')
+			.interfaces<EmptyMethodsCapabilityInterfaces>()
+			.methods(methods => methods)
+			.done()
+		expect(methodsPlugin.capabilities.methods)
+			.toBe(true)
+
+		const slotsPlugin = createWidgetPlugin('caps-empty-slots')
+			.interfaces<EmptySlotsCapabilityInterfaces>()
+			.slots({})
+			.done()
+		expect(slotsPlugin.capabilities.slots)
 			.toBe(true)
 	})
 })

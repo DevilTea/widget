@@ -49,6 +49,14 @@ nothing about rendering, editing, persistence versioning, or metadata. See
 [Design constraints](https://deviltea.github.io/deviltea-labs/packages/widget-core#design-constraints)
 in the full guide for the exact boundary.
 
+Capability presence (`config`/`slots`/`state`/`properties`/`methods`) is
+declaration presence, independent of whether a capability's own domain is
+empty — a completed plugin exposes these facts at runtime as
+`plugin.capabilities: { config, slots, state, properties, methods }`
+(all `boolean`, immutable). See
+[Reading capability presence at runtime](https://deviltea.github.io/deviltea-labs/packages/widget-core#reading-capability-presence-at-runtime-plugin-capabilities)
+in the full guide.
+
 ## Usage
 
 Here is a complete widget: one plugin with `state`, `properties`, and

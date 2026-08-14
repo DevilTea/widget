@@ -57,20 +57,23 @@ const configuredPlugin = createWidgetPlugin('configured')
 	.done()
 
 interface ExplicitEmptyInterfaces {
+	slots: never
 	state: Record<never, never>
 	properties: Record<never, never>
 	methods: Record<never, never>
 }
 
 /**
- * `state`/`properties`/`methods` are all *declared* (each builder phase is actually invoked) but with
- * zero member keys — the "explicitly declared empty" capability shape distinct from "capability not
- * declared at all" (issue #10 amendment "builder/member-key" — `Record<never, never>` is this codebase's
- * established spelling for a declared-but-empty capability, matching `compile-view-typing.unit.test.ts`
- * and `plugin-typestate.unit.test.ts`).
+ * `slots`/`state`/`properties`/`methods` are all *declared* (each builder phase is actually invoked) but
+ * with zero member/slot names — the "explicitly declared empty" capability shape distinct from
+ * "capability not declared at all". `Record<never, never>` is this codebase's established spelling for a
+ * declared-but-empty state/properties/methods capability (matching `compile-view-typing.unit.test.ts`
+ * and `plugin-typestate.unit.test.ts`); `slots: never` is the canonical explicit-empty slots spelling
+ * (issue #10 amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`").
  */
 const explicitEmptyPlugin = createWidgetPlugin('explicit-empty')
 	.interfaces<ExplicitEmptyInterfaces>()
+	.slots({})
 	.state(state => state)
 	.properties(properties => properties)
 	.methods(methods => methods)
@@ -267,19 +270,23 @@ describe('capability distinction', () => {
 			.toEqual([])
 	})
 
-	it('capabilities.state/properties/methods are true (not absent) for a declared-but-explicitly-empty capability, with inventories staying [] (review round 1, finding 5)', () => {
+	it('capabilities.slots/state/properties/methods are true (not absent) for a declared-but-explicitly-empty capability, with inventories staying [] (review round 1 finding 5, round 2 slots correction)', () => {
 		const blueprint = system.createBlueprint({ id: 'root', type: 'explicit-empty' })
 		const inspection = inspectBlueprint(blueprint)
 		const root = inspection.getNode(inspection.rootNodeId)!
 		if (!root.resolved)
 			throw new Error('test fixture: expected a resolved root')
 
+		expect(root.capabilities.slots)
+			.toBe(true)
 		expect(root.capabilities.state)
 			.toBe(true)
 		expect(root.capabilities.properties)
 			.toBe(true)
 		expect(root.capabilities.methods)
 			.toBe(true)
+		expect(root.semanticSlots)
+			.toEqual([])
 		expect(root.state)
 			.toEqual([])
 		expect(root.properties)
