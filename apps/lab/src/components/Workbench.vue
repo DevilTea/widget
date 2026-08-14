@@ -121,13 +121,31 @@ function onReady(event: DockviewReadyEvent): void {
 </template>
 
 <style scoped>
+/*
+ * `<DockviewVue>` is a multi-root component (its own host `<div>` plus a sibling
+ * `<DockviewPortals>`; see dockview-vue's `dockview.vue`) that binds `class`/`style` onto its host
+ * element via an explicit `v-bind="$attrs"` rather than Vue's automatic single-root attr
+ * fallthrough. That explicit spread does not carry this component's scoped-CSS `data-v-*`
+ * attribute, so a plain scoped `.workbench__dockview { ... }` rule silently matched nothing (the
+ * class attribute renders, but with no scope attribute for the scoped selector to require) and the
+ * whole workbench collapsed to zero height. `:deep()` compiles to a descendant selector scoped
+ * through the ancestor `.workbench` (which *does* carry the scope attribute) instead, so it matches
+ * regardless of whether the target element itself carries this component's scope attribute.
+ *
+ * `.workbench` is also switched from percentage-height chaining to `display: flex` so its one child
+ * fills both axes via flex-grow/stretch directly, instead of depending on `height: 100%` resolving
+ * correctly through a percentage-of-flex-item chain.
+ */
 .workbench {
+	position: relative;
+	display: flex;
 	flex: 1 1 auto;
 	min-height: 0;
 }
 
-.workbench__dockview {
-	width: 100%;
-	height: 100%;
+:deep(.workbench__dockview) {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
 }
 </style>
