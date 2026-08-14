@@ -9,14 +9,18 @@
  * 1. suppress the effect's bootstrap run so `subscribe`/`subscribeIssues` have no immediate emission;
  * 2. invoke external listeners with no active alien subscriber, so listener code reading other Runtime
  *    primitives cannot silently extend the dependency graph;
- * 3. isolate listener exceptions outside the current alien-signals flush.
+ * 3. isolate listener exceptions outside the current alien-signals flush;
+ * 4. hold an issue-snapshot commit performed *during* an evaluation inside an alien batch until the
+ *    current Runtime operation is over, so its propagation can never re-enter alien-signals' flush
+ *    while a computed is still mid-evaluation (see {@link writeDeferringFlush}).
  *
- * None of this is a parallel reactive engine: it is a pure call-order wrapper around `effect()` and
- * the exported active-subscriber seam.
+ * None of this is a parallel reactive engine: it is a pure call-order wrapper around `effect()`,
+ * `startBatch()`/`endBatch()` and the exported active-subscriber seam. alien-signals still owns every
+ * queue, every dirty flag and every notification decision.
  */
 
 import type { RuntimeContext } from './context'
-import { effect, setActiveSub } from 'alien-signals'
+import { effect, endBatch, setActiveSub, startBatch } from 'alien-signals'
 
 /**
  * `queueMicrotask` is a host global (browser + Node), not part of the ECMAScript lib this
@@ -43,6 +47,108 @@ export function invokeListenerIsolated<Value>(listener: (value: Value) => void, 
 	finally {
 		setActiveSub(previous)
 	}
+}
+
+/**
+ * Nesting depth of the Runtime operations that can drive an `alien-signals` evaluation/flush:
+ * `RuntimeState`'s `attemptSet`, `RuntimeMethod`'s `invoke` and the tracked read of a Property's result
+ * computed. Only the outermost frame releases the flushes {@link writeDeferringFlush} deferred.
+ */
+let operationDepth = 0
+
+/** Number of `startBatch()` calls {@link writeDeferringFlush} has opened and not yet closed. */
+let deferredFlushDepth = 0
+
+/**
+ * Closes every batch level {@link writeDeferringFlush} left open, letting alien-signals flush the
+ * notifications it already queued.
+ *
+ * The loop condition is re-tested after every `endBatch()`: that flush can run an effect whose Property
+ * recompute commits its own issue snapshot, which opens a fresh level this same drain must then close.
+ * A recompute that throws inside one of those flushes must not leave alien-signals permanently batched
+ * (every later flush in the Runtime's life would be silently suspended), so the remaining levels are
+ * closed before the throw is rethrown.
+ */
+function releaseDeferredFlushes(): void {
+	while (deferredFlushDepth > 0) {
+		--deferredFlushDepth
+		try {
+			endBatch()
+		}
+		catch (error) {
+			releaseDeferredFlushes()
+			throw error
+		}
+	}
+}
+
+/**
+ * Runs `fn` as one Runtime operation boundary and, if it is the outermost one, releases every flush
+ * {@link writeDeferringFlush} deferred inside it.
+ *
+ * The release happens while the depth is still `1`, so a listener that the release's own flush invokes
+ * and that starts a nested Runtime operation cannot re-enter the drain loop.
+ */
+export function runRuntimeOperation<Result>(fn: () => Result): Result {
+	++operationDepth
+	try {
+		return fn()
+	}
+	finally {
+		if (operationDepth === 1)
+			releaseDeferredFlushes()
+		--operationDepth
+	}
+}
+
+/**
+ * Performs a signal write whose propagation must not be flushed while a computed may still be
+ * mid-evaluation, by holding an alien batch open until the current Runtime operation boundary.
+ *
+ * Why this is required in pinned alien-signals@3.2.1 (`esm/index.mjs` / `esm/system.mjs`):
+ *
+ * - `signalOper` ends a changed write with `propagate(subs, ...)` followed by `if (!batchDepth) flush()`.
+ *   A write performed from inside a computed's own evaluator therefore starts a *nested* flush that runs
+ *   the effects the outer propagation had already queued — while the computed that queued them is still
+ *   mid-`updateComputed`.
+ * - `updateComputed` sets `c.flags = 1 | 4` (`Mutable | RecursedCheck`) and only assigns
+ *   `c.value = c.getter(...)` after the getter returns, so during that window the computed carries
+ *   neither `Dirty` (16) nor `Pending` (32) and still holds its previous value.
+ * - `checkDirty` has no `RecursedCheck` branch: a queued effect whose dependency chain passes through
+ *   that computed hits none of its `(1 | 16)` / `(1 | 32)` cases, concludes `dirty === false`, and then
+ *   clears its own intermediate's `Pending` flag (`sub.flags &= ~32`). The intermediate is now marked
+ *   clean while still holding a stale cached value, so the later `shallowPropagate` — which only
+ *   upgrades subscribers that are still `Pending` — skips it for good: the effect never runs again and
+ *   even an untracked `.get()` returns the stale cache.
+ *
+ * Keeping `batchDepth > 0` for the write removes the nested flush entirely: `propagate` still marks and
+ * queues every watcher through alien-signals' own bookkeeping, and the queue is drained later — by the
+ * flush that is already running (it re-reads the shared queue length) or by
+ * {@link runRuntimeOperation}'s release. Nothing here re-implements propagation, ordering or dedupe.
+ *
+ * The write itself is unconditional and immediate, so a snapshot is committed exactly where it was
+ * before: `pendingValue` is written synchronously and every later read commits it (`signalOper`'s read
+ * path runs `updateSignal` when the signal is `Dirty`), which keeps "the snapshot is committed by the
+ * time the operation's `ExecutionResult` is observable" true. Only the *notification* moves — never past
+ * the end of the operation that produced it.
+ *
+ * The open batch also covers whatever else the operation still does, which is the same coalescing window
+ * `RuntimeMethod.invoke` has always had (issue #10 amendment "RuntimeMethod invocation as alien-signals
+ * batch boundary"): two writes to the *same* signal inside one operation notify its subscribers once,
+ * with the final value. Every actual completed recompute still notifies each of its own subscribers
+ * exactly once — alien-signals, not this module, decides which recomputes happen.
+ */
+export function writeDeferringFlush(write: () => void): void {
+	if (operationDepth === 0) {
+		// No Runtime operation is in flight, so no computed can be mid-evaluation and there is nothing to
+		// protect: let the write flush immediately, exactly like any other top-level write.
+		write()
+		return
+	}
+
+	startBatch()
+	++deferredFlushDepth
+	write()
 }
 
 /**

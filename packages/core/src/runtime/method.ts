@@ -6,6 +6,12 @@
  * dependency-invoked methods reuse this exact same pipeline, so nested calls naturally nest batch
  * depth; only the outermost `endBatch()` flushes.
  *
+ * The issue-snapshot commits go through `writeDeferringFlush`, which keeps that rule true one level
+ * further out: a Property may declare a dependency on a write-free Method, so `invoke` can run inside a
+ * Property evaluator, and there the invocation's own `endBatch()` must not be the frame that flushes —
+ * doing so re-enters alien-signals' propagation while the evaluating computed is uncommitted (the helper
+ * documents the mechanism). The release then happens at the enclosing Runtime operation boundary.
+ *
  * Normative source: issue #10 consolidated handoff §15, amendment "RuntimeMethod invocation as
  * alien-signals batch boundary".
  */
@@ -18,7 +24,7 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { ActiveIssueSink, RuntimeContext } from './context'
 import { endBatch, signal, startBatch } from 'alien-signals'
 import { EMPTY_ISSUES } from '../issue'
-import { createTrackedSubscription } from './adapter'
+import { createTrackedSubscription, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { buildDefaultMethodArgsIssue, buildMethodArgsIssue, buildMethodResultIssue, freezeIssueSnapshot, toIssueSnapshot } from './issues'
 import { assertSyncValue } from './sync'
@@ -44,7 +50,10 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 
 	function invoke(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodIssue> {
 		context.assertActive()
+		return runRuntimeOperation(() => invokeWithinOperation(...args))
+	}
 
+	function invokeWithinOperation(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodIssue> {
 		startBatch()
 		try {
 			const argsCollector = createOperationCollector<RelativeValueIssueInput, RuntimeMethodIssue>()
@@ -63,7 +72,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				// a fresh array here and needs the same immutable-snapshot treatment (issue #10
 				// issue-snapshot contract).
 				const issues = finalized.length > 0 ? finalized : freezeIssueSnapshot([buildDefaultMethodArgsIssue(params.widgetId, params.name, args)])
-				issuesSignal(issues)
+				writeDeferringFlush(() => issuesSignal(issues))
 				// `invoke()` doesn't cache its return value, so mutating it can't corrupt a later call
 				// the way Property's cached computed result could — freezing the wrapper here is a
 				// consistency/defense-in-depth measure, not a fix for a persistence hazard.
@@ -89,7 +98,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 			assertSyncValue(value, `Method "${params.name}"'s execute`)
 
 			const issues = execCollector.finalize(input => buildMethodResultIssue(params.widgetId, params.name, value, input))
-			issuesSignal(toIssueSnapshot(issues))
+			writeDeferringFlush(() => issuesSignal(toIssueSnapshot(issues)))
 
 			// Same consistency rationale as the validateArgs-failure branch above: not a persistence
 			// hazard (each `invoke()` builds a fresh wrapper), but freezing it keeps every

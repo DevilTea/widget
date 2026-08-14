@@ -5,7 +5,9 @@
  * `ExecutionResult` snapshot (not the raw value alone), so every actual recompute has fresh identity
  * and notifies subscribers exactly once even when the raw value compares equal. Issues live on a
  * separate signal written as a side effect of evaluation; `subscribeIssues`/`getIssues` only ever
- * touch that signal, never the computed, so they never activate evaluation.
+ * touch that signal, never the computed, so they never activate evaluation. That in-evaluator write is
+ * committed through `writeDeferringFlush`, so watching the issues channel can never perturb value
+ * propagation (see the `alien-signals@3.2.1` mechanism documented on that helper).
  *
  * Normative source: issue #10 consolidated handoff §14, amendment "Implementation verification —
  * alien-signals@3.2.1 conformance" (#4).
@@ -19,7 +21,7 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { ActiveIssueSink, RuntimeContext } from './context'
 import { computed, signal } from 'alien-signals'
 import { EMPTY_ISSUES } from '../issue'
-import { createTrackedSubscription, invokeListenerIsolated } from './adapter'
+import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { buildPropertyResultIssue, toIssueSnapshot } from './issues'
 import { assertSyncValue } from './sync'
@@ -112,7 +114,13 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		assertSyncValue(value, `Property "${params.name}"'s compute`)
 
 		const issues = collector.finalize(input => buildPropertyResultIssue(params.widgetId, params.name, value, input))
-		issuesSignal(toIssueSnapshot(issues))
+		// Commit the snapshot here — the fact-commit point every consumer's `getIssues()` must already
+		// reflect — but hold its *propagation* inside an alien batch until the current Runtime operation
+		// ends. A watched signal write from inside a computed's own evaluator otherwise starts a nested
+		// alien-signals flush while this computed is mid-`updateComputed`, which permanently marks the
+		// Property's other dependents clean-but-stale; `writeDeferringFlush` documents the exact
+		// alien-signals@3.2.1 mechanism.
+		writeDeferringFlush(() => issuesSignal(toIssueSnapshot(issues)))
 
 		// The alien computed caches this exact object as its reactive value and reuses it for every
 		// `.get()`/dependency read until the next actual recompute; shallow-freeze the wrapper so external
@@ -143,7 +151,12 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 * never re-publishing a merely-re-read, already-cached result.
 	 */
 	function getResultWithInspectionPublish(): ExecutionResult<unknown, RuntimePropertyIssue> {
-		const result = resultComputed()
+		// `runRuntimeOperation` only marks the boundary: when this read is the outermost Runtime
+		// operation, the issue-snapshot propagations deferred during the evaluation are released as soon
+		// as the computed has committed — before the inspection publication below, exactly the order a
+		// direct in-evaluator write produced. A nested read (a dependent Property's evaluator, or an
+		// effect run inside a state write's flush) leaves the release to its own outer boundary.
+		const result = runRuntimeOperation(resultComputed)
 		if (result !== lastPublishedResult) {
 			lastPublishedResult = result
 			publishInspectionCompletion(result)
