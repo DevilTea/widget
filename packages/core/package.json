@@ -28,6 +28,10 @@
 		".": {
 			"types": "./dist/index.d.mts",
 			"import": "./dist/index.mjs"
+		},
+		"./inspection": {
+			"types": "./dist/inspection/index.d.mts",
+			"import": "./dist/inspection/index.mjs"
 		}
 	},
 	"main": "dist/index.mjs",

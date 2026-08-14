@@ -15,18 +15,16 @@ import type {
 	RuntimePropertyDependencyIssue,
 } from './issue'
 import type {
+	HasWidgetCapability,
 	WidgetId,
 	WidgetInterfaces,
 	WidgetMemberKey,
 	WidgetMethodArgsOf,
 	WidgetMethodKeyOf,
 	WidgetMethodReturnOf,
-	WidgetMethodsOf,
-	WidgetPropertiesOf,
 	WidgetPropertyKeyOf,
 	WidgetPropertyValueOf,
 	WidgetStateKeyOf,
-	WidgetStateOf,
 	WidgetStateValueOf,
 } from './types'
 
@@ -234,17 +232,21 @@ export interface SelfMethodDependencyOperations<Interfaces extends WidgetInterfa
 
 /**
  * `self` target stage: guaranteed target, strongly typed, and capability-aware.
+ *
+ * Gated on `HasWidgetCapability` (declaration presence), never on whether the capability's own payload
+ * type happens to be `never` — a declared-but-explicitly-empty capability (e.g. `state: Record<never,
+ * never>`) still exposes its `dep.self.state` surface, just with an uncallable-with-any-real-key `get`.
  */
 export type SelfDependencyTarget<Interfaces extends WidgetInterfaces, Consumer extends DependencyConsumer>
-	= & ([WidgetStateOf<Interfaces>] extends [never]
-		? unknown
-		: { readonly state: SelfStateDependencyOperations<Interfaces, Consumer> })
-	& ([WidgetPropertiesOf<Interfaces>] extends [never]
-		? unknown
-		: { readonly properties: SelfPropertyDependencyOperations<Interfaces> })
-	& ([WidgetMethodsOf<Interfaces>] extends [never]
-		? unknown
-		: { readonly methods: SelfMethodDependencyOperations<Interfaces> })
+	= & (HasWidgetCapability<Interfaces, 'state'> extends true
+		? { readonly state: SelfStateDependencyOperations<Interfaces, Consumer> }
+		: unknown)
+	& (HasWidgetCapability<Interfaces, 'properties'> extends true
+		? { readonly properties: SelfPropertyDependencyOperations<Interfaces> }
+		: unknown)
+	& (HasWidgetCapability<Interfaces, 'methods'> extends true
+		? { readonly methods: SelfMethodDependencyOperations<Interfaces> }
+		: unknown)
 
 /**
  * The `dep` grammar supplied to `registerDeps`.

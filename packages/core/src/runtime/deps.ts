@@ -299,6 +299,12 @@ function materializeLeaf(leaf: CompiledDependency, params: DepsMaterializeParams
 	if (leaf.status === 'absent')
 		return materializeAbsentLeaf(leaf.reference.operation)
 
+	// `invalid` is always accompanied by a Blueprint dependency Issue, so a Blueprint carrying one is
+	// always `invalid` — Runtime is only ever created from a valid Blueprint (issue #10 inspection
+	// amendment "inspection exact API v1 part 1"), so this branch can never actually run.
+	if (leaf.status === 'invalid')
+		throw new Error('widget-core: internal error — an invalid dependency reached Runtime materialization; Runtime must only be created from a valid Blueprint.')
+
 	return materializeResolvedLeaf(leaf, params)
 }
 

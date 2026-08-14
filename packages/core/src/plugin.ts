@@ -21,7 +21,7 @@ import type {
 	RelativeValueIssueInput,
 } from './issue'
 import type {
-	WidgetCapabilityOf,
+	HasWidgetCapability,
 	WidgetInterfaces,
 	WidgetInterfacesViolationOf,
 	WidgetMemberKey,
@@ -102,6 +102,24 @@ export interface WidgetPluginBrand<Interfaces extends WidgetInterfaces> {
 }
 
 /**
+ * Renderer-agnostic runtime-readable capability-presence facts (issue #10 amendment
+ * "declaration-presence semantics and public `WidgetPlugin.capabilities`"). Presence booleans only — no
+ * member inventories, callbacks, Blueprint state, Runtime state, diagnostics, or renderer concerns. Not
+ * an inspection/DevTools API: consumers that already hold the exact plugin object (e.g. a renderer
+ * adapter's `useWidget(plugin)`) read this instead of inferring presence from Blueprint object shape or
+ * importing `@deviltea/widget-core/inspection`. The shape intentionally matches
+ * `BlueprintInspectionCapabilities`, but no object-identity relationship between the two is part of the
+ * contract.
+ */
+export interface WidgetPluginCapabilities {
+	readonly config: boolean
+	readonly slots: boolean
+	readonly state: boolean
+	readonly properties: boolean
+	readonly methods: boolean
+}
+
+/**
  * A completed plugin. Plugin-specific integration options are captured by the plugin factory's
  * closure; there is no `pluginConfig` / `globalConfig`.
  */
@@ -110,6 +128,8 @@ export interface WidgetPlugin<
 	Interfaces extends WidgetInterfaces = WidgetInterfaces,
 > {
 	readonly type: Type
+	/** Compiler/plugin-builder-authoritative declaration-presence facts. Immutable, stable for the plugin's lifetime. */
+	readonly capabilities: WidgetPluginCapabilities
 	readonly [widgetPluginBrand]: WidgetPluginBrand<Interfaces>
 }
 
@@ -140,11 +160,11 @@ export function readWidgetPluginDefinition(plugin: AnyWidgetPlugin): WidgetPlugi
  * Conditional resolved-config context fragment. Resolves to `unknown` (an intersection identity)
  * when the plugin has no config capability.
  */
-export type WidgetResolvedConfigContext<Interfaces extends WidgetInterfaces> = [WidgetCapabilityOf<Interfaces, 'config'>] extends [never]
-	? unknown
-	: {
+export type WidgetResolvedConfigContext<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
+	? {
 			readonly config: WidgetResolvedConfigOf<Interfaces>
 		}
+	: unknown
 
 export type WidgetConfigValidateContext = IssueCollector<RelativeValueIssueInput>
 
@@ -341,50 +361,57 @@ export interface WidgetPluginDonePhase<Type extends string, Interfaces extends W
 	done: () => WidgetPlugin<Type, Interfaces>
 }
 
-export type WidgetPluginMethodsPhase<Type extends string, Interfaces extends WidgetInterfaces> = [WidgetCapabilityOf<Interfaces, 'methods'>] extends [never]
-	? WidgetPluginDonePhase<Type, Interfaces>
-	: {
+export type WidgetPluginMethodsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
+	? {
 			methods: (
 				build: (
 					section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>,
 				) => WidgetMethodsSection<Interfaces, never>,
 			) => WidgetPluginDonePhase<Type, Interfaces>
 		}
+	: WidgetPluginDonePhase<Type, Interfaces>
 
-export type WidgetPluginPropertiesPhase<Type extends string, Interfaces extends WidgetInterfaces> = [WidgetCapabilityOf<Interfaces, 'properties'>] extends [never]
-	? WidgetPluginMethodsPhase<Type, Interfaces>
-	: {
+export type WidgetPluginPropertiesPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'properties'> extends true
+	? {
 			properties: (
 				build: (
 					section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>,
 				) => WidgetPropertiesSection<Interfaces, never>,
 			) => WidgetPluginMethodsPhase<Type, Interfaces>
 		}
+	: WidgetPluginMethodsPhase<Type, Interfaces>
 
-export type WidgetPluginStatePhase<Type extends string, Interfaces extends WidgetInterfaces> = [WidgetCapabilityOf<Interfaces, 'state'>] extends [never]
-	? WidgetPluginPropertiesPhase<Type, Interfaces>
-	: {
+export type WidgetPluginStatePhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
+	? {
 			state: (
 				build: (
 					section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>,
 				) => WidgetStateSection<Interfaces, never>,
 			) => WidgetPluginPropertiesPhase<Type, Interfaces>
 		}
+	: WidgetPluginPropertiesPhase<Type, Interfaces>
 
-export type WidgetPluginSlotsPhase<Type extends string, Interfaces extends WidgetInterfaces> = [WidgetCapabilityOf<Interfaces, 'slots'>] extends [never]
-	? WidgetPluginStatePhase<Type, Interfaces>
-	: {
+/**
+ * `slots: never` is the canonical explicit-empty slots declaration (issue #10 amendment
+ * "declaration-presence semantics and public `WidgetPlugin.capabilities`"): the phase still exists —
+ * gated on `HasWidgetCapability`, never on whether `WidgetCapabilityOf<Interfaces, 'slots'>` happens to
+ * be `never` — and completes as `.slots({})`, since `ExactWidgetSlotDefinitions` for zero slot names is
+ * exactly `{}`.
+ */
+export type WidgetPluginSlotsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'slots'> extends true
+	? {
 			slots: <const Definitions extends ExactWidgetSlotDefinitions<Interfaces, Definitions>>(
 				definitions: Definitions,
 				validateStructure?: WidgetPluginValidateStructure<Interfaces>,
 			) => WidgetPluginStatePhase<Type, Interfaces>
 		}
+	: WidgetPluginStatePhase<Type, Interfaces>
 
-export type WidgetPluginConfigPhase<Type extends string, Interfaces extends WidgetInterfaces> = [WidgetCapabilityOf<Interfaces, 'config'>] extends [never]
-	? WidgetPluginSlotsPhase<Type, Interfaces>
-	: {
+export type WidgetPluginConfigPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
+	? {
 			config: (definition: WidgetConfigDefinition<Interfaces>) => WidgetPluginSlotsPhase<Type, Interfaces>
 		}
+	: WidgetPluginSlotsPhase<Type, Interfaces>
 
 export interface WidgetPluginInterfacesPhase<Type extends string> {
 	interfaces: <Interfaces extends WidgetInterfaces>() => [WidgetInterfacesViolationOf<Interfaces>] extends [never]
@@ -492,8 +519,22 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 				methods: draft.methods,
 			})
 
+			// Declaration-presence facts, read off the same `!== null` authoritative check the rest of the
+			// compiler/Runtime already uses (`readWidgetPluginDefinition(...).state !== null`, etc.) — a
+			// capability's builder phase only ever runs (setting the registry to a `Map`, possibly empty)
+			// when `HasWidgetCapability` was `true` for it, so this single runtime fact source stays
+			// consistent with the type-level presence predicate by construction.
+			const capabilities: WidgetPluginCapabilities = Object.freeze({
+				config: definition.config !== null,
+				slots: definition.slots !== null,
+				state: definition.state !== null,
+				properties: definition.properties !== null,
+				methods: definition.methods !== null,
+			})
+
 			return Object.freeze({
 				type,
+				capabilities,
 				[widgetPluginBrand]: Object.freeze({ definition }),
 			})
 		},

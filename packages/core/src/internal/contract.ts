@@ -37,21 +37,18 @@ import type {
 } from '../plugin'
 import type { WidgetSystem } from '../system'
 import type {
-	WidgetCapabilityOf,
+	HasWidgetCapability,
 	WidgetId,
 	WidgetInterfaces,
 	WidgetMemberKey,
 	WidgetMethodKeyOf,
 	WidgetMethodOf,
-	WidgetMethodsOf,
-	WidgetPropertiesOf,
 	WidgetPropertyKeyOf,
 	WidgetPropertyValueOf,
 	WidgetRawConfigOf,
 	WidgetResolvedConfigOf,
 	WidgetSlotNameOf,
 	WidgetStateKeyOf,
-	WidgetStateOf,
 	WidgetStateValueOf,
 } from '../types'
 
@@ -88,9 +85,8 @@ export type BlueprintSemanticSlots<
 	readonly [Name in WidgetSlotNameOf<Interfaces>]: readonly BlueprintWidgetNode<Plugins>[]
 }
 
-export type BlueprintNodeConfigFields<Interfaces extends WidgetInterfaces> = [WidgetCapabilityOf<Interfaces, 'config'>] extends [never]
-	? unknown
-	: {
+export type BlueprintNodeConfigFields<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
+	? {
 			/**
 			 * Typed raw config, or `null` when the raw config was omitted or invalid. The exact source
 			 * fragment always stays available through `rawDefinition`.
@@ -98,6 +94,7 @@ export type BlueprintNodeConfigFields<Interfaces extends WidgetInterfaces> = [Wi
 			readonly rawConfig: WidgetRawConfigOf<Interfaces> | null
 			readonly config: WidgetResolvedConfigOf<Interfaces>
 		}
+	: unknown
 
 /**
  * A node with established widget semantic identity. Later config/slot/structure/dependency errors keep
@@ -280,16 +277,19 @@ export type RawWidgetDefinitionFor<
 		readonly id: WidgetId
 		readonly type: WidgetPluginTypeOf<Plugin>
 	}
-	& ([WidgetCapabilityOf<WidgetInterfacesOf<Plugin>, 'config'>] extends [never]
-		? unknown
-		: { readonly config?: WidgetRawConfigOf<WidgetInterfacesOf<Plugin>> })
-	& ([WidgetCapabilityOf<WidgetInterfacesOf<Plugin>, 'slots'>] extends [never]
-		? unknown
-		: {
+	& (HasWidgetCapability<WidgetInterfacesOf<Plugin>, 'config'> extends true
+		? { readonly config?: WidgetRawConfigOf<WidgetInterfacesOf<Plugin>> }
+		: unknown)
+	& (HasWidgetCapability<WidgetInterfacesOf<Plugin>, 'slots'> extends true
+		? {
+				// Explicit-empty slots (`slots: never`) still gets an optional `slots` field here, typed
+				// `{}` (zero valid names) — present but only satisfiable by an empty object, distinct from a
+				// plugin without slots capability, which has no `slots` field on its raw definition at all.
 				readonly slots?: {
 					readonly [Name in WidgetSlotNameOf<WidgetInterfacesOf<Plugin>>]?: readonly RawWidgetDefinition<Plugins>[]
 				}
-			})
+			}
+		: unknown)
 
 export type RawWidgetDefinition<Plugins extends AnyWidgetPluginTuple> = Plugins[number] extends infer Plugin
 	? Plugin extends AnyWidgetPlugin
@@ -375,36 +375,38 @@ export interface RuntimeMethod<Fn extends (...args: any[]) => any> {
 	subscribeIssues: (listener: (issues: readonly RuntimeMethodIssue[]) => void) => () => void
 }
 
-export type RuntimeStateSurface<Interfaces extends WidgetInterfaces> = [WidgetStateOf<Interfaces>] extends [never]
-	? unknown
-	: {
+export type RuntimeStateSurface<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
+	? {
 			readonly state: {
 				readonly [Key in WidgetStateKeyOf<Interfaces>]: RuntimeState<WidgetStateValueOf<Interfaces, Key>>
 			}
 		}
+	: unknown
 
-export type RuntimePropertySurface<Interfaces extends WidgetInterfaces> = [WidgetPropertiesOf<Interfaces>] extends [never]
-	? unknown
-	: {
+export type RuntimePropertySurface<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'properties'> extends true
+	? {
 			readonly properties: {
 				readonly [Name in WidgetPropertyKeyOf<Interfaces>]: RuntimeProperty<WidgetPropertyValueOf<Interfaces, Name>>
 			}
 		}
+	: unknown
 
 /**
- * Gated on capability presence (`WidgetMethodsOf`), not on the declared member-key union: an
- * explicitly-declared-empty `methods: {}` capability is present (and therefore exposes an empty
- * `methods` surface), matching Runtime assembly's `definition.methods !== null` check. Gating on
- * `WidgetMethodKeyOf` instead would collapse "declared empty" into "absent" because both have an
- * empty key union.
+ * Gated on capability presence (`HasWidgetCapability`), not on the declared member-key union: an
+ * explicitly-declared-empty `methods: Record<never, never>` capability is present (and therefore
+ * exposes an empty `methods` surface), matching Runtime assembly's `definition.methods !== null` check.
+ * Gating on `WidgetMethodKeyOf` instead would collapse "declared empty" into "absent" because both have
+ * an empty key union; gating on `[WidgetMethodsOf<Interfaces>] extends [never]` would additionally
+ * misclassify any capability whose *payload* itself is `never` (issue #10 amendment "declaration-presence
+ * semantics and public `WidgetPlugin.capabilities`").
  */
-export type RuntimeMethodSurface<Interfaces extends WidgetInterfaces> = [WidgetMethodsOf<Interfaces>] extends [never]
-	? unknown
-	: {
+export type RuntimeMethodSurface<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
+	? {
 			readonly methods: {
 				readonly [Name in WidgetMethodKeyOf<Interfaces>]: RuntimeMethod<WidgetMethodOf<Interfaces, Name>>
 			}
 		}
+	: unknown
 
 export type RuntimeWidgetFor<
 	Plugin extends AnyWidgetPlugin,
@@ -482,14 +484,32 @@ export interface ResolvedCompiledDependency extends CompiledDependencyBase {
 }
 
 /**
- * The only legal non-resolved compiled leaf: an optional `parent` / `widget(id)` target with zero
- * cardinality. It contributes no graph edge, no effect and no cycle.
+ * The only legal non-resolved-non-invalid compiled leaf: an optional `parent` / `widget(id)` target
+ * with zero cardinality. It contributes no graph edge, no effect and no cycle.
  */
 export interface AbsentCompiledDependency extends CompiledDependencyBase {
 	readonly status: 'absent'
 }
 
-export type CompiledDependency = ResolvedCompiledDependency | AbsentCompiledDependency
+/**
+ * Every other ordinary dependency-resolution failure: required target missing, ambiguous target,
+ * unique-but-unresolved target, missing capability, or missing member. Always accompanied by a
+ * Blueprint dependency Issue, so a Blueprint carrying one is always `invalid`. `targetNodeId` is
+ * present only when target cardinality resolved to exactly one recovered node before the later
+ * resolution step failed (unresolved target / missing capability / missing member); it is absent for
+ * missing/ambiguous targets, where cardinality itself never reached one.
+ *
+ * Distinct from `absent` (issue #10 inspection amendment "inspection exact API v1 part 1"): `absent` is
+ * legal, Issue-free, optional-cardinality-0 absence; `invalid` is always a diagnosed failure. Runtime
+ * materialization never reaches this state — Runtime is only ever created from a valid Blueprint, and
+ * every `invalid` leaf implies an invalid Blueprint.
+ */
+export interface InvalidCompiledDependency extends CompiledDependencyBase {
+	readonly status: 'invalid'
+	readonly targetNodeId?: InternalNodeId
+}
+
+export type CompiledDependency = ResolvedCompiledDependency | AbsentCompiledDependency | InvalidCompiledDependency
 
 /**
  * Registered dependency container with every branded expression leaf replaced by its compiled leaf.

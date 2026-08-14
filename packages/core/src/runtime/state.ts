@@ -14,10 +14,24 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
 import { signal } from 'alien-signals'
 import { EMPTY_ISSUES } from '../issue'
-import { createTrackedSubscription } from './adapter'
+import { createTrackedSubscription, invokeListenerIsolated } from './adapter'
 import { createOperationCollector } from './collector'
 import { buildDefaultStateValidationIssue, buildStateValidationIssue, freezeIssueSnapshot } from './issues'
 import { assertSyncValue } from './sync'
+
+/**
+ * One retained-fact channel for the readonly `@deviltea/widget-core/inspection` subpath: a frozen
+ * current-value envelope plus plain, lazily-allocated listeners. Retention starts at primitive creation
+ * (Runtime creation), independent of whether an inspector ever attaches — a later-created inspector must
+ * not be amnesiac. Deliberately not built on `effect()`/`createTrackedSubscription`: the envelope is
+ * published directly at `attemptSet`'s fact-commit point (the normal semantic pipeline), never by
+ * wrapping a semantic read in an alien-signals effect, so inspection can never itself widen the reactive
+ * graph.
+ */
+export interface StateInspectionChannel {
+	getSnapshot: () => Readonly<{ value: unknown }>
+	subscribe: (listener: (snapshot: Readonly<{ value: unknown }>) => void) => () => void
+}
 
 export interface StatePrimitiveInternal {
 	/** Tracked raw value read. `null` when never successfully initialized/written. */
@@ -29,6 +43,8 @@ export interface StatePrimitiveInternal {
 	 * and dependency `state-set` crossings alike.
 	 */
 	attemptSet: (candidate: unknown) => ExecutionResult<unknown, RuntimeStateIssue>
+	/** Readonly-inspection retained-fact channel. See {@link StateInspectionChannel}. */
+	readonly inspection: StateInspectionChannel
 }
 
 export interface StatePrimitive {
@@ -47,6 +63,27 @@ export interface CreateStatePrimitiveParams {
 export function createStatePrimitive(context: RuntimeContext, params: CreateStatePrimitiveParams): StatePrimitive {
 	const valueSignal = signal<unknown>(null)
 	const issuesSignal = signal<readonly RuntimeStateIssue[]>(EMPTY_ISSUES)
+
+	let inspectionSnapshot: Readonly<{ value: unknown }> = Object.freeze({ value: null })
+	// Plain lazy-allocated registration list (issue #10 inspection amendment "runtime inspection,
+	// materialization, disposal, conformance"): never a global registry, allocated only once something
+	// actually subscribes. Not a `Set` keyed by the listener function itself — two independent
+	// `subscribe(sameFn)` calls must stay two independent registrations, exactly like the
+	// alien-signals-effect-backed `createTrackedSubscription` never dedupes by listener identity either.
+	interface ListenerEntry { readonly listener: (snapshot: Readonly<{ value: unknown }>) => void }
+	let inspectionListeners: ListenerEntry[] | null = null
+
+	function publishInspectionSnapshot(value: unknown): void {
+		inspectionSnapshot = Object.freeze({ value })
+		if (inspectionListeners === null)
+			return
+		// Iterate a stable snapshot taken at publication start: a listener that itself calls `subscribe()`
+		// during this loop must not have its new registration visited by *this* publication (future-changes
+		// -only / no-immediate-emission), which a live-array/live-Set iteration could otherwise do.
+		const listenersSnapshot = inspectionListeners.slice()
+		for (const entry of listenersSnapshot)
+			invokeListenerIsolated(entry.listener, inspectionSnapshot)
+	}
 
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateIssue> {
 		const collector = createOperationCollector<RelativeValueIssueInput, RuntimeStateIssue>()
@@ -74,8 +111,16 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		// thenable (issue #10 amendment "synchronous core boundary and future async seams").
 		assertSyncValue(candidate, `State "${params.key}"'s value`)
 
+		// Read the pre-write raw value before committing, using the exact strict-inequality comparison
+		// `alien-signals`' own signal uses to decide whether a write actually changes anything (see the
+		// state conformance regressions: `NaN -> NaN` counts as changed, `+0 -> -0` does not). Publishing
+		// the inspection fact only on an authoritative change keeps inspection from becoming a second,
+		// looser change detector.
+		const previous = valueSignal()
 		valueSignal(candidate)
 		issuesSignal(EMPTY_ISSUES)
+		if (candidate !== previous)
+			publishInspectionSnapshot(candidate)
 		return { success: true, value: candidate }
 	}
 
@@ -83,6 +128,22 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		get: () => valueSignal(),
 		getIssues: () => issuesSignal(),
 		attemptSet,
+		inspection: {
+			getSnapshot: () => inspectionSnapshot,
+			subscribe: (listener) => {
+				const entry: ListenerEntry = { listener }
+				if (inspectionListeners === null)
+					inspectionListeners = []
+				inspectionListeners.push(entry)
+				return () => {
+					if (inspectionListeners === null)
+						return
+					const index = inspectionListeners.indexOf(entry)
+					if (index !== -1)
+						inspectionListeners.splice(index, 1)
+				}
+			},
+		},
 	}
 
 	const publicState: RuntimeState<unknown> = {

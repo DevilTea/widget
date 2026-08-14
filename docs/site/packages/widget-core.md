@@ -76,13 +76,43 @@ interface WidgetInterfaces {
 
 Every section is a capability:
 
-- absent (the key is not declared) → that capability does not exist, and its
-  builder phase is skipped entirely
-- present → the builder requires that capability to be implemented completely
+- absent (the key is not declared as a required property) → that capability
+  does not exist, and its builder phase is skipped entirely
+- present (the key is declared as a required property) → the builder requires
+  that capability to be implemented completely
+
+Presence is a declaration fact, independent of whether the capability's own
+member/name domain is empty. `slots: never` (zero declared slot names),
+`state: Record<never, never>` (zero declared state keys) and their
+`properties`/`methods` equivalents are all **present, explicitly-empty**
+capabilities — distinct from not declaring the section at all — and each
+still requires (and exposes) its builder phase, completed with an empty
+argument (`.slots({})`, `.state(state => state)`, ...).
 
 There is no `pluginConfig` / `globalConfig`. Plugin-specific integration
 options are ordinary factory options captured by closure around
 `createWidgetPlugin(...)`, not a framework-owned config layer.
+
+### Reading capability presence at runtime: `plugin.capabilities`
+
+A completed `WidgetPlugin` exposes its own declaration-presence facts as a
+plain, immutable object — renderer-agnostic core metadata, not an
+inspection/DevTools API:
+
+```ts
+const plugin = createWidgetPlugin('counter') /* ... */
+	.done()
+
+plugin.capabilities
+// { config: boolean, slots: boolean, state: boolean, properties: boolean, methods: boolean }
+```
+
+A consumer that already holds the exact plugin object (for example a renderer
+adapter's `useWidget(plugin)`) reads `plugin.capabilities` for capability
+presence instead of inferring it from Blueprint object shape or importing
+`@deviltea/widget-core/inspection`. The shape intentionally matches the
+inspection subpath's `BlueprintInspectionCapabilities`, but no object-identity
+relationship between the two is part of the contract.
 
 ### Builder phase order
 
@@ -539,6 +569,114 @@ catch (error) {
 	}
 }
 ```
+
+## Inspection (DevTools)
+
+`@deviltea/widget-core/inspection` is a dedicated, strictly readonly subpath
+for building inspectors/DevTools over the compiler and Runtime. It is not
+re-exported from the root entrypoint:
+
+```ts
+import { inspectBlueprint, inspectRuntime } from '@deviltea/widget-core/inspection'
+```
+
+The inspection surface only ever reports facts the core already knows or
+already computed; it never sets State, invokes a Method, forces Property
+evaluation, or otherwise changes the semantic behavior being inspected —
+including when a subscription is active.
+
+### Blueprint inspection
+
+```ts
+const inspection = inspectBlueprint(blueprint)
+
+inspection.rootNodeId // InspectionNodeId
+inspection.nodes // every recovered source node, pre-order, including unresolved nodes
+inspection.invalidCycles // Property-containing invalid evaluation SCCs
+inspection.getNode(nodeId)
+inspection.getNodeId(node) // null for a foreign/forged node
+```
+
+- `inspectBlueprint(blueprint)` is lazy opt-in but eager once called: the
+  first call materializes one complete, frozen snapshot, cached per Blueprint
+  instance (`inspectBlueprint(blueprint) === inspectBlueprint(blueprint)`).
+  Building/reading it performs zero semantic execution.
+- `InspectionNodeId` is a snapshot-local diagnostic identity only — unique
+  within one snapshot, valid for resolved and unresolved nodes alike, with no
+  stability guarantee across `recompile()` or separate snapshots. It is not a
+  domain identifier and must never be used as a dependency target.
+- Each node carries the existing public `BlueprintWidgetNode` (`node`) rather
+  than a duplicate DTO, plus `sourceSlots` (recovered source topology, each
+  entry's `placement` is `'slot'` when the raw slot key is plugin-declared and
+  `'raw-slot'` otherwise — an unresolved node's slots are always `'raw-slot'`,
+  and a malformed raw slot value produces no entry at all).
+- A resolved node additionally carries `capabilities` (declared vs
+  explicitly-empty presence for `config` / `slots` / `state` / `properties` /
+  `methods`), `semanticSlots`, and `state` / `properties` / `methods` member
+  inventories in declaration order. A method's `transitivelyWrites` and the
+  Blueprint's `invalidCycles` are read directly off the existing compiler
+  graph analysis — inspection never re-runs its own SCC or write-effect
+  traversal.
+- Each `property`/`method` member exposes its declared dependencies, flattened
+  to `{ path, reference, status, ... }` facts: `path` is the exact container
+  path from the `registerDeps()` return root (object keys stay strings
+  verbatim, array/tuple indices stay numbers — never stringified). `status` is
+  `'resolved'` (with the semantically-resolved `target`), `'absent'` (legal
+  optional cardinality-0 target, no Issue), or `'invalid'` (every other
+  resolution failure — ambiguous/missing targets carry no `targetNodeId`;
+  unique-but-unresolved-target/missing-capability/missing-member failures do).
+  Status is always read from compiler-authoritative data, never reconstructed
+  from Issues; the existing Blueprint Issue surface remains the authoritative
+  human-readable explanation.
+
+### Runtime inspection
+
+```ts
+const inspection = inspectRuntime(runtime)
+
+inspection.blueprint // === inspectBlueprint(runtime.blueprint)
+inspection.getWidget(nodeId) // RuntimeWidgetInspection | null
+```
+
+```ts
+const widgetInspection = inspection.getWidget(nodeId)!
+widgetInspection.getState('count')
+	?.getSnapshot() // { value: T | null }
+widgetInspection.getProperty('doubled')
+	?.getSnapshot() // never-evaluated | completed
+```
+
+- `getState` / `getProperty` return `null` only when the member/capability
+  does not exist; values are dynamically `unknown`-typed (strongly-typed
+  access remains the job of the ordinary Runtime surface). There is
+  deliberately no Method runtime inspection in v1 — no `getMethod`, no
+  invocation facts, no history.
+- Both `RuntimeStateInspection`/`RuntimePropertyInspection` follow the same
+  `{ getSnapshot(), subscribe(listener) }` shape: `getSnapshot()` is a passive
+  read, and `subscribe()` observes *future* changes only — no immediate
+  emission, and never an event log.
+- Retained facts start at Runtime creation, independent of whether/when
+  `inspectRuntime()` is first called. State inspection reflects the current
+  authoritative value, publishing a fresh `{ value }` snapshot only when a
+  write actually changes it (a rejected write publishes nothing). Property
+  inspection starts `{ status: 'never-evaluated' }` and publishes a fresh
+  `{ status: 'completed', result }` on every naturally completed evaluation
+  attempt (success or semantic failure) — two equal completions still notify
+  twice, and a callback throw or thenable violation never replaces the latest
+  snapshot.
+- Reading or subscribing through inspection never activates a Property, never
+  executes a Method, and never creates a tracked `alien-signals` dependency —
+  even a `getSnapshot()` call made from inside an external `effect`/`computed`
+  is an untracked read.
+- Already-retained facts (and not-yet-obtained member facades) stay readable
+  after `runtime.dispose()`, including the very first `inspectRuntime(runtime)`
+  call happening after disposal — this is deliberately different from the
+  live Runtime surface. Only `subscribe()` is gated on disposal: a *new*
+  subscription after `dispose()` throws `WidgetSystemRuntimeDisposedError`,
+  while subscriptions made before disposal are silently detached (no final
+  emission) and their unsubscribe functions stay safe/idempotent. Inspection
+  retains no history, method calls, timestamps, or profiling data beyond the
+  already-documented current/last facts.
 
 ## Design constraints
 
