@@ -5,9 +5,9 @@
  * projects compile-time inspection facts only and never waits on/depends on Runtime. Canvas-prioritized
  * layout with compact/collapsible details, per the interaction contract.
  */
-import type { GraphEdgeData } from '../../graph/vue-flow'
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useDependencyGraph } from '../../composables/use-dependency-graph'
+import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selection'
 import { useLabStore } from '../../composables/use-lab-store'
 import GraphCanvas from '../graph/GraphCanvas.vue'
 import GraphEdgeDetails from '../graph/GraphEdgeDetails.vue'
@@ -15,10 +15,9 @@ import GraphEdgeDetails from '../graph/GraphEdgeDetails.vue'
 const store = useLabStore()
 const { semanticGraph, layoutState, flow } = useDependencyGraph()
 
-// Panel-local edge selection (issue #13 Phase 5: stays local, never expands into shared focus). Holds
-// only the small `data` slice (not the full Vue Flow `Edge`, whose generic shape is otherwise awkward to
-// store in plain component state).
-const selectedEdgeData = ref<GraphEdgeData | null>(null)
+// Panel-local edge selection (issue #13 Phase 5: stays local, never expands into shared focus; reset on
+// applied Blueprint identity change, not on ordinary tab switching — see the composable's own comment).
+const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdgeSelection(store)
 
 function onNodeClick(nodeId: string): void {
 	const vertex = semanticGraph.value.vertices.find(candidate => candidate.id === nodeId)
@@ -31,13 +30,13 @@ function onNodeClick(nodeId: string): void {
 }
 
 function onEdgeClick(edgeId: string): void {
-	selectedEdgeData.value = null
 	for (const edge of flow.value?.edges ?? []) {
 		if (edge.id === edgeId) {
-			selectedEdgeData.value = edge.data ?? null
-			break
+			setSelectedEdgeData(edge.data ?? null)
+			return
 		}
 	}
+	setSelectedEdgeData(null)
 }
 
 const statusLabel = computed(() => {
