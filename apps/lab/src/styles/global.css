@@ -1,0 +1,30 @@
+/**
+ * Application-wide baseline. Design tokens themselves live in `pika.config.ts` (`variables.definitions`,
+ * emitted as `:root` custom properties by PikaCSS) — this file only resets the page and wires those
+ * tokens to `html`/`body`. Everything else uses `pika()` utility calls directly in components.
+ */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background: var(--lab-color-bg);
+	color: var(--lab-color-text);
+	font-family: var(--lab-font-sans);
+	font-size: 13px;
+	-webkit-font-smoothing: antialiased;
+}
+
+button {
+	font-family: inherit;
+}

@@ -1,0 +1,39 @@
+{
+	"name": "widget-lab",
+	"type": "module",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Private Widget Lab application shell: workbench, live JSON source editing, Apply lifecycle, Preview, and Blueprint Inspector for @deviltea/widget-core / @deviltea/widget-vue.",
+	"license": "MIT",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview",
+		"typecheck": "pnpm run pika:codegen && vue-tsc --project ./tsconfig.app.json --noEmit",
+		"pika:codegen": "node ./scripts/pika-codegen.mjs",
+		"test": "vitest run --config vitest.config.ts"
+	},
+	"dependencies": {
+		"@deviltea/widget-core": "workspace:*",
+		"@deviltea/widget-vue": "workspace:*",
+		"dockview-vue": "catalog:",
+		"modern-monaco": "catalog:",
+		"tm-grammars": "catalog:",
+		"tm-themes": "catalog:",
+		"vue": "catalog:"
+	},
+	"devDependencies": {
+		"@deviltea/tsconfig": "workspace:^",
+		"@pikacss/core": "catalog:",
+		"@pikacss/integration": "catalog:",
+		"@pikacss/unplugin-pikacss": "catalog:",
+		"@types/node": "catalog:",
+		"@vue/test-utils": "catalog:",
+		"happy-dom": "catalog:",
+		"typescript": "catalog:",
+		"unplugin-vue": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:",
+		"vue-tsc": "catalog:"
+	}
+}

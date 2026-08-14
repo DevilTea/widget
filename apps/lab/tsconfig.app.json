@@ -1,0 +1,14 @@
+{
+	"extends": "@deviltea/tsconfig/browser",
+	"compilerOptions": {
+		"composite": true,
+		"types": ["vite/client"]
+	},
+	"include": [
+		"./src/**/*.ts",
+		"./src/**/*.vue"
+	],
+	"exclude": [
+		"./src/**/*.unit.test.ts"
+	]
+}
