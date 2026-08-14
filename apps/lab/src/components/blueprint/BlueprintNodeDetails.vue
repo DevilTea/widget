@@ -81,7 +81,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 					Semantic slots
 				</h5>
 				<ul
-					v-if="node.semanticSlots.length > 0"
+					v-if="node.capabilities.slots && node.semanticSlots.length > 0"
 					:class="pika({ margin: '0', paddingLeft: '16px', fontSize: '11px' })"
 				>
 					<li
@@ -91,6 +91,12 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 						{{ slot.name }}: {{ slot.children.length }} child(ren)
 					</li>
 				</ul>
+				<p
+					v-else-if="node.capabilities.slots"
+					:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+				>
+					Slots capability present, but declares no slot names (e.g. explicit-empty <code>slots: never</code>).
+				</p>
 				<p
 					v-else
 					:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"

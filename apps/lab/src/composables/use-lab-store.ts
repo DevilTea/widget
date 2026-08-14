@@ -128,10 +128,21 @@ export function createLabStore(): LabStore {
 			return session.applyPreset(preset.sourceText)
 		},
 		setFocus: next => focusStore.setFocus(next),
+		/**
+		 * Final application teardown. Widget Lab is the Runtime owner (issue #13 Phase 4 Apply-lifecycle
+		 * comment), so this disposes the last active Runtime in addition to tearing down Lab-local
+		 * subscriptions/focus listeners. The Preview `WidgetRenderer` subtree must have already unmounted
+		 * before this runs — the caller (`App.vue`) invokes this from `onUnmounted`, which Vue guarantees
+		 * fires only after every descendant (including Preview) has fully unmounted, never from
+		 * `onBeforeUnmount`, which fires before descendants unmount.
+		 */
 		dispose: () => {
 			unsubscribeSession()
 			unsubscribeFocus()
 			focusStore.dispose()
+			const runtime = session.active.runtime
+			if (runtime !== null && !runtime.isDisposed)
+				runtime.dispose()
 		},
 	}
 }

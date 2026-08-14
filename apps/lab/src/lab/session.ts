@@ -155,7 +155,6 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 			}
 
 			this.parseErrorValue = null
-			const blueprint = this.system.createBlueprint(definition)
 			const oldRuntime = this.activeSnapshot.runtime
 
 			if (oldRuntime !== null) {
@@ -163,6 +162,9 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 				oldRuntime.dispose()
 			}
 
+			// Compilation happens only after the teardown boundary above: the locked ordering is detach
+			// -> dispose -> compile/commit -> create Runtime -> mount, never compile-then-teardown.
+			const blueprint = this.system.createBlueprint(definition)
 			const runtime = blueprint.status === 'valid' ? blueprint.createRuntime() : null
 			this.activeSnapshot = {
 				sourceText: capturedText,

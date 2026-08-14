@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, provide } from 'vue'
+import { onBeforeUnmount, onMounted, onUnmounted, provide } from 'vue'
 import LabHeader from './components/LabHeader.vue'
 import Workbench from './components/Workbench.vue'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
@@ -18,10 +18,13 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => {
-	window.removeEventListener('keydown', onKeydown)
-	store.dispose()
-})
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+// `store.dispose()` (which disposes the final active Runtime) runs from `onUnmounted`, not
+// `onBeforeUnmount`: Vue only guarantees every descendant — including Workbench's Preview
+// `WidgetRenderer` subtree — has fully unmounted by the time a component's own `onUnmounted` fires.
+// `onBeforeUnmount` fires before children unmount, which would dispose the Runtime while Preview's
+// widget bridges may still be live.
+onUnmounted(() => store.dispose())
 </script>
 
 <template>

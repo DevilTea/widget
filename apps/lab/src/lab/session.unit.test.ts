@@ -1,3 +1,5 @@
+import type { WidgetSystem } from '@deviltea/widget-core'
+import type { SandboxPlugins } from '../sandbox/plugins'
 import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
@@ -13,6 +15,23 @@ function createDeferred<T = void>() {
 		resolve = res
 	})
 	return { promise, resolve }
+}
+
+/**
+ * Wraps a real `WidgetSystem` so `createBlueprint()` calls push a `'compile'` event before
+ * delegating — the only way to observe *when* compilation actually happens relative to the
+ * detach/dispose/mount hooks, since `LabSession` calls `system.createBlueprint()` directly with no
+ * hook of its own. `getPlugin`/`validateStructure` are copied by reference (they close over the real
+ * system's own state, not `this`), so the wrapper is otherwise behaviorally identical.
+ */
+function createCompileTrackingSystem(system: WidgetSystem<SandboxPlugins>, events: string[]): WidgetSystem<SandboxPlugins> {
+	return {
+		...system,
+		createBlueprint: (definition) => {
+			events.push('compile')
+			return system.createBlueprint(definition)
+		},
+	}
 }
 
 describe('labSession', () => {
@@ -151,11 +170,12 @@ describe('labSession', () => {
 			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
 	})
 
-	it('sequences detach -> dispose -> commit -> create Runtime -> mount, never disposing before the old Preview detaches', async () => {
+	it('sequences detach -> dispose -> compile -> create Runtime -> mount, compiling only after the old Preview/Runtime teardown', async () => {
 		const events: string[] = []
 		const detach = createDeferred<void>()
+		const trackedSystem = createCompileTrackingSystem(sandboxSystem, events)
 		const session = new LabSession({
-			system: sandboxSystem,
+			system: trackedSystem,
 			initialSourceText: validSource,
 			hooks: {
 				detachPreview: async () => {
@@ -169,11 +189,16 @@ describe('labSession', () => {
 			},
 		})
 		const oldRuntime = session.active.runtime!
+		// The constructor's own initial synchronous compile (seeding `active` before any Apply/hooks
+		// exist) is out of scope for this Apply-sequencing assertion.
+		events.length = 0
 
 		session.setDraftSourceText(secondValidSource)
 		const applyPromise = session.apply()
 
-		// Let detachPreview() start, but not resolve yet.
+		// Let detachPreview() start, but not resolve yet. Compilation must not have happened either —
+		// this is exactly the ordering regression a `detach -> dispose -> mount` trace (with no
+		// `compile` event) cannot detect.
 		await Promise.resolve()
 		expect(events)
 			.toEqual(['detach-start'])
@@ -184,7 +209,7 @@ describe('labSession', () => {
 		await applyPromise
 
 		expect(events)
-			.toEqual(['detach-start', 'detach-end', 'mount'])
+			.toEqual(['detach-start', 'detach-end', 'compile', 'mount'])
 		expect(oldRuntime.isDisposed)
 			.toBe(true)
 		expect(session.active.runtime).not.toBe(oldRuntime)
