@@ -368,6 +368,54 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 	// synchronous (App.vue's `onUnmounted` never awaits it), so a `switchShowcase()` already mid-flight
 	// when `dispose()` runs cannot be cancelled — it resumes afterward and may still create a Runtime.
 	// That Runtime must be disposed immediately rather than mounted into a Preview nobody owns anymore.
+	// PR #19 review 4940721401: the lifecycle transaction queue must serialize showcase replacement
+	// against an in-flight Apply without moving Apply's OWN capture/concurrency boundary later — that
+	// boundary is `LabSession.apply()`'s contract (issue #13 comment 5289958311) and must still fire
+	// synchronously, at the moment `store.apply()`/`store.applyPreset()` is called, never deferred until
+	// the queue happens to reach that transaction.
+	it('apply() captures the draft at command-call time; a same-turn setDraftSourceText() edit is not applied', async () => {
+		const store = createLabStore()
+		const capturedText = '{ "id": "root", "type": "Text", "config": { "text": "captured snapshot" } }\n'
+		const laterText = '{ "id": "root", "type": "Text", "config": { "text": "later snapshot" } }\n'
+
+		store.setDraftSourceText(capturedText)
+		const applyPromise = store.apply()
+		// Same turn, no await between the `apply()` call and this edit — under the regression, `apply()`
+		// deferred its actual `session.apply()` call through the queue's `Promise.then`, so this edit
+		// would land in the draft *before* that deferred call ever read it, and this text (not
+		// `capturedText`) would be the one that got applied.
+		store.setDraftSourceText(laterText)
+
+		const outcome = await applyPromise
+
+		expect(outcome)
+			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
+		expect(store.session.active.sourceText)
+			.toBe(capturedText)
+		expect(store.draftSourceText.value)
+			.toBe(laterText)
+		expect(store.isDirty.value)
+			.toBe(true)
+	})
+
+	it('two same-turn apply() calls are serialized into exactly one real Apply — the second is rejected as concurrent', async () => {
+		const store = createLabStore()
+
+		// Fired back to back, no await between them: under the regression, the queue ran both
+		// `session.apply()` invocations as two genuine, sequential Applies (the second only starting once
+		// the first had fully settled and `isApplying` had already gone back to `false`), instead of the
+		// locked contract's "Apply is disabled while one is running" rejecting the second outright.
+		const firstPromise = store.apply()
+		const secondPromise = store.apply()
+
+		const [firstOutcome, secondOutcome] = await Promise.all([firstPromise, secondPromise])
+
+		expect(secondOutcome)
+			.toEqual({ status: 'skipped-concurrent' })
+		expect(firstOutcome.status)
+			.toBe('applied')
+	})
+
 	it('dispose() while a switchShowcase() is mid-flight disposes whatever Runtime that switch eventually produces, without throwing', async () => {
 		const store = createLabStore()
 		const switchPromise = store.switchShowcase('survey')

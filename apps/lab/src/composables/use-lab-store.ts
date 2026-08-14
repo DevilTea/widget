@@ -36,6 +36,16 @@
  * `ApplyOutcome`, and toggles `isApplying` — the same authoritative pipeline manual editing and preset
  * selection already use. This makes `switchShowcase()`'s "loads the showcase source" step observably
  * indistinguishable, trace-wise, from applying a preset in place.
+ *
+ * Apply's command-start capture/concurrency stays at command-call time (PR #19 review 4940721401):
+ * the paragraph above says `apply()`/`applyPreset()` "route through" `enqueue()`, but they must not be
+ * deferred* by it — the locked Apply lifecycle (issue #13 comment 5289958311) requires the draft to be
+ * captured, and a concurrent Apply to be rejected, synchronously at the moment `apply()`/`applyPreset()`
+ * is called, not whenever the queue happens to reach that transaction. So `LabStore.apply()` and
+ * `applyPreset()` call into `session.apply()`/`session.applyPreset()` directly and synchronously — outside
+ * `enqueue()`'s `task` callback — and only hand the resulting, already in-flight promise to `enqueue()` to
+ * await. `enqueue()` still does its job as the mutual-exclusion barrier (a queued `switchShowcase()` won't
+ * start until that promise settles); it just never gets to choose when the Apply itself starts.
  */
 
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
@@ -119,6 +129,17 @@ export function createLabStore(): LabStore {
 	 * chain: each call's `task` only starts once every previously enqueued task has settled, regardless
 	 * of how the caller interleaves them. This is the fix for PR #19 review 4940219714 finding 1 — see
 	 * the file header for the exact hazard it closes.
+	 *
+	 * Command-start capture/concurrency (PR #19 review 4940721401): this barrier must never be the thing
+	 * that decides *when* an Apply's own draft capture or `isApplying` concurrency guard runs — those are
+	 * `LabSession.apply()`'s contract (issue #13 comment 5289958311) and must fire synchronously, at
+	 * command-call time. `apply()`/`applyPreset()` below therefore call into `session` directly, outside
+	 * `task`, and only hand `enqueue()` the resulting (already in-flight) promise to await — `enqueue()`
+	 * is purely the mutual-exclusion barrier that keeps `switchShowcase()` (whose own `task`, unlike
+	 * Apply's, legitimately does start later, from inside the queue) from starting until that promise
+	 * settles. Passing a *function that starts the real work* (as `switchShowcase` does) is correct when
+	 * the work itself must wait its turn; passing one that just re-returns an already-started promise (as
+	 * `apply`/`applyPreset` do) is correct when the work must not wait, only its completion.
 	 */
 	let transactionQueue: Promise<unknown> = Promise.resolve()
 	function enqueue<T>(task: () => Promise<T>): Promise<T> {
@@ -287,16 +308,28 @@ export function createLabStore(): LabStore {
 		graphShowAbsent,
 		graphShowIsolatedMembers,
 		setDraftSourceText: text => session.setDraftSourceText(text),
-		apply: () => enqueue(() => session.apply()),
+		// `session.apply()` is invoked here, synchronously, at command-call time — never deferred behind
+		// `enqueue()`. See the "Command-start capture/concurrency" note above `enqueue()` for why: an
+		// async function's own body runs synchronously up to its first `await`, so calling it inline is
+		// what lets `LabSession.apply()`'s own capture-the-draft and `isApplying` concurrency guard fire
+		// immediately, in this turn, exactly as the locked Apply lifecycle (issue #13 comment 5289958311)
+		// requires. `enqueue()` only wraps the resulting (already in-flight) promise, so it still serves
+		// as the mutual-exclusion barrier against a concurrent `switchShowcase()`.
+		apply: () => {
+			const outcome = session.apply()
+			return enqueue(() => outcome)
+		},
 		format: () => session.format(),
 		revert: () => session.revert(),
 		applyPreset: (presetId) => {
-			return enqueue(async () => {
-				const preset = currentShowcase.presets.find(candidate => candidate.id === presetId)
-				if (preset === undefined)
-					return undefined
-				return session.applyPreset(preset.sourceText)
-			})
+			const preset = currentShowcase.presets.find(candidate => candidate.id === presetId)
+			if (preset === undefined)
+				return enqueue(async () => undefined)
+			// Same reasoning as `apply()` above: `session.applyPreset()` synchronously sets the draft text
+			// and synchronously starts `session.apply()` (capture + concurrency guard) before this line
+			// returns. `enqueue()` only barriers a concurrent `switchShowcase()`/`apply()` behind it.
+			const outcome = session.applyPreset(preset.sourceText)
+			return enqueue(() => outcome)
 		},
 		switchShowcase: id => enqueue(() => performSwitchShowcase(id)),
 		setFocus: next => focusStore.setFocus(next),
