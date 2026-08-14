@@ -1,0 +1,62 @@
+{
+	"name": "@deviltea/widget-vue",
+	"type": "module",
+	"publishConfig": {
+		"access": "public"
+	},
+	"version": "0.0.0",
+	"author": "DevilTea <ch19980814@gmail.com>",
+	"license": "MIT",
+	"homepage": "https://github.com/DevilTea/deviltea-labs/tree/main/packages/widget/vue#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/DevilTea/deviltea-labs.git",
+		"directory": "packages/widget/vue"
+	},
+	"bugs": {
+		"url": "https://github.com/DevilTea/deviltea-labs/issues"
+	},
+	"keywords": [
+		"widget",
+		"vue",
+		"renderer",
+		"composition"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.mts",
+			"import": "./dist/index.mjs"
+		}
+	},
+	"main": "dist/index.mjs",
+	"module": "dist/index.mjs",
+	"types": "dist/index.d.mts",
+	"files": [
+		"dist"
+	],
+	"engines": {
+		"node": "^22.14.0 || ^24.0.0"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"build:pack": "pnpm build && pnpm pack",
+		"dev": "tsdown --watch",
+		"test": "vitest run --config vitest.config.ts",
+		"typecheck": "pnpm typecheck:package && pnpm typecheck:test",
+		"typecheck:package": "tsc --project ./tsconfig.package.json --noEmit",
+		"typecheck:test": "tsc --project ./tsconfig.tests.json --noEmit"
+	},
+	"peerDependencies": {
+		"vue": "^3.5.0"
+	},
+	"dependencies": {
+		"@deviltea/widget-core": "workspace:*"
+	},
+	"devDependencies": {
+		"@vue/test-utils": "catalog:",
+		"happy-dom": "catalog:",
+		"tsdown": "catalog:",
+		"vitest": "catalog:",
+		"vue": "catalog:"
+	}
+}

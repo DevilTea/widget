@@ -1,0 +1,10 @@
+{
+	"extends": "@deviltea/tsconfig/node-bundler",
+	"compilerOptions": {
+		"composite": true,
+		"lib": ["ES2024", "DOM"]
+	},
+	"include": [
+		"./src/**/*.ts"
+	]
+}
