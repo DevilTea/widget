@@ -11,11 +11,31 @@
  * `switchShowcase()` is the analogous, larger-grained replacement for the showcase registry itself
  * (issue #13 "Source Apply lifecycle" checkpoint, "Presets / showcase changes": "Switching showcases
  * ... detaches/disposes the old Runtime, switches showcase context, loads the showcase source, and
- * then uses the same Apply pipeline"): it tears down the current `LabSession`/focus store the same way
- * `dispose()` tears down the final one, then constructs a fresh `LabSession` bound to the target
- * showcase's `WidgetSystem` and default preset — the same `JSON.parse` -> `createBlueprint` ->
- * `createRuntime`-if-valid pipeline `LabSession`'s constructor already uses to seed its initial
- * snapshot.
+ * then uses the same Apply pipeline").
+ *
+ * Serialized lifecycle transactions (PR #19 review 4940219714, finding 1): `apply()`, `applyPreset()`
+ * and `switchShowcase()` all route through one `enqueue()` promise chain, so at most one of them is
+ * ever running against the mutable `session`/`previewRuntime`/`currentShowcase` state at a time —
+ * regardless of caller overlap (a switch fired while an Apply is mid-flight, or several switches fired
+ * back to back). Without this, `LabSession`'s hooks close over the *mutable outer* `session` variable:
+ * an in-flight `session.apply()` awaiting `detachPreview()`/`mountPreview()` could still be running
+ * when a concurrent `switchShowcase()` reassigns `session` to a different `LabSession` instance, so the
+ * old Apply's own `mountPreview()` hook (invoked after `switchShowcase()` already reassigned `session`)
+ * would observe the *new* session instead of the one it actually compiled against — leaking the
+ * Runtime it just created (never mounted, never disposed) or corrupting `previewRuntime`. Serializing
+ * removes the interleaving by construction: `switchShowcase()`'s own teardown/attach/apply sequence
+ * never starts until any prior queued transaction (Apply, preset, or another switch) has fully settled.
+ *
+ * Authoritative Apply boundary for showcase replacement (PR #19 review 4940219714, finding 2):
+ * `new LabSession({ initialSourceText })`'s constructor synchronously seeds an initial Runtime — this
+ * is the "initial-boot exception" the Source Apply lifecycle checkpoint carves out for the very first
+ * session an app instance ever creates, never a template for *replacing* an already-active showcase.
+ * `switchShowcase()` therefore treats that constructor-seeded Runtime as a purely internal, transient
+ * bootstrap: it is never assigned to `previewRuntime` and is immediately super­seded by an explicit
+ * `session.apply()` call, which is what actually crosses the applied-snapshot boundary, produces a real
+ * `ApplyOutcome`, and toggles `isApplying` — the same authoritative pipeline manual editing and preset
+ * selection already use. This makes `switchShowcase()`'s "loads the showcase source" step observably
+ * indistinguishable, trace-wise, from applying a preset in place.
  */
 
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
@@ -59,7 +79,7 @@ export interface LabStore {
 	format: () => void
 	revert: () => void
 	applyPreset: (presetId: string) => Promise<ApplyOutcome | undefined>
-	/** No-op when `id` is unknown or already the current showcase. */
+	/** No-op when `id` is unknown or already the current showcase. Serialized against Apply/itself. */
 	switchShowcase: (id: string) => Promise<void>
 	setFocus: (focus: InspectorFocus | null) => void
 	dispose: () => void
@@ -79,35 +99,68 @@ export function createLabStore(): LabStore {
 	let currentShowcase: ShowcaseEntry = defaultShowcase
 	// Mutable by design: `switchShowcase` reassigns both on a showcase change. Every closure below reads
 	// these at call time (never destructures them up front), so a reassignment is visible everywhere
-	// without re-wiring `computed()`/returned functions.
+	// without re-wiring `computed()`/returned functions. The serialized `enqueue()` transaction queue
+	// below is what makes that reassignment safe — see the file header.
 	let session: LabSession
 	let focusStore: InspectorFocusStore
 	let unsubscribeSession: () => void
 	let unsubscribeFocus: () => void
 
-	function attach(showcase: ShowcaseEntry): void {
+	// Final-disposal guard (PR #19 review 4940219714, finding 1's "final disposal has guard" ask):
+	// `dispose()` itself stays synchronous (App.vue's `onUnmounted` calls it without awaiting, and
+	// existing tests assert the Runtime is disposed immediately), but a lifecycle transaction that is
+	// already mid-flight when `dispose()` runs cannot be synchronously cancelled — it will still resume
+	// later and may still create/mount a Runtime. `disposed` lets `mountPreview()` recognize that case
+	// (see `createHooks()` below) and dispose that Runtime immediately instead of mounting/leaking it.
+	let disposed = false
+
+	/**
+	 * Serializes every lifecycle-mutating operation (`apply`, `applyPreset`, `switchShowcase`) into one
+	 * chain: each call's `task` only starts once every previously enqueued task has settled, regardless
+	 * of how the caller interleaves them. This is the fix for PR #19 review 4940219714 finding 1 — see
+	 * the file header for the exact hazard it closes.
+	 */
+	let transactionQueue: Promise<unknown> = Promise.resolve()
+	function enqueue<T>(task: () => Promise<T>): Promise<T> {
+		const settled = transactionQueue.then(task, task)
+		transactionQueue = settled.then(() => undefined, () => undefined)
+		return settled
+	}
+
+	function createHooks() {
+		return {
+			// Replacement ordering seam (issue #13 Phase 4 Apply-lifecycle comment): clearing the
+			// Preview runtime unmounts the old `WidgetRenderer` subtree, and `nextTick()` waits for
+			// that unmount to actually commit before `LabSession` disposes the old Runtime.
+			detachPreview: async () => {
+				previewRuntime.value = null
+				await nextTick()
+			},
+			mountPreview: () => {
+				if (disposed) {
+					// The store was torn down while this Apply/switch was still in flight (see the
+					// `disposed` comment above) — dispose the Runtime it just produced instead of
+					// mounting it into a Preview nobody owns anymore.
+					session.active.runtime?.dispose()
+					return
+				}
+				previewRuntime.value = session.active.runtime
+			},
+		}
+	}
+
+	function attachInitial(showcase: ShowcaseEntry): void {
+		// The one legitimate use of `LabSession`'s constructor-seeded Runtime as final state: the very
+		// first session this Lab instance ever creates, with no prior Preview to detach and nothing to
+		// race against (issue #13 "Source Apply lifecycle" checkpoint's "initial-boot exception").
 		session = new LabSession({
 			system: showcase.system,
 			initialSourceText: showcase.defaultPreset.sourceText,
-			hooks: {
-				// Replacement ordering seam (issue #13 Phase 4 Apply-lifecycle comment): clearing the
-				// Preview runtime unmounts the old `WidgetRenderer` subtree, and `nextTick()` waits for
-				// that unmount to actually commit before `LabSession` disposes the old Runtime.
-				detachPreview: async () => {
-					previewRuntime.value = null
-					await nextTick()
-				},
-				mountPreview: () => {
-					previewRuntime.value = session.active.runtime
-				},
-			},
+			hooks: createHooks(),
 		})
-		// The constructor seeds `active` synchronously without going through the hooks (there is no
-		// prior Preview to unmount yet), so the initial Preview mount is seeded here instead.
 		previewRuntime.value = session.active.runtime
 
 		focusStore = createInspectorFocusStore(session)
-
 		unsubscribeSession = session.subscribe(() => {
 			sessionTick.value++
 		})
@@ -116,7 +169,7 @@ export function createLabStore(): LabStore {
 		})
 	}
 
-	attach(defaultShowcase)
+	attachInitial(defaultShowcase)
 
 	const draftSourceText = computed(() => {
 		void sessionTick.value
@@ -148,21 +201,71 @@ export function createLabStore(): LabStore {
 	const graphShowIsolatedMembers = shallowRef(false)
 
 	/**
-	 * Disposes the current session's Runtime/subscriptions only — never anything showcase-registry-wide.
-	 * Shared by `switchShowcase` (which then re-`attach()`s a new session) and the final `dispose()`
-	 * (which does not).
+	 * The body of `switchShowcase()`, run only from inside `enqueue()` — see the file header for both
+	 * the serialization rationale (finding 1) and why this crosses `session.apply()`'s boundary instead
+	 * of only relying on the replacement session's own constructor seeding (finding 2). Reads
+	 * `currentShowcase`/`session` fresh (never captured before enqueueing) so repeated/queued switches
+	 * each observe whatever the *previous* queued transaction actually left behind.
 	 */
-	async function teardownCurrentSession(): Promise<void> {
-		const runtime = session.active.runtime
-		if (runtime !== null) {
+	async function performSwitchShowcase(id: string): Promise<void> {
+		if (disposed)
+			return
+		if (id === currentShowcase.id)
+			return
+		const target = showcases.find(showcase => showcase.id === id)
+		if (target === undefined)
+			return
+
+		// 1. Detach/dispose the OLD Runtime — the same ordering `LabSession.apply()` itself uses.
+		const oldRuntime = session.active.runtime
+		if (oldRuntime !== null) {
 			previewRuntime.value = null
 			await nextTick()
-			if (!runtime.isDisposed)
-				runtime.dispose()
+			if (!oldRuntime.isDisposed)
+				oldRuntime.dispose()
 		}
 		unsubscribeSession()
 		unsubscribeFocus()
 		focusStore.dispose()
+
+		// 2. Switch showcase context: bind a fresh `LabSession` to the target system. Its constructor
+		// seeds a Runtime synchronously, but that Runtime is a purely internal bootstrap — it is never
+		// assigned to `previewRuntime` and step 3 immediately supersedes it through the authoritative
+		// Apply pipeline (finding 2), so nothing externally observable ever treats constructor seeding
+		// as the applied snapshot for a showcase *replacement*.
+		currentShowcase = target
+		session = new LabSession({
+			system: target.system,
+			initialSourceText: target.defaultPreset.sourceText,
+			hooks: createHooks(),
+		})
+		focusStore = createInspectorFocusStore(session)
+		unsubscribeSession = session.subscribe(() => {
+			sessionTick.value++
+		})
+		unsubscribeFocus = focusStore.subscribe(() => {
+			focusTick.value++
+		})
+
+		showcaseId.value = target.id
+		renderer.value = target.renderer
+		presets.value = target.presets
+		sessionTick.value++
+		focusTick.value++
+
+		if (disposed) {
+			// Torn down mid-switch: dispose the bootstrap Runtime immediately rather than crossing the
+			// Apply boundary into a store nobody owns anymore.
+			session.active.runtime?.dispose()
+			return
+		}
+
+		// 3. Load the showcase source through the SAME authoritative Apply pipeline manual editing and
+		// preset selection already use. This disposes the constructor's own bootstrap Runtime (via
+		// `hooks.detachPreview`/the pipeline's own old-Runtime disposal) and creates the Runtime that
+		// actually gets mounted via `hooks.mountPreview`, producing a real `ApplyOutcome` and an
+		// `isApplying` true→false transition — never a second, bypassing compilation path.
+		await session.apply()
 	}
 
 	return {
@@ -184,32 +287,18 @@ export function createLabStore(): LabStore {
 		graphShowAbsent,
 		graphShowIsolatedMembers,
 		setDraftSourceText: text => session.setDraftSourceText(text),
-		apply: () => session.apply(),
+		apply: () => enqueue(() => session.apply()),
 		format: () => session.format(),
 		revert: () => session.revert(),
-		applyPreset: async (presetId) => {
-			const preset = currentShowcase.presets.find(candidate => candidate.id === presetId)
-			if (preset === undefined)
-				return undefined
-			return session.applyPreset(preset.sourceText)
+		applyPreset: (presetId) => {
+			return enqueue(async () => {
+				const preset = currentShowcase.presets.find(candidate => candidate.id === presetId)
+				if (preset === undefined)
+					return undefined
+				return session.applyPreset(preset.sourceText)
+			})
 		},
-		switchShowcase: async (id) => {
-			if (id === currentShowcase.id)
-				return
-			const target = showcases.find(showcase => showcase.id === id)
-			if (target === undefined)
-				return
-
-			await teardownCurrentSession()
-
-			currentShowcase = target
-			attach(target)
-			showcaseId.value = target.id
-			renderer.value = target.renderer
-			presets.value = target.presets
-			sessionTick.value++
-			focusTick.value++
-		},
+		switchShowcase: id => enqueue(() => performSwitchShowcase(id)),
 		setFocus: next => focusStore.setFocus(next),
 		/**
 		 * Final application teardown. Widget Lab is the Runtime owner (issue #13 Phase 4 Apply-lifecycle
@@ -218,8 +307,16 @@ export function createLabStore(): LabStore {
 		 * before this runs — the caller (`App.vue`) invokes this from `onUnmounted`, which Vue guarantees
 		 * fires only after every descendant (including Preview) has fully unmounted, never from
 		 * `onBeforeUnmount`, which fires before descendants unmount.
+		 *
+		 * Stays synchronous by design (see the `disposed` comment above): it immediately disposes
+		 * whatever is synchronously reachable right now, and sets `disposed` so any lifecycle
+		 * transaction already in flight cleans up after itself (via `createHooks()`'s `mountPreview`
+		 * guard) instead of mounting/leaking a Runtime after teardown.
 		 */
 		dispose: () => {
+			if (disposed)
+				return
+			disposed = true
 			unsubscribeSession()
 			unsubscribeFocus()
 			focusStore.dispose()

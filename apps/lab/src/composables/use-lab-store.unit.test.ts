@@ -204,4 +204,186 @@ describe('createLabStore() switchShowcase()', () => {
 		expect(store.session.active.definition)
 			.toMatchObject({ type: 'TripSurvey' })
 	})
+
+	// PR #19 review 4940219714, finding 2: showcase replacement must cross `LabSession.apply()`'s
+	// authoritative boundary rather than only relying on the replacement `LabSession`'s own
+	// constructor-seeded Runtime as final state — constructor seeding is the initial-boot exception,
+	// never a stand-in for `apply()`. The observable, black-box discriminator between the two is
+	// `isApplying`: only `LabSession.apply()` ever toggles it true→false; constructor seeding never
+	// touches it at all. Sampling across microtask boundaries for the whole switch (rather than only
+	// checking the final settled state) is what actually distinguishes "loaded through the Apply
+	// pipeline" from "only synchronously bootstrapped".
+	it('switchShowcase() loads the target showcase source through the authoritative Apply pipeline (isApplying trace, not just final state)', async () => {
+		const store = createLabStore()
+		const oldRuntime = store.session.active.runtime!
+
+		const isApplyingSamples: boolean[] = []
+		// Plain object rather than a bare `let` so the loop's exit condition is visibly mutated across
+		// the closure boundary (`sampler.running = false` below) rather than looking to a linter like a
+		// permanently-true condition.
+		const sampler = { running: true }
+		async function sample(): Promise<void> {
+			while (sampler.running) {
+				isApplyingSamples.push(store.isApplying.value)
+				await Promise.resolve()
+			}
+		}
+		const samplingDone = sample()
+
+		await store.switchShowcase('survey')
+		sampler.running = false
+		await samplingDone
+
+		expect(oldRuntime.isDisposed)
+			.toBe(true)
+		// The switch must have actually observed `isApplying === true` at some point — proof its "load
+		// the showcase source" step really called `session.apply()` and not only the constructor.
+		expect(isApplyingSamples.some(sample => sample))
+			.toBe(true)
+		expect(store.isApplying.value)
+			.toBe(false)
+		expect(store.session.active.runtime)
+			.not.toBeNull()
+	})
+})
+
+/**
+ * PR #19 review 4940219714, finding 1: showcase replacement must be one serialized lifecycle
+ * transaction, mutually exclusive with an in-flight Apply and with itself — deliberately overlapping
+ * calls (never awaited individually before firing the next one) rather than only sequential switching.
+ */
+describe('createLabStore() lifecycle transaction serialization', () => {
+	it('an in-flight apply() never leaves an orphaned, never-mounted, never-disposed replacement Runtime behind a concurrent switchShowcase()', async () => {
+		const store = createLabStore()
+		// Captured by reference, independent of `store.session`'s own getter: this is exactly the
+		// object identity `LabSession.apply()`'s in-flight call closes over as `this`. Under the bug,
+		// `switchShowcase()` reassigns the store's *outer* `session` variable while that in-flight
+		// `apply()` is still awaiting its own `detachPreview()`/`mountPreview()` hooks — hooks which
+		// read that same outer variable rather than `this` — so the in-flight call's own replacement
+		// Runtime gets orphaned on `preSwitchSession` (never mounted into Preview, and never disposed,
+		// because nothing ever calls back into this exact object to tear it down again).
+		const preSwitchSession = store.session
+		const initialRuntime = preSwitchSession.active.runtime!
+
+		const applyPromise = store.apply()
+		const switchPromise = store.switchShowcase('survey')
+		await Promise.all([applyPromise, switchPromise])
+
+		const replacement = preSwitchSession.active.runtime
+		if (replacement !== null && replacement !== initialRuntime) {
+			expect(replacement.isDisposed)
+				.toBe(true)
+		}
+		expect(initialRuntime.isDisposed)
+			.toBe(true)
+	})
+
+	it('serializes an in-flight apply() against a concurrent switchShowcase() with no leaked/mismatched Runtime', async () => {
+		const store = createLabStore()
+
+		// Samples the exact invariant the described race breaks: whenever a Runtime is active,
+		// `previewRuntime` must point at that *same* Runtime (never null-while-active, never a stale or
+		// already-disposed one) — sampled continuously across microtask boundaries throughout the
+		// overlap, not just once at the end.
+		const violations: string[] = []
+		const sampler = { running: true }
+		async function sample(): Promise<void> {
+			while (sampler.running) {
+				const runtime = store.session.active.runtime
+				const preview = store.previewRuntime.value
+				if (runtime !== null && !runtime.isDisposed && preview !== null && preview !== runtime)
+					violations.push(`previewRuntime pointed at a different, non-disposed Runtime than session.active.runtime (showcase=${store.showcaseId.value})`)
+				if (preview !== null && preview.isDisposed)
+					violations.push('previewRuntime pointed at an already-disposed Runtime')
+				await Promise.resolve()
+			}
+		}
+		const samplingDone = sample()
+
+		// Fired back to back, neither awaited first: `apply()` starts its own detach/compile/mount
+		// sequence, and `switchShowcase()` is issued while that is still (at minimum) queued behind it.
+		const applyPromise = store.apply()
+		const switchPromise = store.switchShowcase('survey')
+		await Promise.all([applyPromise, switchPromise])
+
+		sampler.running = false
+		await samplingDone
+
+		expect(violations)
+			.toEqual([])
+		expect(store.showcaseId.value)
+			.toBe('survey')
+		expect(store.session.active.blueprint.status)
+			.toBe('valid')
+		expect(store.session.active.runtime)
+			.not.toBeNull()
+		expect(store.session.active.runtime!.isDisposed)
+			.toBe(false)
+		expect(store.previewRuntime.value)
+			.toBe(store.session.active.runtime)
+	})
+
+	it('serializes repeated switchShowcase() calls fired without awaiting between them', async () => {
+		const store = createLabStore()
+
+		const survey = store.switchShowcase('survey')
+		const sandbox = store.switchShowcase('sandbox')
+		const surveyAgain = store.switchShowcase('survey')
+		await Promise.all([survey, sandbox, surveyAgain])
+
+		// The last queued call wins, and the end state is fully consistent — never a runtime left over
+		// from an intermediate switch.
+		expect(store.showcaseId.value)
+			.toBe('survey')
+		expect(store.session.active.blueprint.status)
+			.toBe('valid')
+		expect(store.session.active.runtime)
+			.not.toBeNull()
+		expect(store.session.active.runtime!.isDisposed)
+			.toBe(false)
+		expect(store.previewRuntime.value)
+			.toBe(store.session.active.runtime)
+	})
+
+	it('serializes switchShowcase() against a concurrent applyPreset() on the pre-switch showcase', async () => {
+		const store = createLabStore()
+
+		const applyPresetPromise = store.applyPreset('invalid-semantic')
+		const switchPromise = store.switchShowcase('survey')
+		const [applyPresetOutcome] = await Promise.all([applyPresetPromise, switchPromise])
+
+		// The preset applied to the *sandbox* session before the switch tore it down — it must not
+		// leak into or affect the survey showcase now active.
+		expect(applyPresetOutcome?.status)
+			.toBe('applied')
+		expect(store.showcaseId.value)
+			.toBe('survey')
+		expect(store.session.active.blueprint.status)
+			.toBe('valid')
+		expect(store.previewRuntime.value)
+			.toBe(store.session.active.runtime)
+	})
+
+	// PR #19 review 4940219714, finding 1's "final disposal has guard" ask: `dispose()` stays
+	// synchronous (App.vue's `onUnmounted` never awaits it), so a `switchShowcase()` already mid-flight
+	// when `dispose()` runs cannot be cancelled — it resumes afterward and may still create a Runtime.
+	// That Runtime must be disposed immediately rather than mounted into a Preview nobody owns anymore.
+	it('dispose() while a switchShowcase() is mid-flight disposes whatever Runtime that switch eventually produces, without throwing', async () => {
+		const store = createLabStore()
+		const switchPromise = store.switchShowcase('survey')
+		// Let the queued transaction actually start (past its first internal await) before tearing down,
+		// so this exercises the mid-flight guard rather than the early `if (disposed) return` no-op.
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(() => store.dispose()).not.toThrow()
+
+		await switchPromise
+
+		const runtime = store.session.active.runtime
+		expect(runtime === null || runtime.isDisposed)
+			.toBe(true)
+		expect(store.previewRuntime.value)
+			.toBeNull()
+	})
 })

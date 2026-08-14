@@ -13,11 +13,24 @@
  * re-reported here with a second `addIssue` — core's dependency propagation already inserts a
  * `property-dependency` Issue into this Property's own collector automatically the moment the failing
  * dependency is read (issue #10 §12), which is exactly the "derived metric validity" signal.
+ *
+ * `destination`/`travelStyle`/`familyPriority` are read through `dep.widget(...).state.get('answer')`
+ * `.validate()` refinements to their closed domain literals (`isDestination`/`isTravelStyle`/
+ * `isFamilyPriority`), not just a bare non-null check: Source is editable, and `SurveyChoiceQuestion`'s
+ * own primitive State validation only constrains an answer to whatever `options` the *source* declares
+ * for that widget (checkpoint §2) — it has no notion of the closed `Destination`/`TravelStyle`/
+ * `FamilyPriority` domains. An edited-but-domain-invalid source (e.g. a `destination` option/default of
+ * `"mars"`) is therefore a perfectly valid *State* value that must still make `ready` fail: a refinement
+ * rejection here fails this Property automatically via the same core dependency propagation as the
+ * `tripDays` case above (no manual `addIssue` needed), so `success(true)` continues to mean the survey
+ * is genuinely semantically ready — required answers *and* derived metric/domain validity — never just
+ * "every required field happens to be non-null" (checkpoint §1 "required answers + conditional family
+ * requirement + derived metric validity → readiness").
  */
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import { createWidgetPlugin } from '@deviltea/widget-core'
-import { isPlainObject } from '../domain'
+import { isDestination, isFamilyPriority, isPlainObject, isTravelStyle } from '../domain'
 
 export interface TripReadinessConfig {
 	readonly departureId: string
@@ -81,9 +94,12 @@ export const TripReadinessPlugin = createWidgetPlugin('TripReadiness')
 				adults: dep.widget(config.adultsId).state.get('answer'),
 				children: dep.widget(config.childrenId).state.get('answer'),
 				budget: dep.widget(config.budgetId).state.get('answer'),
-				destination: dep.widget(config.destinationId).state.get('answer'),
-				travelStyle: dep.widget(config.travelStyleId).state.get('answer'),
-				familyPriority: dep.widget(config.familyPriorityId).state.get('answer'),
+				destination: dep.widget(config.destinationId).state.get('answer')
+					.validate((value): value is string | null => value === null || isDestination(value)),
+				travelStyle: dep.widget(config.travelStyleId).state.get('answer')
+					.validate((value): value is string | null => value === null || isTravelStyle(value)),
+				familyPriority: dep.widget(config.familyPriorityId).state.get('answer')
+					.validate((value): value is string | null => value === null || isFamilyPriority(value)),
 				tripDays: dep.widget(config.metricsId).properties.get('tripDays'),
 			}),
 			compute: ({ deps, addIssue }) => {

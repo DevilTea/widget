@@ -6,6 +6,10 @@
  * semantic topology only. Method failures (readiness/recommendation dependency propagation) surface
  * through `useMethodIssues()` — this component never re-validates before calling a Method (checkpoint
  * §4: "Vue must call semantic Methods directly ... must not duplicate these validation decisions").
+ * In particular, "Generate result" is never disabled on `phase !== 'submitted'`: that precondition is
+ * `generateResult()`'s own Method rule (checkpoint §5), and gating the button here would duplicate that
+ * business rule in Vue and suppress the `method-result` failure path the checkpoint intends to be
+ * exercisable — the button stays clickable in every phase; the Method alone decides success/failure.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { TripSurveyPlugin } from '../plugins/trip-survey'
@@ -53,8 +57,7 @@ function onGenerateResult(): void {
 			</button>
 			<button
 				type="button"
-				:disabled="phase === 'editing'"
-				:class="pika({ 'padding': '6px 12px', 'fontSize': '12px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				:class="pika({ padding: '6px 12px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
 				@click="onGenerateResult"
 			>
 				Generate result

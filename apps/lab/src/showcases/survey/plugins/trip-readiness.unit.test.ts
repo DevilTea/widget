@@ -8,9 +8,14 @@ import { describe, expect, it } from 'vitest'
 import { surveySystem } from '../system'
 import { widgetOfType } from '../test-support'
 
-const destinationOptions = [{ value: 'tokyo', label: 'Tokyo' }]
+// "mars"/"lunar-base" are deliberately NOT part of the closed Destination/FamilyPriority domains
+// (checkpoint §1's `Destination`/`FamilyPriority` literal unions) — they exist only so a source can be
+// *edited* to configure a `SurveyChoiceQuestion` with an option outside that domain (checkpoint §2:
+// primitive State validation only constrains an answer to whatever `options` the source itself
+// declares), exercising the "edited-but-domain-invalid source" regression below.
+const destinationOptions = [{ value: 'tokyo', label: 'Tokyo' }, { value: 'mars', label: 'Mars' }]
 const travelStyleOptions = [{ value: 'balanced', label: 'Balanced' }]
-const familyPriorityOptions = [{ value: 'easy-transit', label: 'Easy transit' }]
+const familyPriorityOptions = [{ value: 'easy-transit', label: 'Easy transit' }, { value: 'lunar-base', label: 'Lunar base' }]
 
 function definitionWithDefaults(overrides: Record<string, unknown> = {}) {
 	const defaults: Record<string, unknown> = {
@@ -129,5 +134,44 @@ describe('tripReadiness.ready (C1)', () => {
 			throw new Error('expected a failure')
 		expect(result.issues.some(issue => issue.source.type === 'property-dependency'))
 			.toBe(true)
+	})
+
+	// PR #19 review 4940219714, finding 3: `SurveyChoiceQuestion`'s primitive State validation only
+	// constrains an answer to whatever `options` the *source* itself declares (checkpoint §2) — it has
+	// no notion of the closed `Destination`/`TravelStyle`/`FamilyPriority` domains. An edited source can
+	// therefore legitimately set `destination` to an option value like `"mars"`, which is a perfectly
+	// valid State value but not a real `Destination`. Readiness must not report `success(true)` for
+	// that survey merely because every required field happens to be non-null.
+	it('fails when destination is an edited-but-domain-invalid option value (e.g. "mars"), even though State accepts it', () => {
+		const runtime = createRuntime({ destination: 'mars' })
+		const destination = widgetOfType(runtime, 'destination', 'SurveyChoiceQuestion')
+		// Confirms this is a genuinely accepted State value, not a rejected one — the point of the
+		// regression is that "domain-invalid" and "State-invalid" are different things here.
+		expect(destination.state.answer.get())
+			.toBe('mars')
+
+		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
+		const result = readiness.properties.ready.get()
+		expect(result.success)
+			.toBe(false)
+		if (result.success)
+			throw new Error('expected a failure')
+		// Caused directly by TripReadiness's own `destination` refinement (a `property-dependency`
+		// wrapping a rejected `.validate()` on a `state-get` dependency) — not merely a downstream
+		// `TripMetrics.estimatedBaselineCost`/`tripDays` cascade.
+		expect(result.issues.some((issue) => {
+			const source = issue.source
+			return source.type === 'property-dependency' && source.dependency.operation.type === 'state-get' && source.dependency.operation.key === 'answer'
+		}))
+			.toBe(true)
+	})
+
+	it('fails when family-priority is an edited-but-domain-invalid option value, even while children is 0 (unrequired)', () => {
+		const runtime = createRuntime({ 'family-priority': 'lunar-base' })
+		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
+
+		const result = readiness.properties.ready.get()
+		expect(result.success)
+			.toBe(false)
 	})
 })
