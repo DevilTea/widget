@@ -1,0 +1,29 @@
+/**
+ * Small custom Dockview theme adapted from the Lab's PikaCSS tokens (`pika.config.ts`), per issue #13
+ * (Widget Lab Phase 4) comment "Widget Lab implementation stack": Dockview's structural stylesheet
+ * (`dockview-vue/dist/styles/dockview.css`, imported once in `App.vue`) supplies layout mechanics;
+ * this file only overrides its themeable CSS custom properties. Dockview never becomes a second
+ * application-wide design system — this class only sets the handful of variables Dockview itself
+ * reads for group/tab chrome.
+ */
+
+.dockview-theme-lab {
+	--dv-group-view-background-color: var(--lab-color-bg);
+	--dv-tabs-and-actions-container-background-color: var(--lab-color-surface);
+	--dv-activegroup-visiblepanel-tab-background-color: var(--lab-color-bg);
+	--dv-activegroup-hiddenpanel-tab-background-color: var(--lab-color-surface);
+	--dv-inactivegroup-visiblepanel-tab-background-color: var(--lab-color-surface);
+	--dv-inactivegroup-hiddenpanel-tab-background-color: var(--lab-color-surface);
+	--dv-tab-divider-color: var(--lab-color-border);
+	--dv-activegroup-visiblepanel-tab-color: var(--lab-color-text);
+	--dv-activegroup-hiddenpanel-tab-color: var(--lab-color-text-muted);
+	--dv-inactivegroup-visiblepanel-tab-color: var(--lab-color-text-muted);
+	--dv-inactivegroup-hiddenpanel-tab-color: var(--lab-color-text-muted);
+	--dv-separator-border: var(--lab-color-border);
+	--dv-paneview-active-outline-color: var(--lab-color-accent);
+	--dv-icon-hover-background-color: var(--lab-color-surface-alt);
+	--dv-tabs-and-actions-container-font-size: 12px;
+	--dv-tabs-and-actions-container-height: 32px;
+	--dv-drag-over-background-color: color-mix(in srgb, var(--lab-color-accent) 25%, transparent);
+	--dv-drag-over-border-color: var(--lab-color-accent);
+}
