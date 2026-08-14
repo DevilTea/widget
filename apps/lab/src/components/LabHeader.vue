@@ -20,6 +20,11 @@ function onPresetChange(event: Event): void {
 	void store.applyPreset(id)
 	;(event.target as HTMLSelectElement).value = ''
 }
+
+function onShowcaseChange(event: Event): void {
+	const id = (event.target as HTMLSelectElement).value
+	void store.switchShowcase(id)
+}
 </script>
 
 <template>
@@ -27,15 +32,30 @@ function onPresetChange(event: Event): void {
 		<strong :class="pika({ fontSize: '13px', letterSpacing: '0.02em' })">Widget Lab</strong>
 
 		<select
+			:value="store.showcaseId.value"
 			:class="pika({ background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 8px', fontSize: '12px' })"
-			aria-label="Load a sandbox preset"
+			aria-label="Switch showcase"
+			@change="onShowcaseChange"
+		>
+			<option
+				v-for="showcase in store.showcases"
+				:key="showcase.id"
+				:value="showcase.id"
+			>
+				{{ showcase.label }}
+			</option>
+		</select>
+
+		<select
+			:class="pika({ background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 8px', fontSize: '12px' })"
+			aria-label="Load a preset"
 			@change="onPresetChange"
 		>
 			<option value="">
 				Preset…
 			</option>
 			<option
-				v-for="preset in store.presets"
+				v-for="preset in store.presets.value"
 				:key="preset.id"
 				:value="preset.id"
 				:title="preset.description"

@@ -3,11 +3,11 @@
  * The persistent Preview surface. `store.previewRuntime` only ever changes through
  * `LabSession`'s replacement-ordering hooks (see `use-lab-store.ts`): this component simply renders
  * whatever it currently holds, or an "unavailable" placeholder when the active Blueprint is invalid.
- * `WidgetRenderer` (from `createWidgetVueRenderer`) never disposes the Runtime — `LabSession` owns
- * that lifecycle.
+ * `store.renderer` is the current showcase's `createWidgetVueRenderer` root component — it changes
+ * only through `store.switchShowcase()`, which already guarantees the old Preview subtree has
+ * unmounted first. `WidgetRenderer` never disposes the Runtime — `LabSession` owns that lifecycle.
  */
 import { useLabStore } from '../../composables/use-lab-store'
-import { SandboxRenderer } from '../../sandbox/renderers'
 
 const store = useLabStore()
 </script>
@@ -15,7 +15,7 @@ const store = useLabStore()
 <template>
 	<div :class="pika({ height: '100%', overflow: 'auto', padding: '16px', background: 'var(--lab-color-bg)' })">
 		<component
-			:is="SandboxRenderer"
+			:is="store.renderer.value"
 			v-if="store.previewRuntime.value !== null"
 			:runtime="store.previewRuntime.value"
 		/>
