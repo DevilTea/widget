@@ -11,8 +11,13 @@
  * {@link buildAggregateSnapshot} composes {@link buildWidgetIssueSnapshot} per widget rather than
  * re-scanning primitives itself, so the two levels cannot silently drift apart.
  *
- * Normative source: issue #10 consolidated handoff §5/§16/§20, amendment "RuntimeWidget aggregate issue
- * surface".
+ * Both aggregate levels are framework-owned snapshots: {@link toIssueSnapshot} reuses the canonical
+ * `EMPTY_ISSUES` identity when empty and freezes the composed array itself otherwise (amendment
+ * "Framework-owned snapshot immutability"). Individual elements are already deep-frozen at their owning
+ * primitive, so composition only ever needs to freeze the new wrapper array, never the issues inside it.
+ *
+ * Normative source: issue #10 consolidated handoff §5/§16/§20, amendments "RuntimeWidget aggregate issue
+ * surface" and "Framework-owned snapshot immutability".
  */
 
 import type { CompiledBlueprint, InternalNodeId } from '../internal/contract'
@@ -86,7 +91,7 @@ export function buildAggregateSnapshot(
 		result.push(...buildWidgetIssueSnapshot(entry))
 	}
 
-	return result
+	return toIssueSnapshot(result)
 }
 
 export interface RuntimeAggregate {

@@ -481,17 +481,36 @@ callback throw discards the in-progress collector and preserves the previous
 completed snapshot; it is an implementation exception, not an `Issue` and not
 an `ExecutionResult.failure`.
 
+Every `RuntimeWidget` also exposes its own aggregate, present regardless of
+declared capabilities:
+
+```ts
+widget.getIssues() // readonly RuntimeWidgetIssue[]
+widget.subscribeIssues(listener)
+```
+
+`RuntimeWidgetIssue` is the union of only that widget's own primitive-owned
+issues (`RuntimeStateIssue | RuntimePropertyIssue | RuntimeMethodIssue`) —
+never a Runtime-level issue, even when its source carries the same
+`widgetId`. The snapshot order is deterministic: state members -> property
+members -> method members, plugin declaration order within each capability,
+and each primitive's own local issue order preserved. A widget with no
+capabilities, or with every primitive currently succeeding, aggregates to
+`[]`.
+
 ```ts
 runtime.getIssues() // runtime-level issues only (e.g. state-override problems)
-runtime.getCollectedIssues() // runtime-level + every current primitive issue snapshot, deterministic order
+runtime.getCollectedIssues() // runtime.getIssues() + every RuntimeWidget.getIssues(), in Blueprint semantic widget order
 runtime.subscribeCollectedIssues(listener)
 ```
 
-`getCollectedIssues()` / `subscribeCollectedIssues()` read issue signals only
-and never activate property evaluation. The aggregate may legitimately list
-both a failing primitive's own issue and a consumer's wrapped
-`property-dependency` / `method-dependency` issue that points back at it —
-that is causal context, not duplication.
+`getIssues()` / `subscribeIssues()` (on both `RuntimeWidget` and
+`WidgetSystemRuntime`) and `getCollectedIssues()` /
+`subscribeCollectedIssues()` read issue signals only and never activate
+property evaluation. The aggregate may legitimately list both a failing
+primitive's own issue and a consumer's wrapped `property-dependency` /
+`method-dependency` issue that points back at it — that is causal context,
+not duplication.
 
 ### Disposal
 
@@ -502,7 +521,8 @@ runtime.dispose() // idempotent
 After disposal, `runtime.isDisposed` and `runtime.blueprint` remain readable,
 and previously obtained `RuntimeWidget.id` / `.type` / `.blueprint` stay
 readable. Every live query/operation (`runtime.getWidget`, state/property
-reads and writes, method invocations) and every *new* subscription throws
+reads and writes, method invocations, `RuntimeWidget.getIssues()`) and every
+*new* subscription (including `RuntimeWidget.subscribeIssues()`) throws
 `WidgetSystemRuntimeDisposedError`; previously returned unsubscribe functions
 remain safe, idempotent no-ops. Disposal itself emits no notification and
 creates no issue.

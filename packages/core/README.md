@@ -195,9 +195,22 @@ create a Runtime.
 - Every state write, property evaluation, and method invocation keeps the
   **latest completed** issue snapshot only (`getIssues()` /
   `subscribeIssues()`), never a history.
+- Every `RuntimeWidget` also exposes an aggregate `getIssues()` /
+  `subscribeIssues()`: the union of only that widget's own primitive-owned
+  issues (state members -> property members -> method members, declaration
+  order within each capability, each primitive's own local issue order),
+  never Runtime-level issues even when their source carries the same
+  `widgetId`. `runtime.getCollectedIssues()` composes `runtime.getIssues()`
+  (Runtime-level only) plus each `RuntimeWidget.getIssues()`, in Blueprint
+  semantic widget order; `subscribeCollectedIssues()` observes that same
+  aggregate, and none of these reads/subscriptions activate Property
+  evaluation.
 - `runtime.dispose()` is idempotent. After disposal, `runtime.isDisposed` and
-  `runtime.blueprint` stay readable, but every live query/operation and every
-  new subscription throws `WidgetSystemRuntimeDisposedError`.
+  `runtime.blueprint` stay readable, but every live query/operation
+  (including `RuntimeWidget.getIssues()`) and every new subscription
+  (including `RuntimeWidget.subscribeIssues()`) throws
+  `WidgetSystemRuntimeDisposedError`; unsubscribe functions obtained before
+  disposal remain safe idempotent no-ops.
 
 The full guide at
 [docs/site/packages/widget-core.md](https://deviltea.github.io/deviltea-labs/packages/widget-core)

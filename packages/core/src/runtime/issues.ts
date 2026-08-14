@@ -13,10 +13,15 @@ import { EMPTY_ISSUES } from '../issue'
 
 /**
  * Picks the canonical empty snapshot on success so `alien-signals` strict-inequality change
- * detection sees success -> success as unchanged, and returns a fresh finalized array otherwise.
+ * detection sees success -> success as unchanged, and otherwise freezes the finalized array itself as
+ * an immutable framework-owned artifact (issue #10 amendment "Framework-owned snapshot immutability")
+ * before returning it. Every non-empty caller already hands in an array whose *elements* were deep-
+ * frozen by `freezeIssueSnapshot`/`collector.finalize()`; `Object.freeze` here only needs to close the
+ * remaining gap — the wrapper array reference itself — and is a safe no-op when that wrapper happens to
+ * already be frozen (e.g. `collector.finalize()`'s own return value).
  */
 export function toIssueSnapshot<Issue>(issues: readonly Issue[]): readonly Issue[] {
-	return issues.length > 0 ? issues : EMPTY_ISSUES
+	return issues.length > 0 ? Object.freeze(issues) : EMPTY_ISSUES
 }
 
 // -------------------------------------------------------------------------------------------------

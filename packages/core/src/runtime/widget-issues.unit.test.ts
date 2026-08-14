@@ -309,21 +309,40 @@ describe('runtimeWidget.subscribeIssues()', () => {
 	})
 })
 
-describe('runtimeWidget.getIssues() immutability', () => {
-	it('a caller mutating the returned aggregate array never leaks a forged issue into a later widget or runtime read', () => {
+describe('runtimeWidget.getIssues() / runtime.getCollectedIssues() — aggregate snapshot immutability', () => {
+	it('a non-empty widget aggregate array is itself frozen and rejects an external push', () => {
+		const { widget, setPropertyTwoShouldFail } = createOrderHarness()
+		setPropertyTwoShouldFail(true)
+		widget.properties.two.get()
+
+		const issues = widget.getIssues()
+		expect(Object.isFrozen(issues))
+			.toBe(true)
+		expect(() => (issues as unknown as unknown[]).push({ source: { type: 'forged' }, message: 'forged' }))
+			.toThrow(TypeError)
+	})
+
+	it('a non-empty runtime.getCollectedIssues() array is itself frozen and rejects an external push', () => {
+		const { runtime, widget, setPropertyTwoShouldFail } = createOrderHarness()
+		setPropertyTwoShouldFail(true)
+		widget.properties.two.get()
+
+		const collected = runtime.getCollectedIssues()
+		expect(Object.isFrozen(collected))
+			.toBe(true)
+		expect(() => (collected as unknown as unknown[]).push({ source: { type: 'forged' }, message: 'forged' }))
+			.toThrow(TypeError)
+	})
+
+	it('a caller mutation attempt (rejected by the freeze above) never leaks a forged issue into a later widget or runtime read', () => {
 		const { runtime, widget, setPropertyTwoShouldFail } = createOrderHarness()
 		setPropertyTwoShouldFail(true)
 		widget.properties.two.get()
 
 		const issues = widget.getIssues()
 		const fake = { source: { type: 'forged' }, message: 'forged' }
-		try {
-			(issues as unknown as unknown[]).push(fake)
-		}
-		catch {
-			// Whether the top-level aggregate array itself rejects mutation is an implementation detail;
-			// the invariant under test is that the attempt never lands in a later read either way.
-		}
+		expect(() => (issues as unknown as unknown[]).push(fake))
+			.toThrow(TypeError)
 
 		expect(widget.getIssues())
 			.not.toContain(fake)
