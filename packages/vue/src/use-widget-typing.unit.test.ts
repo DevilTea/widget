@@ -3,15 +3,17 @@
  * exact capability/member/slot inference and the absent-vs-explicitly-empty distinction.
  */
 
-import type { ComputedRef, Ref } from 'vue'
+import type { Ref } from 'vue'
 import type {
 	ContainerPlugin,
 	CounterPlugin,
+	EmptyPropertiesPlugin,
+	EmptySlotsPlugin,
 	EmptyStatePlugin,
 	LabelPlugin,
 	LeafPlugin,
 } from './test-fixtures'
-import type { UseWidgetResult } from './types'
+import type { ReadonlyRef, UseWidgetResult } from './types'
 import { describe, expectTypeOf, it } from 'vitest'
 
 describe('useWidget(Plugin) — type-level conformance', () => {
@@ -42,7 +44,7 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 
 		expectTypeOf<ReturnType<CounterResult['useProperties']>>()
 			.toEqualTypeOf<{
-			readonly doubled: ComputedRef<number | null>
+			readonly doubled: ReadonlyRef<number | null>
 		}>()
 
 		expectTypeOf<ReturnType<CounterResult['useMethods']>['increment']>()
@@ -88,9 +90,10 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 
 		expectTypeOf<ContainerResult>()
 			.toHaveProperty('WidgetSlot')
-		expectTypeOf<ContainerResult['WidgetSlot']>()
-			.parameter(0)
-			.toHaveProperty('name')
+		// `WidgetSlot` is a non-callable component/constructor type (`new () => { $props }`), not a
+		// plain function — `InstanceType` is the correct way to reach its prop shape, not `.parameter()`.
+		expectTypeOf<InstanceType<ContainerResult['WidgetSlot']>['$props']>()
+			.toEqualTypeOf<{ readonly name: 'header' | 'body' | 'slot-one' }>()
 
 		type LeafResult = UseWidgetResult<typeof LeafPlugin>
 		expectTypeOf<LeafResult>().not.toHaveProperty('WidgetSlot')
@@ -100,5 +103,42 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 			.toEqualTypeOf<{
 			readonly label: Ref<string | null>
 		}>()
+	})
+
+	it('keeps explicitly-declared-empty properties present with an empty keyed surface, distinct from absence', () => {
+		type EmptyPropertiesResult = UseWidgetResult<typeof EmptyPropertiesPlugin>
+
+		expectTypeOf<EmptyPropertiesResult>()
+			.toHaveProperty('useProperties')
+		expectTypeOf<EmptyPropertiesResult>()
+			.toHaveProperty('usePropertyIssues')
+		expectTypeOf<keyof ReturnType<EmptyPropertiesResult['useProperties']>>()
+			.toEqualTypeOf<never>()
+		// No state/methods/slots were declared at all (absent, not explicitly empty).
+		expectTypeOf<EmptyPropertiesResult>().not.toHaveProperty('useState')
+		expectTypeOf<EmptyPropertiesResult>().not.toHaveProperty('useMethods')
+		expectTypeOf<EmptyPropertiesResult>().not.toHaveProperty('WidgetSlot')
+	})
+
+	it('keeps explicitly-declared-empty slots (`slots: never`) present with `name: never`, distinct from absence', () => {
+		type EmptySlotsResult = UseWidgetResult<typeof EmptySlotsPlugin>
+
+		// This is exactly the case a value-`never`/shape-based presence test collapses into absence:
+		// the semantic slot map is `{}` the same way it is for a plugin with no `slots` capability at
+		// all, so presence must come from `HasWidgetCapability`/`plugin.capabilities.slots`, not from
+		// `WidgetSlotNameOf`'s payload or from inspecting `blueprint.slots`'s key count.
+		expectTypeOf<EmptySlotsResult>()
+			.toHaveProperty('WidgetSlot')
+		expectTypeOf<InstanceType<EmptySlotsResult['WidgetSlot']>['$props']>()
+			.toEqualTypeOf<{ readonly name: never }>()
+	})
+
+	it('types Property/issue projections as a truthful readonly Ref, not a ComputedRef', () => {
+		// `ReadonlyRef<T>` (`Readonly<Ref<T>>`) is exactly `{ readonly value: T }` plus Vue's internal
+		// ref brand — it must not additionally claim computed-only public surface such as `.effect`,
+		// which `customRef()` (what actually backs these projections) never provides.
+		expectTypeOf<ReadonlyRef<number>>()
+			.toHaveProperty('value')
+		expectTypeOf<ReadonlyRef<number>>().not.toHaveProperty('effect')
 	})
 })

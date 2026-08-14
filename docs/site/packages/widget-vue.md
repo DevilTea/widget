@@ -109,9 +109,14 @@ const {
 
 Every accessor is derived from `Plugin`'s declared `WidgetInterfaces`: an
 absent capability drops the corresponding accessor entirely; an
-explicitly-declared-empty capability (for example `state: Record<never, never>`)
-keeps the accessor present with an empty keyed surface. `useIssues()` and
-`WidgetSlot`'s gating aside, this mirrors exactly how
+explicitly-declared-empty capability (for example `state: Record<never, never>`
+or the canonical explicit-empty slots spelling `slots: never`) keeps the
+accessor present with an empty (or, for `WidgetSlot`, never-typed) keyed
+surface. Presence is read from `plugin.capabilities` at runtime and from
+`HasWidgetCapability<Interfaces, Key>` at the type level — both
+declaration-presence facts, never a `[Payload] extends [never]` test, since a
+legitimately-present capability can itself have payload `never`. `useIssues()`
+and `WidgetSlot`'s gating aside, this mirrors exactly how
 `@deviltea/widget-core`'s own `RuntimeStateSurface`/`RuntimePropertySurface`/
 `RuntimeMethodSurface` gate `state`/`properties`/`methods` on the Runtime
 widget itself.

@@ -132,10 +132,22 @@ describe('diagnostics conformance', () => {
 		const { count } = bridge.useStateIssues()
 
 		expect(() => {
-			// @ts-expect-error `count` is publicly typed as a readonly ComputedRef; this exercises the
-			// runtime enforcement that backs that type, reached only through an escape hatch like `any`.
+			// @ts-expect-error `count` is publicly typed as `ReadonlyRef<T>`; this exercises the runtime
+			// enforcement that backs that type, reached only through an escape hatch like `any`.
 			count.value = []
 		})
 			.toThrow(WidgetVueIntegrationError)
+	})
+
+	it('issue refs are plain readonly Refs, not ComputedRefs: no computed-only public surface such as `.effect`', () => {
+		const runtime = createFixtureRuntime({ id: 'd9', type: 'Counter' })
+		const { bridge } = mountWidgetBridge(runtime, 'd9', CounterPlugin)
+		const { count } = bridge.useStateIssues()
+		const issues = bridge.useIssues()
+
+		expect('effect' in count)
+			.toBe(false)
+		expect('effect' in issues)
+			.toBe(false)
 	})
 })

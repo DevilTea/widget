@@ -119,10 +119,24 @@ describe('property conformance', () => {
 		const { doubled } = bridge.useProperties()
 
 		expect(() => {
-			// @ts-expect-error `doubled` is publicly typed as a readonly ComputedRef; this exercises the
-			// runtime enforcement that backs that type, reached only through an escape hatch like `any`.
+			// @ts-expect-error `doubled` is publicly typed as `ReadonlyRef<T>`; this exercises the runtime
+			// enforcement that backs that type, reached only through an escape hatch like `any`.
 			doubled.value = 999
 		})
 			.toThrow(WidgetVueIntegrationError)
+	})
+
+	it('is a plain readonly Ref, not a ComputedRef: it carries no computed-only public surface such as `.effect`', () => {
+		const runtime = createFixtureRuntime({ id: 'p9', type: 'Counter' })
+		const { bridge } = mountWidgetBridge(runtime, 'p9', CounterPlugin)
+		const { doubled } = bridge.useProperties()
+
+		// `customRef()` produces a plain Ref; only Vue's own `computed()` attaches a `ReactiveEffect` to
+		// `.effect`. Asserting its absence proves the public `ReadonlyRef<T>` type is truthful about the
+		// actual runtime shape, not merely readonly-compatible with a richer `ComputedRef` promise.
+		expect('effect' in doubled)
+			.toBe(false)
+		expect(doubled.value)
+			.toBe(0)
 	})
 })

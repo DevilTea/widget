@@ -20,6 +20,7 @@ export type {
 } from './renderer'
 
 export type {
+	ReadonlyRef,
 	UseWidgetIssuesAccessor,
 	UseWidgetMethodIssuesAccessor,
 	UseWidgetMethodIssuesSurface,

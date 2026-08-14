@@ -13,22 +13,6 @@ import { CurrentWidgetContextKey } from './context'
 import { WidgetVueIntegrationError } from './errors'
 import { SharedWidgetSlotComponent } from './renderer'
 
-function hasOwnCapability(widget: RuntimeWidgetLike, key: 'state' | 'properties' | 'methods'): boolean {
-	return Object.hasOwn(widget, key)
-}
-
-/**
- * A plugin can only meaningfully declare `slots` with a non-empty finite string-literal union (issue
- * #10's `SlotDomainViolation` rejects the broad-`string` case, and there is no supported way to
- * declare the union `never`), so a resolved widget's complete declared-slot map
- * (`ResolvedBlueprintWidgetNodeFor.slots`) has at least one own key exactly when the plugin declares
- * the `slots` capability at all, and always `{}` when it does not (see
- * `@deviltea/widget-core`'s `blueprint/recovery.ts` `recoverSlots`/`finalizeSlotsAndFreeze`).
- */
-function hasSlotsCapability(widget: RuntimeWidgetLike): boolean {
-	return Object.keys(widget.blueprint.slots).length > 0
-}
-
 function assertWidgetMatchesPlugin(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin): void {
 	if (widget.blueprint.plugin !== plugin) {
 		throw new WidgetVueIntegrationError(
@@ -50,7 +34,15 @@ function getCurrentWidgetContext(): CurrentWidgetContextValue {
 	return current
 }
 
-function buildUseWidgetResult(widget: RuntimeWidgetLike): Record<string, unknown> {
+/**
+ * Capability presence is read from `plugin.capabilities` — the compiler/plugin-builder-authoritative
+ * declaration-presence facts (issue #10 amendment "declaration-presence semantics and public
+ * `WidgetPlugin.capabilities`") — never inferred from Blueprint/Runtime object shape. This is required
+ * for correctness, not just directness: an explicitly-declared-empty capability (`slots: never`,
+ * `state: Record<never, never>`, ...) is present despite an empty/`never` payload, and shape-based
+ * heuristics (member-key counts, semantic-slot-map key counts) cannot distinguish that from absence.
+ */
+function buildUseWidgetResult(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin): Record<string, unknown> {
 	const cleanups: Array<() => void> = []
 	onScopeDispose(() => {
 		for (const cleanup of cleanups)
@@ -61,8 +53,9 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike): Record<string, unknown
 	}
 
 	const result: Record<string, unknown> = Object.create(null)
+	const capabilities = plugin.capabilities
 
-	if (hasOwnCapability(widget, 'state')) {
+	if (capabilities.state) {
 		const state = widget.state!
 		let surface: Readonly<Record<string, unknown>> | undefined
 		result.useState = () => surface ??= createLazyKeyedSurface((key) => {
@@ -77,7 +70,7 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike): Record<string, unknown
 		})
 	}
 
-	if (hasOwnCapability(widget, 'properties')) {
+	if (capabilities.properties) {
 		const properties = widget.properties!
 		let surface: Readonly<Record<string, unknown>> | undefined
 		result.useProperties = () => surface ??= createLazyKeyedSurface((key) => {
@@ -92,7 +85,7 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike): Record<string, unknown
 		})
 	}
 
-	if (hasOwnCapability(widget, 'methods')) {
+	if (capabilities.methods) {
 		const methods = widget.methods!
 		let surface: Readonly<Record<string, unknown>> | undefined
 		result.useMethods = () => surface ??= createLazyKeyedSurface((key) => {
@@ -110,7 +103,7 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike): Record<string, unknown
 	let widgetIssuesRef: unknown
 	result.useIssues = () => widgetIssuesRef ??= createIssuesRef(widget.getIssues, widget.subscribeIssues, registerCleanup)
 
-	if (hasSlotsCapability(widget))
+	if (capabilities.slots)
 		result.WidgetSlot = SharedWidgetSlotComponent
 
 	return result
@@ -129,5 +122,5 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike): Record<string, unknown
 export function useWidget<Plugin extends AnyWidgetPlugin>(plugin: Plugin): UseWidgetResult<Plugin> {
 	const current = getCurrentWidgetContext()
 	assertWidgetMatchesPlugin(current.widget, plugin)
-	return buildUseWidgetResult(current.widget) as unknown as UseWidgetResult<Plugin>
+	return buildUseWidgetResult(current.widget, plugin) as unknown as UseWidgetResult<Plugin>
 }

@@ -6,7 +6,8 @@
  * `tsconfig.package.json` program (see that file's `exclude`).
  */
 
-import type { AnyWidgetPlugin, CreateWidgetSystemRuntimeOptions, RuntimeWidgetFor, WidgetInterfaces, WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { AnyWidgetPlugin, AnyWidgetPluginTuple, CreateWidgetSystemRuntimeOptions, RuntimeWidgetFor, WidgetInterfaces, WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { RuntimeWidgetLike } from './context'
 import type { UseWidgetResult } from './types'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { mount } from '@vue/test-utils'
@@ -137,9 +138,61 @@ export const EmptyStatePlugin = createWidgetPlugin('EmptyState')
 	.state(state => state)
 	.done()
 
+export interface EmptyPropertiesInterfaces extends WidgetInterfaces {
+	properties: Record<never, never>
+}
+
+export const EmptyPropertiesPlugin = createWidgetPlugin('EmptyProperties')
+	.interfaces<EmptyPropertiesInterfaces>()
+	.properties(properties => properties)
+	.done()
+
+export interface EmptyMethodsInterfaces extends WidgetInterfaces {
+	methods: Record<never, never>
+}
+
+export const EmptyMethodsPlugin = createWidgetPlugin('EmptyMethods')
+	.interfaces<EmptyMethodsInterfaces>()
+	.methods(methods => methods)
+	.done()
+
+/**
+ * `slots: never` is the canonical explicit-empty-slots spelling (issue #10 amendment
+ * "declaration-presence semantics and public `WidgetPlugin.capabilities`"). The `slots` capability is
+ * present (`HasWidgetCapability<..., 'slots'>` is `true`, `plugin.capabilities.slots` is `true`) even
+ * though there is no legal slot name to declare a child under — `.slots({})` is the required, and only
+ * legal, builder phase completion.
+ */
+export interface EmptySlotsInterfaces extends WidgetInterfaces {
+	slots: never
+}
+
+export const EmptySlotsPlugin = createWidgetPlugin('EmptySlots')
+	.interfaces<EmptySlotsInterfaces>()
+	.slots({})
+	.done()
+
 export const fixturePlugins = [CounterPlugin, LabelPlugin, ContainerPlugin, LeafPlugin, EmptyStatePlugin] as const
 
 export const fixtureSystem = createWidgetSystem({ plugins: fixturePlugins })
+
+/**
+ * A separate, small system dedicated to explicit-empty-vs-absent capability conformance
+ * (`EmptyPropertiesPlugin` / `EmptyMethodsPlugin` / `EmptySlotsPlugin`). Kept independent of
+ * `fixtureSystem` so these additions never ripple into the renderer-registry exhaustiveness checks
+ * exercised by every other fixture-driven test file.
+ */
+export const capabilityFixturePlugins = [EmptyPropertiesPlugin, EmptyMethodsPlugin, EmptySlotsPlugin] as const
+
+export const capabilityFixtureSystem = createWidgetSystem({ plugins: capabilityFixturePlugins })
+
+export function createCapabilityFixtureRuntime(definition: unknown, options?: CreateWidgetSystemRuntimeOptions) {
+	const blueprint = capabilityFixtureSystem.createBlueprint(definition)
+	if (blueprint.status !== 'valid')
+		throw new Error(`Invalid capability fixture blueprint: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+
+	return blueprint.createRuntime(options)
+}
 
 /**
  * A second, structurally-identical `WidgetSystem` instance. Used to prove that
@@ -294,8 +347,8 @@ export const EmptyStateRenderer = defineComponent({
  * (bypassing the full recursive renderer/registry, which `renderer-mounted.unit.test.ts` covers
  * separately) so `useWidget()` itself can be exercised against a real Runtime widget in isolation.
  */
-export function mountWidgetBridge<Plugin extends AnyWidgetPlugin>(
-	runtime: WidgetSystemRuntime<FixturePlugins>,
+export function mountWidgetBridge<Plugins extends AnyWidgetPluginTuple, Plugin extends AnyWidgetPlugin>(
+	runtime: WidgetSystemRuntime<Plugins>,
 	widgetId: string,
 	plugin: Plugin,
 ) {
@@ -312,7 +365,11 @@ export function mountWidgetBridge<Plugin extends AnyWidgetPlugin>(
 	}), {
 		global: {
 			provide: {
-				[CurrentWidgetContextKey as unknown as string]: { widget, runtime, rendererByType: new Map() },
+				[CurrentWidgetContextKey as unknown as string]: {
+					widget: widget as unknown as RuntimeWidgetLike,
+					runtime,
+					rendererByType: new Map(),
+				},
 			},
 		},
 	})

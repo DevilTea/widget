@@ -61,6 +61,19 @@ or to the widgets it hosts, never to this package.
 - Collision-safety matters the same way it does in `@deviltea/widget-core`: arbitrary plugin-type and
   member-key strings, including `__proto__` and `constructor`, must work through `Map`/Proxy/
   null-prototype storage, never plain-object bracket assignment.
+- Capability presence (`state`/`properties`/`methods`/`slots`) is read from `plugin.capabilities` (issue
+  #10 amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`") — never
+  inferred from Blueprint/Runtime object shape (member-key counts, semantic-slot-map key counts, or any
+  `[Payload] extends [never]` heuristic). A capability can be explicitly-declared-empty (`slots: never`,
+  `properties: Record<never, never>`, ...) and still present; shape-based heuristics cannot distinguish
+  that from absence. The type-level mirror is `HasWidgetCapability<Interfaces, Key>`, never
+  `[WidgetCapabilityOf<Interfaces, Key>] extends [never]`.
+- Property and every issue projection (`useStateIssues`/`usePropertyIssues`/`useMethodIssues`/
+  `useIssues`) are publicly typed `ReadonlyRef<T>` (`Readonly<Ref<T>>`), never `ComputedRef<T>`: they
+  are backed by `customRef()`, a plain `Ref`, and `ComputedRef` would over-promise computed-only public
+  surface (e.g. `.effect`) that does not exist at runtime. `WidgetSlot`'s public type is a non-callable
+  component/constructor shape (`new () => { $props }`), never `FunctionalComponent`, because the shared
+  runtime value is a `defineComponent()` output, not a plain callable function.
 - `createWidgetVueRenderer` validates exactly-once renderer coverage against the actual bound
   `WidgetSystem` instance at construction time, and the returned component validates
   `runtime.blueprint.system === boundSystem` at render time. Both are programmer/configuration
