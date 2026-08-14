@@ -118,3 +118,90 @@ describe('createLabStore() graph filter preferences', () => {
 			.toBe(false)
 	})
 })
+
+/**
+ * Showcase switching (issue #13 "Source Apply lifecycle" checkpoint, "Presets / showcase changes"):
+ * "Switching showcases ... detaches/disposes the old Runtime, switches showcase context, loads the
+ * showcase source, and then uses the same Apply pipeline." `switchShowcase()` in `use-lab-store.ts` is
+ * the larger-grained analogue of Apply's own replacement ordering — this suite drives it against the
+ * real `sandbox` <-> `survey` registry entries (`src/showcases/registry.ts`), never a mock.
+ */
+describe('createLabStore() switchShowcase()', () => {
+	it('starts on the default ("sandbox") showcase', () => {
+		const store = createLabStore()
+		expect(store.showcaseId.value)
+			.toBe('sandbox')
+		expect(store.session.active.blueprint.status)
+			.toBe('valid')
+	})
+
+	it('disposes the old Runtime and replaces the session/renderer/presets with the target showcase', async () => {
+		const store = createLabStore()
+		const oldRuntime = store.session.active.runtime!
+
+		await store.switchShowcase('survey')
+
+		expect(oldRuntime.isDisposed)
+			.toBe(true)
+		expect(store.showcaseId.value)
+			.toBe('survey')
+		expect(store.session.active.blueprint.status)
+			.toBe('valid')
+		expect(store.session.active.runtime)
+			.not.toBeNull()
+		expect(store.session.active.runtime)
+			.not.toBe(oldRuntime)
+		expect(store.previewRuntime.value)
+			.toBe(store.session.active.runtime)
+		expect(store.presets.value.some(preset => preset.id === 'survey-default'))
+			.toBe(true)
+	})
+
+	it('loads the target showcase\'s default preset source text as the new active/draft snapshot', async () => {
+		const store = createLabStore()
+		await store.switchShowcase('survey')
+
+		expect(store.draftSourceText.value)
+			.toBe(store.session.active.sourceText)
+		expect(store.session.active.definition)
+			.toMatchObject({ type: 'TripSurvey' })
+	})
+
+	it('is a no-op when switching to the already-current showcase', async () => {
+		const store = createLabStore()
+		const session = store.session
+
+		await store.switchShowcase('sandbox')
+
+		expect(store.session)
+			.toBe(session)
+		expect(store.showcaseId.value)
+			.toBe('sandbox')
+	})
+
+	it('is a no-op for an unknown showcase id', async () => {
+		const store = createLabStore()
+		const session = store.session
+
+		await store.switchShowcase('does-not-exist')
+
+		expect(store.session)
+			.toBe(session)
+		expect(store.showcaseId.value)
+			.toBe('sandbox')
+	})
+
+	it('applyPreset() after switching resolves presets against the new showcase, not the old one', async () => {
+		const store = createLabStore()
+		await store.switchShowcase('survey')
+
+		// "survey-not-ready" is unknown to the sandbox showcase and only resolvable once `currentShowcase`
+		// has actually flipped to "survey" — a stale showcase reference would make this `applyPreset` a
+		// silent no-op (`undefined`) instead.
+		const outcome = await store.applyPreset('survey-not-ready')
+		expect(outcome?.status)
+			.toBe('applied')
+		expect(store.session.active.definition)
+			.toMatchObject({ type: 'TripSurvey' })
+	})
+})
