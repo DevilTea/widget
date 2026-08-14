@@ -26,6 +26,7 @@ import { createRuntimeAggregate } from './aggregate'
 import { buildBlueprintView } from './blueprint-view'
 import { createRuntimeContext } from './context'
 import { materializeDependencyTree } from './deps'
+import { runtimeInternals } from './internals'
 import { createMethodPrimitive } from './method'
 import { resolveStateOverrides } from './override'
 import { createPropertyPrimitive } from './property'
@@ -215,6 +216,10 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		subscribeCollectedIssues: aggregate.subscribeCollectedIssues,
 		dispose: () => context.dispose(),
 	}
+
+	// Attaches the framework-internal carrier the dedicated `@deviltea/widget-core/inspection` subpath
+	// reads (registry + disposal context); not part of the published Runtime contract.
+	;(runtime as unknown as Record<PropertyKey, unknown>)[runtimeInternals] = { context, registry }
 
 	return runtime as unknown as WidgetSystemRuntime<Plugins>
 }

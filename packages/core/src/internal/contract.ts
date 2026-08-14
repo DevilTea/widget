@@ -482,14 +482,32 @@ export interface ResolvedCompiledDependency extends CompiledDependencyBase {
 }
 
 /**
- * The only legal non-resolved compiled leaf: an optional `parent` / `widget(id)` target with zero
- * cardinality. It contributes no graph edge, no effect and no cycle.
+ * The only legal non-resolved-non-invalid compiled leaf: an optional `parent` / `widget(id)` target
+ * with zero cardinality. It contributes no graph edge, no effect and no cycle.
  */
 export interface AbsentCompiledDependency extends CompiledDependencyBase {
 	readonly status: 'absent'
 }
 
-export type CompiledDependency = ResolvedCompiledDependency | AbsentCompiledDependency
+/**
+ * Every other ordinary dependency-resolution failure: required target missing, ambiguous target,
+ * unique-but-unresolved target, missing capability, or missing member. Always accompanied by a
+ * Blueprint dependency Issue, so a Blueprint carrying one is always `invalid`. `targetNodeId` is
+ * present only when target cardinality resolved to exactly one recovered node before the later
+ * resolution step failed (unresolved target / missing capability / missing member); it is absent for
+ * missing/ambiguous targets, where cardinality itself never reached one.
+ *
+ * Distinct from `absent` (issue #10 inspection amendment "inspection exact API v1 part 1"): `absent` is
+ * legal, Issue-free, optional-cardinality-0 absence; `invalid` is always a diagnosed failure. Runtime
+ * materialization never reaches this state — Runtime is only ever created from a valid Blueprint, and
+ * every `invalid` leaf implies an invalid Blueprint.
+ */
+export interface InvalidCompiledDependency extends CompiledDependencyBase {
+	readonly status: 'invalid'
+	readonly targetNodeId?: InternalNodeId
+}
+
+export type CompiledDependency = ResolvedCompiledDependency | AbsentCompiledDependency | InvalidCompiledDependency
 
 /**
  * Registered dependency container with every branded expression leaf replaced by its compiled leaf.

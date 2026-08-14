@@ -128,6 +128,17 @@ function resolveLeaf(
 		refinements,
 	})
 
+	// Every other ordinary resolution failure is `invalid`, never `absent` (issue #10 inspection
+	// amendment "inspection exact API v1 part 1"): `targetNodeId` is included only when cardinality
+	// resolved to exactly one recovered node before the later step failed.
+	const invalid = (targetNodeId?: InternalNodeId): CompiledDependency => ({
+		[compiledDependencyBrand]: true,
+		status: 'invalid',
+		reference,
+		refinements,
+		...(targetNodeId === undefined ? {} : { targetNodeId }),
+	})
+
 	let candidateIds: readonly InternalNodeId[]
 	switch (target.type) {
 		case 'self':
@@ -149,13 +160,13 @@ function resolveLeaf(
 			return absent()
 
 		finalIssues.push(dependencyIssue(ownerPublicNode, member, describeMissingTarget(target), reference))
-		return absent()
+		return invalid()
 	}
 
 	if (candidateIds.length > 1) {
 		const related = candidateIds.map(id => widgetLocation(nodes[id]!.publicNode))
 		finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target is ambiguous: multiple widgets share that id.', reference, related))
-		return absent()
+		return invalid()
 	}
 
 	const targetNodeId = candidateIds[0]!
@@ -163,7 +174,7 @@ function resolveLeaf(
 
 	if (!targetWorking.resolved) {
 		finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target could not be resolved to a widget.', reference, [widgetLocation(targetWorking.publicNode)]))
-		return absent()
+		return invalid(targetNodeId)
 	}
 
 	const targetDefinition = readWidgetPluginDefinition(targetWorking.plugin!)
@@ -172,11 +183,11 @@ function resolveLeaf(
 	if (operation.type === 'state-get' || operation.type === 'state-set') {
 		if (targetDefinition.state === null) {
 			finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target has no state capability.', reference, [widgetLocation(targetPublicNode)]))
-			return absent()
+			return invalid(targetNodeId)
 		}
 		if (!targetDefinition.state.has(operation.key)) {
 			finalIssues.push(dependencyIssue(ownerPublicNode, member, `Dependency target has no state member "${operation.key}".`, reference, [widgetLocation(targetPublicNode)]))
-			return absent()
+			return invalid(targetNodeId)
 		}
 		if (operation.type === 'state-set' && member.type === 'method')
 			directWriteSeeds.add(`${ownerNodeId}:${member.name}`)
@@ -184,11 +195,11 @@ function resolveLeaf(
 	else if (operation.type === 'property-get') {
 		if (targetDefinition.properties === null) {
 			finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target has no properties capability.', reference, [widgetLocation(targetPublicNode)]))
-			return absent()
+			return invalid(targetNodeId)
 		}
 		if (!targetDefinition.properties.has(operation.name)) {
 			finalIssues.push(dependencyIssue(ownerPublicNode, member, `Dependency target has no property "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
-			return absent()
+			return invalid(targetNodeId)
 		}
 		const key = edgeKey(member.type, ownerNodeId, member.name, 'property', targetNodeId, operation.name)
 		if (!edges.has(key))
@@ -197,11 +208,11 @@ function resolveLeaf(
 	else {
 		if (targetDefinition.methods === null) {
 			finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target has no methods capability.', reference, [widgetLocation(targetPublicNode)]))
-			return absent()
+			return invalid(targetNodeId)
 		}
 		if (!targetDefinition.methods.has(operation.name)) {
 			finalIssues.push(dependencyIssue(ownerPublicNode, member, `Dependency target has no method "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
-			return absent()
+			return invalid(targetNodeId)
 		}
 		const key = edgeKey(member.type, ownerNodeId, member.name, 'method', targetNodeId, operation.name)
 		if (!edges.has(key))

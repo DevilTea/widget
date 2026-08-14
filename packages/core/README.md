@@ -212,6 +212,20 @@ create a Runtime.
   `WidgetSystemRuntimeDisposedError`; unsubscribe functions obtained before
   disposal remain safe idempotent no-ops.
 
+### Inspection (DevTools)
+
+A dedicated, strictly readonly subpath exposes compiler/runtime facts for
+building inspectors — it never mutates state, invokes methods, or forces
+Property evaluation:
+
+```typescript
+import { inspectBlueprint, inspectRuntime } from '@deviltea/widget-core/inspection'
+```
+
+`@deviltea/widget-core`'s root entrypoint does not export this surface. See
+[Inspection](https://deviltea.github.io/deviltea-labs/packages/widget-core#inspection-devtools)
+in the full guide for the exact contract.
+
 The full guide at
 [docs/site/packages/widget-core.md](https://deviltea.github.io/deviltea-labs/packages/widget-core)
 covers the dependency grammar, the compile pipeline, and every Runtime

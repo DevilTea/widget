@@ -19,16 +19,40 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { ActiveIssueSink, RuntimeContext } from './context'
 import { computed, signal } from 'alien-signals'
 import { EMPTY_ISSUES } from '../issue'
-import { createTrackedSubscription } from './adapter'
+import { createTrackedSubscription, invokeListenerIsolated } from './adapter'
 import { createOperationCollector } from './collector'
 import { buildPropertyResultIssue, toIssueSnapshot } from './issues'
 import { assertSyncValue } from './sync'
+
+/**
+ * Readonly-inspection `RuntimePropertyInspectionSnapshot`-shaped envelope, kept structural here (no
+ * import from the `inspection` subpath — this internal module must stay usable independent of it).
+ */
+export type PropertyInspectionSnapshot
+	= | { readonly status: 'never-evaluated' }
+		| { readonly status: 'completed', readonly result: ExecutionResult<unknown, RuntimePropertyIssue> }
+
+/** The frozen singleton every Property inspection channel starts at and returns to before first evaluation. */
+const NEVER_EVALUATED_SNAPSHOT: PropertyInspectionSnapshot = Object.freeze({ status: 'never-evaluated' })
+
+/**
+ * One retained-fact channel for the readonly `@deviltea/widget-core/inspection` subpath. Same
+ * fact-commit-point discipline as `StateInspectionChannel` in `./state`: published directly from inside
+ * the computed body at the exact point a natural recompute actually completes, never by wrapping
+ * `getResult()` in a second alien-signals effect.
+ */
+export interface PropertyInspectionChannel {
+	getSnapshot: () => PropertyInspectionSnapshot
+	subscribe: (listener: (snapshot: PropertyInspectionSnapshot) => void) => () => void
+}
 
 export interface PropertyPrimitiveInternal {
 	/** Tracked, lazy/cached read of the completed `ExecutionResult` snapshot. */
 	getResult: () => ExecutionResult<unknown, RuntimePropertyIssue>
 	/** Tracked raw issue-snapshot read. Reading this never activates the computed. */
 	getIssues: () => readonly RuntimePropertyIssue[]
+	/** Readonly-inspection retained-fact channel. See {@link PropertyInspectionChannel}. */
+	readonly inspection: PropertyInspectionChannel
 }
 
 export interface PropertyPrimitive {
@@ -48,6 +72,18 @@ export interface CreatePropertyPrimitiveParams {
 
 export function createPropertyPrimitive(context: RuntimeContext, params: CreatePropertyPrimitiveParams): PropertyPrimitive {
 	const issuesSignal = signal<readonly RuntimePropertyIssue[]>(EMPTY_ISSUES)
+
+	let inspectionSnapshot: PropertyInspectionSnapshot = NEVER_EVALUATED_SNAPSHOT
+	// Plain lazy-allocated set, same rationale as the State inspection channel: never a global registry.
+	let inspectionListeners: Set<(snapshot: PropertyInspectionSnapshot) => void> | null = null
+
+	function publishInspectionCompletion(result: ExecutionResult<unknown, RuntimePropertyIssue>): void {
+		inspectionSnapshot = Object.freeze({ status: 'completed', result })
+		if (inspectionListeners === null)
+			return
+		for (const listener of inspectionListeners)
+			invokeListenerIsolated(listener, inspectionSnapshot)
+	}
 
 	const resultComputed = computed<ExecutionResult<unknown, RuntimePropertyIssue>>(() => {
 		const collector = createOperationCollector<RelativeValueIssueInput, RuntimePropertyIssue>()
@@ -78,12 +114,30 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		const result: ExecutionResult<unknown, RuntimePropertyIssue> = issues.length > 0
 			? { success: false, issues: issues as readonly [RuntimePropertyIssue, ...RuntimePropertyIssue[]] }
 			: { success: true, value }
-		return Object.freeze(result)
+		const frozenResult = Object.freeze(result)
+
+		// Published from directly inside the computed body — the exact fact-commit point of a natural
+		// recompute (issue #10 inspection amendment "runtime inspection, materialization, disposal,
+		// conformance") — never by wrapping `getResult()`/`resultComputed()` in a second alien-signals
+		// effect. Every actual recompute publishes unconditionally, success or semantic failure alike,
+		// with no deep-equality suppression: two real completions notify twice even when equal.
+		publishInspectionCompletion(frozenResult)
+
+		return frozenResult
 	})
 
 	const internal: PropertyPrimitiveInternal = {
 		getResult: () => resultComputed(),
 		getIssues: () => issuesSignal(),
+		inspection: {
+			getSnapshot: () => inspectionSnapshot,
+			subscribe: (listener) => {
+				if (inspectionListeners === null)
+					inspectionListeners = new Set()
+				inspectionListeners.add(listener)
+				return () => inspectionListeners?.delete(listener)
+			},
+		},
 	}
 
 	const publicProperty: RuntimeProperty<unknown> = {
