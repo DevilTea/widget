@@ -10,9 +10,12 @@
  * `open()` demonstrates a domain Method writing another reusable widget's declared State
  * (`stage-editor.value`) and invoking another reusable widget's Method (`Modal.open`) through
  * registered dependencies (checkpoint §2) — with no selected deal, it fails via `addIssue` and the
- * Modal never opens. `save()` propagates any `DealStore.updateStage` failure as an ordinary
- * method-dependency failure (no modal close, no fallback mutation); on success it invokes `Modal.close`
- * and returns the updated `Deal`. `cancel()` only closes the Modal — no store mutation.
+ * Modal never opens; if writing `stage-editor.value` itself fails (e.g. a configured `stage-editor`
+ * missing the selected deal's current stage among its options), `open()` also fails and returns before
+ * invoking `Modal.open` (PR #22 review 4941241562 finding 3). `save()` propagates any
+ * `DealStore.updateStage` failure as an ordinary method-dependency failure (no modal close, no fallback
+ * mutation); on success it invokes `Modal.close` and returns the updated `Deal`. `cancel()` only closes
+ * the Modal — no store mutation.
  */
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
@@ -107,7 +110,15 @@ export const DealStageFormPlugin = createWidgetPlugin('DealStageForm')
 						addIssue({ message: 'Select a deal before changing its stage.' })
 						return
 					}
-					deps.setStage(selectedDealResult.value.stage)
+					// `stage-editor` is a generic `SelectInput`; a valid edited Source can omit the
+					// selected deal's current stage from its configured options, so this State write can
+					// fail. The failing `deps.setStage(...)` call already contributed a method-dependency
+					// issue to this invocation's collector — check its result and return before
+					// `openModal()` so the Modal never opens with a stale/uninitialized stage-editor value
+					// (PR #22 review 4941241562 finding 3).
+					const setStageResult = deps.setStage(selectedDealResult.value.stage)
+					if (!setStageResult.success)
+						return
 					deps.openModal()
 				},
 			})

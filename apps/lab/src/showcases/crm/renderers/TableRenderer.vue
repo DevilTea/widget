@@ -1,39 +1,36 @@
 <script setup lang="ts">
 /**
- * `Table#deal-table` is the preset's single instance, so hardcoding its column list here (matching
- * `../presets.ts`'s configured `columns` verbatim) rather than reading `config.columns` (which
- * `@deviltea/widget-vue` has no path to expose) carries no per-instance ambiguity. Row click always
- * calls `Table.selectRow(id)` — never local selection state (checkpoint §5 "renderer selection
- * callbacks invoke `Table.selectRow`, not direct local selection state").
+ * `rowIdKey`/`columns` come entirely from `useProperties()` — Lab-private semantic projections of
+ * `Table`'s own resolved config (`../plugins/read-models.ts`) — never hardcoded here, so a valid edited
+ * Source that changes `rowIdKey`/`columns` reaches this renderer (PR #22 review 4941241562 finding 1: a
+ * still-valid edited Source setting `rowIdKey` to another string-valued field must key rows and call
+ * `selectRow()` with that configured key, not a hardcoded `row.id`). Row click always calls
+ * `Table.selectRow(id)` — never local selection state (checkpoint §5 "renderer selection callbacks
+ * invoke `Table.selectRow`, not direct local selection state").
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { TablePlugin } from '../plugins/read-models'
 
-interface DealColumn { readonly key: 'company' | 'contact' | 'owner' | 'stage' | 'amount', readonly label: string }
-
-const columns: readonly DealColumn[] = [
-	{ key: 'company', label: 'Company' },
-	{ key: 'contact', label: 'Contact' },
-	{ key: 'owner', label: 'Owner' },
-	{ key: 'stage', label: 'Stage' },
-	{ key: 'amount', label: 'Amount' },
-]
-
 const { useState, useProperties, useMethods, useMethodIssues } = useWidget(TablePlugin)
 const { selectedRowId } = useState()
-const { rows, empty } = useProperties()
+const { rows, empty, rowIdKey, columns } = useProperties()
 const { selectRow } = useMethods()
 const { selectRow: selectRowIssues } = useMethodIssues()
 
-function cellText(row: Record<string, unknown>, key: DealColumn['key']): string {
+function rowId(row: Record<string, unknown>): unknown {
+	const key = rowIdKey.value
+	return key === null ? undefined : row[key]
+}
+
+function cellText(row: Record<string, unknown>, key: string, format: 'text' | 'currency' | 'badge' | undefined): string {
 	const raw = row[key]
-	if (key === 'amount' && typeof raw === 'number')
+	if (format === 'currency' && typeof raw === 'number')
 		return `$${raw.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 	return String(raw ?? '')
 }
 
-function stageBadgeColor(row: Record<string, unknown>): string {
-	switch (row.stage) {
+function badgeColor(row: Record<string, unknown>, key: string): string {
+	switch (row[key]) {
 		case 'won': return 'var(--lab-color-success)'
 		case 'lost': return 'var(--lab-color-danger)'
 		case 'negotiation': return 'var(--lab-color-warning)'
@@ -42,7 +39,7 @@ function stageBadgeColor(row: Record<string, unknown>): string {
 }
 
 function onRowClick(row: Record<string, unknown>): void {
-	const id = row.id
+	const id = rowId(row)
 	if (typeof id === 'string')
 		selectRow(id)
 }
@@ -68,9 +65,9 @@ function onRowClick(row: Record<string, unknown>): void {
 			<tbody>
 				<tr
 					v-for="row in rows"
-					:key="String(row.id)"
+					:key="String(rowId(row))"
 					:class="pika({ cursor: 'pointer', borderBottom: '1px solid var(--lab-color-border)' })"
-					:style="{ background: row.id === selectedRowId ? 'var(--lab-color-surface-alt)' : 'transparent' }"
+					:style="{ background: rowId(row) === selectedRowId ? 'var(--lab-color-surface-alt)' : 'transparent' }"
 					@click="onRowClick(row)"
 				>
 					<td
@@ -79,12 +76,12 @@ function onRowClick(row: Record<string, unknown>): void {
 						:class="pika({ padding: '6px 8px' })"
 					>
 						<span
-							v-if="column.key === 'stage'"
+							v-if="column.format === 'badge'"
 							:class="pika({ display: 'inline-block', padding: '1px 8px', borderRadius: '999px', fontSize: '11px', color: 'var(--lab-color-bg)' })"
-							:style="{ background: stageBadgeColor(row) }"
-						>{{ cellText(row, column.key) }}</span>
+							:style="{ background: badgeColor(row, column.key) }"
+						>{{ cellText(row, column.key, column.format) }}</span>
 						<template v-else>
-							{{ cellText(row, column.key) }}
+							{{ cellText(row, column.key, column.format) }}
 						</template>
 					</td>
 				</tr>

@@ -1,31 +1,34 @@
 <script setup lang="ts">
 /**
- * `DetailPanel#deal-detail` is the preset's single instance, so hardcoding its title/fields/empty text
- * here (matching `../presets.ts`'s configured `title`/`fields`/`emptyText` verbatim) carries no
- * per-instance ambiguity. `record`/`empty` come entirely from `useProperties()` — sourced from
- * `Table.selectedRow` through the configured `PropertySourceConfig` dependency.
+ * `fields` comes entirely from `useProperties()` — a Lab-private semantic projection of `DetailPanel`'s
+ * own resolved config (`../plugins/read-models.ts`) — never hardcoded here, so a valid edited Source
+ * that changes `config.fields` reaches this renderer (PR #22 review 4941241562 finding 1: "the accepted
+ * checkpoint explicitly says the renderer displays configured fields"). `title`/`emptyText` stay
+ * hardcoded: `DetailPanel#deal-detail` is the preset's single instance and those are purely cosmetic
+ * copy, not semantic interaction/data presentation (checkpoint §6 implementation-detail latitude).
+ * `record`/`empty` come entirely from `useProperties()` — sourced from `Table.selectedRow` through the
+ * configured `PropertySourceConfig` dependency.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { DetailPanelPlugin } from '../plugins/read-models'
 
-interface DealField { readonly key: 'company' | 'contact' | 'owner' | 'stage' | 'amount', readonly label: string }
-
-const fields: readonly DealField[] = [
-	{ key: 'company', label: 'Company' },
-	{ key: 'contact', label: 'Contact' },
-	{ key: 'owner', label: 'Owner' },
-	{ key: 'stage', label: 'Stage' },
-	{ key: 'amount', label: 'Amount' },
-]
-
 const { useProperties, WidgetSlot } = useWidget(DetailPanelPlugin)
-const { record, empty } = useProperties()
+const { record, empty, fields } = useProperties()
 
-function fieldText(key: DealField['key']): string {
+function fieldText(key: string, format: 'text' | 'currency' | 'badge' | undefined): string {
 	const raw = record.value?.[key]
-	if (key === 'amount' && typeof raw === 'number')
+	if (format === 'currency' && typeof raw === 'number')
 		return `$${raw.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 	return String(raw ?? '')
+}
+
+function badgeColor(key: string): string {
+	switch (record.value?.[key]) {
+		case 'won': return 'var(--lab-color-success)'
+		case 'lost': return 'var(--lab-color-danger)'
+		case 'negotiation': return 'var(--lab-color-warning)'
+		default: return 'var(--lab-color-accent)'
+	}
 }
 </script>
 
@@ -50,7 +53,14 @@ function fieldText(key: DealField['key']): string {
 						{{ field.label }}
 					</dt>
 					<dd :class="pika({ margin: '0' })">
-						{{ fieldText(field.key) }}
+						<span
+							v-if="field.format === 'badge'"
+							:class="pika({ display: 'inline-block', padding: '1px 8px', borderRadius: '999px', fontSize: '11px', color: 'var(--lab-color-bg)' })"
+							:style="{ background: badgeColor(field.key) }"
+						>{{ fieldText(field.key, field.format) }}</span>
+						<template v-else>
+							{{ fieldText(field.key, field.format) }}
+						</template>
 					</dd>
 				</template>
 			</dl>

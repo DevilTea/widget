@@ -4,10 +4,13 @@
  * Vue renderers (checkpoint §2).
  *
  * Search is deterministic case-insensitive substring matching over `company + contact + owner`. Stage
- * filter is `'all'` (no restriction) or an exact `DealStage` literal match. `stageSeries` always emits
- * the fixed semantic stage order (`dealStageValues`) and includes zero-valued stages so chart topology
- * never fluctuates with filtering/mutation (checkpoint §2) — the series value is each stage's deal
- * count within the current filtered set (a pipeline-distribution chart), a distinct signal from the
+ * filter is `'all'` (no restriction) or an exact `DealStage` literal match — the generic `stage-filter`
+ * `SelectInput.value` is refined to this domain with a consumer refinement (`isStageFilterValue` below),
+ * so an out-of-domain configured option fails the `filteredDeals` dependency instead of silently
+ * matching zero deals (PR #22 review 4941241562 finding 2). `stageSeries` always emits the fixed
+ * semantic stage order (`dealStageValues`) and includes zero-valued stages so chart topology never
+ * fluctuates with filtering/mutation (checkpoint §2) — the series value is each stage's deal count
+ * within the current filtered set (a pipeline-distribution chart), a distinct signal from the
  * amount-summing `pipelineValue`/`weightedValue` KPIs; checkpoint §6 leaves exact chart aggregation an
  * implementation detail.
  */
@@ -15,7 +18,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { Deal, DealStage } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
-import { dealStageValues, isDealsArray, isPlainObject, stageProbability } from '../domain'
+import { dealStageValues, isDealsArray, isDealStage, isPlainObject, stageProbability } from '../domain'
 
 export interface DealQueryRawConfig {
 	readonly storeId: string
@@ -53,6 +56,19 @@ function isString(value: unknown): value is string {
 	return typeof value === 'string'
 }
 
+/**
+ * Consumer refinement of the generic `stage-filter` `SelectInput.value` (checkpoint §2's stage filter
+ * domain is explicitly `'all' | DealStage`) — analogous to Showcase A's `trip-metrics.ts`/
+ * `trip-readiness.ts` `value === null || isDestination(value)`-style refinements. A valid edited Source
+ * may configure an out-of-domain `stage-filter` option (e.g. `"archived"`), which the generic
+ * `SelectInput` State validation legitimately accepts; refining here means selecting that option fails
+ * this dependency (and therefore `filteredDeals`/every downstream Property) instead of silently
+ * "matching no deals" (PR #22 review 4941241562 finding 2).
+ */
+function isStageFilterValue(value: unknown): value is 'all' | DealStage {
+	return value === 'all' || isDealStage(value)
+}
+
 export const DealQueryPlugin = createWidgetPlugin('DealQuery')
 	.interfaces<DealQueryInterfaces>()
 	.config({
@@ -72,7 +88,7 @@ export const DealQueryPlugin = createWidgetPlugin('DealQuery')
 					search: dep.widget(config.searchInputId).state.get('value')
 						.validate(isString),
 					stageFilter: dep.widget(config.stageFilterId).state.get('value')
-						.validate(isString),
+						.validate(isStageFilterValue),
 				}),
 				compute: ({ deps }) => {
 					const dealsResult = deps.deals()

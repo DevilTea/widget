@@ -3,8 +3,10 @@
  * Renders whatever `save()` reports through `useMethodIssues()` even though this component never calls
  * `save`/`cancel` itself — those are triggered by the sibling `Button#save-stage`/`Button#cancel-stage`
  * widgets in the `actions` slot, each invoking `deal-stage-form.save`/`cancel` through their own
- * configured `action` dependency (checkpoint §6). `canSave` only ever gates the Save button's `disabled`
- * presentation here — `save()` itself does not consume/depend on it (checkpoint §2).
+ * configured `action` dependency (checkpoint §6). `canSave` only ever gates the actions container's
+ * opacity as a visual status indicator here — it does not disable the Save button (`Button` exposes no
+ * `disabled` state), and `save()` itself does not consume/depend on it (checkpoint §2; PR #22 review
+ * 4941241562 non-blocking note: corrected from an earlier comment that claimed this gated `disabled`).
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { DealStageFormPlugin } from '../plugins/deal-stage-form'

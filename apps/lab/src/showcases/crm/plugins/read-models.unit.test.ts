@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { defaultCrmPreset } from '../presets'
 import { createCrmRuntime, widgetOfType } from '../test-support'
 
 function setup() {
@@ -127,5 +128,59 @@ describe('table.empty', () => {
 		search.state.value.set('no-such-deal-exists')
 		expect(table.properties.empty.get())
 			.toEqual({ success: true, value: true })
+	})
+})
+
+describe('table.properties.rowIdKey / columns — Lab-private semantic projection of own resolved config (PR #22 review 4941241562 finding 1)', () => {
+	it('reflects the canonical preset\'s configured rowIdKey/columns verbatim', () => {
+		const { table } = setup()
+		expect(table.properties.rowIdKey.get())
+			.toEqual({ success: true, value: 'id' })
+		const columns = table.properties.columns.get()
+		expect(columns.success && columns.value.map(column => column.key))
+			.toEqual(['company', 'contact', 'owner', 'stage', 'amount'])
+		expect(columns.success && columns.value.find(column => column.key === 'amount')?.format)
+			.toBe('currency')
+	})
+})
+
+describe('table keyed by a configured rowIdKey other than "id" (PR #22 review 4941241562 finding 1 regression)', () => {
+	it('selectRow succeeds with a company value, and rows/selectedRow key off the configured rowIdKey — not "id"', () => {
+		const sourceText = defaultCrmPreset.sourceText.replace('"rowIdKey": "id"', '"rowIdKey": "company"')
+		const { runtime } = createCrmRuntime(sourceText)
+		const table = widgetOfType(runtime, 'deal-table', 'Table')
+
+		expect(table.properties.rowIdKey.get())
+			.toEqual({ success: true, value: 'company' })
+
+		// deal-3's company (not its id) is now the legal selector.
+		const result = table.methods.selectRow('Cobalt Health')
+		expect(result.success)
+			.toBe(true)
+		expect(table.state.selectedRowId.get())
+			.toBe('Cobalt Health')
+
+		const selectedRow = table.properties.selectedRow.get()
+		expect(selectedRow.success && selectedRow.value?.id)
+			.toBe('deal-3')
+		expect(selectedRow.success && selectedRow.value?.company)
+			.toBe('Cobalt Health')
+
+		// The stale "id" value must no longer work as a selector once rowIdKey is reconfigured.
+		const staleIdResult = table.methods.selectRow('deal-3')
+		expect(staleIdResult.success)
+			.toBe(false)
+	})
+})
+
+describe('detailPanel.properties.fields — Lab-private semantic projection of own resolved config (PR #22 review 4941241562 finding 1)', () => {
+	it('reflects the canonical preset\'s configured fields verbatim, including format', () => {
+		const { runtime } = createCrmRuntime()
+		const detail = widgetOfType(runtime, 'deal-detail', 'DetailPanel')
+		const fields = detail.properties.fields.get()
+		expect(fields.success && fields.value.map(field => field.key))
+			.toEqual(['company', 'contact', 'owner', 'stage', 'amount'])
+		expect(fields.success && fields.value.find(field => field.key === 'stage')?.format)
+			.toBe('badge')
 	})
 })

@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { dealStageValues } from '../domain'
+import { defaultCrmPreset } from '../presets'
 import { createCrmRuntime, widgetOfType } from '../test-support'
 
 function setup() {
@@ -16,6 +17,22 @@ function setup() {
 	const search = widgetOfType(runtime, 'deal-search', 'TextInput')
 	const stageFilter = widgetOfType(runtime, 'stage-filter', 'SelectInput')
 	return { runtime, query, search, stageFilter }
+}
+
+/**
+ * A source text identical to the canonical preset except `stage-filter`'s configured `options` also
+ * include an out-of-domain `"archived"` option — a legitimate `SelectInput` option (so `SelectInput`'s
+ * own State validation happily accepts it), but not a legal `DealStage`. Used by the finding-2
+ * regression below (PR #22 review 4941241562): "a valid Blueprint whose generic SelectInput includes an
+ * out-of-domain option".
+ */
+function sourceTextWithArchivedStageFilterOption(): string {
+	const definition = JSON.parse(defaultCrmPreset.sourceText) as {
+		slots: { header: readonly [{ slots: { start: readonly [unknown, { config: { options: { value: string, label: string }[] } }] } }] }
+	}
+	const stageFilter = definition.slots.header[0].slots.start[1]
+	stageFilter.config.options = [...stageFilter.config.options, { value: 'archived', label: 'Archived' }]
+	return JSON.stringify(definition)
 }
 
 describe('dealQuery.filteredDeals / count with no search or stage restriction', () => {
@@ -155,5 +172,44 @@ describe('dealQuery empty-query behaviors — a search matching nothing', () => 
 			.toBe(true)
 		expect(result.success && result.value.map(point => point.label))
 			.toEqual(dealStageValues)
+	})
+})
+
+describe('dealQuery stage filter — out-of-domain configured option fails the dependency/property path (PR #22 review 4941241562 finding 2 regression)', () => {
+	it('a SelectInput-legal but out-of-domain stage-filter value fails filteredDeals/count instead of silently matching zero deals', () => {
+		const { runtime } = createCrmRuntime(sourceTextWithArchivedStageFilterOption())
+		const query = widgetOfType(runtime, 'deal-query', 'DealQuery')
+		const stageFilter = widgetOfType(runtime, 'stage-filter', 'SelectInput')
+
+		// "archived" is a legitimate SelectInput option (passes SelectInput's own State validation)...
+		const setResult = stageFilter.state.value.set('archived')
+		expect(setResult.success)
+			.toBe(true)
+
+		// ...but DealQuery's domain is explicitly `'all' | DealStage`, so filteredDeals must fail the
+		// dependency/property path rather than silently report an empty/zero result.
+		const filteredResult = query.properties.filteredDeals.get()
+		expect(filteredResult.success)
+			.toBe(false)
+		if (filteredResult.success)
+			throw new Error('expected a failure')
+		expect(filteredResult.issues[0]!.source.type)
+			.toBe('property-dependency')
+
+		for (const propertyName of ['count', 'pipelineValue', 'weightedValue', 'stageSeries'] as const) {
+			const result = query.properties[propertyName].get()
+			expect(result.success)
+				.toBe(false)
+		}
+	})
+
+	it('a legal DealStage value still restricts normally once "archived" is a configured (but unselected) option', () => {
+		const { runtime } = createCrmRuntime(sourceTextWithArchivedStageFilterOption())
+		const query = widgetOfType(runtime, 'deal-query', 'DealQuery')
+		const stageFilter = widgetOfType(runtime, 'stage-filter', 'SelectInput')
+
+		stageFilter.state.value.set('proposal')
+		expect(query.properties.count.get())
+			.toEqual({ success: true, value: 2 })
 	})
 })

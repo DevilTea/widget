@@ -10,8 +10,23 @@
 
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
 import { describe, expect, it } from 'vitest'
+import { defaultCrmPreset } from '../presets'
 import { crmSystem } from '../system'
 import { createCrmRuntime, widgetOfType } from '../test-support'
+
+/**
+ * A source text identical to the canonical preset except `stage-editor`'s configured `options` exclude
+ * one `DealStage` literal. Used by the finding-3 regression below (PR #22 review 4941241562): "the
+ * editor options exclude the selected deal's current stage".
+ */
+function sourceTextWithoutStageEditorOption(excludedStage: string): string {
+	const definition = JSON.parse(defaultCrmPreset.sourceText) as {
+		slots: { overlay: readonly [{ slots: { body: readonly [{ slots: { fields: readonly [{ config: { options: { value: string, label: string }[] } }] } }] } }] }
+	}
+	const stageEditor = definition.slots.overlay[0].slots.body[0].slots.fields[0]
+	stageEditor.config.options = stageEditor.config.options.filter(option => option.value !== excludedStage)
+	return JSON.stringify(definition)
+}
 
 function setup() {
 	const { runtime } = createCrmRuntime()
@@ -181,5 +196,36 @@ describe('dealStageForm.save() — propagates a genuine DealStore.updateStage fa
 			.toBe('method-dependency')
 		expect(modal.state.open.get())
 			.toBe(true)
+	})
+})
+
+describe('dealStageForm.open() — stage-editor options exclude the selected deal\'s current stage (PR #22 review 4941241562 finding 3 regression)', () => {
+	it('fails and leaves the Modal closed instead of opening with a stale/default stage-editor value', () => {
+		const { runtime } = createCrmRuntime(sourceTextWithoutStageEditorOption('proposal'))
+		const form = widgetOfType(runtime, 'deal-stage-form', 'DealStageForm')
+		const table = widgetOfType(runtime, 'deal-table', 'Table')
+		const modal = widgetOfType(runtime, 'stage-modal', 'Modal')
+		const stageEditor = widgetOfType(runtime, 'stage-editor', 'SelectInput')
+
+		// deal-3 (Cobalt Health) is seeded at stage "proposal", which is no longer a legal stage-editor
+		// option in this fixture.
+		expect(table.methods.selectRow('deal-3').success)
+			.toBe(true)
+		expect(stageEditor.state.value.get())
+			.toBe('lead') // untouched configured default — proves open() never got to write it
+
+		const result = form.methods.open()
+
+		expect(result.success)
+			.toBe(false)
+		if (result.success)
+			throw new Error('expected a failure')
+		expect(result.issues[0]!.source.type)
+			.toBe('method-dependency')
+		expect(modal.state.open.get())
+			.toBe(false)
+		// The failed write must not have mutated stage-editor's value either.
+		expect(stageEditor.state.value.get())
+			.toBe('lead')
 	})
 })

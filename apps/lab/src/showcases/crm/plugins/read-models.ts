@@ -6,18 +6,24 @@
  * arbitrary Runtime objects or parsing diagnostics. None of these plugins know about deals/stages;
  * every CRM-specific search/filter/aggregation semantic lives in `DealQuery` (`./deal-query.ts`).
  *
- * `Table`/`DetailPanel`/`BarChart` declare no `properties` projection of their own *display* config
- * (`columns`/`fields`/`title`/`emptyText`) — `@deviltea/widget-vue`'s public `useWidget()` contract has
- * no resolved-config accessor (see `./structural.ts`'s file header for the same boundary) — each is a
- * single preset instance, so its renderer safely hardcodes fixed copy matching the preset's own config
- * (checkpoint §6: "Exact display labels ... are implementation details").
+ * `Table`/`DetailPanel` additionally project the resolved-config fields their renderers need to honor
+ * semantic interaction/data presentation — `Table.properties.rowIdKey`/`columns` and
+ * `DetailPanel.properties.fields` — because a valid edited Source can change `rowIdKey`/`columns`/
+ * `fields` and that must reach the renderer (issue #13 note recorded on comment 5298243144, correcting
+ * PR #22 adversarial review 4941241562 finding 1). Each projection is readonly, computed solely from the
+ * widget's own resolved config, and adds zero new dependency edges — `@deviltea/widget-vue`'s public
+ * `useWidget()` contract still has no resolved-config accessor (see `./structural.ts`'s file header for
+ * that boundary), so this is the same Lab-private projection pattern as `Button`/`MetricCard` below, not
+ * a new `@deviltea/widget-vue` escape hatch. `BarChart`'s `title` stays hardcoded: it is a single preset
+ * instance and `title` is purely cosmetic copy, not semantic interaction/data presentation (checkpoint
+ * §6: "Exact display labels ... are implementation details").
  *
- * `MetricCard` is the one exception, and it is a deliberate, narrow deviation from the checkpoint's
- * literal capability list: it additionally declares `properties: { label, format }`, a pure
- * presentation-only projection of its own resolved config (same rationale/precedent as `Button` in
- * `./actions.ts` — see that file's header). `MetricCard` is instantiated three times in this showcase
- * (`visible-deal-count`/`pipeline-value`/`weighted-value`) with no other distinguishing slot/state, so
- * without this projection every instance would render identically.
+ * `MetricCard` is a deliberate, narrow deviation from the checkpoint's literal capability list: it
+ * additionally declares `properties: { label, format }`, a pure presentation-only projection of its own
+ * resolved config (same rationale/precedent as `Button` in `./actions.ts` — see that file's header).
+ * `MetricCard` is instantiated three times in this showcase (`visible-deal-count`/`pipeline-value`/
+ * `weighted-value`) with no other distinguishing slot/state, so without this projection every instance
+ * would render identically.
  */
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
@@ -113,6 +119,8 @@ export interface TableInterfaces extends WidgetInterfaces {
 		rows: readonly Record<string, unknown>[]
 		selectedRow: Record<string, unknown> | null
 		empty: boolean
+		rowIdKey: string
+		columns: readonly TableColumn[]
 	}
 	methods: {
 		selectRow: (id: string) => void
@@ -184,7 +192,14 @@ export const TablePlugin = createWidgetPlugin('Table')
 					const result = deps()
 					return !result.success || (result.value ?? []).length === 0
 				},
-			}))
+			})
+			// Lab-private semantic projections of own resolved config (readonly, zero new dependency
+			// edges) so `TableRenderer.vue` can key rows / call `selectRow()` with the *configured*
+			// `rowIdKey`, and render the *configured* `columns`, instead of hardcoding `row.id` and a
+			// fixed column list (issue #13 note on comment 5298243144, PR #22 review 4941241562 finding
+			// 1: a valid edited Source changing `rowIdKey`/`columns` must reach the renderer).
+			.rowIdKey({ compute: ({ config }) => config.rowIdKey })
+			.columns({ compute: ({ config }) => config.columns }))
 	.methods(methods =>
 		methods.selectRow({
 			// Validation boundary is locked (checkpoint §2): `validateArgs` only checks tuple shape/`id`
@@ -236,6 +251,7 @@ export interface DetailPanelInterfaces extends WidgetInterfaces {
 	properties: {
 		record: Record<string, unknown> | null
 		empty: boolean
+		fields: readonly DetailPanelField[]
 	}
 }
 
@@ -282,7 +298,12 @@ export const DetailPanelPlugin = createWidgetPlugin('DetailPanel')
 					const result = deps()
 					return !result.success || result.value === null
 				},
-			}))
+			})
+			// Lab-private semantic projection of own resolved config (readonly, zero new dependency
+			// edges) so `DetailPanelRenderer.vue` renders the *configured* `fields` instead of a
+			// hardcoded field list (issue #13 note on comment 5298243144, PR #22 review 4941241562
+			// finding 1).
+			.fields({ compute: ({ config }) => config.fields }))
 	.done()
 
 // -------------------------------------------------------------------------------------------------
