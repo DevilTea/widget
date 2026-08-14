@@ -16,7 +16,9 @@
 	"dependencies": {
 		"@deviltea/widget-core": "workspace:*",
 		"@deviltea/widget-vue": "workspace:*",
+		"@vue-flow/core": "catalog:",
 		"dockview-vue": "catalog:",
+		"elkjs": "catalog:",
 		"modern-monaco": "catalog:",
 		"tm-grammars": "catalog:",
 		"tm-themes": "catalog:",

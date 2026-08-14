@@ -34,6 +34,14 @@ export interface LabStore {
 	readonly focus: Readonly<Ref<InspectorFocus | null>>
 	readonly presets: typeof sandboxPresets
 	readonly activeTab: Ref<LabToolTab>
+	/**
+	 * Dependency Graph presentation preferences (issue #13 Phase 5 "inspector panel interaction
+	 * contract"): panel-local, and — unlike snapshot-bound focus/selections — deliberately not reset by
+	 * `session.subscribe()`/Apply, since these plain refs live on the `LabStore` object itself rather than
+	 * being derived from `session`.
+	 */
+	readonly graphShowAbsent: Ref<boolean>
+	readonly graphShowIsolatedMembers: Ref<boolean>
 	setDraftSourceText: (text: string) => void
 	apply: () => Promise<ApplyOutcome>
 	format: () => void
@@ -105,6 +113,8 @@ export function createLabStore(): LabStore {
 	})
 
 	const activeTab = shallowRef<LabToolTab>('source')
+	const graphShowAbsent = shallowRef(false)
+	const graphShowIsolatedMembers = shallowRef(false)
 
 	return {
 		session,
@@ -117,6 +127,8 @@ export function createLabStore(): LabStore {
 		focus,
 		presets: sandboxPresets,
 		activeTab,
+		graphShowAbsent,
+		graphShowIsolatedMembers,
 		setDraftSourceText: text => session.setDraftSourceText(text),
 		apply: () => session.apply(),
 		format: () => session.format(),
