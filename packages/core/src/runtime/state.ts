@@ -14,7 +14,7 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
 import { signal } from 'alien-signals'
 import { EMPTY_ISSUES } from '../issue'
-import { createTrackedSubscription, invokeListenerIsolated } from './adapter'
+import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { buildDefaultStateValidationIssue, buildStateValidationIssue, freezeIssueSnapshot } from './issues'
 import { assertSyncValue } from './sync'
@@ -85,7 +85,18 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 			invokeListenerIsolated(entry.listener, inspectionSnapshot)
 	}
 
+	/**
+	 * The value write below is what makes the whole dependent Property graph recompute, and those
+	 * recomputes commit their own issue snapshots from inside their evaluators. Wrapping the pipeline in
+	 * `runRuntimeOperation` is only what tells `writeDeferringFlush` when those evaluators are all back
+	 * out of the graph, so the propagations they deferred are released here: still inside the very `set()`
+	 * call that caused them, before its `ExecutionResult` reaches the caller.
+	 */
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateIssue> {
+		return runRuntimeOperation(() => attemptSetWithinOperation(candidate))
+	}
+
+	function attemptSetWithinOperation(candidate: unknown): ExecutionResult<unknown, RuntimeStateIssue> {
 		const collector = createOperationCollector<RelativeValueIssueInput, RuntimeStateIssue>()
 		const ctx = {
 			...params.buildConfigFragment(),
@@ -102,7 +113,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 			// fresh array here and needs the same immutable-snapshot treatment (issue #10 issue-snapshot
 			// contract).
 			const issues = finalized.length > 0 ? finalized : freezeIssueSnapshot([buildDefaultStateValidationIssue(params.widgetId, params.key, candidate)])
-			issuesSignal(issues)
+			writeDeferringFlush(() => issuesSignal(issues))
 			return { success: false, issues: issues as readonly [RuntimeStateIssue, ...RuntimeStateIssue[]] }
 		}
 
@@ -118,7 +129,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		// looser change detector.
 		const previous = valueSignal()
 		valueSignal(candidate)
-		issuesSignal(EMPTY_ISSUES)
+		writeDeferringFlush(() => issuesSignal(EMPTY_ISSUES))
 		if (candidate !== previous)
 			publishInspectionSnapshot(candidate)
 		return { success: true, value: candidate }
