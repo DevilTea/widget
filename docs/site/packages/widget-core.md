@@ -504,10 +504,10 @@ runtime.getCollectedIssues() // runtime.getIssues() + every RuntimeWidget.getIss
 runtime.subscribeCollectedIssues(listener)
 ```
 
-`getIssues()` / `subscribeIssues()` (on both `RuntimeWidget` and
-`WidgetSystemRuntime`) and `getCollectedIssues()` /
-`subscribeCollectedIssues()` read issue signals only and never activate
-property evaluation. The aggregate may legitimately list both a failing
+`RuntimeWidget.getIssues()` / `subscribeIssues()`,
+`WidgetSystemRuntime.getIssues()`, and
+`WidgetSystemRuntime.getCollectedIssues()` / `subscribeCollectedIssues()`
+read issue signals only and never activate property evaluation. The aggregate may legitimately list both a failing
 primitive's own issue and a consumer's wrapped `property-dependency` /
 `method-dependency` issue that points back at it — that is causal context,
 not duplication.
