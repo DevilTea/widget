@@ -46,6 +46,29 @@
  * `enqueue()`'s `task` callback — and only hand the resulting, already in-flight promise to `enqueue()` to
  * await. `enqueue()` still does its job as the mutual-exclusion barrier (a queued `switchShowcase()` won't
  * start until that promise settles); it just never gets to choose when the Apply itself starts.
+ *
+ * That fix alone made the mutual exclusion one-directional (PR #19 review 4940839975): an in-flight
+ * `apply()` correctly blocks a *later-queued* `switchShowcase()` (its task, unlike Apply's, legitimately
+ * starts later, from inside the queue — see above), but nothing stopped `apply()`/`applyPreset()`'s own
+ * synchronous, immediate `session.*` call from firing while a `switchShowcase()` was already mid-flight
+ * (queued, or actually running `performSwitchShowcase()`'s detach/dispose/reassign sequence). That would
+ * start a real second Apply against the *pre-switch* `session`/`previewRuntime` while the switch is
+ * concurrently tearing down and reassigning those very same mutable bindings — reproducing the original
+ * finding-1 hazard (orphaned/never-mounted Runtime, or `mountPreview()` resolving against whichever
+ * session `switchShowcase()` has since reassigned to the outer variable) from the other direction.
+ *
+ * `switchTransactionCount` (below) closes that gap: it is incremented synchronously the instant
+ * `switchShowcase()` is *called* — before `enqueue()` even runs — and only decremented once that call's
+ * whole queued transaction has fully settled, so it stays truthy across the entire span a switch
+ * occupies the lifecycle boundary, including the queued-but-not-yet-started gap. `apply()`/`applyPreset()`
+ * check it synchronously, first, before touching `session` at all: while any switch is outstanding they
+ * reject immediately with the same `{ status: 'skipped-concurrent' }` shape Apply already uses for "an
+ * Apply is already running" (issue #13 comment 5289958311's "Apply is disabled while one is running",
+ * read to cover the lifecycle boundary in general, not only a same-session Apply) — never queuing a
+ * second real mutation behind the switch. `switchShowcase()` itself keeps its existing behavior toward a
+ * concurrent Apply unchanged: it still *waits* (via `enqueue()`) rather than rejecting, because an
+ * in-flight Apply's own promise is already the thing occupying the queue by the time `switchShowcase()`
+ * enqueues behind it — there is no case where `switchShowcase()` needs to jump an in-flight Apply.
  */
 
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
@@ -123,6 +146,16 @@ export function createLabStore(): LabStore {
 	// later and may still create/mount a Runtime. `disposed` lets `mountPreview()` recognize that case
 	// (see `createHooks()` below) and dispose that Runtime immediately instead of mounting/leaking it.
 	let disposed = false
+
+	// Symmetric mutual-exclusion counterpart to `LabSession.isApplying` (PR #19 review 4940839975): counts
+	// `switchShowcase()` calls whose queued transaction has not yet fully settled, so `apply()`/
+	// `applyPreset()` can detect "a switch currently occupies the lifecycle boundary" *before* they touch
+	// `session` at all — even during the gap between a switch being called and its queued task actually
+	// starting, which a boolean toggled only from inside `performSwitchShowcase()` would miss. A counter
+	// rather than a boolean because `switchShowcase()` calls can themselves overlap (see the "serializes
+	// repeated switchShowcase() calls" test): it must stay truthy until every outstanding call's own
+	// transaction has settled, not just the first one to resolve.
+	let switchTransactionCount = 0
 
 	/**
 	 * Serializes every lifecycle-mutating operation (`apply`, `applyPreset`, `switchShowcase`) into one
@@ -316,12 +349,23 @@ export function createLabStore(): LabStore {
 		// requires. `enqueue()` only wraps the resulting (already in-flight) promise, so it still serves
 		// as the mutual-exclusion barrier against a concurrent `switchShowcase()`.
 		apply: () => {
+			// Symmetric half of the mutual exclusion (PR #19 review 4940839975): a switch that already
+			// occupies the lifecycle boundary — queued or actually mid-flight — must block a *new* Apply
+			// from starting, exactly as an already-running Apply blocks a new switch. Checked before
+			// `session` is touched at all, so a rejected call never mutates anything.
+			if (switchTransactionCount > 0)
+				return Promise.resolve({ status: 'skipped-concurrent' })
 			const outcome = session.apply()
 			return enqueue(() => outcome)
 		},
 		format: () => session.format(),
 		revert: () => session.revert(),
 		applyPreset: (presetId) => {
+			// Same symmetric guard as `apply()` above, checked first so a concurrent switch also short-
+			// circuits the (otherwise pure) preset lookup rather than resolving it against a showcase that
+			// might be mid-replacement.
+			if (switchTransactionCount > 0)
+				return Promise.resolve({ status: 'skipped-concurrent' })
 			const preset = currentShowcase.presets.find(candidate => candidate.id === presetId)
 			if (preset === undefined)
 				return enqueue(async () => undefined)
@@ -331,7 +375,20 @@ export function createLabStore(): LabStore {
 			const outcome = session.applyPreset(preset.sourceText)
 			return enqueue(() => outcome)
 		},
-		switchShowcase: id => enqueue(() => performSwitchShowcase(id)),
+		switchShowcase: (id) => {
+			// Incremented synchronously, at call time — before `enqueue()` even runs — so `apply()`/
+			// `applyPreset()`'s guard above sees this switch as outstanding for its *entire* span,
+			// including the gap between this call and its queued task actually starting. Decremented once
+			// this call's own transaction has fully settled, whatever the outcome (a real switch, or one
+			// of `performSwitchShowcase()`'s own no-op returns).
+			switchTransactionCount++
+			const outcome = enqueue(() => performSwitchShowcase(id))
+			outcome.then(
+				() => { switchTransactionCount-- },
+				() => { switchTransactionCount-- },
+			)
+			return outcome
+		},
 		setFocus: next => focusStore.setFocus(next),
 		/**
 		 * Final application teardown. Widget Lab is the Runtime owner (issue #13 Phase 4 Apply-lifecycle

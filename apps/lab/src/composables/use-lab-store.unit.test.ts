@@ -416,6 +416,87 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 			.toBe('applied')
 	})
 
+	// PR #19 review 4940839975: the previous fix (command-start capture/concurrency, see the tests above)
+	// made the mutual exclusion one-directional — an in-flight Apply correctly blocked a later-queued
+	// switch, but nothing stopped `apply()`/`applyPreset()`'s own synchronous, immediate `session.*` call
+	// from firing while a `switchShowcase()` was already mid-flight, reproducing the original
+	// orphaned/mismatched-Runtime hazard from the other direction. Exactly one `await Promise.resolve()`
+	// lands inside `performSwitchShowcase()`'s first internal await — its own `await nextTick()` while
+	// detaching the OLD Preview, *before* it reassigns the outer `session`/`currentShowcase` bindings to
+	// the target showcase (verified below: `store.session` is still `preSwitchSession` at that point). One
+	// tick later, `session` has already been reassigned and the switch's own step 3 has already started
+	// its own `session.apply()` on the new session — which would coincidentally reject a same-tick
+	// concurrent call anyway (via `LabSession`'s own `isApplying` guard) without exercising this fix at
+	// all, so hitting this exact tick is what actually proves the store-level guard is doing the work.
+	it('a switchShowcase() mid-flight blocks a concurrent apply() from starting a second real Apply on the pre-switch session', async () => {
+		const store = createLabStore()
+		const preSwitchSession = store.session
+		const initialRuntime = preSwitchSession.active.runtime!
+
+		const switchPromise = store.switchShowcase('survey')
+		await Promise.resolve()
+		// Confirms the timing actually lands where intended: mid old-Preview-detach, before `session` is
+		// reassigned — under the regression, `apply()` below would call `session.apply()` synchronously on
+		// this exact (still pre-switch) session, racing its concurrent teardown.
+		expect(store.session)
+			.toBe(preSwitchSession)
+
+		const applyOutcome = await store.apply()
+
+		expect(applyOutcome)
+			.toEqual({ status: 'skipped-concurrent' })
+
+		await switchPromise
+
+		// The rejected apply() never touched the pre-switch session at all, so it never created a second/
+		// replacement Runtime there to leak or orphan.
+		expect(preSwitchSession.active.runtime)
+			.toBe(initialRuntime)
+		expect(initialRuntime.isDisposed)
+			.toBe(true)
+		expect(store.session)
+			.not.toBe(preSwitchSession)
+		expect(store.showcaseId.value)
+			.toBe('survey')
+		expect(store.session.active.blueprint.status)
+			.toBe('valid')
+		expect(store.session.active.runtime)
+			.not.toBeNull()
+		expect(store.previewRuntime.value)
+			.toBe(store.session.active.runtime)
+	})
+
+	it('a switchShowcase() mid-flight blocks a concurrent applyPreset() from starting a second real Apply on the pre-switch session', async () => {
+		const store = createLabStore()
+		const preSwitchSession = store.session
+		const initialRuntime = preSwitchSession.active.runtime!
+
+		const switchPromise = store.switchShowcase('survey')
+		await Promise.resolve()
+		expect(store.session)
+			.toBe(preSwitchSession)
+
+		const presetOutcome = await store.applyPreset('invalid-semantic')
+
+		expect(presetOutcome)
+			.toEqual({ status: 'skipped-concurrent' })
+
+		await switchPromise
+
+		expect(preSwitchSession.active.runtime)
+			.toBe(initialRuntime)
+		expect(initialRuntime.isDisposed)
+			.toBe(true)
+		expect(store.session)
+			.not.toBe(preSwitchSession)
+		expect(store.showcaseId.value)
+			.toBe('survey')
+		expect(store.session.active.blueprint.status)
+			.toBe('valid')
+		expect(store.previewRuntime.value)
+			.toBe(store.session.active.runtime)
+	})
+
 	it('dispose() while a switchShowcase() is mid-flight disposes whatever Runtime that switch eventually produces, without throwing', async () => {
 		const store = createLabStore()
 		const switchPromise = store.switchShowcase('survey')
