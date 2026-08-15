@@ -53,10 +53,20 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   `runtime/RuntimePropertyIssueList.vue`. `message` is never parsed for structure; every field beyond it
   comes from `issue.source`.
 - `src/components/` — the app shell: `LabHeader.vue` (compact header: showcase selector, preset,
-  status, Apply), `Workbench.vue` (`dockview-vue` two-column default layout), `panels/*`
-  (Source/Blueprint/Runtime/Graph tabs), `preview/PreviewPanel.vue`, `blueprint/*` (the Blueprint
-  Inspector's tree + selected-node detail + issue list), `runtime/*` (Runtime Inspector's member rows
-  + property-issue list), `graph/*` (the Vue Flow canvas + panel-local edge details).
+  status, Apply), `Workbench.vue` (`dockview-vue` two-column default layout), `NonClosableTab.vue`
+  (a custom Dockview `tabComponent` — issue #27 Finding 2: registered as `tabComponents.nonClosable` and
+  selected via `AddPanelOptions.tabComponent` on each of the five canonical panels' `addPanel()` calls, it
+  renders only a title, no close control, so those panels can never be closed; Dockview's own `Tab`
+  wrapper — drag/reorder/dock/resize/activate — is untouched, since a `tabComponent` only replaces what
+  that wrapper renders as content), `panels/*` (Source/Blueprint/Runtime/Graph tabs), `preview/PreviewPanel.vue`,
+  `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list), `runtime/*` (Runtime
+  Inspector's member rows + property-issue list), `graph/*` (the Vue Flow canvas + panel-local edge
+  details).
+- `src/App.vue` also renders a narrow-viewport gate (issue #27 Finding 3): a pure CSS
+  `@media (max-width: 899px)` rule (no JS resize listener/state) shows a `position: fixed` explanatory
+  overlay ("Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.") covering
+  the whole viewport below 900px width, and hides it again above that width; `Workbench`/Dockview stay
+  mounted underneath rather than being torn down.
 - `src/sandbox/` — the `Sandbox` showcase: small, Lab-private fixtures (plugins, a `WidgetSystem`, a
   `createWidgetVueRenderer` registry, preset source texts) whose only job is to exercise the shell
   with minimal semantic surface. Product-shaped showcases live in `src/showcases/`, never here;
@@ -192,9 +202,19 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
 
 Graph works for an invalid Blueprint (compile-time facts only, no Runtime dependency) and its node click
 sets the shared cross-inspector focus (`nodeId` + member) the same way Blueprint/Runtime do; a new
-applied Blueprint resets that shared focus to the new root. Known Graph/workbench UX defects (first-open
-fit, fit-to-view affordance, panel recovery, narrow-viewport behavior) are tracked in issue #27 — check
-its state before "fixing" adjacent behavior in passing.
+applied Blueprint resets that shared focus to the new root.
+
+Viewport fit is coordinated with layout readiness, not `fitViewOnInit` (issue #27 Finding 1):
+`GraphCanvas.vue` calls `useVueFlow()` before its own template renders `<VueFlow>` (creating and
+`provide()`-ing a store `<VueFlow>` then injects, per `@vue-flow/core`'s documented same-component-instance
+pattern) and calls `fitView()` from `onNodesInitialized`. Because `GraphPanel.vue` renders `GraphCanvas`
+behind `v-if="flow !== null"`, and every new laid-out semantic graph transits through `flow === null`
+first (`LayoutSession.request()` sets `status: 'loading'` synchronously), `GraphCanvas` fully
+unmounts/remounts for every new graph — so this single `onNodesInitialized` hook covers first mount and
+every subsequent semantic-graph replacement without special-casing either, and Runtime activity (which
+never replaces `flow`) never re-triggers it. `GraphPanel.vue` also exposes an explicit **Fit graph**
+button (next to the filter checkboxes) that calls the same `fitGraph()` path via a template ref —
+`GraphCanvas.vue` remains the only place in this app that imports `@vue-flow/core`.
 
 ## Layout worker boundary
 

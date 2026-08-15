@@ -58,10 +58,50 @@ test('shell survives modern-monaco failing to load from its (blocked) CDN', asyn
 		.toEqual([])
 })
 
-test.fixme('panel close/recovery policy is enforced (issue #27)', async () => {
-	// Workbench issue #27: closing a Dockview panel has no defined recovery affordance yet.
+test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => {
+	await page.goto('/')
+
+	const panelNames = ['Source', 'Blueprint', 'Runtime', 'Graph', 'Preview']
+
+	// The five canonical panels use a custom Dockview tab renderer (`NonClosableTab.vue`) that never
+	// renders a close control — so there is no in-tab button affordance to find at all.
+	for (const name of panelNames) {
+		const tab = page.getByRole('tab', { name })
+		await expect(tab)
+			.toBeVisible()
+		await expect(tab.getByRole('button'))
+			.toHaveCount(0)
+	}
+
+	// Attempt the interaction that used to close a panel — clicking where a close "x" used to sit, at
+	// the tab's trailing edge — and confirm it is a no-op: every canonical tab remains present.
+	const graphTab = page.getByRole('tab', { name: 'Graph' })
+	const box = (await graphTab.boundingBox())!
+	await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2)
+
+	for (const name of panelNames) {
+		await expect(page.getByRole('tab', { name }))
+			.toBeVisible()
+	}
 })
 
-test.fixme('narrow-viewport behavior is intentional (issue #27)', async () => {
-	// Narrow-viewport workbench behavior is an accepted, undocumented-as-a-contract gap (issue #27).
+test('narrow-viewport behavior is intentional (issue #27)', async ({ page }) => {
+	await page.setViewportSize({ width: 375, height: 667 })
+	await page.goto('/')
+
+	const gateMessage = page.getByText('Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.')
+	await expect(gateMessage)
+		.toBeVisible()
+
+	const hasHorizontalOverflow = await page.evaluate(
+		() => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+	)
+	expect(hasHorizontalOverflow)
+		.toBe(false)
+
+	await page.setViewportSize({ width: 1280, height: 800 })
+	await expect(gateMessage)
+		.toBeHidden()
+	await expect(page.getByRole('tab', { name: 'Source' }))
+		.toBeVisible()
 })

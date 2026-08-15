@@ -8,6 +8,7 @@
 import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
 import { onBeforeUnmount, ref } from 'vue'
+import NonClosableTab from './NonClosableTab.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
 import GraphPanel from './panels/GraphPanel.vue'
 import RuntimePanel from './panels/RuntimePanel.vue'
@@ -42,6 +43,12 @@ const components: Record<string, VueComponent> = {
 	preview: PreviewPanel as unknown as VueComponent,
 }
 
+// issue #27 Finding 2: the canonical panels' tab content renderer, close-button-free by construction
+// (see NonClosableTab.vue) — selected per-panel below via `AddPanelOptions.tabComponent`.
+const tabComponents: Record<string, VueComponent> = {
+	nonClosable: NonClosableTab as unknown as VueComponent,
+}
+
 const workbenchEl = ref<HTMLElement | null>(null)
 let resizeObserver: ResizeObserver | null = null
 
@@ -69,10 +76,13 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
 function onReady(event: DockviewReadyEvent): void {
 	const { api } = event
 
-	api.addPanel({ id: 'source', component: 'source', title: 'Source' })
+	// `tabComponent: 'nonClosable'` on every canonical panel (issue #27 Finding 2) — see
+	// NonClosableTab.vue/tabComponents above for the mechanism.
+	api.addPanel({ id: 'source', component: 'source', tabComponent: 'nonClosable', title: 'Source' })
 	api.addPanel({
 		id: 'blueprint',
 		component: 'blueprint',
+		tabComponent: 'nonClosable',
 		title: 'Blueprint',
 		position: { referencePanel: 'source', direction: 'within' },
 		inactive: true,
@@ -80,6 +90,7 @@ function onReady(event: DockviewReadyEvent): void {
 	api.addPanel({
 		id: 'runtime',
 		component: 'runtime',
+		tabComponent: 'nonClosable',
 		title: 'Runtime',
 		position: { referencePanel: 'source', direction: 'within' },
 		inactive: true,
@@ -87,6 +98,7 @@ function onReady(event: DockviewReadyEvent): void {
 	api.addPanel({
 		id: 'graph',
 		component: 'graph',
+		tabComponent: 'nonClosable',
 		title: 'Graph',
 		position: { referencePanel: 'source', direction: 'within' },
 		inactive: true,
@@ -94,6 +106,7 @@ function onReady(event: DockviewReadyEvent): void {
 	api.addPanel({
 		id: 'preview',
 		component: 'preview',
+		tabComponent: 'nonClosable',
 		title: 'Preview',
 		position: { referencePanel: 'source', direction: 'right' },
 	})
@@ -115,6 +128,7 @@ function onReady(event: DockviewReadyEvent): void {
 			class="workbench__dockview"
 			:theme="labTheme"
 			:components="components"
+			:tabComponents="tabComponents"
 			@ready="onReady"
 		/>
 	</div>

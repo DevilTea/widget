@@ -32,10 +32,128 @@ test('Survey Dependency Graph lays out and renders nodes', async ({ page }) => {
 		.toHaveCount(0)
 })
 
-test.fixme('graph nodes intersect the visible viewport on first open (issue #27)', async () => {
-	// Known defect: the initial Vue Flow viewport does not fit the laid-out graph on first open.
-})
+/**
+ * Bounding-box intersection between two DOMRect-shaped boxes (client coordinates).
+ */
+function intersects(a: { x: number, y: number, width: number, height: number }, b: { x: number, y: number, width: number, height: number }): boolean {
+	return a.x < b.x + b.width
+		&& a.x + a.width > b.x
+		&& a.y < b.y + b.height
+		&& a.y + a.height > b.y
+}
 
-test.fixme('"Fit graph" affordance restores a useful viewport (issue #27)', async () => {
-	// No "Fit graph" control exists yet in the Graph panel — tracked in issue #27.
+// issue #27's acceptance criterion names both showcases explicitly ("Opening Graph on Survey and CRM
+// reliably displays the graph without requiring a filter toggle or manual browser resize") — this is
+// exactly the async layout/render behavior #27 asks to pin at the browser level per showcase rather than
+// infer from one case.
+for (const showcaseId of ['survey', 'crm'] as const) {
+	test(`${showcaseId} graph nodes intersect the visible viewport on first open (issue #27)`, async ({ page }) => {
+		await page.goto('/')
+		await page.getByLabel('Switch showcase')
+			.selectOption(showcaseId)
+		await page.getByRole('tab', { name: 'Graph' })
+			.click()
+
+		const canvas = page.locator('.vue-flow')
+		const nodes = page.locator('.vue-flow__node')
+		await expect(nodes.first())
+			.toBeVisible({ timeout: 15_000 })
+
+		// `GraphCanvas.vue`'s fit runs off `onNodesInitialized`, an async step after nodes first render —
+		// poll rather than asserting immediately after the node locator resolves.
+		await expect(async () => {
+			const canvasBox = await canvas.boundingBox()
+			expect(canvasBox)
+				.not.toBeNull()
+			const count = await nodes.count()
+			let intersecting = 0
+			for (let i = 0; i < count; i++) {
+				const box = await nodes.nth(i)
+					.boundingBox()
+				if (box !== null && intersects(box, canvasBox!))
+					intersecting++
+			}
+			expect(intersecting)
+				.toBeGreaterThan(0)
+		})
+			.toPass({ timeout: 10_000 })
+	})
+}
+
+test('"Fit graph" affordance restores a useful viewport (issue #27)', async ({ page }) => {
+	await page.goto('/')
+	await page.getByLabel('Switch showcase')
+		.selectOption('survey')
+	await page.getByRole('tab', { name: 'Graph' })
+		.click()
+
+	const canvas = page.locator('.vue-flow')
+	const nodes = page.locator('.vue-flow__node')
+	await expect(nodes.first())
+		.toBeVisible({ timeout: 15_000 })
+
+	// Let the automatic first-open fit (issue #27 Finding 1) settle before deliberately panning away.
+	await expect(async () => {
+		const canvasBox = await canvas.boundingBox()
+		const box = await nodes.first()
+			.boundingBox()
+		expect(box)
+			.not.toBeNull()
+		expect(intersects(box!, canvasBox!))
+			.toBe(true)
+	})
+		.toPass({ timeout: 10_000 })
+
+	const viewport = page.locator('.vue-flow__transformationpane')
+	const transformBeforeDistortion = await viewport.getAttribute('style')
+
+	// Zoom in hard, pivoted on one corner of the canvas (`zoomOnScroll` is on by default and needs no
+	// modifier key) — this pushes most of the laid-out graph outside the visible viewport, the same
+	// "pan/zoom away" a user's scroll wheel would produce.
+	const canvasBox = (await canvas.boundingBox())!
+	await page.mouse.move(canvasBox.x + canvasBox.width * 0.15, canvasBox.y + canvasBox.height * 0.15)
+	for (let i = 0; i < 12; i++)
+		await page.mouse.wheel(0, -300)
+
+	// Confirm the interaction actually distorted the viewport, and capture that distorted transform —
+	// this is the exact state "Fit graph" must be proven to recover from below, not merely a starting
+	// point to diff against a stale earlier reading.
+	let transformDistorted = ''
+	await expect(async () => {
+		transformDistorted = (await viewport.getAttribute('style')) ?? ''
+		expect(transformDistorted)
+			.not.toBe(transformBeforeDistortion)
+	})
+		.toPass({ timeout: 5_000 })
+
+	await page.getByRole('button', { name: 'Fit graph' })
+		.click()
+
+	// A no-op `fitGraph()` could still leave one node technically intersecting the canvas after a hard
+	// zoom, so intersection alone does not prove the button did anything (issue #27 review). Assert BOTH
+	// that the transform materially moved away from the captured distorted one — proving the click
+	// actually changed the viewport, not that some unrelated later reading merely differs from it — AND
+	// that the resulting viewport is useful (nodes intersecting again). Deliberately not asserting exact
+	// equality with the original pre-distortion transform: two independent fit computations can differ
+	// slightly in measurement/animation timing, which would make that brittle; the invariant that matters
+	// is "Fit recovers a distorted viewport into a useful one", not "byte-identical transform". `toPass`
+	// also covers a `fitView()` that animates rather than snapping instantly.
+	await expect(async () => {
+		const transformAfterFit = await viewport.getAttribute('style')
+		expect(transformAfterFit)
+			.not.toBe(transformDistorted)
+
+		const canvasBoxAfterFit = await canvas.boundingBox()
+		const count = await nodes.count()
+		let intersecting = 0
+		for (let i = 0; i < count; i++) {
+			const box = await nodes.nth(i)
+				.boundingBox()
+			if (box !== null && intersects(box, canvasBoxAfterFit!))
+				intersecting++
+		}
+		expect(intersecting)
+			.toBeGreaterThan(0)
+	})
+		.toPass({ timeout: 10_000 })
 })
