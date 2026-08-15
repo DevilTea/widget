@@ -216,7 +216,7 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 		expect(survey.properties.resultFresh.get())
 			.toEqual({ success: true, value: true })
 
-		// `destination` is a tracked `resetQuestionIds` question; setting its answer to `null` also
+		// `destination` is a tracked `resultInputQuestionIds` question; setting its answer to `null` also
 		// makes it fail `TripReadiness`/`TripRecommendation` — `resultFresh` must still report `false`,
 		// since it compares tracked answers rather than re-deciding current validity.
 		destination.state.answer.set(null)
@@ -240,7 +240,7 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 
 		// `children` defaults to 0 in the default preset, so `family-priority` is hidden and ignored by
 		// both `TripReadiness`/`TripRecommendation` (see `trip-readiness.ts`'s file header) — yet it is
-		// still one of `resetQuestionIds`' tracked questions, so changing it must still mark stale.
+		// still one of `resultInputQuestionIds`' tracked questions, so changing it must still mark stale.
 		familyPriority.state.answer.set('kid-friendly')
 
 		expect(survey.properties.resultFresh.get())
