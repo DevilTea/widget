@@ -9,16 +9,22 @@
  * invoke `Table.selectRow`, not direct local selection state"). Keyboard activation (Enter/Space) below
  * calls the exact same `onRowClick` → `selectRow(id)` path as a pointer click, for the same reason.
  *
- * Issue #28 accessibility fix — ARIA pattern chosen for this table: `role="grid"` +
- * `role="row"`/`role="columnheader"`/`role="gridcell"` on every row/header-cell/data-cell, with
- * `tabindex="0"` and `aria-selected` on each data row. This is deliberately the *grid-as-selectable-
- * row-list* variant of the WAI-ARIA APG "Grid" pattern, not a full 2D-navigation grid: `aria-selected`
- * is only a valid state on `row` when the containing table's role is `grid`/`treegrid` (a plain
- * `role="table"`/native `<table>` row does not support it) — hence the role upgrade — but this renderer
- * does not add roving tabindex or arrow-key cell/row navigation, because selection here is row-level,
- * not cell-level, and rows are already reachable one at a time via Tab (each row is its own Tab stop).
- * Do not extend this into arrow-key navigation without first reconsidering the ARIA pattern — that
- * belongs to the real-browser contract suite (issue #28), not this renderer.
+ * Issue #28 accessibility fix — ARIA pattern chosen for this table: native table semantics
+ * (no `role` overrides anywhere in the markup below) plus keyboard-operable, focusable data rows and an
+ * `aria-current="true"` selection indication. PR #32 adversarial review round 1 rejected an earlier
+ * `role="grid"` + `role="row"`/`columnheader`/`gridcell` + `aria-selected` version of this renderer:
+ * `grid` is a *composite widget* role with its own mandatory keyboard contract (a single Tab stop into
+ * the widget, author-managed internal focus, Arrow/Home/End cell navigation) — adding the role without
+ * that contract is an invalid, not merely incomplete, use of it, and this table deliberately has no
+ * cell-level navigation to offer (selection here is row-level, reached by giving every row its own Tab
+ * stop). Since `aria-selected` requires exactly that `grid`/`treegrid`/`listbox`-family context to be
+ * valid, dropping the role also means dropping `aria-selected`. `aria-current` is the replacement: per
+ * WAI-ARIA 1.2 it is a global state valid on any element, is announced by screen readers, and expresses
+ * precisely "the current item within a set" — which is what a selected row is here. It is set to
+ * `"true"` only on the selected row; every other row omits the attribute entirely rather than carrying
+ * `aria-current="false"` (there is no "non-current" value in the `aria-current` enumeration — omission
+ * is the correct not-current representation). Do not reintroduce `role="grid"` without also implementing
+ * its full keyboard contract — that trade-off was deliberately rejected here.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { TablePlugin } from '../plugins/read-models'
@@ -73,15 +79,13 @@ function onRowKeydown(event: KeyboardEvent, row: Record<string, unknown>): void 
 	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '6px' })">
 		<table
 			v-if="!empty"
-			role="grid"
 			:class="pika({ width: '100%', borderCollapse: 'collapse', fontSize: '12px' })"
 		>
 			<thead>
-				<tr role="row">
+				<tr>
 					<th
 						v-for="column in columns"
 						:key="column.key"
-						role="columnheader"
 						:class="pika({ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--lab-color-border)', color: 'var(--lab-color-text-muted)', fontWeight: '600' })"
 					>
 						{{ column.label }}
@@ -92,9 +96,8 @@ function onRowKeydown(event: KeyboardEvent, row: Record<string, unknown>): void 
 				<tr
 					v-for="row in rows"
 					:key="String(rowId(row))"
-					role="row"
 					tabindex="0"
-					:aria-selected="rowId(row) === selectedRowId"
+					:aria-current="rowId(row) === selectedRowId ? 'true' : undefined"
 					:class="pika({ 'cursor': 'pointer', 'borderBottom': '1px solid var(--lab-color-border)', '$:focus-visible': { outline: '2px solid var(--lab-color-accent)', outlineOffset: '-2px' } })"
 					:style="{ background: rowId(row) === selectedRowId ? 'var(--lab-color-surface-alt)' : 'transparent' }"
 					@click="onRowClick(row)"
@@ -103,7 +106,6 @@ function onRowKeydown(event: KeyboardEvent, row: Record<string, unknown>): void 
 					<td
 						v-for="column in columns"
 						:key="column.key"
-						role="gridcell"
 						:class="pika({ padding: '6px 8px' })"
 					>
 						<span

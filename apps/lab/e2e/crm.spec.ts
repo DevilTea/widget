@@ -71,10 +71,13 @@ test('stage filter updates the table and the Visible deals KPI coherently', asyn
 		.toHaveText('1')
 })
 
-test('keyboard-selecting a row shows its detail and reflects aria-selected', async ({ page }) => {
+test('keyboard-selecting a row shows its detail and reflects aria-current', async ({ page }) => {
 	const row = dealRow(page, 'Aurora Systems')
+	// Native table semantics throughout (PR #32 review round 1: no `role="grid"` without its full
+	// keyboard contract) — an unselected row carries no `aria-current` attribute at all, not
+	// `aria-current="false"` (there is no "not current" value in the `aria-current` enumeration).
 	await expect(row)
-		.toHaveAttribute('aria-selected', 'false')
+		.not.toHaveAttribute('aria-current')
 
 	await row.focus()
 	await page.keyboard.press('Enter')
@@ -84,7 +87,7 @@ test('keyboard-selecting a row shows its detail and reflects aria-selected', asy
 		.getByText('Aurora Systems'))
 		.toBeVisible()
 	await expect(row)
-		.toHaveAttribute('aria-selected', 'true')
+		.toHaveAttribute('aria-current', 'true')
 })
 
 test('Change stage dialog: focus/Tab containment, Escape cancels without mutation, Save recomputes', async ({ page }) => {
@@ -160,7 +163,7 @@ test('Change stage dialog: focus/Tab containment, Escape cancels without mutatio
 		.nth(3))
 		.toHaveText('won')
 	await expect(dealRow(page, 'Aurora Systems'))
-		.toHaveAttribute('aria-selected', 'true')
+		.toHaveAttribute('aria-current', 'true')
 
 	// KPI/chart recompute through the same DealQuery/BarChart read models — never a renderer-local total.
 	await expect(metricValue(page, 'Weighted value')).not.toHaveText(weightedValueBefore)
