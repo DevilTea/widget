@@ -9,9 +9,24 @@
  * `tripDays` as a Property→Property dependency, so a `tripDays` failure cascades into their own
  * `property-dependency` failures automatically (issue #10 §12) — this module never re-detects that
  * failure itself.
+ *
+ * Issue #26 Finding 2 (GPT adversarial review round 1): every Property here must fail — via `addIssue`,
+ * never a silent `?? 0` fallback — whenever a genuinely missing (`null`) nullable answer is a real
+ * prerequisite for its computation. `adults`/`children`/`budget` are cleared to `null` by
+ * `SurveyNumberQuestion`'s own "empty input" State; `destination`/`travel-style` are cleared to `null`
+ * by `SurveyChoiceQuestion`'s "— select —" option (`../renderers/SurveyChoiceQuestionRenderer.vue`) — so
+ * every one of these `null`s is a real, user-reachable Preview state, not a defensive-only case. Treating
+ * a missing prerequisite as `0` used to make the derived metric look like a legitimate reading of "zero"
+ * rather than "unknown/unavailable," which is exactly the fabricated-value defect issue #26 exists to
+ * fix — the earlier revision only fixed this for `tripDays`'s own date-ordering failure and the
+ * dependency-propagated failures it cascades into, leaving these other nullable leaf reads unfixed.
+ * `useProperties()` projects any failed Property to `null` regardless of why it failed, so
+ * `TripMetricsRenderer.vue` needs no renderer-side distinction between "a dependency failed" and "a
+ * direct nullable answer is missing" — both already render as `'Unavailable'`.
  */
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { Destination, TravelStyle } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { computeTripDays, estimateBaselineCost, isDestination, isPlainObject, isTravelStyle, isValidCalendarDateString } from '../domain'
 
@@ -103,11 +118,21 @@ export const TripMetricsPlugin = createWidgetPlugin('TripMetrics')
 					children: dep.widget(config.childrenId).state.get('answer')
 						.validate(isNullableNumber),
 				}),
-				compute: ({ deps }) => {
+				compute: ({ deps, addIssue }) => {
 					const adultsResult = deps.adults()
 					const childrenResult = deps.children()
-					const adults = adultsResult.success ? (adultsResult.value ?? 0) : 0
-					const children = childrenResult.success ? (childrenResult.value ?? 0) : 0
+					if (!adultsResult.success || !childrenResult.success)
+						return 0
+
+					const adults = adultsResult.value
+					const children = childrenResult.value
+					// `null` is a genuinely missing answer (a cleared number input), not a "zero travelers"
+					// reading — fail rather than silently treat it as 0 (issue #26 Finding 2).
+					if (adults === null || children === null) {
+						addIssue({ message: 'Number of adults and number of children are both required to compute the traveler count.' })
+						return 0
+					}
+
 					return adults + children
 				},
 			})
@@ -118,46 +143,79 @@ export const TripMetricsPlugin = createWidgetPlugin('TripMetrics')
 					tripDays: dep.self.properties.get('tripDays'),
 					travelerCount: dep.self.properties.get('travelerCount'),
 				}),
-				compute: ({ deps }) => {
+				compute: ({ deps, addIssue }) => {
 					const budgetResult = deps.budget()
+					// A `tripDays`/`travelerCount` failure already reports its own `property-dependency`
+					// issue on this Property automatically the moment it is read (issue #10 §12) — this
+					// module never re-detects that failure itself.
 					const tripDaysResult = deps.tripDays()
 					const travelerCountResult = deps.travelerCount()
 					if (!budgetResult.success || !tripDaysResult.success || !travelerCountResult.success)
 						return 0
 
-					const budget = budgetResult.value ?? 0
+					const budget = budgetResult.value
+					// `null` is a genuinely missing answer (a cleared budget input) — fail rather than
+					// silently treat it as 0 (issue #26 Finding 2).
+					if (budget === null) {
+						addIssue({ message: 'Trip budget is required to compute budget per person per day.' })
+						return 0
+					}
+
+					// `dep.self.properties.get(...)` types its value as possibly `null` unconditionally (a
+					// framework-typing artifact of self-reads, not a real outcome here): `tripDays`/
+					// `travelerCount` are declared `number` — never `number | null` — in their own
+					// interfaces, and neither Property's own `compute` ever returns `null` on success, so
+					// `?? 0` below can never actually substitute a value; it only satisfies the type
+					// checker for a branch that cannot be reached at runtime.
 					const tripDays = tripDaysResult.value ?? 0
 					const travelerCount = travelerCountResult.value ?? 0
-					if (tripDays <= 0 || travelerCount <= 0)
+					// `tripDays` never legitimately succeeds at <= 0 (its own `compute` fails whenever
+					// `return` is not strictly after `departure`), but `travelerCount` can legitimately
+					// succeed at exactly 0 under a config that allows a 0-adults answer — dividing by zero
+					// travelers/days is not a valid "0" reading either, so fail rather than fabricate one
+					// (issue #26 Finding 2).
+					if (tripDays <= 0 || travelerCount <= 0) {
+						addIssue({ message: 'Trip days and traveler count must both be greater than zero to compute budget per person per day.' })
 						return 0
+					}
 					return budget / (travelerCount * tripDays)
 				},
 			})
 			.estimatedBaselineCost({
 				registerDeps: ({ dep, config }) => ({
 					destination: dep.widget(config.destinationId).state.get('answer')
-						.validate((value): value is string | null => value === null || isDestination(value)),
+						.validate((value): value is Destination | null => value === null || isDestination(value)),
 					travelStyle: dep.widget(config.travelStyleId).state.get('answer')
-						.validate((value): value is string | null => value === null || isTravelStyle(value)),
+						.validate((value): value is TravelStyle | null => value === null || isTravelStyle(value)),
 					tripDays: dep.self.properties.get('tripDays'),
 					travelerCount: dep.self.properties.get('travelerCount'),
 				}),
-				compute: ({ deps }) => {
+				compute: ({ deps, addIssue }) => {
 					const destinationResult = deps.destination()
 					const travelStyleResult = deps.travelStyle()
+					// A `tripDays`/`travelerCount` failure already reports its own `property-dependency`
+					// issue on this Property automatically the moment it is read (issue #10 §12) — this
+					// module never re-detects that failure itself.
 					const tripDaysResult = deps.tripDays()
 					const travelerCountResult = deps.travelerCount()
 					if (!destinationResult.success || !travelStyleResult.success || !tripDaysResult.success || !travelerCountResult.success)
 						return 0
 
+					// `.validate()` above already only lets `null` or a genuine `Destination`/`TravelStyle`
+					// through, so `null` here is the one remaining case: a cleared/unselected choice
+					// ("— select —") — a genuinely missing answer, not a "zero-cost" reading.
 					const destination = destinationResult.value
 					const travelStyle = travelStyleResult.value
-					if (destination === null || travelStyle === null || !isDestination(destination) || !isTravelStyle(travelStyle))
+					if (destination === null || travelStyle === null) {
+						addIssue({ message: 'Destination and travel style are both required to estimate the baseline cost.' })
 						return 0
+					}
 
-					const tripDays = tripDaysResult.value ?? 0
-					const travelerCount = travelerCountResult.value ?? 0
-					return estimateBaselineCost(destination, travelStyle, travelerCount, tripDays)
+					// See `budgetPerPersonPerDay`'s comment: `?? 0` here only satisfies the type checker
+					// for a self-read branch that cannot actually occur (`tripDays`/`travelerCount` never
+					// return `null` on success) — a 0-traveler/0-day estimate is itself a legitimate `0`
+					// (multiplication, not division), so no additional failure guard is needed here.
+					return estimateBaselineCost(destination, travelStyle, travelerCountResult.value ?? 0, tripDaysResult.value ?? 0)
 				},
 			}))
 	.done()

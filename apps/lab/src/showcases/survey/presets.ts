@@ -22,6 +22,7 @@ function surveySource(childrenDefault: number): string {
   "type": "TripSurvey",
   "config": {
     "resetQuestionIds": ["departure", "return", "adults", "children", "budget", "destination", "travel-style", "family-priority"],
+    "resultInputQuestionIds": ["departure", "return", "adults", "children", "budget", "destination", "travel-style", "family-priority"],
     "readinessId": "trip-readiness",
     "recommendationId": "trip-recommendation"
   },

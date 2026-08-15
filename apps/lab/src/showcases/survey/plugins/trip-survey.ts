@@ -21,21 +21,27 @@
  * current answers and is what the renderer actually consults to decide whether the retained `result`
  * is still trustworthy.
  *
- * Which questions feed `resultInputs`/`resultFresh`: this reuses `resetQuestionIds` rather than adding a
- * second config key. `resetQuestionIds` and "every question `generateResult()`'s answer set depends on"
- * happen to be the exact same 8 leaf questions in every preset this Lab ships today (`presets.ts`) —
- * every answer `reset()` restores is also an answer that can change the computed Recommendation. Reusing
- * the existing key avoids a second config surface that would silently drift out of sync with the first;
- * the trade-off (documented here, not hidden) is that this equivalence is an assumption, not an enforced
- * invariant — a future preset that widens `resetQuestionIds` beyond the answer-input set (or vice versa)
- * would need a dedicated key at that point, not a silent reinterpretation of this one.
+ * Which questions feed `resultInputs`/`resultFresh`: a dedicated `resultInputQuestionIds` config key,
+ * deliberately separate from `resetQuestionIds`. An earlier revision reused `resetQuestionIds` on the
+ * observation that both id lists happen to name the same 8 leaf questions in every preset this Lab ships
+ * — but that equivalence was never enforced, only assumed, and `resetQuestionIds`' actual meaning is
+ * "what `reset()` restores to defaults," a Method-effect concern with no necessary relationship to "what
+ * a past `generateResult()` call's answer set was." Because Widget Lab Source is directly editable, that
+ * assumption is falsifiable at runtime, not just in some hypothetical future preset: editing
+ * `resetQuestionIds` down to a strict subset (e.g. dropping `"return"`, while `TripMetrics`/
+ * `TripReadiness`/`TripRecommendation` keep depending on `return` exactly as before) stays a perfectly
+ * valid Survey, yet would silently narrow which answer changes `resultFresh` notices — a stale
+ * Recommendation could then read as fresh purely because of an edit to unrelated reset behavior. Giving
+ * freshness its own explicit semantic input set closes that coupling: `resetQuestionIds` and
+ * `resultInputQuestionIds` may still name the same questions in every shipped preset, but each config
+ * key now means exactly one thing and edits to one can never silently change the other's behavior.
  *
- * `resultFresh` is deliberately an over-approximation: it flips to `false` the moment any tracked
- * answer changes, even one the generated recommendation never actually read (e.g. `family-priority`
- * while `children === 0`, which `TripReadiness`/`TripRecommendation` both ignore while hidden — see
- * `trip-readiness.ts`'s file header). Precisely tracking which answers a specific past computation
- * actually consumed is not part of this checkpoint's semantic model; "possibly stale, safe to say so"
- * is preferred over silently under-reporting staleness.
+ * `resultFresh` is deliberately an over-approximation: it flips to `false` the moment any
+ * `resultInputQuestionIds`-tracked answer changes, even one the generated recommendation never actually
+ * read (e.g. `family-priority` while `children === 0`, which `TripReadiness`/`TripRecommendation` both
+ * ignore while hidden — see `trip-readiness.ts`'s file header). Precisely tracking which answers a
+ * specific past computation actually consumed is not part of this checkpoint's semantic model; "possibly
+ * stale, safe to say so" is preferred over silently under-reporting staleness.
  */
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
@@ -45,6 +51,13 @@ import { isPlainObject, isTripRecommendationResult } from '../domain'
 
 export interface TripSurveyConfig {
 	readonly resetQuestionIds: readonly string[]
+	/**
+	 * The semantic input set for `resultInputs`/`resultFresh` (issue #26 Finding 1) — deliberately a
+	 * separate key from `resetQuestionIds` (see the file header "Which questions feed..." paragraph):
+	 * reset behavior and recommendation-freshness tracking are different concerns that must not share an
+	 * unenforced accidental equivalence.
+	 */
+	readonly resultInputQuestionIds: readonly string[]
 	readonly readinessId: string
 	readonly recommendationId: string
 }
@@ -72,9 +85,14 @@ export interface TripSurveyInterfaces extends WidgetInterfaces {
 	}
 }
 
+function isStringArray(input: unknown): input is readonly string[] {
+	return Array.isArray(input) && input.every(id => typeof id === 'string')
+}
+
 function isTripSurveyConfig(input: unknown): input is TripSurveyConfig {
 	return isPlainObject(input)
-		&& Array.isArray(input.resetQuestionIds) && input.resetQuestionIds.every(id => typeof id === 'string')
+		&& isStringArray(input.resetQuestionIds)
+		&& isStringArray(input.resultInputQuestionIds)
 		&& typeof input.readinessId === 'string'
 		&& typeof input.recommendationId === 'string'
 }
@@ -107,6 +125,7 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 		validate: (input): input is TripSurveyConfig => isTripSurveyConfig(input),
 		resolve: raw => ({
 			resetQuestionIds: raw?.resetQuestionIds ?? [],
+			resultInputQuestionIds: raw?.resultInputQuestionIds ?? [],
 			readinessId: raw?.readinessId ?? '',
 			recommendationId: raw?.recommendationId ?? '',
 		}),
@@ -129,12 +148,13 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 	.properties(properties =>
 		properties.resultFresh({
 			// Self-state reads of the exact same snapshot pair `generateResult()` writes, plus one
-			// self-state `answer` read per configured question (see the file header for the
-			// `resetQuestionIds`-reuse rationale) — never a renderer-side comparison.
+			// self-state `answer` read per `resultInputQuestionIds` question (the dedicated freshness
+			// input set — see the file header "Which questions feed..." paragraph) — never a
+			// renderer-side comparison, and never `resetQuestionIds`.
 			registerDeps: ({ dep, config }) => ({
 				result: dep.self.state.get('result'),
 				resultInputs: dep.self.state.get('resultInputs'),
-				answers: config.resetQuestionIds.map(id => dep.widget(id).state.get('answer')),
+				answers: config.resultInputQuestionIds.map(id => dep.widget(id).state.get('answer')),
 			}),
 			compute: ({ deps, config }) => {
 				const resultResult = deps.result()
@@ -155,14 +175,14 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 					return false
 
 				const currentAnswers: Record<string, unknown> = {}
-				config.resetQuestionIds.forEach((id, index) => {
+				config.resultInputQuestionIds.forEach((id, index) => {
 					const answerResult = deps.answers[index]!()
 					currentAnswers[id] = answerResult.success ? answerResult.value : null
 				})
 
 				// Over-approximating on purpose (see file header): any tracked answer change marks the
 				// stored `result` stale, even one the recommendation did not actually read.
-				return answersMatch(storedInputs, currentAnswers, config.resetQuestionIds)
+				return answersMatch(storedInputs, currentAnswers, config.resultInputQuestionIds)
 			},
 		}))
 	.methods(methods =>
@@ -213,10 +233,11 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 					phase: dep.self.state.get('phase'),
 					recommendation: dep.widget(config.recommendationId).properties.get('result')
 						.validate(isTripRecommendationResult),
-					// One `answer` read per configured question (issue #26 Finding 1) — captured
-					// alongside `result` so the stored `resultInputs` snapshot always reflects exactly
-					// the answers `result` was computed from in this same transaction.
-					answers: config.resetQuestionIds.map(id => dep.widget(id).state.get('answer')),
+					// One `answer` read per `resultInputQuestionIds` question (issue #26 Finding 1; kept
+					// separate from `resetQuestionIds` — see the file header) — captured alongside
+					// `result` so the stored `resultInputs` snapshot always reflects exactly the answers
+					// `result` was computed from in this same transaction.
+					answers: config.resultInputQuestionIds.map(id => dep.widget(id).state.get('answer')),
 					setResult: dep.self.state.set('result'),
 					setResultInputs: dep.self.state.set('resultInputs'),
 					setPhase: dep.self.state.set('phase'),
@@ -237,7 +258,7 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 						return null
 
 					const resultInputs: Record<string, unknown> = {}
-					config.resetQuestionIds.forEach((id, index) => {
+					config.resultInputQuestionIds.forEach((id, index) => {
 						const answerResult = deps.answers[index]!()
 						resultInputs[id] = answerResult.success ? answerResult.value : null
 					})

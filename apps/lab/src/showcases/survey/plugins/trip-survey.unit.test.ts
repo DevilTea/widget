@@ -295,6 +295,50 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 	})
 })
 
+describe('tripSurvey.resultFresh is decoupled from resetQuestionIds (issue #26, GPT adversarial review round 1)', () => {
+	// Reproduction from the review: a Source edit that narrows `resetQuestionIds` to a strict subset of
+	// `resultInputQuestionIds` must remain a fully valid, functioning Survey — and `resultFresh` must
+	// still track every `resultInputQuestionIds` question regardless of what `resetQuestionIds` says.
+	function createRuntimeWithNarrowedResetSet() {
+		const definition = JSON.parse(defaultSurveyPreset.sourceText) as { config: { resetQuestionIds: string[], resultInputQuestionIds: string[] } }
+		definition.config.resetQuestionIds = definition.config.resetQuestionIds.filter(id => id !== 'return')
+		expect(definition.config.resultInputQuestionIds)
+			.toContain('return')
+		return createSurveyRuntime(JSON.stringify(definition))
+	}
+
+	it('resultFresh still flips false when "return" changes, even though resetQuestionIds no longer includes it', () => {
+		const { runtime } = createRuntimeWithNarrowedResetSet()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+		const returnQuestion = widgetOfType(runtime, 'return', 'SurveyDateQuestion')
+
+		survey.methods.submit()
+		survey.methods.generateResult()
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: true })
+
+		returnQuestion.state.answer.set('2027-04-20')
+
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: false })
+	})
+
+	it('reset() only restores the narrowed resetQuestionIds set, leaving "return" untouched', () => {
+		const { runtime } = createRuntimeWithNarrowedResetSet()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+		const returnQuestion = widgetOfType(runtime, 'return', 'SurveyDateQuestion')
+
+		returnQuestion.state.answer.set('2027-04-20')
+		survey.methods.reset()
+
+		// "return" is deliberately excluded from this variant's resetQuestionIds, so reset() must not
+		// restore it — proving resetQuestionIds and resultInputQuestionIds are genuinely independent
+		// config keys, not just two names for the same list.
+		expect(returnQuestion.state.answer.get())
+			.toBe('2027-04-20')
+	})
+})
+
 describe('presets.ts preset ids', () => {
 	it('exposes the canonical default preset first', () => {
 		expect(surveyPresets[0])
