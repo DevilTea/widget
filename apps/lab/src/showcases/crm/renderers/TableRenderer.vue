@@ -17,14 +17,24 @@
  * the widget, author-managed internal focus, Arrow/Home/End cell navigation) — adding the role without
  * that contract is an invalid, not merely incomplete, use of it, and this table deliberately has no
  * cell-level navigation to offer (selection here is row-level, reached by giving every row its own Tab
- * stop). Since `aria-selected` requires exactly that `grid`/`treegrid`/`listbox`-family context to be
- * valid, dropping the role also means dropping `aria-selected`. `aria-current` is the replacement: per
- * WAI-ARIA 1.2 it is a global state valid on any element, is announced by screen readers, and expresses
- * precisely "the current item within a set" — which is what a selected row is here. It is set to
- * `"true"` only on the selected row; every other row omits the attribute entirely rather than carrying
- * `aria-current="false"` (there is no "non-current" value in the `aria-current` enumeration — omission
- * is the correct not-current representation). Do not reintroduce `role="grid"` without also implementing
- * its full keyboard contract — that trade-off was deliberately rejected here.
+ * stop).
+ *
+ * PR #32 round 2 correction: per WAI-ARIA 1.2, `row`'s allowed containing roles are `table`, `grid`,
+ * `rowgroup`, and `treegrid` (https://www.w3.org/TR/wai-aria/#row), and `row` supports the
+ * `aria-selected` state in any of them — so, contrary to an earlier version of this comment,
+ * `aria-selected` on a plain native `<table>` row is not actually spec-invalid. The real reason to
+ * prefer `aria-current` here is the round-1 review's underlying intent, not a hard technical
+ * requirement: `aria-selected` is documented as part of composite selection-widget patterns
+ * (`grid`/`listbox`/`tree`/`tablist`, ...), and this table deliberately avoids advertising any of that
+ * machinery on what is otherwise a plain native table. `aria-current`
+ * (https://www.w3.org/TR/wai-aria/#aria-current) says exactly what is true here — "the current item
+ * within a set" — with no composite-widget connotation. It is set to `"true"` only on the selected row;
+ * every other row omits the attribute rather than writing `aria-current="false"` explicitly —
+ * `aria-current`'s spec-defined default value is already `"false"`, and an element with no `aria-current`
+ * attribute computes to that default (not exposed to assistive technology) automatically, so omission is
+ * simply relying on the documented default, not avoiding some unsupported "false" state. Do not
+ * reintroduce `role="grid"` without also implementing its full keyboard contract — that trade-off was
+ * deliberately rejected here.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { TablePlugin } from '../plugins/read-models'

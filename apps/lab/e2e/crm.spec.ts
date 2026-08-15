@@ -71,23 +71,54 @@ test('stage filter updates the table and the Visible deals KPI coherently', asyn
 		.toHaveText('1')
 })
 
-test('keyboard-selecting a row shows its detail and reflects aria-current', async ({ page }) => {
-	const row = dealRow(page, 'Aurora Systems')
+test('keyboard-selecting rows with Enter and Space both drive Table.selectedRowId, moving aria-current and the detail panel without scrolling the page', async ({ page }) => {
+	const auroraRow = dealRow(page, 'Aurora Systems')
+	const borealisRow = dealRow(page, 'Borealis Retail')
+	const detailPanelCompany = () => page.getByText('Deal details')
+		.locator('..')
+		.locator('dd')
+		.first()
+
 	// Native table semantics throughout (PR #32 review round 1: no `role="grid"` without its full
-	// keyboard contract) — an unselected row carries no `aria-current` attribute at all, not
-	// `aria-current="false"` (there is no "not current" value in the `aria-current` enumeration).
-	await expect(row)
+	// keyboard contract) — an unselected row carries no `aria-current` attribute at all. Per WAI-ARIA
+	// 1.2 (https://www.w3.org/TR/wai-aria/#aria-current), `aria-current`'s spec-defined default value is
+	// already `"false"`, and an element with no `aria-current` attribute computes to that default (not
+	// exposed to assistive technology) automatically — omission relies on the documented default rather
+	// than there being no `"false"` value at all (PR #32 round 2 correction).
+	await expect(auroraRow)
+		.not.toHaveAttribute('aria-current')
+	await expect(borealisRow)
 		.not.toHaveAttribute('aria-current')
 
-	await row.focus()
+	// Enter activates the focused row through the exact same `Table.selectRow(id)` Method a pointer
+	// click uses.
+	await auroraRow.focus()
 	await page.keyboard.press('Enter')
 
-	await expect(page.getByText('Deal details')
-		.locator('..')
-		.getByText('Aurora Systems'))
-		.toBeVisible()
-	await expect(row)
+	await expect(detailPanelCompany())
+		.toHaveText('Aurora Systems')
+	await expect(auroraRow)
 		.toHaveAttribute('aria-current', 'true')
+	await expect(borealisRow)
+		.not.toHaveAttribute('aria-current')
+
+	// Space must activate a *different* focused row through the same Method — and must not scroll the
+	// page as Space's native default action would on an ordinary focused, non-form-control element.
+	const scrollYBeforeSpace = await page.evaluate(() => window.scrollY)
+	await borealisRow.focus()
+	await page.keyboard.press('Space')
+	const scrollYAfterSpace = await page.evaluate(() => window.scrollY)
+	expect(scrollYAfterSpace)
+		.toBe(scrollYBeforeSpace)
+
+	await expect(detailPanelCompany())
+		.toHaveText('Borealis Retail')
+	await expect(borealisRow)
+		.toHaveAttribute('aria-current', 'true')
+	// Selection is single-row: activating Borealis moves `aria-current` off Aurora, driven by the same
+	// Runtime-backed `Table.selectedRowId` State, never renderer-local selection.
+	await expect(auroraRow)
+		.not.toHaveAttribute('aria-current')
 })
 
 test('Change stage dialog: focus/Tab containment, Escape cancels without mutation, Save recomputes', async ({ page }) => {

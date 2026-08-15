@@ -69,7 +69,9 @@ describe('tableRenderer', () => {
 		expect(currentRows[0]?.text())
 			.toContain('Aurora Systems')
 
-		// Every other row still has no `aria-current` attribute (not `"false"` — see file header).
+		// Every other row still has no `aria-current` attribute — relying on its spec-defined default of
+		// `"false"` (not exposed to assistive technology) rather than writing `aria-current="false"`
+		// explicitly (see file header, PR #32 round 2 correction).
 		for (const tr of dataRows) {
 			if (tr.text()
 				.includes('Aurora Systems')) {
