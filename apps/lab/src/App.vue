@@ -4,11 +4,14 @@ import LabHeader from './components/LabHeader.vue'
 import Workbench from './components/Workbench.vue'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
 import { disposeLayoutWorker } from './graph/layout-client'
+import { installLabTestSeam } from './lab-test-seam'
 import 'dockview-vue/dist/styles/dockview.css'
 import './styles/dockview-theme.css'
 
 const store = createLabStore()
 provide(LabStoreKey, store)
+// Issue #28 browser-contract seam (`?lab-test` only; inert otherwise) — see `lab-test-seam.ts`.
+installLabTestSeam(store)
 
 function onKeydown(event: KeyboardEvent): void {
 	// Cmd/Ctrl+Enter is a UX shortcut for the same Apply command the header button invokes.
