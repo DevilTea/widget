@@ -10,12 +10,23 @@
  * `generateResult()`'s own Method rule (checkpoint §5), and gating the button here would duplicate that
  * business rule in Vue and suppress the `method-result` failure path the checkpoint intends to be
  * exercisable — the button stays clickable in every phase; the Method alone decides success/failure.
+ *
+ * Issue #26 Finding 1/4: whether the retained `result` snapshot is still trustworthy is the semantic
+ * `resultFresh` Property (`../plugins/trip-survey.ts`), read here through `useProperties()` — this
+ * component only presents that fact, it never recomputes or compares answers itself. Method-issue
+ * copy (Finding 4) is left as plain `issue.message` text intentionally: `submit`/`generateResult`
+ * dependency failures already wrap their target Property's own per-requirement message 1:1 (e.g.
+ * "Departure date is required."), which is already specific and actionable — rewriting it through the
+ * same "Unavailable because X failed" provenance phrasing used by `TripMetricsRenderer` (Finding 3)
+ * would only discard that detail for a generic mechanical description, since (unlike TripMetrics'
+ * sibling-metric duplication) there is no multi-row duplicate-appearance problem to solve here.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { TripSurveyPlugin } from '../plugins/trip-survey'
 
-const { useState, useMethods, useMethodIssues, WidgetSlot } = useWidget(TripSurveyPlugin)
+const { useState, useProperties, useMethods, useMethodIssues, WidgetSlot } = useWidget(TripSurveyPlugin)
 const { phase, result } = useState()
+const { resultFresh } = useProperties()
 const { reset, submit, generateResult } = useMethods()
 const methodIssues = useMethodIssues()
 const { submit: submitIssues, generateResult: generateResultIssues } = methodIssues
@@ -79,11 +90,25 @@ function onGenerateResult(): void {
 
 		<section
 			v-if="result"
-			:class="pika({ padding: '10px 12px', border: '1px solid var(--lab-color-accent)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface)' })"
+			:class="pika({ padding: '10px 12px', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface)' })"
+			:style="{ border: `1px solid ${resultFresh ? 'var(--lab-color-accent)' : 'var(--lab-color-warning)'}` }"
 		>
-			<h3 :class="pika({ margin: '0 0 6px', fontSize: '13px' })">
+			<h3 :class="pika({ margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' })">
 				Recommendation
+				<span
+					v-if="!resultFresh"
+					:class="pika({ fontSize: '10px', fontWeight: 'normal', padding: '1px 6px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-warning)' })"
+				>
+					Stale
+				</span>
 			</h3>
+			<p
+				v-if="!resultFresh"
+				:class="pika({ margin: '0 0 8px', fontSize: '11px', color: 'var(--lab-color-warning)' })"
+			>
+				Generated from previous answers — this recommendation does not reflect the current answers
+				(or any issues shown above). Submit and generate again to refresh it.
+			</p>
 			<p :class="pika({ margin: '0 0 4px', fontSize: '12px' })">
 				Destination: <strong>{{ result.destination }}</strong> · requested style: {{ result.requestedStyle }} · recommended style: <strong>{{ result.recommendedStyle }}</strong> · fit: {{ result.fit }}
 			</p>

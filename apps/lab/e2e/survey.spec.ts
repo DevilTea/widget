@@ -56,6 +56,22 @@ test('invalid date flow surfaces the issue and correcting it recovers live metri
 		.first())
 		.toBeVisible()
 
+	// The dependent metrics (issue #26 Finding 2) must show an explicit "Unavailable" representation,
+	// never a fabricated `0.00` — and (Finding 3) their own line is an attributed "Unavailable because
+	// Trip days failed." rather than a repeat of the root-cause message.
+	const budgetPerPersonPerDayValue = page.locator('dt', { hasText: 'Budget / person / day' })
+		.locator('xpath=following-sibling::dd[1]')
+	const estimatedBaselineCostValue = page.locator('dt', { hasText: 'Estimated baseline cost' })
+		.locator('xpath=following-sibling::dd[1]')
+	await expect(budgetPerPersonPerDayValue)
+		.toHaveText('Unavailable')
+	await expect(estimatedBaselineCostValue)
+		.toHaveText('Unavailable')
+	await expect(page.getByText('Unavailable because Trip days failed.'))
+		.toHaveCount(2)
+	await expect(page.getByText('0.00'))
+		.toHaveCount(0)
+
 	await returnDate.fill('2027-04-20')
 	await returnDate.press('Tab')
 	await expect(page.getByText(issueText))
@@ -66,12 +82,48 @@ test('invalid date flow surfaces the issue and correcting it recovers live metri
 		.locator('xpath=following-sibling::dd[1]')
 	await expect(tripDaysValue)
 		.toHaveText('11')
+	await expect(budgetPerPersonPerDayValue)
+		.not.toHaveText('Unavailable')
 })
 
-test.fixme('mutating an answer after Generate result shows an explicit stale-result state (issue #26)', async () => {
-	// Today, `TripSurvey.result` (the "Recommendation" block) simply keeps whatever it last computed —
-	// there is no explicit "stale" presentation once a later answer change would produce a different
-	// result. Confirmed manually: changing Return date after Generate result leaves the Recommendation
-	// block's trip-days figure showing the pre-change value while the live "Live estimate" section above
-	// it already reflects the new answer.
+test('mutating an answer after Generate result shows an explicit stale-result state (issue #26)', async ({ page }) => {
+	await page.getByRole('button', { name: 'Submit' })
+		.click()
+	await page.getByRole('button', { name: 'Generate result' })
+		.click()
+	await expect(page.getByRole('heading', { name: 'Recommendation' }))
+		.toBeVisible()
+
+	const tripDaysLine = page.getByText('Trip days: 5 · travelers:')
+	await expect(tripDaysLine)
+		.toBeVisible()
+	await expect(page.getByText('Stale'))
+		.toHaveCount(0)
+
+	// Default Return date is 2027-04-14 (showcases/survey/presets.ts) — change it to a later, still-valid
+	// date so the tracked answer set differs from the one `result`/`resultInputs` were captured from.
+	const returnDate = page.getByLabel('Return date')
+	await returnDate.fill('2027-04-24')
+	await returnDate.press('Tab')
+
+	await expect(page.getByText('Stale'))
+		.toBeVisible()
+	await expect(page.getByText('Generated from previous answers'))
+		.toBeVisible()
+	// The old snapshot is retained, not cleared — its stale figures stay on screen.
+	await expect(tripDaysLine)
+		.toBeVisible()
+
+	await page.getByRole('button', { name: 'Submit' })
+		.click()
+	await page.getByRole('button', { name: 'Generate result' })
+		.click()
+
+	await expect(page.getByText('Stale'))
+		.toHaveCount(0)
+	await expect(page.getByText('Generated from previous answers'))
+		.toHaveCount(0)
+	// computeTripDays('2027-04-10', '2027-04-24') === 15 (survey/domain.ts).
+	await expect(page.getByText('Trip days: 15 · travelers:'))
+		.toBeVisible()
 })
