@@ -11,7 +11,8 @@
 		"preview": "vite preview",
 		"typecheck": "pnpm run pika:codegen && vue-tsc --project ./tsconfig.app.json --noEmit",
 		"pika:codegen": "node ./scripts/pika-codegen.mjs",
-		"test": "vitest run --config vitest.config.ts"
+		"test": "vitest run --config vitest.config.ts",
+		"test:browser": "playwright test"
 	},
 	"dependencies": {
 		"@deviltea/widget-core": "workspace:*",
@@ -29,6 +30,7 @@
 		"@pikacss/core": "catalog:",
 		"@pikacss/integration": "catalog:",
 		"@pikacss/unplugin-pikacss": "catalog:",
+		"@playwright/test": "catalog:",
 		"@types/node": "catalog:",
 		"@vue/test-utils": "catalog:",
 		"happy-dom": "catalog:",

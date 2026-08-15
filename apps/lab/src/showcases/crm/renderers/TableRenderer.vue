@@ -6,7 +6,35 @@
  * still-valid edited Source setting `rowIdKey` to another string-valued field must key rows and call
  * `selectRow()` with that configured key, not a hardcoded `row.id`). Row click always calls
  * `Table.selectRow(id)` — never local selection state (checkpoint §5 "renderer selection callbacks
- * invoke `Table.selectRow`, not direct local selection state").
+ * invoke `Table.selectRow`, not direct local selection state"). Keyboard activation (Enter/Space) below
+ * calls the exact same `onRowClick` → `selectRow(id)` path as a pointer click, for the same reason.
+ *
+ * Issue #28 accessibility fix — ARIA pattern chosen for this table: native table semantics
+ * (no `role` overrides anywhere in the markup below) plus keyboard-operable, focusable data rows and an
+ * `aria-current="true"` selection indication. PR #32 adversarial review round 1 rejected an earlier
+ * `role="grid"` + `role="row"`/`columnheader`/`gridcell` + `aria-selected` version of this renderer:
+ * `grid` is a *composite widget* role with its own mandatory keyboard contract (a single Tab stop into
+ * the widget, author-managed internal focus, Arrow/Home/End cell navigation) — adding the role without
+ * that contract is an invalid, not merely incomplete, use of it, and this table deliberately has no
+ * cell-level navigation to offer (selection here is row-level, reached by giving every row its own Tab
+ * stop).
+ *
+ * PR #32 round 2 correction: per WAI-ARIA 1.2, `row`'s allowed containing roles are `table`, `grid`,
+ * `rowgroup`, and `treegrid` (https://www.w3.org/TR/wai-aria/#row), and `row` supports the
+ * `aria-selected` state in any of them — so, contrary to an earlier version of this comment,
+ * `aria-selected` on a plain native `<table>` row is not actually spec-invalid. The real reason to
+ * prefer `aria-current` here is the round-1 review's underlying intent, not a hard technical
+ * requirement: `aria-selected` is documented as part of composite selection-widget patterns
+ * (`grid`/`listbox`/`tree`/`tablist`, ...), and this table deliberately avoids advertising any of that
+ * machinery on what is otherwise a plain native table. `aria-current`
+ * (https://www.w3.org/TR/wai-aria/#aria-current) says exactly what is true here — "the current item
+ * within a set" — with no composite-widget connotation. It is set to `"true"` only on the selected row;
+ * every other row omits the attribute rather than writing `aria-current="false"` explicitly —
+ * `aria-current`'s spec-defined default value is already `"false"`, and an element with no `aria-current`
+ * attribute computes to that default (not exposed to assistive technology) automatically, so omission is
+ * simply relying on the documented default, not avoiding some unsupported "false" state. Do not
+ * reintroduce `role="grid"` without also implementing its full keyboard contract — that trade-off was
+ * deliberately rejected here.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { TablePlugin } from '../plugins/read-models'
@@ -43,6 +71,18 @@ function onRowClick(row: Record<string, unknown>): void {
 	if (typeof id === 'string')
 		selectRow(id)
 }
+
+function onRowKeydown(event: KeyboardEvent, row: Record<string, unknown>): void {
+	// Enter and Space both activate a focused row, matching the native button-activation contract.
+	// Space's default browser action (page scroll) must be suppressed — Enter has no such default.
+	if (event.key === 'Enter') {
+		onRowClick(row)
+	}
+	else if (event.key === ' ' || event.key === 'Spacebar') {
+		event.preventDefault()
+		onRowClick(row)
+	}
+}
 </script>
 
 <template>
@@ -66,9 +106,12 @@ function onRowClick(row: Record<string, unknown>): void {
 				<tr
 					v-for="row in rows"
 					:key="String(rowId(row))"
-					:class="pika({ cursor: 'pointer', borderBottom: '1px solid var(--lab-color-border)' })"
+					tabindex="0"
+					:aria-current="rowId(row) === selectedRowId ? 'true' : undefined"
+					:class="pika({ 'cursor': 'pointer', 'borderBottom': '1px solid var(--lab-color-border)', '$:focus-visible': { outline: '2px solid var(--lab-color-accent)', outlineOffset: '-2px' } })"
 					:style="{ background: rowId(row) === selectedRowId ? 'var(--lab-color-surface-alt)' : 'transparent' }"
 					@click="onRowClick(row)"
+					@keydown="onRowKeydown($event, row)"
 				>
 					<td
 						v-for="column in columns"
