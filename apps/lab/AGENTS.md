@@ -1,24 +1,36 @@
 # AGENTS.md — widget-lab
 
+Current-state operating guide for this app. GitHub issue #13 is the canonical Widget Lab decision
+log (architecture checkpoints, accepted trade-offs, historical rationale); issue #10 is the semantic
+authority for `@deviltea/widget-core` that this app never reinterprets. This file describes what is
+true in the repository right now so a fresh agent can work without replaying the issue timeline —
+when it conflicts with repo reality, fix this file; when it conflicts with #10/#13 decisions, the
+issues win.
+
 ## Scope and layout
 
-Private, never-published workspace application: the interactive Widget Lab shell — workbench, live
-JSON source editing with an explicit Apply lifecycle, Preview, and readonly Blueprint/Runtime/Dependency
-Graph inspectors — over `@deviltea/widget-core` / `@deviltea/widget-vue`. Normative source: GitHub
-issue #13's Widget Lab Phase 4 and Phase 5 comments (package/app boundaries, implementation stack,
-default workbench layout, Blueprint Inspector model, inspector panel interaction contract, Source Apply
-lifecycle, readonly-inspector consumer updates, Runtime Inspector passivity, Dependency Graph semantic
-representation/implementation stack/worker loading). Issue #10 (core) and issue #13's earlier
-Vue-integration checkpoints remain the semantic authority this app never reinterprets.
+Private, never-published workspace application with two roles:
+
+1. **Lab shell** — workbench, live JSON source editing with an explicit Apply lifecycle, Preview,
+   and readonly Blueprint/Runtime/Dependency Graph inspectors over `@deviltea/widget-core` /
+   `@deviltea/widget-vue`.
+2. **Released showcases** — switchable via the header's showcase selector, all served by the same
+   shell and Apply pipeline: `Sandbox` (minimal fixtures), Showcase A `Interactive Survey`, and
+   Showcase B `Sales Pipeline CRM`.
+
+The app deploys to GitHub Pages together with `docs/site` (see "Deployment" below).
 
 - `src/lab/` — framework-agnostic, unit-tested Apply lifecycle logic: `LabSession` (draft/active
   snapshot state machine, `types.ts`) and the shared cross-inspector focus store (`focus.ts`). No Vue
   import here on purpose — this is the regression-worthy core, independently testable.
 - `src/composables/use-lab-store.ts` — the one place that bridges `LabSession`/focus store into Vue
   `computed()` refs and supplies the `LabSessionHooks` seam (`detachPreview`/`mountPreview`) that
-  guarantees unmount-before-dispose ordering via `nextTick()`. Also owns `graphShowAbsent`/
-  `graphShowIsolatedMembers` — Dependency Graph presentation preferences that deliberately live as plain
-  refs on the `LabStore` object itself (not derived from `session`) so they survive Apply.
+  guarantees unmount-before-dispose ordering via `nextTick()`. Owns `switchShowcase()` — the
+  application-level replacement operation (teardown old Runtime → switch showcase context → load
+  showcase source → same Apply pipeline), serialized with Apply/preset/revert through one
+  `enqueue()` promise chain. Also owns `graphShowAbsent`/`graphShowIsolatedMembers` — Dependency
+  Graph presentation preferences that deliberately live as plain refs on the `LabStore` object
+  itself (not derived from `session`) so they survive Apply.
 - `src/composables/use-monaco-editor.ts` + `src/components/editor/MonacoJsonEditor.vue` — the entire
   `modern-monaco` integration surface. Nothing else in this app imports `modern-monaco`.
 - `src/composables/use-runtime-member.ts` — Vue bridge for one Runtime Inspector member view model
@@ -29,6 +41,8 @@ Vue-integration checkpoints remain the semantic authority this app never reinter
   `store.active.value.blueprint` through `projectSemanticGraph()` and drives a `LayoutSession`
   (`src/graph/layout-session.ts`) that only requests a fresh ELK layout when the projected graph itself
   changes (new Blueprint snapshot or a graph filter toggle) — never on Runtime activity.
+- `src/composables/use-graph-edge-selection.ts` — panel-local Graph edge-selection state (edge
+  selection never expands into the shared cross-inspector focus).
 - `src/runtime-inspector/viewmodel.ts` — framework-agnostic passive view models
   (`createStateMemberViewModel`/`createPropertyMemberViewModel`) over `RuntimeStateInspection`/
   `RuntimePropertyInspection`. Calls only `getSnapshot()`/`subscribe()` — never `state.get()`/
@@ -38,20 +52,35 @@ Vue-integration checkpoints remain the semantic authority this app never reinter
   `formatDependencyReference`, ...) reused by `blueprint/IssueList.vue` and
   `runtime/RuntimePropertyIssueList.vue`. `message` is never parsed for structure; every field beyond it
   comes from `issue.source`.
-- `src/components/` — the app shell: `LabHeader.vue` (compact header: preset, status, Apply),
-  `Workbench.vue` (`dockview-vue` two-column default layout), `panels/*` (Source/Blueprint/
-  Runtime/Graph tabs), `preview/PreviewPanel.vue`, `blueprint/*` (the Blueprint Inspector's tree +
-  selected-node detail + issue list), `runtime/*` (Runtime Inspector's member rows + property-issue
-  list), `graph/*` (the Vue Flow canvas + panel-local edge details).
-- `src/sandbox/` — small, Lab-private dev fixtures (plugins, a `WidgetSystem`, a
-  `createWidgetVueRenderer` registry, and preset source texts). **Not** the "Interactive Survey" /
-  "Product Prototype" showcases named in issue #13 Checkpoint A — those are a later phase. Sandbox
-  fixtures exist only to exercise this shell and must stay small.
+- `src/components/` — the app shell: `LabHeader.vue` (compact header: showcase selector, preset,
+  status, Apply), `Workbench.vue` (`dockview-vue` two-column default layout), `panels/*`
+  (Source/Blueprint/Runtime/Graph tabs), `preview/PreviewPanel.vue`, `blueprint/*` (the Blueprint
+  Inspector's tree + selected-node detail + issue list), `runtime/*` (Runtime Inspector's member rows
+  + property-issue list), `graph/*` (the Vue Flow canvas + panel-local edge details).
+- `src/sandbox/` — the `Sandbox` showcase: small, Lab-private fixtures (plugins, a `WidgetSystem`, a
+  `createWidgetVueRenderer` registry, preset source texts) whose only job is to exercise the shell
+  with minimal semantic surface. Product-shaped showcases live in `src/showcases/`, never here;
+  sandbox fixtures must stay small.
+- `src/showcases/` — the released product showcases and their registry:
+  - `registry.ts` — the deliberately minimal `{ id, label, system, renderer, presets }` lookup table
+    (no routing, no persistence) consumed by `use-lab-store.ts`'s `switchShowcase`. Plugin-tuple
+    types are erased to `WidgetSystem<AnyWidgetPluginTuple>` on purpose — consumers only need object
+    identity.
+  - `survey/` — Showcase A: Interactive Survey (trip-planning domain). `domain.ts` (pure domain
+    helpers), `plugins/` (semantic plugins, unit-tested), `renderers/` (Vue renderer components),
+    `system.ts`, `presets.ts`, `test-support.ts`.
+  - `crm/` — Showcase B: Sales Pipeline CRM. Same internal organization as `survey/` (`domain.ts`,
+    `plugins/`, `renderers/`, `system.ts`, `presets.ts`, `test-support.ts`), with a deliberately
+    richer widget vocabulary (store/query/form/table/modal/metric plugins and renderers).
+  - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
+    showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
+    not compute them.
 - `pika.config.ts` — the Lab's small PikaCSS token set (`variables.definitions`, safe-listed so the
   hand-authored `src/styles/dockview-theme.css` can reference them via plain `var()`).
 - `src/**/*.unit.test.ts` — colocated Vitest unit tests for `src/lab/`, `src/graph/`,
-  `src/runtime-inspector/` and `src/sandbox/` (run by both this app's own `vitest.config.ts` and the root
-  config). UI/editor/workbench components are not unit tested this phase (see "Testing" below).
+  `src/runtime-inspector/`, `src/sandbox/`, `src/composables/` and `src/showcases/**` (plugins,
+  presets, and selected renderer contracts via `@vue/test-utils` + `happy-dom`), run by both this
+  app's own `vitest.config.ts` and the root config.
 
 ## Commands
 
@@ -70,22 +99,37 @@ Vite plugin would otherwise only produce as a side effect of an actual `pnpm dev
 which augments Vue's `ComponentCustomProperties` so `pika()` type-checks inside `<template>`. This keeps
 `pnpm typecheck` correct on a clean checkout without requiring a prior dev/build run.
 
-## Package boundaries (issue #13 Phase 4 Checkpoint A)
+## Deployment (GitHub Pages)
+
+The Lab deploys as part of the docs Pages artifact: `.github/workflows/docs.yml` runs
+`pnpm docs:build:pages` (`scripts/build-pages.ts`), which builds `widget-lab` **and its workspace
+dependencies** in topological order with `WIDGET_LAB_BASE=/deviltea-labs/widget-lab/` (consumed by
+`vite.config.ts`'s `base`), builds `docs/site`, then copies the Lab build under the docs dist's
+`widget-lab/` subdirectory. `docs/site` and `apps/widget-lab` remain separate source/application
+boundaries — only build output is combined. If you touch the Lab's asset/worker URL behavior, verify
+it still resolves under that subpath, not just under `/`. Runtime hardening of this deployment
+(self-hosting `modern-monaco` instead of its esm.sh CDN loading, heavyweight-chunk lazy-loading
+policy) is tracked in issue #30.
+
+## Package boundaries
 
 This app is a private downstream consumer and architecture probe. It owns the Lab shell, inspectors,
-live source workflow, and (eventually) showcase applications. It must not own, and must not gain:
+live source workflow, and the showcases. It must not own, and must not gain:
 
 - any part of `@deviltea/widget-core`'s semantic compiler/runtime, or `@deviltea/widget-vue`'s
   renderer/lifecycle/reactivity adapter surface — both are consumed exclusively through their public
   entry points (`@deviltea/widget-core`, `@deviltea/widget-core/inspection`, `@deviltea/widget-vue`);
   no private/internal import from either package;
-- Survey/Product Prototype domain widgets (a later phase) — `src/sandbox/` is fixtures, not showcases;
 - persistence/versioning/migration of any kind — `LabSession`'s `draftSourceText`/`active` snapshot is
   in-memory only, and Monaco's own workspace/IndexedDB machinery is deliberately not used (see
   `use-monaco-editor.ts`) so it can never become a second, competing source of truth;
-- deployment/hosting concerns — this phase does not touch the docs Pages workflow.
+- an editor-command/undo architecture — Source text editing plus explicit Apply is the whole model.
 
-## Inspectors are readonly (issue #13 Phase 4 "readonly inspection" updates)
+When Lab work exposes a genuine gap in widget-core/widget-vue's public contract, canonicalize it on
+GitHub (#10/#13) instead of silently working around it in Lab-private code — implementation evidence
+may challenge architecture, but never rewrites it locally.
+
+## Inspectors are readonly
 
 Blueprint/Runtime/Graph panels consume `@deviltea/widget-core/inspection` (`inspectBlueprint`,
 `inspectRuntime`) as pure, passive projections. They must never:
@@ -100,7 +144,7 @@ Real semantic interaction (State/Property/Method activity) stays exclusively in 
 (`src/components/preview/PreviewPanel.vue`, via `useWidget()` from `@deviltea/widget-vue`). There is no
 `Observe` action and no editor-domain operation anywhere in an inspector panel.
 
-## Runtime Inspector is strictly passive (issue #13 Phase 5 "Runtime Inspector becomes strictly passive")
+## Runtime Inspector is strictly passive
 
 `src/components/panels/RuntimePanel.vue` and `src/components/runtime/*` consume `inspectRuntime()`
 readonly. State members render `RuntimeStateInspection.getSnapshot()`/`subscribe()` only — never
@@ -112,7 +156,7 @@ keeps the Runtime tab present with an unavailable/blocked message (`store.active
 rather than hiding it. `src/runtime-inspector/viewmodel.ts` is the passive-projection layer this panel
 is built on — see its file-level comment and colocated tests for the exact contract.
 
-## Dependency Graph (issue #13 Phase 5 "semantic representation" / "implementation stack" comments)
+## Dependency Graph
 
 `src/graph/` implements the readonly projection pipeline behind `src/components/panels/GraphPanel.vue`:
 
@@ -148,9 +192,11 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
 
 Graph works for an invalid Blueprint (compile-time facts only, no Runtime dependency) and its node click
 sets the shared cross-inspector focus (`nodeId` + member) the same way Blueprint/Runtime do; a new
-applied Blueprint resets that shared focus to the new root exactly as it already did before this phase.
+applied Blueprint resets that shared focus to the new root. Known Graph/workbench UX defects (first-open
+fit, fit-to-view affordance, panel recovery, narrow-viewport behavior) are tracked in issue #27 — check
+its state before "fixing" adjacent behavior in passing.
 
-## Layout worker boundary (issue #13 Phase 5 "Dependency Graph worker loading" comment)
+## Layout worker boundary
 
 - `src/graph/layout.worker.ts` — the actual persistent Vite module Worker
   (`new Worker(new URL('./layout.worker.ts', import.meta.url), { type: 'module' })`, created lazily in
@@ -173,7 +219,7 @@ applied Blueprint resets that shared focus to the new root exactly as it already
 - `vite.config.ts`'s `worker: { format: 'es' }` keeps this Worker's own `elkjs` import going through
   normal Vite ESM bundling.
 
-## Apply lifecycle (issue #13 Phase 4 "Source Apply lifecycle" comment)
+## Apply lifecycle
 
 Editing the Source panel only ever mutates `LabSession.draftSourceText`; it never recompiles. Apply is
 the one explicit command that crosses the applied-snapshot boundary, following the ordering `detach
@@ -181,20 +227,47 @@ Preview -> dispose old Runtime -> commit new Blueprint -> create Runtime if vali
 `src/lab/session.ts` and its unit tests for the full contract: parse-failure isolation, concurrent-apply
 guard, draft-capture-at-command-start, invalid-Blueprint -> `runtime: null`, and the disposal-ordering
 seam). Do not add a second path that recompiles outside `LabSession.apply()`/`applyPreset()` — presets,
-Format, and Revert all route through the same session, never around it.
+Format, Revert, and `switchShowcase()` all route through the same session/store queue, never around it.
+
+## Active follow-up backlog
+
+Post-convergence usability/hardening work is tracked on GitHub; read the issue before working in its
+area, and keep implementation truth in those threads rather than expanding this file:
+
+- issue #25 — guided onboarding/tutorial + curated widget/component implementation source explorer;
+- issue #26 — Survey semantic presentation correctness (result freshness, failed-Property display,
+  dependency-issue propagation);
+- issue #27 — Graph/workbench correctness and recovery;
+- issue #28 — real-browser contract tests + baseline accessibility semantics;
+- issue #29 — this document's current-state refresh;
+- issue #30 — self-contained deployment / Monaco self-hosting / lazy-loading policy.
 
 ## Testing
+
+Intended split for this app:
+
+```text
+framework-agnostic semantic/viewmodel logic -> Vitest unit tests
+browser/workbench/DOM/focus/integration behavior -> narrow real-browser contracts
+```
+
+Unit tests are colocated `*.unit.test.ts` against real `@deviltea/widget-core` fixtures (no mocked
+core): `src/lab/`, `src/graph/`, `src/runtime-inspector/`, `src/sandbox/`, `src/composables/`, and
+`src/showcases/**` (plugin semantics, preset validity, and selected renderer contracts via
+`@vue/test-utils` + `happy-dom`). The real-browser contract harness is being introduced by issue #28;
+until it lands, workbench/editor/browser-integration behavior has no automated coverage here — do not
+compensate by writing broad DOM-simulation tests for it, and once the harness exists, put
+browser-semantics assertions (focus, keyboard navigation, dialog behavior) there instead of in
+happy-dom unit tests.
 
 Root AGENTS.md's coverage policy lists the packages whose runtime source joins the root Vitest V8
 coverage report; this app is **not** on that list and its sources are excluded from the coverage
 `include`/`exclude` lists in the root `vitest.config.ts`; it still participates in `pnpm test:unit` via
-`test.include`. Rationale: this is a private application shell, not a published package, and most of
-its code is UI/editor/workbench chrome (Monaco, Dockview, template-heavy panels) that this phase
-explicitly does not require unit/e2e coverage for — folding it into the repo's 90%-threshold coverage
-gate would either force out-of-scope UI tests this phase or silently lower the bar for everything the
-gate already protects. `src/lab/`, `src/graph/`, `src/runtime-inspector/` and `src/sandbox/` — the
-actual regression-worthy logic — are unit-tested regardless (against real `@deviltea/widget-core`
-fixtures, no mocked core); that value does not depend on being counted by the coverage gate. The ELK
-layout Worker itself (`src/graph/layout.worker.ts`) is deliberately excluded from that testing — it is
-kept thin by design (see "Layout worker boundary" above) and `layout-session.ts`'s generation-guard tests
-exercise the same contract against a fake `LayoutGraphFn` instead.
+`test.include`. Rationale: this is a private application shell, not a published package, and much of
+its code is UI/editor/workbench chrome (Monaco, Dockview, template-heavy panels) whose value is
+covered by browser contracts rather than the unit-coverage gate — folding it into the repo's
+90%-threshold coverage gate would either force low-value DOM-simulation tests or silently lower the
+bar for everything the gate already protects. The ELK layout Worker itself
+(`src/graph/layout.worker.ts`) is deliberately excluded from unit testing — it is kept thin by design
+(see "Layout worker boundary" above) and `layout-session.ts`'s generation-guard tests exercise the
+same contract against a fake `LayoutGraphFn` instead.
