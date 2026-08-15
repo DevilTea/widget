@@ -194,6 +194,151 @@ describe('lazy evaluation: TripReadiness/TripRecommendation stay never-evaluated
 	})
 })
 
+describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
+	it('is true immediately after generateResult() (snapshot matches current answers)', () => {
+		const { runtime } = createSurveyRuntime()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+
+		survey.methods.submit()
+		survey.methods.generateResult()
+
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: true })
+	})
+
+	it('flips false after changing a tracked answer, even one that makes the current answers invalid', () => {
+		const { runtime } = createSurveyRuntime()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+		const destination = widgetOfType(runtime, 'destination', 'SurveyChoiceQuestion')
+
+		survey.methods.submit()
+		survey.methods.generateResult()
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: true })
+
+		// `destination` is a tracked `resultInputQuestionIds` question; setting its answer to `null` also
+		// makes it fail `TripReadiness`/`TripRecommendation` — `resultFresh` must still report `false`,
+		// since it compares tracked answers rather than re-deciding current validity.
+		destination.state.answer.set(null)
+
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: false })
+		// The retained snapshot itself is untouched while stale.
+		expect(survey.state.result.get())
+			.not.toBeNull()
+	})
+
+	it('flips false after changing a tracked answer the recommendation never reads (over-approximation)', () => {
+		const { runtime } = createSurveyRuntime()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+		const familyPriority = widgetOfType(runtime, 'family-priority', 'SurveyChoiceQuestion')
+
+		survey.methods.submit()
+		survey.methods.generateResult()
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: true })
+
+		// `children` defaults to 0 in the default preset, so `family-priority` is hidden and ignored by
+		// both `TripReadiness`/`TripRecommendation` (see `trip-readiness.ts`'s file header) — yet it is
+		// still one of `resultInputQuestionIds`' tracked questions, so changing it must still mark stale.
+		familyPriority.state.answer.set('kid-friendly')
+
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: false })
+	})
+
+	it('is true again after re-submitting and regenerating the result', () => {
+		const { runtime } = createSurveyRuntime()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+		const adults = widgetOfType(runtime, 'adults', 'SurveyNumberQuestion')
+
+		survey.methods.submit()
+		survey.methods.generateResult()
+		adults.state.answer.set(3)
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: false })
+
+		survey.methods.submit()
+		survey.methods.generateResult()
+
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: true })
+	})
+
+	it('is true when there is no result yet (documented no-result convention)', () => {
+		const { runtime } = createSurveyRuntime()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+
+		expect(survey.state.result.get())
+			.toBeNull()
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: true })
+	})
+
+	it('reset() clears both result and resultInputs, and a subsequent generateResult() is fresh again', () => {
+		const { runtime } = createSurveyRuntime()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+
+		survey.methods.submit()
+		survey.methods.generateResult()
+		expect(survey.state.result.get())
+			.not.toBeNull()
+
+		survey.methods.reset()
+
+		expect(survey.state.result.get())
+			.toBeNull()
+		expect(survey.state.resultInputs.get())
+			.toBeNull()
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: true })
+	})
+})
+
+describe('tripSurvey.resultFresh is decoupled from resetQuestionIds (issue #26, GPT adversarial review round 1)', () => {
+	// Reproduction from the review: a Source edit that narrows `resetQuestionIds` to a strict subset of
+	// `resultInputQuestionIds` must remain a fully valid, functioning Survey — and `resultFresh` must
+	// still track every `resultInputQuestionIds` question regardless of what `resetQuestionIds` says.
+	function createRuntimeWithNarrowedResetSet() {
+		const definition = JSON.parse(defaultSurveyPreset.sourceText) as { config: { resetQuestionIds: string[], resultInputQuestionIds: string[] } }
+		definition.config.resetQuestionIds = definition.config.resetQuestionIds.filter(id => id !== 'return')
+		expect(definition.config.resultInputQuestionIds)
+			.toContain('return')
+		return createSurveyRuntime(JSON.stringify(definition))
+	}
+
+	it('resultFresh still flips false when "return" changes, even though resetQuestionIds no longer includes it', () => {
+		const { runtime } = createRuntimeWithNarrowedResetSet()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+		const returnQuestion = widgetOfType(runtime, 'return', 'SurveyDateQuestion')
+
+		survey.methods.submit()
+		survey.methods.generateResult()
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: true })
+
+		returnQuestion.state.answer.set('2027-04-20')
+
+		expect(survey.properties.resultFresh.get())
+			.toEqual({ success: true, value: false })
+	})
+
+	it('reset() only restores the narrowed resetQuestionIds set, leaving "return" untouched', () => {
+		const { runtime } = createRuntimeWithNarrowedResetSet()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+		const returnQuestion = widgetOfType(runtime, 'return', 'SurveyDateQuestion')
+
+		returnQuestion.state.answer.set('2027-04-20')
+		survey.methods.reset()
+
+		// "return" is deliberately excluded from this variant's resetQuestionIds, so reset() must not
+		// restore it — proving resetQuestionIds and resultInputQuestionIds are genuinely independent
+		// config keys, not just two names for the same list.
+		expect(returnQuestion.state.answer.get())
+			.toBe('2027-04-20')
+	})
+})
+
 describe('presets.ts preset ids', () => {
 	it('exposes the canonical default preset first', () => {
 		expect(surveyPresets[0])

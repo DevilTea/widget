@@ -5,8 +5,9 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { surveyPresets } from '../presets'
 import { surveySystem } from '../system'
-import { widgetOfType } from '../test-support'
+import { createSurveyRuntime, widgetOfType } from '../test-support'
 
 const destinationOptions = [
 	{ value: 'tokyo', label: 'Tokyo' },
@@ -134,5 +135,138 @@ describe('tripMetrics', () => {
 		// travelerCount does not depend on dates at all, so it is unaffected.
 		expect(metrics.properties.travelerCount.get())
 			.toEqual({ success: true, value: 2 })
+	})
+})
+
+describe('tripMetrics nullable-input failures (issue #26 Finding 2, GPT adversarial review round 1)', () => {
+	// Every case here clears a real, user-reachable nullable answer (SurveyNumberQuestion's empty
+	// input / SurveyChoiceQuestion's "— select —" option both write `null`) and asserts the affected
+	// Property fails with an issue rather than silently substituting 0 — a failed Property is what makes
+	// `useProperties()` project `null`, which is what `TripMetricsRenderer.vue` renders as "Unavailable".
+
+	it('travelerCount fails when adults is cleared to null (not a "0 adults" reading)', () => {
+		const runtime = createRuntime()
+		const adults = widgetOfType(runtime, 'adults', 'SurveyNumberQuestion')
+		const metrics = widgetOfType(runtime, 'trip-metrics', 'TripMetrics')
+
+		expect(adults.state.answer.set(null).success)
+			.toBe(true)
+
+		const result = metrics.properties.travelerCount.get()
+		expect(result.success)
+			.toBe(false)
+		if (result.success)
+			throw new Error('expected a failure')
+		expect(result.issues[0]!.source.type)
+			.toBe('property-result')
+	})
+
+	it('travelerCount fails when children is cleared to null', () => {
+		const runtime = createRuntime()
+		const children = widgetOfType(runtime, 'children', 'SurveyNumberQuestion')
+		const metrics = widgetOfType(runtime, 'trip-metrics', 'TripMetrics')
+
+		expect(children.state.answer.set(null).success)
+			.toBe(true)
+
+		const result = metrics.properties.travelerCount.get()
+		expect(result.success)
+			.toBe(false)
+	})
+
+	it('budgetPerPersonPerDay fails when budget is cleared to null, even though tripDays/travelerCount both still succeed', () => {
+		const runtime = createRuntime()
+		const budget = widgetOfType(runtime, 'budget', 'SurveyNumberQuestion')
+		const metrics = widgetOfType(runtime, 'trip-metrics', 'TripMetrics')
+
+		expect(budget.state.answer.set(null).success)
+			.toBe(true)
+
+		expect(metrics.properties.tripDays.get())
+			.toEqual({ success: true, value: 5 })
+		expect(metrics.properties.travelerCount.get())
+			.toEqual({ success: true, value: 2 })
+
+		const result = metrics.properties.budgetPerPersonPerDay.get()
+		expect(result.success)
+			.toBe(false)
+		if (result.success)
+			throw new Error('expected a failure')
+		// Its own root cause (a missing budget), not a wrapped tripDays/travelerCount dependency failure.
+		expect(result.issues[0]!.source.type)
+			.toBe('property-result')
+	})
+
+	it('estimatedBaselineCost fails when destination is cleared to null', () => {
+		const runtime = createRuntime()
+		const destination = widgetOfType(runtime, 'destination', 'SurveyChoiceQuestion')
+		const metrics = widgetOfType(runtime, 'trip-metrics', 'TripMetrics')
+
+		expect(destination.state.answer.set(null).success)
+			.toBe(true)
+
+		const result = metrics.properties.estimatedBaselineCost.get()
+		expect(result.success)
+			.toBe(false)
+		if (result.success)
+			throw new Error('expected a failure')
+		expect(result.issues[0]!.source.type)
+			.toBe('property-result')
+	})
+
+	it('estimatedBaselineCost fails when travel-style is cleared to null', () => {
+		const runtime = createRuntime()
+		const travelStyle = widgetOfType(runtime, 'travel-style', 'SurveyChoiceQuestion')
+		const metrics = widgetOfType(runtime, 'trip-metrics', 'TripMetrics')
+
+		expect(travelStyle.state.answer.set(null).success)
+			.toBe(true)
+
+		const result = metrics.properties.estimatedBaselineCost.get()
+		expect(result.success)
+			.toBe(false)
+	})
+
+	it('a tripDays failure still propagates structurally into budgetPerPersonPerDay/estimatedBaselineCost (no duplicate issue added by this fix)', () => {
+		const runtime = createRuntime()
+		const returnQuestion = widgetOfType(runtime, 'return', 'SurveyDateQuestion')
+		const metrics = widgetOfType(runtime, 'trip-metrics', 'TripMetrics')
+
+		returnQuestion.state.answer.set('2027-04-01') // strictly before departure
+
+		const budgetPerPersonPerDayResult = metrics.properties.budgetPerPersonPerDay.get()
+		expect(budgetPerPersonPerDayResult.success)
+			.toBe(false)
+		if (budgetPerPersonPerDayResult.success)
+			throw new Error('expected a failure')
+		// Exactly one issue: the propagated tripDays dependency failure, not a second self-reported one.
+		expect(budgetPerPersonPerDayResult.issues)
+			.toHaveLength(1)
+		expect(budgetPerPersonPerDayResult.issues[0]!.source.type)
+			.toBe('property-dependency')
+	})
+})
+
+describe('tripMetrics against the "survey-not-ready" preset (issue #26 Finding 2 knock-on check)', () => {
+	it('renders sanely: TripMetrics properties all still succeed, only TripReadiness fails on the missing family-priority answer', () => {
+		const notReadyPreset = surveyPresets.find(preset => preset.id === 'survey-not-ready')!
+		const { runtime } = createSurveyRuntime(notReadyPreset.sourceText)
+		const metrics = widgetOfType(runtime, 'trip-metrics', 'TripMetrics')
+		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
+
+		// None of TripMetrics' own nullable inputs (adults/children/budget/destination/travel-style) are
+		// null in this preset — only `family-priority` is unanswered, and TripMetrics never reads it — so
+		// the live metrics stay fully computed (no "Unavailable" coexisting with the readiness failure
+		// here); only readiness (and therefore Submit/Recommendation) fails.
+		expect(metrics.properties.tripDays.get().success)
+			.toBe(true)
+		expect(metrics.properties.travelerCount.get())
+			.toEqual({ success: true, value: 4 })
+		expect(metrics.properties.budgetPerPersonPerDay.get().success)
+			.toBe(true)
+		expect(metrics.properties.estimatedBaselineCost.get().success)
+			.toBe(true)
+		expect(readiness.properties.ready.get().success)
+			.toBe(false)
 	})
 })

@@ -87,19 +87,28 @@ describe('tripMetricsRenderer', () => {
 		await wrapper.vm.$nextTick()
 
 		// All three affected Properties (tripDays directly, budgetPerPersonPerDay/estimatedBaselineCost
-		// as its downstream dependents) must reflect the failure — no stale value survives.
+		// as its downstream dependents) must reflect the failure — no stale value survives, and (issue
+		// #26 Finding 2) no fabricated `0.00` stands in for the failed budgetPerPersonPerDay/
+		// estimatedBaselineCost values.
 		expect(wrapper.text())
 			.not.toContain('120.00')
 		expect(wrapper.text())
-			.toContain('0.00')
-		// Each of tripDays' own failure and the two downstream `property-dependency` wraps of it
-		// (issue #10 §12: message preserved 1:1) renders its own list item — three occurrences of the
-		// same human-readable text is expected and correct here, not a bug: `TripMetricsRenderer`
-		// deliberately does not invent a message-based dedupe (issue #10 defines `message` as
-		// human-readable only, never a machine identity).
-		const diagnosticCount = wrapper.text()
+			.not.toContain('0.00')
+		expect(wrapper.text())
+			.toContain('Unavailable')
+
+		// tripDays' own root-cause message (a `property-result` issue) renders exactly once, under "Trip
+		// days" (issue #26 Finding 3: no per-metric flattening/repetition of the wrapped root cause).
+		// budgetPerPersonPerDay/estimatedBaselineCost each instead render their own `property-dependency`
+		// issue as an attributed "Unavailable because Trip days failed." line — same underlying single
+		// root cause, but no longer presented as three duplicate/unrelated errors.
+		const rootCauseCount = wrapper.text()
 			.split('Return date must be strictly after the departure date.').length - 1
-		expect(diagnosticCount)
-			.toBe(3)
+		expect(rootCauseCount)
+			.toBe(1)
+		const attributedCount = wrapper.text()
+			.split('Unavailable because Trip days failed.').length - 1
+		expect(attributedCount)
+			.toBe(2)
 	})
 })
