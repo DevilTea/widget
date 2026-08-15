@@ -28,3 +28,16 @@ body {
 button {
 	font-family: inherit;
 }
+
+/*
+ * issue #27 Finding 3: below the narrow-viewport-gate threshold (`App.vue`), the underlying workbench
+ * stays mounted but is not a supported layout — this only prevents its content from stretching the
+ * document wider than the viewport (letting a stray horizontal scrollbar peek out from under the fixed
+ * gate overlay); it does not itself decide when the gate shows.
+ */
+@media (max-width: 899px) {
+	html,
+	body {
+		overflow-x: hidden;
+	}
+}

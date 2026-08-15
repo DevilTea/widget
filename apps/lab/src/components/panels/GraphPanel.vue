@@ -5,7 +5,7 @@
  * projects compile-time inspection facts only and never waits on/depends on Runtime. Canvas-prioritized
  * layout with compact/collapsible details, per the interaction contract.
  */
-import { computed } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 import { useDependencyGraph } from '../../composables/use-dependency-graph'
 import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selection'
 import { useLabStore } from '../../composables/use-lab-store'
@@ -18,6 +18,13 @@ const { semanticGraph, layoutState, flow } = useDependencyGraph()
 // Panel-local edge selection (issue #13 Phase 5: stays local, never expands into shared focus; reset on
 // applied Blueprint identity change, not on ordinary tab switching — see the composable's own comment).
 const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdgeSelection(store)
+
+// issue #27 Finding 1: manual recovery for the viewport-fit policy — same `fitView` path
+// `GraphCanvas.vue` already calls automatically once a new laid-out graph's nodes render.
+const graphCanvas = useTemplateRef<InstanceType<typeof GraphCanvas>>('graphCanvas')
+function onFitGraphClick(): void {
+	graphCanvas.value?.fitGraph()
+}
 
 function onNodeClick(nodeId: string): void {
 	const vertex = semanticGraph.value.vertices.find(candidate => candidate.id === nodeId)
@@ -66,6 +73,15 @@ const statusLabel = computed(() => {
 				>
 				Show isolated members
 			</label>
+			<button
+				type="button"
+				:disabled="flow === null"
+				aria-label="Fit graph"
+				:class="pika({ 'padding': '3px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				@click="onFitGraphClick"
+			>
+				Fit graph
+			</button>
 			<span
 				v-if="statusLabel"
 				:class="pika({ marginLeft: 'auto' })"
@@ -75,6 +91,7 @@ const statusLabel = computed(() => {
 		<div :class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative' })">
 			<GraphCanvas
 				v-if="flow !== null"
+				ref="graphCanvas"
 				:nodes="flow.nodes"
 				:edges="flow.edges"
 				@nodeClick="onNodeClick"

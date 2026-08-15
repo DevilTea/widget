@@ -38,6 +38,12 @@ onUnmounted(() => disposeLayoutWorker())
 	<div class="lab-app">
 		<LabHeader />
 		<Workbench />
+		<div
+			class="narrow-viewport-gate"
+			role="alert"
+		>
+			<p>Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.</p>
+		</div>
 	</div>
 </template>
 
@@ -46,5 +52,37 @@ onUnmounted(() => disposeLayoutWorker())
 	display: flex;
 	flex-direction: column;
 	height: 100%;
+}
+
+/*
+ * issue #27 Finding 3: minimum supported workbench viewport, chosen at 900px width — narrower than that,
+ * Dockview's default two-column split (tool group + Preview, each with a meaningful minimum width) no
+ * longer has room to lay out usefully (see Workbench.vue's `toolWidth` clamp), so this app is not a
+ * supported experience below the threshold. A pure CSS media query (no JS resize listener/state) shows a
+ * blocking explanatory overlay instead of a degraded layout; it disappears the instant the viewport
+ * widens back past the threshold. `position: fixed` pins it to the actual viewport rather than the
+ * document, so it still fully covers the workbench even if underlying content is scrolled horizontally.
+ * The underlying app (`Workbench`/Dockview) is left mounted, not torn down.
+ */
+.narrow-viewport-gate {
+	display: none;
+}
+
+@media (max-width: 899px) {
+	.narrow-viewport-gate {
+		position: fixed;
+		inset: 0;
+		z-index: 1000;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 24px;
+		text-align: center;
+		background: var(--lab-color-bg);
+		color: var(--lab-color-text);
+		font-family: var(--lab-font-sans);
+		font-size: 14px;
+		line-height: 1.5;
+	}
 }
 </style>
