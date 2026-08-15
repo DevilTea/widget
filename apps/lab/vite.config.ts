@@ -2,6 +2,7 @@ import process from 'node:process'
 import pikacss from '@pikacss/unplugin-pikacss/vite'
 import Vue from 'unplugin-vue/vite'
 import { defineConfig } from 'vite'
+import { vendorModernMonacoEditorCore } from './vite-plugin-vendor-modern-monaco-editor-core'
 
 export default defineConfig({
 	// Root-relative ('/') in dev and any standalone build. The combined GitHub Pages deploy
@@ -18,6 +19,9 @@ export default defineConfig({
 			cssCodegen: './src/pika.gen.css',
 		}),
 		Vue(),
+		// Self-hosts `modern-monaco`'s editor engine (issue #30 Scope A) — see the plugin's own
+		// file-level comment for the full mechanism.
+		vendorModernMonacoEditorCore(),
 	],
 	// The persistent ELK layout Worker (`src/graph/layout.worker.ts`, issue #13 Phase 5 "Dependency
 	// Graph worker loading" comment) is a native Vite module Worker — `format: 'es'` keeps its own

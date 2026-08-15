@@ -117,9 +117,75 @@ dependencies** in topological order with `WIDGET_LAB_BASE=/deviltea-labs/widget-
 `vite.config.ts`'s `base`), builds `docs/site`, then copies the Lab build under the docs dist's
 `widget-lab/` subdirectory. `docs/site` and `apps/widget-lab` remain separate source/application
 boundaries — only build output is combined. If you touch the Lab's asset/worker URL behavior, verify
-it still resolves under that subpath, not just under `/`. Runtime hardening of this deployment
-(self-hosting `modern-monaco` instead of its esm.sh CDN loading, heavyweight-chunk lazy-loading
-policy) is tracked in issue #30.
+it still resolves under that subpath, not just under `/`.
+
+`modern-monaco`'s editor engine is self-hosted rather than loaded from its default esm.sh CDN — see
+issue #30 Scope A. `vite-plugin-vendor-modern-monaco-editor-core.ts` (project root, alongside
+`vite.config.ts`) reads `editor-core.mjs` plus its two Worker-chain siblings
+(`editor-worker-main.mjs`, `editor-worker.mjs`) straight out of `modern-monaco`'s installed
+`node_modules` package — never committed to git — and (a) serves them from Vite dev middleware at
+`/vendor/modern-monaco/*.mjs`, (b) `emitFile`s them into the production bundle at the same relative
+path under `dist/`. Its `transformIndexHtml` hook injects a base-aware `<script type="importmap">`
+mapping the bare specifier `modern-monaco/editor-core` to that URL, which `modern-monaco`'s own
+`loadMonaco()` reads and prefers over its esm.sh fallback — this is `modern-monaco`'s documented "load
+editor modules from a custom CDN" mechanism, just pointed at same-origin output instead of another
+host. Because the plugin reads `config.base` at `configResolved` time, the importmap resolves
+correctly under both plain `/` builds and the `WIDGET_LAB_BASE` subpath build above. See
+`use-monaco-editor.ts`'s `ensureMonaco()` for the other half (the removed `defaultTheme` option that
+used to trigger a separate, unrelated esm.sh fetch for the theme JSON).
+
+## Loading policy
+
+Intentional, not incidental (issue #30 Scope B) — the production artifact's chunk shape, verified by
+building this app in isolation:
+
+```text
+main app JS (index-*.js)                ~742 KB raw / ~204 KB gzip  — eager
+modern-monaco package JS (index-*.js)   ~1.50 MB raw / ~362 KB gzip — loaded when Source mounts
+vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Source mounts
+vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
+ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
+CSS (index-*.css)                       ~120 KB raw / ~11 KB gzip   — eager
+```
+
+- **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
+  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Sandbox/Survey/
+  CRM showcases, `dockview-vue`. This is unavoidable critical-path weight for a workbench app whose
+  shell has to exist before any panel can render.
+- **`modern-monaco` (package JS + vendored `editor-core.mjs`)**: not in the eager chunk — `import('modern-monaco')`
+  in `use-monaco-editor.ts`'s `ensureMonaco()` is Vite's own code-split boundary for the package JS, and
+  `editor-core.mjs` is never in Vite's module graph at all (loaded by `modern-monaco` itself via the
+  importmap-resolved dynamic `import()` described in "Deployment" above). Both are still fetched
+  **during initial load today**, though: `SourcePanel.vue` renders `MonacoJsonEditor` unconditionally,
+  Dockview mounts every one of the five canonical panels' Vue components as soon as `Workbench.vue`'s
+  `onReady()` calls `addPanel()` for it (`inactive: true` only controls which tab is initially
+  *selected*, not whether Dockview mounts the panel's content — verified: dockview-vue keeps every
+  panel's rendered content in the DOM, not just the active one), and Source is the panel added first /
+  made the active tab. So `MonacoJsonEditor`'s `onMounted` runs immediately on app load regardless of
+  which tab a user looks at. This is an accepted, documented trade-off, not an oversight: Source is the
+  Lab's default and most-used surface, so paying its cost immediately is preferable to adding a
+  mount-gate (`v-if` on tab activity) whose only benefit is deferring, never avoiding, that cost for the
+  overwhelmingly common path where a user opens Source anyway. If onboarding/information-architecture
+  ever makes Source not the default active panel, revisit gating `MonacoJsonEditor`'s mount on the tab
+  actually being active rather than merely present.
+- **ELK layout worker**: same eager-on-load shape as Monaco, for the same underlying reason, and this
+  predates this issue's change — verified by loading the built app fresh (no tab interaction) and
+  observing `layout.worker-*.js` requested immediately. `layout-client.ts`'s `ensureElk()` still only
+  creates the `Worker` on the *first* `layoutGraph()` call rather than as an import-time side effect
+  (so it is "lazy" in the narrow sense that comment describes), but that first call happens during
+  initial mount today because `GraphPanel.vue` (like Blueprint/Runtime) is mounted immediately by
+  Dockview per the same paragraph above, and its `useDependencyGraph()` composable's
+  `watch(semanticGraph, ...)` fires as soon as the app's initial default-preset Apply produces the
+  first real Blueprint — before any user ever opens the Graph tab. Runtime state/property/method
+  activity still never re-triggers a relayout (that guarantee is unaffected and unrelated to this
+  paragraph); what does not currently hold is "ELK stays uninitialized until a user opens Graph." Fixing
+  that would mean gating panel *mount* (not just tab selection) on Dockview activity for Blueprint/
+  Runtime/Graph, which is a Workbench/Dockview panel-lifecycle change out of scope for issue #30 — noted
+  here as known, current-state behavior rather than silently left undocumented.
+- Neither of the two heavy, on-load fetches above is a *regression*: this document only makes explicit
+  what was already true before this issue's change (Monaco and ELK both already loaded on initial mount
+  before self-hosting), and self-hosting Monaco's engine does not move it into, or out of, that eager
+  path — it only removes the esm.sh dependency for the fetch that already happened at that same moment.
 
 ## Package boundaries
 

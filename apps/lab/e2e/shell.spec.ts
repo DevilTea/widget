@@ -6,16 +6,7 @@ import { expect, test } from './fixtures'
  * available.
  *
  * Loaded against the network-blocked BUILT app (see `fixtures.ts`/`playwright.config.ts`) — Source is
- * the initially active tab, so this also exercises `modern-monaco` failing to load with external
- * network blocked. Verified (issue #30 evidence): `use-monaco-editor.ts`'s `ensureMonaco()` calls
- * `modern-monaco`'s `init()`, which internally fetches its editor core AND, unexpectedly, even the
- * locally-supplied theme JSON (`https://esm.sh/tm-themes@.../themes/one-dark-pro.json`) from esm.sh at
- * runtime — contradicting this app's own "no CDN dependency" comment in `use-monaco-editor.ts`. With
- * that host blocked the fetch rejects (`TypeError: Failed to fetch`), which surfaces only as a
- * `console.error` from Vue's async-lifecycle error handling (`onMounted(async () => ...)`), never an
- * uncaught `pageerror` — the Source tab's Monaco container simply never mounts an editor, and every
- * other panel/header control is unaffected. This suite treats that as the current, acceptable baseline;
- * self-hosting `modern-monaco` instead is tracked separately in issue #30.
+ * the initially active tab, so this also exercises the Source editor initializing under that block.
  */
 
 test('app loads with header controls and all five panel tabs', async ({ page }) => {
@@ -34,21 +25,46 @@ test('app loads with header controls and all five panel tabs', async ({ page }) 
 	}
 })
 
-test('shell survives modern-monaco failing to load from its (blocked) CDN', async ({ page }) => {
+/**
+ * Issue #30 Scope C offline/self-contained browser contract. Supersedes the previous test on this spot
+ * ("shell survives modern-monaco failing to load from its (blocked) CDN"), whose premise (Monaco
+ * necessarily fails to load with external network blocked, because `modern-monaco` fetches its editor
+ * core AND a built-in JSON language server from esm.sh) is obsolete now that Scope A self-hosts both:
+ * the editor engine via the vendored `modern-monaco/editor-core` importmap entry
+ * (`vite-plugin-vendor-modern-monaco-editor-core.ts`), and the built-in-LSP CDN fetch is avoided
+ * entirely by importing `modern-monaco/core` rather than the package's main entry
+ * (`use-monaco-editor.ts`'s `ensureMonaco()`) — this app never used or wanted Monaco/LSP diagnostics in
+ * the first place (`JSON.parse` at Apply time is the sole authoritative syntax boundary).
+ *
+ * This proves a POSITIVE contract instead: the Source editor actually initializes from local assets
+ * with external network blocked — a real Monaco surface (`.monaco-editor`) mounts and renders the
+ * active preset's draft text (`.view-lines`, Sandbox's default preset text) — AND that this happens
+ * without a single attempted request to esm.sh (or anywhere else off-origin): `fixtures.ts`'s
+ * `blockedRequestUrls` fixture records every URL the route handler had to abort, and the assertion
+ * below is that none of them contain `esm.sh` — not merely that a blocked one failed silently.
+ */
+test('Source editor initializes from local assets with no attempted esm.sh request (issue #30)', async ({ page, blockedRequestUrls }) => {
 	const pageErrors: Error[] = []
 	page.on('pageerror', error => pageErrors.push(error))
 
 	await page.goto('/')
-	// Give the Source tab's `ensureMonaco()` promise time to settle (reject) before asserting the rest
-	// of the shell is unaffected.
-	await page.waitForTimeout(1000)
 
+	const editor = page.locator('.monaco-editor')
+	await expect(editor)
+		.toBeVisible({ timeout: 10_000 })
+
+	// Real content rendered, not just an empty shell — the Sandbox showcase's default preset text
+	// (`src/sandbox/presets.ts`'s `defaultSandboxPreset`) is visible through Monaco's own tokenized
+	// view, proving the model/tokenizer/theme pipeline actually ran, not merely that a container div
+	// exists.
+	await expect(page.locator('.view-lines'))
+		.toContainText('Widget Lab sandbox')
+
+	// Every other panel/header control is unaffected (unchanged from before self-hosting).
 	await expect(page.getByText('Blueprint: valid'))
 		.toBeVisible()
 	await expect(page.getByText('Runtime: active'))
 		.toBeVisible()
-
-	// Every other panel still works — Monaco's failure is isolated to the Source tab.
 	await page.getByRole('tab', { name: 'Blueprint' })
 		.click()
 	await expect(page.getByRole('tab', { name: 'Blueprint' }))
@@ -56,6 +72,8 @@ test('shell survives modern-monaco failing to load from its (blocked) CDN', asyn
 
 	expect(pageErrors)
 		.toEqual([])
+	expect(blockedRequestUrls.some(url => url.includes('esm.sh')))
+		.toBe(false)
 })
 
 test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => {
