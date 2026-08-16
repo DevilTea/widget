@@ -156,7 +156,10 @@ export const surveyTourScript: TutorialScript = {
 				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
 				{ id: 'view-graph', label: 'Graph', run: actions => actions.activateTab('graph') },
 				{ id: 'view-preview', label: 'Preview', run: actions => actions.activateTab('preview') },
-				{ id: 'view-implementation', label: 'Implementation', disabled: true, note: 'coming next' },
+				// issue #25 P3: a real affordance now — opens the Implementation panel for whichever widget
+				// is currently held in shared focus (this step never changes focus itself, matching every
+				// other link in this step).
+				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
 			],
 		},
 		{

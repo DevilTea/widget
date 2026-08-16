@@ -43,16 +43,35 @@
  * No second semantic model: no "last interaction" registry, no tracing — only anchor -> existing focus.
  * Keyboard-driven inspection is out of P2 scope (see issue #25 P2 return notes); the toggle button
  * itself is a normal, keyboard-operable button.
+ *
+ * "View implementation" (issue #25 P3 Scope D, entry point 1): a small button next to the Inspect
+ * toggle, enabled whenever the existing shared focus (`store.focus` — however it got there: an
+ * Inspect-mode click, a Blueprint/Graph tree selection, or the tutorial) resolves to a widget type this
+ * showcase's `sources.ts` curates. It never re-sets focus itself — the Implementation panel reads the
+ * same `store.focus` reactively (see `ImplementationPanel.vue`), so there is nothing else to keep in
+ * sync here.
  */
-import { useTemplateRef, watch } from 'vue'
+import { computed, useTemplateRef, watch } from 'vue'
+import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
 import { useInspectMode } from '../../composables/use-inspect-mode'
 import { useLabStore } from '../../composables/use-lab-store'
+import { resolveFocusedWidget } from '../../implementation/focused-widget'
 import { resolveInspectAnchor } from '../../lab/inspect-anchor'
 import { resolveWidgetFocus } from '../../lab/inspect-focus'
+import { getShowcase } from '../../showcases/registry'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
 const inspect = useInspectMode()
+const implementationExplorer = useImplementationExplorer()
+
+const curatedEntryAvailable = computed(() => {
+	const widget = resolveFocusedWidget(store.active.value.blueprint, store.focus.value)
+	if (widget === null)
+		return false
+	const showcase = getShowcase(store.showcaseId.value)
+	return showcase !== undefined && widget.type in showcase.sources
+})
 
 const previewSurface = useTemplateRef<HTMLDivElement>('previewSurface')
 
@@ -179,6 +198,15 @@ function onClickCapture(event: MouseEvent): void {
 			>
 				Click a widget to focus it in Blueprint — Esc to exit
 			</span>
+			<button
+				type="button"
+				data-testid="preview-view-implementation"
+				:disabled="!curatedEntryAvailable"
+				:class="pika({ 'marginLeft': 'auto', 'padding': '3px 10px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				@click="implementationExplorer.open()"
+			>
+				View implementation
+			</button>
 		</div>
 		<div
 			ref="previewSurface"

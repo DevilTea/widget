@@ -5,6 +5,7 @@ import TutorialConfirmDialog from './components/tutorial/TutorialConfirmDialog.v
 import TutorialRail from './components/tutorial/TutorialRail.vue'
 import WelcomeCard from './components/tutorial/WelcomeCard.vue'
 import Workbench from './components/Workbench.vue'
+import { createImplementationExplorerStore, ImplementationExplorerKey } from './composables/use-implementation-explorer'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
 import { createTutorialStore, TutorialStoreKey } from './composables/use-tutorial'
 import { disposeLayoutWorker } from './graph/layout-client'
@@ -18,10 +19,18 @@ provide(LabStoreKey, store)
 // Issue #28 browser-contract seam (`?lab-test` only; inert otherwise) — see `lab-test-seam.ts`.
 installLabTestSeam(store)
 
-// issue #25 P1: `createTutorialStore(store)` takes the already-created `LabStore` directly rather than
-// injecting it back via `useLabStore()` — `inject()` resolves against a component's *parent* provides,
-// so a component can never see its own `provide()` call; passing `store` sidesteps that entirely.
-const tutorial = createTutorialStore(store)
+// issue #25 P3: a small store of its own (see `use-implementation-explorer.ts`'s file header for why
+// this is a parallel mechanism rather than an extension of `LabStore.activeTab`), created/provided the
+// same way `LabStore`/`TutorialStore` are, and handed to `createTutorialStore()` below so the Survey
+// tour's step 8 "Implementation" link can open it too.
+const implementationExplorer = createImplementationExplorerStore()
+provide(ImplementationExplorerKey, implementationExplorer)
+
+// issue #25 P1: `createTutorialStore(store, ...)` takes the already-created `LabStore`/
+// `ImplementationExplorerStore` directly rather than injecting them back via `useLabStore()`/
+// `useImplementationExplorer()` — `inject()` resolves against a component's *parent* provides, so a
+// component can never see its own `provide()` call; passing them directly sidesteps that entirely.
+const tutorial = createTutorialStore(store, implementationExplorer)
 provide(TutorialStoreKey, tutorial)
 
 const tutorialRailVisible = computed(() => tutorial.snapshot.value.status === 'active')

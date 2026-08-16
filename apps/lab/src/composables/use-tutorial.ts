@@ -9,6 +9,7 @@
 
 import type { InjectionKey, Ref } from 'vue'
 import type { TutorialActions, TutorialEngineSnapshot, TutorialTabId } from '../tutorial/types'
+import type { ImplementationExplorerStore } from './use-implementation-explorer'
 import type { LabStore } from './use-lab-store'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, inject, onUnmounted, shallowRef, watch } from 'vue'
@@ -73,7 +74,7 @@ async function loadSurveyDefault(store: LabStore): Promise<void> {
 		await store.switchShowcase(SURVEY_TOUR_ID)
 }
 
-export function createTutorialStore(store: LabStore): TutorialStore {
+export function createTutorialStore(store: LabStore, implementationExplorer: ImplementationExplorerStore): TutorialStore {
 	const engine = createTutorialEngine(surveyTourScript)
 	if (isTourCompleted())
 		engine.restoreCompleted()
@@ -118,6 +119,9 @@ export function createTutorialStore(store: LabStore): TutorialStore {
 			},
 			activateTab: (tab: TutorialTabId) => {
 				store.activeTab.value = tab
+			},
+			openImplementation: () => {
+				implementationExplorer.open()
 			},
 		}
 	}

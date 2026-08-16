@@ -7,7 +7,8 @@
  */
 import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
+import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabStore } from '../composables/use-lab-store'
 import NonClosableTab from './NonClosableTab.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
@@ -17,6 +18,7 @@ import SourcePanel from './panels/SourcePanel.vue'
 import PreviewPanel from './preview/PreviewPanel.vue'
 
 const store = useLabStore()
+const implementationExplorer = useImplementationExplorer()
 
 /**
  * Dockview applies its theme via the `theme` option's `className` (dockview-core stamps it on its own
@@ -44,6 +46,12 @@ const components: Record<string, VueComponent> = {
 	runtime: RuntimePanel as unknown as VueComponent,
 	graph: GraphPanel as unknown as VueComponent,
 	preview: PreviewPanel as unknown as VueComponent,
+	// issue #25 P3 Scope D: `defineAsyncComponent` (not a plain import) is the actual lazy boundary —
+	// `ImplementationPanel.vue` and everything it statically imports (the curated-file viewer, Shiki)
+	// only enter their own chunk once Dockview first mounts this component, which only happens once
+	// `implementationExplorer.open()` has been called at least once (see `watchImplementationOpenRequests`
+	// below) — never merely because this record exists.
+	implementation: defineAsyncComponent(() => import('./panels/ImplementationPanel.vue')) as unknown as VueComponent,
 }
 
 // issue #27 Finding 2: the canonical panels' tab content renderer, close-button-free by construction
@@ -61,6 +69,10 @@ let resizeObserver: ResizeObserver | null = null
 // stop handle and calling it from `onBeforeUnmount` (alongside the existing `resizeObserver.disconnect()`)
 // makes the cleanup explicit rather than relying on that scope behavior.
 let stopTutorialTabActivationWatch: (() => void) | null = null
+// Same hygiene note as `stopTutorialTabActivationWatch` above — this `watch()` is also only ever
+// created from `onReady()`, so its stop handle is retained and called explicitly from
+// `onBeforeUnmount` instead.
+let stopImplementationOpenWatch: (() => void) | null = null
 
 /**
  * `dockview-vue`'s `<DockviewVue>` measures its container exactly once, synchronously, in its own
@@ -84,6 +96,7 @@ function observeSize(api: DockviewApi): void {
 onBeforeUnmount(() => {
 	resizeObserver?.disconnect()
 	stopTutorialTabActivationWatch?.()
+	stopImplementationOpenWatch?.()
 })
 
 function onReady(event: DockviewReadyEvent): void {
@@ -130,6 +143,7 @@ function onReady(event: DockviewReadyEvent): void {
 
 	observeSize(api)
 	watchTutorialTabActivation(api)
+	watchImplementationOpenRequests(api)
 }
 
 /**
@@ -146,6 +160,34 @@ function watchTutorialTabActivation(api: DockviewApi): void {
 		() => store.activeTab.value,
 		(tab) => {
 			api.getPanel(tab)?.api.setActive()
+		},
+	)
+}
+
+/**
+ * Issue #25 P3 Scope D "Opening = `api.addPanel` if absent else activate". Deliberately not `immediate`
+ * (matching `watchTutorialTabActivation` above): `openRequestTick` starts at `0` and every real
+ * `open()` call increments it, so the watch only ever fires on an actual request, never at setup time.
+ * The Implementation panel is added `within` the same tab group as Source/Blueprint/Runtime/Graph, with
+ * NO `tabComponent` override — Dockview's own default tab (close button included) is exactly the
+ * "closable, default tab component" the panel is specified to use, unlike the five canonical panels'
+ * `nonClosable` tab.
+ */
+function watchImplementationOpenRequests(api: DockviewApi): void {
+	stopImplementationOpenWatch = watch(
+		() => implementationExplorer.openRequestTick.value,
+		() => {
+			const existing = api.getPanel('implementation')
+			if (existing !== undefined) {
+				existing.api.setActive()
+				return
+			}
+			api.addPanel({
+				id: 'implementation',
+				component: 'implementation',
+				title: 'Implementation',
+				position: { referencePanel: 'source', direction: 'within' },
+			})
 		},
 	)
 }

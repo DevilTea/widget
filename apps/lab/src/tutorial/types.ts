@@ -62,6 +62,14 @@ export type TutorialTabId = 'source' | 'blueprint' | 'runtime' | 'graph' | 'prev
 export interface TutorialActions {
 	setFocus: (widgetId: string, member?: TutorialFocusMember) => void
 	activateTab: (tab: TutorialTabId) => void
+	/**
+	 * Opens (or activates) the Implementation panel for the currently-focused widget (issue #25 P3
+	 * Scope D, tutorial entry point 3). Deliberately narrower than `activateTab`: the Implementation
+	 * panel is not one of the five canonical `TutorialTabId` surfaces (it is closable, and only ever
+	 * added lazily) — see `use-implementation-explorer.ts`'s file header for why this is a parallel
+	 * mechanism rather than a widened `TutorialTabId` union.
+	 */
+	openImplementation: () => void
 }
 
 /**
