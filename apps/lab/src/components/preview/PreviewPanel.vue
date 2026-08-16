@@ -20,17 +20,25 @@
  *    since it is applied imperatively via `classList` to an arbitrary descendant renderer's own DOM
  *    element, never through this component's own template/scope) plus a `type#id` badge — one shared
  *    absolutely-positioned element this panel owns, never allocated per-renderer;
- *  - a capture-phase click listener (`@click.capture`) resolves the same innermost anchor and, when one
- *    is found, `preventDefault()`s/`stopPropagation()`s it — running and winning before the actual
- *    widget's own bubble-phase click listener (e.g. `ButtonRenderer`'s `press()`, a text `<input>`
- *    receiving the click/focus) ever runs, so Inspect clicks perform inspector selection ONLY — then
- *    drives the existing shared Lab focus at widget grain (`{ nodeId }`, no `member` — the same grain a
+ *  - the locked contract is "inspector selection ONLY — the underlying control is not also activated",
+ *    which a `click`-only suppression cannot deliver: a real pointer activation runs `pointerdown` (and
+ *    the browser's default focus-on-mousedown action for a focusable control) strictly *before* `click`,
+ *    so a click-capture handler alone is too late to stop a native `<input>`/`<select>` from already
+ *    being focused, beginning text selection, or otherwise reacting. This suppresses both boundaries:
+ *    `@pointerdown.capture`/`@pointerup.capture` (`suppressPointerActivation()`) resolve the innermost
+ *    anchor and `preventDefault()`/`stopPropagation()` the earlier pointer sequence itself (this is what
+ *    actually stops native focus/selection/UI reaction), while the existing `@click.capture`
+ *    (`onClickCapture()`) remains the semantic-selection *commit* path — canceling `pointerdown` does not
+ *    remove the higher-level `click` event, so selection stays click-driven and still
+ *    `preventDefault()`s/`stopPropagation()`s to keep the widget's own bubble-phase click listener (e.g.
+ *    `ButtonRenderer`'s `press()`) from ever running;
+ *  - drives the existing shared Lab focus at widget grain (`{ nodeId }`, no `member` — the same grain a
  *    bare Blueprint/Runtime tree-node click already uses) via `resolveWidgetFocus()` and activates the
  *    Blueprint tab through the existing `activeTab` bridge (`Workbench.vue`) for immediate visible
  *    feedback — Runtime/Graph already follow the same shared focus once opened;
  *  - Escape exits Inspect mode (`useInspectMode()`); toggling off restores normal Preview behavior
- *    immediately — the capture listener is always attached but no-ops whenever `inspect.active` is
- *    `false`.
+ *    immediately — every capture listener below is always attached but no-ops whenever `inspect.active`
+ *    is `false`.
  *
  * No second semantic model: no "last interaction" registry, no tracing — only anchor -> existing focus.
  * Keyboard-driven inspection is out of P2 scope (see issue #25 P2 return notes); the toggle button
@@ -97,12 +105,36 @@ function onPointerLeaveSurface(): void {
 }
 
 /**
+ * Suppresses the *earlier* pointer-activation boundary (merge-gate review round 1, blocker 1):
+ * `pointerdown` — and the browser's default focus-on-mousedown action for a click-focusable control —
+ * fires strictly before `click`, so a native `<input>`/`<select>` can already be focused (and can
+ * already begin native reactions such as text selection) before a click-only handler ever runs.
+ * Attached on both `pointerdown` and `pointerup` (capture phase) so no pointer-specific renderer/native
+ * handler on either edge of the down/up sequence sees an un-suppressed event while Inspect is active.
+ * This does not perform selection itself and does not remove the subsequent `click` event — that stays
+ * `onClickCapture()`'s job below.
+ */
+function suppressPointerActivation(event: PointerEvent): void {
+	if (!inspect.active.value)
+		return
+
+	const anchor = resolveInspectAnchor(event.target)
+	if (anchor === null)
+		return
+
+	event.preventDefault()
+	event.stopPropagation()
+}
+
+/**
  * Capture-phase per issue #25 P2's approved interaction rule ("Suppress the underlying pointer
- * activation while Inspect is active"): this must run, and be able to `preventDefault()`/
- * `stopPropagation()`, strictly before the actual widget's own (bubble-phase) click listener — e.g. a
- * CRM `ButtonRenderer`'s `press()` call, or a Survey `<input>`/`<select>` receiving the click.
- * `stopPropagation()` called here, during capture, stops the event before it ever reaches that
- * bubble-phase listener at all (not merely before some later capture-phase step).
+ * activation while Inspect is active"): the semantic-selection *commit* path. This must run, and be
+ * able to `preventDefault()`/`stopPropagation()`, strictly before the actual widget's own (bubble-phase)
+ * click listener — e.g. a CRM `ButtonRenderer`'s `press()` call. `stopPropagation()` called here, during
+ * capture, stops the event before it ever reaches that bubble-phase listener at all (not merely before
+ * some later capture-phase step). The *earlier* pointerdown/mousedown-driven native reactions (focus,
+ * text-selection start, ...) are a separate boundary this handler alone cannot reach — see
+ * `suppressPointerActivation()` above.
  */
 function onClickCapture(event: MouseEvent): void {
 	if (!inspect.active.value)
@@ -155,6 +187,8 @@ function onClickCapture(event: MouseEvent): void {
 			:style="{ cursor: inspect.active.value ? 'crosshair' : undefined }"
 			@pointerover="onPointerOver"
 			@pointerleave="onPointerLeaveSurface"
+			@pointerdown.capture="suppressPointerActivation"
+			@pointerup.capture="suppressPointerActivation"
 			@click.capture="onClickCapture"
 		>
 			<component

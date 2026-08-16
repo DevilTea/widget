@@ -180,4 +180,69 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await expect(page.getByRole('dialog', CHANGE_STAGE_DIALOG))
 			.toBeVisible()
 	})
+
+	/**
+	 * Merge-gate review round 1, blocker 1: `click.capture` alone is too late — a real pointer
+	 * activation runs `pointerdown` (and the browser's default focus-on-mousedown action) strictly
+	 * before `click`, so a click-only suppression cannot stop a native `<input>` from already being
+	 * focused. This pins the stronger "inspector selection ONLY — the underlying control is not also
+	 * activated" contract against a NATIVE FOCUSABLE control (not a Button): the Survey "Adults" number
+	 * input. Written to fail against the pre-fix (`click`-only) implementation and pass once
+	 * `pointerdown`/`pointerup` are also suppressed at the capture boundary.
+	 */
+	test('inspect-click on a native focusable control (Survey "Adults" input) selects the widget without focusing/activating it or mutating its State', async ({ page }) => {
+		await page.getByLabel('Switch showcase')
+			.selectOption('survey')
+
+		const adultsInput = page.getByLabel('Adults', { exact: true })
+		await expect(adultsInput)
+			.toHaveValue('2')
+
+		await inspectToggle(page)
+			.click()
+
+		await adultsInput.click()
+
+		// (a) the correct semantic widget is selected/focused in the inspector.
+		await expect(page.getByRole('tab', { name: 'Blueprint' }))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByRole('heading', { name: 'adults : SurveyNumberQuestion' }))
+			.toBeVisible()
+
+		// (b) the underlying native control did NOT receive focus / native activation.
+		await expect(adultsInput)
+			.not.toBeFocused()
+
+		// (c) no semantic State change occurred as a side effect (the value is unchanged).
+		await expect(adultsInput)
+			.toHaveValue('2')
+	})
+
+	/**
+	 * Merge-gate review round 1, blocker 2: Sandbox is the Lab's DEFAULT showcase
+	 * (`showcases/registry.ts`'s `defaultShowcase`), so an Inspect toggle that is a non-functional mode
+	 * there (zero anchors) is a user-visible capability lie. `sandbox/renderers.ts`'s five render-function
+	 * renderers now each project `widgetId`/`widgetType` onto their own root vnode via
+	 * `useInspectAnchor()` — this exercises that against the Counter widget (`counter-1`) from the
+	 * default `valid-interactive` Sandbox preset, with no showcase switch at all (the true first-load
+	 * default state).
+	 */
+	test('Sandbox (the default showcase): Inspect works against the default state — hover/click the Counter widget', async ({ page }) => {
+		await inspectToggle(page)
+			.click()
+		await expect(inspectToggle(page))
+			.toHaveAttribute('aria-pressed', 'true')
+
+		const counterValue = page.getByText('count: 0 · doubled: 0', { exact: true })
+		await counterValue.hover()
+		await expect(page.getByText('Counter#counter-1'))
+			.toBeVisible()
+
+		await counterValue.click()
+
+		await expect(page.getByRole('tab', { name: 'Blueprint' }))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
+			.toBeVisible()
+	})
 })
