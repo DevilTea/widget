@@ -10,6 +10,13 @@
  * `src/implementation/shiki-highlighter.ts` is imported here — the innermost point of the
  * Implementation panel's own lazy chunk (see that module's file header for the full lazy-boundary
  * chain) — never anywhere the eager shell could reach.
+ *
+ * Latest-selection-wins (same race class as `ImplementationFile.vue`'s blocker 1 fix, applied here
+ * too): this component is reused as `code`/`lang` change (a new curated file, or a fresh Applied
+ * instance JSON string), and Shiki's own `codeToHtml` is itself async — a slower earlier highlight call
+ * could otherwise settle after a faster later one and overwrite it. `watch()`'s `onCleanup` flips
+ * `cancelled` the instant this watcher is about to re-run (or is stopped), and both the success and
+ * failure branches check it before writing `html`/`status`.
  */
 import type { ImplementationLang } from '../../implementation/shiki-highlighter'
 import { ref, watch } from 'vue'
@@ -26,16 +33,29 @@ const copyLabel = ref('Copy')
 
 watch(
 	() => [props.code, props.lang] as const,
-	async ([code, lang]) => {
+	([code, lang], _previous, onCleanup) => {
+		let cancelled = false
+		onCleanup(() => {
+			cancelled = true
+		})
+
 		status.value = 'loading'
 		html.value = null
-		try {
-			html.value = await highlightSource(code, lang)
-			status.value = 'ready'
-		}
-		catch {
-			status.value = 'error'
-		}
+
+		highlightSource(code, lang)
+			.then(
+				(rendered) => {
+					if (cancelled)
+						return
+					html.value = rendered
+					status.value = 'ready'
+				},
+				() => {
+					if (cancelled)
+						return
+					status.value = 'error'
+				},
+			)
 	},
 	{ immediate: true },
 )
@@ -80,7 +100,16 @@ async function copy(): Promise<void> {
 			>
 				Failed to render this source.
 			</p>
-			<!-- eslint-disable-next-line vue/no-v-html -- Shiki's own generated HTML over a Lab-curated, build-time source string, never user input. -->
+			<!--
+				eslint-disable-next-line vue/no-v-html -- `html` is Shiki's OWN generated markup, never a
+				string this component passes through untouched. `code` itself is NOT always Lab-curated,
+				build-time-only text — the Applied-instance JSON fragment (`ImplementationPanel.vue`) is
+				derived from the user-editable applied Source, so the real trust boundary here is Shiki's
+				`codeToHtml`, which HTML-escapes every token it renders (it is a tokenizer/renderer, not a
+				pass-through) — not any assumption about `code`'s provenance. Safety rests on Shiki always
+				escaping arbitrary input text into markup, the same way any other "render code as HTML"
+				library would have to.
+			-->
 			<div
 				v-else
 				data-testid="implementation-code"

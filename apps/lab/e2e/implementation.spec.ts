@@ -145,4 +145,69 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 		await expect.poll(() => requestedUrls.some(url => tableRawChunk.test(url)))
 			.toBe(true)
 	})
+
+	/**
+	 * P3 merge-gate review round 1, blocker 2: pin the applied-vs-draft identity boundary at the actual
+	 * `ImplementationPanel` + `LabStore` integration boundary — `applied-instance.unit.test.ts` only
+	 * proves the pure extractor walks whatever string it is handed; it cannot catch a one-line regression
+	 * from `store.active.value.sourceText` to `store.draftSourceText.value` at the call site. Reuses the
+	 * `?lab-test` seam / dirty-draft-without-Apply pattern already established by
+	 * `tutorial.spec.ts`'s `dirtyTheDraft()`. Sandbox (the default showcase, no switch needed) and its
+	 * `title` (`Text`) widget are the fixture — simple enough to hand-author a one-field-changed draft
+	 * string for.
+	 */
+	test('Applied instance always reflects the APPLIED snapshot, never an unapplied draft edit to the same widget (issue #25 P3 locked identity boundary)', async ({ page }) => {
+		interface LabTestWindow { __WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void } }
+
+		await page.goto('/?lab-test')
+		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+
+		// Focus the `title` (`Text`) widget via the Blueprint tree and open its Applied instance.
+		await page.getByRole('tab', { name: 'Blueprint' })
+			.click()
+		await page.getByRole('button', { name: 'title : Text' })
+			.click()
+		await page.getByTestId('blueprint-view-implementation')
+			.click()
+		await page.getByRole('button', { name: 'Applied instance' })
+			.click()
+
+		const appliedInstanceCode = page.getByTestId('implementation-code')
+		await expect(appliedInstanceCode)
+			.toContainText('"text": "Widget Lab sandbox"')
+
+		// Dirty the DRAFT (never applied) — the same `title` widget, a distinctive marker in its `text`.
+		const marker = 'DRAFT_ONLY_MARKER_never_applied_9f3c1a'
+		await page.evaluate((text) => {
+			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(JSON.stringify({
+				id: 'root',
+				type: 'Stack',
+				slots: {
+					items: [
+						{ id: 'title', type: 'Text', config: { text } },
+						{ id: 'counter-1', type: 'Counter' },
+					],
+				},
+			}))
+		}, marker)
+
+		// The Source editor (Monaco) shows the dirtied draft.
+		await page.getByRole('tab', { name: 'Source' })
+			.click()
+		await expect(page.locator('.view-lines')
+			.getByText(marker, { exact: false }))
+			.toBeVisible()
+
+		// Applied instance — re-activating the SAME Implementation tab, never re-navigated — still shows
+		// the applied declaration and must NOT show the unapplied marker (scoped to the Implementation
+		// panel's own code view, not a page-wide assertion, since the marker legitimately lives in
+		// Monaco's `.view-lines` DOM above — same scoping precedent as `tutorial.spec.ts`'s dirty-draft
+		// tests).
+		await page.getByRole('tab', { name: 'Implementation' })
+			.click()
+		await expect(appliedInstanceCode)
+			.toContainText('"text": "Widget Lab sandbox"')
+		await expect(appliedInstanceCode)
+			.not.toContainText(marker)
+	})
 })
