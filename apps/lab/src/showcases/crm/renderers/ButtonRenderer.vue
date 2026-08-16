@@ -7,9 +7,10 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { ButtonPlugin } from '../plugins/actions'
 
-const { useProperties, useMethods, useMethodIssues } = useWidget(ButtonPlugin)
+const { useProperties, useMethods, useMethodIssues, widgetId, widgetType } = useWidget(ButtonPlugin)
 const { label, kind } = useProperties()
 const { press } = useMethods()
 const { press: pressIssues } = useMethodIssues()
@@ -21,6 +22,7 @@ const accentColor = computed(() => {
 		default: return 'var(--lab-color-border)'
 	}
 })
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 
 function onClick(): void {
 	press()
@@ -28,7 +30,10 @@ function onClick(): void {
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '4px' })">
+	<div
+		v-bind="inspectAnchor"
+		:class="pika({ display: 'flex', flexDirection: 'column', gap: '4px' })"
+	>
 		<button
 			type="button"
 			:class="pika({ padding: '6px 12px', fontSize: '12px', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"

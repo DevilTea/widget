@@ -24,10 +24,11 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { TripMetricsPlugin } from '../plugins/trip-metrics'
 import { toProvenanceLines } from './trip-metrics-issue-provenance'
 
-const { useProperties, usePropertyIssues } = useWidget(TripMetricsPlugin)
+const { useProperties, usePropertyIssues, widgetId, widgetType } = useWidget(TripMetricsPlugin)
 const { tripDays, travelerCount, budgetPerPersonPerDay, estimatedBaselineCost } = useProperties()
 const { tripDays: tripDaysIssues, travelerCount: travelerCountIssues, budgetPerPersonPerDay: budgetPerPersonPerDayIssues, estimatedBaselineCost: estimatedBaselineCostIssues } = usePropertyIssues()
 
@@ -45,10 +46,14 @@ const tripDaysLines = computed(() => toProvenanceLines(tripDaysIssues.value))
 const travelerCountLines = computed(() => toProvenanceLines(travelerCountIssues.value))
 const budgetPerPersonPerDayLines = computed(() => toProvenanceLines(budgetPerPersonPerDayIssues.value))
 const estimatedBaselineCostLines = computed(() => toProvenanceLines(estimatedBaselineCostIssues.value))
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 </script>
 
 <template>
-	<div data-tutorial-target="survey-trip-metrics">
+	<div
+		data-tutorial-target="survey-trip-metrics"
+		v-bind="inspectAnchor"
+	>
 		<p :class="pika({ margin: '0 0 8px', fontSize: '11px', fontStyle: 'italic', color: 'var(--lab-color-text-muted)' })">
 			Illustrative/demo estimate only — synthetic Lab fixtures, not real travel pricing.
 		</p>

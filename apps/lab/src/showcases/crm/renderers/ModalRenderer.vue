@@ -33,14 +33,16 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { nextTick, useId, useTemplateRef, watch } from 'vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { ModalPlugin } from '../plugins/actions'
 
-const { useState, useMethods, WidgetSlot } = useWidget(ModalPlugin)
+const { useState, useMethods, WidgetSlot, widgetId, widgetType } = useWidget(ModalPlugin)
 const { open } = useState()
 const { close } = useMethods()
 
 const titleId = useId()
 const dialogRef = useTemplateRef<HTMLDialogElement>('dialog')
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 
 // The element focus should return to once the dialog closes ("closing returns focus to the invoking
 // element when practical"), captured the instant before `showModal()` moves focus away from it.
@@ -101,6 +103,7 @@ function onNativeClose(): void {
 <template>
 	<dialog
 		ref="dialog"
+		v-bind="inspectAnchor"
 		:aria-labelledby="titleId"
 		:class="pika({ 'padding': '0', 'border': 'none', 'background': 'transparent', '$::backdrop': { background: 'color-mix(in srgb, black 55%, transparent)' } })"
 		@cancel="onCancel"

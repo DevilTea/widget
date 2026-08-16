@@ -5,13 +5,18 @@
  * — see `../plugins/structural.ts`'s file header) carries no per-instance ambiguity.
  */
 import { useWidget } from '@deviltea/widget-vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { AppShellPlugin } from '../plugins/structural'
 
-const { WidgetSlot } = useWidget(AppShellPlugin)
+const { WidgetSlot, widgetId, widgetType } = useWidget(AppShellPlugin)
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'var(--lab-font-sans)', position: 'relative' })">
+	<div
+		v-bind="inspectAnchor"
+		:class="pika({ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'var(--lab-font-sans)', position: 'relative' })"
+	>
 		<header :class="pika({ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 14px', borderBottom: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)' })">
 			<div :class="pika({ display: 'flex', alignItems: 'baseline', gap: '8px' })">
 				<strong :class="pika({ fontSize: '14px' })">Sales Pipeline CRM</strong>

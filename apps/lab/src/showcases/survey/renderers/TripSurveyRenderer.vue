@@ -22,14 +22,16 @@
  * sibling-metric duplication) there is no multi-row duplicate-appearance problem to solve here.
  */
 import { useWidget } from '@deviltea/widget-vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { TripSurveyPlugin } from '../plugins/trip-survey'
 
-const { useState, useProperties, useMethods, useMethodIssues, WidgetSlot } = useWidget(TripSurveyPlugin)
+const { useState, useProperties, useMethods, useMethodIssues, WidgetSlot, widgetId, widgetType } = useWidget(TripSurveyPlugin)
 const { phase, result } = useState()
 const { resultFresh } = useProperties()
 const { reset, submit, generateResult } = useMethods()
 const methodIssues = useMethodIssues()
 const { submit: submitIssues, generateResult: generateResultIssues } = methodIssues
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 
 function onReset(): void {
 	reset()
@@ -43,7 +45,10 @@ function onGenerateResult(): void {
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '12px' })">
+	<div
+		v-bind="inspectAnchor"
+		:class="pika({ display: 'flex', flexDirection: 'column', gap: '12px' })"
+	>
 		<header :class="pika({ display: 'flex', alignItems: 'center', gap: '10px' })">
 			<strong :class="pika({ fontSize: '14px' })">Interactive Survey — trip planner</strong>
 			<span :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">phase: {{ phase }}</span>

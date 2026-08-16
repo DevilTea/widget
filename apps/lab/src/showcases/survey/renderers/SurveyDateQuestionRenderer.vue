@@ -14,10 +14,11 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, useId } from 'vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { SURVEY_DATE_QUESTION_TARGETS } from '../../../tutorial/survey-target-map'
 import { SurveyDateQuestionPlugin } from '../plugins/survey-questions'
 
-const { useState, useProperties, useStateIssues } = useWidget(SurveyDateQuestionPlugin)
+const { useState, useProperties, useStateIssues, widgetId, widgetType } = useWidget(SurveyDateQuestionPlugin)
 const { answer } = useState()
 const { label, help } = useProperties()
 const { answer: answerIssues } = useStateIssues()
@@ -25,6 +26,7 @@ const { answer: answerIssues } = useStateIssues()
 const inputId = useId()
 const helpId = useId()
 const tutorialTarget = computed(() => label.value === null ? undefined : SURVEY_DATE_QUESTION_TARGETS[label.value])
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 
 function onChange(event: Event): void {
 	const value = (event.target as HTMLInputElement).value
@@ -35,6 +37,7 @@ function onChange(event: Event): void {
 <template>
 	<div
 		:data-tutorial-target="tutorialTarget"
+		v-bind="inspectAnchor"
 		:class="pika({ display: 'flex', flexDirection: 'column', gap: '4px', padding: '6px 0' })"
 	>
 		<label

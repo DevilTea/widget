@@ -9,15 +9,20 @@
  * 4941241562 non-blocking note: corrected from an earlier comment that claimed this gated `disabled`).
  */
 import { useWidget } from '@deviltea/widget-vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { DealStageFormPlugin } from '../plugins/deal-stage-form'
 
-const { useProperties, useMethodIssues, WidgetSlot } = useWidget(DealStageFormPlugin)
+const { useProperties, useMethodIssues, WidgetSlot, widgetId, widgetType } = useWidget(DealStageFormPlugin)
 const { selectedDeal, canSave } = useProperties()
 const { save: saveIssues, open: openIssues } = useMethodIssues()
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '10px' })">
+	<div
+		v-bind="inspectAnchor"
+		:class="pika({ display: 'flex', flexDirection: 'column', gap: '10px' })"
+	>
 		<p
 			v-if="selectedDeal"
 			:class="pika({ margin: '0', fontSize: '12px' })"

@@ -55,6 +55,12 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin
 	const result: Record<string, unknown> = Object.create(null)
 	const capabilities = plugin.capabilities
 
+	// Unconditional widget identity (issue #13 checkpoint amendment "useWidget() may expose readonly
+	// local widget identity"): plain values projected once from the already-injected current
+	// `RuntimeWidget`, never refs — a mounted renderer instance's widget identity never changes.
+	result.widgetId = widget.id
+	result.widgetType = widget.type
+
 	if (capabilities.state) {
 		const state = widget.state!
 		let surface: Readonly<Record<string, unknown>> | undefined

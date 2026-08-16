@@ -7,9 +7,10 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { MetricCardPlugin } from '../plugins/read-models'
 
-const { useProperties } = useWidget(MetricCardPlugin)
+const { useProperties, widgetId, widgetType } = useWidget(MetricCardPlugin)
 const { value, label, format } = useProperties()
 
 const displayValue = computed(() => {
@@ -18,10 +19,14 @@ const displayValue = computed(() => {
 		? `$${numericValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 		: numericValue.toLocaleString('en-US', { maximumFractionDigits: 0 })
 })
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '140px' })">
+	<div
+		v-bind="inspectAnchor"
+		:class="pika({ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '140px' })"
+	>
 		<span :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">{{ label }}</span>
 		<strong :class="pika({ fontSize: '20px' })">{{ displayValue }}</strong>
 	</div>

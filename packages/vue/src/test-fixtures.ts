@@ -172,6 +172,17 @@ export const EmptySlotsPlugin = createWidgetPlugin('EmptySlots')
 	.slots({})
 	.done()
 
+/**
+ * Zero declared capabilities at all (no `config`/`slots`/`state`/`properties`/`methods`) — every
+ * builder phase above `interfaces()` is skipped. Used to prove widget identity (`widgetId`/
+ * `widgetType`) is available regardless of, and independent from, optional capability declarations.
+ */
+export interface BareInterfaces extends WidgetInterfaces {}
+
+export const BarePlugin = createWidgetPlugin('Bare')
+	.interfaces<BareInterfaces>()
+	.done()
+
 export const fixturePlugins = [CounterPlugin, LabelPlugin, ContainerPlugin, LeafPlugin, EmptyStatePlugin] as const
 
 export const fixtureSystem = createWidgetSystem({ plugins: fixturePlugins })
@@ -182,7 +193,7 @@ export const fixtureSystem = createWidgetSystem({ plugins: fixturePlugins })
  * `fixtureSystem` so these additions never ripple into the renderer-registry exhaustiveness checks
  * exercised by every other fixture-driven test file.
  */
-export const capabilityFixturePlugins = [EmptyPropertiesPlugin, EmptyMethodsPlugin, EmptySlotsPlugin] as const
+export const capabilityFixturePlugins = [EmptyPropertiesPlugin, EmptyMethodsPlugin, EmptySlotsPlugin, BarePlugin] as const
 
 export const capabilityFixtureSystem = createWidgetSystem({ plugins: capabilityFixturePlugins })
 

@@ -7,16 +7,21 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { BarChartPlugin } from '../plugins/read-models'
 
-const { useProperties } = useWidget(BarChartPlugin)
+const { useProperties, widgetId, widgetType } = useWidget(BarChartPlugin)
 const { series } = useProperties()
 
 const maxValue = computed(() => Math.max(1, ...(series.value ?? []).map(point => point.value)))
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '8px' })">
+	<div
+		v-bind="inspectAnchor"
+		:class="pika({ display: 'flex', flexDirection: 'column', gap: '8px' })"
+	>
 		<h3 :class="pika({ margin: '0', fontSize: '13px' })">
 			Deals by stage
 		</h3>
