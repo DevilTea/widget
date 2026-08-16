@@ -48,6 +48,20 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   `RuntimePropertyInspection`. Calls only `getSnapshot()`/`subscribe()` — never `state.get()`/
   `property.get()` — so opening/subscribing an inspector can never activate a lazy Property.
 - `src/graph/` — the Dependency Graph's pure projection/layout pipeline; see "Dependency Graph" below.
+- `src/implementation/` — the curated Implementation source explorer's framework-agnostic core (issue
+  #25 P3): `types.ts` (`SourcesRegistry`/`CuratedSourceFile` — metadata only, `load()` thunks are the
+  lazy boundary), `registry-coverage.ts` (dangling/uncurated-type sanity used by unit tests),
+  `applied-instance.ts` (pure extraction of a widget's own JSON fragment from the *applied* source
+  text), `focused-widget.ts` (shared focus -> plain `{ id, type }`), and `shiki-highlighter.ts` (the
+  lazy, self-contained Shiki fine-grained highlighter — see "Loading policy" below for its chunk and
+  engine-choice rationale). Each showcase's `sources.ts` (`src/showcases/survey/sources.ts`,
+  `src/showcases/crm/sources.ts`, `src/sandbox/sources.ts`) is the actual curated registry, wired into
+  `ShowcaseEntry.sources` (`src/showcases/registry.ts`) alongside `presets`. `src/components/panels/
+  ImplementationPanel.vue` (registered lazily — see below) and `src/components/implementation/*`
+  (`ImplementationFile.vue`, `ImplementationSourceView.vue`) are the Vue layer; `src/composables/
+  use-implementation-explorer.ts` is the small, deliberately parallel open/activate bridge to
+  `Workbench.vue`'s Dockview instance (see that file's header for why it is not an extension of
+  `LabStore.activeTab`).
 - `src/lib/issue-format.ts` — shared structured-issue formatting helpers (`formatIssuePath`,
   `formatDependencyReference`, ...) reused by `blueprint/IssueList.vue` and
   `runtime/RuntimePropertyIssueList.vue`. `message` is never parsed for structure; every field beyond it
@@ -58,10 +72,13 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   selected via `AddPanelOptions.tabComponent` on each of the five canonical panels' `addPanel()` calls, it
   renders only a title, no close control, so those panels can never be closed; Dockview's own `Tab`
   wrapper — drag/reorder/dock/resize/activate — is untouched, since a `tabComponent` only replaces what
-  that wrapper renders as content), `panels/*` (Source/Blueprint/Runtime/Graph tabs), `preview/PreviewPanel.vue`,
-  `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list), `runtime/*` (Runtime
-  Inspector's member rows + property-issue list), `graph/*` (the Vue Flow canvas + panel-local edge
-  details).
+  that wrapper renders as content), `panels/*` (Source/Blueprint/Runtime/Graph tabs, plus the
+  lazily-registered `ImplementationPanel.vue` — issue #25 P3; it is the one panel `Workbench.vue`
+  registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
+  deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
+  `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list; the selected-node
+  detail also carries a "View implementation" entry point), `runtime/*` (Runtime Inspector's member rows
+  + property-issue list), `graph/*` (the Vue Flow canvas + panel-local edge details).
 - `src/App.vue` also renders a narrow-viewport gate (issue #27 Finding 3): a pure CSS
   `@media (max-width: 899px)` rule (no JS resize listener/state) shows a `position: fixed` explanatory
   overlay ("Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.") covering
@@ -140,11 +157,16 @@ Intentional, not incidental (issue #30 Scope B) — the production artifact's ch
 building this app in isolation:
 
 ```text
-main app JS (index-*.js)                ~742 KB raw / ~204 KB gzip  — eager
+main app JS (index-*.js)                ~778 KB raw / ~214 KB gzip  — eager
 modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Source mounts
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Source mounts
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
+Implementation panel + Shiki (ImplementationPanel-*.js)
+                                         ~373 KB raw / ~74 KB gzip  — loaded on first Implementation open
+curated raw-source chunks (per curated file, e.g. TableRenderer-*.js)
+                                         ~0.6-14 KB raw / ~0.4-4.3 KB gzip each — loaded on first
+                                         selection of that file's tab
 CSS (index-*.css)                       ~120 KB raw / ~11 KB gzip   — eager
 ```
 
@@ -189,6 +211,25 @@ CSS (index-*.css)                       ~120 KB raw / ~11 KB gzip   — eager
   what was already true before this issue's change (Monaco and ELK both already loaded on initial mount
   before self-hosting), and self-hosting Monaco's engine does not move it into, or out of, that eager
   path — it only removes the esm.sh dependency for the fetch that already happened at that same moment.
+- **Implementation panel + Shiki + curated raw-source chunks (issue #25 P3)**: unlike Monaco/ELK above,
+  these genuinely stay lazy — `ImplementationPanel.vue` is registered in `Workbench.vue`'s `components`
+  map through `defineAsyncComponent(() => import('./panels/ImplementationPanel.vue'))`, and the panel
+  itself is only ever added to Dockview (`api.addPanel({ id: 'implementation', ... })`) the first time
+  `ImplementationExplorerStore.open()` is called — from Preview's "View implementation" button,
+  Blueprint's selected-node detail, or the Survey tour's step 8 link — never at `onReady()` time the way
+  the five canonical panels are. Verified by loading the built app fresh and driving each of those three
+  entry points: no request for `ImplementationPanel-*.js` (which statically bundles
+  `src/implementation/shiki-highlighter.ts` — `@shikijs/core`, `@shikijs/engine-javascript`, and the
+  `typescript`/`vue`/`json` `tm-grammars` grammars + `tm-themes`' `one-dark-pro` theme) occurs before the
+  first `open()` call, and one occurs immediately after. Within an open panel, each curated file's own
+  raw text is a *second*, independent lazy boundary: `showcases/*/sources.ts` / `sandbox/sources.ts`
+  only holds `load()` thunks (`() => import('...?raw')`), and `ImplementationFile.vue` only calls a
+  file's `load()` once that file's tab is actually selected — so opening the panel never fetches every
+  curated file's text up front, only the initially-selected tab's, and switching tabs fetches the next
+  one lazily too. `e2e/implementation.spec.ts`'s lazy-boundary test pins both requests are absent before
+  first open and present after (page.on('request') across a full page load, matching this section's own
+  verification method) — mirroring the network-blocked fixture's own "assert what is/isn't fetched"
+  posture (`e2e/fixtures.ts`) rather than adding a second, parallel assertion mechanism.
 
 ## Package boundaries
 
@@ -341,8 +382,8 @@ browser/workbench/DOM/focus/integration behavior -> narrow real-browser contract
 ```
 
 Unit tests are colocated `*.unit.test.ts` against real `@deviltea/widget-core` fixtures (no mocked
-core): `src/lab/`, `src/graph/`, `src/runtime-inspector/`, `src/sandbox/`, `src/composables/`, and
-`src/showcases/**` (plugin semantics, preset validity, and selected renderer contracts via
+core): `src/lab/`, `src/graph/`, `src/runtime-inspector/`, `src/implementation/`, `src/sandbox/`,
+`src/composables/`, and `src/showcases/**` (plugin semantics, preset validity, and selected renderer contracts via
 `@vue/test-utils` + `happy-dom`). The real-browser contract harness is being introduced by issue #28;
 until it lands, workbench/editor/browser-integration behavior has no automated coverage here — do not
 compensate by writing broad DOM-simulation tests for it, and once the harness exists, put

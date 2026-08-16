@@ -17,6 +17,8 @@
 	"dependencies": {
 		"@deviltea/widget-core": "workspace:*",
 		"@deviltea/widget-vue": "workspace:*",
+		"@shikijs/core": "catalog:",
+		"@shikijs/engine-javascript": "catalog:",
 		"@vue-flow/core": "catalog:",
 		"dockview-vue": "catalog:",
 		"elkjs": "catalog:",

@@ -8,6 +8,9 @@
 import type { WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { BlueprintInspection, BlueprintInspectionNode, InspectionNodeId } from '@deviltea/widget-core/inspection'
 import { computed } from 'vue'
+import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
+import { useLabStore } from '../../composables/use-lab-store'
+import { getShowcase } from '../../showcases/registry'
 import IssueList from './IssueList.vue'
 
 const props = defineProps<{
@@ -19,6 +22,20 @@ const props = defineProps<{
 const emit = defineEmits<{
 	navigate: [nodeId: InspectionNodeId]
 }>()
+
+// issue #25 P3 Scope D, entry point 2: "View implementation" on the selected node's own detail. The
+// selected node here (`props.node`) IS the current shared focus (`BlueprintPanel.vue` drives both from
+// `store.focus`), so opening never needs to re-set focus — the Implementation panel reads the same
+// `store.focus` reactively.
+const store = useLabStore()
+const implementationExplorer = useImplementationExplorer()
+const curatedEntryAvailable = computed(() => {
+	const node = props.node
+	if (node === null || !node.resolved)
+		return false
+	const showcase = getShowcase(store.showcaseId.value)
+	return showcase !== undefined && node.node.type in showcase.sources
+})
 
 const locationLabel = computed(() => {
 	const node = props.node
@@ -50,13 +67,24 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 		v-else
 		:class="pika({ padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'auto', height: '100%' })"
 	>
-		<div>
-			<h4 :class="pika({ margin: '0 0 4px', fontSize: '13px', fontFamily: 'var(--lab-font-mono)' })">
-				{{ node.resolved ? `${node.node.id} : ${node.node.type}` : 'Unresolved node' }}
-			</h4>
-			<div :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
-				status: {{ node.resolved ? 'resolved' : 'unresolved' }} · location: {{ locationLabel }}
+		<div :class="pika({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' })">
+			<div>
+				<h4 :class="pika({ margin: '0 0 4px', fontSize: '13px', fontFamily: 'var(--lab-font-mono)' })">
+					{{ node.resolved ? `${node.node.id} : ${node.node.type}` : 'Unresolved node' }}
+				</h4>
+				<div :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
+					status: {{ node.resolved ? 'resolved' : 'unresolved' }} · location: {{ locationLabel }}
+				</div>
 			</div>
+			<button
+				v-if="curatedEntryAvailable"
+				type="button"
+				data-testid="blueprint-view-implementation"
+				:class="pika({ flex: '0 0 auto', padding: '3px 10px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				@click="implementationExplorer.open()"
+			>
+				View implementation
+			</button>
 		</div>
 
 		<template v-if="node.resolved">

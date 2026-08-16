@@ -386,8 +386,6 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await startTourFromHeader(page)
 
 	const rail = page.getByRole('complementary', { name: RAIL_LABEL })
-	// `exact: true`: step 8's disabled "Implementation (coming next)" link contains "next" as a
-	// substring, which a non-exact match on "Next" would ambiguously also resolve to.
 	const nextButton = page.getByRole('button', { name: 'Next', exact: true })
 	const finishButton = page.getByRole('button', { name: 'Finish', exact: true })
 
@@ -542,9 +540,14 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.click()
 	await expect(page.getByRole('tab', { name: 'Source' }))
 		.toHaveAttribute('aria-selected', 'true')
-	// "Implementation" is named but not yet wired (P3) — non-interactive, not a dead link.
-	await expect(rail.getByRole('button', { name: 'Implementation', exact: false }))
-		.toBeDisabled()
+	// "Implementation" is a real affordance now (issue #25 P3): opens the closable Implementation panel
+	// for whichever widget is currently held in shared focus — `trip-survey`, from step 7's `onEnter`.
+	await rail.getByRole('button', { name: 'Implementation', exact: true })
+		.click()
+	await expect(page.getByRole('tab', { name: 'Implementation' }))
+		.toHaveAttribute('aria-selected', 'true')
+	await expect(page.getByText('TripSurvey', { exact: true }))
+		.toBeVisible()
 	await nextButton.click()
 
 	// Step 9 — hand-back: "Finish" replaces "Next" on the last step.
