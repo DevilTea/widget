@@ -4,6 +4,7 @@
  * (Widget Lab Phase 4) Checkpoint I, no navigation/marketing chrome that would consume workbench
  * vertical space.
  */
+import type { TutorialTourId } from '../composables/use-tutorial'
 import { computed } from 'vue'
 import { useLabStore } from '../composables/use-lab-store'
 import { useTutorialStore } from '../composables/use-tutorial'
@@ -45,6 +46,19 @@ function onTutorialButtonClick(): void {
 		default:
 			tutorial.requestStart()
 	}
+}
+
+/**
+ * Tour picker (issue #25 P4 Scope B): the locked policy is "Survey is the first-run path; the CRM tour
+ * unlocks after completion and from the persistent Tutorial header entry" — rather than a second header
+ * button, this reuses the header's existing `<select>` vocabulary (already used for showcase/preset) so
+ * picking a tour is keyboard-accessible native-select semantics, not a new bespoke control. Only rendered
+ * once `crmTourUnlocked` (i.e. never on first visit — Welcome/the plain "Tutorial" button stay the only
+ * entry points until Survey has been completed once this session); the action button below it keeps
+ * working exactly as before, just against whichever tour is currently selected here.
+ */
+function onTutorialTourChange(event: Event): void {
+	tutorial.selectTour((event.target as HTMLSelectElement).value as TutorialTourId)
 }
 
 function onPresetChange(event: Event): void {
@@ -98,6 +112,21 @@ function onShowcaseChange(event: Event): void {
 			</option>
 		</select>
 
+		<select
+			v-if="tutorial.crmTourUnlocked.value"
+			:value="tutorial.activeTourId.value"
+			:disabled="tutorial.tourPickerDisabled.value"
+			:class="pika({ 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': 'var(--lab-radius)', 'padding': '4px 8px', 'fontSize': '12px', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+			aria-label="Choose tutorial"
+			@change="onTutorialTourChange"
+		>
+			<option value="survey">
+				Survey tour
+			</option>
+			<option value="crm">
+				CRM tour
+			</option>
+		</select>
 		<button
 			type="button"
 			:disabled="tutorial.startPending.value"

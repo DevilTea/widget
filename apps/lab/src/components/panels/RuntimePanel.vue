@@ -60,7 +60,7 @@ function selectNode(nodeId: InspectionNodeId): void {
 			v-if="runtime === null"
 			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 		>
-			<p>Runtime unavailable (invalid Blueprint). Fix the diagnostics in the Blueprint tab, then Apply again.</p>
+			<p>Runtime unavailable — the applied Blueprint is invalid, so there is nothing running yet. Open the Blueprint tab to see why, fix Source, then Apply again.</p>
 		</div>
 		<div
 			v-else

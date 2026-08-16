@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createTutorialEngine } from './engine'
 
 function noopActions(): TutorialActions {
-	return { setFocus: () => {}, activateTab: () => {}, openImplementation: () => {} }
+	return { setFocus: () => {}, activateTab: () => {}, openImplementation: () => {}, startTour: () => {} }
 }
 
 /**

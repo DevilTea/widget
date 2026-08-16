@@ -42,35 +42,54 @@ describe('tutorial session flags', () => {
 			.toBe(true)
 	})
 
-	it('the tour starts uncompleted', () => {
-		expect(isTourCompleted(storage))
+	it('a tour starts uncompleted', () => {
+		expect(isTourCompleted('survey', storage))
+			.toBe(false)
+		expect(isTourCompleted('crm', storage))
 			.toBe(false)
 	})
 
-	it('markTourCompleted() makes isTourCompleted() true', () => {
-		markTourCompleted(storage)
-		expect(isTourCompleted(storage))
+	it('markTourCompleted(tourId) makes isTourCompleted(tourId) true', () => {
+		markTourCompleted('survey', storage)
+		expect(isTourCompleted('survey', storage))
+			.toBe(true)
+	})
+
+	it('each tour id has its own independent completed flag', () => {
+		markTourCompleted('survey', storage)
+		expect(isTourCompleted('survey', storage))
+			.toBe(true)
+		expect(isTourCompleted('crm', storage))
+			.toBe(false)
+
+		markTourCompleted('crm', storage)
+		expect(isTourCompleted('survey', storage))
+			.toBe(true)
+		expect(isTourCompleted('crm', storage))
 			.toBe(true)
 	})
 
 	it('welcome-dismissed and tour-completed are independent flags', () => {
-		markTourCompleted(storage)
+		markTourCompleted('survey', storage)
 		expect(isWelcomeDismissed(storage))
 			.toBe(false)
 
 		markWelcomeDismissed(storage)
-		expect(isTourCompleted(storage))
+		expect(isTourCompleted('survey', storage))
 			.toBe(true)
 	})
 
-	it('a fresh storage (simulating a new browser session) reports both flags unset', () => {
+	it('a fresh storage (simulating a new browser session) reports every flag unset', () => {
 		markWelcomeDismissed(storage)
-		markTourCompleted(storage)
+		markTourCompleted('survey', storage)
+		markTourCompleted('crm', storage)
 
 		const freshSessionStorage = createFakeStorage()
 		expect(isWelcomeDismissed(freshSessionStorage))
 			.toBe(false)
-		expect(isTourCompleted(freshSessionStorage))
+		expect(isTourCompleted('survey', freshSessionStorage))
+			.toBe(false)
+		expect(isTourCompleted('crm', freshSessionStorage))
 			.toBe(false)
 	})
 })

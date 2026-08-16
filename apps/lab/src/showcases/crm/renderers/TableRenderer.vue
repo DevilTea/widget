@@ -37,6 +37,7 @@
  * deliberately rejected here.
  */
 import { useWidget } from '@deviltea/widget-vue'
+import { computed } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { TablePlugin } from '../plugins/read-models'
 
@@ -46,6 +47,8 @@ const { rows, empty, rowIdKey, columns } = useProperties()
 const { selectRow } = useMethods()
 const { selectRow: selectRowIssues } = useMethodIssues()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
+// `data-tutorial-target` (issue #25 P4): `deal-table` is this preset's only `Table` instance.
+const tutorialTarget = computed(() => (widgetId === 'deal-table' ? 'crm-table' : undefined))
 
 function rowId(row: Record<string, unknown>): unknown {
 	const key = rowIdKey.value
@@ -90,6 +93,7 @@ function onRowKeydown(event: KeyboardEvent, row: Record<string, unknown>): void 
 <template>
 	<div
 		v-bind="inspectAnchor"
+		:data-tutorial-target="tutorialTarget"
 		:class="pika({ display: 'flex', flexDirection: 'column', gap: '6px' })"
 	>
 		<table

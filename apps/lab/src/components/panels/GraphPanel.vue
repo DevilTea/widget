@@ -11,6 +11,7 @@ import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selectio
 import { useLabStore } from '../../composables/use-lab-store'
 import GraphCanvas from '../graph/GraphCanvas.vue'
 import GraphEdgeDetails from '../graph/GraphEdgeDetails.vue'
+import GraphLegend from '../graph/GraphLegend.vue'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
@@ -47,12 +48,13 @@ function onEdgeClick(edgeId: string): void {
 	setSelectedEdgeData(null)
 }
 
+// issue #25 P4 Scope D copy audit: say why, and what to do next, rather than a bare status word.
 const statusLabel = computed(() => {
 	const status = layoutState.value.status
 	if (status === 'idle' || status === 'loading')
 		return 'Laying out…'
 	if (status === 'error')
-		return 'Layout failed.'
+		return 'Layout failed — the ELK layout worker reported an error. Toggling a filter below re-requests a fresh layout.'
 	return null
 })
 </script>
@@ -87,6 +89,7 @@ const statusLabel = computed(() => {
 			>
 				Fit graph
 			</button>
+			<GraphLegend />
 			<span
 				v-if="statusLabel"
 				:class="pika({ marginLeft: 'auto' })"
@@ -106,7 +109,7 @@ const statusLabel = computed(() => {
 				v-else
 				:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 			>
-				{{ statusLabel ?? 'No graph.' }}
+				{{ statusLabel ?? 'No graph yet — this Blueprint has no widgets to lay out.' }}
 			</div>
 		</div>
 

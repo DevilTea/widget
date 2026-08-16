@@ -32,7 +32,7 @@
  * stale state survives an Escape-driven close either.
  */
 import { useWidget } from '@deviltea/widget-vue'
-import { nextTick, useId, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, useId, useTemplateRef, watch } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { ModalPlugin } from '../plugins/actions'
 
@@ -43,6 +43,8 @@ const { close } = useMethods()
 const titleId = useId()
 const dialogRef = useTemplateRef<HTMLDialogElement>('dialog')
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
+// `data-tutorial-target` (issue #25 P4): `stage-modal` is this preset's only `Modal` instance.
+const tutorialTarget = computed(() => (widgetId === 'stage-modal' ? 'crm-stage-modal' : undefined))
 
 // The element focus should return to once the dialog closes ("closing returns focus to the invoking
 // element when practical"), captured the instant before `showModal()` moves focus away from it.
@@ -104,6 +106,7 @@ function onNativeClose(): void {
 	<dialog
 		ref="dialog"
 		v-bind="inspectAnchor"
+		:data-tutorial-target="tutorialTarget"
 		:aria-labelledby="titleId"
 		:class="pika({ 'padding': '0', 'border': 'none', 'background': 'transparent', '$::backdrop': { background: 'color-mix(in srgb, black 55%, transparent)' } })"
 		@cancel="onCancel"
