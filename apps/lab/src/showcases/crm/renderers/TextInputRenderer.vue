@@ -6,9 +6,13 @@
  * programmatically associated with its `input` via `for`/`id` (Vue's `useId()` is per-component-instance
  * and SSR-stable, matching the resolved-config-projection style already used elsewhere in this showcase
  * — no renderer-local generated-id state to keep in sync with anything semantic).
+ *
+ * `data-tutorial-target` (issue #25 P4): `deal-search` is this preset's only `TextInput` instance, so a
+ * plain widget-id equality check (rather than a label-keyed lookup table like Survey's renderers needed
+ * pre-P2) is enough — see `crm-target-map.ts`'s header for why widget id, not label, is available here.
  */
 import { useWidget } from '@deviltea/widget-vue'
-import { useId } from 'vue'
+import { computed, useId } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { TextInputPlugin } from '../plugins/inputs'
 
@@ -19,6 +23,7 @@ const { value: valueIssues } = useStateIssues()
 
 const inputId = useId()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
+const tutorialTarget = computed(() => (widgetId === 'deal-search' ? 'crm-search' : undefined))
 
 function onInput(event: Event): void {
 	value.value = (event.target as HTMLInputElement).value
@@ -28,6 +33,7 @@ function onInput(event: Event): void {
 <template>
 	<div
 		v-bind="inspectAnchor"
+		:data-tutorial-target="tutorialTarget"
 		:class="pika({ display: 'flex', flexDirection: 'column', gap: '4px' })"
 	>
 		<label

@@ -4,10 +4,16 @@
  * re-validates or duplicates that decision (mirroring Showcase A's `TripSurveyRenderer` "Vue must call
  * semantic Methods directly" rule). `label`/`kind` are exposed via `properties` as a deliberate, narrow
  * deviation from the checkpoint's literal capability list — see `../plugins/actions.ts`'s file header.
+ *
+ * `data-tutorial-target` (issue #25 P4): `Button` is reused four times in this preset ("Reset data",
+ * "Change stage", "Save", "Cancel"), so this needs the widget-id-keyed lookup table
+ * (`crm-target-map.ts`) rather than an unconditional attribute — only "Change stage" (the CRM tour's own
+ * target) has an entry; the other three render no `data-tutorial-target` at all.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
+import { CRM_BUTTON_TARGETS } from '../../../tutorial/crm-target-map'
 import { ButtonPlugin } from '../plugins/actions'
 
 const { useProperties, useMethods, useMethodIssues, widgetId, widgetType } = useWidget(ButtonPlugin)
@@ -23,6 +29,7 @@ const accentColor = computed(() => {
 	}
 })
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
+const tutorialTarget = computed(() => CRM_BUTTON_TARGETS[widgetId])
 
 function onClick(): void {
 	press()
@@ -32,6 +39,7 @@ function onClick(): void {
 <template>
 	<div
 		v-bind="inspectAnchor"
+		:data-tutorial-target="tutorialTarget"
 		:class="pika({ display: 'flex', flexDirection: 'column', gap: '4px' })"
 	>
 		<button

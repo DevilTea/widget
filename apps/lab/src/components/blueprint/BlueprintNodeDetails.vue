@@ -61,7 +61,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 		v-if="node === null"
 		:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
 	>
-		No node selected.
+		No node selected — click a node in the tree on the left to see its config, slots, and issues.
 	</div>
 	<div
 		v-else

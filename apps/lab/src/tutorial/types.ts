@@ -70,6 +70,17 @@ export interface TutorialActions {
 	 * mechanism rather than a widened `TutorialTabId` union.
 	 */
 	openImplementation: () => void
+	/**
+	 * Switches to and starts/restarts a DIFFERENT tour by id (issue #25 P4 Scope B) — the Survey tour's
+	 * hand-back step uses this for its "Take the CRM tour" link. A plain `string` (not a closed union):
+	 * this directory stays decoupled from exactly which tour scripts exist (mirrors `setFocus`'s own
+	 * plain-string `widgetId`); `use-tutorial.ts` is the one place that knows the concrete tour ids and
+	 * routes this through the same deterministic-start-with-confirmation pipeline every other
+	 * start/restart request uses. If the calling tour's own last step is still active, the switch first
+	 * finishes it (so "take the other tour" from a hand-back step reads as completing this one, not
+	 * abandoning it mid-teaching) — see that module's `startTour` implementation comment.
+	 */
+	startTour: (tourId: string) => void
 }
 
 /**
