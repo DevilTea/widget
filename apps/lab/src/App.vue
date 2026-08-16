@@ -68,8 +68,17 @@ onUnmounted(() => disposeLayoutWorker())
 			<Workbench />
 			<TutorialRail v-if="tutorialRailVisible" />
 		</div>
-		<WelcomeCard v-if="tutorial.welcomeVisible.value" />
-		<TutorialConfirmDialog v-if="tutorial.confirmVisible.value" />
+		<!--
+			issue #25 P1 merge-gate review (blocker 1): both dialogs stay always-mounted now — each is a
+			native `<dialog>` whose OWN `showModal()`/`close()` (via `useModalDialog`, driven one-way by
+			`welcomeVisible`/`confirmVisible`) is the single thing that opens/closes it, mirroring
+			`ModalRenderer.vue`'s semantic-widget pattern. A `v-if` here would race that: the same reactive
+			flip that flows into `useModalDialog`'s watcher would also unmount the component from a
+			different reactive path, with no ordering guarantee between "run the watcher's close/focus-
+			restore logic" and "Vue tears down the component".
+		-->
+		<WelcomeCard />
+		<TutorialConfirmDialog />
 		<div
 			class="narrow-viewport-gate"
 			role="alert"

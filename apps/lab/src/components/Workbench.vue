@@ -54,6 +54,13 @@ const tabComponents: Record<string, VueComponent> = {
 
 const workbenchEl = ref<HTMLElement | null>(null)
 let resizeObserver: ResizeObserver | null = null
+// Merge-gate review hygiene note (issue #25 P1): `watchTutorialTabActivation()` below is only ever
+// called from `onReady()`, a child-emitted event-callback invocation rather than `setup()`'s own
+// synchronous body or a lifecycle hook Vue explicitly re-activates this component's effect scope for —
+// so a `watch()` created there is not reliably guaranteed to be auto-disposed on unmount. Retaining its
+// stop handle and calling it from `onBeforeUnmount` (alongside the existing `resizeObserver.disconnect()`)
+// makes the cleanup explicit rather than relying on that scope behavior.
+let stopTutorialTabActivationWatch: (() => void) | null = null
 
 /**
  * `dockview-vue`'s `<DockviewVue>` measures its container exactly once, synchronously, in its own
@@ -74,7 +81,10 @@ function observeSize(api: DockviewApi): void {
 	resizeObserver.observe(el)
 }
 
-onBeforeUnmount(() => resizeObserver?.disconnect())
+onBeforeUnmount(() => {
+	resizeObserver?.disconnect()
+	stopTutorialTabActivationWatch?.()
+})
 
 function onReady(event: DockviewReadyEvent): void {
 	const { api } = event
@@ -132,7 +142,7 @@ function onReady(event: DockviewReadyEvent): void {
  * of truth for "which tab is active" that the rest of the shell would have to stay in sync with.
  */
 function watchTutorialTabActivation(api: DockviewApi): void {
-	watch(
+	stopTutorialTabActivationWatch = watch(
 		() => store.activeTab.value,
 		(tab) => {
 			api.getPanel(tab)?.api.setActive()

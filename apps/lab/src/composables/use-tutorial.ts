@@ -16,12 +16,26 @@ import { decideDeterministicStart } from '../tutorial/deterministic-start'
 import { createTutorialEngine } from '../tutorial/engine'
 import { createRuntimeReader, findBlueprintNodeId, subscribeObservationTargets } from '../tutorial/inspection-reader'
 import { isTourCompleted, isWelcomeDismissed, markTourCompleted, markWelcomeDismissed } from '../tutorial/session-flags'
+import { createStartRequestGuard } from '../tutorial/start-request'
 import { SURVEY_TOUR_ID, surveyTourScript } from '../tutorial/survey-script'
 
 export interface TutorialStore {
 	readonly snapshot: Readonly<Ref<TutorialEngineSnapshot>>
 	readonly welcomeVisible: Readonly<Ref<boolean>>
 	readonly confirmVisible: Readonly<Ref<boolean>>
+	/**
+	 * `true` only while the deterministic reload + `engine.start()`/`restart()` is actually in flight
+	 * (`start-request.ts`'s `'loading'` phase) — deliberately NOT while a dirty-draft confirmation is
+	 * merely open (`'confirming'`); see `syncPending()`'s comment in this module for why (in short:
+	 * disabling the header button during `'confirming'` would blur its own focus before
+	 * `TutorialConfirmDialog.vue` can capture it as "the control to restore focus to" on close —
+	 * breaking blocker 1's contract). The header's Tutorial/Restart button binds `:disabled` to this;
+	 * the confirm dialog's own "Start tour"/Welcome's "Start the tour" buttons deliberately do not,
+	 * since `start-request.ts`'s guard already makes a stray duplicate click on those a safe no-op on
+	 * its own (see its `confirm()`/`request()` contracts) — no UI disable is needed there, and both
+	 * dialogs already exclude every OTHER control from the tab order via native `showModal()` anyway.
+	 */
+	readonly startPending: Readonly<Ref<boolean>>
 	/** Welcome card's "Explore on my own" — dismisses without starting the tour. */
 	dismissWelcome: () => void
 	/** Welcome card's "Start the tour", and the header's "Tutorial" entry when idle. */
@@ -77,6 +91,24 @@ export function createTutorialStore(store: LabStore): TutorialStore {
 	const confirmVisible = shallowRef(false)
 	let pendingConfirmAction: (() => void) | null = null
 
+	// Blocker 3 guard (see `start-request.ts`'s header for the full hazard). The GUARD's own
+	// idempotency (`request()`/`confirm()` returning `false` while not `'idle'`/`'confirming'`
+	// respectively) is what actually makes a re-entrant click safe, in every phase — `startPending`
+	// below is only the UI-facing subset of that used to visually disable the header button, and is
+	// deliberately narrower than "any phase is not idle": it tracks `'loading'` only, not
+	// `'confirming'`. Disabling the header button the instant a dirty-draft confirmation opens would
+	// blur its own focus (a disabled element cannot stay focused) before `useModalDialog` on
+	// `TutorialConfirmDialog.vue` gets a chance to capture "the control focus should return to" —
+	// silently breaking blocker 1's "closing restores focus to the initiating control" contract. Staying
+	// enabled (but functionally inert, via the guard) during `'confirming'` is safe and correct: a
+	// stray second click on the header while the confirmation is already open just calls
+	// `requestStartOrRestart()` again, which `startRequestGuard.request()` immediately no-ops.
+	const startRequestGuard = createStartRequestGuard()
+	const startPending = shallowRef(false)
+	function syncPending(): void {
+		startPending.value = startRequestGuard.getPhase() === 'loading'
+	}
+
 	function actions(): TutorialActions {
 		return {
 			setFocus: (widgetId, member) => {
@@ -105,10 +137,28 @@ export function createTutorialStore(store: LabStore): TutorialStore {
 					engine.start(actions())
 				recheckNow()
 			})
+			.finally(() => {
+				// Settles the guard only once the deterministic reload AND the engine transition it gates
+				// have both landed — never merely once `loadSurveyDefault()` resolves — so a coalesced
+				// request during this entire window can never race a later engine.start()/restart() call.
+				startRequestGuard.settle()
+				syncPending()
+			})
 	}
 
+	/**
+	 * The single entry point every start/restart-triggering affordance calls. Requests the guard FIRST,
+	 * synchronously, before touching `decideDeterministicStart()`/`confirmVisible`/`beginTour()` at all —
+	 * a request rejected as already-pending (blocker 3) must be a complete no-op, never a second
+	 * confirmation dialog or a second `loadSurveyDefault()` round trip.
+	 */
 	function requestStartOrRestart(isRestart: boolean): void {
 		const decision = decideDeterministicStart({ isDirty: store.isDirty.value })
+		const accepted = startRequestGuard.request(decision.needsConfirmation)
+		syncPending()
+		if (!accepted)
+			return
+
 		if (decision.needsConfirmation) {
 			pendingConfirmAction = () => beginTour(isRestart)
 			confirmVisible.value = true
@@ -144,6 +194,7 @@ export function createTutorialStore(store: LabStore): TutorialStore {
 		snapshot,
 		welcomeVisible,
 		confirmVisible,
+		startPending,
 		dismissWelcome: () => {
 			markWelcomeDismissed()
 			welcomeVisible.value = false
@@ -164,13 +215,22 @@ export function createTutorialStore(store: LabStore): TutorialStore {
 		},
 		confirmStart: () => {
 			confirmVisible.value = false
+			const proceeded = startRequestGuard.confirm()
+			syncPending()
+			if (!proceeded)
+				return
 			const action = pendingConfirmAction
 			pendingConfirmAction = null
 			action?.()
 		},
+		// The dirty-draft confirmation's "Cancel" AND its Escape path (blocker 1's locked policy) both
+		// route through this one method — nothing is reloaded, the guard is released so a fresh request
+		// is accepted afterward, and the draft is left completely untouched.
 		cancelStart: () => {
 			confirmVisible.value = false
 			pendingConfirmAction = null
+			startRequestGuard.cancel()
+			syncPending()
 		},
 		next: () => {
 			engine.next(actions())
