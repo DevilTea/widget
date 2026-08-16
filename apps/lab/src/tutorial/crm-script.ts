@@ -52,11 +52,20 @@ function findDealById(deals: unknown, id: string): { readonly stage: unknown } |
 		typeof deal === 'object' && deal !== null && (deal as { id?: unknown }).id === id)
 }
 
+/**
+ * `true` when `deals` (an array of deal-shaped records) contains one with `id`. Reuses the same
+ * structural shape `findDealById` already checks — a deal record always carries `id`, whether read from
+ * `DealStore.deals` or `DealQuery.filteredDeals` (a filtered projection of the same records).
+ */
+function dealsInclude(deals: unknown, id: string): boolean {
+	return findDealById(deals, id) !== undefined
+}
+
 export const crmTourScript: TutorialScript = {
 	id: CRM_TOUR_ID,
 	observationTargets: [
 		{ widgetId: 'deal-search', member: { type: 'state', key: 'value' } },
-		{ widgetId: 'deal-query', member: { type: 'property', key: 'count' } },
+		{ widgetId: 'deal-query', member: { type: 'property', key: 'filteredDeals' } },
 		{ widgetId: 'deal-table', member: { type: 'state', key: 'selectedRowId' } },
 		{ widgetId: 'stage-modal', member: { type: 'state', key: 'open' } },
 		{ widgetId: 'deal-store', member: { type: 'state', key: 'deals' } },
@@ -77,13 +86,24 @@ export const crmTourScript: TutorialScript = {
 			title: 'Search, stored as State',
 			target: 'crm-search',
 			onEnter: actions => actions.setFocus('deal-search', { type: 'state', name: 'value' }),
+			// Merge-gate review round 2, blocker 1: "Aurora" is the required action, not merely an example
+			// — the predicate below is pinned to it (via the filtered SET still containing `deal-1`,
+			// rather than a bare "any narrowing query" check). `DealQuery.filteredDeals` is a real
+			// case-insensitive substring filter over company/contact/owner, so an EQUALLY valid search
+			// like "Borealis" would also narrow the table — but it would filter Aurora Systems OUT, and
+			// the very next step is hard-pinned to selecting exactly that row (`deal-1`). Accepting any
+			// narrowing search here would let the tour advance into a state its own next instruction
+			// cannot be completed from, without the visitor independently realizing they must undo it.
 			stages: [{
-				prompt: 'Try it: search for a company, e.g. "Aurora".',
+				prompt: 'Try it: search for "Aurora".',
 				isComplete: (reader) => {
-					const count = reader.readProperty('deal-query', 'count')
-					// `crm-default` seeds exactly 8 deals — any successful count other than 8 proves the
-					// search actually narrowed the set (see `showcases/crm/domain.ts`'s `seedDeals`).
-					return count?.status === 'completed' && count.result.success && count.result.value !== 8
+					const filteredDeals = reader.readProperty('deal-query', 'filteredDeals')
+					if (filteredDeals?.status !== 'completed' || !filteredDeals.result.success)
+						return false
+					const deals = filteredDeals.result.value
+					// Narrowing occurred (fewer than all 8 seed deals are visible) AND the row the next
+					// step requires (Aurora Systems, `deal-1`) is still among them.
+					return Array.isArray(deals) && deals.length < 8 && dealsInclude(deals, 'deal-1')
 				},
 				reveal: 'The table narrowed and the Visible deals KPI updated together. Your search is stored as State on the deal-search widget; the table and KPI are Properties — DealQuery.filteredDeals/count — derived from that same State, recomputed automatically.',
 			}],

@@ -75,6 +75,38 @@ test.describe('CRM tour entry', () => {
 			.toBeVisible()
 	})
 
+	test('merge-gate review round 2, blocker 2: the tour picker is disabled while a tour is active, and the CRM rail stays even if a change is forced through', async ({ page }) => {
+		await startCrmTourFromHeader(page)
+
+		const rail = page.getByRole('complementary', { name: RAIL_LABEL })
+		await expect(rail.getByText('This is the Sales Pipeline CRM — a deal-tracking dashboard over a shared set of deals.'))
+			.toBeVisible()
+
+		const picker = page.getByLabel('Choose tutorial')
+		await expect(picker)
+			.toBeDisabled()
+
+		// Force a raw 'change' event through, bypassing the `disabled` attribute's protection against
+		// ordinary user interaction — this exercises `selectTour()`'s own store-level defensive rejection
+		// (blocker 2), not merely the UI-level `:disabled` binding a real user would already be stopped by.
+		await picker.evaluate((element) => {
+			(element as HTMLSelectElement).value = 'survey'
+			element.dispatchEvent(new Event('change', { bubbles: true }))
+		})
+
+		// The CRM rail stays — nothing was orphaned. (The forced DOM mutation above bypasses Vue
+		// entirely, so the `<select>`'s own raw DOM `.value` is not asserted here — Vue's one-way
+		// `:value` binding only re-patches the element when the underlying reactive model actually
+		// changes, which `selectTour()` correctly prevented; what matters is the STORE'S state, proven
+		// below via the showcase and rail content, both still CRM.)
+		await expect(page.getByLabel('Switch showcase'))
+			.toHaveValue('crm')
+		await expect(rail)
+			.toBeVisible()
+		await expect(rail.getByText('This is the Sales Pipeline CRM — a deal-tracking dashboard over a shared set of deals.'))
+			.toBeVisible()
+	})
+
 	test('"Take the CRM tour" from Survey\'s hand-back step marks Survey completed and starts the CRM tour', async ({ page }) => {
 		await page.goto('/')
 		await page.getByRole('button', { name: 'Tutorial', exact: true })
@@ -264,7 +296,7 @@ test('full CRM tour end-to-end via real interactions, each observation appearing
 		.toBeVisible()
 })
 
-test('Graph legend opens, names the three edge kinds, and dismisses', async ({ page }) => {
+test('Graph legend is a plain disclosure (not a menu popup), opens/closes via keyboard, and names the three edge kinds', async ({ page }) => {
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('crm')
@@ -274,15 +306,26 @@ test('Graph legend opens, names the three edge kinds, and dismisses', async ({ p
 	const legendButton = page.getByRole('button', { name: 'Legend' })
 	await expect(legendButton)
 		.toHaveAttribute('aria-expanded', 'false')
+	// Merge-gate review round 2, finding 3: a plain disclosure/group, never a menu-style popup.
+	await expect(legendButton)
+		.not.toHaveAttribute('aria-haspopup')
+	const controlledId = await legendButton.getAttribute('aria-controls')
+	expect(controlledId)
+		.toBeTruthy()
+
 	const legendPanel = page.getByRole('group', { name: 'Graph legend' })
 	await expect(legendPanel)
 		.toHaveCount(0)
 
-	await legendButton.click()
+	// Opens via keyboard (focus + Enter) — the native button gives this for free, no custom key handling.
+	await legendButton.focus()
+	await page.keyboard.press('Enter')
 	await expect(legendButton)
 		.toHaveAttribute('aria-expanded', 'true')
 	await expect(legendPanel)
 		.toBeVisible()
+	await expect(legendPanel)
+		.toHaveAttribute('id', controlledId!)
 	await expect(legendPanel.getByText('reads', { exact: true }))
 		.toBeVisible()
 	await expect(legendPanel.getByText('writes', { exact: true }))
@@ -290,9 +333,18 @@ test('Graph legend opens, names the three edge kinds, and dismisses', async ({ p
 	await expect(legendPanel.getByText('invokes', { exact: true }))
 		.toBeVisible()
 
-	await legendButton.click()
+	// Closes via keyboard too (focus stays on the button after Enter activation) — Space this time.
+	await page.keyboard.press('Space')
 	await expect(legendButton)
 		.toHaveAttribute('aria-expanded', 'false')
+	await expect(legendPanel)
+		.toHaveCount(0)
+
+	// Mouse click still works (not keyboard-only).
+	await legendButton.click()
+	await expect(legendPanel)
+		.toBeVisible()
+	await legendButton.click()
 	await expect(legendPanel)
 		.toHaveCount(0)
 })

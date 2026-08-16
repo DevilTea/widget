@@ -115,7 +115,8 @@ function onShowcaseChange(event: Event): void {
 		<select
 			v-if="tutorial.crmTourUnlocked.value"
 			:value="tutorial.activeTourId.value"
-			:class="pika({ background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 8px', fontSize: '12px' })"
+			:disabled="tutorial.tourPickerDisabled.value"
+			:class="pika({ 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': 'var(--lab-radius)', 'padding': '4px 8px', 'fontSize': '12px', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 			aria-label="Choose tutorial"
 			@change="onTutorialTourChange"
 		>

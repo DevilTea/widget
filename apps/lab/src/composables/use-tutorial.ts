@@ -69,8 +69,21 @@ export interface TutorialStore {
 	 */
 	readonly crmTourUnlocked: Readonly<Ref<boolean>>
 	/**
-	 * The header's tour-picker `<select>`. A no-op if asked to select `'crm'` before `crmTourUnlocked`
-	 * (defensive — the header template already only renders that option once unlocked).
+	 * `true` whenever switching the selected tour would orphan an engine (merge-gate review round 2,
+	 * blocker 2): the CURRENT tour's own engine is `'active'`/`'paused'`, or a start/restart request is
+	 * pending (`'confirming'` or `'loading'` — the whole span `startRequestGuard` occupies, not only its
+	 * `'loading'` phase, since a `selectTour()` mid-`'confirming'` would abandon THAT engine's already-
+	 * requested start just as much as mid-`'loading'` would). `LabHeader.vue` binds the picker's
+	 * `:disabled` to this so the invariant is visible, not just enforced; `selectTour()` itself checks the
+	 * same underlying conditions independently (see its own comment) so correctness never depends on the
+	 * template actually disabling the control.
+	 */
+	readonly tourPickerDisabled: Readonly<Ref<boolean>>
+	/**
+	 * The header's tour-picker `<select>`. A no-op if asked to select `'crm'` before `crmTourUnlocked`,
+	 * or whenever `tourPickerDisabled` would be `true` (defensive — checked independently of the template
+	 * actually disabling the control; see that flag's own comment for the exact invariant this enforces:
+	 * at most one tour may be the "current" one at a time, and only from idle/completed).
 	 */
 	selectTour: (tourId: TutorialTourId) => void
 	/** Welcome card's "Explore on my own" — dismisses without starting the tour. */
@@ -176,6 +189,18 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	function syncPending(): void {
 		startPending.value = startRequestGuard.getPhase() === 'loading'
 	}
+
+	// Blocker 2 (merge-gate review round 2): "at most one current tour" — reactive counterpart of
+	// `selectTour()`'s own defensive checks (see that method's comment), for `LabHeader.vue`'s
+	// `:disabled` binding. `startPending` alone only covers the guard's `'loading'` phase; `confirmVisible`
+	// covers `'confirming'` — together they mirror `startRequestGuard.getPhase() !== 'idle'` reactively
+	// without needing a second, parallel ref that could drift out of sync with the guard itself.
+	const tourPickerDisabled = computed(() => {
+		void engineTick.value
+		const status = activeEngine()
+			.getSnapshot().status
+		return status === 'active' || status === 'paused' || startPending.value || confirmVisible.value
+	})
 
 	function actions(): TutorialActions {
 		return {
@@ -288,8 +313,20 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		startPending,
 		activeTourId,
 		crmTourUnlocked,
+		tourPickerDisabled,
+		// Blocker 2 (merge-gate review round 2): checked independently of `tourPickerDisabled`/the
+		// template actually disabling the `<select>` — reads `activeEngine()`'s live status and the
+		// guard's live phase directly, synchronously, rather than trusting the reactive computed above,
+		// so correctness here never depends on Vue's reactivity having already flushed a `:disabled`
+		// binding by the time a caller (or a stray programmatic `.selectTour()` call) reaches this.
 		selectTour: (tourId) => {
 			if (tourId === CRM_TOUR_ID && !crmTourUnlocked.value)
+				return
+			const currentStatus = activeEngine()
+				.getSnapshot().status
+			if (currentStatus === 'active' || currentStatus === 'paused')
+				return
+			if (startRequestGuard.getPhase() !== 'idle')
 				return
 			activeTourId.value = tourId
 		},

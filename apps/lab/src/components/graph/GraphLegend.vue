@@ -24,14 +24,19 @@
  *   resolved edge) render as dashed pills: gray for `absent` (hidden unless "Show absent references" is
  *   on), red for `invalid` (always shown, per the panel's own filter contract).
  *
- * Disclosure pattern: a toggle button with `aria-expanded` plus a conditionally-rendered panel (not
- * native `<details>`/`<summary>`, to stay within this app's existing PikaCSS-styled-button vocabulary
- * rather than fighting `<summary>`'s browser-default marker/styling) — keyboard-operable via the button's
- * own native Enter/Space activation, and dismissable by pressing it again.
+ * Disclosure pattern: a toggle button with `aria-expanded` (and `aria-controls` pointing at the panel's
+ * own stable id) plus a conditionally-rendered panel (not native `<details>`/`<summary>`, to stay within
+ * this app's existing PikaCSS-styled-button vocabulary rather than fighting `<summary>`'s browser-default
+ * marker/styling) — keyboard-operable via the button's own native Enter/Space activation, and
+ * dismissable by pressing it again. Deliberately no `aria-haspopup` (merge-gate review round 2, finding
+ * 3): that attribute advertises a menu-style popup (menu/listbox/tree/grid/dialog); the controlled
+ * content here is a plain disclosure/group, and `aria-expanded` alone is the correct state for that
+ * pattern.
  */
-import { ref } from 'vue'
+import { ref, useId } from 'vue'
 
 const open = ref(false)
+const panelId = useId()
 
 function toggle(): void {
 	open.value = !open.value
@@ -42,8 +47,8 @@ function toggle(): void {
 	<div :class="pika({ position: 'relative' })">
 		<button
 			type="button"
-			aria-haspopup="true"
 			:aria-expanded="open"
+			:aria-controls="panelId"
 			:class="pika({ 'padding': '3px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 			@click="toggle"
 		>
@@ -52,6 +57,7 @@ function toggle(): void {
 
 		<div
 			v-if="open"
+			:id="panelId"
 			role="group"
 			aria-label="Graph legend"
 			:class="pika({ position: 'absolute', top: 'calc(100% + 4px)', left: '0', zIndex: '10', width: '300px', padding: '10px 12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)', boxShadow: '0 8px 24px color-mix(in srgb, black 40%, transparent)', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11px' })"
