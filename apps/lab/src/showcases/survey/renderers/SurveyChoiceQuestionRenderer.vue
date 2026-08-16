@@ -9,15 +9,17 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { useId } from 'vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { SurveyChoiceQuestionPlugin } from '../plugins/survey-questions'
 
-const { useState, useProperties, useStateIssues } = useWidget(SurveyChoiceQuestionPlugin)
+const { useState, useProperties, useStateIssues, widgetId, widgetType } = useWidget(SurveyChoiceQuestionPlugin)
 const { answer } = useState()
 const { label, help, options } = useProperties()
 const { answer: answerIssues } = useStateIssues()
 
 const selectId = useId()
 const helpId = useId()
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 
 function onChange(event: Event): void {
 	const value = (event.target as HTMLSelectElement).value
@@ -26,7 +28,10 @@ function onChange(event: Event): void {
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '4px', padding: '6px 0' })">
+	<div
+		v-bind="inspectAnchor"
+		:class="pika({ display: 'flex', flexDirection: 'column', gap: '4px', padding: '6px 0' })"
+	>
 		<label
 			:for="selectId"
 			:class="pika({ fontSize: '12px', fontWeight: '600' })"

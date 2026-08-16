@@ -5,9 +5,10 @@
 A thin Vue 3 integration over `@deviltea/widget-core` Runtime semantics: a keyed renderer registry
 builder (`createWidgetVueRenderer`), the recursive `WidgetRenderer` root component, and the
 widget-scoped `useWidget(Plugin)` bridge (lazy `Ref`/callable projections of state, properties,
-methods, diagnostics, and slots). The normative semantic contract for this package lives in GitHub
-issue #13 ("Widget Vue integration — Phase 3 decision log"); GitHub issue #10 remains the core
-semantic authority and this package never reimplements or reinterprets it.
+methods, diagnostics, and slots, plus the unconditional `widgetId`/`widgetType` identity fields — see
+"Package boundaries" below). The normative semantic contract for this package lives in GitHub issue #13
+("Widget Vue integration — Phase 3 decision log"); GitHub issue #10 remains the core semantic authority
+and this package never reimplements or reinterprets it.
 
 - `src/index.ts` — public entry; only export the public contract surface.
 - `src/context.ts` — private Vue injection types/key linking the internal host tree to `useWidget()`. Never exported.
@@ -54,6 +55,14 @@ or to the widgets it hosts, never to this package.
   `runtime`/`system`/an unrestricted `getWidget` escape hatch — every cross-widget interaction stays
   mediated by `@deviltea/widget-core` dependencies (`registerDeps`), never by renderer code reaching
   across the tree.
+- `useWidget(Plugin)` additionally returns flat, unconditional `widgetId: string` /
+  `widgetType: Plugin['type']` (issue #13 checkpoint amendment "`useWidget()` may expose readonly
+  local widget identity") — plain values projected once from the already-injected current
+  `RuntimeWidget`, never refs, never gated by `plugin.capabilities`. This is identity only: it must
+  never grow into exposing the `RuntimeWidget` object, Blueprint node, parent/child traversal, or a
+  member-lookup-by-name escape hatch. This package must not itself stamp any DOM attribute/directive
+  from these fields (no automatic `data-widget-id`/`data-widget-type`, no Inspect-specific
+  presentation behavior) — a renderer/Lab may deliberately project them onto its own rendered root.
 - Renderer components never receive a `widget` prop. The current `RuntimeWidget` is injected
   privately through `CurrentWidgetContext`; renderer code only ever calls `useWidget(Plugin)`.
 - `WidgetSlot` is always the one shared internal component identity (`SharedWidgetSlotComponent` in
@@ -91,3 +100,10 @@ renderer/topology + root lifecycle mounted tests. Use real `@deviltea/widget-cor
 (`test-fixtures.ts`) — never a parallel mocked semantic core. Test public behavior with precise,
 discriminating assertions (exact values, ordering, activation counts, object identity where the
 contract promises it); coverage percentage alone is not evidence of correctness.
+
+Widget identity (`widgetId`/`widgetType`, `use-widget-identity.unit.test.ts`) pins the checkpoint
+amendment's four conformance points: value equals the current Runtime widget instance id/type;
+`widgetType` retains the exact `Plugin['type']` TypeScript type (`expectTypeOf`), never a widened
+`string`; identity is available regardless of declared capabilities (a zero-capability `BarePlugin`
+fixture); the exact-plugin runtime assertion (`assertWidgetMatchesPlugin`) remains authoritative —
+identity is only ever read after it has already succeeded.

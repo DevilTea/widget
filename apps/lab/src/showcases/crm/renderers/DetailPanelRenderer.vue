@@ -10,10 +10,12 @@
  * configured `PropertySourceConfig` dependency.
  */
 import { useWidget } from '@deviltea/widget-vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { DetailPanelPlugin } from '../plugins/read-models'
 
-const { useProperties, WidgetSlot } = useWidget(DetailPanelPlugin)
+const { useProperties, WidgetSlot, widgetId, widgetType } = useWidget(DetailPanelPlugin)
 const { record, empty, fields } = useProperties()
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 
 function fieldText(key: string, format: 'text' | 'currency' | 'badge' | undefined): string {
 	const raw = record.value?.[key]
@@ -33,7 +35,10 @@ function badgeColor(key: string): string {
 </script>
 
 <template>
-	<section :class="pika({ padding: '12px', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface)', display: 'flex', flexDirection: 'column', gap: '10px' })">
+	<section
+		v-bind="inspectAnchor"
+		:class="pika({ padding: '12px', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface)', display: 'flex', flexDirection: 'column', gap: '10px' })"
+	>
 		<h3 :class="pika({ margin: '0', fontSize: '13px' })">
 			Deal details
 		</h3>

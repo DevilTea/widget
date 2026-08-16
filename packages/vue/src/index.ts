@@ -21,6 +21,7 @@ export type {
 
 export type {
 	ReadonlyRef,
+	UseWidgetIdentityAccessor,
 	UseWidgetIssuesAccessor,
 	UseWidgetMethodIssuesAccessor,
 	UseWidgetMethodIssuesSurface,

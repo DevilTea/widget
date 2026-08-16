@@ -41,3 +41,15 @@ button {
 		overflow-x: hidden;
 	}
 }
+
+/*
+ * Inspect mode's hover outline (issue #25 P2 "Preview -> semantic inspector bridge"). Applied
+ * imperatively via `classList` from `PreviewPanel.vue` to whichever showcase renderer's own DOM element
+ * (stamped `[data-widget-id]` by `useInspectAnchor()`) is currently the innermost anchor under the
+ * cursor — a plain global class rather than `pika()`/scoped styles, since the target element belongs to
+ * an arbitrary descendant renderer component's own template, never `PreviewPanel.vue`'s own scope.
+ */
+.lab-inspect-anchor--highlighted {
+	outline: 2px solid var(--lab-color-accent);
+	outline-offset: 1px;
+}

@@ -37,13 +37,15 @@
  * deliberately rejected here.
  */
 import { useWidget } from '@deviltea/widget-vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { TablePlugin } from '../plugins/read-models'
 
-const { useState, useProperties, useMethods, useMethodIssues } = useWidget(TablePlugin)
+const { useState, useProperties, useMethods, useMethodIssues, widgetId, widgetType } = useWidget(TablePlugin)
 const { selectedRowId } = useState()
 const { rows, empty, rowIdKey, columns } = useProperties()
 const { selectRow } = useMethods()
 const { selectRow: selectRowIssues } = useMethodIssues()
+const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 
 function rowId(row: Record<string, unknown>): unknown {
 	const key = rowIdKey.value
@@ -86,7 +88,10 @@ function onRowKeydown(event: KeyboardEvent, row: Record<string, unknown>): void 
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '6px' })">
+	<div
+		v-bind="inspectAnchor"
+		:class="pika({ display: 'flex', flexDirection: 'column', gap: '6px' })"
+	>
 		<table
 			v-if="!empty"
 			:class="pika({ width: '100%', borderCollapse: 'collapse', fontSize: '12px' })"

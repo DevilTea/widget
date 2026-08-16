@@ -129,6 +129,26 @@ export interface UseWidgetIssuesAccessor {
 }
 
 // -------------------------------------------------------------------------------------------------
+// Widget identity (unconditional — present regardless of declared capabilities)
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * Normative source: issue #13 checkpoint amendment "`useWidget()` may expose readonly local widget
+ * identity". Projected from the already-injected current `RuntimeWidget` at `useWidget()` time — plain
+ * readonly values, not refs and not reactive projections: a mounted renderer instance's widget identity
+ * never changes (Runtime replacement remounts through the existing lifecycle boundary). Present
+ * regardless of which optional capabilities (`state`/`properties`/`methods`/`slots`) the plugin
+ * declares. Deliberately narrow: no `RuntimeWidget`, Blueprint node, parent/child traversal, or
+ * system/runtime handle is exposed through this — see the amendment's normative boundaries.
+ */
+export interface UseWidgetIdentityAccessor<Plugin extends AnyWidgetPlugin> {
+	/** The current rendered widget instance's semantic/Blueprint id. Stable for this renderer instance. */
+	readonly widgetId: string
+	/** The exact current widget plugin type. Stable for this renderer instance. */
+	readonly widgetType: Plugin['type']
+}
+
+// -------------------------------------------------------------------------------------------------
 // WidgetSlot
 // -------------------------------------------------------------------------------------------------
 
@@ -167,4 +187,5 @@ export type UseWidgetResult<Plugin extends AnyWidgetPlugin> = WidgetInterfacesOf
 	& UseWidgetMethodIssuesAccessor<Interfaces>
 	& UseWidgetIssuesAccessor
 	& UseWidgetSlotAccessor<Interfaces>
+	& UseWidgetIdentityAccessor<Plugin>
 	: never
