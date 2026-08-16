@@ -7,9 +7,14 @@
  * Issue #28 accessibility fix: `useId()`-derived `for`/`id` ties the visible `label` to the `input`;
  * when `help` is configured, its paragraph gets its own id and the `input` points to it via
  * `aria-describedby` (help text is supplementary, not the accessible name).
+ *
+ * `data-tutorial-target` (issue #25 P1): this component renders Departure/Return alike, so the target
+ * key is looked up by `label` (`SURVEY_DATE_QUESTION_TARGETS`) rather than hardcoded — see that module's
+ * header for why label, not widget id, is what a renderer can see.
  */
 import { useWidget } from '@deviltea/widget-vue'
-import { useId } from 'vue'
+import { computed, useId } from 'vue'
+import { SURVEY_DATE_QUESTION_TARGETS } from '../../../tutorial/survey-target-map'
 import { SurveyDateQuestionPlugin } from '../plugins/survey-questions'
 
 const { useState, useProperties, useStateIssues } = useWidget(SurveyDateQuestionPlugin)
@@ -19,6 +24,7 @@ const { answer: answerIssues } = useStateIssues()
 
 const inputId = useId()
 const helpId = useId()
+const tutorialTarget = computed(() => label.value === null ? undefined : SURVEY_DATE_QUESTION_TARGETS[label.value])
 
 function onChange(event: Event): void {
 	const value = (event.target as HTMLInputElement).value
@@ -27,7 +33,10 @@ function onChange(event: Event): void {
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '4px', padding: '6px 0' })">
+	<div
+		:data-tutorial-target="tutorialTarget"
+		:class="pika({ display: 'flex', flexDirection: 'column', gap: '4px', padding: '6px 0' })"
+	>
 		<label
 			:for="inputId"
 			:class="pika({ fontSize: '12px', fontWeight: '600' })"

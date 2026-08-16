@@ -16,7 +16,22 @@ import { test as base, expect } from '@playwright/test'
  */
 const ALLOWED_HOSTNAMES = new Set(['localhost', '127.0.0.1'])
 
-export const test = base.extend<{ blockedRequestUrls: string[] }>({
+/**
+ * Issue #25 P1: `App.vue` now shows a first-entry Welcome card whenever
+ * `tutorial/session-flags.ts`'s `welcome-dismissed` sessionStorage flag is unset — which every fresh
+ * Playwright context always is. Left alone, that would insert an extra modal in front of every one of
+ * the pre-existing specs, none of which expect it (issue #28's browser-contract suite predates the
+ * tutorial). `context.addInitScript()` pre-sets that exact flag before any page script runs, for EVERY
+ * test using this fixture — the same key `session-flags.ts` reads (`isWelcomeDismissed()`), so this is
+ * not a parallel/duplicated mechanism, just seeding the real flag the app itself already checks.
+ *
+ * `e2e/tutorial.spec.ts` is the one spec that must see the real first-entry welcome card (that is
+ * exactly what part of it tests) — it opts out via the `welcomeDismissed: false` fixture option below
+ * rather than a second fixture file, keeping "which specs see the welcome card" declared in one place.
+ */
+export const test = base.extend<{ blockedRequestUrls: string[], welcomeDismissed: boolean }>({
+	welcomeDismissed: [true, { option: true }],
+
 	// Populated by the `page` fixture below as requests are blocked; a plain array captured by
 	// reference so both fixtures share the same instance for a given test. No other fixture
 	// dependency needed, but Playwright statically parses this signature for its dependency list, so
@@ -39,6 +54,15 @@ export const test = base.extend<{ blockedRequestUrls: string[] }>({
 			await route.abort('blockedbyclient')
 		})
 		await use(page)
+	},
+
+	context: async ({ context, welcomeDismissed }, use) => {
+		if (welcomeDismissed) {
+			await context.addInitScript(() => {
+				sessionStorage.setItem('widget-lab:tutorial:welcome-dismissed', '1')
+			})
+		}
+		await use(context)
 	},
 })
 

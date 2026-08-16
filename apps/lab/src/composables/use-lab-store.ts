@@ -81,7 +81,13 @@ import { createInspectorFocusStore } from '../lab/focus'
 import { LabSession } from '../lab/session'
 import { defaultShowcase, showcases } from '../showcases/registry'
 
-export type LabToolTab = 'source' | 'blueprint' | 'runtime' | 'graph'
+/**
+ * `'preview'` is included (issue #25 P1) even though Preview lives in its own always-visible Dockview
+ * group, never the same tab group as the other four: it lets `Workbench.vue`'s tab-activation bridge
+ * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all five canonical panels
+ * uniformly — activating Preview's own single-panel group is a harmless no-op, never a layout change.
+ */
+export type LabToolTab = 'source' | 'blueprint' | 'runtime' | 'graph' | 'preview'
 
 export interface LabStore {
 	readonly session: LabSession

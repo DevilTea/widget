@@ -7,13 +7,16 @@
  */
 import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { useLabStore } from '../composables/use-lab-store'
 import NonClosableTab from './NonClosableTab.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
 import GraphPanel from './panels/GraphPanel.vue'
 import RuntimePanel from './panels/RuntimePanel.vue'
 import SourcePanel from './panels/SourcePanel.vue'
 import PreviewPanel from './preview/PreviewPanel.vue'
+
+const store = useLabStore()
 
 /**
  * Dockview applies its theme via the `theme` option's `className` (dockview-core stamps it on its own
@@ -116,6 +119,25 @@ function onReady(event: DockviewReadyEvent): void {
 	api.getPanel('source')?.group.api.setSize({ width: toolWidth })
 
 	observeSize(api)
+	watchTutorialTabActivation(api)
+}
+
+/**
+ * The minimal "tab-activation bridge" issue #25 P1's Survey tour view-map step (and its "See it in
+ * Runtime" link) needs: `LabStore.activeTab` already existed as a plain `Ref<LabToolTab>` with no
+ * observable effect on Dockview — this is the one place that makes assigning it actually switch the
+ * visible tab, via `DockviewApi.getPanel(id)?.api.setActive()` (`dockview-core`'s
+ * `DockviewPanelApi.setActive()`). One-directional on purpose (Dockview -> `activeTab` is not wired):
+ * nothing outside the tutorial reads `activeTab` today, so keeping this minimal avoids a second source
+ * of truth for "which tab is active" that the rest of the shell would have to stay in sync with.
+ */
+function watchTutorialTabActivation(api: DockviewApi): void {
+	watch(
+		() => store.activeTab.value,
+		(tab) => {
+			api.getPanel(tab)?.api.setActive()
+		},
+	)
 }
 </script>
 

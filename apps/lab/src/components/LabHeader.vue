@@ -6,12 +6,46 @@
  */
 import { computed } from 'vue'
 import { useLabStore } from '../composables/use-lab-store'
+import { useTutorialStore } from '../composables/use-tutorial'
 
 const store = useLabStore()
+const tutorial = useTutorialStore()
 
 const blueprintStatus = computed(() => store.active.value.blueprint.status)
 const issueCount = computed(() => store.active.value.blueprint.getCollectedIssues().length)
 const runtimeAvailable = computed(() => store.active.value.runtime !== null)
+
+/**
+ * One header entry point covers start/resume/restart/pause (issue #25 P1): "closing the rail pauses"
+ * (`TutorialRail.vue`'s own close control) and "the header button resumes/restarts" are both true, but
+ * routing every status through this single button — rather than adding a second dedicated pause control
+ * here — keeps the header's tutorial affordance count at one, matching its existing "no
+ * navigation/marketing chrome" compactness (see this component's original file header).
+ */
+const tutorialButtonLabel = computed(() => {
+	switch (tutorial.snapshot.value.status) {
+		case 'paused': return 'Resume tutorial'
+		case 'completed': return 'Restart tutorial'
+		case 'active': return 'Pause tutorial'
+		default: return 'Tutorial'
+	}
+})
+
+function onTutorialButtonClick(): void {
+	switch (tutorial.snapshot.value.status) {
+		case 'paused':
+			tutorial.requestResume()
+			return
+		case 'completed':
+			tutorial.requestRestart()
+			return
+		case 'active':
+			tutorial.pause()
+			return
+		default:
+			tutorial.requestStart()
+	}
+}
 
 function onPresetChange(event: Event): void {
 	const id = (event.target as HTMLSelectElement).value
@@ -63,6 +97,14 @@ function onShowcaseChange(event: Event): void {
 				{{ preset.label }}
 			</option>
 		</select>
+
+		<button
+			type="button"
+			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+			@click="onTutorialButtonClick"
+		>
+			{{ tutorialButtonLabel }}
+		</button>
 
 		<span :class="pika({ marginLeft: 'auto' })" />
 

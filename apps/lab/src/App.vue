@@ -1,17 +1,44 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, onUnmounted, provide } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onUnmounted, provide, watchEffect } from 'vue'
 import LabHeader from './components/LabHeader.vue'
+import TutorialConfirmDialog from './components/tutorial/TutorialConfirmDialog.vue'
+import TutorialRail from './components/tutorial/TutorialRail.vue'
+import WelcomeCard from './components/tutorial/WelcomeCard.vue'
 import Workbench from './components/Workbench.vue'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
+import { createTutorialStore, TutorialStoreKey } from './composables/use-tutorial'
 import { disposeLayoutWorker } from './graph/layout-client'
 import { installLabTestSeam } from './lab-test-seam'
 import 'dockview-vue/dist/styles/dockview.css'
 import './styles/dockview-theme.css'
+import './styles/tutorial-theme.css'
 
 const store = createLabStore()
 provide(LabStoreKey, store)
 // Issue #28 browser-contract seam (`?lab-test` only; inert otherwise) — see `lab-test-seam.ts`.
 installLabTestSeam(store)
+
+// issue #25 P1: `createTutorialStore(store)` takes the already-created `LabStore` directly rather than
+// injecting it back via `useLabStore()` — `inject()` resolves against a component's *parent* provides,
+// so a component can never see its own `provide()` call; passing `store` sidesteps that entirely.
+const tutorial = createTutorialStore(store)
+provide(TutorialStoreKey, tutorial)
+
+const tutorialRailVisible = computed(() => tutorial.snapshot.value.status === 'active')
+
+// Spotlight (issue #25 P1 Scope E): plain CSS class toggling on whichever element currently carries the
+// current step's `data-tutorial-target` attribute — no position-cloned overlay. This lives in App.vue
+// (rather than a per-panel component) because it is the one place with an unobstructed `document`-wide
+// view across Preview renderers, panels, and the rail itself.
+watchEffect(() => {
+	const target = tutorialRailVisible.value ? (tutorial.snapshot.value.step?.target ?? null) : null
+	for (const el of document.querySelectorAll('.tutorial-spotlight'))
+		el.classList.remove('tutorial-spotlight')
+	if (target !== null) {
+		const el = document.querySelector(`[data-tutorial-target="${CSS.escape(target)}"]`)
+		el?.classList.add('tutorial-spotlight')
+	}
+})
 
 function onKeydown(event: KeyboardEvent): void {
 	// Cmd/Ctrl+Enter is a UX shortcut for the same Apply command the header button invokes.
@@ -37,7 +64,12 @@ onUnmounted(() => disposeLayoutWorker())
 <template>
 	<div class="lab-app">
 		<LabHeader />
-		<Workbench />
+		<div class="lab-body">
+			<Workbench />
+			<TutorialRail v-if="tutorialRailVisible" />
+		</div>
+		<WelcomeCard v-if="tutorial.welcomeVisible.value" />
+		<TutorialConfirmDialog v-if="tutorial.confirmVisible.value" />
 		<div
 			class="narrow-viewport-gate"
 			role="alert"
@@ -52,6 +84,22 @@ onUnmounted(() => disposeLayoutWorker())
 	display: flex;
 	flex-direction: column;
 	height: 100%;
+}
+
+/*
+ * issue #25 P1: `.lab-body` is the tutorial rail's `position: fixed` positioning reference in spirit
+ * only — `TutorialRail.vue` actually positions itself against the viewport (`top`/`bottom`/`right: 0`),
+ * not this container, since the rail must stay docked to the real right edge regardless of `.lab-body`'s
+ * own box. This wrapper's job is narrower: give `Workbench` a sibling slot in the flex column without
+ * disturbing `Workbench.vue`'s own `flex: 1 1 auto` sizing/`ResizeObserver` behavior — the rail, being
+ * `position: fixed`, never participates in this flex layout at all, which is exactly what keeps
+ * Workbench/Dockview's measured width unaffected by whether the rail is open (see `TutorialRail.vue`'s
+ * header comment on the viewport contract).
+ */
+.lab-body {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
 }
 
 /*

@@ -51,7 +51,10 @@ function onGenerateResult(): void {
 
 		<WidgetSlot name="form" />
 
-		<div :class="pika({ display: 'flex', gap: '8px' })">
+		<div
+			data-tutorial-target="survey-actions"
+			:class="pika({ display: 'flex', gap: '8px' })"
+		>
 			<button
 				type="button"
 				:class="pika({ padding: '6px 12px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
@@ -90,6 +93,7 @@ function onGenerateResult(): void {
 
 		<section
 			v-if="result"
+			data-tutorial-target="survey-recommendation"
 			:class="pika({ padding: '10px 12px', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface)' })"
 			:style="{ border: `1px solid ${resultFresh ? 'var(--lab-color-accent)' : 'var(--lab-color-warning)'}` }"
 		>

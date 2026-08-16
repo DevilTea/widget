@@ -48,7 +48,7 @@ const estimatedBaselineCostLines = computed(() => toProvenanceLines(estimatedBas
 </script>
 
 <template>
-	<div>
+	<div data-tutorial-target="survey-trip-metrics">
 		<p :class="pika({ margin: '0 0 8px', fontSize: '11px', fontStyle: 'italic', color: 'var(--lab-color-text-muted)' })">
 			Illustrative/demo estimate only — synthetic Lab fixtures, not real travel pricing.
 		</p>

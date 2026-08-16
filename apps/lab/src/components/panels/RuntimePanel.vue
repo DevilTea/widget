@@ -15,6 +15,7 @@ import { inspectRuntime } from '@deviltea/widget-core/inspection'
 import { computed } from 'vue'
 import { useLabStore } from '../../composables/use-lab-store'
 import BlueprintTree from '../blueprint/BlueprintTree.vue'
+import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 import RuntimeNodeDetails from '../runtime/RuntimeNodeDetails.vue'
 
 const store = useLabStore()
@@ -50,25 +51,31 @@ function selectNode(nodeId: InspectionNodeId): void {
 </script>
 
 <template>
-	<div
-		v-if="runtime === null"
-		:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
-	>
-		<p>Runtime unavailable (invalid Blueprint). Fix the diagnostics in the Blueprint tab, then Apply again.</p>
-	</div>
-	<div
-		v-else
-		:class="pika({ display: 'grid', gridTemplateColumns: '220px 1px 1fr', height: '100%', minHeight: '0' })"
-	>
-		<BlueprintTree
-			:inspection="runtimeInspection!.blueprint"
-			:selectedNodeId="selectedNodeId"
-			@select="selectNode"
+	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
+		<PanelDescriptionBar
+			storageKey="widget-lab:panel-desc:runtime"
+			text="Live State, Properties, Methods, and Issues of the running widgets"
 		/>
-		<div :class="pika({ background: 'var(--lab-color-border)' })" />
-		<RuntimeNodeDetails
-			:node="selectedNode"
-			:widgetInspection="selectedWidgetInspection"
-		/>
+		<div
+			v-if="runtime === null"
+			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
+		>
+			<p>Runtime unavailable (invalid Blueprint). Fix the diagnostics in the Blueprint tab, then Apply again.</p>
+		</div>
+		<div
+			v-else
+			:class="pika({ display: 'grid', gridTemplateColumns: '220px 1px 1fr', flex: '1 1 auto', minHeight: '0' })"
+		>
+			<BlueprintTree
+				:inspection="runtimeInspection!.blueprint"
+				:selectedNodeId="selectedNodeId"
+				@select="selectNode"
+			/>
+			<div :class="pika({ background: 'var(--lab-color-border)' })" />
+			<RuntimeNodeDetails
+				:node="selectedNode"
+				:widgetInspection="selectedWidgetInspection"
+			/>
+		</div>
 	</div>
 </template>
