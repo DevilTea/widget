@@ -201,8 +201,17 @@ test.describe('dirty-draft confirmation dialog', () => {
 			.toHaveCount(0)
 		await expect(page.getByText('Widget Lab sandbox', { exact: true }))
 			.toBeVisible() // Preview still shows the ORIGINAL applied text — the draft was never applied
-		await expect(page.getByText('dirtied by test'))
+		// Scoped to Preview on purpose: the dirty draft's text legitimately appears in the Source
+		// panel's Monaco DOM (that IS the preserved draft) — asserting a page-wide count of 0 was a
+		// race against Monaco's async render (it passed only before the editor painted the new text,
+		// which is exactly what slower CI exposed). The contract is "never APPLIED": Preview must not
+		// render it, while the Source editor visibly retaining it proves preservation.
+		await expect(page.locator('[data-tutorial-target="preview"]')
+			.getByText('dirtied by test'))
 			.toHaveCount(0)
+		await expect(page.locator('.view-lines')
+			.getByText('dirtied by test'))
+			.toBeVisible()
 	})
 
 	test('Escape is the safe Cancel path — preserves the draft and restores focus, same as the Cancel button', async ({ page }) => {
@@ -225,8 +234,14 @@ test.describe('dirty-draft confirmation dialog', () => {
 			.toBeEnabled()
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toHaveCount(0)
-		await expect(page.getByText('dirtied by test'))
+		// Same Preview-scoped assertion as the Cancel-button test above (see the comment there): the
+		// draft text belongs in the Source editor's DOM; only Preview must never show it un-applied.
+		await expect(page.locator('[data-tutorial-target="preview"]')
+			.getByText('dirtied by test'))
 			.toHaveCount(0)
+		await expect(page.locator('.view-lines')
+			.getByText('dirtied by test'))
+			.toBeVisible()
 
 		// The guard was released by Escape/Cancel — a fresh request is accepted, not coalesced away.
 		await tutorialButton.click()
