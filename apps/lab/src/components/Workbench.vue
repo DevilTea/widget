@@ -7,13 +7,16 @@
  */
 import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { useLabStore } from '../composables/use-lab-store'
 import NonClosableTab from './NonClosableTab.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
 import GraphPanel from './panels/GraphPanel.vue'
 import RuntimePanel from './panels/RuntimePanel.vue'
 import SourcePanel from './panels/SourcePanel.vue'
 import PreviewPanel from './preview/PreviewPanel.vue'
+
+const store = useLabStore()
 
 /**
  * Dockview applies its theme via the `theme` option's `className` (dockview-core stamps it on its own
@@ -51,6 +54,13 @@ const tabComponents: Record<string, VueComponent> = {
 
 const workbenchEl = ref<HTMLElement | null>(null)
 let resizeObserver: ResizeObserver | null = null
+// Merge-gate review hygiene note (issue #25 P1): `watchTutorialTabActivation()` below is only ever
+// called from `onReady()`, a child-emitted event-callback invocation rather than `setup()`'s own
+// synchronous body or a lifecycle hook Vue explicitly re-activates this component's effect scope for —
+// so a `watch()` created there is not reliably guaranteed to be auto-disposed on unmount. Retaining its
+// stop handle and calling it from `onBeforeUnmount` (alongside the existing `resizeObserver.disconnect()`)
+// makes the cleanup explicit rather than relying on that scope behavior.
+let stopTutorialTabActivationWatch: (() => void) | null = null
 
 /**
  * `dockview-vue`'s `<DockviewVue>` measures its container exactly once, synchronously, in its own
@@ -71,7 +81,10 @@ function observeSize(api: DockviewApi): void {
 	resizeObserver.observe(el)
 }
 
-onBeforeUnmount(() => resizeObserver?.disconnect())
+onBeforeUnmount(() => {
+	resizeObserver?.disconnect()
+	stopTutorialTabActivationWatch?.()
+})
 
 function onReady(event: DockviewReadyEvent): void {
 	const { api } = event
@@ -116,6 +129,25 @@ function onReady(event: DockviewReadyEvent): void {
 	api.getPanel('source')?.group.api.setSize({ width: toolWidth })
 
 	observeSize(api)
+	watchTutorialTabActivation(api)
+}
+
+/**
+ * The minimal "tab-activation bridge" issue #25 P1's Survey tour view-map step (and its "See it in
+ * Runtime" link) needs: `LabStore.activeTab` already existed as a plain `Ref<LabToolTab>` with no
+ * observable effect on Dockview — this is the one place that makes assigning it actually switch the
+ * visible tab, via `DockviewApi.getPanel(id)?.api.setActive()` (`dockview-core`'s
+ * `DockviewPanelApi.setActive()`). One-directional on purpose (Dockview -> `activeTab` is not wired):
+ * nothing outside the tutorial reads `activeTab` today, so keeping this minimal avoids a second source
+ * of truth for "which tab is active" that the rest of the shell would have to stay in sync with.
+ */
+function watchTutorialTabActivation(api: DockviewApi): void {
+	stopTutorialTabActivationWatch = watch(
+		() => store.activeTab.value,
+		(tab) => {
+			api.getPanel(tab)?.api.setActive()
+		},
+	)
 }
 </script>
 

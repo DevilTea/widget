@@ -11,6 +11,7 @@ import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selectio
 import { useLabStore } from '../../composables/use-lab-store'
 import GraphCanvas from '../graph/GraphCanvas.vue'
 import GraphEdgeDetails from '../graph/GraphEdgeDetails.vue'
+import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
 const { semanticGraph, layoutState, flow } = useDependencyGraph()
@@ -58,6 +59,10 @@ const statusLabel = computed(() => {
 
 <template>
 	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
+		<PanelDescriptionBar
+			storageKey="widget-lab:panel-desc:graph"
+			text="The declared semantic dependencies between widget members"
+		/>
 		<div :class="pika({ display: 'flex', alignItems: 'center', gap: '12px', padding: '4px 8px', borderBottom: '1px solid var(--lab-color-border)', fontSize: '11px', color: 'var(--lab-color-text-muted)', flex: '0 0 auto' })">
 			<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' })">
 				<input
