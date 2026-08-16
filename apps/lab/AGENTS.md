@@ -141,7 +141,7 @@ building this app in isolation:
 
 ```text
 main app JS (index-*.js)                ~742 KB raw / ~204 KB gzip  — eager
-modern-monaco package JS (index-*.js)   ~1.50 MB raw / ~362 KB gzip — loaded when Source mounts
+modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Source mounts
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Source mounts
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
@@ -152,8 +152,11 @@ CSS (index-*.css)                       ~120 KB raw / ~11 KB gzip   — eager
   every panel *shell* (not necessarily every panel's heavy dependency, see below), the Sandbox/Survey/
   CRM showcases, `dockview-vue`. This is unavoidable critical-path weight for a workbench app whose
   shell has to exist before any panel can render.
-- **`modern-monaco` (package JS + vendored `editor-core.mjs`)**: not in the eager chunk — `import('modern-monaco')`
-  in `use-monaco-editor.ts`'s `ensureMonaco()` is Vite's own code-split boundary for the package JS, and
+- **`modern-monaco/core` (package JS + vendored `editor-core.mjs`)**: not in the eager chunk —
+  `import('modern-monaco/core')` in `use-monaco-editor.ts`'s `ensureMonaco()` is Vite's own code-split
+  boundary for the package JS (the LSP-free submodule — the side-effectful main entry that
+  force-enabled `useBuiltinLSP` and carried ~740 KB of unused LSP/grammar code is deliberately not
+  imported anywhere), and
   `editor-core.mjs` is never in Vite's module graph at all (loaded by `modern-monaco` itself via the
   importmap-resolved dynamic `import()` described in "Deployment" above). Both are still fetched
   **during initial load today**, though: `SourcePanel.vue` renders `MonacoJsonEditor` unconditionally,
