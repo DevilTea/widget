@@ -2,11 +2,12 @@
  * Issue #28 browser-contract "interaction seam" for Source/Apply.
  *
  * The real Source panel edits `LabSession.draftSourceText` exclusively through Monaco
- * (`MonacoJsonEditor.vue`'s `update:modelValue` -> `store.setDraftSourceText`), and `modern-monaco`
- * itself loads its editor core from an esm.sh CDN at runtime (`use-monaco-editor.ts`'s `ensureMonaco()`;
- * self-hosting it is tracked separately in issue #30). CI must not depend on that CDN being reachable,
- * so the Apply-lifecycle browser contract (`e2e/apply.spec.ts`) needs a way to set draft source text
- * without touching Monaco at all.
+ * (`MonacoJsonEditor.vue`'s `update:modelValue` -> `store.setDraftSourceText`). `modern-monaco`'s
+ * editor engine is now self-hosted (issue #30 Scope A; see `use-monaco-editor.ts`'s `ensureMonaco()`
+ * and `vite-plugin-vendor-modern-monaco-editor-core.ts`), so this seam's justification is no longer "CI
+ * must not depend on a reachable CDN" — it is simpler and still holds: the Apply-lifecycle contract
+ * (`e2e/apply.spec.ts`) is about `LabSession`/`LabStore` semantics, not the Source panel's editor
+ * widget, so it has no reason to depend on Monaco's UI at all.
  *
  * This is that seam, and nothing more: it routes through the exact same `LabStore.setDraftSourceText()`
  * call Monaco's `onChange` already makes — never a second recompile path — so exercising it proves the
