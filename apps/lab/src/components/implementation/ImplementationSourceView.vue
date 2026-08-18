@@ -1,11 +1,15 @@
 <script setup lang="ts">
 /**
- * Readonly, syntax-highlighted rendering of one already-resolved source string (issue #25 P3 Scope C).
- * #43 localizes only viewer-owned status/action chrome; the highlighted source text is never translated.
+ * Readonly syntax-highlighted source. Theme and locale are presentation inputs only: theme re-highlights
+ * the already-resolved source with a bundled theme; locale changes viewer-owned status/action chrome.
+ * Source text itself is never translated or normalized. #45 owns local overflow and #46 owns four-column
+ * literal-tab presentation.
  */
 import type { ImplementationLang } from '../../implementation/shiki-highlighter'
 import { computed, ref, watch } from 'vue'
+import { CODE_TAB_SIZE } from '../../code-view/settings'
 import { useLabI18n } from '../../composables/use-lab-i18n'
+import { useLabTheme } from '../../composables/use-lab-theme'
 import { highlightSource } from '../../implementation/shiki-highlighter'
 
 const props = defineProps<{
@@ -14,6 +18,7 @@ const props = defineProps<{
 }>()
 
 const i18n = useLabI18n()
+const theme = useLabTheme()
 const html = ref<string | null>(null)
 const status = ref<'loading' | 'ready' | 'error'>('loading')
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
@@ -26,8 +31,8 @@ const copyLabel = computed(() => {
 })
 
 watch(
-	() => [props.code, props.lang] as const,
-	([code, lang], _previous, onCleanup) => {
+	() => [props.code, props.lang, theme.theme.value] as const,
+	([code, lang, currentTheme], _previous, onCleanup) => {
 		let cancelled = false
 		onCleanup(() => {
 			cancelled = true
@@ -36,7 +41,7 @@ watch(
 		status.value = 'loading'
 		html.value = null
 
-		highlightSource(code, lang)
+		highlightSource(code, lang, currentTheme)
 			.then(
 				(rendered) => {
 					if (cancelled)
@@ -71,7 +76,7 @@ async function copy(): Promise<void> {
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
+	<div class="implementation-source-view">
 		<div :class="pika({ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
 			<button
 				type="button"
@@ -81,7 +86,7 @@ async function copy(): Promise<void> {
 				{{ copyLabel }}
 			</button>
 		</div>
-		<div :class="pika({ flex: '1 1 auto', minHeight: '0', overflow: 'auto', fontSize: '12px' })">
+		<div class="implementation-source-view__scroll">
 			<p
 				v-if="status === 'loading'"
 				:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)' })"
@@ -99,8 +104,32 @@ async function copy(): Promise<void> {
 				v-else
 				data-testid="implementation-code"
 				:class="pika({ padding: '10px' })"
+				:style="{ tabSize: String(CODE_TAB_SIZE) }"
 				v-html="html"
 			/>
 		</div>
 	</div>
 </template>
+
+<style scoped>
+.implementation-source-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+}
+
+.implementation-source-view__scroll {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+	font-size: 12px;
+}
+
+.implementation-source-view__scroll :deep(pre) {
+	margin: 0;
+	min-width: max-content;
+}
+</style>
