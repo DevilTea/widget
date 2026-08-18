@@ -22,9 +22,13 @@ test.describe('lab theme (issue #44)', () => {
 		const monacoLight = await page.locator('.monaco-editor')
 			.evaluate(element => getComputedStyle(element).backgroundColor)
 		const dockviewBinding = await page.locator('.dockview-theme-lab')
-			.evaluate(element => getComputedStyle(element).getPropertyValue('--dv-group-view-background-color').trim())
+			.evaluate(element => getComputedStyle(element)
+				.getPropertyValue('--dv-group-view-background-color')
+				.trim())
 		const labBackgroundLight = await page.locator('html')
-			.evaluate(element => getComputedStyle(element).getPropertyValue('--lab-color-bg').trim())
+			.evaluate(element => getComputedStyle(element)
+				.getPropertyValue('--lab-color-bg')
+				.trim())
 		expect(dockviewBinding)
 			.toBe('var(--lab-color-bg)')
 
@@ -45,11 +49,15 @@ test.describe('lab theme (issue #44)', () => {
 			.evaluate(element => getComputedStyle(element).backgroundColor))
 			.not.toBe(monacoLight)
 		const labBackgroundDark = await page.locator('html')
-			.evaluate(element => getComputedStyle(element).getPropertyValue('--lab-color-bg').trim())
+			.evaluate(element => getComputedStyle(element)
+				.getPropertyValue('--lab-color-bg')
+				.trim())
 		expect(labBackgroundDark)
 			.not.toBe(labBackgroundLight)
 		expect(await page.locator('.dockview-theme-lab')
-			.evaluate(element => getComputedStyle(element).getPropertyValue('--dv-group-view-background-color').trim()))
+			.evaluate(element => getComputedStyle(element)
+				.getPropertyValue('--dv-group-view-background-color')
+				.trim()))
 			.toBe('var(--lab-color-bg)')
 
 		await page.reload()
@@ -72,7 +80,7 @@ test.describe('lab theme (issue #44)', () => {
 		await expect(pre)
 			.toBeVisible()
 		await expect(code)
-			.toContainText("createWidgetPlugin('Text')")
+			.toContainText('createWidgetPlugin(\'Text\')')
 		const textBefore = await code.textContent()
 		const lightBackground = await pre.evaluate(element => getComputedStyle(element).backgroundColor)
 
@@ -101,7 +109,7 @@ test.describe('native dialog theme foreground (issue #44)', () => {
 			const heading = dialog.getByRole('heading')
 			await expect(heading)
 				.toBeVisible()
-			const colors = await heading.evaluate((element) => ({
+			const colors = await heading.evaluate(element => ({
 				heading: getComputedStyle(element).color,
 				body: getComputedStyle(document.body).color,
 			}))
