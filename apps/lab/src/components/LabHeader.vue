@@ -1,12 +1,9 @@
 <script setup lang="ts">
-/**
- * Compact header: preset selection, semantic status, and Apply controls only — per issue #13
- * (Widget Lab Phase 4) Checkpoint I. #44 adds one presentation-only theme selector; it does not enter
- * the Lab semantic/source model.
- */
+/** Compact Lab utility header: showcase/preset selection, explorer/tutorial entry, status, theme, and Apply controls. */
 import type { TutorialTourId } from '../composables/use-tutorial'
 import type { LabTheme } from '../theme/theme'
 import { computed } from 'vue'
+import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabStore } from '../composables/use-lab-store'
 import { useLabTheme } from '../composables/use-lab-theme'
 import { useTutorialStore } from '../composables/use-tutorial'
@@ -14,6 +11,7 @@ import { useTutorialStore } from '../composables/use-tutorial'
 const store = useLabStore()
 const theme = useLabTheme()
 const tutorial = useTutorialStore()
+const implementationExplorer = useImplementationExplorer()
 
 const blueprintStatus = computed(() => store.active.value.blueprint.status)
 const issueCount = computed(() => store.active.value.blueprint.getCollectedIssues().length)
@@ -90,9 +88,7 @@ function onThemeChange(event: Event): void {
 			aria-label="Load a preset"
 			@change="onPresetChange"
 		>
-			<option value="">
-				Preset…
-			</option>
+			<option value="">Preset…</option>
 			<option
 				v-for="preset in store.presets.value"
 				:key="preset.id"
@@ -103,6 +99,14 @@ function onThemeChange(event: Event): void {
 			</option>
 		</select>
 
+		<button
+			type="button"
+			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+			@click="implementationExplorer.open('catalog')"
+		>
+			Implementation
+		</button>
+
 		<select
 			v-if="tutorial.crmTourUnlocked.value"
 			:value="tutorial.activeTourId.value"
@@ -111,12 +115,8 @@ function onThemeChange(event: Event): void {
 			aria-label="Choose tutorial"
 			@change="onTutorialTourChange"
 		>
-			<option value="survey">
-				Survey tour
-			</option>
-			<option value="crm">
-				CRM tour
-			</option>
+			<option value="survey">Survey tour</option>
+			<option value="crm">CRM tour</option>
 		</select>
 		<button
 			type="button"
@@ -149,12 +149,8 @@ function onThemeChange(event: Event): void {
 			aria-label="Theme"
 			@change="onThemeChange"
 		>
-			<option value="light">
-				Light
-			</option>
-			<option value="dark">
-				Dark
-			</option>
+			<option value="light">Light</option>
+			<option value="dark">Dark</option>
 		</select>
 
 		<button
