@@ -7,6 +7,7 @@
  */
 import type { ImplementationLang } from '../../implementation/shiki-highlighter'
 import { ref, watch } from 'vue'
+import { CODE_TAB_SIZE } from '../../code-view/settings'
 import { highlightSource } from '../../implementation/shiki-highlighter'
 
 const props = defineProps<{
@@ -92,6 +93,7 @@ async function copy(): Promise<void> {
 				v-else
 				data-testid="implementation-code"
 				:class="pika({ padding: '10px' })"
+				:style="{ tabSize: String(CODE_TAB_SIZE) }"
 				v-html="html"
 			/>
 		</div>
