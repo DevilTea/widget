@@ -24,20 +24,25 @@ test('core diagnostic text is not localized when presentation locale changes (is
 	await page.getByRole('button', { name: /All issues/ })
 		.click()
 
+	// `IssueList.vue` renders the machine-readable source kind as a badge (`span`) and the core-owned
+	// human diagnostic as a sibling `div`; do not couple this contract to invented `<strong>` markup.
 	const diagnosticItem = page.locator('li')
-		.filter({ has: page.locator('strong') })
 		.filter({ hasText: 'UnknownForI18nContract' })
 		.first()
 	await expect(diagnosticItem)
 		.toBeVisible()
+	await expect(diagnosticItem.locator('span')
+		.first())
+		.toHaveText('definition')
 	const englishDiagnostic = await diagnosticItem.textContent()
-	await expect(diagnosticItem.locator('strong'))
-		.toContainText('[definition]')
 
 	await localeSelect(page)
 		.selectOption('zh-TW')
 	await expect(page.getByRole('button', { name: /所有問題/ }))
 		.toBeVisible()
+
+	// Locale changes may translate the inspector chrome around this item, but the actual core diagnostic
+	// payload and semantic source kind remain byte-for-byte the same.
 	expect(await diagnosticItem.textContent())
 		.toBe(englishDiagnostic)
 })
