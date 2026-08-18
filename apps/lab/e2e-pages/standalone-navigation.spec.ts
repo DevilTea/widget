@@ -23,7 +23,8 @@ test('VitePress opens Widget Lab as a standalone document with no intermediate S
 	await link.click()
 	await page.waitForURL('**/deviltea-labs/widget-lab/')
 
-	await expect(page.getByText('Widget Lab', { exact: true }).first())
+	await expect(page.getByText('Widget Lab', { exact: true })
+		.first())
 		.toBeVisible()
 	await expect(page.getByText('404', { exact: true }))
 		.toHaveCount(0)
@@ -33,7 +34,8 @@ test('VitePress opens Widget Lab as a standalone document with no intermediate S
 
 	// Direct reload must stay in the separately-built Lab instead of falling back to VitePress routing.
 	await page.reload()
-	await expect(page.getByText('Widget Lab', { exact: true }).first())
+	await expect(page.getByText('Widget Lab', { exact: true })
+		.first())
 		.toBeVisible()
 	await expect(page)
 		.toHaveURL(/\/deviltea-labs\/widget-lab\/$/)
@@ -41,7 +43,8 @@ test('VitePress opens Widget Lab as a standalone document with no intermediate S
 
 test('direct Widget Lab entry preserves query parameters under the GitHub Pages base', async ({ page }) => {
 	await page.goto('/deviltea-labs/widget-lab/?lang=zh-TW&probe=pages#entry')
-	await expect(page.getByText('Widget Lab', { exact: true }).first())
+	await expect(page.getByText('Widget Lab', { exact: true })
+		.first())
 		.toBeVisible()
 	await expect(page)
 		.toHaveURL(/\/deviltea-labs\/widget-lab\/\?lang=zh-TW&probe=pages#entry$/)
