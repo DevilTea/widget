@@ -67,7 +67,7 @@ function onLocaleChange(event: Event): void {
 </script>
 
 <template>
-	<header :class="pika({ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', borderBottom: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)', flex: '0 0 auto' })">
+	<header :class="pika({ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', rowGap: '6px', padding: '8px 14px', borderBottom: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)', flex: '0 0 auto' })">
 		<strong :class="pika({ fontSize: '13px', letterSpacing: '0.02em' })">Widget Lab</strong>
 
 		<select
@@ -145,15 +145,15 @@ function onLocaleChange(event: Event): void {
 
 		<select
 			:value="i18n.locale.value"
-			:class="pika({ background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 8px', fontSize: '12px' })"
+			:class="pika({ width: '64px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
 			:aria-label="i18n.t('Language')"
 			@change="onLocaleChange"
 		>
 			<option value="en">
-				English
+				EN
 			</option>
 			<option value="zh-TW">
-				繁體中文（台灣）
+				繁中
 			</option>
 		</select>
 
