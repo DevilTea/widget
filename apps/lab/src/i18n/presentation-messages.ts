@@ -101,10 +101,28 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Change deal stage': '變更案件階段',
 	'No deals match the current search/filter.': '沒有符合目前搜尋／篩選條件的案件。',
 
-	// Representative renderer-owned chrome from the Survey showcase. Source/config-authored labels and
-	// issue messages intentionally stay verbatim; only fixed renderer prose/labels belong here.
-	'Illustrative/demo estimate only — synthetic Lab fixtures, not real travel pricing.': '僅供示範的估算——使用合成 Lab fixtures，不代表真實旅遊價格。',
+	// Survey renderer-owned fixed chrome. Question labels/help/options and result payload values/notes are
+	// semantic/config data and deliberately stay verbatim.
+	'Interactive Survey — trip planner': '互動式問卷——旅遊規劃',
+	'phase': '階段',
+	'Reset': '重設',
+	'Submit': '提交',
+	'Generate result': '產生結果',
+	'Recommendation': '建議結果',
+	'Stale': '已過期',
+	'Generated from previous answers — this recommendation does not reflect the current answers (or any issues shown above). Submit and generate again to refresh it.': '這份建議是依先前答案產生，未反映目前答案（或上方顯示的問題）。請重新提交並產生結果以更新。',
+	'Destination': '目的地',
+	'requested style': '要求風格',
+	'recommended style': '建議風格',
+	'fit': '適配度',
 	'Trip days': '旅遊天數',
+	'travelers': '旅客數',
+	'Budget': '預算',
+	'vs. estimated baseline cost': '相較預估基本花費',
+	'gap': '差額',
+	'budget/person/day': '每人每日預算',
+	'— select —': '— 請選擇 —',
+	'Illustrative/demo estimate only — synthetic Lab fixtures, not real travel pricing.': '僅供示範的估算——使用合成 Lab fixtures，不代表真實旅遊價格。',
 	'Travelers': '旅客數',
 	'Budget / person / day': '每人每日預算',
 	'Estimated baseline cost': '預估基本花費',
