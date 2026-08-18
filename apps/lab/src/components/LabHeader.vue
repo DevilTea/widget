@@ -139,7 +139,7 @@ function onThemeChange(event: Event): void {
 
 		<select
 			:value="theme.theme.value"
-			:class="pika({ width: '72px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
+			:class="pika({ width: '64px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
 			aria-label="Theme"
 			@change="onThemeChange"
 		>
