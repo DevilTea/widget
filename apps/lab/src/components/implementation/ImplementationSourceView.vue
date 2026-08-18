@@ -1,22 +1,9 @@
 <script setup lang="ts">
 /**
  * Readonly, syntax-highlighted rendering of one already-resolved source string (issue #25 P3 Scope C).
- * Used both for a curated file's raw text (via `ImplementationFile.vue`, once its `load()` thunk has
- * resolved) and for the Applied-instance JSON fragment (`ImplementationPanel.vue`, already available
- * synchronously from the active snapshot — no `load()` involved). Highlighting itself is still async
- * (Shiki's `codeToHtml`), which is why this component owns its own loading/error state despite `code`
- * being a plain, already-resolved prop.
- *
- * `src/implementation/shiki-highlighter.ts` is imported here — the innermost point of the
- * Implementation panel's own lazy chunk (see that module's file header for the full lazy-boundary
- * chain) — never anywhere the eager shell could reach.
- *
- * Latest-selection-wins (same race class as `ImplementationFile.vue`'s blocker 1 fix, applied here
- * too): this component is reused as `code`/`lang` change (a new curated file, or a fresh Applied
- * instance JSON string), and Shiki's own `codeToHtml` is itself async — a slower earlier highlight call
- * could otherwise settle after a faster later one and overwrite it. `watch()`'s `onCleanup` flips
- * `cancelled` the instant this watcher is about to re-run (or is stopped), and both the success and
- * failure branches check it before writing `html`/`status`.
+ * #45 makes this component the local overflow owner for long highlighted lines: every flex boundary can
+ * shrink (`min-width: 0`) while the source viewport scrolls horizontally instead of widening Dockview or
+ * the document. Shiki's generated `<pre>` remains content-sized inside that scroll viewport.
  */
 import type { ImplementationLang } from '../../implementation/shiki-highlighter'
 import { ref, watch } from 'vue'
@@ -78,7 +65,7 @@ async function copy(): Promise<void> {
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
+	<div class="implementation-source-view">
 		<div :class="pika({ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
 			<button
 				type="button"
@@ -88,7 +75,7 @@ async function copy(): Promise<void> {
 				{{ copyLabel }}
 			</button>
 		</div>
-		<div :class="pika({ flex: '1 1 auto', minHeight: '0', overflow: 'auto', fontSize: '12px' })">
+		<div class="implementation-source-view__scroll">
 			<p
 				v-if="status === 'loading'"
 				:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)' })"
@@ -101,16 +88,7 @@ async function copy(): Promise<void> {
 			>
 				Failed to render this source.
 			</p>
-			<!--
-				eslint-disable-next-line vue/no-v-html -- `html` is Shiki's OWN generated markup, never a
-				string this component passes through untouched. `code` itself is NOT always Lab-curated,
-				build-time-only text — the Applied-instance JSON fragment (`ImplementationPanel.vue`) is
-				derived from the user-editable applied Source, so the real trust boundary here is Shiki's
-				`codeToHtml`, which HTML-escapes every token it renders (it is a tokenizer/renderer, not a
-				pass-through) — not any assumption about `code`'s provenance. Safety rests on Shiki always
-				escaping arbitrary input text into markup, the same way any other "render code as HTML"
-				library would have to.
-			-->
+			<!-- eslint-disable-next-line vue/no-v-html -- Shiki is the escaping/token-rendering boundary. -->
 			<div
 				v-else
 				data-testid="implementation-code"
@@ -121,3 +99,26 @@ async function copy(): Promise<void> {
 		</div>
 	</div>
 </template>
+
+<style scoped>
+.implementation-source-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+}
+
+.implementation-source-view__scroll {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+	font-size: 12px;
+}
+
+.implementation-source-view__scroll :deep(pre) {
+	margin: 0;
+	min-width: max-content;
+}
+</style>

@@ -1,37 +1,25 @@
 <script setup lang="ts">
 /**
- * Dirty-draft confirmation for the deterministic Survey tour start (issue #25 OWNER decision — copy
- * locked verbatim). Shown only when `deterministic-start.ts`'s `decideDeterministicStart()` reports
- * `needsConfirmation` (the current showcase's draft Source differs from its applied snapshot); Cancel
- * (button or Escape) leaves the draft/Runtime completely untouched — nothing is reloaded until "Start
- * tour" confirms.
- *
- * Built on `useModalDialog` (issue #25 P1 merge-gate review, blocker 1) — native `showModal()`/focus
- * capture, same as `WelcomeCard.vue`/`ModalRenderer.vue` — rather than a plain `<div>` overlay. Escape
- * policy (locked): the safe Cancel path — `onCancel` below calls the exact same `cancelStart()` the
- * "Cancel" button does, so Escape can never leave the draft ambiguously "maybe about to be replaced".
- * Unlike Welcome, this dialog always has a real initiator (the header's Tutorial/Restart button, or
- * Welcome's "Start the tour"): `useModalDialog` captures whatever had focus right before `showModal()`
- * and restores it on close, so closing/cancelling returns focus to whichever control opened it.
- *
- * Always mounted (never `v-if`'d away in `App.vue`) — `isOpen` alone drives `showModal()`/`close()`.
+ * Dirty-draft confirmation for deterministic tutorial start. #45 preserves the pending confirmation
+ * below the supported workbench width but suppresses this native top-layer dialog so the viewport gate
+ * owns the experience; widening reopens the same confirmation without touching draft/Runtime state.
  */
 import { useModalDialog } from '../../composables/use-modal-dialog'
+import { useSupportedWorkbenchViewport } from '../../composables/use-supported-workbench-viewport'
 import { useTutorialStore } from '../../composables/use-tutorial'
 
 const tutorial = useTutorialStore()
+const supportedViewport = useSupportedWorkbenchViewport()
 
-// `dialogRef` is intentionally not read directly here: `useModalDialog('dialog', ...)` owns the
-// `showModal()`/`close()`/focus logic against the `ref="dialog"` element below by name — see
-// `use-modal-dialog.ts`'s header for why the template's `eslint-disable` is narrowly justified.
 const { onCancel, onNativeClose } = useModalDialog('dialog', {
 	isOpen: tutorial.confirmVisible,
+	canShowModal: supportedViewport,
 	onCancel: () => tutorial.cancelStart(),
 })
 </script>
 
 <template>
-	<!-- eslint-disable vue/no-unused-refs -- `ref="dialog"` below is used by `useModalDialog('dialog', ...)` above, by name, in a different module; see this file's script header. -->
+	<!-- eslint-disable vue/no-unused-refs -- consumed by `useModalDialog('dialog', ...)`. -->
 	<dialog
 		ref="dialog"
 		role="alertdialog"
