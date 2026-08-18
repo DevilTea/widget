@@ -1,9 +1,14 @@
 import { expect, test } from './fixtures'
 
 const LOCALE_STORAGE_KEY = 'widget-lab:locale'
+const THEME_STORAGE_KEY = 'widget-lab:theme'
 
 function localeSelect(page: import('@playwright/test').Page) {
 	return page.locator('select:has(option[value="zh-TW"])')
+}
+
+function themeSelect(page: import('@playwright/test').Page) {
+	return page.locator('select:has(option[value="light"]):has(option[value="dark"])')
 }
 
 test.describe('lab localization (issue #43)', () => {
@@ -62,6 +67,50 @@ test.describe('lab localization (issue #43)', () => {
 			.toHaveURL(/\?probe=stored&lang=zh-TW#state$/)
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'zh-TW')
+	})
+
+	test('theme and locale remain independent persisted presentation preferences', async ({ context, page }) => {
+		await context.addInitScript(key => localStorage.setItem(key, 'light'), THEME_STORAGE_KEY)
+		await page.goto('/?lang=zh-TW&probe=orthogonal#state')
+
+		await expect(localeSelect(page))
+			.toHaveValue('zh-TW')
+		await expect(themeSelect(page))
+			.toHaveValue('light')
+		await expect(page.getByLabel('主題'))
+			.toBeVisible()
+		await expect(page.getByLabel('主題').locator('option[value="light"]'))
+			.toHaveText('亮色')
+		await expect(page.getByLabel('主題').locator('option[value="dark"]'))
+			.toHaveText('深色')
+
+		await themeSelect(page)
+			.selectOption('dark')
+		await expect(page.locator('html'))
+			.toHaveAttribute('data-lab-theme', 'dark')
+		await expect(page.locator('html'))
+			.toHaveAttribute('lang', 'zh-TW')
+		await expect(localeSelect(page))
+			.toHaveValue('zh-TW')
+		expect(await page.evaluate(key => localStorage.getItem(key), THEME_STORAGE_KEY))
+			.toBe('dark')
+		expect(await page.evaluate(key => localStorage.getItem(key), LOCALE_STORAGE_KEY))
+			.toBe('zh-TW')
+		await expect(page)
+			.toHaveURL(/\?lang=zh-TW&probe=orthogonal#state$/)
+
+		await localeSelect(page)
+			.selectOption('en')
+		await expect(page.locator('html'))
+			.toHaveAttribute('lang', 'en')
+		await expect(page.locator('html'))
+			.toHaveAttribute('data-lab-theme', 'dark')
+		await expect(themeSelect(page))
+			.toHaveValue('dark')
+		expect(await page.evaluate(key => localStorage.getItem(key), THEME_STORAGE_KEY))
+			.toBe('dark')
+		await expect(page)
+			.toHaveURL(/\?lang=en&probe=orthogonal#state$/)
 	})
 
 	test('changing locale preserves live Runtime state and shared inspector focus', async ({ page }) => {
@@ -128,6 +177,27 @@ test.describe('lab localization (issue #43)', () => {
 			.toBeVisible()
 		await expect(translatedRail.getByText('第 1 步，共 9 步', { exact: true }))
 			.toHaveCount(0)
+	})
+
+	test('registered-plugin catalog chrome translates while plugin identity and source stay verbatim', async ({ page }) => {
+		await page.goto('/?lang=zh-TW')
+		await page.getByRole('button', { name: 'Implementation', exact: true })
+			.click()
+
+		await expect(page.getByRole('button', { name: '已註冊 plugins', exact: true }))
+			.toHaveAttribute('aria-pressed', 'true')
+		await expect(page.getByRole('button', { name: '聚焦的 instance', exact: true }))
+			.toBeVisible()
+
+		const catalog = page.getByRole('navigation', { name: '已註冊 plugins' })
+		await expect(catalog)
+			.toBeVisible()
+		await expect(catalog.getByRole('button', { name: 'Counter', exact: true }))
+			.toBeVisible()
+		await catalog.getByRole('button', { name: 'Counter', exact: true })
+			.click()
+		await expect(page.getByTestId('implementation-code'))
+			.toContainText("createWidgetPlugin('Counter')")
 	})
 
 	test('renderer-owned CRM chrome translates while config/data projection remains verbatim', async ({ page }) => {
