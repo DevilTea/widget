@@ -24,8 +24,9 @@ test('core diagnostic text is not localized when presentation locale changes (is
 	await page.getByRole('button', { name: /All issues/ })
 		.click()
 
-	// `IssueList.vue` renders the machine-readable source kind as a badge (`span`) and the core-owned
-	// human diagnostic as a sibling `div`; do not couple this contract to invented `<strong>` markup.
+	// `IssueList.vue` renders the machine-readable source kind in the first direct child, and the
+	// core-owned human diagnostic as the next direct child. Compare that payload alone: #43 is allowed
+	// to translate surrounding action chrome such as "jump to node".
 	const diagnosticItem = page.locator('li')
 		.filter({ hasText: 'UnknownForI18nContract' })
 		.first()
@@ -34,15 +35,19 @@ test('core diagnostic text is not localized when presentation locale changes (is
 	await expect(diagnosticItem.locator('span')
 		.first())
 		.toHaveText('definition')
-	const englishDiagnostic = await diagnosticItem.textContent()
+	const diagnosticMessage = diagnosticItem.locator(':scope > div')
+		.nth(1)
+	const englishDiagnostic = await diagnosticMessage.textContent()
 
 	await localeSelect(page)
 		.selectOption('zh-TW')
 	await expect(page.getByRole('button', { name: /所有問題/ }))
 		.toBeVisible()
+	await expect(diagnosticItem.locator('span')
+		.first())
+		.toHaveText('definition')
 
-	// Locale changes may translate the inspector chrome around this item, but the actual core diagnostic
-	// payload and semantic source kind remain byte-for-byte the same.
-	expect(await diagnosticItem.textContent())
+	// The inspector chrome may translate, but the actual core issue payload is invariant.
+	expect(await diagnosticMessage.textContent())
 		.toBe(englishDiagnostic)
 })
