@@ -89,6 +89,18 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Failed to load {title}.': '無法載入 {title}。',
 	'Failed to render this source.': '無法顯示這份 source。',
 
+	// CRM renderer-owned fixed chrome. Config-projected Button/TextInput/Table/MetricCard labels and all
+	// deal/stage/series values intentionally stay outside this table even when their English text looks UI-like.
+	'Sales Pipeline CRM': '銷售案件 CRM',
+	'Interactive Product Prototype — Showcase B': '互動式產品原型——Showcase B',
+	'Deals by stage': '各階段案件數',
+	'Deal details': '案件詳細資料',
+	'Select a deal from the table to see its details.': '從表格選取案件以查看詳細資料。',
+	'currently': '目前為',
+	'No deal selected.': '尚未選取案件。',
+	'Change deal stage': '變更案件階段',
+	'No deals match the current search/filter.': '沒有符合目前搜尋／篩選條件的案件。',
+
 	// Representative renderer-owned chrome from the Survey showcase. Source/config-authored labels and
 	// issue messages intentionally stay verbatim; only fixed renderer prose/labels belong here.
 	'Illustrative/demo estimate only — synthetic Lab fixtures, not real travel pricing.': '僅供示範的估算——使用合成 Lab fixtures，不代表真實旅遊價格。',
