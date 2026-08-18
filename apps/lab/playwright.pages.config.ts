@@ -24,7 +24,9 @@ export default defineConfig({
 	],
 	webServer: {
 		command: 'pnpm --dir ../../docs/site run preview -- --port 4174 --strictPort',
-		port: 4174,
+		// VitePress's configured base makes `/` a non-ready response. Probe the actual served docs root
+		// so Playwright does not mistake a healthy preview server for a startup timeout.
+		url: 'http://localhost:4174/deviltea-labs/',
 		reuseExistingServer: !process.env.CI,
 	},
 })
