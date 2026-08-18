@@ -50,7 +50,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Graph to see its implementation here.': '目前沒有聚焦的 widget。請從 Preview（檢視模式）、Blueprint 或 Graph 選取 widget，即可在這裡查看實作。',
 	'has no curated Implementation entry yet.': '目前沒有經整理的 Implementation 項目。',
 	'Applied instance': '已套用 instance',
-	"This widget's declaration was not found in the applied Source — it may only exist in the unapplied draft, or the applied Blueprint changed since this focus was set.": '在已套用 Source 中找不到這個 widget declaration——它可能只存在於尚未套用的 draft，或聚焦後已套用 Blueprint 發生變更。',
+	'This widget\'s declaration was not found in the applied Source — it may only exist in the unapplied draft, or the applied Blueprint changed since this focus was set.': '在已套用 Source 中找不到這個 widget declaration——它可能只存在於尚未套用的 draft，或聚焦後已套用 Blueprint 發生變更。',
 	'Copy': '複製',
 	'Copied': '已複製',
 	'Copy failed': '複製失敗',
