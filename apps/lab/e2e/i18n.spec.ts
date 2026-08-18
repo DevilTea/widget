@@ -8,7 +8,7 @@ function localeSelect(page: import('@playwright/test').Page) {
 
 test.describe('lab localization (issue #43)', () => {
 	test('explicit query overrides storage and locale switching preserves unrelated query/hash', async ({ context, page }) => {
-		await context.addInitScript((key) => localStorage.setItem(key, 'en'), LOCALE_STORAGE_KEY)
+		await context.addInitScript(key => localStorage.setItem(key, 'en'), LOCALE_STORAGE_KEY)
 		await page.goto('/?lang=zh-TW&probe=keep#anchor')
 
 		await expect(localeSelect(page))
@@ -39,7 +39,7 @@ test.describe('lab localization (issue #43)', () => {
 	})
 
 	test('stored zh-TW is used when query is absent and canonicalized into the URL', async ({ context, page }) => {
-		await context.addInitScript((key) => localStorage.setItem(key, 'zh-TW'), LOCALE_STORAGE_KEY)
+		await context.addInitScript(key => localStorage.setItem(key, 'zh-TW'), LOCALE_STORAGE_KEY)
 		await page.goto('/?probe=stored#state')
 
 		await expect(localeSelect(page))
