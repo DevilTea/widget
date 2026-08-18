@@ -3,7 +3,10 @@ import { expect, test } from './fixtures'
 const THEME_STORAGE_KEY = 'widget-lab:theme'
 
 async function seedTheme(context: import('@playwright/test').BrowserContext, theme: 'light' | 'dark'): Promise<void> {
-	await context.addInitScript(({ key, value }) => localStorage.setItem(key, value), { key: THEME_STORAGE_KEY, value: theme })
+	await context.addInitScript(({ key, value }) => {
+		if (localStorage.getItem(key) === null)
+			localStorage.setItem(key, value)
+	}, { key: THEME_STORAGE_KEY, value: theme })
 }
 
 test.describe('lab theme (issue #44)', () => {
