@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseLabTheme, resolveLabTheme, syntaxThemeForLabTheme } from './theme'
 
-describe('Lab theme resolution', () => {
+describe('lab theme resolution', () => {
 	it('accepts only light/dark persisted values', () => {
 		expect(parseLabTheme('light')).toBe('light')
 		expect(parseLabTheme('dark')).toBe('dark')
