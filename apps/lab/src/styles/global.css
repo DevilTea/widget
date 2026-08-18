@@ -1,13 +1,28 @@
 /**
- * Application-wide baseline. Design tokens themselves live in `pika.config.ts` (`variables.definitions`,
- * emitted as `:root` custom properties by PikaCSS) — this file only resets the page and wires those
- * tokens to `html`/`body`. Everything else uses `pika()` utility calls directly in components.
+ * Application-wide baseline. PikaCSS emits the dark palette as the resilient fallback/default; #44's
+ * document-level `[data-lab-theme]` overrides below provide the alternate light palette without
+ * creating a second component styling system. Every consumer continues to read the same semantic
+ * `--lab-color-*` tokens, so Dockview and ordinary Lab chrome switch together.
  */
 
 *,
 *::before,
 *::after {
 	box-sizing: border-box;
+}
+
+html[data-lab-theme='light'] {
+	--lab-color-bg: #f6f7f9;
+	--lab-color-surface: #ffffff;
+	--lab-color-surface-alt: #eef1f5;
+	--lab-color-border: #d4d9e2;
+	--lab-color-text: #1b1f24;
+	--lab-color-text-muted: #596273;
+	--lab-color-accent: #1769e0;
+	--lab-color-accent-contrast: #ffffff;
+	--lab-color-danger: #c9373f;
+	--lab-color-warning: #9a6200;
+	--lab-color-success: #18794e;
 }
 
 html,
@@ -25,8 +40,21 @@ body {
 	-webkit-font-smoothing: antialiased;
 }
 
-button {
+button,
+input,
+select,
+textarea,
+dialog {
 	font-family: inherit;
+}
+
+/*
+ * Native top-layer dialogs do not reliably inherit the page's foreground through the UA stylesheet.
+ * Make their presentation contract explicit so dark surfaces never acquire a black default heading,
+ * while their inner surfaces may still choose more specific semantic tokens.
+ */
+dialog {
+	color: var(--lab-color-text);
 }
 
 /*
