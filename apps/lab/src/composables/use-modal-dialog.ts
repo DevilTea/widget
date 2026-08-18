@@ -5,7 +5,7 @@
  * `canShowModal` gate: when the workbench is below its supported viewport width, a pending welcome/
  * confirmation state stays true but its native dialog is removed from the browser top layer so the
  * narrow-viewport gate can own the experience. Widening reopens the same pending dialog; no tutorial,
- * draft, Runtime, or semantic state is reset.
+ * draft, Runtime, semantic state, or original focus-return target is reset.
  */
 
 import { nextTick, useTemplateRef, watch } from 'vue'
@@ -38,11 +38,20 @@ export interface UseModalDialog {
 export function useModalDialog(templateRef: string, options: UseModalDialogOptions): UseModalDialog {
 	const dialogRef = useTemplateRef<HTMLDialogElement>(templateRef)
 	let previouslyFocused: HTMLElement | null = null
-	let suppressingForPresentation = false
+	let focusReturnCaptured = false
+	let pendingPresentationCloseEvents = 0
 
 	watch(
 		() => [options.isOpen.value, options.canShowModal?.value ?? true] as const,
 		async ([isOpen, canShowModal]) => {
+			// Capture exactly once per semantic open lifecycle. A viewport-driven close/reopen is only a
+			// presentation transition and must not replace the original Tutorial/Restart initiator with
+			// whatever happens to be focused while the narrow gate owns the page.
+			if (isOpen && !focusReturnCaptured) {
+				previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+				focusReturnCaptured = true
+			}
+
 			await nextTick()
 			const dialog = dialogRef.value
 			if (dialog === null)
@@ -52,7 +61,6 @@ export function useModalDialog(templateRef: string, options: UseModalDialogOptio
 			if (shouldShow) {
 				if (dialog.open)
 					return
-				previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
 				dialog.showModal()
 				await nextTick()
 				focusFirstControl(dialog)
@@ -60,13 +68,16 @@ export function useModalDialog(templateRef: string, options: UseModalDialogOptio
 			}
 
 			if (dialog.open) {
-				suppressingForPresentation = isOpen && !canShowModal
+				if (isOpen && !canShowModal)
+					pendingPresentationCloseEvents++
 				dialog.close()
 			}
+
 			if (!isOpen) {
 				if (previouslyFocused !== null && previouslyFocused.isConnected)
 					previouslyFocused.focus()
 				previouslyFocused = null
+				focusReturnCaptured = false
 			}
 		},
 		{ immediate: true },
@@ -79,8 +90,11 @@ export function useModalDialog(templateRef: string, options: UseModalDialogOptio
 			options.onCancel()
 		},
 		onNativeClose: () => {
-			if (suppressingForPresentation) {
-				suppressingForPresentation = false
+			// `dialog.close()` dispatches `close` asynchronously. Count presentation-only closes rather than
+			// relying on the current viewport when the event eventually arrives; a rapid narrow -> wide
+			// transition may already have reopened the dialog by then.
+			if (pendingPresentationCloseEvents > 0) {
+				pendingPresentationCloseEvents--
 				return
 			}
 			if (options.isOpen.value)
