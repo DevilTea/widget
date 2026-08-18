@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 /** Shiki remains the HTML-escaping boundary while #44 adds a provided presentation theme input. */
 import { flushPromises, mount } from '@vue/test-utils'
-import { shallowRef } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
+import { shallowRef } from 'vue'
 import { LabThemeKey } from '../../composables/use-lab-theme'
 import ImplementationSourceView from './ImplementationSourceView.vue'
 
