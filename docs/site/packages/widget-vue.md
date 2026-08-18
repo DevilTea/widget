@@ -13,7 +13,7 @@ This guide covers the full public surface. For installation and a minimal
 end-to-end example, see the
 [package README](https://github.com/DevilTea/deviltea-labs/tree/main/packages/widget/vue#readme).
 For an interactive playground built on this integration, see the
-[Widget Lab](/widget-lab/){target="_self"}.
+[Widget Lab](../widget-lab/){target="_self"}.
 
 ## Core model
 
