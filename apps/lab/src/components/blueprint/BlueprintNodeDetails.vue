@@ -3,12 +3,14 @@
  * Selected-node details (issue #13 Widget Lab Phase 4 Checkpoint H): resolved nodes show
  * identity/location/config (raw + resolved, when the capability exists)/semantic slots
  * summary/issues; unresolved nodes show location/raw-definition/issues without inventing semantic
- * fields they do not have.
+ * fields they do not have. #43 translates only the surrounding inspector chrome; ids/types/member
+ * names/config/raw definitions remain semantic inspection data and are rendered verbatim.
  */
 import type { WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { BlueprintInspection, BlueprintInspectionNode, InspectionNodeId } from '@deviltea/widget-core/inspection'
 import { computed } from 'vue'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { getShowcase } from '../../showcases/registry'
 import IssueList from './IssueList.vue'
@@ -23,11 +25,8 @@ const emit = defineEmits<{
 	navigate: [nodeId: InspectionNodeId]
 }>()
 
-// issue #25 P3 Scope D, entry point 2: "View implementation" on the selected node's own detail. The
-// selected node here (`props.node`) IS the current shared focus (`BlueprintPanel.vue` drives both from
-// `store.focus`), so opening never needs to re-set focus — the Implementation panel reads the same
-// `store.focus` reactively.
 const store = useLabStore()
+const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
 const curatedEntryAvailable = computed(() => {
 	const node = props.node
@@ -43,11 +42,11 @@ const locationLabel = computed(() => {
 		return null
 	const location = props.blueprint.getLocation(node.node)
 	if (location === null)
-		return '(root)'
+		return i18n.t('(root)')
 	if (location.type === 'root')
 		return 'root'
-	const parentLabel = location.parent.resolved ? location.parent.id : '(unresolved parent)'
-	return `${location.type} — parent "${parentLabel}", slot "${location.slot}", index ${location.index}`
+	const parentLabel = location.parent.resolved ? location.parent.id : i18n.t('(unresolved parent)')
+	return `${location.type} — ${i18n.t('parent')} "${parentLabel}", slot "${location.slot}", ${i18n.t('index')} ${location.index}`
 })
 
 /** Capability-conditional fields structurally absent (not merely `undefined`) when the plugin has no config capability — read defensively rather than asserting a concrete Plugin type here. */
@@ -61,7 +60,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 		v-if="node === null"
 		:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
 	>
-		No node selected — click a node in the tree on the left to see its config, slots, and issues.
+		{{ i18n.t('No node selected — click a node in the tree on the left to see its config, slots, and issues.') }}
 	</div>
 	<div
 		v-else
@@ -70,10 +69,10 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 		<div :class="pika({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' })">
 			<div>
 				<h4 :class="pika({ margin: '0 0 4px', fontSize: '13px', fontFamily: 'var(--lab-font-mono)' })">
-					{{ node.resolved ? `${node.node.id} : ${node.node.type}` : 'Unresolved node' }}
+					{{ node.resolved ? `${node.node.id} : ${node.node.type}` : i18n.t('Unresolved node') }}
 				</h4>
 				<div :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
-					status: {{ node.resolved ? 'resolved' : 'unresolved' }} · location: {{ locationLabel }}
+					{{ i18n.t('status') }}: {{ node.resolved ? 'resolved' : 'unresolved' }} · {{ i18n.t('location') }}: {{ locationLabel }}
 				</div>
 			</div>
 			<button
@@ -83,14 +82,14 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 				:class="pika({ flex: '0 0 auto', padding: '3px 10px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
 				@click="implementationExplorer.open()"
 			>
-				View implementation
+				{{ i18n.t('View implementation') }}
 			</button>
 		</div>
 
 		<template v-if="node.resolved">
 			<section>
 				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-					Config
+					{{ i18n.t('Config') }}
 				</h5>
 				<pre
 					v-if="node.capabilities.config"
@@ -100,13 +99,13 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 					v-else
 					:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 				>
-					No config capability.
+					{{ i18n.t('No config capability.') }}
 				</p>
 			</section>
 
 			<section>
 				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-					Semantic slots
+					{{ i18n.t('Semantic slots') }}
 				</h5>
 				<ul
 					v-if="node.capabilities.slots && node.semanticSlots.length > 0"
@@ -116,36 +115,36 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 						v-for="slot in node.semanticSlots"
 						:key="slot.name"
 					>
-						{{ slot.name }}: {{ slot.children.length }} child(ren)
+						{{ slot.name }}: {{ slot.children.length }} {{ i18n.t('child(ren)') }}
 					</li>
 				</ul>
 				<p
 					v-else-if="node.capabilities.slots"
 					:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 				>
-					Slots capability present, but declares no slot names (e.g. explicit-empty <code>slots: never</code>).
+					{{ i18n.t('Slots capability present, but declares no slot names (e.g. explicit-empty') }} <code>slots: never</code>{{ i18n.t(').') }}
 				</p>
 				<p
 					v-else
 					:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 				>
-					No slots capability.
+					{{ i18n.t('No slots capability.') }}
 				</p>
 			</section>
 
 			<section>
 				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-					Members
+					{{ i18n.t('Members') }}
 				</h5>
 				<p :class="pika({ margin: '0', fontSize: '11px' })">
-					{{ node.state.length }} state · {{ node.properties.length }} propert{{ node.properties.length === 1 ? 'y' : 'ies' }} · {{ node.methods.length }} method{{ node.methods.length === 1 ? '' : 's' }}
+					{{ node.state.length }} State · {{ node.properties.length }} {{ node.properties.length === 1 ? 'Property' : 'Properties' }} · {{ node.methods.length }} {{ node.methods.length === 1 ? 'Method' : 'Methods' }}
 				</p>
 			</section>
 		</template>
 		<template v-else>
 			<section>
 				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-					Raw definition
+					{{ i18n.t('Raw definition') }}
 				</h5>
 				<pre
 					:class="pika({ margin: '0', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
@@ -155,7 +154,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 
 		<section>
 			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-				Issues ({{ node.node.getIssues().length }})
+				{{ i18n.t('Issues') }} ({{ node.node.getIssues().length }})
 			</h5>
 			<IssueList
 				:issues="node.node.getIssues()"
