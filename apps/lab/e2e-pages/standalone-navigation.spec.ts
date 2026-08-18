@@ -26,6 +26,18 @@ test('VitePress opens Widget Lab as a standalone document and preserves the pers
 		.toHaveAttribute('target', '_self')
 	await expect(link)
 		.not.toHaveAttribute('href', /[?&]lang=/)
+
+	// The built docs page itself must resolve the entry to the deployment base before any navigation
+	// occurs. This catches regressions where `_self` is correct but the href accidentally drops the
+	// configured `/deviltea-labs/` base (or remains coupled to an unrelated route depth).
+	const resolvedHref = await link.evaluate((element) => {
+		if (!(element instanceof HTMLAnchorElement))
+			throw new TypeError('expected the Widget Lab entry to be an anchor')
+		return new URL(element.href).pathname
+	})
+	expect(resolvedHref)
+		.toBe('/deviltea-labs/widget-lab/')
+
 	const documentLoadsBeforeClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
 
 	await link.click()
