@@ -12,7 +12,8 @@
 		"typecheck": "pnpm run pika:codegen && vue-tsc --project ./tsconfig.app.json --noEmit",
 		"pika:codegen": "node ./scripts/pika-codegen.mjs",
 		"test": "vitest run --config vitest.config.ts",
-		"test:browser": "playwright test"
+		"test:browser": "playwright test",
+		"test:pages": "playwright test --config playwright.pages.config.ts"
 	},
 	"dependencies": {
 		"@deviltea/widget-core": "workspace:*",
