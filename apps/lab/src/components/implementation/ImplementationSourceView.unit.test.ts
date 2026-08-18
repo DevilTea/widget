@@ -24,7 +24,7 @@ async function waitForCode(wrapper: ReturnType<typeof mount>): Promise<void> {
 	})
 }
 
-describe('ImplementationSourceView', () => {
+describe('implementationSourceView', () => {
 	it('renders arbitrary source as escaped text, never injected live markup', async () => {
 		const payload = '<img src=x onerror="window.__pwned = true">'
 		const wrapper = mount(ImplementationSourceView, {
