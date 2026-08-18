@@ -1,16 +1,9 @@
 /**
  * Thin `modern-monaco` integration boundary for the Source panel.
  *
- * Normative source: issue #13 (Widget Lab Phase 4) comment "Widget Lab implementation stack". Keeps
- * the integration deliberately narrow:
- *
- * - one JSON `ITextModel` for the active source, created through `modern-monaco`'s manual `init()`
- *   API — no `Workspace`/virtual filesystem, so there is no IndexedDB-backed persistence that could
- *   become a second, competing source of truth for the Lab's `draftSourceText`;
- * - theme and JSON grammar are bundled from `tm-themes`/`tm-grammars` (no CDN dependency for those);
- * - the editor engine itself is self-hosted rather than fetched from modern-monaco's default CDN;
- * - #44 preloads both light/dark theme objects and switches Monaco presentation in place, without
- *   replacing the text model or crossing the Lab's semantic Apply boundary.
+ * Monaco remains presentation-only and self-hosted. #44 preloads bundled light/dark themes and switches
+ * presentation in place without replacing the text model; #46 keeps literal tabs on the shared
+ * four-column model contract.
  */
 
 import type { Ref } from 'vue'
@@ -18,6 +11,7 @@ import jsonGrammar from 'tm-grammars/grammars/json.json'
 import oneDarkProTheme from 'tm-themes/themes/one-dark-pro.json'
 import oneLightTheme from 'tm-themes/themes/one-light.json'
 import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
+import { CODE_TAB_SIZE } from '../code-view/settings'
 import { syntaxThemeForLabTheme } from '../theme/theme'
 import { useLabTheme } from './use-lab-theme'
 
@@ -28,6 +22,8 @@ type MonacoModel = ReturnType<Monaco['editor']['createModel']>
 let monacoPromise: Promise<Monaco> | null = null
 
 function ensureMonaco(): Promise<Monaco> {
+	// Theme objects are passed directly so modern-monaco never resolves theme names through its CDN
+	// fallback. The LSP-free `core` entry likewise preserves #30's same-origin/self-contained contract.
 	monacoPromise ??= import('modern-monaco/core').then(({ init }) => init({
 		themes: [oneLightTheme as any, oneDarkProTheme as any],
 		langs: [jsonGrammar as any],
@@ -60,12 +56,12 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 
 		monaco.editor.setTheme(syntaxThemeForLabTheme(theme.theme.value))
 		model = monaco.editor.createModel(options.modelValue.value, 'json')
+		model.updateOptions({ tabSize: CODE_TAB_SIZE })
 		editor = monaco.editor.create(el, {
 			model,
 			automaticLayout: true,
 			minimap: { enabled: false },
 			fontSize: 13,
-			tabSize: 2,
 			scrollBeyondLastLine: false,
 		})
 		editor.onDidChangeModelContent(() => {
