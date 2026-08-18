@@ -13,6 +13,11 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'The declared semantic dependencies between widget members': 'widget members 之間已宣告的 semantic dependencies',
 	'The Vue presentation of the running widgets — interact here': '執行中 widgets 的 Vue 呈現層——在這裡操作',
 	'The plugin + Vue renderer code behind the focused widget type — readonly, curated, never a filesystem/editor': '目前聚焦 widget type 背後的 plugin + Vue renderer 程式碼——唯讀、經整理，不是檔案系統或編輯器',
+	'Inspect the focused widget instance or browse the current showcase\'s registered plugin implementations — readonly and curated': '檢視目前聚焦的 widget instance，或瀏覽目前展示範例已註冊的 plugin 實作——唯讀且經整理',
+
+	'Theme': '主題',
+	'Light': '亮色',
+	'Dark': '深色',
 
 	'Selected node': '選取的節點',
 	'All issues': '所有問題',
@@ -77,8 +82,12 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'View implementation': '查看實作',
 	'Preview unavailable — the current Blueprint is invalid. See the Blueprint tab for diagnostics.': 'Preview 無法使用——目前 Blueprint 無效。請到 Blueprint 查看 diagnostics。',
 
+	'Focused instance': '聚焦的 instance',
+	'Registered plugins': '已註冊 plugins',
 	'No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Graph to see its implementation here.': '目前沒有聚焦的 widget。請從 Preview（檢視模式）、Blueprint 或 Graph 選取 widget，即可在這裡查看實作。',
+	'No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Graph, or browse Registered plugins without selecting an instance.': '目前沒有聚焦的 widget。可從 Preview（檢視模式）、Blueprint 或 Graph 選取 widget，或直接瀏覽已註冊 plugins 而不選取 instance。',
 	'has no curated Implementation entry yet.': '目前沒有經整理的 Implementation 項目。',
+	'This showcase has no curated registered-plugin Implementation entries.': '這個展示範例沒有經整理的已註冊 plugin Implementation 項目。',
 	'Applied instance': '已套用 instance',
 	'This widget\'s declaration was not found in the applied Source — it may only exist in the unapplied draft, or the applied Blueprint changed since this focus was set.': '在已套用 Source 中找不到這個 widget declaration——它可能只存在於尚未套用的 draft，或聚焦後已套用 Blueprint 發生變更。',
 	'Copy': '複製',
