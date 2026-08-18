@@ -1,20 +1,10 @@
 <script setup lang="ts">
 /**
- * The Implementation panel (issue #25 P3 Scope D) — a closable Dockview panel (default tab component,
- * NOT `NonClosableTab`; see `Workbench.vue`'s registration), lazily mounted only once
- * `ImplementationExplorerStore.open()` has been called at least once (see
- * `use-implementation-explorer.ts`). This file itself is registered behind `defineAsyncComponent` in
- * `Workbench.vue`, so it (and everything it statically imports — `ImplementationFile.vue` ->
- * `ImplementationSourceView.vue` -> `shiki-highlighter.ts`) only ever enters the explorer's own lazy
- * chunk, never the eager main bundle.
- *
- * Follows the shared cross-inspector focus (`LabStore.focus`), same grain as Blueprint/Runtime/Graph:
- * whenever focus changes — whether because this panel is already open, or because it is opened right
- * after a Preview Inspect-click / Blueprint selected-node click / tutorial step — it re-resolves the
- * focused widget's type and shows that type's curated entry. It never sets focus itself (see
- * `use-implementation-explorer.ts`'s file header).
+ * The Implementation panel (issue #25 P3 Scope D). #43 localizes only Lab-owned explorer chrome;
+ * plugin type names, curated file titles/paths, source, and Applied-instance JSON stay verbatim.
  */
 import { computed, ref, watch } from 'vue'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { extractAppliedInstance } from '../../implementation/applied-instance'
 import { resolveFocusedWidget } from '../../implementation/focused-widget'
@@ -26,6 +16,7 @@ import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 const APPLIED_INSTANCE_TAB = 'applied-instance'
 
 const store = useLabStore()
+const i18n = useLabI18n()
 
 const focusedWidget = computed(() => resolveFocusedWidget(store.active.value.blueprint, store.focus.value))
 const showcase = computed(() => getShowcase(store.showcaseId.value))
@@ -44,11 +35,6 @@ const appliedInstance = computed(() => {
 	return extractAppliedInstance(store.active.value.sourceText, widget.id)
 })
 
-/**
- * Defaults to the first curated file whenever the resolved entry changes identity (a new focused
- * widget type, or the Blueprint/showcase itself was replaced) — never sticks on a stale tab id from a
- * previously-focused, differently-shaped widget type.
- */
 const selectedTabId = ref<string>(APPLIED_INSTANCE_TAB)
 watch(entry, (next) => {
 	selectedTabId.value = next !== null ? next.files[0].path : APPLIED_INSTANCE_TAB
@@ -68,20 +54,19 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 			v-if="focusedWidget === null"
 			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 		>
-			No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Graph to see its
-			implementation here.
+			{{ i18n.t('No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Graph to see its implementation here.') }}
 		</div>
 		<div
 			v-else-if="entry === null"
 			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 		>
 			<code :class="pika({ fontFamily: 'var(--lab-font-mono)' })">{{ focusedWidget.type }}</code>
-			has no curated Implementation entry yet.
+			{{ i18n.t('has no curated Implementation entry yet.') }}
 		</div>
 		<template v-else>
 			<div :class="pika({ padding: '6px 10px', fontSize: '11px', color: 'var(--lab-color-text-muted)', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
 				<strong :class="pika({ color: 'var(--lab-color-text)' })">{{ focusedWidget.type }}</strong>
-				— {{ showcase?.label }}
+				— {{ showcase === undefined ? '' : i18n.t(showcase.label) }}
 			</div>
 			<div :class="pika({ display: 'flex', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto', overflowX: 'auto' })">
 				<button
@@ -100,7 +85,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 					:style="{ fontWeight: selectedTabId === APPLIED_INSTANCE_TAB ? '600' : 'normal', borderBottom: selectedTabId === APPLIED_INSTANCE_TAB ? '2px solid var(--lab-color-accent)' : '2px solid transparent' }"
 					@click="selectedTabId = APPLIED_INSTANCE_TAB"
 				>
-					Applied instance
+					{{ i18n.t('Applied instance') }}
 				</button>
 			</div>
 			<div
@@ -120,8 +105,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 					v-if="appliedInstance === null || appliedInstance.status === 'not-found'"
 					:class="pika({ padding: '10px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 				>
-					This widget's declaration was not found in the applied Source — it may only exist in the
-					unapplied draft, or the applied Blueprint changed since this focus was set.
+					{{ i18n.t("This widget's declaration was not found in the applied Source — it may only exist in the unapplied draft, or the applied Blueprint changed since this focus was set.") }}
 				</p>
 				<ImplementationSourceView
 					v-else
