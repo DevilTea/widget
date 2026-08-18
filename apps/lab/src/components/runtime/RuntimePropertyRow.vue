@@ -35,9 +35,9 @@ const statusLabel = computed(() => {
 	return current.result.success
 		? JSON.stringify(current.result.value)
 		: i18n.t('Failed ({count} {issueWord})', {
-			count: current.result.issues.length,
-			issueWord: current.result.issues.length === 1 ? i18n.t('issue') : i18n.t('issues'),
-		})
+				count: current.result.issues.length,
+				issueWord: current.result.issues.length === 1 ? i18n.t('issue') : i18n.t('issues'),
+			})
 })
 
 const failedIssues = computed(() => {
