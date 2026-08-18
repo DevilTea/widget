@@ -38,7 +38,7 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 		})
 	})
 
-	test('the dirty-draft confirmation survives shrink/widen without applying or losing the draft', async ({ page }) => {
+	test('the dirty-draft confirmation survives shrink/widen without applying, losing the draft, or losing its focus-return target', async ({ page }) => {
 		await page.goto('/?lab-test')
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
 
@@ -51,8 +51,8 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 			seam?.setDraftSourceText(source)
 		}, draft)
 
-		await page.getByRole('button', { name: 'Tutorial', exact: true })
-			.click()
+		const tutorialButton = page.getByRole('button', { name: 'Tutorial', exact: true })
+		await tutorialButton.click()
 		const confirm = page.getByRole('alertdialog')
 		await expect(confirm)
 			.toBeVisible()
@@ -68,6 +68,11 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 			.toBeVisible()
 		await confirm.getByRole('button', { name: 'Cancel' })
 			.click()
+
+		// Presentation-only suppression/reopen must retain the *original* dialog initiator. A new
+		// `showModal()` after widening must not replace this with body/gate focus.
+		await expect(tutorialButton)
+			.toBeFocused()
 
 		// Cancel kept the draft intact and unapplied: Source still contains the marker after the top-layer
 		// suppression/reopen cycle, while Preview must still render the prior applied snapshot.
