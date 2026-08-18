@@ -1,3 +1,4 @@
+import { defaultSandboxPreset } from '../src/sandbox/presets'
 import { expect, test } from './fixtures'
 
 const GATE_TEXT = 'Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.'
@@ -41,10 +42,15 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 		await page.goto('/?lab-test')
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
 
-		await page.evaluate(() => {
+		// Use a known-valid Source fixture through the same LabStore seam as the Apply contracts. Reading
+		// Monaco's tokenized DOM to reconstruct Source would couple this viewport test to editor painting
+		// and could produce invalid JSON before the modal contract is even exercised.
+		const draft = defaultSandboxPreset.sourceText.replace('Widget Lab sandbox', 'Widget Lab sandbox dirtied by viewport test')
+		await page.evaluate((source) => {
 			const seam = (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__
-			seam?.setDraftSourceText(`${document.querySelector('.view-lines')?.textContent ?? ''}\n"dirtied by viewport test"`)
-		})
+			seam?.setDraftSourceText(source)
+		}, draft)
+
 		await page.getByRole('button', { name: 'Tutorial', exact: true })
 			.click()
 		const confirm = page.getByRole('alertdialog')
@@ -62,8 +68,14 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 			.toBeVisible()
 		await confirm.getByRole('button', { name: 'Cancel' })
 			.click()
+
+		// Cancel kept the draft intact and unapplied: Source still contains the marker after the top-layer
+		// suppression/reopen cycle, while Preview must still render the prior applied snapshot.
 		await expect(page.locator('.view-lines'))
 			.toContainText('dirtied by viewport test')
+		await expect(page.locator('[data-tutorial-target="preview"]')
+			.getByText('Widget Lab sandbox dirtied by viewport test', { exact: true }))
+			.toHaveCount(0)
 	})
 })
 
