@@ -1,21 +1,24 @@
 <script setup lang="ts">
 /**
- * Thin presentation only: options come from `useProperties().options` (config-projected).
+ * Thin presentation only: options come from `useProperties().options` (config-projected). #43 leaves
+ * those labels and all validation issues verbatim; only the renderer-owned empty-choice placeholder is
+ * presentation chrome.
  *
  * Issue #28 accessibility fix: `useId()`-derived `for`/`id` ties the visible `label` to the `select`;
  * when `help` is configured, its paragraph gets its own id and the `select` points to it via
- * `aria-describedby` (help text is supplementary, not the accessible name, so `aria-describedby` — not
- * `aria-labelledby` — is the correct association here).
+ * `aria-describedby`.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { useId } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
+import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { SurveyChoiceQuestionPlugin } from '../plugins/survey-questions'
 
 const { useState, useProperties, useStateIssues, widgetId, widgetType } = useWidget(SurveyChoiceQuestionPlugin)
 const { answer } = useState()
 const { label, help, options } = useProperties()
 const { answer: answerIssues } = useStateIssues()
+const i18n = useLabI18n()
 
 const selectId = useId()
 const helpId = useId()
@@ -51,7 +54,7 @@ function onChange(event: Event): void {
 			@change="onChange"
 		>
 			<option value="">
-				— select —
+				{{ i18n.t('— select —') }}
 			</option>
 			<option
 				v-for="option in options"

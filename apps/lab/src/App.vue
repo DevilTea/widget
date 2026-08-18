@@ -6,6 +6,7 @@ import TutorialRail from './components/tutorial/TutorialRail.vue'
 import WelcomeCard from './components/tutorial/WelcomeCard.vue'
 import Workbench from './components/Workbench.vue'
 import { createImplementationExplorerStore, ImplementationExplorerKey } from './composables/use-implementation-explorer'
+import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
 import { createLabThemeStore, LabThemeKey } from './composables/use-lab-theme'
 import { createTutorialStore, TutorialStoreKey } from './composables/use-tutorial'
@@ -15,8 +16,10 @@ import 'dockview-vue/dist/styles/dockview.css'
 import './styles/dockview-theme.css'
 import './styles/tutorial-theme.css'
 
-// #44: theme is an independent presentation preference. Create/provide it before descendants mount so
-// every surface (including Monaco/Shiki) observes one consistent document/UI theme from first render.
+// #43/#44: locale and theme are independent presentation preferences. Neither depends on LabStore or
+// semantic application state; descendants receive both before any semantic/runtime surface mounts.
+const i18n = createLabI18nStore()
+provide(LabI18nKey, i18n)
 const theme = createLabThemeStore()
 provide(LabThemeKey, theme)
 
@@ -98,7 +101,7 @@ onUnmounted(() => disposeLayoutWorker())
 			class="narrow-viewport-gate"
 			role="alert"
 		>
-			<p>Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.</p>
+			<p>{{ i18n.t('Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.') }}</p>
 		</div>
 	</div>
 </template>

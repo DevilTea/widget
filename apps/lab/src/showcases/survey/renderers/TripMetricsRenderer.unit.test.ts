@@ -10,11 +10,14 @@
  * is fixed, it subscribes to every Property's own issues channel directly (the natural design), and
  * this suite proves — against the real Runtime/Blueprint, no mocked core — that `budgetPerPersonPerDay`/
  * `estimatedBaselineCost` (both downstream of `tripDays`) stay live without any renderer-side workaround.
+ * #43 adds a presentation-only locale dependency to the renderer, so this harness supplies an English
+ * identity translator without changing any Runtime semantics asserted here.
  */
 import { createWidgetVueRenderer, useWidget } from '@deviltea/widget-vue'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
+import { LabI18nKey } from '../../../composables/use-lab-i18n'
 import { ConditionalSectionPlugin, SurveySectionPlugin, TripSurveyPlugin } from '../plugins'
 import { defaultSurveyPreset } from '../presets'
 import { surveySystem } from '../system'
@@ -60,7 +63,17 @@ describe('tripMetricsRenderer', () => {
 
 		const wrapper = mount(HarnessRenderer, {
 			props: { runtime },
-			global: { config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } } },
+			global: {
+				config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+				provide: {
+					[LabI18nKey as symbol]: {
+						locale: { value: 'en' },
+						locales: ['en', 'zh-TW'],
+						setLocale: () => {},
+						t: (source: string) => source,
+					},
+				},
+			},
 		})
 		await wrapper.vm.$nextTick()
 		expect(wrapper.text())

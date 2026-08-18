@@ -3,10 +3,12 @@ import type { ResolvedBlueprintInspectionNode, RuntimeWidgetInspection } from '@
 /**
  * Selected-node Runtime member list (issue #13 Phase 5 "Runtime Inspector becomes strictly passive"):
  * State/Property/Method member drill-down for one resolved node. Clicking a member row updates the
- * shared cross-inspector focus (`nodeId` + member) — never Runtime/Preview state.
+ * shared cross-inspector focus (`nodeId` + member) — never Runtime/Preview state. #43 translates only
+ * explanatory inventory/empty-state copy; State/Property/Method taxonomy and member names stay exact.
  */
 import type { InspectorFocusMember } from '../../lab/focus'
 import { computed } from 'vue'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import RuntimeMethodRow from './RuntimeMethodRow.vue'
 import RuntimePropertyRow from './RuntimePropertyRow.vue'
@@ -18,6 +20,7 @@ const props = defineProps<{
 }>()
 
 const store = useLabStore()
+const i18n = useLabI18n()
 
 const focusMember = computed<InspectorFocusMember | null>(() => {
 	const focus = store.focus.value
@@ -44,7 +47,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 		v-if="node === null || widgetInspection === null"
 		:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
 	>
-		No node selected — click a node in the tree on the left to see its live State, Properties, and Methods.
+		{{ i18n.t('No node selected — click a node in the tree on the left to see its live State, Properties, and Methods.') }}
 	</div>
 	<div
 		v-else
@@ -66,7 +69,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 				v-if="node.state.length === 0"
 				:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 			>
-				No state.
+				{{ i18n.t('No State members.') }}
 			</p>
 		</section>
 
@@ -86,13 +89,13 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 				v-if="node.properties.length === 0"
 				:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 			>
-				No properties.
+				{{ i18n.t('No Property members.') }}
 			</p>
 		</section>
 
 		<section>
 			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-				Methods ({{ node.methods.length }}) — inventory only
+				Methods ({{ node.methods.length }}) — {{ i18n.t('inventory only') }}
 			</h5>
 			<RuntimeMethodRow
 				v-for="member in node.methods"
@@ -106,7 +109,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 				v-if="node.methods.length === 0"
 				:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 			>
-				No methods.
+				{{ i18n.t('No Method members.') }}
 			</p>
 		</section>
 	</div>

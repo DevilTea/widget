@@ -9,11 +9,13 @@
  * - Registered plugins (#42): a passive type-level catalog for every curated plugin in the current
  *   showcase. Catalog selection never mutates shared focus and never invents an instance selection.
  *
- * Raw source remains lazy through `ImplementationFile`; this panel only reads eager registry metadata.
+ * #43 localizes only Lab-owned explorer chrome. Plugin types, curated file titles/paths, source, and
+ * Applied-instance JSON remain verbatim. Raw source remains lazy through `ImplementationFile`.
  */
 import type { ImplementationExplorerMode } from '../../composables/use-implementation-explorer'
 import { computed, ref, watch } from 'vue'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { extractAppliedInstance } from '../../implementation/applied-instance'
 import { resolveFocusedWidget } from '../../implementation/focused-widget'
@@ -26,6 +28,7 @@ const APPLIED_INSTANCE_TAB = 'applied-instance'
 
 const store = useLabStore()
 const explorer = useImplementationExplorer()
+const i18n = useLabI18n()
 
 const mode = ref<ImplementationExplorerMode>(explorer.requestedMode.value)
 // An explicit open request carries intent. Existing Preview/Blueprint/tutorial entry points call
@@ -104,7 +107,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 				:style="{ background: mode === 'focused' ? 'var(--lab-color-surface-alt)' : 'transparent' }"
 				@click="mode = 'focused'"
 			>
-				Focused instance
+				{{ i18n.t('Focused instance') }}
 			</button>
 			<button
 				type="button"
@@ -113,7 +116,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 				:style="{ background: mode === 'catalog' ? 'var(--lab-color-surface-alt)' : 'transparent' }"
 				@click="mode = 'catalog'"
 			>
-				Registered plugins
+				{{ i18n.t('Registered plugins') }}
 			</button>
 		</div>
 
@@ -121,21 +124,20 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 			v-if="mode === 'focused' && focusedWidget === null"
 			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 		>
-			No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Graph, or browse
-			Registered plugins without selecting an instance.
+			{{ i18n.t('No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Graph, or browse Registered plugins without selecting an instance.') }}
 		</div>
 		<div
 			v-else-if="mode === 'focused' && entry === null"
 			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 		>
 			<code :class="pika({ fontFamily: 'var(--lab-font-mono)' })">{{ focusedWidget?.type }}</code>
-			has no curated Implementation entry yet.
+			{{ i18n.t('has no curated Implementation entry yet.') }}
 		</div>
 		<div
 			v-else-if="mode === 'catalog' && catalogTypes.length === 0"
 			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 		>
-			This showcase has no curated registered-plugin Implementation entries.
+			{{ i18n.t('This showcase has no curated registered-plugin Implementation entries.') }}
 		</div>
 		<div
 			v-else-if="entry !== null"
@@ -143,7 +145,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 		>
 			<nav
 				v-if="mode === 'catalog'"
-				aria-label="Registered plugins"
+				:aria-label="i18n.t('Registered plugins')"
 				:class="pika({ display: 'flex', flexDirection: 'column', flex: '0 0 180px', minWidth: '0', overflow: 'auto', borderRight: '1px solid var(--lab-color-border)', padding: '6px' })"
 			>
 				<button
@@ -162,7 +164,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 			<div :class="pika({ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: '0', minWidth: '0' })">
 				<div :class="pika({ padding: '6px 10px', fontSize: '11px', color: 'var(--lab-color-text-muted)', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
 					<strong :class="pika({ color: 'var(--lab-color-text)' })">{{ displayedType }}</strong>
-					— {{ showcase?.label }}
+					— {{ showcase === undefined ? '' : i18n.t(showcase.label) }}
 				</div>
 				<div :class="pika({ display: 'flex', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto', overflowX: 'auto' })">
 					<button
@@ -182,7 +184,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 						:style="{ fontWeight: selectedTabId === APPLIED_INSTANCE_TAB ? '600' : 'normal', borderBottom: selectedTabId === APPLIED_INSTANCE_TAB ? '2px solid var(--lab-color-accent)' : '2px solid transparent' }"
 						@click="selectedTabId = APPLIED_INSTANCE_TAB"
 					>
-						Applied instance
+						{{ i18n.t('Applied instance') }}
 					</button>
 				</div>
 				<div
@@ -204,8 +206,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 						v-if="appliedInstance === null || appliedInstance.status === 'not-found'"
 						:class="pika({ padding: '10px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 					>
-						This widget's declaration was not found in the applied Source — it may only exist in the
-						unapplied draft, or the applied Blueprint changed since this focus was set.
+						{{ i18n.t("This widget's declaration was not found in the applied Source — it may only exist in the unapplied draft, or the applied Blueprint changed since this focus was set.") }}
 					</p>
 					<ImplementationSourceView
 						v-else

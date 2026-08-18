@@ -4,10 +4,12 @@
  * `Never evaluated` until some real Runtime consumer naturally evaluates it, then the latest completed
  * `ExecutionResult` retained by core inspection — a success value, or a semantic failure rendered via
  * `RuntimePropertyIssueList`. Never labeled `fresh`/`dirty`/`active`/`stale`, and never forces evaluation
- * itself (only reads `getSnapshot()`/`subscribe()`).
+ * itself (only reads `getSnapshot()`/`subscribe()`). #43 translates only status/action chrome; the
+ * Property name, successful value, and core RuntimePropertyIssue payload remain verbatim.
  */
 import type { RuntimePropertyInspection } from '@deviltea/widget-core/inspection'
 import { computed, ref } from 'vue'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useMemberSnapshot } from '../../composables/use-runtime-member'
 import { createPropertyMemberViewModel } from '../../runtime-inspector/viewmodel'
 import RuntimePropertyIssueList from './RuntimePropertyIssueList.vue'
@@ -22,16 +24,20 @@ const emit = defineEmits<{
 	select: []
 }>()
 
+const i18n = useLabI18n()
 const snapshot = useMemberSnapshot(createPropertyMemberViewModel, () => props.inspection)
 const showIssues = ref(false)
 
 const statusLabel = computed(() => {
 	const current = snapshot.value
 	if (current === null || current.status === 'never-evaluated')
-		return 'Never evaluated'
+		return i18n.t('Never evaluated')
 	return current.result.success
 		? JSON.stringify(current.result.value)
-		: `Failed (${current.result.issues.length} issue${current.result.issues.length === 1 ? '' : 's'})`
+		: i18n.t('Failed ({count} {issueWord})', {
+				count: current.result.issues.length,
+				issueWord: current.result.issues.length === 1 ? i18n.t('issue') : i18n.t('issues'),
+			})
 })
 
 const failedIssues = computed(() => {
@@ -63,7 +69,7 @@ const failedIssues = computed(() => {
 				:class="pika({ fontSize: '10px', color: 'var(--lab-color-accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 0 4px' })"
 				@click="showIssues = !showIssues"
 			>
-				{{ showIssues ? 'hide issues' : 'show issues' }}
+				{{ i18n.t(showIssues ? 'hide issues' : 'show issues') }}
 			</button>
 			<RuntimePropertyIssueList
 				v-if="showIssues"

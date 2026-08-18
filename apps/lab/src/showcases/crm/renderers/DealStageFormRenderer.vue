@@ -5,16 +5,18 @@
  * widgets in the `actions` slot, each invoking `deal-stage-form.save`/`cancel` through their own
  * configured `action` dependency (checkpoint §6). `canSave` only ever gates the actions container's
  * opacity as a visual status indicator here — it does not disable the Save button (`Button` exposes no
- * `disabled` state), and `save()` itself does not consume/depend on it (checkpoint §2; PR #22 review
- * 4941241562 non-blocking note: corrected from an earlier comment that claimed this gated `disabled`).
+ * `disabled` state), and `save()` itself does not consume/depend on it. #43 translates only the fixed
+ * connector/empty-state prose; deal company/stage and core method issues stay verbatim semantic data.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
+import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { DealStageFormPlugin } from '../plugins/deal-stage-form'
 
 const { useProperties, useMethodIssues, WidgetSlot, widgetId, widgetType } = useWidget(DealStageFormPlugin)
 const { selectedDeal, canSave } = useProperties()
 const { save: saveIssues, open: openIssues } = useMethodIssues()
+const i18n = useLabI18n()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 </script>
 
@@ -27,13 +29,13 @@ const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 			v-if="selectedDeal"
 			:class="pika({ margin: '0', fontSize: '12px' })"
 		>
-			{{ selectedDeal.company }} — currently <strong>{{ selectedDeal.stage }}</strong>
+			{{ selectedDeal.company }} — {{ i18n.t('currently') }} <strong>{{ selectedDeal.stage }}</strong>
 		</p>
 		<p
 			v-else
 			:class="pika({ margin: '0', fontSize: '12px', color: 'var(--lab-color-text-muted)', fontStyle: 'italic' })"
 		>
-			No deal selected.
+			{{ i18n.t('No deal selected.') }}
 		</p>
 		<WidgetSlot name="fields" />
 		<ul

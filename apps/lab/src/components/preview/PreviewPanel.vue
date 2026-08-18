@@ -49,11 +49,13 @@
  * Inspect-mode click, a Blueprint/Graph tree selection, or the tutorial) resolves to a widget type this
  * showcase's `sources.ts` curates. It never re-sets focus itself — the Implementation panel reads the
  * same `store.focus` reactively (see `ImplementationPanel.vue`), so there is nothing else to keep in
- * sync here.
+ * sync here. #43 localizes only these Preview-owned controls/explanatory strings; the hover badge keeps
+ * the exact semantic `type#id` identity.
  */
 import { computed, useTemplateRef, watch } from 'vue'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
 import { useInspectMode } from '../../composables/use-inspect-mode'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { resolveFocusedWidget } from '../../implementation/focused-widget'
 import { resolveInspectAnchor } from '../../lab/inspect-anchor'
@@ -62,6 +64,7 @@ import { getShowcase } from '../../showcases/registry'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
+const i18n = useLabI18n()
 const inspect = useInspectMode()
 const implementationExplorer = useImplementationExplorer()
 
@@ -183,20 +186,20 @@ function onClickCapture(event: MouseEvent): void {
 		<div :class="pika({ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
 			<button
 				type="button"
-				aria-label="Inspect"
+				:aria-label="i18n.t('Inspect')"
 				:aria-pressed="inspect.active.value"
 				:class="inspect.active.value
 					? pika({ padding: '3px 10px', fontSize: '11px', fontWeight: '600', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-accent)', background: 'var(--lab-color-accent)', color: 'var(--lab-color-accent-contrast)', cursor: 'pointer' })
 					: pika({ padding: '3px 10px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
 				@click="inspect.toggle()"
 			>
-				Inspect
+				{{ i18n.t('Inspect') }}
 			</button>
 			<span
 				v-if="inspect.active.value"
 				:class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 			>
-				Click a widget to focus it in Blueprint — Esc to exit
+				{{ i18n.t('Click a widget to focus it in Blueprint — Esc to exit') }}
 			</span>
 			<button
 				type="button"
@@ -205,7 +208,7 @@ function onClickCapture(event: MouseEvent): void {
 				:class="pika({ 'marginLeft': 'auto', 'padding': '3px 10px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 				@click="implementationExplorer.open()"
 			>
-				View implementation
+				{{ i18n.t('View implementation') }}
 			</button>
 		</div>
 		<div
@@ -228,7 +231,7 @@ function onClickCapture(event: MouseEvent): void {
 				v-else
 				:class="pika({ color: 'var(--lab-color-text-muted)', fontSize: '13px' })"
 			>
-				Preview unavailable — the current Blueprint is invalid. See the Blueprint tab for diagnostics.
+				{{ i18n.t('Preview unavailable — the current Blueprint is invalid. See the Blueprint tab for diagnostics.') }}
 			</p>
 			<div
 				v-if="inspect.hovered.value !== null && previewSurface !== null"

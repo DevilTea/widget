@@ -1,14 +1,15 @@
 // @vitest-environment happy-dom
 /**
- * Issue #26 Finding 1/4: `TripSurveyRenderer`'s stale-result presentation, against the real
- * `resultFresh` Property (`../plugins/trip-survey.ts`) and a real Runtime/Blueprint — no mocked core.
- * Harness style follows `TripMetricsRenderer.unit.test.ts`: every other widget in the tree is a no-op
- * stub so this suite stays focused on `TripSurveyRenderer` itself.
+ * Issue #26 Finding 1/4: `TripSurveyRenderer`'s stale-result presentation against the real
+ * `resultFresh` Property and a real Runtime/Blueprint. #43 adds presentation-only locale ownership to
+ * the renderer; this harness supplies an English identity translator so semantic freshness assertions
+ * remain unchanged.
  */
 import { createWidgetVueRenderer, useWidget } from '@deviltea/widget-vue'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
+import { LabI18nKey } from '../../../composables/use-lab-i18n'
 import { ConditionalSectionPlugin, SurveySectionPlugin } from '../plugins'
 import { defaultSurveyPreset } from '../presets'
 import { surveySystem } from '../system'
@@ -53,7 +54,17 @@ function mountSurvey() {
 
 	const wrapper = mount(HarnessRenderer, {
 		props: { runtime },
-		global: { config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } } },
+		global: {
+			config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+			provide: {
+				[LabI18nKey as symbol]: {
+					locale: { value: 'en' },
+					locales: ['en', 'zh-TW'],
+					setLocale: () => {},
+					t: (source: string) => source,
+				},
+			},
+		},
 	})
 
 	return { wrapper, runtime }
@@ -94,7 +105,6 @@ describe('tripSurveyRenderer stale-result presentation (issue #26)', () => {
 			.toContain('Stale')
 		expect(wrapper.text())
 			.toContain('Generated from previous answers')
-		// The old snapshot is retained, not cleared — its stale figures stay on screen.
 		expect(wrapper.text())
 			.toContain('Trip days: 5')
 	})
@@ -121,7 +131,6 @@ describe('tripSurveyRenderer stale-result presentation (issue #26)', () => {
 			.not.toContain('Stale')
 		expect(wrapper.text())
 			.not.toContain('Generated from previous answers')
-		// computeTripDays('2027-04-10', '2027-04-20') === 11 (survey/domain.ts).
 		expect(wrapper.text())
 			.toContain('Trip days: 11')
 	})

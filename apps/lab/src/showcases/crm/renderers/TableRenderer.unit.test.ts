@@ -1,14 +1,13 @@
 // @vitest-environment happy-dom
 /**
- * Issue #28 accessibility fix — cheap attribute-wiring assertions only (see this file's ARIA-pattern
- * rationale in `TableRenderer.vue`'s own file header, PR #32 review round 1): native table semantics
- * throughout (no `role` overrides), every data row is a Tab stop (`tabindex="0"`), and `aria-current`
- * is present (`"true"`) only on the row matching `Table.selectedRowId` — the exact same State a pointer
- * click already drove — and absent everywhere else. Behavioral focus/keyboard coverage (Enter/Space
- * activation, focus-visible rendering) belongs to the real-browser contract suite (issue #28), not here.
+ * Issue #28 accessibility fix — cheap attribute-wiring assertions only: native table semantics,
+ * keyboard-focusable data rows, and `aria-current` tied to semantic `Table.selectedRowId`. #43 adds a
+ * presentation-only locale dependency for the table's fixed empty-state copy; this harness supplies an
+ * English identity translator without changing any of the semantic/accessibility assertions.
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { LabI18nKey } from '../../../composables/use-lab-i18n'
 import { createCrmHarness, createCrmRuntime, widgetOfType } from '../test-support'
 import TableRenderer from './TableRenderer.vue'
 
@@ -19,7 +18,17 @@ describe('tableRenderer', () => {
 
 		const wrapper = mount(HarnessRenderer, {
 			props: { runtime },
-			global: { config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } } },
+			global: {
+				config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+				provide: {
+					[LabI18nKey as symbol]: {
+						locale: { value: 'en' },
+						locales: ['en', 'zh-TW'],
+						setLocale: () => {},
+						t: (source: string) => source,
+					},
+				},
+			},
 		})
 		await wrapper.vm.$nextTick()
 
@@ -46,7 +55,6 @@ describe('tableRenderer', () => {
 				.toBeUndefined()
 			expect(tr.attributes('tabindex'))
 				.toBe('0')
-			// No selection yet — every row starts without an `aria-current` attribute at all.
 			expect(tr.attributes('aria-current'))
 				.toBeUndefined()
 			for (const td of tr.findAll('td')) {
@@ -55,8 +63,6 @@ describe('tableRenderer', () => {
 			}
 		}
 
-		// Drive selection through the exact same semantic Method a pointer click uses — never
-		// renderer-local state — and confirm `aria-current="true"` reflects it on the matching row only.
 		const table_ = widgetOfType(runtime, 'deal-table', 'Table')
 		const result = table_.methods.selectRow('deal-1')
 		expect(result.success)
@@ -69,9 +75,6 @@ describe('tableRenderer', () => {
 		expect(currentRows[0]?.text())
 			.toContain('Aurora Systems')
 
-		// Every other row still has no `aria-current` attribute — relying on its spec-defined default of
-		// `"false"` (not exposed to assistive technology) rather than writing `aria-current="false"`
-		// explicitly (see file header, PR #32 round 2 correction).
 		for (const tr of dataRows) {
 			if (tr.text()
 				.includes('Aurora Systems')) {

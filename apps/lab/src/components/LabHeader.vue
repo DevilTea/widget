@@ -1,9 +1,11 @@
 <script setup lang="ts">
-/** Compact Lab utility header: showcase/preset selection, explorer/tutorial entry, status, theme, and Apply controls. */
+/** Compact Lab utility header: presentation controls, semantic status, tutorial entry, and Apply actions. */
 import type { TutorialTourId } from '../composables/use-tutorial'
+import type { LabLocale } from '../i18n/locale'
 import type { LabTheme } from '../theme/theme'
 import { computed } from 'vue'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
+import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
 import { useLabTheme } from '../composables/use-lab-theme'
 import { useTutorialStore } from '../composables/use-tutorial'
@@ -11,6 +13,7 @@ import { useTutorialStore } from '../composables/use-tutorial'
 const store = useLabStore()
 const theme = useLabTheme()
 const tutorial = useTutorialStore()
+const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
 
 const blueprintStatus = computed(() => store.active.value.blueprint.status)
@@ -19,10 +22,10 @@ const runtimeAvailable = computed(() => store.active.value.runtime !== null)
 
 const tutorialButtonLabel = computed(() => {
 	switch (tutorial.snapshot.value.status) {
-		case 'paused': return 'Resume tutorial'
-		case 'completed': return 'Restart tutorial'
-		case 'active': return 'Pause tutorial'
-		default: return 'Tutorial'
+		case 'paused': return i18n.t('Resume tutorial')
+		case 'completed': return i18n.t('Restart tutorial')
+		case 'active': return i18n.t('Pause tutorial')
+		default: return i18n.t('Tutorial')
 	}
 })
 
@@ -62,6 +65,10 @@ function onShowcaseChange(event: Event): void {
 function onThemeChange(event: Event): void {
 	theme.setTheme((event.target as HTMLSelectElement).value as LabTheme)
 }
+
+function onLocaleChange(event: Event): void {
+	i18n.setLocale((event.target as HTMLSelectElement).value as LabLocale)
+}
 </script>
 
 <template>
@@ -71,7 +78,7 @@ function onThemeChange(event: Event): void {
 		<select
 			:value="store.showcaseId.value"
 			:class="pika({ background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 8px', fontSize: '12px' })"
-			aria-label="Switch showcase"
+			:aria-label="i18n.t('Switch showcase')"
 			@change="onShowcaseChange"
 		>
 			<option
@@ -79,23 +86,25 @@ function onThemeChange(event: Event): void {
 				:key="showcase.id"
 				:value="showcase.id"
 			>
-				{{ showcase.label }}
+				{{ i18n.t(showcase.label) }}
 			</option>
 		</select>
 
 		<select
 			:class="pika({ background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 8px', fontSize: '12px' })"
-			aria-label="Load a preset"
+			:aria-label="i18n.t('Load a preset')"
 			@change="onPresetChange"
 		>
-			<option value="">Preset…</option>
+			<option value="">
+				{{ i18n.t('Preset…') }}
+			</option>
 			<option
 				v-for="preset in store.presets.value"
 				:key="preset.id"
 				:value="preset.id"
-				:title="preset.description"
+				:title="i18n.t(preset.description)"
 			>
-				{{ preset.label }}
+				{{ i18n.t(preset.label) }}
 			</option>
 		</select>
 
@@ -104,7 +113,7 @@ function onThemeChange(event: Event): void {
 			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
 			@click="implementationExplorer.open('catalog')"
 		>
-			Implementation
+			{{ i18n.t('Implementation') }}
 		</button>
 
 		<select
@@ -112,11 +121,15 @@ function onThemeChange(event: Event): void {
 			:value="tutorial.activeTourId.value"
 			:disabled="tutorial.tourPickerDisabled.value"
 			:class="pika({ 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': 'var(--lab-radius)', 'padding': '4px 8px', 'fontSize': '12px', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
-			aria-label="Choose tutorial"
+			:aria-label="i18n.t('Choose tutorial')"
 			@change="onTutorialTourChange"
 		>
-			<option value="survey">Survey tour</option>
-			<option value="crm">CRM tour</option>
+			<option value="survey">
+				{{ i18n.t('Survey tour') }}
+			</option>
+			<option value="crm">
+				{{ i18n.t('CRM tour') }}
+			</option>
 		</select>
 		<button
 			type="button"
@@ -133,24 +146,42 @@ function onThemeChange(event: Event): void {
 			:class="pika({ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
 			:style="{ color: blueprintStatus === 'valid' ? 'var(--lab-color-success)' : 'var(--lab-color-danger)' }"
 		>
-			Blueprint: {{ blueprintStatus }}<template v-if="issueCount > 0"> ({{ issueCount }} issue{{ issueCount === 1 ? '' : 's' }})</template>
+			{{ i18n.t('Blueprint') }}: {{ i18n.t(blueprintStatus) }}<template v-if="issueCount > 0"> ({{ issueCount }} {{ i18n.t(issueCount === 1 ? 'issue' : 'issues') }})</template>
 		</span>
 
 		<span
 			:class="pika({ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
 			:style="{ color: runtimeAvailable ? 'var(--lab-color-success)' : 'var(--lab-color-text-muted)' }"
 		>
-			Runtime: {{ runtimeAvailable ? 'active' : 'unavailable' }}
+			{{ i18n.t('Runtime') }}: {{ i18n.t(runtimeAvailable ? 'active' : 'unavailable') }}
 		</span>
 
 		<select
 			:value="theme.theme.value"
 			:class="pika({ width: '64px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
-			aria-label="Theme"
+			:aria-label="i18n.t('Theme')"
 			@change="onThemeChange"
 		>
-			<option value="light">Light</option>
-			<option value="dark">Dark</option>
+			<option value="light">
+				{{ i18n.t('Light') }}
+			</option>
+			<option value="dark">
+				{{ i18n.t('Dark') }}
+			</option>
+		</select>
+
+		<select
+			:value="i18n.locale.value"
+			:class="pika({ width: '64px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
+			:aria-label="i18n.t('Language')"
+			@change="onLocaleChange"
+		>
+			<option value="en">
+				EN
+			</option>
+			<option value="zh-TW">
+				繁中
+			</option>
 		</select>
 
 		<button
@@ -159,23 +190,23 @@ function onThemeChange(event: Event): void {
 			:class="pika({ 'padding': '5px 10px', 'fontSize': '12px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 			@click="store.revert()"
 		>
-			Revert
+			{{ i18n.t('Revert') }}
 		</button>
 		<button
 			type="button"
 			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
 			@click="store.format()"
 		>
-			Format
+			{{ i18n.t('Format') }}
 		</button>
 		<button
 			type="button"
 			:disabled="!store.isDirty.value || store.isApplying.value"
-			title="Apply (Cmd/Ctrl+Enter)"
+			:title="`${i18n.t('Apply')} (Cmd/Ctrl+Enter)`"
 			:class="pika({ 'padding': '5px 12px', 'fontSize': '12px', 'fontWeight': '600', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-accent)', 'background': 'var(--lab-color-accent)', 'color': 'var(--lab-color-accent-contrast)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 			@click="store.apply()"
 		>
-			{{ store.isApplying.value ? 'Applying…' : 'Apply' }}
+			{{ i18n.t(store.isApplying.value ? 'Applying…' : 'Apply') }}
 		</button>
 	</header>
 </template>

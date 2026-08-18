@@ -4,11 +4,13 @@
  * `@deviltea/widget-core/inspection`: never mutates State, invokes Methods, or forces Property
  * evaluation. Narrow/tall tree-over-details layout, with a separate "All issues"
  * (`blueprint.getCollectedIssues()`) view kept distinct from the selected node's own
- * `getIssues()`.
+ * `getIssues()`. #43 localizes only fixed Lab chrome; node/type/member identities and core issue
+ * messages stay verbatim.
  */
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, ref } from 'vue'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import BlueprintNodeDetails from '../blueprint/BlueprintNodeDetails.vue'
 import BlueprintTree from '../blueprint/BlueprintTree.vue'
@@ -16,6 +18,7 @@ import IssueList from '../blueprint/IssueList.vue'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
+const i18n = useLabI18n()
 
 const inspection = computed(() => inspectBlueprint(store.active.value.blueprint))
 const selectedNodeId = computed<InspectionNodeId | null>(() => store.focus.value?.nodeId ?? null)
@@ -54,7 +57,7 @@ function selectNode(nodeId: InspectionNodeId): void {
 						:style="{ fontWeight: showAllIssues ? 'normal' : '600', borderBottom: showAllIssues ? 'none' : '2px solid var(--lab-color-accent)' }"
 						@click="showAllIssues = false"
 					>
-						Selected node
+						{{ i18n.t('Selected node') }}
 					</button>
 					<button
 						type="button"
@@ -62,7 +65,7 @@ function selectNode(nodeId: InspectionNodeId): void {
 						:style="{ fontWeight: showAllIssues ? '600' : 'normal', borderBottom: showAllIssues ? '2px solid var(--lab-color-accent)' : 'none' }"
 						@click="showAllIssues = true"
 					>
-						All issues ({{ collectedIssues.length }})
+						{{ i18n.t('All issues') }} ({{ collectedIssues.length }})
 					</button>
 				</div>
 				<div :class="pika({ flex: '1 1 auto', minHeight: '0', overflow: 'auto' })">

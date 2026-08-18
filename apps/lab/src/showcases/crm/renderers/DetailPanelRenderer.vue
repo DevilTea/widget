@@ -7,14 +7,17 @@
  * hardcoded: `DetailPanel#deal-detail` is the preset's single instance and those are purely cosmetic
  * copy, not semantic interaction/data presentation (checkpoint §6 implementation-detail latitude).
  * `record`/`empty` come entirely from `useProperties()` — sourced from `Table.selectedRow` through the
- * configured `PropertySourceConfig` dependency.
+ * configured `PropertySourceConfig` dependency. #43 therefore translates only the hardcoded title and
+ * empty-state sentence; configured field labels and record values remain verbatim.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
+import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { DetailPanelPlugin } from '../plugins/read-models'
 
 const { useProperties, WidgetSlot, widgetId, widgetType } = useWidget(DetailPanelPlugin)
 const { record, empty, fields } = useProperties()
+const i18n = useLabI18n()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 
 function fieldText(key: string, format: 'text' | 'currency' | 'badge' | undefined): string {
@@ -40,13 +43,13 @@ function badgeColor(key: string): string {
 		:class="pika({ padding: '12px', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface)', display: 'flex', flexDirection: 'column', gap: '10px' })"
 	>
 		<h3 :class="pika({ margin: '0', fontSize: '13px' })">
-			Deal details
+			{{ i18n.t('Deal details') }}
 		</h3>
 		<p
 			v-if="empty"
 			:class="pika({ margin: '0', fontSize: '12px', color: 'var(--lab-color-text-muted)', fontStyle: 'italic' })"
 		>
-			Select a deal from the table to see its details.
+			{{ i18n.t('Select a deal from the table to see its details.') }}
 		</p>
 		<template v-else>
 			<dl :class="pika({ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 12px', margin: '0', fontSize: '12px' })">

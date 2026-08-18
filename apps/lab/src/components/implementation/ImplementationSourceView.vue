@@ -1,13 +1,14 @@
 <script setup lang="ts">
 /**
- * Readonly syntax-highlighted source. #44 treats Lab theme as another latest-selection-wins input: a
- * theme change re-highlights the already-resolved source with the bundled matching Shiki theme, but
- * never reloads raw source or changes/copies different text. #45 keeps long-line overflow local to this
- * surface, while #46 keeps literal tabs on the shared four-column presentation contract.
+ * Readonly syntax-highlighted source. Theme and locale are presentation inputs only: theme re-highlights
+ * the already-resolved source with a bundled theme; locale changes viewer-owned status/action chrome.
+ * Source text itself is never translated or normalized. #45 owns local overflow and #46 owns four-column
+ * literal-tab presentation.
  */
 import type { ImplementationLang } from '../../implementation/shiki-highlighter'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { CODE_TAB_SIZE } from '../../code-view/settings'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabTheme } from '../../composables/use-lab-theme'
 import { highlightSource } from '../../implementation/shiki-highlighter'
 
@@ -16,10 +17,18 @@ const props = defineProps<{
 	lang: ImplementationLang
 }>()
 
+const i18n = useLabI18n()
 const theme = useLabTheme()
 const html = ref<string | null>(null)
 const status = ref<'loading' | 'ready' | 'error'>('loading')
-const copyLabel = ref('Copy')
+const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
+const copyLabel = computed(() => {
+	switch (copyState.value) {
+		case 'copied': return i18n.t('Copied')
+		case 'failed': return i18n.t('Copy failed')
+		default: return i18n.t('Copy')
+	}
+})
 
 watch(
 	() => [props.code, props.lang, theme.theme.value] as const,
@@ -53,14 +62,14 @@ watch(
 async function copy(): Promise<void> {
 	try {
 		await navigator.clipboard.writeText(props.code)
-		copyLabel.value = 'Copied'
+		copyState.value = 'copied'
 	}
 	catch {
-		copyLabel.value = 'Copy failed'
+		copyState.value = 'failed'
 	}
 	finally {
 		setTimeout(() => {
-			copyLabel.value = 'Copy'
+			copyState.value = 'idle'
 		}, 1500)
 	}
 }
@@ -82,13 +91,13 @@ async function copy(): Promise<void> {
 				v-if="status === 'loading'"
 				:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)' })"
 			>
-				Loading…
+				{{ i18n.t('Loading…') }}
 			</p>
 			<p
 				v-else-if="status === 'error'"
 				:class="pika({ padding: '10px', color: 'var(--lab-color-danger)' })"
 			>
-				Failed to render this source.
+				{{ i18n.t('Failed to render this source.') }}
 			</p>
 			<!-- eslint-disable-next-line vue/no-v-html -- Shiki is the escaping/token-rendering boundary. -->
 			<div

@@ -3,11 +3,13 @@
  * Dependency Graph panel (issue #13 Phase 5 "Dependency Graph semantic representation" / "implementation
  * stack" / "inspector panel interaction contract"). Available even for an invalid Blueprint — it
  * projects compile-time inspection facts only and never waits on/depends on Runtime. Canvas-prioritized
- * layout with compact/collapsible details, per the interaction contract.
+ * layout with compact/collapsible details, per the interaction contract. #43 localizes fixed Lab chrome
+ * only; graph node/edge semantic identities remain verbatim.
  */
 import { computed, useTemplateRef } from 'vue'
 import { useDependencyGraph } from '../../composables/use-dependency-graph'
 import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selection'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import GraphCanvas from '../graph/GraphCanvas.vue'
 import GraphEdgeDetails from '../graph/GraphEdgeDetails.vue'
@@ -15,6 +17,7 @@ import GraphLegend from '../graph/GraphLegend.vue'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
+const i18n = useLabI18n()
 const { semanticGraph, layoutState, flow } = useDependencyGraph()
 
 // Panel-local edge selection (issue #13 Phase 5: stays local, never expands into shared focus; reset on
@@ -52,9 +55,9 @@ function onEdgeClick(edgeId: string): void {
 const statusLabel = computed(() => {
 	const status = layoutState.value.status
 	if (status === 'idle' || status === 'loading')
-		return 'Laying out…'
+		return i18n.t('Laying out…')
 	if (status === 'error')
-		return 'Layout failed — the ELK layout worker reported an error. Toggling a filter below re-requests a fresh layout.'
+		return i18n.t('Layout failed — the ELK layout worker reported an error. Toggling a filter below re-requests a fresh layout.')
 	return null
 })
 </script>
@@ -71,23 +74,23 @@ const statusLabel = computed(() => {
 					v-model="store.graphShowAbsent.value"
 					type="checkbox"
 				>
-				Show absent references
+				{{ i18n.t('Show absent references') }}
 			</label>
 			<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' })">
 				<input
 					v-model="store.graphShowIsolatedMembers.value"
 					type="checkbox"
 				>
-				Show isolated members
+				{{ i18n.t('Show isolated members') }}
 			</label>
 			<button
 				type="button"
 				:disabled="flow === null"
-				aria-label="Fit graph"
+				:aria-label="i18n.t('Fit graph')"
 				:class="pika({ 'padding': '3px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 				@click="onFitGraphClick"
 			>
-				Fit graph
+				{{ i18n.t('Fit graph') }}
 			</button>
 			<GraphLegend />
 			<span
@@ -109,7 +112,7 @@ const statusLabel = computed(() => {
 				v-else
 				:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 			>
-				{{ statusLabel ?? 'No graph yet — this Blueprint has no widgets to lay out.' }}
+				{{ statusLabel ?? i18n.t('No graph yet — this Blueprint has no widgets to lay out.') }}
 			</div>
 		</div>
 
