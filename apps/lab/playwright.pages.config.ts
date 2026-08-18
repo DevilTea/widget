@@ -15,7 +15,7 @@ export default defineConfig({
 	retries: process.env.CI ? 1 : 0,
 	reporter: 'list',
 	use: {
-		baseURL: 'http://localhost:4174',
+		baseURL: 'http://127.0.0.1:4174',
 		trace: 'retain-on-failure',
 		screenshot: 'only-on-failure',
 	},
@@ -23,10 +23,10 @@ export default defineConfig({
 		{ name: 'chromium', use: { ...devices['Desktop Chrome'] } },
 	],
 	webServer: {
-		command: 'pnpm --dir ../../docs/site run preview -- --port 4174 --strictPort',
-		// VitePress's configured base makes `/` a non-ready response. Probe the actual served docs root
-		// so Playwright does not mistake a healthy preview server for a startup timeout.
-		url: 'http://localhost:4174/deviltea-labs/',
+		// Run VitePress directly rather than forwarding CLI arguments through the docs package script;
+		// bind IPv4 explicitly so the readiness probe and preview server share the same address family.
+		command: 'pnpm --dir ../../docs/site exec vitepress preview . --host 127.0.0.1 --port 4174',
+		url: 'http://127.0.0.1:4174/deviltea-labs/',
 		reuseExistingServer: !process.env.CI,
 	},
 })
