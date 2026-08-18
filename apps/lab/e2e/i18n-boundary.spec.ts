@@ -30,7 +30,7 @@ test('core diagnostic text is not localized when presentation locale changes (is
 		.first()
 	await expect(diagnosticItem)
 		.toBeVisible()
-	const englishDiagnostic = await diagnosticItem.innerText()
+	const englishDiagnostic = await diagnosticItem.textContent()
 	await expect(diagnosticItem.locator('strong'))
 		.toContainText('[definition]')
 
@@ -38,6 +38,6 @@ test('core diagnostic text is not localized when presentation locale changes (is
 		.selectOption('zh-TW')
 	await expect(page.getByRole('button', { name: /所有問題/ }))
 		.toBeVisible()
-	expect(await diagnosticItem.innerText())
+	expect(await diagnosticItem.textContent())
 		.toBe(englishDiagnostic)
 })
