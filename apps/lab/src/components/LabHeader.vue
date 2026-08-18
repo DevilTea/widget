@@ -4,8 +4,8 @@
  * (Widget Lab Phase 4) Checkpoint I. #44 adds one presentation-only theme selector; it does not enter
  * the Lab semantic/source model.
  */
-import type { LabTheme } from '../theme/theme'
 import type { TutorialTourId } from '../composables/use-tutorial'
+import type { LabTheme } from '../theme/theme'
 import { computed } from 'vue'
 import { useLabStore } from '../composables/use-lab-store'
 import { useLabTheme } from '../composables/use-lab-theme'
@@ -90,7 +90,9 @@ function onThemeChange(event: Event): void {
 			aria-label="Load a preset"
 			@change="onPresetChange"
 		>
-			<option value="">Preset…</option>
+			<option value="">
+				Preset…
+			</option>
 			<option
 				v-for="preset in store.presets.value"
 				:key="preset.id"
@@ -109,8 +111,12 @@ function onThemeChange(event: Event): void {
 			aria-label="Choose tutorial"
 			@change="onTutorialTourChange"
 		>
-			<option value="survey">Survey tour</option>
-			<option value="crm">CRM tour</option>
+			<option value="survey">
+				Survey tour
+			</option>
+			<option value="crm">
+				CRM tour
+			</option>
 		</select>
 		<button
 			type="button"
@@ -143,8 +149,12 @@ function onThemeChange(event: Event): void {
 			aria-label="Theme"
 			@change="onThemeChange"
 		>
-			<option value="light">Light</option>
-			<option value="dark">Dark</option>
+			<option value="light">
+				Light
+			</option>
+			<option value="dark">
+				Dark
+			</option>
 		</select>
 
 		<button
