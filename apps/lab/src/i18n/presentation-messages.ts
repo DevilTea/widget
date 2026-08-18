@@ -55,6 +55,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Copied': '已複製',
 	'Copy failed': '複製失敗',
 	'Loading…': '載入中…',
+	'Loading {title}…': '正在載入 {title}…',
+	'Failed to load {title}.': '無法載入 {title}。',
 	'Failed to render this source.': '無法顯示這份 source。',
 
 	// Representative renderer-owned chrome from the Survey showcase. Source/config-authored labels and
