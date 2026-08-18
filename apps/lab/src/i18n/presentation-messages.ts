@@ -38,6 +38,10 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Dashed red': '紅色虛線',
 	'Invalid/unresolved dependency. Always shown.': '無效或無法解析的 dependency。永遠顯示。',
 	'Only projected facts from the applied Blueprint are shown — no Runtime reads/evaluation.': '只顯示已套用 Blueprint 的 projected facts——不會讀取或執行 Runtime。',
+	'invalid cycle': '無效循環',
+	'target': '目標',
+	'path': '路徑',
+	'(root)': '（根節點）',
 
 	'Inspect': '檢視',
 	'Click a widget to focus it in Blueprint — Esc to exit': '點選 widget 以在 Blueprint 聚焦——按 Esc 離開',
