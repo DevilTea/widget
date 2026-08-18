@@ -4,7 +4,7 @@
  * #43 localizes only viewer-owned status/action chrome; the highlighted source text is never translated.
  */
 import type { ImplementationLang } from '../../implementation/shiki-highlighter'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { highlightSource } from '../../implementation/shiki-highlighter'
 
@@ -17,19 +17,13 @@ const i18n = useLabI18n()
 const html = ref<string | null>(null)
 const status = ref<'loading' | 'ready' | 'error'>('loading')
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
-const copyLabel = computedCopyLabel()
-
-function computedCopyLabel() {
-	return {
-		get value(): string {
-			switch (copyState.value) {
-				case 'copied': return i18n.t('Copied')
-				case 'failed': return i18n.t('Copy failed')
-				default: return i18n.t('Copy')
-			}
-		},
+const copyLabel = computed(() => {
+	switch (copyState.value) {
+		case 'copied': return i18n.t('Copied')
+		case 'failed': return i18n.t('Copy failed')
+		default: return i18n.t('Copy')
 	}
-}
+})
 
 watch(
 	() => [props.code, props.lang] as const,
@@ -84,7 +78,7 @@ async function copy(): Promise<void> {
 				:class="pika({ padding: '2px 8px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
 				@click="copy"
 			>
-				{{ copyLabel.value }}
+				{{ copyLabel }}
 			</button>
 		</div>
 		<div :class="pika({ flex: '1 1 auto', minHeight: '0', overflow: 'auto', fontSize: '12px' })">
