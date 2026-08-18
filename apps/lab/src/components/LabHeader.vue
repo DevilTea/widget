@@ -1,12 +1,15 @@
 <script setup lang="ts">
-/** Compact Lab utility header: showcase/preset selection, explorer/tutorial entry, status, and Apply controls. */
+/** Compact Lab utility header: showcase/preset selection, explorer/tutorial entry, status, theme, and Apply controls. */
 import type { TutorialTourId } from '../composables/use-tutorial'
+import type { LabTheme } from '../theme/theme'
 import { computed } from 'vue'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabStore } from '../composables/use-lab-store'
+import { useLabTheme } from '../composables/use-lab-theme'
 import { useTutorialStore } from '../composables/use-tutorial'
 
 const store = useLabStore()
+const theme = useLabTheme()
 const tutorial = useTutorialStore()
 const implementationExplorer = useImplementationExplorer()
 
@@ -54,6 +57,10 @@ function onPresetChange(event: Event): void {
 function onShowcaseChange(event: Event): void {
 	const id = (event.target as HTMLSelectElement).value
 	void store.switchShowcase(id)
+}
+
+function onThemeChange(event: Event): void {
+	theme.setTheme((event.target as HTMLSelectElement).value as LabTheme)
 }
 </script>
 
@@ -135,6 +142,16 @@ function onShowcaseChange(event: Event): void {
 		>
 			Runtime: {{ runtimeAvailable ? 'active' : 'unavailable' }}
 		</span>
+
+		<select
+			:value="theme.theme.value"
+			:class="pika({ width: '64px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
+			aria-label="Theme"
+			@change="onThemeChange"
+		>
+			<option value="light">Light</option>
+			<option value="dark">Dark</option>
+		</select>
 
 		<button
 			type="button"

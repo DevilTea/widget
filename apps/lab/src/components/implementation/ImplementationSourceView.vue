@@ -1,13 +1,14 @@
 <script setup lang="ts">
 /**
- * Readonly, syntax-highlighted rendering of one already-resolved source string (issue #25 P3 Scope C).
- * #45 makes this component the local overflow owner for long highlighted lines: every flex boundary can
- * shrink (`min-width: 0`) while the source viewport scrolls horizontally instead of widening Dockview or
- * the document. Shiki's generated `<pre>` remains content-sized inside that scroll viewport.
+ * Readonly syntax-highlighted source. #44 treats Lab theme as another latest-selection-wins input: a
+ * theme change re-highlights the already-resolved source with the bundled matching Shiki theme, but
+ * never reloads raw source or changes/copies different text. #45 keeps long-line overflow local to this
+ * surface, while #46 keeps literal tabs on the shared four-column presentation contract.
  */
 import type { ImplementationLang } from '../../implementation/shiki-highlighter'
 import { ref, watch } from 'vue'
 import { CODE_TAB_SIZE } from '../../code-view/settings'
+import { useLabTheme } from '../../composables/use-lab-theme'
 import { highlightSource } from '../../implementation/shiki-highlighter'
 
 const props = defineProps<{
@@ -15,13 +16,14 @@ const props = defineProps<{
 	lang: ImplementationLang
 }>()
 
+const theme = useLabTheme()
 const html = ref<string | null>(null)
 const status = ref<'loading' | 'ready' | 'error'>('loading')
 const copyLabel = ref('Copy')
 
 watch(
-	() => [props.code, props.lang] as const,
-	([code, lang], _previous, onCleanup) => {
+	() => [props.code, props.lang, theme.theme.value] as const,
+	([code, lang, currentTheme], _previous, onCleanup) => {
 		let cancelled = false
 		onCleanup(() => {
 			cancelled = true
@@ -30,7 +32,7 @@ watch(
 		status.value = 'loading'
 		html.value = null
 
-		highlightSource(code, lang)
+		highlightSource(code, lang, currentTheme)
 			.then(
 				(rendered) => {
 					if (cancelled)

@@ -1,18 +1,29 @@
 // @vitest-environment happy-dom
 /**
- * `ImplementationSourceView` owns two presentation boundaries worth pinning here:
+ * `ImplementationSourceView` owns three presentation boundaries worth pinning here:
  *
- * - Shiki is the HTML-escaping boundary for arbitrary code text, including user-editable Applied
- *   instance content.
- * - issue #46: literal U+0009 tabs render at the shared four-column width without normalizing the
- *   source string; Copy must still receive the original bytes/text.
+ * - Shiki is the HTML-escaping boundary for arbitrary code text.
+ * - #44 provides theme as presentation input without changing source text.
+ * - #46 keeps literal U+0009 tabs at four columns and Copy byte/text-preserving.
  */
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { shallowRef } from 'vue'
+import { LabThemeKey } from '../../composables/use-lab-theme'
 import ImplementationSourceView from './ImplementationSourceView.vue'
 
+const theme = shallowRef<'light' | 'dark'>('dark')
 const globalStubConfig = {
-	global: { config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } } },
+	global: {
+		config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+		provide: {
+			[LabThemeKey as symbol]: {
+				theme,
+				themes: ['light', 'dark'],
+				setTheme: (next: 'light' | 'dark') => { theme.value = next },
+			},
+		},
+	},
 }
 
 async function waitForCode(wrapper: ReturnType<typeof mount>): Promise<void> {
