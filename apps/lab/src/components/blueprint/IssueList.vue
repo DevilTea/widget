@@ -4,10 +4,12 @@
  * `blueprint.getCollectedIssues()`). Checkpoint H structured-source rendering: every field shown
  * beyond the human `message` is read from `issue.source`'s machine-readable structure (`path`,
  * `input`, `slot`/`index`, dependency `member`/`dependency` reference, `related` locations) —
- * `message` is never parsed to infer taxonomy or ownership.
+ * `message` is never parsed to infer taxonomy or ownership. #43 translates only the empty/action
+ * chrome; source-kind/field labels and core issue messages remain verbatim semantic inspection data.
  */
 import type { BlueprintIssue, BlueprintIssueLocation, BlueprintWidgetNode } from '@deviltea/widget-core'
 import type { BlueprintInspection, InspectionNodeId } from '@deviltea/widget-core/inspection'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { formatDependencyReference, formatIssuePath } from '../../lib/issue-format'
 
 defineProps<{
@@ -18,6 +20,8 @@ defineProps<{
 const emit = defineEmits<{
 	navigate: [nodeId: InspectionNodeId]
 }>()
+
+const i18n = useLabI18n()
 
 function nodeIdOf(node: BlueprintWidgetNode, inspection: BlueprintInspection): InspectionNodeId | null {
 	return inspection.getNodeId(node)
@@ -51,7 +55,7 @@ function onNavigateToLocation(location: BlueprintIssueLocation, inspection: Blue
 			v-if="issues.length === 0"
 			:class="pika({ color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
 		>
-			No issues.
+			{{ i18n.t('No issues.') }}
 		</li>
 		<li
 			v-for="(issue, index) in issues"
@@ -68,7 +72,7 @@ function onNavigateToLocation(location: BlueprintIssueLocation, inspection: Blue
 					:class="pika({ marginLeft: 'auto', fontSize: '11px', color: 'var(--lab-color-accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0' })"
 					@click="emit('navigate', nodeIdOf(issue.source.node, inspection)!)"
 				>
-					jump to node
+					{{ i18n.t('jump to node') }}
 				</button>
 			</div>
 
