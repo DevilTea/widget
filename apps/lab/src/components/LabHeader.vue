@@ -4,8 +4,8 @@
  * (Widget Lab Phase 4) Checkpoint I. #43 adds presentation-only locale selection; it never touches
  * LabStore/Runtime state.
  */
-import type { LabLocale } from '../i18n/locale'
 import type { TutorialTourId } from '../composables/use-tutorial'
+import type { LabLocale } from '../i18n/locale'
 import { computed } from 'vue'
 import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
