@@ -2,43 +2,15 @@
 /**
  * `rowIdKey`/`columns` come entirely from `useProperties()` — Lab-private semantic projections of
  * `Table`'s own resolved config (`../plugins/read-models.ts`) — never hardcoded here, so a valid edited
- * Source that changes `rowIdKey`/`columns` reaches this renderer (PR #22 review 4941241562 finding 1: a
- * still-valid edited Source setting `rowIdKey` to another string-valued field must key rows and call
- * `selectRow()` with that configured key, not a hardcoded `row.id`). Row click always calls
- * `Table.selectRow(id)` — never local selection state (checkpoint §5 "renderer selection callbacks
- * invoke `Table.selectRow`, not direct local selection state"). Keyboard activation (Enter/Space) below
- * calls the exact same `onRowClick` → `selectRow(id)` path as a pointer click, for the same reason.
- *
- * Issue #28 accessibility fix — ARIA pattern chosen for this table: native table semantics
- * (no `role` overrides anywhere in the markup below) plus keyboard-operable, focusable data rows and an
- * `aria-current="true"` selection indication. PR #32 adversarial review round 1 rejected an earlier
- * `role="grid"` + `role="row"`/`columnheader`/`gridcell` + `aria-selected` version of this renderer:
- * `grid` is a *composite widget* role with its own mandatory keyboard contract (a single Tab stop into
- * the widget, author-managed internal focus, Arrow/Home/End cell navigation) — adding the role without
- * that contract is an invalid, not merely incomplete, use of it, and this table deliberately has no
- * cell-level navigation to offer (selection here is row-level, reached by giving every row its own Tab
- * stop).
- *
- * PR #32 round 2 correction: per WAI-ARIA 1.2, `row`'s allowed containing roles are `table`, `grid`,
- * `rowgroup`, and `treegrid` (https://www.w3.org/TR/wai-aria/#row), and `row` supports the
- * `aria-selected` state in any of them — so, contrary to an earlier version of this comment,
- * `aria-selected` on a plain native `<table>` row is not actually spec-invalid. The real reason to
- * prefer `aria-current` here is the round-1 review's underlying intent, not a hard technical
- * requirement: `aria-selected` is documented as part of composite selection-widget patterns
- * (`grid`/`listbox`/`tree`/`tablist`, ...), and this table deliberately avoids advertising any of that
- * machinery on what is otherwise a plain native table. `aria-current`
- * (https://www.w3.org/TR/wai-aria/#aria-current) says exactly what is true here — "the current item
- * within a set" — with no composite-widget connotation. It is set to `"true"` only on the selected row;
- * every other row omits the attribute rather than writing `aria-current="false"` explicitly —
- * `aria-current`'s spec-defined default value is already `"false"`, and an element with no `aria-current`
- * attribute computes to that default (not exposed to assistive technology) automatically, so omission is
- * simply relying on the documented default, not avoiding some unsupported "false" state. Do not
- * reintroduce `role="grid"` without also implementing its full keyboard contract — that trade-off was
- * deliberately rejected here.
+ * Source that changes `rowIdKey`/`columns` reaches this renderer. Row click always calls
+ * `Table.selectRow(id)` — never local selection state. Keyboard activation (Enter/Space) calls the same
+ * semantic path. #43 translates only the hardcoded empty-state sentence; configured column labels,
+ * row values, selection identity, and method issues remain verbatim semantic/source-owned data.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
+import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { TablePlugin } from '../plugins/read-models'
 
 const { useState, useProperties, useMethods, useMethodIssues, widgetId, widgetType } = useWidget(TablePlugin)
@@ -46,8 +18,8 @@ const { selectedRowId } = useState()
 const { rows, empty, rowIdKey, columns } = useProperties()
 const { selectRow } = useMethods()
 const { selectRow: selectRowIssues } = useMethodIssues()
+const i18n = useLabI18n()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
-// `data-tutorial-target` (issue #25 P4): `deal-table` is this preset's only `Table` instance.
 const tutorialTarget = computed(() => (widgetId === 'deal-table' ? 'crm-table' : undefined))
 
 function rowId(row: Record<string, unknown>): unknown {
@@ -78,8 +50,6 @@ function onRowClick(row: Record<string, unknown>): void {
 }
 
 function onRowKeydown(event: KeyboardEvent, row: Record<string, unknown>): void {
-	// Enter and Space both activate a focused row, matching the native button-activation contract.
-	// Space's default browser action (page scroll) must be suppressed — Enter has no such default.
 	if (event.key === 'Enter') {
 		onRowClick(row)
 	}
@@ -143,7 +113,7 @@ function onRowKeydown(event: KeyboardEvent, row: Record<string, unknown>): void 
 			v-else
 			:class="pika({ margin: '0', fontSize: '12px', color: 'var(--lab-color-text-muted)', fontStyle: 'italic' })"
 		>
-			No deals match the current search/filter.
+			{{ i18n.t('No deals match the current search/filter.') }}
 		</p>
 		<p
 			v-for="issue in selectRowIssues"

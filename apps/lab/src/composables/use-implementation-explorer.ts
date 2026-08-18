@@ -1,40 +1,44 @@
 /**
- * Implementation-panel open/activate request bridge (issue #25 P3 Scope D "Opening = `api.addPanel` if
- * absent else activate"). A small parallel mechanism, deliberately NOT an extension of
- * `use-lab-store.ts`'s `activeTab`/`LabToolTab` bridge: that bridge is scoped to the five canonical,
- * always-present, non-closable panels (`Workbench.vue`'s `onReady()` adds all five up front), while the
- * Implementation panel is closable and only ever added lazily, on first request — a materially
- * different Dockview lifecycle this store owns on its own rather than widening `LabToolTab`'s literal
- * union for a panel that is not one of the five canonical surfaces (issue #25 P1 gate review point 8:
- * "not a sixth canonical non-closable panel").
+ * Implementation-panel open/activate request bridge.
  *
- * `Workbench.vue` is the one consumer that turns `openRequestTick` into a real
- * `DockviewApi.addPanel()`/`.setActive()` call, mirroring `activeTab`'s own watch-driven bridge. Every
- * other caller (Preview's "View implementation" button, Blueprint's selected-node detail, the Survey
- * tour's step 8 link) only ever calls `open()` — none of them touch Dockview directly. `open()` does
- * NOT set focus itself: every call site is expected to already be showing/selecting the widget it wants
- * curated (Preview/Blueprint act on the widget the visitor just selected; the tutorial's `onEnter` hooks
- * already set focus per step) — the Implementation panel itself reads the existing shared
- * `LabStore.focus` reactively (see `ImplementationPanel.vue`), so there is no second focus-setting path
- * to keep in sync with the first.
+ * The panel remains a closable, lazily-added Dockview surface rather than a sixth canonical Lab tab.
+ * Every caller routes through `open()`; Workbench owns the actual `addPanel`/activation side effect.
+ *
+ * Issue #42 adds a second explorer mode without changing the shared widget-focus model:
+ *
+ * - `focused` is the existing contextual inspector. Existing Preview/Blueprint/tutorial callers use
+ *   this default and the panel resolves whatever `LabStore.focus` already points at.
+ * - `catalog` is a passive, plugin-type browser over the current showcase's existing `SourcesRegistry`.
+ *   It is requested directly from the header and never creates/changes widget focus.
+ *
+ * `requestedMode` is request metadata, not semantic/application state. It only tells a newly-mounted or
+ * already-open Implementation panel which presentation mode the latest explicit open request intended.
  */
 
 import type { InjectionKey, Ref } from 'vue'
 import { inject, shallowRef } from 'vue'
 
+export type ImplementationExplorerMode = 'focused' | 'catalog'
+
 export interface ImplementationExplorerStore {
 	/** Bumped on every `open()` call — `Workbench.vue` watches this to add/activate the panel. */
 	readonly openRequestTick: Readonly<Ref<number>>
-	open: () => void
+	/** Presentation mode requested by the most recent explicit `open()` call. */
+	readonly requestedMode: Readonly<Ref<ImplementationExplorerMode>>
+	/** Existing call sites default to the focused-widget flow; header/catalog entry opts into `catalog`. */
+	open: (mode?: ImplementationExplorerMode) => void
 }
 
 export const ImplementationExplorerKey: InjectionKey<ImplementationExplorerStore> = Symbol('widget-lab:implementation-explorer')
 
 export function createImplementationExplorerStore(): ImplementationExplorerStore {
 	const openRequestTick = shallowRef(0)
+	const requestedMode = shallowRef<ImplementationExplorerMode>('focused')
 	return {
 		openRequestTick,
-		open: () => {
+		requestedMode,
+		open: (mode = 'focused') => {
+			requestedMode.value = mode
 			openRequestTick.value++
 		},
 	}

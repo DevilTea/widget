@@ -3,15 +3,18 @@
  * `BarChart#stage-chart` is the preset's single instance, so hardcoding its title here (matching
  * `../presets.ts`'s configured `title` verbatim) carries no per-instance ambiguity. Simple CSS bars —
  * no chart library. `series` always comes from `DealQuery.stageSeries` through the configured
- * `PropertySourceConfig` dependency; grouping/aggregation never happens here (checkpoint §2).
+ * `PropertySourceConfig` dependency; grouping/aggregation never happens here (checkpoint §2). #43
+ * translates only this renderer-owned title; series labels/values remain semantic data.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
+import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { BarChartPlugin } from '../plugins/read-models'
 
 const { useProperties, widgetId, widgetType } = useWidget(BarChartPlugin)
 const { series } = useProperties()
+const i18n = useLabI18n()
 
 const maxValue = computed(() => Math.max(1, ...(series.value ?? []).map(point => point.value)))
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
@@ -23,7 +26,7 @@ const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 		:class="pika({ display: 'flex', flexDirection: 'column', gap: '8px' })"
 	>
 		<h3 :class="pika({ margin: '0', fontSize: '13px' })">
-			Deals by stage
+			{{ i18n.t('Deals by stage') }}
 		</h3>
 		<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '6px' })">
 			<div

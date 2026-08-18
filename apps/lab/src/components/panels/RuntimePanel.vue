@@ -8,17 +8,20 @@
  * Invalid Blueprint -> `runtime === null` -> unavailable/blocked (Phase 4 behavior, kept as-is; the
  * Runtime tab stays present rather than disappearing). Reuses `BlueprintTree` for navigation: an
  * `inspectRuntime(runtime).blueprint` is identity-equal to `inspectBlueprint(runtime.blueprint)`, so the
- * same tree/shared-focus contract Blueprint uses applies here unchanged.
+ * same tree/shared-focus contract Blueprint uses applies here unchanged. #43 localizes only Lab-owned
+ * explanatory chrome; Runtime member names, values, and core issues remain verbatim.
  */
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import { inspectRuntime } from '@deviltea/widget-core/inspection'
 import { computed } from 'vue'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import BlueprintTree from '../blueprint/BlueprintTree.vue'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 import RuntimeNodeDetails from '../runtime/RuntimeNodeDetails.vue'
 
 const store = useLabStore()
+const i18n = useLabI18n()
 
 const runtime = computed(() => store.active.value.runtime)
 const runtimeInspection = computed(() => {
@@ -60,7 +63,7 @@ function selectNode(nodeId: InspectionNodeId): void {
 			v-if="runtime === null"
 			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 		>
-			<p>Runtime unavailable — the applied Blueprint is invalid, so there is nothing running yet. Open the Blueprint tab to see why, fix Source, then Apply again.</p>
+			<p>{{ i18n.t('Runtime unavailable — the applied Blueprint is invalid, so there is nothing running yet. Open the Blueprint tab to see why, fix Source, then Apply again.') }}</p>
 		</div>
 		<div
 			v-else

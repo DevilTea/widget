@@ -12,10 +12,12 @@
  * `onCleanup` (its third callback argument) is the explicit invalidation mechanism: it registers a
  * callback Vue runs the instant this watcher is about to re-run for a new `file` (or is stopped on
  * unmount), so `cancelled` flips true exactly when this in-flight `load()` call's result becomes stale,
- * and both the success and failure branches check it before writing anything.
+ * and both the success and failure branches check it before writing anything. #43 localizes only the
+ * loading/error sentence around the curated file title; title/path/raw source remain verbatim.
  */
 import type { CuratedSourceFile } from '../../implementation/types'
 import { ref, watch } from 'vue'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { languageForPath } from '../../implementation/shiki-highlighter'
 import ImplementationSourceView from './ImplementationSourceView.vue'
 
@@ -23,6 +25,7 @@ const props = defineProps<{
 	file: CuratedSourceFile
 }>()
 
+const i18n = useLabI18n()
 const code = ref<string | null>(null)
 const status = ref<'loading' | 'ready' | 'error'>('loading')
 
@@ -61,13 +64,13 @@ watch(
 		v-if="status === 'loading'"
 		:class="pika({ padding: '10px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 	>
-		Loading {{ file.title }}…
+		{{ i18n.t('Loading {title}…', { title: file.title }) }}
 	</p>
 	<p
 		v-else-if="status === 'error'"
 		:class="pika({ padding: '10px', fontSize: '12px', color: 'var(--lab-color-danger)' })"
 	>
-		Failed to load {{ file.title }}.
+		{{ i18n.t('Failed to load {title}.', { title: file.title }) }}
 	</p>
 	<ImplementationSourceView
 		v-else

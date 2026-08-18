@@ -2,18 +2,12 @@
 /**
  * Issue #28 accessibility fix — cheap attribute-wiring assertions only: the dialog's accessible name is
  * tied to the visible title via `aria-labelledby`, and the native `<dialog>` element's own open/closed
- * state stays in sync with the semantic `Modal.open` State (driving `Modal.open()`/`close()` directly,
- * the same generic Methods `ModalRenderer.vue` itself routes Escape through — see that file's header for
- * why routing Escape to `Modal.close()` rather than any specific consumer's `cancel()` is safe here).
- *
- * happy-dom does implement `HTMLDialogElement.showModal()`/`close()` (as plain `open` attribute
- * toggles — see `node_modules/happy-dom/.../HTMLDialogElement.ts`), so open/closed attribute-syncing is
- * exercisable here; it does not simulate focus containment, `inert` background, or a real
- * Escape-triggered `cancel` event, so that behavior — plus focus-move-in/focus-restore-out — stays with
- * the real-browser contract suite (issue #28), not this file.
+ * state stays in sync with the semantic `Modal.open` State. #43 adds a presentation-only locale
+ * dependency; this harness supplies an English identity translator without changing the semantic test.
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { LabI18nKey } from '../../../composables/use-lab-i18n'
 import { createCrmHarness, createCrmRuntime, widgetOfType } from '../test-support'
 import ModalRenderer from './ModalRenderer.vue'
 
@@ -24,7 +18,17 @@ describe('modalRenderer', () => {
 
 		const wrapper = mount(HarnessRenderer, {
 			props: { runtime },
-			global: { config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } } },
+			global: {
+				config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+				provide: {
+					[LabI18nKey as symbol]: {
+						locale: { value: 'en' },
+						locales: ['en', 'zh-TW'],
+						setLocale: () => {},
+						t: (source: string) => source,
+					},
+				},
+			},
 		})
 		await wrapper.vm.$nextTick()
 

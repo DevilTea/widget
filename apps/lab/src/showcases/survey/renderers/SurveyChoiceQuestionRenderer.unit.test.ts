@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
 /**
- * Issue #28 accessibility fix — cheap attribute-wiring assertion only (see `TripMetricsRenderer.unit.test.ts`
- * for this file's harness style): the visible `label`'s `for` matches the `select`'s `id`. Behavioral
- * focus/keyboard coverage belongs to the real-browser contract suite (issue #28), not here.
+ * Issue #28 accessibility fix — cheap attribute-wiring assertion only. #43 adds a presentation-only
+ * locale dependency for the renderer-owned empty-choice placeholder; this harness supplies an English
+ * identity translator without changing config-projected labels/options or semantic behavior.
  */
 import { createWidgetVueRenderer, useWidget } from '@deviltea/widget-vue'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
+import { LabI18nKey } from '../../../composables/use-lab-i18n'
 import { ConditionalSectionPlugin, SurveySectionPlugin, TripSurveyPlugin } from '../plugins'
 import { defaultSurveyPreset } from '../presets'
 import { surveySystem } from '../system'
@@ -51,14 +52,22 @@ describe('surveyChoiceQuestionRenderer', () => {
 			throw new Error('expected a valid Blueprint')
 		const runtime = blueprint.createRuntime()
 
-		// `family-priority` sits inside a `ConditionalSection`, gated on `children > 0` — set that up
-		// first so the question actually mounts.
 		const children = widgetOfType(runtime, 'children', 'SurveyNumberQuestion')
 		children.state.answer.set(1)
 
 		const wrapper = mount(HarnessRenderer, {
 			props: { runtime },
-			global: { config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } } },
+			global: {
+				config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+				provide: {
+					[LabI18nKey as symbol]: {
+						locale: { value: 'en' },
+						locales: ['en', 'zh-TW'],
+						setLocale: () => {},
+						t: (source: string) => source,
+					},
+				},
+			},
 		})
 		await wrapper.vm.$nextTick()
 		await wrapper.vm.$nextTick()

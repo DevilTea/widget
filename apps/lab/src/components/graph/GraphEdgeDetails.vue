@@ -3,17 +3,20 @@
  * Panel-local edge-selection details (issue #13 Phase 5 "inspector panel interaction contract": Graph
  * edge selection stays local, never expands into the shared cross-inspector focus). Shows the
  * dependency-container `path` and reference target/operation — both belong in edge details, never on the
- * canvas itself (issue #13 Phase 5 "Graph density").
+ * canvas itself (issue #13 Phase 5 "Graph density"). #43 localizes only the fixed labels around those
+ * facts; operation/status/target/path semantic payloads remain verbatim.
  */
 import type { GraphEdgeData } from '../../graph/vue-flow'
 import { computed } from 'vue'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { formatDependencyOperation, formatDependencyTarget, formatIssuePath } from '../../lib/issue-format'
 
 const props = defineProps<{
 	edge: GraphEdgeData
 }>()
 
-const pathLabel = computed(() => formatIssuePath(props.edge.path) ?? '(root)')
+const i18n = useLabI18n()
+const pathLabel = computed(() => formatIssuePath(props.edge.path) ?? i18n.t('(root)'))
 </script>
 
 <template>
@@ -27,9 +30,9 @@ const pathLabel = computed(() => formatIssuePath(props.edge.path) ?? '(root)')
 			<span
 				v-if="edge.invalidCycle"
 				:class="pika({ fontSize: '10px', color: 'var(--lab-color-danger)' })"
-			>invalid cycle</span>
+			>{{ i18n.t('invalid cycle') }}</span>
 		</div>
-		<div>target: {{ formatDependencyTarget(edge.reference.target) }} -&gt; {{ formatDependencyOperation(edge.reference.operation) }}</div>
-		<div>path: {{ pathLabel }}</div>
+		<div>{{ i18n.t('target') }}: {{ formatDependencyTarget(edge.reference.target) }} -&gt; {{ formatDependencyOperation(edge.reference.operation) }}</div>
+		<div>{{ i18n.t('path') }}: {{ pathLabel }}</div>
 	</div>
 </template>

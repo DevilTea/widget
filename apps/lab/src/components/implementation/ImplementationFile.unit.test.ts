@@ -8,11 +8,13 @@
  * select A -> select B -> B resolves first -> A resolves late.
  *
  * `ImplementationSourceView` is stubbed to a trivial `{{ code }}` template: this test is about the
- * file-load race, not Shiki's own (separately covered) async highlighting.
+ * file-load race, not Shiki's own (separately covered) async highlighting. #43 supplies an English
+ * identity translator so the new presentation-only locale dependency does not alter this race contract.
  */
 import type { CuratedSourceFile } from '../../implementation/types'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { LabI18nKey } from '../../composables/use-lab-i18n'
 import ImplementationFile from './ImplementationFile.vue'
 
 interface Deferred<T> {
@@ -38,6 +40,14 @@ function createFile(path: string, load: () => Promise<string>): CuratedSourceFil
 const globalStubConfig = {
 	global: {
 		config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+		provide: {
+			[LabI18nKey as symbol]: {
+				locale: { value: 'en' },
+				locales: ['en', 'zh-TW'],
+				setLocale: () => {},
+				t: (source: string, params?: Readonly<Record<string, string | number>>) => source.replace(/\{([\w-]+)\}/g, (match, key: string) => String(params?.[key] ?? match)),
+			},
+		},
 		stubs: {
 			ImplementationSourceView: {
 				props: ['code', 'lang'],
