@@ -17,7 +17,7 @@ describe('presentation localization boundary', () => {
 			'title',
 			'count',
 			'apps/widget-lab/src/sandbox/plugins.ts',
-			"createWidgetPlugin('Text')",
+			'createWidgetPlugin(\'Text\')',
 			'[definition] Unknown widget type: UnknownForI18nContract',
 		]) {
 			expect(translatePresentationMessage('zh-TW', value))
