@@ -1,19 +1,20 @@
 <script setup lang="ts">
-/**
- * Compact header: preset selection, semantic status, and Apply controls only — per issue #13
- * (Widget Lab Phase 4) Checkpoint I. #43 adds presentation-only locale selection; it never touches
- * LabStore/Runtime state.
- */
+/** Compact Lab utility header: presentation controls, semantic status, tutorial entry, and Apply actions. */
 import type { TutorialTourId } from '../composables/use-tutorial'
 import type { LabLocale } from '../i18n/locale'
+import type { LabTheme } from '../theme/theme'
 import { computed } from 'vue'
+import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
+import { useLabTheme } from '../composables/use-lab-theme'
 import { useTutorialStore } from '../composables/use-tutorial'
 
 const store = useLabStore()
+const theme = useLabTheme()
 const tutorial = useTutorialStore()
 const i18n = useLabI18n()
+const implementationExplorer = useImplementationExplorer()
 
 const blueprintStatus = computed(() => store.active.value.blueprint.status)
 const issueCount = computed(() => store.active.value.blueprint.getCollectedIssues().length)
@@ -61,6 +62,10 @@ function onShowcaseChange(event: Event): void {
 	void store.switchShowcase(id)
 }
 
+function onThemeChange(event: Event): void {
+	theme.setTheme((event.target as HTMLSelectElement).value as LabTheme)
+}
+
 function onLocaleChange(event: Event): void {
 	i18n.setLocale((event.target as HTMLSelectElement).value as LabLocale)
 }
@@ -103,6 +108,14 @@ function onLocaleChange(event: Event): void {
 			</option>
 		</select>
 
+		<button
+			type="button"
+			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+			@click="implementationExplorer.open('catalog')"
+		>
+			{{ i18n.t('Implementation') }}
+		</button>
+
 		<select
 			v-if="tutorial.crmTourUnlocked.value"
 			:value="tutorial.activeTourId.value"
@@ -142,6 +155,20 @@ function onLocaleChange(event: Event): void {
 		>
 			{{ i18n.t('Runtime') }}: {{ i18n.t(runtimeAvailable ? 'active' : 'unavailable') }}
 		</span>
+
+		<select
+			:value="theme.theme.value"
+			:class="pika({ width: '64px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
+			:aria-label="i18n.t('Theme')"
+			@change="onThemeChange"
+		>
+			<option value="light">
+				{{ i18n.t('Light') }}
+			</option>
+			<option value="dark">
+				{{ i18n.t('Dark') }}
+			</option>
+		</select>
 
 		<select
 			:value="i18n.locale.value"
