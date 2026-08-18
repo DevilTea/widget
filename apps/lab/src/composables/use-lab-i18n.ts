@@ -2,7 +2,7 @@ import type { InjectionKey, Ref } from 'vue'
 import type { LabLocale } from '../i18n/locale'
 import { inject, shallowRef } from 'vue'
 import { LAB_LOCALES, resolveLabLocale } from '../i18n/locale'
-import { translateMessage } from '../i18n/messages'
+import { translatePresentationMessage } from '../i18n/presentation-messages'
 
 const STORAGE_KEY = 'widget-lab:locale'
 const QUERY_KEY = 'lang'
@@ -11,7 +11,7 @@ export interface LabI18nStore {
 	readonly locale: Readonly<Ref<LabLocale>>
 	readonly locales: readonly LabLocale[]
 	setLocale: (locale: LabLocale) => void
-	/** Translate Lab-owned presentation copy. Unknown strings deliberately fall back to English source. */
+	/** Translate audited Lab-owned presentation copy; unknown/source-owned strings fall back verbatim. */
 	t: (source: string, params?: Readonly<Record<string, string | number>>) => string
 }
 
@@ -68,9 +68,6 @@ export function createLabI18nStore(): LabI18nStore {
 	})
 	const locale = shallowRef<LabLocale>(resolved)
 
-	// A valid query is authoritative and becomes the persisted preference too; when resolution came from
-	// storage/browser/fallback, writing the same canonical query makes the current URL deterministic and
-	// shareable without a reload. `URL` preserves unrelated query parameters/hash.
 	persistLocale(resolved)
 	canonicalizeUrl(resolved)
 	applyDocumentLocale(resolved)
@@ -85,7 +82,7 @@ export function createLabI18nStore(): LabI18nStore {
 			canonicalizeUrl(next)
 			applyDocumentLocale(next)
 		},
-		t: (source, params) => interpolate(translateMessage(locale.value, source), params),
+		t: (source, params) => interpolate(translatePresentationMessage(locale.value, source), params),
 	}
 }
 
