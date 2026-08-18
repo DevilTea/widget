@@ -13,7 +13,7 @@ This guide covers the full public surface. For installation and a minimal
 end-to-end example, see the
 [package README](https://github.com/DevilTea/deviltea-labs/tree/main/packages/widget/vue#readme).
 For an interactive playground built on this integration, see the
-[Widget Lab](/widget-lab/).
+[Widget Lab](/widget-lab/){target="_self"}.
 
 ## Core model
 
@@ -124,10 +124,10 @@ and `WidgetSlot`'s gating aside, this mirrors exactly how
 widget itself.
 
 Every `useXxx()` call returns a typed keyed Proxy-like surface. Obtaining the
-surface, and accessing a member off it, never reads or subscribes the
-Runtime — only materializes/caches that member's Vue wrapper. Both the
-capability-surface object and each member wrapper are stable/cached within one
-`useWidget(Plugin)` call.
+surface, and accessing a member off it, never reads or subscribes the Runtime —
+only materializes/caches that member's Vue wrapper. Both the capability-surface
+object and each member wrapper are stable/cached within one `useWidget(Plugin)`
+call.
 
 ### State
 
