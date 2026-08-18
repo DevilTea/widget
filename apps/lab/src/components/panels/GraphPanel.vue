@@ -1,5 +1,11 @@
 <script setup lang="ts">
-/** Dependency Graph panel. #43 localizes Lab-owned controls/status prose, never semantic graph labels. */
+/**
+ * Dependency Graph panel (issue #13 Phase 5 "Dependency Graph semantic representation" / "implementation
+ * stack" / "inspector panel interaction contract"). Available even for an invalid Blueprint — it
+ * projects compile-time inspection facts only and never waits on/depends on Runtime. Canvas-prioritized
+ * layout with compact/collapsible details, per the interaction contract. #43 localizes fixed Lab chrome
+ * only; graph node/edge semantic identities remain verbatim.
+ */
 import { computed, useTemplateRef } from 'vue'
 import { useDependencyGraph } from '../../composables/use-dependency-graph'
 import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selection'
@@ -13,8 +19,13 @@ import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 const store = useLabStore()
 const i18n = useLabI18n()
 const { semanticGraph, layoutState, flow } = useDependencyGraph()
+
+// Panel-local edge selection (issue #13 Phase 5: stays local, never expands into shared focus; reset on
+// applied Blueprint identity change, not on ordinary tab switching — see the composable's own comment).
 const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdgeSelection(store)
 
+// issue #27 Finding 1: manual recovery for the viewport-fit policy — same `fitView` path
+// `GraphCanvas.vue` already calls automatically once a new laid-out graph's nodes render.
 const graphCanvas = useTemplateRef<InstanceType<typeof GraphCanvas>>('graphCanvas')
 function onFitGraphClick(): void {
 	graphCanvas.value?.fitGraph()
@@ -30,94 +41,84 @@ function onNodeClick(nodeId: string): void {
 	})
 }
 
-function onEdgeClick(data: unknown): void {
-	if (typeof data !== 'object' || data === null)
-		return
-	setSelectedEdgeData(data as Parameters<typeof setSelectedEdgeData>[0])
+function onEdgeClick(edgeId: string): void {
+	for (const edge of flow.value?.edges ?? []) {
+		if (edge.id === edgeId) {
+			setSelectedEdgeData(edge.data ?? null)
+			return
+		}
+	}
+	setSelectedEdgeData(null)
 }
 
-const edgeKindCounts = computed(() => {
-	const counts = { reads: 0, writes: 0, invokes: 0 }
-	for (const edge of semanticGraph.value.edges)
-		counts[edge.operation]++
-	return counts
+// issue #25 P4 Scope D copy audit: say why, and what to do next, rather than a bare status word.
+const statusLabel = computed(() => {
+	const status = layoutState.value.status
+	if (status === 'idle' || status === 'loading')
+		return i18n.t('Laying out…')
+	if (status === 'error')
+		return i18n.t('Layout failed — the ELK layout worker reported an error. Toggling a filter below re-requests a fresh layout.')
+	return null
 })
 </script>
 
 <template>
-	<div
-		data-tutorial-target="graph"
-		:class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })"
-	>
+	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
 		<PanelDescriptionBar
 			storageKey="widget-lab:panel-desc:graph"
 			text="The declared semantic dependencies between widget members"
 		/>
-		<div :class="pika({ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
-			<GraphLegend />
-			<span :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
-				{{ edgeKindCounts.reads }} reads · {{ edgeKindCounts.writes }} writes · {{ edgeKindCounts.invokes }} invokes
-			</span>
-			<label :class="pika({ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', marginLeft: 'auto' })">
+		<div :class="pika({ display: 'flex', alignItems: 'center', gap: '12px', padding: '4px 8px', borderBottom: '1px solid var(--lab-color-border)', fontSize: '11px', color: 'var(--lab-color-text-muted)', flex: '0 0 auto' })">
+			<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' })">
 				<input
+					v-model="store.graphShowAbsent.value"
 					type="checkbox"
-					:checked="store.graphShowAbsentReferences.value"
-					@change="store.graphShowAbsentReferences.value = ($event.target as HTMLInputElement).checked"
 				>
 				{{ i18n.t('Show absent references') }}
 			</label>
-			<label :class="pika({ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px' })">
+			<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' })">
 				<input
+					v-model="store.graphShowIsolatedMembers.value"
 					type="checkbox"
-					:checked="store.graphShowIsolatedMembers.value"
-					@change="store.graphShowIsolatedMembers.value = ($event.target as HTMLInputElement).checked"
 				>
 				{{ i18n.t('Show isolated members') }}
 			</label>
 			<button
 				type="button"
-				:disabled="flow.nodes.length === 0"
+				:disabled="flow === null"
+				:aria-label="i18n.t('Fit graph')"
 				:class="pika({ 'padding': '3px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 				@click="onFitGraphClick"
 			>
 				{{ i18n.t('Fit graph') }}
 			</button>
+			<GraphLegend />
+			<span
+				v-if="statusLabel"
+				:class="pika({ marginLeft: 'auto' })"
+			>{{ statusLabel }}</span>
 		</div>
 
-		<div :class="pika({ position: 'relative', flex: '1 1 auto', minHeight: '0' })">
+		<div :class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative' })">
 			<GraphCanvas
+				v-if="flow !== null"
 				ref="graphCanvas"
 				:nodes="flow.nodes"
 				:edges="flow.edges"
-				:selectedEdgeId="selectedEdgeData?.id ?? null"
-				@node-click="onNodeClick"
-				@edge-click="onEdgeClick"
+				@nodeClick="onNodeClick"
+				@edgeClick="onEdgeClick"
 			/>
 			<div
-				v-if="layoutState.status === 'loading'"
-				:class="pika({ position: 'absolute', inset: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: 'var(--lab-color-text-muted)', pointerEvents: 'none' })"
+				v-else
+				:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 			>
-				{{ i18n.t('Laying out…') }}
-			</div>
-			<div
-				v-else-if="layoutState.status === 'error'"
-				role="alert"
-				:class="pika({ position: 'absolute', top: '12px', left: '12px', right: '12px', padding: '8px 10px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-danger)', background: 'var(--lab-color-surface)', color: 'var(--lab-color-danger)', fontSize: '12px' })"
-			>
-				{{ i18n.t('Layout failed — the ELK layout worker reported an error. Toggling a filter below re-requests a fresh layout.') }}
-			</div>
-			<div
-				v-else-if="flow.nodes.length === 0"
-				:class="pika({ position: 'absolute', inset: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: 'var(--lab-color-text-muted)', pointerEvents: 'none' })"
-			>
-				{{ i18n.t('No graph yet — this Blueprint has no widgets to lay out.') }}
+				{{ statusLabel ?? i18n.t('No graph yet — this Blueprint has no widgets to lay out.') }}
 			</div>
 		</div>
 
 		<GraphEdgeDetails
 			v-if="selectedEdgeData !== null"
 			:edge="selectedEdgeData"
-			@close="setSelectedEdgeData(null)"
 		/>
 	</div>
 </template>
