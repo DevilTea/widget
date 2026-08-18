@@ -26,6 +26,8 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'unavailable': '無法使用',
 	'valid': '有效',
 	'invalid': '無效',
+	'issue': '問題',
+	'issues': '問題',
 	'Revert': '還原',
 	'Format': '格式化',
 	'Apply': '套用',
@@ -37,7 +39,7 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.': 'Widget Lab 是為桌面尺寸的視窗設計。請加寬視窗後繼續。',
 
 	'Widget Lab lets you change a real app, then see where that behavior comes from.': 'Widget Lab 讓你直接操作一個真實應用程式，再追查這些行為從哪裡來。',
-	"Start with one small interaction; we'll show what changed and why.": '先從一個小互動開始；我們會帶你看發生了什麼變化，以及原因。',
+	'Start with one small interaction; we\'ll show what changed and why.': '先從一個小互動開始；我們會帶你看發生了什麼變化，以及原因。',
 	'Start the tour': '開始教學',
 	'Explore on my own': '自行探索',
 	'Starting the tutorial will load the Survey teaching example and replace your unapplied changes.': '開始教學會載入問卷教學範例，並取代你尚未套用的變更。',
@@ -100,12 +102,12 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Try it: click Change stage.': '試試看：按 Change stage。',
 	'The dialog opened. Change stage invoked DealStageForm.open() — a Method that loaded the current stage into the New stage field and told the Modal to open.': 'dialog 已開啟。Change stage 呼叫了 DealStageForm.open()——這個 Method 會把目前 stage 載入 New stage 欄位，並要求 Modal 開啟。',
 	'Pick a new stage, then press Save. (Cancel or Escape back out first if you like — nothing saves until Save is pressed.)': '選一個新的 stage，再按 Save。（你也可以先用 Cancel 或 Escape 離開；只有按下 Save 才會儲存。）',
-	"Aurora Systems' stage changed — and the table badge, the KPIs, and the stage chart all recomputed together. Save invoked DealStageForm.save(), which invoked DealStore.updateStage(): one Method call, many Properties reading the same store State.": 'Aurora Systems 的 stage 已改變——表格 badge、KPIs 與 stage chart 也一起重算。Save 呼叫 DealStageForm.save()，再呼叫 DealStore.updateStage()：一次 Method 呼叫，讓多個讀取相同 store State 的 Properties 一起更新。',
+	'Aurora Systems\' stage changed — and the table badge, the KPIs, and the stage chart all recomputed together. Save invoked DealStageForm.save(), which invoked DealStore.updateStage(): one Method call, many Properties reading the same store State.': 'Aurora Systems 的 stage 已改變——表格 badge、KPIs 與 stage chart 也一起重算。Save 呼叫 DealStageForm.save()，再呼叫 DealStore.updateStage()：一次 Method 呼叫，讓多個讀取相同 store State 的 Properties 一起更新。',
 	'Some widgets render nothing': '有些 widgets 不會 render 任何畫面',
 	'DealStore and DealQuery own the rules — take a look at how, whenever you like.': 'DealStore 與 DealQuery 擁有這些規則——有興趣時可以直接查看它們的實作。',
 	'DealStore and DealQuery own the search/filter/aggregation rules and the mutation you just made — but neither renders anything in Preview. Open Graph or Implementation to see them.': 'DealStore 與 DealQuery 擁有搜尋、篩選、aggregation 規則，以及你剛完成的 mutation——但兩者都不會在 Preview render 任何畫面。可以到 Graph 或 Implementation 查看。',
 	'You now know the CRM pipeline': '你現在已經理解 CRM pipeline',
-	"You've now seen State, Properties, row-selection coordination, and a Method-driven mutation.": '你已經看過 State、Properties、列選取協調，以及由 Method 驅動的 mutation。',
+	'You\'ve now seen State, Properties, row-selection coordination, and a Method-driven mutation.': '你已經看過 State、Properties、列選取協調，以及由 Method 驅動的 mutation。',
 	'State, Properties, row-selection coordination, and a Method-driven mutation recomputing three views at once — the same semantic model as the Survey tour, applied to a dashboard instead of a form. Explore Blueprint, Runtime, or Graph anytime, or open Implementation for any widget.': 'State、Properties、列選取協調，以及一次由 Method 驅動、讓三個檢視同時重算的 mutation——和問卷教學使用的是同一套 semantic model，只是這次套用在 dashboard 而不是表單。你可以隨時探索 Blueprint、Runtime、Graph，或查看任何 widget 的 Implementation。',
 }
 
