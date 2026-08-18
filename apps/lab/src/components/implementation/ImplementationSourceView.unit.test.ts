@@ -1,17 +1,22 @@
 // @vitest-environment happy-dom
-/**
- * P3 merge-gate review round 1, non-blocking note: the `v-html` rationale in `ImplementationSourceView.vue`
- * is that Shiki's `codeToHtml` is itself the HTML-escaping boundary for arbitrary code text — not any
- * assumption that `code` is always Lab-curated/never user-controlled (the Applied-instance JSON is
- * derived from the user-editable applied Source). This pins that actual escaping guarantee: a payload
- * containing a real HTML tag renders as visible escaped TEXT, never an injected live element.
- */
+/** Shiki is the escaping boundary; #43's viewer localization must not alter arbitrary source text. */
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { LabI18nKey } from '../../composables/use-lab-i18n'
 import ImplementationSourceView from './ImplementationSourceView.vue'
 
 const globalStubConfig = {
-	global: { config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } } },
+	global: {
+		config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+		provide: {
+			[LabI18nKey as symbol]: {
+				locale: { value: 'en' },
+				locales: ['en', 'zh-TW'],
+				setLocale: () => {},
+				t: (source: string) => source,
+			},
+		},
+	},
 }
 
 describe('implementationSourceView — escaping', () => {
@@ -30,10 +35,8 @@ describe('implementationSourceView — escaping', () => {
 		})
 
 		const codeBlock = wrapper.find('[data-testid="implementation-code"]')
-		// No live `<img>` element was injected — Shiki escaped the payload into markup/text.
 		expect(codeBlock.findAll('img').length)
 			.toBe(0)
-		// The original text is still visible, verbatim, as rendered (escaped) content.
 		expect(codeBlock.text())
 			.toContain(payload)
 	})
