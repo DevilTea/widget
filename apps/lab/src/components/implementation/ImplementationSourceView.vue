@@ -2,10 +2,12 @@
 /**
  * Readonly syntax-highlighted source. #44 treats Lab theme as another latest-selection-wins input: a
  * theme change re-highlights the already-resolved source with the bundled matching Shiki theme, but
- * never reloads raw source or changes/copies different text.
+ * never reloads raw source or changes/copies different text. #45 keeps long-line overflow local to this
+ * surface, while #46 keeps literal tabs on the shared four-column presentation contract.
  */
 import type { ImplementationLang } from '../../implementation/shiki-highlighter'
 import { ref, watch } from 'vue'
+import { CODE_TAB_SIZE } from '../../code-view/settings'
 import { useLabTheme } from '../../composables/use-lab-theme'
 import { highlightSource } from '../../implementation/shiki-highlighter'
 
@@ -65,7 +67,7 @@ async function copy(): Promise<void> {
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
+	<div class="implementation-source-view">
 		<div :class="pika({ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
 			<button
 				type="button"
@@ -75,7 +77,7 @@ async function copy(): Promise<void> {
 				{{ copyLabel }}
 			</button>
 		</div>
-		<div :class="pika({ flex: '1 1 auto', minHeight: '0', overflow: 'auto', fontSize: '12px' })">
+		<div class="implementation-source-view__scroll">
 			<p
 				v-if="status === 'loading'"
 				:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)' })"
@@ -93,8 +95,32 @@ async function copy(): Promise<void> {
 				v-else
 				data-testid="implementation-code"
 				:class="pika({ padding: '10px' })"
+				:style="{ tabSize: String(CODE_TAB_SIZE) }"
 				v-html="html"
 			/>
 		</div>
 	</div>
 </template>
+
+<style scoped>
+.implementation-source-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+}
+
+.implementation-source-view__scroll {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+	font-size: 12px;
+}
+
+.implementation-source-view__scroll :deep(pre) {
+	margin: 0;
+	min-width: max-content;
+}
+</style>
