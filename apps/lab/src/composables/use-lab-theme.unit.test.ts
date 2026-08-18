@@ -4,7 +4,7 @@ import { createLabThemeStore } from './use-lab-theme'
 
 const STORAGE_KEY = 'widget-lab:theme'
 
-describe('Lab theme store', () => {
+describe('lab theme store', () => {
 	beforeEach(() => {
 		localStorage.clear()
 		document.documentElement.removeAttribute('data-lab-theme')
