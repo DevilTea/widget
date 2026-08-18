@@ -35,6 +35,7 @@ import type { Ref } from 'vue'
 import jsonGrammar from 'tm-grammars/grammars/json.json'
 import oneDarkProTheme from 'tm-themes/themes/one-dark-pro.json'
 import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
+import { CODE_TAB_SIZE } from '../code-view/settings'
 
 type Monaco = Awaited<ReturnType<typeof import('modern-monaco/core').init>>
 type MonacoEditor = ReturnType<Monaco['editor']['create']>
@@ -87,12 +88,14 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 			return
 
 		model = monaco.editor.createModel(options.modelValue.value, 'json')
+		// Literal tabs are a presentation concern owned by the text model. Keep this in one shared
+		// contract with the readonly Shiki viewer rather than relying on Monaco/browser defaults.
+		model.updateOptions({ tabSize: CODE_TAB_SIZE })
 		editor = monaco.editor.create(el, {
 			model,
 			automaticLayout: true,
 			minimap: { enabled: false },
 			fontSize: 13,
-			tabSize: 2,
 			scrollBeyondLastLine: false,
 		})
 		editor.onDidChangeModelContent(() => {
