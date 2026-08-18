@@ -89,10 +89,11 @@ test.describe('lab localization (issue #43)', () => {
 			.toBeVisible()
 		await page.getByRole('tab', { name: 'Blueprint' })
 			.click()
-		await expect(page.getByTestId('blueprint-view-implementation'))
+		const blueprintImplementationButton = page.getByTestId('blueprint-view-implementation')
+		await expect(blueprintImplementationButton)
 			.toBeVisible()
-		await expect(page.getByRole('button', { name: '查看實作', exact: true }))
-			.toBeVisible()
+		await expect(blueprintImplementationButton)
+			.toHaveText('查看實作')
 	})
 
 	test('changing locale translates the current tutorial step without restarting tutorial progress', async ({ page }) => {
