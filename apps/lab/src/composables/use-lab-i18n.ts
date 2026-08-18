@@ -48,7 +48,7 @@ function applyDocumentLocale(locale: LabLocale): void {
 function interpolate(message: string, params: Readonly<Record<string, string | number>> | undefined): string {
 	if (params === undefined)
 		return message
-	return message.replace(/\{([A-Za-z0-9_-]+)\}/g, (match, key: string) => {
+	return message.replace(/\{([\w-]+)\}/g, (match, key: string) => {
 		const value = params[key]
 		return value === undefined ? match : String(value)
 	})
