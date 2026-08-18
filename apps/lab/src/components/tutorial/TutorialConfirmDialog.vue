@@ -1,20 +1,27 @@
 <script setup lang="ts">
-/** Dirty-draft confirmation for deterministic tutorial start; #43 localizes presentation copy only. */
+/**
+ * Dirty-draft confirmation for deterministic tutorial start. #45 preserves the pending confirmation
+ * below the supported workbench width but suppresses the native top-layer dialog; #43 localizes only
+ * the visible presentation copy.
+ */
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useModalDialog } from '../../composables/use-modal-dialog'
+import { useSupportedWorkbenchViewport } from '../../composables/use-supported-workbench-viewport'
 import { useTutorialStore } from '../../composables/use-tutorial'
 
 const tutorial = useTutorialStore()
 const i18n = useLabI18n()
+const supportedViewport = useSupportedWorkbenchViewport()
 
 const { onCancel, onNativeClose } = useModalDialog('dialog', {
 	isOpen: tutorial.confirmVisible,
+	canShowModal: supportedViewport,
 	onCancel: () => tutorial.cancelStart(),
 })
 </script>
 
 <template>
-	<!-- eslint-disable vue/no-unused-refs -- `ref="dialog"` is consumed by `useModalDialog('dialog', ...)`. -->
+	<!-- eslint-disable vue/no-unused-refs -- consumed by `useModalDialog('dialog', ...)`. -->
 	<dialog
 		ref="dialog"
 		role="alertdialog"
