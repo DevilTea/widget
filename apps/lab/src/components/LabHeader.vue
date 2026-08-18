@@ -19,11 +19,6 @@ const blueprintStatus = computed(() => store.active.value.blueprint.status)
 const issueCount = computed(() => store.active.value.blueprint.getCollectedIssues().length)
 const runtimeAvailable = computed(() => store.active.value.runtime !== null)
 
-/**
- * One header entry point covers start/resume/restart/pause (issue #25 P1): "closing the rail pauses"
- * (`TutorialRail.vue`'s own close control) and "the header button resumes/restarts" are both true, but
- * routing every status through this single button keeps the header's tutorial affordance count at one.
- */
 const tutorialButtonLabel = computed(() => {
 	switch (tutorial.snapshot.value.status) {
 		case 'paused': return 'Resume tutorial'
@@ -72,7 +67,7 @@ function onThemeChange(event: Event): void {
 </script>
 
 <template>
-	<header :class="pika({ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', borderBottom: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)', flex: '0 0 auto' })">
+	<header :class="pika({ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', rowGap: '6px', padding: '8px 14px', borderBottom: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)', flex: '0 0 auto' })">
 		<strong :class="pika({ fontSize: '13px', letterSpacing: '0.02em' })">Widget Lab</strong>
 
 		<select
@@ -144,7 +139,7 @@ function onThemeChange(event: Event): void {
 
 		<select
 			:value="theme.theme.value"
-			:class="pika({ background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 8px', fontSize: '12px' })"
+			:class="pika({ width: '72px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
 			aria-label="Theme"
 			@change="onThemeChange"
 		>
