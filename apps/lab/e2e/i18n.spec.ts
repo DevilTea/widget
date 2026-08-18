@@ -79,9 +79,11 @@ test.describe('lab localization (issue #43)', () => {
 			.toHaveValue('light')
 		await expect(page.getByLabel('主題'))
 			.toBeVisible()
-		await expect(page.getByLabel('主題').locator('option[value="light"]'))
+		await expect(page.getByLabel('主題')
+			.locator('option[value="light"]'))
 			.toHaveText('亮色')
-		await expect(page.getByLabel('主題').locator('option[value="dark"]'))
+		await expect(page.getByLabel('主題')
+			.locator('option[value="dark"]'))
 			.toHaveText('深色')
 
 		await themeSelect(page)
@@ -197,7 +199,7 @@ test.describe('lab localization (issue #43)', () => {
 		await catalog.getByRole('button', { name: 'Counter', exact: true })
 			.click()
 		await expect(page.getByTestId('implementation-code'))
-			.toContainText("createWidgetPlugin('Counter')")
+			.toContainText('createWidgetPlugin(\'Counter\')')
 	})
 
 	test('renderer-owned CRM chrome translates while config/data projection remains verbatim', async ({ page }) => {
