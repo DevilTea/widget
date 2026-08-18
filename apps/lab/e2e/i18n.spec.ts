@@ -109,14 +109,25 @@ test.describe('lab localization (issue #43)', () => {
 		await expect(rail.getByText('Step 1 of 9', { exact: true }))
 			.toBeVisible()
 
+		// Move off the initial step before switching locale. If locale changes rebuilt/reset the tutorial,
+		// a Step-1-only assertion would falsely pass; Step 2 pins preservation of real progress.
+		await rail.getByRole('button', { name: 'Next', exact: true })
+			.click()
+		await expect(rail.getByText('Step 2 of 9', { exact: true }))
+			.toBeVisible()
+		await expect(rail.getByText('One answer, stored as State', { exact: true }))
+			.toBeVisible()
+
 		await localeSelect(page)
 			.selectOption('zh-TW')
 
 		const translatedRail = page.getByRole('complementary', { name: '教學' })
-		await expect(translatedRail.getByText('這是互動式問卷', { exact: true }))
+		await expect(translatedRail.getByText('第 2 步，共 9 步', { exact: true }))
+			.toBeVisible()
+		await expect(translatedRail.getByText('一個答案，儲存在 State', { exact: true }))
 			.toBeVisible()
 		await expect(translatedRail.getByText('第 1 步，共 9 步', { exact: true }))
-			.toBeVisible()
+			.toHaveCount(0)
 	})
 
 	test('renderer-owned CRM chrome translates while config/data projection remains verbatim', async ({ page }) => {
