@@ -1,16 +1,14 @@
 <script setup lang="ts">
-/**
- * Compact header: preset selection, semantic status, and Apply controls only — per issue #13
- * (Widget Lab Phase 4) Checkpoint I, no navigation/marketing chrome that would consume workbench
- * vertical space.
- */
+/** Compact Lab utility header: showcase/preset selection, explorer/tutorial entry, status, and Apply controls. */
 import type { TutorialTourId } from '../composables/use-tutorial'
 import { computed } from 'vue'
+import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabStore } from '../composables/use-lab-store'
 import { useTutorialStore } from '../composables/use-tutorial'
 
 const store = useLabStore()
 const tutorial = useTutorialStore()
+const implementationExplorer = useImplementationExplorer()
 
 const blueprintStatus = computed(() => store.active.value.blueprint.status)
 const issueCount = computed(() => store.active.value.blueprint.getCollectedIssues().length)
@@ -20,8 +18,7 @@ const runtimeAvailable = computed(() => store.active.value.runtime !== null)
  * One header entry point covers start/resume/restart/pause (issue #25 P1): "closing the rail pauses"
  * (`TutorialRail.vue`'s own close control) and "the header button resumes/restarts" are both true, but
  * routing every status through this single button — rather than adding a second dedicated pause control
- * here — keeps the header's tutorial affordance count at one, matching its existing "no
- * navigation/marketing chrome" compactness (see this component's original file header).
+ * here — keeps the header's tutorial affordance count at one.
  */
 const tutorialButtonLabel = computed(() => {
 	switch (tutorial.snapshot.value.status) {
@@ -111,6 +108,14 @@ function onShowcaseChange(event: Event): void {
 				{{ preset.label }}
 			</option>
 		</select>
+
+		<button
+			type="button"
+			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+			@click="implementationExplorer.open('catalog')"
+		>
+			Implementation
+		</button>
 
 		<select
 			v-if="tutorial.crmTourUnlocked.value"
