@@ -66,10 +66,10 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 		.toBeVisible()
 	await expect(page.getByText('Blueprint: valid'))
 		.toBeVisible()
-	await expect(page.getByText('Runtime: active'))
+	await expect(page.getByText('Preview r1'))
 		.toBeVisible()
 
-	// Visible status: the Source panel's parse-error banner (`SourcePanel.vue`'s
+	// Visible status: the Author JSON view's parse-error banner (`AuthorJsonView.vue`'s
 	// `store.parseError.value`) — LabHeader's own status pills never reflect a Lab-only parse error.
 	await expect(page.getByText('SyntaxError:'))
 		.toBeVisible()

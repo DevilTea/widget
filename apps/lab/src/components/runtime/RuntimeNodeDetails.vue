@@ -23,7 +23,7 @@ const store = useLabStore()
 const i18n = useLabI18n()
 
 const focusMember = computed<InspectorFocusMember | null>(() => {
-	const focus = store.focus.value
+	const focus = store.previewFocus.value
 	if (focus === null || props.node === null || focus.nodeId !== props.node.nodeId)
 		return null
 	return focus.member ?? null
@@ -38,7 +38,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 	const node = props.node
 	if (node === null)
 		return
-	store.setFocus({ nodeId: node.nodeId, member: { type, name } })
+	store.setFocus('preview', { nodeId: node.nodeId, member: { type, name } })
 }
 </script>
 

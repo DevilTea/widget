@@ -1,24 +1,28 @@
 <script setup lang="ts">
 /**
  * Default two-column workbench (diagnostic #13 Widget Lab Phase 4 Checkpoint I): a left tool group with
- * tabs Source | Blueprint | Runtime | Graph (Source initially active, ~35-40% width) and a persistent
+ * tabs Author | Blueprint | Runtime | Graph (Author initially active, ~35-40% width) and a persistent
  * Preview on the right (~60-65% width, the dominant surface). Dockview owns tabs/resize/docking only —
  * it never becomes the semantic model for Source/Blueprint/Runtime/Graph/Preview.
  */
 import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
 import { defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
+import { useDocumentTools } from '../composables/use-document-tools'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
+import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
 import NonClosableTab from './NonClosableTab.vue'
+import AuthorPanel from './panels/AuthorPanel.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
 import GraphPanel from './panels/GraphPanel.vue'
 import RuntimePanel from './panels/RuntimePanel.vue'
-import SourcePanel from './panels/SourcePanel.vue'
 import PreviewPanel from './preview/PreviewPanel.vue'
 
 const store = useLabStore()
+const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
+const documentTools = useDocumentTools()
 
 /**
  * Dockview applies its theme via the `theme` option's `className` (dockview-core stamps it on its own
@@ -41,7 +45,7 @@ const labTheme: DockviewTheme = {
 // type is not structurally identical to — a well-known Vue 3 typing friction point, not a runtime
 // concern: every value below genuinely is a Vue component.
 const components: Record<string, VueComponent> = {
-	source: SourcePanel as unknown as VueComponent,
+	author: AuthorPanel as unknown as VueComponent,
 	blueprint: BlueprintPanel as unknown as VueComponent,
 	runtime: RuntimePanel as unknown as VueComponent,
 	graph: GraphPanel as unknown as VueComponent,
@@ -52,6 +56,7 @@ const components: Record<string, VueComponent> = {
 	// `implementationExplorer.open()` has been called at least once (see `watchImplementationOpenRequests`
 	// below) — never merely because this record exists.
 	implementation: defineAsyncComponent(() => import('./panels/ImplementationPanel.vue')) as unknown as VueComponent,
+	documentTools: defineAsyncComponent(() => import('./panels/DocumentToolsPanel.vue')) as unknown as VueComponent,
 }
 
 // diagnostic #27 Finding 2: the canonical panels' tab content renderer, close-button-free by construction
@@ -73,6 +78,7 @@ let stopTutorialTabActivationWatch: (() => void) | null = null
 // created from `onReady()`, so its stop handle is retained and called explicitly from
 // `onBeforeUnmount` instead.
 let stopImplementationOpenWatch: (() => void) | null = null
+let stopDocumentToolsOpenWatch: (() => void) | null = null
 
 /**
  * `dockview-vue`'s `<DockviewVue>` measures its container exactly once, synchronously, in its own
@@ -97,6 +103,7 @@ onBeforeUnmount(() => {
 	resizeObserver?.disconnect()
 	stopTutorialTabActivationWatch?.()
 	stopImplementationOpenWatch?.()
+	stopDocumentToolsOpenWatch?.()
 })
 
 function onReady(event: DockviewReadyEvent): void {
@@ -104,13 +111,13 @@ function onReady(event: DockviewReadyEvent): void {
 
 	// `tabComponent: 'nonClosable'` on every canonical panel (diagnostic #27 Finding 2) — see
 	// NonClosableTab.vue/tabComponents above for the mechanism.
-	api.addPanel({ id: 'source', component: 'source', tabComponent: 'nonClosable', title: 'Source' })
+	api.addPanel({ id: 'author', component: 'author', tabComponent: 'nonClosable', title: i18n.t('Author') })
 	api.addPanel({
 		id: 'blueprint',
 		component: 'blueprint',
 		tabComponent: 'nonClosable',
 		title: 'Blueprint',
-		position: { referencePanel: 'source', direction: 'within' },
+		position: { referencePanel: 'author', direction: 'within' },
 		inactive: true,
 	})
 	api.addPanel({
@@ -118,7 +125,7 @@ function onReady(event: DockviewReadyEvent): void {
 		component: 'runtime',
 		tabComponent: 'nonClosable',
 		title: 'Runtime',
-		position: { referencePanel: 'source', direction: 'within' },
+		position: { referencePanel: 'author', direction: 'within' },
 		inactive: true,
 	})
 	api.addPanel({
@@ -126,7 +133,7 @@ function onReady(event: DockviewReadyEvent): void {
 		component: 'graph',
 		tabComponent: 'nonClosable',
 		title: 'Graph',
-		position: { referencePanel: 'source', direction: 'within' },
+		position: { referencePanel: 'author', direction: 'within' },
 		inactive: true,
 	})
 	api.addPanel({
@@ -134,16 +141,17 @@ function onReady(event: DockviewReadyEvent): void {
 		component: 'preview',
 		tabComponent: 'nonClosable',
 		title: 'Preview',
-		position: { referencePanel: 'source', direction: 'right' },
+		position: { referencePanel: 'author', direction: 'right' },
 	})
 
 	// Default ~35-40% / ~60-65% split. Users may resize the divider afterwards (Dockview owns that).
 	const toolWidth = Math.round(Math.max(360, Math.min(560, api.width * 0.38)))
-	api.getPanel('source')?.group.api.setSize({ width: toolWidth })
+	api.getPanel('author')?.group.api.setSize({ width: toolWidth })
 
 	observeSize(api)
 	watchTutorialTabActivation(api)
 	watchImplementationOpenRequests(api)
+	watchDocumentToolsOpenRequests(api)
 }
 
 /**
@@ -186,7 +194,27 @@ function watchImplementationOpenRequests(api: DockviewApi): void {
 				id: 'implementation',
 				component: 'implementation',
 				title: 'Implementation',
-				position: { referencePanel: 'source', direction: 'within' },
+				position: { referencePanel: 'author', direction: 'within' },
+			})
+		},
+	)
+}
+
+/** Phase 6: adds the developer panel only after an explicit header request; the default tab remains closable. */
+function watchDocumentToolsOpenRequests(api: DockviewApi): void {
+	stopDocumentToolsOpenWatch = watch(
+		() => documentTools.openRequestTick.value,
+		() => {
+			const existing = api.getPanel('document-tools')
+			if (existing !== undefined) {
+				existing.api.setActive()
+				return
+			}
+			api.addPanel({
+				id: 'document-tools',
+				component: 'documentTools',
+				title: i18n.t('Document Tools'),
+				position: { referencePanel: 'author', direction: 'within' },
 			})
 		},
 	)

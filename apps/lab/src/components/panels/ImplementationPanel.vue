@@ -37,7 +37,7 @@ watch(() => explorer.openRequestTick.value, () => {
 	mode.value = explorer.requestedMode.value
 })
 
-const focusedWidget = computed(() => resolveFocusedWidget(store.active.value.blueprint, store.focus.value))
+const focusedWidget = computed(() => resolveFocusedWidget(store.documentState.value.blueprint, store.documentFocus.value))
 const showcase = computed(() => getShowcase(store.showcaseId.value))
 const focusedEntry = computed(() => {
 	const widget = focusedWidget.value
@@ -70,7 +70,7 @@ const appliedInstance = computed(() => {
 	const widget = focusedWidget.value
 	if (widget === null)
 		return null
-	return extractAppliedInstance(store.active.value.sourceText, widget.id)
+	return extractAppliedInstance(store.documentState.value.sourceText, widget.id)
 })
 
 /**

@@ -13,7 +13,7 @@
  */
 
 import type { WidgetSystemBlueprint } from '@deviltea/widget-core'
-import type { InspectorFocus } from './focus'
+import type { InspectorFocus, InspectorFocusScope } from './focus'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 
 /**
@@ -38,4 +38,25 @@ export function resolveWidgetFocus(
 			return { nodeId: node.nodeId }
 	}
 	return null
+}
+
+export interface PreviewInspectResolution {
+	readonly focus: InspectorFocus
+	readonly scope: InspectorFocusScope
+	readonly targetTab: 'blueprint' | 'runtime'
+}
+
+/**
+ * Resolves a Preview anchor and chooses the only safe navigation target. A linked Preview may navigate
+ * to the Document-facing Blueprint; a diverged Preview must remain in the Preview/Runtime scope.
+ */
+export function resolvePreviewInspectResolution(
+	blueprint: WidgetSystemBlueprint,
+	widgetId: string,
+	isLinked: boolean,
+): PreviewInspectResolution | null {
+	const focus = resolveWidgetFocus(blueprint, widgetId)
+	return focus === null
+		? null
+		: { focus, scope: 'preview', targetTab: isLinked ? 'blueprint' : 'runtime' }
 }

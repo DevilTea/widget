@@ -2,7 +2,7 @@ import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
-import { resolveWidgetFocus } from './inspect-focus'
+import { resolvePreviewInspectResolution, resolveWidgetFocus } from './inspect-focus'
 import { LabSession } from './session'
 
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText
@@ -44,6 +44,38 @@ describe('resolveWidgetFocus', () => {
 		const blueprint = session.active.blueprint
 
 		expect(resolveWidgetFocus(blueprint, 'does-not-exist'))
+			.toBeNull()
+	})
+})
+
+describe('resolvePreviewInspectResolution', () => {
+	it('keeps linked Preview inspection in the shared Blueprint navigation path', () => {
+		const blueprint = sandboxSystem.createBlueprint(JSON.parse(validSource))
+		const resolution = resolvePreviewInspectResolution(blueprint, 'counter-1', true)
+
+		expect(resolution?.scope)
+			.toBe('preview')
+		expect(resolution?.targetTab)
+			.toBe('blueprint')
+		expect(resolution?.focus)
+			.toEqual(resolveWidgetFocus(blueprint, 'counter-1'))
+	})
+
+	it('keeps diverged Preview inspection in Runtime and never asks for Document focus', () => {
+		const blueprint = sandboxSystem.createBlueprint(JSON.parse(validSource))
+		const resolution = resolvePreviewInspectResolution(blueprint, 'counter-1', false)
+
+		expect(resolution)
+			.toEqual({
+				focus: resolveWidgetFocus(blueprint, 'counter-1'),
+				scope: 'preview',
+				targetTab: 'runtime',
+			})
+	})
+
+	it('returns null for an anchor that is not present in the Preview Blueprint', () => {
+		const blueprint = sandboxSystem.createBlueprint(JSON.parse(validSource))
+		expect(resolvePreviewInspectResolution(blueprint, 'missing', false))
 			.toBeNull()
 	})
 })

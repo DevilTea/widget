@@ -19,9 +19,23 @@ test('app loads with header controls and all five panel tabs', async ({ page }) 
 	await expect(page.getByRole('button', { name: 'Apply' }))
 		.toBeVisible()
 
-	for (const name of ['Source', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
+	for (const name of ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
 		await expect(page.getByRole('tab', { name }))
 			.toBeVisible()
+	}
+})
+
+test('Blueprint and Runtime keep separate outer inspector surfaces', async ({ page }) => {
+	await page.goto('/')
+
+	for (const name of ['Blueprint', 'Runtime']) {
+		await page.getByRole('tab', { name })
+			.click()
+		const panel = page.getByRole('tabpanel', { name })
+		await expect(panel.getByTestId('inspector-panel-shell'))
+			.toHaveCount(1)
+		await expect(panel.getByTestId('inspector-split-layout'))
+			.toHaveCount(1)
 	}
 })
 
@@ -63,7 +77,7 @@ test('Source editor initializes from local assets with no attempted esm.sh reque
 	// Every other panel/header control is unaffected (unchanged from before self-hosting).
 	await expect(page.getByText('Blueprint: valid'))
 		.toBeVisible()
-	await expect(page.getByText('Runtime: active'))
+	await expect(page.getByText('Preview r0'))
 		.toBeVisible()
 	await page.getByRole('tab', { name: 'Blueprint' })
 		.click()
@@ -79,7 +93,7 @@ test('Source editor initializes from local assets with no attempted esm.sh reque
 test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => {
 	await page.goto('/')
 
-	const panelNames = ['Source', 'Blueprint', 'Runtime', 'Graph', 'Preview']
+	const panelNames = ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']
 
 	// The five canonical panels use a custom Dockview tab renderer (`NonClosableTab.vue`) that never
 	// renders a close control — so there is no in-tab button affordance to find at all.
@@ -120,6 +134,6 @@ test('narrow-viewport behavior is intentional (issue #27)', async ({ page }) => 
 	await page.setViewportSize({ width: 1280, height: 800 })
 	await expect(gateMessage)
 		.toBeHidden()
-	await expect(page.getByRole('tab', { name: 'Source' }))
+	await expect(page.getByRole('tab', { name: 'Author' }))
 		.toBeVisible()
 })

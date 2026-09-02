@@ -86,7 +86,7 @@ test.describe('welcome card', () => {
 			.toHaveCount(0)
 
 		// Never blocks ordinary Lab use.
-		await expect(page.getByRole('tab', { name: 'Source' }))
+		await expect(page.getByRole('tab', { name: 'Author' }))
 			.toBeVisible()
 		await page.getByRole('tab', { name: 'Blueprint' })
 			.click()
@@ -114,7 +114,7 @@ test.describe('welcome card', () => {
 			.toBeEnabled()
 
 		// Lab use is fully unaffected.
-		await expect(page.getByRole('tab', { name: 'Source' }))
+		await expect(page.getByRole('tab', { name: 'Author' }))
 			.toBeVisible()
 	})
 
@@ -141,7 +141,7 @@ test('skipping the tour leaves the Lab fully usable', async ({ page }) => {
 	await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 		.toHaveCount(0)
 
-	for (const name of ['Source', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
+	for (const name of ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
 		await expect(page.getByRole('tab', { name }))
 			.toBeVisible()
 	}
@@ -306,7 +306,7 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	expect(hasHorizontalOverflow)
 		.toBe(false)
 
-	for (const name of ['Source', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
+	for (const name of ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
 		await expect(page.getByRole('tab', { name }))
 			.toBeVisible()
 	}
@@ -530,15 +530,15 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await nextButton.click()
 
 	// Step 8 — map the views: each name is a real navigation affordance.
-	await expect(rail.getByText('Source = the declarative definition you edit', { exact: false }))
+	await expect(rail.getByText('Author = the declarative definition and structure you edit', { exact: false }))
 		.toBeVisible()
 	await rail.getByRole('button', { name: 'Runtime', exact: true })
 		.click()
 	await expect(page.getByRole('tab', { name: 'Runtime' }))
 		.toHaveAttribute('aria-selected', 'true')
-	await rail.getByRole('button', { name: 'Source', exact: true })
+	await rail.getByRole('button', { name: 'Author', exact: true })
 		.click()
-	await expect(page.getByRole('tab', { name: 'Source' }))
+	await expect(page.getByRole('tab', { name: 'Author' }))
 		.toHaveAttribute('aria-selected', 'true')
 	// "Implementation" is a real affordance now (issue #25 P3): opens the closable Implementation panel
 	// for whichever widget is currently held in shared focus — `trip-survey`, from step 7's `onEnter`.
@@ -551,7 +551,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await nextButton.click()
 
 	// Step 9 — hand-back: "Finish" replaces "Next" on the last step.
-	await expect(rail.getByText('Try the CRM tour, open any inspector, or edit the Source JSON and press Apply.'))
+	await expect(rail.getByText('Try the CRM tour, open any inspector, or edit the Author JSON and press Apply.'))
 		.toBeVisible()
 	await expect(finishButton)
 		.toBeEnabled()

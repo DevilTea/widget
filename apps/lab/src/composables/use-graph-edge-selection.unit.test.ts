@@ -4,8 +4,7 @@
  * contract") and must reset when the applied Blueprint identity changes, but must not reset for any
  * `LabSession` mutation that never crosses the applied-snapshot boundary. Exercised against a real
  * `LabSession` over the real sandbox `WidgetSystem` (no mocked core) plus real Vue reactivity — mirrors
- * how `use-lab-store.ts` itself bridges `LabSession.subscribe()` into a `computed()` ref, so this test
- * observes the exact same reactive wiring the real `LabStore.active` ref uses.
+ * how `use-lab-store.ts` bridges the promoted Lab snapshot into a `computed()` ref.
  */
 
 import type { GraphEdgeData } from '../graph/vue-flow'
@@ -28,20 +27,20 @@ const fakeEdge: GraphEdgeData = {
 	},
 }
 
-/** Mirrors `use-lab-store.ts`'s own `session.subscribe()` -> `computed()` bridge, real reactivity included. */
-function createActiveRef(session: LabSession) {
+/** Mirrors `use-lab-store.ts`'s Document `session.subscribe()` -> `computed()` bridge. */
+function createDocumentStateRef(session: LabSession) {
 	const tick = shallowRef(0)
 	session.subscribe(() => tick.value++)
 	return computed(() => {
 		void tick.value
-		return session.active
+		return session.documentState
 	})
 }
 
 describe('useGraphEdgeSelection', () => {
 	it('starts with no selection', () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
-		const selection = useGraphEdgeSelection({ active: createActiveRef(session) })
+		const selection = useGraphEdgeSelection({ documentState: createDocumentStateRef(session) })
 
 		expect(selection.selected.value)
 			.toBeNull()
@@ -49,7 +48,7 @@ describe('useGraphEdgeSelection', () => {
 
 	it('resets the selection once a successful Apply installs a new Blueprint', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
-		const selection = useGraphEdgeSelection({ active: createActiveRef(session) })
+		const selection = useGraphEdgeSelection({ documentState: createDocumentStateRef(session) })
 
 		selection.select(fakeEdge)
 		expect(selection.selected.value)
@@ -63,23 +62,27 @@ describe('useGraphEdgeSelection', () => {
 			.toBeNull()
 	})
 
-	it('resets the selection even when the newly applied Blueprint is invalid (Runtime null)', async () => {
+	it('resets the selection even when the newly applied Document Blueprint is invalid and Preview retains an older Runtime', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
-		const selection = useGraphEdgeSelection({ active: createActiveRef(session) })
+		const selection = useGraphEdgeSelection({ documentState: createDocumentStateRef(session) })
 
 		selection.select(fakeEdge)
 		await session.applyPreset(invalidSource)
 		await nextTick()
 
-		expect(session.active.runtime)
-			.toBeNull()
+		expect(session.documentState.blueprint.status)
+			.toBe('invalid')
+		expect(session.preview?.revision)
+			.toBe(0)
+		expect(session.preview?.runtime.isDisposed)
+			.toBe(false)
 		expect(selection.selected.value)
 			.toBeNull()
 	})
 
 	it('does not reset the selection for a draft edit that never crosses the applied-snapshot boundary', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
-		const selection = useGraphEdgeSelection({ active: createActiveRef(session) })
+		const selection = useGraphEdgeSelection({ documentState: createDocumentStateRef(session) })
 
 		selection.select(fakeEdge)
 		session.setDraftSourceText('{ "id": "root", "type": "Text", "config": { "text": "draft only" } }')
@@ -89,9 +92,24 @@ describe('useGraphEdgeSelection', () => {
 			.toEqual(fakeEdge)
 	})
 
+	it('does not reset the selection for a structural no-op Apply with different JSON text representation', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const selection = useGraphEdgeSelection({ documentState: createDocumentStateRef(session) })
+
+		selection.select(fakeEdge)
+		session.setDraftSourceText(JSON.stringify(JSON.parse(validSource)))
+		await session.apply()
+		await nextTick()
+
+		expect(session.documentSnapshot.revision)
+			.toBe(0)
+		expect(selection.selected.value)
+			.toEqual(fakeEdge)
+	})
+
 	it('does not reset the selection when apply() fails to parse (active snapshot unchanged)', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
-		const selection = useGraphEdgeSelection({ active: createActiveRef(session) })
+		const selection = useGraphEdgeSelection({ documentState: createDocumentStateRef(session) })
 
 		selection.select(fakeEdge)
 		session.setDraftSourceText('not json')
@@ -104,7 +122,7 @@ describe('useGraphEdgeSelection', () => {
 
 	it('lets a fresh selection replace an existing one without needing a clear first', () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
-		const selection = useGraphEdgeSelection({ active: createActiveRef(session) })
+		const selection = useGraphEdgeSelection({ documentState: createDocumentStateRef(session) })
 		const otherEdge: GraphEdgeData = { ...fakeEdge, operation: 'writes' }
 
 		selection.select(fakeEdge)

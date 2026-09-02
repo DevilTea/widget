@@ -1,8 +1,8 @@
 /**
  * Panel-local Dependency Graph edge selection (diagnostic #13 Phase 5 "inspector panel interaction
  * contract"). Graph edge selection is exactly the kind of panel-local, snapshot-bound selection that
- * comment calls out: it must reset when the applied Blueprint identity changes (a successful Apply —
- * `store.active.value.blueprint` becomes a new object even when the new Blueprint is invalid), it must
+ * comment calls out: it must reset when the committed Document Blueprint identity changes (including
+ * an invalid committed Blueprint), it must
  * not reset on ordinary tab switching, and it must never touch the separate, persistent Dependency
  * Graph filter preferences (`LabStore.graphShowAbsent`/`graphShowIsolatedMembers`), which this module
  * does not even reference.
@@ -22,14 +22,15 @@ export interface GraphEdgeSelection {
 	select: (edge: GraphEdgeData | null) => void
 }
 
-export function useGraphEdgeSelection(store: Pick<LabStore, 'active'>): GraphEdgeSelection {
+export function useGraphEdgeSelection(store: Pick<LabStore, 'documentState'>): GraphEdgeSelection {
 	const selected = shallowRef<GraphEdgeData | null>(null)
 
-	// Fires only on an applied-snapshot boundary crossing (a successful Apply/`applyPreset` — including
-	// one that lands on an invalid Blueprint), never on draft edits, Apply start/end, revert, format, or
-	// plain tab switching, all of which leave `active.value.blueprint`'s identity untouched.
+	// The promoted snapshot receives a new Blueprint identity only after a changed Document commit is
+	// ready to replace the old Runtime-facing snapshot. A structural `changed:false` Apply retains that
+	// identity, so text-only representation changes do not clear panel-local graph selection. Showcase
+	// replacement also supplies a new Blueprint identity even though its Document restarts at revision 0.
 	watch(
-		() => store.active.value.blueprint,
+		() => store.documentState.value.blueprint,
 		() => {
 			selected.value = null
 		},

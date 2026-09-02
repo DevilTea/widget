@@ -88,7 +88,7 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 			.toHaveCount(1)
 
 		// No canonical-panel regression (issue #27's non-closable policy stays untouched).
-		for (const name of ['Source', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
+		for (const name of ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
 			await expect(page.getByRole('tab', { name })
 				.locator('.dv-default-tab-action'))
 				.toHaveCount(0)
@@ -192,7 +192,7 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 		}, marker)
 
 		// The Source editor (Monaco) shows the dirtied draft.
-		await page.getByRole('tab', { name: 'Source' })
+		await page.getByRole('tab', { name: 'Author' })
 			.click()
 		await expect(page.locator('.view-lines')
 			.getByText(marker, { exact: false }))

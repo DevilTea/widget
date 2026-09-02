@@ -2,11 +2,11 @@
  * Vue reactivity bridge for the Dependency Graph panel (diagnostic #13 Phase 5 "Dependency Graph semantic
  * representation" / "Graph layout is an asynchronous projection" comments).
  *
- * Projects `store.active.value.blueprint` (compile-time facts only — works for an invalid Blueprint,
+ * Projects the current Document Blueprint (compile-time facts only — works for an invalid Blueprint,
  * never waits on/depends on Runtime) through `projectSemanticGraph()`, then requests an ELK layout
  * through the generation-guarded `LayoutSession`. Only a change to the projected `SemanticGraph` itself
  * (new Blueprint snapshot, or a graph filter toggle) triggers a fresh layout request — Runtime
- * state/property/method activity never touches `store.active.value.blueprint` and therefore never
+ * state/property/method activity never touches the Document Blueprint and therefore never
  * relayouts.
  */
 
@@ -39,7 +39,7 @@ export function useDependencyGraph(): DependencyGraphView {
 	})
 
 	const semanticGraph = computed(() => {
-		const inspection = inspectBlueprint(store.active.value.blueprint)
+		const inspection = inspectBlueprint(store.documentState.value.blueprint)
 		return projectSemanticGraph(inspection, {
 			showAbsent: store.graphShowAbsent.value,
 			showIsolatedMembers: store.graphShowIsolatedMembers.value,

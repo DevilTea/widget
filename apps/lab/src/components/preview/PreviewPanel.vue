@@ -2,7 +2,7 @@
 /**
  * The persistent Preview surface. `store.previewRuntime` only ever changes through
  * `LabSession`'s replacement-ordering hooks (see `use-lab-store.ts`): this component simply renders
- * whatever it currently holds, or an "unavailable" placeholder when the active Blueprint is invalid.
+ * whatever it currently holds, or an "unavailable" placeholder when no valid Preview exists.
  * `store.renderer` is the current showcase's `createWidgetVueRenderer` root component — it changes
  * only through `store.switchShowcase()`, which already guarantees the old Preview subtree has
  * unmounted first. `WidgetRenderer` never disposes the Runtime — `LabSession` owns that lifecycle.
@@ -32,10 +32,9 @@
  *    remove the higher-level `click` event, so selection stays click-driven and still
  *    `preventDefault()`s/`stopPropagation()`s to keep the widget's own bubble-phase click listener (e.g.
  *    `ButtonRenderer`'s `press()`) from ever running;
- *  - drives the existing shared Lab focus at widget grain (`{ nodeId }`, no `member` — the same grain a
- *    bare Blueprint/Runtime tree-node click already uses) via `resolveWidgetFocus()` and activates the
- *    Blueprint tab through the existing `activeTab` bridge (`Workbench.vue`) for immediate visible
- *    feedback — Runtime/Graph already follow the same shared focus once opened;
+ *  - resolves against the Preview Blueprint. When revisions are linked, it updates both scoped focuses
+ *    and activates Blueprint; when diverged, it updates only Preview focus and activates Runtime, never
+ *    forging current-Document focus from an older Preview node id;
  *  - Escape exits Inspect mode (`useInspectMode()`); toggling off restores normal Preview behavior
  *    immediately — every capture listener below is always attached but no-ops whenever `inspect.active`
  *    is `false`.
@@ -45,10 +44,10 @@
  * itself is a normal, keyboard-operable button.
  *
  * "View implementation" (diagnostic #25 P3 Scope D, entry point 1): a small button next to the Inspect
- * toggle, enabled whenever the existing shared focus (`store.focus` — however it got there: an
+ * toggle, enabled whenever current Document focus (`store.documentFocus` — however it got there: an
  * Inspect-mode click, a Blueprint/Graph tree selection, or the tutorial) resolves to a widget type this
  * showcase's `sources.ts` curates. It never re-sets focus itself — the Implementation panel reads the
- * same `store.focus` reactively (see `ImplementationPanel.vue`), so there is nothing else to keep in
+ * same Document focus reactively (see `ImplementationPanel.vue`), so there is nothing else to keep in
  * sync here. #43 localizes only these Preview-owned controls/explanatory strings; the hover badge keeps
  * the exact semantic `type#id` identity.
  */
@@ -59,7 +58,7 @@ import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { resolveFocusedWidget } from '../../implementation/focused-widget'
 import { resolveInspectAnchor } from '../../lab/inspect-anchor'
-import { resolveWidgetFocus } from '../../lab/inspect-focus'
+import { resolvePreviewInspectResolution } from '../../lab/inspect-focus'
 import { getShowcase } from '../../showcases/registry'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
@@ -69,7 +68,7 @@ const inspect = useInspectMode()
 const implementationExplorer = useImplementationExplorer()
 
 const curatedEntryAvailable = computed(() => {
-	const widget = resolveFocusedWidget(store.active.value.blueprint, store.focus.value)
+	const widget = resolveFocusedWidget(store.documentState.value.blueprint, store.documentFocus.value)
 	if (widget === null)
 		return false
 	const showcase = getShowcase(store.showcaseId.value)
@@ -169,10 +168,13 @@ function onClickCapture(event: MouseEvent): void {
 	event.preventDefault()
 	event.stopPropagation()
 
-	const focus = resolveWidgetFocus(store.active.value.blueprint, anchor.widgetId)
-	if (focus !== null) {
-		store.setFocus(focus)
-		store.activeTab.value = 'blueprint'
+	const preview = store.preview.value
+	const selection = preview === null
+		? null
+		: resolvePreviewInspectResolution(preview.blueprint, anchor.widgetId, store.revisionStatus.value.isLinked)
+	if (selection !== null) {
+		store.setFocus(selection.scope, selection.focus)
+		store.activeTab.value = selection.targetTab
 	}
 }
 </script>
@@ -199,7 +201,7 @@ function onClickCapture(event: MouseEvent): void {
 				v-if="inspect.active.value"
 				:class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 			>
-				{{ i18n.t('Click a widget to focus it in Blueprint — Esc to exit') }}
+				{{ i18n.t('Click a widget to focus it in {surface} — Esc to exit', { surface: i18n.t(store.revisionStatus.value.isLinked ? 'Blueprint' : 'Runtime') }) }}
 			</span>
 			<button
 				type="button"
@@ -222,6 +224,13 @@ function onClickCapture(event: MouseEvent): void {
 			@pointerup.capture="suppressPointerActivation"
 			@click.capture="onClickCapture"
 		>
+			<div
+				v-if="store.revisionStatus.value.isDiverged"
+				data-testid="preview-diverged-status"
+				:class="pika({ margin: '0 0 10px', padding: '6px 8px', border: '1px solid var(--lab-color-warning)', borderRadius: 'var(--lab-radius)', color: 'var(--lab-color-warning)', background: 'var(--lab-color-surface-alt)', fontSize: '11px' })"
+			>
+				{{ i18n.t('Running previous valid Preview revision r{previewRevision}; current Document is r{documentRevision}.', { previewRevision: store.revisionStatus.value.previewRevision ?? '', documentRevision: store.revisionStatus.value.documentRevision }) }}
+			</div>
 			<component
 				:is="store.renderer.value"
 				v-if="store.previewRuntime.value !== null"
@@ -231,7 +240,7 @@ function onClickCapture(event: MouseEvent): void {
 				v-else
 				:class="pika({ color: 'var(--lab-color-text-muted)', fontSize: '13px' })"
 			>
-				{{ i18n.t('Preview unavailable — the current Blueprint is invalid. See the Blueprint tab for diagnostics.') }}
+				{{ i18n.t('Preview unavailable — there is no valid Preview revision. See the Blueprint tab for diagnostics.') }}
 			</p>
 			<div
 				v-if="inspect.hovered.value !== null && previewSurface !== null"

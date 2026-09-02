@@ -8,10 +8,9 @@
  * guarantees the old Preview subtree actually unmounts (via `nextTick()`) before the old Runtime is
  * disposed.
  *
- * `switchShowcase()` is the analogous, larger-grained replacement for the showcase registry itself
- * (diagnostic #13 "Source Apply lifecycle" checkpoint, "Presets / showcase changes": "Switching showcases
- * ... detaches/disposes the old Runtime, switches showcase context, loads the showcase source, and
- * then uses the same Apply pipeline").
+ * `switchShowcase()` is the analogous, larger-grained replacement for the entire showcase context.
+ * #60 supersedes the old same-source Apply bootstrap: the target `LabSession` already owns the target
+ * System's authoritative revision-0 Document/Runtime, so the switch mounts that snapshot directly.
  *
  * Serialized lifecycle transactions (PR #19 review 4940219714, finding 1): `apply()`, `applyPreset()`
  * and `switchShowcase()` all route through one `enqueue()` promise chain, so at most one of them is
@@ -23,19 +22,16 @@
  * old Apply's own `mountPreview()` hook (invoked after `switchShowcase()` already reassigned `session`)
  * would observe the *new* session instead of the one it actually compiled against — leaking the
  * Runtime it just created (never mounted, never disposed) or corrupting `previewRuntime`. Serializing
- * removes the interleaving by construction: `switchShowcase()`'s own teardown/attach/apply sequence
+ * removes the interleaving by construction: `switchShowcase()`'s own teardown/attach sequence
  * never starts until any prior queued transaction (Apply, preset, or another switch) has fully settled.
  *
- * Authoritative Apply boundary for showcase replacement (PR #19 review 4940219714, finding 2):
- * `new LabSession({ initialSourceText })`'s constructor synchronously seeds an initial Runtime — this
- * is the "initial-boot exception" the Source Apply lifecycle checkpoint carves out for the very first
- * session an app instance ever creates, never a template for *replacing* an already-active showcase.
- * `switchShowcase()` therefore treats that constructor-seeded Runtime as a purely internal, transient
- * bootstrap: it is never assigned to `previewRuntime` and is immediately super­seded by an explicit
- * `session.apply()` call, which is what actually crosses the applied-snapshot boundary, produces a real
- * `ApplyOutcome`, and toggles `isApplying` — the same authoritative pipeline manual editing and preset
- * selection already use. This makes `switchShowcase()`'s "loads the showcase source" step observably
- * indistinguishable, trace-wise, from applying a preset in place.
+ * Authoritative Document boundary for showcase replacement (#60 decision 1): a fresh `LabSession`
+ * creates a fresh `WidgetDocument` at revision 0 from the target showcase's default source and creates
+ * the Runtime for that already-committed Blueprint. Re-applying the identical default source would now
+ * correctly be a Document `changed:false` no-op, so showcase switching adopts that revision-0 Runtime
+ * directly after the old showcase has been detached/disposed. Manual edits and presets still go through
+ * the normal Document mutation path; showcase replacement is a whole-system/context replacement rather
+ * than a synthetic source edit.
  *
  * Apply's command-start capture/concurrency stays at command-call time (PR #19 review 4940721401):
  * the paragraph above says `apply()`/`applyPreset()` "route through" `enqueue()`, but they must not be
@@ -71,13 +67,14 @@
  * enqueues behind it — there is no case where `switchShowcase()` needs to jump an in-flight Apply.
  */
 
-import type { WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { WidgetDocumentSnapshot, WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { Component, InjectionKey, Ref } from 'vue'
-import type { InspectorFocus, InspectorFocusStore } from '../lab/focus'
-import type { ApplyOutcome } from '../lab/types'
+import type { InspectorFocus, InspectorFocusScope, InspectorFocusStore, ScopedInspectorFocus } from '../lab/focus'
+import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentTraceEvent, RevisionConflictDemoResult } from '../lab/types'
 import type { ShowcaseEntry, ShowcasePreset } from '../showcases/registry'
 import { computed, inject, nextTick, shallowRef } from 'vue'
 import { createInspectorFocusStore } from '../lab/focus'
+import { getLabRevisionStatus } from '../lab/revisions'
 import { LabSession } from '../lab/session'
 import { defaultShowcase, showcases } from '../showcases/registry'
 
@@ -87,7 +84,7 @@ import { defaultShowcase, showcases } from '../showcases/registry'
  * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all five canonical panels
  * uniformly — activating Preview's own single-panel group is a harmless no-op, never a layout change.
  */
-export type LabToolTab = 'source' | 'blueprint' | 'runtime' | 'graph' | 'preview'
+export type LabToolTab = 'author' | 'blueprint' | 'runtime' | 'graph' | 'preview'
 
 export interface LabStore {
 	readonly session: LabSession
@@ -95,9 +92,27 @@ export interface LabStore {
 	readonly previewRuntime: Readonly<Ref<WidgetSystemRuntime | null>>
 	readonly draftSourceText: Readonly<Ref<string>>
 	readonly parseError: Readonly<Ref<LabSession['parseError']>>
+	/** Direct reactive view of Core's committed authored-state snapshot. */
+	readonly documentSnapshot: Readonly<Ref<WidgetDocumentSnapshot>>
+	/** Current applied authored representation + Document revision/Blueprint. */
+	readonly documentState: Readonly<Ref<LabSession['documentState']>>
+	/** Last valid Preview Runtime snapshot, which may intentionally lag the Document revision. */
+	readonly preview: Readonly<Ref<LabSession['preview']>>
+	/** Explicit focus attached to the current Document Blueprint revision. */
+	readonly documentFocus: Readonly<Ref<ScopedInspectorFocus | null>>
+	/** Explicit focus attached to the Preview Blueprint/Runtime revision, when one exists. */
+	readonly previewFocus: Readonly<Ref<ScopedInspectorFocus | null>>
+	/** Whether Document and Preview are linked, diverged, or have no valid Preview. */
+	readonly revisionStatus: Readonly<Ref<ReturnType<typeof getLabRevisionStatus>>>
+	/** Latest accepted SourcePatch as transient developer telemetry, never a source/history authority. */
+	readonly lastAppliedSourcePatch: Readonly<Ref<LabAppliedSourcePatch | null>>
+	/** Bounded session-only Document observations, never replayable history. */
+	readonly documentTrace: Readonly<Ref<readonly LabDocumentTraceEvent[]>>
+	/** @deprecated Phase-2 compatibility only. Prefer `documentState` + `preview`. */
 	readonly active: Readonly<Ref<LabSession['active']>>
 	readonly isApplying: Readonly<Ref<boolean>>
 	readonly isDirty: Readonly<Ref<boolean>>
+	/** @deprecated Use `documentFocus` or `previewFocus` according to the surface's scope. */
 	readonly focus: Readonly<Ref<InspectorFocus | null>>
 	readonly showcases: readonly ShowcaseEntry[]
 	readonly showcaseId: Readonly<Ref<string>>
@@ -115,12 +130,18 @@ export interface LabStore {
 	readonly graphShowIsolatedMembers: Ref<boolean>
 	setDraftSourceText: (text: string) => void
 	apply: () => Promise<ApplyOutcome>
+	author: (command: AuthorCommand) => Promise<AuthorOutcome>
 	format: () => void
 	revert: () => void
 	applyPreset: (presetId: string) => Promise<ApplyOutcome | undefined>
+	demonstrateRevisionConflict: () => RevisionConflictDemoResult | null
 	/** No-op when `id` is unknown or already the current showcase. Serialized against Apply/itself. */
 	switchShowcase: (id: string) => Promise<void>
-	setFocus: (focus: InspectorFocus | null) => void
+	setFocus: {
+		(scope: InspectorFocusScope, focus: InspectorFocus | null): void
+		/** @deprecated Document scope compatibility for tutorial and existing callers. */
+		(focus: InspectorFocus | null): void
+	}
 	dispose: () => void
 }
 
@@ -133,6 +154,7 @@ export function createLabStore(): LabStore {
 	const presets = shallowRef<readonly ShowcasePreset[]>(defaultShowcase.presets)
 
 	const sessionTick = shallowRef(0)
+	const documentTick = shallowRef(0)
 	const focusTick = shallowRef(0)
 
 	let currentShowcase: ShowcaseEntry = defaultShowcase
@@ -143,6 +165,7 @@ export function createLabStore(): LabStore {
 	let session: LabSession
 	let focusStore: InspectorFocusStore
 	let unsubscribeSession: () => void
+	let unsubscribeDocument: () => void
 	let unsubscribeFocus: () => void
 
 	// Final-disposal guard (PR #19 review 4940219714, finding 1's "final disposal has guard" ask):
@@ -201,10 +224,10 @@ export function createLabStore(): LabStore {
 					// The store was torn down while this Apply/switch was still in flight (see the
 					// `disposed` comment above) — dispose the Runtime it just produced instead of
 					// mounting it into a Preview nobody owns anymore.
-					session.active.runtime?.dispose()
+					session.preview?.runtime.dispose()
 					return
 				}
-				previewRuntime.value = session.active.runtime
+				previewRuntime.value = session.preview?.runtime ?? null
 			},
 		}
 	}
@@ -218,11 +241,14 @@ export function createLabStore(): LabStore {
 			initialSourceText: showcase.defaultPreset.sourceText,
 			hooks: createHooks(),
 		})
-		previewRuntime.value = session.active.runtime
+		previewRuntime.value = session.preview?.runtime ?? null
 
 		focusStore = createInspectorFocusStore(session)
 		unsubscribeSession = session.subscribe(() => {
 			sessionTick.value++
+		})
+		unsubscribeDocument = session.subscribeDocument(() => {
+			documentTick.value++
 		})
 		unsubscribeFocus = focusStore.subscribe(() => {
 			focusTick.value++
@@ -238,6 +264,18 @@ export function createLabStore(): LabStore {
 	const parseError = computed(() => {
 		void sessionTick.value
 		return session.parseError
+	})
+	const documentSnapshot = computed(() => {
+		void documentTick.value
+		return session.documentSnapshot
+	})
+	const documentState = computed(() => {
+		void sessionTick.value
+		return session.documentState
+	})
+	const preview = computed(() => {
+		void sessionTick.value
+		return session.preview
 	})
 	const active = computed(() => {
 		void sessionTick.value
@@ -255,17 +293,36 @@ export function createLabStore(): LabStore {
 		void focusTick.value
 		return focusStore.getFocus()
 	})
+	const documentFocus = computed(() => {
+		void focusTick.value
+		return focusStore.getScopedFocus('document')
+	})
+	const previewFocus = computed(() => {
+		void focusTick.value
+		return focusStore.getScopedFocus('preview')
+	})
+	const revisionStatus = computed(() => {
+		void sessionTick.value
+		return getLabRevisionStatus(session.documentState.revision, session.preview?.revision ?? null)
+	})
+	const lastAppliedSourcePatch = computed(() => {
+		void sessionTick.value
+		return session.lastAppliedSourcePatch
+	})
+	const documentTrace = computed(() => {
+		void sessionTick.value
+		return session.documentTrace
+	})
 
-	const activeTab = shallowRef<LabToolTab>('source')
+	const activeTab = shallowRef<LabToolTab>('author')
 	const graphShowAbsent = shallowRef(false)
 	const graphShowIsolatedMembers = shallowRef(false)
 
 	/**
-	 * The body of `switchShowcase()`, run only from inside `enqueue()` — see the file header for both
-	 * the serialization rationale (finding 1) and why this crosses `session.apply()`'s boundary instead
-	 * of only relying on the replacement session's own constructor seeding (finding 2). Reads
+	 * The body of `switchShowcase()`, run only from inside `enqueue()`. Reads
 	 * `currentShowcase`/`session` fresh (never captured before enqueueing) so repeated/queued switches
-	 * each observe whatever the *previous* queued transaction actually left behind.
+	 * each observe whatever the *previous* queued transaction actually left behind. A showcase switch
+	 * replaces the whole System/Document context; it does not synthesize a same-source Apply.
 	 */
 	async function performSwitchShowcase(id: string): Promise<void> {
 		if (disposed)
@@ -276,8 +333,8 @@ export function createLabStore(): LabStore {
 		if (target === undefined)
 			return
 
-		// 1. Detach/dispose the OLD Runtime — the same ordering `LabSession.apply()` itself uses.
-		const oldRuntime = session.active.runtime
+		// 1. Detach/dispose the OLD showcase Runtime before replacing the whole System/Document context.
+		const oldRuntime = session.preview?.runtime ?? null
 		if (oldRuntime !== null) {
 			previewRuntime.value = null
 			await nextTick()
@@ -285,14 +342,13 @@ export function createLabStore(): LabStore {
 				oldRuntime.dispose()
 		}
 		unsubscribeSession()
+		unsubscribeDocument()
 		unsubscribeFocus()
 		focusStore.dispose()
 
-		// 2. Switch showcase context: bind a fresh `LabSession` to the target system. Its constructor
-		// seeds a Runtime synchronously, but that Runtime is a purely internal bootstrap — it is never
-		// assigned to `previewRuntime` and step 3 immediately supersedes it through the authoritative
-		// Apply pipeline (finding 2), so nothing externally observable ever treats constructor seeding
-		// as the applied snapshot for a showcase *replacement*.
+		// 2. Switch showcase context: bind a fresh revision-0 Document/Runtime to the target system.
+		// This is already the authoritative target source snapshot; applying the same source again would
+		// be a Core `changed:false` no-op and must not be used as a Runtime-mount side channel.
 		currentShowcase = target
 		session = new LabSession({
 			system: target.system,
@@ -303,6 +359,9 @@ export function createLabStore(): LabStore {
 		unsubscribeSession = session.subscribe(() => {
 			sessionTick.value++
 		})
+		unsubscribeDocument = session.subscribeDocument(() => {
+			documentTick.value++
+		})
 		unsubscribeFocus = focusStore.subscribe(() => {
 			focusTick.value++
 		})
@@ -311,21 +370,18 @@ export function createLabStore(): LabStore {
 		renderer.value = target.renderer
 		presets.value = target.presets
 		sessionTick.value++
+		documentTick.value++
 		focusTick.value++
 
 		if (disposed) {
-			// Torn down mid-switch: dispose the bootstrap Runtime immediately rather than crossing the
-			// Apply boundary into a store nobody owns anymore.
-			session.active.runtime?.dispose()
+			// Torn down mid-switch: dispose the newly created target Runtime instead of mounting it into
+			// a Preview nobody owns anymore.
+			session.preview?.runtime.dispose()
 			return
 		}
 
-		// 3. Load the showcase source through the SAME authoritative Apply pipeline manual editing and
-		// preset selection already use. This disposes the constructor's own bootstrap Runtime (via
-		// `hooks.detachPreview`/the pipeline's own old-Runtime disposal) and creates the Runtime that
-		// actually gets mounted via `hooks.mountPreview`, producing a real `ApplyOutcome` and an
-		// `isApplying` true→false transition — never a second, bypassing compilation path.
-		await session.apply()
+		// 3. Mount the Runtime associated with the fresh target Document revision 0.
+		previewRuntime.value = session.preview?.runtime ?? null
 	}
 
 	return {
@@ -335,6 +391,14 @@ export function createLabStore(): LabStore {
 		previewRuntime,
 		draftSourceText,
 		parseError,
+		documentSnapshot,
+		documentState,
+		preview,
+		documentFocus,
+		previewFocus,
+		revisionStatus,
+		lastAppliedSourcePatch,
+		documentTrace,
 		active,
 		isApplying,
 		isDirty,
@@ -364,6 +428,12 @@ export function createLabStore(): LabStore {
 			const outcome = session.apply()
 			return enqueue(() => outcome)
 		},
+		author: (command) => {
+			if (switchTransactionCount > 0)
+				return Promise.resolve({ status: 'skipped-concurrent' })
+			const outcome = session.author(command)
+			return enqueue(() => outcome)
+		},
 		format: () => session.format(),
 		revert: () => session.revert(),
 		applyPreset: (presetId) => {
@@ -381,6 +451,11 @@ export function createLabStore(): LabStore {
 			const outcome = session.applyPreset(preset.sourceText)
 			return enqueue(() => outcome)
 		},
+		demonstrateRevisionConflict: () => {
+			if (switchTransactionCount > 0)
+				return null
+			return session.demonstrateRevisionConflict()
+		},
 		switchShowcase: (id) => {
 			// Incremented synchronously, at call time — before `enqueue()` even runs — so `apply()`/
 			// `applyPreset()`'s guard above sees this switch as outstanding for its *entire* span,
@@ -395,7 +470,12 @@ export function createLabStore(): LabStore {
 			)
 			return outcome
 		},
-		setFocus: next => focusStore.setFocus(next),
+		setFocus: (scopeOrFocus: InspectorFocusScope | InspectorFocus | null, next?: InspectorFocus | null) => {
+			if (typeof scopeOrFocus === 'string')
+				focusStore.setFocus(scopeOrFocus, next ?? null)
+			else
+				focusStore.setFocus(scopeOrFocus)
+		},
 		/**
 		 * Final application teardown. Widget Lab is the Runtime owner (diagnostic #13 Phase 4 Apply-lifecycle
 		 * comment), so this disposes the last active Runtime in addition to tearing down Lab-local
@@ -414,11 +494,13 @@ export function createLabStore(): LabStore {
 				return
 			disposed = true
 			unsubscribeSession()
+			unsubscribeDocument()
 			unsubscribeFocus()
 			focusStore.dispose()
-			const runtime = session.active.runtime
+			const runtime = session.preview?.runtime ?? null
 			if (runtime !== null && !runtime.isDisposed)
 				runtime.dispose()
+			previewRuntime.value = null
 		},
 	}
 }

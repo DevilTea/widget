@@ -6,6 +6,7 @@
 import type { BlueprintDependencyReference, BlueprintDiagnostic, BlueprintDiagnosticLocation, BlueprintWidgetNode, DiagnosticPath } from '@deviltea/widget-core'
 import type { BlueprintInspection, InspectionNodeId } from '@deviltea/widget-core/inspection'
 import { useLabI18n } from '../../composables/use-lab-i18n'
+import { inspectionNodeIdOfLocation } from '../../lab/diagnostics'
 import { formatDependencyReference, formatDiagnosticPath } from '../../lib/diagnostic-format'
 
 defineProps<{
@@ -36,7 +37,33 @@ function relatedOf(diagnostic: BlueprintDiagnostic): readonly BlueprintDiagnosti
 }
 
 function nodeIdOfLocation(location: BlueprintDiagnosticLocation, inspection: BlueprintInspection): InspectionNodeId | null {
-	return location.type === 'source' ? null : nodeIdOf(location.node, inspection)
+	return inspectionNodeIdOfLocation(location, inspection)
+}
+
+function locationLabel(diagnostic: BlueprintDiagnostic, inspection: BlueprintInspection): string {
+	const location = diagnostic.location
+	if (location.type === 'source')
+		return 'source'
+	const nodeId = nodeIdOf(location.node, inspection)
+	const node = nodeId === null ? null : inspection.getNode(nodeId)
+	const nodeLabel = node?.resolved
+		? `${node.node.id} : ${node.node.type}`
+		: (() => {
+				const source = node?.node.source
+				if (typeof source === 'object' && source !== null && !Array.isArray(source)) {
+					const hintedId = typeof (source as Record<string, unknown>).id === 'string' ? (source as Record<string, string>).id : '?'
+					const hintedType = typeof (source as Record<string, unknown>).type === 'string' ? (source as Record<string, string>).type : '?'
+					return `${hintedId} : ${hintedType} (unresolved)`
+				}
+				return 'unresolved node'
+			})()
+	switch (location.type) {
+		case 'widget': return `widget "${nodeLabel}"`
+		case 'slot': return `widget "${nodeLabel}" · slot "${location.slot}"`
+		case 'slot-child': return `widget "${nodeLabel}" · slot "${location.slot}"[${location.index}]`
+		case 'property': return `widget "${nodeLabel}" · property "${location.name}"`
+		case 'method': return `widget "${nodeLabel}" · method "${location.name}"`
+	}
 }
 
 function relatedLocationLabel(location: BlueprintDiagnosticLocation): string {
@@ -74,6 +101,7 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 		<li
 			v-for="(diagnostic, index) in diagnostics"
 			:key="index"
+			:data-testid="`blueprint-diagnostic-${index}`"
 			:class="pika({ border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '6px 8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' })"
 		>
 			<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
@@ -83,6 +111,7 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 				<button
 					v-if="nodeIdOfLocation(diagnostic.location, inspection) !== null"
 					type="button"
+					:data-testid="`blueprint-diagnostic-navigate-${index}`"
 					:class="pika({ marginLeft: 'auto', fontSize: '11px', color: 'var(--lab-color-accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0' })"
 					@click="emit('navigate', nodeIdOfLocation(diagnostic.location, inspection)!)"
 				>
@@ -91,6 +120,12 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 			</div>
 
 			<div>{{ diagnostic.message }}</div>
+			<dl
+				:data-testid="`blueprint-diagnostic-location-${index}`"
+				:class="pika({ margin: '0', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)' })"
+			>
+				{{ i18n.t('location') }}: {{ locationLabel(diagnostic, inspection) }}
+			</dl>
 
 			<dl
 				v-if="pathOf(diagnostic) !== undefined"

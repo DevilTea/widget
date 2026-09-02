@@ -35,7 +35,7 @@ function onNodeClick(nodeId: string): void {
 	const vertex = semanticGraph.value.vertices.find(candidate => candidate.id === nodeId)
 	if (vertex === undefined)
 		return
-	store.setFocus({
+	store.setFocus('document', {
 		nodeId: vertex.nodeId,
 		member: { type: vertex.kind, name: vertex.name },
 	})

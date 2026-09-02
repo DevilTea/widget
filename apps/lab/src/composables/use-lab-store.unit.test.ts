@@ -1,3 +1,4 @@
+import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 // @vitest-environment happy-dom
 /**
  * `createLabStore()` teardown ordering (PR #17 review 4938934963, finding 2): Widget Lab is the
@@ -10,6 +11,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { defineComponent, h, onUnmounted, provide } from 'vue'
+import { replaceConfigScalar } from '../lab/author'
 import { SandboxRenderer } from '../sandbox/renderers'
 import { createLabStore, LabStoreKey } from './use-lab-store'
 
@@ -26,13 +28,24 @@ describe('createLabStore() dispose()', () => {
 			.toBe(true)
 	})
 
-	it('is a no-op on Runtime disposal when the active Blueprint has none (never throws)', async () => {
+	it('disposes the retained last-valid Preview Runtime even when the current Document is invalid', async () => {
 		const store = createLabStore()
+		const retained = store.preview.value!
+
 		await store.applyPreset('invalid-semantic')
-		expect(store.session.active.runtime)
-			.toBeNull()
+
+		expect(store.documentState.value.blueprint.status)
+			.toBe('invalid')
+		expect(store.preview.value)
+			.toBe(retained)
+		expect(retained.runtime.isDisposed)
+			.toBe(false)
 
 		expect(() => store.dispose()).not.toThrow()
+		expect(retained.runtime.isDisposed)
+			.toBe(true)
+		expect(store.previewRuntime.value)
+			.toBeNull()
 	})
 
 	it('mirrors App.vue: dispose() must be invoked from onUnmounted, after the Preview subtree has fully unmounted', () => {
@@ -81,6 +94,84 @@ describe('createLabStore() dispose()', () => {
 	})
 })
 
+describe('createLabStore() committed Document bridge', () => {
+	it('exposes the high-level Author command through the same store lifecycle', async () => {
+		const store = createLabStore()
+		const nodeId = inspectBlueprint(store.documentState.value.blueprint).nodes.find(node => node.resolved && node.node.id === 'title')!.nodeId
+		const previousPreview = store.preview.value!
+
+		const outcome = await store.author(replaceConfigScalar(0, nodeId, 'text', 'store author value'))
+
+		expect(outcome)
+			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
+		expect(store.documentState.value.revision)
+			.toBe(1)
+		expect(store.preview.value?.revision)
+			.toBe(1)
+		expect(store.preview.value)
+			.not.toBe(previousPreview)
+		expect(store.previewRuntime.value)
+			.toBe(store.preview.value?.runtime)
+		expect(store.isDirty.value)
+			.toBe(false)
+	})
+
+	it('tracks changed Document commits but preserves snapshot identity for structural no-op Apply', async () => {
+		const store = createLabStore()
+		const initial = store.documentSnapshot.value
+
+		expect(initial.revision)
+			.toBe(0)
+		expect(initial.blueprint)
+			.toBe(store.session.active.blueprint)
+
+		await store.applyPreset('invalid-semantic')
+		const committed = store.documentSnapshot.value
+		expect(committed)
+			.not.toBe(initial)
+		expect(committed.revision)
+			.toBe(1)
+		expect(committed.blueprint)
+			.toBe(store.session.active.blueprint)
+
+		const equivalentText = JSON.stringify(store.session.active.definition)
+		store.setDraftSourceText(equivalentText)
+		await store.apply()
+
+		expect(store.documentSnapshot.value)
+			.toBe(committed)
+		expect(store.documentSnapshot.value.revision)
+			.toBe(1)
+		expect(store.session.active.sourceText)
+			.toBe(equivalentText)
+	})
+
+	it('exposes current Document and retained Preview revisions independently after an invalid commit', async () => {
+		const store = createLabStore()
+		const initialPreview = store.preview.value!
+
+		expect(store.documentState.value.revision)
+			.toBe(0)
+		expect(initialPreview.revision)
+			.toBe(0)
+
+		await store.applyPreset('invalid-semantic')
+
+		expect(store.documentState.value.revision)
+			.toBe(1)
+		expect(store.documentState.value.blueprint.status)
+			.toBe('invalid')
+		expect(store.preview.value)
+			.toBe(initialPreview)
+		expect(store.preview.value?.revision)
+			.toBe(0)
+		expect(store.previewRuntime.value)
+			.toBe(initialPreview.runtime)
+		expect(initialPreview.runtime.isDisposed)
+			.toBe(false)
+	})
+})
+
 /**
  * PR #18 review 4939584651, finding 1: Dependency Graph filter preferences are the persistent
  * counterpart to panel-local *snapshot-bound* selections (e.g. `useGraphEdgeSelection`'s edge selection,
@@ -107,10 +198,15 @@ describe('createLabStore() graph filter preferences', () => {
 		const store = createLabStore()
 		store.graphShowAbsent.value = true
 
+		const retained = store.preview.value!
 		await store.applyPreset('invalid-semantic')
 
-		expect(store.session.active.runtime)
-			.toBeNull()
+		expect(store.documentState.value.blueprint.status)
+			.toBe('invalid')
+		expect(store.preview.value)
+			.toBe(retained)
+		expect(retained.runtime.isDisposed)
+			.toBe(false)
 		expect(store.graphShowAbsent.value)
 			.toBe(true)
 		// The other preference was never touched, so it must still read its untouched default.
@@ -120,11 +216,9 @@ describe('createLabStore() graph filter preferences', () => {
 })
 
 /**
- * Showcase switching (diagnostic #13 "Source Apply lifecycle" checkpoint, "Presets / showcase changes"):
- * "Switching showcases ... detaches/disposes the old Runtime, switches showcase context, loads the
- * showcase source, and then uses the same Apply pipeline." `switchShowcase()` in `use-lab-store.ts` is
- * the larger-grained analogue of Apply's own replacement ordering — this suite drives it against the
- * real `sandbox` <-> `survey` registry entries (`src/showcases/registry.ts`), never a mock.
+ * Showcase switching replaces the whole System/Document/Runtime context. Under #60's Document
+ * authority, the target session's default source is already committed at revision 0; switching must
+ * mount that Runtime directly rather than manufacturing a same-source Apply just to trigger mounting.
  */
 describe('createLabStore() switchShowcase()', () => {
 	it('starts on the default ("sandbox") showcase', () => {
@@ -205,45 +299,22 @@ describe('createLabStore() switchShowcase()', () => {
 			.toMatchObject({ type: 'TripSurvey' })
 	})
 
-	// PR #19 review 4940219714, finding 2: showcase replacement must cross `LabSession.apply()`'s
-	// authoritative boundary rather than only relying on the replacement `LabSession`'s own
-	// constructor-seeded Runtime as final state — constructor seeding is the initial-boot exception,
-	// never a stand-in for `apply()`. The observable, black-box discriminator between the two is
-	// `isApplying`: only `LabSession.apply()` ever toggles it true→false; constructor seeding never
-	// touches it at all. Sampling across microtask boundaries for the whole switch (rather than only
-	// checking the final settled state) is what actually distinguishes "loaded through the Apply
-	// pipeline" from "only synchronously bootstrapped".
-	it('switchShowcase() loads the target showcase source through the authoritative Apply pipeline (isApplying trace, not just final state)', async () => {
+	it('adopts the target showcase authoritative revision-0 Document/Runtime without a synthetic same-source Apply', async () => {
 		const store = createLabStore()
 		const oldRuntime = store.session.active.runtime!
 
-		const isApplyingSamples: boolean[] = []
-		// Plain object rather than a bare `let` so the loop's exit condition is visibly mutated across
-		// the closure boundary (`sampler.running = false` below) rather than looking to a linter like a
-		// permanently-true condition.
-		const sampler = { running: true }
-		async function sample(): Promise<void> {
-			while (sampler.running) {
-				isApplyingSamples.push(store.isApplying.value)
-				await Promise.resolve()
-			}
-		}
-		const samplingDone = sample()
-
 		await store.switchShowcase('survey')
-		sampler.running = false
-		await samplingDone
 
 		expect(oldRuntime.isDisposed)
 			.toBe(true)
-		// The switch must have actually observed `isApplying === true` at some point — proof its "load
-		// the showcase source" step really called `session.apply()` and not only the constructor.
-		expect(isApplyingSamples.some(sample => sample))
-			.toBe(true)
+		expect(store.session.active.revision)
+			.toBe(0)
 		expect(store.isApplying.value)
 			.toBe(false)
 		expect(store.session.active.runtime)
 			.not.toBeNull()
+		expect(store.previewRuntime.value)
+			.toBe(store.session.active.runtime)
 	})
 })
 
@@ -495,6 +566,29 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 			.toBe('valid')
 		expect(store.previewRuntime.value)
 			.toBe(store.session.active.runtime)
+	})
+
+	it('does not record a conflict demonstration on the outgoing session during a showcase switch', async () => {
+		const store = createLabStore()
+		const outgoingSession = store.session
+
+		const switchPromise = store.switchShowcase('survey')
+		expect(store.demonstrateRevisionConflict())
+			.toBeNull()
+		expect(outgoingSession.documentTrace)
+			.toHaveLength(0)
+
+		await Promise.resolve()
+		expect(store.session)
+			.toBe(outgoingSession)
+		expect(store.demonstrateRevisionConflict())
+			.toBeNull()
+		expect(outgoingSession.documentTrace)
+			.toHaveLength(0)
+
+		await switchPromise
+		expect(store.showcaseId.value)
+			.toBe('survey')
 	})
 
 	it('dispose() while a switchShowcase() is mid-flight disposes whatever Runtime that switch eventually produces, without throwing', async () => {

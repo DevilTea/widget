@@ -1,33 +1,36 @@
 # AGENTS.md — widget-lab
 
-Current-state operating guide for this app. GitHub issue #13 is the canonical Widget Lab decision
-log (architecture checkpoints, accepted trade-offs, historical rationale); issue #10 is the semantic
-authority for `@deviltea/widget-core` that this app never reinterprets. This file describes what is
+Current-state operating guide for this app. GitHub issue #13 is the historical Widget Lab decision
+log; issue #60 tracks the current post-`WidgetDocument` Lab redesign and accepted migration decisions;
+issue #10 (with its detailed source/document design in #54) is the semantic authority for
+`@deviltea/widget-core` that this app never reinterprets. This file describes what is
 true in the repository right now so a fresh agent can work without replaying the issue timeline —
-when it conflicts with repo reality, fix this file; when it conflicts with #10/#13 decisions, the
-issues win.
+when it conflicts with repo reality, fix this file; current accepted decisions in #10/#54/#60 win over
+stale prose here or historical #13 checkpoints that #60 explicitly supersedes.
 
 ## Scope and layout
 
 Private, never-published workspace application with two roles:
 
-1. **Lab shell** — workbench, live JSON source editing with an explicit Apply lifecycle, Preview,
+1. **Lab shell** — the two-column workbench's `Author` workspace (Catalog/Structure/JSON), Preview,
    and readonly Blueprint/Runtime/Dependency Graph inspectors over `@deviltea/widget-core` /
    `@deviltea/widget-vue`.
 2. **Released showcases** — switchable via the header's showcase selector, all served by the same
-   shell and Apply pipeline: `Sandbox` (minimal fixtures), Showcase A `Interactive Survey`, and
+   shell and Document-backed authoring model: `Sandbox` (minimal fixtures), Showcase A `Interactive Survey`, and
    Showcase B `Sales Pipeline CRM`.
 
 The app deploys to GitHub Pages together with `docs/site` (see "Deployment" below).
 
-- `src/lab/` — framework-agnostic, unit-tested Apply lifecycle logic: `LabSession` (draft/active
-  snapshot state machine, `types.ts`) and the shared cross-inspector focus store (`focus.ts`). No Vue
+- `src/lab/` — framework-agnostic, unit-tested authoring/runtime-host lifecycle logic: `LabSession`
+  (JSON draft + authoritative `WidgetDocument` mutation + Runtime promotion, `types.ts`), `author.ts`
+  (high-level Structure commands lowered to `SourcePatch`), and the shared
+  cross-inspector focus store (`focus.ts`). No Vue
   import here on purpose — this is the regression-worthy core, independently testable.
 - `src/composables/use-lab-store.ts` — the one place that bridges `LabSession`/focus store into Vue
   `computed()` refs and supplies the `LabSessionHooks` seam (`detachPreview`/`mountPreview`) that
   guarantees unmount-before-dispose ordering via `nextTick()`. Owns `switchShowcase()` — the
-  application-level replacement operation (teardown old Runtime → switch showcase context → load
-  showcase source → same Apply pipeline), serialized with Apply/preset/revert through one
+  application-level whole-context replacement operation (teardown old Runtime → create target
+  revision-0 Document/Runtime → mount it), serialized with Apply/preset/revert through one
   `enqueue()` promise chain. Also owns `graphShowAbsent`/`graphShowIsolatedMembers` — Dependency
   Graph presentation preferences that deliberately live as plain refs on the `LabStore` object
   itself (not derived from `session`) so they survive Apply.
@@ -37,10 +40,13 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   (`src/runtime-inspector/viewmodel.ts`): adapts its `getSnapshot()`/`subscribe()` shape into a ref and
   disposes the previous view model whenever the reactive observable source changes (different selected
   member, or a Runtime replaced by Apply) or the component unmounts.
-- `src/composables/use-dependency-graph.ts` — Vue bridge for the Dependency Graph panel: projects
-  `store.active.value.blueprint` through `projectSemanticGraph()` and drives a `LayoutSession`
+- `src/composables/use-dependency-graph.ts` — Vue bridge for the Dependency Graph panel: projects the
+  current Document Blueprint through `projectSemanticGraph()` and drives a `LayoutSession`
   (`src/graph/layout-session.ts`) that only requests a fresh ELK layout when the projected graph itself
   changes (new Blueprint snapshot or a graph filter toggle) — never on Runtime activity.
+- `src/composables/use-document-tools.ts` — request-only bridge for the lazy, closable Phase 6 Document
+  Tools developer panel; it owns no Document state and only asks `Workbench.vue` to add or activate the
+  panel, paralleling the Implementation explorer lifecycle.
 - `src/composables/use-graph-edge-selection.ts` — panel-local Graph edge-selection state (edge
   selection never expands into the shared cross-inspector focus).
 - `src/runtime-inspector/viewmodel.ts` — framework-agnostic passive view models
@@ -72,11 +78,12 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   selected via `AddPanelOptions.tabComponent` on each of the five canonical panels' `addPanel()` calls, it
   renders only a title, no close control, so those panels can never be closed; Dockview's own `Tab`
   wrapper — drag/reorder/dock/resize/activate — is untouched, since a `tabComponent` only replaces what
-  that wrapper renders as content), `panels/*` (Source/Blueprint/Runtime/Graph tabs, plus the
+  that wrapper renders as content), `panels/*` (Author/Blueprint/Runtime/Graph tabs, plus the
   lazily-registered `ImplementationPanel.vue` — issue #25 P3; it is the one panel `Workbench.vue`
   registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
   deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
-  `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list; the selected-node
+  `inspector/*` (presentation-only inspector shell and tree/details split layout shared by Blueprint and
+  Runtime; these components own no semantic data, revision labels, or focus state), `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list; the selected-node
   detail also carries a "View implementation" entry point), `runtime/*` (Runtime Inspector's member rows
   + property-issue list), `graph/*` (the Vue Flow canvas + panel-local edge details).
 - `src/App.vue` also renders a narrow-viewport gate (issue #27 Finding 3): a pure CSS
@@ -158,8 +165,8 @@ building this app in isolation:
 
 ```text
 main app JS (index-*.js)                ~778 KB raw / ~214 KB gzip  — eager
-modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Source mounts
-vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Source mounts
+modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
+vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
 Implementation panel + Shiki (ImplementationPanel-*.js)
@@ -181,17 +188,17 @@ CSS (index-*.css)                       ~120 KB raw / ~11 KB gzip   — eager
   imported anywhere), and
   `editor-core.mjs` is never in Vite's module graph at all (loaded by `modern-monaco` itself via the
   importmap-resolved dynamic `import()` described in "Deployment" above). Both are still fetched
-  **during initial load today**, though: `SourcePanel.vue` renders `MonacoJsonEditor` unconditionally,
+  **during initial load today**, though: `AuthorJsonView.vue` renders `MonacoJsonEditor` when the JSON view is active,
   Dockview mounts every one of the five canonical panels' Vue components as soon as `Workbench.vue`'s
   `onReady()` calls `addPanel()` for it (`inactive: true` only controls which tab is initially
   *selected*, not whether Dockview mounts the panel's content — verified: dockview-vue keeps every
-  panel's rendered content in the DOM, not just the active one), and Source is the panel added first /
+  panel's rendered content in the DOM, not just the active one), and Author is the panel added first /
   made the active tab. So `MonacoJsonEditor`'s `onMounted` runs immediately on app load regardless of
-  which tab a user looks at. This is an accepted, documented trade-off, not an oversight: Source is the
-  Lab's default and most-used surface, so paying its cost immediately is preferable to adding a
+  which tab a user looks at. This is an accepted, documented trade-off, not an oversight: Author JSON is
+  the Lab's default and most-used surface, so paying its cost immediately is preferable to adding a
   mount-gate (`v-if` on tab activity) whose only benefit is deferring, never avoiding, that cost for the
-  overwhelmingly common path where a user opens Source anyway. If onboarding/information-architecture
-  ever makes Source not the default active panel, revisit gating `MonacoJsonEditor`'s mount on the tab
+  overwhelmingly common path where a user opens Author JSON anyway. If onboarding/information-architecture
+  ever makes Author not the default active panel, revisit gating `MonacoJsonEditor`'s mount on the view
   actually being active rather than merely present.
 - **ELK layout worker**: same eager-on-load shape as Monaco, for the same underlying reason, and this
   predates this issue's change — verified by loading the built app fresh (no tab interaction) and
@@ -240,8 +247,8 @@ live source workflow, and the showcases. It must not own, and must not gain:
   renderer/lifecycle/reactivity adapter surface — both are consumed exclusively through their public
   entry points (`@deviltea/widget-core`, `@deviltea/widget-core/inspection`, `@deviltea/widget-vue`);
   no private/internal import from either package;
-- persistence/versioning/migration of any kind — `LabSession`'s `draftSourceText`/`active` snapshot is
-  in-memory only, and Monaco's own workspace/IndexedDB machinery is deliberately not used (see
+- persistence/versioning/migration of any kind — `LabSession`'s `draftSourceText`/`documentState` and
+  `preview` snapshots are in-memory only, and Monaco's own workspace/IndexedDB machinery is deliberately not used (see
   `use-monaco-editor.ts`) so it can never become a second, competing source of truth;
 - an editor-command/undo architecture — Source text editing plus explicit Apply is the whole model.
 
@@ -271,10 +278,12 @@ readonly. State members render `RuntimeStateInspection.getSnapshot()`/`subscribe
 `state.get()`. Property members render `Never evaluated` until `RuntimePropertyInspection`'s snapshot
 reports `status: 'completed'` — the latest `ExecutionResult` some *real* Runtime consumer (Preview)
 naturally produced — and never `fresh`/`dirty`/`active`/`stale` labels. Methods are inventory only (name
-+ the compiler's `transitivelyWrites` fact); there is no invocation affordance. An invalid Blueprint
-keeps the Runtime tab present with an unavailable/blocked message (`store.active.value.runtime === null`)
-rather than hiding it. `src/runtime-inspector/viewmodel.ts` is the passive-projection layer this panel
-is built on — see its file-level comment and colocated tests for the exact contract.
++ the compiler's `transitivelyWrites` fact); there is no invocation affordance. The Runtime Inspector
+always consumes `store.preview`'s Blueprint/Runtime and shows its Preview revision; an invalid current
+Document may leave an older valid Preview running, so it is not an unavailable Runtime state by itself.
+Only a session with no valid Preview has an unavailable Runtime panel. `src/runtime-inspector/viewmodel.ts`
+is the passive-projection layer this panel is built on — see its file-level comment and colocated tests
+for the exact contract.
 
 ## Dependency Graph
 
@@ -310,9 +319,12 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container
   `path` + reference target/operation) — edge selection stays local, never expands into shared focus.
 
-Graph works for an invalid Blueprint (compile-time facts only, no Runtime dependency) and its node click
-sets the shared cross-inspector focus (`nodeId` + member) the same way Blueprint/Runtime do; a new
-applied Blueprint resets that shared focus to the new root.
+Graph works for an invalid current Document Blueprint (compile-time facts only, no Runtime dependency) and
+its node click sets Document-scoped focus (`nodeId` + member). Blueprint and Graph never consume a
+Preview-scoped node id when revisions diverge. Runtime and Preview use a separate Preview-scoped focus;
+equal Document/Preview revisions synchronize the two scopes, while diverged revisions never map raw
+`InspectionNodeId`s between them. A changed Document resets Document focus; a replaced Preview resets
+Preview focus.
 
 Viewport fit is coordinated with layout readiness, not `fitViewOnInit` (issue #27 Finding 1):
 `GraphCanvas.vue` calls `useVueFlow()` before its own template renders `<VueFlow>` (creating and
@@ -345,19 +357,116 @@ button (next to the filter checkboxes) that calls the same `fitGraph()` path via
   disposal, which `LabStore.dispose()` already owns separately).
 - Only `src/composables/use-dependency-graph.ts`'s projected-graph `watch` triggers a `layoutGraph()`
   request (via `LayoutSession.request()`) — Runtime state/property/method activity never touches
-  `store.active.value.blueprint` and therefore never relayouts.
+  the current Document Blueprint and therefore never relayouts.
 - `vite.config.ts`'s `worker: { format: 'es' }` keeps this Worker's own `elkjs` import going through
   normal Vite ESM bundling.
 
 ## Apply lifecycle
 
-Editing the Source panel only ever mutates `LabSession.draftSourceText`; it never recompiles. Apply is
-the one explicit command that crosses the applied-snapshot boundary, following the ordering `detach
-Preview -> dispose old Runtime -> commit new Blueprint -> create Runtime if valid -> mount Preview` (see
-`src/lab/session.ts` and its unit tests for the full contract: parse-failure isolation, concurrent-apply
-guard, draft-capture-at-command-start, invalid-Blueprint -> `runtime: null`, and the disposal-ordering
-seam). Do not add a second path that recompiles outside `LabSession.apply()`/`applyPreset()` — presets,
-Format, Revert, and `switchShowcase()` all route through the same session/store queue, never around it.
+Editing the Author JSON view only ever mutates `LabSession.draftSourceText`; it never recompiles. Apply
+parses the captured draft and submits one root `SourcePatch` replacement to core's authoritative
+`WidgetDocument`. A structural `changed:false` accepts the Lab-local text representation without a
+Document revision, Blueprint compile, Preview detach, or Runtime replacement. A `changed:true` commit
+compiles/increments the Document revision first. If that committed Blueprint is invalid, authored state
+advances but the Lab Runtime Host retains the exact last-valid Preview Runtime and its older revision;
+there is no detach/dispose/mount. If the committed Blueprint is valid, the host then detaches/disposes
+the previous Preview Runtime, creates a fresh Runtime for the new revision, and mounts it. Runtime state
+is never migrated across valid revisions. `LabSession.documentState` and `LabSession.preview` are the
+explicit two snapshots; the deprecated `active` compatibility shape must not be used to infer that its
+current Document Blueprint and retained Runtime share a revision. See `src/lab/session.ts` and its tests
+for parse-failure isolation, concurrent-Apply guard, no-op semantics, revision behavior, and ordering.
+
+Do not add a second Lab path that calls `system.createBlueprint()` for authored-state mutation: manual
+Apply and presets must go through the Document/SourcePatch boundary. Format/Revert remain draft-only.
+`switchShowcase()` is intentionally different: it replaces the whole System/Document context and mounts
+the target session's already-authoritative revision-0 Runtime directly; re-applying identical default
+source merely to trigger mounting is forbidden because Core correctly treats it as `changed:false`. All
+lifecycle-mutating operations remain serialized by the Lab store's transaction boundary.
+
+## Author workspace (Phase 3)
+
+The canonical authored surface is the outer `Author` panel with three Lab-owned views: `Catalog`,
+`Structure`, and `JSON`. `AuthorJsonView.vue` contains the existing Monaco draft workflow; header
+`Apply`/`Format`/`Revert` controls continue to operate on that same draft. `Catalog` reads the immutable
+public `session.system.catalog` and public `WidgetPlugin.capabilities`; it never reads or derives from the
+curated `ShowcaseEntry.sources` Implementation Explorer registry. Core currently publishes config/slot
+descriptions and capability-presence facts, so the view does not invent state/property/method schemas or
+member definitions that Core does not publish through the catalog contracts.
+
+`Structure` renders the current committed Document Blueprint inspection and uses Document-scoped focus.
+Its deliberately narrow operation is replacing an existing scalar config value on the selected inspection
+node. `ReplaceConfigScalarCommand` carries both the current Document `InspectionNodeId` and Document
+revision; `src/lab/author.ts` resolves that exact snapshot node and lowers the command to an array-form
+`SourcePatch`. The component never constructs a patch and never targets a widget by id, which keeps
+duplicate authored ids and cross-revision focus safe. Unsupported/non-scalar fields and mechanical patch
+failures are explicit outcomes.
+
+Successful Structure commands and JSON Apply share `LabSession`'s Document commit and Runtime promotion
+boundary. A successful Structure commit rewrites both applied source text and the JSON draft to deterministic
+pretty JSON only when the draft still equals the command's captured clean text; a concurrent Monaco edit is
+preserved as dirty. Invalid Document commits advance the authored revision while retaining the prior valid
+Preview revision. No persistence, history, undo/redo, collaboration, drag/drop, or Runtime-state migration
+belongs to this Phase 3 workspace.
+
+### Author recovery and diagnostics (Phase 4)
+
+AuthorStatusSurface.vue is a Lab-owned status projection for the current Document. It reads the
+draft's Lab-only SourceParseError, Core's committed blueprint.sourceJsonCompatible and blueprint.status,
+Core's aggregate blueprint.diagnostics.length, Core inspection recovery counts, and the existing
+Document/Preview revision link status. It does not parse JSON outside Apply, perform a compatibility
+check, classify diagnostic codes, or turn a diagnostic message into a second protocol. JSON syntax errors
+therefore remain distinct from Core source-compatibility and Blueprint semantic status.
+
+BlueprintTree continues to traverse BlueprintInspection.nodes and sourceSlots, so unresolved nodes and
+raw-slot placements remain visible and selectable. DiagnosticList displays Core's location/path fields
+and uses src/lab/diagnostics.ts only to resolve a node location through the current Document inspection.
+Source-level locations intentionally return no inspection node and remain non-navigable. Node-level
+diagnostic navigation writes Document-scoped shared focus; it never consumes Preview-scoped IDs or maps
+across diverged revisions. Structure and Blueprint read that same Document focus, while Runtime and
+Preview retain their Preview-revision scope.
+
+Phase 4 adds no persistence/history/undo/redo/editor framework, second validator, compatibility
+implementation, or alternative authored source authority.
+
+### Separate inspector panels with shared presentation primitives (Phase 5)
+
+Blueprint and Runtime remain separate outer, canonical Dockview panels. `BlueprintPanel.vue` is the
+current Document inspection surface for semantic status, diagnostics, recovery nodes, and Document
+focus; `RuntimePanel.vue` is the Preview-revision surface for passive Runtime state/property/method
+inspection and Preview focus. They must not gain a shared Blueprint/Runtime mode, shared revision state,
+or cross-revision `InspectionNodeId` mapping. Preview Inspect continues to select Blueprint when
+Document/Preview revisions are linked and Runtime when they diverge; Graph and Implementation retain
+their existing Document-scoped entry points.
+
+`src/components/inspector/InspectorPanelShell.vue` and `InspectorSplitLayout.vue` are intentionally
+small, props/slot-only presentation primitives. The shell owns only the repeated description-bar and
+column-container chrome; the split layout owns only the tree/divider/details columns. Blueprint and
+Runtime continue to provide their own data, status lines, diagnostics, recovery behavior, selection
+handlers, and details components. Do not use these primitives as a semantic or focus abstraction, and
+do not merge the two outer panels merely to remove presentation duplication.
+
+### Document Tools developer panel (Phase 6)
+
+`DocumentToolsPanel.vue` is a lazy-added, closable developer surface in the left Dockview group, not a
+canonical panel and not an Author subview. Its header entry point and `use-document-tools.ts` request
+store parallel the Implementation explorer's lifecycle; `Workbench.vue` owns the actual Dockview
+`addPanel`/activation operation and does not increase the canonical non-closable panel count.
+
+The panel observes the latest successfully accepted SourcePatch from `LabSession` as transient
+Lab-observed telemetry and offers copy-only display. JSON Apply and Structure commands remain the only
+authoring paths. The optimistic-concurrency fixture calls the same public
+`WidgetDocument.applyPatch(patch, { expectedRevision })` contract with a stale revision and displays
+Core's returned result; it has no Lab-owned conflict model and must leave both Document and Preview
+revisions unchanged.
+
+The separated-source section uses Core's public `separateWidgetSource()` only when the current Blueprint
+is valid. It is a read-only projection of the current Document source, never an alternate source
+authority or validator; invalid/recovery Documents show that the Core precondition is unavailable.
+
+The Document trace is a finite, session-only ring of Lab-observed parse/commit/patch/conflict metadata.
+It is explicitly telemetry: no persistence, replay, restore, undo/redo, collaboration, or authoritative
+history semantics may be added. Runtime/Preview behavior, revision-scoped focus, Author recovery,
+Blueprint/Runtime separation, Graph, and Implementation entry points remain unchanged.
 
 ## Active follow-up backlog
 

@@ -148,10 +148,10 @@ export const surveyTourScript: TutorialScript = {
 			target: null,
 			stages: [{
 				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Source = the declarative definition you edit · Blueprint = what the applied Source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Graph = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.',
+				reveal: 'Author = the declarative definition and structure you edit · Blueprint = what the applied Author source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Graph = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.',
 			}],
 			links: [
-				{ id: 'view-source', label: 'Source', run: actions => actions.activateTab('source') },
+				{ id: 'view-author', label: 'Author', run: actions => actions.activateTab('author') },
 				{ id: 'view-blueprint', label: 'Blueprint', run: actions => actions.activateTab('blueprint') },
 				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
 				{ id: 'view-graph', label: 'Graph', run: actions => actions.activateTab('graph') },
@@ -169,7 +169,7 @@ export const surveyTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You now know State, Property, Method, and dependency.',
-				reveal: 'Try the CRM tour, open any inspector, or edit the Source JSON and press Apply.',
+				reveal: 'Try the CRM tour, open any inspector, or edit the Author JSON and press Apply.',
 			}],
 			// diagnostic #25 P4 Scope B: the completion state's direct "Take the CRM tour" offer. This is the
 			// hand-back (last) step, so `TutorialActions.startTour()`'s own "finish the current step first"

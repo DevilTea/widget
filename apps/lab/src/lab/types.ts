@@ -6,7 +6,27 @@
  * `@deviltea/widget-core`'s public Blueprint/Runtime contract and never reinterprets it.
  */
 
-import type { AnyWidgetPluginTuple, WidgetSystemBlueprint, WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { AnyWidgetPluginTuple, ApplyPatchFailure, ApplyPatchResult, JsonPrimitive, SourcePatch, ValidWidgetSystemBlueprint, WidgetSystemBlueprint, WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
+
+/** The deliberately narrow semantic command surface exposed by the Phase 3 Structure view. */
+export interface ReplaceConfigScalarCommand {
+	readonly type: 'replace-config-scalar'
+	/** Snapshot-local identity from the current Document inspection. Never reused across revisions. */
+	readonly nodeId: InspectionNodeId
+	readonly documentRevision: number
+	readonly configKey: string
+	readonly value: JsonPrimitive
+}
+
+export type AuthorCommand = ReplaceConfigScalarCommand
+
+export type AuthorOutcome
+	= | { readonly status: 'applied', readonly blueprintStatus: 'valid' | 'invalid' }
+		| { readonly status: 'skipped-concurrent' }
+		| { readonly status: 'draft-dirty' }
+		| { readonly status: 'unsupported', readonly reason: 'stale-selection' | 'widget-not-found' | 'config-not-found' | 'config-value-not-scalar' | 'invalid-value' }
+		| { readonly status: 'patch-error', readonly failure: ApplyPatchFailure }
 
 /**
  * A `JSON.parse()` syntax failure at Apply time. Lab-only: never injected into core Blueprint
@@ -22,15 +42,32 @@ export interface SourceParseError {
 /**
  * The last successfully parsed-and-applied source snapshot.
  *
- * `definition` is the exact `JSON.parse(sourceText)` value handed to
- * `WidgetSystem.createBlueprint(...)`, with no Lab cloning/normalization. `runtime` is `null`
- * whenever `blueprint.status !== 'valid'` — a semantically invalid Blueprint is still a
- * successfully applied snapshot, it simply has no Runtime and no Preview.
+ * `definition` is the exact Lab-local `JSON.parse(sourceText)` value accepted by Apply. Core's
+ * authoritative authored source/Blueprint lives in the `WidgetDocument`; `revision` is that Document
+ * snapshot revision. A text-only structural no-op may therefore update `sourceText`/`definition` while
+ * retaining the same revision and Blueprint. Runtime ownership is deliberately separate in
+ * `LabPreviewSnapshot`: an invalid current Document may coexist with an older, still-running Preview.
  */
-export interface LabActiveSnapshot<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
+export interface LabDocumentState<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly sourceText: string
 	readonly definition: unknown
+	readonly revision: number
 	readonly blueprint: WidgetSystemBlueprint<Plugins>
+}
+
+/** The exact valid Blueprint revision whose Runtime is currently owned by the Lab Preview host. */
+export interface LabPreviewSnapshot<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
+	readonly revision: number
+	readonly blueprint: ValidWidgetSystemBlueprint<Plugins>
+	readonly runtime: WidgetSystemRuntime<Plugins>
+}
+
+/**
+ * Temporary compatibility shape while Phase 2 migrates every surface off the pre-redesign `active`
+ * concept. `blueprint`/`revision` are current Document state; `runtime` is the retained Preview Runtime
+ * and may therefore belong to an older revision. New code must use `documentState` + `preview` instead.
+ */
+export interface LabActiveSnapshot<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends LabDocumentState<Plugins> {
 	readonly runtime: WidgetSystemRuntime<Plugins> | null
 }
 
@@ -52,7 +89,50 @@ export interface LabSessionHooks {
 export type ApplyOutcome
 	= | { readonly status: 'skipped-concurrent' }
 		| { readonly status: 'parse-error', readonly error: SourceParseError }
+		| { readonly status: 'patch-error', readonly failure: ApplyPatchFailure }
 		| { readonly status: 'applied', readonly blueprintStatus: 'valid' | 'invalid' }
+
+/** Lab-only provenance for the latest applied patch; this is telemetry, not authored-state authority. */
+export type LabPatchOrigin = 'json' | 'structure'
+
+export interface LabAppliedSourcePatch {
+	readonly origin: LabPatchOrigin
+	readonly revision: number
+	readonly patch: SourcePatch
+}
+
+/** Bounded, session-only observations of Document-related Lab activity. Never replayable history. */
+export type LabDocumentTraceEvent
+	= | {
+		readonly kind: 'commit'
+		readonly origin: LabPatchOrigin
+		readonly revision: number
+		readonly changed: boolean
+	}
+	| {
+		readonly kind: 'parse-error'
+		readonly revision: number
+	}
+	| {
+		readonly kind: 'patch-error'
+		readonly revision: number
+		readonly code: ApplyPatchFailure['code']
+	}
+	| {
+		readonly kind: 'conflict-demo'
+		readonly expectedRevision: number
+		readonly actualRevision: number
+		readonly failureCode: ApplyPatchFailure['code'] | null
+	}
+
+export interface RevisionConflictDemoResult {
+	readonly expectedRevision: number
+	readonly beforeDocumentRevision: number
+	readonly afterDocumentRevision: number
+	readonly beforePreviewRevision: number | null
+	readonly afterPreviewRevision: number | null
+	readonly result: ApplyPatchResult
+}
 
 /**
  * Fired after every state-observable Lab mutation (draft edits, Apply start/end, revert, format).

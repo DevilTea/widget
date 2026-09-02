@@ -5,6 +5,7 @@ import TutorialConfirmDialog from './components/tutorial/TutorialConfirmDialog.v
 import TutorialRail from './components/tutorial/TutorialRail.vue'
 import WelcomeCard from './components/tutorial/WelcomeCard.vue'
 import Workbench from './components/Workbench.vue'
+import { createDocumentToolsStore, DocumentToolsKey } from './composables/use-document-tools'
 import { createImplementationExplorerStore, ImplementationExplorerKey } from './composables/use-implementation-explorer'
 import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
@@ -34,6 +35,11 @@ installLabTestSeam(store)
 // tour's step 8 "Implementation" link can open it too.
 const implementationExplorer = createImplementationExplorerStore()
 provide(ImplementationExplorerKey, implementationExplorer)
+
+// Phase 6: Document Tools parallels the Implementation explorer — a small request store for a lazy,
+// closable developer panel, while all Document data remains owned by LabSession/WidgetDocument.
+const documentTools = createDocumentToolsStore()
+provide(DocumentToolsKey, documentTools)
 
 // diagnostic #25 P1: `createTutorialStore(store, ...)` takes the already-created `LabStore`/
 // `ImplementationExplorerStore` directly rather than injecting them back via `useLabStore()`/

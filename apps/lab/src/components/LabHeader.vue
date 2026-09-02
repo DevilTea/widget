@@ -4,6 +4,7 @@ import type { TutorialTourId } from '../composables/use-tutorial'
 import type { LabLocale } from '../i18n/locale'
 import type { LabTheme } from '../theme/theme'
 import { computed } from 'vue'
+import { useDocumentTools } from '../composables/use-document-tools'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
@@ -15,10 +16,12 @@ const theme = useLabTheme()
 const tutorial = useTutorialStore()
 const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
+const documentTools = useDocumentTools()
 
-const blueprintStatus = computed(() => store.active.value.blueprint.status)
-const diagnosticCount = computed(() => store.active.value.blueprint.diagnostics.length)
-const runtimeAvailable = computed(() => store.active.value.runtime !== null)
+const blueprintStatus = computed(() => store.documentState.value.blueprint.status)
+const diagnosticCount = computed(() => store.documentState.value.blueprint.diagnostics.length)
+const documentRevision = computed(() => store.documentState.value.revision)
+const previewRevision = computed(() => store.revisionStatus.value.previewRevision)
 
 const tutorialButtonLabel = computed(() => {
 	switch (tutorial.snapshot.value.status) {
@@ -115,6 +118,14 @@ function onLocaleChange(event: Event): void {
 		>
 			{{ i18n.t('Implementation') }}
 		</button>
+		<button
+			type="button"
+			data-testid="open-document-tools"
+			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+			@click="documentTools.open()"
+		>
+			{{ i18n.t('Document Tools') }}
+		</button>
 
 		<select
 			v-if="tutorial.crmTourUnlocked.value"
@@ -143,17 +154,28 @@ function onLocaleChange(event: Event): void {
 		<span :class="pika({ marginLeft: 'auto' })" />
 
 		<span
+			data-testid="document-status"
 			:class="pika({ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
 			:style="{ color: blueprintStatus === 'valid' ? 'var(--lab-color-ok)' : 'var(--lab-color-danger)' }"
 		>
-			{{ i18n.t('Blueprint') }}: {{ i18n.t(blueprintStatus) }}<template v-if="diagnosticCount > 0"> ({{ diagnosticCount }} {{ i18n.t(diagnosticCount === 1 ? 'diagnostic' : 'diagnostics') }})</template>
+			{{ i18n.t('Document r{revision}', { revision: documentRevision }) }} · {{ i18n.t('Blueprint') }}: {{ i18n.t(blueprintStatus) }} ({{ diagnosticCount }} {{ i18n.t(diagnosticCount === 1 ? 'diagnostic' : 'diagnostics') }})
 		</span>
 
 		<span
+			data-testid="preview-status"
 			:class="pika({ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
-			:style="{ color: runtimeAvailable ? 'var(--lab-color-ok)' : 'var(--lab-color-text-muted)' }"
+			:style="{ color: previewRevision === null ? 'var(--lab-color-text-muted)' : store.revisionStatus.value.isPreviewStale ? 'var(--lab-color-warning)' : 'var(--lab-color-ok)' }"
 		>
-			{{ i18n.t('Runtime') }}: {{ i18n.t(runtimeAvailable ? 'active' : 'unavailable') }}
+			{{ previewRevision === null ? i18n.t('Preview unavailable') : i18n.t('Preview r{revision}', { revision: previewRevision }) }}
+		</span>
+
+		<span
+			data-testid="revision-link-status"
+			:class="pika({ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: '600', border: '1px solid var(--lab-color-border)' })"
+			:style="{ color: store.revisionStatus.value.isLinked ? 'var(--lab-color-ok)' : 'var(--lab-color-warning)' }"
+		>
+			<span aria-hidden="true">{{ store.revisionStatus.value.isLinked ? '●' : '!' }}</span>
+			{{ i18n.t(store.revisionStatus.value.isLinked ? 'Linked / Synced' : store.revisionStatus.value.state === 'diverged' ? 'Diverged / Unlinked' : 'Unlinked') }}
 		</span>
 
 		<select

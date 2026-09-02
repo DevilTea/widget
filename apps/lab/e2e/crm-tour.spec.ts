@@ -349,7 +349,7 @@ test('Graph legend is a plain disclosure (not a menu popup), opens/closes via ke
 		.toHaveCount(0)
 })
 
-test('Runtime unavailable message explains why and what to do next (issue #25 P4 Scope D copy audit)', async ({ page }) => {
+test('an invalid Document retains the prior Preview and explains the divergence', async ({ page }) => {
 	interface LabTestWindow { __WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void } }
 
 	await page.goto('/?lab-test')
@@ -364,10 +364,12 @@ test('Runtime unavailable message explains why and what to do next (issue #25 P4
 
 	await page.getByRole('tab', { name: 'Runtime' })
 		.click()
-	await expect(page.getByText('Runtime unavailable', { exact: false }))
+	await expect(page.getByText('Running previous valid Preview revision r0; current Document is r1.', { exact: false }))
 		.toBeVisible()
-	await expect(page.getByText('the applied Blueprint is invalid', { exact: false }))
+	await expect(page.getByRole('tabpanel', { name: 'Runtime' })
+		.getByText('Preview r0', { exact: true }))
 		.toBeVisible()
-	await expect(page.getByText('Apply again', { exact: false }))
+	await expect(page.getByRole('tabpanel', { name: 'Runtime' })
+		.getByText('Diverged / Unlinked', { exact: true }))
 		.toBeVisible()
 })

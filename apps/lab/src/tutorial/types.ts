@@ -51,7 +51,7 @@ export interface TutorialFocusMember {
  * (`LabToolTab`, widened to include `'preview'`) already models. Kept as its own literal union here so
  * this directory never imports `use-lab-store.ts`'s Vue-touching types.
  */
-export type TutorialTabId = 'source' | 'blueprint' | 'runtime' | 'graph' | 'preview'
+export type TutorialTabId = 'author' | 'blueprint' | 'runtime' | 'graph' | 'preview'
 
 /**
  * The abstract navigation surface a step's `onEnter`/link `run()` may call. `use-tutorial.ts` is the

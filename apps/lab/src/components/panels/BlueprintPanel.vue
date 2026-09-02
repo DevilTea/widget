@@ -15,41 +15,42 @@ import { useLabStore } from '../../composables/use-lab-store'
 import BlueprintNodeDetails from '../blueprint/BlueprintNodeDetails.vue'
 import BlueprintTree from '../blueprint/BlueprintTree.vue'
 import DiagnosticList from '../blueprint/DiagnosticList.vue'
-import PanelDescriptionBar from '../PanelDescriptionBar.vue'
+import InspectorPanelShell from '../inspector/InspectorPanelShell.vue'
+import InspectorSplitLayout from '../inspector/InspectorSplitLayout.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
 
-const inspection = computed(() => inspectBlueprint(store.active.value.blueprint))
-const selectedNodeId = computed<InspectionNodeId | null>(() => store.focus.value?.nodeId ?? null)
+const inspection = computed(() => inspectBlueprint(store.documentState.value.blueprint))
+const selectedNodeId = computed<InspectionNodeId | null>(() => store.documentFocus.value?.nodeId ?? null)
 const selectedNode = computed(() => {
 	const nodeId = selectedNodeId.value
 	return nodeId === null ? null : inspection.value.getNode(nodeId)
 })
 
 const showAllDiagnostics = ref(false)
-const collectedDiagnostics = computed(() => store.active.value.blueprint.diagnostics)
+const collectedDiagnostics = computed(() => store.documentState.value.blueprint.diagnostics)
 
 function selectNode(nodeId: InspectionNodeId): void {
-	store.setFocus({ nodeId })
+	store.setFocus('document', { nodeId })
 	showAllDiagnostics.value = false
 }
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
-		<PanelDescriptionBar
-			storageKey="widget-lab:panel-desc:blueprint"
-			text="What the applied Source compiled into — declarations, never live values"
-		/>
-		<div :class="pika({ display: 'grid', gridTemplateColumns: '220px 1px 1fr', flex: '1 1 auto', minHeight: '0' })">
-			<BlueprintTree
-				:inspection="inspection"
-				:selectedNodeId="selectedNodeId"
-				@select="selectNode"
-			/>
-			<div :class="pika({ background: 'var(--lab-color-border)' })" />
-			<div :class="pika({ display: 'flex', flexDirection: 'column', minHeight: '0' })">
+	<InspectorPanelShell
+		storageKey="widget-lab:panel-desc:blueprint"
+		text="What the applied Source compiled into — declarations, never live values"
+	>
+		<InspectorSplitLayout>
+			<template #tree>
+				<BlueprintTree
+					:inspection="inspection"
+					:selectedNodeId="selectedNodeId"
+					@select="selectNode"
+				/>
+			</template>
+			<template #details>
 				<div :class="pika({ display: 'flex', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
 					<button
 						type="button"
@@ -72,7 +73,7 @@ function selectNode(nodeId: InspectionNodeId): void {
 					<BlueprintNodeDetails
 						v-if="!showAllDiagnostics"
 						:node="selectedNode"
-						:blueprint="store.active.value.blueprint"
+						:blueprint="store.documentState.value.blueprint"
 						:inspection="inspection"
 						@navigate="selectNode"
 					/>
@@ -87,7 +88,7 @@ function selectNode(nodeId: InspectionNodeId): void {
 						/>
 					</div>
 				</div>
-			</div>
-		</div>
-	</div>
+			</template>
+		</InspectorSplitLayout>
+	</InspectorPanelShell>
 </template>

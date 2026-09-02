@@ -205,9 +205,9 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	function actions(): TutorialActions {
 		return {
 			setFocus: (widgetId, member) => {
-				const nodeId = findBlueprintNodeId(inspectBlueprint(store.active.value.blueprint), widgetId)
+				const nodeId = findBlueprintNodeId(inspectBlueprint(store.documentState.value.blueprint), widgetId)
 				if (nodeId !== null)
-					store.setFocus({ nodeId, member })
+					store.setFocus('document', { nodeId, member })
 			},
 			activateTab: (tab: TutorialTabId) => {
 				store.activeTab.value = tab
@@ -236,7 +236,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	}
 
 	function recheckNow(): void {
-		const runtime = store.active.value.runtime
+		const runtime = store.preview.value?.runtime ?? null
 		if (runtime !== null) {
 			activeEngine()
 				.recheck(createRuntimeReader(runtime))
@@ -289,7 +289,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	// replace it), the tour's own status changes, or `activeTourId` itself changes (diagnostic #25 P4).
 	let teardownObservation: (() => void) | null = null
 	watch(
-		() => [store.active.value.runtime, snapshot.value.status, store.showcaseId.value, activeTourId.value] as const,
+		() => [store.preview.value?.runtime ?? null, snapshot.value.status, store.showcaseId.value, activeTourId.value] as const,
 		([runtime, status, showcaseId, tourId]) => {
 			teardownObservation?.()
 			teardownObservation = null
