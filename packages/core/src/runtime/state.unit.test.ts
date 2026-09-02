@@ -1,10 +1,10 @@
 /**
- * Conformance coverage for the `RuntimeState` primitive — issue #10 COMMENT 26 §8 (State), COMMENT 15
+ * Conformance coverage for the `RuntimeState` primitive — diagnostic #10 COMMENT 26 §8 (State), COMMENT 15
  * ("RuntimeState subscription semantics aligned to alien-signals") and consolidated handoff §13.
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_ISSUES } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
 
 interface CounterInterfaces {
 	state: {
@@ -19,6 +19,7 @@ function createCounterRuntime(params: {
 	const validate = params.validate ?? ((input: unknown): boolean => typeof input === 'number')
 
 	const plugin = createWidgetPlugin('counter')
+		.description('Test widget')
 		.interfaces<CounterInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => validate(input),
@@ -37,40 +38,40 @@ function createCounterRuntime(params: {
 
 	return { runtime, state: widget.state.count as {
 		get: () => number | null
-		set: (value: number) => { success: boolean, value?: number, issues?: readonly unknown[] }
+		set: (value: number) => { ok: boolean, value?: number, diagnostics?: readonly unknown[] }
 		subscribe: (listener: (value: number | null) => void) => () => void
-		getIssues: () => readonly { source: unknown }[]
-		subscribeIssues: (listener: (issues: readonly unknown[]) => void) => () => void
+		getDiagnostics: () => readonly { source: unknown }[]
+		subscribeDiagnostics: (listener: (diagnostics: readonly unknown[]) => void) => () => void
 	} }
 }
 
-describe('runtimeState — valid/invalid set + issue snapshot (issue #10 §8/§13)', () => {
-	it('a valid set commits the value and clears issues to the canonical empty snapshot', () => {
+describe('runtimeState — valid/invalid set + diagnostic snapshot (diagnostic #10 §8/§13)', () => {
+	it('a valid set commits the value and clears diagnostics to the canonical empty snapshot', () => {
 		const { state } = createCounterRuntime({ default: () => 0 })
 
 		const result = state.set(5)
 
 		expect(result)
-			.toEqual({ success: true, value: 5 })
+			.toEqual({ ok: true, value: 5 })
 		expect(state.get())
 			.toBe(5)
-		expect(state.getIssues())
-			.toBe(EMPTY_ISSUES)
+		expect(state.getDiagnostics())
+			.toBe(EMPTY_DIAGNOSTICS)
 	})
 
-	it('an invalid set replaces the latest issue snapshot and reports failure', () => {
+	it('an invalid set replaces the latest diagnostic snapshot and reports failure', () => {
 		const { state } = createCounterRuntime({ default: () => 0 })
 
 		const result = state.set('not-a-number' as any)
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		expect((result as any).issues)
+		expect((result as any).failure.diagnostics)
 			.toHaveLength(1)
-		expect((result as any).issues[0].source)
-			.toMatchObject({ type: 'state-validation', candidate: 'not-a-number' })
-		expect(state.getIssues())
-			.toEqual((result as any).issues)
+		expect((result as any).failure.diagnostics[0])
+			.toMatchObject({ code: 'invalid-state-value', location: { type: 'state', widgetId: 'root', key: 'count' }, candidate: 'not-a-number' })
+		expect(state.getDiagnostics())
+			.toEqual((result as any).failure.diagnostics)
 	})
 
 	it('a failed write leaves the value signal untouched', () => {
@@ -81,24 +82,24 @@ describe('runtimeState — valid/invalid set + issue snapshot (issue #10 §8/§1
 
 		const result = state.set('nope' as any)
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
 		expect(state.get())
 			.toBe(5)
 	})
 
-	it('two consecutive successful writes both read back the identical canonical empty-issues reference', () => {
+	it('two consecutive successful writes both read back the identical canonical empty-diagnostics reference', () => {
 		const { state } = createCounterRuntime({ default: () => 0 })
 
 		state.set(1)
-		const first = state.getIssues()
+		const first = state.getDiagnostics()
 		state.set(2)
-		const second = state.getIssues()
+		const second = state.getDiagnostics()
 
 		expect(first)
-			.toBe(EMPTY_ISSUES)
+			.toBe(EMPTY_DIAGNOSTICS)
 		expect(second)
-			.toBe(EMPTY_ISSUES)
+			.toBe(EMPTY_DIAGNOSTICS)
 		expect(first)
 			.toBe(second)
 	})
@@ -111,7 +112,7 @@ describe('runtimeState — valid/invalid set + issue snapshot (issue #10 §8/§1
 		const result = state.set(3)
 
 		expect(result)
-			.toEqual({ success: true, value: 3 })
+			.toEqual({ ok: true, value: 3 })
 		expect(listener).not.toHaveBeenCalled()
 	})
 
@@ -153,17 +154,17 @@ describe('runtimeState — valid/invalid set + issue snapshot (issue #10 §8/§1
 		expect(listener).not.toHaveBeenCalled()
 	})
 
-	it('an issue-only change (failed write) does not notify the value subscriber', () => {
+	it('an diagnostic-only change (failed write) does not notify the value subscriber', () => {
 		const { state } = createCounterRuntime({ default: () => 1 })
 		const valueListener = vi.fn()
-		const issuesListener = vi.fn()
+		const diagnosticsListener = vi.fn()
 		state.subscribe(valueListener)
-		state.subscribeIssues(issuesListener)
+		state.subscribeDiagnostics(diagnosticsListener)
 
 		state.set('not-a-number' as any)
 
 		expect(valueListener).not.toHaveBeenCalled()
-		expect(issuesListener)
+		expect(diagnosticsListener)
 			.toHaveBeenCalledTimes(1)
 	})
 

@@ -1,6 +1,6 @@
 /**
  * `TripReadiness` locked C1 semantics (checkpoint C1): a semantically ready survey succeeds with
- * `true`; a not-ready survey fails as a `property-result` failure carrying contextual issues — the
+ * `true`; a not-ready survey fails as a `property-result` failure carrying contextual diagnostics — the
  * successful-`false` branch is never produced by this plugin.
  */
 
@@ -72,7 +72,7 @@ function definitionWithDefaults(overrides: Record<string, unknown> = {}) {
 function createRuntime(overrides: Record<string, unknown> = {}) {
 	const blueprint = surveySystem.createBlueprint(definitionWithDefaults(overrides))
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid Blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid Blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 	return blueprint.createRuntime()
 }
 
@@ -82,21 +82,21 @@ describe('tripReadiness.ready (C1)', () => {
 		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
 
 		expect(readiness.properties.ready.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 
-	it('fails with a contextual issue when a required answer is missing', () => {
+	it('fails with a contextual diagnostic when a required answer is missing', () => {
 		const runtime = createRuntime()
 		const destination = widgetOfType(runtime, 'destination', 'SurveyChoiceQuestion')
 		destination.state.answer.set(null)
 
 		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
 		const result = readiness.properties.ready.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues.some(issue => issue.message.includes('Destination')))
+		expect(result.failure.diagnostics.some(diagnostic => diagnostic.message.includes('Destination')))
 			.toBe(true)
 	})
 
@@ -105,11 +105,11 @@ describe('tripReadiness.ready (C1)', () => {
 		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
 
 		const result = readiness.properties.ready.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues.some(issue => issue.message.includes('Family priority')))
+		expect(result.failure.diagnostics.some(diagnostic => diagnostic.message.includes('Family priority')))
 			.toBe(true)
 	})
 
@@ -118,7 +118,7 @@ describe('tripReadiness.ready (C1)', () => {
 		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
 
 		expect(readiness.properties.ready.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 
 	it('fails via automatic property-dependency propagation when TripMetrics.tripDays itself fails', () => {
@@ -128,11 +128,11 @@ describe('tripReadiness.ready (C1)', () => {
 
 		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
 		const result = readiness.properties.ready.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues.some(issue => issue.source.type === 'property-dependency'))
+		expect(result.failure.diagnostics.some(diagnostic => diagnostic.code === 'dependency-value-rejected' || diagnostic.code === 'dependency-target-failed'))
 			.toBe(true)
 	})
 
@@ -140,7 +140,7 @@ describe('tripReadiness.ready (C1)', () => {
 	// constrains an answer to whatever `options` the *source* itself declares (checkpoint §2) — it has
 	// no notion of the closed `Destination`/`TravelStyle`/`FamilyPriority` domains. An edited source can
 	// therefore legitimately set `destination` to an option value like `"mars"`, which is a perfectly
-	// valid State value but not a real `Destination`. Readiness must not report `success(true)` for
+	// valid State value but not a real `Destination`. Readiness must not report `ok(true)` for
 	// that survey merely because every required field happens to be non-null.
 	it('fails when destination is an edited-but-domain-invalid option value (e.g. "mars"), even though State accepts it', () => {
 		const runtime = createRuntime({ destination: 'mars' })
@@ -152,16 +152,17 @@ describe('tripReadiness.ready (C1)', () => {
 
 		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
 		const result = readiness.properties.ready.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
 		// Caused directly by TripReadiness's own `destination` refinement (a `property-dependency`
 		// wrapping a rejected `.validate()` on a `state-get` dependency) — not merely a downstream
 		// `TripMetrics.estimatedBaselineCost`/`tripDays` cascade.
-		expect(result.issues.some((issue) => {
-			const source = issue.source
-			return source.type === 'property-dependency' && source.dependency.operation.type === 'state-get' && source.dependency.operation.key === 'answer'
+		expect(result.failure.diagnostics.some((diagnostic) => {
+			return (diagnostic.code === 'dependency-value-rejected' || diagnostic.code === 'dependency-target-failed')
+				&& diagnostic.dependency.operation.type === 'state-get'
+				&& diagnostic.dependency.operation.key === 'answer'
 		}))
 			.toBe(true)
 	})
@@ -181,7 +182,7 @@ describe('tripReadiness.ready (C1)', () => {
 
 		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
 		expect(readiness.properties.ready.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 
 	it('fails when children > 0 (family section visible) and family-priority holds a domain-invalid value', () => {
@@ -189,7 +190,7 @@ describe('tripReadiness.ready (C1)', () => {
 		const readiness = widgetOfType(runtime, 'trip-readiness', 'TripReadiness')
 
 		const result = readiness.properties.ready.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
 	})
 })

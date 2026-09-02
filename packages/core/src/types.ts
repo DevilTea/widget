@@ -1,9 +1,13 @@
 /**
  * Core identity, capability and member-key domain types.
  *
- * Normative source: issue #10 (consolidated handoff §2, amendments
+ * Normative source: diagnostic #10 (consolidated handoff §2, amendments
  * "WidgetMemberKey domain" and "builder completion typestate and finite member-key universe").
  */
+
+import type { JsonDomainViolation } from './json'
+
+export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from './json'
 
 /**
  * Persisted/domain widget identity. Compiler-internal node identity is private and never public.
@@ -57,7 +61,7 @@ export type WidgetCapabilityOf<
 /**
  * `true` when the capability is declared, `false` otherwise.
  *
- * The authoritative presence predicate (issue #10 amendment "declaration-presence semantics and public
+ * The authoritative presence predicate (diagnostic #10 amendment "declaration-presence semantics and public
  * `WidgetPlugin.capabilities`"): presence is required-key *declaration*, independent of the capability's
  * own payload type. It must never be implemented by testing whether `WidgetCapabilityOf<...>` is
  * `never` — a legitimately-present capability can itself have payload `never` (the canonical
@@ -172,6 +176,10 @@ type SlotDomainViolation<Interfaces extends WidgetInterfaces> = HasWidgetCapabil
 		? `'slots' must be a finite union of string literals`
 		: never
 
+type RawConfigDomainViolation<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
+	? JsonDomainViolation<WidgetRawConfigOf<Interfaces>>
+	: never
+
 /**
  * Every reason the supplied `WidgetInterfaces` cannot back a plugin builder, or `never` when valid.
  *
@@ -183,6 +191,7 @@ export type WidgetInterfacesViolationOf<Interfaces extends WidgetInterfaces>
 		| MemberKeyDomainViolation<'properties', WidgetPropertiesOf<Interfaces>>
 		| MemberKeyDomainViolation<'methods', WidgetMethodsOf<Interfaces>>
 		| SlotDomainViolation<Interfaces>
+		| RawConfigDomainViolation<Interfaces>
 		| SyncValueDomainViolation<'state', WidgetStateOf<Interfaces>>
 		| SyncValueDomainViolation<'properties', WidgetPropertiesOf<Interfaces>>
 		| SyncMethodReturnViolation<Interfaces>

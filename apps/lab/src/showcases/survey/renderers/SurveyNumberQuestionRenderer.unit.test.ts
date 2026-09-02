@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 /**
- * Issue #28 accessibility fix — cheap attribute-wiring assertions only (see `TripMetricsRenderer.unit.test.ts`
+ * Diagnostic #28 accessibility fix — cheap attribute-wiring assertions only (see `TripMetricsRenderer.unit.test.ts`
  * for this file's harness style): every `SurveyNumberQuestion`'s visible `label` has its `for` matched to
  * its `input`'s `id`. `../presets.ts` configures three instances — `adults`/`children` *without* `help`
  * text and `budget` *with* it — so this also covers both `aria-describedby` cases: absent when there is
  * no help paragraph, present and matching the help paragraph's `id` when there is one. Behavioral
- * focus/keyboard coverage belongs to the real-browser contract suite (issue #28), not here.
+ * focus/keyboard coverage belongs to the real-browser contract suite (diagnostic #28), not here.
  */
 import { createWidgetVueRenderer, useWidget } from '@deviltea/widget-vue'
 import { mount } from '@vue/test-utils'

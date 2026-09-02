@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Monaco-only — deliberately not forced into the inspector tree/detail layout the other panels share
- * (issue #13 Widget Lab Phase 4 "inspector panel interaction contract"). Source cursor/scroll are
+ * (diagnostic #13 Widget Lab Phase 4 "inspector panel interaction contract"). Source cursor/scroll are
  * Source-local; no authoritative source-position linking to Blueprint/Runtime exists yet.
  */
 import { useLabStore } from '../../composables/use-lab-store'

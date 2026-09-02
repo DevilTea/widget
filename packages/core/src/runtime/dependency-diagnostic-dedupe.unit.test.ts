@@ -1,12 +1,12 @@
 /**
  * Regression coverage for PR #12 review finding 3773310841 (`runtime/collector.ts` unconditional
- * dependency-issue insertion).
+ * dependency-diagnostic insertion).
  *
- * Normative source: issue #10 consolidated handoff §12 — "repeated reads of the same failing
- * dependency within one execution scope should avoid duplicating the same dependency issue insertion."
- * The operation-local collector used to append every wrapped/refinement dependency issue
+ * Normative source: diagnostic #10 consolidated handoff §12 — "repeated reads of the same failing
+ * dependency within one execution scope should avoid duplicating the same dependency diagnostic insertion."
+ * The operation-local collector used to append every wrapped/refinement dependency diagnostic
  * unconditionally, so reading the same failing dependency twice inside one Property compute / Method
- * execute inserted two semantically identical `property-dependency` / `method-dependency` issues into
+ * execute inserted two semantically identical `property-dependency` / `method-dependency` diagnostics into
  * the finalized snapshot — while each individual dependency call still correctly reports its own
  * `ExecutionResult` failure.
  */
@@ -31,12 +31,13 @@ function createHarness() {
 	let lastMethodCallResults: readonly boolean[] = []
 
 	const plugin = createWidgetPlugin('counter')
+		.description('Test widget')
 		.interfaces<DedupeInterfaces>()
 		.properties(properties => properties
 			.flaky({
-				compute: ({ addIssue }) => {
+				compute: ({ addDiagnostic }) => {
 					if (flakyShouldFail)
-						addIssue({ message: 'flaky failed' })
+						addDiagnostic({ message: 'flaky failed' })
 					return 0
 				},
 			})
@@ -46,7 +47,7 @@ function createHarness() {
 				compute: ({ deps }) => {
 					const first = deps.flaky()
 					const second = deps.flaky()
-					lastPropertyCallResults = [first.success, second.success]
+					lastPropertyCallResults = [first.ok, second.ok]
 					return 0
 				},
 			})
@@ -68,7 +69,7 @@ function createHarness() {
 			execute: ({ deps }) => {
 				const first = deps.flaky()
 				const second = deps.flaky()
-				lastMethodCallResults = [first.success, second.success]
+				lastMethodCallResults = [first.ok, second.ok]
 				return 0
 			},
 		}))
@@ -77,7 +78,7 @@ function createHarness() {
 	const system = createWidgetSystem({ plugins: [plugin] })
 	const blueprint = system.createBlueprint({ id: 'root', type: 'counter' })
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	const runtime = blueprint.createRuntime()
 	const widget = runtime.getWidget('root')
@@ -94,24 +95,24 @@ function createHarness() {
 	}
 }
 
-describe('operation-local collector dedupes repeated dependency-issue insertion', () => {
-	it('reading the same failing dependency twice inserts exactly one wrapped property-dependency issue', () => {
+describe('operation-local collector dedupes repeated dependency-diagnostic insertion', () => {
+	it('reading the same failing dependency twice inserts exactly one wrapped property-dependency diagnostic', () => {
 		const { widget, setFlakyShouldFail } = createHarness()
 		setFlakyShouldFail(true)
 
 		const result = widget.properties.readsFlakyTwice.get()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('Expected a failure result.')
 
-		// Exactly one dependency issue was inserted, not two, even though the failing target was read
+		// Exactly one dependency diagnostic was inserted, not two, even though the failing target was read
 		// twice within the same compute.
-		expect(result.issues)
+		expect(result.failure.diagnostics)
 			.toHaveLength(1)
-		expect(result.issues[0]!.source.type)
-			.toBe('property-dependency')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('dependency-target-failed')
 	})
 
 	it('each individual dependency call still reports its own ExecutionResult failure despite the dedupe', () => {
@@ -124,35 +125,35 @@ describe('operation-local collector dedupes repeated dependency-issue insertion'
 			.toEqual([false, false])
 	})
 
-	it('dedupe also applies to a Method invoking the same failing dependency twice, one issue only', () => {
+	it('dedupe also applies to a Method invoking the same failing dependency twice, one diagnostic only', () => {
 		const { widget, setFlakyShouldFail, getLastMethodCallResults } = createHarness()
 		setFlakyShouldFail(true)
 
 		const result = widget.methods.invokesFlakyTwice()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('Expected a failure result.')
-		expect(result.issues)
+		expect(result.failure.diagnostics)
 			.toHaveLength(1)
-		expect(result.issues[0]!.source.type)
-			.toBe('method-dependency')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('dependency-target-failed')
 		expect(getLastMethodCallResults())
 			.toEqual([false, false])
 	})
 
-	it('a repeated refinement rejection of the same value inserts exactly one dependency issue', () => {
+	it('a repeated refinement rejection of the same value inserts exactly one dependency diagnostic', () => {
 		const { widget } = createHarness()
 
 		const result = widget.properties.refinedTwice.get()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('Expected a failure result.')
 
-		expect(result.issues)
+		expect(result.failure.diagnostics)
 			.toHaveLength(1)
 	})
 })
@@ -172,6 +173,7 @@ describe('dedupe anchor identity is collision-free for Symbols (review finding 3
 		const stableSymbol = Symbol('x')
 
 		const plugin = createWidgetPlugin('symbol-dedupe')
+			.description('Test widget')
 			.interfaces<SymbolDedupeInterfaces>()
 			.methods(methods => methods
 				// A fresh `Symbol('x')` every call: same description, different instance each time.
@@ -214,7 +216,7 @@ describe('dedupe anchor identity is collision-free for Symbols (review finding 3
 		const system = createWidgetSystem({ plugins: [plugin] })
 		const blueprint = system.createBlueprint({ id: 'root', type: 'symbol-dedupe' })
 		if (blueprint.status !== 'valid')
-			throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+			throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 		const runtime = blueprint.createRuntime()
 		const widget = runtime.getWidget('root')
@@ -224,25 +226,25 @@ describe('dedupe anchor identity is collision-free for Symbols (review finding 3
 		return { widget }
 	}
 
-	it('rejecting two distinct same-description Symbols within one execution keeps both consumer issues, each with its own `received`', () => {
+	it('rejecting two distinct same-description Symbols within one execution keeps both consumer diagnostics, each with its own `received`', () => {
 		const { widget } = createSymbolHarness()
 
 		const result = widget.methods.viaDistinctSymbolTwice()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('Expected a failure result.')
 
 		// Not deduped: two distinct Symbol instances are two distinct failures, even though a
 		// `typeof`+`String()` encoding would have stringified both to the same `"symbol:Symbol(x)"`.
-		expect(result.issues)
+		expect(result.failure.diagnostics)
 			.toHaveLength(2)
 
-		const received = result.issues.map((issue) => {
-			if (issue.source.type !== 'method-dependency')
-				throw new Error('Expected a method-dependency issue.')
-			return issue.source.received
+		const received = result.failure.diagnostics.map((diagnostic) => {
+			if (diagnostic.code !== 'dependency-value-rejected')
+				throw new Error('Expected a dependency-value-rejected diagnostic.')
+			return diagnostic.received
 		})
 
 		expect(typeof received[0])
@@ -254,21 +256,21 @@ describe('dedupe anchor identity is collision-free for Symbols (review finding 3
 			.not.toBe(received[1])
 	})
 
-	it('rejecting the same Symbol instance twice within one execution still dedupes to exactly one issue', () => {
+	it('rejecting the same Symbol instance twice within one execution still dedupes to exactly one diagnostic', () => {
 		const { widget } = createSymbolHarness()
 
 		const result = widget.methods.viaStableSymbolTwice()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('Expected a failure result.')
 
-		expect(result.issues)
+		expect(result.failure.diagnostics)
 			.toHaveLength(1)
-		if (result.issues[0]!.source.type !== 'method-dependency')
-			throw new Error('Expected a method-dependency issue.')
-		expect(typeof result.issues[0]!.source.received)
+		if (result.failure.diagnostics[0]!.code !== 'dependency-value-rejected')
+			throw new Error('Expected a dependency-value-rejected diagnostic.')
+		expect(typeof result.failure.diagnostics[0]!.received)
 			.toBe('symbol')
 	})
 })

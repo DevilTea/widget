@@ -1,7 +1,7 @@
 /**
  * Shared real `@deviltea/widget-core` fixtures for `@deviltea/widget-vue`'s unit tests.
  *
- * Per issue #13 checkpoint G, conformance tests use real Runtime fixtures, never a parallel mocked
+ * Per diagnostic #13 checkpoint G, conformance tests use real Runtime fixtures, never a parallel mocked
  * semantic core. Not part of the public contract, not exported from `index.ts`, and excluded from the
  * `tsconfig.package.json` program (see that file's `exclude`).
  */
@@ -35,6 +35,7 @@ export interface CounterInterfaces extends WidgetInterfaces {
 }
 
 export const CounterPlugin = createWidgetPlugin('Counter')
+	.description('Counter widget')
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
@@ -46,7 +47,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 			registerDeps: ({ dep }) => dep.self.state.get('count'),
 			compute: ({ deps }) => {
 				const result = deps()
-				return (result.success ? (result.value ?? 0) : 0) * 2
+				return (result.ok ? (result.value ?? 0) : 0) * 2
 			},
 		}))
 	.methods(methods =>
@@ -59,7 +60,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 				validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 				execute: ({ args: [step], deps }) => {
 					const current = deps.count()
-					const value = (current.success ? (current.value ?? 0) : 0) + step
+					const value = (current.ok ? (current.value ?? 0) : 0) + step
 					deps.setCount(value)
 					return value
 				},
@@ -74,7 +75,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 			.crash({
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: (): never => {
-					throw new Error('crash() always throws — an implementation exception, not an Issue.')
+					throw new Error('crash() always throws — an implementation exception, not an Diagnostic.')
 				},
 			})
 			.then({
@@ -91,6 +92,7 @@ export interface LabelInterfaces extends WidgetInterfaces {
 }
 
 export const LabelPlugin = createWidgetPlugin('Label')
+	.description('Label widget')
 	.interfaces<LabelInterfaces>()
 	.properties(properties =>
 		properties
@@ -99,7 +101,7 @@ export const LabelPlugin = createWidgetPlugin('Label')
 			})
 			.failing({
 				compute: (ctx) => {
-					ctx.addIssue({ message: 'this property always fails' })
+					ctx.addDiagnostic({ message: 'this property always fails' })
 					return ''
 				},
 			}))
@@ -110,8 +112,13 @@ export interface ContainerInterfaces extends WidgetInterfaces {
 }
 
 export const ContainerPlugin = createWidgetPlugin('Container')
+	.description('Container widget')
 	.interfaces<ContainerInterfaces>()
-	.slots({ 'header': {}, 'body': {}, 'slot-one': {} })
+	.slots({
+		'header': { description: 'Header widgets' },
+		'body': { description: 'Body widgets' },
+		'slot-one': { description: 'First slot widgets' },
+	})
 	.done()
 
 export interface LeafInterfaces extends WidgetInterfaces {
@@ -121,6 +128,7 @@ export interface LeafInterfaces extends WidgetInterfaces {
 }
 
 export const LeafPlugin = createWidgetPlugin('Leaf')
+	.description('Leaf widget')
 	.interfaces<LeafInterfaces>()
 	.state(state =>
 		state.label({
@@ -134,6 +142,7 @@ export interface EmptyStateInterfaces extends WidgetInterfaces {
 }
 
 export const EmptyStatePlugin = createWidgetPlugin('EmptyState')
+	.description('Empty-state widget')
 	.interfaces<EmptyStateInterfaces>()
 	.state(state => state)
 	.done()
@@ -143,6 +152,7 @@ export interface EmptyPropertiesInterfaces extends WidgetInterfaces {
 }
 
 export const EmptyPropertiesPlugin = createWidgetPlugin('EmptyProperties')
+	.description('Empty-properties widget')
 	.interfaces<EmptyPropertiesInterfaces>()
 	.properties(properties => properties)
 	.done()
@@ -152,12 +162,13 @@ export interface EmptyMethodsInterfaces extends WidgetInterfaces {
 }
 
 export const EmptyMethodsPlugin = createWidgetPlugin('EmptyMethods')
+	.description('Empty-methods widget')
 	.interfaces<EmptyMethodsInterfaces>()
 	.methods(methods => methods)
 	.done()
 
 /**
- * `slots: never` is the canonical explicit-empty-slots spelling (issue #10 amendment
+ * `slots: never` is the canonical explicit-empty-slots spelling (diagnostic #10 amendment
  * "declaration-presence semantics and public `WidgetPlugin.capabilities`"). The `slots` capability is
  * present (`HasWidgetCapability<..., 'slots'>` is `true`, `plugin.capabilities.slots` is `true`) even
  * though there is no legal slot name to declare a child under — `.slots({})` is the required, and only
@@ -168,6 +179,7 @@ export interface EmptySlotsInterfaces extends WidgetInterfaces {
 }
 
 export const EmptySlotsPlugin = createWidgetPlugin('EmptySlots')
+	.description('Empty-slots widget')
 	.interfaces<EmptySlotsInterfaces>()
 	.slots({})
 	.done()
@@ -180,6 +192,7 @@ export const EmptySlotsPlugin = createWidgetPlugin('EmptySlots')
 export interface BareInterfaces extends WidgetInterfaces {}
 
 export const BarePlugin = createWidgetPlugin('Bare')
+	.description('Bare widget')
 	.interfaces<BareInterfaces>()
 	.done()
 
@@ -200,7 +213,7 @@ export const capabilityFixtureSystem = createWidgetSystem({ plugins: capabilityF
 export function createCapabilityFixtureRuntime(definition: unknown, options?: CreateWidgetSystemRuntimeOptions) {
 	const blueprint = capabilityFixtureSystem.createBlueprint(definition)
 	if (blueprint.status !== 'valid')
-		throw new Error(`Invalid capability fixture blueprint: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Invalid capability fixture blueprint: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	return blueprint.createRuntime(options)
 }
@@ -215,7 +228,7 @@ export const otherFixtureSystem = createWidgetSystem({ plugins: fixturePlugins }
 export function createFixtureRuntime(definition: unknown, options?: CreateWidgetSystemRuntimeOptions) {
 	const blueprint = fixtureSystem.createBlueprint(definition)
 	if (blueprint.status !== 'valid')
-		throw new Error(`Invalid fixture blueprint: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Invalid fixture blueprint: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	return blueprint.createRuntime(options)
 }
@@ -223,7 +236,7 @@ export function createFixtureRuntime(definition: unknown, options?: CreateWidget
 export function createOtherFixtureRuntime(definition: unknown, options?: CreateWidgetSystemRuntimeOptions) {
 	const blueprint = otherFixtureSystem.createBlueprint(definition)
 	if (blueprint.status !== 'valid')
-		throw new Error(`Invalid fixture blueprint: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Invalid fixture blueprint: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	return blueprint.createRuntime(options)
 }

@@ -1,6 +1,6 @@
 /**
  * `useGraphEdgeSelection()` regression tests (PR #18 review 4939584651, finding 1): Graph edge
- * selection is a panel-local *snapshot-bound* selection (issue #13 Phase 5 "inspector panel interaction
+ * selection is a panel-local *snapshot-bound* selection (diagnostic #13 Phase 5 "inspector panel interaction
  * contract") and must reset when the applied Blueprint identity changes, but must not reset for any
  * `LabSession` mutation that never crosses the applied-snapshot boundary. Exercised against a real
  * `LabSession` over the real sandbox `WidgetSystem` (no mocked core) plus real Vue reactivity — mirrors

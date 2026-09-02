@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 /**
- * Conformance tests — issue #13 checkpoint G "State conformance", checkpoints C and F.
+ * Conformance tests — diagnostic #13 checkpoint G "State conformance", checkpoints C and F.
  *
  * Real writes, validation rejection, `T | null` Vue setter candidates, authoritative Runtime rollback
- * after a rejected `v-model`-style candidate, independent state-issue projection, and no optimistic
+ * after a rejected `v-model`-style candidate, independent state-diagnostic projection, and no optimistic
  * local writes.
  */
 
@@ -90,23 +90,23 @@ describe('state conformance', () => {
 			.toBe(99)
 	})
 
-	it('projects state issues on a separate, independently-lazy channel from the value channel', async () => {
+	it('projects state diagnostics on a separate, independently-lazy channel from the value channel', async () => {
 		const runtime = createFixtureRuntime({ id: 's6', type: 'Counter' })
 		const { bridge } = mountWidgetBridge(runtime, 's6', CounterPlugin)
 		const { count } = bridge.useState()
-		const { count: countIssues } = bridge.useStateIssues()
+		const { count: countDiagnostics } = bridge.useStateDiagnostics()
 
-		expect(countIssues.value)
+		expect(countDiagnostics.value)
 			.toEqual([])
 
 		count.value = -5
 		await nextTick()
 
-		expect(countIssues.value)
+		expect(countDiagnostics.value)
 			.toHaveLength(1)
-		expect(countIssues.value)
-			.toEqual(getCounterWidget(runtime, 's6').state.count.getIssues())
-		// The value channel itself never carries `ExecutionResult`/issue data.
+		expect(countDiagnostics.value)
+			.toEqual(getCounterWidget(runtime, 's6').state.count.getDiagnostics())
+		// The value channel itself never carries `ExecutionResult`/diagnostic data.
 		expect(count.value)
 			.toBe(0)
 	})

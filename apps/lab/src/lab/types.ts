@@ -1,7 +1,7 @@
 /**
  * Widget Lab session types — the non-UI Apply lifecycle contract.
  *
- * Normative source: issue #13 (Widget Lab Phase 4) comment "Checkpoint — Source Apply lifecycle and
+ * Normative source: diagnostic #13 (Widget Lab Phase 4) comment "Checkpoint — Source Apply lifecycle and
  * applied snapshot boundary". This module owns only the Lab-local shape; it consumes
  * `@deviltea/widget-core`'s public Blueprint/Runtime contract and never reinterprets it.
  */
@@ -35,7 +35,7 @@ export interface LabActiveSnapshot<Plugins extends AnyWidgetPluginTuple = AnyWid
 }
 
 /**
- * Caller-supplied Preview replacement seam (issue #13 Phase 4 Apply-lifecycle comment).
+ * Caller-supplied Preview replacement seam (diagnostic #13 Phase 4 Apply-lifecycle comment).
  *
  * `LabSession` never touches the DOM or Vue directly; it only sequences these two hooks around
  * Runtime disposal so the Vue layer can guarantee the old renderer subtree has actually unmounted

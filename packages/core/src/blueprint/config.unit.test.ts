@@ -1,13 +1,13 @@
 /**
  * Conformance coverage for COMMENT 26 §3 (config projection), COMMENT 2 (config semantics) and
- * COMMENT 14 (relative `addIssue()` authoring / framework finalization).
+ * COMMENT 14 (relative `addDiagnostic()` authoring / framework finalization).
  */
 
-import type { BlueprintConfigIssueSource, BlueprintDefinitionIssueSource, WidgetInterfaces } from '../index'
+import type { BlueprintConfigDiagnostic, BlueprintDefinitionDiagnostic, WidgetInterfaces } from '../index'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
-type ConfigMode = 'false-no-issue' | 'false-with-issue' | 'ok' | 'true-with-issue'
+type ConfigMode = 'false-no-diagnostic' | 'false-with-diagnostic' | 'ok' | 'true-with-diagnostic'
 
 interface ConfigRaw {
 	readonly mode: ConfigMode
@@ -31,8 +31,10 @@ function isConfigRaw(value: unknown): value is ConfigRaw {
 const configProbeCalls: unknown[] = []
 
 const configProbePlugin = createWidgetPlugin('config-probe')
+	.description('Test widget')
 	.interfaces<ConfigProbeInterfaces>()
 	.config({
+		description: 'Test config',
 		validate: (input, ctx): input is ConfigRaw => {
 			configProbeCalls.push(input)
 
@@ -42,13 +44,13 @@ const configProbePlugin = createWidgetPlugin('config-probe')
 			switch (input.mode) {
 				case 'ok':
 					return true
-				case 'true-with-issue':
-					ctx.addIssue({ message: 'reported despite a true predicate', path: ['mode'] })
+				case 'true-with-diagnostic':
+					ctx.addDiagnostic({ message: 'reported despite a true predicate', path: ['mode'], reason: 'fixture-rule' })
 					return true
-				case 'false-with-issue':
-					ctx.addIssue({ message: 'reported alongside a false predicate' })
+				case 'false-with-diagnostic':
+					ctx.addDiagnostic({ message: 'reported alongside a false predicate' })
 					return false
-				case 'false-no-issue':
+				case 'false-no-diagnostic':
 					return false
 			}
 		},
@@ -59,6 +61,7 @@ const configProbePlugin = createWidgetPlugin('config-probe')
 interface BareInterfaces extends WidgetInterfaces {}
 
 const barePlugin = createWidgetPlugin('bare')
+	.description('Test widget')
 	.interfaces<BareInterfaces>()
 	.done()
 
@@ -86,11 +89,11 @@ describe('config presence', () => {
 			.toEqual({ mode: 'none' })
 		expect(blueprint.status)
 			.toBe('valid')
-		expect(blueprint.getCollectedIssues())
+		expect(blueprint.diagnostics)
 			.toEqual([])
 	})
 
-	it('an own-property config: undefined is present and is passed to validate', () => {
+	it('an own-property config: undefined is passed to semantic validation and independently diagnosed outside the authored JSON domain', () => {
 		configProbeCalls.length = 0
 
 		const definition = { id: 'root', type: 'config-probe', config: undefined }
@@ -101,22 +104,28 @@ describe('config presence', () => {
 
 		expect(configProbeCalls)
 			.toEqual([undefined])
-		// undefined fails `isConfigRaw`, so the predicate returns false with no authored issue: the
-		// framework fallback still finalizes it as an ordinary config issue, distinct from omission.
+		// undefined fails `isConfigRaw`, so the predicate returns false with no authored diagnostic: the
+		// framework fallback still finalizes it as an ordinary config diagnostic, distinct from omission.
 		expect(root.rawConfig)
 			.toBeNull()
 		expect(root.config)
 			.toEqual({ mode: 'none' })
 		expect(blueprint.status)
 			.toBe('invalid')
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
-			.toHaveLength(1)
-		expect(issues[0]!.source.type)
-			.toBe('config')
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
+			.toHaveLength(2)
+		expect(diagnostics[0]!.code)
+			.toBe('invalid-widget-config')
+		expect(diagnostics[1])
+			.toEqual(expect.objectContaining({
+				code: 'json-incompatible-value',
+				path: ['config'],
+				reason: 'undefined',
+			}))
 	})
 
-	it('an invalid present config produces a config issue carrying the raw input, then resolves via resolve(null)', () => {
+	it('an invalid present config produces a config diagnostic without duplicating the raw input, then resolves via resolve(null)', () => {
 		const { blueprint, root } = getProbeRoot({ id: 'root', type: 'config-probe', config: 'not-an-object' })
 
 		expect(root.rawConfig)
@@ -126,19 +135,19 @@ describe('config presence', () => {
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
 			.toHaveLength(1)
-		const source = issues[0]!.source as BlueprintConfigIssueSource
-		expect(source.type)
-			.toBe('config')
-		expect(source.input)
-			.toBe('not-an-object')
-		expect(source.node)
+		const source = diagnostics[0]! as BlueprintConfigDiagnostic
+		expect(source.code)
+			.toBe('invalid-widget-config')
+		expect('input' in source)
+			.toBe(false)
+		expect(source.location.node)
 			.toBe(root)
 	})
 
-	it('a raw config field on a plugin without config capability produces a definition issue at [\'config\']', () => {
+	it('a raw config field on a plugin without config capability produces a definition diagnostic at [\'config\']', () => {
 		const blueprint = system.createBlueprint({ id: 'root', type: 'bare', config: { anything: true } })
 		const root = blueprint.root
 
@@ -147,17 +156,17 @@ describe('config presence', () => {
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
 			.toHaveLength(1)
-		const source = issues[0]!.source as BlueprintDefinitionIssueSource
-		expect(source.type)
-			.toBe('definition')
-		expect(source.path)
+		const source = diagnostics[0]! as BlueprintDefinitionDiagnostic
+		expect(source.code)
+			.toBe('unexpected-widget-config')
+		expect('path' in source ? source.path : undefined)
 			.toEqual(['config'])
-		expect(source.node)
+		expect(source.location.node)
 			.toBe(root)
-		expect(issues.some(issue => issue.source.type === 'config'))
+		expect(diagnostics.some(diagnostic => diagnostic.code === 'invalid-widget-config'))
 			.toBe(false)
 	})
 })
@@ -172,12 +181,12 @@ describe('config.validate finalization (COMMENT 2 predicate + collector table)',
 			.toEqual({ mode: 'ok' })
 		expect(blueprint.status)
 			.toBe('valid')
-		expect(blueprint.getCollectedIssues())
+		expect(blueprint.diagnostics)
 			.toEqual([])
 	})
 
-	it('predicate true with issues present still fails and discards the typed raw config', () => {
-		const { blueprint, root } = getProbeRoot({ id: 'root', type: 'config-probe', config: { mode: 'true-with-issue' } })
+	it('predicate true with diagnostics present still fails and discards the typed raw config', () => {
+		const { blueprint, root } = getProbeRoot({ id: 'root', type: 'config-probe', config: { mode: 'true-with-diagnostic' } })
 
 		expect(root.rawConfig)
 			.toBeNull()
@@ -186,19 +195,21 @@ describe('config.validate finalization (COMMENT 2 predicate + collector table)',
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
 			.toHaveLength(1)
-		const source = issues[0]!.source as BlueprintConfigIssueSource
-		expect(source.input)
-			.toEqual({ mode: 'true-with-issue' })
+		const source = diagnostics[0]! as BlueprintConfigDiagnostic
+		expect('input' in source)
+			.toBe(false)
 		// the callback's relative `path` is finalized into the absolute config source unchanged.
 		expect(source.path)
 			.toEqual(['mode'])
+		expect(source.reason)
+			.toBe('fixture-rule')
 	})
 
-	it('predicate false with issues present fails using the authored issue', () => {
-		const { blueprint, root } = getProbeRoot({ id: 'root', type: 'config-probe', config: { mode: 'false-with-issue' } })
+	it('predicate false with diagnostics present fails using the authored diagnostic', () => {
+		const { blueprint, root } = getProbeRoot({ id: 'root', type: 'config-probe', config: { mode: 'false-with-diagnostic' } })
 
 		expect(root.rawConfig)
 			.toBeNull()
@@ -207,18 +218,18 @@ describe('config.validate finalization (COMMENT 2 predicate + collector table)',
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
 			.toHaveLength(1)
-		const source = issues[0]!.source as BlueprintConfigIssueSource
-		expect(source.input)
-			.toEqual({ mode: 'false-with-issue' })
+		const source = diagnostics[0]! as BlueprintConfigDiagnostic
+		expect('input' in source)
+			.toBe(false)
 		expect(source.path)
 			.toBeUndefined()
 	})
 
-	it('predicate false with an empty collector triggers a framework-generated fallback issue', () => {
-		const { blueprint, root } = getProbeRoot({ id: 'root', type: 'config-probe', config: { mode: 'false-no-issue' } })
+	it('predicate false with an empty collector triggers a framework-generated fallback diagnostic', () => {
+		const { blueprint, root } = getProbeRoot({ id: 'root', type: 'config-probe', config: { mode: 'false-no-diagnostic' } })
 
 		expect(root.rawConfig)
 			.toBeNull()
@@ -227,19 +238,19 @@ describe('config.validate finalization (COMMENT 2 predicate + collector table)',
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
 			.toHaveLength(1)
-		const source = issues[0]!.source as BlueprintConfigIssueSource
-		expect(source.type)
-			.toBe('config')
-		expect(source.input)
-			.toEqual({ mode: 'false-no-issue' })
+		const source = diagnostics[0]! as BlueprintConfigDiagnostic
+		expect(source.code)
+			.toBe('invalid-widget-config')
+		expect('input' in source)
+			.toBe(false)
 		// the exact fallback message text is not part of the stable contract (COMMENT 29); only that a
-		// non-empty message was produced so `Issue.message` remains a string.
-		expect(typeof issues[0]!.message)
+		// non-empty message was produced so `Diagnostic.message` remains a string.
+		expect(typeof diagnostics[0]!.message)
 			.toBe('string')
-		expect(issues[0]!.message.length)
+		expect(diagnostics[0]!.message.length)
 			.toBeGreaterThan(0)
 	})
 })

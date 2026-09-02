@@ -4,7 +4,7 @@
  * The panel remains a closable, lazily-added Dockview surface rather than a sixth canonical Lab tab.
  * Every caller routes through `open()`; Workbench owns the actual `addPanel`/activation side effect.
  *
- * Issue #42 adds a second explorer mode without changing the shared widget-focus model:
+ * Diagnostic #42 adds a second explorer mode without changing the shared widget-focus model:
  *
  * - `focused` is the existing contextual inspector. Existing Preview/Blueprint/tutorial callers use
  *   this default and the panel resolves whatever `LabStore.focus` already points at.

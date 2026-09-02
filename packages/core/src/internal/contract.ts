@@ -1,7 +1,7 @@
 /**
  * Public Blueprint/Runtime surface plus the framework-internal Blueprint -> Runtime data model.
  *
- * Normative source: issue #10 checkpoint B/C/E/F, amendments "Blueprint recovery edge-case contract",
+ * Normative source: diagnostic #10 checkpoint B/C/E/F, amendments "Blueprint recovery edge-case contract",
  * "dependency resolution and compiled-edge invariants", "simplify method graph semantics",
  * "disposed Runtime exact error surface", "overrideStateDefaults is best-effort" and consolidated
  * handoff §6/§9/§11/§13/§14/§15/§19/§20.
@@ -13,18 +13,19 @@
  */
 
 import type { DependencyRefinement } from '../dep'
-import type { ExecutionResult } from '../execution-result'
 import type {
 	BlueprintDependencyMember,
 	BlueprintDependencyReference,
-	BlueprintIssue,
-	RuntimeLevelIssue,
-	RuntimeMethodIssue,
-	RuntimePropertyIssue,
-	RuntimeStateIssue,
-	RuntimeWidgetIssue,
-	WidgetSystemRuntimeIssue,
-} from '../issue'
+	BlueprintDiagnostic,
+	BlueprintNodeDiagnostic,
+	RuntimeMethodDiagnostic,
+	RuntimePropertyDiagnostic,
+	RuntimeStateDiagnostic,
+	RuntimeWidgetDiagnostic,
+	WidgetSystemRuntimeDiagnostic,
+} from '../diagnostic'
+import type { ExecutionResult } from '../execution-result'
+import type { JsonValue } from '../json'
 import type {
 	AnyWidgetPlugin,
 	AnyWidgetPluginTuple,
@@ -58,19 +59,22 @@ import type {
 
 export type WidgetSystemBlueprintStatus = 'valid' | 'invalid'
 
-export interface BlueprintWidgetNodeBase<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
+export interface BlueprintWidgetNodeBase<
+	Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple,
+	Source = unknown,
+> {
 	/**
 	 * The exact source fragment for this recovered node. Never mutated, cloned or frozen by the core.
 	 */
-	readonly rawDefinition: unknown
-	getIssues: () => readonly BlueprintIssue<Plugins>[]
+	readonly source: Source
+	readonly diagnostics: readonly BlueprintNodeDiagnostic<Plugins>[]
 }
 
 /**
  * A node whose widget semantic identity could not be established (missing/invalid `id`,
  * missing/invalid `type`, or unknown plugin type).
  */
-export interface UnresolvedBlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends BlueprintWidgetNodeBase<Plugins> {
+export interface UnresolvedBlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown> extends BlueprintWidgetNodeBase<Plugins, Source> {
 	readonly resolved: false
 }
 
@@ -81,15 +85,16 @@ export interface UnresolvedBlueprintWidgetNode<Plugins extends AnyWidgetPluginTu
 export type BlueprintSemanticSlots<
 	Interfaces extends WidgetInterfaces,
 	Plugins extends AnyWidgetPluginTuple,
+	Source = unknown,
 > = {
-	readonly [Name in WidgetSlotNameOf<Interfaces>]: readonly BlueprintWidgetNode<Plugins>[]
+	readonly [Name in WidgetSlotNameOf<Interfaces>]: readonly BlueprintWidgetNode<Plugins, Source>[]
 }
 
 export type BlueprintNodeConfigFields<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
 	? {
 			/**
 			 * Typed raw config, or `null` when the raw config was omitted or invalid. The exact source
-			 * fragment always stays available through `rawDefinition`.
+			 * fragment always stays available through `source`.
 			 */
 			readonly rawConfig: WidgetRawConfigOf<Interfaces> | null
 			readonly config: WidgetResolvedConfigOf<Interfaces>
@@ -103,31 +108,32 @@ export type BlueprintNodeConfigFields<Interfaces extends WidgetInterfaces> = Has
 export type ResolvedBlueprintWidgetNodeFor<
 	Plugin extends AnyWidgetPlugin,
 	Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple,
+	Source = unknown,
 >
-	= & BlueprintWidgetNodeBase<Plugins>
+	= & BlueprintWidgetNodeBase<Plugins, Source>
 		& {
 			readonly resolved: true
 			readonly id: WidgetId
 			readonly type: WidgetPluginTypeOf<Plugin>
 			readonly plugin: Plugin
-			readonly slots: BlueprintSemanticSlots<WidgetInterfacesOf<Plugin>, Plugins>
+			readonly slots: BlueprintSemanticSlots<WidgetInterfacesOf<Plugin>, Plugins, Source>
 		}
 		& BlueprintNodeConfigFields<WidgetInterfacesOf<Plugin>>
 
-export type ResolvedBlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = Plugins[number] extends infer Plugin
+export type ResolvedBlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown> = Plugins[number] extends infer Plugin
 	? Plugin extends AnyWidgetPlugin
-		? ResolvedBlueprintWidgetNodeFor<Plugin, Plugins>
+		? ResolvedBlueprintWidgetNodeFor<Plugin, Plugins, Source>
 		: never
 	: never
 
-export type BlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
-	= | UnresolvedBlueprintWidgetNode<Plugins>
-		| ResolvedBlueprintWidgetNode<Plugins>
+export type BlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown>
+	= | UnresolvedBlueprintWidgetNode<Plugins, Source>
+		| ResolvedBlueprintWidgetNode<Plugins, Source>
 
 /**
  * The semantic node type a plugin author sees for its own widget.
  */
-export type SelfBlueprintWidgetNode<Interfaces extends WidgetInterfaces> = ResolvedBlueprintWidgetNodeFor<WidgetPlugin<string, Interfaces>>
+export type SelfBlueprintWidgetNode<Interfaces extends WidgetInterfaces> = ResolvedBlueprintWidgetNodeFor<WidgetPlugin<string, Interfaces>, AnyWidgetPluginTuple, JsonValue>
 
 /**
  * Compile-time view of {@link BlueprintSemanticSlots}: same complete declared-slot map, but every
@@ -137,48 +143,50 @@ export type SelfBlueprintWidgetNode<Interfaces extends WidgetInterfaces> = Resol
 export type BlueprintSemanticSlotsView<
 	Interfaces extends WidgetInterfaces,
 	Plugins extends AnyWidgetPluginTuple,
+	Source = unknown,
 > = {
-	readonly [Name in WidgetSlotNameOf<Interfaces>]: readonly BlueprintWidgetNodeView<Plugins>[]
+	readonly [Name in WidgetSlotNameOf<Interfaces>]: readonly BlueprintWidgetNodeView<Plugins, Source>[]
 }
 
 /**
- * Compile-time view of {@link ResolvedBlueprintWidgetNodeFor}: no `getIssues()`, and `.slots`'
+ * Compile-time view of {@link ResolvedBlueprintWidgetNodeFor}: no `diagnostics`, and `.slots`'
  * children are themselves views (recursive), not full nodes.
  */
 export type ResolvedBlueprintWidgetNodeViewFor<
 	Plugin extends AnyWidgetPlugin,
 	Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple,
+	Source = unknown,
 >
-	= & Omit<ResolvedBlueprintWidgetNodeFor<Plugin, Plugins>, 'getIssues' | 'slots'>
+	= & Omit<ResolvedBlueprintWidgetNodeFor<Plugin, Plugins, Source>, 'diagnostics' | 'slots'>
 		& {
-			readonly slots: BlueprintSemanticSlotsView<WidgetInterfacesOf<Plugin>, Plugins>
+			readonly slots: BlueprintSemanticSlotsView<WidgetInterfacesOf<Plugin>, Plugins, Source>
 		}
 
 /**
  * The resolved-only compile-time node view, distributed over the registered plugin tuple, for
  * compile-time locations that are only reachable from a resolved node (slot / slot-child).
  */
-export type ResolvedBlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = Plugins[number] extends infer Plugin
+export type ResolvedBlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown> = Plugins[number] extends infer Plugin
 	? Plugin extends AnyWidgetPlugin
-		? ResolvedBlueprintWidgetNodeViewFor<Plugin, Plugins>
+		? ResolvedBlueprintWidgetNodeViewFor<Plugin, Plugins, Source>
 		: never
 	: never
 
 /**
- * Compile-time view of {@link BlueprintWidgetNode}: same navigation shape, but with `getIssues()`
+ * Compile-time view of {@link BlueprintWidgetNode}: same navigation shape, but with `diagnostics`
  * removed recursively — including through `.slots`' children — not just at the top level.
  *
  * Used only for the types compile-time callbacks (`validateStructure`, `registerDeps`) and
  * {@link BlueprintCompileView} see. Backed by a genuinely restricted, frozen runtime facade object —
  * not the same node object the finalized Blueprint later exposes — so a facade never physically has
- * `getIssues()` and no callback can reassign a navigation method to corrupt the view later callbacks in
+ * `diagnostics` and no callback can reassign a navigation method to corrupt the view later callbacks in
  * the same compile pass observe. Facade identity is snapshot-local to one compile pass; the finalized
- * Blueprint's nodes (which do carry `getIssues()`) are separate full-node objects built once
- * compilation completes, because no final issue snapshot exists yet while compilation is in progress.
+ * Blueprint's nodes (which do carry `diagnostics`) are separate full-node objects built once
+ * compilation completes, because no final diagnostic snapshot exists yet while compilation is in progress.
  */
-export type BlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
-	= | Omit<UnresolvedBlueprintWidgetNode<Plugins>, 'getIssues'>
-		| ResolvedBlueprintWidgetNodeView<Plugins>
+export type BlueprintWidgetNodeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown>
+	= | Omit<UnresolvedBlueprintWidgetNode<Plugins, Source>, 'diagnostics'>
+		| ResolvedBlueprintWidgetNodeView<Plugins, Source>
 
 /**
  * Compile-time view of {@link SelfBlueprintWidgetNode}, for the same reason as
@@ -192,19 +200,19 @@ export type SelfBlueprintWidgetNodeView<Interfaces extends WidgetInterfaces> = R
  * `slot` is a confirmed semantic slot edge; `raw-slot` is a recovered source edge that was not
  * confirmed semantically.
  */
-export type WidgetLocation<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
+export type WidgetLocation<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown>
 	= | {
 		readonly type: 'root'
 	}
 	| {
 		readonly type: 'slot'
-		readonly parent: ResolvedBlueprintWidgetNode<Plugins>
+		readonly parent: ResolvedBlueprintWidgetNode<Plugins, Source>
 		readonly slot: WidgetMemberKey
 		readonly index: number
 	}
 	| {
 		readonly type: 'raw-slot'
-		readonly parent: BlueprintWidgetNode<Plugins>
+		readonly parent: BlueprintWidgetNode<Plugins, Source>
 		readonly slot: string
 		readonly index: number
 	}
@@ -213,21 +221,21 @@ export type WidgetLocation<Plugins extends AnyWidgetPluginTuple = AnyWidgetPlugi
  * Compile-time view of {@link WidgetLocation}: same topology shape, but `parent` is a
  * {@link BlueprintWidgetNodeView} / {@link ResolvedBlueprintWidgetNodeView} rather than a full node —
  * a `validateStructure`/`registerDeps` author reaching a location through `BlueprintCompileView`
- * cannot get from there to `getIssues()` either.
+ * cannot get from there to `diagnostics` either.
  */
-export type WidgetLocationView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
+export type WidgetLocationView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown>
 	= | {
 		readonly type: 'root'
 	}
 	| {
 		readonly type: 'slot'
-		readonly parent: ResolvedBlueprintWidgetNodeView<Plugins>
+		readonly parent: ResolvedBlueprintWidgetNodeView<Plugins, Source>
 		readonly slot: WidgetMemberKey
 		readonly index: number
 	}
 	| {
 		readonly type: 'raw-slot'
-		readonly parent: BlueprintWidgetNodeView<Plugins>
+		readonly parent: BlueprintWidgetNodeView<Plugins, Source>
 		readonly slot: string
 		readonly index: number
 	}
@@ -235,7 +243,7 @@ export type WidgetLocationView<Plugins extends AnyWidgetPluginTuple = AnyWidgetP
 /**
  * Read-only semantic view handed to compile-time callbacks (`validateStructure`, `registerDeps`).
  *
- * It intentionally exposes no `getIssues()`, no final status, and no runtime machinery, because
+ * It intentionally exposes no `diagnostics`, no final status, and no runtime machinery, because
  * compilation is still in progress. Every field is `readonly` — the concrete runtime object the
  * compiler hands out is additionally frozen, so plugin code cannot reassign a navigation method to
  * corrupt the view later callbacks in the same compile pass see.
@@ -253,12 +261,12 @@ export interface BlueprintCompileView<Plugins extends AnyWidgetPluginTuple = Any
  * Read-only valid-Blueprint view handed to runtime semantic callbacks (`compute`, `execute`).
  */
 export interface ValidBlueprintView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
-	readonly root: ResolvedBlueprintWidgetNode<Plugins>
-	getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins> | null
-	getParent: (node: ResolvedBlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins> | null
-	getLocation: (node: ResolvedBlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins> | null
-	getChildren: (node: ResolvedBlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins>[]
-	getChildrenAt: (node: ResolvedBlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins>[]
+	readonly root: ResolvedBlueprintWidgetNode<Plugins, JsonValue>
+	getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
+	getParent: (node: ResolvedBlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
+	getLocation: (node: ResolvedBlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+	getChildren: (node: ResolvedBlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
+	getChildrenAt: (node: ResolvedBlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -269,7 +277,7 @@ export interface ValidBlueprintView<Plugins extends AnyWidgetPluginTuple = AnyWi
  * Typed raw representation of one widget. Not the compiler input type: `createBlueprint` takes
  * `unknown` because JSON-parsed/untrusted input is the real boundary.
  */
-export type RawWidgetDefinitionFor<
+export type WidgetSourceFor<
 	Plugin extends AnyWidgetPlugin,
 	Plugins extends AnyWidgetPluginTuple,
 >
@@ -284,63 +292,67 @@ export type RawWidgetDefinitionFor<
 		? {
 				// Explicit-empty slots (`slots: never`) still gets an optional `slots` field here, typed
 				// `{}` (zero valid names) — present but only satisfiable by an empty object, distinct from a
-				// plugin without slots capability, which has no `slots` field on its raw definition at all.
+				// plugin without slots capability, which has no `slots` field on its authored source at all.
 				readonly slots?: {
-					readonly [Name in WidgetSlotNameOf<WidgetInterfacesOf<Plugin>>]?: readonly RawWidgetDefinition<Plugins>[]
+					readonly [Name in WidgetSlotNameOf<WidgetInterfacesOf<Plugin>>]?: readonly WidgetSource<Plugins>[]
 				}
 			}
 		: unknown)
 
-export type RawWidgetDefinition<Plugins extends AnyWidgetPluginTuple> = Plugins[number] extends infer Plugin
+export type WidgetSource<Plugins extends AnyWidgetPluginTuple> = Plugins[number] extends infer Plugin
 	? Plugin extends AnyWidgetPlugin
-		? RawWidgetDefinitionFor<Plugin, Plugins>
+		? WidgetSourceFor<Plugin, Plugins>
 		: never
 	: never
 
-export interface WidgetSystemBlueprintBase<Plugins extends AnyWidgetPluginTuple> {
+export interface WidgetSystemBlueprintBase<Plugins extends AnyWidgetPluginTuple, Source = unknown> {
 	readonly system: WidgetSystem<Plugins>
 	/**
 	 * The exact entire unknown input this Blueprint was compiled from.
 	 */
-	readonly rawDefinition: unknown
+	readonly source: Source
+	readonly sourceJsonCompatible: boolean
 	/**
 	 * Observably equivalent to `blueprint.system.createBlueprint(next)`.
 	 */
 	recompile: (definition: unknown) => WidgetSystemBlueprint<Plugins>
 }
 
-export interface ValidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends WidgetSystemBlueprintBase<Plugins> {
+export interface ValidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends WidgetSystemBlueprintBase<Plugins, JsonValue> {
 	readonly status: 'valid'
-	readonly root: ResolvedBlueprintWidgetNode<Plugins>
-	getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins> | null
-	getParent: (node: BlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins> | null
-	getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins> | null
-	getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins>[]
-	getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins>[]
-	getCollectedIssues: () => readonly never[]
+	readonly sourceJsonCompatible: true
+	readonly root: ResolvedBlueprintWidgetNode<Plugins, JsonValue>
+	getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
+	getParent: (node: BlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
+	getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+	getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
+	getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
+	readonly diagnostics: readonly never[]
 	createRuntime: (options?: CreateWidgetSystemRuntimeOptions) => WidgetSystemRuntime<Plugins>
 }
 
-export interface InvalidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends WidgetSystemBlueprintBase<Plugins> {
+export interface InvalidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown, Compatible extends boolean = boolean> extends WidgetSystemBlueprintBase<Plugins, Source> {
 	readonly status: 'invalid'
-	readonly root: BlueprintWidgetNode<Plugins>
-	getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins> | null
-	getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins> | null
-	getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins> | null
-	getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins>[]
-	getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins>[]
-	getCollectedIssues: () => readonly BlueprintIssue<Plugins>[]
+	readonly sourceJsonCompatible: Compatible
+	readonly root: BlueprintWidgetNode<Plugins, Source>
+	getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins, Source> | null
+	getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins, Source> | null
+	getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, Source> | null
+	getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins, Source>[]
+	getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins, Source>[]
+	readonly diagnostics: readonly BlueprintDiagnostic<Plugins>[]
 }
 
 /**
  * Immutable compiled semantic snapshot of one unknown/raw widget tree.
  *
- * A valid Blueprint narrows every node query to resolved nodes, narrows collected issues to empty and
+ * A valid Blueprint narrows every node query to resolved nodes, narrows collected diagnostics to empty and
  * is the only variant exposing `createRuntime`.
  */
 export type WidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
 	= | ValidWidgetSystemBlueprint<Plugins>
-		| InvalidWidgetSystemBlueprint<Plugins>
+		| InvalidWidgetSystemBlueprint<Plugins, JsonValue, true>
+		| InvalidWidgetSystemBlueprint<Plugins, unknown, false>
 
 // -------------------------------------------------------------------------------------------------
 // Public Runtime
@@ -356,23 +368,23 @@ export interface CreateWidgetSystemRuntimeOptions {
 
 export interface RuntimeState<T> {
 	get: () => T | null
-	set: (value: T) => ExecutionResult<T, RuntimeStateIssue>
+	set: (value: T) => ExecutionResult<T, RuntimeStateDiagnostic>
 	subscribe: (listener: (value: T | null) => void) => () => void
-	getIssues: () => readonly RuntimeStateIssue[]
-	subscribeIssues: (listener: (issues: readonly RuntimeStateIssue[]) => void) => () => void
+	getDiagnostics: () => readonly RuntimeStateDiagnostic[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeStateDiagnostic[]) => void) => () => void
 }
 
 export interface RuntimeProperty<T> {
-	get: () => ExecutionResult<T | null, RuntimePropertyIssue>
-	subscribe: (listener: (result: ExecutionResult<T | null, RuntimePropertyIssue>) => void) => () => void
-	getIssues: () => readonly RuntimePropertyIssue[]
-	subscribeIssues: (listener: (issues: readonly RuntimePropertyIssue[]) => void) => () => void
+	get: () => ExecutionResult<T | null, RuntimePropertyDiagnostic>
+	subscribe: (listener: (result: ExecutionResult<T | null, RuntimePropertyDiagnostic>) => void) => () => void
+	getDiagnostics: () => readonly RuntimePropertyDiagnostic[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimePropertyDiagnostic[]) => void) => () => void
 }
 
 export interface RuntimeMethod<Fn extends (...args: any[]) => any> {
-	(...args: Parameters<Fn>): ExecutionResult<ReturnType<Fn> | null, RuntimeMethodIssue>
-	getIssues: () => readonly RuntimeMethodIssue[]
-	subscribeIssues: (listener: (issues: readonly RuntimeMethodIssue[]) => void) => () => void
+	(...args: Parameters<Fn>): ExecutionResult<ReturnType<Fn> | null, RuntimeMethodDiagnostic>
+	getDiagnostics: () => readonly RuntimeMethodDiagnostic[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeMethodDiagnostic[]) => void) => () => void
 }
 
 export type RuntimeStateSurface<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
@@ -397,7 +409,7 @@ export type RuntimePropertySurface<Interfaces extends WidgetInterfaces> = HasWid
  * exposes an empty `methods` surface), matching Runtime assembly's `definition.methods !== null` check.
  * Gating on `WidgetMethodKeyOf` instead would collapse "declared empty" into "absent" because both have
  * an empty key union; gating on `[WidgetMethodsOf<Interfaces>] extends [never]` would additionally
- * misclassify any capability whose *payload* itself is `never` (issue #10 amendment "declaration-presence
+ * misclassify any capability whose *payload* itself is `never` (diagnostic #10 amendment "declaration-presence
  * semantics and public `WidgetPlugin.capabilities`").
  */
 export type RuntimeMethodSurface<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
@@ -418,12 +430,12 @@ export type RuntimeWidgetFor<
 		readonly blueprint: ResolvedBlueprintWidgetNodeFor<Plugin, Plugins>
 		/**
 		 * This widget's own aggregate diagnostic snapshot: state members -> property members -> method
-		 * members, declaration order within each capability, each primitive's own local issue order.
+		 * members, declaration order within each capability, each primitive's own local diagnostic order.
 		 * Present regardless of declared capabilities (a widget with none aggregates to `[]`). Never
-		 * includes Runtime-level issues.
+		 * includes Runtime-level diagnostics.
 		 */
-		getIssues: () => readonly RuntimeWidgetIssue[]
-		subscribeIssues: (listener: (issues: readonly RuntimeWidgetIssue[]) => void) => () => void
+		getDiagnostics: () => readonly RuntimeWidgetDiagnostic[]
+		subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeWidgetDiagnostic[]) => void) => () => void
 	}
 	& RuntimeStateSurface<WidgetInterfacesOf<Plugin>>
 	& RuntimePropertySurface<WidgetInterfacesOf<Plugin>>
@@ -446,15 +458,11 @@ export interface WidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple = AnyW
 	readonly isDisposed: boolean
 	getWidget: (id: WidgetId) => RuntimeWidget<Plugins> | null
 	/**
-	 * Runtime-level issues only.
-	 */
-	getIssues: () => readonly RuntimeLevelIssue[]
-	/**
-	 * Runtime-level issues plus the current state/property/method issue snapshots, in deterministic
+	 * Runtime-level diagnostics plus the current state/property/method diagnostic snapshots, in deterministic
 	 * order. Never history, and never activates property evaluation.
 	 */
-	getCollectedIssues: () => readonly WidgetSystemRuntimeIssue[]
-	subscribeCollectedIssues: (listener: (issues: readonly WidgetSystemRuntimeIssue[]) => void) => () => void
+	getDiagnostics: () => readonly WidgetSystemRuntimeDiagnostic[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly WidgetSystemRuntimeDiagnostic[]) => void) => () => void
 	dispose: () => void
 }
 
@@ -494,13 +502,13 @@ export interface AbsentCompiledDependency extends CompiledDependencyBase {
 /**
  * Every other ordinary dependency-resolution failure: required target missing, ambiguous target,
  * unique-but-unresolved target, missing capability, or missing member. Always accompanied by a
- * Blueprint dependency Issue, so a Blueprint carrying one is always `invalid`. `targetNodeId` is
+ * Blueprint dependency Diagnostic, so a Blueprint carrying one is always `invalid`. `targetNodeId` is
  * present only when target cardinality resolved to exactly one recovered node before the later
  * resolution step failed (unresolved target / missing capability / missing member); it is absent for
  * missing/ambiguous targets, where cardinality itself never reached one.
  *
- * Distinct from `absent` (issue #10 inspection amendment "inspection exact API v1 part 1"): `absent` is
- * legal, Issue-free, optional-cardinality-0 absence; `invalid` is always a diagnosed failure. Runtime
+ * Distinct from `absent` (diagnostic #10 inspection amendment "inspection exact API v1 part 1"): `absent` is
+ * legal, Diagnostic-free, optional-cardinality-0 absence; `invalid` is always a diagnosed failure. Runtime
  * materialization never reaches this state — Runtime is only ever created from a valid Blueprint, and
  * every `invalid` leaf implies an invalid Blueprint.
  */
@@ -556,11 +564,11 @@ export interface CompiledRawSlot {
 export interface CompiledWidgetNodeBase<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly nodeId: InternalNodeId
 	readonly publicNode: BlueprintWidgetNode<Plugins>
-	readonly rawDefinition: unknown
+	readonly source: unknown
 	readonly parentNodeId: InternalNodeId | null
 	readonly location: WidgetLocation<Plugins>
 	readonly rawSlots: readonly CompiledRawSlot[]
-	readonly issues: readonly BlueprintIssue<Plugins>[]
+	readonly diagnostics: readonly BlueprintNodeDiagnostic<Plugins>[]
 }
 
 export interface CompiledUnresolvedWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends CompiledWidgetNodeBase<Plugins> {
@@ -616,7 +624,8 @@ export interface CompiledGraphAnalysis {
  */
 export interface CompiledBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly system: WidgetSystem<Plugins>
-	readonly rawDefinition: unknown
+	readonly source: unknown
+	readonly sourceJsonCompatible: boolean
 	readonly status: WidgetSystemBlueprintStatus
 	readonly rootNodeId: InternalNodeId
 	/**
@@ -632,7 +641,7 @@ export interface CompiledBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWid
 	 * Semantic traversal order, used for deterministic diagnostic aggregation.
 	 */
 	readonly semanticOrder: readonly InternalNodeId[]
-	readonly issues: readonly BlueprintIssue<Plugins>[]
+	readonly diagnostics: readonly BlueprintDiagnostic<Plugins>[]
 	readonly analysis: CompiledGraphAnalysis
 }
 

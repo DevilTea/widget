@@ -1,5 +1,5 @@
 /**
- * `layoutGraph()` — the real, Worker-backed `LayoutGraphFn` (issue #13 Phase 5 "Dependency Graph worker
+ * `layoutGraph()` — the real, Worker-backed `LayoutGraphFn` (diagnostic #13 Phase 5 "Dependency Graph worker
  * loading" comment).
  *
  * One persistent Vite module Worker for the Lab's lifetime, created lazily on first use rather than a
@@ -24,14 +24,14 @@ function ensureElk(): ElkInstance {
 	if (elk !== null)
 		return elk
 
-	// Vite native module-worker integration (issue #13 Phase 5 comment) — not `useWebWorkerFn` and not a
+	// Vite native module-worker integration (diagnostic #13 Phase 5 comment) — not `useWebWorkerFn` and not a
 	// Blob Worker, so Vite owns bundling/code-splitting for `layout.worker.ts` and its `elkjs` import.
 	worker = new Worker(new URL('./layout.worker.ts', import.meta.url), { type: 'module' })
 	elk = new ELK({ workerFactory: () => worker! })
 	return elk
 }
 
-/** The `layoutGraph(graph): Promise<LayoutedGraph>` adapter (issue #13 Phase 5 implementation stack). */
+/** The `layoutGraph(graph): Promise<LayoutedGraph>` adapter (diagnostic #13 Phase 5 implementation stack). */
 export const layoutGraph: LayoutGraphFn = async (graph) => {
 	const result = await ensureElk()
 		.layout(toElkGraph(graph))
@@ -39,7 +39,7 @@ export const layoutGraph: LayoutGraphFn = async (graph) => {
 }
 
 /**
- * Application/component lifecycle cleanup (issue #13 Phase 5: "Worker shutdown is app lifecycle
+ * Application/component lifecycle cleanup (diagnostic #13 Phase 5: "Worker shutdown is app lifecycle
  * cleanup"). Does not touch widget-core Runtime ownership/disposal semantics — this only tears down the
  * Lab-local layout transport.
  */

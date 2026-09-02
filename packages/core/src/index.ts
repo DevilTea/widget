@@ -1,7 +1,7 @@
 /**
  * `@deviltea/widget-core` public contract.
  *
- * The normative semantic contract is GitHub issue #10 ("Widget composition core architecture —
+ * The normative semantic contract is GitHub diagnostic #10 ("Widget composition core architecture —
  * canonical decision log"); its consolidated implementation handoff plus the accepted amendments are
  * authoritative over any comment in this package.
  */
@@ -28,11 +28,72 @@ export type {
 	UnknownTargetStateDependencyOperations,
 } from './dep'
 
+export { EMPTY_DIAGNOSTICS, WidgetSystemRuntimeDisposedError } from './diagnostic'
+
 export type {
-	ExecutionResult,
-	FailedExecutionResult,
-	SuccessfulExecutionResult,
-} from './execution-result'
+	BlueprintConfigDiagnostic,
+	BlueprintDefinitionDiagnostic,
+	BlueprintDependencyDiagnostic,
+	BlueprintDependencyDiagnosticLocation,
+	BlueprintDependencyOperation,
+	BlueprintDependencyReference,
+	BlueprintDependencyTarget,
+	BlueprintDiagnostic,
+	BlueprintDiagnosticLocation,
+	BlueprintMethodDiagnosticLocation,
+	BlueprintNodeDiagnostic,
+	BlueprintNodeDiagnosticLocation,
+	BlueprintPropertyDiagnosticLocation,
+	BlueprintSlotChildDiagnosticLocation,
+	BlueprintSlotDiagnosticLocation,
+	BlueprintSourceDiagnostic,
+	BlueprintSourceDiagnosticLocation,
+	BlueprintStructureDiagnostic,
+	BlueprintStructureDiagnosticLocation,
+	BlueprintWidgetDiagnosticLocation,
+	Diagnostic,
+	DiagnosticBase,
+	DiagnosticCollector,
+	DiagnosticPath,
+	JsonCompatibilityDiagnostic,
+	JsonCompatibilityReason,
+	RelativePluginStructureDiagnosticInput,
+	RelativeSlotStructureDiagnosticInput,
+	RelativeStructureDiagnosticLocation,
+	RelativeSystemStructureDiagnosticInput,
+	RelativeValueDiagnosticInput,
+	RuntimeDependencyTargetFailedDiagnostic,
+	RuntimeDependencyValueRejectedDiagnostic,
+	RuntimeDiagnostic,
+	RuntimeDiagnosticLocation,
+	RuntimeLevelDiagnostic,
+	RuntimeLevelDiagnosticLocation,
+	RuntimeMethodArgsDiagnostic,
+	RuntimeMethodDependencyDiagnostic,
+	RuntimeMethodDiagnostic,
+	RuntimeMethodResultDiagnostic,
+	RuntimePropertyDependencyDiagnostic,
+	RuntimePropertyDiagnostic,
+	RuntimePropertyResultDiagnostic,
+	RuntimeStateDiagnostic,
+	RuntimeWidgetDiagnostic,
+	SourceAccessDiagnostic,
+	WidgetSystemRuntimeDiagnostic,
+} from './diagnostic'
+
+export type {
+	ApplyPatchFailure,
+	ApplyPatchOptions,
+	ApplyPatchResult,
+	CreateWidgetDocumentOptions,
+	DocumentRevisionConflictFailure,
+	ReentrantApplyFailure,
+	WidgetDocument,
+	WidgetDocumentSnapshot,
+} from './document'
+export { createWidgetDocument } from './document'
+
+export type { ExecutionFailure, ExecutionResult } from './execution-result'
 
 export type {
 	BlueprintCompileView,
@@ -44,8 +105,6 @@ export type {
 	BlueprintWidgetNodeView,
 	CreateWidgetSystemRuntimeOptions,
 	InvalidWidgetSystemBlueprint,
-	RawWidgetDefinition,
-	RawWidgetDefinitionFor,
 	ResolvedBlueprintWidgetNode,
 	ResolvedBlueprintWidgetNodeFor,
 	ResolvedBlueprintWidgetNodeView,
@@ -65,58 +124,14 @@ export type {
 	ValidWidgetSystemBlueprint,
 	WidgetLocation,
 	WidgetLocationView,
+	WidgetSource,
+	WidgetSourceFor,
 	WidgetSystemBlueprint,
 	WidgetSystemBlueprintStatus,
 	WidgetSystemRuntime,
 } from './internal/contract'
 
-export { EMPTY_ISSUES, WidgetSystemRuntimeDisposedError } from './issue'
-
-export type {
-	BlueprintConfigIssueSource,
-	BlueprintDefinitionIssueSource,
-	BlueprintDependencyIssueLocation,
-	BlueprintDependencyIssueSource,
-	BlueprintDependencyMember,
-	BlueprintDependencyOperation,
-	BlueprintDependencyReference,
-	BlueprintDependencyTarget,
-	BlueprintIssue,
-	BlueprintIssueLocation,
-	BlueprintIssueSource,
-	BlueprintMethodIssueLocation,
-	BlueprintNodeIssue,
-	BlueprintPropertyIssueLocation,
-	BlueprintSlotChildIssueLocation,
-	BlueprintSlotIssueLocation,
-	BlueprintStructureIssueLocation,
-	BlueprintStructureIssueSource,
-	BlueprintWidgetIssueLocation,
-	Issue,
-	IssueCollector,
-	IssuePath,
-	RelativePluginStructureIssueInput,
-	RelativeSlotStructureIssueInput,
-	RelativeStructureIssueLocation,
-	RelativeSystemStructureIssueInput,
-	RelativeValueIssueInput,
-	RuntimeIssueLocation,
-	RuntimeLevelIssue,
-	RuntimeMethodArgsIssueSource,
-	RuntimeMethodDependencyIssue,
-	RuntimeMethodDependencyIssueSource,
-	RuntimeMethodIssue,
-	RuntimeMethodResultIssueSource,
-	RuntimePropertyDependencyIssue,
-	RuntimePropertyDependencyIssueSource,
-	RuntimePropertyIssue,
-	RuntimePropertyResultIssueSource,
-	RuntimeStateIssue,
-	RuntimeStateOverrideIssueSource,
-	RuntimeStateValidationIssueSource,
-	RuntimeWidgetIssue,
-	WidgetSystemRuntimeIssue,
-} from './issue'
+export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from './json'
 
 export { createWidgetPlugin } from './plugin'
 
@@ -134,6 +149,7 @@ export type {
 	WidgetPlugin,
 	WidgetPluginCapabilities,
 	WidgetPluginConfigPhase,
+	WidgetPluginDescriptionPhase,
 	WidgetPluginDonePhase,
 	WidgetPluginInterfacesPhase,
 	WidgetPluginMethodsPhase,
@@ -157,10 +173,35 @@ export type {
 	WidgetStateValidateContext,
 } from './plugin'
 
+export {
+	normalizeSeparatedWidgetSource,
+	separateWidgetSource,
+} from './separated-source'
+
+export type {
+	SeparatedSourceLocation,
+	SeparatedWidgetData,
+	SeparatedWidgetSource,
+	SeparatedWidgetSourceDiagnostic,
+	SeparatedWidgetSourceDiagnosticCode,
+	SeparatedWidgetSourceNormalization,
+	SeparatedWidgetStructure,
+} from './separated-source'
+
+export type {
+	SourcePatch,
+	SourcePatchOperation,
+	SourcePatchOperationFailure,
+	SourcePatchOperationFailureCode,
+	SourcePath,
+} from './source-patch'
+
 export { createWidgetSystem } from './system'
 
 export type {
 	CreateWidgetSystemOptions,
+	WidgetCatalog,
+	WidgetCatalogEntry,
 	WidgetPluginOf,
 	WidgetSystem,
 	WidgetSystemValidateStructure,

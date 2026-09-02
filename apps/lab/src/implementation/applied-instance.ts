@@ -1,5 +1,5 @@
 /**
- * Applied-instance extraction (issue #25 P3 Scope B). Given the APPLIED source text — always
+ * Applied-instance extraction (diagnostic #25 P3 Scope B). Given the APPLIED source text — always
  * `session.active.sourceText` / `LabStore.active.value.sourceText`, never `draftSourceText` (the P1
  * gate review's "Applied instance ... always derives from the applied snapshot — never the unapplied
  * draft — so the two identities cannot blur") — and a widget id, locates and pretty-prints that
@@ -30,7 +30,7 @@ function isRawWidgetNode(value: unknown): value is RawWidgetNode {
 
 /**
  * Depth-first search through `slots`' own object-of-arrays shape. Returns the first node whose `id`
- * matches — widget ids are unique per the Lab's own source-document convention (issue #13), so "first"
+ * matches — widget ids are unique per the Lab's own source-document convention (diagnostic #13), so "first"
  * and "only" coincide in practice, but this never asserts uniqueness itself.
  */
 function findWidgetNode(value: unknown, widgetId: string): RawWidgetNode | null {

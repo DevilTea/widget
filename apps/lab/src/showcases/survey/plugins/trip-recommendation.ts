@@ -2,11 +2,11 @@
  * `TripRecommendation` (checkpoint §2) — `config + properties`.
  *
  * Locked dependency-failure semantics (checkpoint C2): `result` reads `TripReadiness.ready` first. If
- * readiness is a `property-result` failure, core's dependency propagation (issue #10 §12) makes
+ * readiness is a `property-result` failure, core's dependency propagation (diagnostic #10 §12) makes
  * `result` fail with the corresponding `property-dependency` failure the instant `deps.ready()` is
  * called — this Property must not go on to compute and return a fallback/partial recommendation for a
  * not-ready survey. `compute` therefore returns an inert dummy value immediately after observing
- * `!readyResult.success`; that value is never observed by any consumer (failure exposes no usable
+ * `!readyResult.ok`; that value is never observed by any consumer (failure exposes no usable
  * value), it only satisfies the declared `TripRecommendationResult` return type.
  *
  * Recommendation logic (fit thresholds, style downgrade table, family notes) is the deterministic,
@@ -95,8 +95,10 @@ function familyNotes(children: number, familyPriority: string | null): readonly 
 }
 
 export const TripRecommendationPlugin = createWidgetPlugin('TripRecommendation')
+	.description('Trip recommendation widget')
 	.interfaces<TripRecommendationInterfaces>()
 	.config({
+		description: 'Trip recommendation configuration',
 		validate: (input): input is TripRecommendationConfig => isTripRecommendationConfig(input),
 		resolve: raw => ({
 			readinessId: raw?.readinessId ?? '',
@@ -133,7 +135,7 @@ export const TripRecommendationPlugin = createWidgetPlugin('TripRecommendation')
 			}),
 			compute: ({ deps }) => {
 				const readyResult = deps.ready()
-				if (!readyResult.success)
+				if (!readyResult.ok)
 					return DUMMY_RESULT
 
 				const tripDaysResult = deps.tripDays()
@@ -145,20 +147,20 @@ export const TripRecommendationPlugin = createWidgetPlugin('TripRecommendation')
 				const travelStyleResult = deps.travelStyle()
 				const childrenResult = deps.children()
 				if (
-					!tripDaysResult.success
-					|| !travelerCountResult.success
-					|| !budgetPerPersonPerDayResult.success
-					|| !estimatedBaselineCostResult.success
-					|| !budgetResult.success
-					|| !destinationResult.success
-					|| !travelStyleResult.success
-					|| !childrenResult.success
+					!tripDaysResult.ok
+					|| !travelerCountResult.ok
+					|| !budgetPerPersonPerDayResult.ok
+					|| !estimatedBaselineCostResult.ok
+					|| !budgetResult.ok
+					|| !destinationResult.ok
+					|| !travelStyleResult.ok
+					|| !childrenResult.ok
 				) {
 					return DUMMY_RESULT
 				}
 
 				const familyPriorityResult = deps.familyPriority()
-				const familyPriority = familyPriorityResult.success && typeof familyPriorityResult.value === 'string' ? familyPriorityResult.value : null
+				const familyPriority = familyPriorityResult.ok && typeof familyPriorityResult.value === 'string' ? familyPriorityResult.value : null
 
 				const budget = budgetResult.value
 				const estimatedBaselineCost = estimatedBaselineCostResult.value

@@ -55,7 +55,7 @@ export function createRuntimeReader(runtime: WidgetSystemRuntime<AnyWidgetPlugin
 			const snapshot = property.getSnapshot()
 			return snapshot.status === 'never-evaluated'
 				? { status: 'never-evaluated' }
-				: { status: 'completed', result: { success: snapshot.result.success, value: snapshot.result.success ? snapshot.result.value : undefined } }
+				: { status: 'completed', result: { ok: snapshot.result.ok, value: snapshot.result.ok ? snapshot.result.value : undefined } }
 		},
 	}
 }

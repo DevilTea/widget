@@ -2,7 +2,7 @@
  * Method write-effect analysis, Property purity diagnostics and evaluation-cycle analysis — compile
  * pipeline steps 10-13 (consolidated handoff §10).
  *
- * Normative source: issue #10 amendment "simplify method graph semantics; only Property safety is
+ * Normative source: diagnostic #10 amendment "simplify method graph semantics; only Property safety is
  * normative" (COMMENT 18, superseding COMMENT 12's Property-reachable method-only SCC rule) and
  * consolidated handoff §9.
  *
@@ -10,11 +10,11 @@
  * least one Property. Method-only cyclic SCCs are valid and receive no diagnostics.
  */
 
+import type { BlueprintDependencyDiagnosticLocation, BlueprintDiagnostic } from '../diagnostic'
 import type { CompiledGraphAnalysis, CompiledMemberRef, InternalNodeId, ResolvedBlueprintWidgetNode } from '../internal/contract'
-import type { BlueprintDependencyIssueLocation, BlueprintIssue } from '../issue'
 import type { GraphEdge } from './deps'
 import type { WorkingNode } from './recovery'
-import { dependencyIssue, methodLocation, propertyLocation } from './issues'
+import { dependencyDiagnostic, methodLocation, propertyLocation } from './diagnostics'
 
 interface MemberRef {
 	readonly nodeId: InternalNodeId
@@ -26,7 +26,7 @@ function memberKey(kind: string, nodeId: InternalNodeId, name: string): string {
 	return `${kind}:${nodeId}:${name}`
 }
 
-function memberLocation(nodes: readonly WorkingNode[], ref: MemberRef): BlueprintDependencyIssueLocation {
+function memberLocation(nodes: readonly WorkingNode[], ref: MemberRef): BlueprintDependencyDiagnosticLocation {
 	const node = nodes[ref.nodeId]!.publicNode as ResolvedBlueprintWidgetNode
 	return ref.kind === 'property' ? propertyLocation(node, ref.name) : methodLocation(node, ref.name)
 }
@@ -64,7 +64,7 @@ function computeWritefulMethods(nodes: readonly WorkingNode[], edges: ReadonlyMa
 	return writeful
 }
 
-function emitPurityIssues(nodes: readonly WorkingNode[], edges: ReadonlyMap<string, GraphEdge>, writefulMethods: ReadonlySet<string>, finalIssues: BlueprintIssue[]): void {
+function emitPurityDiagnostics(nodes: readonly WorkingNode[], edges: ReadonlyMap<string, GraphEdge>, writefulMethods: ReadonlySet<string>, finalDiagnostics: BlueprintDiagnostic[]): void {
 	for (const edge of edges.values()) {
 		if (edge.fromKind !== 'property' || edge.toKind !== 'method')
 			continue
@@ -73,7 +73,7 @@ function emitPurityIssues(nodes: readonly WorkingNode[], edges: ReadonlyMap<stri
 
 		const ownerNode = nodes[edge.fromNodeId]!.publicNode as ResolvedBlueprintWidgetNode
 		const targetNode = nodes[edge.toNodeId]!.publicNode as ResolvedBlueprintWidgetNode
-		finalIssues.push(dependencyIssue(
+		finalDiagnostics.push(dependencyDiagnostic(
 			ownerNode,
 			{ type: 'property', name: edge.fromName },
 			`Property "${edge.fromName}" invokes writeful method "${edge.toName}".`,
@@ -132,12 +132,12 @@ function findStronglyConnectedComponents(memberOrder: readonly string[], adjacen
 	return components
 }
 
-function emitCycleIssues(
+function emitCycleDiagnostics(
 	nodes: readonly WorkingNode[],
 	memberOrder: readonly MemberRef[],
 	memberOrderKeys: readonly string[],
 	adjacency: ReadonlyMap<string, readonly string[]>,
-	finalIssues: BlueprintIssue[],
+	finalDiagnostics: BlueprintDiagnostic[],
 ): readonly (readonly CompiledMemberRef[])[] {
 	const refByKey = new Map<string, MemberRef>()
 	for (const ref of memberOrder)
@@ -171,7 +171,7 @@ function emitCycleIssues(
 				.filter(ref => ref !== property)
 				.map(ref => memberLocation(nodes, ref))
 
-			finalIssues.push(dependencyIssue(
+			finalDiagnostics.push(dependencyDiagnostic(
 				ownerNode,
 				{ type: 'property', name: property.name },
 				`Property "${property.name}" participates in an evaluation cycle.`,
@@ -189,10 +189,10 @@ export function runGraphAnalysis(
 	semanticOrder: readonly InternalNodeId[],
 	edges: ReadonlyMap<string, GraphEdge>,
 	directWriteSeeds: ReadonlySet<string>,
-	finalIssues: BlueprintIssue[],
+	finalDiagnostics: BlueprintDiagnostic[],
 ): CompiledGraphAnalysis {
 	const writefulMethods = computeWritefulMethods(nodes, edges, directWriteSeeds)
-	emitPurityIssues(nodes, edges, writefulMethods, finalIssues)
+	emitPurityDiagnostics(nodes, edges, writefulMethods, finalDiagnostics)
 
 	const memberOrder: MemberRef[] = []
 	for (const nodeId of semanticOrder) {
@@ -217,7 +217,7 @@ export function runGraphAnalysis(
 			list.push(toKey)
 	}
 
-	const invalidCycles = emitCycleIssues(nodes, memberOrder, memberOrderKeys, adjacency, finalIssues)
+	const invalidCycles = emitCycleDiagnostics(nodes, memberOrder, memberOrderKeys, adjacency, finalDiagnostics)
 
 	return {
 		writefulMethods,

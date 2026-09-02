@@ -1,7 +1,7 @@
 /**
- * Conformance coverage for issue #10 COMMENT 26 §2 (Blueprint recovery contract).
+ * Conformance coverage for diagnostic #10 COMMENT 26 §2 (Blueprint recovery contract).
  *
- * Normative source: issue #10 checkpoint B (COMMENT 1), amendment "Blueprint recovery edge-case
+ * Normative source: diagnostic #10 checkpoint B (COMMENT 1), amendment "Blueprint recovery edge-case
  * contract" (COMMENT 24), and the U2 blueprint-compiler handoff notes. Only public Blueprint surface
  * imported from the package entry (`../index`) is exercised; internal modules and `blueprintInternals`
  * are out of scope.
@@ -9,14 +9,13 @@
 
 import type {
 	AnyWidgetPluginTuple,
-	BlueprintDefinitionIssueSource,
-	BlueprintIssue,
+	BlueprintDefinitionDiagnostic,
+	BlueprintDiagnostic,
 	BlueprintWidgetNode,
-	Issue,
 	ResolvedBlueprintWidgetNode,
 } from '../index'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_ISSUES } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
 
 // -------------------------------------------------------------------------------------------------
 // Fixture plugins/system
@@ -25,6 +24,7 @@ import { createWidgetPlugin, createWidgetSystem, EMPTY_ISSUES } from '../index'
 interface LeafInterfaces {}
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.done()
 
@@ -33,9 +33,10 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		children: {},
+		children: { description: 'Test slot' },
 	})
 	.done()
 
@@ -44,7 +45,7 @@ const system = createWidgetSystem({
 })
 
 type OurPlugins = (typeof system)['plugins']
-type OurBlueprintIssue = BlueprintIssue<OurPlugins>
+type OurBlueprintDiagnostic = BlueprintDiagnostic<OurPlugins>
 
 // -------------------------------------------------------------------------------------------------
 // Local helpers
@@ -65,17 +66,17 @@ function assertResolved(node: BlueprintWidgetNode<OurPlugins>): ResolvedBlueprin
 	return node
 }
 
-function isDefinitionIssue<Plugins extends AnyWidgetPluginTuple>(
-	issue: BlueprintIssue<Plugins>,
-): issue is Issue<BlueprintDefinitionIssueSource<Plugins>> {
-	return issue.source.type === 'definition'
+function isDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple>(
+	diagnostic: BlueprintDiagnostic<Plugins>,
+): diagnostic is BlueprintDefinitionDiagnostic<Plugins> {
+	return ['invalid-widget-definition', 'invalid-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
 }
 
-function summarizeIssues(issues: readonly OurBlueprintIssue[]) {
-	return issues.map((issue) => {
-		const source = issue.source as { type: string, path?: readonly PropertyKey[], related?: readonly unknown[] }
+function summarizeDiagnostics(diagnostics: readonly OurBlueprintDiagnostic[]) {
+	return diagnostics.map((diagnostic) => {
+		const source = diagnostic as { code: string, path?: readonly PropertyKey[], related?: readonly unknown[] }
 		return {
-			type: source.type,
+			type: source.code,
 			path: source.path,
 			relatedCount: source.related?.length ?? 0,
 		}
@@ -99,18 +100,84 @@ describe('root recovery for non-object input', () => {
 			.toBe('invalid')
 		expect(blueprint.root.resolved)
 			.toBe(false)
-		expect(blueprint.root.rawDefinition)
+		expect(blueprint.root.source)
 			.toBe(definition)
 
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
-		expect(issues)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
+		expect(diagnostics)
 			.toHaveLength(1)
-		const issue = at(issues, 0)
-		expect(issue.source.node)
+		const diagnostic = at(diagnostics, 0)
+		expect(diagnostic.location.node)
 			.toBe(blueprint.root)
-		expect(issue.source.path)
+		expect('path' in diagnostic ? diagnostic.path : undefined)
 			.toBeUndefined()
+	})
+})
+
+describe('hostile source recovery', () => {
+	it('does not execute an accessor-backed id while recovering the exact source candidate', () => {
+		let reads = 0
+		const source = Object.defineProperty({ type: 'leaf' }, 'id', {
+			get() {
+				reads++
+				throw new Error('must not execute')
+			},
+			enumerable: true,
+		})
+
+		const blueprint = system.createBlueprint(source)
+
+		expect(reads)
+			.toBe(0)
+		expect(blueprint.status)
+			.toBe('invalid')
+		expect(blueprint.sourceJsonCompatible)
+			.toBe(false)
+		expect(blueprint.root.source)
+			.toBe(source)
+		expect(blueprint.root.diagnostics)
+			.toContainEqual(expect.objectContaining({ code: 'invalid-widget-id', path: ['id'] }))
+	})
+
+	it('fails closed for a revoked Proxy root instead of throwing', () => {
+		const { proxy, revoke } = Proxy.revocable({ id: 'root', type: 'leaf' }, {})
+		revoke()
+
+		const blueprint = system.createBlueprint(proxy)
+
+		expect(blueprint.status)
+			.toBe('invalid')
+		expect(blueprint.sourceJsonCompatible)
+			.toBe(false)
+		expect(blueprint.root.source)
+			.toBe(proxy)
+		expect(blueprint.root.diagnostics)
+			.toContainEqual(expect.objectContaining({ code: 'invalid-widget-definition' }))
+	})
+
+	it('breaks cyclic slot traversal into an inspectable unresolved child', () => {
+		const source: { id: string, type: string, slots: { children: unknown[] } } = {
+			id: 'root',
+			type: 'container',
+			slots: { children: [] },
+		}
+		source.slots.children.push(source)
+
+		const blueprint = system.createBlueprint(source)
+		const root = assertResolved(blueprint.root)
+		const child = at(blueprint.getChildrenAt(root, 'children'), 0)
+
+		expect(blueprint.status)
+			.toBe('invalid')
+		expect(blueprint.sourceJsonCompatible)
+			.toBe(false)
+		expect(child.source)
+			.toBe(source)
+		expect(child.resolved)
+			.toBe(false)
+		expect(child.diagnostics)
+			.toContainEqual(expect.objectContaining({ code: 'invalid-widget-definition' }))
 	})
 })
 
@@ -211,7 +278,7 @@ describe('array child recovery', () => {
 		const second = at(children, 1)
 		expect(second.resolved)
 			.toBe(false)
-		expect(second.rawDefinition)
+		expect(second.source)
 			.toBeNull()
 		expect(blueprint.getLocation(second))
 			.toEqual({ type: 'slot', parent: blueprint.root, slot: 'children', index: 1 })
@@ -225,7 +292,7 @@ describe('array child recovery', () => {
 		const fourth = at(children, 3)
 		expect(fourth.resolved)
 			.toBe(false)
-		expect(fourth.rawDefinition)
+		expect(fourth.source)
 			.toBe(42)
 		expect(blueprint.getLocation(fourth))
 			.toEqual({ type: 'slot', parent: blueprint.root, slot: 'children', index: 3 })
@@ -258,7 +325,7 @@ describe('array child recovery', () => {
 		const hole = at(children, 1)
 		expect(hole.resolved)
 			.toBe(false)
-		expect(hole.rawDefinition)
+		expect(hole.source)
 			.toBeUndefined()
 		expect(blueprint.getLocation(hole))
 			.toEqual({ type: 'slot', parent: blueprint.root, slot: 'children', index: 1 })
@@ -332,16 +399,16 @@ describe('getWidget id cardinality collapsing', () => {
 // -------------------------------------------------------------------------------------------------
 
 describe('unreserved extra fields', () => {
-	it('retains unreserved extra fields in rawDefinition by reference, without producing an issue', () => {
+	it('retains unreserved extra fields in source by reference, without producing an diagnostic', () => {
 		const definition = { id: 'root', type: 'leaf', extra: 42, nested: { a: [1, 2, 3] }, tag: 'meta' }
 		const blueprint = system.createBlueprint(definition)
 
 		expect(blueprint.status)
 			.toBe('valid')
-		expect(blueprint.root.rawDefinition)
+		expect(blueprint.root.source)
 			.toBe(definition)
-		expect(blueprint.root.getIssues())
-			.toEqual(EMPTY_ISSUES)
+		expect(blueprint.root.diagnostics)
+			.toEqual(EMPTY_DIAGNOSTICS)
 	})
 })
 
@@ -360,9 +427,9 @@ describe('own-property semantics for id/type', () => {
 		expect(blueprint.root.resolved)
 			.toBe(false)
 
-		const paths = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
-			.map(issue => issue.source.path)
+		const paths = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
+			.map(diagnostic => 'path' in diagnostic ? diagnostic.path : undefined)
 		expect(paths)
 			.toEqual([['id'], ['type']])
 	})
@@ -382,11 +449,12 @@ describe('own-property semantics for id/type', () => {
 		expect(blueprint.root.resolved)
 			.toBe(false)
 
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
-		expect(issues)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(at(issues, 0).source.path)
+		const diagnostic = at(diagnostics, 0)
+		expect('path' in diagnostic ? diagnostic.path : undefined)
 			.toEqual(['type'])
 	})
 })
@@ -419,8 +487,8 @@ describe('recompile', () => {
 			.toBe('invalid')
 		expect(viaRecompile.status)
 			.toBe(viaFreshCompile.status)
-		expect(summarizeIssues(viaRecompile.getCollectedIssues()))
-			.toEqual(summarizeIssues(viaFreshCompile.getCollectedIssues()))
+		expect(summarizeDiagnostics(viaRecompile.diagnostics))
+			.toEqual(summarizeDiagnostics(viaFreshCompile.diagnostics))
 	})
 
 	it('is observably equivalent to system.createBlueprint(next) for a valid definition', () => {
@@ -434,11 +502,11 @@ describe('recompile', () => {
 		expect(viaFreshCompile.status)
 			.toBe('valid')
 
-		// The one reference-equality guarantee across a recompile boundary: the canonical empty-issue
+		// The one reference-equality guarantee across a recompile boundary: the canonical empty-diagnostic
 		// snapshot is reused by identity for every successful compile.
-		expect(viaRecompile.getCollectedIssues())
-			.toBe(EMPTY_ISSUES)
-		expect(viaFreshCompile.getCollectedIssues())
-			.toBe(EMPTY_ISSUES)
+		expect(viaRecompile.diagnostics)
+			.toBe(EMPTY_DIAGNOSTICS)
+		expect(viaFreshCompile.diagnostics)
+			.toBe(EMPTY_DIAGNOSTICS)
 	})
 })

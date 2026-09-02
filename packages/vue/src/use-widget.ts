@@ -1,14 +1,14 @@
 /**
  * `useWidget(Plugin)` — the single renderer-facing bridge boundary.
  *
- * Normative source: issue #13 checkpoints C, C addendum, D (both parts), E, F, G.
+ * Normative source: diagnostic #13 checkpoints C, C addendum, D (both parts), E, F, G.
  */
 
 import type { AnyWidgetPlugin } from '@deviltea/widget-core'
 import type { CurrentWidgetContextValue, RuntimeWidgetLike } from './context'
 import type { UseWidgetResult } from './types'
 import { inject, onScopeDispose } from 'vue'
-import { createIssuesRef, createLazyKeyedSurface, createMethodWrapper, createPropertyRef, createStateRef } from './bridge'
+import { createDiagnosticsRef, createLazyKeyedSurface, createMethodWrapper, createPropertyRef, createStateRef } from './bridge'
 import { CurrentWidgetContextKey } from './context'
 import { WidgetVueIntegrationError } from './errors'
 import { SharedWidgetSlotComponent } from './renderer'
@@ -36,7 +36,7 @@ function getCurrentWidgetContext(): CurrentWidgetContextValue {
 
 /**
  * Capability presence is read from `plugin.capabilities` — the compiler/plugin-builder-authoritative
- * declaration-presence facts (issue #10 amendment "declaration-presence semantics and public
+ * declaration-presence facts (diagnostic #10 amendment "declaration-presence semantics and public
  * `WidgetPlugin.capabilities`") — never inferred from Blueprint/Runtime object shape. This is required
  * for correctness, not just directness: an explicitly-declared-empty capability (`slots: never`,
  * `state: Record<never, never>`, ...) is present despite an empty/`never` payload, and shape-based
@@ -55,7 +55,7 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin
 	const result: Record<string, unknown> = Object.create(null)
 	const capabilities = plugin.capabilities
 
-	// Unconditional widget identity (issue #13 checkpoint amendment "useWidget() may expose readonly
+	// Unconditional widget identity (diagnostic #13 checkpoint amendment "useWidget() may expose readonly
 	// local widget identity"): plain values projected once from the already-injected current
 	// `RuntimeWidget`, never refs — a mounted renderer instance's widget identity never changes.
 	result.widgetId = widget.id
@@ -69,10 +69,10 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin
 			return primitive === undefined ? undefined : createStateRef(primitive, registerCleanup)
 		})
 
-		let issuesSurface: Readonly<Record<string, unknown>> | undefined
-		result.useStateIssues = () => issuesSurface ??= createLazyKeyedSurface((key) => {
+		let diagnosticsSurface: Readonly<Record<string, unknown>> | undefined
+		result.useStateDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface((key) => {
 			const primitive = state[key]
-			return primitive === undefined ? undefined : createIssuesRef(primitive.getIssues, primitive.subscribeIssues, registerCleanup)
+			return primitive === undefined ? undefined : createDiagnosticsRef(primitive.getDiagnostics, primitive.subscribeDiagnostics, registerCleanup)
 		})
 	}
 
@@ -84,10 +84,10 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin
 			return primitive === undefined ? undefined : createPropertyRef(primitive, registerCleanup)
 		})
 
-		let issuesSurface: Readonly<Record<string, unknown>> | undefined
-		result.usePropertyIssues = () => issuesSurface ??= createLazyKeyedSurface((key) => {
+		let diagnosticsSurface: Readonly<Record<string, unknown>> | undefined
+		result.usePropertyDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface((key) => {
 			const primitive = properties[key]
-			return primitive === undefined ? undefined : createIssuesRef(primitive.getIssues, primitive.subscribeIssues, registerCleanup)
+			return primitive === undefined ? undefined : createDiagnosticsRef(primitive.getDiagnostics, primitive.subscribeDiagnostics, registerCleanup)
 		})
 	}
 
@@ -99,15 +99,15 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin
 			return primitive === undefined ? undefined : createMethodWrapper(primitive)
 		})
 
-		let issuesSurface: Readonly<Record<string, unknown>> | undefined
-		result.useMethodIssues = () => issuesSurface ??= createLazyKeyedSurface((key) => {
+		let diagnosticsSurface: Readonly<Record<string, unknown>> | undefined
+		result.useMethodDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface((key) => {
 			const primitive = methods[key]
-			return primitive === undefined ? undefined : createIssuesRef(primitive.getIssues, primitive.subscribeIssues, registerCleanup)
+			return primitive === undefined ? undefined : createDiagnosticsRef(primitive.getDiagnostics, primitive.subscribeDiagnostics, registerCleanup)
 		})
 	}
 
-	let widgetIssuesRef: unknown
-	result.useIssues = () => widgetIssuesRef ??= createIssuesRef(widget.getIssues, widget.subscribeIssues, registerCleanup)
+	let widgetDiagnosticsRef: unknown
+	result.useDiagnostics = () => widgetDiagnosticsRef ??= createDiagnosticsRef(widget.getDiagnostics, widget.subscribeDiagnostics, registerCleanup)
 
 	if (capabilities.slots)
 		result.WidgetSlot = SharedWidgetSlotComponent

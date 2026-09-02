@@ -9,7 +9,7 @@
  * `Modal#stage-modal` is the preset's single instance, so hardcoding its title here carries no
  * per-instance ambiguity; #43 treats that title as renderer-owned presentation chrome.
  *
- * Issue #28 accessibility fix — native dialog semantics/focus/Escape are driven one-way from the
+ * Diagnostic #28 accessibility fix — native dialog semantics/focus/Escape are driven one-way from the
  * semantic `open` State. Runtime remains authoritative; Escape routes through the semantic `close()`
  * Method and no renderer-local state participates in the interaction contract.
  */

@@ -1,7 +1,7 @@
 /**
  * Public `useWidget(Plugin)` return-type surface.
  *
- * Normative source: issue #13 checkpoints C, C addendum, D (both parts), F; issue #10 amendment
+ * Normative source: diagnostic #13 checkpoints C, C addendum, D (both parts), F; diagnostic #10 amendment
  * "declaration-presence semantics and public `WidgetPlugin.capabilities`".
  *
  * Every accessor is gated on `HasWidgetCapability<Interfaces, Key>` — `@deviltea/widget-core`'s
@@ -20,10 +20,10 @@
 import type {
 	AnyWidgetPlugin,
 	HasWidgetCapability,
-	RuntimeMethodIssue,
-	RuntimePropertyIssue,
-	RuntimeStateIssue,
-	RuntimeWidgetIssue,
+	RuntimeMethodDiagnostic,
+	RuntimePropertyDiagnostic,
+	RuntimeStateDiagnostic,
+	RuntimeWidgetDiagnostic,
 	WidgetInterfaces,
 	WidgetInterfacesOf,
 	WidgetMethodArgsOf,
@@ -38,7 +38,7 @@ import type {
 import type { Ref } from 'vue'
 
 /**
- * Truthful readonly-Ref projection shape. Property and every issue channel are backed by `customRef`
+ * Truthful readonly-Ref projection shape. Property and every diagnostic channel are backed by `customRef`
  * (a plain `Ref`), never by `computed()` — `ComputedRef` additionally promises computed-specific
  * public surface (for example the deprecated `.effect` field in the pinned Vue 3.5 line) that these
  * bridges do not actually have, so it must not be used here even though both are readonly-shaped.
@@ -60,13 +60,13 @@ export type UseWidgetStateAccessor<Interfaces extends WidgetInterfaces> = HasWid
 		}
 	: unknown
 
-export type UseWidgetStateIssuesSurface<Interfaces extends WidgetInterfaces> = {
-	readonly [Key in WidgetStateKeyOf<Interfaces>]: ReadonlyRef<readonly RuntimeStateIssue[]>
+export type UseWidgetStateDiagnosticsSurface<Interfaces extends WidgetInterfaces> = {
+	readonly [Key in WidgetStateKeyOf<Interfaces>]: ReadonlyRef<readonly RuntimeStateDiagnostic[]>
 }
 
-export type UseWidgetStateIssuesAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
+export type UseWidgetStateDiagnosticsAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
 	? {
-			readonly useStateIssues: () => UseWidgetStateIssuesSurface<Interfaces>
+			readonly useStateDiagnostics: () => UseWidgetStateDiagnosticsSurface<Interfaces>
 		}
 	: unknown
 
@@ -84,13 +84,13 @@ export type UseWidgetPropertiesAccessor<Interfaces extends WidgetInterfaces> = H
 		}
 	: unknown
 
-export type UseWidgetPropertyIssuesSurface<Interfaces extends WidgetInterfaces> = {
-	readonly [Name in WidgetPropertyKeyOf<Interfaces>]: ReadonlyRef<readonly RuntimePropertyIssue[]>
+export type UseWidgetPropertyDiagnosticsSurface<Interfaces extends WidgetInterfaces> = {
+	readonly [Name in WidgetPropertyKeyOf<Interfaces>]: ReadonlyRef<readonly RuntimePropertyDiagnostic[]>
 }
 
-export type UseWidgetPropertyIssuesAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'properties'> extends true
+export type UseWidgetPropertyDiagnosticsAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'properties'> extends true
 	? {
-			readonly usePropertyIssues: () => UseWidgetPropertyIssuesSurface<Interfaces>
+			readonly usePropertyDiagnostics: () => UseWidgetPropertyDiagnosticsSurface<Interfaces>
 		}
 	: unknown
 
@@ -110,22 +110,22 @@ export type UseWidgetMethodsAccessor<Interfaces extends WidgetInterfaces> = HasW
 		}
 	: unknown
 
-export type UseWidgetMethodIssuesSurface<Interfaces extends WidgetInterfaces> = {
-	readonly [Name in WidgetMethodKeyOf<Interfaces>]: ReadonlyRef<readonly RuntimeMethodIssue[]>
+export type UseWidgetMethodDiagnosticsSurface<Interfaces extends WidgetInterfaces> = {
+	readonly [Name in WidgetMethodKeyOf<Interfaces>]: ReadonlyRef<readonly RuntimeMethodDiagnostic[]>
 }
 
-export type UseWidgetMethodIssuesAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
+export type UseWidgetMethodDiagnosticsAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
 	? {
-			readonly useMethodIssues: () => UseWidgetMethodIssuesSurface<Interfaces>
+			readonly useMethodDiagnostics: () => UseWidgetMethodDiagnosticsSurface<Interfaces>
 		}
 	: unknown
 
 // -------------------------------------------------------------------------------------------------
-// Widget-level aggregate issues (unconditional — present regardless of declared capabilities)
+// Widget-level aggregate diagnostics (unconditional — present regardless of declared capabilities)
 // -------------------------------------------------------------------------------------------------
 
-export interface UseWidgetIssuesAccessor {
-	readonly useIssues: () => ReadonlyRef<readonly RuntimeWidgetIssue[]>
+export interface UseWidgetDiagnosticsAccessor {
+	readonly useDiagnostics: () => ReadonlyRef<readonly RuntimeWidgetDiagnostic[]>
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -133,7 +133,7 @@ export interface UseWidgetIssuesAccessor {
 // -------------------------------------------------------------------------------------------------
 
 /**
- * Normative source: issue #13 checkpoint amendment "`useWidget()` may expose readonly local widget
+ * Normative source: diagnostic #13 checkpoint amendment "`useWidget()` may expose readonly local widget
  * identity". Projected from the already-injected current `RuntimeWidget` at `useWidget()` time — plain
  * readonly values, not refs and not reactive projections: a mounted renderer instance's widget identity
  * never changes (Runtime replacement remounts through the existing lifecycle boundary). Present
@@ -156,7 +156,7 @@ export interface UseWidgetIdentityAccessor<Plugin extends AnyWidgetPlugin> {
  * `WidgetSlot`'s public component type: a `name` prop narrowed to the exact widget's declared
  * slot-name union (`never` for an explicitly-declared-empty `slots: never` capability, since no legal
  * slot name exists to pass). The underlying value returned at runtime is always the same shared
- * internal component identity (issue #13 checkpoint D) — only this type differs per `useWidget(Plugin)`
+ * internal component identity (diagnostic #13 checkpoint D) — only this type differs per `useWidget(Plugin)`
  * call.
  *
  * Typed as a non-callable component/constructor shape — mirroring `WidgetVueRenderer` in
@@ -182,10 +182,10 @@ export type UseWidgetResult<Plugin extends AnyWidgetPlugin> = WidgetInterfacesOf
 	? & UseWidgetStateAccessor<Interfaces>
 	& UseWidgetPropertiesAccessor<Interfaces>
 	& UseWidgetMethodsAccessor<Interfaces>
-	& UseWidgetStateIssuesAccessor<Interfaces>
-	& UseWidgetPropertyIssuesAccessor<Interfaces>
-	& UseWidgetMethodIssuesAccessor<Interfaces>
-	& UseWidgetIssuesAccessor
+	& UseWidgetStateDiagnosticsAccessor<Interfaces>
+	& UseWidgetPropertyDiagnosticsAccessor<Interfaces>
+	& UseWidgetMethodDiagnosticsAccessor<Interfaces>
+	& UseWidgetDiagnosticsAccessor
 	& UseWidgetSlotAccessor<Interfaces>
 	& UseWidgetIdentityAccessor<Plugin>
 	: never

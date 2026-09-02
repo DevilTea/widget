@@ -3,7 +3,7 @@
  *
  * These are dev fixtures for exercising the Lab shell (workbench, Apply lifecycle, Blueprint
  * Inspector, Preview) — deliberately small and private to `widget-lab`. They are NOT the "Interactive
- * Survey" / "Product Prototype" showcases named in issue #13's Checkpoint A (those are a later phase);
+ * Survey" / "Product Prototype" showcases named in diagnostic #13's Checkpoint A (those are a later phase);
  * see this app's `AGENTS.md` for the boundary. Every plugin is built exclusively through
  * `@deviltea/widget-core`'s public `createWidgetPlugin` contract.
  */
@@ -32,8 +32,10 @@ export interface TextInterfaces extends WidgetInterfaces {
 }
 
 export const TextPlugin = createWidgetPlugin('Text')
+	.description('Sandbox text widget')
 	.interfaces<TextInterfaces>()
 	.config({
+		description: 'Sandbox text configuration',
 		validate: (input): input is { text: string } => isPlainObject(input) && typeof input.text === 'string',
 		resolve: raw => ({ text: raw?.text ?? '' }),
 	})
@@ -61,6 +63,7 @@ export interface CounterInterfaces extends WidgetInterfaces {
 }
 
 export const CounterPlugin = createWidgetPlugin('Counter')
+	.description('Sandbox counter widget')
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
@@ -72,7 +75,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 			registerDeps: ({ dep }) => dep.self.state.get('count'),
 			compute: ({ deps }) => {
 				const result = deps()
-				return (result.success ? (result.value ?? 0) : 0) * 2
+				return (result.ok ? (result.value ?? 0) : 0) * 2
 			},
 		}))
 	.methods(methods =>
@@ -85,7 +88,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 				validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 				execute: ({ args: [step], deps }) => {
 					const current = deps.count()
-					const value = (current.success ? (current.value ?? 0) : 0) + step
+					const value = (current.ok ? (current.value ?? 0) : 0) + step
 					deps.setCount(value)
 					return value
 				},
@@ -115,13 +118,15 @@ export interface SectionInterfaces extends WidgetInterfaces {
 }
 
 export const SectionPlugin = createWidgetPlugin('Section')
+	.description('Sandbox section widget')
 	.interfaces<SectionInterfaces>()
 	.config({
+		description: 'Sandbox section configuration',
 		validate: (input): input is { title?: string } =>
 			isPlainObject(input) && (input.title === undefined || typeof input.title === 'string'),
 		resolve: raw => ({ title: raw?.title ?? 'Section' }),
 	})
-	.slots({ body: {} })
+	.slots({ body: { description: 'Sandbox section body' } })
 	.properties(properties =>
 		properties.heading({
 			compute: ({ config }) => config.title,
@@ -137,8 +142,9 @@ export interface StackInterfaces extends WidgetInterfaces {
 }
 
 export const StackPlugin = createWidgetPlugin('Stack')
+	.description('Sandbox stack widget')
 	.interfaces<StackInterfaces>()
-	.slots({ items: {} })
+	.slots({ items: { description: 'Sandbox stack items' } })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -158,8 +164,10 @@ export interface SummaryInterfaces extends WidgetInterfaces {
 }
 
 export const SummaryPlugin = createWidgetPlugin('Summary')
+	.description('Sandbox summary widget')
 	.interfaces<SummaryInterfaces>()
 	.config({
+		description: 'Sandbox summary configuration',
 		validate: (input): input is { counterId: string } => isPlainObject(input) && typeof input.counterId === 'string',
 		resolve: raw => ({ counterId: raw?.counterId ?? '' }),
 	})
@@ -170,7 +178,7 @@ export const SummaryPlugin = createWidgetPlugin('Summary')
 					.validate((value): value is number => typeof value === 'number'),
 			compute: ({ deps }) => {
 				const result = deps()
-				return result.success ? (result.value ?? 0) : 0
+				return result.ok ? (result.value ?? 0) : 0
 			},
 		}))
 	.done()

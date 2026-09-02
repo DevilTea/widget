@@ -8,11 +8,11 @@
  * Latest-selection-wins (P3 merge-gate review round 1, blocker 1): this component is reused across
  * selections (`<ImplementationFile :file="selectedFile" />`, no `:key`), so switching from file A to
  * file B while A's `load()` is still in flight must never let A's later-settling promise overwrite B's
- * already-rendered `code`/`status` — for either a stale success OR a stale rejection. `watch()`'s own
+ * already-rendered `code`/`status` — for either a stale ok OR a stale rejection. `watch()`'s own
  * `onCleanup` (its third callback argument) is the explicit invalidation mechanism: it registers a
  * callback Vue runs the instant this watcher is about to re-run for a new `file` (or is stopped on
  * unmount), so `cancelled` flips true exactly when this in-flight `load()` call's result becomes stale,
- * and both the success and failure branches check it before writing anything. #43 localizes only the
+ * and both the ok and failure branches check it before writing anything. #43 localizes only the
  * loading/error sentence around the curated file title; title/path/raw source remain verbatim.
  */
 import type { CuratedSourceFile } from '../../implementation/types'

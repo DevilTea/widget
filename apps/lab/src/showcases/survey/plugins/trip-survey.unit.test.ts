@@ -70,7 +70,7 @@ describe('tripSurvey.submit()', () => {
 		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
 
 		expect(survey.methods.submit())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 		expect(survey.state.phase.get())
 			.toBe('submitted')
 		expect(survey.state.result.get())
@@ -82,12 +82,12 @@ describe('tripSurvey.submit()', () => {
 		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
 
 		const result = survey.methods.submit()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-dependency')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('dependency-target-failed')
 		expect(survey.state.phase.get())
 			.toBe('editing')
 		expect(survey.state.result.get())
@@ -96,19 +96,19 @@ describe('tripSurvey.submit()', () => {
 })
 
 describe('tripSurvey.generateResult()', () => {
-	it('fails with a Method issue and performs no mutation when phase is not "submitted"', () => {
+	it('fails with a Method diagnostic and performs no mutation when phase is not "submitted"', () => {
 		const { runtime } = createSurveyRuntime()
 		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
 
 		expect(survey.state.phase.get())
 			.toBe('editing')
 		const result = survey.methods.generateResult()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-result')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('invalid-method-result')
 		expect(survey.state.phase.get())
 			.toBe('editing')
 		expect(survey.state.result.get())
@@ -122,10 +122,10 @@ describe('tripSurvey.generateResult()', () => {
 		survey.methods.submit()
 		const result = survey.methods.generateResult()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('expected success')
+		if (!result.ok)
+			throw new Error('expected ok')
 		expect(result.value)
 			.not.toBeNull()
 		expect(survey.state.phase.get())
@@ -147,12 +147,12 @@ describe('tripSurvey.generateResult()', () => {
 		destination.state.answer.set(null)
 
 		const result = survey.methods.generateResult()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-dependency')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('dependency-target-failed')
 		expect(survey.state.phase.get())
 			.toBe('submitted')
 		expect(survey.state.result.get())
@@ -194,7 +194,7 @@ describe('lazy evaluation: TripReadiness/TripRecommendation stay never-evaluated
 	})
 })
 
-describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
+describe('tripSurvey.resultFresh (diagnostic #26 Finding 1)', () => {
 	it('is true immediately after generateResult() (snapshot matches current answers)', () => {
 		const { runtime } = createSurveyRuntime()
 		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
@@ -203,7 +203,7 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 		survey.methods.generateResult()
 
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 
 	it('flips false after changing a tracked answer, even one that makes the current answers invalid', () => {
@@ -214,7 +214,7 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 		survey.methods.submit()
 		survey.methods.generateResult()
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 
 		// `destination` is a tracked `resultInputQuestionIds` question; setting its answer to `null` also
 		// makes it fail `TripReadiness`/`TripRecommendation` — `resultFresh` must still report `false`,
@@ -222,7 +222,7 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 		destination.state.answer.set(null)
 
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 		// The retained snapshot itself is untouched while stale.
 		expect(survey.state.result.get())
 			.not.toBeNull()
@@ -236,7 +236,7 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 		survey.methods.submit()
 		survey.methods.generateResult()
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 
 		// `children` defaults to 0 in the default preset, so `family-priority` is hidden and ignored by
 		// both `TripReadiness`/`TripRecommendation` (see `trip-readiness.ts`'s file header) — yet it is
@@ -244,7 +244,7 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 		familyPriority.state.answer.set('kid-friendly')
 
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 	})
 
 	it('is true again after re-submitting and regenerating the result', () => {
@@ -256,13 +256,13 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 		survey.methods.generateResult()
 		adults.state.answer.set(3)
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 
 		survey.methods.submit()
 		survey.methods.generateResult()
 
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 
 	it('is true when there is no result yet (documented no-result convention)', () => {
@@ -272,7 +272,7 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 		expect(survey.state.result.get())
 			.toBeNull()
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 
 	it('reset() clears both result and resultInputs, and a subsequent generateResult() is fresh again', () => {
@@ -291,11 +291,11 @@ describe('tripSurvey.resultFresh (issue #26 Finding 1)', () => {
 		expect(survey.state.resultInputs.get())
 			.toBeNull()
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 })
 
-describe('tripSurvey.resultFresh is decoupled from resetQuestionIds (issue #26, GPT adversarial review round 1)', () => {
+describe('tripSurvey.resultFresh is decoupled from resetQuestionIds (diagnostic #26, GPT adversarial review round 1)', () => {
 	// Reproduction from the review: a Source edit that narrows `resetQuestionIds` to a strict subset of
 	// `resultInputQuestionIds` must remain a fully valid, functioning Survey — and `resultFresh` must
 	// still track every `resultInputQuestionIds` question regardless of what `resetQuestionIds` says.
@@ -315,12 +315,12 @@ describe('tripSurvey.resultFresh is decoupled from resetQuestionIds (issue #26, 
 		survey.methods.submit()
 		survey.methods.generateResult()
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 
 		returnQuestion.state.answer.set('2027-04-20')
 
 		expect(survey.properties.resultFresh.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 	})
 
 	it('reset() only restores the narrowed resetQuestionIds set, leaving "return" untouched', () => {

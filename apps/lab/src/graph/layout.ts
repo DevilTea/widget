@@ -1,5 +1,5 @@
 /**
- * `layoutGraph(graph): Promise<LayoutedGraph>` — the layout adapter boundary (issue #13 Phase 5
+ * `layoutGraph(graph): Promise<LayoutedGraph>` — the layout adapter boundary (diagnostic #13 Phase 5
  * "Dependency Graph implementation stack" / "ELK layout worker" comments).
  *
  * This module owns only the shared shape; the real ELK-worker-backed implementation is

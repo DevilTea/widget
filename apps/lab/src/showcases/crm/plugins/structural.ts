@@ -4,7 +4,7 @@
  * only, never `properties`/`state`/`methods`.
  *
  * `@deviltea/widget-vue`'s public `useWidget()` contract exposes only `state`/`properties`/`methods`/
- * `slots` (never resolved `config` — see issue #13 checkpoints C/D); a widget declared `config + slots`
+ * `slots` (never resolved `config` — see diagnostic #13 checkpoints C/D); a widget declared `config + slots`
  * only therefore has no reactive path to echo its own config text as DOM output. Per checkpoint §6
  * ("Exact display labels ... CSS/layout ... are implementation details"), these three renderers treat
  * their configured `title`/`subtitle`/`description` as compile-time Blueprint documentation (visible in
@@ -40,8 +40,10 @@ export interface AppShellInterfaces extends WidgetInterfaces {
 }
 
 export const AppShellPlugin = createWidgetPlugin('AppShell')
+	.description('Application shell widget')
 	.interfaces<AppShellInterfaces>()
 	.config({
+		description: 'Application shell configuration',
 		validate: (input): input is AppShellRawConfig =>
 			isPlainObject(input)
 			&& typeof input.title === 'string'
@@ -51,7 +53,11 @@ export const AppShellPlugin = createWidgetPlugin('AppShell')
 			subtitle: raw?.subtitle ?? null,
 		}),
 	})
-	.slots({ header: {}, main: {}, overlay: {} })
+	.slots({
+		header: { description: 'Application header' },
+		main: { description: 'Application main content' },
+		overlay: { description: 'Application overlay' },
+	})
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -63,8 +69,12 @@ export interface ToolbarInterfaces extends WidgetInterfaces {
 }
 
 export const ToolbarPlugin = createWidgetPlugin('Toolbar')
+	.description('Toolbar widget')
 	.interfaces<ToolbarInterfaces>()
-	.slots({ start: {}, end: {} })
+	.slots({
+		start: { description: 'Toolbar start' },
+		end: { description: 'Toolbar end' },
+	})
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -90,8 +100,10 @@ export interface CardInterfaces extends WidgetInterfaces {
 }
 
 export const CardPlugin = createWidgetPlugin('Card')
+	.description('Card widget')
 	.interfaces<CardInterfaces>()
 	.config({
+		description: 'Card configuration',
 		validate: (input): input is CardRawConfig =>
 			isPlainObject(input)
 			&& (input.title === undefined || typeof input.title === 'string')
@@ -101,5 +113,5 @@ export const CardPlugin = createWidgetPlugin('Card')
 			description: raw?.description ?? null,
 		}),
 	})
-	.slots({ body: {} })
+	.slots({ body: { description: 'Card body' } })
 	.done()

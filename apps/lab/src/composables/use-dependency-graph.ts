@@ -1,5 +1,5 @@
 /**
- * Vue reactivity bridge for the Dependency Graph panel (issue #13 Phase 5 "Dependency Graph semantic
+ * Vue reactivity bridge for the Dependency Graph panel (diagnostic #13 Phase 5 "Dependency Graph semantic
  * representation" / "Graph layout is an asynchronous projection" comments).
  *
  * Projects `store.active.value.blueprint` (compile-time facts only — works for an invalid Blueprint,

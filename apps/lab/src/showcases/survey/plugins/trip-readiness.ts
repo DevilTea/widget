@@ -3,16 +3,16 @@
  *
  * Locked failure semantics (checkpoint C1): `ready` is not a normal `true | false` status value. A
  * semantically ready survey completes successfully with `true`; a not-ready survey calls
- * `ctx.addIssue(...)` for every missing/contextually-invalid answer, so the Property completes as a
- * `property-result` failure carrying those issues. The successful-`false` branch is never used — the
- * returned literal `true` at the end of `compute` is only ever observed on the success path; on
- * failure it is discarded (issue #10 §12: failure exposes no usable value).
+ * `ctx.addDiagnostic(...)` for every missing/contextually-invalid answer, so the Property completes as a
+ * `property-result` failure carrying those diagnostics. The successful-`false` branch is never used — the
+ * returned literal `true` at the end of `compute` is only ever observed on the ok path; on
+ * failure it is discarded (diagnostic #10 §12: failure exposes no usable value).
  *
  * `tripDays` is read from `TripMetrics` as a Property→Property dependency purely to fold "derived
  * metric validity" into readiness (checkpoint §1). Its own failure (invalid date ordering) is not
- * re-reported here with a second `addIssue` — core's dependency propagation already inserts a
- * `property-dependency` Issue into this Property's own collector automatically the moment the failing
- * dependency is read (issue #10 §12), which is exactly the "derived metric validity" signal.
+ * re-reported here with a second `addDiagnostic` — core's dependency propagation already inserts a
+ * `property-dependency` Diagnostic into this Property's own collector automatically the moment the failing
+ * dependency is read (diagnostic #10 §12), which is exactly the "derived metric validity" signal.
  *
  * `destination`/`travelStyle`/`familyPriority` are read through `dep.widget(...).state.get('answer')`
  * `.validate()` refinements to their closed domain literals (`isDestination`/`isTravelStyle`/
@@ -22,7 +22,7 @@
  * `FamilyPriority` domains. An edited-but-domain-invalid source (e.g. a `destination` option/default of
  * `"mars"`) is therefore a perfectly valid *State* value that must still make `ready` fail: a refinement
  * rejection here fails this Property automatically via the same core dependency propagation as the
- * `tripDays` case above (no manual `addIssue` needed), so `success(true)` continues to mean the survey
+ * `tripDays` case above (no manual `addDiagnostic` needed), so `ok(true)` continues to mean the survey
  * is genuinely semantically ready — required answers *and* derived metric/domain validity — never just
  * "every required field happens to be non-null" (checkpoint §1 "required answers + conditional family
  * requirement + derived metric validity → readiness").
@@ -83,8 +83,10 @@ function isTripReadinessConfig(input: unknown): input is TripReadinessConfig {
 }
 
 export const TripReadinessPlugin = createWidgetPlugin('TripReadiness')
+	.description('Trip readiness widget')
 	.interfaces<TripReadinessInterfaces>()
 	.config({
+		description: 'Trip readiness configuration',
 		validate: (input): input is TripReadinessConfig => isTripReadinessConfig(input),
 		resolve: raw => ({
 			departureId: raw?.departureId ?? '',
@@ -114,7 +116,7 @@ export const TripReadinessPlugin = createWidgetPlugin('TripReadiness')
 					.validate((value): value is string | null => value === null || isFamilyPriority(value)),
 				tripDays: dep.widget(config.metricsId).properties.get('tripDays'),
 			}),
-			compute: ({ deps, addIssue }) => {
+			compute: ({ deps, addDiagnostic }) => {
 				const departure = deps.departure()
 				const returnDate = deps.returnDate()
 				const adults = deps.adults()
@@ -123,37 +125,37 @@ export const TripReadinessPlugin = createWidgetPlugin('TripReadiness')
 				const destination = deps.destination()
 				const travelStyle = deps.travelStyle()
 				// Read (but do not re-report): a `TripMetrics.tripDays` failure automatically becomes a
-				// `property-dependency` Issue on this Property via core's dependency propagation.
+				// `property-dependency` Diagnostic on this Property via core's dependency propagation.
 				deps.tripDays()
 
-				if (!departure.success || departure.value === null)
-					addIssue({ message: 'Departure date is required.' })
-				if (!returnDate.success || returnDate.value === null)
-					addIssue({ message: 'Return date is required.' })
-				if (!adults.success || adults.value === null)
-					addIssue({ message: 'Number of adults is required.' })
-				if (!children.success || children.value === null)
-					addIssue({ message: 'Number of children is required.' })
-				if (!budget.success || budget.value === null)
-					addIssue({ message: 'Trip budget is required.' })
-				if (!destination.success || destination.value === null)
-					addIssue({ message: 'Destination is required.' })
-				if (!travelStyle.success || travelStyle.value === null)
-					addIssue({ message: 'Travel style is required.' })
+				if (!departure.ok || departure.value === null)
+					addDiagnostic({ message: 'Departure date is required.' })
+				if (!returnDate.ok || returnDate.value === null)
+					addDiagnostic({ message: 'Return date is required.' })
+				if (!adults.ok || adults.value === null)
+					addDiagnostic({ message: 'Number of adults is required.' })
+				if (!children.ok || children.value === null)
+					addDiagnostic({ message: 'Number of children is required.' })
+				if (!budget.ok || budget.value === null)
+					addDiagnostic({ message: 'Trip budget is required.' })
+				if (!destination.ok || destination.value === null)
+					addDiagnostic({ message: 'Destination is required.' })
+				if (!travelStyle.ok || travelStyle.value === null)
+					addDiagnostic({ message: 'Travel style is required.' })
 
-				const childrenCount = children.success && typeof children.value === 'number' ? children.value : 0
+				const childrenCount = children.ok && typeof children.value === 'number' ? children.value : 0
 				// `deps.familyPriority()` is intentionally only invoked in this branch — see the file
 				// header. When the family section is hidden (`childrenCount === 0`), this Property must
 				// never read (and so never judge, via the dependency's own `.validate()` refinement) the
 				// hidden `family-priority` answer at all.
 				if (childrenCount > 0) {
 					const familyPriority = deps.familyPriority()
-					if (!familyPriority.success || familyPriority.value === null)
-						addIssue({ message: 'Family priority is required when traveling with children.' })
+					if (!familyPriority.ok || familyPriority.value === null)
+						addDiagnostic({ message: 'Family priority is required when traveling with children.' })
 				}
 
-				// Only ever observed on the success path (checkpoint C1); a not-ready survey's failure is
-				// carried entirely by the `addIssue(...)` calls above.
+				// Only ever observed on the ok path (checkpoint C1); a not-ready survey's failure is
+				// carried entirely by the `addDiagnostic(...)` calls above.
 				return true
 			},
 		}))

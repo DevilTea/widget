@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Conformance tests — issue #13 checkpoint amendment "`useWidget()` may expose readonly local widget
+ * Conformance tests — diagnostic #13 checkpoint amendment "`useWidget()` may expose readonly local widget
  * identity". Pins the amendment's four required conformance points:
  *
  * 1. `widgetId` equals the current Runtime widget instance id;
@@ -106,6 +106,7 @@ describe('useWidget() identity — widgetId / widgetType', () => {
 		// after this assertion has already succeeded, so a rejection here proves this amendment added no
 		// bypass around it.
 		const impostorCounterPlugin = createWidgetPlugin('Counter')
+			.description('Impostor counter widget')
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const runtime = createFixtureRuntime({ id: 'counter-4', type: 'Counter' })

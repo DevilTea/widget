@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ResolvedBlueprintInspectionNode, RuntimeWidgetInspection } from '@deviltea/widget-core/inspection'
 /**
- * Selected-node Runtime member list (issue #13 Phase 5 "Runtime Inspector becomes strictly passive"):
+ * Selected-node Runtime member list (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly passive"):
  * State/Property/Method member drill-down for one resolved node. Clicking a member row updates the
  * shared cross-inspector focus (`nodeId` + member) — never Runtime/Preview state. #43 translates only
  * explanatory inventory/empty-state copy; State/Property/Method taxonomy and member names stay exact.

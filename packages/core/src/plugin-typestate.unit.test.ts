@@ -5,7 +5,7 @@
  * keyed-chain typestate (`state` / `properties` / `methods`), `.done()` gating, and the PromiseLike /
  * MaybePromise rejection rules on `WidgetInterfacesViolationOf`, `compute` and `execute`.
  *
- * Normative source: issue #10 COMMENT 26 §1, COMMENT 0 (checkpoint A), COMMENT 16 (synchronous
+ * Normative source: diagnostic #10 COMMENT 26 §1, COMMENT 0 (checkpoint A), COMMENT 16 (synchronous
  * boundary), COMMENT 22 (`WidgetMemberKey` domain), COMMENT 23 (builder completion typestate).
  *
  * Positive assertions use `expectTypeOf`; negative assertions use `@ts-expect-error` with a one-line
@@ -63,6 +63,13 @@ interface ConfigAndMethodsInterfaces extends WidgetInterfaces {
 	}
 }
 
+interface NonJsonConfigInterfaces extends WidgetInterfaces {
+	config: {
+		raw: { readonly callback: () => void }
+		resolved: { readonly label: string }
+	}
+}
+
 interface KeyedChainInterfaces extends WidgetInterfaces {
 	state: {
 		'a': number
@@ -85,7 +92,7 @@ interface EmptyMethodsCapabilityInterfaces extends WidgetInterfaces {
 }
 
 /**
- * The canonical explicit-empty slots spelling (issue #10 amendment "declaration-presence semantics and
+ * The canonical explicit-empty slots spelling (diagnostic #10 amendment "declaration-presence semantics and
  * public `WidgetPlugin.capabilities`"). Unlike `state`/`properties`/`methods` (whose empty spelling is
  * the object type `Record<never, never>`), `slots`' own payload domain is a plain string/string-literal
  * union, so its only possible "declared with zero names" spelling is the payload `never` itself — which
@@ -196,6 +203,7 @@ interface SimpleMethodInterfaces extends WidgetInterfaces {
 // -------------------------------------------------------------------------------------------------
 
 const fullConfigDef: WidgetConfigDefinition<FullInterfaces> = {
+	description: 'Test config',
 	validate: (input): input is { label?: string } => typeof input === 'object' && input !== null,
 	resolve: raw => ({ label: raw?.label ?? 'default' }),
 }
@@ -208,6 +216,7 @@ const nameDef = { validate: (input: unknown): input is string => typeof input ==
 describe('builder capability-phase ordering', () => {
 	it('orders phases as interfaces -> config -> slots -> state -> properties -> methods -> done, and `.done` only appears once every phase has completed', () => {
 		const afterInterfaces = createWidgetPlugin('full')
+			.description('Test widget')
 			.interfaces<FullInterfaces>()
 		expectTypeOf(afterInterfaces)
 			.toHaveProperty('config')
@@ -218,7 +227,7 @@ describe('builder capability-phase ordering', () => {
 			.toHaveProperty('slots')
 		expectTypeOf(afterConfig).not.toHaveProperty('done')
 
-		const afterSlots = afterConfig.slots({ header: {}, body: {} })
+		const afterSlots = afterConfig.slots({ header: { description: 'Test slot' }, body: { description: 'Test slot' } })
 		expectTypeOf(afterSlots)
 			.toHaveProperty('state')
 		expectTypeOf(afterSlots).not.toHaveProperty('done')
@@ -243,7 +252,7 @@ describe('builder capability-phase ordering', () => {
 					registerDeps: ({ dep }) => dep.self.state.get('count'),
 					compute: ({ deps }) => {
 						const result = deps()
-						const current = result.success ? result.value ?? 0 : 0
+						const current = result.ok ? result.value ?? 0 : 0
 						return current * 2
 					},
 				})
@@ -261,7 +270,7 @@ describe('builder capability-phase ordering', () => {
 					validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 					execute: ({ args, deps }) => {
 						const result = deps(args[0])
-						return result.success ? result.value : 0
+						return result.ok ? result.value : 0
 					},
 				})
 				.reset({
@@ -280,6 +289,7 @@ describe('builder capability-phase ordering', () => {
 
 	it('skips every absent capability phase at once and jumps straight to the next declared one', () => {
 		const afterInterfaces = createWidgetPlugin('config-methods')
+			.description('Test widget')
 			.interfaces<ConfigAndMethodsInterfaces>()
 		expectTypeOf(afterInterfaces)
 			.toHaveProperty('config')
@@ -289,6 +299,7 @@ describe('builder capability-phase ordering', () => {
 		expectTypeOf(afterInterfaces).not.toHaveProperty('methods')
 
 		const afterConfig = afterInterfaces.config({
+			description: 'Test config',
 			validate: (input): input is { x?: number } => typeof input === 'object' && input !== null,
 			resolve: raw => ({ x: raw?.x ?? 0 }),
 		})
@@ -314,6 +325,7 @@ describe('builder capability-phase ordering', () => {
 
 	it('reaches `done` immediately after `.interfaces()` when no capability is declared', () => {
 		const afterInterfaces = createWidgetPlugin('empty')
+			.description('Test widget')
 			.interfaces<EmptyInterfaces>()
 		expectTypeOf(afterInterfaces)
 			.toEqualTypeOf<WidgetPluginDonePhase<'empty', EmptyInterfaces>>()
@@ -328,6 +340,7 @@ describe('builder capability-phase ordering', () => {
 	it('rejects a slots object literal (even via a variable) that declares an extra, undeclared slot', () => {
 		const slotsWithExtra = { header: {}, body: {}, extra: {} }
 		const beforeSlots = createWidgetPlugin('extra-slot')
+			.description('Test widget')
 			.interfaces<FullInterfaces>()
 			.config(fullConfigDef)
 		// @ts-expect-error 'extra' is not declared by FullInterfaces; the exact-slots constraint rejects it even though it arrives through a variable, not an object literal
@@ -341,6 +354,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 		let capturedAfterC: unknown
 
 		const plugin = createWidgetPlugin('keyed-chain-order')
+			.description('Test widget')
 			.interfaces<KeyedChainInterfaces>()
 			.state((state) => {
 				capturedInitial = state
@@ -369,6 +383,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 
 	it('makes a consumed member disappear from the type surface so it cannot be repeated', () => {
 		createWidgetPlugin('keyed-chain-repeat')
+			.description('Test widget')
 			.interfaces<KeyedChainInterfaces>()
 			.state((state) => {
 				const afterA = state.a(aDef)
@@ -386,6 +401,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 
 	it('rejects a state builder callback that leaves a declared member unconsumed', () => {
 		const plugin = createWidgetPlugin('incomplete-state')
+			.description('Test widget')
 			.interfaces<KeyedChainInterfaces>()
 		// @ts-expect-error the callback omits 'display-name', so `Remaining` never reaches `never` and the state phase cannot complete
 		plugin.state(state => state.a(aDef)
@@ -395,6 +411,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 
 	it('rejects an empty object literal masquerading as a completed section', () => {
 		const plugin = createWidgetPlugin('fake-empty-section')
+			.description('Test widget')
 			.interfaces<KeyedChainInterfaces>()
 		// @ts-expect-error `{}` has neither the private completion marker nor the section methods; it cannot satisfy a completed section
 		plugin.state(() => ({}))
@@ -402,6 +419,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 
 	it('lets an explicitly empty declared capability complete immediately, distinct from an absent capability', () => {
 		const plugin = createWidgetPlugin('empty-state-capability')
+			.description('Test widget')
 			.interfaces<EmptyStateCapabilityInterfaces>()
 			.state(state => state)
 			.done()
@@ -413,9 +431,10 @@ describe('section keyed-chain typestate (state section, representative of proper
 	})
 })
 
-describe('explicit-empty slots capability (`slots: never`), distinct from an absent slots capability (review round 2, issue #10 amendment "declaration-presence semantics")', () => {
+describe('explicit-empty slots capability (`slots: never`), distinct from an absent slots capability (review round 2, diagnostic #10 amendment "declaration-presence semantics")', () => {
 	it('exposes the .slots phase for `slots: never`, which completes via .slots({})', () => {
 		const afterInterfaces = createWidgetPlugin('empty-slots-capability')
+			.description('Test widget')
 			.interfaces<EmptySlotsCapabilityInterfaces>()
 		expectTypeOf(afterInterfaces)
 			.toHaveProperty('slots')
@@ -433,6 +452,7 @@ describe('explicit-empty slots capability (`slots: never`), distinct from an abs
 
 	it('skips the .slots phase entirely for a plugin that never declares slots', () => {
 		const afterInterfaces = createWidgetPlugin('no-slots-capability')
+			.description('Test widget')
 			.interfaces<EmptyInterfaces>()
 		expectTypeOf(afterInterfaces).not.toHaveProperty('slots')
 
@@ -442,9 +462,10 @@ describe('explicit-empty slots capability (`slots: never`), distinct from an abs
 	})
 })
 
-describe('plugin.capabilities (review round 2, issue #10 amendment "declaration-presence semantics and public WidgetPlugin.capabilities")', () => {
+describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declaration-presence semantics and public WidgetPlugin.capabilities")', () => {
 	it('is all-false, frozen, for a plugin declaring no capabilities', () => {
 		const plugin = createWidgetPlugin('caps-none')
+			.description('Test widget')
 			.interfaces<EmptyInterfaces>()
 			.done()
 
@@ -456,12 +477,14 @@ describe('plugin.capabilities (review round 2, issue #10 amendment "declaration-
 
 	it('is all-true for a plugin declaring every capability', () => {
 		const plugin = createWidgetPlugin('caps-all')
+			.description('Test widget')
 			.interfaces<AllCapabilitiesInterfaces>()
 			.config({
+				description: 'Test config',
 				validate: (input): input is Record<string, never> => typeof input === 'object' && input !== null,
 				resolve: () => ({}),
 			})
-			.slots({ a: {} })
+			.slots({ a: { description: 'Test slot' } })
 			.state(state => state.s({ validate: (input): input is number => typeof input === 'number' }))
 			.properties(properties => properties.p({ compute: () => 0 }))
 			.methods(methods => methods.m({
@@ -476,6 +499,7 @@ describe('plugin.capabilities (review round 2, issue #10 amendment "declaration-
 
 	it('is true, with an empty inventory, for each explicitly-declared-empty capability', () => {
 		const statePlugin = createWidgetPlugin('caps-empty-state')
+			.description('Test widget')
 			.interfaces<EmptyStateCapabilityInterfaces>()
 			.state(state => state)
 			.done()
@@ -483,6 +507,7 @@ describe('plugin.capabilities (review round 2, issue #10 amendment "declaration-
 			.toBe(true)
 
 		const propertiesPlugin = createWidgetPlugin('caps-empty-properties')
+			.description('Test widget')
 			.interfaces<EmptyPropertiesCapabilityInterfaces>()
 			.properties(properties => properties)
 			.done()
@@ -490,6 +515,7 @@ describe('plugin.capabilities (review round 2, issue #10 amendment "declaration-
 			.toBe(true)
 
 		const methodsPlugin = createWidgetPlugin('caps-empty-methods')
+			.description('Test widget')
 			.interfaces<EmptyMethodsCapabilityInterfaces>()
 			.methods(methods => methods)
 			.done()
@@ -497,6 +523,7 @@ describe('plugin.capabilities (review round 2, issue #10 amendment "declaration-
 			.toBe(true)
 
 		const slotsPlugin = createWidgetPlugin('caps-empty-slots')
+			.description('Test widget')
 			.interfaces<EmptySlotsCapabilityInterfaces>()
 			.slots({})
 			.done()
@@ -506,6 +533,20 @@ describe('plugin.capabilities (review round 2, issue #10 amendment "declaration-
 })
 
 describe('widgetInterfaces domain rejection (types.ts type layer)', () => {
+	it('rejects a function inside authored RawConfig', () => {
+		expectTypeOf<WidgetInterfacesViolationOf<NonJsonConfigInterfaces>>()
+			.toEqualTypeOf<'authored values must be JSON-compatible'>()
+	})
+
+	it('leaves the interfaces phase unusable for a non-JSON RawConfig', () => {
+		const violation = createWidgetPlugin('non-json-config')
+			.description('Test widget')
+			.interfaces<NonJsonConfigInterfaces>()
+		expectTypeOf(violation)
+			.toEqualTypeOf<WidgetInterfacesViolation<'authored values must be JSON-compatible'>>()
+		expectTypeOf(violation).not.toHaveProperty('done')
+	})
+
 	it('rejects a broad string index signature on state', () => {
 		expectTypeOf<WidgetInterfacesViolationOf<BroadStateIndexInterfaces>>()
 			.toEqualTypeOf<'\'state\' must not be declared with a broad string index signature'>()
@@ -528,6 +569,7 @@ describe('widgetInterfaces domain rejection (types.ts type layer)', () => {
 
 	it('leaves the interfaces phase unusable once a domain violation is present', () => {
 		const violation = createWidgetPlugin('broad-state')
+			.description('Test widget')
 			.interfaces<BroadStateIndexInterfaces>()
 		expectTypeOf(violation)
 			.toEqualTypeOf<WidgetInterfacesViolation<'\'state\' must not be declared with a broad string index signature'>>()

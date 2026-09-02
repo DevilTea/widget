@@ -1,6 +1,6 @@
 /**
  * `projectSemanticGraph()` — projects a `BlueprintInspection` snapshot into the Lab's Dependency Graph
- * semantic representation (issue #13 Phase 5 "Dependency Graph semantic representation" comment).
+ * semantic representation (diagnostic #13 Phase 5 "Dependency Graph semantic representation" comment).
  *
  * Pure and deterministic: every fact is read directly off `inspection.nodes` / member
  * `dependencies[]` / `inspection.invalidCycles`, in the order core inspection already provides. This
@@ -33,7 +33,7 @@ function clusterIdOf(nodeId: InspectionNodeId): string {
 	return `cluster:${nodeId}`
 }
 
-/** Issue #13 Phase 5 operation-projection table: state-get/property-get -> reads, method-invoke -> invokes, state-set -> writes. */
+/** Diagnostic #13 Phase 5 operation-projection table: state-get/property-get -> reads, method-invoke -> invokes, state-set -> writes. */
 function operationKindOf(operationType: 'state-get' | 'state-set' | 'property-get' | 'method-invoke'): GraphEdgeOperation {
 	switch (operationType) {
 		case 'state-get':
@@ -70,7 +70,7 @@ function collectOwners(node: ResolvedBlueprintInspectionNode): readonly Dependen
 
 /**
  * Projects every recovered-and-resolved node's State/Property/Method members into semantic vertices,
- * grouped by their owning widget cluster. Unresolved nodes own no members and contribute nothing (issue
+ * grouped by their owning widget cluster. Unresolved nodes own no members and contribute nothing (diagnostic
  * #13 Phase 5: "the graph must not invent a resolved target edge" extends to never fabricating member
  * vertices for a node the compiler could not resolve).
  */
@@ -169,7 +169,7 @@ function projectEdgesAndStubs(inspection: BlueprintInspection): { edges: GraphEd
 	return { edges, stubs }
 }
 
-/** Property-containing invalid evaluation SCCs (issue #13 Phase 5: overlay, never recomputed by the Lab). */
+/** Property-containing invalid evaluation SCCs (diagnostic #13 Phase 5: overlay, never recomputed by the Lab). */
 function computeInvalidCycleVertexSets(inspection: BlueprintInspection): readonly ReadonlySet<string>[] {
 	return inspection.invalidCycles.map(cycle =>
 		new Set(cycle.members.map(member => vertexId(member.nodeId, member.member.type, member.member.name))),
@@ -186,7 +186,7 @@ function markInvalidCycleEdges(edges: readonly GraphEdge[], cycleSets: readonly 
 /**
  * Projects `inspection` into the Lab's semantic Dependency Graph.
  *
- * Filtering (issue #13 Phase 5 "Graph density" / "Dependency status presentation"):
+ * Filtering (diagnostic #13 Phase 5 "Graph density" / "Dependency status presentation"):
  * - `absent` stubs are hidden unless `options.showAbsent` — `invalid` stubs are always visible.
  * - members with no visible relation (no visible edge/stub touching them) are hidden unless
  *   `options.showIsolatedMembers`.

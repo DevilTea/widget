@@ -1,6 +1,6 @@
 /**
  * Runtime Inspector view model tests against a real `@deviltea/widget-core` Runtime (no mocked core —
- * repo testing policy). Covers issue #13 Phase 5 "Runtime Inspector becomes strictly passive": passive
+ * repo testing policy). Covers diagnostic #13 Phase 5 "Runtime Inspector becomes strictly passive": passive
  * rendering from `getSnapshot()`, notification-driven updates, zero Property activation from merely
  * opening/subscribing the inspector, and subscription cleanup.
  */
@@ -157,13 +157,13 @@ describe('createPropertyMemberViewModel', () => {
 
 		const result = runtime.getWidget('root')!.properties.computed.get()
 		expect(result)
-			.toEqual({ success: true, value: 42 })
+			.toEqual({ ok: true, value: 42 })
 		expect(computeSpy)
 			.toHaveBeenCalledTimes(1)
 
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
 		expect(vm.getSnapshot())
-			.toEqual({ status: 'completed', result: { success: true, value: 42 } })
+			.toEqual({ status: 'completed', result: { ok: true, value: 42 } })
 	})
 })

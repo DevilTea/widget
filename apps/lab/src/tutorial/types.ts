@@ -1,7 +1,7 @@
 /**
- * Widget Lab guided tutorial — framework-agnostic step-machine contract (issue #25 P1).
+ * Widget Lab guided tutorial — framework-agnostic step-machine contract (diagnostic #25 P1).
  *
- * Normative source: GitHub issue #25 ("guided onboarding, tutorial flow, and widget/component source
+ * Normative source: GitHub diagnostic #25 ("guided onboarding, tutorial flow, and widget/component source
  * explorer") plus its Review Gate comments — "[GPT] gate review", "[Claude] Proposal v2", and the
  * "[GPT] OWNER decision" that locks the deterministic Survey tour start. This module (and every other
  * file directly under `src/tutorial/`) never imports Vue, mirroring `src/lab/`'s framework-agnostic
@@ -21,7 +21,7 @@
  */
 export type TutorialPropertySnapshot
 	= | { readonly status: 'never-evaluated' }
-		| { readonly status: 'completed', readonly result: { readonly success: boolean, readonly value: unknown } }
+		| { readonly status: 'completed', readonly result: { readonly ok: boolean, readonly value: unknown } }
 
 /**
  * The passive, readonly Runtime-observation surface a step's `isComplete` predicate is given. Backed by
@@ -63,7 +63,7 @@ export interface TutorialActions {
 	setFocus: (widgetId: string, member?: TutorialFocusMember) => void
 	activateTab: (tab: TutorialTabId) => void
 	/**
-	 * Opens (or activates) the Implementation panel for the currently-focused widget (issue #25 P3
+	 * Opens (or activates) the Implementation panel for the currently-focused widget (diagnostic #25 P3
 	 * Scope D, tutorial entry point 3). Deliberately narrower than `activateTab`: the Implementation
 	 * panel is not one of the five canonical `TutorialTabId` surfaces (it is closable, and only ever
 	 * added lazily) — see `use-implementation-explorer.ts`'s file header for why this is a parallel
@@ -71,7 +71,7 @@ export interface TutorialActions {
 	 */
 	openImplementation: () => void
 	/**
-	 * Switches to and starts/restarts a DIFFERENT tour by id (issue #25 P4 Scope B) — the Survey tour's
+	 * Switches to and starts/restarts a DIFFERENT tour by id (diagnostic #25 P4 Scope B) — the Survey tour's
 	 * hand-back step uses this for its "Take the CRM tour" link. A plain `string` (not a closed union):
 	 * this directory stays decoupled from exactly which tour scripts exist (mirrors `setFocus`'s own
 	 * plain-string `widgetId`); `use-tutorial.ts` is the one place that knows the concrete tour ids and

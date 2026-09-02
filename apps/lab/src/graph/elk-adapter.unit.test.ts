@@ -1,7 +1,7 @@
 /**
  * `toElkGraph()` / `fromElkResult()` structural tests against a hand-built `SemanticGraph` fixture (no
  * `@deviltea/widget-core` needed here — `SemanticGraph` is Lab-owned data). The real `elkjs` layout
- * engine and the Worker are deliberately excluded (issue #13 Phase 5 "worker itself excluded — keep it
+ * engine and the Worker are deliberately excluded (diagnostic #13 Phase 5 "worker itself excluded — keep it
  * thin"); these tests only assert the pure JSON-shape boundary this module owns.
  */
 

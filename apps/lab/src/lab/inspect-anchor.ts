@@ -1,5 +1,5 @@
 /**
- * Innermost Inspect-anchor DOM resolution (issue #25 P2 "Preview -> semantic inspector bridge").
+ * Innermost Inspect-anchor DOM resolution (diagnostic #25 P2 "Preview -> semantic inspector bridge").
  *
  * Framework-agnostic, pure `Element.closest()` walk — no Vue import here on purpose, matching
  * `src/lab/focus.ts`'s split (regression-worthy logic stays independently unit-testable). Anchors are

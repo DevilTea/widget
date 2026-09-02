@@ -2,12 +2,12 @@
 /**
  * Thin presentation only: this showcase's generic search box. CRM search semantics live in `DealQuery`.
  *
- * Issue #28 accessibility fix: `useId()` gives this instance a stable id so the visible `label` is
+ * Diagnostic #28 accessibility fix: `useId()` gives this instance a stable id so the visible `label` is
  * programmatically associated with its `input` via `for`/`id` (Vue's `useId()` is per-component-instance
  * and SSR-stable, matching the resolved-config-projection style already used elsewhere in this showcase
  * — no renderer-local generated-id state to keep in sync with anything semantic).
  *
- * `data-tutorial-target` (issue #25 P4): `deal-search` is this preset's only `TextInput` instance, so a
+ * `data-tutorial-target` (diagnostic #25 P4): `deal-search` is this preset's only `TextInput` instance, so a
  * plain widget-id equality check (rather than a label-keyed lookup table like Survey's renderers needed
  * pre-P2) is enough — see `crm-target-map.ts`'s header for why widget id, not label, is available here.
  */
@@ -16,10 +16,10 @@ import { computed, useId } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { TextInputPlugin } from '../plugins/inputs'
 
-const { useState, useProperties, useStateIssues, widgetId, widgetType } = useWidget(TextInputPlugin)
+const { useState, useProperties, useStateDiagnostics, widgetId, widgetType } = useWidget(TextInputPlugin)
 const { value } = useState()
 const { label, placeholder } = useProperties()
-const { value: valueIssues } = useStateIssues()
+const { value: valueDiagnostics } = useStateDiagnostics()
 
 const inputId = useId()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
@@ -49,11 +49,11 @@ function onInput(event: Event): void {
 			@input="onInput"
 		>
 		<p
-			v-for="issue in valueIssues"
-			:key="issue.message"
+			v-for="diagnostic in valueDiagnostics"
+			:key="diagnostic.message"
 			:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-danger)' })"
 		>
-			{{ issue.message }}
+			{{ diagnostic.message }}
 		</p>
 	</div>
 </template>

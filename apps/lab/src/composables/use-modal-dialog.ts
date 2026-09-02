@@ -1,5 +1,5 @@
 /**
- * Generic native-`<dialog>` modal-focus binding (issue #25 P1 merge-gate review, blocker 1).
+ * Generic native-`<dialog>` modal-focus binding (diagnostic #25 P1 merge-gate review, blocker 1).
  *
  * `isOpen` remains the caller's single source of truth. #45 adds an optional presentation-only
  * `canShowModal` gate: when the workbench is below its supported viewport width, a pending welcome/

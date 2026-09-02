@@ -17,7 +17,7 @@ const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
 
 const blueprintStatus = computed(() => store.active.value.blueprint.status)
-const issueCount = computed(() => store.active.value.blueprint.getCollectedIssues().length)
+const diagnosticCount = computed(() => store.active.value.blueprint.diagnostics.length)
 const runtimeAvailable = computed(() => store.active.value.runtime !== null)
 
 const tutorialButtonLabel = computed(() => {
@@ -144,14 +144,14 @@ function onLocaleChange(event: Event): void {
 
 		<span
 			:class="pika({ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
-			:style="{ color: blueprintStatus === 'valid' ? 'var(--lab-color-success)' : 'var(--lab-color-danger)' }"
+			:style="{ color: blueprintStatus === 'valid' ? 'var(--lab-color-ok)' : 'var(--lab-color-danger)' }"
 		>
-			{{ i18n.t('Blueprint') }}: {{ i18n.t(blueprintStatus) }}<template v-if="issueCount > 0"> ({{ issueCount }} {{ i18n.t(issueCount === 1 ? 'issue' : 'issues') }})</template>
+			{{ i18n.t('Blueprint') }}: {{ i18n.t(blueprintStatus) }}<template v-if="diagnosticCount > 0"> ({{ diagnosticCount }} {{ i18n.t(diagnosticCount === 1 ? 'diagnostic' : 'diagnostics') }})</template>
 		</span>
 
 		<span
 			:class="pika({ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
-			:style="{ color: runtimeAvailable ? 'var(--lab-color-success)' : 'var(--lab-color-text-muted)' }"
+			:style="{ color: runtimeAvailable ? 'var(--lab-color-ok)' : 'var(--lab-color-text-muted)' }"
 		>
 			{{ i18n.t('Runtime') }}: {{ i18n.t(runtimeAvailable ? 'active' : 'unavailable') }}
 		</span>

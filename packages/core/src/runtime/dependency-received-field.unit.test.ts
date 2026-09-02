@@ -1,5 +1,5 @@
 /**
- * Regression coverage for PR #12 review finding 3773310844 (`runtime/issues.ts` `received` sentinel
+ * Regression coverage for PR #12 review finding 3773310844 (`runtime/diagnostics.ts` `received` sentinel
  * conflation).
  *
  * `undefined` is a valid dependency value, so it cannot double as the sentinel for "no `received`
@@ -7,8 +7,8 @@
  * `received: undefined` *own property* on `source` — distinguishable, by key presence, from a wrapped
  * target-primitive failure, which never carries a `received` field at all.
  *
- * Normative source: issue #10 consolidated handoff §12 ("a dependency refinement failure ... becomes a
- * consumer-local dependency Issue carrying the rejected `received` value").
+ * Normative source: diagnostic #10 consolidated handoff §12 ("a dependency refinement failure ... becomes a
+ * consumer-local dependency Diagnostic carrying the rejected `received` value").
  */
 
 import { describe, expect, it } from 'vitest'
@@ -29,6 +29,7 @@ function createHarness() {
 	let flakyShouldFail = false
 
 	const plugin = createWidgetPlugin('probe')
+		.description('Test widget')
 		.interfaces<ReceivedInterfaces>()
 		.properties(properties => properties
 			// Always reads back as `undefined`.
@@ -43,21 +44,21 @@ function createHarness() {
 				}),
 				compute: ({ deps }) => {
 					const result = deps.source()
-					return result.success ? 1 : 0
+					return result.ok ? 1 : 0
 				},
 			})
 			.viaFlaky({
 				registerDeps: ({ dep }) => ({ flaky: dep.self.methods.invoke('flakyMethod') }),
 				compute: ({ deps }) => {
 					const result = deps.flaky()
-					return result.success ? 1 : 0
+					return result.ok ? 1 : 0
 				},
 			}))
 		.methods(methods => methods.flakyMethod({
 			validateArgs: (args): args is [] => args.length === 0,
-			execute: ({ addIssue }) => {
+			execute: ({ addDiagnostic }) => {
 				if (flakyShouldFail)
-					addIssue({ message: 'flaky method failed' })
+					addDiagnostic({ message: 'flaky method failed' })
 				return 0
 			},
 		}))
@@ -66,7 +67,7 @@ function createHarness() {
 	const system = createWidgetSystem({ plugins: [plugin] })
 	const blueprint = system.createBlueprint({ id: 'root', type: 'probe' })
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	const runtime = blueprint.createRuntime()
 	const widget = runtime.getWidget('root')
@@ -81,22 +82,22 @@ function createHarness() {
 	}
 }
 
-describe('dependency-issue `received` field presence vs. value (issue #10 §12)', () => {
+describe('dependency-diagnostic `received` field presence vs. value (diagnostic #10 §12)', () => {
 	it('a refinement rejecting an actual `undefined` value emits `received: undefined` as an own property', () => {
 		const { widget } = createHarness()
 
 		const result = widget.properties.rejectsUndefined.get()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('Expected a failure result.')
 
-		expect(result.issues)
+		expect(result.failure.diagnostics)
 			.toHaveLength(1)
-		const source = result.issues[0]!.source
-		expect(source.type)
-			.toBe('property-dependency')
+		const source = result.failure.diagnostics[0]!
+		expect(source.code)
+			.toBe('dependency-value-rejected')
 
 		// Own-property presence, not value equality: `.toBeUndefined()` alone cannot distinguish
 		// "field absent" from "field present with value undefined".
@@ -112,16 +113,16 @@ describe('dependency-issue `received` field presence vs. value (issue #10 §12)'
 
 		const result = widget.properties.viaFlaky.get()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('Expected a failure result.')
 
-		expect(result.issues)
+		expect(result.failure.diagnostics)
 			.toHaveLength(1)
-		const source = result.issues[0]!.source
-		expect(source.type)
-			.toBe('property-dependency')
+		const source = result.failure.diagnostics[0]!
+		expect(source.code)
+			.toBe('dependency-target-failed')
 
 		expect(Object.hasOwn(source, 'received'))
 			.toBe(false)

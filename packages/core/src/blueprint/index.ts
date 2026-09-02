@@ -1,13 +1,14 @@
 /**
  * Blueprint compilation entry.
  *
- * Runs the full compile pipeline of issue #10's consolidated handoff §10 (recovery -> identity ->
+ * Runs the full compile pipeline of diagnostic #10's consolidated handoff §10 (recovery -> identity ->
  * config -> semantic slots -> definition diagnostics -> structure validation -> dependency
  * registration/resolution -> write-effect/purity/cycle analysis -> finalize) and returns a public
  * `ValidWidgetSystemBlueprint` or `InvalidWidgetSystemBlueprint`, carrying the compiled internal model
  * under the `blueprintInternals` symbol for the Runtime unit (U3) to read.
  */
 
+import type { BlueprintDiagnostic, BlueprintNodeDiagnostic } from '../diagnostic'
 import type {
 	BlueprintWidgetNode,
 	CompiledBlueprint,
@@ -20,51 +21,54 @@ import type {
 	WidgetSystemBlueprint,
 	WidgetSystemBlueprintStatus,
 } from '../internal/contract'
-import type { BlueprintIssue } from '../issue'
+import type { JsonValue } from '../json'
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetSystem } from '../system'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { WorkingNode } from './recovery'
+import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { blueprintInternals } from '../internal/contract'
-import { EMPTY_ISSUES } from '../issue'
+import { inspectJsonValue } from '../json'
+import { freezeDiagnosticSnapshot } from '../runtime/diagnostics'
 import { createWidgetSystemRuntime } from '../runtime/index'
-import { freezeIssueSnapshot } from '../runtime/issues'
 import { resolveDependencies } from './deps'
 import { runGraphAnalysis } from './graph'
 import { computeSemanticOrder, recoverBlueprint } from './recovery'
 import { runStructureValidation } from './structure'
 import { createCompileFacade, createNavigator } from './view'
 
-function finalizeIssuesByNode(
+function finalizeDiagnosticsByNode(
 	nodeIdByPublicNode: ReadonlyMap<BlueprintWidgetNode, InternalNodeId>,
-	finalIssues: readonly BlueprintIssue[],
-	issuesByNode: Map<InternalNodeId, BlueprintIssue[]>,
+	finalDiagnostics: readonly BlueprintDiagnostic[],
+	diagnosticsByNode: Map<InternalNodeId, BlueprintNodeDiagnostic[]>,
 ): void {
-	for (const issue of finalIssues) {
-		const node = (issue.source as { node: BlueprintWidgetNode }).node
+	for (const diagnostic of finalDiagnostics) {
+		if (diagnostic.code === 'json-incompatible-value' || diagnostic.code === 'source-access-failed')
+			continue
+		const node = diagnostic.location.node
 		const nodeId = nodeIdByPublicNode.get(node)
 		if (nodeId === undefined)
 			continue
 
-		const list = issuesByNode.get(nodeId)
+		const list = diagnosticsByNode.get(nodeId)
 		if (list === undefined)
-			issuesByNode.set(nodeId, [issue])
+			diagnosticsByNode.set(nodeId, [diagnostic])
 		else
-			list.push(issue)
+			list.push(diagnostic)
 	}
 }
 
-function buildCompiledNodes(nodes: readonly WorkingNode[], issuesByNode: ReadonlyMap<InternalNodeId, BlueprintIssue[]>): CompiledWidgetNode[] {
+function buildCompiledNodes(nodes: readonly WorkingNode[], diagnosticsByNode: ReadonlyMap<InternalNodeId, BlueprintNodeDiagnostic[]>): CompiledWidgetNode[] {
 	return nodes.map((node): CompiledWidgetNode => {
-		const issues = issuesByNode.get(node.nodeId) ?? (EMPTY_ISSUES as readonly BlueprintIssue[])
+		const diagnostics = diagnosticsByNode.get(node.nodeId) ?? (EMPTY_DIAGNOSTICS as readonly BlueprintNodeDiagnostic[])
 		const base = {
 			nodeId: node.nodeId,
 			publicNode: node.publicNode,
-			rawDefinition: node.rawDefinition,
+			source: node.source,
 			parentNodeId: node.parentNodeId,
 			location: node.location,
 			rawSlots: Object.freeze(node.rawSlots),
-			issues,
+			diagnostics,
 		}
 
 		if (!node.resolved)
@@ -91,61 +95,72 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 	definition: unknown,
 ): WidgetSystemBlueprint<Plugins> {
 	const recovery = recoverBlueprint(system, definition)
-	const { nodes, rootNodeId, nodeIdByPublicNode, nodeIdsByWidgetId, finalIssues, issuesByNode } = recovery
+	const { nodes, rootNodeId, nodeIdByPublicNode, nodeIdsByWidgetId, finalDiagnostics, diagnosticsByNode } = recovery
+	const jsonInspection = inspectJsonValue(definition)
+	const sourceJsonCompatible = jsonInspection.compatible
+	finalDiagnostics.push(...jsonInspection.diagnostics)
 
 	const semanticOrder = computeSemanticOrder(nodes, rootNodeId)
 	// `navigator` (full public nodes) backs only the *finalized* Blueprint's own navigation methods
 	// below. Compile-time callbacks (`validateStructure`, `registerDeps`) never see it directly — they
 	// receive `compileFacade.view`, a genuinely restricted and frozen runtime facade, so a JS/`any`
-	// callback cannot reach `getIssues()` or corrupt the view for later callbacks in this compile pass.
+	// callback cannot reach `getDiagnostics()` or corrupt the view for later callbacks in this compile pass.
 	const navigator = createNavigator<Plugins>(nodes, nodeIdByPublicNode, nodeIdsByWidgetId, rootNodeId)
 	const compileFacade = createCompileFacade<Plugins>(nodes, nodeIdByPublicNode, nodeIdsByWidgetId, rootNodeId)
 
-	runStructureValidation(system as unknown as WidgetSystem<AnyWidgetPluginTuple>, nodes, semanticOrder, compileFacade, finalIssues)
+	runStructureValidation(system as unknown as WidgetSystem<AnyWidgetPluginTuple>, nodes, semanticOrder, compileFacade, finalDiagnostics)
 
-	const { edges, directWriteSeeds } = resolveDependencies(nodes, semanticOrder, rootNodeId, nodeIdsByWidgetId, compileFacade, finalIssues)
+	const { edges, directWriteSeeds } = resolveDependencies(nodes, semanticOrder, rootNodeId, nodeIdsByWidgetId, compileFacade, finalDiagnostics)
 
-	const analysis = runGraphAnalysis(nodes, semanticOrder, edges, directWriteSeeds, finalIssues)
+	const analysis = runGraphAnalysis(nodes, semanticOrder, edges, directWriteSeeds, finalDiagnostics)
 
-	finalizeIssuesByNode(nodeIdByPublicNode, finalIssues, issuesByNode)
+	finalizeDiagnosticsByNode(nodeIdByPublicNode, finalDiagnostics, diagnosticsByNode)
 
-	// Blueprint diagnostics are an immutable compiled snapshot: freeze every per-node issue array (the
-	// same array `node.getIssues()` closures over) plus the aggregate array, deep-freezing each issue and
-	// its framework-owned `source` structure exactly once (idempotent — the same issue object commonly
-	// appears in both places). Caller/plugin-owned payload values (e.g. config `input`) are left alone.
-	for (const list of issuesByNode.values())
-		freezeIssueSnapshot(list)
-	freezeIssueSnapshot(finalIssues)
+	// Blueprint diagnostics are an immutable compiled snapshot: freeze every per-node diagnostic array (the
+	// same array `node.diagnostics` refers to) plus the aggregate array, deep-freezing each diagnostic and
+	// its framework-owned structural fields exactly once (idempotent — the same diagnostic object commonly
+	// appears in both places). Caller/plugin-owned Runtime payload values are left alone.
+	for (const list of diagnosticsByNode.values())
+		freezeDiagnosticSnapshot(list)
+	freezeDiagnosticSnapshot(finalDiagnostics)
+	for (const node of nodes) {
+		const shell = node.publicNode as unknown as Record<string, unknown>
+		shell.diagnostics = diagnosticsByNode.get(node.nodeId) ?? EMPTY_DIAGNOSTICS
+		Object.freeze(shell)
+	}
 
-	const status: WidgetSystemBlueprintStatus = finalIssues.length === 0 ? 'valid' : 'invalid'
-	const compiledNodes = buildCompiledNodes(nodes, issuesByNode)
+	const status: WidgetSystemBlueprintStatus = finalDiagnostics.length === 0 ? 'valid' : 'invalid'
+	const canCreateRuntime = status === 'valid' && sourceJsonCompatible
+	const compiledNodes = buildCompiledNodes(nodes, diagnosticsByNode)
 
 	const compiled: CompiledBlueprint<Plugins> = {
 		system,
-		rawDefinition: definition,
-		status,
+		source: definition,
+		sourceJsonCompatible,
+		status: canCreateRuntime ? 'valid' : 'invalid',
 		rootNodeId,
 		nodes: compiledNodes as readonly CompiledWidgetNode<Plugins>[],
 		nodeIdByPublicNode,
 		nodeIdsByWidgetId,
 		semanticOrder,
-		issues: finalIssues,
+		diagnostics: finalDiagnostics,
 		analysis,
 	}
 
-	if (status === 'valid') {
+	if (canCreateRuntime) {
 		const validNavigator = navigator as unknown as {
-			root: ResolvedBlueprintWidgetNode<Plugins>
-			getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins> | null
-			getParent: (node: BlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins> | null
-			getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins> | null
-			getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins>[]
-			getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins>[]
+			root: ResolvedBlueprintWidgetNode<Plugins, JsonValue>
+			getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
+			getParent: (node: BlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
+			getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+			getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
+			getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 		}
 
 		const blueprint: ValidWidgetSystemBlueprint<Plugins> = {
 			system,
-			rawDefinition: definition,
+			source: definition as JsonValue,
+			sourceJsonCompatible: true,
 			status: 'valid',
 			root: validNavigator.root,
 			getWidget: validNavigator.getWidget,
@@ -153,7 +168,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 			getLocation: validNavigator.getLocation,
 			getChildren: validNavigator.getChildren,
 			getChildrenAt: validNavigator.getChildrenAt,
-			getCollectedIssues: () => EMPTY_ISSUES,
+			diagnostics: EMPTY_DIAGNOSTICS,
 			recompile: next => system.createBlueprint(next),
 			createRuntime: options => createWidgetSystemRuntime(blueprint, options),
 		}
@@ -161,7 +176,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 		return attachInternalsAndFreeze(blueprint, compiled)
 	}
 
-	// The finalized (non-compile-time) Blueprint surface exposes full nodes (with `getIssues()`); the
+	// The finalized (non-compile-time) Blueprint surface exposes full nodes (with `.diagnostics`); the
 	// Navigator/BlueprintCompileView type is intentionally narrower (COMMENT: compile-view contract), so
 	// this reinterprets the same underlying navigation functions/objects under the finalized shape.
 	const invalidNavigator = navigator as unknown as {
@@ -173,9 +188,37 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 		getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins>[]
 	}
 
-	const blueprint: InvalidWidgetSystemBlueprint<Plugins> = {
+	if (sourceJsonCompatible) {
+		const jsonInvalidNavigator = invalidNavigator as unknown as {
+			root: BlueprintWidgetNode<Plugins, JsonValue>
+			getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins, JsonValue> | null
+			getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins, JsonValue> | null
+			getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+			getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins, JsonValue>[]
+			getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins, JsonValue>[]
+		}
+		const blueprint: InvalidWidgetSystemBlueprint<Plugins, JsonValue, true> = {
+			system,
+			source: definition as JsonValue,
+			sourceJsonCompatible: true,
+			status: 'invalid',
+			root: jsonInvalidNavigator.root,
+			getWidget: jsonInvalidNavigator.getWidget,
+			getParent: jsonInvalidNavigator.getParent,
+			getLocation: jsonInvalidNavigator.getLocation,
+			getChildren: jsonInvalidNavigator.getChildren,
+			getChildrenAt: jsonInvalidNavigator.getChildrenAt,
+			diagnostics: finalDiagnostics,
+			recompile: next => system.createBlueprint(next),
+		}
+
+		return attachInternalsAndFreeze(blueprint, compiled)
+	}
+
+	const blueprint: InvalidWidgetSystemBlueprint<Plugins, unknown, false> = {
 		system,
-		rawDefinition: definition,
+		source: definition,
+		sourceJsonCompatible: false,
 		status: 'invalid',
 		root: invalidNavigator.root,
 		getWidget: invalidNavigator.getWidget,
@@ -183,7 +226,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 		getLocation: invalidNavigator.getLocation,
 		getChildren: invalidNavigator.getChildren,
 		getChildrenAt: invalidNavigator.getChildrenAt,
-		getCollectedIssues: () => finalIssues,
+		diagnostics: finalDiagnostics,
 		recompile: next => system.createBlueprint(next),
 	}
 

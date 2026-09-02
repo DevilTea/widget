@@ -101,7 +101,7 @@ describe('createRuntimeReader', () => {
 			;(summary as unknown as { properties: { total: { get: () => unknown } } }).properties.total.get()
 
 			expect(reader.readProperty('summary-1', 'total'))
-				.toEqual({ status: 'completed', result: { success: true, value: 0 } })
+				.toEqual({ status: 'completed', result: { ok: true, value: 0 } })
 		}
 		finally {
 			runtime.dispose()

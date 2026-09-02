@@ -2,7 +2,7 @@
  * Runtime Inspector member view models — the framework-agnostic passive-projection layer over
  * `@deviltea/widget-core/inspection`'s `RuntimeStateInspection`/`RuntimePropertyInspection`.
  *
- * Normative source: issue #13 (Widget Lab Phase 5) comments "Runtime Inspector becomes strictly
+ * Normative source: diagnostic #13 (Widget Lab Phase 5) comments "Runtime Inspector becomes strictly
  * passive" and "inspectors are readonly consumers of core inspection". No Vue import on purpose (mirrors
  * `../lab/session.ts`'s plain-getter + `subscribe()` shape) — this is the regression-worthy logic,
  * independently testable without mounting anything.

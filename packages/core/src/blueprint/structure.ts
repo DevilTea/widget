@@ -1,7 +1,7 @@
 /**
  * Structure validation — compile pipeline step 6 (consolidated handoff §10).
  *
- * Normative source: issue #10 checkpoint C ("Structure validation"), amendment "callback addIssue()
+ * Normative source: diagnostic #10 checkpoint C ("Structure validation"), amendment "callback addDiagnostic()
  * relative authoring" (COMMENT 14), amendment "synchronous core boundary and future async seams"
  * (every semantic callback here is sync-only), amendment "diagnostic-location contract" (system-level
  * `related` normalization), amendment "compile-view contract" (callbacks receive a restricted, frozen
@@ -11,15 +11,15 @@
  * validators (in node-recovery order); the single system validator runs once, last.
  */
 
-import type { InternalNodeId, ResolvedBlueprintWidgetNode } from '../internal/contract'
 import type {
-	BlueprintIssue,
-	BlueprintStructureIssueLocation,
-	RelativePluginStructureIssueInput,
-	RelativeSlotStructureIssueInput,
-	RelativeStructureIssueLocation,
-	RelativeSystemStructureIssueInput,
-} from '../issue'
+	BlueprintDiagnostic,
+	BlueprintStructureDiagnosticLocation,
+	RelativePluginStructureDiagnosticInput,
+	RelativeSlotStructureDiagnosticInput,
+	RelativeStructureDiagnosticLocation,
+	RelativeSystemStructureDiagnosticInput,
+} from '../diagnostic'
+import type { InternalNodeId, ResolvedBlueprintWidgetNode } from '../internal/contract'
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetSystem } from '../system'
 import type { WidgetMemberKey } from '../types'
@@ -27,7 +27,7 @@ import type { WorkingNode } from './recovery'
 import type { CompileFacade } from './view'
 import { readWidgetPluginDefinition } from '../plugin'
 import { assertSyncValue } from '../runtime/sync'
-import { createCollector, dedupeBy, structureIssue } from './issues'
+import { createCollector, dedupeBy, structureDiagnostic } from './diagnostics'
 
 function configFragment(node: WorkingNode): Record<string, unknown> {
 	return node.plugin !== null && readWidgetPluginDefinition(node.plugin).config !== null
@@ -63,7 +63,7 @@ function slotDeclarationIndex(node: WorkingNode, slot: WidgetMemberKey): number 
  */
 function locationKey(
 	resolveNodeId: (node: unknown) => InternalNodeId | undefined,
-	location: RelativeStructureIssueLocation,
+	location: RelativeStructureDiagnosticLocation,
 ): string {
 	const nodeId = resolveNodeId(location.node) ?? -1
 	const slot = location.type === 'widget' ? '' : location.slot
@@ -71,7 +71,7 @@ function locationKey(
 	return `${location.type}:${nodeId}:${slot}:${index}`
 }
 
-const locationRank: Record<RelativeStructureIssueLocation['type'], number> = { 'widget': 0, 'slot': 1, 'slot-child': 2 }
+const locationRank: Record<RelativeStructureDiagnosticLocation['type'], number> = { 'widget': 0, 'slot': 1, 'slot-child': 2 }
 
 /**
  * Orders `related` locations deterministically by semantic traversal order (the node's position in
@@ -82,8 +82,8 @@ function compareLocations(
 	nodes: readonly WorkingNode[],
 	semanticOrderIndex: ReadonlyMap<InternalNodeId, number>,
 	resolveNodeId: (node: unknown) => InternalNodeId | undefined,
-	a: RelativeStructureIssueLocation,
-	b: RelativeStructureIssueLocation,
+	a: RelativeStructureDiagnosticLocation,
+	b: RelativeStructureDiagnosticLocation,
 ): number {
 	const nodeIdA = resolveNodeId(a.node)
 	const nodeIdB = resolveNodeId(b.node)
@@ -120,8 +120,8 @@ function normalizeRelated(
 	nodes: readonly WorkingNode[],
 	semanticOrderIndex: ReadonlyMap<InternalNodeId, number>,
 	resolveNodeId: (node: unknown) => InternalNodeId | undefined,
-	related: readonly RelativeStructureIssueLocation[] | undefined,
-): readonly BlueprintStructureIssueLocation[] | undefined {
+	related: readonly RelativeStructureDiagnosticLocation[] | undefined,
+): readonly BlueprintStructureDiagnosticLocation[] | undefined {
 	if (related === undefined || related.length === 0)
 		return undefined
 
@@ -135,7 +135,7 @@ function normalizeRelated(
 	return Object.freeze(deduped.map((location) => {
 		const nodeId = resolveNodeId(location.node)
 		const realNode = nodeId !== undefined ? nodes[nodeId]!.publicNode as ResolvedBlueprintWidgetNode : (location.node as unknown as ResolvedBlueprintWidgetNode)
-		return { ...location, node: realNode } as BlueprintStructureIssueLocation
+		return { ...location, node: realNode } as BlueprintStructureDiagnosticLocation
 	}))
 }
 
@@ -144,7 +144,7 @@ export function runStructureValidation(
 	nodes: readonly WorkingNode[],
 	semanticOrder: readonly InternalNodeId[],
 	compileFacade: CompileFacade<AnyWidgetPluginTuple>,
-	finalIssues: BlueprintIssue[],
+	finalDiagnostics: BlueprintDiagnostic[],
 ): void {
 	for (const nodeId of semanticOrder) {
 		const node = nodes[nodeId]!
@@ -161,7 +161,7 @@ export function runStructureValidation(
 					continue
 
 				const children = (node.semanticSlots.get(slotName) ?? []).map(id => compileFacade.facadeForNodeId(id))
-				const { collector, items } = createCollector<RelativeSlotStructureIssueInput>()
+				const { collector, items } = createCollector<RelativeSlotStructureDiagnosticInput>()
 
 				const result: unknown = slotDefinition.validateStructure({
 					widget: widgetFacade,
@@ -174,12 +174,12 @@ export function runStructureValidation(
 				assertSyncValue(result, `Slot "${slotName}"'s validateStructure`)
 
 				for (const item of items)
-					finalIssues.push(structureIssue(publicNode, item.message, slotName, item.index))
+					finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slotName, item.index))
 			}
 		}
 
 		if (definition.validateStructure !== null) {
-			const { collector, items } = createCollector<RelativePluginStructureIssueInput>()
+			const { collector, items } = createCollector<RelativePluginStructureDiagnosticInput>()
 
 			const result: unknown = definition.validateStructure({
 				widget: widgetFacade,
@@ -192,13 +192,13 @@ export function runStructureValidation(
 			for (const item of items) {
 				const slot = 'slot' in item ? item.slot : undefined
 				const index = 'index' in item ? item.index : undefined
-				finalIssues.push(structureIssue(publicNode, item.message, slot, index))
+				finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slot, index))
 			}
 		}
 	}
 
 	if (system.validateStructure !== null) {
-		const { collector, items } = createCollector<RelativeSystemStructureIssueInput>()
+		const { collector, items } = createCollector<RelativeSystemStructureDiagnosticInput>()
 
 		const result: unknown = system.validateStructure({
 			blueprint: compileFacade.view,
@@ -214,7 +214,7 @@ export function runStructureValidation(
 			const nodeId = compileFacade.resolveNodeId(location.node)
 			const realNode = nodeId !== undefined ? nodes[nodeId]!.publicNode as ResolvedBlueprintWidgetNode : (location.node as unknown as ResolvedBlueprintWidgetNode)
 
-			finalIssues.push(structureIssue(
+			finalDiagnostics.push(structureDiagnostic(
 				realNode,
 				item.message,
 				location.type === 'widget' ? undefined : location.slot,

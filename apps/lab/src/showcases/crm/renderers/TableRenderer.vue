@@ -5,7 +5,7 @@
  * Source that changes `rowIdKey`/`columns` reaches this renderer. Row click always calls
  * `Table.selectRow(id)` — never local selection state. Keyboard activation (Enter/Space) calls the same
  * semantic path. #43 translates only the hardcoded empty-state sentence; configured column labels,
- * row values, selection identity, and method issues remain verbatim semantic/source-owned data.
+ * row values, selection identity, and method diagnostics remain verbatim semantic/source-owned data.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
@@ -13,11 +13,11 @@ import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { TablePlugin } from '../plugins/read-models'
 
-const { useState, useProperties, useMethods, useMethodIssues, widgetId, widgetType } = useWidget(TablePlugin)
+const { useState, useProperties, useMethods, useMethodDiagnostics, widgetId, widgetType } = useWidget(TablePlugin)
 const { selectedRowId } = useState()
 const { rows, empty, rowIdKey, columns } = useProperties()
 const { selectRow } = useMethods()
-const { selectRow: selectRowIssues } = useMethodIssues()
+const { selectRow: selectRowDiagnostics } = useMethodDiagnostics()
 const i18n = useLabI18n()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 const tutorialTarget = computed(() => (widgetId === 'deal-table' ? 'crm-table' : undefined))
@@ -36,7 +36,7 @@ function cellText(row: Record<string, unknown>, key: string, format: 'text' | 'c
 
 function badgeColor(row: Record<string, unknown>, key: string): string {
 	switch (row[key]) {
-		case 'won': return 'var(--lab-color-success)'
+		case 'won': return 'var(--lab-color-ok)'
 		case 'lost': return 'var(--lab-color-danger)'
 		case 'negotiation': return 'var(--lab-color-warning)'
 		default: return 'var(--lab-color-accent)'
@@ -116,11 +116,11 @@ function onRowKeydown(event: KeyboardEvent, row: Record<string, unknown>): void 
 			{{ i18n.t('No deals match the current search/filter.') }}
 		</p>
 		<p
-			v-for="issue in selectRowIssues"
-			:key="issue.message"
+			v-for="diagnostic in selectRowDiagnostics"
+			:key="diagnostic.message"
 			:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-danger)' })"
 		>
-			{{ issue.message }}
+			{{ diagnostic.message }}
 		</p>
 	</div>
 </template>

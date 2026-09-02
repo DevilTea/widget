@@ -49,8 +49,10 @@ export interface TextInputInterfaces extends WidgetInterfaces {
 }
 
 export const TextInputPlugin = createWidgetPlugin('TextInput')
+	.description('Text input widget')
 	.interfaces<TextInputInterfaces>()
 	.config({
+		description: 'Text input configuration',
 		validate: (input): input is TextInputRawConfig =>
 			isPlainObject(input)
 			&& typeof input.label === 'string'
@@ -144,8 +146,10 @@ function isSelectInputConfig(input: unknown): input is SelectInputConfig {
 }
 
 export const SelectInputPlugin = createWidgetPlugin('SelectInput')
+	.description('Select input widget')
 	.interfaces<SelectInputInterfaces>()
 	.config({
+		description: 'Select input configuration',
 		validate: (input): input is SelectInputConfig => isSelectInputConfig(input),
 		resolve: raw => ({
 			label: raw?.label ?? '',

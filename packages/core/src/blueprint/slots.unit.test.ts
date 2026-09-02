@@ -3,13 +3,14 @@
  * declared/unknown/malformed raw slots).
  */
 
-import type { BlueprintDefinitionIssueSource, WidgetInterfaces } from '../index'
+import type { BlueprintDefinitionDiagnostic, WidgetInterfaces } from '../index'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
 interface LeafInterfaces extends WidgetInterfaces {}
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.done()
 
@@ -18,10 +19,11 @@ interface ContainerInterfaces extends WidgetInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		header: {},
-		content: {},
+		header: { description: 'Test slot' },
+		content: { description: 'Test slot' },
 	})
 	.done()
 
@@ -30,12 +32,13 @@ interface EmptySlotsInterfaces extends WidgetInterfaces {
 }
 
 /**
- * The canonical explicit-empty slots spelling (issue #10 amendment "declaration-presence semantics and
+ * The canonical explicit-empty slots spelling (diagnostic #10 amendment "declaration-presence semantics and
  * public `WidgetPlugin.capabilities`"): the slots capability is present (`plugin.capabilities.slots ===
  * true`) with zero declared slot names, distinct from `leafPlugin` above, which never declares slots at
  * all.
  */
 const emptySlotsPlugin = createWidgetPlugin('empty-slots')
+	.description('Test widget')
 	.interfaces<EmptySlotsInterfaces>()
 	.slots({})
 	.done()
@@ -70,7 +73,7 @@ describe('declared slot omission', () => {
 
 		expect(root.slots.header)
 			.toHaveLength(1)
-		expect(root.slots.header[0]!.rawDefinition)
+		expect(root.slots.header[0]!.source)
 			.toBe(child)
 		expect(root.slots.content)
 			.toEqual([])
@@ -80,7 +83,7 @@ describe('declared slot omission', () => {
 })
 
 describe('malformed declared slot', () => {
-	it('a non-array declared slot value resolves to [] and reports a definition issue at [\'slots\', slot]', () => {
+	it('a non-array declared slot value resolves to [] and reports a definition diagnostic at [\'slots\', slot]', () => {
 		const { blueprint, root } = getContainerRoot({
 			id: 'root',
 			type: 'container',
@@ -94,19 +97,19 @@ describe('malformed declared slot', () => {
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
 			.toHaveLength(1)
-		const source = issues[0]!.source as BlueprintDefinitionIssueSource
-		expect(source.type)
-			.toBe('definition')
-		expect(source.path)
+		const source = diagnostics[0]! as BlueprintDefinitionDiagnostic
+		expect(source.code)
+			.toBe('invalid-widget-slot')
+		expect('path' in source ? source.path : undefined)
 			.toEqual(['slots', 'header'])
-		expect(source.node)
+		expect(source.location.node)
 			.toBe(root)
 	})
 
-	it('a malformed slots container also resolves every declared slot to [] and reports a definition issue at [\'slots\']', () => {
+	it('a malformed slots container also resolves every declared slot to [] and reports a definition diagnostic at [\'slots\']', () => {
 		const { blueprint, root } = getContainerRoot({ id: 'root', type: 'container', slots: 'not-an-object' })
 
 		expect(Object.keys(root.slots))
@@ -118,15 +121,15 @@ describe('malformed declared slot', () => {
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
 			.toHaveLength(1)
-		const source = issues[0]!.source as BlueprintDefinitionIssueSource
-		expect(source.type)
-			.toBe('definition')
-		expect(source.path)
+		const source = diagnostics[0]! as BlueprintDefinitionDiagnostic
+		expect(source.code)
+			.toBe('invalid-widget-slots')
+		expect('path' in source ? source.path : undefined)
 			.toEqual(['slots'])
-		expect(source.node)
+		expect(source.location.node)
 			.toBe(root)
 	})
 })
@@ -149,7 +152,7 @@ describe('unknown raw slots', () => {
 		expect(childrenAtMystery)
 			.toHaveLength(1)
 		const childNode = childrenAtMystery[0]!
-		expect(childNode.rawDefinition)
+		expect(childNode.source)
 			.toBe(child)
 
 		const location = blueprint.getLocation(childNode)
@@ -169,11 +172,11 @@ describe('unknown raw slots', () => {
 
 		expect(blueprint.status)
 			.toBe('invalid')
-		const issues = blueprint.getCollectedIssues()
-		const defIssue = issues.find(issue => issue.source.type === 'definition' && (issue.source as BlueprintDefinitionIssueSource).path?.[1] === 'mystery')
-		expect(defIssue)
+		const diagnostics = blueprint.diagnostics
+		const defDiagnostic = diagnostics.find(diagnostic => ['invalid-widget-definition', 'invalid-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code) && 'path' in diagnostic && diagnostic.path?.[1] === 'mystery')
+		expect(defDiagnostic)
 			.toBeDefined()
-		expect((defIssue!.source as BlueprintDefinitionIssueSource).path)
+		expect('path' in defDiagnostic! ? defDiagnostic.path : undefined)
 			.toEqual(['slots', 'mystery'])
 	})
 
@@ -214,7 +217,7 @@ describe('plugin without slots capability', () => {
 		expect(children)
 			.toHaveLength(1)
 		const child = children[0]!
-		expect(child.rawDefinition)
+		expect(child.source)
 			.toBe(grandchild)
 
 		const location = blueprint.getLocation(child)
@@ -231,20 +234,20 @@ describe('plugin without slots capability', () => {
 
 		expect(blueprint.status)
 			.toBe('invalid')
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
 			.toHaveLength(1)
-		const source = issues[0]!.source as BlueprintDefinitionIssueSource
-		expect(source.type)
-			.toBe('definition')
-		expect(source.path)
+		const source = diagnostics[0]! as BlueprintDefinitionDiagnostic
+		expect(source.code)
+			.toBe('unexpected-widget-slots')
+		expect('path' in source ? source.path : undefined)
 			.toEqual(['slots'])
-		expect(source.node)
+		expect(source.location.node)
 			.toBe(root)
 	})
 })
 
-describe('explicit-empty slots capability, distinct from an absent slots capability (issue #10 amendment "declaration-presence semantics")', () => {
+describe('explicit-empty slots capability, distinct from an absent slots capability (diagnostic #10 amendment "declaration-presence semantics")', () => {
 	it('resolved semantic .slots stays {} for an explicit-empty slots plugin, same as a plugin without slots capability', () => {
 		const blueprint = system.createBlueprint({ id: 'root', type: 'empty-slots' })
 		const root = blueprint.root
@@ -269,10 +272,10 @@ describe('explicit-empty slots capability, distinct from an absent slots capabil
 
 		expect(blueprint.status)
 			.toBe('invalid')
-		const issues = blueprint.getCollectedIssues()
-		expect(issues)
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(issues[0]!.message)
+		expect(diagnostics[0]!.message)
 			.toBe('Widget slot "mystery" is not declared by its plugin.')
 
 		// Contrast: the exact same raw shape against `leafPlugin` (genuinely absent slots capability)
@@ -283,10 +286,10 @@ describe('explicit-empty slots capability, distinct from an absent slots capabil
 			type: 'leaf',
 			slots: { mystery: [{ id: 'child', type: 'leaf' }] },
 		})
-		const absentIssues = absentBlueprint.getCollectedIssues()
-		expect(absentIssues)
+		const absentDiagnostics = absentBlueprint.diagnostics
+		expect(absentDiagnostics)
 			.toHaveLength(1)
-		expect(absentIssues[0]!.message)
+		expect(absentDiagnostics[0]!.message)
 			.toBe('Widget declares "slots" but its plugin has no slots capability.')
 	})
 })

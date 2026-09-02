@@ -1,5 +1,5 @@
 /**
- * Conformance tests — issue #13 checkpoint G "Type-level conformance" (renderer-builder half) and the
+ * Conformance tests — diagnostic #13 checkpoint G "Type-level conformance" (renderer-builder half) and the
  * runtime construction-validation half of checkpoint B.
  */
 
@@ -183,9 +183,11 @@ describe('renderer registry — runtime construction validation', () => {
 
 	it('supports arbitrary string-literal renderer keys, including "__proto__" and "constructor"', () => {
 		const weirdPlugin = createWidgetPlugin('__proto__')
+			.description('Prototype-key widget')
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const ctorPlugin = createWidgetPlugin('constructor')
+			.description('Constructor-key widget')
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const weirdSystem = createWidgetSystem({ plugins: [weirdPlugin, ctorPlugin] })

@@ -1,7 +1,7 @@
 /**
  * Conformance group 13 (zero semantic execution), group 14 (Property inspection subscribe truth table),
  * group 15 (State inspection passive read + notification truth table) and the runtime half of group 16
- * (no Method runtime inspection surface) from issue #10's inspection amendment "inspection exact API v1
+ * (no Method runtime inspection surface) from diagnostic #10's inspection amendment "inspection exact API v1
  * (part 2)".
  */
 
@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectBlueprint, inspectRuntime } from './index'
 
-type ControlledMode = 'success' | 'fail' | 'throw' | 'thenable'
+type ControlledMode = 'ok' | 'fail' | 'throw' | 'thenable'
 
 interface HarnessInterfaces {
 	state: {
@@ -23,10 +23,11 @@ interface HarnessInterfaces {
 
 function createHarness() {
 	let computeSpyCount = 0
-	let mode: ControlledMode = 'success'
+	let mode: ControlledMode = 'ok'
 	let controlledValue = 1
 
 	const plugin = createWidgetPlugin('runtime-facade-harness')
+		.description('Test widget')
 		.interfaces<HarnessInterfaces>()
 		.state(state => state.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -34,7 +35,7 @@ function createHarness() {
 		}))
 		.properties(properties => properties.controlled({
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
-			compute: ({ deps, addIssue }) => {
+			compute: ({ deps, addDiagnostic }) => {
 				computeSpyCount++
 				// Registers/reads the dependency so state changes actually invalidate this computed; the
 				// business output below is independently controlled by test-controlled closure state.
@@ -44,7 +45,7 @@ function createHarness() {
 				if (mode === 'thenable')
 					return { then: () => {} } as unknown as number
 				if (mode === 'fail') {
-					addIssue({ message: 'flaky failed' })
+					addDiagnostic({ message: 'flaky failed' })
 					return controlledValue
 				}
 				return controlledValue
@@ -154,15 +155,15 @@ describe('property inspection subscribe truth table', () => {
 			.not.toHaveBeenCalled()
 	})
 
-	it('walks the full retention sequence: success -> invalidation (no notify) -> failure -> throw (no notify) -> thenable violation (no notify) -> equal-value fresh completion (notifies)', () => {
+	it('walks the full retention sequence: ok -> invalidation (no notify) -> failure -> throw (no notify) -> thenable violation (no notify) -> equal-value fresh completion (notifies)', () => {
 		const { widget, runtime, setMode, setControlledValue } = createHarness()
 		const propertyInspection = inspectRuntime(runtime)
 			.getWidget(rootIdOf(runtime))!.getProperty('controlled')!
 		const listener = vi.fn()
 		propertyInspection.subscribe(listener)
 
-		// 1. First natural completion: success A.
-		setMode('success')
+		// 1. First natural completion: ok A.
+		setMode('ok')
 		setControlledValue(1)
 		const resultA = widget.properties.controlled.get()
 		expect(listener)
@@ -180,7 +181,7 @@ describe('property inspection subscribe truth table', () => {
 		// 3. A real pull now recomputes, this time a semantic failure: completed snapshot B.
 		setMode('fail')
 		const resultB = widget.properties.controlled.get()
-		expect(resultB.success)
+		expect(resultB.ok)
 			.toBe(false)
 		expect(listener)
 			.toHaveBeenCalledTimes(2)
@@ -207,10 +208,10 @@ describe('property inspection subscribe truth table', () => {
 		expect(propertyInspection.getSnapshot())
 			.toEqual({ status: 'completed', result: resultB })
 
-		// 6. Invalidate again, then a fresh success completion whose value equals A's: still notifies,
+		// 6. Invalidate again, then a fresh ok completion whose value equals A's: still notifies,
 		// no deep-equality suppression, and it is a distinct snapshot from A.
 		widget.state.count.set(5)
-		setMode('success')
+		setMode('ok')
 		setControlledValue(1)
 		const resultC = widget.properties.controlled.get()
 		expect(resultC)
@@ -221,7 +222,7 @@ describe('property inspection subscribe truth table', () => {
 			.toEqual({ status: 'completed', result: resultC })
 	})
 
-	it('subscribeIssues-style unsubscribe is idempotent and safe to call multiple times', () => {
+	it('subscribeDiagnostics-style unsubscribe is idempotent and safe to call multiple times', () => {
 		const { runtime } = createHarness()
 		const propertyInspection = inspectRuntime(runtime)
 			.getWidget(rootIdOf(runtime))!.getProperty('controlled')!
@@ -267,7 +268,7 @@ describe('property inspection subscribe truth table', () => {
 			propertyInspection.subscribe(snapshot => bCalls.push(snapshot))
 		})
 
-		setMode('success')
+		setMode('ok')
 		setControlledValue(1)
 		widget.properties.controlled.get()
 		// B subscribed during A's notification for this exact completion; B must not receive it.
@@ -305,7 +306,7 @@ describe('state inspection passive read + notification truth table', () => {
 		stop()
 	})
 
-	it('publishes exactly one snapshot per authoritative value change; a rejected write publishes nothing while Issues still update', () => {
+	it('publishes exactly one snapshot per authoritative value change; a rejected write publishes nothing while Diagnostics still update', () => {
 		const { widget, runtime } = createHarness()
 		const stateInspection = inspectRuntime(runtime)
 			.getWidget(rootIdOf(runtime))!.getState('count')!
@@ -321,15 +322,15 @@ describe('state inspection passive read + notification truth table', () => {
 		expect(stateInspection.getSnapshot())
 			.toEqual({ value: 5 })
 
-		const issuesBefore = widget.state.count.getIssues()
+		const diagnosticsBefore = widget.state.count.getDiagnostics()
 		const rejected = widget.state.count.set('not-a-number' as unknown as number)
-		expect(rejected.success)
+		expect(rejected.ok)
 			.toBe(false)
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
 		expect(stateInspection.getSnapshot())
 			.toEqual({ value: 5 })
-		expect(widget.state.count.getIssues()).not.toBe(issuesBefore)
+		expect(widget.state.count.getDiagnostics()).not.toBe(diagnosticsBefore)
 
 		// Same-value write: no authoritative change, matching core state signal semantics.
 		widget.state.count.set(5)

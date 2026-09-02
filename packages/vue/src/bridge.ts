@@ -1,7 +1,7 @@
 /**
  * Lazy Runtime -> Vue value/callable bridge primitives.
  *
- * Normative source: issue #13 checkpoint C/F/G. The Runtime is the sole source of truth: every ref
+ * Normative source: diagnostic #13 checkpoint C/F/G. The Runtime is the sole source of truth: every ref
  * created here is a `customRef` with no authoritative mirrored cache, activates its underlying Runtime
  * subscription only on first `.value` read, and every listener only calls `trigger()` — it never
  * writes a locally cached value. `.value` getters always re-read the Runtime directly.
@@ -63,14 +63,14 @@ export function createStateRef(state: RuntimeStateLike, registerCleanup: Registe
 		},
 		set(candidate) {
 			const result = state.set(candidate)
-			if (!result.success)
+			if (!result.ok)
 				trigger()
 		},
 	}))
 }
 
 /**
- * Readonly `Ref<T | null>` projection of a `RuntimeProperty`. `ExecutionResult.success(value)`
+ * Readonly `Ref<T | null>` projection of a `RuntimeProperty`. `ExecutionResult.ok(value)`
  * projects to `value`; `failure` projects to `null` with no last-successful fallback.
  */
 export function createPropertyRef(property: RuntimePropertyLike, registerCleanup: RegisterCleanup): Ref<unknown> {
@@ -84,7 +84,7 @@ export function createPropertyRef(property: RuntimePropertyLike, registerCleanup
 			}
 			track()
 			const result = property.get()
-			return result.success ? result.value : null
+			return result.ok ? result.value : null
 		},
 		set() {
 			throw new WidgetVueIntegrationError('This Vue projection is read-only: properties cannot be written through `useProperties()`.')
@@ -93,34 +93,34 @@ export function createPropertyRef(property: RuntimePropertyLike, registerCleanup
 }
 
 /**
- * Readonly `Ref<readonly Issue[]>` projection shared by every `getIssues()` / `subscribeIssues()`
+ * Readonly `Ref<readonly Diagnostic[]>` projection shared by every `getDiagnostics()` / `subscribeDiagnostics()`
  * channel (state member, property member, method member, and the widget-level aggregate). Snapshot
  * objects/order are forwarded exactly as `@deviltea/widget-core` produced them.
  */
-export function createIssuesRef<Issue>(
-	getIssues: () => readonly Issue[],
-	subscribeIssues: (listener: (issues: readonly Issue[]) => void) => () => void,
+export function createDiagnosticsRef<Diagnostic>(
+	getDiagnostics: () => readonly Diagnostic[],
+	subscribeDiagnostics: (listener: (diagnostics: readonly Diagnostic[]) => void) => () => void,
 	registerCleanup: RegisterCleanup,
-): Ref<readonly Issue[]> {
+): Ref<readonly Diagnostic[]> {
 	let activated = false
 
-	return customRef<readonly Issue[]>((track, trigger) => ({
+	return customRef<readonly Diagnostic[]>((track, trigger) => ({
 		get() {
 			if (!activated) {
 				activated = true
-				registerCleanup(subscribeIssues(() => trigger()))
+				registerCleanup(subscribeDiagnostics(() => trigger()))
 			}
 			track()
-			return getIssues()
+			return getDiagnostics()
 		},
 		set() {
-			throw new WidgetVueIntegrationError('This Vue projection is read-only: issue snapshots cannot be written.')
+			throw new WidgetVueIntegrationError('This Vue projection is read-only: diagnostic snapshots cannot be written.')
 		},
 	}))
 }
 
 /**
- * Stable callable wrapper over a `RuntimeMethod`. Semantic success projects to its value; semantic
+ * Stable callable wrapper over a `RuntimeMethod`. Semantic ok projects to its value; semantic
  * failure projects to `null`. Implementation-contract exceptions and disposed-runtime errors propagate
  * unchanged — this wrapper never catches them. No subscription, no ref: methods are not reactive
  * values.
@@ -128,6 +128,6 @@ export function createIssuesRef<Issue>(
 export function createMethodWrapper(method: RuntimeMethodLike): (...args: readonly unknown[]) => unknown {
 	return (...args: readonly unknown[]) => {
 		const result = method(...args)
-		return result.success ? result.value : null
+		return result.ok ? result.value : null
 	}
 }

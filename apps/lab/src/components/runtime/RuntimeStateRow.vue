@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * One State member row (issue #13 Phase 5 "Runtime Inspector becomes strictly passive"): renders the
+ * One State member row (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly passive"): renders the
  * current passive inspection snapshot from `getSnapshot()` and updates on `subscribe()` notifications.
  * Never calls `state.get()`/`state.set()` — the readonly `RuntimeStateInspection` facade is the only
  * surface this component touches.

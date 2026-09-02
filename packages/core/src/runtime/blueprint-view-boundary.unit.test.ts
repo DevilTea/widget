@@ -5,8 +5,8 @@
  * `compute`/`execute` are typed against `ValidBlueprintView` (`root`/`getWidget`/`getParent`/
  * `getLocation`/`getChildren`/`getChildrenAt` — navigation only), but the implementation used to pass
  * the *full* `ValidWidgetSystemBlueprint` object through as `blueprintView`, relying entirely on that
- * static type to keep callbacks away from `system`, `rawDefinition`, `recompile()`,
- * `getCollectedIssues()` and `createRuntime()`. Plain JS / `any` inside a callback could reach all of
+ * static type to keep callbacks away from `system`, `source`, `recompile()`,
+ * `getDiagnostics()` and `createRuntime()`. Plain JS / `any` inside a callback could reach all of
  * those, obtaining Runtime machinery and full-Blueprint capabilities from inside a semantic callback —
  * bypassing the callback capability matrix and the intended dependency-only interaction boundary.
  *
@@ -14,7 +14,7 @@
  * escape hatch and prove the *runtime object itself* — not just its static type — withholds the
  * forbidden members.
  *
- * Normative source: issue #10 consolidated handoff callback capability matrix.
+ * Normative source: diagnostic #10 consolidated handoff callback capability matrix.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -31,6 +31,7 @@ interface BlueprintViewInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('blueprint-view-probe')
+		.description('Test widget')
 		.interfaces<BlueprintViewInterfaces>()
 		.properties(properties => properties.probeProperty({
 			compute: (ctx) => {
@@ -38,9 +39,9 @@ function createHarness() {
 				return {
 					createRuntime: blueprintAny.createRuntime,
 					recompile: blueprintAny.recompile,
-					getCollectedIssues: blueprintAny.getCollectedIssues,
+					getDiagnostics: blueprintAny.getDiagnostics,
 					system: blueprintAny.system,
-					rawDefinition: blueprintAny.rawDefinition,
+					source: blueprintAny.source,
 					status: blueprintAny.status,
 					hasRoot: blueprintAny.root !== undefined,
 					hasGetWidget: typeof blueprintAny.getWidget === 'function',
@@ -66,7 +67,7 @@ function createHarness() {
 	const system = createWidgetSystem({ plugins: [plugin] })
 	const blueprint = system.createBlueprint({ id: 'root', type: 'blueprint-view-probe' })
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	const runtime = blueprint.createRuntime()
 	const widget = runtime.getWidget('root')
@@ -77,25 +78,25 @@ function createHarness() {
 }
 
 describe('ctx.blueprint is a real restricted ValidBlueprintView facade, not the full Blueprint object (round-2 finding 3773696034)', () => {
-	it('a Property compute cannot reach createRuntime/recompile/getCollectedIssues/system/rawDefinition/status through JS/any', () => {
+	it('a Property compute cannot reach createRuntime/recompile/getDiagnostics/system/source/status through JS/any', () => {
 		const { widget } = createHarness()
 
 		const result = widget.properties.probeProperty.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('Expected a success result.')
+		if (!result.ok)
+			throw new Error('Expected a ok result.')
 
 		const probe = result.value as Record<string, unknown>
 		expect(probe.createRuntime)
 			.toBeUndefined()
 		expect(probe.recompile)
 			.toBeUndefined()
-		expect(probe.getCollectedIssues)
+		expect(probe.getDiagnostics)
 			.toBeUndefined()
 		expect(probe.system)
 			.toBeUndefined()
-		expect(probe.rawDefinition)
+		expect(probe.source)
 			.toBeUndefined()
 		expect(probe.status)
 			.toBeUndefined()
@@ -119,10 +120,10 @@ describe('ctx.blueprint is a real restricted ValidBlueprintView facade, not the 
 		const { widget } = createHarness()
 
 		const result = widget.methods.probeMethod()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('Expected a success result.')
+		if (!result.ok)
+			throw new Error('Expected a ok result.')
 
 		const probe = result.value as Record<string, unknown>
 		expect(probe.createRuntime)
@@ -135,6 +136,7 @@ describe('ctx.blueprint is a real restricted ValidBlueprintView facade, not the 
 		const { widget } = createHarness()
 
 		const plugin = createWidgetPlugin('navigation-check')
+			.description('Test widget')
 			.interfaces<{ properties: { self: unknown } }>()
 			.properties(properties => properties.self({
 				compute: ctx => ctx.blueprint.getWidget('root')?.id ?? null,
@@ -150,9 +152,9 @@ describe('ctx.blueprint is a real restricted ValidBlueprintView facade, not the 
 			throw new Error('test fixture: expected the root widget to resolve')
 
 		expect(navWidget.properties.self.get())
-			.toEqual({ success: true, value: 'root' })
+			.toEqual({ ok: true, value: 'root' })
 		// Sanity: the original harness widget is unrelated but still independently functional.
-		expect(widget.properties.probeProperty.get().success)
+		expect(widget.properties.probeProperty.get().ok)
 			.toBe(true)
 	})
 })

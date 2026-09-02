@@ -1,18 +1,18 @@
 /**
- * The CRM tour's 6-step script (issue #25 P4 Scope A). Same staged do -> observe -> name structure as
+ * The CRM tour's 6-step script (diagnostic #25 P4 Scope A). Same staged do -> observe -> name structure as
  * `survey-script.ts`, against the `crm-default` preset's deterministic eight-deal seed set
  * (`showcases/crm/domain.ts`'s `seedDeals` — "Aurora Systems" is `deal-1`, seeded at stage `lead`). The
- * deterministic-start policy the OWNER locked for the Survey tour (issue #25 OWNER decision) applies to
+ * deterministic-start policy the OWNER locked for the Survey tour (diagnostic #25 OWNER decision) applies to
  * this tour by direct extension: starting/restarting the CRM tour always reloads `crm-default` through
  * the normal preset/Apply pipeline (`use-tutorial.ts`'s `loadTourDefault()`), with the same dirty-draft
  * confirmation — this script is authored/tested against that known starting state, never adapted to
  * arbitrary Runtime state.
  *
- * Required teaching moments (issue #25 Scope A "Sales Pipeline CRM should at least teach"): search/filter
+ * Required teaching moments (diagnostic #25 Scope A "Sales Pipeline CRM should at least teach"): search/filter
  * State + derived Properties (step 2), row selection -> detail coordination via `Table.selectedRowId`
  * (step 3), Change stage -> Modal -> Method mutation with dependent-view recompute (step 4), an optional
  * pointer to semantic-only widgets (step 5), and a condensed hand-back (step 6) that deliberately does
- * NOT repeat Survey's step 8 six-view walkthrough verbatim (issue #25 P4 ask: "avoid duplicating ... one
+ * NOT repeat Survey's step 8 six-view walkthrough verbatim (diagnostic #25 P4 ask: "avoid duplicating ... one
  * condensed step is fine").
  *
  * Step 4's two stages are NOT split into two separate steps, and this is a deliberate correction of an
@@ -98,7 +98,7 @@ export const crmTourScript: TutorialScript = {
 				prompt: 'Try it: search for "Aurora".',
 				isComplete: (reader) => {
 					const filteredDeals = reader.readProperty('deal-query', 'filteredDeals')
-					if (filteredDeals?.status !== 'completed' || !filteredDeals.result.success)
+					if (filteredDeals?.status !== 'completed' || !filteredDeals.result.ok)
 						return false
 					const deals = filteredDeals.result.value
 					// Narrowing occurred (fewer than all 8 seed deals are visible) AND the row the next
@@ -183,7 +183,7 @@ export const crmTourScript: TutorialScript = {
 }
 
 /**
- * Tour-end stage-mutation handling (issue #25 P4 ask: "reset any mutated stage at tour end OR document
+ * Tour-end stage-mutation handling (diagnostic #25 P4 ask: "reset any mutated stage at tour end OR document
  * why leaving it is fine"): this script deliberately does NOT reset Aurora Systems' stage back to `lead`
  * before/at Finish. Reasons, matching the OWNER-locked policy for Survey ("the tutorial does not
  * preserve/restore the previous Runtime or draft after completion/cancellation"):

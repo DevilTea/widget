@@ -25,17 +25,17 @@ provide(LabThemeKey, theme)
 
 const store = createLabStore()
 provide(LabStoreKey, store)
-// Issue #28 browser-contract seam (`?lab-test` only; inert otherwise) — see `lab-test-seam.ts`.
+// Diagnostic #28 browser-contract seam (`?lab-test` only; inert otherwise) — see `lab-test-seam.ts`.
 installLabTestSeam(store)
 
-// issue #25 P3: a small store of its own (see `use-implementation-explorer.ts`'s file header for why
+// diagnostic #25 P3: a small store of its own (see `use-implementation-explorer.ts`'s file header for why
 // this is a parallel mechanism rather than an extension of `LabStore.activeTab`), created/provided the
 // same way `LabStore`/`TutorialStore` are, and handed to `createTutorialStore()` below so the Survey
 // tour's step 8 "Implementation" link can open it too.
 const implementationExplorer = createImplementationExplorerStore()
 provide(ImplementationExplorerKey, implementationExplorer)
 
-// issue #25 P1: `createTutorialStore(store, ...)` takes the already-created `LabStore`/
+// diagnostic #25 P1: `createTutorialStore(store, ...)` takes the already-created `LabStore`/
 // `ImplementationExplorerStore` directly rather than injecting them back via `useLabStore()`/
 // `useImplementationExplorer()` — `inject()` resolves against a component's *parent* provides, so a
 // component can never see its own `provide()` call; passing them directly sidesteps that entirely.
@@ -44,7 +44,7 @@ provide(TutorialStoreKey, tutorial)
 
 const tutorialRailVisible = computed(() => tutorial.snapshot.value.status === 'active')
 
-// Spotlight (issue #25 P1 Scope E): plain CSS class toggling on whichever element currently carries the
+// Spotlight (diagnostic #25 P1 Scope E): plain CSS class toggling on whichever element currently carries the
 // current step's `data-tutorial-target` attribute — no position-cloned overlay. This lives in App.vue
 // (rather than a per-panel component) because it is the one place with an unobstructed `document`-wide
 // view across Preview renderers, panels, and the rail itself.
@@ -74,7 +74,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 // `onBeforeUnmount` fires before children unmount, which would dispose the Runtime while Preview's
 // widget bridges may still be live.
 onUnmounted(() => store.dispose())
-// Worker shutdown is app lifecycle cleanup (issue #13 Phase 5 "Dependency Graph worker loading"
+// Worker shutdown is app lifecycle cleanup (diagnostic #13 Phase 5 "Dependency Graph worker loading"
 // comment) — unrelated to widget-core Runtime ownership/disposal, which `store.dispose()` already owns.
 onUnmounted(() => disposeLayoutWorker())
 </script>
@@ -87,7 +87,7 @@ onUnmounted(() => disposeLayoutWorker())
 			<TutorialRail v-if="tutorialRailVisible" />
 		</div>
 		<!--
-			issue #25 P1 merge-gate review (blocker 1): both dialogs stay always-mounted now — each is a
+			diagnostic #25 P1 merge-gate review (blocker 1): both dialogs stay always-mounted now — each is a
 			native `<dialog>` whose OWN `showModal()`/`close()` (via `useModalDialog`, driven one-way by
 			`welcomeVisible`/`confirmVisible`) is the single thing that opens/closes it, mirroring
 			`ModalRenderer.vue`'s semantic-widget pattern. A `v-if` here would race that: the same reactive
@@ -114,7 +114,7 @@ onUnmounted(() => disposeLayoutWorker())
 }
 
 /*
- * issue #25 P1: `.lab-body` is the tutorial rail's `position: fixed` positioning reference in spirit
+ * diagnostic #25 P1: `.lab-body` is the tutorial rail's `position: fixed` positioning reference in spirit
  * only — `TutorialRail.vue` actually positions itself against the viewport (`top`/`bottom`/`right: 0`),
  * not this container, since the rail must stay docked to the real right edge regardless of `.lab-body`'s
  * own box. This wrapper's job is narrower: give `Workbench` a sibling slot in the flex column without
@@ -130,7 +130,7 @@ onUnmounted(() => disposeLayoutWorker())
 }
 
 /*
- * issue #27 Finding 3: minimum supported workbench viewport, chosen at 900px width — narrower than that,
+ * diagnostic #27 Finding 3: minimum supported workbench viewport, chosen at 900px width — narrower than that,
  * Dockview's default two-column split (tool group + Preview, each with a meaningful minimum width) no
  * longer has room to lay out usefully (see Workbench.vue's `toolWidth` clamp), so this app is not a
  * supported experience below the threshold. A pure CSS media query (no JS resize listener/state) shows a

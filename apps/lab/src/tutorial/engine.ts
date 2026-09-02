@@ -1,5 +1,5 @@
 /**
- * `createTutorialEngine()` — the framework-agnostic tutorial step machine (issue #25 P1).
+ * `createTutorialEngine()` — the framework-agnostic tutorial step machine (diagnostic #25 P1).
  *
  * See `types.ts` for the full contract and the do -> observe -> name pedagogical invariant this engine
  * exists to enforce: `recheck()` only ever reveals stage text and flips `canAdvance` within the *current*

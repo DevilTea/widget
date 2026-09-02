@@ -1,5 +1,5 @@
 /**
- * Deterministic-start re-entry guard (issue #25 P1 merge-gate review, blocker 3).
+ * Deterministic-start re-entry guard (diagnostic #25 P1 merge-gate review, blocker 3).
  *
  * `use-tutorial.ts`'s `requestStartOrRestart()` calls an async `loadSurveyDefault()` (a
  * `switchShowcase()`/`applyPreset()` Apply-pipeline round trip) before `TutorialEngine.start()`/

@@ -15,7 +15,7 @@ import { createCrmRuntime, widgetOfType } from './test-support'
 function compileDefault() {
 	const blueprint = crmSystem.createBlueprint(JSON.parse(defaultCrmPreset.sourceText))
 	if (blueprint.status !== 'valid')
-		throw new Error(`expected a valid Blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`expected a valid Blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 	return blueprint
 }
 
@@ -28,11 +28,11 @@ function resolvedNode(blueprint: ReturnType<typeof compileDefault>, id: string):
 }
 
 describe('product Prototype presets', () => {
-	it.each(crmPresets)('"$id" compiles to a valid Blueprint with no collected issues', (preset) => {
+	it.each(crmPresets)('"$id" compiles to a valid Blueprint with no collected diagnostics', (preset) => {
 		const blueprint = crmSystem.createBlueprint(JSON.parse(preset.sourceText))
 		expect(blueprint.status)
 			.toBe('valid')
-		expect(blueprint.getCollectedIssues())
+		expect(blueprint.diagnostics)
 			.toEqual([])
 	})
 
@@ -114,14 +114,14 @@ describe('coordinated live path (checkpoint §1 required demonstration)', () => 
 		// filter stage = proposal
 		stageFilter.state.value.set('proposal')
 		expect(query.properties.count.get())
-			.toEqual({ success: true, value: 2 })
+			.toEqual({ ok: true, value: 2 })
 
 		// select a proposal deal
-		expect(table.methods.selectRow('deal-3').success)
+		expect(table.methods.selectRow('deal-3').ok)
 			.toBe(true)
 
 		// open Change stage
-		expect(form.methods.open().success)
+		expect(form.methods.open().ok)
 			.toBe(true)
 		expect(stageEditor.state.value.get())
 			.toBe('proposal')
@@ -132,20 +132,20 @@ describe('coordinated live path (checkpoint §1 required demonstration)', () => 
 		stageEditor.state.value.set('won')
 		const saveResult = form.methods.save()
 		expect(saveResult)
-			.toEqual({ success: true, value: { id: 'deal-3', company: 'Cobalt Health', contact: 'Grace Kim', owner: 'Jordan Lee', stage: 'won', amount: 54_000 } })
+			.toEqual({ ok: true, value: { id: 'deal-3', company: 'Cobalt Health', contact: 'Grace Kim', owner: 'Jordan Lee', stage: 'won', amount: 54_000 } })
 
 		// store mutates; proposal-filtered table loses that row
 		const filtered = query.properties.filteredDeals.get()
-		expect(filtered.success && filtered.value.map(deal => deal.id))
+		expect(filtered.ok && filtered.value.map(deal => deal.id))
 			.toEqual(['deal-4'])
 
 		// count/value/chart recompute
 		expect(query.properties.count.get())
-			.toEqual({ success: true, value: 1 })
+			.toEqual({ ok: true, value: 1 })
 		expect(query.properties.pipelineValue.get())
-			.toEqual({ success: true, value: 41_000 })
+			.toEqual({ ok: true, value: 41_000 })
 		const series = query.properties.stageSeries.get()
-		expect(series.success && series.value)
+		expect(series.ok && series.value)
 			.toEqual([
 				{ label: 'lead', value: 0 },
 				{ label: 'qualified', value: 0 },
@@ -159,7 +159,7 @@ describe('coordinated live path (checkpoint §1 required demonstration)', () => 
 		expect(table.state.selectedRowId.get())
 			.toBe('deal-3')
 		expect(table.properties.selectedRow.get())
-			.toEqual({ success: true, value: null })
+			.toEqual({ ok: true, value: null })
 
 		// Modal closed after a successful save
 		expect(modal.state.open.get())
@@ -170,7 +170,7 @@ describe('coordinated live path (checkpoint §1 required demonstration)', () => 
 		expect(table.state.selectedRowId.get())
 			.toBe('deal-3')
 		const reappeared = table.properties.selectedRow.get()
-		expect(reappeared.success && reappeared.value?.id)
+		expect(reappeared.ok && reappeared.value?.id)
 			.toBe('deal-3')
 	})
 })

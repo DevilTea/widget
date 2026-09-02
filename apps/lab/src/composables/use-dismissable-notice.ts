@@ -1,5 +1,5 @@
 /**
- * Session-local dismiss state for the five panels' first-use description bars (issue #25 P1 Scope F).
+ * Session-local dismiss state for the five panels' first-use description bars (diagnostic #25 P1 Scope F).
  * `sessionStorage`-backed, same as the tutorial's own welcome/completion flags (`tutorial/session-flags.ts`)
  * — dismissed once per browser session, never persisted beyond it, per the app's existing "no
  * persistence of Lab-local UI state" stance (see this app's `AGENTS.md` "Package boundaries").

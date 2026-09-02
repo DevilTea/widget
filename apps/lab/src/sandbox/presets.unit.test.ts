@@ -36,12 +36,12 @@ describe('sandbox presets', () => {
 			const summary = narrowWidget<typeof SummaryPlugin>(runtime, 'summary-1', 'Summary')
 
 			expect(summary.properties.total.get())
-				.toEqual({ success: true, value: 0 })
+				.toEqual({ ok: true, value: 0 })
 
 			counter.methods.increment(3)
 
 			expect(summary.properties.total.get())
-				.toEqual({ success: true, value: 6 })
+				.toEqual({ ok: true, value: 6 })
 		}
 		finally {
 			runtime.dispose()
@@ -58,7 +58,7 @@ describe('sandbox presets', () => {
 		expect(summaryNode).not.toBeNull()
 		expect(summaryNode!.resolved)
 			.toBe(true)
-		expect(summaryNode!.getIssues().length)
+		expect(summaryNode!.diagnostics.length)
 			.toBeGreaterThan(0)
 	})
 

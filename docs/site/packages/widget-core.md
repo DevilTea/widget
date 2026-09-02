@@ -5,14 +5,17 @@ title: '@deviltea/widget-core'
 # @deviltea/widget-core
 
 `@deviltea/widget-core` is a renderer-agnostic widget composition core. It
-defines four cooperating layers — `WidgetPlugin`, `WidgetSystem`,
-`WidgetSystemBlueprint`, and `WidgetSystemRuntime` — and nothing else:
-persistence versioning, editor operations, metadata, and rendering all live
-outside the core.
+defines the cooperating `WidgetPlugin`, `WidgetSystem`,
+`WidgetSystemBlueprint`, `WidgetDocument`, and `WidgetSystemRuntime` layers.
+Persistence versioning, metadata, and rendering live outside the core;
+source editing is limited to the revisioned `WidgetDocument` and its
+JSON-domain `SourcePatch` contract.
 
 This guide covers the full public surface. For installation and a minimal
 end-to-end example, see the
 [package README](https://github.com/DevilTea/deviltea-labs/tree/main/packages/widget/core#readme).
+Cross-cutting Diagnostic/Result/Failure/Error conventions are maintained in the
+[Widget API conventions](https://github.com/DevilTea/deviltea-labs/blob/main/docs/architecture/widget-api-conventions.md).
 
 ## Core model
 
@@ -27,6 +30,9 @@ WidgetSystemBlueprint
     immutable compiled semantic snapshot of one unknown/raw widget tree
     status: 'valid' | 'invalid'
 
+WidgetDocument
+    revisioned source + Blueprint coordinator with atomic SourcePatch commits
+
 WidgetSystemRuntime
     executable instance of a valid Blueprint
 ```
@@ -34,7 +40,7 @@ WidgetSystemRuntime
 ```text
 createWidgetPlugin(type) -> builder chain -> WidgetPlugin
 createWidgetSystem({ plugins, validateStructure? }) -> WidgetSystem
-system.createBlueprint(rawDefinition: unknown) -> WidgetSystemBlueprint
+system.createBlueprint(source: unknown) -> WidgetSystemBlueprint
 blueprint.createRuntime(options?) -> WidgetSystemRuntime   // only when status === 'valid'
 ```
 
@@ -65,14 +71,20 @@ Ownership rules that shape everything below:
 A plugin's shape is declared once, as a `WidgetInterfaces`:
 
 ```ts
+import type { JsonValue } from '@deviltea/widget-core'
+
 interface WidgetInterfaces {
-	config?: { raw: Record<any, any>, resolved: Record<any, any> }
+	config?: { raw: Record<string, JsonValue>, resolved: Record<any, any> }
 	slots?: string
 	state?: Record<any, any>
 	properties?: Record<any, any>
 	methods?: Record<any, (...args: any[]) => any>
 }
 ```
+
+`RawConfig` is authored JSON data: its values must stay within `JsonValue`
+(including nested arrays and objects with string keys). Resolved config is a
+runtime domain and may use richer values.
 
 Every section is a capability:
 
@@ -100,7 +112,8 @@ plain, immutable object — renderer-agnostic core metadata, not an
 inspection/DevTools API:
 
 ```ts
-const plugin = createWidgetPlugin('counter') /* ... */
+const plugin = createWidgetPlugin('counter')
+	.description('A counter widget')
 	.done()
 
 plugin.capabilities
@@ -114,10 +127,16 @@ presence instead of inferring it from Blueprint object shape or importing
 inspection subpath's `BlueprintInspectionCapabilities`, but no object-identity
 relationship between the two is part of the contract.
 
+Plugin, config, and slot descriptions are required intrinsic metadata.
+`system.catalog` is an immutable passive projection of the registered widget
+types and their capability descriptions; it contains no Blueprint or Runtime
+state.
+
 ### Builder phase order
 
 ```ts
 createWidgetPlugin('counter')
+	.description('A counter widget')
 	.interfaces<CounterInterfaces>()
 	.config({ /* ... */ }) // only if `config` is declared
 	.slots({ /* ... */ }) // only if `slots` is declared
@@ -139,6 +158,7 @@ these three sections specifically (only the outer builder has `.done()`).
 
 ```ts
 createWidgetPlugin('example')
+	.description('An example widget')
 	.interfaces<ExampleInterfaces>()
 	.state(state =>
 		state
@@ -158,8 +178,10 @@ interface BadgeInterfaces {
 }
 
 createWidgetPlugin('badge')
+	.description('A badge widget')
 	.interfaces<BadgeInterfaces>()
 	.config({
+		description: 'Badge configuration',
 		validate: (input): input is { label?: string } =>
 			typeof input === 'object' && input !== null,
 		resolve: rawConfig => ({ label: rawConfig?.label ?? 'Badge' }),
@@ -172,7 +194,7 @@ createWidgetPlugin('badge')
 - Raw config presence is own-property based: an omitted raw `config` field
   resolves as `resolve(null)`.
 - An explicitly present but invalid raw config produces a Blueprint `config`
-  issue, the typed raw config becomes unavailable, and the semantic config
+  diagnostic, the typed raw config becomes unavailable, and the semantic config
   still resolves through `resolve(null)` so the invalid Blueprint stays
   inspectable.
 - `validate` is an authoritative predicate (`input is RawConfig`), not a
@@ -189,15 +211,17 @@ interface ContainerInterfaces {
 }
 
 createWidgetPlugin('container')
+	.description('A container widget')
 	.interfaces<ContainerInterfaces>()
 	.slots({
 		header: {
-			validateStructure: ({ children, addIssue }) => {
+			description: 'Header widgets',
+			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length > 1)
-					addIssue({ message: 'header accepts at most one widget', index: 1 })
+					addDiagnostic({ message: 'header accepts at most one widget', index: 1 })
 			},
 		},
-		content: {},
+		content: { description: 'Content widgets' },
 	})
 	// an optional second argument adds a plugin-level validateStructure
 	// ...
@@ -215,6 +239,7 @@ createWidgetPlugin('container')
 
 ```ts
 createWidgetPlugin('counter')
+	.description('A counter widget')
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
@@ -234,6 +259,7 @@ createWidgetPlugin('counter')
 
 ```ts
 createWidgetPlugin('counter')
+	.description('A counter widget')
 	.interfaces<CounterInterfaces>()
 	.properties(properties =>
 		properties.doubled({
@@ -242,7 +268,7 @@ createWidgetPlugin('counter')
 			}),
 			compute: ({ deps }) => {
 				const count = deps.count()
-				return (count.success ? count.value ?? 0 : 0) * 2
+				return (count.ok ? count.value ?? 0 : 0) * 2
 			},
 		}),
 	)
@@ -252,7 +278,7 @@ createWidgetPlugin('counter')
   runtime evaluation); recompiling produces a new Blueprint and may register a
   different dependency graph.
 - `compute` receives the materialized `deps` (executed dependency callables),
-  the current widget's Blueprint node, a valid-Blueprint view, and an issue
+  the current widget's Blueprint node, a valid-Blueprint view, and an diagnostic
   collector.
 - A property's dependency grammar has no `state.set` at the type level —
   properties cannot write state, directly or transitively.
@@ -261,6 +287,7 @@ createWidgetPlugin('counter')
 
 ```ts
 createWidgetPlugin('counter')
+	.description('A counter widget')
 	.interfaces<CounterInterfaces>()
 	.methods(methods =>
 		methods
@@ -273,7 +300,7 @@ createWidgetPlugin('counter')
 				}),
 				execute: ({ args: [step], deps }) => {
 					const current = deps.count()
-					const value = (current.success ? current.value ?? 0 : 0) + step
+					const value = (current.ok ? current.value ?? 0 : 0) + step
 					deps.setCount(value)
 					return value
 				},
@@ -338,15 +365,15 @@ dep.parent
   invocation arguments.
 - Reads/invokes materialize as zero/variadic-argument callables returning an
   `ExecutionResult`; a target's own failure is wrapped one-to-one into a
-  consumer-local `property-dependency` / `method-dependency` issue rather
-  than exposed as the target's own issue type.
+	  consumer-local `dependency-target-failed` / `dependency-value-rejected` diagnostic rather
+  than exposed as the target's own diagnostic type.
 
 ## Compiling a blueprint
 
 ### Compilation boundary and recovery
 
 ```ts
-const blueprint = system.createBlueprint(rawDefinition) // rawDefinition: unknown
+const blueprint = system.createBlueprint(source) // source: unknown
 ```
 
 The input is `unknown` on purpose — JSON-parsed or otherwise untrusted
@@ -370,7 +397,7 @@ blueprint.getParent(node)
 blueprint.getLocation(node)
 blueprint.getChildren(node)
 blueprint.getChildrenAt(node, slot)
-blueprint.getCollectedIssues()
+blueprint.diagnostics
 ```
 
 `getChildren` / `getChildrenAt` walk the recovered *source* topology; a
@@ -379,20 +406,23 @@ resolved node's `.slots` field is the separate, complete *semantic* topology
 
 ### Diagnostics
 
-Every issue is `{ source, message }` — `source.type` is the discriminator,
-`message` is human-readable only and is never meant to be parsed as a machine
-protocol. Blueprint issues use four coarse `source.type` categories:
+Every diagnostic has top-level `code`, `location`, and `message` fields.
+Variant-specific facts are direct fields; structured `path` and `related` are
+not nested under a generic `source` object. Codes are stable lowercase
+kebab-case values.
 
-| `source.type` | Owns |
+| `code` family | Owns |
 |---|---|
-| `definition` | malformed widget identity/shape: missing/invalid `id`/`type`, duplicate ids, unknown plugin type, malformed/unknown slots |
-| `config` | `config.validate` failures on a resolved node |
-| `structure` | slot-level / plugin-level / system-level `validateStructure` failures |
-| `dependency` | unresolved dependency targets/members, Property purity violations (a Property depending on a writeful Method), Property-containing evaluation cycles |
+| `invalid-widget-*` / `unknown-widget-type` | malformed widget identity and authored shape |
+| `invalid-widget-config` | `config.validate` failures on a resolved node |
+| `invalid-widget-structure` | slot-level / plugin-level / system-level `validateStructure` failures |
+| `json-incompatible-value` | confirmed whole-source JSON-domain violations; carries a source-rooted `path` and closed framework `reason` |
+| `source-access-failed` | whole-source compatibility could not be safely proven for the source-rooted `path` |
+| `*-dependency-*` / `property-evaluation-cycle` | dependency target/member failures, Property purity violations, and Property-containing evaluation cycles |
 
 ```ts
-for (const issue of blueprint.getCollectedIssues()) {
-	console.log(issue.source.type, issue.message)
+for (const diagnostic of blueprint.diagnostics) {
+	console.log(diagnostic.code, diagnostic.location, diagnostic.message)
 }
 ```
 
@@ -405,12 +435,21 @@ type WidgetSystemBlueprintStatus = 'valid' | 'invalid'
 Only `status === 'valid'`:
 
 - narrows every node query to resolved nodes
-- narrows `getCollectedIssues()` to an empty array
+- narrows `.diagnostics` to an empty array
 - exposes `createRuntime(options?)`
+
+`sourceJsonCompatible` is the authored JSON-domain proof. In its positive
+branch, `blueprint.source` and source fragments on all recovered navigation
+outputs carry `JsonValue`; the false branch keeps the exact source as
+`unknown`. False means either confirmed incompatibility or an unproven safe
+inspection; aggregate Blueprint diagnostics distinguish `json-incompatible-value`
+from `source-access-failed`. Source-level diagnostics are not copied onto node
+`.diagnostics`. A valid Blueprint requires semantic validity and this proof, so
+Runtime creation never promotes non-JSON authored material.
 
 ```ts
 if (blueprint.status !== 'valid') {
-	// inspect blueprint.getCollectedIssues() — no createRuntime here
+	// inspect blueprint.diagnostics — no createRuntime here
 }
 else {
 	const runtime = blueprint.createRuntime()
@@ -420,9 +459,59 @@ else {
 Editing is recompiling, not mutating:
 
 ```ts
-const next = blueprint.recompile(nextRawDefinition)
-// observably equivalent to: blueprint.system.createBlueprint(nextRawDefinition)
+const next = blueprint.recompile(nextSource)
+// observably equivalent to: blueprint.system.createBlueprint(nextSource)
 ```
+
+### WidgetDocument and SourcePatch
+
+`createWidgetDocument({ system, source })` keeps the current source and its
+compiled Blueprint together behind a monotonically increasing revision. A
+`SourcePatch` uses one JSON-domain RFC6901/RFC6902 language: paths may be JSON
+Pointer strings or structured string/number segments, operands are `JsonValue`,
+and successful patches use copy-on-write reconstruction. Mechanical failure
+is atomic; a mechanically successful patch may still commit a semantically
+invalid Blueprint for inspection.
+
+```ts
+import { createWidgetDocument } from '@deviltea/widget-core'
+
+const document = createWidgetDocument({
+	system,
+	source: { id: 'counter-1', type: 'counter' },
+})
+
+const result = document.applyPatch([
+	{ op: 'replace', path: '/config/step', value: 2 },
+], { expectedRevision: 0 })
+
+if (result.ok && result.changed)
+	console.log(document.getSnapshot().revision) // 1
+```
+
+### Explicit separated-source tooling
+
+`WidgetSource` remains the canonical nested authored form. Core also exports an
+explicit `SeparatedWidgetSource` projection with a nested `structure` tree and
+a flat `widgets` data list. This representation is tooling only; Core never
+auto-detects it at the `unknown` Blueprint or Document recovery boundary.
+
+```ts
+import {
+	normalizeSeparatedWidgetSource,
+	separateWidgetSource,
+} from '@deviltea/widget-core'
+
+const separated = separateWidgetSource(canonicalSource)
+const { source, diagnostics } = normalizeSeparatedWidgetSource(separated)
+```
+
+The normalizer is deterministic, non-destructive, and best-effort. The first
+flat entry for a Widget ID wins; missing data creates a partial nested node;
+unused data is diagnosed rather than guessed into the tree; and repeated
+structural IDs retain their available data/subtree while the later occurrence
+is de-identified. These representation diagnostics are separate from Blueprint
+semantic diagnostics and carry `structure` or flat-`widgets` source locations.
 
 ## Running a runtime
 
@@ -438,12 +527,12 @@ const runtime = blueprint.createRuntime({
 
 `overrideStateDefaults` is an initialization-only candidate map, not a patch
 API — it never mutates a running Runtime. Precedence per state member is
-`override > plugin default > null`, and every candidate (override or
+	`override > plugin default > null`, and every candidate (override or
 default) is still run through that member's `validate`. An invalid override
 never falls back to the plugin default; it leaves the state `null` with an
-ordinary `state-validation` issue. `createRuntime` never fails: malformed
+	ordinary `invalid-state-value` diagnostic. `createRuntime` never fails: malformed
 override input (unknown widget, unknown key, wrong shape) still produces a
-Runtime, recorded as runtime-level `state-override` issues.
+	Runtime, recorded as Runtime-level `unknown-state-override-*` diagnostics.
 
 `runtime.getWidget(id)` returns a `RuntimeWidget | null` distributed over the
 registered plugin tuple. When more than one plugin is registered, narrow on
@@ -454,15 +543,15 @@ registered plugin tuple. When more than one plugin is registered, narrow on
 
 ```ts
 widget.state.count.get() // T | null — a direct read, not an ExecutionResult
-widget.state.count.set(5) // ExecutionResult<number, RuntimeStateIssue>
+widget.state.count.set(5) // ExecutionResult<number, RuntimeStateDiagnostic>
 widget.state.count.subscribe(listener) // listener: (value: T | null) => void
-widget.state.count.getIssues()
-widget.state.count.subscribeIssues(listener)
+widget.state.count.getDiagnostics()
+widget.state.count.subscribeDiagnostics(listener)
 ```
 
 - An invalid `set()` preserves the previously accepted value and returns
-  `{ success: false, issues }`; a successful `set()` commits the candidate
-  and clears the latest issue snapshot.
+	`{ ok: false, failure: { diagnostics } }`; a successful `set()` commits the candidate
+  and clears the latest diagnostic snapshot.
 - Change detection is strict `!==`: writing `NaN` again still counts as
   changed (`NaN !== NaN` is `true`), while `+0` and `-0` count as unchanged.
 - Subscriptions never emit immediately upon subscribing.
@@ -470,31 +559,31 @@ widget.state.count.subscribeIssues(listener)
 ### Properties
 
 ```ts
-widget.properties.doubled.get() // ExecutionResult<T | null, RuntimePropertyIssue>
+widget.properties.doubled.get() // ExecutionResult<T | null, RuntimePropertyDiagnostic>
 widget.properties.doubled.subscribe(listener) // listener: (result) => void
-widget.properties.doubled.getIssues()
-widget.properties.doubled.subscribeIssues(listener)
+widget.properties.doubled.getDiagnostics()
+widget.properties.doubled.subscribeDiagnostics(listener)
 ```
 
 Properties are lazily evaluated and cached through `alien-signals`.
 `subscribe()` activates observation but never emits immediately; every
 *actual* completed recompute notifies exactly once, even when the recomputed
-value compares equal to the previous one. `subscribeIssues()` observes a
+value compares equal to the previous one. `subscribeDiagnostics()` observes a
 separate diagnostic channel and never triggers a property evaluation.
 
 ### Methods
 
 ```ts
-widget.methods.increment(5) // ExecutionResult<number, RuntimeMethodIssue>
-widget.methods.increment.getIssues()
-widget.methods.increment.subscribeIssues(listener)
+widget.methods.increment(5) // ExecutionResult<number, RuntimeMethodDiagnostic>
+widget.methods.increment.getDiagnostics()
+widget.methods.increment.subscribeDiagnostics(listener)
 ```
 
 Every invocation runs `validateArgs` before `execute`; on failure, `execute`
-never runs and the result carries a `method-args` issue. A successful
+	never runs and the result carries an `invalid-method-arguments` diagnostic. A successful
 `execute` whose plugin/dependency diagnostics were still recorded becomes a
-failure with a `method-result` issue attached — the returned value in that
-case is diagnostic context only, never a degraded success value.
+	failure with an `invalid-method-result` diagnostic attached — the returned value in that
+case is diagnostic context only, never a degraded ok value.
 
 Every `RuntimeMethod` invocation opens a batch boundary around its
 dependency/state writes (including dependency-invoked methods, which nest);
@@ -503,43 +592,40 @@ propagation atomicity, not a transaction: writes performed before a later
 failure or a thrown callback remain committed, and the batch still ends via
 `finally`.
 
-### Issues
+### Diagnostics
 
 Every state write, property evaluation, and method invocation keeps only its
-**latest completed** operation's issue snapshot — never a history. A
+**latest completed** operation's diagnostic snapshot — never a history. A
 callback throw discards the in-progress collector and preserves the previous
-completed snapshot; it is an implementation exception, not an `Issue` and not
+completed snapshot; it is an implementation exception, not a `Diagnostic` and not
 an `ExecutionResult.failure`.
 
 Every `RuntimeWidget` also exposes its own aggregate, present regardless of
 declared capabilities:
 
 ```ts
-widget.getIssues() // readonly RuntimeWidgetIssue[]
-widget.subscribeIssues(listener)
+widget.getDiagnostics() // readonly RuntimeWidgetDiagnostic[]
+widget.subscribeDiagnostics(listener)
 ```
 
-`RuntimeWidgetIssue` is the union of only that widget's own primitive-owned
-issues (`RuntimeStateIssue | RuntimePropertyIssue | RuntimeMethodIssue`) —
-never a Runtime-level issue, even when its source carries the same
+`RuntimeWidgetDiagnostic` is the union of only that widget's own primitive-owned
+diagnostics (`RuntimeStateDiagnostic | RuntimePropertyDiagnostic | RuntimeMethodDiagnostic`) —
+never a Runtime-level diagnostic, even when a diagnostic mentions the same
 `widgetId`. The snapshot order is deterministic: state members -> property
 members -> method members, plugin declaration order within each capability,
-and each primitive's own local issue order preserved. A widget with no
+and each primitive's own local diagnostic order preserved. A widget with no
 capabilities, or with every primitive currently succeeding, aggregates to
 `[]`.
 
 ```ts
-runtime.getIssues() // runtime-level issues only (e.g. state-override problems)
-runtime.getCollectedIssues() // runtime.getIssues() + every RuntimeWidget.getIssues(), in Blueprint semantic widget order
-runtime.subscribeCollectedIssues(listener)
+runtime.getDiagnostics() // complete aggregate: Runtime-level, then RuntimeWidget snapshots in Blueprint order
+runtime.subscribeDiagnostics(listener)
 ```
 
-`RuntimeWidget.getIssues()` / `subscribeIssues()`,
-`WidgetSystemRuntime.getIssues()`, and
-`WidgetSystemRuntime.getCollectedIssues()` / `subscribeCollectedIssues()`
-read issue signals only and never activate property evaluation. The aggregate may legitimately list both a failing
-primitive's own issue and a consumer's wrapped `property-dependency` /
-`method-dependency` issue that points back at it — that is causal context,
+`RuntimeWidget.getDiagnostics()` / `subscribeDiagnostics()` and
+`WidgetSystemRuntime.getDiagnostics()` / `subscribeDiagnostics()`
+read diagnostic signals only and never activate property evaluation. The aggregate may legitimately list both a failing
+primitive's own diagnostic and a consumer's wrapped dependency diagnostic that points back at it — that is causal context,
 not duplication.
 
 ### Disposal
@@ -551,11 +637,11 @@ runtime.dispose() // idempotent
 After disposal, `runtime.isDisposed` and `runtime.blueprint` remain readable,
 and previously obtained `RuntimeWidget.id` / `.type` / `.blueprint` stay
 readable. Every live query/operation (`runtime.getWidget`, state/property
-reads and writes, method invocations, `RuntimeWidget.getIssues()`) and every
-*new* subscription (including `RuntimeWidget.subscribeIssues()`) throws
+reads and writes, method invocations, `RuntimeWidget.getDiagnostics()`) and every
+*new* subscription (including `RuntimeWidget.subscribeDiagnostics()`) throws
 `WidgetSystemRuntimeDisposedError`; previously returned unsubscribe functions
 remain safe, idempotent no-ops. Disposal itself emits no notification and
-creates no issue.
+creates no diagnostic.
 
 ```ts
 import { WidgetSystemRuntimeDisposedError } from '@deviltea/widget-core'
@@ -622,11 +708,11 @@ inspection.getNodeId(node) // null for a foreign/forged node
   path from the `registerDeps()` return root (object keys stay strings
   verbatim, array/tuple indices stay numbers — never stringified). `status` is
   `'resolved'` (with the semantically-resolved `target`), `'absent'` (legal
-  optional cardinality-0 target, no Issue), or `'invalid'` (every other
+  optional cardinality-0 target, no Diagnostic), or `'invalid'` (every other
   resolution failure — ambiguous/missing targets carry no `targetNodeId`;
   unique-but-unresolved-target/missing-capability/missing-member failures do).
   Status is always read from compiler-authoritative data, never reconstructed
-  from Issues; the existing Blueprint Issue surface remains the authoritative
+  from Diagnostics; the existing Blueprint Diagnostic surface remains the authoritative
   human-readable explanation.
 
 ### Runtime inspection
@@ -661,7 +747,7 @@ widgetInspection.getProperty('doubled')
   write actually changes it (a rejected write publishes nothing). Property
   inspection starts `{ status: 'never-evaluated' }` and publishes a fresh
   `{ status: 'completed', result }` on every naturally completed evaluation
-  attempt (success or semantic failure) — two equal completions still notify
+  attempt (ok or semantic failure) — two equal completions still notify
   twice, and a callback throw or thenable violation never replaces the latest
   snapshot.
 - Reading or subscribing through inspection never activates a Property, never
@@ -684,7 +770,7 @@ widgetInspection.getProperty('doubled')
   (`validate`, `resolve`, `default`, `validateStructure`, `registerDeps`,
   `compute`, `validateArgs`, `execute`) is synchronous. A returned
   Promise/thenable is a contract violation on the plugin author's side, not
-  an `Issue` and not an `ExecutionResult.failure`.
+  a `Diagnostic` and not an `ExecutionResult.failure`.
 - **Renderer-agnostic.** The core has no concept of an editor, a document
   envelope, persistence versioning/migration, or UI. A `WidgetSystemRuntime`
   is the only thing an integration/renderer layer consumes; how it's drawn is
@@ -697,7 +783,7 @@ widgetInspection.getProperty('doubled')
   semantics on top of it and does not implement a second reactive engine.
 
 The canonical, authoritative decision log for this architecture is
-[GitHub issue #10](https://github.com/DevilTea/deviltea-labs/issues/10) —
+[GitHub diagnostic #10](https://github.com/DevilTea/deviltea-labs/diagnostics/10) —
 "Widget composition core architecture — canonical decision log." Its
 consolidated implementation handoff comment, together with any later accepted
 amendment, is authoritative over this guide.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Custom Dockview tab-content renderer for Workbench.vue's five canonical panels (issue #27 Finding 2).
+ * Custom Dockview tab-content renderer for Workbench.vue's five canonical panels (diagnostic #27 Finding 2).
  *
  * Dockview's own `Tab` class (drag/drop, click-to-activate, active/inactive tab styling — see
  * `dockview-core`'s `dockview/components/tab/tab.d.ts`) is a wrapper the host app never touches; it hosts

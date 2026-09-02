@@ -3,7 +3,7 @@
  * models. Mirrors `use-lab-store.ts`'s role for `LabSession`: the one place that adapts a plain
  * `getSnapshot()` + `subscribe()` shape into a Vue ref, and owns disposing the previous view model
  * whenever the reactive `observableGetter()` source yields a different (or `null`) observable — e.g. a
- * different selected member, or a Runtime replaced by Apply — as well as on component unmount (issue
+ * different selected member, or a Runtime replaced by Apply — as well as on component unmount (diagnostic
  * #13 Phase 5: "Unsubscribe all inspection subscriptions with component/panel scope disposal and on
  * snapshot replacement").
  */

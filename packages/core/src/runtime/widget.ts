@@ -4,9 +4,9 @@
  * Distributed by plugin type; only conditionally exposes `state`/`properties`/`methods` when the
  * corresponding compiled member map is non-empty. Identity/static fields (`id`, `type`, `blueprint`)
  * stay readable after Runtime disposal because they are plain immutable references, not live
- * operations. `getIssues`/`subscribeIssues` are unconditional — every widget aggregates to its own
- * issue surface regardless of declared capabilities, per issue #10 amendment "RuntimeWidget aggregate
- * issue surface" — and are live operations, so they throw `WidgetSystemRuntimeDisposedError` after
+ * operations. `getDiagnostics`/`subscribeDiagnostics` are unconditional — every widget aggregates to its own
+ * diagnostic surface regardless of declared capabilities, per diagnostic #10 amendment "RuntimeWidget aggregate
+ * diagnostic surface" — and are live operations, so they throw `WidgetSystemRuntimeDisposedError` after
  * Runtime disposal like every other live query/subscription.
  *
  * Member names are not restricted (`constructor`/`__proto__` stay legitimate keys), so every surface
@@ -14,26 +14,26 @@
  * bracket-assigning a `"__proto__"` key into an ordinary object mutates its prototype instead of
  * creating an own member.
  *
- * Normative source: issue #10 consolidated handoff §20, amendment "builder/member-key" (special
+ * Normative source: diagnostic #10 consolidated handoff §20, amendment "builder/member-key" (special
  * JavaScript names stay safe via `Map`/null-prototype storage rather than ordinary object semantics),
- * amendment "RuntimeWidget aggregate issue surface".
+ * amendment "RuntimeWidget aggregate diagnostic surface".
  */
 
 import type { CompiledResolvedWidgetNode } from '../internal/contract'
 import type { RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
 import { readWidgetPluginDefinition } from '../plugin'
-import { createRuntimeWidgetIssuesAggregate } from './aggregate'
+import { createRuntimeWidgetDiagnosticsAggregate } from './aggregate'
 
 export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolvedWidgetNode, entry: PrimitiveRegistryEntry): unknown {
-	const issuesAggregate = createRuntimeWidgetIssuesAggregate(context, entry)
+	const diagnosticsAggregate = createRuntimeWidgetDiagnosticsAggregate(context, entry)
 
 	const widget: Record<string, unknown> = {
 		id: node.id,
 		type: node.type,
 		blueprint: node.publicNode,
-		getIssues: issuesAggregate.getIssues,
-		subscribeIssues: issuesAggregate.subscribeIssues,
+		getDiagnostics: diagnosticsAggregate.getDiagnostics,
+		subscribeDiagnostics: diagnosticsAggregate.subscribeDiagnostics,
 	}
 
 	const definition = readWidgetPluginDefinition(node.plugin)

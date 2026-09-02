@@ -4,13 +4,13 @@
  * `compute`/`execute` are typed against `ValidBlueprintView` (navigation only: `root`/`getWidget`/
  * `getParent`/`getLocation`/`getChildren`/`getChildrenAt`), but passing the full
  * `ValidWidgetSystemBlueprint` object through relied entirely on that static type to keep callbacks away
- * from `system`, `rawDefinition`, `recompile()`, `getCollectedIssues()` and `createRuntime()`. Plain
+ * from `system`, `source`, `recompile()`, `getDiagnostics()` and `createRuntime()`. Plain
  * JS / `any` inside a callback could reach all of those — Runtime machinery and full-Blueprint
  * capabilities the callback matrix explicitly withholds, since Runtime interaction is meant to happen
  * only through declared deps. This builds an actual object exposing only the `ValidBlueprintView`
  * surface, so the restriction is a real runtime boundary, not only a compile-time one.
  *
- * Normative source: issue #10 consolidated handoff callback capability matrix ("Property/Method
+ * Normative source: diagnostic #10 consolidated handoff callback capability matrix ("Property/Method
  * callbacks receive the valid read-only view; they do not receive Runtime/RuntimeWidget").
  */
 

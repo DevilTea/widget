@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
- * The readonly Vue Flow canvas (issue #13 Phase 5 "Dependency Graph implementation stack" comment).
+ * The readonly Vue Flow canvas (diagnostic #13 Phase 5 "Dependency Graph implementation stack" comment).
  * Viewer-only: pan/zoom/fit and readonly node/edge selection — nodes are never draggable/connectable and
  * no edge is updatable, so this component can never produce graph editing, edge creation/deletion, or
  * reparenting. The only place in this app that imports `@vue-flow/core` (and its required base
  * stylesheet); theming beyond that structural stylesheet comes from PikaCSS tokens, not Vue Flow's own
  * default theme CSS.
  *
- * Viewport fit (issue #27 Finding 1): `useVueFlow()` called here — before this component's own
+ * Viewport fit (diagnostic #27 Finding 1): `useVueFlow()` called here — before this component's own
  * template renders `<VueFlow>` — creates a store and provides it via Vue's `provide()`, which `<VueFlow>`
  * then injects instead of creating its own (this is `@vue-flow/core`'s documented same-component-instance
  * pattern; see `useVueFlow.d.ts`'s doc comment). That gives this component `fitView` and
@@ -64,7 +64,7 @@ function memberBorderColor(kind: string, invalidCycle: boolean | undefined): str
 	if (invalidCycle)
 		return 'var(--lab-color-danger)'
 	if (kind === 'state')
-		return 'var(--lab-color-success)'
+		return 'var(--lab-color-ok)'
 	if (kind === 'method')
 		return 'var(--lab-color-accent)'
 	return 'var(--lab-color-warning)'

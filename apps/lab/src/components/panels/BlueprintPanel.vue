@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * Blueprint Inspector (issue #13 Widget Lab Phase 4 Checkpoint H). Readonly consumer of
+ * Blueprint Inspector (diagnostic #13 Widget Lab Phase 4 Checkpoint H). Readonly consumer of
  * `@deviltea/widget-core/inspection`: never mutates State, invokes Methods, or forces Property
- * evaluation. Narrow/tall tree-over-details layout, with a separate "All issues"
- * (`blueprint.getCollectedIssues()`) view kept distinct from the selected node's own
- * `getIssues()`. #43 localizes only fixed Lab chrome; node/type/member identities and core issue
+ * evaluation. Narrow/tall tree-over-details layout, with a separate "All diagnostics"
+ * (`blueprint.diagnostics`) view kept distinct from the selected node's own
+ * `getDiagnostics()`. #43 localizes only fixed Lab chrome; node/type/member identities and core diagnostic
  * messages stay verbatim.
  */
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
@@ -14,7 +14,7 @@ import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import BlueprintNodeDetails from '../blueprint/BlueprintNodeDetails.vue'
 import BlueprintTree from '../blueprint/BlueprintTree.vue'
-import IssueList from '../blueprint/IssueList.vue'
+import DiagnosticList from '../blueprint/DiagnosticList.vue'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
@@ -27,12 +27,12 @@ const selectedNode = computed(() => {
 	return nodeId === null ? null : inspection.value.getNode(nodeId)
 })
 
-const showAllIssues = ref(false)
-const collectedIssues = computed(() => store.active.value.blueprint.getCollectedIssues())
+const showAllDiagnostics = ref(false)
+const collectedDiagnostics = computed(() => store.active.value.blueprint.diagnostics)
 
 function selectNode(nodeId: InspectionNodeId): void {
 	store.setFocus({ nodeId })
-	showAllIssues.value = false
+	showAllDiagnostics.value = false
 }
 </script>
 
@@ -54,23 +54,23 @@ function selectNode(nodeId: InspectionNodeId): void {
 					<button
 						type="button"
 						:class="pika({ flex: '1 1 auto', padding: '6px', fontSize: '11px', border: 'none', background: 'transparent', color: 'var(--lab-color-text)', cursor: 'pointer' })"
-						:style="{ fontWeight: showAllIssues ? 'normal' : '600', borderBottom: showAllIssues ? 'none' : '2px solid var(--lab-color-accent)' }"
-						@click="showAllIssues = false"
+						:style="{ fontWeight: showAllDiagnostics ? 'normal' : '600', borderBottom: showAllDiagnostics ? 'none' : '2px solid var(--lab-color-accent)' }"
+						@click="showAllDiagnostics = false"
 					>
 						{{ i18n.t('Selected node') }}
 					</button>
 					<button
 						type="button"
 						:class="pika({ flex: '1 1 auto', padding: '6px', fontSize: '11px', border: 'none', background: 'transparent', color: 'var(--lab-color-text)', cursor: 'pointer' })"
-						:style="{ fontWeight: showAllIssues ? '600' : 'normal', borderBottom: showAllIssues ? '2px solid var(--lab-color-accent)' : 'none' }"
-						@click="showAllIssues = true"
+						:style="{ fontWeight: showAllDiagnostics ? '600' : 'normal', borderBottom: showAllDiagnostics ? '2px solid var(--lab-color-accent)' : 'none' }"
+						@click="showAllDiagnostics = true"
 					>
-						{{ i18n.t('All issues') }} ({{ collectedIssues.length }})
+						{{ i18n.t('All diagnostics') }} ({{ collectedDiagnostics.length }})
 					</button>
 				</div>
 				<div :class="pika({ flex: '1 1 auto', minHeight: '0', overflow: 'auto' })">
 					<BlueprintNodeDetails
-						v-if="!showAllIssues"
+						v-if="!showAllDiagnostics"
 						:node="selectedNode"
 						:blueprint="store.active.value.blueprint"
 						:inspection="inspection"
@@ -80,8 +80,8 @@ function selectNode(nodeId: InspectionNodeId): void {
 						v-else
 						:class="pika({ padding: '10px' })"
 					>
-						<IssueList
-							:issues="collectedIssues"
+						<DiagnosticList
+							:diagnostics="collectedDiagnostics"
 							:inspection="inspection"
 							@navigate="selectNode"
 						/>

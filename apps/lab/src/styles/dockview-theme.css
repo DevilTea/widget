@@ -1,5 +1,5 @@
 /**
- * Small custom Dockview theme adapted from the Lab's PikaCSS tokens (`pika.config.ts`), per issue #13
+ * Small custom Dockview theme adapted from the Lab's PikaCSS tokens (`pika.config.ts`), per diagnostic #13
  * (Widget Lab Phase 4) comment "Widget Lab implementation stack": Dockview's structural stylesheet
  * (`dockview-vue/dist/styles/dockview.css`, imported once in `App.vue`) supplies layout mechanics;
  * this file only overrides its themeable CSS custom properties. Dockview never becomes a second

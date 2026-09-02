@@ -12,6 +12,8 @@ three things — a keyed renderer registry, a recursive root renderer, and the
 This guide covers the full public surface. For installation and a minimal
 end-to-end example, see the
 [package README](https://github.com/DevilTea/deviltea-labs/tree/main/packages/widget/vue#readme).
+Cross-cutting Diagnostic/Result/Failure/Error conventions are maintained in the
+[Widget API conventions](https://github.com/DevilTea/deviltea-labs/blob/main/docs/architecture/widget-api-conventions.md).
 For an interactive playground built on this integration, see the
 [Widget Lab](../widget-lab/){target="_self"}.
 
@@ -26,8 +28,8 @@ createWidgetVueRenderer(system, build) -> WidgetRenderer component
 
 useWidget(Plugin)  (called inside a registered renderer component)
     -> { useState, useProperties, useMethods,
-         useStateIssues, usePropertyIssues, useMethodIssues,
-         useIssues, WidgetSlot }
+         useStateDiagnostics, usePropertyDiagnostics, useMethodDiagnostics,
+         useDiagnostics, WidgetSlot }
     each accessor present only if Plugin declares that capability
 ```
 
@@ -64,7 +66,7 @@ const WidgetRenderer = createWidgetVueRenderer(
   runtime (type-level completeness alone cannot stop `any`/untyped call
   sites): missing, unknown, or duplicate renderer registration all throw
   `WidgetVueIntegrationError` — a programmer/configuration exception, never a
-  Widget Issue.
+  Widget Diagnostic.
 - The returned component is bound to the exact `WidgetSystem` instance
   supplied; a `WidgetSystemRuntime` from a different (even structurally
   identical) `WidgetSystem` is rejected the same way.
@@ -76,7 +78,7 @@ const WidgetRenderer = createWidgetVueRenderer(
 ```
 
 - `runtime: WidgetSystemRuntime<Plugins>` is the only semantic prop. There is
-  no raw-definition, Blueprint, root-widget, fallback-renderer, or
+  no raw source, Blueprint, root-widget, fallback-renderer, or
   loading/error-slot prop.
 - Mount/render time validates `runtime.blueprint.system === boundSystem`.
 - If the `runtime` prop's identity changes, the entire internal host/renderer
@@ -101,10 +103,10 @@ const {
 	useState,
 	useProperties,
 	useMethods,
-	useStateIssues,
-	usePropertyIssues,
-	useMethodIssues,
-	useIssues,
+	useStateDiagnostics,
+	usePropertyDiagnostics,
+	useMethodDiagnostics,
+	useDiagnostics,
 	WidgetSlot,
 } = useWidget(SectionPlugin)
 ```
@@ -117,7 +119,7 @@ accessor present with an empty (or, for `WidgetSlot`, never-typed) keyed
 surface. Presence is read from `plugin.capabilities` at runtime and from
 `HasWidgetCapability<Interfaces, Key>` at the type level — both
 declaration-presence facts, never a `[Payload] extends [never]` test, since a
-legitimately-present capability can itself have payload `never`. `useIssues()`
+legitimately-present capability can itself have payload `never`. `useDiagnostics()`
 and `WidgetSlot`'s gating aside, this mirrors exactly how
 `@deviltea/widget-core`'s own `RuntimeStateSurface`/`RuntimePropertySurface`/
 `RuntimeMethodSurface` gate `state`/`properties`/`methods` on the Runtime
@@ -158,9 +160,9 @@ const { estimatedCost } = useProperties()
 estimatedCost.value // T | null, readonly
 ```
 
-`ExecutionResult.success(value)` projects to `value`; `failure` projects to
-`null`, with no last-successful fallback. `ExecutionResult` itself is never
-exposed through this surface.
+An `ExecutionResult` with `ok: true` projects its `value`; the `ok: false`
+branch projects to `null`, with no last-successful fallback. The
+`ExecutionResult` itself is never exposed through this surface.
 
 ### Methods
 
@@ -172,7 +174,7 @@ submit(...args) // ReturnType<Fn> | null
 
 `useMethods()` exposes lazy, stable callable wrappers shaped
 `(...args: Parameters<Fn>) => ReturnType<Fn> | null` — not refs, and no
-subscription is created merely by obtaining or calling one. Semantic success
+subscription is created merely by obtaining or calling one. Semantic ok
 projects to the returned value; semantic failure projects to `null`.
 Implementation-contract exceptions and disposed-Runtime errors propagate
 unchanged. Arbitrary legal method names, including JavaScript-special ones
@@ -181,18 +183,18 @@ such as `then`, receive no special handling.
 ### Diagnostics
 
 ```ts
-const { budget: budgetIssues } = useStateIssues()
-const { estimatedCost: estimatedCostIssues } = usePropertyIssues()
-const { submit: submitIssues } = useMethodIssues()
-const issues = useIssues()
+const { budget: budgetDiagnostics } = useStateDiagnostics()
+const { estimatedCost: estimatedCostDiagnostics } = usePropertyDiagnostics()
+const { submit: submitDiagnostics } = useMethodDiagnostics()
+const diagnostics = useDiagnostics()
 ```
 
-`useStateIssues()` / `usePropertyIssues()` / `useMethodIssues()` mirror the
-corresponding Runtime primitive's `getIssues()`/`subscribeIssues()` through
+`useStateDiagnostics()` / `usePropertyDiagnostics()` / `useMethodDiagnostics()` mirror the
+corresponding Runtime primitive's `getDiagnostics()`/`subscribeDiagnostics()` through
 the same lazy keyed-Proxy model as their value counterpart, independently
-lazy per member. `useIssues()` mirrors the widget-level aggregate —
-`RuntimeWidget.getIssues()`/`subscribeIssues()` — never the Runtime-wide
-`WidgetSystemRuntime.getCollectedIssues()`. Every projection preserves the
+lazy per member. `useDiagnostics()` mirrors the widget-level aggregate —
+`RuntimeWidget.getDiagnostics()`/`subscribeDiagnostics()` — never the Runtime-wide
+`WidgetSystemRuntime.getDiagnostics()`. Every projection preserves the
 core snapshot objects and order exactly: no message parsing, no
 reclassification, no invented aggregation.
 
@@ -233,7 +235,7 @@ tree outside that mechanism.
   existing Runtime surface into Vue-native reactivity.
 
 The canonical, authoritative decision log for this integration is
-[GitHub issue #13](https://github.com/DevilTea/deviltea-labs/issues/13) —
+[GitHub diagnostic #13](https://github.com/DevilTea/deviltea-labs/diagnostics/13) —
 "Widget Vue integration — Phase 3 decision log." Its checkpoints, together
-with [issue #10](https://github.com/DevilTea/deviltea-labs/issues/10) for
+with [diagnostic #10](https://github.com/DevilTea/deviltea-labs/diagnostics/10) for
 core semantics, are authoritative over this guide.

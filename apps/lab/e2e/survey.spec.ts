@@ -44,15 +44,15 @@ test('valid flow: Submit then Generate result renders the Recommendation block',
 })
 
 test('invalid date flow surfaces the issue and correcting it recovers live metrics', async ({ page }) => {
-	const issueText = 'Return date must be strictly after the departure date.'
-	await expect(page.getByText(issueText))
+	const diagnosticMessage = 'Return date must be strictly after the departure date.'
+	await expect(page.getByText(diagnosticMessage))
 		.toHaveCount(0)
 
 	// Default Departure date is 2027-04-10 (showcases/survey/presets.ts) — this is strictly before it.
 	const returnDate = page.getByLabel('Return date')
 	await returnDate.fill('2027-04-01')
 	await returnDate.press('Tab')
-	await expect(page.getByText(issueText)
+	await expect(page.getByText(diagnosticMessage)
 		.first())
 		.toBeVisible()
 
@@ -74,7 +74,7 @@ test('invalid date flow surfaces the issue and correcting it recovers live metri
 
 	await returnDate.fill('2027-04-20')
 	await returnDate.press('Tab')
-	await expect(page.getByText(issueText))
+	await expect(page.getByText(diagnosticMessage))
 		.toHaveCount(0)
 
 	// Live metrics recover: computeTripDays('2027-04-10', '2027-04-20') === 11 (survey/domain.ts).
@@ -113,8 +113,8 @@ test('mutating an answer after Generate result shows an explicit stale-result st
 	// its exact text rather than a page-wide "0.00" substring search — "Estimated baseline cost" can
 	// legitimately read e.g. "1500.00" elsewhere on this same page, which would falsely match a loose
 	// substring check even though it is a real, unrelated success value.
-	const issueText = 'Return date must be strictly after the departure date.'
-	await expect(page.getByText(issueText)
+	const diagnosticMessage = 'Return date must be strictly after the departure date.'
+	await expect(page.getByText(diagnosticMessage)
 		.first())
 		.toBeVisible()
 	const budgetPerPersonPerDayValue = page.locator('dt', { hasText: 'Budget / person / day' })
@@ -140,7 +140,7 @@ test('mutating an answer after Generate result shows an explicit stale-result st
 	// metrics recover, but the Recommendation stays stale (still generated from the original answers).
 	await returnDate.fill('2027-04-24')
 	await returnDate.press('Tab')
-	await expect(page.getByText(issueText))
+	await expect(page.getByText(diagnosticMessage))
 		.toHaveCount(0)
 	await expect(budgetPerPersonPerDayValue)
 		.not.toHaveText('Unavailable')

@@ -1,7 +1,7 @@
 /**
  * Showcase B ("Interactive Product Prototype") domain model.
  *
- * Normative source: GitHub issue #13 comment "Checkpoint — Showcase B: Interactive Product Prototype
+ * Normative source: GitHub diagnostic #13 comment "Checkpoint — Showcase B: Interactive Product Prototype
  * (ACCEPTED)". A bounded, offline, in-memory Sales Pipeline CRM dashboard over a fixed synthetic deal
  * dataset — a semantic architecture probe, not a real CRM/sales product. Every constant here is a
  * synthetic Lab-private fixture; there is no network/backend/persistence. All domain

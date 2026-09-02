@@ -19,7 +19,7 @@ export function createCrmRuntime(sourceText: string = defaultCrmPreset.sourceTex
 	const definition: unknown = JSON.parse(sourceText)
 	const blueprint = crmSystem.createBlueprint(definition)
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid Blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid Blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	return { runtime: blueprint.createRuntime() }
 }

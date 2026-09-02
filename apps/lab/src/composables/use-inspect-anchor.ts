@@ -1,6 +1,6 @@
 /**
  * Stamps `data-widget-id`/`data-widget-type` onto a showcase renderer's own rendered root element
- * (issue #25 P2 "Preview -> semantic inspector bridge"). `@deviltea/widget-vue`'s `useWidget()` identity
+ * (diagnostic #25 P2 "Preview -> semantic inspector bridge"). `@deviltea/widget-vue`'s `useWidget()` identity
  * amendment ("useWidget() may expose readonly local widget identity") deliberately supplies
  * `widgetId`/`widgetType` as plain identity values only, with no DOM-stamping behavior of its own — a
  * renderer/Lab may deliberately project those onto its own rendered root. This composable is that one

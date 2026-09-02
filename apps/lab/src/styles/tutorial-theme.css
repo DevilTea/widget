@@ -1,5 +1,5 @@
 /*
- * Tutorial spotlight (issue #25 P1 Scope E): a plain, global (non-scoped) class toggled directly onto
+ * Tutorial spotlight (diagnostic #25 P1 Scope E): a plain, global (non-scoped) class toggled directly onto
  * whichever element currently carries the matching `data-tutorial-target` attribute (`App.vue`'s
  * `watchEffect`) — an outline/glow highlight, never a position-cloned overlay, per the locked mechanism.
  * Global on purpose: Vue's scoped-style attribute selectors would not reach across the many different

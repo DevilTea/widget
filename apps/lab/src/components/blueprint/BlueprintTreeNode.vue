@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * One row of the recovered source topology (issue #13 Widget Lab Phase 4 Checkpoint H): traverses via
+ * One row of the recovered source topology (diagnostic #13 Widget Lab Phase 4 Checkpoint H): traverses via
  * `inspection.getNode(id).sourceSlots`, never via resolved `.slots`, so unresolved nodes and
  * `raw-slot` placement — the whole point of Blueprint recovery — render exactly like everything else.
  * Recursive by filename self-reference (a standard Vue SFC feature — no import needed).
@@ -32,14 +32,14 @@ const label = computed(() => {
 	if (node.resolved)
 		return `${node.node.id} : ${node.node.type}`
 
-	// Unresolved: best-effort display hints from `rawDefinition` only — never treated as semantic identity.
-	const raw = node.node.rawDefinition
+	// Unresolved: best-effort display hints from `source` only — never treated as semantic identity.
+	const raw = node.node.source
 	const hintedId = isPlainObject(raw) && typeof raw.id === 'string' ? raw.id : '?'
 	const hintedType = isPlainObject(raw) && typeof raw.type === 'string' ? raw.type : '?'
 	return `${hintedId} : ${hintedType}`
 })
 
-const issueCount = computed(() => inspectionNode.value?.node.getIssues().length ?? 0)
+const diagnosticCount = computed(() => inspectionNode.value?.node.diagnostics.length ?? 0)
 </script>
 
 <template>
@@ -68,13 +68,13 @@ const issueCount = computed(() => inspectionNode.value?.node.getIssues().length 
 		>
 			<span
 				:class="pika({ width: '7px', height: '7px', borderRadius: '999px', flex: '0 0 auto' })"
-				:style="{ background: inspectionNode?.resolved ? 'var(--lab-color-success)' : 'var(--lab-color-danger)' }"
+				:style="{ background: inspectionNode?.resolved ? 'var(--lab-color-ok)' : 'var(--lab-color-danger)' }"
 			/>
 			<span :class="pika({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })">{{ label }}</span>
 			<span
-				v-if="issueCount > 0"
+				v-if="diagnosticCount > 0"
 				:class="pika({ marginLeft: 'auto', fontSize: '10px', color: 'var(--lab-color-danger)', flex: '0 0 auto' })"
-			>{{ issueCount }}</span>
+			>{{ diagnosticCount }}</span>
 		</button>
 
 		<div

@@ -12,7 +12,7 @@
  * workflow (readiness/recommendation Properties may stay `never-evaluated` in inspection until the
  * corresponding Method naturally evaluates them).
  *
- * Issue #26 Finding 1 (stale Recommendation with no explicit freshness signal): `generateResult()` now
+ * Diagnostic #26 Finding 1 (stale Recommendation with no explicit freshness signal): `generateResult()` now
  * also stores the exact answer set it generated `result` from, as a new State (`resultInputs`) keyed by
  * each configured question's widget id. Storing it as a State (not deriving it) is intentional — it is
  * a snapshot of a specific past `generateResult()` call, not a live reactive read, so it demonstrates
@@ -52,7 +52,7 @@ import { isPlainObject, isTripRecommendationResult } from '../domain'
 export interface TripSurveyConfig {
 	readonly resetQuestionIds: readonly string[]
 	/**
-	 * The semantic input set for `resultInputs`/`resultFresh` (issue #26 Finding 1) — deliberately a
+	 * The semantic input set for `resultInputs`/`resultFresh` (diagnostic #26 Finding 1) — deliberately a
 	 * separate key from `resetQuestionIds` (see the file header "Which questions feed..." paragraph):
 	 * reset behavior and recommendation-freshness tracking are different concerns that must not share an
 	 * unenforced accidental equivalence.
@@ -120,8 +120,10 @@ function answersMatch(stored: Readonly<Record<string, unknown>>, current: Readon
 }
 
 export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
+	.description('Trip survey widget')
 	.interfaces<TripSurveyInterfaces>()
 	.config({
+		description: 'Trip survey configuration',
 		validate: (input): input is TripSurveyConfig => isTripSurveyConfig(input),
 		resolve: raw => ({
 			resetQuestionIds: raw?.resetQuestionIds ?? [],
@@ -130,7 +132,10 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 			recommendationId: raw?.recommendationId ?? '',
 		}),
 	})
-	.slots({ form: {}, semantics: {} })
+	.slots({
+		form: { description: 'Survey form' },
+		semantics: { description: 'Survey semantics' },
+	})
 	.state(state =>
 		state
 			.phase({
@@ -158,7 +163,7 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 			}),
 			compute: ({ deps, config }) => {
 				const resultResult = deps.result()
-				const result = resultResult.success ? resultResult.value : null
+				const result = resultResult.ok ? resultResult.value : null
 				// No result yet: there is nothing to be stale relative to. The renderer never consults
 				// `resultFresh` while `result === null` (checkpoint UI rule), so this branch's exact value
 				// is a documented convention, not an observed behavior: `true` ("vacuously fresh") reads
@@ -167,7 +172,7 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 					return true
 
 				const resultInputsResult = deps.resultInputs()
-				const storedInputs = resultInputsResult.success ? resultInputsResult.value : null
+				const storedInputs = resultInputsResult.ok ? resultInputsResult.value : null
 				// Defensive only: `generateResult()` always writes `resultInputs` in the same transaction as
 				// `result`, so a non-null `result` with a null `resultInputs` should not occur in practice.
 				// Treat it conservatively as stale rather than assuming freshness for an unverifiable snapshot.
@@ -177,7 +182,7 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 				const currentAnswers: Record<string, unknown> = {}
 				config.resultInputQuestionIds.forEach((id, index) => {
 					const answerResult = deps.answers[index]!()
-					currentAnswers[id] = answerResult.success ? answerResult.value : null
+					currentAnswers[id] = answerResult.ok ? answerResult.value : null
 				})
 
 				// Over-approximating on purpose (see file header): any tracked answer change marks the
@@ -219,7 +224,7 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 					// Readiness failure fails this Method automatically via dependency propagation
 					// (checkpoint C2/§5) — no phase/result mutation, no renderer-side substitute
 					// validation. The returned `false` is discarded on that path.
-					if (!readyResult.success)
+					if (!readyResult.ok)
 						return false
 
 					deps.setResult(null)
@@ -233,7 +238,7 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 					phase: dep.self.state.get('phase'),
 					recommendation: dep.widget(config.recommendationId).properties.get('result')
 						.validate(isTripRecommendationResult),
-					// One `answer` read per `resultInputQuestionIds` question (issue #26 Finding 1; kept
+					// One `answer` read per `resultInputQuestionIds` question (diagnostic #26 Finding 1; kept
 					// separate from `resetQuestionIds` — see the file header) — captured alongside
 					// `result` so the stored `resultInputs` snapshot always reflects exactly the answers
 					// `result` was computed from in this same transaction.
@@ -243,24 +248,24 @@ export const TripSurveyPlugin = createWidgetPlugin('TripSurvey')
 					setPhase: dep.self.state.set('phase'),
 				}),
 				validateArgs: (args): args is [] => args.length === 0,
-				execute: ({ deps, config, addIssue }) => {
+				execute: ({ deps, config, addDiagnostic }) => {
 					const phaseResult = deps.phase()
-					const phase = phaseResult.success ? phaseResult.value : null
+					const phase = phaseResult.ok ? phaseResult.value : null
 					if (phase !== 'submitted') {
-						addIssue({ message: 'generateResult() requires the survey to be submitted first.' })
+						addDiagnostic({ message: 'generateResult() requires the survey to be submitted first.' })
 						return null
 					}
 
 					const recommendationResult = deps.recommendation()
 					// A recommendation failure (e.g. readiness regressed after submit) fails this Method
 					// automatically via dependency propagation — no mutation, per checkpoint §5.
-					if (!recommendationResult.success)
+					if (!recommendationResult.ok)
 						return null
 
 					const resultInputs: Record<string, unknown> = {}
 					config.resultInputQuestionIds.forEach((id, index) => {
 						const answerResult = deps.answers[index]!()
-						resultInputs[id] = answerResult.success ? answerResult.value : null
+						resultInputs[id] = answerResult.ok ? answerResult.value : null
 					})
 
 					deps.setResult(recommendationResult.value)

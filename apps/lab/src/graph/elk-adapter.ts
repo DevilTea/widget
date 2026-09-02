@@ -1,10 +1,10 @@
 /**
  * `toElkGraph()` / `fromElkResult()` — the pure boundary between the Lab's `SemanticGraph` projection
- * and ELK's JSON graph schema (issue #13 Phase 5 "Dependency Graph implementation stack": `toElkGraph()
+ * and ELK's JSON graph schema (diagnostic #13 Phase 5 "Dependency Graph implementation stack": `toElkGraph()
  * -> ELK layout -> toVueFlow()`).
  *
  * Type-only `elkjs` import: this module builds/reads plain ELK-shaped JSON and never instantiates the
- * real `ELK` layout engine — that value import lives exclusively inside `layout.worker.ts` (issue #13
+ * real `ELK` layout engine — that value import lives exclusively inside `layout.worker.ts` (diagnostic #13
  * Phase 5 "ELK layout worker" comment). Kept pure and synchronous so it is unit-testable without a
  * worker or the real elkjs runtime.
  */
@@ -16,13 +16,13 @@ import type { SemanticGraph } from './types'
 /** Fixed member-vertex footprint. Deliberately simple fixed sizing — no text-measurement dependency. */
 export const VERTEX_WIDTH = 160
 export const VERTEX_HEIGHT = 32
-/** Reference stubs render smaller than a real member vertex (issue #13 Phase 5: "distinct visual"). */
+/** Reference stubs render smaller than a real member vertex (diagnostic #13 Phase 5: "distinct visual"). */
 export const STUB_WIDTH = 132
 export const STUB_HEIGHT = 24
 
 const ROOT_LAYOUT_OPTIONS = {
 	'elk.algorithm': 'layered',
-	// Initial vertical direction for the narrow/tall inspector panel (issue #13 Phase 5 "implementation
+	// Initial vertical direction for the narrow/tall inspector panel (diagnostic #13 Phase 5 "implementation
 	// stack" comment) — an implementation choice, not an architecture contract.
 	'elk.direction': 'DOWN',
 	'elk.edgeRouting': 'ORTHOGONAL',

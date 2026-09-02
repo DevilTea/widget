@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 /**
- * Conformance tests — issue #10 amendment "declaration-presence semantics and public
- * `WidgetPlugin.capabilities`"; issue #13 checkpoint G's explicit-empty-vs-absent requirement,
+ * Conformance tests — diagnostic #10 amendment "declaration-presence semantics and public
+ * `WidgetPlugin.capabilities`"; diagnostic #13 checkpoint G's explicit-empty-vs-absent requirement,
  * extended per adversarial review round 1 beyond the pre-existing `EmptyState` fixture.
  *
  * `useWidget(Plugin)` must gate every accessor — most critically `WidgetSlot` — on
@@ -67,17 +67,17 @@ describe('plugin.capabilities — the authoritative presence source `useWidget()
 })
 
 describe('useWidget() runtime capability gating — explicit-empty vs absent', () => {
-	it('exposes useProperties()/usePropertyIssues() with an empty keyed surface for explicit-empty properties, and drops every other accessor', () => {
+	it('exposes useProperties()/usePropertyDiagnostics() with an empty keyed surface for explicit-empty properties, and drops every other accessor', () => {
 		const runtime = createCapabilityFixtureRuntime({ id: 'ep1', type: 'EmptyProperties' })
 		const { bridge } = mountWidgetBridge(runtime, 'ep1', EmptyPropertiesPlugin)
 
 		expect(bridge.useProperties)
 			.toBeTypeOf('function')
-		expect(bridge.usePropertyIssues)
+		expect(bridge.usePropertyDiagnostics)
 			.toBeTypeOf('function')
 		expect(Object.keys(bridge.useProperties()))
 			.toEqual([])
-		expect(Object.keys(bridge.usePropertyIssues()))
+		expect(Object.keys(bridge.usePropertyDiagnostics()))
 			.toEqual([])
 		// No state/methods/slots were declared at all — absent, not explicitly empty.
 		expect(asLooseRecord(bridge).useState)
@@ -88,17 +88,17 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 			.toBeUndefined()
 	})
 
-	it('exposes useMethods()/useMethodIssues() with an empty keyed surface for explicit-empty methods, and drops every other accessor', () => {
+	it('exposes useMethods()/useMethodDiagnostics() with an empty keyed surface for explicit-empty methods, and drops every other accessor', () => {
 		const runtime = createCapabilityFixtureRuntime({ id: 'em1', type: 'EmptyMethods' })
 		const { bridge } = mountWidgetBridge(runtime, 'em1', EmptyMethodsPlugin)
 
 		expect(bridge.useMethods)
 			.toBeTypeOf('function')
-		expect(bridge.useMethodIssues)
+		expect(bridge.useMethodDiagnostics)
 			.toBeTypeOf('function')
 		expect(Object.keys(bridge.useMethods()))
 			.toEqual([])
-		expect(Object.keys(bridge.useMethodIssues()))
+		expect(Object.keys(bridge.useMethodDiagnostics()))
 			.toEqual([])
 		expect(asLooseRecord(bridge).useProperties)
 			.toBeUndefined()

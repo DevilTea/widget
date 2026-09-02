@@ -1,7 +1,7 @@
 /**
  * Renderer registry builder, recursive internal host, and the shared `WidgetSlot` component.
  *
- * Normative source: issue #13 checkpoints B, D, E, F.
+ * Normative source: diagnostic #13 checkpoints B, D, E, F.
  */
 
 import type { AnyWidgetPluginTuple, WidgetPluginTypeOf, WidgetSystem, WidgetSystemRuntime } from '@deviltea/widget-core'
@@ -31,7 +31,7 @@ export interface WidgetVueRendererSectionMarker<Remaining extends string> {
  * plugin-type union and shrinks by one literal per registered key; the section can only be returned
  * from the `createWidgetVueRenderer` callback once `Remaining` has been reduced to `never`.
  *
- * A registered key narrows to a plain Vue `Component` — per issue #13 checkpoint E, a renderer
+ * A registered key narrows to a plain Vue `Component` — per diagnostic #13 checkpoint E, a renderer
  * component carries no static brand proving which plugin it calls `useWidget(...)` with, so the
  * registry cannot statically demand more than "some Vue component".
  */
@@ -45,14 +45,14 @@ export type WidgetVueRendererSection<Remaining extends string>
 
 /**
  * The renderer-key domain for one `WidgetSystem`. When the system's plugin-type union has been
- * broadened to plain `string` (an unsupported universe per issue #13 checkpoint B), `Remaining` never
+ * broadened to plain `string` (an unsupported universe per diagnostic #13 checkpoint B), `Remaining` never
  * reduces to `never` — `Exclude<string, AnyLiteral>` stays `string` — so the builder callback can never
  * type-check as complete and `createWidgetVueRenderer` cannot be called at all.
  */
 export type WidgetVueRendererEntry<Plugins extends AnyWidgetPluginTuple> = WidgetVueRendererSection<WidgetPluginTypeOf<Plugins[number]>>
 
 /**
- * The component `createWidgetVueRenderer` returns. `runtime` is the only semantic prop; per issue #13
+ * The component `createWidgetVueRenderer` returns. `runtime` is the only semantic prop; per diagnostic #13
  * checkpoint E the root renderer never accepts raw definitions, Blueprints, fallback renderers, or
  * loading/error slots.
  */
@@ -103,7 +103,7 @@ function quote(value: string): string {
  * Vue vnode `key` only accepts a `PropertyKey`, not an arbitrary object, so a `WidgetSystemRuntime`
  * instance cannot be used as a `key` directly. This assigns one stable `symbol` per distinct Runtime
  * object identity (never per Runtime-shape-equality) the first time it is seen, giving the
- * remount-on-identity-change behavior issue #13 checkpoint E requires without leaking: entries are
+ * remount-on-identity-change behavior diagnostic #13 checkpoint E requires without leaking: entries are
  * held by a `WeakMap`, so a Runtime that is no longer referenced anywhere else is collected together
  * with its key.
  */
@@ -125,8 +125,8 @@ interface ErasedRuntime {
 
 /**
  * Validates exactly-once coverage against the actual bound `WidgetSystem` instance. Type-level
- * completeness is not sufficient because JS/`any` can bypass it (issue #13 checkpoint B); a violation
- * here is a programmer/configuration exception, never a Widget Issue.
+ * completeness is not sufficient because JS/`any` can bypass it (diagnostic #13 checkpoint B); a violation
+ * here is a programmer/configuration exception, never a Widget Diagnostic.
  */
 function finalizeRegistry(system: WidgetSystem<AnyWidgetPluginTuple>, registrations: Map<string, Component[]>): ReadonlyMap<string, Component> {
 	const pluginTypes = new Set(system.plugins.map(plugin => plugin.type))
@@ -224,7 +224,7 @@ const InternalWidgetHost = defineComponent({
 })
 
 /**
- * The single shared `WidgetSlot` component identity (issue #13 checkpoint D). `useWidget(Plugin)`
+ * The single shared `WidgetSlot` component identity (diagnostic #13 checkpoint D). `useWidget(Plugin)`
  * never allocates a fresh component per widget/call — it returns this exact component, only narrowed
  * at the TypeScript level to the current widget's declared slot-name union.
  */
@@ -263,12 +263,12 @@ export const SharedWidgetSlotComponent = defineComponent({
 // -------------------------------------------------------------------------------------------------
 
 /**
- * `createWidgetVueRenderer(system, build)` — see issue #13 checkpoints B and E.
+ * `createWidgetVueRenderer(system, build)` — see diagnostic #13 checkpoints B and E.
  *
  * The returned component is stable and bound to one exact `WidgetSystem` instance and one complete
  * immutable renderer registry. Mount-time (render-time) identity validates
  * `runtime.blueprint.system === system`; a Runtime from any other `WidgetSystem` is a
- * programmer/configuration exception, never a Widget Issue. A `runtime` prop identity change forces a
+ * programmer/configuration exception, never a Widget Diagnostic. A `runtime` prop identity change forces a
  * full unmount/remount of the internal host tree via a vnode `key` bound to the Runtime instance
  * itself, so every Vue bridge subscription activated under the previous Runtime is cleaned up. The
  * component never calls `runtime.dispose()` — Runtime lifetime stays owned by the caller.

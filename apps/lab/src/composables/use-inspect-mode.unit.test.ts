@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * `useInspectMode()` regression tests (issue #25 P2): off-by-default toggle state, Escape-driven exit
+ * `useInspectMode()` regression tests (diagnostic #25 P2): off-by-default toggle state, Escape-driven exit
  * (only while active), and listener cleanup on unmount. Mounted through a throwaway host component
  * since `onMounted`/`onBeforeUnmount` require an active component instance.
  */

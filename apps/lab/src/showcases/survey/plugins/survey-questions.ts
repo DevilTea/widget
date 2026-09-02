@@ -44,8 +44,10 @@ export interface SurveyDateQuestionInterfaces extends WidgetInterfaces {
 }
 
 export const SurveyDateQuestionPlugin = createWidgetPlugin('SurveyDateQuestion')
+	.description('Survey date question widget')
 	.interfaces<SurveyDateQuestionInterfaces>()
 	.config({
+		description: 'Survey date question configuration',
 		validate: (input): input is SurveyDateQuestionRawConfig =>
 			isPlainObject(input)
 			&& typeof input.label === 'string'
@@ -121,8 +123,10 @@ export interface SurveyNumberQuestionInterfaces extends WidgetInterfaces {
 }
 
 export const SurveyNumberQuestionPlugin = createWidgetPlugin('SurveyNumberQuestion')
+	.description('Survey number question widget')
 	.interfaces<SurveyNumberQuestionInterfaces>()
 	.config({
+		description: 'Survey number question configuration',
 		validate: (input): input is SurveyNumberQuestionRawConfig =>
 			isPlainObject(input)
 			&& typeof input.label === 'string'
@@ -143,7 +147,7 @@ export const SurveyNumberQuestionPlugin = createWidgetPlugin('SurveyNumberQuesti
 	.state(state =>
 		state.answer({
 			// `answer.validate` uses resolved config (min/max/integer). Invalid writes produce an
-			// ordinary `state-validation` Runtime Issue and preserve the previous authoritative value —
+			// ordinary `state-validation` Runtime Diagnostic and preserve the previous authoritative value —
 			// `RuntimeState.attemptSet` never commits a rejected candidate (checkpoint §2/§4).
 			validate: (input, ctx): input is number | null => {
 				if (input === null)
@@ -223,8 +227,10 @@ function isSurveyChoiceOption(value: unknown): value is SurveyChoiceOption {
 }
 
 export const SurveyChoiceQuestionPlugin = createWidgetPlugin('SurveyChoiceQuestion')
+	.description('Survey choice question widget')
 	.interfaces<SurveyChoiceQuestionInterfaces>()
 	.config({
+		description: 'Survey choice question configuration',
 		validate: (input): input is SurveyChoiceQuestionRawConfig =>
 			isPlainObject(input)
 			&& typeof input.label === 'string'

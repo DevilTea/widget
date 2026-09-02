@@ -9,24 +9,24 @@
  * order: a forward `Property -> later Property`, any `Property -> read-only Method`, a dependency on a
  * later widget, and a valid Method-only cycle (`A <-> B`) must all materialize and invoke correctly.
  *
- * Normative source: issue #10 consolidated handoff §12 (target-failure 1:1 wrapping,
+ * Normative source: diagnostic #10 consolidated handoff §12 (target-failure 1:1 wrapping,
  * `property-dependency`/`method-dependency`), U1 handoff §5 (resolved/absent x
  * state-get/property-get/method-invoke/state-set materialization table).
  */
 
 import type { DependencyConsumer, DependencyRefinement } from '../dep'
+import type { BlueprintDependencyReference, RuntimeDiagnostic, RuntimeDiagnosticLocation, RuntimeMethodDependencyDiagnostic, RuntimePropertyDependencyDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { CompiledDependency, CompiledDependencyTree, CompiledWidgetNode } from '../internal/contract'
-import type { BlueprintDependencyReference, RuntimeIssueLocation, RuntimeMethodDependencyIssue, RuntimePropertyDependencyIssue } from '../issue'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { DedupeDescriptor } from './collector'
 import type { RuntimeContext } from './context'
-import type { ReceivedBox } from './issues'
+import type { ReceivedBox } from './diagnostics'
 import type { MethodPrimitive } from './method'
 import type { PropertyPrimitive } from './property'
 import type { StatePrimitive } from './state'
 import { isCompiledDependency } from '../internal/contract'
-import { buildMethodDependencyIssue, buildPropertyDependencyIssue, deepFreezeIssue, freezeIssueSnapshot } from './issues'
+import { buildMethodDependencyDiagnostic, buildPropertyDependencyDiagnostic, deepFreezeDiagnostic, freezeDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
 export interface PrimitiveRegistryEntry {
@@ -44,38 +44,40 @@ export interface DepsMaterializeParams {
 	readonly context: RuntimeContext
 }
 
-function consumerDependencyIssue(
+function consumerDependencyDiagnostic(
 	params: DepsMaterializeParams,
 	dependency: BlueprintDependencyReference,
 	message: string,
 	received: ReceivedBox | undefined,
-	related: RuntimeIssueLocation,
-): RuntimePropertyDependencyIssue | RuntimeMethodDependencyIssue {
+	related: RuntimeDiagnosticLocation,
+	cause?: RuntimeDiagnostic,
+): RuntimePropertyDependencyDiagnostic | RuntimeMethodDependencyDiagnostic {
 	const base = {
 		widgetId: params.ownerWidgetId,
 		name: params.ownerName,
 		dependency,
 		...(received === undefined ? {} : { received }),
+		...(cause === undefined ? {} : { cause }),
 		related,
 		message,
 	}
-	return params.consumer === 'property' ? buildPropertyDependencyIssue(base) : buildMethodDependencyIssue(base)
+	return params.consumer === 'property' ? buildPropertyDependencyDiagnostic(base) : buildMethodDependencyDiagnostic(base)
 }
 
-function reportDependencyIssue(
+function reportDependencyDiagnostic(
 	params: DepsMaterializeParams,
-	issue: RuntimePropertyDependencyIssue | RuntimeMethodDependencyIssue,
+	diagnostic: RuntimePropertyDependencyDiagnostic | RuntimeMethodDependencyDiagnostic,
 	dedupe: DedupeDescriptor,
 ): void {
 	params.context.getActiveCollector()
-		?.addFinalizedIssue(issue, dedupe)
+		?.addFinalizedDiagnostic(diagnostic, dedupe)
 }
 
 /**
  * Per-dependency-leaf unique id, assigned once when a leaf's callable is materialized and closed over
  * for the callable's lifetime. Combined with a raw failure-identity anchor to dedupe repeated insertion
- * of the same dependency failure into one execution scope's collector (issue #10 §12: "repeated reads
- * of the same failing dependency ... avoid duplicating the same dependency issue insertion").
+ * of the same dependency failure into one execution scope's collector (diagnostic #10 §12: "repeated reads
+ * of the same failing dependency ... avoid duplicating the same dependency diagnostic insertion").
  */
 let nextLeafId = 0
 
@@ -83,7 +85,7 @@ let nextLeafId = 0
  * Builds the dedupe descriptor for one dependency-leaf failure.
  *
  * `scope` identifies the dependency *leaf* only (`leafId`) — never the failure's `message`. Message is
- * human-readable-only per issue #10 ("`message` is human-readable only, never a machine protocol") and
+ * human-readable-only per diagnostic #10 ("`message` is human-readable only, never a machine protocol") and
  * must not participate in identity/machine logic; stuffing it into `scope` would make two occurrences
  * of literally the same failure fail to dedupe if the message text ever varied, and — more subtly —
  * would never actually help distinguish genuinely different failures either, since that job already
@@ -100,7 +102,7 @@ export function dependencyDedupeDescriptor(leafId: number, failureAnchor: unknow
 
 /**
  * Applies `.validate()` refinements, in order, to a successfully-produced value. Returns the refined
- * success value or a rejection carrying the offending `received` value.
+ * ok value or a rejection carrying the offending `received` value.
  *
  * `.validate()` is a semantic callback like every other framework-owned predicate, so its return value
  * is captured as `unknown` and passed through the sync-boundary guard *before* being interpreted as a
@@ -120,7 +122,7 @@ function applyRefinements(
 	return { ok: true, value }
 }
 
-function locationOf(operation: BlueprintDependencyReference['operation'], widgetId: WidgetId): RuntimeIssueLocation {
+function locationOf(operation: BlueprintDependencyReference['operation'], widgetId: WidgetId): RuntimeDiagnosticLocation {
 	switch (operation.type) {
 		case 'state-get':
 		case 'state-set':
@@ -142,12 +144,12 @@ function resolveTargetWidgetId(nodes: readonly CompiledWidgetNode[], nodeId: num
 function materializeAbsentLeaf(operation: BlueprintDependencyReference['operation']): unknown {
 	switch (operation.type) {
 		case 'state-set':
-			return (candidate: unknown) => ({ success: true, value: candidate }) satisfies ExecutionResult<unknown, never>
+			return (candidate: unknown) => ({ ok: true, value: candidate }) satisfies ExecutionResult<unknown, never>
 		case 'method-invoke':
-			return (..._args: readonly unknown[]) => ({ success: true, value: null }) satisfies ExecutionResult<unknown, never>
+			return (..._args: readonly unknown[]) => ({ ok: true, value: null }) satisfies ExecutionResult<unknown, never>
 		case 'state-get':
 		case 'property-get':
-			return () => ({ success: true, value: null }) satisfies ExecutionResult<unknown, never>
+			return () => ({ ok: true, value: null }) satisfies ExecutionResult<unknown, never>
 	}
 }
 
@@ -182,16 +184,16 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 				const raw = target.internal.get()
 				const refined = applyRefinements(raw, leaf.refinements)
 				if (!refined.ok) {
-					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
-					// Deep-freeze both the issue and the single-element array *before* inserting it into
+					const diagnostic = consumerDependencyDiagnostic(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
+					// Deep-freeze both the diagnostic and the single-element array *before* inserting it into
 					// the active collector and returning it to plugin code — otherwise plugin code could
-					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
+					// mutate `depResult.diagnostics[0]` between "reported" and "returned", and the mutated
 					// object would then get committed as the consumer's own latest snapshot.
-					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
-					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, refined.received))
-					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
+					const diagnostics = freezeDiagnosticSnapshot([deepFreezeDiagnostic(diagnostic)])
+					reportDependencyDiagnostic(params, diagnostic, dependencyDedupeDescriptor(leafId, refined.received))
+					return { ok: false, failure: { diagnostics: diagnostics as readonly [unknown, ...unknown[]] } } satisfies ExecutionResult<never, unknown>
 				}
-				return { success: true, value: refined.value }
+				return { ok: true, value: refined.value }
 			}
 		}
 
@@ -202,11 +204,11 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					throw new Error(`widget-core: internal error — resolved state-set target "${operation.key}" is missing.`)
 
 				const result = target.internal.attemptSet(candidate)
-				if (result.success)
-					return { success: true, value: candidate }
+				if (result.ok)
+					return { ok: true, value: candidate }
 
-				const wrapped = wrapTargetFailure(params, reference, result.issues, related, leafId)
-				return { success: false, issues: wrapped }
+				const wrapped = wrapTargetFailure(params, reference, result.failure.diagnostics, related, leafId)
+				return { ok: false, failure: { diagnostics: wrapped } }
 			}
 		}
 
@@ -217,23 +219,23 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					throw new Error(`widget-core: internal error — resolved property-get target "${operation.name}" is missing.`)
 
 				const targetResult = target.internal.getResult()
-				if (!targetResult.success) {
-					const wrapped = wrapTargetFailure(params, reference, targetResult.issues, related, leafId)
-					return { success: false, issues: wrapped }
+				if (!targetResult.ok) {
+					const wrapped = wrapTargetFailure(params, reference, targetResult.failure.diagnostics, related, leafId)
+					return { ok: false, failure: { diagnostics: wrapped } }
 				}
 
 				const refined = applyRefinements(targetResult.value, leaf.refinements)
 				if (!refined.ok) {
-					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
-					// Deep-freeze both the issue and the single-element array *before* inserting it into
+					const diagnostic = consumerDependencyDiagnostic(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
+					// Deep-freeze both the diagnostic and the single-element array *before* inserting it into
 					// the active collector and returning it to plugin code — otherwise plugin code could
-					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
+					// mutate `depResult.diagnostics[0]` between "reported" and "returned", and the mutated
 					// object would then get committed as the consumer's own latest snapshot.
-					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
-					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, refined.received))
-					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
+					const diagnostics = freezeDiagnosticSnapshot([deepFreezeDiagnostic(diagnostic)])
+					reportDependencyDiagnostic(params, diagnostic, dependencyDedupeDescriptor(leafId, refined.received))
+					return { ok: false, failure: { diagnostics: diagnostics as readonly [unknown, ...unknown[]] } } satisfies ExecutionResult<never, unknown>
 				}
-				return { success: true, value: refined.value }
+				return { ok: true, value: refined.value }
 			}
 		}
 
@@ -244,23 +246,23 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					throw new Error(`widget-core: internal error — resolved method-invoke target "${operation.name}" is missing.`)
 
 				const targetResult = target.public(...args)
-				if (!targetResult.success) {
-					const wrapped = wrapTargetFailure(params, reference, targetResult.issues, related, leafId)
-					return { success: false, issues: wrapped }
+				if (!targetResult.ok) {
+					const wrapped = wrapTargetFailure(params, reference, targetResult.failure.diagnostics, related, leafId)
+					return { ok: false, failure: { diagnostics: wrapped } }
 				}
 
 				const refined = applyRefinements(targetResult.value, leaf.refinements)
 				if (!refined.ok) {
-					const issue = consumerDependencyIssue(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
-					// Deep-freeze both the issue and the single-element array *before* inserting it into
+					const diagnostic = consumerDependencyDiagnostic(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
+					// Deep-freeze both the diagnostic and the single-element array *before* inserting it into
 					// the active collector and returning it to plugin code — otherwise plugin code could
-					// mutate `depResult.issues[0]` between "reported" and "returned", and the mutated
+					// mutate `depResult.diagnostics[0]` between "reported" and "returned", and the mutated
 					// object would then get committed as the consumer's own latest snapshot.
-					const issues = freezeIssueSnapshot([deepFreezeIssue(issue)])
-					reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, refined.received))
-					return { success: false, issues: issues as unknown as readonly [unknown, ...unknown[]] } satisfies ExecutionResult<never, unknown>
+					const diagnostics = freezeDiagnosticSnapshot([deepFreezeDiagnostic(diagnostic)])
+					reportDependencyDiagnostic(params, diagnostic, dependencyDedupeDescriptor(leafId, refined.received))
+					return { ok: false, failure: { diagnostics: diagnostics as readonly [unknown, ...unknown[]] } } satisfies ExecutionResult<never, unknown>
 				}
-				return { success: true, value: refined.value }
+				return { ok: true, value: refined.value }
 			}
 		}
 	}
@@ -269,28 +271,28 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 function wrapTargetFailure(
 	params: DepsMaterializeParams,
 	reference: BlueprintDependencyReference,
-	// State-set wraps `RuntimeStateIssue`; property-get/method-invoke wrap `RuntimePropertyIssue` /
-	// `RuntimeMethodIssue`. Only `.message` (preserved 1:1) and the issue's own identity (as a dedupe
+	// State-set wraps `RuntimeStateDiagnostic`; property-get/method-invoke wrap `RuntimePropertyDiagnostic` /
+	// `RuntimeMethodDiagnostic`. Only `.message` (preserved 1:1) and the diagnostic's own identity (as a dedupe
 	// anchor) are needed here, so the parameter stays structurally minimal rather than importing every
-	// concrete target-issue type.
-	targetIssues: readonly { readonly message: string }[],
-	related: RuntimeIssueLocation,
+	// concrete target-diagnostic type.
+	targetDiagnostics: readonly RuntimeDiagnostic[],
+	related: RuntimeDiagnosticLocation,
 	leafId: number,
 ): readonly [unknown, ...unknown[]] {
-	// Build + deep-freeze every wrapped issue (and pair it with its dedupe anchor) before reporting any
+	// Build + deep-freeze every wrapped diagnostic (and pair it with its dedupe anchor) before reporting any
 	// of them to the active collector or returning the array to plugin code — same ordering rationale
 	// as the refinement-rejection branches above: nothing outside this function ever observes a
-	// not-yet-frozen wrapped issue.
-	const pairs = targetIssues.map((targetIssue) => {
-		const issue = consumerDependencyIssue(params, reference, targetIssue.message, undefined, related)
-		deepFreezeIssue(issue)
-		return { issue, targetIssue }
+	// not-yet-frozen wrapped diagnostic.
+	const pairs = targetDiagnostics.map((targetDiagnostic) => {
+		const diagnostic = consumerDependencyDiagnostic(params, reference, targetDiagnostic.message, undefined, related, targetDiagnostic)
+		deepFreezeDiagnostic(diagnostic)
+		return { diagnostic, targetDiagnostic }
 	})
-	const wrapped = pairs.map(pair => pair.issue)
-	freezeIssueSnapshot(wrapped)
+	const wrapped = pairs.map(pair => pair.diagnostic)
+	freezeDiagnosticSnapshot(wrapped)
 
-	for (const { issue, targetIssue } of pairs)
-		reportDependencyIssue(params, issue, dependencyDedupeDescriptor(leafId, targetIssue))
+	for (const { diagnostic, targetDiagnostic } of pairs)
+		reportDependencyDiagnostic(params, diagnostic, dependencyDedupeDescriptor(leafId, targetDiagnostic))
 
 	return wrapped as unknown as readonly [unknown, ...unknown[]]
 }
@@ -299,8 +301,8 @@ function materializeLeaf(leaf: CompiledDependency, params: DepsMaterializeParams
 	if (leaf.status === 'absent')
 		return materializeAbsentLeaf(leaf.reference.operation)
 
-	// `invalid` is always accompanied by a Blueprint dependency Issue, so a Blueprint carrying one is
-	// always `invalid` — Runtime is only ever created from a valid Blueprint (issue #10 inspection
+	// `invalid` is always accompanied by a Blueprint dependency Diagnostic, so a Blueprint carrying one is
+	// always `invalid` — Runtime is only ever created from a valid Blueprint (diagnostic #10 inspection
 	// amendment "inspection exact API v1 part 1"), so this branch can never actually run.
 	if (leaf.status === 'invalid')
 		throw new Error('widget-core: internal error — an invalid dependency reached Runtime materialization; Runtime must only be created from a valid Blueprint.')

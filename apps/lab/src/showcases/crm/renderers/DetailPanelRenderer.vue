@@ -29,7 +29,7 @@ function fieldText(key: string, format: 'text' | 'currency' | 'badge' | undefine
 
 function badgeColor(key: string): string {
 	switch (record.value?.[key]) {
-		case 'won': return 'var(--lab-color-success)'
+		case 'won': return 'var(--lab-color-ok)'
 		case 'lost': return 'var(--lab-color-danger)'
 		case 'negotiation': return 'var(--lab-color-warning)'
 		default: return 'var(--lab-color-accent)'

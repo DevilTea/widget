@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Conformance tests — issue #13 checkpoint G "Root lifecycle conformance", checkpoint E.
+ * Conformance tests — diagnostic #13 checkpoint G "Root lifecycle conformance", checkpoint E.
  *
  * Exact `WidgetSystem`-instance mismatch rejection, full rendered-subtree remount on Runtime identity
  * replacement (even for structurally identical root id/type), cleanup of every Vue bridge subscription,

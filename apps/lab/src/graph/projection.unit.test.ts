@@ -1,6 +1,6 @@
 /**
  * `projectSemanticGraph()` tests against real `@deviltea/widget-core` fixtures (no mocked core — repo
- * testing policy). Covers issue #13 Phase 5 "Dependency Graph semantic representation": all four
+ * testing policy). Covers diagnostic #13 Phase 5 "Dependency Graph semantic representation": all four
  * operation kinds, absent/invalid stub filtering, isolated-member hiding, `transitivelyWrites`
  * cross-checked against the compiler's own fact, `invalidCycles` overlay, and deterministic output.
  */

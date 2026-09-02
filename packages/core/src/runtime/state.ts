@@ -1,22 +1,22 @@
 /**
  * RuntimeState primitive.
  *
- * Backed by two independent `alien-signals` signals (value, issues) per issue #10 consolidated
+ * Backed by two independent `alien-signals` signals (value, diagnostics) per diagnostic #10 consolidated
  * handoff §13. `attemptSet` is the single authoritative candidate-acceptance path shared by direct
  * `set()`, state initialization (defaults/overrides) and dependency `state-set` crossings.
  */
 
+import type { RelativeValueDiagnosticInput, RuntimeStateDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { RuntimeState } from '../internal/contract'
-import type { RelativeValueIssueInput, RuntimeStateIssue } from '../issue'
 import type { ErasedWidgetStateMemberDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
 import { signal } from 'alien-signals'
-import { EMPTY_ISSUES } from '../issue'
+import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
-import { buildDefaultStateValidationIssue, buildStateValidationIssue, freezeIssueSnapshot } from './issues'
+import { buildDefaultStateValidationDiagnostic, buildStateValidationDiagnostic, freezeDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
 /**
@@ -36,13 +36,13 @@ export interface StateInspectionChannel {
 export interface StatePrimitiveInternal {
 	/** Tracked raw value read. `null` when never successfully initialized/written. */
 	get: () => unknown
-	/** Tracked raw issue-snapshot read. Reading this never touches the value signal. */
-	getIssues: () => readonly RuntimeStateIssue[]
+	/** Tracked raw diagnostic-snapshot read. Reading this never touches the value signal. */
+	getDiagnostics: () => readonly RuntimeStateDiagnostic[]
 	/**
 	 * The authoritative candidate-acceptance path. Used by `RuntimeState.set`, state initialization
 	 * and dependency `state-set` crossings alike.
 	 */
-	attemptSet: (candidate: unknown) => ExecutionResult<unknown, RuntimeStateIssue>
+	attemptSet: (candidate: unknown) => ExecutionResult<unknown, RuntimeStateDiagnostic>
 	/** Readonly-inspection retained-fact channel. See {@link StateInspectionChannel}. */
 	readonly inspection: StateInspectionChannel
 }
@@ -62,10 +62,10 @@ export interface CreateStatePrimitiveParams {
 
 export function createStatePrimitive(context: RuntimeContext, params: CreateStatePrimitiveParams): StatePrimitive {
 	const valueSignal = signal<unknown>(null)
-	const issuesSignal = signal<readonly RuntimeStateIssue[]>(EMPTY_ISSUES)
+	const diagnosticsSignal = signal<readonly RuntimeStateDiagnostic[]>(EMPTY_DIAGNOSTICS)
 
 	let inspectionSnapshot: Readonly<{ value: unknown }> = Object.freeze({ value: null })
-	// Plain lazy-allocated registration list (issue #10 inspection amendment "runtime inspection,
+	// Plain lazy-allocated registration list (diagnostic #10 inspection amendment "runtime inspection,
 	// materialization, disposal, conformance"): never a global registry, allocated only once something
 	// actually subscribes. Not a `Set` keyed by the listener function itself — two independent
 	// `subscribe(sameFn)` calls must stay two independent registrations, exactly like the
@@ -87,39 +87,39 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 
 	/**
 	 * The value write below is what makes the whole dependent Property graph recompute, and those
-	 * recomputes commit their own issue snapshots from inside their evaluators. Wrapping the pipeline in
+	 * recomputes commit their own diagnostic snapshots from inside their evaluators. Wrapping the pipeline in
 	 * `runRuntimeOperation` is only what tells `writeDeferringFlush` when those evaluators are all back
 	 * out of the graph, so the propagations they deferred are released here: still inside the very `set()`
 	 * call that caused them, before its `ExecutionResult` reaches the caller.
 	 */
-	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateIssue> {
+	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
 		return runRuntimeOperation(() => attemptSetWithinOperation(candidate))
 	}
 
-	function attemptSetWithinOperation(candidate: unknown): ExecutionResult<unknown, RuntimeStateIssue> {
-		const collector = createOperationCollector<RelativeValueIssueInput, RuntimeStateIssue>()
+	function attemptSetWithinOperation(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
+		const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeStateDiagnostic>()
 		const ctx = {
 			...params.buildConfigFragment(),
-			addIssue: collector.addIssue,
-			hasAnyIssue: collector.hasAnyIssue,
+			addDiagnostic: collector.addDiagnostic,
+			hasAnyDiagnostic: collector.hasAnyDiagnostic,
 		}
 
 		const isValid = params.definition.validate(candidate, ctx)
 		assertSyncValue(isValid, `State "${params.key}"'s validate`)
 
-		if (!isValid || collector.hasAnyIssue()) {
-			const finalized = collector.finalize(input => buildStateValidationIssue(params.widgetId, params.key, candidate, input))
+		if (!isValid || collector.hasAnyDiagnostic()) {
+			const finalized = collector.finalize(input => buildStateValidationDiagnostic(params.widgetId, params.key, candidate, input))
 			// `finalize()` already returns a deep-frozen array; the generic-fallback branch builds a
-			// fresh array here and needs the same immutable-snapshot treatment (issue #10 issue-snapshot
+			// fresh array here and needs the same immutable-snapshot treatment (diagnostic #10 diagnostic-snapshot
 			// contract).
-			const issues = finalized.length > 0 ? finalized : freezeIssueSnapshot([buildDefaultStateValidationIssue(params.widgetId, params.key, candidate)])
-			writeDeferringFlush(() => issuesSignal(issues))
-			return { success: false, issues: issues as readonly [RuntimeStateIssue, ...RuntimeStateIssue[]] }
+			const diagnostics = finalized.length > 0 ? finalized : freezeDiagnosticSnapshot([buildDefaultStateValidationDiagnostic(params.widgetId, params.key, candidate)])
+			writeDeferringFlush(() => diagnosticsSignal(diagnostics))
+			return { ok: false, failure: { diagnostics: diagnostics as readonly [RuntimeStateDiagnostic, ...RuntimeStateDiagnostic[]] } }
 		}
 
 		// Top-level semantic execution values (state values included) must not be `PromiseLike`; a
 		// candidate that would otherwise be accepted must not become the live State value if it is
-		// thenable (issue #10 amendment "synchronous core boundary and future async seams").
+		// thenable (diagnostic #10 amendment "synchronous core boundary and future async seams").
 		assertSyncValue(candidate, `State "${params.key}"'s value`)
 
 		// Read the pre-write raw value before committing, using the exact strict-inequality comparison
@@ -129,15 +129,15 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		// looser change detector.
 		const previous = valueSignal()
 		valueSignal(candidate)
-		writeDeferringFlush(() => issuesSignal(EMPTY_ISSUES))
+		writeDeferringFlush(() => diagnosticsSignal(EMPTY_DIAGNOSTICS))
 		if (candidate !== previous)
 			publishInspectionSnapshot(candidate)
-		return { success: true, value: candidate }
+		return { ok: true, value: candidate }
 	}
 
 	const internal: StatePrimitiveInternal = {
 		get: () => valueSignal(),
-		getIssues: () => issuesSignal(),
+		getDiagnostics: () => diagnosticsSignal(),
 		attemptSet,
 		inspection: {
 			getSnapshot: () => inspectionSnapshot,
@@ -170,13 +170,13 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 			context.assertActive()
 			return createTrackedSubscription(context, internal.get, listener)
 		},
-		getIssues() {
+		getDiagnostics() {
 			context.assertActive()
-			return internal.getIssues()
+			return internal.getDiagnostics()
 		},
-		subscribeIssues(listener) {
+		subscribeDiagnostics(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, internal.getIssues, listener)
+			return createTrackedSubscription(context, internal.getDiagnostics, listener)
 		},
 	}
 

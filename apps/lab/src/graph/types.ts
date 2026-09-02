@@ -1,7 +1,7 @@
 /**
  * Widget Lab Dependency Graph — semantic graph projection types.
  *
- * Normative source: issue #13 (Widget Lab Phase 5) comment "Dependency Graph semantic representation
+ * Normative source: diagnostic #13 (Widget Lab Phase 5) comment "Dependency Graph semantic representation
  * — accepted". Widgets are visual clusters/namespaces; State/Property/Method members are the semantic
  * vertices. Edge direction is owner -> declared dependency target. This module owns only the Lab-local
  * projection shape; it is a pure readonly view over `@deviltea/widget-core/inspection` facts and never
@@ -13,7 +13,7 @@ import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 
 export type GraphVertexKind = 'state' | 'property' | 'method'
 
-/** Projected edge operation label (issue #13 Phase 5 "Dependency Graph semantic representation"). */
+/** Projected edge operation label (diagnostic #13 Phase 5 "Dependency Graph semantic representation"). */
 export type GraphEdgeOperation = 'reads' | 'invokes' | 'writes'
 
 export type GraphStubStatus = 'absent' | 'invalid'

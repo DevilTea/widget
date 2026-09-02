@@ -1,5 +1,5 @@
 /**
- * Panel-local Dependency Graph edge selection (issue #13 Phase 5 "inspector panel interaction
+ * Panel-local Dependency Graph edge selection (diagnostic #13 Phase 5 "inspector panel interaction
  * contract"). Graph edge selection is exactly the kind of panel-local, snapshot-bound selection that
  * comment calls out: it must reset when the applied Blueprint identity changes (a successful Apply —
  * `store.active.value.blueprint` becomes a new object even when the new Blueprint is invalid), it must

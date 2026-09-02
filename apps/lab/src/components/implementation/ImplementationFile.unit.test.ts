@@ -2,7 +2,7 @@
 /**
  * Latest-selection-wins regression (P3 merge-gate review round 1, blocker 1): `ImplementationFile.vue`
  * is reused across selections with no `:key`, so an out-of-order async `load()` settlement must never
- * let a stale selection overwrite a newer one's `code`/`status` — for either a stale success or a stale
+ * let a stale selection overwrite a newer one's `code`/`status` — for either a stale ok or a stale
  * rejection. Uses two independently-controllable deferred promises so the resolution ORDER (not the
  * selection order) is what this test actually drives, matching the exact hazard the review described:
  * select A -> select B -> B resolves first -> A resolves late.

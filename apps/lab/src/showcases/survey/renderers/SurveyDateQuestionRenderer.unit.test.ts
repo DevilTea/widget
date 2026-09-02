@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 /**
- * Issue #28 accessibility fix — cheap attribute-wiring assertions only (see `TripMetricsRenderer.unit.test.ts`
+ * Diagnostic #28 accessibility fix — cheap attribute-wiring assertions only (see `TripMetricsRenderer.unit.test.ts`
  * for this file's harness style): the visible `label`'s `for` matches the `input`'s `id`, and — because
  * `return` (`SurveyDateQuestion`) is configured with `help` text (`../presets.ts`) — the `input`'s
  * `aria-describedby` matches the help paragraph's `id`. Behavioral focus/keyboard coverage belongs to the
- * real-browser contract suite (issue #28), not here.
+ * real-browser contract suite (diagnostic #28), not here.
  */
 import { createWidgetVueRenderer, useWidget } from '@deviltea/widget-vue'
 import { mount } from '@vue/test-utils'

@@ -1,5 +1,5 @@
 /**
- * Registry-shape sanity (issue #25 P3 Scope F) for all three curated `sources.ts` modules: every
+ * Registry-shape sanity (diagnostic #25 P3 Scope F) for all three curated `sources.ts` modules: every
  * type each registry curates must be a real plugin type on its showcase's `WidgetSystem` — a
  * typo'd/renamed/removed plugin type would otherwise silently curate a dead entry the Implementation
  * panel can never reach.
@@ -28,7 +28,7 @@ describe('curated sources registries', () => {
 			.toEqual([])
 	})
 
-	// Full coverage is a deliberate curation choice (issue #25 Scope C: "Domain helper entries only
+	// Full coverage is a deliberate curation choice (diagnostic #25 Scope C: "Domain helper entries only
 	// where directly relevant"), not a structural requirement — but for these three showcases every
 	// registered plugin type IS curated, so this pins that intentional choice rather than letting a
 	// newly-added plugin silently go uncurated without anyone noticing.

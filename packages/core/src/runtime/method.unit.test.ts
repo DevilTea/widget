@@ -1,9 +1,9 @@
 /**
- * Conformance tests for `RuntimeMethod` — issue #10 COMMENT 26 §8 (Method section).
+ * Conformance tests for `RuntimeMethod` — diagnostic #10 COMMENT 26 §8 (Method section).
  *
  * Normative source: consolidated handoff §15 (`RuntimeMethod`), §12 (dependency-failure 1:1
  * wrapping, absent-target materialization), COMMENT 4 (`ExecutionResult` semantics, "diagnostic
- * context only, not a degraded success value").
+ * context only, not a degraded ok value").
  */
 
 import { describe, expect, it, vi } from 'vitest'
@@ -32,6 +32,7 @@ function createHarness() {
 	let flakyShouldFail = false
 
 	const plugin = createWidgetPlugin('counter')
+		.description('Test widget')
 		.interfaces<MethodInterfaces>()
 		.state(state => state
 			.count({
@@ -61,12 +62,12 @@ function createHarness() {
 			})
 			.flakyExecute({
 				validateArgs: (args): args is [] => args.length === 0,
-				execute: ({ addIssue }) => {
+				execute: ({ addDiagnostic }) => {
 					flakyExecuteCount++
 					if (flakyShouldFail)
-						addIssue({ message: 'flaky execute failed' })
-					// Deliberately returns a truthy/success-looking value even while failing: presence of
-					// issues, not the returned value, decides the ExecutionResult outcome.
+						addDiagnostic({ message: 'flaky execute failed' })
+					// Deliberately returns a truthy/ok-looking value even while failing: presence of
+					// diagnostics, not the returned value, decides the ExecutionResult outcome.
 					return true
 				},
 			})
@@ -75,7 +76,7 @@ function createHarness() {
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ deps }) => {
 					const result = deps.flaky()
-					return result.success ? 1 : 0
+					return result.ok ? 1 : 0
 				},
 			})
 			.incrementViaDep({
@@ -86,7 +87,7 @@ function createHarness() {
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ deps }) => {
 					const current = deps.get()
-					const next = (current.success ? current.value ?? 0 : 0) + 1
+					const next = (current.ok ? current.value ?? 0 : 0) + 1
 					deps.set(next)
 					return next
 				},
@@ -110,7 +111,7 @@ function createHarness() {
 	const blueprint = system.createBlueprint({ id: 'root', type: 'counter' })
 
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	const runtime = blueprint.createRuntime()
 	const widget = runtime.getWidget('root')
@@ -141,19 +142,19 @@ describe('runtimeMethod', () => {
 		// @ts-expect-error — deliberately wrong argument type to trigger a validateArgs rejection.
 		const result = widget.methods.guarded(123)
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
 		expect(counters().guardedExecuteCount)
 			.toBe(0)
 	})
 
-	it('a successful validateArgs allows execute and returns a success ExecutionResult', () => {
+	it('a successful validateArgs allows execute and returns a ok ExecutionResult', () => {
 		const { widget, counters } = createHarness()
 
 		const result = widget.methods.guarded(true)
 
 		expect(result)
-			.toEqual({ success: true, value: 1 })
+			.toEqual({ ok: true, value: 1 })
 		expect(counters().guardedExecuteCount)
 			.toBe(1)
 	})
@@ -168,68 +169,68 @@ describe('runtimeMethod', () => {
 		expect(counters().pingExecuteCount)
 			.toBe(1)
 		expect(result)
-			.toEqual({ success: true, value: 1 })
+			.toEqual({ ok: true, value: 1 })
 	})
 
-	it('plugin addIssue diagnostics during execute produce operation failure even when the callback returns a truthy value', () => {
+	it('plugin addDiagnostic diagnostics during execute produce operation failure even when the callback returns a truthy value', () => {
 		const { widget, setFlakyShouldFail } = createHarness()
 
 		expect(widget.methods.flakyExecute())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 
 		setFlakyShouldFail(true)
 		const result = widget.methods.flakyExecute()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('Expected a failure result.')
 
-		expect(result.issues)
+		expect(result.failure.diagnostics)
 			.toHaveLength(1)
-		const issue = result.issues[0]
-		expect(issue.source.type)
-			.toBe('method-result')
-		if (issue.source.type !== 'method-result')
-			throw new Error('Expected a method-result issue.')
-		// The callback's own truthy return value is diagnostic context only, never a degraded success.
-		expect(issue.source.result)
+		const diagnostic = result.failure.diagnostics[0]
+		expect(diagnostic.code)
+			.toBe('invalid-method-result')
+		if (diagnostic.code !== 'invalid-method-result')
+			throw new Error('Expected a method-result diagnostic.')
+		// The callback's own truthy return value is diagnostic context only, never a degraded ok.
+		expect(diagnostic.result)
 			.toBe(true)
-		expect(issue.message)
+		expect(diagnostic.message)
 			.toBe('flaky execute failed')
 	})
 
-	it('a dependency failure becomes a method-dependency issue wrapped 1:1 from the direct target', () => {
+	it('a dependency failure becomes a method-dependency diagnostic wrapped 1:1 from the direct target', () => {
 		const { widget, setFlakyShouldFail } = createHarness()
 		setFlakyShouldFail(true)
 
 		const result = widget.methods.viaFlaky()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('Expected a failure result.')
 
-		expect(result.issues)
+		expect(result.failure.diagnostics)
 			.toHaveLength(1)
-		const issue = result.issues[0]
-		expect(issue.source.type)
-			.toBe('method-dependency')
-		if (issue.source.type !== 'method-dependency')
-			throw new Error('Expected a method-dependency issue.')
+		const diagnostic = result.failure.diagnostics[0]
+		expect(diagnostic.code)
+			.toBe('dependency-target-failed')
+		if (!('dependency' in diagnostic))
+			throw new Error('Expected a method-dependency diagnostic.')
 
-		expect(issue.source.widgetId)
+		expect(diagnostic.location.widgetId)
 			.toBe('root')
-		expect(issue.source.name)
+		expect(diagnostic.location.name)
 			.toBe('viaFlaky')
-		expect(issue.source.dependency)
+		expect(diagnostic.dependency)
 			.toEqual({
 				target: { type: 'self' },
 				operation: { type: 'method-invoke', name: 'flakyExecute' },
 			})
-		expect(issue.source.related)
+		expect(diagnostic.related)
 			.toEqual([{ type: 'method', widgetId: 'root', name: 'flakyExecute' }])
-		expect(issue.message)
+		expect(diagnostic.message)
 			.toBe('flaky execute failed')
 	})
 
@@ -239,51 +240,51 @@ describe('runtimeMethod', () => {
 		const result = widget.methods.incrementViaDep()
 
 		expect(result)
-			.toEqual({ success: true, value: 1 })
+			.toEqual({ ok: true, value: 1 })
 		expect(widget.state.count.get())
 			.toBe(1)
 
 		const second = widget.methods.incrementViaDep()
 		expect(second)
-			.toEqual({ success: true, value: 2 })
+			.toEqual({ ok: true, value: 2 })
 		expect(widget.state.count.get())
 			.toBe(2)
 	})
 
-	it('an absent optional dependency materializes reads/invocations as success(null) and state.set as a no-op success(candidate)', () => {
+	it('an absent optional dependency materializes reads/invocations as ok(null) and state.set as a no-op ok(candidate)', () => {
 		const { widget } = createHarness()
 
 		const result = widget.methods.viaAbsentParent()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('Expected a success result.')
+		if (!result.ok)
+			throw new Error('Expected a ok result.')
 
 		expect(result.value)
 			.toEqual({
-				read: { success: true, value: null },
-				invoke: { success: true, value: null },
-				write: { success: true, value: 42 },
+				read: { ok: true, value: null },
+				invoke: { ok: true, value: null },
+				write: { ok: true, value: 42 },
 			})
 	})
 })
 
-describe('runtimeMethod — the wrapper is callable and exposes the issue surface', () => {
-	it('exposes getIssues()/subscribeIssues() alongside the call signature', () => {
+describe('runtimeMethod — the wrapper is callable and exposes the diagnostic surface', () => {
+	it('exposes getDiagnostics()/subscribeDiagnostics() alongside the call signature', () => {
 		const { widget } = createHarness()
 
 		expect(typeof widget.methods.ping)
 			.toBe('function')
-		expect(typeof widget.methods.ping.getIssues)
+		expect(typeof widget.methods.ping.getDiagnostics)
 			.toBe('function')
-		expect(typeof widget.methods.ping.subscribeIssues)
+		expect(typeof widget.methods.ping.subscribeDiagnostics)
 			.toBe('function')
-		expect(widget.methods.ping.getIssues())
+		expect(widget.methods.ping.getDiagnostics())
 			.toEqual([])
 
 		const listener = vi.fn()
-		widget.methods.ping.subscribeIssues(listener)
+		widget.methods.ping.subscribeDiagnostics(listener)
 		expect(listener)
 			.not.toHaveBeenCalled()
 	})

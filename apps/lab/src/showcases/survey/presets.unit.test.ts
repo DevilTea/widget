@@ -1,6 +1,6 @@
 /**
  * Both canonical Showcase A presets (checkpoint §6) compile to a valid Blueprint, and the declared
- * `semantics` slot topology is present in Blueprint inspection — issue #13's "semantic application
+ * `semantics` slot topology is present in Blueprint inspection — diagnostic #13's "semantic application
  * structure is not identical to mounted component structure" thesis at the Blueprint level.
  *
  * A renderer-level mounted assertion (that `TripSurveyRenderer` never renders the "semantics" slot
@@ -17,11 +17,11 @@ import { surveyPresets } from './presets'
 import { surveySystem } from './system'
 
 describe('interactive Survey presets', () => {
-	it.each(surveyPresets)('"$id" compiles to a valid Blueprint with no collected issues', (preset) => {
+	it.each(surveyPresets)('"$id" compiles to a valid Blueprint with no collected diagnostics', (preset) => {
 		const blueprint = surveySystem.createBlueprint(JSON.parse(preset.sourceText))
 		expect(blueprint.status)
 			.toBe('valid')
-		expect(blueprint.getCollectedIssues())
+		expect(blueprint.diagnostics)
 			.toEqual([])
 	})
 

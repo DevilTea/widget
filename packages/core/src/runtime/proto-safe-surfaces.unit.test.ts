@@ -2,7 +2,7 @@
  * Regression coverage for PR #12 review finding 3773310848 (`runtime/widget.ts` unsafe `{}` +
  * bracket-assignment for arbitrary member-name surfaces).
  *
- * Normative source: issue #10 builder/member-key amendment — `constructor`/`__proto__` are not
+ * Normative source: diagnostic #10 builder/member-key amendment — `constructor`/`__proto__` are not
  * forbidden member names; implementation must represent member-keyed surfaces with `Map` or a
  * null-prototype record rather than relying on ordinary object prototype semantics. Bracket-assigning a
  * `"__proto__"` key into a plain `{}` mutates the object's own `[[Prototype]]` instead of creating an
@@ -34,6 +34,7 @@ interface ProtoInterfaces {
 }
 
 const plugin = createWidgetPlugin('proto-widget')
+	.description('Test widget')
 	.interfaces<ProtoInterfaces>()
 	.state(state => state[PROTO_KEY]({
 		validate: (input): input is number => typeof input === 'number',
@@ -49,7 +50,7 @@ const plugin = createWidgetPlugin('proto-widget')
 			registerDeps: ({ dep }) => ({ value: dep.self.state.get(PROTO_KEY) }),
 			compute: ({ deps }) => {
 				const result = deps.value()
-				return result.success && typeof result.value === 'number' ? result.value : -1
+				return result.ok && typeof result.value === 'number' ? result.value : -1
 			},
 		}))
 	.methods(methods => methods.constructor({
@@ -62,7 +63,7 @@ function createHarness() {
 	const system = createWidgetSystem({ plugins: [plugin] })
 	const blueprint = system.createBlueprint({ id: 'root', type: 'proto-widget' })
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	const runtime = blueprint.createRuntime()
 	const widget = runtime.getWidget('root')
@@ -85,7 +86,7 @@ describe('runtimeWidget surfaces stay prototype-safe for special member names', 
 		const result = state.set(5)
 
 		expect(result)
-			.toEqual({ success: true, value: 5 })
+			.toEqual({ ok: true, value: 5 })
 		expect(state.get())
 			.toBe(5)
 		expect(listener)
@@ -99,7 +100,7 @@ describe('runtimeWidget surfaces stay prototype-safe for special member names', 
 		const property = widget.properties[PROTO_KEY]
 
 		expect(property.get())
-			.toEqual({ success: true, value: 2 })
+			.toEqual({ ok: true, value: 2 })
 		// Reading through the member surface never resolves to a "real" prototype object.
 		expect(typeof property.get)
 			.toBe('function')
@@ -109,10 +110,10 @@ describe('runtimeWidget surfaces stay prototype-safe for special member names', 
 		const { widget } = createHarness()
 
 		expect(widget.methods.constructor())
-			.toEqual({ success: true, value: 3 })
+			.toEqual({ ok: true, value: 3 })
 		expect(widget.methods.constructor)
 			.not.toBe(Object.prototype.constructor)
-		expect(typeof widget.methods.constructor.getIssues)
+		expect(typeof widget.methods.constructor.getDiagnostics)
 			.toBe('function')
 	})
 
@@ -122,7 +123,7 @@ describe('runtimeWidget surfaces stay prototype-safe for special member names', 
 		widget.state[PROTO_KEY].set(42)
 
 		expect(widget.properties.viaProtoState.get())
-			.toEqual({ success: true, value: 42 })
+			.toEqual({ ok: true, value: 42 })
 	})
 
 	it('the state/properties/methods surfaces are null-prototype records', () => {

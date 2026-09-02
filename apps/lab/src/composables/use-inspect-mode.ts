@@ -1,5 +1,5 @@
 /**
- * Preview panel's Inspect-mode toggle/hover state (issue #25 P2 "Preview -> semantic inspector bridge").
+ * Preview panel's Inspect-mode toggle/hover state (diagnostic #25 P2 "Preview -> semantic inspector bridge").
  *
  * Off by default. `active` gates every pointer/click behavior `PreviewPanel.vue` wires up around it;
  * flipping `active` back to `false` (via `toggle()`/`disable()`, or Escape while active) must restore

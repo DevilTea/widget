@@ -43,7 +43,7 @@ describe('crmTourScript "search" step predicate', () => {
 		search.state.value.set('Borealis')
 		const filtered = query.properties.filteredDeals.get()
 		forceRealEvaluation(query)
-		expect(filtered.success && filtered.value.map(deal => deal.id))
+		expect(filtered.ok && filtered.value.map(deal => deal.id))
 			.toEqual(['deal-2']) // Borealis Retail only — a genuinely narrowing, otherwise-legitimate search.
 
 		const reader = createRuntimeReader(runtime)
@@ -82,7 +82,7 @@ describe('crmTourScript "search" step predicate', () => {
 		search.state.value.set('Aurora')
 		const filtered = query.properties.filteredDeals.get()
 		forceRealEvaluation(query)
-		expect(filtered.success && filtered.value.map(deal => deal.id))
+		expect(filtered.ok && filtered.value.map(deal => deal.id))
 			.toEqual(['deal-1'])
 
 		const reader = createRuntimeReader(runtime)
@@ -93,7 +93,7 @@ describe('crmTourScript "search" step predicate', () => {
 		const selectRowStep = crmTourScript.steps.find(step => step.id === 'select-row')!
 		expect(selectRowStep.stages[0].isComplete)
 			.toBeDefined()
-		expect(filtered.success && filtered.value.some(deal => deal.id === 'deal-1'))
+		expect(filtered.ok && filtered.value.some(deal => deal.id === 'deal-1'))
 			.toBe(true)
 	})
 

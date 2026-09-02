@@ -3,27 +3,27 @@
  *
  * Lazy/cached `alien-signals` computed whose reactive value is the fresh completed
  * `ExecutionResult` snapshot (not the raw value alone), so every actual recompute has fresh identity
- * and notifies subscribers exactly once even when the raw value compares equal. Issues live on a
- * separate signal written as a side effect of evaluation; `subscribeIssues`/`getIssues` only ever
+ * and notifies subscribers exactly once even when the raw value compares equal. Diagnostics live on a
+ * separate signal written as a side effect of evaluation; `subscribeDiagnostics`/`getDiagnostics` only ever
  * touch that signal, never the computed, so they never activate evaluation. That in-evaluator write is
- * committed through `writeDeferringFlush`, so watching the issues channel can never perturb value
+ * committed through `writeDeferringFlush`, so watching the diagnostics channel can never perturb value
  * propagation (see the `alien-signals@3.2.1` mechanism documented on that helper).
  *
- * Normative source: issue #10 consolidated handoff §14, amendment "Implementation verification —
+ * Normative source: diagnostic #10 consolidated handoff §14, amendment "Implementation verification —
  * alien-signals@3.2.1 conformance" (#4).
  */
 
+import type { RelativeValueDiagnosticInput, RuntimePropertyDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { RuntimeProperty } from '../internal/contract'
-import type { RelativeValueIssueInput, RuntimePropertyIssue } from '../issue'
 import type { ErasedWidgetPropertyDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
-import type { ActiveIssueSink, RuntimeContext } from './context'
+import type { ActiveDiagnosticSink, RuntimeContext } from './context'
 import { computed, signal } from 'alien-signals'
-import { EMPTY_ISSUES } from '../issue'
+import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
-import { buildPropertyResultIssue, toIssueSnapshot } from './issues'
+import { buildPropertyResultDiagnostic, toDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
 /**
@@ -32,7 +32,7 @@ import { assertSyncValue } from './sync'
  */
 export type PropertyInspectionSnapshot
 	= | { readonly status: 'never-evaluated' }
-		| { readonly status: 'completed', readonly result: ExecutionResult<unknown, RuntimePropertyIssue> }
+		| { readonly status: 'completed', readonly result: ExecutionResult<unknown, RuntimePropertyDiagnostic> }
 
 /** The frozen singleton every Property inspection channel starts at and returns to before first evaluation. */
 const NEVER_EVALUATED_SNAPSHOT: PropertyInspectionSnapshot = Object.freeze({ status: 'never-evaluated' })
@@ -50,9 +50,9 @@ export interface PropertyInspectionChannel {
 
 export interface PropertyPrimitiveInternal {
 	/** Tracked, lazy/cached read of the completed `ExecutionResult` snapshot. */
-	getResult: () => ExecutionResult<unknown, RuntimePropertyIssue>
-	/** Tracked raw issue-snapshot read. Reading this never activates the computed. */
-	getIssues: () => readonly RuntimePropertyIssue[]
+	getResult: () => ExecutionResult<unknown, RuntimePropertyDiagnostic>
+	/** Tracked raw diagnostic-snapshot read. Reading this never activates the computed. */
+	getDiagnostics: () => readonly RuntimePropertyDiagnostic[]
 	/** Readonly-inspection retained-fact channel. See {@link PropertyInspectionChannel}. */
 	readonly inspection: PropertyInspectionChannel
 }
@@ -73,7 +73,7 @@ export interface CreatePropertyPrimitiveParams {
 }
 
 export function createPropertyPrimitive(context: RuntimeContext, params: CreatePropertyPrimitiveParams): PropertyPrimitive {
-	const issuesSignal = signal<readonly RuntimePropertyIssue[]>(EMPTY_ISSUES)
+	const diagnosticsSignal = signal<readonly RuntimePropertyDiagnostic[]>(EMPTY_DIAGNOSTICS)
 
 	let inspectionSnapshot: PropertyInspectionSnapshot = NEVER_EVALUATED_SNAPSHOT
 	// Plain lazy-allocated registration list (not a `Set` keyed by the listener function itself — two
@@ -81,9 +81,9 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	// alien-signals-effect-backed `createTrackedSubscription` never dedupes by listener identity either).
 	interface ListenerEntry { readonly listener: (snapshot: PropertyInspectionSnapshot) => void }
 	let inspectionListeners: ListenerEntry[] | null = null
-	let lastPublishedResult: ExecutionResult<unknown, RuntimePropertyIssue> | null = null
+	let lastPublishedResult: ExecutionResult<unknown, RuntimePropertyDiagnostic> | null = null
 
-	function publishInspectionCompletion(result: ExecutionResult<unknown, RuntimePropertyIssue>): void {
+	function publishInspectionCompletion(result: ExecutionResult<unknown, RuntimePropertyDiagnostic>): void {
 		inspectionSnapshot = Object.freeze({ status: 'completed', result })
 		if (inspectionListeners === null)
 			return
@@ -95,10 +95,10 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			invokeListenerIsolated(entry.listener, inspectionSnapshot)
 	}
 
-	const resultComputed = computed<ExecutionResult<unknown, RuntimePropertyIssue>>(() => {
-		const collector = createOperationCollector<RelativeValueIssueInput, RuntimePropertyIssue>()
-		const sink: ActiveIssueSink = {
-			addFinalizedIssue: (issue, dedupe) => collector.addFinalizedIssue(issue as RuntimePropertyIssue, dedupe),
+	const resultComputed = computed<ExecutionResult<unknown, RuntimePropertyDiagnostic>>(() => {
+		const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimePropertyDiagnostic>()
+		const sink: ActiveDiagnosticSink = {
+			addFinalizedDiagnostic: (diagnostic, dedupe) => collector.addFinalizedDiagnostic(diagnostic as RuntimePropertyDiagnostic, dedupe),
 		}
 
 		const ctx = {
@@ -106,30 +106,30 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			blueprint: params.blueprintView,
 			deps: params.deps,
 			...params.buildConfigFragment(),
-			addIssue: collector.addIssue,
-			hasAnyIssue: collector.hasAnyIssue,
+			addDiagnostic: collector.addDiagnostic,
+			hasAnyDiagnostic: collector.hasAnyDiagnostic,
 		}
 
 		const value = context.withActiveCollector(sink, () => params.definition.compute(ctx))
 		assertSyncValue(value, `Property "${params.name}"'s compute`)
 
-		const issues = collector.finalize(input => buildPropertyResultIssue(params.widgetId, params.name, value, input))
-		// Commit the snapshot here — the fact-commit point every consumer's `getIssues()` must already
+		const diagnostics = collector.finalize(input => buildPropertyResultDiagnostic(params.widgetId, params.name, value, input))
+		// Commit the snapshot here — the fact-commit point every consumer's `getDiagnostics()` must already
 		// reflect — but hold its *propagation* inside an alien batch until this evaluation (and whatever
 		// drove it) is done. A watched signal write from inside a computed's own evaluator starts a nested
 		// alien-signals flush while this computed is mid-`updateComputed`, which permanently marks the
 		// Property's other dependents clean-but-stale; `writeDeferringFlush` documents the exact
 		// alien-signals@3.2.1 mechanism.
-		writeDeferringFlush(() => issuesSignal(toIssueSnapshot(issues)))
+		writeDeferringFlush(() => diagnosticsSignal(toDiagnosticSnapshot(diagnostics)))
 
 		// The alien computed caches this exact object as its reactive value and reuses it for every
 		// `.get()`/dependency read until the next actual recompute; shallow-freeze the wrapper so external
-		// code cannot rewrite `.value`/`.success` in place with no invalidation. `issues` is already
+		// code cannot rewrite `.value`/`.ok` in place with no invalidation. `diagnostics` is already
 		// deep-frozen (via `finalize()`); `value` is the plugin's own payload and is deliberately left
 		// untouched.
-		const result: ExecutionResult<unknown, RuntimePropertyIssue> = issues.length > 0
-			? { success: false, issues: issues as readonly [RuntimePropertyIssue, ...RuntimePropertyIssue[]] }
-			: { success: true, value }
+		const result: ExecutionResult<unknown, RuntimePropertyDiagnostic> = diagnostics.length > 0
+			? { ok: false, failure: { diagnostics: diagnostics as readonly [RuntimePropertyDiagnostic, ...RuntimePropertyDiagnostic[]] } }
+			: { ok: true, value }
 		return Object.freeze(result)
 	})
 
@@ -150,9 +150,9 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 * comparing by reference — never by value — still notifies twice for two equal-value completions while
 	 * never re-publishing a merely-re-read, already-cached result.
 	 */
-	function getResultWithInspectionPublish(): ExecutionResult<unknown, RuntimePropertyIssue> {
+	function getResultWithInspectionPublish(): ExecutionResult<unknown, RuntimePropertyDiagnostic> {
 		// `runRuntimeOperation` only records that an evaluation may start here: when this read is the
-		// outermost such call, the issue-snapshot propagations deferred during the evaluation are released
+		// outermost such call, the diagnostic-snapshot propagations deferred during the evaluation are released
 		// as soon as the computed has committed — before the inspection publication below, exactly the
 		// order a direct in-evaluator write produced. A nested read (a dependent Property's evaluator, or
 		// an effect run inside a state write's flush) leaves the release to the outermost call instead.
@@ -166,7 +166,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 
 	const internal: PropertyPrimitiveInternal = {
 		getResult: getResultWithInspectionPublish,
-		getIssues: () => issuesSignal(),
+		getDiagnostics: () => diagnosticsSignal(),
 		inspection: {
 			getSnapshot: () => inspectionSnapshot,
 			subscribe: (listener) => {
@@ -194,13 +194,13 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			context.assertActive()
 			return createTrackedSubscription(context, internal.getResult, listener)
 		},
-		getIssues() {
+		getDiagnostics() {
 			context.assertActive()
-			return internal.getIssues()
+			return internal.getDiagnostics()
 		},
-		subscribeIssues(listener) {
+		subscribeDiagnostics(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, internal.getIssues, listener)
+			return createTrackedSubscription(context, internal.getDiagnostics, listener)
 		},
 	}
 

@@ -1,5 +1,5 @@
 /**
- * Conformance tests for issue #10 COMMENT 26 §10 — the `RuntimeMethod` invocation as an
+ * Conformance tests for diagnostic #10 COMMENT 26 §10 — the `RuntimeMethod` invocation as an
  * `alien-signals` batch boundary, observed only through public behavior.
  *
  * Normative source: consolidated handoff §15, amendment "RuntimeMethod invocation as alien-signals
@@ -31,6 +31,7 @@ interface BatchInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('counter')
+		.description('Test widget')
 		.interfaces<BatchInterfaces>()
 		.state(state => state
 			.count({
@@ -42,7 +43,7 @@ function createHarness() {
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps }) => {
 					const result = deps.count()
-					return result.success ? (result.value ?? 0) * 2 : -1
+					return result.ok ? (result.value ?? 0) * 2 : -1
 				},
 			}))
 		.methods(methods => methods
@@ -54,7 +55,7 @@ function createHarness() {
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ deps }) => {
 					const current = deps.get()
-					const base = current.success ? current.value ?? 0 : 0
+					const base = current.ok ? current.value ?? 0 : 0
 					deps.set(base + 1)
 					deps.set(base + 2)
 					return base + 2
@@ -68,7 +69,7 @@ function createHarness() {
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ deps }) => {
 					const current = deps.get()
-					const next = (current.success ? current.value ?? 0 : 0) + 10
+					const next = (current.ok ? current.value ?? 0 : 0) + 10
 					deps.set(next)
 					return next
 				},
@@ -83,7 +84,7 @@ function createHarness() {
 				execute: ({ deps }) => {
 					deps.invokeInner()
 					const current = deps.get()
-					const next = (current.success ? current.value ?? 0 : 0) + 1
+					const next = (current.ok ? current.value ?? 0 : 0) + 1
 					deps.set(next)
 					return next
 				},
@@ -97,7 +98,7 @@ function createHarness() {
 				execute: ({ deps }) => {
 					deps.set(999)
 					const after = deps.get()
-					return after.success ? after.value : null
+					return after.ok ? after.value : null
 				},
 			})
 			.propertyRecompute({
@@ -109,15 +110,15 @@ function createHarness() {
 				execute: ({ deps }) => {
 					deps.set(50)
 					const result = deps.doubled()
-					return result.success ? result.value : null
+					return result.ok ? result.value : null
 				},
 			})
 			.failAfterWrite({
 				registerDeps: ({ dep }) => ({ set: dep.self.state.set('count') }),
 				validateArgs: (args): args is [] => args.length === 0,
-				execute: ({ deps, addIssue }) => {
+				execute: ({ deps, addDiagnostic }) => {
 					deps.set(777)
-					addIssue({ message: 'semantic failure after a committed write' })
+					addDiagnostic({ message: 'semantic failure after a committed write' })
 					return 0
 				},
 			})
@@ -135,7 +136,7 @@ function createHarness() {
 	const blueprint = system.createBlueprint({ id: 'root', type: 'counter' })
 
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	const runtime = blueprint.createRuntime()
 	const widget = runtime.getWidget('root')
@@ -155,7 +156,7 @@ describe('runtimeMethod as an alien-signals batch boundary', () => {
 		const result = widget.methods.bumpTwice()
 
 		expect(result)
-			.toEqual({ success: true, value: 2 })
+			.toEqual({ ok: true, value: 2 })
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
 		expect(listener)
@@ -172,7 +173,7 @@ describe('runtimeMethod as an alien-signals batch boundary', () => {
 		// inner writes count -> 10, outer then writes count -> 11; only one stabilized notification for
 		// the whole nested call, carrying the final value only.
 		expect(result)
-			.toEqual({ success: true, value: 11 })
+			.toEqual({ ok: true, value: 11 })
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
 		expect(listener)
@@ -185,7 +186,7 @@ describe('runtimeMethod as an alien-signals batch boundary', () => {
 		const result = widget.methods.syncRead()
 
 		expect(result)
-			.toEqual({ success: true, value: 999 })
+			.toEqual({ ok: true, value: 999 })
 	})
 
 	it('an explicit Property get inside a Method recomputes against the batch\'s pending writes', () => {
@@ -194,7 +195,7 @@ describe('runtimeMethod as an alien-signals batch boundary', () => {
 		const result = widget.methods.propertyRecompute()
 
 		expect(result)
-			.toEqual({ success: true, value: 100 })
+			.toEqual({ ok: true, value: 100 })
 	})
 
 	it('is not rollback/transaction semantics: a later semantic failure does not undo an already-committed write', () => {
@@ -202,7 +203,7 @@ describe('runtimeMethod as an alien-signals batch boundary', () => {
 
 		const result = widget.methods.failAfterWrite()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
 		expect(widget.state.count.get())
 			.toBe(777)
@@ -225,7 +226,7 @@ describe('runtimeMethod as an alien-signals batch boundary', () => {
 		const result = widget.state.count.set(42)
 
 		expect(result)
-			.toEqual({ success: true, value: 42 })
+			.toEqual({ ok: true, value: 42 })
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
 		expect(listener)

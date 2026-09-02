@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 /**
- * Conformance tests — issue #13 checkpoint G "Property conformance", checkpoints C and F.
+ * Conformance tests — diagnostic #13 checkpoint G "Property conformance", checkpoints C and F.
  *
  * Obtaining `useProperties()` or a member off it never evaluates the Property; the first ref read may
- * activate it; success projects to the value, failure projects to `null` (never `ExecutionResult`,
+ * activate it; ok projects to the value, failure projects to `null` (never `ExecutionResult`,
  * never a last-successful fallback); diagnostics stay a separate reactive channel.
  */
 
@@ -44,7 +44,7 @@ describe('property conformance', () => {
 			.toBeNull()
 		// Sanity: the underlying Runtime Property really is failing, not merely returning `null` as a
 		// successful value.
-		expect(getLabelWidget(runtime, 'p3').properties.failing.get().success)
+		expect(getLabelWidget(runtime, 'p3').properties.failing.get().ok)
 			.toBe(false)
 	})
 
@@ -75,31 +75,31 @@ describe('property conformance', () => {
 			.toBeNull()
 	})
 
-	it('projects property issues on a separate channel: reading it never activates evaluation, but it reflects the issues a real evaluation wrote', () => {
+	it('projects property diagnostics on a separate channel: reading it never activates evaluation, but it reflects the diagnostics a real evaluation wrote', () => {
 		const runtime = createFixtureRuntime({ id: 'p6', type: 'Label' })
 		const widget = getLabelWidget(runtime, 'p6')
 		const getSpy = vi.spyOn(widget.properties.failing, 'get')
 
 		const { bridge } = mountWidgetBridge(runtime, 'p6', LabelPlugin)
-		const { failing: failingIssues } = bridge.usePropertyIssues()
+		const { failing: failingDiagnostics } = bridge.usePropertyDiagnostics()
 
-		// Before anything evaluates the Property, its issue snapshot is still the canonical empty one,
-		// and merely reading the issues channel never itself activates evaluation (core's
-		// `getIssues()`/`subscribeIssues()` only ever touch the issue signal, never the computed).
-		expect(failingIssues.value)
+		// Before anything evaluates the Property, its diagnostic snapshot is still the canonical empty one,
+		// and merely reading the diagnostics channel never itself activates evaluation (core's
+		// `getDiagnostics()`/`subscribeDiagnostics()` only ever touch the diagnostic signal, never the computed).
+		expect(failingDiagnostics.value)
 			.toEqual([])
 		expect(getSpy).not.toHaveBeenCalled()
 
-		// Activating the value channel evaluates the Property once, writing its issue snapshot as a
-		// side effect — which the already-obtained issues ref then reflects.
+		// Activating the value channel evaluates the Property once, writing its diagnostic snapshot as a
+		// side effect — which the already-obtained diagnostics ref then reflects.
 		const { failing } = bridge.useProperties()
 		expect(failing.value)
 			.toBeNull()
 
-		expect(failingIssues.value)
+		expect(failingDiagnostics.value)
 			.toHaveLength(1)
-		expect(failingIssues.value)
-			.toEqual(widget.properties.failing.getIssues())
+		expect(failingDiagnostics.value)
+			.toEqual(widget.properties.failing.getDiagnostics())
 	})
 
 	it('cleans up the property subscription when the owning component unmounts', () => {

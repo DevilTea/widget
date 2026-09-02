@@ -9,7 +9,7 @@
  * disposed.
  *
  * `switchShowcase()` is the analogous, larger-grained replacement for the showcase registry itself
- * (issue #13 "Source Apply lifecycle" checkpoint, "Presets / showcase changes": "Switching showcases
+ * (diagnostic #13 "Source Apply lifecycle" checkpoint, "Presets / showcase changes": "Switching showcases
  * ... detaches/disposes the old Runtime, switches showcase context, loads the showcase source, and
  * then uses the same Apply pipeline").
  *
@@ -39,7 +39,7 @@
  *
  * Apply's command-start capture/concurrency stays at command-call time (PR #19 review 4940721401):
  * the paragraph above says `apply()`/`applyPreset()` "route through" `enqueue()`, but they must not be
- * deferred* by it — the locked Apply lifecycle (issue #13 comment 5289958311) requires the draft to be
+ * deferred* by it — the locked Apply lifecycle (diagnostic #13 comment 5289958311) requires the draft to be
  * captured, and a concurrent Apply to be rejected, synchronously at the moment `apply()`/`applyPreset()`
  * is called, not whenever the queue happens to reach that transaction. So `LabStore.apply()` and
  * `applyPreset()` call into `session.apply()`/`session.applyPreset()` directly and synchronously — outside
@@ -63,7 +63,7 @@
  * occupies the lifecycle boundary, including the queued-but-not-yet-started gap. `apply()`/`applyPreset()`
  * check it synchronously, first, before touching `session` at all: while any switch is outstanding they
  * reject immediately with the same `{ status: 'skipped-concurrent' }` shape Apply already uses for "an
- * Apply is already running" (issue #13 comment 5289958311's "Apply is disabled while one is running",
+ * Apply is already running" (diagnostic #13 comment 5289958311's "Apply is disabled while one is running",
  * read to cover the lifecycle boundary in general, not only a same-session Apply) — never queuing a
  * second real mutation behind the switch. `switchShowcase()` itself keeps its existing behavior toward a
  * concurrent Apply unchanged: it still *waits* (via `enqueue()`) rather than rejecting, because an
@@ -82,7 +82,7 @@ import { LabSession } from '../lab/session'
 import { defaultShowcase, showcases } from '../showcases/registry'
 
 /**
- * `'preview'` is included (issue #25 P1) even though Preview lives in its own always-visible Dockview
+ * `'preview'` is included (diagnostic #25 P1) even though Preview lives in its own always-visible Dockview
  * group, never the same tab group as the other four: it lets `Workbench.vue`'s tab-activation bridge
  * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all five canonical panels
  * uniformly — activating Preview's own single-panel group is a harmless no-op, never a layout change.
@@ -106,7 +106,7 @@ export interface LabStore {
 	readonly presets: Readonly<Ref<readonly ShowcasePreset[]>>
 	readonly activeTab: Ref<LabToolTab>
 	/**
-	 * Dependency Graph presentation preferences (issue #13 Phase 5 "inspector panel interaction
+	 * Dependency Graph presentation preferences (diagnostic #13 Phase 5 "inspector panel interaction
 	 * contract"): panel-local, and — unlike snapshot-bound focus/selections — deliberately not reset by
 	 * `session.subscribe()`/Apply, since these plain refs live on the `LabStore` object itself rather than
 	 * being derived from `session`.
@@ -171,7 +171,7 @@ export function createLabStore(): LabStore {
 	 *
 	 * Command-start capture/concurrency (PR #19 review 4940721401): this barrier must never be the thing
 	 * that decides *when* an Apply's own draft capture or `isApplying` concurrency guard runs — those are
-	 * `LabSession.apply()`'s contract (issue #13 comment 5289958311) and must fire synchronously, at
+	 * `LabSession.apply()`'s contract (diagnostic #13 comment 5289958311) and must fire synchronously, at
 	 * command-call time. `apply()`/`applyPreset()` below therefore call into `session` directly, outside
 	 * `task`, and only hand `enqueue()` the resulting (already in-flight) promise to await — `enqueue()`
 	 * is purely the mutual-exclusion barrier that keeps `switchShowcase()` (whose own `task`, unlike
@@ -189,7 +189,7 @@ export function createLabStore(): LabStore {
 
 	function createHooks() {
 		return {
-			// Replacement ordering seam (issue #13 Phase 4 Apply-lifecycle comment): clearing the
+			// Replacement ordering seam (diagnostic #13 Phase 4 Apply-lifecycle comment): clearing the
 			// Preview runtime unmounts the old `WidgetRenderer` subtree, and `nextTick()` waits for
 			// that unmount to actually commit before `LabSession` disposes the old Runtime.
 			detachPreview: async () => {
@@ -212,7 +212,7 @@ export function createLabStore(): LabStore {
 	function attachInitial(showcase: ShowcaseEntry): void {
 		// The one legitimate use of `LabSession`'s constructor-seeded Runtime as final state: the very
 		// first session this Lab instance ever creates, with no prior Preview to detach and nothing to
-		// race against (issue #13 "Source Apply lifecycle" checkpoint's "initial-boot exception").
+		// race against (diagnostic #13 "Source Apply lifecycle" checkpoint's "initial-boot exception").
 		session = new LabSession({
 			system: showcase.system,
 			initialSourceText: showcase.defaultPreset.sourceText,
@@ -351,7 +351,7 @@ export function createLabStore(): LabStore {
 		// `enqueue()`. See the "Command-start capture/concurrency" note above `enqueue()` for why: an
 		// async function's own body runs synchronously up to its first `await`, so calling it inline is
 		// what lets `LabSession.apply()`'s own capture-the-draft and `isApplying` concurrency guard fire
-		// immediately, in this turn, exactly as the locked Apply lifecycle (issue #13 comment 5289958311)
+		// immediately, in this turn, exactly as the locked Apply lifecycle (diagnostic #13 comment 5289958311)
 		// requires. `enqueue()` only wraps the resulting (already in-flight) promise, so it still serves
 		// as the mutual-exclusion barrier against a concurrent `switchShowcase()`.
 		apply: () => {
@@ -397,7 +397,7 @@ export function createLabStore(): LabStore {
 		},
 		setFocus: next => focusStore.setFocus(next),
 		/**
-		 * Final application teardown. Widget Lab is the Runtime owner (issue #13 Phase 4 Apply-lifecycle
+		 * Final application teardown. Widget Lab is the Runtime owner (diagnostic #13 Phase 4 Apply-lifecycle
 		 * comment), so this disposes the last active Runtime in addition to tearing down Lab-local
 		 * subscriptions/focus listeners. The Preview `WidgetRenderer` subtree must have already unmounted
 		 * before this runs — the caller (`App.vue`) invokes this from `onUnmounted`, which Vue guarantees

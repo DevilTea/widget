@@ -1,19 +1,19 @@
 /**
  * Dependency declaration grammar and registered/executed dependency type mapping.
  *
- * Normative source: issue #10 checkpoint D, amendments "RegisteredDeps recursive shape + conservative
+ * Normative source: diagnostic #10 checkpoint D, amendments "RegisteredDeps recursive shape + conservative
  * optional typing", "dependency fluent grammar locked", "dependency resolution and compiled-edge
  * invariants" and consolidated handoff §8.
  */
 
-import type { ExecutionResult } from './execution-result'
 import type {
 	BlueprintDependencyOperation,
 	BlueprintDependencyReference,
 	BlueprintDependencyTarget,
-	RuntimeMethodDependencyIssue,
-	RuntimePropertyDependencyIssue,
-} from './issue'
+	RuntimeMethodDependencyDiagnostic,
+	RuntimePropertyDependencyDiagnostic,
+} from './diagnostic'
+import type { ExecutionResult } from './execution-result'
 import type {
 	HasWidgetCapability,
 	WidgetId,
@@ -134,9 +134,9 @@ export type RegisteredDeps
  */
 export type EmptyRegisteredDeps = Record<never, never>
 
-type DependencyIssueOf<Consumer extends DependencyConsumer> = Consumer extends 'property'
-	? RuntimePropertyDependencyIssue
-	: RuntimeMethodDependencyIssue
+type DependencyDiagnosticOf<Consumer extends DependencyConsumer> = Consumer extends 'property'
+	? RuntimePropertyDependencyDiagnostic
+	: RuntimeMethodDependencyDiagnostic
 
 /**
  * Runtime materialization of one branded dependency leaf.
@@ -146,13 +146,13 @@ type DependencyIssueOf<Consumer extends DependencyConsumer> = Consumer extends '
  */
 export type ToExecutedDep<Expression, Consumer extends DependencyConsumer> = Expression extends { readonly [depExpressionBrand]: infer Meta }
 	? Meta extends { readonly kind: 'state-get', readonly value: infer Value, readonly optional: infer Optional extends boolean }
-		? () => ExecutionResult<MaybeOptional<Value, Optional>, DependencyIssueOf<Consumer>>
+		? () => ExecutionResult<MaybeOptional<Value, Optional>, DependencyDiagnosticOf<Consumer>>
 		: Meta extends { readonly kind: 'state-set', readonly input: infer Input, readonly optional: boolean }
-			? (candidate: Input) => ExecutionResult<Input, DependencyIssueOf<Consumer>>
+			? (candidate: Input) => ExecutionResult<Input, DependencyDiagnosticOf<Consumer>>
 			: Meta extends { readonly kind: 'property-get', readonly value: infer Value, readonly optional: infer Optional extends boolean }
-				? () => ExecutionResult<MaybeOptional<Value, Optional>, DependencyIssueOf<Consumer>>
+				? () => ExecutionResult<MaybeOptional<Value, Optional>, DependencyDiagnosticOf<Consumer>>
 				: Meta extends { readonly kind: 'method-invoke', readonly args: infer Args extends readonly unknown[], readonly value: infer Value, readonly optional: infer Optional extends boolean }
-					? (...args: Args) => ExecutionResult<MaybeOptional<Value, Optional>, DependencyIssueOf<Consumer>>
+					? (...args: Args) => ExecutionResult<MaybeOptional<Value, Optional>, DependencyDiagnosticOf<Consumer>>
 					: never
 	: never
 

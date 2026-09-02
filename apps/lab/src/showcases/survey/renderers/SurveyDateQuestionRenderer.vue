@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /**
  * Thin presentation only: reads/writes `answer` through `useState()`, reads `label`/`help` through
- * `useProperties()`, and surfaces `state-validation` issues through `useStateIssues()`. No date-order
+ * `useProperties()`, and surfaces `state-validation` diagnostics through `useStateDiagnostics()`. No date-order
  * or other cross-field validation lives here — that stays in `TripMetrics` (checkpoint §2/§4).
  *
- * Issue #28 accessibility fix: `useId()`-derived `for`/`id` ties the visible `label` to the `input`;
+ * Diagnostic #28 accessibility fix: `useId()`-derived `for`/`id` ties the visible `label` to the `input`;
  * when `help` is configured, its paragraph gets its own id and the `input` points to it via
  * `aria-describedby` (help text is supplementary, not the accessible name).
  *
- * `data-tutorial-target` (issue #25 P1): this component renders Departure/Return alike, so the target
+ * `data-tutorial-target` (diagnostic #25 P1): this component renders Departure/Return alike, so the target
  * key is looked up by `label` (`SURVEY_DATE_QUESTION_TARGETS`) rather than hardcoded — see that module's
  * header for why label, not widget id, is what a renderer can see.
  */
@@ -18,10 +18,10 @@ import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { SURVEY_DATE_QUESTION_TARGETS } from '../../../tutorial/survey-target-map'
 import { SurveyDateQuestionPlugin } from '../plugins/survey-questions'
 
-const { useState, useProperties, useStateIssues, widgetId, widgetType } = useWidget(SurveyDateQuestionPlugin)
+const { useState, useProperties, useStateDiagnostics, widgetId, widgetType } = useWidget(SurveyDateQuestionPlugin)
 const { answer } = useState()
 const { label, help } = useProperties()
-const { answer: answerIssues } = useStateIssues()
+const { answer: answerDiagnostics } = useStateDiagnostics()
 
 const inputId = useId()
 const helpId = useId()
@@ -60,11 +60,11 @@ function onChange(event: Event): void {
 			@change="onChange"
 		>
 		<p
-			v-for="issue in answerIssues"
-			:key="issue.message"
+			v-for="diagnostic in answerDiagnostics"
+			:key="diagnostic.message"
 			:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-danger)' })"
 		>
-			{{ issue.message }}
+			{{ diagnostic.message }}
 		</p>
 	</div>
 </template>

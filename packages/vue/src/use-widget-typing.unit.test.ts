@@ -1,5 +1,5 @@
 /**
- * Conformance tests — issue #13 checkpoint G "Type-level conformance" (`useWidget(Plugin)` half):
+ * Conformance tests — diagnostic #13 checkpoint G "Type-level conformance" (`useWidget(Plugin)` half):
  * exact capability/member/slot inference and the absent-vs-explicitly-empty distinction.
  */
 
@@ -27,13 +27,13 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 		expectTypeOf<CounterResult>()
 			.toHaveProperty('useMethods')
 		expectTypeOf<CounterResult>()
-			.toHaveProperty('useStateIssues')
+			.toHaveProperty('useStateDiagnostics')
 		expectTypeOf<CounterResult>()
-			.toHaveProperty('usePropertyIssues')
+			.toHaveProperty('usePropertyDiagnostics')
 		expectTypeOf<CounterResult>()
-			.toHaveProperty('useMethodIssues')
+			.toHaveProperty('useMethodDiagnostics')
 		expectTypeOf<CounterResult>()
-			.toHaveProperty('useIssues')
+			.toHaveProperty('useDiagnostics')
 		// Counter declares no slots capability.
 		expectTypeOf<CounterResult>().not.toHaveProperty('WidgetSlot')
 
@@ -57,15 +57,15 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 		type LabelResult = UseWidgetResult<typeof LabelPlugin>
 
 		expectTypeOf<LabelResult>().not.toHaveProperty('useState')
-		expectTypeOf<LabelResult>().not.toHaveProperty('useStateIssues')
+		expectTypeOf<LabelResult>().not.toHaveProperty('useStateDiagnostics')
 		expectTypeOf<LabelResult>().not.toHaveProperty('useMethods')
-		expectTypeOf<LabelResult>().not.toHaveProperty('useMethodIssues')
+		expectTypeOf<LabelResult>().not.toHaveProperty('useMethodDiagnostics')
 		expectTypeOf<LabelResult>().not.toHaveProperty('WidgetSlot')
 		expectTypeOf<LabelResult>()
 			.toHaveProperty('useProperties')
 		// The widget-level aggregate is unconditional, regardless of declared capabilities.
 		expectTypeOf<LabelResult>()
-			.toHaveProperty('useIssues')
+			.toHaveProperty('useDiagnostics')
 	})
 
 	it('keeps an explicitly-declared-empty capability present with an empty keyed surface, distinct from absence', () => {
@@ -74,7 +74,7 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 		expectTypeOf<EmptyStateResult>()
 			.toHaveProperty('useState')
 		expectTypeOf<EmptyStateResult>()
-			.toHaveProperty('useStateIssues')
+			.toHaveProperty('useStateDiagnostics')
 		// Present, but with a keyed surface that has no members — distinct from the capability being
 		// absent (which drops `useState` from the type entirely, asserted above for `Label`/`Leaf`).
 		expectTypeOf<keyof ReturnType<EmptyStateResult['useState']>>()
@@ -111,7 +111,7 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 		expectTypeOf<EmptyPropertiesResult>()
 			.toHaveProperty('useProperties')
 		expectTypeOf<EmptyPropertiesResult>()
-			.toHaveProperty('usePropertyIssues')
+			.toHaveProperty('usePropertyDiagnostics')
 		expectTypeOf<keyof ReturnType<EmptyPropertiesResult['useProperties']>>()
 			.toEqualTypeOf<never>()
 		// No state/methods/slots were declared at all (absent, not explicitly empty).
@@ -133,7 +133,7 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 			.toEqualTypeOf<{ readonly name: never }>()
 	})
 
-	it('types Property/issue projections as a truthful readonly Ref, not a ComputedRef', () => {
+	it('types Property/diagnostic projections as a truthful readonly Ref, not a ComputedRef', () => {
 		// `ReadonlyRef<T>` (`Readonly<Ref<T>>`) is exactly `{ readonly value: T }` plus Vue's internal
 		// ref brand — it must not additionally claim computed-only public surface such as `.effect`,
 		// which `customRef()` (what actually backs these projections) never provides.

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Issue #26 Finding 1/4: `TripSurveyRenderer`'s stale-result presentation against the real
+ * Diagnostic #26 Finding 1/4: `TripSurveyRenderer`'s stale-result presentation against the real
  * `resultFresh` Property and a real Runtime/Blueprint. #43 adds presentation-only locale ownership to
  * the renderer; this harness supplies an English identity translator so semantic freshness assertions
  * remain unchanged.
@@ -70,7 +70,7 @@ function mountSurvey() {
 	return { wrapper, runtime }
 }
 
-describe('tripSurveyRenderer stale-result presentation (issue #26)', () => {
+describe('tripSurveyRenderer stale-result presentation (diagnostic #26)', () => {
 	it('shows no stale copy/badge for a freshly generated result', async () => {
 		const { wrapper, runtime } = mountSurvey()
 		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')

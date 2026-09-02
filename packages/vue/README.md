@@ -1,5 +1,8 @@
 # @deviltea/widget-vue
 
+Cross-cutting Diagnostic/Result/Failure/Error conventions are maintained in
+[Widget API conventions](../../../docs/architecture/widget-api-conventions.md).
+
 > ESM-only package.
 
 [![npm version][npm-version-src]][npm-version-href]
@@ -76,11 +79,11 @@ plugin instance:
 import { useWidget } from '@deviltea/widget-vue'
 import { TextInputPlugin } from './plugins/text-input'
 
-const { useState, useProperties, useMethods, useStateIssues } = useWidget(TextInputPlugin)
+const { useState, useProperties, useMethods, useStateDiagnostics } = useWidget(TextInputPlugin)
 const { value } = useState()
 const { charCount } = useProperties()
 const { clear } = useMethods()
-const { value: valueIssues } = useStateIssues()
+const { value: valueDiagnostics } = useStateDiagnostics()
 </script>
 
 <template>
@@ -90,8 +93,8 @@ const { value: valueIssues } = useStateIssues()
 		<button @click="clear()">
 			Clear
 		</button>
-		<p v-if="valueIssues.length > 0">
-			{{ valueIssues[0].message }}
+		<p v-if="valueDiagnostics.length > 0">
+			{{ valueDiagnostics[0].message }}
 		</p>
 	</div>
 </template>
@@ -107,10 +110,10 @@ const { value: valueIssues } = useStateIssues()
   `(...args: Parameters<Fn>) => ReturnType<Fn> | null`. Semantic failure
   projects to `null`; implementation-contract/disposed-runtime exceptions
   propagate unchanged.
-- `useStateIssues()` / `usePropertyIssues()` / `useMethodIssues()` mirror the
-  corresponding Runtime primitive's `getIssues()`/`subscribeIssues()` as a
+- `useStateDiagnostics()` / `usePropertyDiagnostics()` / `useMethodDiagnostics()` mirror the
+  corresponding Runtime primitive's `getDiagnostics()`/`subscribeDiagnostics()` as a
   separate reactive channel, keyed the same way as their value counterpart.
-- `useIssues()` mirrors `RuntimeWidget.getIssues()`/`subscribeIssues()` — this
+- `useDiagnostics()` mirrors `RuntimeWidget.getDiagnostics()`/`subscribeDiagnostics()` — this
   widget's own aggregate, not the Runtime-wide collected aggregate.
 - Every accessor is gated on the plugin's declared capabilities: an absent
   capability drops the accessor entirely; an explicitly-declared-empty
@@ -155,7 +158,7 @@ declaration order, with no filtering/sorting/fallback semantics of its own.
 `runtime.blueprint.system` against the exact `WidgetSystem` instance
 `createWidgetVueRenderer` was bound to (a mismatch throws
 `WidgetVueIntegrationError`, a programmer/configuration exception, never a
-Widget Issue), fully unmounts and remounts its internal tree whenever the
+Widget Diagnostic), fully unmounts and remounts its internal tree whenever the
 `runtime` prop identity changes (even for a structurally identical root), and
 never calls `runtime.dispose()` itself — Runtime lifetime stays owned by the
 caller.

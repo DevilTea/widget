@@ -2,18 +2,18 @@
  * `registerDeps` invocation and dependency target/member resolution — compile pipeline steps 7-9
  * (consolidated handoff §10).
  *
- * Normative source: issue #10 checkpoint D, amendments "dependency resolution and compiled-edge
+ * Normative source: diagnostic #10 checkpoint D, amendments "dependency resolution and compiled-edge
  * invariants" (COMMENT 11) and "graph-analysis diagnostics" (COMMENT 12), consolidated handoff §8.
  */
 
 import type { AnyDepExpression } from '../dep'
+import type { BlueprintDependencyMember, BlueprintDependencyReference, BlueprintDiagnostic } from '../diagnostic'
 import type {
 	CompiledDependency,
 	CompiledDependencyTree,
 	InternalNodeId,
 	ResolvedBlueprintWidgetNode,
 } from '../internal/contract'
-import type { BlueprintDependencyMember, BlueprintDependencyReference, BlueprintIssue } from '../issue'
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetId } from '../types'
 import type { WorkingNode } from './recovery'
@@ -22,7 +22,7 @@ import { createDependencyBuilder, isDepExpression, readDepExpression } from '../
 import { compiledDependencyBrand } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
 import { assertSyncValue } from '../runtime/sync'
-import { dependencyIssue, widgetLocation } from './issues'
+import { dependencyDiagnostic, widgetLocation } from './diagnostics'
 
 export interface GraphEdge {
 	readonly fromKind: 'property' | 'method'
@@ -101,7 +101,7 @@ function resolveLeaf(
 	ownerNodeId: InternalNodeId,
 	member: BlueprintDependencyMember,
 	leaf: AnyDepExpression,
-	finalIssues: BlueprintIssue[],
+	finalDiagnostics: BlueprintDiagnostic[],
 	edges: Map<string, GraphEdge>,
 	directWriteSeeds: Set<string>,
 ): CompiledDependency {
@@ -128,7 +128,7 @@ function resolveLeaf(
 		refinements,
 	})
 
-	// Every other ordinary resolution failure is `invalid`, never `absent` (issue #10 inspection
+	// Every other ordinary resolution failure is `invalid`, never `absent` (diagnostic #10 inspection
 	// amendment "inspection exact API v1 part 1"): `targetNodeId` is included only when cardinality
 	// resolved to exactly one recovered node before the later step failed.
 	const invalid = (targetNodeId?: InternalNodeId): CompiledDependency => ({
@@ -159,13 +159,13 @@ function resolveLeaf(
 		if ((target.type === 'parent' || target.type === 'widget') && target.optional)
 			return absent()
 
-		finalIssues.push(dependencyIssue(ownerPublicNode, member, describeMissingTarget(target), reference))
+		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, describeMissingTarget(target), reference))
 		return invalid()
 	}
 
 	if (candidateIds.length > 1) {
 		const related = candidateIds.map(id => widgetLocation(nodes[id]!.publicNode))
-		finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target is ambiguous: multiple widgets share that id.', reference, related))
+		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target is ambiguous: multiple widgets share that id.', reference, related))
 		return invalid()
 	}
 
@@ -173,7 +173,7 @@ function resolveLeaf(
 	const targetWorking = nodes[targetNodeId]!
 
 	if (!targetWorking.resolved) {
-		finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target could not be resolved to a widget.', reference, [widgetLocation(targetWorking.publicNode)]))
+		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target could not be resolved to a widget.', reference, [widgetLocation(targetWorking.publicNode)]))
 		return invalid(targetNodeId)
 	}
 
@@ -182,11 +182,11 @@ function resolveLeaf(
 
 	if (operation.type === 'state-get' || operation.type === 'state-set') {
 		if (targetDefinition.state === null) {
-			finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target has no state capability.', reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target has no state capability.', reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		if (!targetDefinition.state.has(operation.key)) {
-			finalIssues.push(dependencyIssue(ownerPublicNode, member, `Dependency target has no state member "${operation.key}".`, reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, `Dependency target has no state member "${operation.key}".`, reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		if (operation.type === 'state-set' && member.type === 'method')
@@ -194,11 +194,11 @@ function resolveLeaf(
 	}
 	else if (operation.type === 'property-get') {
 		if (targetDefinition.properties === null) {
-			finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target has no properties capability.', reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target has no properties capability.', reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		if (!targetDefinition.properties.has(operation.name)) {
-			finalIssues.push(dependencyIssue(ownerPublicNode, member, `Dependency target has no property "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, `Dependency target has no property "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		const key = edgeKey(member.type, ownerNodeId, member.name, 'property', targetNodeId, operation.name)
@@ -207,11 +207,11 @@ function resolveLeaf(
 	}
 	else {
 		if (targetDefinition.methods === null) {
-			finalIssues.push(dependencyIssue(ownerPublicNode, member, 'Dependency target has no methods capability.', reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target has no methods capability.', reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		if (!targetDefinition.methods.has(operation.name)) {
-			finalIssues.push(dependencyIssue(ownerPublicNode, member, `Dependency target has no method "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, `Dependency target has no method "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		const key = edgeKey(member.type, ownerNodeId, member.name, 'method', targetNodeId, operation.name)
@@ -234,13 +234,13 @@ export function resolveDependencies(
 	rootNodeId: InternalNodeId,
 	nodeIdsByWidgetId: ReadonlyMap<WidgetId, readonly InternalNodeId[]>,
 	compileFacade: CompileFacade<AnyWidgetPluginTuple>,
-	finalIssues: BlueprintIssue[],
+	finalDiagnostics: BlueprintDiagnostic[],
 ): DependencyResolutionResult {
 	const edges = new Map<string, GraphEdge>()
 	const directWriteSeeds = new Set<string>()
 
 	const resolve = (ownerNodeId: InternalNodeId, member: BlueprintDependencyMember, leaf: AnyDepExpression): CompiledDependency =>
-		resolveLeaf(nodes, nodeIdsByWidgetId, rootNodeId, ownerNodeId, member, leaf, finalIssues, edges, directWriteSeeds)
+		resolveLeaf(nodes, nodeIdsByWidgetId, rootNodeId, ownerNodeId, member, leaf, finalDiagnostics, edges, directWriteSeeds)
 
 	// Properties (step 7), then methods (step 8), each in semantic traversal + declaration order.
 	for (const nodeId of semanticOrder) {

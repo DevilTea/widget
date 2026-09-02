@@ -1,20 +1,20 @@
 /**
- * Conformance tests for `RuntimeWidget.getIssues()`/`subscribeIssues()` — issue #10 amendment
- * "RuntimeWidget aggregate issue surface" (discovery context: issue #13 comment "Core gap discovered by
- * Widget Lab — RuntimeWidget issue aggregation").
+ * Conformance tests for `RuntimeWidget.getDiagnostics()`/`subscribeDiagnostics()` — diagnostic #10 amendment
+ * "RuntimeWidget aggregate diagnostic surface" (discovery context: diagnostic #13 comment "Core gap discovered by
+ * Widget Lab — RuntimeWidget diagnostic aggregation").
  *
- * Scope: a `RuntimeWidget` aggregates only the current issues owned by its own primitives — state
+ * Scope: a `RuntimeWidget` aggregates only the current diagnostics owned by its own primitives — state
  * members -> property members -> method members, plugin declaration order within each capability, each
- * primitive's own local issue order preserved — and never Runtime-level issues, even when a
- * Runtime-level issue's source happens to carry the same `widgetId`. `runtime.getCollectedIssues()`
- * composes `runtime.getIssues()` (Runtime-level only) plus each `RuntimeWidget.getIssues()` in Blueprint
+ * primitive's own local diagnostic order preserved — and never Runtime-level diagnostics, even when a
+ * Runtime-level diagnostic's source happens to carry the same `widgetId`. `runtime.getDiagnostics()`
+ * composes `runtime.getDiagnostics()` (Runtime-level only) plus each `RuntimeWidget.getDiagnostics()` in Blueprint
  * semantic widget order.
  *
  * Only the public entry (`../index`) is imported; no internal module or `blueprintInternals` access.
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_ISSUES, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS, WidgetSystemRuntimeDisposedError } from '../index'
 
 // -------------------------------------------------------------------------------------------------
 // Harness: one widget with two members per capability, declared in reverse-alphabetical order ("two"
@@ -40,13 +40,14 @@ interface OrderInterfaces {
 
 function createOrderHarness() {
 	let propertyTwoShouldFail = false
-	let propertyTwoDoubleIssue = false
+	let propertyTwoDoubleDiagnostic = false
 	let propertyOneShouldFail = false
 	let methodTwoShouldFail = false
 	let methodOneShouldFail = false
 	let lazyComputeCount = 0
 
 	const plugin = createWidgetPlugin('order-probe')
+		.description('Test widget')
 		.interfaces<OrderInterfaces>()
 		.state(state => state
 			.two({
@@ -59,18 +60,18 @@ function createOrderHarness() {
 			}))
 		.properties(properties => properties
 			.two({
-				compute: ({ addIssue }) => {
+				compute: ({ addDiagnostic }) => {
 					if (propertyTwoShouldFail)
-						addIssue({ message: 'property two failed' })
-					if (propertyTwoDoubleIssue)
-						addIssue({ message: 'property two failed again' })
+						addDiagnostic({ message: 'property two failed' })
+					if (propertyTwoDoubleDiagnostic)
+						addDiagnostic({ message: 'property two failed again' })
 					return 0
 				},
 			})
 			.one({
-				compute: ({ addIssue }) => {
+				compute: ({ addDiagnostic }) => {
 					if (propertyOneShouldFail)
-						addIssue({ message: 'property one failed' })
+						addDiagnostic({ message: 'property one failed' })
 					return 0
 				},
 			})
@@ -83,17 +84,17 @@ function createOrderHarness() {
 		.methods(methods => methods
 			.two({
 				validateArgs: (args): args is [] => args.length === 0,
-				execute: ({ addIssue }) => {
+				execute: ({ addDiagnostic }) => {
 					if (methodTwoShouldFail)
-						addIssue({ message: 'method two failed' })
+						addDiagnostic({ message: 'method two failed' })
 					return 0
 				},
 			})
 			.one({
 				validateArgs: (args): args is [] => args.length === 0,
-				execute: ({ addIssue }) => {
+				execute: ({ addDiagnostic }) => {
 					if (methodOneShouldFail)
-						addIssue({ message: 'method one failed' })
+						addDiagnostic({ message: 'method one failed' })
 					return 0
 				},
 			}))
@@ -102,7 +103,7 @@ function createOrderHarness() {
 	const system = createWidgetSystem({ plugins: [plugin] })
 	const blueprint = system.createBlueprint({ id: 'root', type: 'order-probe' })
 	if (blueprint.status !== 'valid')
-		throw new Error(`test fixture: expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`test fixture: expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 	const runtime = blueprint.createRuntime()
 	const widget = runtime.getWidget('root')
@@ -114,23 +115,23 @@ function createOrderHarness() {
 		widget,
 		lazyComputeCount: () => lazyComputeCount,
 		setPropertyTwoShouldFail: (value: boolean) => { propertyTwoShouldFail = value },
-		setPropertyTwoDoubleIssue: (value: boolean) => { propertyTwoDoubleIssue = value },
+		setPropertyTwoDoubleDiagnostic: (value: boolean) => { propertyTwoDoubleDiagnostic = value },
 		setPropertyOneShouldFail: (value: boolean) => { propertyOneShouldFail = value },
 		setMethodTwoShouldFail: (value: boolean) => { methodTwoShouldFail = value },
 		setMethodOneShouldFail: (value: boolean) => { methodOneShouldFail = value },
 	}
 }
 
-describe('runtimeWidget.getIssues() — canonical empty aggregate', () => {
-	it('a widget with every primitive currently succeeding aggregates to the canonical EMPTY_ISSUES reference', () => {
+describe('runtimeWidget.getDiagnostics() — canonical empty aggregate', () => {
+	it('a widget with every primitive currently succeeding aggregates to the canonical EMPTY_DIAGNOSTICS reference', () => {
 		const { widget } = createOrderHarness()
 
-		expect(widget.getIssues())
-			.toBe(EMPTY_ISSUES)
+		expect(widget.getDiagnostics())
+			.toBe(EMPTY_DIAGNOSTICS)
 	})
 })
 
-describe('runtimeWidget.getIssues() — deterministic aggregate order', () => {
+describe('runtimeWidget.getDiagnostics() — deterministic aggregate order', () => {
 	it('orders state -> properties -> methods and preserves declaration order within each capability', () => {
 		const { widget, setPropertyTwoShouldFail, setPropertyOneShouldFail, setMethodTwoShouldFail, setMethodOneShouldFail } = createOrderHarness()
 
@@ -145,53 +146,53 @@ describe('runtimeWidget.getIssues() — deterministic aggregate order', () => {
 		widget.methods.two()
 		widget.methods.one()
 
-		const issues = widget.getIssues()
+		const diagnostics = widget.getDiagnostics()
 
-		expect(issues.map(issue => issue.source.type))
+		expect(diagnostics.map(diagnostic => diagnostic.code))
 			.toEqual([
-				'state-validation',
-				'state-validation',
-				'property-result',
-				'property-result',
-				'method-result',
-				'method-result',
+				'invalid-state-value',
+				'invalid-state-value',
+				'invalid-property-result',
+				'invalid-property-result',
+				'invalid-method-result',
+				'invalid-method-result',
 			])
 
 		// "two" was declared before "one" in every capability; the aggregate must not silently sort by
 		// key/name.
-		const memberOf = (issue: (typeof issues)[number]) => (issue.source as { key?: string, name?: string }).key ?? (issue.source as { key?: string, name?: string }).name
-		expect(issues.map(memberOf))
+		const memberOf = (diagnostic: (typeof diagnostics)[number]) => diagnostic.location.type === 'state' ? diagnostic.location.key : diagnostic.location.name
+		expect(diagnostics.map(memberOf))
 			.toEqual(['two', 'one', 'two', 'one', 'two', 'one'])
 
-		// Every aggregated issue is the exact same frozen object the owning primitive itself reports —
+		// Every aggregated diagnostic is the exact same frozen object the owning primitive itself reports —
 		// aggregation reuses references, it never copies.
-		expect(issues[0])
-			.toBe(widget.state.two.getIssues()[0])
-		expect(issues[2])
-			.toBe(widget.properties.two.getIssues()[0])
-		expect(issues[4])
-			.toBe(widget.methods.two.getIssues()[0])
+		expect(diagnostics[0])
+			.toBe(widget.state.two.getDiagnostics()[0])
+		expect(diagnostics[2])
+			.toBe(widget.properties.two.getDiagnostics()[0])
+		expect(diagnostics[4])
+			.toBe(widget.methods.two.getDiagnostics()[0])
 	})
 
-	it('preserves one primitive\'s own local issue order inside the widget aggregate', () => {
-		const { widget, setPropertyTwoShouldFail, setPropertyTwoDoubleIssue } = createOrderHarness()
+	it('preserves one primitive\'s own local diagnostic order inside the widget aggregate', () => {
+		const { widget, setPropertyTwoShouldFail, setPropertyTwoDoubleDiagnostic } = createOrderHarness()
 
 		setPropertyTwoShouldFail(true)
-		setPropertyTwoDoubleIssue(true)
+		setPropertyTwoDoubleDiagnostic(true)
 		widget.properties.two.get()
 
-		const localIssues = widget.properties.two.getIssues()
-		expect(localIssues.map(issue => issue.message))
+		const localDiagnostics = widget.properties.two.getDiagnostics()
+		expect(localDiagnostics.map(diagnostic => diagnostic.message))
 			.toEqual(['property two failed', 'property two failed again'])
 
-		expect(widget.getIssues()
-			.map(issue => issue.message))
+		expect(widget.getDiagnostics()
+			.map(diagnostic => diagnostic.message))
 			.toEqual(['property two failed', 'property two failed again'])
 	})
 })
 
-describe('runtimeWidget.getIssues() — widgets without every capability', () => {
-	it('a widget declaring only properties aggregates just its property issues', () => {
+describe('runtimeWidget.getDiagnostics() — widgets without every capability', () => {
+	it('a widget declaring only properties aggregates just its property diagnostics', () => {
 		interface PropsOnlyInterfaces {
 			properties: {
 				flaky: number
@@ -200,11 +201,12 @@ describe('runtimeWidget.getIssues() — widgets without every capability', () =>
 
 		let shouldFail = false
 		const plugin = createWidgetPlugin('props-only-probe')
+			.description('Test widget')
 			.interfaces<PropsOnlyInterfaces>()
 			.properties(properties => properties.flaky({
-				compute: ({ addIssue }) => {
+				compute: ({ addDiagnostic }) => {
 					if (shouldFail)
-						addIssue({ message: 'flaky failed' })
+						addDiagnostic({ message: 'flaky failed' })
 					return 0
 				},
 			}))
@@ -220,19 +222,20 @@ describe('runtimeWidget.getIssues() — widgets without every capability', () =>
 		if (widget === null)
 			throw new Error('test fixture: expected the "root" widget to resolve')
 
-		expect(widget.getIssues())
-			.toBe(EMPTY_ISSUES)
+		expect(widget.getDiagnostics())
+			.toBe(EMPTY_DIAGNOSTICS)
 
 		shouldFail = true
 		widget.properties.flaky.get()
 
-		expect(widget.getIssues()
-			.map(issue => issue.source.type))
-			.toEqual(['property-result'])
+		expect(widget.getDiagnostics()
+			.map(diagnostic => diagnostic.code))
+			.toEqual(['invalid-property-result'])
 	})
 
-	it('a widget declaring no capabilities at all still exposes getIssues()/subscribeIssues(), aggregating to the canonical empty array', () => {
+	it('a widget declaring no capabilities at all still exposes getDiagnostics()/subscribeDiagnostics(), aggregating to the canonical empty array', () => {
 		const plugin = createWidgetPlugin('capability-less-probe')
+			.description('Test widget')
 			.interfaces<Record<never, never>>()
 			.done()
 
@@ -246,23 +249,23 @@ describe('runtimeWidget.getIssues() — widgets without every capability', () =>
 		if (widget === null)
 			throw new Error('test fixture: expected the "root" widget to resolve')
 
-		expect(widget.getIssues())
-			.toBe(EMPTY_ISSUES)
-		expect(() => widget.subscribeIssues(() => {})())
+		expect(widget.getDiagnostics())
+			.toBe(EMPTY_DIAGNOSTICS)
+		expect(() => widget.subscribeDiagnostics(() => {})())
 			.not.toThrow()
 	})
 })
 
-describe('runtimeWidget.getIssues()/subscribeIssues() laziness', () => {
+describe('runtimeWidget.getDiagnostics()/subscribeDiagnostics() laziness', () => {
 	it('never activates a lazy Property evaluation', () => {
 		const { widget, lazyComputeCount } = createOrderHarness()
 
-		widget.getIssues()
+		widget.getDiagnostics()
 		expect(lazyComputeCount())
 			.toBe(0)
 
 		const listener = vi.fn()
-		const unsubscribe = widget.subscribeIssues(listener)
+		const unsubscribe = widget.subscribeDiagnostics(listener)
 		expect(lazyComputeCount())
 			.toBe(0)
 		expect(listener)
@@ -272,21 +275,21 @@ describe('runtimeWidget.getIssues()/subscribeIssues() laziness', () => {
 	})
 })
 
-describe('runtimeWidget.subscribeIssues()', () => {
+describe('runtimeWidget.subscribeDiagnostics()', () => {
 	it('does not emit immediately on subscribe', () => {
 		const { widget } = createOrderHarness()
 		const listener = vi.fn()
 
-		widget.subscribeIssues(listener)
+		widget.subscribeDiagnostics(listener)
 
 		expect(listener)
 			.not.toHaveBeenCalled()
 	})
 
-	it('emits on a state issue change, a property issue change produced by natural evaluation, and a method invocation issue change, then stops after unsubscribe', () => {
+	it('emits on a state diagnostic change, a property diagnostic change produced by natural evaluation, and a method invocation diagnostic change, then stops after unsubscribe', () => {
 		const { widget, setPropertyTwoShouldFail, setMethodTwoShouldFail } = createOrderHarness()
 		const snapshotLengths: number[] = []
-		const unsubscribe = widget.subscribeIssues(issues => snapshotLengths.push(issues.length))
+		const unsubscribe = widget.subscribeDiagnostics(diagnostics => snapshotLengths.push(diagnostics.length))
 
 		widget.state.two.set('nope' as unknown as number)
 		expect(snapshotLengths)
@@ -309,81 +312,81 @@ describe('runtimeWidget.subscribeIssues()', () => {
 	})
 })
 
-describe('runtimeWidget.getIssues() / runtime.getCollectedIssues() — aggregate snapshot immutability', () => {
+describe('runtimeWidget.getDiagnostics() / runtime.getDiagnostics() — aggregate snapshot immutability', () => {
 	it('a non-empty widget aggregate array is itself frozen and rejects an external push', () => {
 		const { widget, setPropertyTwoShouldFail } = createOrderHarness()
 		setPropertyTwoShouldFail(true)
 		widget.properties.two.get()
 
-		const issues = widget.getIssues()
-		expect(Object.isFrozen(issues))
+		const diagnostics = widget.getDiagnostics()
+		expect(Object.isFrozen(diagnostics))
 			.toBe(true)
-		expect(() => (issues as unknown as unknown[]).push({ source: { type: 'forged' }, message: 'forged' }))
+		expect(() => (diagnostics as unknown as unknown[]).push({ source: { type: 'forged' }, message: 'forged' }))
 			.toThrow(TypeError)
 	})
 
-	it('a non-empty runtime.getCollectedIssues() array is itself frozen and rejects an external push', () => {
+	it('a non-empty runtime.getDiagnostics() array is itself frozen and rejects an external push', () => {
 		const { runtime, widget, setPropertyTwoShouldFail } = createOrderHarness()
 		setPropertyTwoShouldFail(true)
 		widget.properties.two.get()
 
-		const collected = runtime.getCollectedIssues()
+		const collected = runtime.getDiagnostics()
 		expect(Object.isFrozen(collected))
 			.toBe(true)
 		expect(() => (collected as unknown as unknown[]).push({ source: { type: 'forged' }, message: 'forged' }))
 			.toThrow(TypeError)
 	})
 
-	it('a caller mutation attempt (rejected by the freeze above) never leaks a forged issue into a later widget or runtime read', () => {
+	it('a caller mutation attempt (rejected by the freeze above) never leaks a forged diagnostic into a later widget or runtime read', () => {
 		const { runtime, widget, setPropertyTwoShouldFail } = createOrderHarness()
 		setPropertyTwoShouldFail(true)
 		widget.properties.two.get()
 
-		const issues = widget.getIssues()
+		const diagnostics = widget.getDiagnostics()
 		const fake = { source: { type: 'forged' }, message: 'forged' }
-		expect(() => (issues as unknown as unknown[]).push(fake))
+		expect(() => (diagnostics as unknown as unknown[]).push(fake))
 			.toThrow(TypeError)
 
-		expect(widget.getIssues())
+		expect(widget.getDiagnostics())
 			.not.toContain(fake)
-		expect(runtime.getCollectedIssues())
+		expect(runtime.getDiagnostics())
 			.not.toContain(fake)
 	})
 
-	it('each aggregated issue stays frozen — inherited from the owning primitive\'s own immutable snapshot', () => {
+	it('each aggregated diagnostic stays frozen — inherited from the owning primitive\'s own immutable snapshot', () => {
 		const { widget } = createOrderHarness()
 		widget.state.two.set('nope' as unknown as number)
 
-		const issue = widget.getIssues()[0]!
-		expect(Object.isFrozen(issue))
+		const diagnostic = widget.getDiagnostics()[0]!
+		expect(Object.isFrozen(diagnostic))
 			.toBe(true)
 		expect(() => {
-			(issue as unknown as Record<string, unknown>).message = 'forged'
+			(diagnostic as unknown as Record<string, unknown>).message = 'forged'
 		})
 			.toThrow(TypeError)
 	})
 })
 
-describe('runtimeWidget.getIssues()/subscribeIssues() post-dispose contract', () => {
-	it('getIssues() throws WidgetSystemRuntimeDisposedError after dispose', () => {
+describe('runtimeWidget.getDiagnostics()/subscribeDiagnostics() post-dispose contract', () => {
+	it('getDiagnostics() throws WidgetSystemRuntimeDisposedError after dispose', () => {
 		const { runtime, widget } = createOrderHarness()
 		runtime.dispose()
 
-		expect(() => widget.getIssues())
+		expect(() => widget.getDiagnostics())
 			.toThrow(WidgetSystemRuntimeDisposedError)
 	})
 
-	it('subscribeIssues() (new subscription) throws WidgetSystemRuntimeDisposedError after dispose', () => {
+	it('subscribeDiagnostics() (new subscription) throws WidgetSystemRuntimeDisposedError after dispose', () => {
 		const { runtime, widget } = createOrderHarness()
 		runtime.dispose()
 
-		expect(() => widget.subscribeIssues(() => {}))
+		expect(() => widget.subscribeDiagnostics(() => {}))
 			.toThrow(WidgetSystemRuntimeDisposedError)
 	})
 
 	it('an unsubscribe handle obtained before dispose stays a safe idempotent no-op afterward', () => {
 		const { runtime, widget } = createOrderHarness()
-		const unsubscribe = widget.subscribeIssues(() => {})
+		const unsubscribe = widget.subscribeDiagnostics(() => {})
 
 		runtime.dispose()
 
@@ -392,7 +395,7 @@ describe('runtimeWidget.getIssues()/subscribeIssues() post-dispose contract', ()
 	})
 })
 
-describe('runtimeWidget.subscribeIssues() external listener exception isolation', () => {
+describe('runtimeWidget.subscribeDiagnostics() external listener exception isolation', () => {
 	it('a throwing listener does not block another listener on the same propagation, and its throw surfaces outside the current flush', async () => {
 		const { widget } = createOrderHarness()
 		const secondSnapshotLengths: number[] = []
@@ -401,10 +404,10 @@ describe('runtimeWidget.subscribeIssues() external listener exception isolation'
 			captured.push(error)
 		}
 
-		widget.subscribeIssues(() => {
+		widget.subscribeDiagnostics(() => {
 			throw new Error('first listener boom')
 		})
-		widget.subscribeIssues(issues => secondSnapshotLengths.push(issues.length))
+		widget.subscribeDiagnostics(diagnostics => secondSnapshotLengths.push(diagnostics.length))
 
 		process.on('uncaughtException', onUncaughtException)
 		try {
@@ -428,10 +431,10 @@ describe('runtimeWidget.subscribeIssues() external listener exception isolation'
 })
 
 // -------------------------------------------------------------------------------------------------
-// Runtime-wide composition: runtime-level issues + widget aggregates in Blueprint semantic order.
+// Runtime-wide composition: runtime-level diagnostics + widget aggregates in Blueprint semantic order.
 // -------------------------------------------------------------------------------------------------
 
-describe('runtime.getCollectedIssues() composes runtime-level issues + each RuntimeWidget.getIssues()', () => {
+describe('runtime.getDiagnostics() composes runtime-level diagnostics + each RuntimeWidget.getDiagnostics()', () => {
 	interface LeafInterfaces {
 		properties: {
 			flaky: number
@@ -443,20 +446,22 @@ describe('runtime.getCollectedIssues() composes runtime-level issues + each Runt
 	// is a union keyed by literal `type`, and a widened `string` type would collapse `getWidget()`'s
 	// return narrowing.
 	const leafAPlugin = createWidgetPlugin('leaf-a-probe')
+		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.properties(properties => properties.flaky({
-			compute: ({ addIssue }) => {
-				addIssue({ message: 'leaf-a-probe flaky failed' })
+			compute: ({ addDiagnostic }) => {
+				addDiagnostic({ message: 'leaf-a-probe flaky failed' })
 				return 0
 			},
 		}))
 		.done()
 
 	const leafBPlugin = createWidgetPlugin('leaf-b-probe')
+		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.properties(properties => properties.flaky({
-			compute: ({ addIssue }) => {
-				addIssue({ message: 'leaf-b-probe flaky failed' })
+			compute: ({ addDiagnostic }) => {
+				addDiagnostic({ message: 'leaf-b-probe flaky failed' })
 				return 0
 			},
 		}))
@@ -470,8 +475,9 @@ describe('runtime.getCollectedIssues() composes runtime-level issues + each Runt
 	}
 
 	const containerPlugin = createWidgetPlugin('container-probe')
+		.description('Test widget')
 		.interfaces<ContainerInterfaces>()
-		.slots({ children: {} })
+		.slots({ children: { description: 'Test slot' } })
 		.state(state => state.count({
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
@@ -491,61 +497,62 @@ describe('runtime.getCollectedIssues() composes runtime-level issues + each Runt
 			},
 		})
 		if (blueprint.status !== 'valid')
-			throw new Error(`test fixture: expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+			throw new Error(`test fixture: expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
-		// An unknown state key on the known "root" widget produces a widget-level `state-override`
-		// Runtime-level issue that carries `widgetId: 'root'` — the same id as a real widget with its own
-		// primitive-owned issues below — regression-testing that it is never absorbed into that widget's
+		// An unknown state key on the known "root" widget produces a Runtime-level diagnostic whose location
+		// stays at the Runtime boundary — the same id as a real widget with its own
+		// primitive-owned diagnostics below — regression-testing that it is never absorbed into that widget's
 		// own aggregate merely because the widgetId matches.
 		const runtime = blueprint.createRuntime({ overrideStateDefaults: { root: { doesNotExist: 1 } } })
 
 		return { runtime }
 	}
 
-	it('a Runtime-level state-override issue never appears in the same-widgetId widget\'s own aggregate', () => {
+	it('a Runtime-level state-override diagnostic never appears in the same-widgetId widget\'s own aggregate', () => {
 		const { runtime } = createMultiWidgetHarness()
 		const rootWidget = runtime.getWidget('root')
 		if (rootWidget === null)
 			throw new Error('test fixture: expected the "root" widget to resolve')
 
-		expect(rootWidget.getIssues())
+		expect(rootWidget.getDiagnostics())
 			.toEqual([])
-		expect(runtime.getIssues())
+		expect(runtime.getDiagnostics())
 			.toHaveLength(1)
-		expect(runtime.getIssues()[0]!.source)
-			.toEqual({ type: 'state-override', widgetId: 'root', key: 'doesNotExist' })
+		expect(runtime.getDiagnostics()[0]!)
+			.toMatchObject({ code: 'unknown-state-override-member', location: { type: 'runtime' }, path: ['root', 'doesNotExist'] })
 	})
 
-	it('collected order is Runtime-level issues first, then each widget in Blueprint semantic (pre-order) widget order', () => {
+	it('collected order is Runtime-level diagnostics first, then each widget in Blueprint semantic (pre-order) widget order', () => {
 		const { runtime } = createMultiWidgetHarness()
 		const widgetA = runtime.getWidget('a')
 		const widgetB = runtime.getWidget('b')
 		if (widgetA === null || widgetA.type !== 'leaf-a-probe' || widgetB === null || widgetB.type !== 'leaf-b-probe')
 			throw new Error('test fixture: expected widgets "a" and "b" to resolve as their declared types')
 
-		// Force both leaves to actually evaluate; a Property issue only exists after evaluation.
+		// Force both leaves to actually evaluate; a Property diagnostic only exists after evaluation.
 		widgetA.properties.flaky.get()
 		widgetB.properties.flaky.get()
 
-		const collected = runtime.getCollectedIssues()
-		const runtimeLevel = runtime.getIssues()
-		const aIssues = widgetA.getIssues()
-		const bIssues = widgetB.getIssues()
+		const collected = runtime.getDiagnostics()
+		const runtimeLevel = runtime.getDiagnostics()
+			.filter(diagnostic => diagnostic.location.type === 'runtime')
+		const aDiagnostics = widgetA.getDiagnostics()
+		const bDiagnostics = widgetB.getDiagnostics()
 
 		expect(runtimeLevel)
 			.toHaveLength(1)
-		expect(aIssues)
+		expect(aDiagnostics)
 			.toHaveLength(1)
-		expect(bIssues)
+		expect(bDiagnostics)
 			.toHaveLength(1)
 
 		expect(collected)
-			.toEqual([...runtimeLevel, ...aIssues, ...bIssues])
+			.toEqual([...runtimeLevel, ...aDiagnostics, ...bDiagnostics])
 		expect(collected[0])
 			.toBe(runtimeLevel[0])
 		expect(collected[1])
-			.toBe(aIssues[0])
+			.toBe(aDiagnostics[0])
 		expect(collected[2])
-			.toBe(bIssues[0])
+			.toBe(bDiagnostics[0])
 	})
 })

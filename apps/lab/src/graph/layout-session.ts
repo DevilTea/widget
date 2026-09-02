@@ -1,5 +1,5 @@
 /**
- * `createLayoutSession()` — generation-guarded async wrapper around any `LayoutGraphFn` (issue #13
+ * `createLayoutSession()` — generation-guarded async wrapper around any `LayoutGraphFn` (diagnostic #13
  * Phase 5 "Graph layout is an asynchronous projection" comment).
  *
  * Framework-agnostic on purpose (no Vue import), mirroring `../lab/session.ts`'s plain-getter +
@@ -7,7 +7,7 @@
  * whichever Vue composable bridges it into refs. `request()` bumps an internal generation counter on
  * every call; a still-pending older request's resolution/rejection is discarded once a newer `request()`
  * has been made, so a layout result for a superseded snapshot never clobbers state for the current one.
- * Only the caller decides *when* to call `request()` (issue #13 Phase 5: only graph/topology/layout-
+ * Only the caller decides *when* to call `request()` (diagnostic #13 Phase 5: only graph/topology/layout-
  * option changes trigger ELK work — Runtime state/property/method activity never relayouts).
  */
 

@@ -1,33 +1,33 @@
 /**
  * Shared per-Runtime bookkeeping: the disposed guard, the active operation-local collector seam used
- * by dependency-leaf issue wrapping, and the alien-signals disposal handles Runtime owns.
+ * by dependency-leaf diagnostic wrapping, and the alien-signals disposal handles Runtime owns.
  *
- * Normative source: issue #10 consolidated handoff §12 ("automatically insert wrapped consumer Issues
+ * Normative source: diagnostic #10 consolidated handoff §12 ("automatically insert wrapped consumer Diagnostics
  * into the active operation-local collector"), §19 (disposal), §17 (alien-signals adapter disposal
  * bookkeeping).
  */
 
 import type { DedupeDescriptor } from './collector'
-import { WidgetSystemRuntimeDisposedError } from '../issue'
+import { WidgetSystemRuntimeDisposedError } from '../diagnostic'
 
 /**
  * The narrow surface dependency-leaf wrapping needs from whichever operation-local collector is
  * currently in scope (a Property recompute or a Method invocation). Not a competing reactive engine:
  * plain save/restore bookkeeping mirroring alien-signals' own `getActiveSub`/`setActiveSub` seam.
  */
-export interface ActiveIssueSink {
-	addFinalizedIssue: (issue: unknown, dedupe?: DedupeDescriptor) => void
+export interface ActiveDiagnosticSink {
+	addFinalizedDiagnostic: (diagnostic: unknown, dedupe?: DedupeDescriptor) => void
 }
 
 export interface RuntimeContext {
 	isDisposed: () => boolean
 	assertActive: () => void
 	/**
-	 * Runs `fn` with `collector` as the active issue sink for dependency-leaf wrapping, restoring the
+	 * Runs `fn` with `collector` as the active diagnostic sink for dependency-leaf wrapping, restoring the
 	 * previous one afterward (including on throw).
 	 */
-	withActiveCollector: <R>(collector: ActiveIssueSink, fn: () => R) => R
-	getActiveCollector: () => ActiveIssueSink | null
+	withActiveCollector: <R>(collector: ActiveDiagnosticSink, fn: () => R) => R
+	getActiveCollector: () => ActiveDiagnosticSink | null
 	/**
 	 * Registers an alien-signals disposal handle created for a Runtime-owned public subscription.
 	 * Returns an idempotent unsubscribe function safe to call before or after Runtime disposal.
@@ -41,7 +41,7 @@ export interface RuntimeContext {
 
 export function createRuntimeContext(): RuntimeContext {
 	let disposed = false
-	let activeCollector: ActiveIssueSink | null = null
+	let activeCollector: ActiveDiagnosticSink | null = null
 	const owned = new Set<() => void>()
 
 	function assertActive(): void {

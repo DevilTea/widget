@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 /**
- * Conformance tests — issue #13 checkpoint G "Method conformance", checkpoints C addendum and F.
+ * Conformance tests — diagnostic #13 checkpoint G "Method conformance", checkpoints C addendum and F.
  *
- * `useMethods()` exposes lazy stable callable wrappers (not refs, no subscription); semantic success
+ * `useMethods()` exposes lazy stable callable wrappers (not refs, no subscription); semantic ok
  * projects to the returned value; semantic failure projects to `null`; implementation-contract
  * exceptions propagate unchanged; special JavaScript member names such as `then` receive no
  * Vue-layer special handling.
@@ -41,7 +41,7 @@ describe('method conformance', () => {
 		const { crash } = bridge.useMethods()
 
 		expect(() => crash())
-			.toThrow('crash() always throws — an implementation exception, not an Issue.')
+			.toThrow('crash() always throws — an implementation exception, not an Diagnostic.')
 	})
 
 	it('propagates disposed-Runtime exceptions unchanged', () => {
@@ -81,20 +81,20 @@ describe('method conformance', () => {
 		void widget
 	})
 
-	it('projects method issues on a separate reactive channel, independent of the callable itself', () => {
+	it('projects method diagnostics on a separate reactive channel, independent of the callable itself', () => {
 		const runtime = createFixtureRuntime({ id: 'm7', type: 'Counter' })
 		const { bridge } = mountWidgetBridge(runtime, 'm7', CounterPlugin)
 		const { increment } = bridge.useMethods()
-		const { increment: incrementIssues } = bridge.useMethodIssues()
+		const { increment: incrementDiagnostics } = bridge.useMethodDiagnostics()
 
-		expect(incrementIssues.value)
+		expect(incrementDiagnostics.value)
 			.toEqual([])
-		// @ts-expect-error deliberately calling with the wrong arity to produce a method-args issue
+		// @ts-expect-error deliberately calling with the wrong arity to produce a method-args diagnostic
 		increment()
 
-		expect(incrementIssues.value)
+		expect(incrementDiagnostics.value)
 			.toHaveLength(1)
-		expect(incrementIssues.value)
-			.toEqual(getCounterWidget(runtime, 'm7').methods.increment.getIssues())
+		expect(incrementDiagnostics.value)
+			.toEqual(getCounterWidget(runtime, 'm7').methods.increment.getDiagnostics())
 	})
 })

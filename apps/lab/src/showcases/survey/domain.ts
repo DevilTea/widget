@@ -1,7 +1,7 @@
 /**
  * Showcase A ("Interactive Survey") domain model.
  *
- * Normative source: GitHub issue #13 comment "Checkpoint — Showcase A: Interactive Survey (ACCEPTED)".
+ * Normative source: GitHub diagnostic #13 comment "Checkpoint — Showcase A: Interactive Survey (ACCEPTED)".
  * A deterministic, offline, single-destination leisure city-trip planning survey — a bounded semantic
  * demonstration, not a real travel-booking/recommendation service. Every constant here is a synthetic
  * Lab-private fixture; there is no network/API/pricing lookup. All domain calculation/validation lives
@@ -94,7 +94,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 
 // -------------------------------------------------------------------------------------------------
 // UTC-calendar-day date semantics (checkpoint §2 "Derived semantics" / §4 "Custom validation and
-// Runtime-issue demonstrations"). Calendar-date arithmetic, never local timestamp-duration arithmetic.
+// Runtime-diagnostic demonstrations"). Calendar-date arithmetic, never local timestamp-duration arithmetic.
 // -------------------------------------------------------------------------------------------------
 
 const STRICT_CALENDAR_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -130,7 +130,7 @@ export function utcCalendarDayNumber(value: string): number {
  * `tripDays = UTC-calendar-day(return) - UTC-calendar-day(departure) + 1`, requiring `return` strictly
  * after `departure` (checkpoint §2 example: `2027-04-10` through `2027-04-14` = `5`). Returns `null`
  * when the ordering constraint is violated — the caller (`TripMetrics.tripDays`) is responsible for
- * turning that into a Runtime Issue via `ctx.addIssue(...)`.
+ * turning that into a Runtime Diagnostic via `ctx.addDiagnostic(...)`.
  */
 export function computeTripDays(departure: string, returnDate: string): number | null {
 	const departureDay = utcCalendarDayNumber(departure)

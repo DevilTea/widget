@@ -1,6 +1,6 @@
 /**
  * Conformance group 2 (facade identity) and group 3 (`InspectionNodeId` uniqueness/round-trip/foreign
- * handling) from issue #10's inspection amendment "inspection exact API v1 (part 2)".
+ * handling) from diagnostic #10's inspection amendment "inspection exact API v1 (part 2)".
  */
 
 import { describe, expect, it } from 'vitest'
@@ -14,6 +14,7 @@ interface LeafInterfaces {
 }
 
 const leafPlugin = createWidgetPlugin('identity-leaf')
+	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -26,8 +27,9 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('identity-container')
+	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
-	.slots({ items: {} })
+	.slots({ items: { description: 'Test slot' } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [leafPlugin, containerPlugin] })

@@ -1,19 +1,19 @@
 /**
- * Conformance coverage for issue #10 COMMENT 26 §4 (Definition diagnostics).
+ * Conformance coverage for diagnostic #10 COMMENT 26 §4 (Definition diagnostics).
  *
  * Normative source: amendment "Blueprint definition diagnostic paths and exact recovery cases"
  * (COMMENT 25), amendment "Blueprint recovery edge-case contract" (COMMENT 24), and checkpoint C
- * (COMMENT 2) for the Issue base model. Assertions lock the structured `source` fields
+ * (COMMENT 2) for the Diagnostic base model. Assertions lock the structured `source` fields
  * (`type`/`path`/`node`/`related`) only; `message` text is explicitly not part of the conformance
  * surface (COMMENT 26 §14).
  */
 
 import type {
 	AnyWidgetPluginTuple,
-	BlueprintConfigIssueSource,
-	BlueprintDefinitionIssueSource,
-	BlueprintIssue,
-	Issue,
+	BlueprintConfigDiagnostic,
+	BlueprintDefinitionDiagnostic,
+	BlueprintDiagnostic,
+	JsonValue,
 } from '../index'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
@@ -25,6 +25,7 @@ import { createWidgetPlugin, createWidgetSystem } from '../index'
 interface LeafInterfaces {}
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.done()
 
@@ -33,25 +34,28 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		children: {},
+		children: { description: 'Test slot' },
 	})
 	.done()
 
 interface ConfiguredInterfaces {
 	config: {
-		raw: { label?: unknown }
+		raw: { label?: JsonValue }
 		resolved: { label: string }
 	}
 }
 
 const configuredPlugin = createWidgetPlugin('configured')
+	.description('Test widget')
 	.interfaces<ConfiguredInterfaces>()
 	.config({
-		validate: (input, ctx): input is { label?: unknown } => {
+		description: 'Test config',
+		validate: (input, ctx): input is { label?: JsonValue } => {
 			if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-				ctx.addIssue({ message: 'Config must be an object.' })
+				ctx.addDiagnostic({ message: 'Config must be an object.' })
 				return false
 			}
 			return true
@@ -75,16 +79,28 @@ function at<T>(array: readonly T[], index: number): T {
 	return value
 }
 
-function isDefinitionIssue<Plugins extends AnyWidgetPluginTuple>(
-	issue: BlueprintIssue<Plugins>,
-): issue is Issue<BlueprintDefinitionIssueSource<Plugins>> {
-	return issue.source.type === 'definition'
+function isDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple>(
+	diagnostic: BlueprintDiagnostic<Plugins>,
+): diagnostic is BlueprintDefinitionDiagnostic<Plugins> {
+	return ['invalid-widget-definition', 'invalid-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
 }
 
-function isConfigIssue<Plugins extends AnyWidgetPluginTuple>(
-	issue: BlueprintIssue<Plugins>,
-): issue is Issue<BlueprintConfigIssueSource<Plugins>> {
-	return issue.source.type === 'config'
+function isConfigDiagnostic<Plugins extends AnyWidgetPluginTuple>(
+	diagnostic: BlueprintDiagnostic<Plugins>,
+): diagnostic is BlueprintConfigDiagnostic<Plugins> {
+	return diagnostic.code === 'invalid-widget-config'
+}
+
+function pathOf(
+	diagnostic: BlueprintDefinitionDiagnostic | BlueprintDiagnostic,
+): readonly PropertyKey[] | undefined {
+	return 'path' in diagnostic ? diagnostic.path : undefined
+}
+
+function relatedOf(
+	diagnostic: BlueprintDefinitionDiagnostic,
+): readonly unknown[] | undefined {
+	return 'related' in diagnostic ? diagnostic.related : undefined
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -96,19 +112,19 @@ describe('malformed whole widget', () => {
 		['null', null],
 		['a number', 7],
 		['an array', ['not-a-widget']],
-	])('emits exactly one definition issue with no path for %s', (_label, definition) => {
+	])('emits exactly one definition diagnostic with no path for %s', (_label, definition) => {
 		const blueprint = system.createBlueprint(definition)
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
 
-		expect(issues)
+		expect(diagnostics)
 			.toHaveLength(1)
-		const issue = at(issues, 0)
-		expect(issue.source.node)
+		const diagnostic = at(diagnostics, 0)
+		expect(diagnostic.location.node)
 			.toBe(blueprint.root)
-		expect(issue.source.path)
+		expect(pathOf(diagnostic))
 			.toBeUndefined()
-		expect(issue.source.related)
+		expect(relatedOf(diagnostic))
 			.toBeUndefined()
 	})
 })
@@ -123,17 +139,17 @@ describe('id diagnostics', () => {
 		['id is a number', { id: 42, type: 'leaf' }],
 		['id is null', { id: null, type: 'leaf' }],
 		['id is an object', { id: {}, type: 'leaf' }],
-	])('emits exactly one definition issue at [\'id\'] when %s', (_label, definition) => {
+	])('emits exactly one definition diagnostic at [\'id\'] when %s', (_label, definition) => {
 		const blueprint = system.createBlueprint(definition)
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
 
-		expect(issues)
+		expect(diagnostics)
 			.toHaveLength(1)
-		const issue = at(issues, 0)
-		expect(issue.source.path)
+		const diagnostic = at(diagnostics, 0)
+		expect(pathOf(diagnostic))
 			.toEqual(['id'])
-		expect(issue.source.node)
+		expect(diagnostic.location.node)
 			.toBe(blueprint.root)
 	})
 })
@@ -144,17 +160,17 @@ describe('type diagnostics', () => {
 		['type is a number', { id: 'x', type: 7 }],
 		['type is null', { id: 'x', type: null }],
 		['type is an unknown plugin type', { id: 'x', type: 'nonexistent-plugin' }],
-	])('emits exactly one definition issue at [\'type\'] when %s', (_label, definition) => {
+	])('emits exactly one definition diagnostic at [\'type\'] when %s', (_label, definition) => {
 		const blueprint = system.createBlueprint(definition)
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
 
-		expect(issues)
+		expect(diagnostics)
 			.toHaveLength(1)
-		const issue = at(issues, 0)
-		expect(issue.source.path)
+		const diagnostic = at(diagnostics, 0)
+		expect(pathOf(diagnostic))
 			.toEqual(['type'])
-		expect(issue.source.node)
+		expect(diagnostic.location.node)
 			.toBe(blueprint.root)
 	})
 })
@@ -164,7 +180,7 @@ describe('type diagnostics', () => {
 // -------------------------------------------------------------------------------------------------
 
 describe('duplicate id', () => {
-	it('gives each of three colliders its own [\'id\'] issue, related to all other colliders in source order', () => {
+	it('gives each of three colliders its own [\'id\'] diagnostic, related to all other colliders in source order', () => {
 		const definition = {
 			id: 'root',
 			type: 'container',
@@ -182,40 +198,40 @@ describe('duplicate id', () => {
 			.toHaveLength(3)
 		const [nodeA, nodeB, nodeC] = [at(children, 0), at(children, 1), at(children, 2)]
 
-		function idIssuesOf(node: (typeof children)[number]) {
-			const issues = node.getIssues()
-				.filter(isDefinitionIssue)
-				.filter(issue => arraysEqual(issue.source.path, ['id']))
-			expect(issues)
+		function idDiagnosticsOf(node: (typeof children)[number]) {
+			const diagnostics = node.diagnostics
+				.filter(isDefinitionDiagnostic)
+				.filter(diagnostic => arraysEqual(pathOf(diagnostic), ['id']))
+			expect(diagnostics)
 				.toHaveLength(1)
-			return at(issues, 0)
+			return at(diagnostics, 0)
 		}
 
 		function arraysEqual(a: readonly PropertyKey[] | undefined, b: readonly PropertyKey[]): boolean {
 			return a !== undefined && a.length === b.length && a.every((item, index) => item === b[index])
 		}
 
-		expect(idIssuesOf(nodeA).source.related)
+		expect(relatedOf(idDiagnosticsOf(nodeA)))
 			.toEqual([
 				{ type: 'widget', node: nodeB },
 				{ type: 'widget', node: nodeC },
 			])
-		expect(idIssuesOf(nodeB).source.related)
+		expect(relatedOf(idDiagnosticsOf(nodeB)))
 			.toEqual([
 				{ type: 'widget', node: nodeA },
 				{ type: 'widget', node: nodeC },
 			])
-		expect(idIssuesOf(nodeC).source.related)
+		expect(relatedOf(idDiagnosticsOf(nodeC)))
 			.toEqual([
 				{ type: 'widget', node: nodeA },
 				{ type: 'widget', node: nodeB },
 			])
 
-		// Exactly one ['id'] duplicate-id definition issue per collider, no more, no fewer.
-		const allDuplicateIdIssues = blueprint.getCollectedIssues()
-			.filter(isDefinitionIssue)
-			.filter(issue => arraysEqual(issue.source.path, ['id']))
-		expect(allDuplicateIdIssues)
+		// Exactly one ['id'] duplicate-id definition diagnostic per collider, no more, no fewer.
+		const allDuplicateIdDiagnostics = blueprint.diagnostics
+			.filter(isDefinitionDiagnostic)
+			.filter(diagnostic => arraysEqual(pathOf(diagnostic), ['id']))
+		expect(allDuplicateIdDiagnostics)
 			.toHaveLength(3)
 	})
 })
@@ -225,27 +241,27 @@ describe('duplicate id', () => {
 // -------------------------------------------------------------------------------------------------
 
 describe('config diagnostics', () => {
-	it('emits exactly one definition issue at [\'config\'] when config is supplied without the config capability', () => {
+	it('emits exactly one definition diagnostic at [\'config\'] when config is supplied without the config capability', () => {
 		const blueprint = system.createBlueprint({ id: 'x', type: 'leaf', config: { anything: true } })
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
 
-		expect(issues)
+		expect(diagnostics)
 			.toHaveLength(1)
-		const issue = at(issues, 0)
-		expect(issue.source.path)
+		const diagnostic = at(diagnostics, 0)
+		expect(pathOf(diagnostic))
 			.toEqual(['config'])
-		expect(issue.source.node)
+		expect(diagnostic.location.node)
 			.toBe(blueprint.root)
 	})
 
-	it('does not duplicate an invalid-but-capable config as a definition issue', () => {
+	it('does not duplicate an invalid-but-capable config as a definition diagnostic', () => {
 		const blueprint = system.createBlueprint({ id: 'x', type: 'configured', config: 'not-an-object' })
-		const allIssues = blueprint.root.getIssues()
+		const allDiagnostics = blueprint.root.diagnostics
 
-		expect(allIssues.filter(isDefinitionIssue))
+		expect(allDiagnostics.filter(isDefinitionDiagnostic))
 			.toHaveLength(0)
-		expect(allIssues.filter(isConfigIssue).length)
+		expect(allDiagnostics.filter(isConfigDiagnostic).length)
 			.toBeGreaterThan(0)
 	})
 })
@@ -258,68 +274,68 @@ describe('slots container diagnostics', () => {
 	it.each([
 		['a string', 'not-an-object'],
 		['an array', []],
-	])('emits exactly one definition issue at [\'slots\'] for a malformed slots container (%s)', (_label, slots) => {
+	])('emits exactly one definition diagnostic at [\'slots\'] for a malformed slots container (%s)', (_label, slots) => {
 		const blueprint = system.createBlueprint({ id: 'x', type: 'container', slots })
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
 
-		expect(issues)
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(at(issues, 0).source.path)
+		expect(pathOf(at(diagnostics, 0)))
 			.toEqual(['slots'])
 	})
 
-	it('emits exactly one definition issue at [\'slots\'] when slots are supplied without the slots capability', () => {
+	it('emits exactly one definition diagnostic at [\'slots\'] when slots are supplied without the slots capability', () => {
 		const blueprint = system.createBlueprint({
 			id: 'x',
 			type: 'leaf',
 			slots: { extra: [{ id: 'y', type: 'leaf' }] },
 		})
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
 
-		expect(issues)
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(at(issues, 0).source.path)
+		expect(pathOf(at(diagnostics, 0)))
 			.toEqual(['slots'])
 	})
 })
 
 describe('slot entry diagnostics', () => {
-	it('emits a definition issue at [\'slots\', slot] for a malformed declared slot value', () => {
+	it('emits a definition diagnostic at [\'slots\', slot] for a malformed declared slot value', () => {
 		const blueprint = system.createBlueprint({ id: 'x', type: 'container', slots: { children: 'not-an-array' } })
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
 
-		expect(issues)
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(at(issues, 0).source.path)
+		expect(pathOf(at(diagnostics, 0)))
 			.toEqual(['slots', 'children'])
 	})
 
-	it('emits a definition issue at [\'slots\', slot] for an undeclared raw slot name', () => {
+	it('emits a definition diagnostic at [\'slots\', slot] for an undeclared raw slot name', () => {
 		const blueprint = system.createBlueprint({
 			id: 'x',
 			type: 'container',
 			slots: { extra: [{ id: 'y', type: 'leaf' }] },
 		})
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
 
-		expect(issues)
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(at(issues, 0).source.path)
+		expect(pathOf(at(diagnostics, 0)))
 			.toEqual(['slots', 'extra'])
 	})
 
-	it('lets a capability-mismatch issue and a malformed-value issue coexist independently', () => {
+	it('lets a capability-mismatch diagnostic and a malformed-value diagnostic coexist independently', () => {
 		const blueprint = system.createBlueprint({ id: 'x', type: 'leaf', slots: { anything: 'not-an-array' } })
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
 
-		expect(issues)
+		expect(diagnostics)
 			.toHaveLength(2)
-		const paths = issues.map(issue => issue.source.path)
+		const paths = diagnostics.map(diagnostic => pathOf(diagnostic))
 		expect(paths)
 			.toContainEqual(['slots'])
 		expect(paths)
@@ -332,32 +348,32 @@ describe('slot entry diagnostics', () => {
 // -------------------------------------------------------------------------------------------------
 
 describe('malformed child attribution', () => {
-	it('reports a malformed child on the child itself, never as a duplicate parent array-index issue', () => {
+	it('reports a malformed child on the child itself, never as a duplicate parent array-index diagnostic', () => {
 		const blueprint = system.createBlueprint({
 			id: 'root',
 			type: 'container',
 			slots: { children: [null] },
 		})
 
-		const parentIssues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
-		expect(parentIssues)
+		const parentDiagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
+		expect(parentDiagnostics)
 			.toHaveLength(0)
 
 		const child = at(blueprint.getChildrenAt(blueprint.root, 'children'), 0)
 		expect(child.resolved)
 			.toBe(false)
-		expect(child.rawDefinition)
+		expect(child.source)
 			.toBeNull()
 
-		const childIssues = child.getIssues()
-			.filter(isDefinitionIssue)
-		expect(childIssues)
+		const childDiagnostics = child.diagnostics
+			.filter(isDefinitionDiagnostic)
+		expect(childDiagnostics)
 			.toHaveLength(1)
-		const issue = at(childIssues, 0)
-		expect(issue.source.node)
+		const diagnostic = at(childDiagnostics, 0)
+		expect(diagnostic.location.node)
 			.toBe(child)
-		expect(issue.source.path)
+		expect(pathOf(diagnostic))
 			.toBeUndefined()
 	})
 })
@@ -371,10 +387,10 @@ describe('unreserved extra fields', () => {
 		['a primitive extra field', { id: 'x', type: 'leaf', revision: 3 }],
 		['an object extra field', { id: 'x', type: 'leaf', meta: { createdBy: 'someone' } }],
 		['a function-valued extra field', { id: 'x', type: 'leaf', onSomething: () => {} }],
-	])('produces no definition issue for %s', (_label, definition) => {
+	])('produces no definition diagnostic for %s', (_label, definition) => {
 		const blueprint = system.createBlueprint(definition)
-		expect(blueprint.root.getIssues()
-			.filter(isDefinitionIssue))
+		expect(blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic))
 			.toHaveLength(0)
 	})
 })
@@ -389,9 +405,9 @@ describe('deterministic diagnostic ordering', () => {
 			type: 'nonexistent-plugin',
 			slots: 'not-an-object',
 		})
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
-		expect(issues.map(issue => issue.source.path))
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
+		expect(diagnostics.map(diagnostic => pathOf(diagnostic)))
 			.toEqual([['id'], ['type'], ['slots']])
 	})
 
@@ -402,9 +418,9 @@ describe('deterministic diagnostic ordering', () => {
 			config: { foo: 1 },
 			slots: 'not-an-object',
 		})
-		const issues = blueprint.root.getIssues()
-			.filter(isDefinitionIssue)
-		expect(issues.map(issue => issue.source.path))
+		const diagnostics = blueprint.root.diagnostics
+			.filter(isDefinitionDiagnostic)
+		expect(diagnostics.map(diagnostic => pathOf(diagnostic)))
 			.toEqual([['config'], ['slots']])
 	})
 })

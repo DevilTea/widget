@@ -3,7 +3,7 @@
  * Thin presentation only. Reused as both `stage-filter` and `stage-editor` (including inside the modal
  * as "New stage") — options come entirely from `useProperties().options`.
  *
- * Issue #28 accessibility fix: `useId()` gives this instance a stable id so the visible `label` is
+ * Diagnostic #28 accessibility fix: `useId()` gives this instance a stable id so the visible `label` is
  * programmatically associated with its `select` via `for`/`id` — same rationale as `TextInputRenderer.vue`.
  */
 import { useWidget } from '@deviltea/widget-vue'
@@ -11,10 +11,10 @@ import { useId } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { SelectInputPlugin } from '../plugins/inputs'
 
-const { useState, useProperties, useStateIssues, widgetId, widgetType } = useWidget(SelectInputPlugin)
+const { useState, useProperties, useStateDiagnostics, widgetId, widgetType } = useWidget(SelectInputPlugin)
 const { value } = useState()
 const { label, options } = useProperties()
-const { value: valueIssues } = useStateIssues()
+const { value: valueDiagnostics } = useStateDiagnostics()
 
 const selectId = useId()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
@@ -48,11 +48,11 @@ function onChange(event: Event): void {
 			</option>
 		</select>
 		<p
-			v-for="issue in valueIssues"
-			:key="issue.message"
+			v-for="diagnostic in valueDiagnostics"
+			:key="diagnostic.message"
 			:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-danger)' })"
 		>
-			{{ issue.message }}
+			{{ diagnostic.message }}
 		</p>
 	</div>
 </template>

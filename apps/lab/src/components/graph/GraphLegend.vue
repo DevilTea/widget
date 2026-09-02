@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * Graph legend (issue #25 P4 Scope C): a compact, dismissable disclosure explaining what
+ * Graph legend (diagnostic #25 P4 Scope C): a compact, dismissable disclosure explaining what
  * `GraphCanvas.vue`/`projection.ts` actually render — never inventing a visual encoding this panel does
  * not have. Content is verified against those two modules directly (not written from memory of the
  * design intent):
  *
- * - Member-kind border colors are `GraphCanvas.vue`'s own `memberBorderColor()`: State = success (green),
+ * - Member-kind border colors are `GraphCanvas.vue`'s own `memberBorderColor()`: State = ok (green),
  *   Method = accent (blue), Property = the `else` branch (warning/amber) — and any member inside an
  *   `invalidCycle` (`projection.ts`'s `computeInvalidCycleVertexSets()`, projected verbatim from core's
  *   `BlueprintInspection.invalidCycles`) overrides its own kind color to danger (red), checked first.
@@ -70,7 +70,7 @@ function toggle(): void {
 					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
 						<span
 							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '2px' })"
-							:style="{ border: '1.5px solid var(--lab-color-success)' }"
+							:style="{ border: '1.5px solid var(--lab-color-ok)' }"
 						/>
 						State
 					</li>

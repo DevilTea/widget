@@ -2,37 +2,37 @@
  * RuntimeMethod primitive.
  *
  * Every invocation is one `alien-signals` batch boundary (start before `validateArgs`, end only after
- * the method's final issue snapshot commits, `endBatch()` always in `finally`). Nested
+ * the method's final diagnostic snapshot commits, `endBatch()` always in `finally`). Nested
  * dependency-invoked methods reuse this exact same pipeline, so nested calls naturally nest batch
  * depth; only the outermost `endBatch()` flushes.
  *
- * The issue-snapshot commits go through `writeDeferringFlush`, which keeps that rule true one level
+ * The diagnostic-snapshot commits go through `writeDeferringFlush`, which keeps that rule true one level
  * further out: a Property may declare a dependency on a write-free Method, so `invoke` can run inside a
  * Property evaluator, and there the invocation's own `endBatch()` must not be the frame that flushes —
  * doing so re-enters alien-signals' propagation while the evaluating computed is uncommitted (the helper
  * documents the mechanism). The still-open deferral level keeps this `endBatch()` from reaching depth `0`,
  * and the flush happens once the outermost enclosing read/write call is leaving instead.
  *
- * Normative source: issue #10 consolidated handoff §15, amendment "RuntimeMethod invocation as
+ * Normative source: diagnostic #10 consolidated handoff §15, amendment "RuntimeMethod invocation as
  * alien-signals batch boundary".
  */
 
+import type { RelativeValueDiagnosticInput, RuntimeMethodDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { RuntimeMethod } from '../internal/contract'
-import type { RelativeValueIssueInput, RuntimeMethodIssue } from '../issue'
 import type { ErasedWidgetMethodDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
-import type { ActiveIssueSink, RuntimeContext } from './context'
+import type { ActiveDiagnosticSink, RuntimeContext } from './context'
 import { endBatch, signal, startBatch } from 'alien-signals'
-import { EMPTY_ISSUES } from '../issue'
+import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
-import { buildDefaultMethodArgsIssue, buildMethodArgsIssue, buildMethodResultIssue, freezeIssueSnapshot, toIssueSnapshot } from './issues'
+import { buildDefaultMethodArgsDiagnostic, buildMethodArgsDiagnostic, buildMethodResultDiagnostic, freezeDiagnosticSnapshot, toDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
 export interface MethodPrimitive {
-	/** Tracked raw issue-snapshot read. */
-	getIssues: () => readonly RuntimeMethodIssue[]
+	/** Tracked raw diagnostic-snapshot read. */
+	getDiagnostics: () => readonly RuntimeMethodDiagnostic[]
 	public: RuntimeMethod<(...args: readonly unknown[]) => unknown>
 }
 
@@ -47,42 +47,42 @@ export interface CreateMethodPrimitiveParams {
 }
 
 export function createMethodPrimitive(context: RuntimeContext, params: CreateMethodPrimitiveParams): MethodPrimitive {
-	const issuesSignal = signal<readonly RuntimeMethodIssue[]>(EMPTY_ISSUES)
+	const diagnosticsSignal = signal<readonly RuntimeMethodDiagnostic[]>(EMPTY_DIAGNOSTICS)
 
-	function invoke(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodIssue> {
+	function invoke(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
 		context.assertActive()
 		return runRuntimeOperation(() => invokeWithinOperation(...args))
 	}
 
-	function invokeWithinOperation(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodIssue> {
+	function invokeWithinOperation(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
 		startBatch()
 		try {
-			const argsCollector = createOperationCollector<RelativeValueIssueInput, RuntimeMethodIssue>()
+			const argsCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>()
 			const argsCtx = {
 				...params.buildConfigFragment(),
-				addIssue: argsCollector.addIssue,
-				hasAnyIssue: argsCollector.hasAnyIssue,
+				addDiagnostic: argsCollector.addDiagnostic,
+				hasAnyDiagnostic: argsCollector.hasAnyDiagnostic,
 			}
 
 			const validArgs = params.definition.validateArgs(args, argsCtx)
 			assertSyncValue(validArgs, `Method "${params.name}"'s validateArgs`)
 
-			if (!validArgs || argsCollector.hasAnyIssue()) {
-				const finalized = argsCollector.finalize(input => buildMethodArgsIssue(params.widgetId, params.name, args, input))
+			if (!validArgs || argsCollector.hasAnyDiagnostic()) {
+				const finalized = argsCollector.finalize(input => buildMethodArgsDiagnostic(params.widgetId, params.name, args, input))
 				// `finalize()` already returns a deep-frozen array; the generic-fallback branch builds
-				// a fresh array here and needs the same immutable-snapshot treatment (issue #10
-				// issue-snapshot contract).
-				const issues = finalized.length > 0 ? finalized : freezeIssueSnapshot([buildDefaultMethodArgsIssue(params.widgetId, params.name, args)])
-				writeDeferringFlush(() => issuesSignal(issues))
+				// a fresh array here and needs the same immutable-snapshot treatment (diagnostic #10
+				// diagnostic-snapshot contract).
+				const diagnostics = finalized.length > 0 ? finalized : freezeDiagnosticSnapshot([buildDefaultMethodArgsDiagnostic(params.widgetId, params.name, args)])
+				writeDeferringFlush(() => diagnosticsSignal(diagnostics))
 				// `invoke()` doesn't cache its return value, so mutating it can't corrupt a later call
 				// the way Property's cached computed result could — freezing the wrapper here is a
 				// consistency/defense-in-depth measure, not a fix for a persistence hazard.
-				return Object.freeze({ success: false, issues: issues as readonly [RuntimeMethodIssue, ...RuntimeMethodIssue[]] })
+				return Object.freeze({ ok: false, failure: { diagnostics: diagnostics as readonly [RuntimeMethodDiagnostic, ...RuntimeMethodDiagnostic[]] } })
 			}
 
-			const execCollector = createOperationCollector<RelativeValueIssueInput, RuntimeMethodIssue>()
-			const sink: ActiveIssueSink = {
-				addFinalizedIssue: (issue, dedupe) => execCollector.addFinalizedIssue(issue as RuntimeMethodIssue, dedupe),
+			const execCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>()
+			const sink: ActiveDiagnosticSink = {
+				addFinalizedDiagnostic: (diagnostic, dedupe) => execCollector.addFinalizedDiagnostic(diagnostic as RuntimeMethodDiagnostic, dedupe),
 			}
 
 			const executeCtx = {
@@ -91,22 +91,22 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				blueprint: params.blueprintView,
 				deps: params.deps,
 				...params.buildConfigFragment(),
-				addIssue: execCollector.addIssue,
-				hasAnyIssue: execCollector.hasAnyIssue,
+				addDiagnostic: execCollector.addDiagnostic,
+				hasAnyDiagnostic: execCollector.hasAnyDiagnostic,
 			}
 
 			const value = context.withActiveCollector(sink, () => params.definition.execute(executeCtx))
 			assertSyncValue(value, `Method "${params.name}"'s execute`)
 
-			const issues = execCollector.finalize(input => buildMethodResultIssue(params.widgetId, params.name, value, input))
-			writeDeferringFlush(() => issuesSignal(toIssueSnapshot(issues)))
+			const diagnostics = execCollector.finalize(input => buildMethodResultDiagnostic(params.widgetId, params.name, value, input))
+			writeDeferringFlush(() => diagnosticsSignal(toDiagnosticSnapshot(diagnostics)))
 
 			// Same consistency rationale as the validateArgs-failure branch above: not a persistence
 			// hazard (each `invoke()` builds a fresh wrapper), but freezing it keeps every
 			// `ExecutionResult` returned to plugin/consumer code equally immutable.
-			const result: ExecutionResult<unknown, RuntimeMethodIssue> = issues.length > 0
-				? { success: false, issues: issues as readonly [RuntimeMethodIssue, ...RuntimeMethodIssue[]] }
-				: { success: true, value }
+			const result: ExecutionResult<unknown, RuntimeMethodDiagnostic> = diagnostics.length > 0
+				? { ok: false, failure: { diagnostics: diagnostics as readonly [RuntimeMethodDiagnostic, ...RuntimeMethodDiagnostic[]] } }
+				: { ok: true, value }
 			return Object.freeze(result)
 		}
 		finally {
@@ -117,18 +117,18 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 	const callable = ((...args: readonly unknown[]) => invoke(...args)) as RuntimeMethod<(...args: readonly unknown[]) => unknown>
 
 	Object.assign(callable, {
-		getIssues() {
+		getDiagnostics() {
 			context.assertActive()
-			return issuesSignal()
+			return diagnosticsSignal()
 		},
-		subscribeIssues(listener: (issues: readonly RuntimeMethodIssue[]) => void) {
+		subscribeDiagnostics(listener: (diagnostics: readonly RuntimeMethodDiagnostic[]) => void) {
 			context.assertActive()
-			return createTrackedSubscription(context, () => issuesSignal(), listener)
+			return createTrackedSubscription(context, () => diagnosticsSignal(), listener)
 		},
 	})
 
 	return {
-		getIssues: () => issuesSignal(),
+		getDiagnostics: () => diagnosticsSignal(),
 		public: callable,
 	}
 }

@@ -1,6 +1,6 @@
 /**
  * Conformance group 8 (dependency flatten/path), group 9 (dependency status truth table) and group 10
- * (resolved endpoint correctness) from issue #10's inspection amendment "inspection exact API v1 (part
+ * (resolved endpoint correctness) from diagnostic #10's inspection amendment "inspection exact API v1 (part
  * 1)".
  *
  * `.__proto__` container-key access is written through a `PROTO_KEY` string constant + computed
@@ -29,6 +29,7 @@ interface DepTargetInterfaces {
 }
 
 const depTargetPlugin = createWidgetPlugin('dep-target')
+	.description('Test widget')
 	.interfaces<DepTargetInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -48,6 +49,7 @@ interface DepTargetNoStateInterfaces {
 }
 
 const depTargetNoStatePlugin = createWidgetPlugin('dep-target-no-state')
+	.description('Test widget')
 	.interfaces<DepTargetNoStateInterfaces>()
 	.properties(properties => properties.val({ compute: () => 9 }))
 	.done()
@@ -70,8 +72,9 @@ interface DepConsumerInterfaces {
 }
 
 const depConsumerPlugin = createWidgetPlugin('dep-consumer')
+	.description('Test widget')
 	.interfaces<DepConsumerInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: 'Test slot' } })
 	.properties(properties => properties
 		.resolvedProp({
 			registerDeps: ({ dep }) => ({ v: dep.widget('target').state.get('value') }),
@@ -170,18 +173,18 @@ describe('dependency status truth table', () => {
 			.toBe('resolved')
 	})
 
-	it('optional-missing target (cardinality 0, optional) is absent, with no dependency Issue', () => {
+	it('optional-missing target (cardinality 0, optional) is absent, with no dependency Diagnostic', () => {
 		const blueprint = createFixtureBlueprint()
 		const root = inspectRootOf(blueprint)
 		expect(propertyDep(root, 'optionalMissingProp').status)
 			.toBe('absent')
 
-		const issues = blueprint.getCollectedIssues()
-		expect(issues.some(issue => issue.source.type === 'dependency' && issue.source.member.type === 'property' && issue.source.member.name === 'optionalMissingProp'))
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics.some(diagnostic => diagnostic.code.includes('dependency') && diagnostic.location.type === 'property' && diagnostic.location.name === 'optionalMissingProp'))
 			.toBe(false)
 	})
 
-	it('required-missing target (cardinality 0, not optional) is invalid with no targetNodeId, and an Issue exists', () => {
+	it('required-missing target (cardinality 0, not optional) is invalid with no targetNodeId, and an Diagnostic exists', () => {
 		const blueprint = createFixtureBlueprint()
 		const root = inspectRootOf(blueprint)
 		const dep = propertyDep(root, 'requiredMissingProp')
@@ -190,8 +193,8 @@ describe('dependency status truth table', () => {
 		expect(dep.status === 'invalid' ? dep.targetNodeId : 'not-invalid')
 			.toBeUndefined()
 
-		const issues = blueprint.getCollectedIssues()
-		expect(issues.some(issue => issue.source.type === 'dependency' && issue.source.member.type === 'property' && issue.source.member.name === 'requiredMissingProp'))
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics.some(diagnostic => diagnostic.code.includes('dependency') && diagnostic.location.type === 'property' && diagnostic.location.name === 'requiredMissingProp'))
 			.toBe(true)
 	})
 
@@ -235,11 +238,11 @@ describe('dependency status truth table', () => {
 			.not.toBeUndefined()
 	})
 
-	it('every invalid/absent status is cross-checked against the existing Blueprint Issue surface, never derived from it', () => {
+	it('every invalid/absent status is cross-checked against the existing Blueprint Diagnostic surface, never derived from it', () => {
 		const blueprint = createFixtureBlueprint()
 		const root = inspectRootOf(blueprint)
 		// Every one of these six properties fails resolution for a different reason; the Blueprint's own
-		// collected Issues independently confirm six matching dependency diagnostics (one per failing
+		// collected Diagnostics independently confirm six matching dependency diagnostics (one per failing
 		// property, `optionalMissingProp` legitimately excluded).
 		const failing = ['requiredMissingProp', 'ambiguousProp', 'unresolvedTargetProp', 'missingCapabilityProp', 'missingMemberProp']
 		for (const name of failing) {
@@ -247,14 +250,14 @@ describe('dependency status truth table', () => {
 				.toBe('invalid')
 		}
 
-		const issues = blueprint.getCollectedIssues()
-		const namesWithIssues = new Set(
-			issues
-				.filter(issue => issue.source.type === 'dependency' && issue.source.member.type === 'property')
-				.map(issue => (issue.source as { member: { name: string } }).member.name),
+		const diagnostics = blueprint.diagnostics
+		const namesWithDiagnostics = new Set(
+			diagnostics
+				.filter(diagnostic => diagnostic.code.includes('dependency') && diagnostic.location.type === 'property')
+				.map(diagnostic => (diagnostic as unknown as { location: { name: string } }).location.name),
 		)
 		for (const name of failing) {
-			expect(namesWithIssues.has(name))
+			expect(namesWithDiagnostics.has(name))
 				.toBe(true)
 		}
 	})

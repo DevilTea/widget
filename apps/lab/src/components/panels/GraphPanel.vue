@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Dependency Graph panel (issue #13 Phase 5 "Dependency Graph semantic representation" / "implementation
+ * Dependency Graph panel (diagnostic #13 Phase 5 "Dependency Graph semantic representation" / "implementation
  * stack" / "inspector panel interaction contract"). Available even for an invalid Blueprint — it
  * projects compile-time inspection facts only and never waits on/depends on Runtime. Canvas-prioritized
  * layout with compact/collapsible details, per the interaction contract. #43 localizes fixed Lab chrome
@@ -20,11 +20,11 @@ const store = useLabStore()
 const i18n = useLabI18n()
 const { semanticGraph, layoutState, flow } = useDependencyGraph()
 
-// Panel-local edge selection (issue #13 Phase 5: stays local, never expands into shared focus; reset on
+// Panel-local edge selection (diagnostic #13 Phase 5: stays local, never expands into shared focus; reset on
 // applied Blueprint identity change, not on ordinary tab switching — see the composable's own comment).
 const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdgeSelection(store)
 
-// issue #27 Finding 1: manual recovery for the viewport-fit policy — same `fitView` path
+// diagnostic #27 Finding 1: manual recovery for the viewport-fit policy — same `fitView` path
 // `GraphCanvas.vue` already calls automatically once a new laid-out graph's nodes render.
 const graphCanvas = useTemplateRef<InstanceType<typeof GraphCanvas>>('graphCanvas')
 function onFitGraphClick(): void {
@@ -51,7 +51,7 @@ function onEdgeClick(edgeId: string): void {
 	setSelectedEdgeData(null)
 }
 
-// issue #25 P4 Scope D copy audit: say why, and what to do next, rather than a bare status word.
+// diagnostic #25 P4 Scope D copy audit: say why, and what to do next, rather than a bare status word.
 const statusLabel = computed(() => {
 	const status = layoutState.value.status
 	if (status === 'idle' || status === 'loading')

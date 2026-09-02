@@ -1,7 +1,7 @@
 /**
  * Conformance tests for the three leaf question plugins (checkpoint §2/§4.1): primitive State
  * validation only, invalid writes preserve the previous authoritative value and produce a
- * `state-validation` Runtime Issue, and `reset()` restores the configured default.
+ * `state-validation` Runtime Diagnostic, and `reset()` restores the configured default.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -11,7 +11,7 @@ import { widgetOfType } from '../test-support'
 function runtimeOf(definition: unknown) {
 	const blueprint = surveySystem.createBlueprint(definition)
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid Blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid Blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 	return blueprint.createRuntime()
 }
 
@@ -23,7 +23,7 @@ describe('surveyDateQuestion', () => {
 		expect(widget.state.answer.get())
 			.toBeNull()
 		expect(widget.state.answer.set('2027-04-10'))
-			.toEqual({ success: true, value: '2027-04-10' })
+			.toEqual({ ok: true, value: '2027-04-10' })
 		expect(widget.state.answer.get())
 			.toBe('2027-04-10')
 	})
@@ -33,14 +33,14 @@ describe('surveyDateQuestion', () => {
 		const widget = widgetOfType(runtime, 'q', 'SurveyDateQuestion')
 
 		const result = widget.state.answer.set('2027-02-30')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
 		expect(widget.state.answer.get())
 			.toBe('2027-04-10')
-		expect(widget.state.answer.getIssues())
+		expect(widget.state.answer.getDiagnostics())
 			.toHaveLength(1)
-		expect(widget.state.answer.getIssues()[0]!.source.type)
-			.toBe('state-validation')
+		expect(widget.state.answer.getDiagnostics()[0]!.code)
+			.toBe('invalid-state-value')
 	})
 
 	it('reset() restores the configured default', () => {
@@ -55,24 +55,24 @@ describe('surveyDateQuestion', () => {
 })
 
 describe('surveyNumberQuestion', () => {
-	it('rejects a candidate below min, preserving the previous value with a state-validation issue', () => {
+	it('rejects a candidate below min, preserving the previous value with a state-validation diagnostic', () => {
 		const runtime = runtimeOf({ id: 'q', type: 'SurveyNumberQuestion', config: { label: 'Adults', min: 1, max: 8, integer: true, default: 2 } })
 		const widget = widgetOfType(runtime, 'q', 'SurveyNumberQuestion')
 
 		const result = widget.state.answer.set(0)
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
 		expect(widget.state.answer.get())
 			.toBe(2)
-		expect(widget.state.answer.getIssues()[0]!.source.type)
-			.toBe('state-validation')
+		expect(widget.state.answer.getDiagnostics()[0]!.code)
+			.toBe('invalid-state-value')
 	})
 
 	it('rejects a candidate above max, preserving the previous value', () => {
 		const runtime = runtimeOf({ id: 'q', type: 'SurveyNumberQuestion', config: { label: 'Adults', min: 1, max: 8, integer: true, default: 2 } })
 		const widget = widgetOfType(runtime, 'q', 'SurveyNumberQuestion')
 
-		expect(widget.state.answer.set(9).success)
+		expect(widget.state.answer.set(9).ok)
 			.toBe(false)
 		expect(widget.state.answer.get())
 			.toBe(2)
@@ -82,7 +82,7 @@ describe('surveyNumberQuestion', () => {
 		const runtime = runtimeOf({ id: 'q', type: 'SurveyNumberQuestion', config: { label: 'Adults', integer: true, default: 2 } })
 		const widget = widgetOfType(runtime, 'q', 'SurveyNumberQuestion')
 
-		expect(widget.state.answer.set(2.5).success)
+		expect(widget.state.answer.set(2.5).ok)
 			.toBe(false)
 		expect(widget.state.answer.get())
 			.toBe(2)
@@ -93,7 +93,7 @@ describe('surveyNumberQuestion', () => {
 		const widget = widgetOfType(runtime, 'q', 'SurveyNumberQuestion')
 
 		expect(widget.state.answer.set(5))
-			.toEqual({ success: true, value: 5 })
+			.toEqual({ ok: true, value: 5 })
 	})
 })
 
@@ -111,9 +111,9 @@ describe('surveyChoiceQuestion', () => {
 		expect(widget.state.answer.get())
 			.toBe('tokyo')
 		expect(widget.state.answer.set('seoul'))
-			.toEqual({ success: true, value: 'seoul' })
+			.toEqual({ ok: true, value: 'seoul' })
 		expect(widget.state.answer.set(null))
-			.toEqual({ success: true, value: null })
+			.toEqual({ ok: true, value: null })
 	})
 
 	it('rejects a value outside the configured options, preserving the previous value', () => {
@@ -121,12 +121,12 @@ describe('surveyChoiceQuestion', () => {
 		const widget = widgetOfType(runtime, 'q', 'SurveyChoiceQuestion')
 
 		const result = widget.state.answer.set('paris')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
 		expect(widget.state.answer.get())
 			.toBe('tokyo')
-		expect(widget.state.answer.getIssues()[0]!.source.type)
-			.toBe('state-validation')
+		expect(widget.state.answer.getDiagnostics()[0]!.code)
+			.toBe('invalid-state-value')
 	})
 
 	it('reset() restores the configured default', () => {

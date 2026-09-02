@@ -2,7 +2,7 @@
  * `@deviltea/widget-vue` public contract.
  *
  * A thin Vue 3 integration over `@deviltea/widget-core` Runtime semantics. The normative semantic
- * contract lives in GitHub issue #13 ("Widget Vue integration — Phase 3 decision log"); issue #10
+ * contract lives in GitHub diagnostic #13 ("Widget Vue integration — Phase 3 decision log"); diagnostic #10
  * ("Widget composition core architecture — canonical decision log") remains the core semantic
  * authority and is never reimplemented or reinterpreted here.
  */
@@ -21,21 +21,21 @@ export type {
 
 export type {
 	ReadonlyRef,
+	UseWidgetDiagnosticsAccessor,
 	UseWidgetIdentityAccessor,
-	UseWidgetIssuesAccessor,
-	UseWidgetMethodIssuesAccessor,
-	UseWidgetMethodIssuesSurface,
+	UseWidgetMethodDiagnosticsAccessor,
+	UseWidgetMethodDiagnosticsSurface,
 	UseWidgetMethodsAccessor,
 	UseWidgetMethodsSurface,
 	UseWidgetPropertiesAccessor,
 	UseWidgetPropertiesSurface,
-	UseWidgetPropertyIssuesAccessor,
-	UseWidgetPropertyIssuesSurface,
+	UseWidgetPropertyDiagnosticsAccessor,
+	UseWidgetPropertyDiagnosticsSurface,
 	UseWidgetResult,
 	UseWidgetSlotAccessor,
 	UseWidgetStateAccessor,
-	UseWidgetStateIssuesAccessor,
-	UseWidgetStateIssuesSurface,
+	UseWidgetStateDiagnosticsAccessor,
+	UseWidgetStateDiagnosticsSurface,
 	UseWidgetStateSurface,
 	WidgetSlotComponent,
 } from './types'

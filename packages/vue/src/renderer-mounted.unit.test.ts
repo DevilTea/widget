@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Conformance tests — issue #13 checkpoint G "Renderer / topology conformance", checkpoints D and E.
+ * Conformance tests — diagnostic #13 checkpoint G "Renderer / topology conformance", checkpoints D and E.
  *
  * Recursive `WidgetSlot` rendering, semantic child order, empty slots, arbitrary slot names,
  * nearest-widget provider shadowing, exact renderer lookup, and renderer/plugin mismatch as a

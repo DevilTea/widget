@@ -5,7 +5,7 @@
  * semantic Methods directly" rule). `label`/`kind` are exposed via `properties` as a deliberate, narrow
  * deviation from the checkpoint's literal capability list — see `../plugins/actions.ts`'s file header.
  *
- * `data-tutorial-target` (issue #25 P4): `Button` is reused four times in this preset ("Reset data",
+ * `data-tutorial-target` (diagnostic #25 P4): `Button` is reused four times in this preset ("Reset data",
  * "Change stage", "Save", "Cancel"), so this needs the widget-id-keyed lookup table
  * (`crm-target-map.ts`) rather than an unconditional attribute — only "Change stage" (the CRM tour's own
  * target) has an entry; the other three render no `data-tutorial-target` at all.
@@ -16,10 +16,10 @@ import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { CRM_BUTTON_TARGETS } from '../../../tutorial/crm-target-map'
 import { ButtonPlugin } from '../plugins/actions'
 
-const { useProperties, useMethods, useMethodIssues, widgetId, widgetType } = useWidget(ButtonPlugin)
+const { useProperties, useMethods, useMethodDiagnostics, widgetId, widgetType } = useWidget(ButtonPlugin)
 const { label, kind } = useProperties()
 const { press } = useMethods()
-const { press: pressIssues } = useMethodIssues()
+const { press: pressDiagnostics } = useMethodDiagnostics()
 
 const accentColor = computed(() => {
 	switch (kind.value) {
@@ -51,11 +51,11 @@ function onClick(): void {
 			{{ label }}
 		</button>
 		<p
-			v-for="issue in pressIssues"
-			:key="issue.message"
+			v-for="diagnostic in pressDiagnostics"
+			:key="diagnostic.message"
 			:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-danger)' })"
 		>
-			{{ issue.message }}
+			{{ diagnostic.message }}
 		</p>
 	</div>
 </template>

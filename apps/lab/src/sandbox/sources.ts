@@ -1,6 +1,6 @@
 /**
- * Sandbox curated Implementation-explorer registry (issue #25 P3 Scope A). Sandbox is the Lab's
- * default showcase and Inspect already works there (issue #25 P2 merge-gate blocker 2), so the
+ * Sandbox curated Implementation-explorer registry (diagnostic #25 P3 Scope A). Sandbox is the Lab's
+ * default showcase and Inspect already works there (diagnostic #25 P2 merge-gate blocker 2), so the
  * Implementation explorer curates it too rather than treating it as a lesser fixture. Both the plugin
  * and renderer sides live in one file each (`plugins.ts` / `renderers.ts`) — every entry below points
  * at the same two files; Vite's `?raw` dynamic import is deduped per specifier, so this never re-fetches

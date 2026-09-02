@@ -1,5 +1,5 @@
 /**
- * Interactive Survey curated Implementation-explorer registry (issue #25 P3 Scope A). One entry per
+ * Interactive Survey curated Implementation-explorer registry (diagnostic #25 P3 Scope A). One entry per
  * `surveyPlugins` type (`./plugins/index.ts`) — semantic plugin file, Vue renderer file, and (only
  * where the widget's own behavior genuinely depends on domain calculations/scoring, not merely a
  * generic `isPlainObject` guard borrowed from `./domain.ts`) the domain helper file. `TripMetrics`/

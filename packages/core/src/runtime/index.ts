@@ -6,7 +6,7 @@
  * `attemptSet`), materializes dependency callables, creates Property/Method primitives, assembles
  * RuntimeWidget objects and wires the deterministic aggregate.
  *
- * Normative source: issue #10 consolidated handoff §11 (Runtime creation/initialization pipeline).
+ * Normative source: diagnostic #10 consolidated handoff §11 (Runtime creation/initialization pipeline).
  */
 
 import type {
@@ -41,7 +41,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	const compiled: CompiledBlueprint<Plugins> = readCompiledBlueprint(blueprint)
 	const context = createRuntimeContext()
 	// A real restricted facade, not the full Blueprint object: `compute`/`execute` must not be able to
-	// reach `createRuntime`/`recompile`/`getCollectedIssues`/`system`/`rawDefinition` through JS/`any`.
+	// reach `createRuntime`/`recompile`/`getDiagnostics`/`system`/`source` through JS/`any`.
 	const blueprintView = buildBlueprintView(blueprint)
 
 	const registry = new Map<InternalNodeId, PrimitiveRegistryEntry & {
@@ -57,7 +57,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		return () => ({ config: node.config })
 	}
 
-	// 1. Runtime/widget indexes + 2. create all states (null + empty issue snapshot).
+	// 1. Runtime/widget indexes + 2. create all states (null + empty diagnostic snapshot).
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
 		if (node === undefined || !node.resolved)
@@ -84,7 +84,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	}
 
 	// 3. Apply override/default precedence through authoritative validation +
-	// 4. collect override topology runtime-level issues.
+	// 4. collect override topology runtime-level diagnostics.
 	const overrideResolution = resolveStateOverrides(compiled, options?.overrideStateDefaults)
 
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
@@ -122,7 +122,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		}
 	}
 
-	// 5. Materialize compiled dependency callables + 6. create property computed/issues +
+	// 5. Materialize compiled dependency callables + 6. create property computed/diagnostics +
 	// 7. create method wrappers.
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
@@ -180,7 +180,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		}
 	}
 
-	// 8. Build collected-issue aggregate.
+	// 8. Build the live diagnostic aggregate.
 	const runtimeWidgetsByNodeId = new Map<InternalNodeId, unknown>()
 	for (const [nodeId, entry] of registry) {
 		const node = compiled.nodes[nodeId]
@@ -189,7 +189,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		runtimeWidgetsByNodeId.set(nodeId, buildRuntimeWidget(context, node, entry))
 	}
 
-	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelIssues)
+	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelDiagnostics)
 
 	function getWidget(id: WidgetId): unknown {
 		context.assertActive()
@@ -211,9 +211,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			return context.isDisposed()
 		},
 		getWidget,
-		getIssues: aggregate.getIssues,
-		getCollectedIssues: aggregate.getCollectedIssues,
-		subscribeCollectedIssues: aggregate.subscribeCollectedIssues,
+		getDiagnostics: aggregate.getDiagnostics,
+		subscribeDiagnostics: aggregate.subscribeDiagnostics,
 		dispose: () => context.dispose(),
 	}
 

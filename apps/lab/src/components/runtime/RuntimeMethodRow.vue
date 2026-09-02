@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * One Method member row — inventory only (issue #13 Phase 5 "Runtime Inspector becomes strictly
+ * One Method member row — inventory only (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly
  * passive"): name and the compiler-authoritative `transitivelyWrites` fact. No invocation affordance, no
  * runtime execution facts (Methods do not retain any).
  */

@@ -1,5 +1,5 @@
 /**
- * Conformance group 11 (`transitivelyWrites`) and group 12 (invalid SCC projection) from issue #10's
+ * Conformance group 11 (`transitivelyWrites`) and group 12 (invalid SCC projection) from diagnostic #10's
  * inspection amendment "inspection exact API v1 (part 1)".
  *
  * Every fact here is read straight off `CompiledGraphAnalysis` (`../blueprint/graph.ts`); this module
@@ -27,6 +27,7 @@ interface WriteChain3Interfaces {
 
 /** `reader` -> method `a` -> method `b` -> method `c` -> direct `state.set` (3-layer chain). */
 const writeChain3Plugin = createWidgetPlugin('graph-write-chain-3')
+	.description('Test widget')
 	.interfaces<WriteChain3Interfaces>()
 	.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
 	.properties(properties => properties.reader({
@@ -60,6 +61,7 @@ interface PureMethodInterfaces {
 }
 
 const pureMethodPlugin = createWidgetPlugin('graph-pure-method')
+	.description('Test widget')
 	.interfaces<PureMethodInterfaces>()
 	.methods(methods => methods.noop({
 		validateArgs: (args): args is [] => args.length === 0,
@@ -74,6 +76,7 @@ interface SelfLoopInterfaces {
 }
 
 const selfLoopPlugin = createWidgetPlugin('graph-self-loop')
+	.description('Test widget')
 	.interfaces<SelfLoopInterfaces>()
 	.properties(properties => properties.loop({
 		registerDeps: ({ dep }) => ({ self: dep.self.properties.get('loop') }),
@@ -92,6 +95,7 @@ interface PropMethodCycleInterfaces {
 
 /** `p` -> method `m` -> `p`: a 2-member mixed cyclic SCC containing one Property and one Method. */
 const propMethodCyclePlugin = createWidgetPlugin('graph-prop-method-cycle')
+	.description('Test widget')
 	.interfaces<PropMethodCycleInterfaces>()
 	.properties(properties => properties.p({
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m') }),
@@ -113,6 +117,7 @@ interface PropPropCycleInterfaces {
 
 /** `p1` <-> `p2`: a 2-member Property<->Property cyclic SCC. */
 const propPropCyclePlugin = createWidgetPlugin('graph-prop-prop-cycle')
+	.description('Test widget')
 	.interfaces<PropPropCycleInterfaces>()
 	.properties(properties =>
 		properties
@@ -136,6 +141,7 @@ interface MethodOnlyCycleInterfaces {
 
 /** `m1` <-> `m2` with no Property participant: a valid, standalone method-only cyclic SCC. */
 const methodOnlyCyclePlugin = createWidgetPlugin('graph-method-only-cycle')
+	.description('Test widget')
 	.interfaces<MethodOnlyCycleInterfaces>()
 	.methods(methods =>
 		methods

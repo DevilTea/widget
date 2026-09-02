@@ -17,16 +17,16 @@ function setup() {
 	return { runtime, table, stageFilter, search }
 }
 
-describe('table.selectRow() — success', () => {
+describe('table.selectRow() — ok', () => {
 	it('sets selectedRowId and makes selectedRow the matching row', () => {
 		const { table } = setup()
 		const result = table.methods.selectRow('deal-1')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
 		expect(table.state.selectedRowId.get())
 			.toBe('deal-1')
 		const selectedRow = table.properties.selectedRow.get()
-		expect(selectedRow.success && selectedRow.value?.id)
+		expect(selectedRow.ok && selectedRow.value?.id)
 			.toBe('deal-1')
 	})
 })
@@ -35,32 +35,32 @@ describe('table.selectRow() — locked validateArgs-vs-execute failure split', (
 	it('a non-string argument is a method-args failure (validateArgs), selection unchanged', () => {
 		const { table } = setup()
 		const result = table.methods.selectRow(42 as unknown as string)
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-args')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('invalid-method-arguments')
 		expect(table.state.selectedRowId.get())
 			.toBeNull()
 	})
 
 	it('wrong arity is a method-args failure', () => {
 		const { table } = setup()
-		const result = (table.methods.selectRow as (...args: readonly unknown[]) => { readonly success: boolean })()
-		expect(result.success)
+		const result = (table.methods.selectRow as (...args: readonly unknown[]) => { readonly ok: boolean })()
+		expect(result.ok)
 			.toBe(false)
 	})
 
 	it('a syntactically valid but currently-missing id is a method-result failure from execute(), selection unchanged', () => {
 		const { table } = setup()
 		const result = table.methods.selectRow('no-such-deal')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-result')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('invalid-method-result')
 		expect(table.state.selectedRowId.get())
 			.toBeNull()
 	})
@@ -70,12 +70,12 @@ describe('table.selectRow() — locked validateArgs-vs-execute failure split', (
 		stageFilter.state.value.set('won')
 		// deal-1 is a real seed deal (stage "lead"), just not currently visible under the "won" filter.
 		const result = table.methods.selectRow('deal-1')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-result')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('invalid-method-result')
 		expect(table.state.selectedRowId.get())
 			.toBeNull()
 	})
@@ -84,7 +84,7 @@ describe('table.selectRow() — locked validateArgs-vs-execute failure split', (
 describe('table selection retention — filtering hides selectedRow without mutating selectedRowId', () => {
 	it('selectedRow goes null while selectedRowId is retained, and empty reflects the filtered rows', () => {
 		const { table, stageFilter } = setup()
-		expect(table.methods.selectRow('deal-1').success)
+		expect(table.methods.selectRow('deal-1').ok)
 			.toBe(true)
 
 		stageFilter.state.value.set('won')
@@ -93,25 +93,25 @@ describe('table selection retention — filtering hides selectedRow without muta
 			.toBe('deal-1')
 		const selectedRow = table.properties.selectedRow.get()
 		expect(selectedRow)
-			.toEqual({ success: true, value: null })
+			.toEqual({ ok: true, value: null })
 		expect(table.properties.empty.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 	})
 
 	it('selectedRow reappears once the retained id becomes visible again, without re-selecting', () => {
 		const { table, stageFilter } = setup()
-		expect(table.methods.selectRow('deal-1').success)
+		expect(table.methods.selectRow('deal-1').ok)
 			.toBe(true)
 		stageFilter.state.value.set('won')
 		expect(table.properties.selectedRow.get())
-			.toEqual({ success: true, value: null })
+			.toEqual({ ok: true, value: null })
 
 		stageFilter.state.value.set('all')
 
 		expect(table.state.selectedRowId.get())
 			.toBe('deal-1')
 		const selectedRow = table.properties.selectedRow.get()
-		expect(selectedRow.success && selectedRow.value?.id)
+		expect(selectedRow.ok && selectedRow.value?.id)
 			.toBe('deal-1')
 	})
 })
@@ -120,14 +120,14 @@ describe('table.empty', () => {
 	it('is false when rows are present', () => {
 		const { table } = setup()
 		expect(table.properties.empty.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 	})
 
 	it('is true when the search matches no deal', () => {
 		const { table, search } = setup()
 		search.state.value.set('no-such-deal-exists')
 		expect(table.properties.empty.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 })
 
@@ -135,11 +135,11 @@ describe('table.properties.rowIdKey / columns — Lab-private semantic projectio
 	it('reflects the canonical preset\'s configured rowIdKey/columns verbatim', () => {
 		const { table } = setup()
 		expect(table.properties.rowIdKey.get())
-			.toEqual({ success: true, value: 'id' })
+			.toEqual({ ok: true, value: 'id' })
 		const columns = table.properties.columns.get()
-		expect(columns.success && columns.value.map(column => column.key))
+		expect(columns.ok && columns.value.map(column => column.key))
 			.toEqual(['company', 'contact', 'owner', 'stage', 'amount'])
-		expect(columns.success && columns.value.find(column => column.key === 'amount')?.format)
+		expect(columns.ok && columns.value.find(column => column.key === 'amount')?.format)
 			.toBe('currency')
 	})
 })
@@ -151,24 +151,24 @@ describe('table keyed by a configured rowIdKey other than "id" (PR #22 review 49
 		const table = widgetOfType(runtime, 'deal-table', 'Table')
 
 		expect(table.properties.rowIdKey.get())
-			.toEqual({ success: true, value: 'company' })
+			.toEqual({ ok: true, value: 'company' })
 
 		// deal-3's company (not its id) is now the legal selector.
 		const result = table.methods.selectRow('Cobalt Health')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
 		expect(table.state.selectedRowId.get())
 			.toBe('Cobalt Health')
 
 		const selectedRow = table.properties.selectedRow.get()
-		expect(selectedRow.success && selectedRow.value?.id)
+		expect(selectedRow.ok && selectedRow.value?.id)
 			.toBe('deal-3')
-		expect(selectedRow.success && selectedRow.value?.company)
+		expect(selectedRow.ok && selectedRow.value?.company)
 			.toBe('Cobalt Health')
 
 		// The stale "id" value must no longer work as a selector once rowIdKey is reconfigured.
 		const staleIdResult = table.methods.selectRow('deal-3')
-		expect(staleIdResult.success)
+		expect(staleIdResult.ok)
 			.toBe(false)
 	})
 })
@@ -178,9 +178,9 @@ describe('detailPanel.properties.fields — Lab-private semantic projection of o
 		const { runtime } = createCrmRuntime()
 		const detail = widgetOfType(runtime, 'deal-detail', 'DetailPanel')
 		const fields = detail.properties.fields.get()
-		expect(fields.success && fields.value.map(field => field.key))
+		expect(fields.ok && fields.value.map(field => field.key))
 			.toEqual(['company', 'contact', 'owner', 'stage', 'amount'])
-		expect(fields.success && fields.value.find(field => field.key === 'stage')?.format)
+		expect(fields.ok && fields.value.find(field => field.key === 'stage')?.format)
 			.toBe('badge')
 	})
 })

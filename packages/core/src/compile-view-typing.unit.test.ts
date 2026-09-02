@@ -9,14 +9,14 @@
  *
  * finding 3773310859 (internal/contract.ts:163): compile-time semantic callbacks
  * (`registerDeps`, `validateStructure`) receive a read-only compile-time node view with no
- * `getIssues()` — compilation is still in progress and no final issue snapshot exists yet
+ * `getDiagnostics()` — compilation is still in progress and no final diagnostic snapshot exists yet
  * (COMMENT 2 compile-view contract). Runtime semantic callbacks (`compute`, `execute`) are
- * unaffected and keep `getIssues()` on `ctx.widget`.
+ * unaffected and keep `getDiagnostics()` on `ctx.widget`.
  *
  * finding 3773695997 (internal/contract.ts:188): the round-1 compile-view fix was shallow — a
  * resolved view's `.slots` children were still full nodes, and `getLocation()`'s `parent` was still a
- * full node, so `ctx.widget.slots.items[0].getIssues()` and
- * `ctx.blueprint.getLocation(...).parent.getIssues()` both stayed legal. The view is now recursive
+ * full node, so `ctx.widget.slots.items[0].getDiagnostics()` and
+ * `ctx.blueprint.getLocation(...).parent.getDiagnostics()` both stayed legal. The view is now recursive
  * (`BlueprintSemanticSlotsView`, `WidgetLocationView`) all the way down.
  *
  * Only the public entry (`./index`) is used; no internal module or `blueprintInternals` access.
@@ -88,73 +88,71 @@ describe('methods capability presence vs member count (finding 3773310855)', () 
 })
 
 // -------------------------------------------------------------------------------------------------
-// finding 3773310859 — compile-time compile view omits getIssues
+// finding 3773310859 — compile-time compile view omits getDiagnostics
 // -------------------------------------------------------------------------------------------------
 
-describe('compile-time node views omit getIssues (finding 3773310859)', () => {
-	it('registerDeps: ctx.widget has no getIssues', () => {
+describe('compile-time node views omit getDiagnostics (finding 3773310859)', () => {
+	it('registerDeps: ctx.widget has no getDiagnostics', () => {
 		function attempt(ctx: WidgetRegisterDepsContext<SampleInterfaces, 'property'>): void {
-			// @ts-expect-error compile-time widget view has no getIssues; compilation is still in progress
-			ctx.widget.getIssues()
+			// @ts-expect-error compile-time widget view has no getDiagnostics; compilation is still in progress
+			ctx.widget.getDiagnostics()
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})
 
-	it('registerDeps: a node reached through ctx.blueprint has no getIssues', () => {
+	it('registerDeps: a node reached through ctx.blueprint has no getDiagnostics', () => {
 		function attempt(ctx: WidgetRegisterDepsContext<SampleInterfaces, 'method'>): void {
 			const found = ctx.blueprint.getWidget('other')
-			// @ts-expect-error compile-time node view has no getIssues
-			found?.getIssues()
+			// @ts-expect-error compile-time node view has no getDiagnostics
+			found?.getDiagnostics()
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})
 
-	it('slot-level validateStructure: ctx.widget and ctx.children have no getIssues', () => {
+	it('slot-level validateStructure: ctx.widget and ctx.children have no getDiagnostics', () => {
 		function attempt(ctx: WidgetSlotValidateStructureContext<SampleInterfaces, 'items'>): void {
-			// @ts-expect-error compile-time widget view has no getIssues
-			ctx.widget.getIssues()
-			// @ts-expect-error compile-time child node views have no getIssues
-			ctx.children[0]?.getIssues()
+			// @ts-expect-error compile-time widget view has no getDiagnostics
+			ctx.widget.getDiagnostics()
+			// @ts-expect-error compile-time child node views have no getDiagnostics
+			ctx.children[0]?.getDiagnostics()
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})
 
-	it('plugin-level validateStructure: ctx.widget has no getIssues', () => {
+	it('plugin-level validateStructure: ctx.widget has no getDiagnostics', () => {
 		function attempt(ctx: WidgetPluginValidateStructureContext<SampleInterfaces>): void {
-			// @ts-expect-error compile-time widget view has no getIssues
-			ctx.widget.getIssues()
+			// @ts-expect-error compile-time widget view has no getDiagnostics
+			ctx.widget.getDiagnostics()
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})
 
-	it('blueprintCompileView queries (root/getParent/getChildren/getChildrenAt) all omit getIssues', () => {
+	it('blueprintCompileView queries (root/getParent/getChildren/getChildrenAt) all omit getDiagnostics', () => {
 		function attempt(view: BlueprintCompileView): void {
 			// @ts-expect-error root is a compile-time node view
-			view.root.getIssues()
+			view.root.getDiagnostics()
 
 			const parent = view.getParent(view.root)
 			// @ts-expect-error getParent returns a compile-time node view
-			parent?.getIssues()
+			void parent?.diagnostics
 
 			const children = view.getChildren(view.root)
 			// @ts-expect-error getChildren returns compile-time node views
-			children[0]?.getIssues()
+			void children[0]?.diagnostics
 
 			const atSlot = view.getChildrenAt(view.root, 'items')
 			// @ts-expect-error getChildrenAt returns compile-time node views
-			atSlot[0]?.getIssues()
+			void atSlot[0]?.diagnostics
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})
 
-	it('runtime callbacks (compute/execute) are unaffected: ctx.widget keeps getIssues', () => {
+	it('runtime callbacks (compute/execute) expose the immutable diagnostics property', () => {
 		function computeAttempt(ctx: WidgetPropertyComputeContext<SampleInterfaces, EmptyRegisteredDeps>): void {
-			// No @ts-expect-error: the runtime widget view is unaffected by the compile-view fix.
-			ctx.widget.getIssues()
+			void ctx.widget.diagnostics
 		}
 		function executeAttempt(ctx: WidgetMethodExecuteContext<SampleInterfaces, 'run', EmptyRegisteredDeps>): void {
-			// No @ts-expect-error: the runtime widget view is unaffected by the compile-view fix.
-			ctx.widget.getIssues()
+			void ctx.widget.diagnostics
 		}
 		expectTypeOf(computeAttempt).returns.toBeVoid()
 		expectTypeOf(executeAttempt).returns.toBeVoid()
@@ -166,51 +164,51 @@ describe('compile-time node views omit getIssues (finding 3773310859)', () => {
 // -------------------------------------------------------------------------------------------------
 
 describe('compile-time views are recursive, not just top-level (finding 3773695997)', () => {
-	it('registerDeps: ctx.widget.slots[...] children have no getIssues', () => {
+	it('registerDeps: ctx.widget.slots[...] children have no getDiagnostics', () => {
 		function attempt(ctx: WidgetRegisterDepsContext<SampleInterfaces, 'property'>): void {
 			// @ts-expect-error a slot's children are compile-time node views too, not full nodes
-			ctx.widget.slots.items[0]?.getIssues()
+			void ctx.widget.slots.items[0]?.diagnostics
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})
 
-	it('slot-level validateStructure: ctx.widget.slots[...] children have no getIssues', () => {
+	it('slot-level validateStructure: ctx.widget.slots[...] children have no getDiagnostics', () => {
 		function attempt(ctx: WidgetSlotValidateStructureContext<SampleInterfaces, 'items'>): void {
 			// @ts-expect-error a slot's children are compile-time node views too, not full nodes
-			ctx.widget.slots.items[0]?.getIssues()
+			void ctx.widget.slots.items[0]?.diagnostics
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})
 
-	it('registerDeps: ctx.blueprint.getLocation(...)\'s parent has no getIssues', () => {
+	it('registerDeps: ctx.blueprint.getLocation(...)\'s parent has no getDiagnostics', () => {
 		function attempt(ctx: WidgetRegisterDepsContext<SampleInterfaces, 'property'>): void {
 			const location = ctx.blueprint.getLocation(ctx.widget)
 			if (location === null || location.type === 'root')
 				return
 			// @ts-expect-error the location's parent is a compile-time node view too, not a full node
-			location.parent.getIssues()
+			void location.parent.diagnostics
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})
 
-	it('blueprintCompileView.getLocation(...)\'s parent has no getIssues', () => {
+	it('blueprintCompileView.getLocation(...)\'s parent has no getDiagnostics', () => {
 		function attempt(view: BlueprintCompileView): void {
 			const location = view.getLocation(view.root)
 			if (location === null || location.type === 'root')
 				return
 			// @ts-expect-error the location's parent is a compile-time node view too, not a full node
-			location.parent.getIssues()
+			void location.parent.diagnostics
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})
 
-	it('runtime callbacks (compute/execute) are unaffected: getLocation(...)\'s parent keeps getIssues', () => {
+	it('runtime callbacks (compute/execute) are unaffected: getLocation(...)\'s parent keeps getDiagnostics', () => {
 		function attempt(ctx: WidgetPropertyComputeContext<SampleInterfaces, EmptyRegisteredDeps>): void {
 			const location = ctx.blueprint.getLocation(ctx.widget)
 			if (location === null || location.type === 'root')
 				return
 			// No @ts-expect-error: the runtime valid-blueprint view is unaffected by the compile-view fix.
-			location.parent.getIssues()
+			void location.parent.diagnostics
 		}
 		expectTypeOf(attempt).returns.toBeVoid()
 	})

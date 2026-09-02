@@ -1,9 +1,9 @@
 /**
- * Conformance: issue #10 COMMENT 26 §12 (disposal), cross-checked against COMMENT 20 and consolidated
+ * Conformance: diagnostic #10 COMMENT 26 §12 (disposal), cross-checked against COMMENT 20 and consolidated
  * handoff §19.
  *
  * Scope: `runtime.dispose()` is idempotent, marks the Runtime disposed before tearing anything down,
- * emits no final value/issue notification, and leaves a small set of immutable metadata readable
+ * emits no final value/diagnostic notification, and leaves a small set of immutable metadata readable
  * (`runtime.isDisposed`, `runtime.blueprint`, held `RuntimeWidget.id`/`.type`/`.blueprint`) while every
  * other live Runtime/State/Property/Method operation and every *new* subscription throws the exact,
  * stable `WidgetSystemRuntimeDisposedError` (checked via `instanceof` and `.name`, never message text).
@@ -29,6 +29,7 @@ interface CounterInterfaces {
 
 function createCounterPlugin() {
 	return createWidgetPlugin('counter')
+		.description('Test widget')
 		.interfaces<CounterInterfaces>()
 		.state(section => section
 			.count({
@@ -40,7 +41,7 @@ function createCounterPlugin() {
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps }) => {
 					const result = deps.count()
-					return result.success ? (result.value ?? 0) * 2 : 0
+					return result.ok ? (result.value ?? 0) * 2 : 0
 				},
 			}))
 		.methods(section => section
@@ -53,7 +54,7 @@ function createCounterPlugin() {
 				execute: ({ args, deps }) => {
 					const current = deps.count()
 					const amount = args[0] ?? 1
-					const next = (current.success ? current.value ?? 0 : 0) + amount
+					const next = (current.ok ? current.value ?? 0 : 0) + amount
 					deps.setCount(next)
 					return next
 				},
@@ -148,22 +149,22 @@ describe('post-dispose live Runtime surface throws WidgetSystemRuntimeDisposedEr
 		expectDisposedError(() => runtime.getWidget('root'))
 	})
 
-	it('runtime.getIssues', () => {
+	it('runtime.getDiagnostics after dispose', () => {
 		const { runtime } = createRuntime()
 		runtime.dispose()
-		expectDisposedError(() => runtime.getIssues())
+		expectDisposedError(() => runtime.getDiagnostics())
 	})
 
-	it('runtime.getCollectedIssues', () => {
+	it('runtime.getDiagnostics', () => {
 		const { runtime } = createRuntime()
 		runtime.dispose()
-		expectDisposedError(() => runtime.getCollectedIssues())
+		expectDisposedError(() => runtime.getDiagnostics())
 	})
 
-	it('runtime.subscribeCollectedIssues (new subscription)', () => {
+	it('runtime.subscribeDiagnostics (new subscription)', () => {
 		const { runtime } = createRuntime()
 		runtime.dispose()
-		expectDisposedError(() => runtime.subscribeCollectedIssues(() => {}))
+		expectDisposedError(() => runtime.subscribeDiagnostics(() => {}))
 	})
 })
 
@@ -186,16 +187,16 @@ describe('post-dispose State surface throws WidgetSystemRuntimeDisposedError', (
 		expectDisposedError(() => widget.state.count.subscribe(() => {}))
 	})
 
-	it('getIssues', () => {
+	it('getDiagnostics', () => {
 		const { runtime, widget } = createRuntime()
 		runtime.dispose()
-		expectDisposedError(() => widget.state.count.getIssues())
+		expectDisposedError(() => widget.state.count.getDiagnostics())
 	})
 
-	it('subscribeIssues (new subscription)', () => {
+	it('subscribeDiagnostics (new subscription)', () => {
 		const { runtime, widget } = createRuntime()
 		runtime.dispose()
-		expectDisposedError(() => widget.state.count.subscribeIssues(() => {}))
+		expectDisposedError(() => widget.state.count.subscribeDiagnostics(() => {}))
 	})
 })
 
@@ -212,16 +213,16 @@ describe('post-dispose Property surface throws WidgetSystemRuntimeDisposedError'
 		expectDisposedError(() => widget.properties.doubled.subscribe(() => {}))
 	})
 
-	it('getIssues', () => {
+	it('getDiagnostics', () => {
 		const { runtime, widget } = createRuntime()
 		runtime.dispose()
-		expectDisposedError(() => widget.properties.doubled.getIssues())
+		expectDisposedError(() => widget.properties.doubled.getDiagnostics())
 	})
 
-	it('subscribeIssues (new subscription)', () => {
+	it('subscribeDiagnostics (new subscription)', () => {
 		const { runtime, widget } = createRuntime()
 		runtime.dispose()
-		expectDisposedError(() => widget.properties.doubled.subscribeIssues(() => {}))
+		expectDisposedError(() => widget.properties.doubled.subscribeDiagnostics(() => {}))
 	})
 })
 
@@ -232,16 +233,16 @@ describe('post-dispose Method surface throws WidgetSystemRuntimeDisposedError', 
 		expectDisposedError(() => widget.methods.increment(1))
 	})
 
-	it('getIssues', () => {
+	it('getDiagnostics', () => {
 		const { runtime, widget } = createRuntime()
 		runtime.dispose()
-		expectDisposedError(() => widget.methods.increment.getIssues())
+		expectDisposedError(() => widget.methods.increment.getDiagnostics())
 	})
 
-	it('subscribeIssues (new subscription)', () => {
+	it('subscribeDiagnostics (new subscription)', () => {
 		const { runtime, widget } = createRuntime()
 		runtime.dispose()
-		expectDisposedError(() => widget.methods.increment.subscribeIssues(() => {}))
+		expectDisposedError(() => widget.methods.increment.subscribeDiagnostics(() => {}))
 	})
 })
 
@@ -265,9 +266,9 @@ describe('pre-existing unsubscribe handles remain safe idempotent no-ops after d
 		expect(() => unsubscribe()).not.toThrow()
 	})
 
-	it('a runtime.subscribeCollectedIssues handle obtained before dispose does not throw when called after dispose', () => {
+	it('a runtime.subscribeDiagnostics handle obtained before dispose does not throw when called after dispose', () => {
 		const { runtime } = createRuntime()
-		const unsubscribe = runtime.subscribeCollectedIssues(() => {})
+		const unsubscribe = runtime.subscribeDiagnostics(() => {})
 
 		runtime.dispose()
 
@@ -284,7 +285,7 @@ describe('pre-existing unsubscribe handles remain safe idempotent no-ops after d
 	})
 })
 
-describe('dispose() emits no final value/issue notification', () => {
+describe('dispose() emits no final value/diagnostic notification', () => {
 	it('a state subscriber count observed before dispose does not change because of dispose() itself', () => {
 		const { runtime, widget } = createRuntime()
 		const calls: Array<number | null> = []
@@ -301,25 +302,25 @@ describe('dispose() emits no final value/issue notification', () => {
 			.toEqual([5])
 	})
 
-	it('a state issue subscriber count observed before dispose does not change because of dispose() itself', () => {
+	it('a state diagnostic subscriber count observed before dispose does not change because of dispose() itself', () => {
 		const { runtime, widget } = createRuntime()
-		const issueSnapshots: number[] = []
-		widget.state.count.subscribeIssues(issues => issueSnapshots.push(issues.length))
+		const diagnosticSnapshots: number[] = []
+		widget.state.count.subscribeDiagnostics(diagnostics => diagnosticSnapshots.push(diagnostics.length))
 
 		widget.state.count.set('not-a-number' as unknown as number)
-		expect(issueSnapshots)
+		expect(diagnosticSnapshots)
 			.toEqual([1])
 
 		runtime.dispose()
 
-		expect(issueSnapshots)
+		expect(diagnosticSnapshots)
 			.toEqual([1])
 	})
 
-	it('a runtime.subscribeCollectedIssues subscriber observed before dispose does not change because of dispose() itself', () => {
+	it('a runtime.subscribeDiagnostics subscriber observed before dispose does not change because of dispose() itself', () => {
 		const { runtime, widget } = createRuntime()
 		const snapshotLengths: number[] = []
-		runtime.subscribeCollectedIssues(issues => snapshotLengths.push(issues.length))
+		runtime.subscribeDiagnostics(diagnostics => snapshotLengths.push(diagnostics.length))
 
 		widget.state.count.set('not-a-number' as unknown as number)
 		expect(snapshotLengths)
@@ -335,7 +336,7 @@ describe('dispose() emits no final value/issue notification', () => {
 		const { runtime, widget } = createRuntime()
 		const results: number[] = []
 		widget.properties.doubled.subscribe((result) => {
-			if (result.success && result.value !== null)
+			if (result.ok && result.value !== null)
 				results.push(result.value)
 		})
 

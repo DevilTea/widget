@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * Selected-node details (issue #13 Widget Lab Phase 4 Checkpoint H): resolved nodes show
+ * Selected-node details (diagnostic #13 Widget Lab Phase 4 Checkpoint H): resolved nodes show
  * identity/location/config (raw + resolved, when the capability exists)/semantic slots
- * summary/issues; unresolved nodes show location/raw-definition/issues without inventing semantic
+ * summary/diagnostics; unresolved nodes show location/raw source/diagnostics without inventing semantic
  * fields they do not have. #43 translates only the surrounding inspector chrome; ids/types/member
  * names/config/raw definitions remain semantic inspection data and are rendered verbatim.
  */
@@ -13,7 +13,7 @@ import { useImplementationExplorer } from '../../composables/use-implementation-
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { getShowcase } from '../../showcases/registry'
-import IssueList from './IssueList.vue'
+import DiagnosticList from './DiagnosticList.vue'
 
 const props = defineProps<{
 	node: BlueprintInspectionNode | null
@@ -60,7 +60,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 		v-if="node === null"
 		:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
 	>
-		{{ i18n.t('No node selected — click a node in the tree on the left to see its config, slots, and issues.') }}
+		{{ i18n.t('No node selected — click a node in the tree on the left to see its config, slots, and diagnostics.') }}
 	</div>
 	<div
 		v-else
@@ -144,20 +144,20 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 		<template v-else>
 			<section>
 				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-					{{ i18n.t('Raw definition') }}
+					{{ i18n.t('Source') }}
 				</h5>
 				<pre
 					:class="pika({ margin: '0', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
-				>{{ JSON.stringify(node.node.rawDefinition, null, 2) }}</pre>
+				>{{ JSON.stringify(node.node.source, null, 2) }}</pre>
 			</section>
 		</template>
 
 		<section>
 			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-				{{ i18n.t('Issues') }} ({{ node.node.getIssues().length }})
+				{{ i18n.t('Diagnostics') }} ({{ node.node.diagnostics.length }})
 			</h5>
-			<IssueList
-				:issues="node.node.getIssues()"
+			<DiagnosticList
+				:diagnostics="node.node.diagnostics"
 				:inspection="inspection"
 				@navigate="(id) => emit('navigate', id)"
 			/>

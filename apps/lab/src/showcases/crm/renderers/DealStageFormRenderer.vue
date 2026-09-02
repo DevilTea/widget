@@ -1,21 +1,21 @@
 <script setup lang="ts">
 /**
- * Renders whatever `save()` reports through `useMethodIssues()` even though this component never calls
+ * Renders whatever `save()` reports through `useMethodDiagnostics()` even though this component never calls
  * `save`/`cancel` itself — those are triggered by the sibling `Button#save-stage`/`Button#cancel-stage`
  * widgets in the `actions` slot, each invoking `deal-stage-form.save`/`cancel` through their own
  * configured `action` dependency (checkpoint §6). `canSave` only ever gates the actions container's
  * opacity as a visual status indicator here — it does not disable the Save button (`Button` exposes no
  * `disabled` state), and `save()` itself does not consume/depend on it. #43 translates only the fixed
- * connector/empty-state prose; deal company/stage and core method issues stay verbatim semantic data.
+ * connector/empty-state prose; deal company/stage and core method diagnostics stay verbatim semantic data.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { DealStageFormPlugin } from '../plugins/deal-stage-form'
 
-const { useProperties, useMethodIssues, WidgetSlot, widgetId, widgetType } = useWidget(DealStageFormPlugin)
+const { useProperties, useMethodDiagnostics, WidgetSlot, widgetId, widgetType } = useWidget(DealStageFormPlugin)
 const { selectedDeal, canSave } = useProperties()
-const { save: saveIssues, open: openIssues } = useMethodIssues()
+const { save: saveDiagnostics, open: openDiagnostics } = useMethodDiagnostics()
 const i18n = useLabI18n()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 </script>
@@ -39,15 +39,15 @@ const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 		</p>
 		<WidgetSlot name="fields" />
 		<ul
-			v-if="saveIssues.length > 0 || openIssues.length > 0"
+			v-if="saveDiagnostics.length > 0 || openDiagnostics.length > 0"
 			:class="pika({ margin: '0', paddingLeft: '16px' })"
 		>
 			<li
-				v-for="issue in [...openIssues, ...saveIssues]"
-				:key="issue.message"
+				v-for="diagnostic in [...openDiagnostics, ...saveDiagnostics]"
+				:key="diagnostic.message"
 				:class="pika({ fontSize: '11px', color: 'var(--lab-color-danger)' })"
 			>
-				{{ issue.message }}
+				{{ diagnostic.message }}
 			</li>
 		</ul>
 		<div

@@ -7,11 +7,11 @@
  * only through `store.switchShowcase()`, which already guarantees the old Preview subtree has
  * unmounted first. `WidgetRenderer` never disposes the Runtime — `LabSession` owns that lifecycle.
  *
- * `data-tutorial-target="preview"` (issue #25 P1) is the Survey tour's step 1 spotlight target — the
+ * `data-tutorial-target="preview"` (diagnostic #25 P1) is the Survey tour's step 1 spotlight target — the
  * whole scrollable Preview surface, not just the mounted widget tree, since step 1 is a plain
  * orientation ("this is the Interactive Survey") rather than a specific-control callout.
  *
- * Inspect mode (issue #25 P2 "Preview -> semantic inspector bridge"): an opt-in, off-by-default toggle
+ * Inspect mode (diagnostic #25 P2 "Preview -> semantic inspector bridge"): an opt-in, off-by-default toggle
  * in this panel's own header area (never `LabHeader.vue` — Preview owns this affordance since it is the
  * only panel it applies to). While active:
  *  - pointer-over resolves the innermost Inspect anchor under the cursor (`resolveInspectAnchor()`,
@@ -41,10 +41,10 @@
  *    is `false`.
  *
  * No second semantic model: no "last interaction" registry, no tracing — only anchor -> existing focus.
- * Keyboard-driven inspection is out of P2 scope (see issue #25 P2 return notes); the toggle button
+ * Keyboard-driven inspection is out of P2 scope (see diagnostic #25 P2 return notes); the toggle button
  * itself is a normal, keyboard-operable button.
  *
- * "View implementation" (issue #25 P3 Scope D, entry point 1): a small button next to the Inspect
+ * "View implementation" (diagnostic #25 P3 Scope D, entry point 1): a small button next to the Inspect
  * toggle, enabled whenever the existing shared focus (`store.focus` — however it got there: an
  * Inspect-mode click, a Blueprint/Graph tree selection, or the tutorial) resolves to a widget type this
  * showcase's `sources.ts` curates. It never re-sets focus itself — the Implementation panel reads the
@@ -149,7 +149,7 @@ function suppressPointerActivation(event: PointerEvent): void {
 }
 
 /**
- * Capture-phase per issue #25 P2's approved interaction rule ("Suppress the underlying pointer
+ * Capture-phase per diagnostic #25 P2's approved interaction rule ("Suppress the underlying pointer
  * activation while Inspect is active"): the semantic-selection *commit* path. This must run, and be
  * able to `preventDefault()`/`stopPropagation()`, strictly before the actual widget's own (bubble-phase)
  * click listener — e.g. a CRM `ButtonRenderer`'s `press()` call. `stopPropagation()` called here, during

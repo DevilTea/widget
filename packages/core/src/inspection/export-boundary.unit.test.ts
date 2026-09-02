@@ -1,6 +1,6 @@
 /**
  * Conformance group 1 (export boundary) + type half of group 16 (no Method runtime inspection surface)
- * from issue #10's inspection amendment "inspection exact API v1 (part 2)".
+ * from diagnostic #10's inspection amendment "inspection exact API v1 (part 2)".
  *
  * The runtime half of group 16 (no `getMethod` on an actual `RuntimeWidgetInspection` instance) lives in
  * `runtime-facades.unit.test.ts`, alongside the fixtures it needs.

@@ -1,5 +1,5 @@
 /**
- * Conformance group 7 (member inventories: declaration order + special-name safety) from issue #10's
+ * Conformance group 7 (member inventories: declaration order + special-name safety) from diagnostic #10's
  * inspection amendment "inspection exact API v1 (part 1)".
  *
  * `.__proto__` member access is written through a `PROTO_KEY` string constant + bracket notation, same
@@ -66,6 +66,7 @@ function applyAllMembers(section: unknown, definitionFor: (key: string) => unkno
 }
 
 const orderedPlugin = createWidgetPlugin('ordered-members')
+	.description('Test widget')
 	.interfaces<OrderedInterfaces>()
 	.state(state => applyAllMembers(state, () => ({ validate: (input: unknown): input is number => typeof input === 'number' })) as any)
 	.properties(properties => applyAllMembers(properties, () => ({ compute: () => 0 })) as any)

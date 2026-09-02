@@ -21,10 +21,10 @@ test('core diagnostic text is not localized when presentation locale changes (is
 		.click()
 	await page.getByRole('tab', { name: 'Blueprint' })
 		.click()
-	await page.getByRole('button', { name: /All issues/ })
+	await page.getByRole('button', { name: /All diagnostics/ })
 		.click()
 
-	// `IssueList.vue` renders the machine-readable source kind in the first direct child, and the
+	// `DiagnosticList.vue` renders the machine-readable code in the first direct child, and the
 	// core-owned human diagnostic as the next direct child. Compare that payload alone: #43 is allowed
 	// to translate surrounding action chrome such as "jump to node".
 	const diagnosticItem = page.locator('li')
@@ -34,7 +34,7 @@ test('core diagnostic text is not localized when presentation locale changes (is
 		.toBeVisible()
 	await expect(diagnosticItem.locator('span')
 		.first())
-		.toHaveText('definition')
+		.toHaveText('unknown-widget-type')
 	const diagnosticMessage = diagnosticItem.locator(':scope > div')
 		.nth(1)
 	const englishDiagnostic = await diagnosticMessage.textContent()
@@ -45,9 +45,9 @@ test('core diagnostic text is not localized when presentation locale changes (is
 		.toBeVisible()
 	await expect(diagnosticItem.locator('span')
 		.first())
-		.toHaveText('definition')
+		.toHaveText('unknown-widget-type')
 
-	// The inspector chrome may translate, but the actual core issue payload is invariant.
+	// The inspector chrome may translate, but the actual core diagnostic payload is invariant.
 	expect(await diagnosticMessage.textContent())
 		.toBe(englishDiagnostic)
 })

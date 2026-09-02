@@ -5,7 +5,7 @@
  * `useWidget()` exposes.
  *
  * Every renderer below projects `useWidget()`'s `widgetId`/`widgetType` identity fields onto its own
- * root vnode via `useInspectAnchor()` (issue #25 P2 "Preview -> semantic inspector bridge" merge-gate
+ * root vnode via `useInspectAnchor()` (diagnostic #25 P2 "Preview -> semantic inspector bridge" merge-gate
  * review round 1, blocker 2: Sandbox is the Lab's *default* showcase, so an Inspect toggle with zero
  * anchors there is a non-functional/misleading mode). These are render-function components, not SFCs
  * with a `v-bind`-able template root, so the anchor attrs are spread directly into each `h()` call's

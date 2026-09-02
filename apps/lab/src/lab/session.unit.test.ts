@@ -91,15 +91,15 @@ describe('labSession', () => {
 
 	it('apply() never injects a JSON syntax failure into core Blueprint diagnostics', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: invalidSource })
-		const issuesBefore = session.active.blueprint.getCollectedIssues()
+		const diagnosticsBefore = session.active.blueprint.diagnostics
 
 		session.setDraftSourceText('{ broken')
 		await session.apply()
 
 		// Same frozen array by identity: the syntax failure never touched the active Blueprint's
 		// own (already non-empty) diagnostics.
-		expect(session.active.blueprint.getCollectedIssues())
-			.toBe(issuesBefore)
+		expect(session.active.blueprint.diagnostics)
+			.toBe(diagnosticsBefore)
 	})
 
 	it('apply() on a semantically invalid Blueprint still crosses the applied-snapshot boundary, with runtime null', async () => {

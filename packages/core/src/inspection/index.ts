@@ -3,7 +3,7 @@
  *
  * Deliberately not re-exported from the root `@deviltea/widget-core` entrypoint: ordinary consumers
  * never need to see or depend on this DevTools-oriented surface. See `packages/widget/core/AGENTS.md`
- * and GitHub issue #10's inspection amendments for the normative contract.
+ * and GitHub diagnostic #10's inspection amendments for the normative contract.
  */
 
 export { inspectBlueprint } from './blueprint'

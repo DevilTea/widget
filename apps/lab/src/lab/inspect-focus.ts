@@ -1,5 +1,5 @@
 /**
- * Widget id -> shared inspector focus resolution (issue #25 P2 "Preview -> semantic inspector bridge").
+ * Widget id -> shared inspector focus resolution (diagnostic #25 P2 "Preview -> semantic inspector bridge").
  *
  * `InspectorFocus.nodeId` (`src/lab/focus.ts`) is an opaque, snapshot-local
  * `@deviltea/widget-core/inspection` `InspectionNodeId` — not the widget's own semantic `id` string a

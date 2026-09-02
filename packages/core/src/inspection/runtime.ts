@@ -5,11 +5,11 @@
  * fact-commit point (`../runtime/state.ts`'s `attemptSet`, `../runtime/property.ts`'s computed body) —
  * never reconstructed here, never activated here. `getWidget`/`getState`/`getProperty`/`getSnapshot` are
  * passive reads that must stay usable after Runtime disposal (post-mortem inspection); only `subscribe()`
- * is gated on disposal, by design (issue #10 amendment "readonly inspection subscription and disposal
+ * is gated on disposal, by design (diagnostic #10 amendment "readonly inspection subscription and disposal
  * semantics") — this module deliberately does not call the generic live-operation disposed guard from
  * any other path.
  *
- * Normative source: issue #10 amendment "inspection exact API v1 (part 2: Runtime inspection,
+ * Normative source: diagnostic #10 amendment "inspection exact API v1 (part 2: Runtime inspection,
  * materialization, disposal, conformance)".
  */
 
@@ -37,7 +37,7 @@ function buildStateInspection(context: RuntimeContext, primitive: StatePrimitive
 	return Object.freeze({
 		getSnapshot: (): RuntimeStateInspectionSnapshot<unknown> => primitive.internal.inspection.getSnapshot(),
 		subscribe: (listener: (snapshot: RuntimeStateInspectionSnapshot<unknown>) => void) => {
-			// The one inspection operation that *is* gated on disposal (issue #10 amendment): a brand new
+			// The one inspection operation that *is* gated on disposal (diagnostic #10 amendment): a brand new
 			// subscription after `dispose()` throws `WidgetSystemRuntimeDisposedError`, while every passive
 			// read stays available post-mortem.
 			context.assertActive()
@@ -64,7 +64,7 @@ function buildRuntimeWidgetInspection<Plugins extends AnyWidgetPluginTuple>(
 	blueprintNode: ResolvedBlueprintInspectionNode<Plugins>,
 	entry: PrimitiveRegistryEntry,
 ): RuntimeWidgetInspection<Plugins> {
-	// Lazily-materialized, per-widget facade caches (issue #10: "Inspection facades ... may be
+	// Lazily-materialized, per-widget facade caches (diagnostic #10: "Inspection facades ... may be
 	// materialized lazily"). Owned entirely by this widget inspection closure — not a global registry —
 	// so they are reclaimed together with the owning Runtime/RuntimeInspection.
 	const stateFacades = new Map<WidgetMemberKey, RuntimeStateInspection<unknown>>()
@@ -108,7 +108,7 @@ function buildRuntimeInspection<Plugins extends AnyWidgetPluginTuple>(
 	runtime: WidgetSystemRuntime<Plugins>,
 ): RuntimeInspection<Plugins> {
 	const { context, registry } = readRuntimeInternals(runtime)
-	// Identity composition (issue #10, already locked): `inspectRuntime(runtime).blueprint ===
+	// Identity composition (diagnostic #10, already locked): `inspectRuntime(runtime).blueprint ===
 	// inspectBlueprint(runtime.blueprint)` falls out for free because both share `inspectBlueprint`'s own
 	// per-Blueprint cache.
 	const blueprintInspection = inspectBlueprint(runtime.blueprint)

@@ -1,20 +1,34 @@
 /**
  * Immutable registered plugin universe.
  *
- * Normative source: issue #10 amendment "reconciliation audit" (WidgetSystem registration details)
+ * Normative source: diagnostic #10 amendment "reconciliation audit" (WidgetSystem registration details)
  * and consolidated handoff §5.
  */
 
+import type { DiagnosticCollector, RelativeSystemStructureDiagnosticInput } from './diagnostic'
 import type { BlueprintCompileView, WidgetSystemBlueprint } from './internal/contract'
-import type { IssueCollector, RelativeSystemStructureIssueInput } from './issue'
 import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetPluginTypeOf } from './plugin'
 import { compileBlueprint } from './blueprint/index'
+import { createReadonlyMap } from './readonly-map'
+
+export interface WidgetCatalogEntry {
+	readonly type: string
+	readonly description: string
+	readonly descriptions: {
+		readonly config: string | null
+		readonly slots: ReadonlyMap<string, string> | null
+	}
+}
+
+export interface WidgetCatalog {
+	readonly widgets: readonly WidgetCatalogEntry[]
+}
 
 export type WidgetSystemValidateStructureContext<Plugins extends AnyWidgetPluginTuple>
 	= & {
 		readonly blueprint: BlueprintCompileView<Plugins>
 	}
-	& IssueCollector<RelativeSystemStructureIssueInput<Plugins>>
+	& DiagnosticCollector<RelativeSystemStructureDiagnosticInput<Plugins>>
 
 export type WidgetSystemValidateStructure<Plugins extends AnyWidgetPluginTuple> = (ctx: WidgetSystemValidateStructureContext<Plugins>) => void
 
@@ -35,6 +49,7 @@ export interface WidgetSystem<Plugins extends AnyWidgetPluginTuple = AnyWidgetPl
 	 */
 	readonly plugins: Plugins
 	readonly validateStructure: WidgetSystemValidateStructure<Plugins> | null
+	readonly catalog: WidgetCatalog
 	getPlugin: <Type extends WidgetPluginTypeOf<Plugins[number]>>(type: Type) => WidgetPluginOf<Plugins, Type>
 	/**
 	 * The compilation boundary. The input is `unknown` because JSON-parsed/untrusted document data is
@@ -59,9 +74,23 @@ export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple>(
 		pluginsByType.set(plugin.type, plugin)
 	}
 
+	const catalog: WidgetCatalog = Object.freeze({
+		widgets: Object.freeze(plugins.map(plugin => Object.freeze({
+			type: plugin.type,
+			description: plugin.description,
+			descriptions: Object.freeze({
+				config: plugin.descriptions.config,
+				slots: plugin.descriptions.slots === null
+					? null
+					: createReadonlyMap(plugin.descriptions.slots),
+			}),
+		}))),
+	})
+
 	const system: WidgetSystem<Plugins> = {
 		plugins,
 		validateStructure: options.validateStructure ?? null,
+		catalog,
 
 		getPlugin(type) {
 			return pluginsByType.get(type) as WidgetPluginOf<Plugins, typeof type>

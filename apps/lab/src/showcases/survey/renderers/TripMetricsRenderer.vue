@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Thin presentation only: every value/issue comes from `useProperties()`/`usePropertyIssues()`.
- * #43 localizes only this renderer's fixed presentation labels. Property values, issue/provenance text,
+ * Thin presentation only: every value/diagnostic comes from `useProperties()`/`usePropertyDiagnostics()`.
+ * #43 localizes only this renderer's fixed presentation labels. Property values, diagnostic/provenance text,
  * widget/member identities, and config/source-owned content remain exactly what the semantic layer emits.
  */
 import { useWidget } from '@deviltea/widget-vue'
@@ -9,11 +9,11 @@ import { computed } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { TripMetricsPlugin } from '../plugins/trip-metrics'
-import { toProvenanceLines } from './trip-metrics-issue-provenance'
+import { toProvenanceLines } from './trip-metrics-diagnostic-provenance'
 
-const { useProperties, usePropertyIssues, widgetId, widgetType } = useWidget(TripMetricsPlugin)
+const { useProperties, usePropertyDiagnostics, widgetId, widgetType } = useWidget(TripMetricsPlugin)
 const { tripDays, travelerCount, budgetPerPersonPerDay, estimatedBaselineCost } = useProperties()
-const { tripDays: tripDaysIssues, travelerCount: travelerCountIssues, budgetPerPersonPerDay: budgetPerPersonPerDayIssues, estimatedBaselineCost: estimatedBaselineCostIssues } = usePropertyIssues()
+const { tripDays: tripDaysDiagnostics, travelerCount: travelerCountDiagnostics, budgetPerPersonPerDay: budgetPerPersonPerDayDiagnostics, estimatedBaselineCost: estimatedBaselineCostDiagnostics } = usePropertyDiagnostics()
 const i18n = useLabI18n()
 
 /** Whole-number metrics: rendered verbatim; failure gets renderer-owned localized chrome. */
@@ -21,15 +21,15 @@ function formatMetric(value: number | null): string {
 	return value === null ? i18n.t('Unavailable') : String(value)
 }
 
-/** Currency-shaped metrics: two decimals on success; failure uses the same presentation label. */
+/** Currency-shaped metrics: two decimals on ok; failure uses the same presentation label. */
 function formatCurrencyMetric(value: number | null): string {
 	return value === null ? i18n.t('Unavailable') : value.toFixed(2)
 }
 
-const tripDaysLines = computed(() => toProvenanceLines(tripDaysIssues.value))
-const travelerCountLines = computed(() => toProvenanceLines(travelerCountIssues.value))
-const budgetPerPersonPerDayLines = computed(() => toProvenanceLines(budgetPerPersonPerDayIssues.value))
-const estimatedBaselineCostLines = computed(() => toProvenanceLines(estimatedBaselineCostIssues.value))
+const tripDaysLines = computed(() => toProvenanceLines(tripDaysDiagnostics.value))
+const travelerCountLines = computed(() => toProvenanceLines(travelerCountDiagnostics.value))
+const budgetPerPersonPerDayLines = computed(() => toProvenanceLines(budgetPerPersonPerDayDiagnostics.value))
+const estimatedBaselineCostLines = computed(() => toProvenanceLines(estimatedBaselineCostDiagnostics.value))
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 </script>
 

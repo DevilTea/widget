@@ -1,5 +1,5 @@
 /**
- * The Survey tour's 9-step script (issue #25 P1 Scope D "Revised Survey step script", Proposal v2).
+ * The Survey tour's 9-step script (diagnostic #25 P1 Scope D "Revised Survey step script", Proposal v2).
  *
  * Authored verbatim against the structure and teaching content locked in Proposal v2 — copy is
  * paraphrased only where the rail's shorter card format needs it, never the do -> observe -> name
@@ -75,7 +75,7 @@ export const surveyTourScript: TutorialScript = {
 					prompt: 'Try it: set Return date to a day before Departure date.',
 					isComplete: (reader) => {
 						const tripDays = reader.readProperty('trip-metrics', 'tripDays')
-						return tripDays?.status === 'completed' && !tripDays.result.success
+						return tripDays?.status === 'completed' && !tripDays.result.ok
 					},
 					reveal: 'Trip days fails with a reason, and every value that depends on it says exactly why it is unavailable — that is failure propagation.',
 				},
@@ -83,7 +83,7 @@ export const surveyTourScript: TutorialScript = {
 					prompt: 'Now fix Return date so it is after Departure again.',
 					isComplete: (reader) => {
 						const tripDays = reader.readProperty('trip-metrics', 'tripDays')
-						return tripDays?.status === 'completed' && tripDays.result.success
+						return tripDays?.status === 'completed' && tripDays.result.ok
 					},
 					reveal: 'The same Properties recovered. Failures are current Runtime results — never a permanently broken page.',
 				},
@@ -137,7 +137,7 @@ export const surveyTourScript: TutorialScript = {
 				prompt: 'Now change any answer again (for example, Adults) and watch the Recommendation.',
 				isComplete: (reader) => {
 					const resultFresh = reader.readProperty('trip-survey', 'resultFresh')
-					return resultFresh?.status === 'completed' && resultFresh.result.success && resultFresh.result.value === false
+					return resultFresh?.status === 'completed' && resultFresh.result.ok && resultFresh.result.value === false
 				},
 				reveal: 'The live estimate moved, while the Recommendation kept its old values and gained the Stale marker. The result is a stored State snapshot; the estimate is a live Property.',
 			}],
@@ -148,7 +148,7 @@ export const surveyTourScript: TutorialScript = {
 			target: null,
 			stages: [{
 				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Source = the declarative definition you edit · Blueprint = what the applied Source compiled into · Runtime = live State/Properties/Methods/Issues · Graph = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.',
+				reveal: 'Source = the declarative definition you edit · Blueprint = what the applied Source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Graph = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.',
 			}],
 			links: [
 				{ id: 'view-source', label: 'Source', run: actions => actions.activateTab('source') },
@@ -156,7 +156,7 @@ export const surveyTourScript: TutorialScript = {
 				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
 				{ id: 'view-graph', label: 'Graph', run: actions => actions.activateTab('graph') },
 				{ id: 'view-preview', label: 'Preview', run: actions => actions.activateTab('preview') },
-				// issue #25 P3: a real affordance now — opens the Implementation panel for whichever widget
+				// diagnostic #25 P3: a real affordance now — opens the Implementation panel for whichever widget
 				// is currently held in shared focus (this step never changes focus itself, matching every
 				// other link in this step).
 				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
@@ -171,7 +171,7 @@ export const surveyTourScript: TutorialScript = {
 				prompt: 'You now know State, Property, Method, and dependency.',
 				reveal: 'Try the CRM tour, open any inspector, or edit the Source JSON and press Apply.',
 			}],
-			// issue #25 P4 Scope B: the completion state's direct "Take the CRM tour" offer. This is the
+			// diagnostic #25 P4 Scope B: the completion state's direct "Take the CRM tour" offer. This is the
 			// hand-back (last) step, so `TutorialActions.startTour()`'s own "finish the current step first"
 			// behavior applies — clicking this reads as completing the Survey tour, not abandoning it.
 			links: [{

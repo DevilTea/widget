@@ -1,9 +1,9 @@
 /**
  * Synchronous semantic-boundary guard.
  *
- * Normative source: issue #10 amendment "synchronous core boundary and future async seams" /
+ * Normative source: diagnostic #10 amendment "synchronous core boundary and future async seams" /
  * consolidated handoff §16: a semantic callback returning a thenable is an implementation-contract
- * violation, not a Blueprint/Runtime Issue and not an `ExecutionResult.failure`, so it throws.
+ * violation, not a Blueprint/Runtime Diagnostic and not an `ExecutionResult.failure`, so it throws.
  *
  * `PromiseLike` is a structural (duck-typed) contract, not a nominal one, and its `then` method may
  * live on an object *or* on a callable (a function value with a `.then` property is still thenable).

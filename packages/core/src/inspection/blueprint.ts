@@ -4,12 +4,13 @@
  * Every fact projected here is read directly off the compiler-authoritative `CompiledBlueprint` (see
  * `../internal/contract.ts`, `../blueprint/deps.ts`, `../blueprint/graph.ts`); this module performs zero
  * semantic execution, zero own SCC/DFS analysis and never reconstructs a dependency's status from
- * Issues — adversarial review gate (1)/(3) of issue #10's inspection amendments.
+ * Diagnostics — adversarial review gate (1)/(3) of diagnostic #10's inspection amendments.
  *
- * Normative source: issue #10 amendments "inspection exact API v1 (part 1: Blueprint inspection)" and
+ * Normative source: diagnostic #10 amendments "inspection exact API v1 (part 1: Blueprint inspection)" and
  * the earlier locked inspection amendments it composes with.
  */
 
+import type { BlueprintDependencyReference } from '../diagnostic'
 import type {
 	BlueprintWidgetNode,
 	CompiledBlueprint,
@@ -20,7 +21,6 @@ import type {
 	InternalNodeId,
 	WidgetSystemBlueprint,
 } from '../internal/contract'
-import type { BlueprintDependencyReference } from '../issue'
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type {
 	BlueprintInspection,
@@ -47,8 +47,8 @@ import { isCompiledDependency, readCompiledBlueprint } from '../internal/contrac
  * clone (`target`/`operation` included).
  *
  * The compiler's own `reference` object (and its nested `target`/`operation` wrappers) is not guaranteed
- * frozen for resolved/absent leaves — only issue finalization freezes it, and resolved/absent leaves
- * never produce an Issue of their own. Runtime dependency-callable closures (`../runtime/deps.ts`)
+ * frozen for resolved/absent leaves — only diagnostic finalization freezes it, and resolved/absent leaves
+ * never produce an Diagnostic of their own. Runtime dependency-callable closures (`../runtime/deps.ts`)
  * capture that *same* object; aliasing it directly into the public inspection snapshot would let a
  * consumer mutate `dependency.reference.operation`/`.target` through `as any` and corrupt later Runtime
  * lookups/diagnostics — a live inspection-to-semantics channel the readonly contract must not allow.
@@ -186,7 +186,7 @@ function buildMethodMembers(compiledNode: CompiledResolvedWidgetNode): readonly 
 }
 
 /**
- * Reuses the plugin's own public `capabilities` fact object (issue #10 amendment "declaration-presence
+ * Reuses the plugin's own public `capabilities` fact object (diagnostic #10 amendment "declaration-presence
  * semantics and public `WidgetPlugin.capabilities`") rather than re-deriving presence from the erased
  * definition: `plugin.capabilities` is already the compiler/builder-authoritative declaration-presence
  * source, and `BlueprintInspectionCapabilities` is intentionally the same shape. No object-identity
@@ -229,7 +229,7 @@ function buildNode<Plugins extends AnyWidgetPluginTuple>(compiledNode: CompiledW
 /**
  * Recovered-source topology pre-order: root first, then recursively each node's recovered children in
  * `rawSlots` enumeration order, each with its children in source index order. Deliberately distinct from
- * the compiler's own `semanticOrder` (which prioritizes declared slots over raw-only ones for issue
+ * the compiler's own `semanticOrder` (which prioritizes declared slots over raw-only ones for diagnostic
  * aggregation) — inspection's `nodes` ordering contract is topology-only, not semantic priority.
  */
 function computePreOrder(nodes: readonly CompiledWidgetNode[], rootNodeId: InternalNodeId): InternalNodeId[] {

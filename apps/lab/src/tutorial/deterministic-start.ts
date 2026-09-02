@@ -1,5 +1,5 @@
 /**
- * Deterministic-start decision logic (issue #25 OWNER decision, "deterministic tutorial start
+ * Deterministic-start decision logic (diagnostic #25 OWNER decision, "deterministic tutorial start
  * accepted"): starting or restarting the Survey tour always reloads the known `survey-default` preset
  * through the normal preset -> Apply pipeline. The only product decision left to the visitor is whether
  * that reload is allowed to silently replace an unapplied Source draft — this module is exactly that

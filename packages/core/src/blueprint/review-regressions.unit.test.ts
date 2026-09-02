@@ -13,7 +13,7 @@
  *
  * finding 3773363784 (blueprint/recovery.ts:296): "not declared by its plugin" and "malformed raw
  * value" are independent facts about the same raw slot name and must both be reported, each their own
- * `['slots', slotName]` definition issue; a malformed value never recovers children either way.
+ * `['slots', slotName]` definition diagnostic; a malformed value never recovers children either way.
  *
  * finding 3773363797 (blueprint/structure.ts:91): a system-level `validateStructure` author's
  * `related` locations are deduplicated by semantic identity and ordered deterministically by semantic
@@ -42,29 +42,29 @@
  *
  * finding 3773890334 (blueprint/view.ts:23): the round-2 compile-view type fix had no runtime
  * counterpart — compile-time callbacks physically received the original navigator and full public
- * nodes, so a JS/`any` callback could still call `getIssues()` mid-compilation, and the navigator
+ * nodes, so a JS/`any` callback could still call `getDiagnostics()` mid-compilation, and the navigator
  * object itself was neither restricted nor frozen, so plugin code could reassign a navigation method
  * (`ctx.blueprint.getWidget = ...`) and corrupt the view every later callback in the same compile pass
  * receives. `createCompileFacade` (`./view.ts`) now builds a real, frozen, restricted facade (no
- * `getIssues` anywhere, slots/`getLocation().parent` are themselves facades) shared by every
+ * `getDiagnostics` anywhere, slots/`getLocation().parent` are themselves facades) shared by every
  * compile-time callback in one `compileBlueprint()` call.
  *
  * finding 3773890344 (blueprint/recovery.ts:111): `WidgetLocation` records were left mutable even
  * though `getLocation()` returns the exact stored object; a caller casting away `readonly` could
  * mutate topology metadata observed by every later `getLocation()` call. Now frozen at construction.
  *
- * finding 3773890349 (blueprint/index.ts:105): freezing only the aggregate `finalIssues` array left
- * per-node `getIssues()` arrays, and the issue/`source` objects themselves, mutable — a caller could
+ * finding 3773890349 (blueprint/index.ts:105): freezing only the aggregate `finalDiagnostics` array left
+ * per-node `getDiagnostics()` arrays, and the diagnostic/`source` objects themselves, mutable — a caller could
  * permanently rewrite a node's diagnostic snapshot or its structured `source` fields through either
- * view. Now both `issuesByNode`'s per-node arrays and the aggregate array are frozen via the
- * Runtime-side `freezeIssueSnapshot`/`deepFreezeIssue` helpers (shared, generic, imported from
- * `../runtime/issues`), which freeze the framework-owned diagnostic structure without touching
+ * view. Now both `diagnosticsByNode`'s per-node arrays and the aggregate array are frozen via the
+ * Runtime-side `freezeDiagnosticSnapshot`/`deepFreezeDiagnostic` helpers (shared, generic, imported from
+ * `../runtime/diagnostics`), which freeze the framework-owned diagnostic structure without touching
  * caller/plugin-owned payload values.
  *
  * Only the public entry (`../index`) is used; no internal module or `blueprintInternals` access.
  */
 
-import type { StateSetDepExpression } from '../index'
+import type { JsonValue, StateSetDepExpression } from '../index'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -93,6 +93,7 @@ describe('property-owned state-set dependency escape (finding 3773310829)', () =
 	}
 
 	const plugin = createWidgetPlugin('property-state-set-escape')
+		.description('Test widget')
 		.interfaces<EscapeInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -132,9 +133,11 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 		}
 
 		const plugin = createWidgetPlugin('async-slot-validate-structure')
+			.description('Test widget')
 			.interfaces<ListInterfaces>()
 			.slots({
 				items: {
+					description: 'Test slot',
 					// TypeScript's `void`-return contextual typing allows this async function through;
 					// the sync-boundary guard must still catch it at runtime.
 					validateStructure: async () => {},
@@ -160,9 +163,10 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 		}
 
 		const plugin = createWidgetPlugin('async-plugin-validate-structure')
+			.description('Test widget')
 			.interfaces<ListInterfaces>()
 			.slots(
-				{ items: {} },
+				{ items: { description: 'Test slot' } },
 				async () => {},
 			)
 			.done()
@@ -183,6 +187,7 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 		interface LeafInterfaces {}
 
 		const plugin = createWidgetPlugin('async-system-validate-structure-leaf')
+			.description('Test widget')
 			.interfaces<LeafInterfaces>()
 			.done()
 
@@ -209,10 +214,11 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 		}
 
 		const plugin = createWidgetPlugin('async-register-deps')
+			.description('Test widget')
 			.interfaces<AsyncDepsInterfaces>()
 			.properties(section => section.value({
 				// Deliberately lies about its declared synchronous return type to simulate a
-				// misbehaving plugin implementation, per issue #10 consolidated handoff §16.
+				// misbehaving plugin implementation, per diagnostic #10 consolidated handoff §16.
 				registerDeps: () => Promise.resolve({}) as unknown as Record<never, never>,
 				compute: () => 0,
 			}))
@@ -233,15 +239,17 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 	it('an async config.validate throws instead of silently starting async work', () => {
 		interface AsyncConfigInterfaces {
 			config: {
-				raw: Record<string, unknown>
+				raw: Record<string, JsonValue>
 				resolved: Record<string, unknown>
 			}
 		}
 
 		const plugin = createWidgetPlugin('async-config-validate')
+			.description('Test widget')
 			.interfaces<AsyncConfigInterfaces>()
 			.config({
-				validate: (_input): _input is Record<string, unknown> => (Promise.resolve(true) as unknown as boolean),
+				description: 'Test config',
+				validate: (_input): _input is Record<string, JsonValue> => (Promise.resolve(true) as unknown as boolean),
 				resolve: raw => raw ?? {},
 			})
 			.done()
@@ -261,15 +269,17 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 	it('an async config.resolve throws instead of silently starting async work', () => {
 		interface AsyncConfigInterfaces {
 			config: {
-				raw: Record<string, unknown>
+				raw: Record<string, JsonValue>
 				resolved: Record<string, unknown>
 			}
 		}
 
 		const plugin = createWidgetPlugin('async-config-resolve')
+			.description('Test widget')
 			.interfaces<AsyncConfigInterfaces>()
 			.config({
-				validate: (input): input is Record<string, unknown> => typeof input === 'object' && input !== null,
+				description: 'Test config',
+				validate: (input): input is Record<string, JsonValue> => typeof input === 'object' && input !== null,
 				resolve: raw => Promise.resolve(raw ?? {}) as unknown as Record<string, unknown>,
 			})
 			.done()
@@ -298,27 +308,28 @@ describe('slot dual diagnostics: not-declared and malformed coexist independentl
 	}
 
 	const containerPlugin = createWidgetPlugin('dual-diag-container')
+		.description('Test widget')
 		.interfaces<ContainerInterfaces>()
-		.slots({ content: {} })
+		.slots({ content: { description: 'Test slot' } })
 		.done()
 
 	const system = createWidgetSystem({ plugins: [containerPlugin] })
 
-	it('emits both a not-declared and a malformed-value definition issue at the same [\'slots\', slotName] path', () => {
+	it('emits both a not-declared and a malformed-value definition diagnostic at the same [\'slots\', slotName] path', () => {
 		const blueprint = system.createBlueprint({ id: 'root', type: 'dual-diag-container', slots: { legacy: 123 } })
 
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const legacyIssues = blueprint.root.getIssues()
-			.filter(issue => issue.source.type === 'definition')
-			.filter((issue) => {
-				const path = (issue.source as { path?: readonly PropertyKey[] }).path
+		const legacyDiagnostics = blueprint.root.diagnostics
+			.filter(diagnostic => ['invalid-widget-definition', 'invalid-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code))
+			.filter((diagnostic) => {
+				const path = (diagnostic as { path?: readonly PropertyKey[] }).path
 				return path?.[0] === 'slots' && path?.[1] === 'legacy'
 			})
 
-		// Two independent facts, two independent issues — neither suppresses the other.
-		expect(legacyIssues)
+		// Two independent facts, two independent diagnostics — neither suppresses the other.
+		expect(legacyDiagnostics)
 			.toHaveLength(2)
 	})
 
@@ -338,6 +349,7 @@ describe('system-level related normalization (finding 3773363797)', () => {
 	interface LeafInterfaces {}
 
 	const leafPlugin = createWidgetPlugin('related-normalize-leaf')
+		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.done()
 
@@ -346,8 +358,9 @@ describe('system-level related normalization (finding 3773363797)', () => {
 	}
 
 	const listPlugin = createWidgetPlugin('related-normalize-list')
+		.description('Test widget')
 		.interfaces<ListInterfaces>()
-		.slots({ items: {} })
+		.slots({ items: { description: 'Test slot' } })
 		.done()
 
 	const system = createWidgetSystem({
@@ -362,7 +375,7 @@ describe('system-level related normalization (finding 3773363797)', () => {
 			if (first === undefined || second === undefined)
 				return
 
-			ctx.addIssue({
+			ctx.addDiagnostic({
 				message: 'dup-and-reverse',
 				location: { type: 'widget', node: root },
 				related: [
@@ -388,12 +401,12 @@ describe('system-level related normalization (finding 3773363797)', () => {
 			},
 		})
 
-		const issue = blueprint.getCollectedIssues()
+		const diagnostic = blueprint.diagnostics
 			.find(candidate => candidate.message === 'dup-and-reverse')
-		expect(issue)
+		expect(diagnostic)
 			.toBeDefined()
 
-		const related = (issue!.source as { related?: readonly { node: unknown }[] }).related
+		const related = (diagnostic! as { related?: readonly { node: unknown }[] }).related
 		expect(related)
 			.toBeDefined()
 
@@ -417,17 +430,17 @@ describe('system-level related normalization (finding 3773363797)', () => {
 				const root = ctx.blueprint.root
 				if (!root.resolved || root.type !== 'related-normalize-list')
 					return
-				ctx.addIssue({ message: 'no-related', location: { type: 'widget', node: root } })
+				ctx.addDiagnostic({ message: 'no-related', location: { type: 'widget', node: root } })
 			},
 		})
 
 		const blueprint = noRelatedSystem.createBlueprint({ id: 'root', type: 'related-normalize-list' })
-		const issue = blueprint.getCollectedIssues()
+		const diagnostic = blueprint.diagnostics
 			.find(candidate => candidate.message === 'no-related')
 
-		expect(issue)
+		expect(diagnostic)
 			.toBeDefined()
-		expect((issue!.source as { related?: unknown }).related)
+		expect((diagnostic! as { related?: unknown }).related)
 			.toBeUndefined()
 	})
 })
@@ -454,6 +467,7 @@ describe('registerDeps container keyed by a special JavaScript name stays protot
 	}
 
 	const plugin = createWidgetPlugin('proto-safe-register-deps')
+		.description('Test widget')
 		.interfaces<ProtoSafeInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -463,7 +477,7 @@ describe('registerDeps container keyed by a special JavaScript name stays protot
 			registerDeps: ({ dep }) => ({ [protoKey]: dep.self.state.get('count') }),
 			compute: ({ deps }) => {
 				const result = deps[protoKey]()
-				return result.success ? (result.value ?? -1) : -1
+				return result.ok ? (result.value ?? -1) : -1
 			},
 		}))
 		.methods(section => section.viaMethod({
@@ -471,7 +485,7 @@ describe('registerDeps container keyed by a special JavaScript name stays protot
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
 				const result = deps[protoKey]()
-				return result.success ? (result.value ?? -1) : -1
+				return result.ok ? (result.value ?? -1) : -1
 			},
 		}))
 		.done()
@@ -496,16 +510,16 @@ describe('registerDeps container keyed by a special JavaScript name stays protot
 			throw new Error('test fixture: expected the root widget to resolve')
 
 		expect(widget.properties.viaProperty.get())
-			.toEqual({ success: true, value: 42 })
+			.toEqual({ ok: true, value: 42 })
 		expect(widget.methods.viaMethod())
-			.toEqual({ success: true, value: 42 })
+			.toEqual({ ok: true, value: 42 })
 
 		widget.state.count.set(7)
 
 		expect(widget.properties.viaProperty.get())
-			.toEqual({ success: true, value: 7 })
+			.toEqual({ ok: true, value: 7 })
 		expect(widget.methods.viaMethod())
-			.toEqual({ success: true, value: 7 })
+			.toEqual({ ok: true, value: 7 })
 	})
 })
 
@@ -529,6 +543,7 @@ describe('edge identity collision across delimiter-rich member names (finding 37
 	}
 
 	const plugin = createWidgetPlugin('edge-key-collision')
+		.description('Test widget')
 		.interfaces<CollisionInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -545,7 +560,7 @@ describe('edge identity collision across delimiter-rich member names (finding 37
 				registerDeps: ({ dep }) => ({ target: dep.self.properties.get('c') }),
 				compute: ({ deps }) => {
 					const result = deps.target()
-					return result.success ? (result.value ?? -1) : -1
+					return result.ok ? (result.value ?? -1) : -1
 				},
 			})
 			const afterA = afterWeird.a({
@@ -555,7 +570,7 @@ describe('edge identity collision across delimiter-rich member names (finding 37
 				registerDeps: ({ dep }) => ({ target: dep.self.methods.invoke('b->property:0:c') }),
 				compute: ({ deps }) => {
 					const result = deps.target()
-					return result.success ? (result.value ?? -1) : -1
+					return result.ok ? (result.value ?? -1) : -1
 				},
 			})
 			return afterA.c({
@@ -564,7 +579,7 @@ describe('edge identity collision across delimiter-rich member names (finding 37
 				registerDeps: ({ dep }) => ({ target: dep.self.properties.get('a->method:0:b') }),
 				compute: ({ deps }) => {
 					const result = deps.target()
-					return result.success ? (result.value ?? -1) : -1
+					return result.ok ? (result.value ?? -1) : -1
 				},
 			})
 		})
@@ -586,17 +601,21 @@ describe('edge identity collision across delimiter-rich member names (finding 37
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const purityIssue = blueprint.getCollectedIssues()
-			.find(issue =>
-				issue.source.type === 'dependency'
-				&& issue.source.member.type === 'property'
-				&& issue.source.member.name === 'a'
-				&& issue.source.dependency?.operation.type === 'method-invoke')
+		const purityDiagnostic = blueprint.diagnostics
+			.find(diagnostic =>
+				diagnostic.code.includes('dependency')
+				&& diagnostic.location.type === 'property'
+				&& diagnostic.location.name === 'a'
+				&& 'dependency' in diagnostic
+				&& diagnostic.dependency?.operation.type === 'method-invoke') as unknown as {
+					code: string
+					related?: readonly { type: string, name?: string }[]
+				} | undefined
 
-		if (purityIssue === undefined || purityIssue.source.type !== 'dependency')
-			throw new Error('test fixture: expected a Property "a" dependency issue naming the method-invoke edge')
+		if (purityDiagnostic === undefined || purityDiagnostic.code !== 'property-dependency-has-write-effects')
+			throw new Error('test fixture: expected a Property "a" dependency diagnostic naming the method-invoke edge')
 
-		const related = purityIssue.source.related
+		const related = purityDiagnostic.related
 		expect(related?.some(location => location.type === 'method' && location.name === 'b->property:0:c'))
 			.toBe(true)
 	})
@@ -604,26 +623,30 @@ describe('edge identity collision across delimiter-rich member names (finding 37
 	it('keeps the Property <-> Property edge (A) distinct: the evaluation cycle is still detected on both ends', () => {
 		const blueprint = system.createBlueprint({ id: 'root', type: 'edge-key-collision' })
 
-		const cycleIssues = blueprint.getCollectedIssues()
-			.filter(issue =>
-				issue.source.type === 'dependency'
-				&& issue.source.member.type === 'property'
-				&& (issue.source.member.name === 'a->method:0:b' || issue.source.member.name === 'c')
-				&& issue.source.dependency === undefined)
+		const cycleDiagnostics = blueprint.diagnostics
+			.filter(diagnostic =>
+				diagnostic.code === 'property-evaluation-cycle'
+				&& diagnostic.location.type === 'property'
+				&& (diagnostic.location.name === 'a->method:0:b' || diagnostic.location.name === 'c')
+				&& !('dependency' in diagnostic)) as unknown as readonly {
+			code: string
+			location: { type: string, name?: string }
+			related?: readonly { type: string, name?: string }[]
+		}[]
 
 		// One cycle diagnostic per Property participant in the cyclic SCC (COMMENT 18).
-		expect(cycleIssues)
+		expect(cycleDiagnostics)
 			.toHaveLength(2)
 
-		const weirdIssue = cycleIssues.find(issue => issue.source.type === 'dependency' && issue.source.member.name === 'a->method:0:b')
-		const cIssue = cycleIssues.find(issue => issue.source.type === 'dependency' && issue.source.member.name === 'c')
+		const weirdDiagnostic = cycleDiagnostics.find(diagnostic => diagnostic.code === 'property-evaluation-cycle' && diagnostic.location.name === 'a->method:0:b')
+		const cDiagnostic = cycleDiagnostics.find(diagnostic => diagnostic.code === 'property-evaluation-cycle' && diagnostic.location.name === 'c')
 
-		if (weirdIssue === undefined || weirdIssue.source.type !== 'dependency' || cIssue === undefined || cIssue.source.type !== 'dependency')
-			throw new Error('test fixture: expected cycle issues on both "a->method:0:b" and "c"')
+		if (weirdDiagnostic === undefined || weirdDiagnostic.code !== 'property-evaluation-cycle' || cDiagnostic === undefined || cDiagnostic.code !== 'property-evaluation-cycle')
+			throw new Error('test fixture: expected cycle diagnostics on both "a->method:0:b" and "c"')
 
-		expect(weirdIssue.source.related?.some(location => location.type === 'property' && location.name === 'c'))
+		expect(weirdDiagnostic.related?.some(location => location.type === 'property' && location.name === 'c'))
 			.toBe(true)
-		expect(cIssue.source.related?.some(location => location.type === 'property' && location.name === 'a->method:0:b'))
+		expect(cDiagnostic.related?.some(location => location.type === 'property' && location.name === 'a->method:0:b'))
 			.toBe(true)
 	})
 })
@@ -641,6 +664,7 @@ describe('registerDeps: present-but-malformed output vs an omitted callback (fin
 		}
 
 		const plugin = createWidgetPlugin('malformed-register-deps-property')
+			.description('Test widget')
 			.interfaces<MalformedInterfaces>()
 			.properties(section => section.value({
 
@@ -667,6 +691,7 @@ describe('registerDeps: present-but-malformed output vs an omitted callback (fin
 		}
 
 		const plugin = createWidgetPlugin('malformed-register-deps-method')
+			.description('Test widget')
 			.interfaces<MalformedInterfaces>()
 			.methods(section => section.run({
 
@@ -694,6 +719,7 @@ describe('registerDeps: present-but-malformed output vs an omitted callback (fin
 		}
 
 		const plugin = createWidgetPlugin('omitted-register-deps')
+			.description('Test widget')
 			.interfaces<OmittedInterfaces>()
 			.properties(section => section.value({
 				compute: () => 0,
@@ -713,12 +739,13 @@ describe('registerDeps: present-but-malformed output vs an omitted callback (fin
 // -------------------------------------------------------------------------------------------------
 
 describe('the compile-time facade is genuinely restricted and frozen at runtime, not just narrowly typed (finding 3773890334)', () => {
-	it('physically has no getIssues anywhere: widget, blueprint.root, slot children, and getLocation(...).parent', () => {
+	it('physically has no getDiagnostics anywhere: widget, blueprint.root, slot children, and getLocation(...).parent', () => {
 		const checks: Record<string, boolean> = {}
 
 		interface LeafInterfaces {}
 
 		const leafPlugin = createWidgetPlugin('facade-leaf')
+			.description('Test widget')
 			.interfaces<LeafInterfaces>()
 			.done()
 
@@ -727,26 +754,28 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 		}
 
 		const listPlugin = createWidgetPlugin('facade-list')
+			.description('Test widget')
 			.interfaces<ListInterfaces>()
 			.slots(
 				{
 					items: {
+						description: 'Test slot',
 						validateStructure: (ctx) => {
-							checks.slotWidgetHasNoGetIssues = (ctx.widget as unknown as { getIssues?: unknown }).getIssues === undefined
-							checks.slotChildrenHaveNoGetIssues = ctx.children.every(child => (child as unknown as { getIssues?: unknown }).getIssues === undefined)
+							checks.slotWidgetHasNoGetDiagnostics = (ctx.widget as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
+							checks.slotChildrenHaveNoGetDiagnostics = ctx.children.every(child => (child as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined)
 						},
 					},
 				},
 				(ctx) => {
-					checks.pluginWidgetHasNoGetIssues = (ctx.widget as unknown as { getIssues?: unknown }).getIssues === undefined
-					checks.rootHasNoGetIssues = (ctx.blueprint.root as unknown as { getIssues?: unknown }).getIssues === undefined
+					checks.pluginWidgetHasNoGetDiagnostics = (ctx.widget as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
+					checks.rootHasNoGetDiagnostics = (ctx.blueprint.root as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
 
 					const firstChild = ctx.blueprint.getChildrenAt(ctx.widget, 'items')[0]
 					if (firstChild !== undefined) {
 						const location = ctx.blueprint.getLocation(firstChild)
-						checks.locationParentHasNoGetIssues = location !== null
+						checks.locationParentHasNoGetDiagnostics = location !== null
 							&& location.type !== 'root'
-							&& (location.parent as unknown as { getIssues?: unknown }).getIssues === undefined
+							&& (location.parent as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
 					}
 				},
 			)
@@ -759,15 +788,15 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 			slots: { items: [{ id: 'child', type: 'facade-leaf' }] },
 		})
 
-		expect(checks.slotWidgetHasNoGetIssues)
+		expect(checks.slotWidgetHasNoGetDiagnostics)
 			.toBe(true)
-		expect(checks.slotChildrenHaveNoGetIssues)
+		expect(checks.slotChildrenHaveNoGetDiagnostics)
 			.toBe(true)
-		expect(checks.pluginWidgetHasNoGetIssues)
+		expect(checks.pluginWidgetHasNoGetDiagnostics)
 			.toBe(true)
-		expect(checks.rootHasNoGetIssues)
+		expect(checks.rootHasNoGetDiagnostics)
 			.toBe(true)
-		expect(checks.locationParentHasNoGetIssues)
+		expect(checks.locationParentHasNoGetDiagnostics)
 			.toBe(true)
 	})
 
@@ -780,9 +809,10 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 		}
 
 		const containerPlugin = createWidgetPlugin('facade-freeze-container')
+			.description('Test widget')
 			.interfaces<ContainerInterfaces>()
 			.slots(
-				{ child: {} },
+				{ child: { description: 'Test slot' } },
 				(ctx) => {
 					try {
 						// Only reachable through a JS/`any` contract escape: the type is `readonly`.
@@ -802,6 +832,7 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 		}
 
 		const leafPlugin = createWidgetPlugin('facade-freeze-leaf')
+			.description('Test widget')
 			.interfaces<LeafInterfaces>()
 			.properties(section => section.probe({
 				// `registerDeps` runs in a later compile pipeline stage than structure validation, but
@@ -840,11 +871,13 @@ describe('widgetLocation records are frozen (finding 3773890344)', () => {
 	interface LeafInterfaces {}
 
 	const containerPlugin = createWidgetPlugin('location-freeze-container')
+		.description('Test widget')
 		.interfaces<ContainerInterfaces>()
-		.slots({ child: {} })
+		.slots({ child: { description: 'Test slot' } })
 		.done()
 
 	const leafPlugin = createWidgetPlugin('location-freeze-leaf')
+		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.done()
 
@@ -878,53 +911,54 @@ describe('widgetLocation records are frozen (finding 3773890344)', () => {
 })
 
 // -------------------------------------------------------------------------------------------------
-// finding 3773890349 — Blueprint issue/source structures are immutable
+// finding 3773890349 — Blueprint diagnostic/source structures are immutable
 // -------------------------------------------------------------------------------------------------
 
-describe('blueprint issue/source structures are immutable (finding 3773890349)', () => {
+describe('blueprint diagnostic/source structures are immutable (finding 3773890349)', () => {
 	interface LeafInterfaces {}
 
-	const leafPlugin = createWidgetPlugin('issue-freeze-leaf')
+	const leafPlugin = createWidgetPlugin('diagnostic-freeze-leaf')
+		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.done()
 
 	const system = createWidgetSystem({ plugins: [leafPlugin] })
 
-	it('freezes per-node getIssues() arrays, the aggregate array, and the issue/source structures, at both entry points', () => {
-		const blueprint = system.createBlueprint({ type: 'issue-freeze-leaf' })
+	it('freezes per-node getDiagnostics() arrays, the aggregate array, and the diagnostic/source structures, at both entry points', () => {
+		const blueprint = system.createBlueprint({ type: 'diagnostic-freeze-leaf' })
 
 		expect(blueprint.status)
 			.toBe('invalid')
 
-		const nodeIssues = blueprint.root.getIssues()
-		expect(nodeIssues.length)
+		const nodeDiagnostics = blueprint.root.diagnostics
+		expect(nodeDiagnostics.length)
 			.toBeGreaterThan(0)
-		expect(Object.isFrozen(nodeIssues))
+		expect(Object.isFrozen(nodeDiagnostics))
 			.toBe(true)
-		expect(() => (nodeIssues as unknown as unknown[]).push({}))
+		expect(() => (nodeDiagnostics as unknown as unknown[]).push({}))
 			.toThrow(TypeError)
 
-		const aggregateIssues = blueprint.getCollectedIssues()
-		expect(Object.isFrozen(aggregateIssues))
+		const aggregateDiagnostics = blueprint.diagnostics
+		expect(Object.isFrozen(aggregateDiagnostics))
 			.toBe(true)
-		expect(() => (aggregateIssues as unknown as unknown[]).push({}))
+		expect(() => (aggregateDiagnostics as unknown as unknown[]).push({}))
 			.toThrow(TypeError)
 
-		const issue = nodeIssues[0]!
-		expect(Object.isFrozen(issue))
+		const diagnostic = nodeDiagnostics[0]!
+		expect(Object.isFrozen(diagnostic))
 			.toBe(true)
-		expect(Object.isFrozen(issue.source))
+		expect(Object.isFrozen(diagnostic))
 			.toBe(true)
 		expect(() => {
-			(issue as unknown as { message: string }).message = 'mutated'
+			(diagnostic as unknown as { message: string }).message = 'mutated'
 		})
 			.toThrow(TypeError)
 		expect(() => {
-			(issue.source as unknown as Record<string, unknown>).path = ['mutated']
+			(diagnostic as unknown as Record<string, unknown>).path = ['mutated']
 		})
 			.toThrow(TypeError)
 
-		const path = (issue.source as unknown as { path?: unknown[] }).path
+		const path = (diagnostic as unknown as { path?: unknown[] }).path
 		if (path !== undefined) {
 			expect(Object.isFrozen(path))
 				.toBe(true)
@@ -932,9 +966,9 @@ describe('blueprint issue/source structures are immutable (finding 3773890349)',
 				.toThrow(TypeError)
 		}
 
-		// The same issue object is shared identically between the node-local and aggregate views (a
+		// The same diagnostic object is shared identically between the node-local and aggregate views (a
 		// mutation through either would otherwise silently corrupt the other).
-		expect(aggregateIssues)
-			.toContain(issue)
+		expect(aggregateDiagnostics)
+			.toContain(diagnostic)
 	})
 })

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Issue #28 accessibility fix — cheap attribute-wiring assertions only: the dialog's accessible name is
+ * Diagnostic #28 accessibility fix — cheap attribute-wiring assertions only: the dialog's accessible name is
  * tied to the visible title via `aria-labelledby`, and the native `<dialog>` element's own open/closed
  * state stays in sync with the semantic `Modal.open` State. #43 adds a presentation-only locale
  * dependency; this harness supplies an English identity translator without changing the semantic test.

@@ -7,7 +7,7 @@
  * shape preservation and recursive readonly-ness, the conservative `MaybeOptional` nullability rule,
  * and `.validate()` refinement.
  *
- * Normative source: issue #10 COMMENT 26 §1, COMMENT 9 (recursive shape + conservative optional
+ * Normative source: diagnostic #10 COMMENT 26 §1, COMMENT 9 (recursive shape + conservative optional
  * typing), COMMENT 10 (dependency fluent grammar locked), COMMENT 11 (resolution / compiled-edge
  * invariants).
  *
@@ -26,8 +26,8 @@ import type {
 	MethodInvokeDepExpression,
 	OptionalizableDependencyTarget,
 	PropertyGetDepExpression,
-	RuntimeMethodDependencyIssue,
-	RuntimePropertyDependencyIssue,
+	RuntimeMethodDependencyDiagnostic,
+	RuntimePropertyDependencyDiagnostic,
 	SelfStateDependencyOperations,
 	StateGetDepExpression,
 	StateSetDepExpression,
@@ -138,29 +138,29 @@ describe('toExecutedDeps preserves exact nested object/array/tuple shape', () =>
 
 		expectTypeOf<Executed>()
 			.toEqualTypeOf<{
-			readonly primary: () => ExecutionResult<number, RuntimeMethodDependencyIssue>
+			readonly primary: () => ExecutionResult<number, RuntimeMethodDependencyDiagnostic>
 			readonly group: {
-				readonly current: () => ExecutionResult<string, RuntimeMethodDependencyIssue>
+				readonly current: () => ExecutionResult<string, RuntimeMethodDependencyDiagnostic>
 				readonly actions: readonly [
-					(...args: []) => ExecutionResult<void, RuntimeMethodDependencyIssue>,
-					(...args: [number]) => ExecutionResult<number, RuntimeMethodDependencyIssue>,
+					(...args: []) => ExecutionResult<void, RuntimeMethodDependencyDiagnostic>,
+					(...args: [number]) => ExecutionResult<number, RuntimeMethodDependencyDiagnostic>,
 				]
 			}
-			readonly children: readonly { readonly id: () => ExecutionResult<string | null, RuntimeMethodDependencyIssue> }[]
+			readonly children: readonly { readonly id: () => ExecutionResult<string | null, RuntimeMethodDependencyDiagnostic> }[]
 		}>()
 	})
 
-	it('switches the executed dependency issue type based on Consumer (property vs method)', () => {
+	it('switches the executed dependency diagnostic type based on Consumer (property vs method)', () => {
 		type Leaf = StateGetDepExpression<number, false>
 		expectTypeOf<ToExecutedDeps<Leaf, 'property'>>()
-			.toEqualTypeOf<() => ExecutionResult<number, RuntimePropertyDependencyIssue>>()
+			.toEqualTypeOf<() => ExecutionResult<number, RuntimePropertyDependencyDiagnostic>>()
 		expectTypeOf<ToExecutedDeps<Leaf, 'method'>>()
-			.toEqualTypeOf<() => ExecutionResult<number, RuntimeMethodDependencyIssue>>()
+			.toEqualTypeOf<() => ExecutionResult<number, RuntimeMethodDependencyDiagnostic>>()
 	})
 
 	it('keeps a state-set executed callable\'s candidate type exactly Input, regardless of Optional (never candidate | null)', () => {
 		expectTypeOf<ToExecutedDeps<StateSetDepExpression<number, true>, 'method'>>()
-			.toEqualTypeOf<(candidate: number) => ExecutionResult<number, RuntimeMethodDependencyIssue>>()
+			.toEqualTypeOf<(candidate: number) => ExecutionResult<number, RuntimeMethodDependencyDiagnostic>>()
 	})
 })
 

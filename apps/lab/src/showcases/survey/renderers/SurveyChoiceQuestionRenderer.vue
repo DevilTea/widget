@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
  * Thin presentation only: options come from `useProperties().options` (config-projected). #43 leaves
- * those labels and all validation issues verbatim; only the renderer-owned empty-choice placeholder is
+ * those labels and all validation diagnostics verbatim; only the renderer-owned empty-choice placeholder is
  * presentation chrome.
  *
- * Issue #28 accessibility fix: `useId()`-derived `for`/`id` ties the visible `label` to the `select`;
+ * Diagnostic #28 accessibility fix: `useId()`-derived `for`/`id` ties the visible `label` to the `select`;
  * when `help` is configured, its paragraph gets its own id and the `select` points to it via
  * `aria-describedby`.
  */
@@ -14,10 +14,10 @@ import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { SurveyChoiceQuestionPlugin } from '../plugins/survey-questions'
 
-const { useState, useProperties, useStateIssues, widgetId, widgetType } = useWidget(SurveyChoiceQuestionPlugin)
+const { useState, useProperties, useStateDiagnostics, widgetId, widgetType } = useWidget(SurveyChoiceQuestionPlugin)
 const { answer } = useState()
 const { label, help, options } = useProperties()
-const { answer: answerIssues } = useStateIssues()
+const { answer: answerDiagnostics } = useStateDiagnostics()
 const i18n = useLabI18n()
 
 const selectId = useId()
@@ -65,11 +65,11 @@ function onChange(event: Event): void {
 			</option>
 		</select>
 		<p
-			v-for="issue in answerIssues"
-			:key="issue.message"
+			v-for="diagnostic in answerDiagnostics"
+			:key="diagnostic.message"
 			:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-danger)' })"
 		>
-			{{ issue.message }}
+			{{ diagnostic.message }}
 		</p>
 	</div>
 </template>

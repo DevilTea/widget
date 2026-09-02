@@ -3,13 +3,13 @@ import { translateMessage } from './messages'
 
 /**
  * #43 audit of non-tutorial Lab-owned chrome. Keep semantic/source payloads out of this table: plugin
- * types, widget/member ids, file paths, source/Applied JSON, core issues, and config-authored labels are
+ * types, widget/member ids, file paths, source/Applied JSON, core diagnostics, and config-authored labels are
  * rendered verbatim by their owning inspectors/renderers.
  */
 const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'The declarative definition you edit — changes take effect when you press Apply': '你正在編輯的 declarative definition——按下「套用」後變更才會生效',
 	'What the applied Source compiled into — declarations, never live values': '已套用 Source 編譯出的結果——這裡只看 declarations，不是 live values',
-	'Live State, Properties, Methods, and Issues of the running widgets': '目前執行中 widgets 的 live State、Properties、Methods 與 Issues',
+	'Live State, Properties, Methods, and Diagnostics of the running widgets': '目前執行中 widgets 的 live State、Properties、Methods 與 Diagnostics',
 	'The declared semantic dependencies between widget members': 'widget members 之間已宣告的 semantic dependencies',
 	'The Vue presentation of the running widgets — interact here': '執行中 widgets 的 Vue 呈現層——在這裡操作',
 	'The plugin + Vue renderer code behind the focused widget type — readonly, curated, never a filesystem/editor': '目前聚焦 widget type 背後的 plugin + Vue renderer 程式碼——唯讀、經整理，不是檔案系統或編輯器',
@@ -20,10 +20,10 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Dark': '深色',
 
 	'Selected node': '選取的節點',
-	'All issues': '所有問題',
-	'No issues.': '沒有問題。',
+	'All diagnostics': '所有問題',
+	'No diagnostics.': '沒有問題。',
 	'jump to node': '跳到節點',
-	'No node selected — click a node in the tree on the left to see its config, slots, and issues.': '尚未選取節點——點選左側 tree 的節點即可查看 config、slots 與 issues。',
+	'No node selected — click a node in the tree on the left to see its config, slots, and diagnostics.': '尚未選取節點——點選左側 tree 的節點即可查看 config、slots 與 diagnostics。',
 	'Unresolved node': '未解析節點',
 	'status': '狀態',
 	'location': '位置',
@@ -39,7 +39,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'No slots capability.': '沒有 slots capability。',
 	'Members': 'Members',
 	'Raw definition': 'Raw definition',
-	'Issues': 'Issues',
+	'Diagnostics': 'Diagnostics',
 
 	'Runtime unavailable — the applied Blueprint is invalid, so there is nothing running yet. Open the Blueprint tab to see why, fix Source, then Apply again.': 'Runtime 無法使用——已套用的 Blueprint 無效，因此目前沒有可執行內容。請到 Blueprint 查看原因、修正 Source，再重新套用。',
 	'No node selected — click a node in the tree on the left to see its live State, Properties, and Methods.': '尚未選取節點——點選左側 tree 的節點即可查看 live State、Properties 與 Methods。',
@@ -48,9 +48,9 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'inventory only': '僅列出清單',
 	'No Method members.': '沒有 Method members。',
 	'Never evaluated': '尚未求值',
-	'Failed ({count} {issueWord})': '失敗（{count} 個{issueWord}）',
-	'show issues': '顯示 issues',
-	'hide issues': '隱藏 issues',
+	'Failed ({count} {diagnosticWord})': '失敗（{count} 個{diagnosticWord}）',
+	'show diagnostics': '顯示 diagnostics',
+	'hide diagnostics': '隱藏 diagnostics',
 
 	'Show absent references': '顯示缺少的 references',
 	'Show isolated members': '顯示孤立 members',
@@ -119,7 +119,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Generate result': '產生結果',
 	'Recommendation': '建議結果',
 	'Stale': '已過期',
-	'Generated from previous answers — this recommendation does not reflect the current answers (or any issues shown above). Submit and generate again to refresh it.': '這份建議是依先前答案產生，未反映目前答案（或上方顯示的問題）。請重新提交並產生結果以更新。',
+	'Generated from previous answers — this recommendation does not reflect the current answers (or any diagnostics shown above). Submit and generate again to refresh it.': '這份建議是依先前答案產生，未反映目前答案（或上方顯示的問題）。請重新提交並產生結果以更新。',
 	'Destination': '目的地',
 	'requested style': '要求風格',
 	'recommended style': '建議風格',

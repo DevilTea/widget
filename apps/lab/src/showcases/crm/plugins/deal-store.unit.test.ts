@@ -21,12 +21,12 @@ describe('dealStore.updateStage() — locked validateArgs-vs-execute failure spl
 		const { store } = setup()
 		const before = store.state.deals.get()
 		const result = store.methods.updateStage(42 as unknown as string, 'won')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-args')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('invalid-method-arguments')
 		expect(store.state.deals.get())
 			.toEqual(before)
 	})
@@ -35,20 +35,20 @@ describe('dealStore.updateStage() — locked validateArgs-vs-execute failure spl
 		const { store } = setup()
 		const before = store.state.deals.get()
 		const result = store.methods.updateStage('deal-1', 'bogus-stage' as unknown as 'won')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-args')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('invalid-method-arguments')
 		expect(store.state.deals.get())
 			.toEqual(before)
 	})
 
 	it('wrong arity is a method-args failure', () => {
 		const { store } = setup()
-		const result = (store.methods.updateStage as (...args: readonly unknown[]) => { readonly success: boolean })('deal-1')
-		expect(result.success)
+		const result = (store.methods.updateStage as (...args: readonly unknown[]) => { readonly ok: boolean })('deal-1')
+		expect(result.ok)
 			.toBe(false)
 	})
 
@@ -56,18 +56,18 @@ describe('dealStore.updateStage() — locked validateArgs-vs-execute failure spl
 		const { store } = setup()
 		const before = store.state.deals.get()
 		const result = store.methods.updateStage('no-such-deal', 'won')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-result')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('invalid-method-result')
 		expect(store.state.deals.get())
 			.toEqual(before)
 	})
 })
 
-describe('dealStore.updateStage() — success', () => {
+describe('dealStore.updateStage() — ok', () => {
 	it('immutably replaces the deals array and returns the updated Deal', () => {
 		const { store } = setup()
 		const before = store.state.deals.get()!
@@ -75,7 +75,7 @@ describe('dealStore.updateStage() — success', () => {
 		const result = store.methods.updateStage('deal-1', 'won')
 
 		expect(result)
-			.toEqual({ success: true, value: { id: 'deal-1', company: 'Aurora Systems', contact: 'Mia Chen', owner: 'Alex Rivera', stage: 'won', amount: 18_000 } })
+			.toEqual({ ok: true, value: { id: 'deal-1', company: 'Aurora Systems', contact: 'Mia Chen', owner: 'Alex Rivera', stage: 'won', amount: 18_000 } })
 
 		const after = store.state.deals.get()!
 		expect(after)
@@ -96,7 +96,7 @@ describe('dealStore.reset()', () => {
 			.toBe('won')
 
 		const result = store.methods.reset()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
 		expect(store.state.deals.get())
 			.toEqual(seedDeals)

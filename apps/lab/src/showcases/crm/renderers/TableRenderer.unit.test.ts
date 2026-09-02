@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Issue #28 accessibility fix — cheap attribute-wiring assertions only: native table semantics,
+ * Diagnostic #28 accessibility fix — cheap attribute-wiring assertions only: native table semantics,
  * keyboard-focusable data rows, and `aria-current` tied to semantic `Table.selectedRowId`. #43 adds a
  * presentation-only locale dependency for the table's fixed empty-state copy; this harness supplies an
  * English identity translator without changing any of the semantic/accessibility assertions.
@@ -65,7 +65,7 @@ describe('tableRenderer', () => {
 
 		const table_ = widgetOfType(runtime, 'deal-table', 'Table')
 		const result = table_.methods.selectRow('deal-1')
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
 		await wrapper.vm.$nextTick()
 

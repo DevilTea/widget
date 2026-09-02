@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 /**
- * Issue #28 accessibility fix — cheap attribute-wiring assertion only: the visible `label`'s `for`
+ * Diagnostic #28 accessibility fix — cheap attribute-wiring assertion only: the visible `label`'s `for`
  * matches the `select`'s `id`. `SelectInput` is reused as both `stage-filter` and `stage-editor`
  * (`../presets.ts`); asserting this against `stage-filter` (the toolbar instance, reachable without
  * opening the modal) is sufficient since both instances share this exact renderer. Behavioral
- * focus/keyboard coverage belongs to the real-browser contract suite (issue #28), not here.
+ * focus/keyboard coverage belongs to the real-browser contract suite (diagnostic #28), not here.
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'

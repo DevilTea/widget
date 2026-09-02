@@ -1,18 +1,18 @@
 /**
- * Vue reactivity bridge over `../tutorial/`'s framework-agnostic `TutorialEngine` (issue #25 P1) — the
+ * Vue reactivity bridge over `../tutorial/`'s framework-agnostic `TutorialEngine` (diagnostic #25 P1) — the
  * one place that adapts its plain `getSnapshot()`/`subscribe()` shape into a Vue ref, owns the
  * deterministic-tour-start orchestration (`../tutorial/deterministic-start.ts`'s pure decision plus the
  * actual `LabStore.applyPreset()`/`switchShowcase()` calls the OWNER-locked policy requires), and
  * subscribes the passive Runtime-observation surface (`../tutorial/inspection-reader.ts`) that drives
  * `TutorialEngine.recheck()`. Mirrors `use-lab-store.ts`'s role for `LabSession`.
  *
- * issue #25 P4: now owns TWO tours (Survey + CRM), one `TutorialEngine` instance each, keyed by
+ * diagnostic #25 P4: now owns TWO tours (Survey + CRM), one `TutorialEngine` instance each, keyed by
  * `TutorialTourId`. `activeTourId` decides which engine every method below (`next`/`back`/`skip`/
  * `pause`/`requestResume`/`runLink`/the returned `snapshot`) operates on — there is deliberately no
  * "current tour" concept inside `TutorialEngine` itself (each engine only ever knows its own script);
  * this module is the one place that picks which engine is "the" tutorial at any moment, mirroring how it
  * is already the one place that adapts multiple framework-agnostic pieces into one Vue-facing surface.
- * The locked "Survey is the first-run path" rule (issue #25 gate review point 1 / v2 amendment) shows up
+ * The locked "Survey is the first-run path" rule (diagnostic #25 gate review point 1 / v2 amendment) shows up
  * here as `crmTourUnlocked`: the header's tour-picker (`LabHeader.vue`) only ever offers CRM once Survey
  * has been completed at least once this session, and the Welcome card's "Start the tour" always lands on
  * Survey because `activeTourId` starts as `'survey'` and nothing can change it before Welcome is ever
@@ -34,7 +34,7 @@ import { createStartRequestGuard } from '../tutorial/start-request'
 import { SURVEY_TOUR_ID, surveyTourScript } from '../tutorial/survey-script'
 
 /**
- * The two tour scripts this app ships (issue #25 P4). Derived from each script module's own exported
+ * The two tour scripts this app ships (diagnostic #25 P4). Derived from each script module's own exported
  * id constant rather than hardcoded string literals here, so there is exactly one place (each script's
  * own `_TOUR_ID` export) that spells out its id.
  */
@@ -59,12 +59,12 @@ export interface TutorialStore {
 	readonly startPending: Readonly<Ref<boolean>>
 	/**
 	 * Which tour every method below (`next`/`back`/`skip`/`pause`/`requestResume`/`runLink`/`snapshot`)
-	 * currently operates on (issue #25 P4). Starts `'survey'` and only ever changes via `selectTour()` or
+	 * currently operates on (diagnostic #25 P4). Starts `'survey'` and only ever changes via `selectTour()` or
 	 * the Survey hand-back step's "Take the CRM tour" link.
 	 */
 	readonly activeTourId: Readonly<Ref<TutorialTourId>>
 	/**
-	 * `true` once the Survey tour has been completed at least once this session (issue #25 P4 Scope B,
+	 * `true` once the Survey tour has been completed at least once this session (diagnostic #25 P4 Scope B,
 	 * "Survey is the first-run path"): the header's tour-picker only offers CRM once this is `true`.
 	 */
 	readonly crmTourUnlocked: Readonly<Ref<boolean>>
@@ -113,7 +113,7 @@ export const TutorialStoreKey: InjectionKey<TutorialStore> = Symbol('widget-lab:
 
 /**
  * Loads a tour's known default preset through the exact same Apply pipeline every other Source mutation
- * uses (issue #25 OWNER decision, extended to CRM by issue #25 P4) — switching showcase when not already
+ * uses (diagnostic #25 OWNER decision, extended to CRM by diagnostic #25 P4) — switching showcase when not already
  * on the target one already applies its `defaultPreset` (which IS each tour's own default — `survey-
  * default` for Survey, `crm-default` for CRM; see `showcases/registry.ts`), so only the already-on-that-
  * showcase case needs an explicit `applyPreset()` (covers a different preset, or a Runtime the visitor
@@ -159,7 +159,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			.getSnapshot()
 	})
 
-	// issue #25 P4 Scope B: unlocked once Survey has been completed this session — either just now (the
+	// diagnostic #25 P4 Scope B: unlocked once Survey has been completed this session — either just now (the
 	// live engine already reports `'completed'`) or on an earlier visit this session (the persisted
 	// flag). Depends on `engineTick` so a completion that happens THIS session is reflected immediately,
 	// not only after a reload.
@@ -219,7 +219,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 				if (tourId !== SURVEY_TOUR_ID && tourId !== CRM_TOUR_ID)
 					return
 				// "Take the CRM tour" from Survey's hand-back step reads as completing Survey, not
-				// abandoning it mid-teaching (issue #25 P4 Scope B) — the hand-back step has no gating
+				// abandoning it mid-teaching (diagnostic #25 P4 Scope B) — the hand-back step has no gating
 				// predicate, so if it is the current step this `next()` always succeeds and flips status
 				// to `'completed'` (recorded below), exactly as if Finish had been clicked first. A no-op
 				// from any other step/status (`next()` is already a no-op unless `canAdvance`).
@@ -283,10 +283,10 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		beginTour(tourId, isRestart)
 	}
 
-	// Passive Runtime observation (issue #25 P1 "predicates observe Runtime PASSIVELY"): subscribes only
+	// Passive Runtime observation (diagnostic #25 P1 "predicates observe Runtime PASSIVELY"): subscribes only
 	// while the ACTIVE tour is active AND the current showcase matches that tour's own showcase id —
 	// re-subscribing whenever the active Runtime identity changes (Apply/preset/switchShowcase all
-	// replace it), the tour's own status changes, or `activeTourId` itself changes (issue #25 P4).
+	// replace it), the tour's own status changes, or `activeTourId` itself changes (diagnostic #25 P4).
 	let teardownObservation: (() => void) | null = null
 	watch(
 		() => [store.active.value.runtime, snapshot.value.status, store.showcaseId.value, activeTourId.value] as const,
@@ -339,7 +339,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			welcomeVisible.value = false
 			// `activeTourId` is still `'survey'` the very first time this can possibly fire (Welcome only
 			// shows before any tour has ever run), so this also serves as the Welcome card's own "always
-			// Survey" entry point without a second, dedicated method (issue #25 P4 Scope B).
+			// Survey" entry point without a second, dedicated method (diagnostic #25 P4 Scope B).
 			requestStartOrRestart(activeTourId.value, false)
 		},
 		requestRestart: () => requestStartOrRestart(activeTourId.value, true),

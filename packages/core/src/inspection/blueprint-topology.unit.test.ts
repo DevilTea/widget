@@ -1,6 +1,6 @@
 /**
  * Conformance group 4 (source topology projection), group 5 (ordering — node pre-order and
- * slot/semantic-slot declaration order) and group 6 (capability distinction) from issue #10's inspection
+ * slot/semantic-slot declaration order) and group 6 (capability distinction) from diagnostic #10's inspection
  * amendment "inspection exact API v1 (part 1)".
  */
 
@@ -15,6 +15,7 @@ interface LeafInterfaces {
 }
 
 const leafPlugin = createWidgetPlugin('topology-leaf')
+	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -28,8 +29,9 @@ interface ContainerInterfaces {
 
 /** Declared in reverse-alphabetic order to prove `semanticSlots` preserves declaration order verbatim. */
 const containerPlugin = createWidgetPlugin('topology-container')
+	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
-	.slots({ right: {}, left: {} })
+	.slots({ right: { description: 'Test slot' }, left: { description: 'Test slot' } })
 	.done()
 
 interface ZebraApplePluginInterfaces {
@@ -37,8 +39,9 @@ interface ZebraApplePluginInterfaces {
 }
 
 const zebraApplePlugin = createWidgetPlugin('zebra-apple')
+	.description('Test widget')
 	.interfaces<ZebraApplePluginInterfaces>()
-	.slots({ zebra: {}, apple: {} })
+	.slots({ zebra: { description: 'Test slot' }, apple: { description: 'Test slot' } })
 	.done()
 
 interface ConfiguredInterfaces {
@@ -49,8 +52,10 @@ interface ConfiguredInterfaces {
 }
 
 const configuredPlugin = createWidgetPlugin('configured')
+	.description('Test widget')
 	.interfaces<ConfiguredInterfaces>()
 	.config({
+		description: 'Test config',
 		validate: (input): input is { readonly label?: string } => input === undefined || (typeof input === 'object' && input !== null),
 		resolve: raw => ({ label: raw?.label ?? 'default' }),
 	})
@@ -69,9 +74,10 @@ interface ExplicitEmptyInterfaces {
  * "capability not declared at all". `Record<never, never>` is this codebase's established spelling for a
  * declared-but-empty state/properties/methods capability (matching `compile-view-typing.unit.test.ts`
  * and `plugin-typestate.unit.test.ts`); `slots: never` is the canonical explicit-empty slots spelling
- * (issue #10 amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`").
+ * (diagnostic #10 amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`").
  */
 const explicitEmptyPlugin = createWidgetPlugin('explicit-empty')
+	.description('Test widget')
 	.interfaces<ExplicitEmptyInterfaces>()
 	.slots({})
 	.state(state => state)
@@ -156,7 +162,7 @@ describe('source topology projection', () => {
 		// Each entry is a single scalar placement, structurally incapable of mixing.
 	})
 
-	it('a malformed raw slot value produces no sourceSlots entry, and the existing definition Issue is unaffected', () => {
+	it('a malformed raw slot value produces no sourceSlots entry, and the existing definition Diagnostic is unaffected', () => {
 		const blueprint = system.createBlueprint({
 			id: 'root',
 			type: 'topology-container',
@@ -169,8 +175,8 @@ describe('source topology projection', () => {
 
 		expect(root.sourceSlots.some(slot => slot.name === 'left'))
 			.toBe(false)
-		expect(root.node.getIssues()
-			.some(issue => issue.source.type === 'definition'))
+		expect(root.node.diagnostics
+			.some(diagnostic => ['invalid-widget-definition', 'invalid-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)))
 			.toBe(true)
 	})
 })

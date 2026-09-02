@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Runtime Inspector (issue #13 Phase 5 "Runtime Inspector becomes strictly passive" / "inspectors are
+ * Runtime Inspector (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly passive" / "inspectors are
  * readonly consumers of core inspection"). Strictly readonly: opening, selecting a widget/member, or
  * subscribing never calls `state.get()`/`property.get()`, invokes Methods, or otherwise drives Runtime
  * semantics — every fact comes from `@deviltea/widget-core/inspection`'s `inspectRuntime()`.
@@ -9,7 +9,7 @@
  * Runtime tab stays present rather than disappearing). Reuses `BlueprintTree` for navigation: an
  * `inspectRuntime(runtime).blueprint` is identity-equal to `inspectBlueprint(runtime.blueprint)`, so the
  * same tree/shared-focus contract Blueprint uses applies here unchanged. #43 localizes only Lab-owned
- * explanatory chrome; Runtime member names, values, and core issues remain verbatim.
+ * explanatory chrome; Runtime member names, values, and core diagnostics remain verbatim.
  */
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import { inspectRuntime } from '@deviltea/widget-core/inspection'
@@ -57,7 +57,7 @@ function selectNode(nodeId: InspectionNodeId): void {
 	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
 		<PanelDescriptionBar
 			storageKey="widget-lab:panel-desc:runtime"
-			text="Live State, Properties, Methods, and Issues of the running widgets"
+			text="Live State, Properties, Methods, and Diagnostics of the running widgets"
 		/>
 		<div
 			v-if="runtime === null"

@@ -1,7 +1,7 @@
 /**
  * Public type contract of the dedicated `@deviltea/widget-core/inspection` subpath.
  *
- * Normative source: issue #10 amendments "Promote renderer-agnostic inspection support into core",
+ * Normative source: diagnostic #10 amendments "Promote renderer-agnostic inspection support into core",
  * "inspection identity may expose snapshot-local node IDs", "inspection is a readonly public subpath",
  * "readonly inspection subscription and disposal semantics", "inspection exact API v1 (part 1: Blueprint
  * inspection)" and "inspection exact API v1 (part 2: Runtime inspection, materialization, disposal,
@@ -10,9 +10,9 @@
  * The root `@deviltea/widget-core` entrypoint does not re-export anything from this module.
  */
 
+import type { BlueprintDependencyReference, RuntimePropertyDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { BlueprintWidgetNode, ResolvedBlueprintWidgetNode, UnresolvedBlueprintWidgetNode } from '../internal/contract'
-import type { BlueprintDependencyReference, RuntimePropertyIssue } from '../issue'
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetMemberKey } from '../types'
 
@@ -119,7 +119,7 @@ export interface BlueprintInspectionMethodMember {
 export interface BlueprintInspectionNodeBase<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly nodeId: InspectionNodeId
 	/**
-	 * The existing public Blueprint node object (`rawDefinition`, `getIssues`, and — when resolved —
+	 * The existing public Blueprint node object (`source`, `diagnostics`, and — when resolved —
 	 * id/type/config/slots semantics). Inspection does not duplicate those semantics into a second DTO.
 	 */
 	readonly node: BlueprintWidgetNode<Plugins>
@@ -192,7 +192,7 @@ export type RuntimePropertyInspectionSnapshot<T>
 	= | { readonly status: 'never-evaluated' }
 		| {
 			readonly status: 'completed'
-			readonly result: ExecutionResult<T | null, RuntimePropertyIssue>
+			readonly result: ExecutionResult<T | null, RuntimePropertyDiagnostic>
 		}
 
 export interface RuntimePropertyInspection<T> extends InspectionObservable<RuntimePropertyInspectionSnapshot<T>> {}

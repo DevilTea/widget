@@ -5,7 +5,7 @@
  * request (`selectTour()`'s own defensive checks, independent of `LabHeader.vue` actually disabling the
  * `<select>`).
  *
- * Against the REAL `createLabStore()` (issue #25's own `use-lab-store.unit.test.ts` precedent: called
+ * Against the REAL `createLabStore()` (diagnostic #25's own `use-lab-store.unit.test.ts` precedent: called
  * directly, no component mount needed for plain reactivity/lifecycle-hook registration to work) — for
  * the pending-start case, `switchShowcase()` is overridden with a manually-resolved ("deferred") promise
  * so the test can deterministically hold the tour mid-flight, the same "make the async window

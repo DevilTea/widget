@@ -1,11 +1,11 @@
 /**
  * Shared cross-inspector focus (Blueprint / Runtime / Graph panels).
  *
- * Normative source: issue #13 (Widget Lab Phase 4) comment "Widget Lab inspector panel interaction
+ * Normative source: diagnostic #13 (Widget Lab Phase 4) comment "Widget Lab inspector panel interaction
  * contract". Shared focus is snapshot-local: an `InspectionNodeId` (see
  * `@deviltea/widget-core/inspection`) plus an optional State/Property/Method member. It resets to the
  * new Blueprint's root on every applied snapshot; panel-local selections (Graph edge selection,
- * Blueprint's own selected issue, Graph viewport/filters, ...) are out of scope here and stay owned by
+ * Blueprint's own selected diagnostic, Graph viewport/filters, ...) are out of scope here and stay owned by
  * each panel.
  */
 
@@ -26,7 +26,7 @@ export interface InspectorFocus {
 
 export interface InspectorFocusStore {
 	getFocus: () => InspectorFocus | null
-	/** Explicit issue-navigation commands (and panel row selection) call this; ordinary tab switching never does. */
+	/** Explicit diagnostic-navigation commands (and panel row selection) call this; ordinary tab switching never does. */
 	setFocus: (focus: InspectorFocus | null) => void
 	subscribe: (listener: () => void) => () => void
 	/** Stops listening to the underlying `LabSession`. Call when the store itself is torn down. */

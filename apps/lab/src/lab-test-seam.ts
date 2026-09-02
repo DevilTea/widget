@@ -1,9 +1,9 @@
 /**
- * Issue #28 browser-contract "interaction seam" for Source/Apply.
+ * Diagnostic #28 browser-contract "interaction seam" for Source/Apply.
  *
  * The real Source panel edits `LabSession.draftSourceText` exclusively through Monaco
  * (`MonacoJsonEditor.vue`'s `update:modelValue` -> `store.setDraftSourceText`). `modern-monaco`'s
- * editor engine is now self-hosted (issue #30 Scope A; see `use-monaco-editor.ts`'s `ensureMonaco()`
+ * editor engine is now self-hosted (diagnostic #30 Scope A; see `use-monaco-editor.ts`'s `ensureMonaco()`
  * and `vite-plugin-vendor-modern-monaco-editor-core.ts`), so this seam's justification is no longer "CI
  * must not depend on a reachable CDN" — it is simpler and still holds: the Apply-lifecycle contract
  * (`e2e/apply.spec.ts`) is about `LabSession`/`LabStore` semantics, not the Source panel's editor

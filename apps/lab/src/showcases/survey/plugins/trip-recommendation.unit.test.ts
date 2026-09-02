@@ -86,7 +86,7 @@ function createRuntime(scenario: Scenario) {
 
 	const blueprint = surveySystem.createBlueprint(definition)
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid Blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid Blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 	return blueprint.createRuntime()
 }
 
@@ -96,12 +96,12 @@ describe('tripRecommendation.result (C2)', () => {
 		const recommendation = widgetOfType(runtime, 'trip-recommendation', 'TripRecommendation')
 
 		const result = recommendation.properties.result.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('property-dependency')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('dependency-target-failed')
 	})
 
 	it('fit "comfortable" (ratio >= 1.20) keeps the requested style', () => {
@@ -112,7 +112,7 @@ describe('tripRecommendation.result (C2)', () => {
 		const result = recommendation.properties.result.get()
 		expect(result)
 			.toEqual({
-				success: true,
+				ok: true,
 				value: expect.objectContaining({
 					fit: 'comfortable',
 					requestedStyle: 'balanced',
@@ -130,10 +130,10 @@ describe('tripRecommendation.result (C2)', () => {
 		const recommendation = widgetOfType(runtime, 'trip-recommendation', 'TripRecommendation')
 
 		const result = recommendation.properties.result.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('expected success')
+		if (!result.ok)
+			throw new Error('expected ok')
 		expect(result.value.fit)
 			.toBe('workable')
 		expect(result.value.recommendedStyle)
@@ -146,10 +146,10 @@ describe('tripRecommendation.result (C2)', () => {
 		const recommendation = widgetOfType(runtime, 'trip-recommendation', 'TripRecommendation')
 
 		const result = recommendation.properties.result.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('expected success')
+		if (!result.ok)
+			throw new Error('expected ok')
 		expect(result.value.fit)
 			.toBe('tight')
 		expect(result.value.requestedStyle)
@@ -164,10 +164,10 @@ describe('tripRecommendation.result (C2)', () => {
 		const recommendation = widgetOfType(runtime, 'trip-recommendation', 'TripRecommendation')
 
 		const result = recommendation.properties.result.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('expected success')
+		if (!result.ok)
+			throw new Error('expected ok')
 		expect(result.value.fit)
 			.toBe('tight')
 		expect(result.value.recommendedStyle)
@@ -180,10 +180,10 @@ describe('tripRecommendation.result (C2)', () => {
 		const recommendation = widgetOfType(runtime, 'trip-recommendation', 'TripRecommendation')
 
 		const result = recommendation.properties.result.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('expected success')
+		if (!result.ok)
+			throw new Error('expected ok')
 		expect(result.value.fit)
 			.toBe('tight')
 		expect(result.value.requestedStyle)
@@ -197,10 +197,10 @@ describe('tripRecommendation.result (C2)', () => {
 		const recommendation = widgetOfType(runtime, 'trip-recommendation', 'TripRecommendation')
 
 		const result = recommendation.properties.result.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('expected success')
+		if (!result.ok)
+			throw new Error('expected ok')
 		expect(result.value.notes)
 			.toEqual([
 				'Traveling with 2 children.',
@@ -213,10 +213,10 @@ describe('tripRecommendation.result (C2)', () => {
 		const recommendation = widgetOfType(runtime, 'trip-recommendation', 'TripRecommendation')
 
 		const result = recommendation.properties.result.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
-		if (!result.success)
-			throw new Error('expected success')
+		if (!result.ok)
+			throw new Error('expected ok')
 		expect(result.value.notes)
 			.toEqual([])
 	})

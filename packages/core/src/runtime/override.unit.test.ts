@@ -1,14 +1,15 @@
 /**
- * Conformance coverage for `overrideStateDefaults` best-effort recovery granularity — issue #10
+ * Conformance coverage for `overrideStateDefaults` best-effort recovery granularity — diagnostic #10
  * COMMENT 21 ("overrideStateDefaults is best-effort and never blocks Runtime creation"), COMMENT 27/28
  * (locked `state-override` source union) and consolidated handoff §11.
  *
  * Each row of the granularity table gets its own discriminating test: the whole point is that a
- * plausible-but-wrong implementation collapses distinct granularities (e.g. emitting one issue per
+ * plausible-but-wrong implementation collapses distinct granularities (e.g. emitting one diagnostic per
  * nested key for an unknown widget, or duplicating a known-key validation failure as a `state-override`
- * issue too).
+ * diagnostic too).
  */
 
+import type { WidgetSystemRuntimeDiagnostic } from '../index'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -19,6 +20,7 @@ interface CounterInterfaces {
 }
 
 const counterPlugin = createWidgetPlugin('counter')
+	.description('Test widget')
 	.interfaces<CounterInterfaces>()
 	.state(section => section.count({
 		validate: (input): input is number => typeof input === 'number',
@@ -27,6 +29,7 @@ const counterPlugin = createWidgetPlugin('counter')
 	.done()
 
 const statelessPlugin = createWidgetPlugin('stateless')
+	.description('Test widget')
 	.interfaces<Record<never, never>>()
 	.done()
 
@@ -39,21 +42,25 @@ function createValidBlueprint(definition: unknown) {
 	return blueprint
 }
 
-function stateOverrideIssues(issues: readonly { source: unknown }[]) {
-	return issues.filter(issue => (issue.source as { type?: string }).type === 'state-override')
+function stateOverrideDiagnostics(diagnostics: readonly WidgetSystemRuntimeDiagnostic[]) {
+	return diagnostics.filter(diagnostic => diagnostic.code === 'invalid-state-overrides'
+		|| diagnostic.code === 'unknown-state-override-widget'
+		|| diagnostic.code === 'unsupported-state-override-target'
+		|| diagnostic.code === 'invalid-state-override-fragment'
+		|| diagnostic.code === 'unknown-state-override-member')
 }
 
-describe('overrideStateDefaults best-effort granularity (issue #10 COMMENT 21/27/28)', () => {
-	it('malformed top-level payload => exactly one top-level state-override issue (no widgetId)', () => {
+describe('overrideStateDefaults best-effort granularity (diagnostic #10 COMMENT 21/27/28)', () => {
+	it('malformed top-level payload => exactly one top-level state-override diagnostic (no widgetId)', () => {
 		const blueprint = createValidBlueprint({ id: 'root', type: 'counter' })
 
 		const runtime = blueprint.createRuntime({ overrideStateDefaults: 'not-a-record' as any })
 
-		const issues = runtime.getIssues()
-		expect(issues)
+		const diagnostics = runtime.getDiagnostics()
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(issues[0]!.source)
-			.toEqual({ type: 'state-override' })
+		expect(diagnostics[0]!)
+			.toMatchObject({ code: 'invalid-state-overrides', location: { type: 'runtime' } })
 
 		// Regression: Runtime is still created successfully, and the unrelated default still initializes.
 		expect(runtime.isDisposed)
@@ -63,16 +70,16 @@ describe('overrideStateDefaults best-effort granularity (issue #10 COMMENT 21/27
 			.toBe(0)
 	})
 
-	it('unknown widget id => exactly one widget-level state-override issue (widgetId, no key)', () => {
+	it('unknown widget id => exactly one widget-level state-override diagnostic (widgetId, no key)', () => {
 		const blueprint = createValidBlueprint({ id: 'root', type: 'counter' })
 
 		const runtime = blueprint.createRuntime({ overrideStateDefaults: { ghost: { count: 5 } } })
 
-		const issues = runtime.getIssues()
-		expect(issues)
+		const diagnostics = runtime.getDiagnostics()
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(issues[0]!.source)
-			.toEqual({ type: 'state-override', widgetId: 'ghost' })
+		expect(diagnostics[0]!)
+			.toMatchObject({ code: 'unknown-state-override-widget', path: ['ghost'], location: { type: 'runtime' } })
 
 		expect(runtime.isDisposed)
 			.toBe(false)
@@ -81,31 +88,31 @@ describe('overrideStateDefaults best-effort granularity (issue #10 COMMENT 21/27
 			.toBe(0)
 	})
 
-	it('widget without state capability => exactly one widget-level state-override issue', () => {
+	it('widget without state capability => exactly one widget-level state-override diagnostic', () => {
 		const blueprint = createValidBlueprint({ id: 'root', type: 'stateless' })
 
 		const runtime = blueprint.createRuntime({ overrideStateDefaults: { root: { count: 5 } } })
 
-		const issues = runtime.getIssues()
-		expect(issues)
+		const diagnostics = runtime.getDiagnostics()
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(issues[0]!.source)
-			.toEqual({ type: 'state-override', widgetId: 'root' })
+		expect(diagnostics[0]!)
+			.toMatchObject({ code: 'unsupported-state-override-target', path: ['root'], location: { type: 'runtime' } })
 
 		expect(runtime.isDisposed)
 			.toBe(false)
 	})
 
-	it('malformed per-widget fragment => exactly one widget-level state-override issue', () => {
+	it('malformed per-widget fragment => exactly one widget-level state-override diagnostic', () => {
 		const blueprint = createValidBlueprint({ id: 'root', type: 'counter' })
 
 		const runtime = blueprint.createRuntime({ overrideStateDefaults: { root: 'not-a-record' as any } })
 
-		const issues = runtime.getIssues()
-		expect(issues)
+		const diagnostics = runtime.getDiagnostics()
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(issues[0]!.source)
-			.toEqual({ type: 'state-override', widgetId: 'root' })
+		expect(diagnostics[0]!)
+			.toMatchObject({ code: 'invalid-state-override-fragment', path: ['root'], location: { type: 'runtime' } })
 
 		// The fragment is discarded wholesale; the state falls back to its default rather than being left
 		// uninitialized by the malformed fragment.
@@ -116,19 +123,19 @@ describe('overrideStateDefaults best-effort granularity (issue #10 COMMENT 21/27
 			.toBe(0)
 	})
 
-	it('unknown state key => one issue per unknown key (widgetId + key), known keys still initialize', () => {
+	it('unknown state key => one diagnostic per unknown key (widgetId + key), known keys still initialize', () => {
 		const blueprint = createValidBlueprint({ id: 'root', type: 'counter' })
 
 		const runtime = blueprint.createRuntime({ overrideStateDefaults: { root: { count: 5, mystery: 1, another: 2 } } })
 
-		const issues = stateOverrideIssues(runtime.getIssues())
-		expect(issues)
+		const diagnostics = stateOverrideDiagnostics(runtime.getDiagnostics())
+		expect(diagnostics)
 			.toHaveLength(2)
-		expect(issues.map(issue => issue.source))
+		expect(diagnostics.map(diagnostic => diagnostic))
 			.toEqual(
 				expect.arrayContaining([
-					{ type: 'state-override', widgetId: 'root', key: 'mystery' },
-					{ type: 'state-override', widgetId: 'root', key: 'another' },
+					expect.objectContaining({ code: 'unknown-state-override-member', path: ['root', 'mystery'], location: { type: 'runtime' } }),
+					expect.objectContaining({ code: 'unknown-state-override-member', path: ['root', 'another'], location: { type: 'runtime' } }),
 				]),
 			)
 
@@ -136,27 +143,27 @@ describe('overrideStateDefaults best-effort granularity (issue #10 COMMENT 21/27
 		const widget = runtime.getWidget('root') as any
 		expect(widget.state.count.get())
 			.toBe(5)
-		expect(widget.state.count.getIssues())
+		expect(widget.state.count.getDiagnostics())
 			.toHaveLength(0)
 	})
 
-	it('known key + invalid candidate => only a primitive state-validation issue, never state-override', () => {
+	it('known key + invalid candidate => only a primitive state-validation diagnostic, never state-override', () => {
 		const blueprint = createValidBlueprint({ id: 'root', type: 'counter' })
 
 		const runtime = blueprint.createRuntime({ overrideStateDefaults: { root: { count: 'not-a-number' } } })
 
-		expect(stateOverrideIssues(runtime.getIssues()))
+		expect(stateOverrideDiagnostics(runtime.getDiagnostics()))
 			.toHaveLength(0)
 
 		const widget = runtime.getWidget('root') as any
 		expect(widget.state.count.get())
 			.toBeNull()
 
-		const stateIssues = widget.state.count.getIssues()
-		expect(stateIssues)
+		const stateDiagnostics = widget.state.count.getDiagnostics()
+		expect(stateDiagnostics)
 			.toHaveLength(1)
-		expect(stateIssues[0].source)
-			.toMatchObject({ type: 'state-validation', widgetId: 'root', key: 'count', candidate: 'not-a-number' })
+		expect(stateDiagnostics[0])
+			.toMatchObject({ code: 'invalid-state-value', location: { type: 'state', widgetId: 'root', key: 'count' }, candidate: 'not-a-number' })
 	})
 
 	it('regression: every malformed/unusable override shape still yields a successfully created Runtime', () => {
@@ -179,22 +186,22 @@ describe('overrideStateDefaults best-effort granularity (issue #10 COMMENT 21/27
 		}
 	})
 
-	it('these override issues participate in the runtime aggregate (getCollectedIssues)', () => {
+	it('these override diagnostics participate in the runtime aggregate (getDiagnostics)', () => {
 		const blueprint = createValidBlueprint({ id: 'root', type: 'counter' })
 
 		const runtime = blueprint.createRuntime({ overrideStateDefaults: { ghost: { count: 5 } } })
 
-		const collected = runtime.getCollectedIssues()
-		const overrideIssuesInAggregate = stateOverrideIssues(collected)
-		expect(overrideIssuesInAggregate)
+		const collected = runtime.getDiagnostics()
+		const overrideDiagnosticsInAggregate = stateOverrideDiagnostics(collected)
+		expect(overrideDiagnosticsInAggregate)
 			.toHaveLength(1)
-		expect(overrideIssuesInAggregate[0]!.source)
-			.toEqual({ type: 'state-override', widgetId: 'ghost' })
+		expect(overrideDiagnosticsInAggregate[0]!)
+			.toMatchObject({ code: 'unknown-state-override-widget', path: ['ghost'], location: { type: 'runtime' } })
 
-		// The runtime-level issue set is exactly `getIssues()`, and it appears first in the aggregate.
-		expect(runtime.getIssues())
-			.toEqual([overrideIssuesInAggregate[0]])
+		// The runtime-level diagnostic set is exactly `getDiagnostics()`, and it appears first in the aggregate.
+		expect(runtime.getDiagnostics())
+			.toEqual([overrideDiagnosticsInAggregate[0]])
 		expect(collected[0])
-			.toBe(runtime.getIssues()[0])
+			.toBe(runtime.getDiagnostics()[0])
 	})
 })

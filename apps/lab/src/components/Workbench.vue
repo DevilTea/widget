@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Default two-column workbench (issue #13 Widget Lab Phase 4 Checkpoint I): a left tool group with
+ * Default two-column workbench (diagnostic #13 Widget Lab Phase 4 Checkpoint I): a left tool group with
  * tabs Source | Blueprint | Runtime | Graph (Source initially active, ~35-40% width) and a persistent
  * Preview on the right (~60-65% width, the dominant surface). Dockview owns tabs/resize/docking only —
  * it never becomes the semantic model for Source/Blueprint/Runtime/Graph/Preview.
@@ -46,7 +46,7 @@ const components: Record<string, VueComponent> = {
 	runtime: RuntimePanel as unknown as VueComponent,
 	graph: GraphPanel as unknown as VueComponent,
 	preview: PreviewPanel as unknown as VueComponent,
-	// issue #25 P3 Scope D: `defineAsyncComponent` (not a plain import) is the actual lazy boundary —
+	// diagnostic #25 P3 Scope D: `defineAsyncComponent` (not a plain import) is the actual lazy boundary —
 	// `ImplementationPanel.vue` and everything it statically imports (the curated-file viewer, Shiki)
 	// only enter their own chunk once Dockview first mounts this component, which only happens once
 	// `implementationExplorer.open()` has been called at least once (see `watchImplementationOpenRequests`
@@ -54,7 +54,7 @@ const components: Record<string, VueComponent> = {
 	implementation: defineAsyncComponent(() => import('./panels/ImplementationPanel.vue')) as unknown as VueComponent,
 }
 
-// issue #27 Finding 2: the canonical panels' tab content renderer, close-button-free by construction
+// diagnostic #27 Finding 2: the canonical panels' tab content renderer, close-button-free by construction
 // (see NonClosableTab.vue) — selected per-panel below via `AddPanelOptions.tabComponent`.
 const tabComponents: Record<string, VueComponent> = {
 	nonClosable: NonClosableTab as unknown as VueComponent,
@@ -62,7 +62,7 @@ const tabComponents: Record<string, VueComponent> = {
 
 const workbenchEl = ref<HTMLElement | null>(null)
 let resizeObserver: ResizeObserver | null = null
-// Merge-gate review hygiene note (issue #25 P1): `watchTutorialTabActivation()` below is only ever
+// Merge-gate review hygiene note (diagnostic #25 P1): `watchTutorialTabActivation()` below is only ever
 // called from `onReady()`, a child-emitted event-callback invocation rather than `setup()`'s own
 // synchronous body or a lifecycle hook Vue explicitly re-activates this component's effect scope for —
 // so a `watch()` created there is not reliably guaranteed to be auto-disposed on unmount. Retaining its
@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
 function onReady(event: DockviewReadyEvent): void {
 	const { api } = event
 
-	// `tabComponent: 'nonClosable'` on every canonical panel (issue #27 Finding 2) — see
+	// `tabComponent: 'nonClosable'` on every canonical panel (diagnostic #27 Finding 2) — see
 	// NonClosableTab.vue/tabComponents above for the mechanism.
 	api.addPanel({ id: 'source', component: 'source', tabComponent: 'nonClosable', title: 'Source' })
 	api.addPanel({
@@ -147,7 +147,7 @@ function onReady(event: DockviewReadyEvent): void {
 }
 
 /**
- * The minimal "tab-activation bridge" issue #25 P1's Survey tour view-map step (and its "See it in
+ * The minimal "tab-activation bridge" diagnostic #25 P1's Survey tour view-map step (and its "See it in
  * Runtime" link) needs: `LabStore.activeTab` already existed as a plain `Ref<LabToolTab>` with no
  * observable effect on Dockview — this is the one place that makes assigning it actually switch the
  * visible tab, via `DockviewApi.getPanel(id)?.api.setActive()` (`dockview-core`'s
@@ -165,7 +165,7 @@ function watchTutorialTabActivation(api: DockviewApi): void {
 }
 
 /**
- * Issue #25 P3 Scope D "Opening = `api.addPanel` if absent else activate". Deliberately not `immediate`
+ * Diagnostic #25 P3 Scope D "Opening = `api.addPanel` if absent else activate". Deliberately not `immediate`
  * (matching `watchTutorialTabActivation` above): `openRequestTick` starts at `0` and every real
  * `open()` call increments it, so the watch only ever fires on an actual request, never at setup time.
  * The Implementation panel is added `within` the same tab group as Source/Blueprint/Runtime/Graph, with

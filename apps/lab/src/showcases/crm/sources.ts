@@ -1,7 +1,7 @@
 /**
- * Sales Pipeline CRM curated Implementation-explorer registry (issue #25 P3 Scope A). One entry per
+ * Sales Pipeline CRM curated Implementation-explorer registry (diagnostic #25 P3 Scope A). One entry per
  * `crmPlugins` type (`./plugins/index.ts`). `domain.ts` is curated only for the three CRM-domain
- * semantic widgets (`DealStore`/`DealQuery`/`DealStageForm`, per the issue's own deliverable notes
+ * semantic widgets (`DealStore`/`DealQuery`/`DealStageForm`, per the diagnostic's own deliverable notes
  * "crm domain.ts for store/query plugins") whose behavior genuinely depends on it (`Deal`/`DealStage`,
  * `stageProbability`, the seed dataset shape); the reusable-style primitives (`structural.ts`/
  * `inputs.ts`/`read-models.ts`/`actions.ts`) only import `domain.ts` for the generic `isPlainObject`

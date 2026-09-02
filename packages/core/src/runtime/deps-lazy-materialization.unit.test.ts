@@ -6,7 +6,7 @@
  * then all methods, per node, in ascending compiled-node order). Dependency-tree materialization used to
  * resolve its target primitive eagerly while *building* the returned callable, which only works when
  * the target already exists at that exact point in construction order. Runtime correctness must not
- * depend on member/widget declaration order — issue #10 consolidated handoff §12 only promises that a
+ * depend on member/widget declaration order — diagnostic #10 consolidated handoff §12 only promises that a
  * `resolved` compiled dependency materializes into a usable runtime callable, and COMMENT 18 requires
  * valid Method-only cycles to work.
  *
@@ -32,6 +32,7 @@ interface OrderingInterfaces {
 }
 
 const orderingPlugin = createWidgetPlugin('ordering')
+	.description('Test widget')
 	.interfaces<OrderingInterfaces>()
 	.properties(properties => properties
 		// Declared first, but depends on `second`, declared after it.
@@ -39,7 +40,7 @@ const orderingPlugin = createWidgetPlugin('ordering')
 			registerDeps: ({ dep }) => ({ second: dep.self.properties.get('second') }),
 			compute: ({ deps }) => {
 				const result = deps.second()
-				return result.success ? (result.value ?? 0) + 1 : -1
+				return result.ok ? (result.value ?? 0) + 1 : -1
 			},
 		})
 		.second({
@@ -51,7 +52,7 @@ const orderingPlugin = createWidgetPlugin('ordering')
 			registerDeps: ({ dep }) => ({ readOnly: dep.self.methods.invoke('readOnly') }),
 			compute: ({ deps }) => {
 				const result = deps.readOnly()
-				return result.success ? (result.value ?? 0) : -1
+				return result.ok ? (result.value ?? 0) : -1
 			},
 		}))
 	.methods(methods => methods.readOnly({
@@ -71,6 +72,7 @@ interface LeafBInterfaces {
 }
 
 const leafBPlugin = createWidgetPlugin('leaf-b')
+	.description('Test widget')
 	.interfaces<LeafBInterfaces>()
 	.properties(properties => properties.value({
 		compute: () => 5,
@@ -84,12 +86,13 @@ interface LeafAInterfaces {
 }
 
 const leafAPlugin = createWidgetPlugin('leaf-a')
+	.description('Test widget')
 	.interfaces<LeafAInterfaces>()
 	.properties(properties => properties.viaB({
 		registerDeps: ({ dep }) => ({ value: dep.widget('b').properties.get('value') }),
 		compute: ({ deps }) => {
 			const result = deps.value()
-			return result.success && typeof result.value === 'number' ? result.value : -1
+			return result.ok && typeof result.value === 'number' ? result.value : -1
 		},
 	}))
 	.done()
@@ -99,8 +102,9 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: 'Test slot' } })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -115,6 +119,7 @@ interface CycleInterfaces {
 }
 
 const cyclePlugin = createWidgetPlugin('cycle')
+	.description('Test widget')
 	.interfaces<CycleInterfaces>()
 	.methods(methods => methods
 		.a({
@@ -124,7 +129,7 @@ const cyclePlugin = createWidgetPlugin('cycle')
 				if (!args[0])
 					return 1
 				const result = deps.callB(false)
-				return result.success ? (result.value ?? 0) + 1 : -1
+				return result.ok ? (result.value ?? 0) + 1 : -1
 			},
 		})
 		.b({
@@ -134,7 +139,7 @@ const cyclePlugin = createWidgetPlugin('cycle')
 				if (!args[0])
 					return 2
 				const result = deps.callA(false)
-				return result.success ? (result.value ?? 0) + 1 : -1
+				return result.ok ? (result.value ?? 0) + 1 : -1
 			},
 		}))
 	.done()
@@ -144,7 +149,7 @@ describe('dependency materialization does not depend on member/widget declaratio
 		const system = createWidgetSystem({ plugins: [orderingPlugin] })
 		const blueprint = system.createBlueprint({ id: 'root', type: 'ordering' })
 		if (blueprint.status !== 'valid')
-			throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+			throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 		expect(() => blueprint.createRuntime())
 			.not.toThrow()
@@ -155,16 +160,16 @@ describe('dependency materialization does not depend on member/widget declaratio
 			throw new Error('Expected the "root" widget to exist.')
 
 		expect(widget.properties.first.get())
-			.toEqual({ success: true, value: 42 })
+			.toEqual({ ok: true, value: 42 })
 		expect(widget.properties.second.get())
-			.toEqual({ success: true, value: 41 })
+			.toEqual({ ok: true, value: 41 })
 	})
 
 	it('a Property depending on a read-only Method (materialized only after every Property) works', () => {
 		const system = createWidgetSystem({ plugins: [orderingPlugin] })
 		const blueprint = system.createBlueprint({ id: 'root', type: 'ordering' })
 		if (blueprint.status !== 'valid')
-			throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+			throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 		const runtime = blueprint.createRuntime()
 		const widget = runtime.getWidget('root')
@@ -172,7 +177,7 @@ describe('dependency materialization does not depend on member/widget declaratio
 			throw new Error('Expected the "root" widget to exist.')
 
 		expect(widget.properties.viaMethod.get())
-			.toEqual({ success: true, value: 99 })
+			.toEqual({ ok: true, value: 99 })
 	})
 
 	it('a dependency on a widget compiled later than the consumer materializes and reads correctly', () => {
@@ -188,7 +193,7 @@ describe('dependency materialization does not depend on member/widget declaratio
 			},
 		})
 		if (blueprint.status !== 'valid')
-			throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+			throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 		expect(() => blueprint.createRuntime())
 			.not.toThrow()
@@ -199,14 +204,14 @@ describe('dependency materialization does not depend on member/widget declaratio
 			throw new Error('Expected widget "a" to exist and be a "leaf-a" widget.')
 
 		expect(widgetA.properties.viaB.get())
-			.toEqual({ success: true, value: 5 })
+			.toEqual({ ok: true, value: 5 })
 	})
 
 	it('a legal Method-only cycle (A <-> B) materializes under createRuntime() and both directions invoke correctly', () => {
 		const system = createWidgetSystem({ plugins: [cyclePlugin] })
 		const blueprint = system.createBlueprint({ id: 'root', type: 'cycle' })
 		if (blueprint.status !== 'valid')
-			throw new Error(`Expected a valid blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+			throw new Error(`Expected a valid blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 
 		expect(() => blueprint.createRuntime())
 			.not.toThrow()
@@ -218,15 +223,15 @@ describe('dependency materialization does not depend on member/widget declaratio
 
 		// Direct, non-recursive calls exercise each method's own materialized dependency callable.
 		expect(widget.methods.a(false))
-			.toEqual({ success: true, value: 1 })
+			.toEqual({ ok: true, value: 1 })
 		expect(widget.methods.b(false))
-			.toEqual({ success: true, value: 2 })
+			.toEqual({ ok: true, value: 2 })
 
 		// `a` actually invokes its dependency on `b` (materialized while `b` did not exist yet).
 		expect(widget.methods.a(true))
-			.toEqual({ success: true, value: 3 })
+			.toEqual({ ok: true, value: 3 })
 		// `b` actually invokes its dependency on `a` (materialized while `a` was still mid-construction).
 		expect(widget.methods.b(true))
-			.toEqual({ success: true, value: 2 })
+			.toEqual({ ok: true, value: 2 })
 	})
 })

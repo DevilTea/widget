@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Fixed tutorial rail (issue #25). #43 translates its presentation copy at render time so the
+ * Fixed tutorial rail (diagnostic #25). #43 translates its presentation copy at render time so the
  * framework-agnostic tutorial scripts remain stable semantic/pedagogical definitions rather than
  * depending on Vue/i18n state.
  */

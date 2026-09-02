@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 /**
- * Issue #28 accessibility fix — cheap attribute-wiring assertion only: the visible `label`'s `for`
+ * Diagnostic #28 accessibility fix — cheap attribute-wiring assertion only: the visible `label`'s `for`
  * matches the `input`'s `id` for `deal-search` (the toolbar's `TextInput` instance, `../presets.ts`).
- * Behavioral focus/keyboard coverage belongs to the real-browser contract suite (issue #28), not here.
+ * Behavioral focus/keyboard coverage belongs to the real-browser contract suite (diagnostic #28), not here.
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'

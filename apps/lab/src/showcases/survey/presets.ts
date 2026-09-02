@@ -173,7 +173,7 @@ export const surveyPresets: readonly SurveyPreset[] = [
 	{
 		id: 'survey-not-ready',
 		label: 'Not ready — family priority missing',
-		description: 'Same topology, `children` defaults to 2 with `family-priority` left unanswered: TripReadiness.ready fails with a contextual issue (checkpoint C1), and Submit fails through Method dependency propagation.',
+		description: 'Same topology, `children` defaults to 2 with `family-priority` left unanswered: TripReadiness.ready fails with a contextual diagnostic (checkpoint C1), and Submit fails through Method dependency propagation.',
 		sourceText: notReadySurveySource,
 	},
 ]

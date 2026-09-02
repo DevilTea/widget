@@ -2,15 +2,15 @@
  * Thin `alien-signals@3.2.1` adapter.
  *
  * `alien-signals` owns dependency tracking, lazy computed, cache/stale state, invalidation and
- * batching/propagation. This module only adds the thin wrapper behavior issue #10 consolidated
+ * batching/propagation. This module only adds the thin wrapper behavior diagnostic #10 consolidated
  * handoff §17 (mirroring the amendment "Implementation verification — alien-signals@3.2.1
  * conformance") requires on top of it:
  *
- * 1. suppress the effect's bootstrap run so `subscribe`/`subscribeIssues` have no immediate emission;
+ * 1. suppress the effect's bootstrap run so `subscribe`/`subscribeDiagnostics` have no immediate emission;
  * 2. invoke external listeners with no active alien subscriber, so listener code reading other Runtime
  *    primitives cannot silently extend the dependency graph;
  * 3. isolate listener exceptions outside the current alien-signals flush;
- * 4. hold an issue-snapshot commit performed *during* an evaluation inside an alien batch until the call
+ * 4. hold an diagnostic-snapshot commit performed *during* an evaluation inside an alien batch until the call
  *    that drove that evaluation has returned, so its propagation can never re-enter alien-signals' flush
  *    while a computed is still mid-evaluation (see {@link writeDeferringFlush}).
  *
@@ -65,7 +65,7 @@ let deferredFlushDepth = 0
  * notifications it already queued.
  *
  * The loop condition is re-tested after every `endBatch()`: that flush can run an effect whose Property
- * recompute commits its own issue snapshot, which opens a fresh level this same drain must then close.
+ * recompute commits its own diagnostic snapshot, which opens a fresh level this same drain must then close.
  * A recompute that throws inside one of those flushes must not leave alien-signals permanently batched
  * (every later flush in the Runtime's life would be silently suspended), so the remaining levels are
  * closed before the throw is rethrown.

@@ -1,5 +1,5 @@
 /**
- * Registry-shape sanity for curated `sources.ts` modules (issue #25 P3 Scope F "registry shape
+ * Registry-shape sanity for curated `sources.ts` modules (diagnostic #25 P3 Scope F "registry shape
  * sanity: every referenced plugin type exists in the corresponding system — import the systems and
  * assert coverage/no-dangling entries").
  *

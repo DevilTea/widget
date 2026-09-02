@@ -2,9 +2,9 @@
  * Regression coverage for PR #12 review finding 3774401609 (`runtime/deps.ts` dedupe `scope` leaking
  * `message` into machine identity).
  *
- * Normative source: issue #10 — "`message` is human-readable only, never a machine protocol." Before
+ * Normative source: diagnostic #10 — "`message` is human-readable only, never a machine protocol." Before
  * this fix, `dependencyDedupeDescriptor()` built its collector `scope` as `` `${leafId}|${message}` ``,
- * so the dependency-issue dedupe mechanism keyed on message text alongside the leaf identity — a
+ * so the dependency-diagnostic dedupe mechanism keyed on message text alongside the leaf identity — a
  * machine-logic dependency on human-readable text.
  *
  * This file deliberately imports `dependencyDedupeDescriptor` directly from the sibling `./deps` module
@@ -12,7 +12,7 @@
  * this package. That is a considered exception, not an oversight: in every current call site, `anchor`
  * and `message` are structurally coupled 1:1—
  *
- * - wrapped target failures anchor on the *target issue object itself*, which is frozen once built, so
+ * - wrapped target failures anchor on the *target diagnostic object itself*, which is frozen once built, so
  *   two occurrences with the same anchor (the same object reference) are, by construction, always the
  *   same message too;
  * - `.validate()` refinement rejections always use the one hardcoded message
@@ -56,7 +56,7 @@ describe('dependencyDedupeDescriptor scope excludes message (review finding 3774
 
 describe('end-to-end: the collector dedupes by (scope, anchor) only, discriminating on anchor alone', () => {
 	// A minimal in-repo model of the exact `createOperationCollector` contract `deps.ts` relies on,
-	// exercising `dependencyDedupeDescriptor`'s real output the same way `reportDependencyIssue` does —
+	// exercising `dependencyDedupeDescriptor`'s real output the same way `reportDependencyDiagnostic` does —
 	// without needing to construct a full compiled Blueprint/Runtime just to observe this one mechanism.
 	function dedupe(entries: readonly { readonly leafId: number, readonly message: string, readonly anchor: unknown }[]): number {
 		const seenAnchorsByScope = new Map<string, Set<unknown>>()

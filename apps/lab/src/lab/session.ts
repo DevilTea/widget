@@ -1,7 +1,7 @@
 /**
  * `LabSession` — the Widget Lab Source Apply lifecycle state machine.
  *
- * Normative source: issue #13 (Widget Lab Phase 4) comment "Checkpoint — Source Apply lifecycle and
+ * Normative source: diagnostic #13 (Widget Lab Phase 4) comment "Checkpoint — Source Apply lifecycle and
  * applied snapshot boundary". Framework-agnostic on purpose: this module never imports Vue and never
  * touches the DOM. The Vue layer supplies `LabSessionHooks` (see `types.ts`) as the seam that lets it
  * guarantee Preview unmount-before-dispose ordering; `LabSession` only sequences those hooks.
@@ -125,12 +125,12 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	}
 
 	/**
-	 * The deterministic Apply command (issue #13 Phase 4 Apply-lifecycle comment):
+	 * The deterministic Apply command (diagnostic #13 Phase 4 Apply-lifecycle comment):
 	 *
 	 * - captures the draft at command start; concurrent edits stay in the draft and are not applied;
 	 * - concurrent Apply is disabled — a call while one is already running is a no-op;
 	 * - a `JSON.parse` failure sets a Lab-only `SourceParseError` and leaves `active` untouched;
-	 * - a parse success always crosses the applied-snapshot boundary, even when the resulting
+	 * - a parse ok always crosses the applied-snapshot boundary, even when the resulting
 	 *   Blueprint is semantically invalid (`runtime` becomes `null`, Preview unavailable);
 	 * - replacement ordering: detach old Preview -> dispose old Runtime -> commit the new Blueprint
 	 *   snapshot -> create a fresh Runtime when valid -> mount the new Preview. `WidgetRenderer` (the

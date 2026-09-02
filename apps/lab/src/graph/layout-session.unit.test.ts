@@ -1,8 +1,8 @@
 /**
  * `createLayoutSession()` tests using a fake/stub `LayoutGraphFn` — the real Worker-backed
  * implementation (`layout-client.ts`) and the Worker itself (`layout.worker.ts`) are excluded by design
- * (issue #13 Phase 5 "worker itself excluded — keep it thin"). These tests cover the generation-guard
- * contract: a result for a superseded `request()` call is discarded (issue #13 Phase 5 "Graph layout is
+ * (diagnostic #13 Phase 5 "worker itself excluded — keep it thin"). These tests cover the generation-guard
+ * contract: a result for a superseded `request()` call is discarded (diagnostic #13 Phase 5 "Graph layout is
  * an asynchronous projection").
  */
 

@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 /**
- * Regression coverage for the `@deviltea/widget-core` issue #20 fix (PR #21, "keep sibling property
- * dependents live under issue subscriptions"): before that fix, once something (e.g. Vue's
- * `usePropertyIssues()`) subscribed to an upstream Property's issues channel, a downstream same-widget
+ * Regression coverage for the `@deviltea/widget-core` diagnostic #20 fix (PR #21, "keep sibling property
+ * dependents live under diagnostic subscriptions"): before that fix, once something (e.g. Vue's
+ * `usePropertyDiagnostics()`) subscribed to an upstream Property's diagnostics channel, a downstream same-widget
  * Property reading the upstream Property's value via `dep.self.properties.get(...)` stopped receiving
  * live updates through its own value subscription after the upstream Property later flipped from
- * success to failure — even a fresh `.get()` pull could remain stale. `TripMetricsRenderer.vue` used to
- * work around this by never calling `usePropertyIssues()` for `tripDays`/`travelerCount`; now that core
- * is fixed, it subscribes to every Property's own issues channel directly (the natural design), and
+ * ok to failure — even a fresh `.get()` pull could remain stale. `TripMetricsRenderer.vue` used to
+ * work around this by never calling `usePropertyDiagnostics()` for `tripDays`/`travelerCount`; now that core
+ * is fixed, it subscribes to every Property's own diagnostics channel directly (the natural design), and
  * this suite proves — against the real Runtime/Blueprint, no mocked core — that `budgetPerPersonPerDay`/
  * `estimatedBaselineCost` (both downstream of `tripDays`) stay live without any renderer-side workaround.
  * #43 adds a presentation-only locale dependency to the renderer, so this harness supplies an English
@@ -100,7 +100,7 @@ describe('tripMetricsRenderer', () => {
 		await wrapper.vm.$nextTick()
 
 		// All three affected Properties (tripDays directly, budgetPerPersonPerDay/estimatedBaselineCost
-		// as its downstream dependents) must reflect the failure — no stale value survives, and (issue
+		// as its downstream dependents) must reflect the failure — no stale value survives, and (diagnostic
 		// #26 Finding 2) no fabricated `0.00` stands in for the failed budgetPerPersonPerDay/
 		// estimatedBaselineCost values.
 		expect(wrapper.text())
@@ -110,10 +110,10 @@ describe('tripMetricsRenderer', () => {
 		expect(wrapper.text())
 			.toContain('Unavailable')
 
-		// tripDays' own root-cause message (a `property-result` issue) renders exactly once, under "Trip
-		// days" (issue #26 Finding 3: no per-metric flattening/repetition of the wrapped root cause).
+		// tripDays' own root-cause message (a `property-result` diagnostic) renders exactly once, under "Trip
+		// days" (diagnostic #26 Finding 3: no per-metric flattening/repetition of the wrapped root cause).
 		// budgetPerPersonPerDay/estimatedBaselineCost each instead render their own `property-dependency`
-		// issue as an attributed "Unavailable because Trip days failed." line — same underlying single
+		// diagnostic as an attributed "Unavailable because Trip days failed." line — same underlying single
 		// root cause, but no longer presented as three duplicate/unrelated errors.
 		const rootCauseCount = wrapper.text()
 			.split('Return date must be strictly after the departure date.').length - 1

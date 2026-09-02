@@ -1,6 +1,6 @@
 /**
  * Conformance group 17 (disposal/post-mortem), group 18 (immutability) and the remaining slice of group
- * 19 (arbitrary-string safety — a special WidgetId as a dependency target) from issue #10's inspection
+ * 19 (arbitrary-string safety — a special WidgetId as a dependency target) from diagnostic #10's inspection
  * amendments "readonly inspection subscription and disposal semantics" and "inspection exact API v1
  * (part 1/2)". The member-key and container-key slices of group 19 live in
  * `member-inventories.unit.test.ts` and `dependencies.unit.test.ts`.
@@ -23,6 +23,7 @@ interface HarnessInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('disposal-harness')
+		.description('Test widget')
 		.interfaces<HarnessInterfaces>()
 		.state(state => state.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -32,7 +33,7 @@ function createHarness() {
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 			compute: ({ deps }) => {
 				const result = deps.count()
-				return result.success ? (result.value ?? 0) * 2 : -1
+				return result.ok ? (result.value ?? 0) * 2 : -1
 			},
 		}))
 		.done()
@@ -70,7 +71,7 @@ describe('disposal / post-mortem', () => {
 		expect(stateInspection.getSnapshot())
 			.toEqual({ value: 3 })
 		expect(propertyInspection.getSnapshot())
-			.toEqual({ status: 'completed', result: { success: true, value: 6 } })
+			.toEqual({ status: 'completed', result: { ok: true, value: 6 } })
 	})
 
 	it('getWidget()/blueprint stay usable after dispose', () => {
@@ -163,14 +164,15 @@ describe('immutability', () => {
 	}
 
 	const immutContainerPlugin = createWidgetPlugin('immut-container')
+		.description('Test widget')
 		.interfaces<ImmutInterfaces>()
-		.slots({ items: {} })
+		.slots({ items: { description: 'Test slot' } })
 		.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
 		.properties(properties => properties.p({
 			registerDeps: ({ dep }) => ({ v: dep.self.state.get('value') }),
 			compute: ({ deps }) => {
 				const result = deps.v()
-				return result.success ? result.value : null
+				return result.ok ? result.value : null
 			},
 		}))
 		.methods(methods => methods.m({
@@ -187,6 +189,7 @@ describe('immutability', () => {
 	}
 
 	const immutLeafPlugin = createWidgetPlugin('immut-leaf')
+		.description('Test widget')
 		.interfaces<ImmutLeafInterfaces>()
 		.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
 		.done()
@@ -199,6 +202,7 @@ describe('immutability', () => {
 
 	/** A Property self-loop, used only to populate `invalidCycles` for the nested-member-freeze test. */
 	const immutCyclePlugin = createWidgetPlugin('immut-cycle')
+		.description('Test widget')
 		.interfaces<ImmutCycleInterfaces>()
 		.properties(properties => properties.loop({
 			registerDeps: ({ dep }) => ({ self: dep.self.properties.get('loop') }),
@@ -307,8 +311,8 @@ describe('immutability', () => {
 		// above projects) still resolves correctly against the real, compiler-owned `reference` object —
 		// proof the inspection-exposed clone was never aliased into Runtime materialization.
 		expect(widget.properties.p.get())
-			.toEqual({ success: true, value: 41 })
-		expect(widget.properties.p.getIssues())
+			.toEqual({ ok: true, value: 41 })
+		expect(widget.properties.p.getDiagnostics())
 			.toEqual([])
 	})
 
@@ -346,15 +350,15 @@ describe('immutability', () => {
 			.toEqual([{ type: 'state', name: 'value' }])
 	})
 
-	it('caller/plugin payload values (rawDefinition) are never deep-frozen by inspection', () => {
-		const rawDefinition = { id: 'root', type: 'immut-leaf', marker: { nested: true } }
-		const blueprint = system.createBlueprint(rawDefinition)
+	it('caller/plugin payload values (source) are never deep-frozen by inspection', () => {
+		const source = { id: 'root', type: 'immut-leaf', marker: { nested: true } }
+		const blueprint = system.createBlueprint(source)
 		const inspection = inspectBlueprint(blueprint)
 		const root = inspection.getNode(inspection.rootNodeId)!
 
-		expect(root.node.rawDefinition)
-			.toBe(rawDefinition)
-		expect(Object.isFrozen(rawDefinition))
+		expect(root.node.source)
+			.toBe(source)
+		expect(Object.isFrozen(source))
 			.toBe(false)
 	})
 
@@ -386,6 +390,7 @@ describe('arbitrary-string safety: WidgetId as a dependency target', () => {
 	}
 
 	const targetPlugin = createWidgetPlugin('special-id-target')
+		.description('Test widget')
 		.interfaces<TargetInterfaces>()
 		.state(state => state.value({
 			validate: (input): input is number => typeof input === 'number',
@@ -394,8 +399,9 @@ describe('arbitrary-string safety: WidgetId as a dependency target', () => {
 		.done()
 
 	const consumerPlugin = createWidgetPlugin('special-id-consumer')
+		.description('Test widget')
 		.interfaces<ConsumerInterfaces>()
-		.slots({ children: {} })
+		.slots({ children: { description: 'Test slot' } })
 		.properties(properties => properties.viaProtoId({
 			registerDeps: ({ dep }) => ({ v: dep.widget(PROTO_KEY).state.get('value') }),
 			compute: () => null,

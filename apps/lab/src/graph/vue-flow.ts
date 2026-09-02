@@ -1,9 +1,9 @@
 /**
  * `toVueFlow()` — the final step of the `SemanticGraph -> toElkGraph() -> ELK layout -> toVueFlow()`
- * pipeline (issue #13 Phase 5 "Dependency Graph implementation stack" comment): projects a laid-out
+ * pipeline (diagnostic #13 Phase 5 "Dependency Graph implementation stack" comment): projects a laid-out
  * `SemanticGraph` into plain Vue Flow `nodes`/`edges`. Vue Flow is viewer-only here — every node is
  * `draggable: false`/`connectable: false` and no edge is `updatable`, so nothing in this module ever
- * produces an editable graph (issue #13 Phase 5 "implementation stack" comment: "Do not enable graph
+ * produces an editable graph (diagnostic #13 Phase 5 "implementation stack" comment: "Do not enable graph
  * editing, edge creation, deletion or reparenting").
  */
 
@@ -24,7 +24,7 @@ export interface GraphNodeData {
 
 export interface GraphEdgeData {
 	readonly operation: GraphEdgeOperation
-	/** Dependency-container path (issue #13 Phase 5: belongs in edge details, never on the canvas). */
+	/** Dependency-container path (diagnostic #13 Phase 5: belongs in edge details, never on the canvas). */
 	readonly path: readonly (string | number)[]
 	readonly reference: BlueprintDependencyReference
 	readonly invalidCycle?: boolean

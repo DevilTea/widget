@@ -1,7 +1,7 @@
 /**
  * Widget Lab showcase registry.
  *
- * Normative source: issue #13 comment "Checkpoint — Showcase A: Interactive Survey (ACCEPTED)"
+ * Normative source: diagnostic #13 comment "Checkpoint — Showcase A: Interactive Survey (ACCEPTED)"
  * (structure decisions) plus the "Source Apply lifecycle" checkpoint's "Presets / showcase changes"
  * section: "Switching showcases is a larger application-level replacement ... It detaches/disposes the
  * old Runtime, switches showcase context, loads the showcase source, and then uses the same Apply
@@ -41,7 +41,7 @@ export interface ShowcaseEntry {
 	readonly presets: readonly ShowcasePreset[]
 	readonly defaultPreset: ShowcasePreset
 	/**
-	 * Curated Implementation-explorer registry (issue #25 P3 Scope A) — metadata only (plugin type ->
+	 * Curated Implementation-explorer registry (diagnostic #25 P3 Scope A) — metadata only (plugin type ->
 	 * file descriptors with lazy `load()` thunks, see `implementation/types.ts`), trivially small, so
 	 * this field is safe to keep eager alongside the rest of `ShowcaseEntry` without pulling any raw
 	 * source text or Shiki into the eager/shared chunk graph.

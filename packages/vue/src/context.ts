@@ -17,22 +17,22 @@ import type { Component, InjectionKey } from 'vue'
 
 export interface RuntimeStateLike {
 	get: () => unknown
-	set: (value: unknown) => { readonly success: boolean }
+	set: (value: unknown) => { readonly ok: boolean }
 	subscribe: (listener: (value: unknown) => void) => () => void
-	getIssues: () => readonly unknown[]
-	subscribeIssues: (listener: (issues: readonly unknown[]) => void) => () => void
+	getDiagnostics: () => readonly unknown[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly unknown[]) => void) => () => void
 }
 
 export interface RuntimePropertyLike {
-	get: () => { readonly success: boolean, readonly value?: unknown }
+	get: () => { readonly ok: boolean, readonly value?: unknown }
 	subscribe: (listener: (result: unknown) => void) => () => void
-	getIssues: () => readonly unknown[]
-	subscribeIssues: (listener: (issues: readonly unknown[]) => void) => () => void
+	getDiagnostics: () => readonly unknown[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly unknown[]) => void) => () => void
 }
 
-export type RuntimeMethodLike = ((...args: readonly unknown[]) => { readonly success: boolean, readonly value?: unknown }) & {
-	getIssues: () => readonly unknown[]
-	subscribeIssues: (listener: (issues: readonly unknown[]) => void) => () => void
+export type RuntimeMethodLike = ((...args: readonly unknown[]) => { readonly ok: boolean, readonly value?: unknown }) & {
+	getDiagnostics: () => readonly unknown[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly unknown[]) => void) => () => void
 }
 
 export interface RuntimeWidgetLike {
@@ -42,8 +42,8 @@ export interface RuntimeWidgetLike {
 		readonly plugin: unknown
 		readonly slots: Readonly<Record<string, readonly { readonly id: string }[]>>
 	}
-	getIssues: () => readonly unknown[]
-	subscribeIssues: (listener: (issues: readonly unknown[]) => void) => () => void
+	getDiagnostics: () => readonly unknown[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly unknown[]) => void) => () => void
 	readonly state?: Readonly<Record<string, RuntimeStateLike>>
 	readonly properties?: Readonly<Record<string, RuntimePropertyLike>>
 	readonly methods?: Readonly<Record<string, RuntimeMethodLike>>

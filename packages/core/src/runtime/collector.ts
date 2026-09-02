@@ -1,32 +1,32 @@
 /**
- * Operation-local issue collector.
+ * Operation-local diagnostic collector.
  *
  * Every state write, property evaluation and method invocation owns one of these for the duration of
- * its synchronous callback(s). Plugin callbacks only ever see the `IssueCollector<RelativeInput>`
- * surface (`addIssue`/`hasAnyIssue`); framework-internal code (dependency-leaf wrapping) additionally
- * inserts already-finalized issues through `addFinalizedIssue`, and reads the merged, call-ordered
+ * its synchronous callback(s). Plugin callbacks only ever see the `DiagnosticCollector<RelativeInput>`
+ * surface (`addDiagnostic`/`hasAnyDiagnostic`); framework-internal code (dependency-leaf wrapping) additionally
+ * inserts already-finalized diagnostics through `addFinalizedDiagnostic`, and reads the merged, call-ordered
  * result through `finalize()` once the callback has returned and the operation's final payload
  * (candidate / args / result) is known.
  *
- * `addFinalizedIssue` accepts an optional {@link DedupeDescriptor}: repeated reads of the same failing
+ * `addFinalizedDiagnostic` accepts an optional {@link DedupeDescriptor}: repeated reads of the same failing
  * dependency within one execution scope resolve to the same `scope` + `anchor` pair, so only the first
  * insertion is kept while each call's own returned `ExecutionResult` failure is unaffected. `anchor` is
  * compared by `Set` membership (SameValueZero) rather than stringified, so it stays collision-free for
  * every JS value — including two distinct `Symbol` instances that happen to share a description, which
  * a naive `` `${typeof value}:${String(value)}` `` encoding would incorrectly conflate.
  *
- * Normative source: issue #10 consolidated handoff §12/§15/§16 ("local execution collectors",
- * "finalize pending ... diagnostics", "automatically insert wrapped consumer Issues into the active
+ * Normative source: diagnostic #10 consolidated handoff §12/§15/§16 ("local execution collectors",
+ * "finalize pending ... diagnostics", "automatically insert wrapped consumer Diagnostics into the active
  * operation-local collector", "repeated reads of the same failing dependency ... avoid duplicating the
- * same dependency issue insertion").
+ * same dependency diagnostic insertion").
  */
 
-import type { IssueCollector } from '../issue'
-import { freezeIssueSnapshot } from './issues'
+import type { DiagnosticCollector } from '../diagnostic'
+import { freezeDiagnosticSnapshot } from './diagnostics'
 
-type CollectorEntry<RelativeInput, FinalIssue>
+type CollectorEntry<RelativeInput, FinalDiagnostic>
 	= | { readonly kind: 'relative', readonly input: RelativeInput }
-		| { readonly kind: 'final', readonly issue: FinalIssue }
+		| { readonly kind: 'final', readonly diagnostic: FinalDiagnostic }
 
 /**
  * Identifies "the same failing dependency" for dedupe purposes. `scope` groups entries that could ever
@@ -42,33 +42,33 @@ export interface DedupeDescriptor {
 	readonly anchor: unknown
 }
 
-export interface OperationCollector<RelativeInput, FinalIssue> extends IssueCollector<RelativeInput> {
+export interface OperationCollector<RelativeInput, FinalDiagnostic> extends DiagnosticCollector<RelativeInput> {
 	/**
-	 * Inserts an already-finalized issue (a wrapped dependency-target failure or refinement
+	 * Inserts an already-finalized diagnostic (a wrapped dependency-target failure or refinement
 	 * rejection) while preserving relative-call order. When `dedupe` is given and its `(scope, anchor)`
 	 * pair was already seen by this collector instance, the insertion is skipped (the caller's own
 	 * returned failure is unaffected either way).
 	 */
-	addFinalizedIssue: (issue: FinalIssue, dedupe?: DedupeDescriptor) => void
+	addFinalizedDiagnostic: (diagnostic: FinalDiagnostic, dedupe?: DedupeDescriptor) => void
 	/**
-	 * Resolves every pending relative entry into its final issue via `toFinalIssue`, in original call
+	 * Resolves every pending relative entry into its final diagnostic via `toFinalDiagnostic`, in original call
 	 * order, and returns the merged final list, frozen. Framework-internal only; never exposed to
 	 * plugin callbacks.
 	 */
-	finalize: (toFinalIssue: (input: RelativeInput) => FinalIssue) => readonly FinalIssue[]
+	finalize: (toFinalDiagnostic: (input: RelativeInput) => FinalDiagnostic) => readonly FinalDiagnostic[]
 }
 
-export function createOperationCollector<RelativeInput, FinalIssue>(): OperationCollector<RelativeInput, FinalIssue> {
-	const entries: CollectorEntry<RelativeInput, FinalIssue>[] = []
+export function createOperationCollector<RelativeInput, FinalDiagnostic>(): OperationCollector<RelativeInput, FinalDiagnostic> {
+	const entries: CollectorEntry<RelativeInput, FinalDiagnostic>[] = []
 	// Operation-local (this collector's lifetime only, discarded with it): never a module-global table,
 	// so distinct `Symbol`s/objects passed through here never accumulate beyond one operation.
 	const seenAnchorsByScope = new Map<string, Set<unknown>>()
 
 	return {
-		addIssue(input: RelativeInput) {
+		addDiagnostic(input: RelativeInput) {
 			entries.push({ kind: 'relative', input })
 		},
-		addFinalizedIssue(issue: FinalIssue, dedupe?: DedupeDescriptor) {
+		addFinalizedDiagnostic(diagnostic: FinalDiagnostic, dedupe?: DedupeDescriptor) {
 			if (dedupe !== undefined) {
 				let seenAnchors = seenAnchorsByScope.get(dedupe.scope)
 				if (seenAnchors === undefined) {
@@ -79,20 +79,20 @@ export function createOperationCollector<RelativeInput, FinalIssue>(): Operation
 					return
 				seenAnchors.add(dedupe.anchor)
 			}
-			entries.push({ kind: 'final', issue })
+			entries.push({ kind: 'final', diagnostic })
 		},
-		hasAnyIssue() {
+		hasAnyDiagnostic() {
 			return entries.length > 0
 		},
-		finalize(toFinalIssue: (input: RelativeInput) => FinalIssue) {
-			// A completed non-empty issue snapshot is an immutable final artifact (issue #10 issue-
-			// snapshot contract): it is stored as the primitive's latest `getIssues()` state *and*
-			// returned as `ExecutionResult.failure.issues` for the very same call, so an external
-			// mutation of one must not silently corrupt the other. `freezeIssueSnapshot` deep-freezes
-			// each issue's framework-owned structure (not just the top-level issue object) plus the
+		finalize(toFinalDiagnostic: (input: RelativeInput) => FinalDiagnostic) {
+			// A completed non-empty diagnostic snapshot is an immutable final artifact (diagnostic #10 diagnostic-
+			// snapshot contract): it is stored as the primitive's latest `getDiagnostics()` state *and*
+			// returned as `ExecutionResult.failure.diagnostics` for the very same call, so an external
+			// mutation of one must not silently corrupt the other. `freezeDiagnosticSnapshot` deep-freezes
+			// each diagnostic's framework-owned structure (not just the top-level diagnostic object) plus the
 			// array itself.
-			const finalized = entries.map(entry => entry.kind === 'relative' ? toFinalIssue(entry.input) : entry.issue)
-			return freezeIssueSnapshot(finalized)
+			const finalized = entries.map(entry => entry.kind === 'relative' ? toFinalDiagnostic(entry.input) : entry.diagnostic)
+			return freezeDiagnosticSnapshot(finalized)
 		},
 	}
 }

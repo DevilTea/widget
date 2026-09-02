@@ -4,11 +4,11 @@
  * drive the `<input>` attributes; the authoritative accept/reject decision is `answer.validate`
  * (checkpoint §2) — this component never re-validates before writing.
  *
- * Issue #28 accessibility fix: `useId()`-derived `for`/`id` ties the visible `label` to the `input`;
+ * Diagnostic #28 accessibility fix: `useId()`-derived `for`/`id` ties the visible `label` to the `input`;
  * when `help` is configured, its paragraph gets its own id and the `input` points to it via
  * `aria-describedby` (help text is supplementary, not the accessible name).
  *
- * `data-tutorial-target` (issue #25 P1): this component renders Adults/Children/Budget alike, so the
+ * `data-tutorial-target` (diagnostic #25 P1): this component renders Adults/Children/Budget alike, so the
  * target key is looked up by `label` (`SURVEY_NUMBER_QUESTION_TARGETS`) rather than hardcoded — see that
  * module's header for why label, not widget id, is what a renderer can see.
  */
@@ -18,10 +18,10 @@ import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { SURVEY_NUMBER_QUESTION_TARGETS } from '../../../tutorial/survey-target-map'
 import { SurveyNumberQuestionPlugin } from '../plugins/survey-questions'
 
-const { useState, useProperties, useStateIssues, widgetId, widgetType } = useWidget(SurveyNumberQuestionPlugin)
+const { useState, useProperties, useStateDiagnostics, widgetId, widgetType } = useWidget(SurveyNumberQuestionPlugin)
 const { answer } = useState()
 const { label, help, min, max, integer } = useProperties()
-const { answer: answerIssues } = useStateIssues()
+const { answer: answerDiagnostics } = useStateDiagnostics()
 
 const inputId = useId()
 const helpId = useId()
@@ -70,11 +70,11 @@ function onChange(event: Event): void {
 			@change="onChange"
 		>
 		<p
-			v-for="issue in answerIssues"
-			:key="issue.message"
+			v-for="diagnostic in answerDiagnostics"
+			:key="diagnostic.message"
 			:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-danger)' })"
 		>
-			{{ issue.message }}
+			{{ diagnostic.message }}
 		</p>
 	</div>
 </template>

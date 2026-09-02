@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Issue #28 accessibility fix — cheap attribute-wiring assertion only. #43 adds a presentation-only
+ * Diagnostic #28 accessibility fix — cheap attribute-wiring assertion only. #43 adds a presentation-only
  * locale dependency for the renderer-owned empty-choice placeholder; this harness supplies an English
  * identity translator without changing config-projected labels/options or semantic behavior.
  */

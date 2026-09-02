@@ -39,15 +39,15 @@ function setup() {
 }
 
 describe('dealStageForm.open()', () => {
-	it('fails with a method issue and leaves the modal closed when no deal is selected', () => {
+	it('fails with a method diagnostic and leaves the modal closed when no deal is selected', () => {
 		const { form, modal } = setup()
 		const result = form.methods.open()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-result')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('invalid-method-result')
 		expect(modal.state.open.get())
 			.toBe(false)
 	})
@@ -59,7 +59,7 @@ describe('dealStageForm.open()', () => {
 		const result = form.methods.open()
 
 		expect(result)
-			.toEqual({ success: true, value: undefined })
+			.toEqual({ ok: true, value: undefined })
 		expect(stageEditor.state.value.get())
 			.toBe('proposal')
 		expect(modal.state.open.get())
@@ -77,7 +77,7 @@ describe('dealStageForm.save()', () => {
 		const result = form.methods.save()
 
 		expect(result)
-			.toEqual({ success: true, value: { id: 'deal-3', company: 'Cobalt Health', contact: 'Grace Kim', owner: 'Jordan Lee', stage: 'won', amount: 54_000 } })
+			.toEqual({ ok: true, value: { id: 'deal-3', company: 'Cobalt Health', contact: 'Grace Kim', owner: 'Jordan Lee', stage: 'won', amount: 54_000 } })
 		expect(modal.state.open.get())
 			.toBe(false)
 	})
@@ -91,7 +91,7 @@ describe('dealStageForm.save()', () => {
 		// Deliberately never inspect `form.properties.canSave` before calling save() — the checkpoint
 		// locks `save()` as not consuming/depending on it.
 		const result = form.methods.save()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(true)
 	})
 
@@ -105,7 +105,7 @@ describe('dealStageForm.save()', () => {
 		stageFilter.state.value.set('won') // deal-1 is "lead" — this hides it from Table.selectedRow
 
 		const result = form.methods.save()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
 		expect(modal.state.open.get())
 			.toBe(true)
@@ -124,7 +124,7 @@ describe('dealStageForm.cancel()', () => {
 		const result = form.methods.cancel()
 
 		expect(result)
-			.toEqual({ success: true, value: undefined })
+			.toEqual({ ok: true, value: undefined })
 		expect(modal.state.open.get())
 			.toBe(false)
 		expect(store.state.deals.get())
@@ -136,11 +136,11 @@ describe('dealStageForm.canSave', () => {
 	it('is false with no selection and true once a deal is selected', () => {
 		const { form, table } = setup()
 		expect(form.properties.canSave.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 
 		table.methods.selectRow('deal-1')
 		expect(form.properties.canSave.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 })
 
@@ -168,7 +168,7 @@ function createIsolatedStoreMismatchRuntime(): WidgetSystemRuntime {
 	}
 	const blueprint = crmSystem.createBlueprint(source)
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid Blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid Blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 	return blueprint.createRuntime()
 }
 
@@ -179,21 +179,21 @@ describe('dealStageForm.save() — propagates a genuine DealStore.updateStage fa
 		const form = widgetOfType(runtime, 'form-a', 'DealStageForm')
 		const modal = widgetOfType(runtime, 'modal-a', 'Modal')
 
-		expect(table.methods.selectRow('ghost-deal').success)
+		expect(table.methods.selectRow('ghost-deal').ok)
 			.toBe(true)
-		expect(form.methods.open().success)
+		expect(form.methods.open().ok)
 			.toBe(true)
 		expect(modal.state.open.get())
 			.toBe(true)
 
 		const result = form.methods.save()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-dependency')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('dependency-target-failed')
 		expect(modal.state.open.get())
 			.toBe(true)
 	})
@@ -209,19 +209,19 @@ describe('dealStageForm.open() — stage-editor options exclude the selected dea
 
 		// deal-3 (Cobalt Health) is seeded at stage "proposal", which is no longer a legal stage-editor
 		// option in this fixture.
-		expect(table.methods.selectRow('deal-3').success)
+		expect(table.methods.selectRow('deal-3').ok)
 			.toBe(true)
 		expect(stageEditor.state.value.get())
 			.toBe('lead') // untouched configured default — proves open() never got to write it
 
 		const result = form.methods.open()
 
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('method-dependency')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('dependency-target-failed')
 		expect(modal.state.open.get())
 			.toBe(false)
 		// The failed write must not have mutated stage-editor's value either.

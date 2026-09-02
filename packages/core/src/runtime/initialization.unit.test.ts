@@ -1,5 +1,5 @@
 /**
- * Conformance coverage for issue #10 COMMENT 26 §7 (Runtime initialization) — the state
+ * Conformance coverage for diagnostic #10 COMMENT 26 §7 (Runtime initialization) — the state
  * override/default/null precedence rules, plus consolidated handoff §11 and amendments COMMENT 15/21.
  *
  * Scope: state initialization precedence and its validation-vs-fallback edges. `overrideStateDefaults`
@@ -31,6 +31,7 @@ function createCounterBlueprint(params: {
 	default?: (ctx: unknown) => unknown
 }): ValidWidgetSystemBlueprint {
 	const plugin = createWidgetPlugin('counter')
+		.description('Test widget')
 		.interfaces<CounterInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => params.validate(input),
@@ -51,7 +52,7 @@ function isFiniteNumber(input: unknown): input is number {
 	return typeof input === 'number'
 }
 
-describe('runtime initialization — state precedence (issue #10 §7 / §11, COMMENT 15/21)', () => {
+describe('runtime initialization — state precedence (diagnostic #10 §7 / §11, COMMENT 15/21)', () => {
 	it('uses the explicit override when both an override and a default are present', () => {
 		const defaultFn = vi.fn(() => 1)
 		const blueprint = createCounterBlueprint({ validate: isFiniteNumber, default: defaultFn })
@@ -85,7 +86,7 @@ describe('runtime initialization — state precedence (issue #10 §7 / §11, COM
 
 		expect(widget.state.count.get())
 			.toBeNull()
-		expect(widget.state.count.getIssues())
+		expect(widget.state.count.getDiagnostics())
 			.toHaveLength(0)
 	})
 
@@ -99,19 +100,19 @@ describe('runtime initialization — state precedence (issue #10 §7 / §11, COM
 
 		expect(widgetA.state.count.get())
 			.toBeNull()
-		expect(widgetA.state.count.getIssues())
+		expect(widgetA.state.count.getDiagnostics())
 			.toHaveLength(1)
-		expect(widgetA.state.count.getIssues()[0].source)
-			.toMatchObject({ type: 'state-validation', widgetId: 'root', key: 'count', candidate: undefined })
+		expect(widgetA.state.count.getDiagnostics()[0])
+			.toMatchObject({ code: 'invalid-state-value', location: { type: 'state', widgetId: 'root', key: 'count' }, candidate: undefined })
 
 		// Contrast: the key is genuinely absent from the fragment, so there is no explicit candidate at
-		// all and (with no default declared) initialization silently stays null with no issue.
+		// all and (with no default declared) initialization silently stays null with no diagnostic.
 		const withAbsentKey = blueprint.createRuntime({ overrideStateDefaults: { root: {} } })
 		const widgetB = withAbsentKey.getWidget('root') as any
 
 		expect(widgetB.state.count.get())
 			.toBeNull()
-		expect(widgetB.state.count.getIssues())
+		expect(widgetB.state.count.getDiagnostics())
 			.toHaveLength(0)
 	})
 
@@ -126,14 +127,14 @@ describe('runtime initialization — state precedence (issue #10 §7 / §11, COM
 			.toBeNull()
 		expect(defaultFn).not.toHaveBeenCalled()
 
-		const issues = widget.state.count.getIssues()
-		expect(issues)
+		const diagnostics = widget.state.count.getDiagnostics()
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(issues[0].source)
-			.toMatchObject({ type: 'state-validation', widgetId: 'root', key: 'count', candidate: 'not-a-number' })
+		expect(diagnostics[0])
+			.toMatchObject({ code: 'invalid-state-value', location: { type: 'state', widgetId: 'root', key: 'count' }, candidate: 'not-a-number' })
 	})
 
-	it('an invalid default initializes to null with a state-validation issue', () => {
+	it('an invalid default initializes to null with a state-validation diagnostic', () => {
 		const validatePositive = (input: unknown): input is number => typeof input === 'number' && input > 0
 		const blueprint = createCounterBlueprint({ validate: validatePositive, default: () => -1 })
 
@@ -143,18 +144,20 @@ describe('runtime initialization — state precedence (issue #10 §7 / §11, COM
 		expect(widget.state.count.get())
 			.toBeNull()
 
-		const issues = widget.state.count.getIssues()
-		expect(issues)
+		const diagnostics = widget.state.count.getDiagnostics()
+		expect(diagnostics)
 			.toHaveLength(1)
-		expect(issues[0].source)
-			.toMatchObject({ type: 'state-validation', widgetId: 'root', key: 'count', candidate: -1 })
+		expect(diagnostics[0])
+			.toMatchObject({ code: 'invalid-state-value', location: { type: 'state', widgetId: 'root', key: 'count' }, candidate: -1 })
 	})
 
 	it('the default callback receives the resolved config, not the raw config', () => {
 		let capturedConfig: unknown
 		const plugin = createWidgetPlugin('configured')
+			.description('Test widget')
 			.interfaces<ConfiguredInterfaces>()
 			.config({
+				description: 'Test config',
 				validate: (input): input is { multiplier: number } => typeof input === 'object' && input !== null && typeof (input as any).multiplier === 'number',
 				resolve: raw => raw === null ? { multiplier: 1 } : raw,
 			})

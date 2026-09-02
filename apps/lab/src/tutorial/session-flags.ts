@@ -1,5 +1,5 @@
 /**
- * Session-local tutorial flags (issue #25 P1 Scope B/OWNER decision): the tutorial has no persistence
+ * Session-local tutorial flags (diagnostic #25 P1 Scope B/OWNER decision): the tutorial has no persistence
  * of its own — "welcome dismissed" and "tour completed" are the only facts that survive a page reload,
  * and only for the current browser session (`sessionStorage`, never `localStorage`), per the locked
  * policy ("Persistence, draft restoration, and Runtime-state migration remain out of scope").
@@ -8,7 +8,7 @@
  * the global, so this stays unit-testable without leaking state across test files that all run in the
  * same happy-dom/jsdom global.
  *
- * issue #25 P4: "tour completed" is now per-tour (`widget-lab:tutorial:completed:<tourId>`) — CRM's
+ * diagnostic #25 P4: "tour completed" is now per-tour (`widget-lab:tutorial:completed:<tourId>`) — CRM's
  * availability gate (`use-tutorial.ts`'s `crmTourUnlocked`) needs to ask specifically "has the Survey
  * tour been completed this session?" independent of whether the CRM tour itself has ever been completed,
  * so one shared flag from P1 would conflate the two. `tourId` is a plain string (not a closed union)

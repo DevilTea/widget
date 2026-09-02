@@ -39,8 +39,10 @@ export interface DealStoreInterfaces extends WidgetInterfaces {
 const DUMMY_DEAL: Deal = { id: '', company: '', contact: '', owner: '', stage: 'lead', amount: 0 }
 
 export const DealStorePlugin = createWidgetPlugin('DealStore')
+	.description('Deal store widget')
 	.interfaces<DealStoreInterfaces>()
 	.config({
+		description: 'Deal store configuration',
 		validate: (input): input is DealStoreRawConfig => isPlainObject(input) && isDealsArray(input.seedDeals),
 		// Cloned defensively so a later `updateStage`/`reset` array/record replacement can never be
 		// observed as mutating the plugin's own configured seed payload in place.
@@ -60,16 +62,16 @@ export const DealStorePlugin = createWidgetPlugin('DealStore')
 				}),
 				validateArgs: (args): args is [string, DealStage] =>
 					args.length === 2 && typeof args[0] === 'string' && isDealStage(args[1]),
-				execute: ({ deps, args, addIssue }) => {
+				execute: ({ deps, args, addDiagnostic }) => {
 					const [dealId, stage] = args
 					const dealsResult = deps.deals()
-					if (!dealsResult.success)
+					if (!dealsResult.ok)
 						return DUMMY_DEAL
 
 					const deals = dealsResult.value ?? []
 					const index = deals.findIndex(deal => deal.id === dealId)
 					if (index === -1) {
-						addIssue({ message: `No deal found with id "${dealId}".` })
+						addDiagnostic({ message: `No deal found with id "${dealId}".` })
 						return DUMMY_DEAL
 					}
 

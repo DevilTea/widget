@@ -1,12 +1,12 @@
 /**
- * Conformance: issue #10 COMMENT 26 §11 (subscriber exception isolation), cross-checked against
+ * Conformance: diagnostic #10 COMMENT 26 §11 (subscriber exception isolation), cross-checked against
  * COMMENT 16/19/20 and consolidated handoff §17-§18.
  *
  * Scope: a synchronous throw from an external subscription listener (`state.subscribe`,
- * `property.subscribe`, `method.subscribeIssues`, `runtime.subscribeCollectedIssues`) must not:
+ * `property.subscribe`, `method.subscribeDiagnostics`, `runtime.subscribeDiagnostics`) must not:
  * - prevent another queued listener on the same propagation from observing it,
  * - change the `ExecutionResult` of the triggering Runtime operation,
- * - become a `RuntimeIssue`,
+ * - become a `RuntimeDiagnostic`,
  * - escape synchronously into the caller.
  *
  * It must surface later through some host error-reporting boundary outside the current reactive
@@ -23,7 +23,7 @@
 
 import type { ExecutionResult } from '../index'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_ISSUES } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
 
 interface CounterInterfaces {
 	state: {
@@ -40,6 +40,7 @@ interface CounterInterfaces {
 
 function createCounterPlugin() {
 	return createWidgetPlugin('counter')
+		.description('Test widget')
 		.interfaces<CounterInterfaces>()
 		.state(section => section
 			.count({
@@ -55,7 +56,7 @@ function createCounterPlugin() {
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps }) => {
 					const result = deps.count()
-					return result.success ? (result.value ?? 0) * 2 : 0
+					return result.ok ? (result.value ?? 0) * 2 : 0
 				},
 			}))
 		.methods(section => section
@@ -68,7 +69,7 @@ function createCounterPlugin() {
 				execute: ({ args, deps }) => {
 					const current = deps.count()
 					const amount = args[0] ?? 1
-					const next = (current.success ? current.value ?? 0 : 0) + amount
+					const next = (current.ok ? current.value ?? 0 : 0) + amount
 					deps.setCount(next)
 					return next
 				},
@@ -159,32 +160,32 @@ describe('external listener throw does not block other listeners on the same pro
 
 		expect(() => widget.state.count.set(5)).not.toThrow()
 		expect(secondResults)
-			.toEqual([{ success: true, value: 10 }])
+			.toEqual([{ ok: true, value: 10 }])
 	})
 
-	it('method.subscribeIssues', () => {
+	it('method.subscribeDiagnostics', () => {
 		const { widget } = createRuntime()
-		const secondIssueCounts: number[] = []
+		const secondDiagnosticCounts: number[] = []
 
-		widget.methods.increment.subscribeIssues(() => {
+		widget.methods.increment.subscribeDiagnostics(() => {
 			throw new Error('first listener boom')
 		})
-		widget.methods.increment.subscribeIssues(issues => secondIssueCounts.push(issues.length))
+		widget.methods.increment.subscribeDiagnostics(diagnostics => secondDiagnosticCounts.push(diagnostics.length))
 
 		const invalidIncrement = asUnsafeCallable(widget.methods.increment)
 		expect(() => invalidIncrement('not-a-number')).not.toThrow()
-		expect(secondIssueCounts)
+		expect(secondDiagnosticCounts)
 			.toEqual([1])
 	})
 
-	it('runtime.subscribeCollectedIssues', () => {
+	it('runtime.subscribeDiagnostics', () => {
 		const { runtime, widget } = createRuntime()
 		const secondSnapshots: number[] = []
 
-		runtime.subscribeCollectedIssues(() => {
+		runtime.subscribeDiagnostics(() => {
 			throw new Error('first listener boom')
 		})
-		runtime.subscribeCollectedIssues(issues => secondSnapshots.push(issues.length))
+		runtime.subscribeDiagnostics(diagnostics => secondSnapshots.push(diagnostics.length))
 
 		expect(() => widget.state.count.set('not-a-number' as unknown as number)).not.toThrow()
 		expect(secondSnapshots)
@@ -203,22 +204,22 @@ describe('external listener throw does not affect the triggering operation resul
 		const result = widget.state.count.set(9)
 
 		expect(result)
-			.toEqual({ success: true, value: 9 })
+			.toEqual({ ok: true, value: 9 })
 		expect(widget.state.count.get())
 			.toBe(9)
 	})
 
-	it('a throwing method.subscribeIssues listener does not change the ExecutionResult of the invocation', () => {
+	it('a throwing method.subscribeDiagnostics listener does not change the ExecutionResult of the invocation', () => {
 		const { widget } = createRuntime()
 
-		widget.methods.increment.subscribeIssues(() => {
+		widget.methods.increment.subscribeDiagnostics(() => {
 			throw new Error('listener boom')
 		})
 
 		const result = widget.methods.increment(4)
 
 		expect(result)
-			.toEqual({ success: true, value: 4 })
+			.toEqual({ ok: true, value: 4 })
 	})
 
 	it('a throwing property.subscribe listener does not change the ExecutionResult of property.get', () => {
@@ -231,12 +232,12 @@ describe('external listener throw does not affect the triggering operation resul
 		widget.state.count.set(3)
 
 		expect(widget.properties.doubled.get())
-			.toEqual({ success: true, value: 6 })
+			.toEqual({ ok: true, value: 6 })
 	})
 })
 
-describe('external listener throw never becomes a RuntimeIssue', () => {
-	it('state issue snapshot stays the canonical EMPTY_ISSUES identity after a successful write with a throwing subscriber', () => {
+describe('external listener throw never becomes a RuntimeDiagnostic', () => {
+	it('state diagnostic snapshot stays the canonical EMPTY_DIAGNOSTICS identity after a successful write with a throwing subscriber', () => {
 		const { widget } = createRuntime()
 
 		widget.state.count.subscribe(() => {
@@ -245,20 +246,20 @@ describe('external listener throw never becomes a RuntimeIssue', () => {
 
 		widget.state.count.set(11)
 
-		expect(widget.state.count.getIssues())
-			.toBe(EMPTY_ISSUES)
+		expect(widget.state.count.getDiagnostics())
+			.toBe(EMPTY_DIAGNOSTICS)
 	})
 
-	it('runtime.getCollectedIssues() does not gain an entry caused by a throwing subscriber', () => {
+	it('runtime.getDiagnostics() does not gain an entry caused by a throwing subscriber', () => {
 		const { runtime, widget } = createRuntime()
 
-		runtime.subscribeCollectedIssues(() => {
+		runtime.subscribeDiagnostics(() => {
 			throw new Error('listener boom')
 		})
 
 		widget.state.count.set(11)
 
-		expect(runtime.getCollectedIssues())
+		expect(runtime.getDiagnostics())
 			.toEqual([])
 	})
 })
@@ -342,7 +343,7 @@ describe('external listener returned Promise is unmanaged', () => {
 		const result = widget.state.count.set(7)
 
 		expect(result)
-			.toEqual({ success: true, value: 7 })
+			.toEqual({ ok: true, value: 7 })
 		expect(order)
 			.toEqual(['first:7', 'second:7'])
 	})

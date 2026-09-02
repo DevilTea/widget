@@ -1,22 +1,22 @@
 <script setup lang="ts">
 /**
- * Panel-local edge-selection details (issue #13 Phase 5 "inspector panel interaction contract": Graph
+ * Panel-local edge-selection details (diagnostic #13 Phase 5 "inspector panel interaction contract": Graph
  * edge selection stays local, never expands into the shared cross-inspector focus). Shows the
  * dependency-container `path` and reference target/operation — both belong in edge details, never on the
- * canvas itself (issue #13 Phase 5 "Graph density"). #43 localizes only the fixed labels around those
+ * canvas itself (diagnostic #13 Phase 5 "Graph density"). #43 localizes only the fixed labels around those
  * facts; operation/status/target/path semantic payloads remain verbatim.
  */
 import type { GraphEdgeData } from '../../graph/vue-flow'
 import { computed } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
-import { formatDependencyOperation, formatDependencyTarget, formatIssuePath } from '../../lib/issue-format'
+import { formatDependencyOperation, formatDependencyTarget, formatDiagnosticPath } from '../../lib/diagnostic-format'
 
 const props = defineProps<{
 	edge: GraphEdgeData
 }>()
 
 const i18n = useLabI18n()
-const pathLabel = computed(() => formatIssuePath(props.edge.path) ?? i18n.t('(root)'))
+const pathLabel = computed(() => formatDiagnosticPath(props.edge.path) ?? i18n.t('(root)'))
 </script>
 
 <template>

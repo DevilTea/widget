@@ -11,7 +11,7 @@
  * resolved config (`compute: ({ config }) => config.label`/`config.kind`, no new dependency edges, no
  * behavior change) — the same pattern checkpoint A already used for `SurveySection`/`SurveyDateQuestion`
  * (`../survey/plugins/sections.ts`, `survey-questions.ts`). This is required because
- * `@deviltea/widget-vue`'s public `useWidget()` contract never exposes resolved `config` (issue #13
+ * `@deviltea/widget-vue`'s public `useWidget()` contract never exposes resolved `config` (diagnostic #13
  * checkpoints C/D) and a registered renderer component receives no per-instance props at all (verified
  * against `packages/widget/vue/src/renderer.ts`'s `h(ActualRenderer)` call) — `Button` is reused four
  * times in this showcase's preset (`reset-data`/`change-stage`/`save-stage`/`cancel-stage`) with no
@@ -72,8 +72,10 @@ function isButtonAction(value: unknown): value is ButtonAction {
 }
 
 export const ButtonPlugin = createWidgetPlugin('Button')
+	.description('Button widget')
 	.interfaces<ButtonInterfaces>()
 	.config({
+		description: 'Button configuration',
 		validate: (input): input is ButtonRawConfig =>
 			isPlainObject(input)
 			&& typeof input.label === 'string'
@@ -126,12 +128,17 @@ export interface ModalInterfaces extends WidgetInterfaces {
 }
 
 export const ModalPlugin = createWidgetPlugin('Modal')
+	.description('Modal widget')
 	.interfaces<ModalInterfaces>()
 	.config({
+		description: 'Modal configuration',
 		validate: (input): input is ModalRawConfig => isPlainObject(input) && typeof input.title === 'string',
 		resolve: raw => ({ title: raw?.title ?? '' }),
 	})
-	.slots({ body: {}, footer: {} })
+	.slots({
+		body: { description: 'Modal body' },
+		footer: { description: 'Modal footer' },
+	})
 	.state(state =>
 		state.open({
 			validate: (input): input is boolean => typeof input === 'boolean',

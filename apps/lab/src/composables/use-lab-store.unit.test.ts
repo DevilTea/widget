@@ -120,7 +120,7 @@ describe('createLabStore() graph filter preferences', () => {
 })
 
 /**
- * Showcase switching (issue #13 "Source Apply lifecycle" checkpoint, "Presets / showcase changes"):
+ * Showcase switching (diagnostic #13 "Source Apply lifecycle" checkpoint, "Presets / showcase changes"):
  * "Switching showcases ... detaches/disposes the old Runtime, switches showcase context, loads the
  * showcase source, and then uses the same Apply pipeline." `switchShowcase()` in `use-lab-store.ts` is
  * the larger-grained analogue of Apply's own replacement ordering — this suite drives it against the
@@ -301,7 +301,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 		const samplingDone = sample()
 
 		// Fired back to back, neither awaited first: `apply()` starts its own detach/compile/mount
-		// sequence, and `switchShowcase()` is issued while that is still (at minimum) queued behind it.
+		// sequence, and `switchShowcase()` is diagnosticd while that is still (at minimum) queued behind it.
 		const applyPromise = store.apply()
 		const switchPromise = store.switchShowcase('survey')
 		await Promise.all([applyPromise, switchPromise])
@@ -370,7 +370,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 	// That Runtime must be disposed immediately rather than mounted into a Preview nobody owns anymore.
 	// PR #19 review 4940721401: the lifecycle transaction queue must serialize showcase replacement
 	// against an in-flight Apply without moving Apply's OWN capture/concurrency boundary later — that
-	// boundary is `LabSession.apply()`'s contract (issue #13 comment 5289958311) and must still fire
+	// boundary is `LabSession.apply()`'s contract (diagnostic #13 comment 5289958311) and must still fire
 	// synchronously, at the moment `store.apply()`/`store.applyPreset()` is called, never deferred until
 	// the queue happens to reach that transaction.
 	it('apply() captures the draft at command-call time; a same-turn setDraftSourceText() edit is not applied', async () => {

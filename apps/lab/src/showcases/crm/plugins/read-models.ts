@@ -9,7 +9,7 @@
  * `Table`/`DetailPanel` additionally project the resolved-config fields their renderers need to honor
  * semantic interaction/data presentation — `Table.properties.rowIdKey`/`columns` and
  * `DetailPanel.properties.fields` — because a valid edited Source can change `rowIdKey`/`columns`/
- * `fields` and that must reach the renderer (issue #13 note recorded on comment 5298243144, correcting
+ * `fields` and that must reach the renderer (diagnostic #13 note recorded on comment 5298243144, correcting
  * PR #22 adversarial review 4941241562 finding 1). Each projection is readonly, computed solely from the
  * widget's own resolved config, and adds zero new dependency edges — `@deviltea/widget-vue`'s public
  * `useWidget()` contract still has no resolved-config accessor (see `./structural.ts`'s file header for
@@ -64,8 +64,10 @@ function isMetricCardFormat(value: unknown): value is MetricCardFormat {
 }
 
 export const MetricCardPlugin = createWidgetPlugin('MetricCard')
+	.description('Metric card widget')
 	.interfaces<MetricCardInterfaces>()
 	.config({
+		description: 'Metric card configuration',
 		validate: (input): input is MetricCardRawConfig =>
 			isPlainObject(input)
 			&& typeof input.label === 'string'
@@ -84,7 +86,7 @@ export const MetricCardPlugin = createWidgetPlugin('MetricCard')
 					.validate(isNumber),
 				compute: ({ deps }) => {
 					const result = deps()
-					return result.success ? result.value : 0
+					return result.ok ? result.value : 0
 				},
 			})
 			.label({ compute: ({ config }) => config.label })
@@ -142,8 +144,10 @@ function isTableRawConfig(input: unknown): input is TableRawConfig {
 }
 
 export const TablePlugin = createWidgetPlugin('Table')
+	.description('Table widget')
 	.interfaces<TableInterfaces>()
 	.config({
+		description: 'Table configuration',
 		validate: (input): input is TableRawConfig => isTableRawConfig(input),
 		resolve: raw => ({
 			source: raw?.source ?? { widgetId: '', property: '' },
@@ -164,7 +168,7 @@ export const TablePlugin = createWidgetPlugin('Table')
 						Array.isArray(value) && value.every(row => isPlainObject(row) && typeof row[config.rowIdKey] === 'string')),
 				compute: ({ deps }) => {
 					const result = deps()
-					return result.success ? result.value : []
+					return result.ok ? result.value : []
 				},
 			})
 			.selectedRow({
@@ -178,9 +182,9 @@ export const TablePlugin = createWidgetPlugin('Table')
 				compute: ({ deps, config }) => {
 					const rowsResult = deps.rows()
 					const selectedRowIdResult = deps.selectedRowId()
-					if (!rowsResult.success)
+					if (!rowsResult.ok)
 						return null
-					const selectedRowId = selectedRowIdResult.success ? selectedRowIdResult.value : null
+					const selectedRowId = selectedRowIdResult.ok ? selectedRowIdResult.value : null
 					if (selectedRowId === null)
 						return null
 					return (rowsResult.value ?? []).find(row => row[config.rowIdKey] === selectedRowId) ?? null
@@ -190,13 +194,13 @@ export const TablePlugin = createWidgetPlugin('Table')
 				registerDeps: ({ dep }) => dep.self.properties.get('rows'),
 				compute: ({ deps }) => {
 					const result = deps()
-					return !result.success || (result.value ?? []).length === 0
+					return !result.ok || (result.value ?? []).length === 0
 				},
 			})
 			// Lab-private semantic projections of own resolved config (readonly, zero new dependency
 			// edges) so `TableRenderer.vue` can key rows / call `selectRow()` with the *configured*
 			// `rowIdKey`, and render the *configured* `columns`, instead of hardcoding `row.id` and a
-			// fixed column list (issue #13 note on comment 5298243144, PR #22 review 4941241562 finding
+			// fixed column list (diagnostic #13 note on comment 5298243144, PR #22 review 4941241562 finding
 			// 1: a valid edited Source changing `rowIdKey`/`columns` must reach the renderer).
 			.rowIdKey({ compute: ({ config }) => config.rowIdKey })
 			.columns({ compute: ({ config }) => config.columns }))
@@ -210,14 +214,14 @@ export const TablePlugin = createWidgetPlugin('Table')
 				setSelectedRowId: dep.self.state.set('selectedRowId'),
 			}),
 			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
-			execute: ({ deps, args, addIssue, config }) => {
+			execute: ({ deps, args, addDiagnostic, config }) => {
 				const [id] = args
 				const rowsResult = deps.rows()
-				if (!rowsResult.success)
+				if (!rowsResult.ok)
 					return
 				const exists = (rowsResult.value ?? []).some(row => row[config.rowIdKey] === id)
 				if (!exists) {
-					addIssue({ message: `No visible row with id "${id}".` })
+					addDiagnostic({ message: `No visible row with id "${id}".` })
 					return
 				}
 				deps.setSelectedRowId(id)
@@ -271,8 +275,10 @@ function isDetailPanelRawConfig(input: unknown): input is DetailPanelRawConfig {
 }
 
 export const DetailPanelPlugin = createWidgetPlugin('DetailPanel')
+	.description('Detail panel widget')
 	.interfaces<DetailPanelInterfaces>()
 	.config({
+		description: 'Detail panel configuration',
 		validate: (input): input is DetailPanelRawConfig => isDetailPanelRawConfig(input),
 		resolve: raw => ({
 			title: raw?.title ?? '',
@@ -281,7 +287,7 @@ export const DetailPanelPlugin = createWidgetPlugin('DetailPanel')
 			emptyText: raw?.emptyText ?? '',
 		}),
 	})
-	.slots({ actions: {} })
+	.slots({ actions: { description: 'Detail panel actions' } })
 	.properties(properties =>
 		properties
 			.record({
@@ -289,19 +295,19 @@ export const DetailPanelPlugin = createWidgetPlugin('DetailPanel')
 					.validate((value): value is Record<string, unknown> | null => value === null || isPlainObject(value)),
 				compute: ({ deps }) => {
 					const result = deps()
-					return result.success ? result.value : null
+					return result.ok ? result.value : null
 				},
 			})
 			.empty({
 				registerDeps: ({ dep }) => dep.self.properties.get('record'),
 				compute: ({ deps }) => {
 					const result = deps()
-					return !result.success || result.value === null
+					return !result.ok || result.value === null
 				},
 			})
 			// Lab-private semantic projection of own resolved config (readonly, zero new dependency
 			// edges) so `DetailPanelRenderer.vue` renders the *configured* `fields` instead of a
-			// hardcoded field list (issue #13 note on comment 5298243144, PR #22 review 4941241562
+			// hardcoded field list (diagnostic #13 note on comment 5298243144, PR #22 review 4941241562
 			// finding 1).
 			.fields({ compute: ({ config }) => config.fields }))
 	.done()
@@ -335,8 +341,10 @@ function isBarChartSeriesPoint(value: unknown): value is BarChartSeriesPoint {
 }
 
 export const BarChartPlugin = createWidgetPlugin('BarChart')
+	.description('Bar chart widget')
 	.interfaces<BarChartInterfaces>()
 	.config({
+		description: 'Bar chart configuration',
 		validate: (input): input is BarChartRawConfig =>
 			isPlainObject(input) && typeof input.title === 'string' && isPropertySourceConfig(input.source),
 		resolve: raw => ({
@@ -350,7 +358,7 @@ export const BarChartPlugin = createWidgetPlugin('BarChart')
 				.validate((value): value is readonly BarChartSeriesPoint[] => Array.isArray(value) && value.every(isBarChartSeriesPoint)),
 			compute: ({ deps }) => {
 				const result = deps()
-				return result.success ? result.value : []
+				return result.ok ? result.value : []
 			},
 		}))
 	.done()

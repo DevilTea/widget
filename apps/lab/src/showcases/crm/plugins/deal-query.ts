@@ -70,8 +70,10 @@ function isStageFilterValue(value: unknown): value is 'all' | DealStage {
 }
 
 export const DealQueryPlugin = createWidgetPlugin('DealQuery')
+	.description('Deal query widget')
 	.interfaces<DealQueryInterfaces>()
 	.config({
+		description: 'Deal query configuration',
 		validate: (input): input is DealQueryRawConfig => isDealQueryRawConfig(input),
 		resolve: raw => ({
 			storeId: raw?.storeId ?? '',
@@ -94,7 +96,7 @@ export const DealQueryPlugin = createWidgetPlugin('DealQuery')
 					const dealsResult = deps.deals()
 					const searchResult = deps.search()
 					const stageFilterResult = deps.stageFilter()
-					if (!dealsResult.success || !searchResult.success || !stageFilterResult.success)
+					if (!dealsResult.ok || !searchResult.ok || !stageFilterResult.ok)
 						return []
 
 					const query = searchResult.value.trim()
@@ -114,14 +116,14 @@ export const DealQueryPlugin = createWidgetPlugin('DealQuery')
 				registerDeps: ({ dep }) => dep.self.properties.get('filteredDeals'),
 				compute: ({ deps }) => {
 					const result = deps()
-					return result.success ? (result.value ?? []).length : 0
+					return result.ok ? (result.value ?? []).length : 0
 				},
 			})
 			.pipelineValue({
 				registerDeps: ({ dep }) => dep.self.properties.get('filteredDeals'),
 				compute: ({ deps }) => {
 					const result = deps()
-					if (!result.success)
+					if (!result.ok)
 						return 0
 					return (result.value ?? []).reduce((sum, deal) => sum + deal.amount, 0)
 				},
@@ -130,7 +132,7 @@ export const DealQueryPlugin = createWidgetPlugin('DealQuery')
 				registerDeps: ({ dep }) => dep.self.properties.get('filteredDeals'),
 				compute: ({ deps }) => {
 					const result = deps()
-					if (!result.success)
+					if (!result.ok)
 						return 0
 					return (result.value ?? []).reduce((sum, deal) => sum + (deal.amount * stageProbability[deal.stage]), 0)
 				},
@@ -139,7 +141,7 @@ export const DealQueryPlugin = createWidgetPlugin('DealQuery')
 				registerDeps: ({ dep }) => dep.self.properties.get('filteredDeals'),
 				compute: ({ deps }) => {
 					const result = deps()
-					const deals = result.success ? (result.value ?? []) : []
+					const deals = result.ok ? (result.value ?? []) : []
 					return dealStageValues.map(stage => ({
 						label: stage,
 						value: deals.filter(deal => deal.stage === stage).length,

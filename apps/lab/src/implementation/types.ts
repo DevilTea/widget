@@ -1,5 +1,5 @@
 /**
- * Curated Implementation-explorer registry shape (issue #25 P3 Scope A "curated registry").
+ * Curated Implementation-explorer registry shape (diagnostic #25 P3 Scope A "curated registry").
  *
  * Framework-agnostic, metadata-only (no Vue import) — mirrors `src/tutorial/types.ts`'s split from its
  * own Vue bridge. `CuratedSourceFile.load()` is the one deliberate lazy boundary the gate review's

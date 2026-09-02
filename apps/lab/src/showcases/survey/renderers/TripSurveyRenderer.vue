@@ -2,7 +2,7 @@
 /**
  * Renders the `form` slot and Reset/Submit/Generate-result workflow by calling semantic Methods
  * directly. `phase`/`result` are semantic State, `resultFresh` is the semantic Property; Vue only
- * presents those facts and never duplicates their business rules. Method/core issue messages and every
+ * presents those facts and never duplicates their business rules. Method/core diagnostic messages and every
  * value inside the stored result snapshot remain verbatim under #43; only renderer-owned headings,
  * actions, freshness explanation, and field labels are localized.
  */
@@ -11,11 +11,11 @@ import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { TripSurveyPlugin } from '../plugins/trip-survey'
 
-const { useState, useProperties, useMethods, useMethodIssues, WidgetSlot, widgetId, widgetType } = useWidget(TripSurveyPlugin)
+const { useState, useProperties, useMethods, useMethodDiagnostics, WidgetSlot, widgetId, widgetType } = useWidget(TripSurveyPlugin)
 const { phase, result } = useState()
 const { resultFresh } = useProperties()
 const { reset, submit, generateResult } = useMethods()
-const { submit: submitIssues, generateResult: generateResultIssues } = useMethodIssues()
+const { submit: submitDiagnostics, generateResult: generateResultDiagnostics } = useMethodDiagnostics()
 const i18n = useLabI18n()
 const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 
@@ -70,15 +70,15 @@ function onGenerateResult(): void {
 		</div>
 
 		<ul
-			v-if="submitIssues.length > 0 || generateResultIssues.length > 0"
+			v-if="submitDiagnostics.length > 0 || generateResultDiagnostics.length > 0"
 			:class="pika({ margin: '0', paddingLeft: '16px' })"
 		>
 			<li
-				v-for="issue in [...submitIssues, ...generateResultIssues]"
-				:key="issue.message"
+				v-for="diagnostic in [...submitDiagnostics, ...generateResultDiagnostics]"
+				:key="diagnostic.message"
 				:class="pika({ fontSize: '11px', color: 'var(--lab-color-danger)' })"
 			>
-				{{ issue.message }}
+				{{ diagnostic.message }}
 			</li>
 		</ul>
 
@@ -101,7 +101,7 @@ function onGenerateResult(): void {
 				v-if="!resultFresh"
 				:class="pika({ margin: '0 0 8px', fontSize: '11px', color: 'var(--lab-color-warning)' })"
 			>
-				{{ i18n.t('Generated from previous answers — this recommendation does not reflect the current answers (or any issues shown above). Submit and generate again to refresh it.') }}
+				{{ i18n.t('Generated from previous answers — this recommendation does not reflect the current answers (or any diagnostics shown above). Submit and generate again to refresh it.') }}
 			</p>
 			<p :class="pika({ margin: '0 0 4px', fontSize: '12px' })">
 				{{ i18n.t('Destination') }}: <strong>{{ result.destination }}</strong> · {{ i18n.t('requested style') }}: {{ result.requestedStyle }} · {{ i18n.t('recommended style') }}: <strong>{{ result.recommendedStyle }}</strong> · {{ i18n.t('fit') }}: {{ result.fit }}

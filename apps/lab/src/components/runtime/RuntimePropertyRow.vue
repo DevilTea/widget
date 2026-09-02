@@ -1,18 +1,18 @@
 <script setup lang="ts">
 /**
- * One Property member row (issue #13 Phase 5 "Runtime Inspector becomes strictly passive"): shows
+ * One Property member row (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly passive"): shows
  * `Never evaluated` until some real Runtime consumer naturally evaluates it, then the latest completed
- * `ExecutionResult` retained by core inspection — a success value, or a semantic failure rendered via
- * `RuntimePropertyIssueList`. Never labeled `fresh`/`dirty`/`active`/`stale`, and never forces evaluation
+ * `ExecutionResult` retained by core inspection — a ok value, or a semantic failure rendered via
+ * `RuntimePropertyDiagnosticList`. Never labeled `fresh`/`dirty`/`active`/`stale`, and never forces evaluation
  * itself (only reads `getSnapshot()`/`subscribe()`). #43 translates only status/action chrome; the
- * Property name, successful value, and core RuntimePropertyIssue payload remain verbatim.
+ * Property name, successful value, and core RuntimePropertyDiagnostic payload remain verbatim.
  */
 import type { RuntimePropertyInspection } from '@deviltea/widget-core/inspection'
 import { computed, ref } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useMemberSnapshot } from '../../composables/use-runtime-member'
 import { createPropertyMemberViewModel } from '../../runtime-inspector/viewmodel'
-import RuntimePropertyIssueList from './RuntimePropertyIssueList.vue'
+import RuntimePropertyDiagnosticList from './RuntimePropertyDiagnosticList.vue'
 
 const props = defineProps<{
 	name: string
@@ -26,23 +26,23 @@ const emit = defineEmits<{
 
 const i18n = useLabI18n()
 const snapshot = useMemberSnapshot(createPropertyMemberViewModel, () => props.inspection)
-const showIssues = ref(false)
+const showDiagnostics = ref(false)
 
 const statusLabel = computed(() => {
 	const current = snapshot.value
 	if (current === null || current.status === 'never-evaluated')
 		return i18n.t('Never evaluated')
-	return current.result.success
+	return current.result.ok
 		? JSON.stringify(current.result.value)
-		: i18n.t('Failed ({count} {issueWord})', {
-				count: current.result.issues.length,
-				issueWord: current.result.issues.length === 1 ? i18n.t('issue') : i18n.t('issues'),
+		: i18n.t('Failed ({count} {diagnosticWord})', {
+				count: current.result.failure.diagnostics.length,
+				diagnosticWord: current.result.failure.diagnostics.length === 1 ? i18n.t('diagnostic') : i18n.t('diagnostics'),
 			})
 })
 
-const failedIssues = computed(() => {
+const failedDiagnostics = computed(() => {
 	const current = snapshot.value
-	return current !== null && current.status === 'completed' && !current.result.success ? current.result.issues : []
+	return current !== null && current.status === 'completed' && !current.result.ok ? current.result.failure.diagnostics : []
 })
 </script>
 
@@ -57,23 +57,23 @@ const failedIssues = computed(() => {
 			<span>{{ name }}</span>
 			<span
 				:class="pika({ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' })"
-				:style="{ color: failedIssues.length > 0 ? 'var(--lab-color-danger)' : 'var(--lab-color-text-muted)' }"
+				:style="{ color: failedDiagnostics.length > 0 ? 'var(--lab-color-danger)' : 'var(--lab-color-text-muted)' }"
 			>{{ statusLabel }}</span>
 		</button>
 		<div
-			v-if="failedIssues.length > 0"
+			v-if="failedDiagnostics.length > 0"
 			:class="pika({ paddingLeft: '14px', marginTop: '4px' })"
 		>
 			<button
 				type="button"
 				:class="pika({ fontSize: '10px', color: 'var(--lab-color-accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 0 4px' })"
-				@click="showIssues = !showIssues"
+				@click="showDiagnostics = !showDiagnostics"
 			>
-				{{ i18n.t(showIssues ? 'hide issues' : 'show issues') }}
+				{{ i18n.t(showDiagnostics ? 'hide diagnostics' : 'show diagnostics') }}
 			</button>
-			<RuntimePropertyIssueList
-				v-if="showIssues"
-				:issues="failedIssues"
+			<RuntimePropertyDiagnosticList
+				v-if="showDiagnostics"
+				:diagnostics="failedDiagnostics"
 			/>
 		</div>
 	</div>

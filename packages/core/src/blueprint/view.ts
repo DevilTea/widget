@@ -3,11 +3,11 @@
  *
  * - {@link createNavigator} builds the real navigator over full public nodes. Used internally to
  *   assemble the *finalized* Blueprint's own navigation methods (`blueprint.getWidget`, etc.), which
- *   legitimately expose full nodes (`getIssues()` included) once compilation has finished.
+ *   legitimately expose full nodes (`diagnostics` included) once compilation has finished.
  * - {@link createCompileFacade} builds a genuinely restricted, frozen runtime facade over the same
  *   underlying nodes, for compile-time callbacks (`validateStructure`, `registerDeps`) while
  *   compilation is still in progress (COMMENT 2 compile-view contract). A facade node/location never
- *   physically has `getIssues()`, a slot's children are themselves facades (recursive), and the facade
+ *   physically has `diagnostics`, a slot's children are themselves facades (recursive), and the facade
  *   navigator object itself is frozen so no callback can reassign a navigation method and corrupt the
  *   view later callbacks in the same compile pass observe. `getWidget`/`getParent`/`getLocation`/
  *   `getChildren*` accept either a facade or a real node as input, since a compile-time callback only
@@ -15,7 +15,7 @@
  *   still work from real nodes.
  *
  * Navigation topology itself never changes between compile-time and the finalized Blueprint (COMMENT
- * 2): only `getIssues()` / final status / runtime machinery are compile-view exclusions.
+ * 2): only `diagnostics` / final status / runtime machinery are compile-view exclusions.
  */
 
 import type {
@@ -114,7 +114,7 @@ export interface CompileFacade<Plugins extends AnyWidgetPluginTuple = AnyWidgetP
 }
 
 /**
- * Builds a real, restricted compile-time facade: node facades never physically carry `getIssues`, a
+ * Builds a real, restricted compile-time facade: node facades never physically carry `diagnostics`, a
  * resolved facade's `.slots` children are themselves facades, `getLocation()`'s `parent` is a facade,
  * and the returned navigator object is frozen (readonly navigation, per {@link BlueprintCompileView}).
  */
@@ -139,9 +139,9 @@ export function createCompileFacade<Plugins extends AnyWidgetPluginTuple>(
 		// `blueprint/deps.ts`'s `walkDeps`: member/slot names are arbitrary plugin-authored strings and
 		// must stay prototype-safe.
 		const shell: Record<string, unknown> = Object.create(null)
-		shell.rawDefinition = working.rawDefinition
+		shell.source = working.source
 		shell.resolved = working.resolved
-		// Deliberately no `getIssues`: compilation is still in progress (COMMENT 2 compile-view contract).
+		// Deliberately no `diagnostics`: compilation is still in progress (COMMENT 2 compile-view contract).
 
 		if (working.resolved) {
 			shell.id = working.id

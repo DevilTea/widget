@@ -55,7 +55,7 @@ const definition = {
 function createRuntime() {
 	const blueprint = surveySystem.createBlueprint(definition)
 	if (blueprint.status !== 'valid')
-		throw new Error(`Expected a valid Blueprint, got issues: ${JSON.stringify(blueprint.getCollectedIssues())}`)
+		throw new Error(`Expected a valid Blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
 	return blueprint.createRuntime()
 }
 
@@ -66,11 +66,11 @@ describe('conditionalSection.visible', () => {
 		const flag = widgetOfType(runtime, 'flag', 'SurveyChoiceQuestion')
 
 		expect(condEq.properties.visible.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 
 		flag.state.answer.set('b')
 		expect(condEq.properties.visible.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 	})
 
 	it('"not-equals": visible when the target state differs from the configured value', () => {
@@ -79,11 +79,11 @@ describe('conditionalSection.visible', () => {
 		const flag = widgetOfType(runtime, 'flag', 'SurveyChoiceQuestion')
 
 		expect(condNeq.properties.visible.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 
 		flag.state.answer.set('b')
 		expect(condNeq.properties.visible.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 
 	it('"greater-than": visible when the (numeric) target state is greater than the configured value', () => {
@@ -92,11 +92,11 @@ describe('conditionalSection.visible', () => {
 		const children = widgetOfType(runtime, 'children', 'SurveyNumberQuestion')
 
 		expect(condGt.properties.visible.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 
 		children.state.answer.set(2)
 		expect(condGt.properties.visible.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 	})
 
 	it('"greater-than" against a non-numeric target fails via the .validate() refinement (property-dependency failure)', () => {
@@ -104,12 +104,12 @@ describe('conditionalSection.visible', () => {
 		const condGtNonNumeric = widgetOfType(runtime, 'cond-gt-non-numeric', 'ConditionalSection')
 
 		const result = condGtNonNumeric.properties.visible.get()
-		expect(result.success)
+		expect(result.ok)
 			.toBe(false)
-		if (result.success)
+		if (result.ok)
 			throw new Error('expected a failure')
-		expect(result.issues[0]!.source.type)
-			.toBe('property-dependency')
+		expect(result.failure.diagnostics[0]!.code)
+			.toBe('dependency-value-rejected')
 	})
 
 	it('hiding does not reset the hidden child\'s Runtime State (topology and State are untouched)', () => {
@@ -120,12 +120,12 @@ describe('conditionalSection.visible', () => {
 
 		children.state.answer.set(1)
 		expect(condGt.properties.visible.get())
-			.toEqual({ success: true, value: true })
+			.toEqual({ ok: true, value: true })
 		family.state.answer.set('x')
 
 		children.state.answer.set(0)
 		expect(condGt.properties.visible.get())
-			.toEqual({ success: true, value: false })
+			.toEqual({ ok: true, value: false })
 		// The child widget still exists in the Runtime and its State is untouched by becoming hidden.
 		expect(runtime.getWidget('family'))
 			.not.toBeNull()
@@ -140,8 +140,8 @@ describe('surveySection', () => {
 		const root = widgetOfType(runtime, 'root', 'SurveySection')
 
 		expect(root.properties.heading.get())
-			.toEqual({ success: true, value: 'Root' })
+			.toEqual({ ok: true, value: 'Root' })
 		expect(root.properties.description.get())
-			.toEqual({ success: true, value: 'Root description' })
+			.toEqual({ ok: true, value: 'Root description' })
 	})
 })

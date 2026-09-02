@@ -1,14 +1,14 @@
 /**
- * Shared structured-issue formatting helpers (issue #13 Phase 4 Checkpoint H "structured-source
- * rendering" convention, reused by Phase 5's Runtime Inspector property-issue rendering): every field
- * shown beyond the human `message` is read from an issue's machine-readable structure — `message` is
+ * Shared structured-diagnostic formatting helpers (diagnostic #13 Phase 4 Checkpoint H "structured-source
+ * rendering" convention, reused by Phase 5's Runtime Inspector property-diagnostic rendering): every field
+ * shown beyond the human `message` is read from an diagnostic's machine-readable structure — `message` is
  * never parsed to infer taxonomy or ownership.
  */
 
-import type { BlueprintDependencyOperation, BlueprintDependencyReference, BlueprintDependencyTarget, IssuePath } from '@deviltea/widget-core'
+import type { BlueprintDependencyOperation, BlueprintDependencyReference, BlueprintDependencyTarget, DiagnosticPath } from '@deviltea/widget-core'
 
-/** `[a, 0, 'b']` -> `a[0].b`. `IssuePath` segments stay verbatim (never dot-joined into a lossy string). */
-export function formatIssuePath(path: IssuePath | undefined): string | null {
+/** `[a, 0, 'b']` -> `a[0].b`. `DiagnosticPath` segments stay verbatim (never dot-joined into a lossy string). */
+export function formatDiagnosticPath(path: DiagnosticPath | undefined): string | null {
 	if (path === undefined || path.length === 0)
 		return null
 	return path

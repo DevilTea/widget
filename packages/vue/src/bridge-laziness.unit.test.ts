@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Conformance tests — issue #13 checkpoint G "Lazy bridge invariants" and checkpoint F.
+ * Conformance tests — diagnostic #13 checkpoint G "Lazy bridge invariants" and checkpoint F.
  *
  * `useXxx()` never reads/subscribes; member access materializes/caches only that member's Vue
  * wrapper without activating it; the first `.value` read activates exactly one Runtime subscription;
@@ -83,44 +83,44 @@ describe('lazy bridge invariants', () => {
 			.toHaveBeenCalledTimes(1)
 	})
 
-	it('activates exactly one Runtime issues-subscription for a state-member issue channel on first `.value` read, independently of the value channel', () => {
+	it('activates exactly one Runtime diagnostics-subscription for a state-member diagnostic channel on first `.value` read, independently of the value channel', () => {
 		const runtime = createFixtureRuntime({ id: 'w5', type: 'Counter' })
 		const widget = getCounterWidget(runtime, 'w5')
 		const stateSubscribeSpy = vi.spyOn(widget.state.count, 'subscribe')
-		const subscribeIssuesSpy = vi.spyOn(widget.state.count, 'subscribeIssues')
+		const subscribeDiagnosticsSpy = vi.spyOn(widget.state.count, 'subscribeDiagnostics')
 
 		const { bridge } = mountWidgetBridge(runtime, 'w5', CounterPlugin)
-		const { count } = bridge.useStateIssues()
+		const { count } = bridge.useStateDiagnostics()
 
-		expect(subscribeIssuesSpy).not.toHaveBeenCalled()
+		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
 		void count.value
-		expect(subscribeIssuesSpy)
+		expect(subscribeDiagnosticsSpy)
 			.toHaveBeenCalledTimes(1)
-		// Reading the issues channel never activates the unrelated value channel.
+		// Reading the diagnostics channel never activates the unrelated value channel.
 		expect(stateSubscribeSpy).not.toHaveBeenCalled()
 		void count.value
-		expect(subscribeIssuesSpy)
+		expect(subscribeDiagnosticsSpy)
 			.toHaveBeenCalledTimes(1)
 	})
 
-	it('activates the widget-level aggregate (`useIssues()`) lazily: no updates before first `.value` read, exactly one per issue-producing event once activated', async () => {
+	it('activates the widget-level aggregate (`useDiagnostics()`) lazily: no updates before first `.value` read, exactly one per diagnostic-producing event once activated', async () => {
 		// `RuntimeWidget` is a frozen object (per @deviltea/widget-core's contract), so its
-		// `subscribeIssues` call count cannot be spied on directly; instead this asserts the
-		// user-observable contract — exactly one notification per actual issue-producing event, no
+		// `subscribeDiagnostics` call count cannot be spied on directly; instead this asserts the
+		// user-observable contract — exactly one notification per actual diagnostic-producing event, no
 		// missed updates and no duplicate over-firing — via a `watchEffect` over the projected ref.
 		const runtime = createFixtureRuntime({ id: 'w5b', type: 'Counter' })
 		const { bridge } = mountWidgetBridge(runtime, 'w5b', CounterPlugin)
-		const issues = bridge.useIssues()
+		const diagnostics = bridge.useDiagnostics()
 
 		const seenLengths: number[] = []
 		const stop = watchEffect(() => {
-			seenLengths.push(issues.value.length)
+			seenLengths.push(diagnostics.value.length)
 		})
 		await nextTick()
 		expect(seenLengths)
 			.toEqual([0])
 
-		// A rejected write produces exactly one state-validation issue owned by this widget.
+		// A rejected write produces exactly one state-validation diagnostic owned by this widget.
 		getCounterWidget(runtime, 'w5b').state.count.set(-1)
 		await nextTick()
 		expect(seenLengths)
@@ -155,14 +155,14 @@ describe('lazy bridge invariants', () => {
 		expect(incrementA)
 			.toBe(incrementB)
 
-		expect(bridge.useStateIssues())
-			.toBe(bridge.useStateIssues())
-		expect(bridge.usePropertyIssues())
-			.toBe(bridge.usePropertyIssues())
-		expect(bridge.useMethodIssues())
-			.toBe(bridge.useMethodIssues())
-		expect(bridge.useIssues())
-			.toBe(bridge.useIssues())
+		expect(bridge.useStateDiagnostics())
+			.toBe(bridge.useStateDiagnostics())
+		expect(bridge.usePropertyDiagnostics())
+			.toBe(bridge.usePropertyDiagnostics())
+		expect(bridge.useMethodDiagnostics())
+			.toBe(bridge.useMethodDiagnostics())
+		expect(bridge.useDiagnostics())
+			.toBe(bridge.useDiagnostics())
 	})
 
 	it('cleans up every activated subscription when the owning Vue component unmounts', () => {
@@ -196,13 +196,13 @@ describe('lazy bridge invariants', () => {
 		const spies = [
 			wrapUnsubscribe(widget.state.count, 'subscribe'),
 			wrapUnsubscribe(widget.properties.doubled, 'subscribe'),
-			wrapUnsubscribe(widget.state.count, 'subscribeIssues'),
+			wrapUnsubscribe(widget.state.count, 'subscribeDiagnostics'),
 		]
 
 		const { wrapper, bridge } = mountWidgetBridge(runtime, 'w8', CounterPlugin)
 		void bridge.useState().count.value
 		void bridge.useProperties().doubled.value
-		void bridge.useStateIssues().count.value
+		void bridge.useStateDiagnostics().count.value
 
 		for (const spy of spies) expect(spy).not.toHaveBeenCalled()
 		wrapper.unmount()
