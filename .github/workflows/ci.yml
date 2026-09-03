@@ -15,21 +15,71 @@ concurrency:
 
 jobs:
   check:
-    name: Verify workspace (Node ${{ matrix.node }})
+    name: Verify workspace (Node 24)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [22, 24]
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-node-pnpm
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 24
           pnpm-version: 10.34.4
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+
+  package-node22:
+    name: Packed packages (Node 22.14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up build toolchain
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 24
+          pnpm-version: 10.34.4
+      - run: pnpm install --frozen-lockfile
+      - name: Build published packages
+        run: pnpm --filter @deviltea/widget-vue... run build
+      - name: Pack published packages
+        run: |
+          mkdir -p package-tarballs
+          pnpm --dir packages/core pack --pack-destination "$GITHUB_WORKSPACE/package-tarballs"
+          pnpm --dir packages/vue pack --pack-destination "$GITHUB_WORKSPACE/package-tarballs"
+      - name: Switch to minimum supported Node 22 release
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.14.0
+      - name: Verify packed runtime and declarations
+        run: |
+          consumer="$RUNNER_TEMP/widget-consumer"
+          mkdir -p "$consumer"
+          cd "$consumer"
+
+          core_tarball="$(find "$GITHUB_WORKSPACE/package-tarballs" -maxdepth 1 -name 'deviltea-widget-core-*.tgz' -print -quit)"
+          vue_tarball="$(find "$GITHUB_WORKSPACE/package-tarballs" -maxdepth 1 -name 'deviltea-widget-vue-*.tgz' -print -quit)"
+          test -n "$core_tarball"
+          test -n "$vue_tarball"
+
+          npm init -y >/dev/null
+          npm install "$core_tarball" "$vue_tarball" vue@3.5.42 typescript@6.0.3
+          node --input-type=module -e "await import('@deviltea/widget-core'); await import('@deviltea/widget-vue')"
+
+          cat > smoke.mts <<'SMOKE'
+          import * as core from '@deviltea/widget-core'
+          import * as widgetVue from '@deviltea/widget-vue'
+
+          void core
+          void widgetVue
+          SMOKE
+
+          ./node_modules/.bin/tsc \
+            --noEmit \
+            --target ES2022 \
+            --module NodeNext \
+            --moduleResolution NodeNext \
+            --lib ES2022,DOM,DOM.Iterable \
+            smoke.mts
 
   browser-contracts:
     name: Browser contracts (Widget Lab)
