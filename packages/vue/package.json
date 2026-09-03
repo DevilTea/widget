@@ -7,14 +7,14 @@
 	"version": "0.0.1",
 	"author": "DevilTea <ch19980814@gmail.com>",
 	"license": "MIT",
-	"homepage": "https://github.com/DevilTea/deviltea-labs/tree/main/packages/widget/vue#readme",
+	"homepage": "https://github.com/DevilTea/widget/tree/main/packages/vue#readme",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/DevilTea/deviltea-labs.git",
-		"directory": "packages/widget/vue"
+		"url": "git+https://github.com/DevilTea/widget.git",
+		"directory": "packages/vue"
 	},
 	"bugs": {
-		"url": "https://github.com/DevilTea/deviltea-labs/issues"
+		"url": "https://github.com/DevilTea/widget/issues"
 	},
 	"keywords": [
 		"widget",
@@ -53,6 +53,7 @@
 		"@deviltea/widget-core": "workspace:*"
 	},
 	"devDependencies": {
+		"@deviltea/tsconfig": "catalog:",
 		"@vue/test-utils": "catalog:",
 		"happy-dom": "catalog:",
 		"tsdown": "catalog:",

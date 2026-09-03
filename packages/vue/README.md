@@ -165,7 +165,7 @@ caller.
 
 ## License
 
-[MIT](https://github.com/DevilTea/deviltea-labs/blob/main/LICENSE) License © 2023-PRESENT [DevilTea](https://github.com/DevilTea)
+[MIT](https://github.com/DevilTea/widget/blob/main/LICENSE) License © 2023-PRESENT [DevilTea](https://github.com/DevilTea)
 
 <!-- Badges -->
 
@@ -176,4 +176,4 @@ caller.
 [bundle-src]: https://img.shields.io/bundlephobia/minzip/@deviltea/widget-vue?style=flat&colorA=080f12&colorB=1fa669&label=minzip
 [bundle-href]: https://bundlephobia.com/result?p=@deviltea/widget-vue
 [license-src]: https://img.shields.io/github/license/DevilTea/deviltea-labs.svg?style=flat&colorA=080f12&colorB=1fa669
-[license-href]: https://github.com/DevilTea/deviltea-labs/blob/main/LICENSE
+[license-href]: https://github.com/DevilTea/widget/blob/main/LICENSE

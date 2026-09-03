@@ -12,7 +12,7 @@
  * invariants).
  *
  * The `dep` builder itself has no public runtime constructor (`createDependencyBuilder` is an
- * internal export U2/U3 use directly; see `packages/widget/core/src/plugin.ts`'s docs), so this file
+ * internal export U2/U3 use directly; see `packages/core/src/plugin.ts`'s docs), so this file
  * is a type-level suite: every assertion is either a positive `expectTypeOf` check or a `@ts-expect-error`
  * negative case. Negative cases are written as a function whose *parameter* carries the tested type and
  * whose body contains the rejected expression; the function is referenced (via `expectTypeOf`) but never

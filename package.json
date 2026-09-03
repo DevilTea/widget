@@ -1,0 +1,53 @@
+{
+	"name": "@deviltea/widget",
+	"type": "module",
+	"version": "0.0.0",
+	"private": true,
+	"packageManager": "pnpm@10.34.4",
+	"description": "DevilTea Widget monorepo: core, Vue integration, and Widget Lab.",
+	"license": "MIT",
+	"scripts": {
+		"build": "pnpm -r --if-present run build",
+		"check": "pnpm run build && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run publint",
+		"docs:build": "pnpm --filter docs run build",
+		"docs:build:pages": "tsx scripts/build-pages.ts",
+		"docs:dev": "pnpm --filter docs run dev",
+		"docs:preview": "pnpm --filter docs run preview",
+		"lint": "eslint .",
+		"prepare": "simple-git-hooks",
+		"publint": "pnpm --filter @deviltea/widget-core exec publint && pnpm --filter @deviltea/widget-vue exec publint",
+		"release": "tsx scripts/release.ts open",
+		"release:tag": "tsx scripts/release.ts tag",
+		"test": "pnpm run test:unit",
+		"test:unit": "vitest run",
+		"typecheck": "pnpm -r --if-present run typecheck"
+	},
+	"devDependencies": {
+		"@clack/prompts": "catalog:",
+		"@deviltea/eslint-config": "catalog:",
+		"@deviltea/tsconfig": "catalog:",
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "catalog:",
+		"bumpp": "catalog:",
+		"eslint": "catalog:",
+		"lint-staged": "catalog:",
+		"pathe": "catalog:",
+		"publint": "catalog:",
+		"simple-git-hooks": "catalog:",
+		"tsx": "catalog:",
+		"typescript": "catalog:",
+		"unplugin-vue": "catalog:",
+		"vite": "catalog:",
+		"vitepress": "catalog:",
+		"vitest": "catalog:",
+		"vue": "catalog:",
+		"vue-tsc": "catalog:",
+		"zx": "catalog:"
+	},
+	"simple-git-hooks": {
+		"pre-commit": "pnpm lint-staged"
+	},
+	"lint-staged": {
+		"*": "eslint --fix"
+	}
+}

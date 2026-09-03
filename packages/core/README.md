@@ -52,7 +52,7 @@ A renderer/integration layer consumes the Runtime; the core itself knows
 nothing about rendering, persistence versioning, or metadata. Source editing
 is limited to the revisioned `WidgetDocument` and JSON-domain `SourcePatch`
 contract described below. See
-[Design constraints](https://deviltea.github.io/deviltea-labs/packages/widget-core#design-constraints)
+[Design constraints](https://deviltea.github.io/widget/packages/widget-core#design-constraints)
 in the full guide for the exact boundary.
 
 Capability presence (`config`/`slots`/`state`/`properties`/`methods`) is
@@ -60,7 +60,7 @@ declaration presence, independent of whether a capability's own domain is
 empty — a completed plugin exposes these facts at runtime as
 `plugin.capabilities: { config, slots, state, properties, methods }`
 (all `boolean`, immutable). See
-[Reading capability presence at runtime](https://deviltea.github.io/deviltea-labs/packages/widget-core#reading-capability-presence-at-runtime-plugin-capabilities)
+[Reading capability presence at runtime](https://deviltea.github.io/widget/packages/widget-core#reading-capability-presence-at-runtime-plugin-capabilities)
 in the full guide.
 
 Plugin, config, and slot descriptions are required intrinsic metadata. The
@@ -303,17 +303,17 @@ import { inspectBlueprint, inspectRuntime } from '@deviltea/widget-core/inspecti
 ```
 
 `@deviltea/widget-core`'s root entrypoint does not export this surface. See
-[Inspection](https://deviltea.github.io/deviltea-labs/packages/widget-core#inspection-devtools)
+[Inspection](https://deviltea.github.io/widget/packages/widget-core#inspection-devtools)
 in the full guide for the exact contract.
 
 The full guide at
-[docs/site/packages/widget-core.md](https://deviltea.github.io/deviltea-labs/packages/widget-core)
+[docs/site/packages/widget-core.md](https://deviltea.github.io/widget/packages/widget-core)
 covers the dependency grammar, the compile pipeline, and every Runtime
 primitive in detail.
 
 ## License
 
-[MIT](https://github.com/DevilTea/deviltea-labs/blob/main/LICENSE) License © 2023-PRESENT [DevilTea](https://github.com/DevilTea)
+[MIT](https://github.com/DevilTea/widget/blob/main/LICENSE) License © 2023-PRESENT [DevilTea](https://github.com/DevilTea)
 
 <!-- Badges -->
 
@@ -324,4 +324,4 @@ primitive in detail.
 [bundle-src]: https://img.shields.io/bundlephobia/minzip/@deviltea/widget-core?style=flat&colorA=080f12&colorB=1fa669&label=minzip
 [bundle-href]: https://bundlephobia.com/result?p=@deviltea/widget-core
 [license-src]: https://img.shields.io/github/license/DevilTea/deviltea-labs.svg?style=flat&colorA=080f12&colorB=1fa669
-[license-href]: https://github.com/DevilTea/deviltea-labs/blob/main/LICENSE
+[license-href]: https://github.com/DevilTea/widget/blob/main/LICENSE

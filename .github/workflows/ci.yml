@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Verify workspace (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: ${{ matrix.node }}
+          pnpm-version: 10.34.4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  browser-contracts:
+    name: Browser contracts (Widget Lab)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 24
+          pnpm-version: 10.34.4
+      - run: pnpm install --frozen-lockfile
+      - name: Build Widget Lab and workspace dependencies
+        run: pnpm --filter widget-lab... run build
+      - name: Install Playwright Chromium
+        run: pnpm --filter widget-lab exec playwright install --with-deps chromium
+      - name: Run browser contract suite
+        run: pnpm --filter widget-lab run test:browser
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: widget-lab-playwright-report
+          path: apps/lab/test-results
+          if-no-files-found: ignore
+          retention-days: 7

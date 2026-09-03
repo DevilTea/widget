@@ -9,8 +9,8 @@
 
 import type { SourcesRegistry } from '../implementation/types'
 
-const PLUGINS_PATH = 'apps/widget-lab/src/sandbox/plugins.ts'
-const RENDERERS_PATH = 'apps/widget-lab/src/sandbox/renderers.ts'
+const PLUGINS_PATH = 'apps/lab/src/sandbox/plugins.ts'
+const RENDERERS_PATH = 'apps/lab/src/sandbox/renderers.ts'
 
 function loadPlugins(): Promise<string> {
 	return import('./plugins.ts?raw').then(module => module.default)

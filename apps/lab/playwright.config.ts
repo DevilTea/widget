@@ -26,7 +26,7 @@ export default defineConfig({
 	use: {
 		baseURL: 'http://localhost:4173',
 		// Diagnostics only on failure (issue #28 "preserve useful diagnostics ... do not commit generated
-		// artifacts") — both write under `test-results/` (gitignored; see apps/widget-lab/.gitignore),
+		// artifacts") — both write under `test-results/` (gitignored; see apps/lab/.gitignore),
 		// which CI's `browser-contracts` job uploads with `if: failure()`.
 		trace: 'retain-on-failure',
 		screenshot: 'only-on-failure',

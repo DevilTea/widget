@@ -6,7 +6,7 @@ import { defineEngineConfig } from '@pikacss/core'
  * Deliberately small: a handful of design tokens (exposed as CSS custom properties so the
  * hand-authored Dockview theme in `src/styles/dockview-theme.css` and Monaco's local styling can
  * reuse them) plus PikaCSS's own atomic-utility generation for application UI. This is Lab visual
- * language only — see `packages/widget/core` / `packages/widget/vue` AGENTS.md — it has no bearing
+ * language only — see `packages/core` / `packages/vue` AGENTS.md — it has no bearing
  * on any published package's public contract.
  */
 export default defineEngineConfig({

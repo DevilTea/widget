@@ -29,7 +29,7 @@
 		"vue": "catalog:"
 	},
 	"devDependencies": {
-		"@deviltea/tsconfig": "workspace:^",
+		"@deviltea/tsconfig": "catalog:",
 		"@pikacss/core": "catalog:",
 		"@pikacss/integration": "catalog:",
 		"@pikacss/unplugin-pikacss": "catalog:",

@@ -1,0 +1,55 @@
+minimumReleaseAge: 4320
+minimumReleaseAgeExclude:
+  - '@deviltea/eslint-config'
+  - '@deviltea/tsconfig'
+blockExoticSubdeps: true
+strictDepBuilds: true
+shellEmulator: true
+trustPolicy: no-downgrade
+packages:
+  - 'packages/*'
+  - 'apps/*'
+  - 'docs/*'
+catalog:
+  '@clack/prompts': ^0.10.1
+  '@deviltea/eslint-config': 9.0.0
+  '@deviltea/tsconfig': 1.0.0
+  '@pikacss/core': ^0.0.61
+  '@pikacss/integration': ^0.0.61
+  '@pikacss/unplugin-pikacss': ^0.0.61
+  '@playwright/test': 1.62.1
+  '@shikijs/core': ^4.4.3
+  '@shikijs/engine-javascript': ^4.4.3
+  '@types/node': ^24.13.2
+  '@vitest/coverage-v8': ^4.1.9
+  '@vue-flow/core': 1.48.2
+  '@vue/test-utils': ^2.4.11
+  alien-signals: 3.2.1
+  bumpp: 11.1.0
+  dockview-vue: ^7.0.4
+  elkjs: 0.12.0
+  eslint: 10.6.0
+  happy-dom: ^20.11.2
+  lint-staged: ^15.5.2
+  modern-monaco: 0.4.2
+  pathe: ^2.0.3
+  publint: ^0.3.21
+  simple-git-hooks: ^2.13.1
+  tm-grammars: ^1.32.3
+  tm-themes: ^1.12.3
+  tsdown: ^0.22.3
+  tsx: ^4.23.0
+  typescript: ^6.0.3
+  unplugin-vue: ^7.2.0
+  vite: ^7.3.6
+  vitepress: 2.0.0-alpha.17
+  vitest: ^4.1.9
+  vue: ^3.5.39
+  vue-tsc: ^3.3.6
+  zx: ^8.8.5
+ignoredBuiltDependencies:
+  - esbuild
+  - simple-git-hooks
+  - unrs-resolver
+  - vue-demi
+onlyBuiltDependencies: []

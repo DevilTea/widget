@@ -1,0 +1,73 @@
+name: Setup Node and pnpm
+description: Set up an exact Node.js and Corepack-managed pnpm environment.
+
+inputs:
+  node-version:
+    description: Exact Node.js version or version range to install.
+    required: true
+  pnpm-version:
+    description: Exact pnpm version declared by the workspace packageManager field.
+    required: true
+  corepack-version:
+    description: Corepack version to install only when the selected Node.js lacks it.
+    required: false
+    default: 0.34.6
+  cache:
+    description: Cache the pnpm store.
+    required: false
+    default: 'true'
+  cache-dependency-path:
+    description: Lockfile path or glob used to key the pnpm store cache.
+    required: false
+    default: pnpm-lock.yaml
+  registry-url:
+    description: Optional npm registry URL.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Enable Corepack
+      shell: bash
+      env:
+        COREPACK_VERSION: ${{ inputs.corepack-version }}
+      run: |
+        if ! command -v corepack >/dev/null 2>&1; then
+          npm install --global "corepack@$COREPACK_VERSION"
+        fi
+
+        corepack enable
+
+    - name: Install and verify pnpm
+      shell: bash
+      env:
+        PNPM_VERSION: ${{ inputs.pnpm-version }}
+      run: |
+        corepack install --global "pnpm@$PNPM_VERSION"
+        corepack install
+
+        actual_version="$(pnpm --version)"
+        if [ "$actual_version" != "$PNPM_VERSION" ]; then
+          echo "Expected pnpm $PNPM_VERSION, received $actual_version." >&2
+          exit 1
+        fi
+
+    - name: Resolve pnpm store path
+      id: pnpm-store
+      if: inputs.cache == 'true'
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore pnpm store
+      if: inputs.cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-node-${{ inputs.node-version }}-pnpm-${{ inputs.pnpm-version }}-${{ hashFiles(inputs.cache-dependency-path) }}

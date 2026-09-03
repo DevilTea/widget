@@ -13,7 +13,7 @@
  * (`../survey/plugins/sections.ts`, `survey-questions.ts`). This is required because
  * `@deviltea/widget-vue`'s public `useWidget()` contract never exposes resolved `config` (diagnostic #13
  * checkpoints C/D) and a registered renderer component receives no per-instance props at all (verified
- * against `packages/widget/vue/src/renderer.ts`'s `h(ActualRenderer)` call) — `Button` is reused four
+ * against `packages/vue/src/renderer.ts`'s `h(ActualRenderer)` call) — `Button` is reused four
  * times in this showcase's preset (`reset-data`/`change-stage`/`save-stage`/`cancel-stage`) with no
  * other distinguishing slot/state, so without this projection every instance would be visually
  * identical. `Modal`/`Table`/`DetailPanel`/`BarChart`/`AppShell`/`Toolbar` stay exactly as the checkpoint

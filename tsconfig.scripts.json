@@ -1,0 +1,9 @@
+{
+	"extends": "@deviltea/tsconfig/tooling",
+	"compilerOptions": {
+		"composite": true
+	},
+	"include": [
+		"./scripts/*.ts"
+	]
+}

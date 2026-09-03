@@ -137,9 +137,9 @@ which augments Vue's `ComponentCustomProperties` so `pika()` type-checks inside 
 
 The Lab deploys as part of the docs Pages artifact: `.github/workflows/docs.yml` runs
 `pnpm docs:build:pages` (`scripts/build-pages.ts`), which builds `widget-lab` **and its workspace
-dependencies** in topological order with `WIDGET_LAB_BASE=/deviltea-labs/widget-lab/` (consumed by
+dependencies** in topological order with `WIDGET_LAB_BASE=/widget/lab/` (consumed by
 `vite.config.ts`'s `base`), builds `docs/site`, then copies the Lab build under the docs dist's
-`widget-lab/` subdirectory. `docs/site` and `apps/widget-lab` remain separate source/application
+`lab/` subdirectory. `docs/site` and `apps/lab` remain separate source/application
 boundaries — only build output is combined. If you touch the Lab's asset/worker URL behavior, verify
 it still resolves under that subpath, not just under `/`.
 

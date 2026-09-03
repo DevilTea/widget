@@ -13,9 +13,9 @@ JSON-domain `SourcePatch` contract.
 
 This guide covers the full public surface. For installation and a minimal
 end-to-end example, see the
-[package README](https://github.com/DevilTea/deviltea-labs/tree/main/packages/widget/core#readme).
+[package README](https://github.com/DevilTea/widget/tree/main/packages/core#readme).
 Cross-cutting Diagnostic/Result/Failure/Error conventions are maintained in the
-[Widget API conventions](https://github.com/DevilTea/deviltea-labs/blob/main/docs/architecture/widget-api-conventions.md).
+[Widget API conventions](https://github.com/DevilTea/widget/blob/main/docs/architecture/widget-api-conventions.md).
 
 ## Core model
 
@@ -783,7 +783,7 @@ widgetInspection.getProperty('doubled')
   semantics on top of it and does not implement a second reactive engine.
 
 The canonical, authoritative decision log for this architecture is
-[GitHub diagnostic #10](https://github.com/DevilTea/deviltea-labs/diagnostics/10) —
+[GitHub diagnostic #10](https://github.com/DevilTea/widget/diagnostics/10) —
 "Widget composition core architecture — canonical decision log." Its
 consolidated implementation handoff comment, together with any later accepted
 amendment, is authoritative over this guide.

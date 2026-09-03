@@ -1,0 +1,49 @@
+name: Pages integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/lab/**
+      - docs/site/**
+      - scripts/build-pages.ts
+      - .github/workflows/pages-integration.yml
+      - pnpm-lock.yaml
+  pull_request:
+    paths:
+      - apps/lab/**
+      - docs/site/**
+      - scripts/build-pages.ts
+      - .github/workflows/pages-integration.yml
+      - pnpm-lock.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pages-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 24
+          pnpm-version: 10.34.4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm docs:build:pages
+      - run: pnpm --filter widget-lab exec playwright install --with-deps chromium
+      - run: pnpm --filter widget-lab run test:pages
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: widget-lab-pages-playwright-report
+          path: apps/lab/test-results
+          if-no-files-found: ignore
+          retention-days: 7

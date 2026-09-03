@@ -21,7 +21,7 @@ export interface CuratedSourceFile {
 	readonly kind: CuratedSourceFileKind
 	/** Short display title for this file's tab, e.g. "read-models.ts". */
 	readonly title: string
-	/** Repo-relative display path, e.g. "apps/widget-lab/src/showcases/crm/plugins/read-models.ts". */
+	/** Repo-relative display path, e.g. "apps/lab/src/showcases/crm/plugins/read-models.ts". */
 	readonly path: string
 	/** Lazy boundary (see file header) — resolves this file's raw text. */
 	readonly load: () => Promise<string>

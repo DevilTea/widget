@@ -1,0 +1,52 @@
+name: Deploy documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/docs.yml
+      - .github/actions/setup-node-pnpm/**
+      - docs/site/**
+      - apps/lab/**
+      - packages/**
+      - scripts/build-pages.ts
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 24
+          pnpm-version: 10.34.4
+      - uses: actions/configure-pages@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm docs:build:pages
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

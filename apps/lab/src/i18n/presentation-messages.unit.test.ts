@@ -23,7 +23,7 @@ describe('presentation localization boundary', () => {
 			'Counter',
 			'title',
 			'count',
-			'apps/widget-lab/src/sandbox/plugins.ts',
+			'apps/lab/src/sandbox/plugins.ts',
 			'createWidgetPlugin(\'Text\')',
 			'[definition] Unknown widget type: UnknownForI18nContract',
 		]) {

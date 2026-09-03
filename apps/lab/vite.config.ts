@@ -7,8 +7,8 @@ import { vendorModernMonacoEditorCore } from './vite-plugin-vendor-modern-monaco
 export default defineConfig({
 	// Root-relative ('/') in dev and any standalone build. The combined GitHub Pages deploy
 	// (issue #13 Checkpoint A "Widget Lab" deployment section) co-locates this app's build output
-	// under docs/site/.vitepress/dist/widget-lab/, so `pnpm docs:build:pages` overrides this via
-	// `WIDGET_LAB_BASE=/deviltea-labs/widget-lab/` to keep asset/worker/router URLs correct under
+	// under docs/site/.vitepress/dist/lab/, so `pnpm docs:build:pages` overrides this via
+	// `WIDGET_LAB_BASE=/widget/lab/` to keep asset/worker/router URLs correct under
 	// that subpath. Left unset, `pnpm dev`/`pnpm build` behavior is unchanged.
 	base: process.env.WIDGET_LAB_BASE ?? '/',
 	plugins: [

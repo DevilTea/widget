@@ -5,7 +5,7 @@ import { defineConfig, devices } from '@playwright/test'
  * Built GitHub-Pages integration harness (#47).
  *
  * `pnpm docs:build:pages` is run by CI before this suite. The docs VitePress preview then serves the
- * combined artifact (`/deviltea-labs/` plus the separately-built `/deviltea-labs/widget-lab/`) from one
+ * combined artifact (`/widget/` plus the separately-built `/widget/lab/`) from one
  * origin, matching the production routing shape without treating Widget Lab as a VitePress page.
  */
 export default defineConfig({
@@ -26,7 +26,7 @@ export default defineConfig({
 		// Run VitePress directly rather than forwarding CLI arguments through the docs package script;
 		// bind IPv4 explicitly so the readiness probe and preview server share the same address family.
 		command: 'pnpm --dir ../../docs/site exec vitepress preview . --host 127.0.0.1 --port 4174',
-		url: 'http://127.0.0.1:4174/deviltea-labs/',
+		url: 'http://127.0.0.1:4174/widget/',
 		reuseExistingServer: !process.env.CI,
 	},
 })

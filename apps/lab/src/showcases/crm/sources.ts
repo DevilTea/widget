@@ -11,7 +11,7 @@
 
 import type { SourcesRegistry } from '../../implementation/types'
 
-const DOMAIN_PATH = 'apps/widget-lab/src/showcases/crm/domain.ts'
+const DOMAIN_PATH = 'apps/lab/src/showcases/crm/domain.ts'
 
 function loadDomain(): Promise<string> {
 	return import('./domain.ts?raw').then(module => module.default)
@@ -36,88 +36,88 @@ function loadActions(): Promise<string> {
 export const crmSources: SourcesRegistry = {
 	AppShell: {
 		files: [
-			{ kind: 'plugin', title: 'structural.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/structural.ts', load: loadStructural },
-			{ kind: 'renderer', title: 'AppShellRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/AppShellRenderer.vue', load: () => import('./renderers/AppShellRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'structural.ts', path: 'apps/lab/src/showcases/crm/plugins/structural.ts', load: loadStructural },
+			{ kind: 'renderer', title: 'AppShellRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/AppShellRenderer.vue', load: () => import('./renderers/AppShellRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	Toolbar: {
 		files: [
-			{ kind: 'plugin', title: 'structural.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/structural.ts', load: loadStructural },
-			{ kind: 'renderer', title: 'ToolbarRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/ToolbarRenderer.vue', load: () => import('./renderers/ToolbarRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'structural.ts', path: 'apps/lab/src/showcases/crm/plugins/structural.ts', load: loadStructural },
+			{ kind: 'renderer', title: 'ToolbarRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/ToolbarRenderer.vue', load: () => import('./renderers/ToolbarRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	Card: {
 		files: [
-			{ kind: 'plugin', title: 'structural.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/structural.ts', load: loadStructural },
-			{ kind: 'renderer', title: 'CardRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/CardRenderer.vue', load: () => import('./renderers/CardRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'structural.ts', path: 'apps/lab/src/showcases/crm/plugins/structural.ts', load: loadStructural },
+			{ kind: 'renderer', title: 'CardRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/CardRenderer.vue', load: () => import('./renderers/CardRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	TextInput: {
 		files: [
-			{ kind: 'plugin', title: 'inputs.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/inputs.ts', load: loadInputs },
-			{ kind: 'renderer', title: 'TextInputRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/TextInputRenderer.vue', load: () => import('./renderers/TextInputRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'inputs.ts', path: 'apps/lab/src/showcases/crm/plugins/inputs.ts', load: loadInputs },
+			{ kind: 'renderer', title: 'TextInputRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/TextInputRenderer.vue', load: () => import('./renderers/TextInputRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	SelectInput: {
 		files: [
-			{ kind: 'plugin', title: 'inputs.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/inputs.ts', load: loadInputs },
-			{ kind: 'renderer', title: 'SelectInputRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/SelectInputRenderer.vue', load: () => import('./renderers/SelectInputRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'inputs.ts', path: 'apps/lab/src/showcases/crm/plugins/inputs.ts', load: loadInputs },
+			{ kind: 'renderer', title: 'SelectInputRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/SelectInputRenderer.vue', load: () => import('./renderers/SelectInputRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	MetricCard: {
 		files: [
-			{ kind: 'plugin', title: 'read-models.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/read-models.ts', load: loadReadModels },
-			{ kind: 'renderer', title: 'MetricCardRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/MetricCardRenderer.vue', load: () => import('./renderers/MetricCardRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'read-models.ts', path: 'apps/lab/src/showcases/crm/plugins/read-models.ts', load: loadReadModels },
+			{ kind: 'renderer', title: 'MetricCardRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/MetricCardRenderer.vue', load: () => import('./renderers/MetricCardRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	Table: {
 		files: [
-			{ kind: 'plugin', title: 'read-models.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/read-models.ts', load: loadReadModels },
-			{ kind: 'renderer', title: 'TableRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/TableRenderer.vue', load: () => import('./renderers/TableRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'read-models.ts', path: 'apps/lab/src/showcases/crm/plugins/read-models.ts', load: loadReadModels },
+			{ kind: 'renderer', title: 'TableRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/TableRenderer.vue', load: () => import('./renderers/TableRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	DetailPanel: {
 		files: [
-			{ kind: 'plugin', title: 'read-models.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/read-models.ts', load: loadReadModels },
-			{ kind: 'renderer', title: 'DetailPanelRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/DetailPanelRenderer.vue', load: () => import('./renderers/DetailPanelRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'read-models.ts', path: 'apps/lab/src/showcases/crm/plugins/read-models.ts', load: loadReadModels },
+			{ kind: 'renderer', title: 'DetailPanelRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/DetailPanelRenderer.vue', load: () => import('./renderers/DetailPanelRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	BarChart: {
 		files: [
-			{ kind: 'plugin', title: 'read-models.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/read-models.ts', load: loadReadModels },
-			{ kind: 'renderer', title: 'BarChartRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/BarChartRenderer.vue', load: () => import('./renderers/BarChartRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'read-models.ts', path: 'apps/lab/src/showcases/crm/plugins/read-models.ts', load: loadReadModels },
+			{ kind: 'renderer', title: 'BarChartRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/BarChartRenderer.vue', load: () => import('./renderers/BarChartRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	Button: {
 		files: [
-			{ kind: 'plugin', title: 'actions.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/actions.ts', load: loadActions },
-			{ kind: 'renderer', title: 'ButtonRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/ButtonRenderer.vue', load: () => import('./renderers/ButtonRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'actions.ts', path: 'apps/lab/src/showcases/crm/plugins/actions.ts', load: loadActions },
+			{ kind: 'renderer', title: 'ButtonRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/ButtonRenderer.vue', load: () => import('./renderers/ButtonRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	Modal: {
 		files: [
-			{ kind: 'plugin', title: 'actions.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/actions.ts', load: loadActions },
-			{ kind: 'renderer', title: 'ModalRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/ModalRenderer.vue', load: () => import('./renderers/ModalRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'actions.ts', path: 'apps/lab/src/showcases/crm/plugins/actions.ts', load: loadActions },
+			{ kind: 'renderer', title: 'ModalRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/ModalRenderer.vue', load: () => import('./renderers/ModalRenderer.vue?raw').then(m => m.default) },
 		],
 	},
 	DealStore: {
 		files: [
-			{ kind: 'plugin', title: 'deal-store.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/deal-store.ts', load: () => import('./plugins/deal-store.ts?raw').then(m => m.default) },
-			{ kind: 'renderer', title: 'DealStoreRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/DealStoreRenderer.vue', load: () => import('./renderers/DealStoreRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'deal-store.ts', path: 'apps/lab/src/showcases/crm/plugins/deal-store.ts', load: () => import('./plugins/deal-store.ts?raw').then(m => m.default) },
+			{ kind: 'renderer', title: 'DealStoreRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/DealStoreRenderer.vue', load: () => import('./renderers/DealStoreRenderer.vue?raw').then(m => m.default) },
 			{ kind: 'domain', title: 'domain.ts', path: DOMAIN_PATH, load: loadDomain },
 		],
 	},
 	DealQuery: {
 		files: [
-			{ kind: 'plugin', title: 'deal-query.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/deal-query.ts', load: () => import('./plugins/deal-query.ts?raw').then(m => m.default) },
-			{ kind: 'renderer', title: 'DealQueryRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/DealQueryRenderer.vue', load: () => import('./renderers/DealQueryRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'deal-query.ts', path: 'apps/lab/src/showcases/crm/plugins/deal-query.ts', load: () => import('./plugins/deal-query.ts?raw').then(m => m.default) },
+			{ kind: 'renderer', title: 'DealQueryRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/DealQueryRenderer.vue', load: () => import('./renderers/DealQueryRenderer.vue?raw').then(m => m.default) },
 			{ kind: 'domain', title: 'domain.ts', path: DOMAIN_PATH, load: loadDomain },
 		],
 	},
 	DealStageForm: {
 		files: [
-			{ kind: 'plugin', title: 'deal-stage-form.ts', path: 'apps/widget-lab/src/showcases/crm/plugins/deal-stage-form.ts', load: () => import('./plugins/deal-stage-form.ts?raw').then(m => m.default) },
-			{ kind: 'renderer', title: 'DealStageFormRenderer.vue', path: 'apps/widget-lab/src/showcases/crm/renderers/DealStageFormRenderer.vue', load: () => import('./renderers/DealStageFormRenderer.vue?raw').then(m => m.default) },
+			{ kind: 'plugin', title: 'deal-stage-form.ts', path: 'apps/lab/src/showcases/crm/plugins/deal-stage-form.ts', load: () => import('./plugins/deal-stage-form.ts?raw').then(m => m.default) },
+			{ kind: 'renderer', title: 'DealStageFormRenderer.vue', path: 'apps/lab/src/showcases/crm/renderers/DealStageFormRenderer.vue', load: () => import('./renderers/DealStageFormRenderer.vue?raw').then(m => m.default) },
 			{ kind: 'domain', title: 'domain.ts', path: DOMAIN_PATH, load: loadDomain },
 		],
 	},
