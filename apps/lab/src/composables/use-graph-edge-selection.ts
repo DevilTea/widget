@@ -7,7 +7,7 @@
  * Graph filter preferences (`LabStore.graphShowAbsent`/`graphShowIsolatedMembers`), which this module
  * does not even reference.
  *
- * Factored out of `GraphPanel.vue` into its own composable — like `use-runtime-member.ts` and
+ * Factored out of `DependenciesPanel.vue` into its own composable — like `use-runtime-member.ts` and
  * `use-dependency-graph.ts` — so this regression-worthy reset contract stays independently unit-testable
  * without mounting the (template-heavy, intentionally untested per this app's `AGENTS.md`) panel SFC.
  */

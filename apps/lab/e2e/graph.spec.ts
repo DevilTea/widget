@@ -14,7 +14,7 @@ test('Survey Dependency Graph lays out and renders nodes', async ({ page }) => {
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('survey')
-	await page.getByRole('tab', { name: 'Graph' })
+	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
 	const nodes = page.locator('.vue-flow__node')
@@ -23,7 +23,7 @@ test('Survey Dependency Graph lays out and renders nodes', async ({ page }) => {
 	expect(await nodes.count())
 		.toBeGreaterThan(0)
 
-	// Layout completed: `GraphPanel.vue`'s `statusLabel` only renders "Laying out…"/"Layout failed."
+	// Layout completed: `DependenciesPanel.vue`'s Graph-view `statusLabel` only renders "Laying out…"/"Layout failed."
 	// while the async ELK request is in flight or rejected — neither is shown once Vue Flow has real
 	// node elements to render.
 	await expect(page.getByText('Laying out…'))
@@ -53,7 +53,7 @@ for (const showcaseId of ['sandbox', 'survey', 'crm'] as const) {
 			await page.getByLabel('Switch showcase')
 				.selectOption(showcaseId)
 		}
-		await page.getByRole('tab', { name: 'Graph' })
+		await page.getByRole('tab', { name: 'Dependencies' })
 			.click()
 
 		const canvas = page.locator('.vue-flow')
@@ -86,7 +86,7 @@ test('"Fit graph" affordance restores a useful viewport (issue #27)', async ({ p
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('survey')
-	await page.getByRole('tab', { name: 'Graph' })
+	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
 	const canvas = page.locator('.vue-flow')
@@ -164,7 +164,7 @@ test('progressive disclosure collapses clusters initially, expands on click, and
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('survey')
-	await page.getByRole('tab', { name: 'Graph' })
+	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
 	const canvas = page.locator('.vue-flow')
@@ -244,7 +244,7 @@ test('focusing a member highlights subgraph and dims unrelated nodes', async ({ 
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('survey')
-	await page.getByRole('tab', { name: 'Graph' })
+	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
 	// Expand all so members are visible

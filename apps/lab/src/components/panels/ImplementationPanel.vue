@@ -124,7 +124,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 			v-if="mode === 'focused' && focusedWidget === null"
 			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 		>
-			{{ i18n.t('No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Graph, or browse Registered plugins without selecting an instance.') }}
+			{{ i18n.t('No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Dependencies, or browse Registered plugins without selecting an instance.') }}
 		</div>
 		<div
 			v-else-if="mode === 'focused' && entry === null"

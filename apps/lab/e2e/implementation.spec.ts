@@ -88,7 +88,7 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 			.toHaveCount(1)
 
 		// No canonical-panel regression (issue #27's non-closable policy stays untouched).
-		for (const name of ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
+		for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 			await expect(page.getByRole('tab', { name })
 				.locator('.dv-default-tab-action'))
 				.toHaveCount(0)

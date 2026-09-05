@@ -19,7 +19,7 @@ test('app loads with header controls and all five panel tabs', async ({ page }) 
 	await expect(page.getByRole('button', { name: 'Apply' }))
 		.toBeVisible()
 
-	for (const name of ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
+	for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 		await expect(page.getByRole('tab', { name }))
 			.toBeVisible()
 	}
@@ -93,7 +93,7 @@ test('Source editor initializes from local assets with no attempted esm.sh reque
 test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => {
 	await page.goto('/')
 
-	const panelNames = ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']
+	const panelNames = ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']
 
 	// The five canonical panels use a custom Dockview tab renderer (`NonClosableTab.vue`) that never
 	// renders a close control — so there is no in-tab button affordance to find at all.
@@ -107,8 +107,8 @@ test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => 
 
 	// Attempt the interaction that used to close a panel — clicking where a close "x" used to sit, at
 	// the tab's trailing edge — and confirm it is a no-op: every canonical tab remains present.
-	const graphTab = page.getByRole('tab', { name: 'Graph' })
-	const box = (await graphTab.boundingBox())!
+	const dependenciesTab = page.getByRole('tab', { name: 'Dependencies' })
+	const box = (await dependenciesTab.boundingBox())!
 	await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2)
 
 	for (const name of panelNames) {

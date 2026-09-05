@@ -162,10 +162,10 @@ export const crmTourScript: TutorialScript = {
 			onEnter: actions => actions.setFocus('deal-query'),
 			stages: [{
 				prompt: 'DealStore and DealQuery own the rules — take a look at how, whenever you like.',
-				reveal: 'DealStore and DealQuery own the search/filter/aggregation rules and the mutation you just made — but neither renders anything in Preview. Open Graph or Implementation to see them.',
+				reveal: 'DealStore and DealQuery own the search/filter/aggregation rules and the mutation you just made — but neither renders anything in Preview. Open Dependencies or Implementation to see them.',
 			}],
 			links: [
-				{ id: 'view-graph', label: 'Graph', run: actions => actions.activateTab('graph') },
+				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.activateTab('dependencies') },
 				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
 			],
 		},
@@ -176,7 +176,7 @@ export const crmTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You\'ve now seen State, Properties, row-selection coordination, and a Method-driven mutation.',
-				reveal: 'State, Properties, row-selection coordination, and a Method-driven mutation recomputing three views at once — the same semantic model as the Survey tour, applied to a dashboard instead of a form. Explore Blueprint, Runtime, or Graph anytime, or open Implementation for any widget.',
+				reveal: 'State, Properties, row-selection coordination, and a Method-driven mutation recomputing three views at once — the same semantic model as the Survey tour, applied to a dashboard instead of a form. Explore Blueprint, Runtime, or Dependencies anytime, or open Implementation for any widget.',
 			}],
 		},
 	],

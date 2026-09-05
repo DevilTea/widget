@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
  * Default two-column workbench (diagnostic #13 Widget Lab Phase 4 Checkpoint I): a left tool group with
- * tabs Author | Blueprint | Runtime | Graph (Author initially active, ~35-40% width) and a persistent
+ * tabs Author | Blueprint | Runtime | Dependencies (Author initially active, ~35-40% width) and a persistent
  * Preview on the right (~60-65% width, the dominant surface). Dockview owns tabs/resize/docking only —
- * it never becomes the semantic model for Source/Blueprint/Runtime/Graph/Preview.
+ * it never becomes the semantic model for Author/Blueprint/Runtime/Dependencies/Preview.
  */
 import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
@@ -15,7 +15,7 @@ import { useLabStore } from '../composables/use-lab-store'
 import NonClosableTab from './NonClosableTab.vue'
 import AuthorPanel from './panels/AuthorPanel.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
-import GraphPanel from './panels/GraphPanel.vue'
+import DependenciesPanel from './panels/DependenciesPanel.vue'
 import RuntimePanel from './panels/RuntimePanel.vue'
 import PreviewPanel from './preview/PreviewPanel.vue'
 
@@ -48,7 +48,7 @@ const components: Record<string, VueComponent> = {
 	author: AuthorPanel as unknown as VueComponent,
 	blueprint: BlueprintPanel as unknown as VueComponent,
 	runtime: RuntimePanel as unknown as VueComponent,
-	graph: GraphPanel as unknown as VueComponent,
+	dependencies: DependenciesPanel as unknown as VueComponent,
 	preview: PreviewPanel as unknown as VueComponent,
 	// diagnostic #25 P3 Scope D: `defineAsyncComponent` (not a plain import) is the actual lazy boundary —
 	// `ImplementationPanel.vue` and everything it statically imports (the curated-file viewer, Shiki)
@@ -129,10 +129,10 @@ function onReady(event: DockviewReadyEvent): void {
 		inactive: true,
 	})
 	api.addPanel({
-		id: 'graph',
-		component: 'graph',
+		id: 'dependencies',
+		component: 'dependencies',
 		tabComponent: 'nonClosable',
-		title: 'Graph',
+		title: i18n.t('Dependencies'),
 		position: { referencePanel: 'author', direction: 'within' },
 		inactive: true,
 	})
@@ -176,7 +176,7 @@ function watchTutorialTabActivation(api: DockviewApi): void {
  * Diagnostic #25 P3 Scope D "Opening = `api.addPanel` if absent else activate". Deliberately not `immediate`
  * (matching `watchTutorialTabActivation` above): `openRequestTick` starts at `0` and every real
  * `open()` call increments it, so the watch only ever fires on an actual request, never at setup time.
- * The Implementation panel is added `within` the same tab group as Source/Blueprint/Runtime/Graph, with
+ * The Implementation panel is added `within` the same tab group as Author/Blueprint/Runtime/Dependencies, with
  * NO `tabComponent` override — Dockview's own default tab (close button included) is exactly the
  * "closable, default tab component" the panel is specified to use, unlike the five canonical panels'
  * `nonClosable` tab.
