@@ -459,6 +459,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 
 								<!-- Target member button -->
 								<button
+									v-if="item.resolved && item.targetMember"
 									type="button"
 									:class="pika({
 										'background': 'transparent',
@@ -483,6 +484,31 @@ function memberKindShort(kind: GraphVertexKind): string {
 									</span>
 									<span>{{ item.targetMember.name }}</span>
 								</button>
+
+								<span
+									v-else-if="item.stubTarget"
+									class="relations-internal-stub-target"
+									:class="pika({
+										display: 'inline-flex',
+										alignItems: 'center',
+										gap: '4px',
+										padding: '1px 6px',
+										borderRadius: '3px',
+										border: '1px dashed var(--lab-color-danger)',
+										background: 'color-mix(in srgb, var(--lab-color-danger) 8%, transparent)',
+										color: 'var(--lab-color-text)',
+									})"
+									:title="`${item.stubStatus}: ${item.stubTarget.targetDescription}`"
+								>
+									<span
+										class="relations-kind-badge"
+										:class="`relations-kind-badge--${item.stubTarget.memberKind}`"
+									>
+										{{ memberKindShort(item.stubTarget.memberKind) }}
+									</span>
+									<span :class="pika({ fontFamily: 'var(--lab-font-mono)' })">{{ item.stubTarget.memberName }}</span>
+									<span :class="pika({ fontSize: '9px', color: 'var(--lab-color-danger)', fontWeight: '600' })">{{ i18n.t('unresolved') }}</span>
+								</span>
 							</div>
 						</div>
 					</div>

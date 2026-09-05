@@ -89,7 +89,7 @@ export interface RelationsInternalDependency {
 		readonly kind: GraphVertexKind
 		readonly name: string
 	}
-	readonly targetMember: {
+	readonly targetMember?: {
 		readonly nodeId: InspectionNodeId
 		readonly kind: GraphVertexKind
 		readonly name: string
@@ -98,6 +98,14 @@ export interface RelationsInternalDependency {
 	readonly path: readonly (string | number)[]
 	readonly reference: BlueprintDependencyReference
 	readonly invalidCycle?: boolean
+	readonly resolved: boolean
+	readonly stubStatus?: GraphStubStatus
+	readonly stubTarget?: {
+		readonly targetDescription: string
+		readonly targetNodeId?: InspectionNodeId
+		readonly memberKind: GraphVertexKind
+		readonly memberName: string
+	}
 }
 
 export type RelationsViewModel
@@ -212,13 +220,14 @@ function resolveRemoteWidgetForStub(
 			}
 		}
 
+		const isSameWidget = target.widgetId === currentCluster.widgetId || clusterForTarget?.id === currentCluster.id
 		return {
-			key: `stub:widget:${target.widgetId}`,
+			key: isSameWidget ? `stub:self:${currentCluster.id}` : `stub:widget:${target.widgetId}`,
 			widgetId: target.widgetId,
-			widgetType: clusterForTarget?.widgetType,
-			nodeId: stub.targetNodeId ?? clusterForTarget?.nodeId,
+			widgetType: clusterForTarget?.widgetType ?? (isSameWidget ? currentCluster.widgetType : undefined),
+			nodeId: stub.targetNodeId ?? clusterForTarget?.nodeId ?? (isSameWidget ? currentCluster.nodeId : undefined),
 			isResolved: false,
-			isSameWidget: false,
+			isSameWidget,
 		}
 	}
 
@@ -507,6 +516,7 @@ export function projectRelations(
 					path: edge.path,
 					reference: edge.reference,
 					invalidCycle: edge.invalidCycle,
+					resolved: true,
 				})
 			}
 			continue
@@ -599,6 +609,30 @@ export function projectRelations(
 
 		const target = resolveRemoteWidgetForStub(stub, clusterMap, focusedCluster)
 		const memberInfo = extractMemberFromOperation(stub.reference.operation)
+		const stubTarget = {
+			targetDescription: formatDependencyTarget(stub.reference.target),
+			targetNodeId: stub.targetNodeId,
+			memberKind: memberInfo.kind,
+			memberName: memberInfo.name,
+		}
+
+		if (target.isSameWidget) {
+			internalDependencies.push({
+				id: stub.id,
+				sourceMember: {
+					nodeId: ownerVertex.nodeId,
+					kind: ownerVertex.kind,
+					name: ownerVertex.name,
+				},
+				operation: stub.operation,
+				path: stub.path,
+				reference: stub.reference,
+				resolved: false,
+				stubStatus: stub.status,
+				stubTarget,
+			})
+			continue
+		}
 
 		const row: RelationsDependencyRow = {
 			id: stub.id,
@@ -612,12 +646,7 @@ export function projectRelations(
 			reference: stub.reference,
 			resolved: false,
 			stubStatus: stub.status,
-			stubTarget: {
-				targetDescription: formatDependencyTarget(stub.reference.target),
-				targetNodeId: stub.targetNodeId,
-				memberKind: memberInfo.kind,
-				memberName: memberInfo.name,
-			},
+			stubTarget,
 		}
 
 		outgoingRowsWithTarget.push({ target, row })

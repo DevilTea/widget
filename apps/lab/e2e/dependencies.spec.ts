@@ -80,6 +80,89 @@ test('Relations inspects shared Document focus and switching back to Graph prese
 		.toHaveAttribute('style', transformBeforeRelations ?? '')
 })
 
+test('Dependencies view tabs are keyboard-operable and member focus does not mutate collapsed Graph layout', async ({ page }) => {
+	await openSurveyDependencies(page)
+
+	const viewTabs = page.getByRole('tablist', { name: 'Dependencies views' })
+	const graphViewTab = viewTabs.getByRole('tab', { name: 'Graph' })
+	const relationsViewTab = viewTabs.getByRole('tab', { name: 'Relations' })
+	const graphPanel = page.getByRole('tabpanel', { name: 'Graph' })
+	const relationsPanel = page.getByRole('tabpanel', { name: 'Relations' })
+
+	await expect(graphViewTab)
+		.toHaveAttribute('aria-controls', 'dependencies-view-panel-graph')
+	await expect(graphViewTab)
+		.toHaveAttribute('tabindex', '0')
+	await expect(relationsViewTab)
+		.toHaveAttribute('aria-controls', 'dependencies-view-panel-relations')
+	await expect(relationsViewTab)
+		.toHaveAttribute('tabindex', '-1')
+	await expect(graphPanel)
+		.toBeVisible()
+
+	await graphViewTab.focus()
+	await graphViewTab.press('ArrowLeft')
+	await expect(relationsViewTab)
+		.toBeFocused()
+	await expect(relationsViewTab)
+		.toHaveAttribute('aria-selected', 'true')
+	await expect(relationsPanel)
+		.toBeVisible()
+
+	await relationsViewTab.press('ArrowRight')
+	await expect(graphViewTab)
+		.toBeFocused()
+	await expect(graphViewTab)
+		.toHaveAttribute('aria-selected', 'true')
+	await expect(graphPanel)
+		.toBeVisible()
+
+	const graphMembers = page.locator('.graph-node--member')
+	await expect(graphMembers)
+		.toHaveCount(0)
+
+	// A collapsed cluster has a keyboard-operable identity separate from the expand toggle.
+	// Selecting the identity focuses the widget but must leave progressive-disclosure state intact.
+	const clusterIdentity = page.locator('.graph-cluster-identity--collapsed')
+		.filter({ hasText: 'TripMetrics' })
+		.first()
+	await expect(clusterIdentity)
+		.toBeVisible({ timeout: 15_000 })
+	await clusterIdentity.focus()
+	await clusterIdentity.press('Enter')
+	await expect(graphMembers)
+		.toHaveCount(0)
+
+	const graphTransform = page.locator('.vue-flow__transformationpane')
+	const transformBeforeMemberFocus = await graphTransform.getAttribute('style')
+
+	await relationsViewTab.click()
+	await expect(relationsPanel.getByText('Focused widget'))
+		.toBeVisible()
+
+	const memberChoice = relationsPanel.getByTitle(/^Focus (state|property|method) /)
+		.first()
+	await expect(memberChoice)
+		.toBeVisible()
+	await memberChoice.click()
+	await expect(relationsPanel.getByText('Focused member'))
+		.toBeVisible()
+
+	// Focus is semantic inspector state only. It must not auto-expand a Graph cluster, request a
+	// fresh ELK layout, or destroy the preserved Graph viewport while the Graph view is hidden.
+	await page.waitForTimeout(500)
+	await expect(graphMembers)
+		.toHaveCount(0)
+	await expect(graphTransform)
+		.toHaveAttribute('style', transformBeforeMemberFocus ?? '')
+
+	await graphViewTab.click()
+	await expect(graphMembers)
+		.toHaveCount(0)
+	await expect(graphTransform)
+		.toHaveAttribute('style', transformBeforeMemberFocus ?? '')
+})
+
 test('Relations keeps page-level width contained at the 900px minimum in light and dark themes', async ({ page }) => {
 	await page.setViewportSize({ width: 900, height: 900 })
 	await openSurveyDependencies(page)

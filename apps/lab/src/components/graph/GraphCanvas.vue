@@ -218,10 +218,21 @@ function memberKindShort(kind: string): string {
 					}"
 				>
 					<div class="graph-cluster-card-topline">
-						<span
-							class="graph-cluster-type"
-							:title="data.widgetType"
-						>{{ data.widgetType }}</span>
+						<button
+							type="button"
+							class="graph-cluster-identity graph-cluster-identity--collapsed"
+							:aria-label="`${data.widgetType} #${data.widgetId}`"
+							@click.stop="emit('clusterClick', id)"
+						>
+							<span
+								class="graph-cluster-type"
+								:title="data.widgetType"
+							>{{ data.widgetType }}</span>
+							<span
+								class="graph-cluster-id"
+								:title="data.widgetId"
+							>#{{ data.widgetId }}</span>
+						</button>
 						<button
 							type="button"
 							class="graph-cluster-toggle"
@@ -232,10 +243,6 @@ function memberKindShort(kind: string): string {
 							<span aria-hidden="true">+</span>
 						</button>
 					</div>
-					<span
-						class="graph-cluster-id"
-						:title="data.widgetId"
-					>#{{ data.widgetId }}</span>
 					<div
 						class="graph-cluster-counts"
 						aria-label="member counts"
@@ -274,15 +281,20 @@ function memberKindShort(kind: string): string {
 				</div>
 			</template>
 
-			<template #node-member="{ data }">
+			<template #node-member="{ data, id }">
 				<div
 					class="graph-node--member graph-member-card"
+					role="button"
+					tabindex="0"
+					:aria-label="`${data.kind} ${data.label}`"
 					:class="[
 						`graph-member-card--${data.kind}`,
 						data.invalidCycle && 'graph-member-card--invalid',
 						data.isDimmed && 'graph-node--dimmed',
 						data.isFocused && 'graph-node--focused',
 					]"
+					@keydown.enter.prevent.stop="emit('nodeClick', id)"
+					@keydown.space.prevent.stop="emit('nodeClick', id)"
 				>
 					<span
 						class="graph-member-kind"
@@ -412,10 +424,16 @@ function memberKindShort(kind: string): string {
 
 .graph-cluster-card-topline {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: space-between;
 	gap: 8px;
 	min-width: 0;
+}
+
+.graph-cluster-identity--collapsed {
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 1px;
 }
 
 .graph-cluster-type {
@@ -550,6 +568,11 @@ function memberKindShort(kind: string): string {
 	border-right-color: color-mix(in srgb, var(--graph-kind-color) 38%, var(--lab-color-border));
 	border-bottom-color: color-mix(in srgb, var(--graph-kind-color) 38%, var(--lab-color-border));
 	box-shadow: 0 3px 8px color-mix(in srgb, var(--lab-color-text) 9%, transparent);
+}
+
+.graph-member-card:focus-visible {
+	outline: 2px solid var(--lab-color-accent);
+	outline-offset: 2px;
 }
 
 .graph-member-card--invalid {

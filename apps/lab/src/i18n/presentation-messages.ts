@@ -100,7 +100,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Slots capability present, but declares no slot names (e.g. explicit-empty': 'Slots capability 存在，但沒有宣告任何 slot 名稱（例如 explicit-empty',
 	').': '）。',
 	'No slots capability.': '沒有 slots capability。',
-	'Members': 'Members',
+	'Members': '成員',
 	'Raw definition': 'Raw definition',
 	'Diagnostics': 'Diagnostics',
 

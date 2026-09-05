@@ -87,8 +87,15 @@ export function toVueFlow(
 
 	const clusterIdByVertex = new Map(graph.vertices.map(vertex => [vertex.id, vertex.clusterId] as const))
 
+	interface CrossClusterGroup {
+		readonly effectiveSource: string
+		readonly effectiveTarget: string
+		readonly edgeId: string
+		readonly edges: GraphEdge[]
+	}
+
 	// Group cross-cluster edges and collect same-cluster edges
-	const crossClusterMap = new Map<string, GraphEdge[]>()
+	const crossClusterMap = new Map<string, CrossClusterGroup>()
 	const sameClusterEdges: GraphEdge[] = []
 
 	for (const edge of graph.edges) {
@@ -103,10 +110,18 @@ export function toVueFlow(
 		else {
 			const effectiveSource = expandedClusterIds.has(sourceCluster) ? edge.sourceVertexId : sourceCluster
 			const effectiveTarget = expandedClusterIds.has(targetCluster) ? edge.targetVertexId : targetCluster
-			const key = `${effectiveSource}->${effectiveTarget}`
-			const existing = crossClusterMap.get(key) ?? []
-			existing.push(edge)
-			crossClusterMap.set(key, existing)
+			const key = JSON.stringify([effectiveSource, effectiveTarget])
+			let group = crossClusterMap.get(key)
+			if (group === undefined) {
+				group = {
+					effectiveSource,
+					effectiveTarget,
+					edgeId: `edge:${key}`,
+					edges: [],
+				}
+				crossClusterMap.set(key, group)
+			}
+			group.edges.push(edge)
 		}
 	}
 
@@ -132,18 +147,27 @@ export function toVueFlow(
 				relatedEdgeIds.add(edge.id)
 				relatedNodeIds.add(edge.sourceVertexId)
 				relatedNodeIds.add(edge.targetVertexId)
+				const sourceCluster = clusterIdByVertex.get(edge.sourceVertexId)
+				if (sourceCluster)
+					relatedNodeIds.add(sourceCluster)
+				const targetCluster = clusterIdByVertex.get(edge.targetVertexId)
+				if (targetCluster)
+					relatedNodeIds.add(targetCluster)
 			}
 		}
 
-		for (const [key] of crossClusterMap) {
-			const [effSource, effTarget] = key.split('->')
-			const edgeId = `edge:${key}`
-			if (effSource === activeMemberKey || effTarget === activeMemberKey) {
+		for (const group of crossClusterMap.values()) {
+			const { effectiveSource, effectiveTarget, edgeId } = group
+			if (effectiveSource === activeMemberKey || effectiveTarget === activeMemberKey) {
 				relatedEdgeIds.add(edgeId)
-				if (effSource)
-					relatedNodeIds.add(effSource)
-				if (effTarget)
-					relatedNodeIds.add(effTarget)
+				relatedNodeIds.add(effectiveSource)
+				relatedNodeIds.add(effectiveTarget)
+				const sourceCluster = clusterIdByVertex.get(effectiveSource)
+				if (sourceCluster)
+					relatedNodeIds.add(sourceCluster)
+				const targetCluster = clusterIdByVertex.get(effectiveTarget)
+				if (targetCluster)
+					relatedNodeIds.add(targetCluster)
 			}
 		}
 	}
@@ -166,17 +190,20 @@ export function toVueFlow(
 				relatedNodeIds.add(edge.targetVertexId)
 			}
 		}
-		for (const [key] of crossClusterMap) {
-			const [effSource, effTarget] = key.split('->')
-			const edgeId = `edge:${key}`
-			const sourceMatch = effSource === activeClusterId || (effSource !== undefined && relatedNodeIds.has(effSource))
-			const targetMatch = effTarget === activeClusterId || (effTarget !== undefined && relatedNodeIds.has(effTarget))
+		for (const group of crossClusterMap.values()) {
+			const { effectiveSource, effectiveTarget, edgeId } = group
+			const sourceMatch = effectiveSource === activeClusterId || relatedNodeIds.has(effectiveSource)
+			const targetMatch = effectiveTarget === activeClusterId || relatedNodeIds.has(effectiveTarget)
 			if (sourceMatch || targetMatch) {
 				relatedEdgeIds.add(edgeId)
-				if (effSource)
-					relatedNodeIds.add(effSource)
-				if (effTarget)
-					relatedNodeIds.add(effTarget)
+				relatedNodeIds.add(effectiveSource)
+				relatedNodeIds.add(effectiveTarget)
+				const sourceCluster = clusterIdByVertex.get(effectiveSource)
+				if (sourceCluster)
+					relatedNodeIds.add(sourceCluster)
+				const targetCluster = clusterIdByVertex.get(effectiveTarget)
+				if (targetCluster)
+					relatedNodeIds.add(targetCluster)
 			}
 		}
 	}
@@ -312,35 +339,32 @@ export function toVueFlow(
 	}
 
 	// Cross-cluster presentation edges
-	for (const [key, group] of crossClusterMap) {
-		const [effSource, effTarget] = key.split('->')
-		if (!effSource || !effTarget)
-			continue
-		const edgeId = `edge:${key}`
+	for (const group of crossClusterMap.values()) {
+		const { effectiveSource, effectiveTarget, edgeId, edges: semanticEdges } = group
 		const isDimmed = hasActiveInspection && !relatedEdgeIds.has(edgeId)
-		const primaryOp = group[0]!.operation
-		const invalidCycle = group.some(e => e.invalidCycle)
-		const isClusterLevel = effSource.startsWith('cluster:') || effTarget.startsWith('cluster:')
+		const primaryOp = semanticEdges[0]!.operation
+		const invalidCycle = semanticEdges.some(e => e.invalidCycle)
+		const isClusterLevel = effectiveSource.startsWith('cluster:') || effectiveTarget.startsWith('cluster:')
 		const label = isClusterLevel
-			? `${group.length} ${group.length === 1 ? 'dep' : 'deps'}`
-			: (group.length === 1 ? primaryOp : `${group.length} deps`)
+			? `${semanticEdges.length} ${semanticEdges.length === 1 ? 'dep' : 'deps'}`
+			: (semanticEdges.length === 1 ? primaryOp : `${semanticEdges.length} deps`)
 
 		edges.push({
 			id: edgeId,
-			source: effSource,
+			source: effectiveSource,
 			sourceHandle: 'b',
-			target: effTarget,
+			target: effectiveTarget,
 			targetHandle: 't',
 			type: 'smoothstep',
 			label,
 			class: `graph-edge graph-edge--${primaryOp} graph-edge--aggregate${invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}`,
 			data: {
 				operation: primaryOp,
-				path: group[0]!.path,
-				reference: group[0]!.reference,
+				path: semanticEdges[0]!.path,
+				reference: semanticEdges[0]!.reference,
 				invalidCycle,
-				count: group.length,
-				semanticEdges: group,
+				count: semanticEdges.length,
+				semanticEdges,
 				isDimmed,
 			},
 			selectable: true,

@@ -231,7 +231,7 @@ test('progressive disclosure collapses clusters initially, expands on click, and
 		.toPass({ timeout: 10_000 })
 
 	// Expand individual cluster by clicking its toggle button
-	const toggleBtn = canvas.locator('.graph-node--cluster button')
+	const toggleBtn = canvas.locator('.graph-node--cluster .graph-cluster-toggle')
 		.first()
 	await toggleBtn.click()
 
@@ -252,19 +252,50 @@ test('focusing a member highlights subgraph and dims unrelated nodes', async ({ 
 		.click()
 
 	const member = page.locator('.graph-node--member')
+		.filter({ hasText: 'budgetPerPersonPerDay' })
 		.first()
 	await expect(member)
 		.toBeVisible({ timeout: 15_000 })
 
-	// Click member to focus it
+	// Click a member with known cross-widget dependencies to focus it.
 	await member.click()
 
-	// Focused member has focused class
+	// Focused member has focused class.
 	await expect(page.locator('.graph-node--focused'))
-		.toBeVisible({ timeout: 5_000 })
+		.toContainText('budgetPerPersonPerDay')
 
-	// Unrelated nodes have dimmed class
+	// The connected TripRecommendation member lives inside an expanded cluster. Its owning
+	// cluster must remain fully visible rather than inheriting unrelated-node deemphasis.
+	const relatedCluster = page.locator('.graph-node--cluster')
+		.filter({ hasText: 'TripRecommendation' })
+		.first()
+	await expect(relatedCluster)
+		.not.toHaveClass(/graph-node--dimmed/)
+
+	// Unrelated nodes still have dimmed class.
 	await expect(page.locator('.graph-node--dimmed')
 		.first())
 		.toBeVisible({ timeout: 5_000 })
+})
+
+test('expanded member nodes can be focused from the keyboard', async ({ page }) => {
+	await page.goto('/')
+	await page.getByLabel('Switch showcase')
+		.selectOption('survey')
+	await page.getByRole('tab', { name: 'Dependencies' })
+		.click()
+	await page.getByRole('button', { name: 'Expand all' })
+		.click()
+
+	const member = page.locator('.graph-node--member')
+		.filter({ hasText: 'budgetPerPersonPerDay' })
+		.first()
+	await expect(member)
+		.toBeVisible({ timeout: 15_000 })
+	await member.focus()
+	await expect(member)
+		.toBeFocused()
+	await member.press('Enter')
+	await expect(member)
+		.toHaveClass(/graph-node--focused/)
 })

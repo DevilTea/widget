@@ -13,7 +13,7 @@
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { GraphVertexKind } from '../../graph/types'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
-import { computed, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, ref, useTemplateRef } from 'vue'
 import { useDependencyGraph } from '../../composables/use-dependency-graph'
 import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selection'
 import { useLabI18n } from '../../composables/use-lab-i18n'
@@ -34,7 +34,39 @@ const { semanticGraph, layoutState, flow, layoutVersion } = useDependencyGraph()
 const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdgeSelection(store)
 
 // View switcher: default to 'graph' so existing users do not open a blank focus-centric screen
-const activeView = ref<'graph' | 'relations'>('graph')
+type DependenciesView = 'graph' | 'relations'
+const activeView = ref<DependenciesView>('graph')
+const relationsTab = useTemplateRef<HTMLButtonElement>('relationsTab')
+const graphTab = useTemplateRef<HTMLButtonElement>('graphTab')
+
+function activateView(view: DependenciesView, moveFocus = false): void {
+	activeView.value = view
+	if (!moveFocus)
+		return
+
+	void nextTick(() => {
+		if (view === 'relations')
+			relationsTab.value?.focus()
+		else
+			graphTab.value?.focus()
+	})
+}
+
+function onViewTabKeydown(event: KeyboardEvent, current: DependenciesView): void {
+	let next: DependenciesView | null = null
+	if (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+		next = current === 'graph' ? 'relations' : 'graph'
+	else if (event.key === 'Home')
+		next = 'relations'
+	else if (event.key === 'End')
+		next = 'graph'
+
+	if (next === null)
+		return
+
+	event.preventDefault()
+	activateView(next, true)
+}
 
 // Relations shares the authoritative dependency projection and the absent-reference preference,
 // but deliberately ignores Graph's "show isolated members" presentation filter: a focused member
@@ -78,12 +110,8 @@ function onNodeClick(nodeId: string): void {
 
 function onClusterClick(clusterId: string): void {
 	const cluster = semanticGraph.value.clusters.find(candidate => candidate.id === clusterId)
-	if (cluster !== undefined) {
+	if (cluster !== undefined)
 		store.setFocus('document', { nodeId: cluster.nodeId })
-	}
-	if (!store.graphExpandedClusterIds.value.has(clusterId)) {
-		store.expandGraphCluster(clusterId)
-	}
 }
 
 function onToggleCluster(clusterId: string): void {
@@ -145,9 +173,13 @@ const statusLabel = computed(() => {
 				})"
 			>
 				<button
+					id="dependencies-view-tab-relations"
+					ref="relationsTab"
 					type="button"
 					role="tab"
+					aria-controls="dependencies-view-panel-relations"
 					:aria-selected="activeView === 'relations'"
+					:tabindex="activeView === 'relations' ? 0 : -1"
 					:class="[
 						pika({
 							padding: '2px 9px',
@@ -160,14 +192,19 @@ const statusLabel = computed(() => {
 							? pika({ background: 'var(--lab-color-accent)', color: '#fff', fontWeight: 'bold' })
 							: pika({ background: 'transparent', color: 'var(--lab-color-text)' }),
 					]"
-					@click="activeView = 'relations'"
+					@click="activateView('relations')"
+					@keydown="onViewTabKeydown($event, 'relations')"
 				>
 					{{ i18n.t('Relations') }}
 				</button>
 				<button
+					id="dependencies-view-tab-graph"
+					ref="graphTab"
 					type="button"
 					role="tab"
+					aria-controls="dependencies-view-panel-graph"
 					:aria-selected="activeView === 'graph'"
+					:tabindex="activeView === 'graph' ? 0 : -1"
 					:class="[
 						pika({
 							padding: '2px 9px',
@@ -181,7 +218,8 @@ const statusLabel = computed(() => {
 							? pika({ background: 'var(--lab-color-accent)', color: '#fff', fontWeight: 'bold' })
 							: pika({ background: 'transparent', color: 'var(--lab-color-text)' }),
 					]"
-					@click="activeView = 'graph'"
+					@click="activateView('graph')"
+					@keydown="onViewTabKeydown($event, 'graph')"
 				>
 					{{ i18n.t('Graph') }}
 				</button>
@@ -255,7 +293,7 @@ const statusLabel = computed(() => {
 						'cursor': 'pointer',
 						'$:disabled': { opacity: '0.5', cursor: 'not-allowed' },
 					})"
-					@click="store.collapseAllGraphClusters"
+					@click="store.collapseAllGraphClusters()"
 				>
 					{{ i18n.t('Collapse all') }}
 				</button>
@@ -272,6 +310,10 @@ const statusLabel = computed(() => {
 			<!-- Graph View -->
 			<div
 				v-show="activeView === 'graph'"
+				id="dependencies-view-panel-graph"
+				role="tabpanel"
+				aria-labelledby="dependencies-view-tab-graph"
+				tabindex="0"
 				class="dependencies-graph-view"
 				:class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative', display: 'flex', flexDirection: 'column' })"
 			>
@@ -304,6 +346,10 @@ const statusLabel = computed(() => {
 			<!-- Relations View -->
 			<div
 				v-show="activeView === 'relations'"
+				id="dependencies-view-panel-relations"
+				role="tabpanel"
+				aria-labelledby="dependencies-view-tab-relations"
+				tabindex="0"
 				class="dependencies-relations-view"
 				:class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative', display: 'flex', flexDirection: 'column' })"
 			>

@@ -648,7 +648,7 @@ describe('createLabStore() graph cluster expansion', () => {
 			.toBe(0)
 	})
 
-	it('auto-expands the cluster when a member is focused', () => {
+	it('keeps graph cluster presentation state unchanged when a member is focused', () => {
 		const store = createLabStore()
 		expect(store.graphExpandedClusterIds.value.has('cluster:title'))
 			.toBe(false)
@@ -662,7 +662,7 @@ describe('createLabStore() graph cluster expansion', () => {
 		})
 
 		expect(store.graphExpandedClusterIds.value.has(`cluster:${titleWidget.nodeId}`))
-			.toBe(true)
+			.toBe(false)
 	})
 
 	it('resets expanded clusters on switchShowcase', async () => {

@@ -527,11 +527,6 @@ export function createLabStore(): LabStore {
 				focusStore.setFocus(scopeOrFocus, next ?? null)
 			else
 				focusStore.setFocus(scopeOrFocus)
-
-			const docFocus = focusStore.getFocus('document')
-			if (docFocus?.member !== undefined) {
-				expandGraphCluster(`cluster:${docFocus.nodeId}`)
-			}
 		},
 		/**
 		 * Final application teardown. Widget Lab is the Runtime owner (diagnostic #13 Phase 4 Apply-lifecycle

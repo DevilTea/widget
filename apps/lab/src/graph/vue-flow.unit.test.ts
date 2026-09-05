@@ -163,6 +163,7 @@ describe('toVueFlow', () => {
 
 		const reader = nodes.find(n => n.id === '1:property:reader')
 		const target = nodes.find(n => n.id === '2:state:value')
+		const targetCluster = nodes.find(n => n.id === 'cluster:2')
 		const unrelated = nodes.find(n => n.id === '3:state:other')
 
 		expect(reader?.data?.isFocused)
@@ -174,6 +175,8 @@ describe('toVueFlow', () => {
 		expect(target?.data?.isFocused)
 			.toBe(false)
 		expect(target?.data?.isDimmed)
+			.toBe(false)
+		expect(targetCluster?.data?.isDimmed)
 			.toBe(false)
 
 		// Unrelated node is dimmed
@@ -191,7 +194,7 @@ describe('toVueFlow', () => {
 		const layout = fixtureLayout()
 
 		const { nodes } = toVueFlow(graph, layout, {
-			expandedClusterIds: new Set(),
+			expandedClusterIds: new Set(['cluster:1', 'cluster:2', 'cluster:3']),
 			focused: {
 				nodeId: 1 as InspectionNodeId,
 			},

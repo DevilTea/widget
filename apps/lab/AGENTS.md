@@ -296,7 +296,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
 ```
 
 - `relations.ts` — pure `projectRelations()`: `SemanticGraph + InspectorFocus + rootNodeId` -> a framework-agnostic Relations view model. It imports neither Vue Flow nor ELK. Root/no usable focus yields an explicit empty state; member focus exposes exact incoming **Used by** and outgoing **Depends on** facts grouped by remote widget; widget focus treats all members as the selected set, keeps cross-widget incoming/outgoing separate, and lists same-widget dependencies in an internal section. Every row retains the original semantic edge/reference/path/operation; unresolved stubs remain unresolved and non-focusable. Relations shares `graphShowAbsent`, but deliberately projects with isolated members present so the Graph-only `graphShowIsolatedMembers` presentation preference can never erase a focused member from this inspector. Resolved member/widget clicks write through the existing Document-scoped focus API; they do not request ELK layout.
-- `src/components/dependencies/DependenciesPanel.vue` owns the internal `Relations | Graph` switcher and view-specific toolbar. The Graph DOM stays mounted with `v-show`, preserving pan/zoom across view changes. `RelationsView.vue` renders the dense three-column inspector and the widget/internal-dependency mode without a canvas layout engine.
+- `src/components/dependencies/DependenciesPanel.vue` owns the internal `Relations | Graph` switcher and view-specific toolbar. The switcher follows the WAI-ARIA tabs pattern (roving tab stop plus Arrow/Home/End keyboard navigation and labelled tabpanels). The Graph DOM stays mounted with `v-show`, preserving pan/zoom across view changes. Shared focus changes never mutate Graph expansion state or request layout/refit; cluster identity selection and the explicit expand/collapse toggle are separate actions. `RelationsView.vue` renders the dense three-column inspector and the widget/internal-dependency mode without a canvas layout engine; same-widget unresolved stubs stay in the internal section rather than leaking into cross-widget outgoing dependencies.
 - `types.ts` / `projection.ts` — the Lab's semantic graph shape and its pure, deterministic projection.
   Widgets are visual clusters (`GraphCluster`); State/Property/Method members are the semantic vertices
   (`GraphVertex`). Edge direction is owner -> declared dependency target; `state-get`/`property-get`
@@ -330,7 +330,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
     is `updatable`.
 - `src/components/graph/GraphCanvas.vue` — the only place in this app that imports `@vue-flow/core`
   (and its structural `dist/style.css`); custom node templates for `cluster`, `member`, and `stub`,
-  themed through Lab/PikaCSS tokens. The collapsed cluster card makes widget type primary, widget id
+  themed through Lab/PikaCSS tokens. Collapsed and expanded cluster identities and expanded member cards are keyboard-focusable/selectable without changing expansion state. The collapsed cluster card makes widget type primary, widget id
   secondary, and summarizes member inventory as S/P/M counts; the expanded cluster becomes a subdued
   compound inspector shell rather than a dashed debug boundary. Member nodes keep State/Property/Method
   distinguishable by a small letter badge plus restrained accent, so kind is not encoded by color alone.

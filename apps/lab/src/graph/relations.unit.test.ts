@@ -371,4 +371,63 @@ describe('projectRelations', () => {
 				.toBe(0)
 		})
 	})
+	it('classifies unresolved self and same-widget-id stubs as same-widget relations', () => {
+		const graphWithInternalStubs: SemanticGraph = {
+			...graph,
+			stubs: [
+				...graph.stubs,
+				{
+					id: '1:property:doubled#stub-self',
+					ownerVertexId: '1:property:doubled',
+					status: 'invalid',
+					operation: 'reads',
+					path: ['selfMissing'],
+					reference: { target: { type: 'self' }, operation: { type: 'property-get', name: 'missingInternal' } },
+				},
+				{
+					id: '1:method:reset#stub-widget-self',
+					ownerVertexId: '1:method:reset',
+					status: 'invalid',
+					operation: 'invokes',
+					path: ['sameWidgetMissing'],
+					reference: { target: { type: 'widget', widgetId: 'producer', optional: false }, operation: { type: 'method-invoke', name: 'missingMethod' } },
+				},
+			],
+		}
+
+		const memberModel = projectRelations(graphWithInternalStubs, {
+			nodeId: 1 as InspectionNodeId,
+			member: { type: 'method', name: 'reset' },
+		}, rootNodeId)
+		expect(memberModel.mode)
+			.toBe('member')
+		if (memberModel.mode !== 'member')
+			return
+		const sameWidgetStubGroup = memberModel.dependsOn.find(group => !group.isResolved && group.isSameWidget)
+		expect(sameWidgetStubGroup)
+			.toMatchObject({ widgetId: 'producer', widgetType: 'ProducerWidget', isSameWidget: true })
+		expect(sameWidgetStubGroup?.rows[0]?.stubTarget?.memberName)
+			.toBe('missingMethod')
+
+		const widgetModel = projectRelations(graphWithInternalStubs, { nodeId: 1 as InspectionNodeId }, rootNodeId)
+		expect(widgetModel.mode)
+			.toBe('widget')
+		if (widgetModel.mode !== 'widget')
+			return
+
+		// Only the external `broken` stub remains in Depends on. Same-widget unresolved references
+		// belong beside resolved same-widget facts in the Internal dependencies section.
+		expect(widgetModel.totalDependsOnCount)
+			.toBe(1)
+		expect(widgetModel.totalInternalCount)
+			.toBe(4)
+		const unresolvedInternal = widgetModel.internal.filter(item => !item.resolved)
+		expect(unresolvedInternal)
+			.toHaveLength(2)
+		expect(unresolvedInternal.map(item => item.stubTarget?.memberName)
+			.sort())
+			.toEqual(['missingInternal', 'missingMethod'])
+		expect(unresolvedInternal.every(item => item.targetMember === undefined))
+			.toBe(true)
+	})
 })
