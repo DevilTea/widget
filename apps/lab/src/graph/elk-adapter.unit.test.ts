@@ -8,7 +8,7 @@
 import type { ElkNode } from 'elkjs/lib/elk-api'
 import type { SemanticGraph } from './types'
 import { describe, expect, it } from 'vitest'
-import { fromElkResult, STUB_HEIGHT, STUB_WIDTH, toElkGraph, VERTEX_HEIGHT, VERTEX_WIDTH } from './elk-adapter'
+import { COLLAPSED_CLUSTER_HEIGHT, COLLAPSED_CLUSTER_WIDTH, fromElkResult, STUB_HEIGHT, STUB_WIDTH, toElkGraph, VERTEX_HEIGHT, VERTEX_WIDTH } from './elk-adapter'
 
 function fixtureGraph(): SemanticGraph {
 	return {
@@ -106,6 +106,56 @@ describe('toElkGraph', () => {
 		expect(consumerCluster?.edges?.map(edge => edge.id))
 			.toEqual(['1:property:reader#dep0'])
 	})
+
+	it('treats collapsed clusters as leaf nodes with collapsed dimensions and routes edges between cluster nodes', () => {
+		const graph = fixtureGraph()
+		// Both cluster:1 and cluster:2 collapsed
+		const elkGraph = toElkGraph(graph, { expandedClusterIds: new Set() })
+
+		const consumerCluster = elkGraph.children?.find(child => child.id === 'cluster:1')
+		const targetCluster = elkGraph.children?.find(child => child.id === 'cluster:2')
+
+		expect(consumerCluster)
+			.toMatchObject({
+				width: COLLAPSED_CLUSTER_WIDTH,
+				height: COLLAPSED_CLUSTER_HEIGHT,
+			})
+		expect(consumerCluster?.children)
+			.toBeUndefined()
+
+		expect(targetCluster)
+			.toMatchObject({
+				width: COLLAPSED_CLUSTER_WIDTH,
+				height: COLLAPSED_CLUSTER_HEIGHT,
+			})
+		expect(targetCluster?.children)
+			.toBeUndefined()
+
+		// Cross-cluster edge connects cluster:1 -> cluster:2 directly
+		expect(elkGraph.edges)
+			.toEqual([
+				{
+					id: '1:property:reader#dep0',
+					sources: ['cluster:1'],
+					targets: ['cluster:2'],
+				},
+			])
+	})
+
+	it('routes cross-cluster edges between expanded vertex and collapsed cluster', () => {
+		const graph = fixtureGraph()
+		// cluster:1 expanded, cluster:2 collapsed
+		const elkGraph = toElkGraph(graph, { expandedClusterIds: new Set(['cluster:1']) })
+
+		expect(elkGraph.edges)
+			.toEqual([
+				{
+					id: '1:property:reader#dep0',
+					sources: ['1:property:reader'],
+					targets: ['cluster:2'],
+				},
+			])
+	})
 })
 
 describe('fromElkResult', () => {
@@ -165,5 +215,38 @@ describe('fromElkResult', () => {
 			.toEqual({ x: 0, y: 0, width: 0, height: 0 })
 		expect(layout.vertices.get('1:property:reader'))
 			.toEqual({ x: 0, y: 0, width: 0, height: 0 })
+	})
+
+	it('reads collapsed cluster rectangle and omits child vertices when collapsed', () => {
+		const graph = fixtureGraph()
+		const result: ElkNode = {
+			id: 'root',
+			children: [
+				{ id: 'cluster:1', x: 10, y: 20, width: COLLAPSED_CLUSTER_WIDTH, height: COLLAPSED_CLUSTER_HEIGHT },
+				{
+					id: 'cluster:2',
+					x: 300,
+					y: 20,
+					width: 180,
+					height: 60,
+					children: [{ id: '2:state:value', x: 5, y: 5, width: VERTEX_WIDTH, height: VERTEX_HEIGHT }],
+				},
+			],
+		}
+
+		// cluster:1 collapsed, cluster:2 expanded
+		const layout = fromElkResult(result, graph, { expandedClusterIds: new Set(['cluster:2']) })
+
+		expect(layout.clusters.get('cluster:1'))
+			.toEqual({ x: 10, y: 20, width: COLLAPSED_CLUSTER_WIDTH, height: COLLAPSED_CLUSTER_HEIGHT })
+		expect(layout.vertices.has('1:property:reader'))
+			.toBe(false)
+		expect(layout.stubs.has('1:property:reader#dep1'))
+			.toBe(false)
+
+		expect(layout.clusters.get('cluster:2'))
+			.toEqual({ x: 300, y: 20, width: 180, height: 60 })
+		expect(layout.vertices.get('2:state:value'))
+			.toEqual({ x: 5, y: 5, width: VERTEX_WIDTH, height: VERTEX_HEIGHT })
 	})
 })

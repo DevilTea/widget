@@ -295,29 +295,41 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
 
 - `types.ts` / `projection.ts` — the Lab's semantic graph shape and its pure, deterministic projection.
   Widgets are visual clusters (`GraphCluster`); State/Property/Method members are the semantic vertices
-  (`GraphVertex`) — never collapsed into widget-to-widget edges. Edge direction is owner -> declared
-  dependency target; `state-get`/`property-get` project as `reads`, `method-invoke` as `invokes`,
-  `state-set` (Method-only) as `writes`. `resolved` dependencies become `GraphEdge`s; `absent`/`invalid`
-  become presentation-only `GraphStub`s, never a fabricated resolved edge. `absent` stubs (and any member
-  with no other visible relation) are hidden unless the panel's `showAbsent`/`showIsolatedMembers`
-  filters are on; `invalid` stubs are always visible. `transitivelyWrites` and `invalidCycles` are
-  projected verbatim from core inspection facts — this module never recomputes either.
-- `elk-adapter.ts` — pure `toElkGraph()`/`fromElkResult()`, the JSON-shape boundary to ELK's graph
-  schema. Type-only `elkjs` import (`elkjs/lib/elk-api`); no `ELK` instantiation here, so it is
-  unit-testable without a worker or the real elkjs runtime.
-- `layout.ts` — the shared `LayoutedGraph`/`LayoutGraphFn` adapter shapes.
+  (`GraphVertex`). Edge direction is owner -> declared dependency target; `state-get`/`property-get`
+  project as `reads`, `method-invoke` as `invokes`, `state-set` (Method-only) as `writes`. `resolved`
+  dependencies become `GraphEdge`s; `absent`/`invalid` become presentation-only `GraphStub`s, never a
+  fabricated resolved edge. `absent` stubs (and any member with no other visible relation) are hidden
+  unless the panel's `showAbsent`/`showIsolatedMembers` filters are on; `invalid` stubs are always
+  visible. `transitivelyWrites` and `invalidCycles` are projected verbatim from core inspection facts —
+  this module never recomputes either.
+- `elk-adapter.ts` — pure `toElkGraph()`/`fromElkResult()`, the JSON-shape boundary to ELK's graph schema.
+  Accepts optional `LayoutGraphOptions` (`expandedClusterIds`). Collapsed clusters are treated as leaf
+  nodes with compact dimensions (`COLLAPSED_CLUSTER_WIDTH`, `COLLAPSED_CLUSTER_HEIGHT`), and cross-cluster
+  edges between collapsed clusters connect to the cluster node directly with duplicate endpoints collapsed
+  for layout efficiency. Unit-testable without a worker or the real elkjs runtime.
+- `layout.ts` — the shared `LayoutedGraph`/`LayoutGraphFn` adapter shapes and `LayoutGraphOptions`.
 - `layout-session.ts` — `createLayoutSession(layoutFn)`: framework-agnostic, generation-guarded async
   wrapper around any `LayoutGraphFn` (real or a test fake). A layout result for a superseded `request()`
   call is discarded — this is what makes Graph layout safe as an asynchronous projection that never
   blocks Blueprint/Runtime/Preview availability (see "Layout worker boundary" below).
-- `vue-flow.ts` — `toVueFlow()`: the laid-out `SemanticGraph` -> plain Vue Flow `nodes`/`edges`. Every
-  node is `draggable: false`/`connectable: false` and no edge is `updatable` — Vue Flow is viewer-only
-  here (pan/zoom/fit/readonly selection), never graph editing.
+- `vue-flow.ts` — `toVueFlow()`: the laid-out `SemanticGraph` -> plain Vue Flow `nodes`/`edges`.
+  Supports hierarchical progressive disclosure:
+  - Widget clusters are the top-level view by default (collapsed), preventing visual overload on
+    dense topologies (e.g. Survey ~43 nodes / 77 edges).
+  - Expanding a cluster reveals its internal member vertices and stubs as child nodes.
+  - Inter-cluster edges between collapsed clusters aggregate into single presentation edges showing
+    combined operation labels and dependency counts (`count`).
+  - Selecting/focusing a widget or member highlights the connected subgraph and deemphasizes
+    unrelated nodes and edges (`isDimmed` / `graph-node--dimmed` / `graph-edge--dimmed`).
+  - Vue Flow is strictly viewer-only: every node is `draggable: false`/`connectable: false` and no edge
+    is `updatable`.
 - `src/components/graph/GraphCanvas.vue` — the only place in this app that imports `@vue-flow/core`
-  (and its structural `dist/style.css`); custom node templates for `cluster`/`member`/`stub`, themed
-  through PikaCSS tokens rather than Vue Flow's own default theme CSS.
+  (and its structural `dist/style.css`); custom node templates for `cluster` (expanded compound container
+  or compact collapsed node with member count and expand `+` toggle), `member` (State/Property/Method),
+  and `stub`, themed through PikaCSS tokens.
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container
-  `path` + reference target/operation) — edge selection stays local, never expands into shared focus.
+  `path` + reference target/operation, plus aggregated semantic dependencies list when an aggregated
+  cluster-to-cluster edge is selected) — edge selection stays local, never expands into shared focus.
 
 Graph works for an invalid current Document Blueprint (compile-time facts only, no Runtime dependency) and
 its node click sets Document-scoped focus (`nodeId` + member). Blueprint and Graph never consume a
@@ -326,17 +338,20 @@ equal Document/Preview revisions synchronize the two scopes, while diverged revi
 `InspectionNodeId`s between them. A changed Document resets Document focus; a replaced Preview resets
 Preview focus.
 
-Viewport fit is coordinated with layout readiness, not `fitViewOnInit` (issue #27 Finding 1):
-`GraphCanvas.vue` calls `useVueFlow()` before its own template renders `<VueFlow>` (creating and
-`provide()`-ing a store `<VueFlow>` then injects, per `@vue-flow/core`'s documented same-component-instance
-pattern) and calls `fitView()` from `onNodesInitialized`. Because `GraphPanel.vue` renders `GraphCanvas`
-behind `v-if="flow !== null"`, and every new laid-out semantic graph transits through `flow === null`
-first (`LayoutSession.request()` sets `status: 'loading'` synchronously), `GraphCanvas` fully
-unmounts/remounts for every new graph — so this single `onNodesInitialized` hook covers first mount and
-every subsequent semantic-graph replacement without special-casing either, and Runtime activity (which
-never replaces `flow`) never re-triggers it. `GraphPanel.vue` also exposes an explicit **Fit graph**
-button (next to the filter checkboxes) that calls the same `fitGraph()` path via a template ref —
-`GraphCanvas.vue` remains the only place in this app that imports `@vue-flow/core`.
+Viewport fit policy (issue #27 Finding 1 & reliable lifecycle):
+`GraphCanvas.vue` coordinates `fitView()` with both layout readiness and container dimensions. In
+Dockview, tabs mounted in inactive/background state have 0 client dimensions, which caused an initial
+`fitView()` in `onNodesInitialized` to fail. `GraphCanvas.vue` pairs `onNodesInitialized` with a
+`ResizeObserver` on the canvas container element to run `attemptFit()` as soon as non-zero dimensions
+become available (e.g. when the user first switches to the Graph tab). Before accepting an automatic fit,
+`attemptFit()` also verifies that Vue Flow's current internal node set exactly matches the current
+presentation node ids and that every node has non-zero measured dimensions; `onNodesChange` retries while
+a new layout generation is still being measured. This prevents `fitView()` from succeeding against only a
+partially measured subset and then incorrectly marking that generation fitted. `useDependencyGraph` exposes
+`layoutVersion` (incremented only when ELK layout succeeds), which resets fit tracking so the graph
+automatically refits on semantic graph replacements and cluster expansion/collapse, while ordinary
+Runtime activity and focus deemphasis never trigger a refit. `GraphPanel.vue` also exposes an explicit
+**Fit graph** button along with **Expand all** / **Collapse all** controls in the toolbar.
 
 ## Layout worker boundary
 

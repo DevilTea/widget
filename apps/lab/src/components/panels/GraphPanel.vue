@@ -18,7 +18,7 @@ import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
-const { semanticGraph, layoutState, flow } = useDependencyGraph()
+const { semanticGraph, layoutState, flow, layoutVersion } = useDependencyGraph()
 
 // Panel-local edge selection (diagnostic #13 Phase 5: stays local, never expands into shared focus; reset on
 // applied Blueprint identity change, not on ordinary tab switching — see the composable's own comment).
@@ -39,6 +39,20 @@ function onNodeClick(nodeId: string): void {
 		nodeId: vertex.nodeId,
 		member: { type: vertex.kind, name: vertex.name },
 	})
+}
+
+function onClusterClick(clusterId: string): void {
+	const cluster = semanticGraph.value.clusters.find(candidate => candidate.id === clusterId)
+	if (cluster !== undefined) {
+		store.setFocus('document', { nodeId: cluster.nodeId })
+	}
+	if (!store.graphExpandedClusterIds.value.has(clusterId)) {
+		store.expandGraphCluster(clusterId)
+	}
+}
+
+function onToggleCluster(clusterId: string): void {
+	store.toggleGraphCluster(clusterId)
 }
 
 function onEdgeClick(edgeId: string): void {
@@ -92,6 +106,24 @@ const statusLabel = computed(() => {
 			>
 				{{ i18n.t('Fit graph') }}
 			</button>
+			<button
+				type="button"
+				:disabled="flow === null"
+				:aria-label="i18n.t('Expand all')"
+				:class="pika({ 'padding': '3px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				@click="store.expandAllGraphClusters()"
+			>
+				{{ i18n.t('Expand all') }}
+			</button>
+			<button
+				type="button"
+				:disabled="flow === null"
+				:aria-label="i18n.t('Collapse all')"
+				:class="pika({ 'padding': '3px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				@click="store.collapseAllGraphClusters"
+			>
+				{{ i18n.t('Collapse all') }}
+			</button>
 			<GraphLegend />
 			<span
 				v-if="statusLabel"
@@ -105,8 +137,11 @@ const statusLabel = computed(() => {
 				ref="graphCanvas"
 				:nodes="flow.nodes"
 				:edges="flow.edges"
+				:layoutVersion="layoutVersion"
 				@nodeClick="onNodeClick"
 				@edgeClick="onEdgeClick"
+				@clusterClick="onClusterClick"
+				@toggleCluster="onToggleCluster"
 			/>
 			<div
 				v-else

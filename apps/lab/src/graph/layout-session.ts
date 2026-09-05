@@ -11,20 +11,20 @@
  * option changes trigger ELK work — Runtime state/property/method activity never relayouts).
  */
 
-import type { LayoutedGraph, LayoutGraphFn } from './layout'
+import type { LayoutedGraph, LayoutGraphFn, LayoutGraphOptions } from './layout'
 import type { SemanticGraph } from './types'
 
 export type LayoutSessionState
 	= | { readonly status: 'idle' }
-		| { readonly status: 'loading', readonly graph: SemanticGraph }
-		| { readonly status: 'ready', readonly graph: SemanticGraph, readonly layout: LayoutedGraph }
-		| { readonly status: 'error', readonly graph: SemanticGraph, readonly error: unknown }
+		| { readonly status: 'loading', readonly graph: SemanticGraph, readonly options?: LayoutGraphOptions }
+		| { readonly status: 'ready', readonly graph: SemanticGraph, readonly layout: LayoutedGraph, readonly options?: LayoutGraphOptions }
+		| { readonly status: 'error', readonly graph: SemanticGraph, readonly error: unknown, readonly options?: LayoutGraphOptions }
 
 export interface LayoutSession {
 	getState: () => LayoutSessionState
 	subscribe: (listener: () => void) => () => void
 	/** Requests a fresh layout for `graph`. Superseded by any later `request()` call. */
-	request: (graph: SemanticGraph) => void
+	request: (graph: SemanticGraph, options?: LayoutGraphOptions) => void
 	/** Stops accepting new requests and discards any in-flight one. Idempotent. */
 	dispose: () => void
 }
@@ -54,26 +54,26 @@ export function createLayoutSession(layoutFn: LayoutGraphFn): LayoutSession {
 			}
 		},
 
-		request: (graph) => {
+		request: (graph, options) => {
 			if (disposed)
 				return
 
 			const myGeneration = ++generation
-			setState({ status: 'loading', graph })
+			setState({ status: 'loading', graph, options })
 
-			layoutFn(graph)
-				.then(
-					(layout) => {
-						if (disposed || myGeneration !== generation)
-							return
-						setState({ status: 'ready', graph, layout })
-					},
-					(error: unknown) => {
-						if (disposed || myGeneration !== generation)
-							return
-						setState({ status: 'error', graph, error })
-					},
-				)
+			const promise = options !== undefined ? layoutFn(graph, options) : layoutFn(graph)
+			promise.then(
+				(layout) => {
+					if (disposed || myGeneration !== generation)
+						return
+					setState({ status: 'ready', graph, layout, options })
+				},
+				(error: unknown) => {
+					if (disposed || myGeneration !== generation)
+						return
+					setState({ status: 'error', graph, error, options })
+				},
+			)
 		},
 
 		dispose: () => {

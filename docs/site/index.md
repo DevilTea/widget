@@ -12,6 +12,7 @@ hero:
     - theme: alt
       text: Open Widget Lab
       link: /lab/
+      target: _self
     - theme: alt
       text: View on GitHub
       link: https://github.com/DevilTea/widget

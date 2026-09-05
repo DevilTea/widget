@@ -66,6 +66,70 @@ test('VitePress opens Widget Lab as a standalone document and preserves the pers
 		.toHaveURL(/\/widget\/lab\/\?lang=zh-TW$/)
 })
 
+test('Home page hero action opens Widget Lab as a standalone document navigation', async ({ page }) => {
+	await page.goto('/widget/')
+
+	const heroLink = page.locator('.VPHero')
+		.getByRole('link', { name: 'Open Widget Lab', exact: true })
+	await expect(heroLink)
+		.toHaveAttribute('target', '_self')
+
+	const resolvedHref = await heroLink.evaluate((element) => {
+		if (!(element instanceof HTMLAnchorElement))
+			throw new TypeError('expected the hero action to be an anchor')
+		return new URL(element.href).pathname
+	})
+	expect(resolvedHref)
+		.toBe('/widget/lab/')
+
+	const documentLoadsBeforeClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
+
+	await heroLink.click()
+	await page.waitForURL('**/widget/lab/**')
+
+	await expect(page.getByText('Widget Lab', { exact: true })
+		.first())
+		.toBeVisible()
+	await expect(page.getByText('404', { exact: true }))
+		.toHaveCount(0)
+
+	const documentLoadsAfterClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
+	expect(documentLoadsAfterClick)
+		.toBeGreaterThan(documentLoadsBeforeClick)
+})
+
+test('Navbar link opens Widget Lab as a standalone document navigation', async ({ page }) => {
+	await page.goto('/widget/')
+
+	const navLink = page.locator('.VPNavBarMenu')
+		.getByRole('link', { name: 'Widget Lab', exact: true })
+	await expect(navLink)
+		.toHaveAttribute('target', '_self')
+
+	const resolvedHref = await navLink.evaluate((element) => {
+		if (!(element instanceof HTMLAnchorElement))
+			throw new TypeError('expected the nav link to be an anchor')
+		return new URL(element.href).pathname
+	})
+	expect(resolvedHref)
+		.toBe('/widget/lab/')
+
+	const documentLoadsBeforeClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
+
+	await navLink.click()
+	await page.waitForURL('**/widget/lab/**')
+
+	await expect(page.getByText('Widget Lab', { exact: true })
+		.first())
+		.toBeVisible()
+	await expect(page.getByText('404', { exact: true }))
+		.toHaveCount(0)
+
+	const documentLoadsAfterClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
+	expect(documentLoadsAfterClick)
+		.toBeGreaterThan(documentLoadsBeforeClick)
+})
+
 for (const [explicitLocale, storedLocale] of [['en', 'zh-TW'], ['zh-TW', 'en']] as const) {
 	test(`direct Widget Lab ?lang=${explicitLocale} remains authoritative over stored ${storedLocale}`, async ({ page }) => {
 		await page.goto('/widget/packages/widget-vue')
