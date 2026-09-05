@@ -23,6 +23,8 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Blueprint': 'Blueprint',
 	'Runtime': 'Runtime',
 	'Author': 'Author',
+	'Dependencies': 'Dependencies',
+	'Relations': 'Relations',
 	'Catalog': 'Catalog',
 	'Structure': 'Structure',
 	'JSON': 'JSON',
@@ -85,7 +87,7 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'The live estimate moved, while the Recommendation kept its old values and gained the Stale marker. The result is a stored State snapshot; the estimate is a live Property.': 'live estimate 已變動，但 Recommendation 保留舊值並出現 Stale 標記。結果是一份儲存在 State 的 snapshot；estimate 則是 live Property。',
 	'Map the views': '理解各個檢視',
 	'Each of these views is a real navigation shortcut — try one.': '這些檢視都是實際可用的導覽捷徑——選一個試試看。',
-	'Source = the declarative definition you edit · Blueprint = what the applied Source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Graph = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.': 'Source = 你編輯的 declarative definition · Blueprint = 已套用 Source 編譯後的結果 · Runtime = live State / Properties / Methods / Diagnostics · Graph = 已宣告 dependencies · Preview = Vue 呈現層 · Implementation = 這個 widget type 背後的 plugin + renderer 程式碼。',
+	'Author = the declarative definition and structure you edit · Blueprint = what the applied Author source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Dependencies = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.': 'Author = 你編輯的 declarative definition 與結構 · Blueprint = 已套用 Author source 編譯後的結果 · Runtime = live State / Properties / Methods / Diagnostics · Dependencies = 已宣告 dependencies · Preview = Vue 呈現層 · Implementation = 這個 widget type 背後的 plugin + renderer 程式碼。',
 	'Source': 'Source',
 	'Graph': 'Graph',
 	'Preview': 'Preview',
@@ -110,10 +112,10 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Aurora Systems\' stage changed — and the table badge, the KPIs, and the stage chart all recomputed together. Save invoked DealStageForm.save(), which invoked DealStore.updateStage(): one Method call, many Properties reading the same store State.': 'Aurora Systems 的 stage 已改變——表格 badge、KPIs 與 stage chart 也一起重算。Save 呼叫 DealStageForm.save()，再呼叫 DealStore.updateStage()：一次 Method 呼叫，讓多個讀取相同 store State 的 Properties 一起更新。',
 	'Some widgets render nothing': '有些 widgets 不會 render 任何畫面',
 	'DealStore and DealQuery own the rules — take a look at how, whenever you like.': 'DealStore 與 DealQuery 擁有這些規則——有興趣時可以直接查看它們的實作。',
-	'DealStore and DealQuery own the search/filter/aggregation rules and the mutation you just made — but neither renders anything in Preview. Open Graph or Implementation to see them.': 'DealStore 與 DealQuery 擁有搜尋、篩選、aggregation 規則，以及你剛完成的 mutation——但兩者都不會在 Preview render 任何畫面。可以到 Graph 或 Implementation 查看。',
+	'DealStore and DealQuery own the search/filter/aggregation rules and the mutation you just made — but neither renders anything in Preview. Open Dependencies or Implementation to see them.': 'DealStore 與 DealQuery 擁有搜尋、篩選、aggregation 規則，以及你剛完成的 mutation——但兩者都不會在 Preview render 任何畫面。可以到 Dependencies 或 Implementation 查看。',
 	'You now know the CRM pipeline': '你現在已經理解 CRM pipeline',
 	'You\'ve now seen State, Properties, row-selection coordination, and a Method-driven mutation.': '你已經看過 State、Properties、列選取協調，以及由 Method 驅動的 mutation。',
-	'State, Properties, row-selection coordination, and a Method-driven mutation recomputing three views at once — the same semantic model as the Survey tour, applied to a dashboard instead of a form. Explore Blueprint, Runtime, or Graph anytime, or open Implementation for any widget.': 'State、Properties、列選取協調，以及一次由 Method 驅動、讓三個檢視同時重算的 mutation——和問卷教學使用的是同一套 semantic model，只是這次套用在 dashboard 而不是表單。你可以隨時探索 Blueprint、Runtime、Graph，或查看任何 widget 的 Implementation。',
+	'State, Properties, row-selection coordination, and a Method-driven mutation recomputing three views at once — the same semantic model as the Survey tour, applied to a dashboard instead of a form. Explore Blueprint, Runtime, or Dependencies anytime, or open Implementation for any widget.': 'State、Properties、列選取協調，以及一次由 Method 驅動、讓三個檢視同時重算的 mutation——和問卷教學使用的是同一套 semantic model，只是這次套用在 dashboard 而不是表單。你可以隨時探索 Blueprint、Runtime、Dependencies，或查看任何 widget 的 Implementation。',
 }
 
 export function translateMessage(locale: LabLocale, source: string): string {

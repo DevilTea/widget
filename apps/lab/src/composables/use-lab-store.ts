@@ -72,6 +72,7 @@ import type { Component, InjectionKey, Ref } from 'vue'
 import type { InspectorFocus, InspectorFocusScope, InspectorFocusStore, ScopedInspectorFocus } from '../lab/focus'
 import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentTraceEvent, RevisionConflictDemoResult } from '../lab/types'
 import type { ShowcaseEntry, ShowcasePreset } from '../showcases/registry'
+import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, inject, nextTick, shallowRef } from 'vue'
 import { createInspectorFocusStore } from '../lab/focus'
 import { getLabRevisionStatus } from '../lab/revisions'
@@ -84,7 +85,7 @@ import { defaultShowcase, showcases } from '../showcases/registry'
  * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all five canonical panels
  * uniformly — activating Preview's own single-panel group is a harmless no-op, never a layout change.
  */
-export type LabToolTab = 'author' | 'blueprint' | 'runtime' | 'graph' | 'preview'
+export type LabToolTab = 'author' | 'blueprint' | 'runtime' | 'dependencies' | 'preview'
 
 export interface LabStore {
 	readonly session: LabSession
@@ -128,6 +129,12 @@ export interface LabStore {
 	 */
 	readonly graphShowAbsent: Ref<boolean>
 	readonly graphShowIsolatedMembers: Ref<boolean>
+	readonly graphExpandedClusterIds: Ref<ReadonlySet<string>>
+	expandGraphCluster: (clusterId: string) => void
+	collapseGraphCluster: (clusterId: string) => void
+	toggleGraphCluster: (clusterId: string) => void
+	expandAllGraphClusters: (clusterIds?: readonly string[]) => void
+	collapseAllGraphClusters: () => void
 	setDraftSourceText: (text: string) => void
 	apply: () => Promise<ApplyOutcome>
 	author: (command: AuthorCommand) => Promise<AuthorOutcome>
@@ -317,6 +324,44 @@ export function createLabStore(): LabStore {
 	const activeTab = shallowRef<LabToolTab>('author')
 	const graphShowAbsent = shallowRef(false)
 	const graphShowIsolatedMembers = shallowRef(false)
+	const graphExpandedClusterIds = shallowRef<ReadonlySet<string>>(new Set())
+
+	function expandGraphCluster(clusterId: string): void {
+		if (!graphExpandedClusterIds.value.has(clusterId)) {
+			graphExpandedClusterIds.value = new Set([...graphExpandedClusterIds.value, clusterId])
+		}
+	}
+
+	function collapseGraphCluster(clusterId: string): void {
+		if (graphExpandedClusterIds.value.has(clusterId)) {
+			const next = new Set(graphExpandedClusterIds.value)
+			next.delete(clusterId)
+			graphExpandedClusterIds.value = next
+		}
+	}
+
+	function toggleGraphCluster(clusterId: string): void {
+		if (graphExpandedClusterIds.value.has(clusterId))
+			collapseGraphCluster(clusterId)
+		else
+			expandGraphCluster(clusterId)
+	}
+
+	function expandAllGraphClusters(clusterIds?: readonly string[]): void {
+		if (clusterIds !== undefined) {
+			graphExpandedClusterIds.value = new Set(clusterIds)
+		}
+		else {
+			const inspection = inspectBlueprint(session.documentState.blueprint)
+			const allClusterIds = inspection.nodes.filter(n => n.resolved)
+				.map(n => `cluster:${n.nodeId}`)
+			graphExpandedClusterIds.value = new Set(allClusterIds)
+		}
+	}
+
+	function collapseAllGraphClusters(): void {
+		graphExpandedClusterIds.value = new Set()
+	}
 
 	/**
 	 * The body of `switchShowcase()`, run only from inside `enqueue()`. Reads
@@ -369,6 +414,7 @@ export function createLabStore(): LabStore {
 		showcaseId.value = target.id
 		renderer.value = target.renderer
 		presets.value = target.presets
+		graphExpandedClusterIds.value = new Set()
 		sessionTick.value++
 		documentTick.value++
 		focusTick.value++
@@ -410,6 +456,12 @@ export function createLabStore(): LabStore {
 		activeTab,
 		graphShowAbsent,
 		graphShowIsolatedMembers,
+		graphExpandedClusterIds,
+		expandGraphCluster,
+		collapseGraphCluster,
+		toggleGraphCluster,
+		expandAllGraphClusters,
+		collapseAllGraphClusters,
 		setDraftSourceText: text => session.setDraftSourceText(text),
 		// `session.apply()` is invoked here, synchronously, at command-call time — never deferred behind
 		// `enqueue()`. See the "Command-start capture/concurrency" note above `enqueue()` for why: an

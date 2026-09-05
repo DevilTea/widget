@@ -610,3 +610,69 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 			.toBeNull()
 	})
 })
+
+describe('createLabStore() graph cluster expansion', () => {
+	it('supports expanding, collapsing, and toggling clusters', () => {
+		const store = createLabStore()
+		expect(store.graphExpandedClusterIds.value.size)
+			.toBe(0)
+
+		store.expandGraphCluster('cluster:test')
+		expect(store.graphExpandedClusterIds.value.has('cluster:test'))
+			.toBe(true)
+
+		store.toggleGraphCluster('cluster:test')
+		expect(store.graphExpandedClusterIds.value.has('cluster:test'))
+			.toBe(false)
+
+		store.toggleGraphCluster('cluster:test')
+		expect(store.graphExpandedClusterIds.value.has('cluster:test'))
+			.toBe(true)
+
+		store.collapseGraphCluster('cluster:test')
+		expect(store.graphExpandedClusterIds.value.has('cluster:test'))
+			.toBe(false)
+	})
+
+	it('supports expandAll and collapseAll', () => {
+		const store = createLabStore()
+		expect(store.graphExpandedClusterIds.value.size)
+			.toBe(0)
+
+		store.expandAllGraphClusters()
+		expect(store.graphExpandedClusterIds.value.size)
+			.toBeGreaterThan(0)
+
+		store.collapseAllGraphClusters()
+		expect(store.graphExpandedClusterIds.value.size)
+			.toBe(0)
+	})
+
+	it('keeps graph cluster presentation state unchanged when a member is focused', () => {
+		const store = createLabStore()
+		expect(store.graphExpandedClusterIds.value.has('cluster:title'))
+			.toBe(false)
+
+		const inspection = inspectBlueprint(store.documentState.value.blueprint)
+		const titleWidget = inspection.nodes.find(n => n.resolved && n.node.id === 'title')!
+
+		store.setFocus('document', {
+			nodeId: titleWidget.nodeId,
+			member: { type: 'state', name: 'text' },
+		})
+
+		expect(store.graphExpandedClusterIds.value.has(`cluster:${titleWidget.nodeId}`))
+			.toBe(false)
+	})
+
+	it('resets expanded clusters on switchShowcase', async () => {
+		const store = createLabStore()
+		store.expandGraphCluster('cluster:custom')
+		expect(store.graphExpandedClusterIds.value.has('cluster:custom'))
+			.toBe(true)
+
+		await store.switchShowcase('survey')
+		expect(store.graphExpandedClusterIds.value.size)
+			.toBe(0)
+	})
+})

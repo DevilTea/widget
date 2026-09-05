@@ -13,7 +13,7 @@ stale prose here or historical #13 checkpoints that #60 explicitly supersedes.
 Private, never-published workspace application with two roles:
 
 1. **Lab shell** — the two-column workbench's `Author` workspace (Catalog/Structure/JSON), Preview,
-   and readonly Blueprint/Runtime/Dependency Graph inspectors over `@deviltea/widget-core` /
+   and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
    `@deviltea/widget-vue`.
 2. **Released showcases** — switchable via the header's showcase selector, all served by the same
    shell and Document-backed authoring model: `Sandbox` (minimal fixtures), Showcase A `Interactive Survey`, and
@@ -31,8 +31,8 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   guarantees unmount-before-dispose ordering via `nextTick()`. Owns `switchShowcase()` — the
   application-level whole-context replacement operation (teardown old Runtime → create target
   revision-0 Document/Runtime → mount it), serialized with Apply/preset/revert through one
-  `enqueue()` promise chain. Also owns `graphShowAbsent`/`graphShowIsolatedMembers` — Dependency
-  Graph presentation preferences that deliberately live as plain refs on the `LabStore` object
+  `enqueue()` promise chain. Also owns `graphShowAbsent`/`graphShowIsolatedMembers` — Dependencies/Graph
+  presentation preferences that deliberately live as plain refs on the `LabStore` object
   itself (not derived from `session`) so they survive Apply.
 - `src/composables/use-monaco-editor.ts` + `src/components/editor/MonacoJsonEditor.vue` — the entire
   `modern-monaco` integration surface. Nothing else in this app imports `modern-monaco`.
@@ -40,7 +40,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   (`src/runtime-inspector/viewmodel.ts`): adapts its `getSnapshot()`/`subscribe()` shape into a ref and
   disposes the previous view model whenever the reactive observable source changes (different selected
   member, or a Runtime replaced by Apply) or the component unmounts.
-- `src/composables/use-dependency-graph.ts` — Vue bridge for the Dependency Graph panel: projects the
+- `src/composables/use-dependency-graph.ts` — Vue bridge for the Dependencies panel's Graph view: projects the
   current Document Blueprint through `projectSemanticGraph()` and drives a `LayoutSession`
   (`src/graph/layout-session.ts`) that only requests a fresh ELK layout when the projected graph itself
   changes (new Blueprint snapshot or a graph filter toggle) — never on Runtime activity.
@@ -53,7 +53,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   (`createStateMemberViewModel`/`createPropertyMemberViewModel`) over `RuntimeStateInspection`/
   `RuntimePropertyInspection`. Calls only `getSnapshot()`/`subscribe()` — never `state.get()`/
   `property.get()` — so opening/subscribing an inspector can never activate a lazy Property.
-- `src/graph/` — the Dependency Graph's pure projection/layout pipeline; see "Dependency Graph" below.
+- `src/graph/` — pure dependency projections plus the Graph layout pipeline; see "Dependencies inspector" below.
 - `src/implementation/` — the curated Implementation source explorer's framework-agnostic core (issue
   #25 P3): `types.ts` (`SourcesRegistry`/`CuratedSourceFile` — metadata only, `load()` thunks are the
   lazy boundary), `registry-coverage.ts` (dangling/uncurated-type sanity used by unit tests),
@@ -78,14 +78,14 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   selected via `AddPanelOptions.tabComponent` on each of the five canonical panels' `addPanel()` calls, it
   renders only a title, no close control, so those panels can never be closed; Dockview's own `Tab`
   wrapper — drag/reorder/dock/resize/activate — is untouched, since a `tabComponent` only replaces what
-  that wrapper renders as content), `panels/*` (Author/Blueprint/Runtime/Graph tabs, plus the
+  that wrapper renders as content), `panels/*` (Author/Blueprint/Runtime/Dependencies tabs, plus the
   lazily-registered `ImplementationPanel.vue` — issue #25 P3; it is the one panel `Workbench.vue`
   registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
   deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
   `inspector/*` (presentation-only inspector shell and tree/details split layout shared by Blueprint and
   Runtime; these components own no semantic data, revision labels, or focus state), `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list; the selected-node
   detail also carries a "View implementation" entry point), `runtime/*` (Runtime Inspector's member rows
-  + property-issue list), `graph/*` (the Vue Flow canvas + panel-local edge details).
+  + property-issue list), `dependencies/*` (the Dependencies view switcher + Relations UI), `graph/*` (the Vue Flow canvas + panel-local edge details).
 - `src/App.vue` also renders a narrow-viewport gate (issue #27 Finding 3): a pure CSS
   `@media (max-width: 899px)` rule (no JS resize listener/state) shows a `position: fixed` explanatory
   overlay ("Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.") covering
@@ -205,7 +205,7 @@ CSS (index-*.css)                       ~120 KB raw / ~11 KB gzip   — eager
   observing `layout.worker-*.js` requested immediately. `layout-client.ts`'s `ensureElk()` still only
   creates the `Worker` on the *first* `layoutGraph()` call rather than as an import-time side effect
   (so it is "lazy" in the narrow sense that comment describes), but that first call happens during
-  initial mount today because `GraphPanel.vue` (like Blueprint/Runtime) is mounted immediately by
+  initial mount today because `DependenciesPanel.vue` (like Blueprint/Runtime) is mounted immediately by
   Dockview per the same paragraph above, and its `useDependencyGraph()` composable's
   `watch(semanticGraph, ...)` fires as soon as the app's initial default-preset Apply produces the
   first real Blueprint — before any user ever opens the Graph tab. Runtime state/property/method
@@ -258,7 +258,7 @@ may challenge architecture, but never rewrites it locally.
 
 ## Inspectors are readonly
 
-Blueprint/Runtime/Graph panels consume `@deviltea/widget-core/inspection` (`inspectBlueprint`,
+Blueprint/Runtime/Dependencies panels consume `@deviltea/widget-core/inspection` (`inspectBlueprint`,
 `inspectRuntime`) as pure, passive projections. They must never:
 
 - call `state.set()`, invoke a Method, or otherwise force Property evaluation from inspector UI;
@@ -285,39 +285,62 @@ Only a session with no valid Preview has an unavailable Runtime panel. `src/runt
 is the passive-projection layer this panel is built on — see its file-level comment and colocated tests
 for the exact contract.
 
-## Dependency Graph
+## Dependencies inspector
 
-`src/graph/` implements the readonly projection pipeline behind `src/components/panels/GraphPanel.vue`:
+The canonical readonly `Dependencies` Dockview panel owns two presentation views over the same current Document Blueprint facts. `Graph` remains the default topology view; `Relations` is a focus-centric dependency inspector. Switching views is presentation-only: it preserves shared Document focus and never mutates semantic state.
+
+`src/graph/` implements the authoritative Lab-side dependency projections. The Graph view continues to use this pipeline:
 
 ```text
 BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> toVueFlow()
 ```
 
+- `relations.ts` — pure `projectRelations()`: `SemanticGraph + InspectorFocus + rootNodeId` -> a framework-agnostic Relations view model. It imports neither Vue Flow nor ELK. Root/no usable focus yields an explicit empty state; member focus exposes exact incoming **Used by** and outgoing **Depends on** facts grouped by remote widget; widget focus treats all members as the selected set, keeps cross-widget incoming/outgoing separate, and lists same-widget dependencies in an internal section. Every row retains the original semantic edge/reference/path/operation; unresolved stubs remain unresolved and non-focusable. Relations shares `graphShowAbsent`, but deliberately projects with isolated members present so the Graph-only `graphShowIsolatedMembers` presentation preference can never erase a focused member from this inspector. Resolved member/widget clicks write through the existing Document-scoped focus API; they do not request ELK layout.
+- `src/components/dependencies/DependenciesPanel.vue` owns the internal `Relations | Graph` switcher and view-specific toolbar. The switcher follows the WAI-ARIA tabs pattern (roving tab stop plus Arrow/Home/End keyboard navigation and labelled tabpanels). The Graph DOM stays mounted with `v-show`, preserving pan/zoom across view changes. Shared focus changes never mutate Graph expansion state or request layout/refit; cluster identity selection and the explicit expand/collapse toggle are separate actions. `RelationsView.vue` renders the dense three-column inspector and the widget/internal-dependency mode without a canvas layout engine; same-widget unresolved stubs stay in the internal section rather than leaking into cross-widget outgoing dependencies.
 - `types.ts` / `projection.ts` — the Lab's semantic graph shape and its pure, deterministic projection.
   Widgets are visual clusters (`GraphCluster`); State/Property/Method members are the semantic vertices
-  (`GraphVertex`) — never collapsed into widget-to-widget edges. Edge direction is owner -> declared
-  dependency target; `state-get`/`property-get` project as `reads`, `method-invoke` as `invokes`,
-  `state-set` (Method-only) as `writes`. `resolved` dependencies become `GraphEdge`s; `absent`/`invalid`
-  become presentation-only `GraphStub`s, never a fabricated resolved edge. `absent` stubs (and any member
-  with no other visible relation) are hidden unless the panel's `showAbsent`/`showIsolatedMembers`
-  filters are on; `invalid` stubs are always visible. `transitivelyWrites` and `invalidCycles` are
-  projected verbatim from core inspection facts — this module never recomputes either.
-- `elk-adapter.ts` — pure `toElkGraph()`/`fromElkResult()`, the JSON-shape boundary to ELK's graph
-  schema. Type-only `elkjs` import (`elkjs/lib/elk-api`); no `ELK` instantiation here, so it is
-  unit-testable without a worker or the real elkjs runtime.
-- `layout.ts` — the shared `LayoutedGraph`/`LayoutGraphFn` adapter shapes.
+  (`GraphVertex`). Edge direction is owner -> declared dependency target; `state-get`/`property-get`
+  project as `reads`, `method-invoke` as `invokes`, `state-set` (Method-only) as `writes`. `resolved`
+  dependencies become `GraphEdge`s; `absent`/`invalid` become presentation-only `GraphStub`s, never a
+  fabricated resolved edge. `absent` stubs (and any member with no other visible relation) are hidden
+  unless the panel's `showAbsent`/`showIsolatedMembers` filters are on; `invalid` stubs are always
+  visible. `transitivelyWrites` and `invalidCycles` are projected verbatim from core inspection facts —
+  this module never recomputes either.
+- `elk-adapter.ts` — pure `toElkGraph()`/`fromElkResult()`, the JSON-shape boundary to ELK's graph schema.
+  Accepts optional `LayoutGraphOptions` (`expandedClusterIds`). Collapsed clusters are treated as leaf
+  nodes with compact dimensions (`COLLAPSED_CLUSTER_WIDTH`, `COLLAPSED_CLUSTER_HEIGHT`), and cross-cluster
+  edges between collapsed clusters connect to the cluster node directly with duplicate endpoints collapsed
+  for layout efficiency. Unit-testable without a worker or the real elkjs runtime.
+- `layout.ts` — the shared `LayoutedGraph`/`LayoutGraphFn` adapter shapes and `LayoutGraphOptions`.
 - `layout-session.ts` — `createLayoutSession(layoutFn)`: framework-agnostic, generation-guarded async
   wrapper around any `LayoutGraphFn` (real or a test fake). A layout result for a superseded `request()`
   call is discarded — this is what makes Graph layout safe as an asynchronous projection that never
   blocks Blueprint/Runtime/Preview availability (see "Layout worker boundary" below).
-- `vue-flow.ts` — `toVueFlow()`: the laid-out `SemanticGraph` -> plain Vue Flow `nodes`/`edges`. Every
-  node is `draggable: false`/`connectable: false` and no edge is `updatable` — Vue Flow is viewer-only
-  here (pan/zoom/fit/readonly selection), never graph editing.
+- `vue-flow.ts` — `toVueFlow()`: the laid-out `SemanticGraph` -> plain Vue Flow `nodes`/`edges`.
+  Supports hierarchical progressive disclosure:
+  - Widget clusters are the top-level view by default (collapsed), preventing visual overload on
+    dense topologies (e.g. Survey ~43 nodes / 77 edges).
+  - Expanding a cluster reveals its internal member vertices and stubs as child nodes.
+  - Inter-cluster edges between collapsed clusters aggregate into single presentation edges. The
+    canvas deliberately labels these with only a compact dependency count (`1 dep` / `N deps`);
+    `semanticEdges` retains every exact member-level operation/path/reference for the details surface.
+  - Selecting/focusing a widget or member highlights the connected subgraph and deemphasizes
+    unrelated nodes and edges (`isDimmed` / `graph-node--dimmed` / `graph-edge--dimmed`).
+  - Vue Flow is strictly viewer-only: every node is `draggable: false`/`connectable: false` and no edge
+    is `updatable`.
 - `src/components/graph/GraphCanvas.vue` — the only place in this app that imports `@vue-flow/core`
-  (and its structural `dist/style.css`); custom node templates for `cluster`/`member`/`stub`, themed
-  through PikaCSS tokens rather than Vue Flow's own default theme CSS.
+  (and its structural `dist/style.css`); custom node templates for `cluster`, `member`, and `stub`,
+  themed through Lab/PikaCSS tokens. Collapsed and expanded cluster identities and expanded member cards are keyboard-focusable/selectable without changing expansion state. The collapsed cluster card makes widget type primary, widget id
+  secondary, and summarizes member inventory as S/P/M counts; the expanded cluster becomes a subdued
+  compound inspector shell rather than a dashed debug boundary. Member nodes keep State/Property/Method
+  distinguishable by a small letter badge plus restrained accent, so kind is not encoded by color alone.
+  Edge operation is encoded primarily by stroke treatment (reads thin solid, writes stronger solid,
+  invokes dashed), while exact non-aggregate labels are visually secondary until hover/selection.
+  Handles remain intentionally unobtrusive and the canvas uses only a subtle dot grid: these cues must
+  never imply that the readonly inspector is an editable node editor.
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container
-  `path` + reference target/operation) — edge selection stays local, never expands into shared focus.
+  `path` + reference target/operation, plus aggregated semantic dependencies list when an aggregated
+  cluster-to-cluster edge is selected) — edge selection stays local, never expands into shared focus.
 
 Graph works for an invalid current Document Blueprint (compile-time facts only, no Runtime dependency) and
 its node click sets Document-scoped focus (`nodeId` + member). Blueprint and Graph never consume a
@@ -326,17 +349,20 @@ equal Document/Preview revisions synchronize the two scopes, while diverged revi
 `InspectionNodeId`s between them. A changed Document resets Document focus; a replaced Preview resets
 Preview focus.
 
-Viewport fit is coordinated with layout readiness, not `fitViewOnInit` (issue #27 Finding 1):
-`GraphCanvas.vue` calls `useVueFlow()` before its own template renders `<VueFlow>` (creating and
-`provide()`-ing a store `<VueFlow>` then injects, per `@vue-flow/core`'s documented same-component-instance
-pattern) and calls `fitView()` from `onNodesInitialized`. Because `GraphPanel.vue` renders `GraphCanvas`
-behind `v-if="flow !== null"`, and every new laid-out semantic graph transits through `flow === null`
-first (`LayoutSession.request()` sets `status: 'loading'` synchronously), `GraphCanvas` fully
-unmounts/remounts for every new graph — so this single `onNodesInitialized` hook covers first mount and
-every subsequent semantic-graph replacement without special-casing either, and Runtime activity (which
-never replaces `flow`) never re-triggers it. `GraphPanel.vue` also exposes an explicit **Fit graph**
-button (next to the filter checkboxes) that calls the same `fitGraph()` path via a template ref —
-`GraphCanvas.vue` remains the only place in this app that imports `@vue-flow/core`.
+Viewport fit policy (issue #27 Finding 1 & reliable lifecycle):
+`GraphCanvas.vue` coordinates `fitView()` with both layout readiness and container dimensions. In
+Dockview, tabs mounted in inactive/background state have 0 client dimensions, which caused an initial
+`fitView()` in `onNodesInitialized` to fail. `GraphCanvas.vue` pairs `onNodesInitialized` with a
+`ResizeObserver` on the canvas container element to run `attemptFit()` as soon as non-zero dimensions
+become available (e.g. when the user first switches to the Graph tab). Before accepting an automatic fit,
+`attemptFit()` also verifies that Vue Flow's current internal node set exactly matches the current
+presentation node ids and that every node has non-zero measured dimensions; `onNodesChange` retries while
+a new layout generation is still being measured. This prevents `fitView()` from succeeding against only a
+partially measured subset and then incorrectly marking that generation fitted. `useDependencyGraph` exposes
+`layoutVersion` (incremented only when ELK layout succeeds), which resets fit tracking so the graph
+automatically refits on semantic graph replacements and cluster expansion/collapse, while ordinary
+Runtime activity and focus deemphasis never trigger a refit. `DependenciesPanel.vue`'s Graph view also exposes an explicit
+**Fit graph** button along with **Expand all** / **Collapse all** controls in the toolbar.
 
 ## Layout worker boundary
 
@@ -466,7 +492,7 @@ authority or validator; invalid/recovery Documents show that the Core preconditi
 The Document trace is a finite, session-only ring of Lab-observed parse/commit/patch/conflict metadata.
 It is explicitly telemetry: no persistence, replay, restore, undo/redo, collaboration, or authoritative
 history semantics may be added. Runtime/Preview behavior, revision-scoped focus, Author recovery,
-Blueprint/Runtime separation, Graph, and Implementation entry points remain unchanged.
+Blueprint/Runtime separation, Dependencies, and Implementation entry points remain unchanged.
 
 ## Active follow-up backlog
 

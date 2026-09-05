@@ -277,9 +277,9 @@ test('full CRM tour end-to-end via real interactions, each observation appearing
 	// Step 5 — optional deep dive: semantic-only widgets, reveals immediately, links to Graph/Implementation.
 	await expect(rail.getByText('DealStore and DealQuery own the search/filter/aggregation rules', { exact: false }))
 		.toBeVisible()
-	await rail.getByRole('button', { name: 'Graph', exact: true })
+	await rail.getByRole('button', { name: 'Dependencies', exact: true })
 		.click()
-	await expect(page.getByRole('tab', { name: 'Graph' }))
+	await expect(page.getByRole('tab', { name: 'Dependencies' }))
 		.toHaveAttribute('aria-selected', 'true')
 	await nextButton.click()
 
@@ -300,7 +300,7 @@ test('Graph legend is a plain disclosure (not a menu popup), opens/closes via ke
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('crm')
-	await page.getByRole('tab', { name: 'Graph' })
+	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
 	const legendButton = page.getByRole('button', { name: 'Legend' })

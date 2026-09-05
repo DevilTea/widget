@@ -32,10 +32,10 @@ function ensureElk(): ElkInstance {
 }
 
 /** The `layoutGraph(graph): Promise<LayoutedGraph>` adapter (diagnostic #13 Phase 5 implementation stack). */
-export const layoutGraph: LayoutGraphFn = async (graph) => {
+export const layoutGraph: LayoutGraphFn = async (graph, options) => {
 	const result = await ensureElk()
-		.layout(toElkGraph(graph))
-	return fromElkResult(result as ElkNode, graph)
+		.layout(toElkGraph(graph, options))
+	return fromElkResult(result as ElkNode, graph, options)
 }
 
 /**

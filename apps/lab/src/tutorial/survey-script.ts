@@ -148,13 +148,13 @@ export const surveyTourScript: TutorialScript = {
 			target: null,
 			stages: [{
 				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Author = the declarative definition and structure you edit · Blueprint = what the applied Author source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Graph = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.',
+				reveal: 'Author = the declarative definition and structure you edit · Blueprint = what the applied Author source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Dependencies = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.',
 			}],
 			links: [
 				{ id: 'view-author', label: 'Author', run: actions => actions.activateTab('author') },
 				{ id: 'view-blueprint', label: 'Blueprint', run: actions => actions.activateTab('blueprint') },
 				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
-				{ id: 'view-graph', label: 'Graph', run: actions => actions.activateTab('graph') },
+				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.activateTab('dependencies') },
 				{ id: 'view-preview', label: 'Preview', run: actions => actions.activateTab('preview') },
 				// diagnostic #25 P3: a real affordance now — opens the Implementation panel for whichever widget
 				// is currently held in shared focus (this step never changes focus itself, matching every

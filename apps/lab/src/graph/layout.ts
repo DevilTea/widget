@@ -24,4 +24,8 @@ export interface LayoutedGraph {
 	readonly stubs: ReadonlyMap<string, LayoutRect>
 }
 
-export type LayoutGraphFn = (graph: SemanticGraph) => Promise<LayoutedGraph>
+export interface LayoutGraphOptions {
+	readonly expandedClusterIds?: ReadonlySet<string>
+}
+
+export type LayoutGraphFn = (graph: SemanticGraph, options?: LayoutGraphOptions) => Promise<LayoutedGraph>

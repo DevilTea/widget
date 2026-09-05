@@ -14,7 +14,7 @@ test('Survey Dependency Graph lays out and renders nodes', async ({ page }) => {
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('survey')
-	await page.getByRole('tab', { name: 'Graph' })
+	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
 	const nodes = page.locator('.vue-flow__node')
@@ -23,7 +23,7 @@ test('Survey Dependency Graph lays out and renders nodes', async ({ page }) => {
 	expect(await nodes.count())
 		.toBeGreaterThan(0)
 
-	// Layout completed: `GraphPanel.vue`'s `statusLabel` only renders "Laying out…"/"Layout failed."
+	// Layout completed: `DependenciesPanel.vue`'s Graph-view `statusLabel` only renders "Laying out…"/"Layout failed."
 	// while the async ELK request is in flight or rejected — neither is shown once Vue Flow has real
 	// node elements to render.
 	await expect(page.getByText('Laying out…'))
@@ -42,16 +42,18 @@ function intersects(a: { x: number, y: number, width: number, height: number }, 
 		&& a.y + a.height > b.y
 }
 
-// issue #27's acceptance criterion names both showcases explicitly ("Opening Graph on Survey and CRM
+// issue #27's acceptance criterion names all showcases explicitly ("Opening Graph on Survey and CRM
 // reliably displays the graph without requiring a filter toggle or manual browser resize") — this is
 // exactly the async layout/render behavior #27 asks to pin at the browser level per showcase rather than
-// infer from one case.
-for (const showcaseId of ['survey', 'crm'] as const) {
+// infer from one case. Includes sandbox default on direct first-open without switching.
+for (const showcaseId of ['sandbox', 'survey', 'crm'] as const) {
 	test(`${showcaseId} graph nodes intersect the visible viewport on first open (issue #27)`, async ({ page }) => {
 		await page.goto('/')
-		await page.getByLabel('Switch showcase')
-			.selectOption(showcaseId)
-		await page.getByRole('tab', { name: 'Graph' })
+		if (showcaseId !== 'sandbox') {
+			await page.getByLabel('Switch showcase')
+				.selectOption(showcaseId)
+		}
+		await page.getByRole('tab', { name: 'Dependencies' })
 			.click()
 
 		const canvas = page.locator('.vue-flow')
@@ -84,7 +86,7 @@ test('"Fit graph" affordance restores a useful viewport (issue #27)', async ({ p
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('survey')
-	await page.getByRole('tab', { name: 'Graph' })
+	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
 	const canvas = page.locator('.vue-flow')
@@ -156,4 +158,144 @@ test('"Fit graph" affordance restores a useful viewport (issue #27)', async ({ p
 			.toBeGreaterThan(0)
 	})
 		.toPass({ timeout: 10_000 })
+})
+
+test('progressive disclosure collapses clusters initially, expands on click, and supports Expand/Collapse all', async ({ page }) => {
+	await page.goto('/')
+	await page.getByLabel('Switch showcase')
+		.selectOption('survey')
+	await page.getByRole('tab', { name: 'Dependencies' })
+		.click()
+
+	const canvas = page.locator('.vue-flow')
+	await expect(canvas.locator('.graph-node--cluster')
+		.first())
+		.toBeVisible({ timeout: 15_000 })
+
+	// Initially, clusters are collapsed, so member nodes are not rendered
+	await expect(canvas.locator('.graph-node--member'))
+		.toHaveCount(0)
+
+	// Expand all
+	await page.getByRole('button', { name: 'Expand all' })
+		.click()
+
+	const members = canvas.locator('.graph-node--member')
+	await expect(members.first())
+		.toBeVisible({ timeout: 15_000 })
+	expect(await members.count())
+		.toBeGreaterThan(0)
+
+	// Expansion triggers a fresh ELK layout. Automatic fit must recover only after the new generation's
+	// nodes have all been measured; this assertion intentionally does not use the manual Fit button.
+	await expect(async () => {
+		const canvasBox = await canvas.boundingBox()
+		expect(canvasBox)
+			.not.toBeNull()
+		const count = await members.count()
+		let intersecting = 0
+		for (let i = 0; i < count; i++) {
+			const box = await members.nth(i)
+				.boundingBox()
+			if (box !== null && intersects(box, canvasBox!))
+				intersecting++
+		}
+		expect(intersecting)
+			.toBeGreaterThan(0)
+	})
+		.toPass({ timeout: 10_000 })
+
+	// Collapse all
+	await page.getByRole('button', { name: 'Collapse all' })
+		.click()
+
+	await expect(canvas.locator('.graph-node--member'))
+		.toHaveCount(0)
+
+	const clusters = canvas.locator('.graph-node--cluster')
+	await expect(async () => {
+		const canvasBox = await canvas.boundingBox()
+		expect(canvasBox)
+			.not.toBeNull()
+		const count = await clusters.count()
+		let intersecting = 0
+		for (let i = 0; i < count; i++) {
+			const box = await clusters.nth(i)
+				.boundingBox()
+			if (box !== null && intersects(box, canvasBox!))
+				intersecting++
+		}
+		expect(intersecting)
+			.toBeGreaterThan(0)
+	})
+		.toPass({ timeout: 10_000 })
+
+	// Expand individual cluster by clicking its toggle button
+	const toggleBtn = canvas.locator('.graph-node--cluster .graph-cluster-toggle')
+		.first()
+	await toggleBtn.click()
+
+	await expect(canvas.locator('.graph-node--member')
+		.first())
+		.toBeVisible({ timeout: 15_000 })
+})
+
+test('focusing a member highlights subgraph and dims unrelated nodes', async ({ page }) => {
+	await page.goto('/')
+	await page.getByLabel('Switch showcase')
+		.selectOption('survey')
+	await page.getByRole('tab', { name: 'Dependencies' })
+		.click()
+
+	// Expand all so members are visible
+	await page.getByRole('button', { name: 'Expand all' })
+		.click()
+
+	const member = page.locator('.graph-node--member')
+		.filter({ hasText: 'budgetPerPersonPerDay' })
+		.first()
+	await expect(member)
+		.toBeVisible({ timeout: 15_000 })
+
+	// Click a member with known cross-widget dependencies to focus it.
+	await member.click()
+
+	// Focused member has focused class.
+	await expect(page.locator('.graph-node--focused'))
+		.toContainText('budgetPerPersonPerDay')
+
+	// The connected TripRecommendation member lives inside an expanded cluster. Its owning
+	// cluster must remain fully visible rather than inheriting unrelated-node deemphasis.
+	const relatedCluster = page.locator('.graph-node--cluster')
+		.filter({ hasText: 'TripRecommendation' })
+		.first()
+	await expect(relatedCluster)
+		.not.toHaveClass(/graph-node--dimmed/)
+
+	// Unrelated nodes still have dimmed class.
+	await expect(page.locator('.graph-node--dimmed')
+		.first())
+		.toBeVisible({ timeout: 5_000 })
+})
+
+test('expanded member nodes can be focused from the keyboard', async ({ page }) => {
+	await page.goto('/')
+	await page.getByLabel('Switch showcase')
+		.selectOption('survey')
+	await page.getByRole('tab', { name: 'Dependencies' })
+		.click()
+	await page.getByRole('button', { name: 'Expand all' })
+		.click()
+
+	const member = page.locator('.graph-node--member')
+		.filter({ hasText: 'budgetPerPersonPerDay' })
+		.first()
+	await expect(member)
+		.toBeVisible({ timeout: 15_000 })
+	await member.focus()
+	await expect(member)
+		.toBeFocused()
+	await member.press('Enter')
+	await expect(member)
+		.toHaveClass(/graph-node--focused/)
 })

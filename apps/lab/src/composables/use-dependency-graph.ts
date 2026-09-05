@@ -27,6 +27,7 @@ export interface DependencyGraphView {
 	readonly semanticGraph: Readonly<Ref<SemanticGraph>>
 	readonly layoutState: Readonly<Ref<LayoutSessionState>>
 	readonly flow: Readonly<Ref<{ nodes: GraphFlowNode[], edges: GraphFlowEdge[] } | null>>
+	readonly layoutVersion: Readonly<Ref<number>>
 }
 
 export function useDependencyGraph(): DependencyGraphView {
@@ -34,8 +35,11 @@ export function useDependencyGraph(): DependencyGraphView {
 	const session = createLayoutSession(layoutGraph)
 
 	const tick = shallowRef(0)
+	const layoutVersion = shallowRef(0)
 	const unsubscribeSession = session.subscribe(() => {
 		tick.value++
+		if (session.getState().status === 'ready')
+			layoutVersion.value++
 	})
 
 	const semanticGraph = computed(() => {
@@ -46,9 +50,13 @@ export function useDependencyGraph(): DependencyGraphView {
 		})
 	})
 
-	watch(semanticGraph, (graph) => {
-		session.request(graph)
-	}, { immediate: true })
+	watch(
+		[semanticGraph, () => store.graphExpandedClusterIds.value],
+		([graph, expanded]) => {
+			session.request(graph, { expandedClusterIds: expanded })
+		},
+		{ immediate: true },
+	)
 
 	const layoutState = computed(() => {
 		void tick.value
@@ -57,7 +65,14 @@ export function useDependencyGraph(): DependencyGraphView {
 
 	const flow = computed(() => {
 		const state = layoutState.value
-		return state.status === 'ready' ? toVueFlow(state.graph, state.layout) : null
+		if (state.status !== 'ready')
+			return null
+		const rootNodeId = inspectBlueprint(store.documentState.value.blueprint).rootNodeId
+		return toVueFlow(state.graph, state.layout, {
+			expandedClusterIds: state.options?.expandedClusterIds,
+			focused: store.focus.value,
+			rootNodeId,
+		})
 	})
 
 	onUnmounted(() => {
@@ -65,5 +80,5 @@ export function useDependencyGraph(): DependencyGraphView {
 		session.dispose()
 	})
 
-	return { semanticGraph, layoutState, flow }
+	return { semanticGraph, layoutState, flow, layoutVersion }
 }

@@ -35,7 +35,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 			.click()
 		await expect(page.getByRole('tab', { name: 'Document Tools' }))
 			.toHaveAttribute('aria-selected', 'true')
-		for (const name of ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
+		for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 			await expect(page.getByRole('tab', { name }))
 				.toBeVisible()
 		}

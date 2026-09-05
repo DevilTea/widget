@@ -141,7 +141,7 @@ test('skipping the tour leaves the Lab fully usable', async ({ page }) => {
 	await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 		.toHaveCount(0)
 
-	for (const name of ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
+	for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 		await expect(page.getByRole('tab', { name }))
 			.toBeVisible()
 	}
@@ -306,7 +306,7 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	expect(hasHorizontalOverflow)
 		.toBe(false)
 
-	for (const name of ['Author', 'Blueprint', 'Runtime', 'Graph', 'Preview']) {
+	for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 		await expect(page.getByRole('tab', { name }))
 			.toBeVisible()
 	}

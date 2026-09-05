@@ -10,7 +10,7 @@
  */
 
 import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk-api'
-import type { LayoutedGraph, LayoutRect } from './layout'
+import type { LayoutedGraph, LayoutGraphOptions, LayoutRect } from './layout'
 import type { SemanticGraph } from './types'
 
 /** Fixed member-vertex footprint. Deliberately simple fixed sizing — no text-measurement dependency. */
@@ -19,6 +19,9 @@ export const VERTEX_HEIGHT = 32
 /** Reference stubs render smaller than a real member vertex (diagnostic #13 Phase 5: "distinct visual"). */
 export const STUB_WIDTH = 132
 export const STUB_HEIGHT = 24
+/** Collapsed widget cluster footprint for top-level progressive disclosure view. */
+export const COLLAPSED_CLUSTER_WIDTH = 220
+export const COLLAPSED_CLUSTER_HEIGHT = 72
 
 const ROOT_LAYOUT_OPTIONS = {
 	'elk.algorithm': 'layered',
@@ -34,7 +37,7 @@ const ROOT_LAYOUT_OPTIONS = {
 } as const
 
 const CLUSTER_LAYOUT_OPTIONS = {
-	'elk.padding': '[top=32,left=14,bottom=14,right=14]',
+	'elk.padding': '[top=48,left=16,bottom=16,right=16]',
 } as const
 
 function emptyClusterNode(id: string): ElkNode {
@@ -42,24 +45,38 @@ function emptyClusterNode(id: string): ElkNode {
 }
 
 /**
- * Projects a `SemanticGraph` into ELK's JSON graph schema. Every member vertex and reference stub is a
- * child of its owning widget cluster (an ELK compound node); an edge is declared on the least common
- * ancestor of its two endpoints — same-cluster edges nest inside that cluster, cross-cluster edges (and
- * every stub edge, which is always same-cluster) are declared at the level ELK requires.
+ * Projects a `SemanticGraph` into ELK's JSON graph schema. Supports hierarchical progressive disclosure:
+ * when `options.expandedClusterIds` is provided, clusters outside the set render as compact leaf nodes
+ * without member children, and cross-cluster dependencies route to/from the cluster node itself.
+ * If omitted, defaults to expanding all clusters.
  */
-export function toElkGraph(graph: SemanticGraph): ElkNode {
+export function toElkGraph(graph: SemanticGraph, options?: LayoutGraphOptions): ElkNode {
+	const expandedClusterIds = options?.expandedClusterIds ?? new Set(graph.clusters.map(c => c.id))
 	const clusterNodes = new Map<string, ElkNode>()
-	for (const cluster of graph.clusters) clusterNodes.set(cluster.id, emptyClusterNode(cluster.id))
+	for (const cluster of graph.clusters) {
+		if (expandedClusterIds.has(cluster.id)) {
+			clusterNodes.set(cluster.id, emptyClusterNode(cluster.id))
+		}
+		else {
+			clusterNodes.set(cluster.id, {
+				id: cluster.id,
+				width: COLLAPSED_CLUSTER_WIDTH,
+				height: COLLAPSED_CLUSTER_HEIGHT,
+			})
+		}
+	}
 
 	const clusterIdOfVertex = new Map<string, string>()
 	for (const vertex of graph.vertices) {
 		clusterIdOfVertex.set(vertex.id, vertex.clusterId)
-		clusterNodes.get(vertex.clusterId)?.children?.push({ id: vertex.id, width: VERTEX_WIDTH, height: VERTEX_HEIGHT })
+		if (expandedClusterIds.has(vertex.clusterId)) {
+			clusterNodes.get(vertex.clusterId)?.children?.push({ id: vertex.id, width: VERTEX_WIDTH, height: VERTEX_HEIGHT })
+		}
 	}
 
 	for (const stub of graph.stubs) {
 		const clusterId = clusterIdOfVertex.get(stub.ownerVertexId)
-		if (clusterId === undefined)
+		if (clusterId === undefined || !expandedClusterIds.has(clusterId))
 			continue
 		const cluster = clusterNodes.get(clusterId)
 		if (cluster === undefined)
@@ -69,15 +86,36 @@ export function toElkGraph(graph: SemanticGraph): ElkNode {
 	}
 
 	const rootEdges: ElkExtendedEdge[] = []
+	const seenRootEdgeEndpoints = new Set<string>()
+
 	for (const edge of graph.edges) {
 		const sourceCluster = clusterIdOfVertex.get(edge.sourceVertexId)
 		const targetCluster = clusterIdOfVertex.get(edge.targetVertexId)
-		const elkEdge: ElkExtendedEdge = { id: edge.id, sources: [edge.sourceVertexId], targets: [edge.targetVertexId] }
+		if (sourceCluster === undefined || targetCluster === undefined)
+			continue
 
-		if (sourceCluster !== undefined && sourceCluster === targetCluster)
-			clusterNodes.get(sourceCluster)?.edges?.push(elkEdge)
-		else
-			rootEdges.push(elkEdge)
+		const sourceExpanded = expandedClusterIds.has(sourceCluster)
+		const targetExpanded = expandedClusterIds.has(targetCluster)
+
+		if (sourceCluster === targetCluster) {
+			if (sourceExpanded) {
+				const elkEdge: ElkExtendedEdge = { id: edge.id, sources: [edge.sourceVertexId], targets: [edge.targetVertexId] }
+				clusterNodes.get(sourceCluster)?.edges?.push(elkEdge)
+			}
+		}
+		else {
+			const effectiveSource = sourceExpanded ? edge.sourceVertexId : sourceCluster
+			const effectiveTarget = targetExpanded ? edge.targetVertexId : targetCluster
+			const key = `${effectiveSource}->${effectiveTarget}`
+			if (!seenRootEdgeEndpoints.has(key)) {
+				seenRootEdgeEndpoints.add(key)
+				rootEdges.push({
+					id: edge.id,
+					sources: [effectiveSource],
+					targets: [effectiveTarget],
+				})
+			}
+		}
 	}
 
 	return {
@@ -93,7 +131,8 @@ function rectOf(node: ElkNode): LayoutRect {
 }
 
 /** Reads back the ELK layout result into `LayoutedGraph`, keyed by the same ids `toElkGraph()` used. */
-export function fromElkResult(result: ElkNode, graph: SemanticGraph): LayoutedGraph {
+export function fromElkResult(result: ElkNode, graph: SemanticGraph, options?: LayoutGraphOptions): LayoutedGraph {
+	const expandedClusterIds = options?.expandedClusterIds ?? new Set(graph.clusters.map(c => c.id))
 	const vertexIds = new Set(graph.vertices.map(vertex => vertex.id))
 	const stubIds = new Set(graph.stubs.map(stub => stub.id))
 
@@ -103,11 +142,13 @@ export function fromElkResult(result: ElkNode, graph: SemanticGraph): LayoutedGr
 
 	for (const clusterNode of result.children ?? []) {
 		clusters.set(clusterNode.id, rectOf(clusterNode))
-		for (const child of clusterNode.children ?? []) {
-			if (vertexIds.has(child.id))
-				vertices.set(child.id, rectOf(child))
-			else if (stubIds.has(child.id))
-				stubs.set(child.id, rectOf(child))
+		if (expandedClusterIds.has(clusterNode.id)) {
+			for (const child of clusterNode.children ?? []) {
+				if (vertexIds.has(child.id))
+					vertices.set(child.id, rectOf(child))
+				else if (stubIds.has(child.id))
+					stubs.set(child.id, rectOf(child))
+			}
 		}
 	}
 

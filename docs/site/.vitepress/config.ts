@@ -8,7 +8,7 @@ export default defineConfig({
 	themeConfig: {
 		nav: [
 			{ text: 'Packages', link: '/packages/' },
-			{ text: 'Widget Lab', link: '/lab/' },
+			{ text: 'Widget Lab', link: '/lab/', target: '_self' },
 		],
 		sidebar: {
 			'/packages/': [
