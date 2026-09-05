@@ -147,6 +147,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'a State write (Method-only)': '一次 State 寫入（僅 Method）',
 	'a Method invocation': '一次 Method 呼叫',
 	'The label is the only thing distinguishing edge kinds today — edge color is not yet meaningful.': '目前只有 label 用來區分 edge kinds——edge color 尚未具有語意。',
+	'Line style distinguishes edge kinds; aggregate labels show dependency counts, while details preserve exact operations.': '線條樣式用來區分 edge kind；彙總 edge label 只顯示依賴數量，精確 operation 則保留在詳細資訊中。',
 	'Stubs (a dependency with no resolved target)': 'Stubs（沒有 resolved target 的 dependency）',
 	'Absent — hidden unless "Show absent references" is on': 'Absent——除非開啟「顯示缺少的 references」，否則隱藏',
 	'Invalid — always shown': 'Invalid——永遠顯示',

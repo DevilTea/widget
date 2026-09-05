@@ -20,8 +20,8 @@ export const VERTEX_HEIGHT = 32
 export const STUB_WIDTH = 132
 export const STUB_HEIGHT = 24
 /** Collapsed widget cluster footprint for top-level progressive disclosure view. */
-export const COLLAPSED_CLUSTER_WIDTH = 200
-export const COLLAPSED_CLUSTER_HEIGHT = 52
+export const COLLAPSED_CLUSTER_WIDTH = 220
+export const COLLAPSED_CLUSTER_HEIGHT = 72
 
 const ROOT_LAYOUT_OPTIONS = {
 	'elk.algorithm': 'layered',
@@ -37,7 +37,7 @@ const ROOT_LAYOUT_OPTIONS = {
 } as const
 
 const CLUSTER_LAYOUT_OPTIONS = {
-	'elk.padding': '[top=32,left=14,bottom=14,right=14]',
+	'elk.padding': '[top=48,left=16,bottom=16,right=16]',
 } as const
 
 function emptyClusterNode(id: string): ElkNode {

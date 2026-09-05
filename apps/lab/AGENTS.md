@@ -317,16 +317,23 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   - Widget clusters are the top-level view by default (collapsed), preventing visual overload on
     dense topologies (e.g. Survey ~43 nodes / 77 edges).
   - Expanding a cluster reveals its internal member vertices and stubs as child nodes.
-  - Inter-cluster edges between collapsed clusters aggregate into single presentation edges showing
-    combined operation labels and dependency counts (`count`).
+  - Inter-cluster edges between collapsed clusters aggregate into single presentation edges. The
+    canvas deliberately labels these with only a compact dependency count (`1 dep` / `N deps`);
+    `semanticEdges` retains every exact member-level operation/path/reference for the details surface.
   - Selecting/focusing a widget or member highlights the connected subgraph and deemphasizes
     unrelated nodes and edges (`isDimmed` / `graph-node--dimmed` / `graph-edge--dimmed`).
   - Vue Flow is strictly viewer-only: every node is `draggable: false`/`connectable: false` and no edge
     is `updatable`.
 - `src/components/graph/GraphCanvas.vue` — the only place in this app that imports `@vue-flow/core`
-  (and its structural `dist/style.css`); custom node templates for `cluster` (expanded compound container
-  or compact collapsed node with member count and expand `+` toggle), `member` (State/Property/Method),
-  and `stub`, themed through PikaCSS tokens.
+  (and its structural `dist/style.css`); custom node templates for `cluster`, `member`, and `stub`,
+  themed through Lab/PikaCSS tokens. The collapsed cluster card makes widget type primary, widget id
+  secondary, and summarizes member inventory as S/P/M counts; the expanded cluster becomes a subdued
+  compound inspector shell rather than a dashed debug boundary. Member nodes keep State/Property/Method
+  distinguishable by a small letter badge plus restrained accent, so kind is not encoded by color alone.
+  Edge operation is encoded primarily by stroke treatment (reads thin solid, writes stronger solid,
+  invokes dashed), while exact non-aggregate labels are visually secondary until hover/selection.
+  Handles remain intentionally unobtrusive and the canvas uses only a subtle dot grid: these cues must
+  never imply that the readonly inspector is an editable node editor.
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container
   `path` + reference target/operation, plus aggregated semantic dependencies list when an aggregated
   cluster-to-cluster edge is selected) — edge selection stays local, never expands into shared focus.

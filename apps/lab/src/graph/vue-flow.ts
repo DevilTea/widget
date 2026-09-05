@@ -16,6 +16,13 @@ import type { GraphEdge, GraphEdgeOperation, GraphStubStatus, GraphVertexKind, S
 
 export type GraphNodeKind = 'cluster' | GraphVertexKind | 'stub'
 
+export interface MemberCounts {
+	readonly state: number
+	readonly property: number
+	readonly method: number
+	readonly total: number
+}
+
 export interface GraphNodeData {
 	readonly kind: GraphNodeKind
 	readonly label: string
@@ -24,6 +31,7 @@ export interface GraphNodeData {
 	readonly stubStatus?: GraphStubStatus
 	readonly isExpanded?: boolean
 	readonly memberCount?: number
+	readonly memberCounts?: MemberCounts
 	readonly widgetId?: string
 	readonly widgetType?: string
 	readonly hasInvalidCycle?: boolean
@@ -185,6 +193,17 @@ export function toVueFlow(
 		const hasInvalidCycle = clusterMembers.some(v => graph.invalidCycleVertexIds.has(v.id))
 		const isFocused = cluster.id === activeClusterId
 		const isDimmed = hasActiveInspection && !relatedNodeIds.has(cluster.id)
+		let stateCount = 0
+		let propertyCount = 0
+		let methodCount = 0
+		for (const v of clusterMembers) {
+			if (v.kind === 'state')
+				stateCount++
+			else if (v.kind === 'property')
+				propertyCount++
+			else if (v.kind === 'method')
+				methodCount++
+		}
 
 		nodes.push({
 			id: cluster.id,
@@ -198,6 +217,12 @@ export function toVueFlow(
 				widgetType: cluster.widgetType,
 				isExpanded,
 				memberCount: clusterMembers.length,
+				memberCounts: {
+					state: stateCount,
+					property: propertyCount,
+					method: methodCount,
+					total: clusterMembers.length,
+				},
 				hasInvalidCycle,
 				isFocused,
 				isDimmed,
@@ -295,8 +320,10 @@ export function toVueFlow(
 		const isDimmed = hasActiveInspection && !relatedEdgeIds.has(edgeId)
 		const primaryOp = group[0]!.operation
 		const invalidCycle = group.some(e => e.invalidCycle)
-		const ops = [...new Set(group.map(e => e.operation))]
-		const label = group.length === 1 ? primaryOp : `${ops.join(', ')} (${group.length})`
+		const isClusterLevel = effSource.startsWith('cluster:') || effTarget.startsWith('cluster:')
+		const label = isClusterLevel
+			? `${group.length} ${group.length === 1 ? 'dep' : 'deps'}`
+			: (group.length === 1 ? primaryOp : `${group.length} deps`)
 
 		edges.push({
 			id: edgeId,
@@ -306,7 +333,7 @@ export function toVueFlow(
 			targetHandle: 't',
 			type: 'smoothstep',
 			label,
-			class: `graph-edge graph-edge--${primaryOp}${invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}`,
+			class: `graph-edge graph-edge--${primaryOp} graph-edge--aggregate${invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}`,
 			data: {
 				operation: primaryOp,
 				path: group[0]!.path,
