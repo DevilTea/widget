@@ -14,12 +14,15 @@ import { crmSources } from '../showcases/crm/sources'
 import { crmSystem } from '../showcases/crm/system'
 import { surveySources } from '../showcases/survey/sources'
 import { surveySystem } from '../showcases/survey/system'
+import { vuetifyTaskSources } from '../showcases/vuetify-tasks/sources'
+import { vuetifyTaskSystem } from '../showcases/vuetify-tasks/system'
 import { findDanglingRegistryTypes, findUncuratedPluginTypes } from './registry-coverage'
 
 const showcases: readonly { readonly label: string, readonly system: WidgetSystem<AnyWidgetPluginTuple>, readonly sources: SourcesRegistry }[] = [
 	{ label: 'sandbox', system: sandboxSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: sandboxSources },
 	{ label: 'survey', system: surveySystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: surveySources },
 	{ label: 'crm', system: crmSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: crmSources },
+	{ label: 'vuetify-tasks', system: vuetifyTaskSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: vuetifyTaskSources },
 ]
 
 describe('curated sources registries', () => {
@@ -52,7 +55,7 @@ describe('curated sources registries', () => {
 		}
 	})
 
-	it('sandbox/survey/crm curated file loaders resolve to non-empty raw source text', async () => {
+	it('all curated file loaders resolve to non-empty raw source text', async () => {
 		for (const { sources } of showcases) {
 			for (const entry of Object.values(sources)) {
 				for (const file of entry.files) {

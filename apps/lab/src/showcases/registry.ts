@@ -12,6 +12,7 @@
 import type { AnyWidgetPluginTuple, WidgetSystem } from '@deviltea/widget-core'
 import type { Component } from 'vue'
 import type { SourcesRegistry } from '../implementation/types'
+import { defineAsyncComponent } from 'vue'
 import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
 import { SandboxRenderer } from '../sandbox/renderers'
 import { sandboxSources } from '../sandbox/sources'
@@ -24,6 +25,9 @@ import { defaultSurveyPreset, surveyPresets } from './survey/presets'
 import { SurveyRenderer } from './survey/renderers'
 import { surveySources } from './survey/sources'
 import { surveySystem } from './survey/system'
+import { defaultVuetifyTaskPreset, vuetifyTaskPresets } from './vuetify-tasks/presets'
+import { vuetifyTaskSources } from './vuetify-tasks/sources'
+import { vuetifyTaskSystem } from './vuetify-tasks/system'
 
 export interface ShowcasePreset {
 	readonly id: string
@@ -82,6 +86,19 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: crmPresets,
 		defaultPreset: defaultCrmPreset,
 		sources: crmSources,
+	},
+	{
+		id: 'vuetify-tasks',
+		label: 'Vuetify Task Workspace',
+		system: vuetifyTaskSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
+		// Vuetify is intentionally the heavyweight integration showcase. Keep its renderer (and its
+		// component CSS) outside the Lab shell's eager bundle; the async component still receives the same
+		// Runtime prop once this showcase is selected. Vuetify's app-level injection is installed in main.ts.
+		renderer: defineAsyncComponent(() => import('./vuetify-tasks/renderers')
+			.then(module => module.VuetifyTaskRenderer)) as unknown as Component,
+		presets: vuetifyTaskPresets,
+		defaultPreset: defaultVuetifyTaskPreset,
+		sources: vuetifyTaskSources,
 	},
 ]
 
