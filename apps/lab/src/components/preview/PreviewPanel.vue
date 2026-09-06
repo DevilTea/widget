@@ -28,6 +28,9 @@ const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
 const previewSurface = useTemplateRef<HTMLDivElement>('previewSurface')
 const inspectActive = shallowRef(false)
+const inspectRequested = shallowRef(false)
+const inspectorReady = shallowRef(false)
+const inspectCommandPending = shallowRef(false)
 let inspectorClient: InspectorClient | null = null
 
 const curatedEntryAvailable = computed(() => {
@@ -41,12 +44,17 @@ const curatedEntryAvailable = computed(() => {
 watch(
 	[previewSurface, store.previewRuntime],
 	([root, runtime], _previous, onCleanup) => {
-		const restoreInspect = inspectActive.value
+		const restoreInspect = inspectRequested.value
 		inspectorClient = null
-		if (root === null || runtime === null) {
-			inspectActive.value = false
+		inspectorReady.value = false
+		inspectCommandPending.value = false
+		// `inspectActive` is Agent-acknowledged state, not desired state. A replacement Agent starts
+		// disabled, so never claim pointer suppression is active while an async transport is still
+		// handshaking/restoring the user's requested Inspect state.
+		inspectActive.value = false
+		if (root === null || runtime === null)
 			return
-		}
+		inspectRequested.value = restoreInspect
 
 		const transport = createInProcessInspectorTransportPair()
 		const agent = createInspectorAgent({
@@ -62,8 +70,10 @@ watch(
 		inspectorClient = client
 
 		const stopStatus = client.on('agent.status', ({ inspectEnabled }) => {
-			if (inspectorClient === client)
+			if (inspectorClient === client) {
 				inspectActive.value = inspectEnabled
+				inspectRequested.value = inspectEnabled
+			}
 		})
 		const stopSelection = client.on('inspect.selected', (selection) => {
 			if (inspectorClient !== client)
@@ -78,13 +88,20 @@ watch(
 		void (async () => {
 			try {
 				await client.handshake()
-				if (inspectorClient === client && restoreInspect)
+				if (inspectorClient !== client)
+					return
+				if (inspectRequested.value)
 					await client.request('inspect.enable', {})
+				if (inspectorClient === client)
+					inspectorReady.value = true
 			}
 			catch {
 				// A failed handshake leaves Inspect unavailable; normal Preview interaction remains intact.
-				if (inspectorClient === client)
+				if (inspectorClient === client) {
 					inspectActive.value = false
+					inspectRequested.value = false
+					inspectorReady.value = false
+				}
 			}
 		})()
 
@@ -93,8 +110,12 @@ watch(
 			stopSelection()
 			client.close()
 			agent.dispose()
-			if (inspectorClient === client)
+			if (inspectorClient === client) {
 				inspectorClient = null
+				inspectorReady.value = false
+				inspectCommandPending.value = false
+				inspectActive.value = false
+			}
 		})
 	},
 	{ flush: 'post', immediate: true },
@@ -102,19 +123,30 @@ watch(
 
 async function toggleInspect(): Promise<void> {
 	const client = inspectorClient
-	if (client === null)
+	if (client === null || !inspectorReady.value || inspectCommandPending.value)
 		return
-	const method = inspectActive.value ? 'inspect.disable' : 'inspect.enable'
+
+	const requested = !inspectActive.value
+	inspectRequested.value = requested
+	inspectCommandPending.value = true
 	try {
-		const result = method === 'inspect.enable'
+		const result = requested
 			? await client.request('inspect.enable', {})
 			: await client.request('inspect.disable', {})
-		if (inspectorClient === client)
+		if (inspectorClient === client) {
 			inspectActive.value = result.enabled
+			inspectRequested.value = result.enabled
+		}
 	}
 	catch {
-		if (inspectorClient === client)
+		if (inspectorClient === client) {
 			inspectActive.value = false
+			inspectRequested.value = false
+		}
+	}
+	finally {
+		if (inspectorClient === client)
+			inspectCommandPending.value = false
 	}
 }
 </script>
@@ -130,9 +162,10 @@ async function toggleInspect(): Promise<void> {
 				type="button"
 				:aria-label="i18n.t('Inspect')"
 				:aria-pressed="inspectActive"
+				:disabled="!inspectorReady || inspectCommandPending"
 				:class="inspectActive
-					? pika({ padding: '3px 10px', fontSize: '11px', fontWeight: '600', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-accent)', background: 'var(--lab-color-accent)', color: 'var(--lab-color-accent-contrast)', cursor: 'pointer' })
-					: pika({ padding: '3px 10px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+					? pika({ 'padding': '3px 10px', 'fontSize': '11px', 'fontWeight': '600', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-accent)', 'background': 'var(--lab-color-accent)', 'color': 'var(--lab-color-accent-contrast)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })
+					: pika({ 'padding': '3px 10px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 				@click="toggleInspect"
 			>
 				{{ i18n.t('Inspect') }}

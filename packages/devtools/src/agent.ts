@@ -106,6 +106,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	function sendSuccess(request: InspectorRequestMessage, result: unknown): void {
+		if (disposed || options.transport.closed)
+			return
 		options.transport.send({
 			protocol: INSPECTOR_PROTOCOL_VERSION,
 			kind: 'response',
@@ -280,8 +282,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	function onKeydown(event: KeyboardEvent): void {
-		if (event.key === 'Escape' && inspectEnabled)
+		if (event.key === 'Escape' && inspectEnabled) {
+			event.preventDefault()
+			event.stopPropagation()
 			disableInspect()
+		}
 	}
 
 	function installDomListeners(): () => void {
@@ -304,6 +309,10 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	function subscribeMember(request: Extract<InspectorRequestMessage, { method: 'runtime.subscribeMember' }>): void {
+		if (request.params.ref.runtimeId !== runtimeId) {
+			sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
+			return
+		}
 		const widget = resolveWidget(request.params.ref)
 		if (widget === null) {
 			sendError(request.requestId, protocolError('widget-not-found', 'The requested widget does not exist in this Runtime snapshot.'))
@@ -366,6 +375,10 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				sendSuccess(request, projectBlueprintSnapshot(runtimeId, runtimeInspection.blueprint))
 				return
 			case 'runtime.getWidgetSnapshot': {
+				if (request.params.ref.runtimeId !== runtimeId) {
+					sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
+					return
+				}
 				const nodeId = resolveNodeId(request.params.ref)
 				const snapshot = nodeId === null ? null : projectRuntimeWidgetSnapshot(runtimeId, runtimeInspection, nodeId)
 				if (snapshot === null) {
@@ -399,6 +412,10 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				sendSuccess(request, { enabled: false })
 				return
 			case 'highlight.show':
+				if (request.params.ref.runtimeId !== runtimeId) {
+					sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
+					return
+				}
 				sendSuccess(request, { highlighted: highlightRef(request.params.ref) })
 				return
 			case 'highlight.clear':

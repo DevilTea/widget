@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import { defaultSandboxPreset } from '../src/sandbox/presets'
 import { expect, test } from './fixtures'
 
 /**
@@ -18,6 +19,18 @@ const CHANGE_STAGE_DIALOG = { name: 'Change deal stage' }
 
 function inspectToggle(page: Page) {
 	return page.getByRole('button', INSPECT_TOGGLE)
+}
+
+interface LabTestWindow {
+	__WIDGET_LAB_TEST__?: {
+		setDraftSourceText: (text: string) => void
+	}
+}
+
+async function setDraftSourceText(page: Page, text: string): Promise<void> {
+	await page.evaluate((source) => {
+		(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)
+	}, text)
 }
 
 async function selectAuroraDeal(page: Page): Promise<void> {
@@ -227,6 +240,33 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 	 * default `valid-interactive` Sandbox preset, with no showcase switch at all (the true first-load
 	 * default state).
 	 */
+	test('restores requested Inspect state after Apply replaces the Preview Runtime', async ({ page }) => {
+		await page.goto('/?lab-test')
+		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+
+		await inspectToggle(page)
+			.click()
+		await expect(inspectToggle(page))
+			.toHaveAttribute('aria-pressed', 'true')
+
+		const draft = defaultSandboxPreset.sourceText.replace('Widget Lab sandbox', 'Widget Lab sandbox INSPECT REPLACED')
+		await setDraftSourceText(page, draft)
+		await page.getByRole('button', { name: 'Apply' })
+			.click()
+
+		await expect(page.getByText('Widget Lab sandbox INSPECT REPLACED', { exact: true }))
+			.toBeVisible()
+		await expect(inspectToggle(page))
+			.toBeEnabled()
+		await expect(inspectToggle(page))
+			.toHaveAttribute('aria-pressed', 'true')
+
+		await page.getByText('count: 0 · doubled: 0', { exact: true })
+			.click()
+		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
+			.toBeVisible()
+	})
+
 	test('Sandbox (the default showcase): Inspect works against the default state — hover/click the Counter widget', async ({ page }) => {
 		await inspectToggle(page)
 			.click()

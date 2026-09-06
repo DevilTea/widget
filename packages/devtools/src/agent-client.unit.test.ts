@@ -213,6 +213,28 @@ describe('inspector client/agent protocol boundary', () => {
 		agent.dispose()
 	})
 
+	it('distinguishes an unknown Runtime identity from a missing widget', async () => {
+		const { runtime } = createFixture()
+		const pair = createInProcessInspectorTransportPair()
+		const agent = createInspectorAgent({ runtime, transport: pair.agent, runtimeId: 'runtime-test' })
+		const client = createInspectorClient(pair.client)
+		const { runtimes } = await client.request('runtime.list', {})
+		const wrongRuntimeRef = { runtimeId: 'other-runtime', nodeId: runtimes[0]!.rootNodeId }
+
+		await expect(client.request('runtime.getWidgetSnapshot', { ref: wrongRuntimeRef }))
+			.rejects.toMatchObject({ code: 'runtime-not-found' })
+		await expect(client.request('runtime.subscribeMember', {
+			ref: wrongRuntimeRef,
+			member: { type: 'state', name: 'count' },
+		}))
+			.rejects.toMatchObject({ code: 'runtime-not-found' })
+		await expect(client.request('highlight.show', { ref: wrongRuntimeRef }))
+			.rejects.toMatchObject({ code: 'runtime-not-found' })
+
+		client.dispose()
+		agent.dispose()
+	})
+
 	it('subscribes passively and emits encoded member changes only after real Runtime activity', async () => {
 		const { runtime, getComputeCalls } = createFixture()
 		const pair = createInProcessInspectorTransportPair()

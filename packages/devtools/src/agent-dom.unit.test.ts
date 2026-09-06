@@ -131,16 +131,21 @@ describe('inspectorAgent DOM ownership', () => {
 		}
 	})
 
-	it('captures Escape before inspected controls can stop keyboard propagation', async () => {
+	it('captures and consumes Escape before inspected controls can react', async () => {
 		const { root, inner, agent, client } = createDomFixture()
 		try {
-			inner.addEventListener('keydown', event => event.stopPropagation())
+			const underlyingKeydown = vi.fn((event: KeyboardEvent) => event.stopPropagation())
+			inner.addEventListener('keydown', underlyingKeydown)
 			await client.request('inspect.enable', {})
 
-			inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+			const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+			inner.dispatchEvent(escape)
 
 			expect(agent.inspectEnabled)
 				.toBe(false)
+			expect(escape.defaultPrevented)
+				.toBe(true)
+			expect(underlyingKeydown).not.toHaveBeenCalled()
 		}
 		finally {
 			client.dispose()
