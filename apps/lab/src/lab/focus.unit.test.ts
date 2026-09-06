@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
 import { createInspectorFocusStore } from './focus'
-import { resolveWidgetFocus } from './inspect-focus'
 import { LabSession } from './session'
 
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText
@@ -13,7 +12,11 @@ describe('createInspectorFocusStore', () => {
 	it('synchronizes Document and Preview focus only while their revisions are linked', () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		const store = createInspectorFocusStore(session)
-		const focus = resolveWidgetFocus(session.preview!.blueprint, 'counter-1')!
+		const counterNode = inspectBlueprint(session.preview!.blueprint).nodes
+			.find(node => node.resolved && node.node.id === 'counter-1')
+		if (counterNode === undefined)
+			throw new Error('Expected counter-1 in Preview inspection.')
+		const focus = { nodeId: counterNode.nodeId }
 
 		store.setFocus('document', focus)
 
@@ -26,7 +29,11 @@ describe('createInspectorFocusStore', () => {
 	it('isolates Preview focus from current Document focus after an invalid commit diverges revisions', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		const store = createInspectorFocusStore(session)
-		const previewFocus = resolveWidgetFocus(session.preview!.blueprint, 'counter-1')!
+		const counterNode = inspectBlueprint(session.preview!.blueprint).nodes
+			.find(node => node.resolved && node.node.id === 'counter-1')
+		if (counterNode === undefined)
+			throw new Error('Expected counter-1 in Preview inspection.')
+		const previewFocus = { nodeId: counterNode.nodeId }
 		store.setFocus('preview', previewFocus)
 
 		await session.applyPreset(invalidSource)

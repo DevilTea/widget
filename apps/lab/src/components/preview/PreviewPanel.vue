@@ -1,71 +1,37 @@
 <script setup lang="ts">
 /**
- * The persistent Preview surface. `store.previewRuntime` only ever changes through
- * `LabSession`'s replacement-ordering hooks (see `use-lab-store.ts`): this component simply renders
- * whatever it currently holds, or an "unavailable" placeholder when no valid Preview exists.
- * `store.renderer` is the current showcase's `createWidgetVueRenderer` root component — it changes
- * only through `store.switchShowcase()`, which already guarantees the old Preview subtree has
- * unmounted first. `WidgetRenderer` never disposes the Runtime — `LabSession` owns that lifecycle.
+ * Persistent Preview surface. Runtime ownership/replacement stays in LabSession; this component only
+ * renders the current Preview Runtime and consumes the experimental InspectorClient protocol.
  *
- * `data-tutorial-target="preview"` (diagnostic #25 P1) is the Survey tour's step 1 spotlight target — the
- * whole scrollable Preview surface, not just the mounted widget tree, since step 1 is a plain
- * orientation ("this is the Interactive Survey") rather than a specific-control callout.
- *
- * Inspect mode (diagnostic #25 P2 "Preview -> semantic inspector bridge"): an opt-in, off-by-default toggle
- * in this panel's own header area (never `LabHeader.vue` — Preview owns this affordance since it is the
- * only panel it applies to). While active:
- *  - pointer-over resolves the innermost Inspect anchor under the cursor (`resolveInspectAnchor()`,
- *    over elements `useInspectAnchor()` stamped per-renderer) and highlights it with an outline
- *    (`lab-inspect-anchor--highlighted`, `src/styles/global.css` — a plain global class, not `pika()`,
- *    since it is applied imperatively via `classList` to an arbitrary descendant renderer's own DOM
- *    element, never through this component's own template/scope) plus a `type#id` badge — one shared
- *    absolutely-positioned element this panel owns, never allocated per-renderer;
- *  - the locked contract is "inspector selection ONLY — the underlying control is not also activated",
- *    which a `click`-only suppression cannot deliver: a real pointer activation runs `pointerdown` (and
- *    the browser's default focus-on-mousedown action for a focusable control) strictly *before* `click`,
- *    so a click-capture handler alone is too late to stop a native `<input>`/`<select>` from already
- *    being focused, beginning text selection, or otherwise reacting. This suppresses both boundaries:
- *    `@pointerdown.capture`/`@pointerup.capture` (`suppressPointerActivation()`) resolve the innermost
- *    anchor and `preventDefault()`/`stopPropagation()` the earlier pointer sequence itself (this is what
- *    actually stops native focus/selection/UI reaction), while the existing `@click.capture`
- *    (`onClickCapture()`) remains the semantic-selection *commit* path — canceling `pointerdown` does not
- *    remove the higher-level `click` event, so selection stays click-driven and still
- *    `preventDefault()`s/`stopPropagation()`s to keep the widget's own bubble-phase click listener (e.g.
- *    `ButtonRenderer`'s `press()`) from ever running;
- *  - resolves against the Preview Blueprint. When revisions are linked, it updates both scoped focuses
- *    and activates Blueprint; when diverged, it updates only Preview focus and activates Runtime, never
- *    forging current-Document focus from an older Preview node id;
- *  - Escape exits Inspect mode (`useInspectMode()`); toggling off restores normal Preview behavior
- *    immediately — every capture listener below is always attached but no-ops whenever `inspect.active`
- *    is `false`.
- *
- * No second semantic model: no "last interaction" registry, no tracing — only anchor -> existing focus.
- * Keyboard-driven inspection is out of P2 scope (see diagnostic #25 P2 return notes); the toggle button
- * itself is a normal, keyboard-operable button.
- *
- * "View implementation" (diagnostic #25 P3 Scope D, entry point 1): a small button next to the Inspect
- * toggle, enabled whenever current Document focus (`store.documentFocus` — however it got there: an
- * Inspect-mode click, a Blueprint/Graph tree selection, or the tutorial) resolves to a widget type this
- * showcase's `sources.ts` curates. It never re-sets focus itself — the Implementation panel reads the
- * same Document focus reactively (see `ImplementationPanel.vue`), so there is nothing else to keep in
- * sync here. #43 localizes only these Preview-owned controls/explanatory strings; the hover badge keeps
- * the exact semantic `type#id` identity.
+ * Issue #6 Phase A1 deliberately keeps Preview in the same Vue/DOM realm, but inspection no longer
+ * relies on that fact: the in-process transport JSON-clones every message, InspectorAgent owns DOM
+ * hit-testing/highlight/pointer suppression, and PreviewPanel only reacts to protocol events. The same
+ * client can therefore survive a later MessagePort/iframe or browser-extension transport swap.
  */
-import { computed, useTemplateRef, watch } from 'vue'
+import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
+import type { InspectorClient } from '@deviltea/widget-devtools'
+import {
+	createInProcessInspectorTransportPair,
+	createInspectorClient,
+} from '@deviltea/widget-devtools'
+import { createInspectorAgent } from '@deviltea/widget-devtools/agent'
+import { computed, shallowRef, useTemplateRef, watch } from 'vue'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
-import { useInspectMode } from '../../composables/use-inspect-mode'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { resolveFocusedWidget } from '../../implementation/focused-widget'
-import { resolveInspectAnchor } from '../../lab/inspect-anchor'
-import { resolvePreviewInspectResolution } from '../../lab/inspect-focus'
 import { getShowcase } from '../../showcases/registry'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
-const inspect = useInspectMode()
 const implementationExplorer = useImplementationExplorer()
+const previewSurface = useTemplateRef<HTMLDivElement>('previewSurface')
+const inspectActive = shallowRef(false)
+const inspectRequested = shallowRef(false)
+const inspectorReady = shallowRef(false)
+const inspectCommandPending = shallowRef(false)
+let inspectorClient: InspectorClient | null = null
 
 const curatedEntryAvailable = computed(() => {
 	const widget = resolveFocusedWidget(store.documentState.value.blueprint, store.documentFocus.value)
@@ -75,106 +41,112 @@ const curatedEntryAvailable = computed(() => {
 	return showcase !== undefined && widget.type in showcase.sources
 })
 
-const previewSurface = useTemplateRef<HTMLDivElement>('previewSurface')
+watch(
+	[previewSurface, store.previewRuntime],
+	([root, runtime], _previous, onCleanup) => {
+		const restoreInspect = inspectRequested.value
+		inspectorClient = null
+		inspectorReady.value = false
+		inspectCommandPending.value = false
+		// `inspectActive` is Agent-acknowledged state, not desired state. A replacement Agent starts
+		// disabled, so never claim pointer suppression is active while an async transport is still
+		// handshaking/restoring the user's requested Inspect state.
+		inspectActive.value = false
+		if (root === null || runtime === null)
+			return
+		inspectRequested.value = restoreInspect
 
-// The currently outlined DOM element, tracked outside Vue's own reactivity: it belongs to whichever
-// showcase renderer component happens to be under the cursor, never to this component's own template,
-// so it is toggled imperatively via `classList` rather than through a `:class` binding here.
-let highlightedElement: Element | null = null
+		const transport = createInProcessInspectorTransportPair()
+		const agent = createInspectorAgent({
+			runtime,
+			transport: transport.agent,
+			dom: {
+				root,
+				highlightClass: 'lab-inspect-anchor--highlighted',
+				badgeClass: 'lab-inspector-agent-badge',
+			},
+		})
+		const client = createInspectorClient(transport.client)
+		inspectorClient = client
 
-function clearHighlight(): void {
-	highlightedElement?.classList.remove('lab-inspect-anchor--highlighted')
-	highlightedElement = null
-}
+		const stopStatus = client.on('agent.status', ({ inspectEnabled }) => {
+			if (inspectorClient === client) {
+				inspectActive.value = inspectEnabled
+				inspectRequested.value = inspectEnabled
+			}
+		})
+		const stopSelection = client.on('inspect.selected', (selection) => {
+			if (inspectorClient !== client)
+				return
 
-// Escape flips `inspect.active` off (inside `useInspectMode()`) — clear any leftover highlight/badge
-// immediately rather than waiting for the next pointer event to notice.
-watch(inspect.active, (active) => {
-	if (!active) {
-		clearHighlight()
-		inspect.setHovered(null)
+			// Wire nodeIds are the numeric representation of this exact registered Runtime's
+			// snapshot-local InspectionNodeId. Re-brand only at the local focus adapter boundary.
+			store.setFocus('preview', { nodeId: selection.ref.nodeId as InspectionNodeId })
+			store.activeTab.value = store.revisionStatus.value.isLinked ? 'blueprint' : 'runtime'
+		})
+
+		void (async () => {
+			try {
+				await client.handshake()
+				if (inspectorClient !== client)
+					return
+				if (inspectRequested.value)
+					await client.request('inspect.enable', {})
+				if (inspectorClient === client)
+					inspectorReady.value = true
+			}
+			catch {
+				// A failed handshake leaves Inspect unavailable; normal Preview interaction remains intact.
+				if (inspectorClient === client) {
+					inspectActive.value = false
+					inspectRequested.value = false
+					inspectorReady.value = false
+				}
+			}
+		})()
+
+		onCleanup(() => {
+			stopStatus()
+			stopSelection()
+			client.close()
+			agent.dispose()
+			if (inspectorClient === client) {
+				inspectorClient = null
+				inspectorReady.value = false
+				inspectCommandPending.value = false
+				inspectActive.value = false
+			}
+		})
+	},
+	{ flush: 'post', immediate: true },
+)
+
+async function toggleInspect(): Promise<void> {
+	const client = inspectorClient
+	if (client === null || !inspectorReady.value || inspectCommandPending.value)
+		return
+
+	const requested = !inspectActive.value
+	inspectRequested.value = requested
+	inspectCommandPending.value = true
+	try {
+		const result = requested
+			? await client.request('inspect.enable', {})
+			: await client.request('inspect.disable', {})
+		if (inspectorClient === client) {
+			inspectActive.value = result.enabled
+			inspectRequested.value = result.enabled
+		}
 	}
-})
-
-function onPointerOver(event: PointerEvent): void {
-	if (!inspect.active.value)
-		return
-
-	const anchor = resolveInspectAnchor(event.target)
-	if (anchor === null) {
-		clearHighlight()
-		inspect.setHovered(null)
-		return
+	catch {
+		if (inspectorClient === client) {
+			inspectActive.value = false
+			inspectRequested.value = false
+		}
 	}
-
-	if (anchor.element !== highlightedElement) {
-		clearHighlight()
-		anchor.element.classList.add('lab-inspect-anchor--highlighted')
-		highlightedElement = anchor.element
-	}
-	inspect.setHovered({
-		widgetId: anchor.widgetId,
-		widgetType: anchor.widgetType,
-		rect: anchor.element.getBoundingClientRect(),
-	})
-}
-
-/** Fires once, only when the pointer actually leaves the whole scrollable Preview surface. */
-function onPointerLeaveSurface(): void {
-	clearHighlight()
-	inspect.setHovered(null)
-}
-
-/**
- * Suppresses the *earlier* pointer-activation boundary (merge-gate review round 1, blocker 1):
- * `pointerdown` — and the browser's default focus-on-mousedown action for a click-focusable control —
- * fires strictly before `click`, so a native `<input>`/`<select>` can already be focused (and can
- * already begin native reactions such as text selection) before a click-only handler ever runs.
- * Attached on both `pointerdown` and `pointerup` (capture phase) so no pointer-specific renderer/native
- * handler on either edge of the down/up sequence sees an un-suppressed event while Inspect is active.
- * This does not perform selection itself and does not remove the subsequent `click` event — that stays
- * `onClickCapture()`'s job below.
- */
-function suppressPointerActivation(event: PointerEvent): void {
-	if (!inspect.active.value)
-		return
-
-	const anchor = resolveInspectAnchor(event.target)
-	if (anchor === null)
-		return
-
-	event.preventDefault()
-	event.stopPropagation()
-}
-
-/**
- * Capture-phase per diagnostic #25 P2's approved interaction rule ("Suppress the underlying pointer
- * activation while Inspect is active"): the semantic-selection *commit* path. This must run, and be
- * able to `preventDefault()`/`stopPropagation()`, strictly before the actual widget's own (bubble-phase)
- * click listener — e.g. a CRM `ButtonRenderer`'s `press()` call. `stopPropagation()` called here, during
- * capture, stops the event before it ever reaches that bubble-phase listener at all (not merely before
- * some later capture-phase step). The *earlier* pointerdown/mousedown-driven native reactions (focus,
- * text-selection start, ...) are a separate boundary this handler alone cannot reach — see
- * `suppressPointerActivation()` above.
- */
-function onClickCapture(event: MouseEvent): void {
-	if (!inspect.active.value)
-		return
-
-	const anchor = resolveInspectAnchor(event.target)
-	if (anchor === null)
-		return
-
-	event.preventDefault()
-	event.stopPropagation()
-
-	const preview = store.preview.value
-	const selection = preview === null
-		? null
-		: resolvePreviewInspectResolution(preview.blueprint, anchor.widgetId, store.revisionStatus.value.isLinked)
-	if (selection !== null) {
-		store.setFocus(selection.scope, selection.focus)
-		store.activeTab.value = selection.targetTab
+	finally {
+		if (inspectorClient === client)
+			inspectCommandPending.value = false
 	}
 }
 </script>
@@ -189,16 +161,17 @@ function onClickCapture(event: MouseEvent): void {
 			<button
 				type="button"
 				:aria-label="i18n.t('Inspect')"
-				:aria-pressed="inspect.active.value"
-				:class="inspect.active.value
-					? pika({ padding: '3px 10px', fontSize: '11px', fontWeight: '600', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-accent)', background: 'var(--lab-color-accent)', color: 'var(--lab-color-accent-contrast)', cursor: 'pointer' })
-					: pika({ padding: '3px 10px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
-				@click="inspect.toggle()"
+				:aria-pressed="inspectActive"
+				:disabled="!inspectorReady || inspectCommandPending"
+				:class="inspectActive
+					? pika({ 'padding': '3px 10px', 'fontSize': '11px', 'fontWeight': '600', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-accent)', 'background': 'var(--lab-color-accent)', 'color': 'var(--lab-color-accent-contrast)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })
+					: pika({ 'padding': '3px 10px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				@click="toggleInspect"
 			>
 				{{ i18n.t('Inspect') }}
 			</button>
 			<span
-				v-if="inspect.active.value"
+				v-if="inspectActive"
 				:class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 			>
 				{{ i18n.t('Click a widget to focus it in {surface} — Esc to exit', { surface: i18n.t(store.revisionStatus.value.isLinked ? 'Blueprint' : 'Runtime') }) }}
@@ -217,12 +190,7 @@ function onClickCapture(event: MouseEvent): void {
 			ref="previewSurface"
 			data-tutorial-target="preview"
 			:class="pika({ position: 'relative', flex: '1 1 auto', overflow: 'auto', padding: '16px', background: 'var(--lab-color-bg)', minHeight: '0' })"
-			:style="{ cursor: inspect.active.value ? 'crosshair' : undefined }"
-			@pointerover="onPointerOver"
-			@pointerleave="onPointerLeaveSurface"
-			@pointerdown.capture="suppressPointerActivation"
-			@pointerup.capture="suppressPointerActivation"
-			@click.capture="onClickCapture"
+			:style="{ cursor: inspectActive ? 'crosshair' : undefined }"
 		>
 			<div
 				v-if="store.revisionStatus.value.isDiverged"
@@ -242,18 +210,6 @@ function onClickCapture(event: MouseEvent): void {
 			>
 				{{ i18n.t('Preview unavailable — there is no valid Preview revision. See the Blueprint tab for diagnostics.') }}
 			</p>
-			<div
-				v-if="inspect.hovered.value !== null && previewSurface !== null"
-				aria-hidden="true"
-				:class="pika({ position: 'absolute', zIndex: '10', padding: '2px 6px', fontSize: '10px', fontWeight: '600', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-accent)', color: 'var(--lab-color-accent-contrast)', pointerEvents: 'none', whiteSpace: 'nowrap' })"
-				:style="{
-					top: `${inspect.hovered.value.rect.top - previewSurface.getBoundingClientRect().top + previewSurface.scrollTop}px`,
-					left: `${inspect.hovered.value.rect.left - previewSurface.getBoundingClientRect().left + previewSurface.scrollLeft}px`,
-					transform: 'translateY(-100%)',
-				}"
-			>
-				{{ inspect.hovered.value.widgetType }}#{{ inspect.hovered.value.widgetId }}
-			</div>
 		</div>
 	</div>
 </template>

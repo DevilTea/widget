@@ -6,6 +6,7 @@ DevilTea Widget is a renderer-agnostic widget composition system with a Vue 3 ad
 | --- | --- |
 | [`@deviltea/widget-core`](packages/core) | Widget plugins, systems, blueprints, documents, runtime semantics, and readonly inspection. |
 | [`@deviltea/widget-vue`](packages/vue) | Thin Vue 3 renderer and reactivity integration over the core runtime. |
+| [`@deviltea/widget-devtools`](packages/devtools) | Private experimental serializable inspector protocol, client/agent boundary, and in-process transport. |
 | [`widget-lab`](apps/lab) | Private workbench, inspectors, source editing, dependency graph, and showcases. |
 
 Documentation is built for `https://deviltea.github.io/widget/`, with Widget Lab served under `/widget/lab/`.

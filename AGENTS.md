@@ -2,9 +2,11 @@
 
 ## Monorepo guide
 
-This repository owns the DevilTea Widget project. It publishes the renderer-agnostic core from `packages/core` and the Vue adapter from `packages/vue`, hosts the private Widget Lab application in `apps/lab`, and builds project documentation from `docs/site`.
+This repository owns the DevilTea Widget project. It publishes the renderer-agnostic core from `packages/core` and the Vue adapter from `packages/vue`, hosts the private experimental DevTools boundary in `packages/devtools`, hosts the private Widget Lab application in `apps/lab`, and builds project documentation from `docs/site`.
 
 Treat `@deviltea/widget-core` and `@deviltea/widget-vue` as independently releasable packages, but keep them in this repository because the Vue adapter and Lab intentionally integrate against the exact core workspace contract.
+`@deviltea/widget-devtools` is currently private and experimental; its package name and publication status are not committed public API.
+
 
 The project was split from `DevilTea/deviltea-labs` after the initial `0.0.1` releases. Historical decision logs referenced by migrated source remain authoritative in the original repository: core semantics are primarily `DevilTea/deviltea-labs#10`, Vue integration is primarily `DevilTea/deviltea-labs#13`, source/document work includes `#54`, and the current Lab redesign includes `#60`. Bare historical issue references in migrated comments refer to `DevilTea/deviltea-labs` unless a later comment explicitly names this repository.
 
@@ -33,6 +35,7 @@ The npm Trusted Publisher configuration must name repository `DevilTea/widget` b
 - Test externally observable behavior with precise assertions; coverage percentage alone is not evidence of correctness.
 - Keep core and Vue conformance tests colocated with runtime source as `*.unit.test.ts`.
 - Keep Widget Lab unit tests colocated under `apps/lab/src`; the Lab is private and excluded from package coverage thresholds.
+- Keep experimental DevTools protocol/agent tests colocated under `packages/devtools/src`; they run in the unit suite but are excluded from the published core/Vue coverage threshold until that package boundary is intentionally promoted.
 - Keep Playwright browser and Pages-navigation suites separate from the fast unit suite.
 - The root V8 coverage report explicitly covers published runtime source in `packages/core` and `packages/vue`. Its thresholds preserve the rounded-down Widget-only baseline measured at the repository split (branches 82%, functions 95%, lines 88%, statements 89%) rather than inheriting the old cross-package 90% aggregate gate.
 

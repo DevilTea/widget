@@ -71,13 +71,29 @@ dialog {
 }
 
 /*
- * Inspect mode's hover outline (diagnostic #25 P2 "Preview -> semantic inspector bridge"). Applied
- * imperatively via `classList` from `PreviewPanel.vue` to whichever showcase renderer's own DOM element
- * (stamped `[data-widget-id]` by `useInspectAnchor()`) is currently the innermost anchor under the
- * cursor — a plain global class rather than `pika()`/scoped styles, since the target element belongs to
- * an arbitrary descendant renderer component's own template, never `PreviewPanel.vue`'s own scope.
+ * Inspect mode's hover outline. InspectorAgent applies this class to the innermost renderer anchor
+ * inside its bounded DOM root. It stays Lab-owned CSS so the reusable Agent has no Vue/PikaCSS styling
+ * dependency.
  */
 .lab-inspect-anchor--highlighted {
 	outline: 2px solid var(--lab-color-accent);
 	outline-offset: 1px;
+}
+
+/**
+ * InspectorAgent-owned hover label. The Agent creates/removes this element inside the bounded Preview
+ * root; keeping appearance in Lab CSS avoids coupling the reusable Agent to PikaCSS or Vue.
+ */
+.lab-inspector-agent-badge {
+	position: absolute;
+	z-index: 10;
+	padding: 2px 6px;
+	font-size: 10px;
+	font-weight: 600;
+	border-radius: var(--lab-radius);
+	background: var(--lab-color-accent);
+	color: var(--lab-color-accent-contrast);
+	pointer-events: none;
+	white-space: nowrap;
+	transform: translateY(-100%);
 }
