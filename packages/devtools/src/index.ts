@@ -32,7 +32,7 @@ export type {
 	InspectorRuntimeWidgetSnapshot,
 	WidgetRef,
 } from './protocol'
-export { createInProcessInspectorTransportPair } from './transport'
+export { createInProcessInspectorTransportPair, createMessagePortInspectorTransport } from './transport'
 export type {
 	InProcessInspectorTransportPair,
 	InspectorTransport,

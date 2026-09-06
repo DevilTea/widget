@@ -82,11 +82,14 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   lazily-registered `ImplementationPanel.vue` — issue #25 P3; it is the one panel `Workbench.vue`
   registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
   deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
-  which now consumes the private `@deviltea/widget-devtools` A1 client/agent boundary for Inspect mode: an
-  in-process transport JSON-round-trips protocol messages, the Agent owns bounded Preview DOM hit-testing,
-  pointer suppression, highlight/badge chrome, and Escape cleanup, while the panel only translates scoped
-  `WidgetRef` selection events into the existing Preview focus/navigation rules. This is intentionally not
-  an iframe yet; issue #6 is the A1 authority and issue #5 remains the iframe/extension umbrella,
+  which consumes the private `@deviltea/widget-devtools` client/agent boundary for Inspect mode. Phase B1
+  (#8) now runs that same-realm bridge over a real asynchronous `MessageChannel` rather than the A1
+  in-process pair; the Agent still owns bounded Preview DOM hit-testing, pointer suppression,
+  highlight/badge chrome, and Escape cleanup, while the panel only translates scoped `WidgetRef`
+  selection events into the existing Preview focus/navigation rules. `src/preview-host/lifecycle.ts` is
+  the generation-aware remote-host state machine (`booting`/`ready`/`replacing`/`disconnected`/`error`)
+  for the next iframe step. Preview Runtime ownership has **not** moved into an iframe yet; #8 owns Phase B
+  implementation and #5 remains the iframe/extension umbrella,
   `inspector/*` (presentation-only inspector shell and tree/details split layout shared by Blueprint and
   Runtime; these components own no semantic data, revision labels, or focus state), `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list; the selected-node
   detail also carries a "View implementation" entry point), `runtime/*` (Runtime Inspector's member rows

@@ -3,16 +3,16 @@
  * Persistent Preview surface. Runtime ownership/replacement stays in LabSession; this component only
  * renders the current Preview Runtime and consumes the experimental InspectorClient protocol.
  *
- * Issue #6 Phase A1 deliberately keeps Preview in the same Vue/DOM realm, but inspection no longer
- * relies on that fact: the in-process transport JSON-clones every message, InspectorAgent owns DOM
- * hit-testing/highlight/pointer suppression, and PreviewPanel only reacts to protocol events. The same
- * client can therefore survive a later MessagePort/iframe or browser-extension transport swap.
+ * Issue #8 Phase B1 still keeps Preview execution in the same Vue/DOM realm, but inspection now runs
+ * through a real asynchronous MessageChannel. InspectorAgent owns DOM hit-testing/highlight/pointer
+ * suppression, and PreviewPanel only reacts to protocol events. The next Phase B step can therefore
+ * move the Agent/Runtime into an iframe without changing the InspectorClient state model.
  */
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { InspectorClient } from '@deviltea/widget-devtools'
 import {
-	createInProcessInspectorTransportPair,
 	createInspectorClient,
+	createMessagePortInspectorTransport,
 } from '@deviltea/widget-devtools'
 import { createInspectorAgent } from '@deviltea/widget-devtools/agent'
 import { computed, shallowRef, useTemplateRef, watch } from 'vue'
@@ -56,17 +56,19 @@ watch(
 			return
 		inspectRequested.value = restoreInspect
 
-		const transport = createInProcessInspectorTransportPair()
+		const channel = new MessageChannel()
+		const clientTransport = createMessagePortInspectorTransport(channel.port1)
+		const agentTransport = createMessagePortInspectorTransport(channel.port2)
 		const agent = createInspectorAgent({
 			runtime,
-			transport: transport.agent,
+			transport: agentTransport,
 			dom: {
 				root,
 				highlightClass: 'lab-inspect-anchor--highlighted',
 				badgeClass: 'lab-inspector-agent-badge',
 			},
 		})
-		const client = createInspectorClient(transport.client)
+		const client = createInspectorClient(clientTransport)
 		inspectorClient = client
 
 		const stopStatus = client.on('agent.status', ({ inspectEnabled }) => {
