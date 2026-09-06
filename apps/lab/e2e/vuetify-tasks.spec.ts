@@ -1,0 +1,125 @@
+import type { Locator, Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+
+function taskRow(page: Page, title: string): Locator {
+	return page.locator('[data-task-id]')
+		.filter({ hasText: title })
+}
+
+async function chooseVuetifySelect(page: Page, label: string, option: string): Promise<void> {
+	const combobox = page.getByRole('combobox', { name: label })
+	const field = combobox.locator('xpath=ancestor::div[contains(concat(\" \", normalize-space(@class), \" \"), \" v-field \")][1]')
+	await field.click()
+	await page.getByRole('option', { name: option, exact: true })
+		.click()
+}
+
+test.beforeEach(async ({ page }) => {
+	await page.goto('/')
+	await page.getByLabel('Switch showcase')
+		.selectOption('vuetify-tasks')
+	await expect(page.getByTestId('vuetify-task-app'))
+		.toBeVisible()
+})
+
+test('search and status filter are Runtime-backed and coherent with the rendered task collection', async ({ page }) => {
+	await expect(page.locator('[data-task-id]'))
+		.toHaveCount(4)
+
+	await page.getByRole('textbox', { name: 'Search' })
+		.fill('dialog')
+	await expect(taskRow(page, 'Exercise the editor dialog'))
+		.toBeVisible()
+	await expect(page.locator('[data-task-id]'))
+		.toHaveCount(1)
+
+	await page.getByRole('textbox', { name: 'Search' })
+		.fill('')
+	await chooseVuetifySelect(page, 'Status', 'Done')
+	await expect(taskRow(page, 'Map Widget state to Vuetify controls'))
+		.toBeVisible()
+	await expect(page.locator('[data-task-id]'))
+		.toHaveCount(1)
+})
+
+test('create, edit, complete and delete flow through Widget Methods with snackbar feedback', async ({ page }) => {
+	await page.getByRole('button', { name: 'New task' })
+		.click()
+	const dialog = page.getByRole('dialog')
+	await expect(dialog)
+		.toBeVisible()
+	await expect(dialog)
+		.toContainText('Create task')
+	await dialog.getByRole('textbox', { name: 'Task title' })
+		.fill('Write the browser contract')
+	await dialog.getByRole('button', { name: 'Save' })
+		.click()
+
+	await expect(dialog)
+		.toBeHidden()
+	await expect(taskRow(page, 'Write the browser contract'))
+		.toBeVisible()
+	await expect(page.getByText('Task created', { exact: true }))
+		.toBeVisible()
+
+	const row = taskRow(page, 'Write the browser contract')
+	await row.getByRole('button', { name: 'Edit' })
+		.click()
+	await expect(dialog)
+		.toBeVisible()
+	await expect(dialog)
+		.toContainText('Edit task')
+	const title = dialog.getByRole('textbox', { name: 'Task title' })
+	await expect(title)
+		.toHaveValue('Write the browser contract')
+	await title.fill('Verify the browser contract')
+	await dialog.getByRole('button', { name: 'Save' })
+		.click()
+	await expect(taskRow(page, 'Verify the browser contract'))
+		.toBeVisible()
+	await expect(page.getByText('Task updated', { exact: true }))
+		.toBeVisible()
+
+	const updatedRow = taskRow(page, 'Verify the browser contract')
+	await updatedRow.getByRole('checkbox')
+		.click()
+	await expect(page.getByText('Task completed', { exact: true }))
+		.toBeVisible()
+
+	await updatedRow.getByRole('button', { name: 'Delete' })
+		.click()
+	await expect(taskRow(page, 'Verify the browser contract'))
+		.toHaveCount(0)
+	await expect(page.getByText('Task deleted', { exact: true }))
+		.toBeVisible()
+})
+
+test('locale and theme controls project capability Widget state into Vuetify rendering', async ({ page }) => {
+	const app = page.getByTestId('vuetify-task-app')
+	await expect(app)
+		.toContainText('Widget Task Workspace')
+
+	await page.getByRole('button', { name: 'Language' })
+		.click()
+	await expect(app)
+		.toContainText('Widget 任務工作區')
+	await expect(page.getByRole('button', { name: '新增任務' }))
+		.toBeVisible()
+	await expect(page.getByText('任務', { exact: true }))
+		.toBeVisible()
+
+	const themeButton = page.getByRole('button', { name: '主題' })
+	await expect(themeButton)
+		.toContainText('system')
+	await themeButton.click()
+	await expect(themeButton)
+		.toContainText('light')
+	await expect(app)
+		.toHaveClass(/v-theme--light/)
+
+	await themeButton.click()
+	await expect(themeButton)
+		.toContainText('dark')
+	await expect(app)
+		.toHaveClass(/v-theme--dark/)
+})

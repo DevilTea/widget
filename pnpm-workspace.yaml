@@ -46,6 +46,7 @@ catalog:
   vitest: ^4.1.9
   vue: ^3.5.39
   vue-tsc: ^3.3.6
+  vuetify: 4.2.0
   zx: ^8.8.5
 ignoredBuiltDependencies:
   - esbuild
