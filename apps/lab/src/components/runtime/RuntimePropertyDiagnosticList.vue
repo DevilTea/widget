@@ -1,26 +1,18 @@
 <script setup lang="ts">
-/** Renders a Property's immutable diagnostic snapshot using its canonical top-level code and fields. */
-import type { BlueprintDependencyReference, DiagnosticPath, RuntimePropertyDiagnostic } from '@deviltea/widget-core'
+import type { InspectableValue, InspectorDependencyReference, InspectorRuntimeDiagnostic } from '@deviltea/widget-devtools'
 import { formatDependencyReference, formatDiagnosticPath } from '../../lib/diagnostic-format'
+import { formatInspectableValue } from '../../runtime-inspector/format-value'
 
 defineProps<{
-	diagnostics: readonly RuntimePropertyDiagnostic[]
+	diagnostics: readonly InspectorRuntimeDiagnostic[]
 }>()
 
-function pathOf(diagnostic: RuntimePropertyDiagnostic): DiagnosticPath | undefined {
-	return 'path' in diagnostic ? diagnostic.path : undefined
+function valueText(value: InspectableValue | undefined): string {
+	return value === undefined ? 'undefined' : formatInspectableValue(value)
 }
 
-function resultOf(diagnostic: RuntimePropertyDiagnostic): unknown {
-	return 'result' in diagnostic ? diagnostic.result : undefined
-}
-
-function dependencyOf(diagnostic: RuntimePropertyDiagnostic): BlueprintDependencyReference | undefined {
-	return 'dependency' in diagnostic ? diagnostic.dependency : undefined
-}
-
-function receivedOf(diagnostic: RuntimePropertyDiagnostic): unknown {
-	return 'received' in diagnostic ? diagnostic.received : undefined
+function dependencyText(reference: InspectorDependencyReference): string {
+	return formatDependencyReference(reference)
 }
 </script>
 
@@ -39,18 +31,18 @@ function receivedOf(diagnostic: RuntimePropertyDiagnostic): unknown {
 				v-if="diagnostic.code === 'invalid-property-result'"
 				:class="pika({ margin: '0', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)', display: 'flex', flexDirection: 'column', gap: '2px' })"
 			>
-				<div v-if="pathOf(diagnostic) !== undefined">
-					path: {{ formatDiagnosticPath(pathOf(diagnostic)) }}
+				<div v-if="diagnostic.path !== undefined">
+					path: {{ formatDiagnosticPath(diagnostic.path) }}
 				</div>
-				<div>result: {{ JSON.stringify(resultOf(diagnostic)) }}</div>
+				<div>result: {{ valueText(diagnostic.result) }}</div>
 			</dl>
 			<dl
-				v-if="dependencyOf(diagnostic) !== undefined"
+				v-if="diagnostic.dependency !== undefined"
 				:class="pika({ margin: '0', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)', display: 'flex', flexDirection: 'column', gap: '2px' })"
 			>
-				<div>dependency: {{ formatDependencyReference(dependencyOf(diagnostic)!) }}</div>
+				<div>dependency: {{ dependencyText(diagnostic.dependency) }}</div>
 				<div v-if="diagnostic.code === 'dependency-value-rejected'">
-					received: {{ JSON.stringify(receivedOf(diagnostic)) }}
+					received: {{ valueText(diagnostic.received) }}
 				</div>
 			</dl>
 		</li>

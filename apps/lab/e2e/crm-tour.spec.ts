@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 /**
  * Issue #25 P4 CRM tour contract — a new file (rather than extending `tutorial.spec.ts`) for suite
@@ -121,26 +121,31 @@ test.describe('CRM tour entry', () => {
 		// walkthrough (every observation asserted) is `tutorial.spec.ts`'s job; this only needs to get
 		// there via genuine interactions to prove the NEW "Take the CRM tour" link (issue #25 P4).
 		await nextButton.click() // step 1 -> 2
-		const adults = page.getByLabel('Adults', { exact: true })
+		const adults = previewFrame(page)
+			.getByLabel('Adults', { exact: true })
 		await adults.fill('5')
 		await adults.press('Tab')
 		await nextButton.click() // -> 3
 		await nextButton.click() // -> 4
-		const returnDate = page.getByLabel('Return date')
+		const returnDate = previewFrame(page)
+			.getByLabel('Return date')
 		await returnDate.fill('2027-04-01')
 		await returnDate.press('Tab')
 		await returnDate.fill('2027-04-20')
 		await returnDate.press('Tab')
 		await nextButton.click() // -> 5
-		const children = page.getByLabel('Children', { exact: true })
+		const children = previewFrame(page)
+			.getByLabel('Children', { exact: true })
 		await children.fill('2')
 		await children.press('Tab')
 		await children.fill('0')
 		await children.press('Tab')
 		await nextButton.click() // -> 6
-		await page.getByRole('button', { name: 'Submit', exact: true })
+		await previewFrame(page)
+			.getByRole('button', { name: 'Submit', exact: true })
 			.click()
-		await page.getByRole('button', { name: 'Generate result', exact: true })
+		await previewFrame(page)
+			.getByRole('button', { name: 'Generate result', exact: true })
 			.click()
 		await nextButton.click() // -> 7
 		await adults.fill('6')
@@ -189,12 +194,15 @@ test('full CRM tour end-to-end via real interactions, each observation appearing
 		.toHaveCount(0)
 	await expect(nextButton)
 		.toBeDisabled()
-	await expect(page.locator('[data-tutorial-target="crm-search"]'))
+	await expect(previewFrame(page)
+		.locator('[data-tutorial-target="crm-search"]'))
 		.toHaveClass(/tutorial-spotlight/)
 
-	await page.getByLabel('Search', { exact: true })
+	await previewFrame(page)
+		.getByLabel('Search', { exact: true })
 		.fill('Aurora')
-	await expect(page.locator('tbody tr'))
+	await expect(previewFrame(page)
+		.locator('tbody tr'))
 		.toHaveCount(1)
 	await expect(searchObservation)
 		.toBeVisible()
@@ -208,17 +216,20 @@ test('full CRM tour end-to-end via real interactions, each observation appearing
 	await nextButton.click()
 
 	// Step 3 — row selection -> detail coordination via Table.selectedRowId.
-	const detailPanelCompany = page.getByText('Deal details')
+	const detailPanelCompany = previewFrame(page)
+		.getByText('Deal details')
 		.locator('..')
 		.locator('dd')
 		.first()
 	const selectObservation = rail.getByText('The detail panel now shows Aurora Systems.', { exact: false })
 	await expect(selectObservation)
 		.toHaveCount(0)
-	await expect(page.locator('[data-tutorial-target="crm-table"]'))
+	await expect(previewFrame(page)
+		.locator('[data-tutorial-target="crm-table"]'))
 		.toHaveClass(/tutorial-spotlight/)
 
-	await page.getByRole('row')
+	await previewFrame(page)
+		.getByRole('row')
 		.filter({ hasText: 'Aurora Systems' })
 		.click()
 	await expect(detailPanelCompany)
@@ -237,12 +248,15 @@ test('full CRM tour end-to-end via real interactions, each observation appearing
 	const saveObservation = rail.getByText('Aurora Systems\' stage changed', { exact: false })
 	await expect(openObservation)
 		.toHaveCount(0)
-	await expect(page.locator('[data-tutorial-target="crm-change-stage-button"]'))
+	await expect(previewFrame(page)
+		.locator('[data-tutorial-target="crm-change-stage-button"]'))
 		.toHaveClass(/tutorial-spotlight/)
 
-	const changeStageButton = page.getByRole('button', { name: 'Change stage' })
+	const changeStageButton = previewFrame(page)
+		.getByRole('button', { name: 'Change stage' })
 	await changeStageButton.click()
-	const dialog = page.getByRole('dialog', { name: 'Change deal stage' })
+	const dialog = previewFrame(page)
+		.getByRole('dialog', { name: 'Change deal stage' })
 	await expect(dialog)
 		.toBeVisible()
 	// Stage 1 revealed via passive Runtime observation while the (native, `inert`-making) dialog is
@@ -254,16 +268,19 @@ test('full CRM tour end-to-end via real interactions, each observation appearing
 	await expect(saveObservation)
 		.toHaveCount(0)
 
-	await page.getByLabel('New stage')
+	await previewFrame(page)
+		.getByLabel('New stage')
 		.selectOption('won')
 	// `exact: true`: the Runtime tab (activated via step 2's "See it in Runtime" link, and still
 	// mounted though inactive) has its own "save-stage : Button"/"save() writes ..." rows, which a
 	// non-exact substring match on "Save" would ambiguously also match.
-	await page.getByRole('button', { name: 'Save', exact: true })
+	await previewFrame(page)
+		.getByRole('button', { name: 'Save', exact: true })
 		.click()
 	await expect(dialog)
 		.toBeHidden()
-	await expect(page.getByRole('row')
+	await expect(previewFrame(page)
+		.getByRole('row')
 		.filter({ hasText: 'Aurora Systems' })
 		.locator('td')
 		.nth(3))

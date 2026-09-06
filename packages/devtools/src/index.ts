@@ -1,3 +1,5 @@
+export { createMessagePortChannelHub } from './channel'
+export type { MessagePortChannelHub } from './channel'
 export { createInspectorClient, InspectorClientError } from './client'
 export type { InspectorClient } from './client'
 export {
@@ -14,11 +16,13 @@ export type {
 	InspectorBlueprintNode,
 	InspectorBlueprintSnapshot,
 	InspectorCapabilities,
+	InspectorDependencyReference,
 	InspectorDiagnostic,
 	InspectorEventMap,
 	InspectorEventMessage,
 	InspectorEventName,
 	InspectorHandshakeResult,
+	InspectorMemberRef,
 	InspectorMessage,
 	InspectorProtocolError,
 	InspectorProtocolVersion,
@@ -28,7 +32,10 @@ export type {
 	InspectorRequestParams,
 	InspectorRequestResult,
 	InspectorResponseMessage,
+	InspectorRuntimeDiagnostic,
 	InspectorRuntimeMemberSnapshot,
+	InspectorRuntimePropertySnapshot,
+	InspectorRuntimeStateSnapshot,
 	InspectorRuntimeWidgetSnapshot,
 	WidgetRef,
 } from './protocol'

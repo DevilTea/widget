@@ -1,14 +1,14 @@
 /**
- * Revision-scoped inspector focus (Blueprint / Graph / Runtime / Preview).
+ * Revision-scoped inspector focus across the parent Document and remote iframe Preview.
  *
- * `InspectionNodeId` is snapshot-local. The Lab therefore keeps a Document focus and a Preview focus
- * separately, each tagged with the revision whose Blueprint produced the id. The two focuses are copied
- * only while the Document and Preview revisions are equal; a diverged Preview never receives a raw nodeId
- * from the current Document, and vice versa.
+ * Core's `InspectionNodeId` is explicitly snapshot-local: separately-created Blueprints have unrelated
+ * node-id domains even when they represent the same authored revision. Phase B2 therefore never copies a
+ * raw node id between realms. Linked focus maps only through resolved `widgetId + widgetType` identity.
  */
 
 import type { AnyWidgetPluginTuple, WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
+import type { InspectorBlueprintNode, InspectorBlueprintSnapshot } from '@deviltea/widget-devtools'
 import type { LabSession } from './session'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 
@@ -19,141 +19,246 @@ export type InspectorFocusMember
 		| { readonly type: 'property', readonly name: string }
 		| { readonly type: 'method', readonly name: string }
 
-/** Snapshot-local node/member payload. The scope and revision live in `ScopedInspectorFocus`. */
 export interface InspectorFocus {
 	readonly nodeId: InspectionNodeId
 	readonly member?: InspectorFocusMember
 }
 
-/** A focus payload that is safe to pass only to the matching Blueprint/Runtime snapshot. */
-export interface ScopedInspectorFocus extends InspectorFocus {
-	readonly scope: InspectorFocusScope
+export interface PreviewInspectorFocus {
+	readonly nodeId: number
+	readonly member?: InspectorFocusMember
+}
+
+export interface DocumentScopedInspectorFocus extends InspectorFocus {
+	readonly scope: 'document'
 	readonly revision: number
 }
 
+export interface PreviewScopedInspectorFocus extends PreviewInspectorFocus {
+	readonly scope: 'preview'
+	readonly revision: number
+	readonly runtimeId: string
+}
+
+export type ScopedInspectorFocus = DocumentScopedInspectorFocus | PreviewScopedInspectorFocus
+
 export interface InspectorFocusStore {
-	getFocus: (scope?: InspectorFocusScope) => InspectorFocus | null
-	getScopedFocus: (scope: InspectorFocusScope) => ScopedInspectorFocus | null
-	/** Explicit diagnostic-navigation commands and panel row selection call this overload. */
+	getFocus: () => InspectorFocus | null
+	getScopedFocus: {
+		(scope: 'document'): DocumentScopedInspectorFocus | null
+		(scope: 'preview'): PreviewScopedInspectorFocus | null
+	}
 	setFocus: {
-		(scope: InspectorFocusScope, focus: InspectorFocus | null): void
-		/** @deprecated Document scope compatibility for existing tutorial/consumer calls. */
+		(scope: 'document', focus: InspectorFocus | null): void
+		(scope: 'preview', focus: PreviewInspectorFocus | null): void
+		/** @deprecated Document-scope compatibility for tutorial/consumer calls. */
 		(focus: InspectorFocus | null): void
 	}
+	setPreviewSnapshot: (revision: number, snapshot: InspectorBlueprintSnapshot | null) => void
 	subscribe: (listener: () => void) => () => void
-	/** Stops listening to the underlying `LabSession`. Call when the store itself is torn down. */
 	dispose: () => void
+}
+
+interface WidgetIdentity {
+	readonly widgetId: string
+	readonly widgetType: string
 }
 
 function rootFocusOf<Plugins extends AnyWidgetPluginTuple>(blueprint: WidgetSystemBlueprint<Plugins>): InspectorFocus {
 	return { nodeId: inspectBlueprint(blueprint).rootNodeId }
 }
 
-function scopedFocusOf(scope: InspectorFocusScope, revision: number, focus: InspectorFocus): ScopedInspectorFocus {
-	return { ...focus, scope, revision }
+function documentIdentity(blueprint: WidgetSystemBlueprint, nodeId: InspectionNodeId): WidgetIdentity | null {
+	const node = inspectBlueprint(blueprint)
+		.getNode(nodeId)
+	return node !== null && node.resolved ? { widgetId: node.node.id, widgetType: node.node.type } : null
 }
 
-/**
- * Keeps each focus attached to its own snapshot. A changed Document always gets a new Document root;
- * a replaced Preview gets a new Preview root. An invalid Document commit changes only the Document
- * scope, so the previous Preview focus remains valid for the still-running Runtime.
- */
+function documentNodeForIdentity(blueprint: WidgetSystemBlueprint, identity: WidgetIdentity): InspectionNodeId | null {
+	for (const entry of inspectBlueprint(blueprint).nodes) {
+		if (entry.node.resolved && entry.node.id === identity.widgetId && entry.node.type === identity.widgetType)
+			return entry.nodeId
+	}
+	return null
+}
+
+function remoteIdentity(snapshot: InspectorBlueprintSnapshot, nodeId: number): WidgetIdentity | null {
+	const node = snapshot.nodes.find(candidate => candidate.nodeId === nodeId)
+	return node !== undefined && node.resolved && node.widgetId !== undefined && node.widgetType !== undefined
+		? { widgetId: node.widgetId, widgetType: node.widgetType }
+		: null
+}
+
+function remoteNodeForIdentity(snapshot: InspectorBlueprintSnapshot, identity: WidgetIdentity): InspectorBlueprintNode | null {
+	return snapshot.nodes.find(node => node.resolved
+		&& node.widgetId === identity.widgetId
+		&& node.widgetType === identity.widgetType) ?? null
+}
+
 export function createInspectorFocusStore<Plugins extends AnyWidgetPluginTuple>(
 	session: LabSession<Plugins>,
 ): InspectorFocusStore {
 	const listeners = new Set<() => void>()
 	let lastDocumentRevision = session.documentState.revision
 	let lastDocumentBlueprint = session.documentState.blueprint
-	let lastPreviewRevision = session.preview?.revision ?? null
-	let lastPreviewBlueprint = session.preview?.blueprint ?? null
-	let documentFocus: ScopedInspectorFocus | null = scopedFocusOf(
-		'document',
-		lastDocumentRevision,
-		rootFocusOf(lastDocumentBlueprint),
-	)
-	let previewFocus: ScopedInspectorFocus | null = session.preview === null
-		? null
-		: scopedFocusOf('preview', lastPreviewRevision!, rootFocusOf(lastPreviewBlueprint!))
+	let remoteRevision: number | null = null
+	let remoteSnapshot: InspectorBlueprintSnapshot | null = null
+	let documentFocus: DocumentScopedInspectorFocus | null = {
+		...rootFocusOf(lastDocumentBlueprint),
+		scope: 'document',
+		revision: lastDocumentRevision,
+	}
+	let previewFocus: PreviewScopedInspectorFocus | null = null
 
 	function emit(): void {
-		for (const listener of listeners) listener()
+		for (const listener of listeners)
+			listener()
 	}
 
 	function isLinked(): boolean {
-		return lastPreviewRevision !== null && lastPreviewRevision === lastDocumentRevision
+		return remoteRevision !== null && remoteRevision === lastDocumentRevision && remoteSnapshot !== null
+	}
+
+	function refreshDocumentSnapshot(): boolean {
+		const document = session.documentState
+		const changed = document.revision !== lastDocumentRevision || document.blueprint !== lastDocumentBlueprint
+		if (!changed)
+			return false
+		lastDocumentRevision = document.revision
+		lastDocumentBlueprint = document.blueprint
+		documentFocus = {
+			...rootFocusOf(document.blueprint),
+			scope: 'document',
+			revision: document.revision,
+		}
+		return true
+	}
+
+	function mapDocumentToPreview(focus: DocumentScopedInspectorFocus | null): PreviewScopedInspectorFocus | null {
+		const snapshot = remoteSnapshot
+		if (!isLinked() || snapshot === null || focus === null)
+			return null
+		const identity = documentIdentity(lastDocumentBlueprint, focus.nodeId)
+		const remoteNode = identity === null ? null : remoteNodeForIdentity(snapshot, identity)
+		if (remoteNode === null)
+			return null
+		return {
+			nodeId: remoteNode.nodeId,
+			...(focus.member === undefined ? {} : { member: focus.member }),
+			scope: 'preview',
+			revision: remoteRevision!,
+			runtimeId: snapshot.runtimeId,
+		}
+	}
+
+	function mapPreviewToDocument(focus: PreviewScopedInspectorFocus | null): DocumentScopedInspectorFocus | null {
+		const snapshot = remoteSnapshot
+		if (!isLinked() || snapshot === null || focus === null || focus.runtimeId !== snapshot.runtimeId)
+			return null
+		const identity = remoteIdentity(snapshot, focus.nodeId)
+		const nodeId = identity === null ? null : documentNodeForIdentity(lastDocumentBlueprint, identity)
+		if (nodeId === null)
+			return null
+		return {
+			nodeId,
+			...(focus.member === undefined ? {} : { member: focus.member }),
+			scope: 'document',
+			revision: lastDocumentRevision,
+		}
 	}
 
 	const unsubscribeSession = session.subscribe(() => {
-		const document = session.documentState
-		const preview = session.preview
-		const documentChanged = document.revision !== lastDocumentRevision || document.blueprint !== lastDocumentBlueprint
-		const previewRevision = preview?.revision ?? null
-		const previewChanged = previewRevision !== lastPreviewRevision || preview?.blueprint !== lastPreviewBlueprint
-
-		if (!documentChanged && !previewChanged)
+		const documentChanged = refreshDocumentSnapshot()
+		if (!documentChanged)
 			return
-
-		lastDocumentRevision = document.revision
-		lastDocumentBlueprint = document.blueprint
-		lastPreviewRevision = previewRevision
-		lastPreviewBlueprint = preview?.blueprint ?? null
-
-		if (documentChanged) {
-			documentFocus = scopedFocusOf('document', document.revision, rootFocusOf(document.blueprint))
-		}
-		if (previewChanged) {
-			previewFocus = preview === null
-				? null
-				: scopedFocusOf('preview', preview.revision, rootFocusOf(preview.blueprint))
-		}
-
-		// Equality is the only safe implicit mapping boundary: both scopes use the same committed Blueprint
-		// revision and therefore the same InspectionNodeId domain.
-		if (isLinked() && previewChanged) {
-			documentFocus = previewFocus === null
-				? null
-				: scopedFocusOf('document', lastDocumentRevision, previewFocus)
-		}
-
+		if (isLinked())
+			previewFocus = mapDocumentToPreview(documentFocus)
 		emit()
 	})
 
-	function getScopedFocus(scope: InspectorFocusScope): ScopedInspectorFocus | null {
-		return scope === 'document' ? documentFocus : previewFocus
+	function setPreviewSnapshot(revision: number, snapshot: InspectorBlueprintSnapshot | null): void {
+		refreshDocumentSnapshot()
+		const previousSnapshot = remoteSnapshot
+		const previousFocus = previewFocus
+		remoteRevision = snapshot === null ? null : revision
+		remoteSnapshot = snapshot
+		if (snapshot === null) {
+			previewFocus = null
+			emit()
+			return
+		}
+
+		// A reconnect/replacement creates a fresh remote node-id domain. Preserve a prior selection only
+		// through stable widget identity; otherwise start from the remote root.
+		const previousIdentity = previousSnapshot === null || previousFocus === null
+			? null
+			: remoteIdentity(previousSnapshot, previousFocus.nodeId)
+		const mapped = previousIdentity === null ? null : remoteNodeForIdentity(snapshot, previousIdentity)
+		previewFocus = {
+			nodeId: mapped?.nodeId ?? snapshot.rootNodeId,
+			...(mapped !== null && previousFocus?.member !== undefined ? { member: previousFocus.member } : {}),
+			scope: 'preview',
+			revision,
+			runtimeId: snapshot.runtimeId,
+		}
+
+		if (isLinked()) {
+			// Document focus is the user's stable cross-surface intent when a new linked remote snapshot lands.
+			const fromDocument = mapDocumentToPreview(documentFocus)
+			if (fromDocument !== null)
+				previewFocus = fromDocument
+		}
+		emit()
 	}
 
-	function setFocus(scopeOrFocus: InspectorFocusScope | InspectorFocus | null, next?: InspectorFocus | null): void {
-		const scope: InspectorFocusScope = typeof scopeOrFocus === 'string' ? scopeOrFocus : 'document'
-		const focus = typeof scopeOrFocus === 'string' ? next ?? null : scopeOrFocus
-		const revision = scope === 'document' ? lastDocumentRevision : lastPreviewRevision
-		const scoped = focus === null || revision === null ? null : scopedFocusOf(scope, revision, focus)
+	function setDocumentFocus(focus: InspectorFocus | null): void {
+		documentFocus = focus === null
+			? null
+			: {
+					nodeId: focus.nodeId,
+					...(focus.member === undefined ? {} : { member: focus.member }),
+					scope: 'document',
+					revision: lastDocumentRevision,
+				}
+		if (isLinked())
+			previewFocus = mapDocumentToPreview(documentFocus)
+		emit()
+	}
 
-		if (scope === 'document')
-			documentFocus = scoped
-		else
-			previewFocus = scoped
-
-		// Null is synchronized too: linked surfaces represent one selection, including clearing it.
-		if (isLinked()) {
-			if (scope === 'document')
-				previewFocus = scoped === null ? null : scopedFocusOf('preview', lastPreviewRevision!, scoped)
-			else
-				documentFocus = scoped === null ? null : scopedFocusOf('document', lastDocumentRevision, scoped)
-		}
+	function setPreviewFocus(focus: PreviewInspectorFocus | null): void {
+		const snapshot = remoteSnapshot
+		previewFocus = focus === null || snapshot === null || remoteRevision === null
+			? null
+			: {
+					nodeId: focus.nodeId,
+					...(focus.member === undefined ? {} : { member: focus.member }),
+					scope: 'preview',
+					revision: remoteRevision,
+					runtimeId: snapshot.runtimeId,
+				}
+		if (isLinked())
+			documentFocus = mapPreviewToDocument(previewFocus)
 		emit()
 	}
 
 	return {
-		getFocus: (scope = 'document') => {
-			const scoped = getScopedFocus(scope)
-			if (scoped === null)
-				return null
-			return scoped.member === undefined
-				? { nodeId: scoped.nodeId }
-				: { nodeId: scoped.nodeId, member: scoped.member }
-		},
-		getScopedFocus,
-		setFocus,
+		getFocus: () => documentFocus === null
+			? null
+			: documentFocus.member === undefined
+				? { nodeId: documentFocus.nodeId }
+				: { nodeId: documentFocus.nodeId, member: documentFocus.member },
+		getScopedFocus: ((scope: InspectorFocusScope) => scope === 'document' ? documentFocus : previewFocus) as InspectorFocusStore['getScopedFocus'],
+		setFocus: ((scopeOrFocus: InspectorFocusScope | InspectorFocus | null, next?: InspectorFocus | PreviewInspectorFocus | null) => {
+			if (typeof scopeOrFocus !== 'string') {
+				setDocumentFocus(scopeOrFocus)
+				return
+			}
+			if (scopeOrFocus === 'document')
+				setDocumentFocus(next as InspectorFocus | null)
+			else
+				setPreviewFocus(next as PreviewInspectorFocus | null)
+		}) as InspectorFocusStore['setFocus'],
+		setPreviewSnapshot,
 		subscribe: (listener) => {
 			listeners.add(listener)
 			return () => listeners.delete(listener)

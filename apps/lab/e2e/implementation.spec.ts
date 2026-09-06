@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 /**
  * Issue #25 P3 "curated Implementation source explorer" contract.
@@ -18,7 +18,8 @@ async function focusDealTableViaInspect(page: Page): Promise<void> {
 		.click()
 	// The whole `Table` widget is the innermost Inspect anchor for a data row (`TableRenderer.vue`'s own
 	// root wraps the entire `<table>`) — no per-row anchor exists, matching `inspect.spec.ts`'s own note.
-	await page.getByRole('row')
+	await previewFrame(page)
+		.getByRole('row')
 		.filter({ hasText: 'Aurora Systems' })
 		.click()
 	await expect(page.getByRole('heading', { name: 'deal-table : Table' }))

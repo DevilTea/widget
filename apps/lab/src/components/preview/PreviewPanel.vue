@@ -1,32 +1,27 @@
 <script setup lang="ts">
 /**
- * Persistent Preview surface. Runtime ownership/replacement stays in LabSession; this component only
- * renders the current Preview Runtime and consumes the experimental InspectorClient protocol.
+ * Persistent parent-side Preview shell for issue #10 / Phase B2.
  *
- * Issue #8 Phase B1 still keeps Preview execution in the same Vue/DOM realm, but inspection now runs
- * through a real asynchronous MessageChannel. InspectorAgent owns DOM hit-testing/highlight/pointer
- * suppression, and PreviewPanel only reacts to protocol events. The next Phase B step can therefore
- * move the Agent/Runtime into an iframe without changing the InspectorClient state model.
+ * The actual showcase Blueprint/Runtime, renderer tree and InspectorAgent live in `preview-frame.html`.
+ * This component owns only the iframe element, presentation controls and the remote InspectorClient UI.
+ * No Core Runtime or frame DOM is reachable through this component's state.
  */
-import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { InspectorClient } from '@deviltea/widget-devtools'
-import {
-	createInspectorClient,
-	createMessagePortInspectorTransport,
-} from '@deviltea/widget-devtools'
-import { createInspectorAgent } from '@deviltea/widget-devtools/agent'
-import { computed, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
+import { useLabTheme } from '../../composables/use-lab-theme'
 import { resolveFocusedWidget } from '../../implementation/focused-widget'
+import { createPreviewFrameDriver } from '../../preview-host/frame-driver'
 import { getShowcase } from '../../showcases/registry'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
+const theme = useLabTheme()
 const implementationExplorer = useImplementationExplorer()
-const previewSurface = useTemplateRef<HTMLDivElement>('previewSurface')
+const previewFrame = useTemplateRef<HTMLIFrameElement>('previewFrame')
 const inspectActive = shallowRef(false)
 const inspectRequested = shallowRef(false)
 const inspectorReady = shallowRef(false)
@@ -42,63 +37,66 @@ const curatedEntryAvailable = computed(() => {
 })
 
 watch(
-	[previewSurface, store.previewRuntime],
-	([root, runtime], _previous, onCleanup) => {
+	previewFrame,
+	(frame, _previous, onCleanup) => {
+		if (frame === null)
+			return
+		const driver = createPreviewFrameDriver(frame, () => ({
+			locale: i18n.locale.value,
+			theme: theme.theme.value,
+		}))
+		const detach = store.previewHost.attachDriver(driver)
+		onCleanup(detach)
+	},
+	{ flush: 'post', immediate: true },
+)
+
+watch(
+	() => [i18n.locale.value, theme.theme.value] as const,
+	([locale, currentTheme]) => store.previewHost.updatePresentation(locale, currentTheme),
+	{ immediate: true },
+)
+
+watch(
+	store.previewHost.connection,
+	(connection, _previous, onCleanup) => {
 		const restoreInspect = inspectRequested.value
 		inspectorClient = null
 		inspectorReady.value = false
 		inspectCommandPending.value = false
-		// `inspectActive` is Agent-acknowledged state, not desired state. A replacement Agent starts
-		// disabled, so never claim pointer suppression is active while an async transport is still
-		// handshaking/restoring the user's requested Inspect state.
 		inspectActive.value = false
-		if (root === null || runtime === null)
+		if (connection === null)
 			return
-		inspectRequested.value = restoreInspect
 
-		const channel = new MessageChannel()
-		const clientTransport = createMessagePortInspectorTransport(channel.port1)
-		const agentTransport = createMessagePortInspectorTransport(channel.port2)
-		const agent = createInspectorAgent({
-			runtime,
-			transport: agentTransport,
-			dom: {
-				root,
-				highlightClass: 'lab-inspect-anchor--highlighted',
-				badgeClass: 'lab-inspector-agent-badge',
-			},
-		})
-		const client = createInspectorClient(clientTransport)
+		const client = connection.inspectorClient
 		inspectorClient = client
-
 		const stopStatus = client.on('agent.status', ({ inspectEnabled }) => {
-			if (inspectorClient === client) {
-				inspectActive.value = inspectEnabled
-				inspectRequested.value = inspectEnabled
-			}
-		})
-		const stopSelection = client.on('inspect.selected', (selection) => {
 			if (inspectorClient !== client)
 				return
-
-			// Wire nodeIds are the numeric representation of this exact registered Runtime's
-			// snapshot-local InspectionNodeId. Re-brand only at the local focus adapter boundary.
-			store.setFocus('preview', { nodeId: selection.ref.nodeId as InspectionNodeId })
+			inspectActive.value = inspectEnabled
+			if (!inspectEnabled && !inspectCommandPending.value)
+				inspectRequested.value = false
+		})
+		const stopSelection = client.on('inspect.selected', (selection) => {
+			if (inspectorClient !== client || selection.ref.runtimeId !== connection.runtimeId)
+				return
+			store.setFocus('preview', { nodeId: selection.ref.nodeId })
 			store.activeTab.value = store.revisionStatus.value.isLinked ? 'blueprint' : 'runtime'
 		})
 
 		void (async () => {
 			try {
+				// The frame driver already handshakes before publishing a connection. Repeating it here is
+				// intentional capability/liveness verification at the UI boundary after a remote replacement.
 				await client.handshake()
 				if (inspectorClient !== client)
 					return
-				if (inspectRequested.value)
+				if (restoreInspect)
 					await client.request('inspect.enable', {})
 				if (inspectorClient === client)
 					inspectorReady.value = true
 			}
 			catch {
-				// A failed handshake leaves Inspect unavailable; normal Preview interaction remains intact.
 				if (inspectorClient === client) {
 					inspectActive.value = false
 					inspectRequested.value = false
@@ -110,8 +108,8 @@ watch(
 		onCleanup(() => {
 			stopStatus()
 			stopSelection()
-			client.close()
-			agent.dispose()
+			// The frame driver/coordinator owns the shared client/port lifecycle. Closing it here would
+			// tear down the remote host merely because this reactive connection object was replaced.
 			if (inspectorClient === client) {
 				inspectorClient = null
 				inspectorReady.value = false
@@ -120,24 +118,27 @@ watch(
 			}
 		})
 	},
-	{ flush: 'post', immediate: true },
+	{ immediate: true },
 )
 
-async function toggleInspect(): Promise<void> {
+async function setInspectRequested(requested: boolean): Promise<void> {
+	inspectRequested.value = requested
 	const client = inspectorClient
 	if (client === null || !inspectorReady.value || inspectCommandPending.value)
 		return
 
-	const requested = !inspectActive.value
-	inspectRequested.value = requested
 	inspectCommandPending.value = true
 	try {
-		const result = requested
-			? await client.request('inspect.enable', {})
-			: await client.request('inspect.disable', {})
-		if (inspectorClient === client) {
+		while (inspectActive.value !== inspectRequested.value) {
+			if (inspectorClient !== client || !inspectorReady.value)
+				return
+			const target = inspectRequested.value
+			const result = target
+				? await client.request('inspect.enable', {})
+				: await client.request('inspect.disable', {})
+			if (inspectorClient !== client)
+				return
 			inspectActive.value = result.enabled
-			inspectRequested.value = result.enabled
 		}
 	}
 	catch {
@@ -147,10 +148,28 @@ async function toggleInspect(): Promise<void> {
 		}
 	}
 	finally {
-		if (inspectorClient === client)
+		if (inspectorClient === client) {
 			inspectCommandPending.value = false
+			if (inspectActive.value !== inspectRequested.value)
+				void setInspectRequested(inspectRequested.value)
+		}
 	}
 }
+
+function toggleInspect(): void {
+	void setInspectRequested(!inspectRequested.value)
+}
+
+function onParentKeydown(event: KeyboardEvent): void {
+	if (event.key !== 'Escape' || (!inspectRequested.value && !inspectActive.value))
+		return
+	event.preventDefault()
+	event.stopPropagation()
+	void setInspectRequested(false)
+}
+
+onMounted(() => window.addEventListener('keydown', onParentKeydown, true))
+onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 </script>
 
 <template>
@@ -189,26 +208,27 @@ async function toggleInspect(): Promise<void> {
 			</button>
 		</div>
 		<div
-			ref="previewSurface"
 			data-tutorial-target="preview"
-			:class="pika({ position: 'relative', flex: '1 1 auto', overflow: 'auto', padding: '16px', background: 'var(--lab-color-bg)', minHeight: '0' })"
-			:style="{ cursor: inspectActive ? 'crosshair' : undefined }"
+			:class="pika({ position: 'relative', display: 'flex', flexDirection: 'column', flex: '1 1 auto', overflow: 'hidden', background: 'var(--lab-color-bg)', minHeight: '0' })"
 		>
 			<div
 				v-if="store.revisionStatus.value.isDiverged"
 				data-testid="preview-diverged-status"
-				:class="pika({ margin: '0 0 10px', padding: '6px 8px', border: '1px solid var(--lab-color-warning)', borderRadius: 'var(--lab-radius)', color: 'var(--lab-color-warning)', background: 'var(--lab-color-surface-alt)', fontSize: '11px' })"
+				:class="pika({ margin: '10px 16px 0', padding: '6px 8px', border: '1px solid var(--lab-color-warning)', borderRadius: 'var(--lab-radius)', color: 'var(--lab-color-warning)', background: 'var(--lab-color-surface-alt)', fontSize: '11px', flex: '0 0 auto' })"
 			>
 				{{ i18n.t('Running previous valid Preview revision r{previewRevision}; current Document is r{documentRevision}.', { previewRevision: store.revisionStatus.value.previewRevision ?? '', documentRevision: store.revisionStatus.value.documentRevision }) }}
 			</div>
-			<component
-				:is="store.renderer.value"
-				v-if="store.previewRuntime.value !== null"
-				:runtime="store.previewRuntime.value"
+			<iframe
+				ref="previewFrame"
+				title="Widget Lab Preview"
+				data-testid="preview-frame"
+				sandbox="allow-scripts allow-same-origin allow-forms"
+				:class="pika({ width: '100%', flex: '1 1 auto', minHeight: '0', border: 'none', background: 'var(--lab-color-bg)' })"
+				:style="{ display: store.preview.value === null ? 'none' : 'block' }"
 			/>
 			<p
-				v-else
-				:class="pika({ color: 'var(--lab-color-text-muted)', fontSize: '13px' })"
+				v-if="store.preview.value === null"
+				:class="pika({ padding: '16px', margin: '0', color: 'var(--lab-color-text-muted)', fontSize: '13px' })"
 			>
 				{{ i18n.t('Preview unavailable — there is no valid Preview revision. See the Blueprint tab for diagnostics.') }}
 			</p>

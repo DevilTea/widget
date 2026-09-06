@@ -20,7 +20,7 @@
  */
 
 import type { InjectionKey, Ref } from 'vue'
-import type { TutorialActions, TutorialEngine, TutorialEngineSnapshot, TutorialScript, TutorialTabId } from '../tutorial/types'
+import type { TutorialActions, TutorialEngine, TutorialEngineSnapshot, TutorialTabId } from '../tutorial/types'
 import type { ImplementationExplorerStore } from './use-implementation-explorer'
 import type { LabStore } from './use-lab-store'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
@@ -28,7 +28,7 @@ import { computed, inject, onUnmounted, shallowRef, watch } from 'vue'
 import { CRM_TOUR_ID, crmTourScript } from '../tutorial/crm-script'
 import { decideDeterministicStart } from '../tutorial/deterministic-start'
 import { createTutorialEngine } from '../tutorial/engine'
-import { createRuntimeReader, findBlueprintNodeId, subscribeObservationTargets } from '../tutorial/inspection-reader'
+import { findBlueprintNodeId } from '../tutorial/inspection-reader'
 import { isTourCompleted, isWelcomeDismissed, markTourCompleted, markWelcomeDismissed } from '../tutorial/session-flags'
 import { createStartRequestGuard } from '../tutorial/start-request'
 import { SURVEY_TOUR_ID, surveyTourScript } from '../tutorial/survey-script'
@@ -133,11 +133,6 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		[SURVEY_TOUR_ID]: createTutorialEngine(surveyTourScript),
 		[CRM_TOUR_ID]: createTutorialEngine(crmTourScript),
 	}
-	const scripts: Record<TutorialTourId, TutorialScript> = {
-		[SURVEY_TOUR_ID]: surveyTourScript,
-		[CRM_TOUR_ID]: crmTourScript,
-	}
-
 	for (const tourId of [SURVEY_TOUR_ID, CRM_TOUR_ID] as const) {
 		if (isTourCompleted(tourId))
 			engines[tourId].restoreCompleted()
@@ -235,12 +230,29 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		}
 	}
 
+	let recheckSequence = 0
 	function recheckNow(): void {
-		const runtime = store.preview.value?.runtime ?? null
-		if (runtime !== null) {
-			activeEngine()
-				.recheck(createRuntimeReader(runtime))
-		}
+		const engine = activeEngine()
+		const before = engine.getSnapshot()
+		const tourId = activeTourId.value
+		if (before.status !== 'active' || before.step === null || store.showcaseId.value !== tourId)
+			return
+		const connection = store.previewHost.connection.value
+		if (connection === null)
+			return
+		const sequence = ++recheckSequence
+		void store.previewHost.evaluateTutorial(tourId, before.stepIndex, before.revealed.length)
+			.then((progress) => {
+				if (sequence !== recheckSequence || activeTourId.value !== tourId)
+					return
+				const current = engine.getSnapshot()
+				if (current.status !== 'active' || current.stepIndex !== before.stepIndex)
+					return
+				engine.acceptProgress(progress)
+			})
+			.catch(() => {
+				// A frame replacement/disconnect is retried by the connection watch below.
+			})
 	}
 
 	function beginTour(tourId: TutorialTourId, isRestart: boolean): void {
@@ -283,26 +295,25 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		beginTour(tourId, isRestart)
 	}
 
-	// Passive Runtime observation (diagnostic #25 P1 "predicates observe Runtime PASSIVELY"): subscribes only
-	// while the ACTIVE tour is active AND the current showcase matches that tour's own showcase id —
-	// re-subscribing whenever the active Runtime identity changes (Apply/preset/switchShowcase all
-	// replace it), the tour's own status changes, or `activeTourId` itself changes (diagnostic #25 P4).
-	let teardownObservation: (() => void) | null = null
-	watch(
-		() => [store.preview.value?.runtime ?? null, snapshot.value.status, store.showcaseId.value, activeTourId.value] as const,
-		([runtime, status, showcaseId, tourId]) => {
-			teardownObservation?.()
-			teardownObservation = null
-			if (runtime === null || status !== 'active' || showcaseId !== tourId)
-				return
-			teardownObservation = subscribeObservationTargets(runtime, scripts[tourId].observationTargets, recheckNow)
+	// Runtime predicate evaluation now lives with the iframe-owned Runtime. The parent subscribes only to
+	// a semantic "an observed member changed" signal, then asks the host to evaluate the current step
+	// and return the monotonic completed-stage count. No Runtime value crosses the frame boundary.
+	const stopRemoteObservation = store.previewHost.onTutorialObservation((tourId) => {
+		if (tourId === activeTourId.value)
 			recheckNow()
+	})
+
+	watch(
+		() => [store.previewHost.connection.value?.runtimeId ?? null, snapshot.value.status, store.showcaseId.value, activeTourId.value] as const,
+		([runtimeId, status, showcaseId, tourId]) => {
+			if (runtimeId !== null && status === 'active' && showcaseId === tourId)
+				recheckNow()
 		},
 		{ immediate: true },
 	)
 
 	onUnmounted(() => {
-		teardownObservation?.()
+		stopRemoteObservation()
 		for (const unsubscribe of unsubscribeEngines) unsubscribe()
 	})
 

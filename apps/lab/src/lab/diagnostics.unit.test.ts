@@ -126,6 +126,5 @@ describe('lab-owned syntax state versus Core Blueprint state', () => {
 		expect(focusStore.getScopedFocus('preview'))
 			.toEqual(initialPreviewFocus)
 		focusStore.dispose()
-		session.preview?.runtime.dispose()
 	})
 })

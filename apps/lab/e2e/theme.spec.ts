@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 const THEME_STORAGE_KEY = 'widget-lab:theme'
 
@@ -35,15 +35,18 @@ test.describe('lab theme (issue #44)', () => {
 		expect(dockviewBackgroundLight)
 			.toBe(labBackgroundLight)
 
-		await page.getByRole('button', { name: '+1', exact: true })
+		await previewFrame(page)
+			.getByRole('button', { name: '+1', exact: true })
 			.click()
-		await expect(page.getByText('count: 1 · doubled: 2', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('count: 1 · doubled: 2', { exact: true }))
 			.toBeVisible()
 
 		await themeSelect.selectOption('dark')
 		await expect(page.locator('html'))
 			.toHaveAttribute('data-lab-theme', 'dark')
-		await expect(page.getByText('count: 1 · doubled: 2', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('count: 1 · doubled: 2', { exact: true }))
 			.toBeVisible()
 		expect(await page.evaluate(key => localStorage.getItem(key), THEME_STORAGE_KEY))
 			.toBe('dark')

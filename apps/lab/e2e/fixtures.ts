@@ -1,3 +1,4 @@
+import type { FrameLocator, Page } from '@playwright/test'
 import { test as base, expect } from '@playwright/test'
 
 /**
@@ -67,3 +68,8 @@ export const test = base.extend<{ blockedRequestUrls: string[], welcomeDismissed
 })
 
 export { expect }
+
+/** The isolated Preview execution document introduced by issue #10 / Phase B2. */
+export function previewFrame(page: Page): FrameLocator {
+	return page.frameLocator('[data-testid=\"preview-frame\"]')
+}

@@ -1,5 +1,5 @@
-import type { Locator, Page } from '@playwright/test'
-import { expect, test } from './fixtures'
+import type { FrameLocator, Locator } from '@playwright/test'
+import { expect, previewFrame, test } from './fixtures'
 
 /**
  * Issue #28 Sales Pipeline CRM contract, against the default preset (`crm-default` —
@@ -11,8 +11,8 @@ import { expect, test } from './fixtures'
  * (a capitalized stage label, then its count), so `innerText()` (layout-aware, unlike `textContent`)
  * parses cleanly into a label -> count map.
  */
-async function stageChartCounts(page: Page): Promise<Record<string, string>> {
-	const container = page.locator('h3', { hasText: 'Deals by stage' })
+async function stageChartCounts(preview: FrameLocator): Promise<Record<string, string>> {
+	const container = preview.locator('h3', { hasText: 'Deals by stage' })
 		.locator('..')
 	// `innerText()` (not `textContent()`) is required here: it is layout-aware, so each grid-cell
 	// `<span>` renders on its own line — `textContent()` would concatenate every label/count with no
@@ -28,14 +28,14 @@ async function stageChartCounts(page: Page): Promise<Record<string, string>> {
 }
 
 /** `MetricCardRenderer.vue` renders `<span>{label}</span><strong>{value}</strong>` as siblings. */
-function metricValue(page: Page, label: string): Locator {
-	return page.locator('span', { hasText: label })
+function metricValue(preview: FrameLocator, label: string): Locator {
+	return preview.locator('span', { hasText: label })
 		.locator('..')
 		.locator('strong')
 }
 
-function dealRow(page: Page, company: string): Locator {
-	return page.getByRole('row')
+function dealRow(preview: FrameLocator, company: string): Locator {
+	return preview.getByRole('row')
 		.filter({ hasText: company })
 }
 
@@ -46,35 +46,38 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('search filters the table and the Visible deals KPI coherently', async ({ page }) => {
-	await expect(metricValue(page, 'Visible deals'))
+	const preview = previewFrame(page)
+	await expect(metricValue(preview, 'Visible deals'))
 		.toHaveText('8')
 
-	await page.getByLabel('Search', { exact: true })
+	await preview.getByLabel('Search', { exact: true })
 		.fill('Aurora')
-	await expect(dealRow(page, 'Aurora Systems'))
+	await expect(dealRow(preview, 'Aurora Systems'))
 		.toBeVisible()
-	await expect(page.locator('tbody tr'))
+	await expect(preview.locator('tbody tr'))
 		.toHaveCount(1)
-	await expect(metricValue(page, 'Visible deals'))
+	await expect(metricValue(preview, 'Visible deals'))
 		.toHaveText('1')
 })
 
 test('stage filter updates the table and the Visible deals KPI coherently', async ({ page }) => {
+	const preview = previewFrame(page)
 	// Exactly one seed deal is `won` (Fjord Robotics) — showcases/crm/domain.ts.
-	await page.getByLabel('Stage', { exact: true })
+	await preview.getByLabel('Stage', { exact: true })
 		.selectOption('won')
-	await expect(dealRow(page, 'Fjord Robotics'))
+	await expect(dealRow(preview, 'Fjord Robotics'))
 		.toBeVisible()
-	await expect(page.locator('tbody tr'))
+	await expect(preview.locator('tbody tr'))
 		.toHaveCount(1)
-	await expect(metricValue(page, 'Visible deals'))
+	await expect(metricValue(preview, 'Visible deals'))
 		.toHaveText('1')
 })
 
-test('keyboard-selecting rows with Enter and Space both drive Table.selectedRowId, moving aria-current and the detail panel without scrolling the page', async ({ page }) => {
-	const auroraRow = dealRow(page, 'Aurora Systems')
-	const borealisRow = dealRow(page, 'Borealis Retail')
-	const detailPanelCompany = () => page.getByText('Deal details')
+test('keyboard-selecting rows with Enter and Space both drive Table.selectedRowId, moving aria-current and the detail panel without scrolling the Preview frame', async ({ page }) => {
+	const preview = previewFrame(page)
+	const auroraRow = dealRow(preview, 'Aurora Systems')
+	const borealisRow = dealRow(preview, 'Borealis Retail')
+	const detailPanelCompany = () => preview.getByText('Deal details')
 		.locator('..')
 		.locator('dd')
 		.first()
@@ -104,10 +107,12 @@ test('keyboard-selecting rows with Enter and Space both drive Table.selectedRowI
 
 	// Space must activate a *different* focused row through the same Method — and must not scroll the
 	// page as Space's native default action would on an ordinary focused, non-form-control element.
-	const scrollYBeforeSpace = await page.evaluate(() => window.scrollY)
+	const scrollYBeforeSpace = await preview.locator('html')
+		.evaluate(() => window.scrollY)
 	await borealisRow.focus()
 	await page.keyboard.press('Space')
-	const scrollYAfterSpace = await page.evaluate(() => window.scrollY)
+	const scrollYAfterSpace = await preview.locator('html')
+		.evaluate(() => window.scrollY)
 	expect(scrollYAfterSpace)
 		.toBe(scrollYBeforeSpace)
 
@@ -122,18 +127,19 @@ test('keyboard-selecting rows with Enter and Space both drive Table.selectedRowI
 })
 
 test('Change stage dialog: focus/Tab containment, Escape cancels without mutation, Save recomputes', async ({ page }) => {
-	const row = dealRow(page, 'Aurora Systems')
+	const preview = previewFrame(page)
+	const row = dealRow(preview, 'Aurora Systems')
 	await row.focus()
 	await page.keyboard.press('Enter')
 
-	const changeStageButton = page.getByRole('button', { name: 'Change stage' })
+	const changeStageButton = preview.getByRole('button', { name: 'Change stage' })
 	await changeStageButton.click()
 
-	const dialog = page.getByRole('dialog', { name: 'Change deal stage' })
+	const dialog = preview.getByRole('dialog', { name: 'Change deal stage' })
 	await expect(dialog)
 		.toBeVisible()
 	// Opening moves focus into the dialog, to its first control ("New stage").
-	await expect(page.getByLabel('New stage'))
+	await expect(preview.getByLabel('New stage'))
 		.toBeFocused()
 
 	/**
@@ -146,11 +152,12 @@ test('Change stage dialog: focus/Tab containment, Escape cancels without mutatio
 	 * Shift+Tab presses in both directions.
 	 */
 	async function focusStaysWithinModalBoundary(): Promise<boolean> {
-		return page.evaluate(() => {
-			const active = document.activeElement
-			const dialogEl = document.querySelector('dialog')
-			return active === document.body || (dialogEl !== null && dialogEl.contains(active))
-		})
+		return preview.locator('html')
+			.evaluate(() => {
+				const active = document.activeElement
+				const dialogEl = document.querySelector('dialog')
+				return active === document.body || (dialogEl !== null && dialogEl.contains(active))
+			})
 	}
 
 	for (let i = 0; i < 5; i++) {
@@ -165,38 +172,40 @@ test('Change stage dialog: focus/Tab containment, Escape cancels without mutatio
 	}
 
 	// Escape cancels: no mutation, dialog closes, focus returns to the button that opened it.
+	await preview.getByLabel('New stage')
+		.focus()
 	await page.keyboard.press('Escape')
 	await expect(dialog)
 		.toBeHidden()
 	await expect(changeStageButton)
 		.toBeFocused()
-	await expect(dealRow(page, 'Aurora Systems')
+	await expect(dealRow(preview, 'Aurora Systems')
 		.locator('td')
 		.nth(3))
 		.toHaveText('lead')
 
 	// Reopen, change the stage, and Save through the semantic Method flow.
-	const weightedValueBefore = await metricValue(page, 'Weighted value')
+	const weightedValueBefore = await metricValue(preview, 'Weighted value')
 		// eslint-disable-next-line unicorn/prefer-dom-node-text-content -- Playwright's `Locator.innerText()`, not the DOM node API this rule assumes.
 		.innerText()
-	const wonCountBefore = (await stageChartCounts(page)).won
+	const wonCountBefore = (await stageChartCounts(preview)).won
 
 	await changeStageButton.click()
-	await page.getByLabel('New stage')
+	await preview.getByLabel('New stage')
 		.selectOption('won')
-	await page.getByRole('button', { name: 'Save' })
+	await preview.getByRole('button', { name: 'Save' })
 		.click()
 
 	await expect(dialog)
 		.toBeHidden()
-	await expect(dealRow(page, 'Aurora Systems')
+	await expect(dealRow(preview, 'Aurora Systems')
 		.locator('td')
 		.nth(3))
 		.toHaveText('won')
-	await expect(dealRow(page, 'Aurora Systems'))
+	await expect(dealRow(preview, 'Aurora Systems'))
 		.toHaveAttribute('aria-current', 'true')
 
 	// KPI/chart recompute through the same DealQuery/BarChart read models — never a renderer-local total.
-	await expect(metricValue(page, 'Weighted value')).not.toHaveText(weightedValueBefore)
-	await expect.poll(async () => (await stageChartCounts(page)).won).not.toBe(wonCountBefore)
+	await expect(metricValue(preview, 'Weighted value')).not.toHaveText(weightedValueBefore)
+	await expect.poll(async () => (await stageChartCounts(preview)).won).not.toBe(wonCountBefore)
 })

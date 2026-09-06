@@ -6,7 +6,7 @@
  * `@deviltea/widget-core`'s public Blueprint/Runtime contract and never reinterprets it.
  */
 
-import type { AnyWidgetPluginTuple, ApplyPatchFailure, ApplyPatchResult, JsonPrimitive, SourcePatch, ValidWidgetSystemBlueprint, WidgetSystemBlueprint, WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { AnyWidgetPluginTuple, ApplyPatchFailure, ApplyPatchResult, JsonPrimitive, SourcePatch, ValidWidgetSystemBlueprint, WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 
 /** The deliberately narrow semantic command surface exposed by the Phase 3 Structure view. */
@@ -55,35 +55,22 @@ export interface LabDocumentState<Plugins extends AnyWidgetPluginTuple = AnyWidg
 	readonly blueprint: WidgetSystemBlueprint<Plugins>
 }
 
-/** The exact valid Blueprint revision whose Runtime is currently owned by the Lab Preview host. */
+/** The last valid Blueprint revision promoted to the remote Preview host. No Runtime object lives here. */
 export interface LabPreviewSnapshot<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly revision: number
+	readonly sourceText: string
 	readonly blueprint: ValidWidgetSystemBlueprint<Plugins>
-	readonly runtime: WidgetSystemRuntime<Plugins>
 }
 
 /**
- * Temporary compatibility shape while Phase 2 migrates every surface off the pre-redesign `active`
- * concept. `blueprint`/`revision` are current Document state; `runtime` is the retained Preview Runtime
- * and may therefore belong to an older revision. New code must use `documentState` + `preview` instead.
- */
-export interface LabActiveSnapshot<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends LabDocumentState<Plugins> {
-	readonly runtime: WidgetSystemRuntime<Plugins> | null
-}
-
-/**
- * Caller-supplied Preview replacement seam (diagnostic #13 Phase 4 Apply-lifecycle comment).
+ * Caller-supplied remote Preview promotion seam (issue #10 / Phase B2).
  *
- * `LabSession` never touches the DOM or Vue directly; it only sequences these two hooks around
- * Runtime disposal so the Vue layer can guarantee the old renderer subtree has actually unmounted
- * (e.g. by clearing the Preview `runtime` prop and awaiting a Vue render boundary) before the old
- * Runtime is disposed, and mount the new Preview only after the new Runtime exists.
+ * `LabSession` owns only the authored WidgetDocument and last-valid Preview metadata. The hook is the
+ * one point where a valid committed snapshot is handed to the remote Preview host; that host owns
+ * renderer unmount, Runtime disposal/creation, InspectorAgent binding, and readiness acknowledgement.
  */
-export interface LabSessionHooks {
-	/** Called once, only when an old Runtime exists, before it is disposed. */
-	detachPreview: () => Promise<void> | void
-	/** Called once, only when a fresh Runtime was created for the new snapshot. */
-	mountPreview: () => Promise<void> | void
+export interface LabSessionHooks<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
+	replacePreview: (preview: LabPreviewSnapshot<Plugins>) => Promise<void> | void
 }
 
 export type ApplyOutcome

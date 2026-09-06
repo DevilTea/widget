@@ -1,35 +1,92 @@
-import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 // @vitest-environment happy-dom
-/**
- * `createLabStore()` teardown ordering (PR #17 review 4938934963, finding 2): Widget Lab is the
- * Runtime owner, so application teardown must dispose the final active Runtime — but only after the
- * Preview `WidgetRenderer` subtree has actually unmounted. `store.dispose()` itself is
- * framework-agnostic; the ordering guarantee comes from *where* the caller (`App.vue`) invokes it —
- * `onUnmounted`, never `onBeforeUnmount` — which this suite proves against a real mounted component
- * tree rendering the actual sandbox `WidgetRenderer`, not a mock.
- */
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
-import { defineComponent, h, onUnmounted, provide } from 'vue'
-import { replaceConfigScalar } from '../lab/author'
-import { SandboxRenderer } from '../sandbox/renderers'
-import { createLabStore, LabStoreKey } from './use-lab-store'
 
-describe('createLabStore() dispose()', () => {
-	it('disposes the current active Runtime', () => {
+import type { PreviewFrameConnection, PreviewFrameDriver } from '../preview-host/frame-driver'
+import type { PreviewHostDescriptor } from '../preview-host/protocol'
+import type { LabStore } from './use-lab-store'
+import { inspectBlueprint } from '@deviltea/widget-core/inspection'
+import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { defineComponent, h, onUnmounted } from 'vue'
+import { replaceConfigScalar } from '../lab/author'
+import { createLabStore } from './use-lab-store'
+
+const capturedText = '{ "id": "root", "type": "Text", "config": { "text": "captured snapshot" } }\n'
+const laterText = '{ "id": "root", "type": "Text", "config": { "text": "later snapshot" } }\n'
+
+function createDeferred() {
+	let resolve!: () => void
+	const promise = new Promise<void>((done) => {
+		resolve = done
+	})
+	return { promise, resolve }
+}
+
+function connectionFor(descriptor: PreviewHostDescriptor, sequence: number): PreviewFrameConnection {
+	const runtimeId = `remote-${descriptor.showcaseId}-${descriptor.revision}-${sequence}`
+	return {
+		generation: 1,
+		revision: descriptor.revision,
+		runtimeId,
+		blueprint: { runtimeId, rootNodeId: 0, nodes: [], invalidCycles: [] },
+		inspectorClient: {} as PreviewFrameConnection['inspectorClient'],
+		hostClient: {} as PreviewFrameConnection['hostClient'],
+	}
+}
+
+function createRecordingDriver(options: {
+	beforeMount?: (descriptor: PreviewHostDescriptor) => Promise<void> | void
+	onDispose?: () => void
+} = {}) {
+	let sequence = 0
+	const mount = vi.fn(async (descriptor: PreviewHostDescriptor) => {
+		await options.beforeMount?.(descriptor)
+		return connectionFor(descriptor, sequence++)
+	})
+	const dispose = vi.fn(() => options.onDispose?.())
+	const driver: PreviewFrameDriver = {
+		mount,
+		updatePresentation: () => {},
+		setTutorialSpotlight: () => {},
+		evaluateTutorial: async (_tourId, _stepIndex, progress) => progress,
+		onTutorialObservation: () => () => {},
+		dispose,
+	}
+	return { driver, mount, dispose }
+}
+
+async function attachDriver(store: LabStore, driver: PreviewFrameDriver): Promise<void> {
+	store.previewHost.attachDriver(driver)
+	await vi.waitFor(() => expect(store.previewHost.connection.value).not.toBeNull())
+}
+
+function mountRevisions(mount: ReturnType<typeof vi.fn>): number[] {
+	return mount.mock.calls.map(([descriptor]) => (descriptor as PreviewHostDescriptor).revision)
+}
+
+function mountShowcases(mount: ReturnType<typeof vi.fn>): string[] {
+	return mount.mock.calls.map(([descriptor]) => (descriptor as PreviewHostDescriptor).showcaseId)
+}
+
+describe('createLabStore() remote Preview ownership', () => {
+	it('disposes the iframe driver and clears the remote connection', async () => {
 		const store = createLabStore()
-		const runtime = store.session.active.runtime!
-		expect(runtime.isDisposed)
-			.toBe(false)
+		const recorded = createRecordingDriver()
+		await attachDriver(store, recorded.driver)
+		expect(store.previewHost.connection.value?.revision)
+			.toBe(0)
 
 		store.dispose()
 
-		expect(runtime.isDisposed)
-			.toBe(true)
+		expect(recorded.dispose)
+			.toHaveBeenCalledOnce()
+		expect(store.previewHost.connection.value)
+			.toBeNull()
 	})
 
-	it('disposes the retained last-valid Preview Runtime even when the current Document is invalid', async () => {
+	it('retains the last-valid remote Preview when the current Document becomes invalid', async () => {
 		const store = createLabStore()
+		const recorded = createRecordingDriver()
+		await attachDriver(store, recorded.driver)
 		const retained = store.preview.value!
 
 		await store.applyPreset('invalid-semantic')
@@ -38,37 +95,27 @@ describe('createLabStore() dispose()', () => {
 			.toBe('invalid')
 		expect(store.preview.value)
 			.toBe(retained)
-		expect(retained.runtime.isDisposed)
-			.toBe(false)
-
-		expect(() => store.dispose()).not.toThrow()
-		expect(retained.runtime.isDisposed)
-			.toBe(true)
-		expect(store.previewRuntime.value)
-			.toBeNull()
+		expect(store.previewHost.connection.value?.revision)
+			.toBe(0)
+		expect(recorded.mount)
+			.toHaveBeenCalledTimes(1)
+		store.dispose()
 	})
 
-	it('mirrors App.vue: dispose() must be invoked from onUnmounted, after the Preview subtree has fully unmounted', () => {
+	it('mirrors App.vue teardown ordering: descendants unmount before the iframe host is disposed', async () => {
 		const events: string[] = []
 		const store = createLabStore()
-		const runtime = store.session.active.runtime!
+		const recorded = createRecordingDriver({ onDispose: () => events.push('driver-dispose') })
+		await attachDriver(store, recorded.driver)
 
-		// Stands in for `Workbench.vue` -> `PreviewPanel.vue`: renders the real Preview `WidgetRenderer`
-		// subtree bound to a real Runtime, and records when Vue actually finishes unmounting it.
 		const PreviewProbe = defineComponent({
 			setup() {
-				onUnmounted(() => events.push('preview-subtree-unmounted'))
-				return () => store.previewRuntime.value !== null
-					? h(SandboxRenderer, { runtime: store.previewRuntime.value })
-					: null
+				onUnmounted(() => events.push('preview-panel-unmounted'))
+				return () => h('div')
 			},
 		})
-
-		// Stands in for `App.vue`: provides the store and disposes it from `onUnmounted`, exactly as the
-		// real component does.
 		const Root = defineComponent({
 			setup() {
-				provide(LabStoreKey, store)
 				onUnmounted(() => {
 					events.push('app-dispose-start')
 					store.dispose()
@@ -79,24 +126,23 @@ describe('createLabStore() dispose()', () => {
 		})
 
 		const wrapper = mount(Root)
-		expect(runtime.isDisposed)
-			.toBe(false)
-
 		wrapper.unmount()
 
-		// Vue's own contract (a parent's `onUnmounted` fires only after every descendant's `onUnmounted`
-		// has already run) is what this ordering depends on — this assertion is what would catch a
-		// regression back to `onBeforeUnmount`, which fires *before* descendants unmount.
 		expect(events)
-			.toEqual(['preview-subtree-unmounted', 'app-dispose-start', 'app-dispose-end'])
-		expect(runtime.isDisposed)
-			.toBe(true)
+			.toEqual([
+				'preview-panel-unmounted',
+				'app-dispose-start',
+				'driver-dispose',
+				'app-dispose-end',
+			])
 	})
 })
 
 describe('createLabStore() committed Document bridge', () => {
-	it('exposes the high-level Author command through the same store lifecycle', async () => {
+	it('exposes the high-level Author command and promotes the new valid revision remotely', async () => {
 		const store = createLabStore()
+		const recorded = createRecordingDriver()
+		await attachDriver(store, recorded.driver)
 		const nodeId = inspectBlueprint(store.documentState.value.blueprint).nodes.find(node => node.resolved && node.node.id === 'title')!.nodeId
 		const previousPreview = store.preview.value!
 
@@ -108,52 +154,48 @@ describe('createLabStore() committed Document bridge', () => {
 			.toBe(1)
 		expect(store.preview.value?.revision)
 			.toBe(1)
-		expect(store.preview.value)
-			.not.toBe(previousPreview)
-		expect(store.previewRuntime.value)
-			.toBe(store.preview.value?.runtime)
+		expect(store.preview.value).not.toBe(previousPreview)
+		expect(store.previewHost.connection.value?.revision)
+			.toBe(1)
+		expect(mountRevisions(recorded.mount))
+			.toEqual([0, 1])
 		expect(store.isDirty.value)
 			.toBe(false)
+		store.dispose()
 	})
 
-	it('tracks changed Document commits but preserves snapshot identity for structural no-op Apply', async () => {
+	it('tracks changed commits but does not remotely replace a structural no-op', async () => {
 		const store = createLabStore()
+		const recorded = createRecordingDriver()
+		await attachDriver(store, recorded.driver)
 		const initial = store.documentSnapshot.value
-
-		expect(initial.revision)
-			.toBe(0)
-		expect(initial.blueprint)
-			.toBe(store.session.active.blueprint)
 
 		await store.applyPreset('invalid-semantic')
 		const committed = store.documentSnapshot.value
-		expect(committed)
-			.not.toBe(initial)
+		expect(committed).not.toBe(initial)
 		expect(committed.revision)
 			.toBe(1)
 		expect(committed.blueprint)
-			.toBe(store.session.active.blueprint)
+			.toBe(store.documentState.value.blueprint)
 
-		const equivalentText = JSON.stringify(store.session.active.definition)
+		const equivalentText = JSON.stringify(store.documentState.value.definition)
 		store.setDraftSourceText(equivalentText)
 		await store.apply()
 
 		expect(store.documentSnapshot.value)
 			.toBe(committed)
-		expect(store.documentSnapshot.value.revision)
-			.toBe(1)
-		expect(store.session.active.sourceText)
+		expect(store.documentState.value.sourceText)
 			.toBe(equivalentText)
+		expect(recorded.mount)
+			.toHaveBeenCalledTimes(1)
+		store.dispose()
 	})
 
 	it('exposes current Document and retained Preview revisions independently after an invalid commit', async () => {
 		const store = createLabStore()
+		const recorded = createRecordingDriver()
+		await attachDriver(store, recorded.driver)
 		const initialPreview = store.preview.value!
-
-		expect(store.documentState.value.revision)
-			.toBe(0)
-		expect(initialPreview.revision)
-			.toBe(0)
 
 		await store.applyPreset('invalid-semantic')
 
@@ -165,20 +207,12 @@ describe('createLabStore() committed Document bridge', () => {
 			.toBe(initialPreview)
 		expect(store.preview.value?.revision)
 			.toBe(0)
-		expect(store.previewRuntime.value)
-			.toBe(initialPreview.runtime)
-		expect(initialPreview.runtime.isDisposed)
-			.toBe(false)
+		expect(store.previewHost.connection.value?.revision)
+			.toBe(0)
+		store.dispose()
 	})
 })
 
-/**
- * PR #18 review 4939584651, finding 1: Dependency Graph filter preferences are the persistent
- * counterpart to panel-local *snapshot-bound* selections (e.g. `useGraphEdgeSelection`'s edge selection,
- * which does reset on Apply — see `use-graph-edge-selection.unit.test.ts`). `graphShowAbsent`/
- * `graphShowIsolatedMembers` live as plain refs on the `LabStore` object itself, never derived from
- * `session`, so a successful Apply — valid or invalid — must never touch them.
- */
 describe('createLabStore() graph filter preferences', () => {
 	it('survive a successful Apply to a new valid Blueprint', async () => {
 		const store = createLabStore()
@@ -197,86 +231,73 @@ describe('createLabStore() graph filter preferences', () => {
 	it('survive an Apply that lands on an invalid Blueprint', async () => {
 		const store = createLabStore()
 		store.graphShowAbsent.value = true
-
 		const retained = store.preview.value!
+
 		await store.applyPreset('invalid-semantic')
 
 		expect(store.documentState.value.blueprint.status)
 			.toBe('invalid')
 		expect(store.preview.value)
 			.toBe(retained)
-		expect(retained.runtime.isDisposed)
-			.toBe(false)
 		expect(store.graphShowAbsent.value)
 			.toBe(true)
-		// The other preference was never touched, so it must still read its untouched default.
 		expect(store.graphShowIsolatedMembers.value)
 			.toBe(false)
 	})
 })
 
-/**
- * Showcase switching replaces the whole System/Document/Runtime context. Under #60's Document
- * authority, the target session's default source is already committed at revision 0; switching must
- * mount that Runtime directly rather than manufacturing a same-source Apply just to trigger mounting.
- */
 describe('createLabStore() switchShowcase()', () => {
-	it('starts on the default ("sandbox") showcase', () => {
+	it('starts on the default sandbox authored context', () => {
 		const store = createLabStore()
 		expect(store.showcaseId.value)
 			.toBe('sandbox')
-		expect(store.session.active.blueprint.status)
+		expect(store.documentState.value.blueprint.status)
 			.toBe('valid')
+		expect(store.preview.value?.revision)
+			.toBe(0)
 	})
 
-	it('disposes the old Runtime and replaces the session/renderer/presets with the target showcase', async () => {
+	it('replaces the authored session/presets and promotes the target revision-0 Preview', async () => {
 		const store = createLabStore()
-		const oldRuntime = store.session.active.runtime!
+		const recorded = createRecordingDriver()
+		await attachDriver(store, recorded.driver)
+		const oldSession = store.session
 
 		await store.switchShowcase('survey')
 
-		expect(oldRuntime.isDisposed)
-			.toBe(true)
+		expect(store.session).not.toBe(oldSession)
 		expect(store.showcaseId.value)
 			.toBe('survey')
-		expect(store.session.active.blueprint.status)
+		expect(store.documentState.value.blueprint.status)
 			.toBe('valid')
-		expect(store.session.active.runtime)
-			.not.toBeNull()
-		expect(store.session.active.runtime)
-			.not.toBe(oldRuntime)
-		expect(store.previewRuntime.value)
-			.toBe(store.session.active.runtime)
+		expect(store.documentState.value.revision)
+			.toBe(0)
+		expect(store.preview.value?.revision)
+			.toBe(0)
+		expect(store.previewHost.connection.value?.revision)
+			.toBe(0)
+		expect(mountShowcases(recorded.mount))
+			.toEqual(['sandbox', 'survey'])
 		expect(store.presets.value.some(preset => preset.id === 'survey-default'))
 			.toBe(true)
+		store.dispose()
 	})
 
-	it('loads the target showcase\'s default preset source text as the new active/draft snapshot', async () => {
+	it('loads the target showcase default source as the new Document and draft', async () => {
 		const store = createLabStore()
 		await store.switchShowcase('survey')
 
 		expect(store.draftSourceText.value)
-			.toBe(store.session.active.sourceText)
-		expect(store.session.active.definition)
+			.toBe(store.documentState.value.sourceText)
+		expect(store.documentState.value.definition)
 			.toMatchObject({ type: 'TripSurvey' })
 	})
 
-	it('is a no-op when switching to the already-current showcase', async () => {
+	it('is a no-op for the current or an unknown showcase', async () => {
 		const store = createLabStore()
 		const session = store.session
 
 		await store.switchShowcase('sandbox')
-
-		expect(store.session)
-			.toBe(session)
-		expect(store.showcaseId.value)
-			.toBe('sandbox')
-	})
-
-	it('is a no-op for an unknown showcase id', async () => {
-		const store = createLabStore()
-		const session = store.session
-
 		await store.switchShowcase('does-not-exist')
 
 		expect(store.session)
@@ -285,291 +306,205 @@ describe('createLabStore() switchShowcase()', () => {
 			.toBe('sandbox')
 	})
 
-	it('applyPreset() after switching resolves presets against the new showcase, not the old one', async () => {
+	it('resolves applyPreset() against the new showcase after switching', async () => {
 		const store = createLabStore()
 		await store.switchShowcase('survey')
 
-		// "survey-not-ready" is unknown to the sandbox showcase and only resolvable once `currentShowcase`
-		// has actually flipped to "survey" — a stale showcase reference would make this `applyPreset` a
-		// silent no-op (`undefined`) instead.
 		const outcome = await store.applyPreset('survey-not-ready')
+
 		expect(outcome?.status)
 			.toBe('applied')
-		expect(store.session.active.definition)
+		expect(store.documentState.value.definition)
 			.toMatchObject({ type: 'TripSurvey' })
 	})
 
-	it('adopts the target showcase authoritative revision-0 Document/Runtime without a synthetic same-source Apply', async () => {
+	it('adopts the target authoritative revision-0 snapshot without a synthetic same-source Apply', async () => {
 		const store = createLabStore()
-		const oldRuntime = store.session.active.runtime!
-
 		await store.switchShowcase('survey')
 
-		expect(oldRuntime.isDisposed)
-			.toBe(true)
-		expect(store.session.active.revision)
+		expect(store.documentState.value.revision)
+			.toBe(0)
+		expect(store.preview.value?.revision)
 			.toBe(0)
 		expect(store.isApplying.value)
 			.toBe(false)
-		expect(store.session.active.runtime)
-			.not.toBeNull()
-		expect(store.previewRuntime.value)
-			.toBe(store.session.active.runtime)
 	})
 })
 
-/**
- * PR #19 review 4940219714, finding 1: showcase replacement must be one serialized lifecycle
- * transaction, mutually exclusive with an in-flight Apply and with itself — deliberately overlapping
- * calls (never awaited individually before firing the next one) rather than only sequential switching.
- */
 describe('createLabStore() lifecycle transaction serialization', () => {
-	it('an in-flight apply() never leaves an orphaned, never-mounted, never-disposed replacement Runtime behind a concurrent switchShowcase()', async () => {
+	it('serializes an in-flight valid Apply before a concurrent showcase switch', async () => {
+		const gate = createDeferred()
 		const store = createLabStore()
-		// Captured by reference, independent of `store.session`'s own getter: this is exactly the
-		// object identity `LabSession.apply()`'s in-flight call closes over as `this`. Under the bug,
-		// `switchShowcase()` reassigns the store's *outer* `session` variable while that in-flight
-		// `apply()` is still awaiting its own `detachPreview()`/`mountPreview()` hooks — hooks which
-		// read that same outer variable rather than `this` — so the in-flight call's own replacement
-		// Runtime gets orphaned on `preSwitchSession` (never mounted into Preview, and never disposed,
-		// because nothing ever calls back into this exact object to tear it down again).
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.showcaseId === 'sandbox' && descriptor.revision === 1 ? gate.promise : undefined,
+		})
+		await attachDriver(store, recorded.driver)
 		const preSwitchSession = store.session
-		const initialRuntime = preSwitchSession.active.runtime!
 
+		store.setDraftSourceText(capturedText)
 		const applyPromise = store.apply()
+		await vi.waitFor(() => expect(recorded.mount)
+			.toHaveBeenCalledTimes(2))
 		const switchPromise = store.switchShowcase('survey')
+		expect(store.session)
+			.toBe(preSwitchSession)
+
+		gate.resolve()
 		await Promise.all([applyPromise, switchPromise])
 
-		const replacement = preSwitchSession.active.runtime
-		if (replacement !== null && replacement !== initialRuntime) {
-			expect(replacement.isDisposed)
-				.toBe(true)
-		}
-		expect(initialRuntime.isDisposed)
-			.toBe(true)
-	})
-
-	it('serializes an in-flight apply() against a concurrent switchShowcase() with no leaked/mismatched Runtime', async () => {
-		const store = createLabStore()
-
-		// Samples the exact invariant the described race breaks: whenever a Runtime is active,
-		// `previewRuntime` must point at that *same* Runtime (never null-while-active, never a stale or
-		// already-disposed one) — sampled continuously across microtask boundaries throughout the
-		// overlap, not just once at the end.
-		const violations: string[] = []
-		const sampler = { running: true }
-		async function sample(): Promise<void> {
-			while (sampler.running) {
-				const runtime = store.session.active.runtime
-				const preview = store.previewRuntime.value
-				if (runtime !== null && !runtime.isDisposed && preview !== null && preview !== runtime)
-					violations.push(`previewRuntime pointed at a different, non-disposed Runtime than session.active.runtime (showcase=${store.showcaseId.value})`)
-				if (preview !== null && preview.isDisposed)
-					violations.push('previewRuntime pointed at an already-disposed Runtime')
-				await Promise.resolve()
-			}
-		}
-		const samplingDone = sample()
-
-		// Fired back to back, neither awaited first: `apply()` starts its own detach/compile/mount
-		// sequence, and `switchShowcase()` is diagnosticd while that is still (at minimum) queued behind it.
-		const applyPromise = store.apply()
-		const switchPromise = store.switchShowcase('survey')
-		await Promise.all([applyPromise, switchPromise])
-
-		sampler.running = false
-		await samplingDone
-
-		expect(violations)
-			.toEqual([])
+		expect(preSwitchSession.preview?.revision)
+			.toBe(1)
 		expect(store.showcaseId.value)
 			.toBe('survey')
-		expect(store.session.active.blueprint.status)
-			.toBe('valid')
-		expect(store.session.active.runtime)
-			.not.toBeNull()
-		expect(store.session.active.runtime!.isDisposed)
-			.toBe(false)
-		expect(store.previewRuntime.value)
-			.toBe(store.session.active.runtime)
+		expect(store.documentState.value.revision)
+			.toBe(0)
+		expect(mountShowcases(recorded.mount))
+			.toEqual(['sandbox', 'sandbox', 'survey'])
+		expect(mountRevisions(recorded.mount))
+			.toEqual([0, 1, 0])
+		store.dispose()
 	})
 
-	it('serializes repeated switchShowcase() calls fired without awaiting between them', async () => {
+	it('serializes repeated switchShowcase() calls and the last queued call wins', async () => {
 		const store = createLabStore()
+		const recorded = createRecordingDriver()
+		await attachDriver(store, recorded.driver)
 
 		const survey = store.switchShowcase('survey')
 		const sandbox = store.switchShowcase('sandbox')
 		const surveyAgain = store.switchShowcase('survey')
 		await Promise.all([survey, sandbox, surveyAgain])
 
-		// The last queued call wins, and the end state is fully consistent — never a runtime left over
-		// from an intermediate switch.
 		expect(store.showcaseId.value)
 			.toBe('survey')
-		expect(store.session.active.blueprint.status)
+		expect(store.documentState.value.blueprint.status)
 			.toBe('valid')
-		expect(store.session.active.runtime)
-			.not.toBeNull()
-		expect(store.session.active.runtime!.isDisposed)
-			.toBe(false)
-		expect(store.previewRuntime.value)
-			.toBe(store.session.active.runtime)
+		expect(mountShowcases(recorded.mount))
+			.toEqual(['sandbox', 'survey', 'sandbox', 'survey'])
+		store.dispose()
 	})
 
-	it('serializes switchShowcase() against a concurrent applyPreset() on the pre-switch showcase', async () => {
+	it('serializes switchShowcase() behind an already-started applyPreset()', async () => {
 		const store = createLabStore()
-
 		const applyPresetPromise = store.applyPreset('invalid-semantic')
 		const switchPromise = store.switchShowcase('survey')
 		const [applyPresetOutcome] = await Promise.all([applyPresetPromise, switchPromise])
 
-		// The preset applied to the *sandbox* session before the switch tore it down — it must not
-		// leak into or affect the survey showcase now active.
 		expect(applyPresetOutcome?.status)
 			.toBe('applied')
 		expect(store.showcaseId.value)
 			.toBe('survey')
-		expect(store.session.active.blueprint.status)
+		expect(store.documentState.value.blueprint.status)
 			.toBe('valid')
-		expect(store.previewRuntime.value)
-			.toBe(store.session.active.runtime)
 	})
 
-	// PR #19 review 4940219714, finding 1's "final disposal has guard" ask: `dispose()` stays
-	// synchronous (App.vue's `onUnmounted` never awaits it), so a `switchShowcase()` already mid-flight
-	// when `dispose()` runs cannot be cancelled — it resumes afterward and may still create a Runtime.
-	// That Runtime must be disposed immediately rather than mounted into a Preview nobody owns anymore.
-	// PR #19 review 4940721401: the lifecycle transaction queue must serialize showcase replacement
-	// against an in-flight Apply without moving Apply's OWN capture/concurrency boundary later — that
-	// boundary is `LabSession.apply()`'s contract (diagnostic #13 comment 5289958311) and must still fire
-	// synchronously, at the moment `store.apply()`/`store.applyPreset()` is called, never deferred until
-	// the queue happens to reach that transaction.
-	it('apply() captures the draft at command-call time; a same-turn setDraftSourceText() edit is not applied', async () => {
+	it('captures the Apply draft at command-call time even while remote promotion is pending', async () => {
+		const gate = createDeferred()
 		const store = createLabStore()
-		const capturedText = '{ "id": "root", "type": "Text", "config": { "text": "captured snapshot" } }\n'
-		const laterText = '{ "id": "root", "type": "Text", "config": { "text": "later snapshot" } }\n'
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.revision === 1 ? gate.promise : undefined,
+		})
+		await attachDriver(store, recorded.driver)
 
 		store.setDraftSourceText(capturedText)
 		const applyPromise = store.apply()
-		// Same turn, no await between the `apply()` call and this edit — under the regression, `apply()`
-		// deferred its actual `session.apply()` call through the queue's `Promise.then`, so this edit
-		// would land in the draft *before* that deferred call ever read it, and this text (not
-		// `capturedText`) would be the one that got applied.
 		store.setDraftSourceText(laterText)
+		await vi.waitFor(() => expect(recorded.mount)
+			.toHaveBeenCalledTimes(2))
+		gate.resolve()
 
 		const outcome = await applyPromise
-
 		expect(outcome)
 			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
-		expect(store.session.active.sourceText)
+		expect(store.documentState.value.sourceText)
 			.toBe(capturedText)
 		expect(store.draftSourceText.value)
 			.toBe(laterText)
 		expect(store.isDirty.value)
 			.toBe(true)
+		store.dispose()
 	})
 
-	it('two same-turn apply() calls are serialized into exactly one real Apply — the second is rejected as concurrent', async () => {
+	it('rejects a second same-turn Apply while the first one is in flight', async () => {
+		const gate = createDeferred()
 		const store = createLabStore()
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.revision === 1 ? gate.promise : undefined,
+		})
+		await attachDriver(store, recorded.driver)
+		store.setDraftSourceText(capturedText)
 
-		// Fired back to back, no await between them: under the regression, the queue ran both
-		// `session.apply()` invocations as two genuine, sequential Applies (the second only starting once
-		// the first had fully settled and `isApplying` had already gone back to `false`), instead of the
-		// locked contract's "Apply is disabled while one is running" rejecting the second outright.
 		const firstPromise = store.apply()
 		const secondPromise = store.apply()
+		await vi.waitFor(() => expect(recorded.mount)
+			.toHaveBeenCalledTimes(2))
 
+		gate.resolve()
 		const [firstOutcome, secondOutcome] = await Promise.all([firstPromise, secondPromise])
-
-		expect(secondOutcome)
-			.toEqual({ status: 'skipped-concurrent' })
 		expect(firstOutcome.status)
 			.toBe('applied')
+		expect(secondOutcome)
+			.toEqual({ status: 'skipped-concurrent' })
+		store.dispose()
 	})
 
-	// PR #19 review 4940839975: the previous fix (command-start capture/concurrency, see the tests above)
-	// made the mutual exclusion one-directional — an in-flight Apply correctly blocked a later-queued
-	// switch, but nothing stopped `apply()`/`applyPreset()`'s own synchronous, immediate `session.*` call
-	// from firing while a `switchShowcase()` was already mid-flight, reproducing the original
-	// orphaned/mismatched-Runtime hazard from the other direction. Exactly one `await Promise.resolve()`
-	// lands inside `performSwitchShowcase()`'s first internal await — its own `await nextTick()` while
-	// detaching the OLD Preview, *before* it reassigns the outer `session`/`currentShowcase` bindings to
-	// the target showcase (verified below: `store.session` is still `preSwitchSession` at that point). One
-	// tick later, `session` has already been reassigned and the switch's own step 3 has already started
-	// its own `session.apply()` on the new session — which would coincidentally reject a same-tick
-	// concurrent call anyway (via `LabSession`'s own `isApplying` guard) without exercising this fix at
-	// all, so hitting this exact tick is what actually proves the store-level guard is doing the work.
-	it('a switchShowcase() mid-flight blocks a concurrent apply() from starting a second real Apply on the pre-switch session', async () => {
+	it('blocks a new apply() while a showcase switch occupies the lifecycle boundary', async () => {
+		const gate = createDeferred()
 		const store = createLabStore()
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.showcaseId === 'survey' ? gate.promise : undefined,
+		})
+		await attachDriver(store, recorded.driver)
 		const preSwitchSession = store.session
-		const initialRuntime = preSwitchSession.active.runtime!
 
 		const switchPromise = store.switchShowcase('survey')
-		await Promise.resolve()
-		// Confirms the timing actually lands where intended: mid old-Preview-detach, before `session` is
-		// reassigned — under the regression, `apply()` below would call `session.apply()` synchronously on
-		// this exact (still pre-switch) session, racing its concurrent teardown.
-		expect(store.session)
-			.toBe(preSwitchSession)
-
 		const applyOutcome = await store.apply()
-
 		expect(applyOutcome)
 			.toEqual({ status: 'skipped-concurrent' })
+		expect(preSwitchSession.documentState.revision)
+			.toBe(0)
 
+		await vi.waitFor(() => expect(recorded.mount)
+			.toHaveBeenCalledTimes(2))
+		gate.resolve()
 		await switchPromise
-
-		// The rejected apply() never touched the pre-switch session at all, so it never created a second/
-		// replacement Runtime there to leak or orphan.
-		expect(preSwitchSession.active.runtime)
-			.toBe(initialRuntime)
-		expect(initialRuntime.isDisposed)
-			.toBe(true)
-		expect(store.session)
-			.not.toBe(preSwitchSession)
 		expect(store.showcaseId.value)
 			.toBe('survey')
-		expect(store.session.active.blueprint.status)
-			.toBe('valid')
-		expect(store.session.active.runtime)
-			.not.toBeNull()
-		expect(store.previewRuntime.value)
-			.toBe(store.session.active.runtime)
+		store.dispose()
 	})
 
-	it('a switchShowcase() mid-flight blocks a concurrent applyPreset() from starting a second real Apply on the pre-switch session', async () => {
+	it('blocks a new applyPreset() while a showcase switch occupies the lifecycle boundary', async () => {
+		const gate = createDeferred()
 		const store = createLabStore()
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.showcaseId === 'survey' ? gate.promise : undefined,
+		})
+		await attachDriver(store, recorded.driver)
 		const preSwitchSession = store.session
-		const initialRuntime = preSwitchSession.active.runtime!
 
 		const switchPromise = store.switchShowcase('survey')
-		await Promise.resolve()
-		expect(store.session)
-			.toBe(preSwitchSession)
-
 		const presetOutcome = await store.applyPreset('invalid-semantic')
-
 		expect(presetOutcome)
 			.toEqual({ status: 'skipped-concurrent' })
+		expect(preSwitchSession.documentState.revision)
+			.toBe(0)
 
+		await vi.waitFor(() => expect(recorded.mount)
+			.toHaveBeenCalledTimes(2))
+		gate.resolve()
 		await switchPromise
-
-		expect(preSwitchSession.active.runtime)
-			.toBe(initialRuntime)
-		expect(initialRuntime.isDisposed)
-			.toBe(true)
-		expect(store.session)
-			.not.toBe(preSwitchSession)
 		expect(store.showcaseId.value)
 			.toBe('survey')
-		expect(store.session.active.blueprint.status)
-			.toBe('valid')
-		expect(store.previewRuntime.value)
-			.toBe(store.session.active.runtime)
+		store.dispose()
 	})
 
-	it('does not record a conflict demonstration on the outgoing session during a showcase switch', async () => {
+	it('does not record a conflict demonstration while a showcase switch is outstanding', async () => {
+		const gate = createDeferred()
 		const store = createLabStore()
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.showcaseId === 'survey' ? gate.promise : undefined,
+		})
+		await attachDriver(store, recorded.driver)
 		const outgoingSession = store.session
 
 		const switchPromise = store.switchShowcase('survey')
@@ -578,35 +513,35 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 		expect(outgoingSession.documentTrace)
 			.toHaveLength(0)
 
-		await Promise.resolve()
-		expect(store.session)
-			.toBe(outgoingSession)
+		await vi.waitFor(() => expect(recorded.mount)
+			.toHaveBeenCalledTimes(2))
 		expect(store.demonstrateRevisionConflict())
 			.toBeNull()
 		expect(outgoingSession.documentTrace)
 			.toHaveLength(0)
-
+		gate.resolve()
 		await switchPromise
-		expect(store.showcaseId.value)
-			.toBe('survey')
+		store.dispose()
 	})
 
-	it('dispose() while a switchShowcase() is mid-flight disposes whatever Runtime that switch eventually produces, without throwing', async () => {
+	it('dispose() during a remote showcase mount prevents a late connection from being published', async () => {
+		const gate = createDeferred()
 		const store = createLabStore()
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.showcaseId === 'survey' ? gate.promise : undefined,
+		})
+		await attachDriver(store, recorded.driver)
+
 		const switchPromise = store.switchShowcase('survey')
-		// Let the queued transaction actually start (past its first internal await) before tearing down,
-		// so this exercises the mid-flight guard rather than the early `if (disposed) return` no-op.
-		await Promise.resolve()
-		await Promise.resolve()
-
-		expect(() => store.dispose()).not.toThrow()
-
+		await vi.waitFor(() => expect(recorded.mount)
+			.toHaveBeenCalledTimes(2))
+		store.dispose()
+		gate.resolve()
 		await switchPromise
 
-		const runtime = store.session.active.runtime
-		expect(runtime === null || runtime.isDisposed)
-			.toBe(true)
-		expect(store.previewRuntime.value)
+		expect(recorded.dispose)
+			.toHaveBeenCalledOnce()
+		expect(store.previewHost.connection.value)
 			.toBeNull()
 	})
 })
@@ -620,15 +555,12 @@ describe('createLabStore() graph cluster expansion', () => {
 		store.expandGraphCluster('cluster:test')
 		expect(store.graphExpandedClusterIds.value.has('cluster:test'))
 			.toBe(true)
-
 		store.toggleGraphCluster('cluster:test')
 		expect(store.graphExpandedClusterIds.value.has('cluster:test'))
 			.toBe(false)
-
 		store.toggleGraphCluster('cluster:test')
 		expect(store.graphExpandedClusterIds.value.has('cluster:test'))
 			.toBe(true)
-
 		store.collapseGraphCluster('cluster:test')
 		expect(store.graphExpandedClusterIds.value.has('cluster:test'))
 			.toBe(false)
@@ -636,13 +568,9 @@ describe('createLabStore() graph cluster expansion', () => {
 
 	it('supports expandAll and collapseAll', () => {
 		const store = createLabStore()
-		expect(store.graphExpandedClusterIds.value.size)
-			.toBe(0)
-
 		store.expandAllGraphClusters()
 		expect(store.graphExpandedClusterIds.value.size)
 			.toBeGreaterThan(0)
-
 		store.collapseAllGraphClusters()
 		expect(store.graphExpandedClusterIds.value.size)
 			.toBe(0)
@@ -650,11 +578,8 @@ describe('createLabStore() graph cluster expansion', () => {
 
 	it('keeps graph cluster presentation state unchanged when a member is focused', () => {
 		const store = createLabStore()
-		expect(store.graphExpandedClusterIds.value.has('cluster:title'))
-			.toBe(false)
-
 		const inspection = inspectBlueprint(store.documentState.value.blueprint)
-		const titleWidget = inspection.nodes.find(n => n.resolved && n.node.id === 'title')!
+		const titleWidget = inspection.nodes.find(node => node.resolved && node.node.id === 'title')!
 
 		store.setFocus('document', {
 			nodeId: titleWidget.nodeId,
@@ -668,9 +593,6 @@ describe('createLabStore() graph cluster expansion', () => {
 	it('resets expanded clusters on switchShowcase', async () => {
 		const store = createLabStore()
 		store.expandGraphCluster('cluster:custom')
-		expect(store.graphExpandedClusterIds.value.has('cluster:custom'))
-			.toBe(true)
-
 		await store.switchShowcase('survey')
 		expect(store.graphExpandedClusterIds.value.size)
 			.toBe(0)

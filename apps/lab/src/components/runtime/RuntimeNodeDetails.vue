@@ -1,11 +1,6 @@
 <script setup lang="ts">
-import type { ResolvedBlueprintInspectionNode, RuntimeWidgetInspection } from '@deviltea/widget-core/inspection'
-/**
- * Selected-node Runtime member list (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly passive"):
- * State/Property/Method member drill-down for one resolved node. Clicking a member row updates the
- * shared cross-inspector focus (`nodeId` + member) — never Runtime/Preview state. #43 translates only
- * explanatory inventory/empty-state copy; State/Property/Method taxonomy and member names stay exact.
- */
+/** Remote Runtime Inspector member list. All live values arrive through InspectorClient DTOs. */
+import type { InspectorBlueprintNode, InspectorClient, InspectorRuntimePropertySnapshot, InspectorRuntimeStateSnapshot, InspectorRuntimeWidgetSnapshot } from '@deviltea/widget-devtools'
 import type { InspectorFocusMember } from '../../lab/focus'
 import { computed } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
@@ -15,8 +10,9 @@ import RuntimePropertyRow from './RuntimePropertyRow.vue'
 import RuntimeStateRow from './RuntimeStateRow.vue'
 
 const props = defineProps<{
-	node: ResolvedBlueprintInspectionNode | null
-	widgetInspection: RuntimeWidgetInspection | null
+	node: InspectorBlueprintNode | null
+	widgetSnapshot: InspectorRuntimeWidgetSnapshot | null
+	client: InspectorClient | null
 }>()
 
 const store = useLabStore()
@@ -28,6 +24,20 @@ const focusMember = computed<InspectorFocusMember | null>(() => {
 		return null
 	return focus.member ?? null
 })
+
+const stateMembers = computed(() => props.node?.state ?? [])
+const propertyMembers = computed(() => props.node?.properties ?? [])
+const methodMembers = computed(() => props.node?.methods ?? [])
+
+function stateSnapshot(name: string): InspectorRuntimeStateSnapshot | null {
+	const member = props.widgetSnapshot?.members.find(candidate => candidate.type === 'state' && candidate.name === name)
+	return member?.type === 'state' ? member : null
+}
+
+function propertySnapshot(name: string): InspectorRuntimePropertySnapshot | null {
+	const member = props.widgetSnapshot?.members.find(candidate => candidate.type === 'property' && candidate.name === name)
+	return member?.type === 'property' ? member : null
+}
 
 function isSelected(type: InspectorFocusMember['type'], name: string): boolean {
 	const member = focusMember.value
@@ -44,7 +54,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 
 <template>
 	<div
-		v-if="node === null || widgetInspection === null"
+		v-if="node === null || widgetSnapshot === null || client === null"
 		:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
 	>
 		{{ i18n.t('No node selected — click a node in the tree on the left to see its live State, Properties, and Methods.') }}
@@ -55,18 +65,24 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 	>
 		<section>
 			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-				State ({{ node.state.length }})
+				State ({{ stateMembers.length }})
 			</h5>
-			<RuntimeStateRow
-				v-for="member in node.state"
+			<template
+				v-for="member in stateMembers"
 				:key="member.name"
-				:name="member.name"
-				:inspection="widgetInspection.getState(member.name)!"
-				:selected="isSelected('state', member.name)"
-				@select="selectMember('state', member.name)"
-			/>
+			>
+				<RuntimeStateRow
+					v-if="stateSnapshot(member.name) !== null"
+					:name="member.name"
+					:client="client"
+					:widgetRef="widgetSnapshot.ref"
+					:initial="stateSnapshot(member.name)!"
+					:selected="isSelected('state', member.name)"
+					@select="selectMember('state', member.name)"
+				/>
+			</template>
 			<p
-				v-if="node.state.length === 0"
+				v-if="stateMembers.length === 0"
 				:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 			>
 				{{ i18n.t('No State members.') }}
@@ -75,18 +91,24 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 
 		<section>
 			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-				Properties ({{ node.properties.length }})
+				Properties ({{ propertyMembers.length }})
 			</h5>
-			<RuntimePropertyRow
-				v-for="member in node.properties"
+			<template
+				v-for="member in propertyMembers"
 				:key="member.name"
-				:name="member.name"
-				:inspection="widgetInspection.getProperty(member.name)!"
-				:selected="isSelected('property', member.name)"
-				@select="selectMember('property', member.name)"
-			/>
+			>
+				<RuntimePropertyRow
+					v-if="propertySnapshot(member.name) !== null"
+					:name="member.name"
+					:client="client"
+					:widgetRef="widgetSnapshot.ref"
+					:initial="propertySnapshot(member.name)!"
+					:selected="isSelected('property', member.name)"
+					@select="selectMember('property', member.name)"
+				/>
+			</template>
 			<p
-				v-if="node.properties.length === 0"
+				v-if="propertyMembers.length === 0"
 				:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 			>
 				{{ i18n.t('No Property members.') }}
@@ -95,10 +117,10 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 
 		<section>
 			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
-				Methods ({{ node.methods.length }}) — {{ i18n.t('inventory only') }}
+				Methods ({{ methodMembers.length }}) — {{ i18n.t('inventory only') }}
 			</h5>
 			<RuntimeMethodRow
-				v-for="member in node.methods"
+				v-for="member in methodMembers"
 				:key="member.name"
 				:name="member.name"
 				:transitivelyWrites="member.transitivelyWrites"
@@ -106,7 +128,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 				@select="selectMember('method', member.name)"
 			/>
 			<p
-				v-if="node.methods.length === 0"
+				v-if="methodMembers.length === 0"
 				:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 			>
 				{{ i18n.t('No Method members.') }}

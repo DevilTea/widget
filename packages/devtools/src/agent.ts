@@ -72,6 +72,8 @@ export interface CreateInspectorAgentOptions {
 	readonly transport: InspectorTransport
 	readonly runtimeId?: string
 	readonly dom?: InspectorAgentDomOptions
+	/** Keep a host-owned shared transport alive when replacing only this Agent/Runtime binding. */
+	readonly closeTransportOnDispose?: boolean
 }
 
 export interface InspectorAgent {
@@ -462,7 +464,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return inspectEnabled
 		},
 		dispose() {
-			cleanup(true)
+			cleanup(options.closeTransportOnDispose ?? true)
 		},
 	}
 }

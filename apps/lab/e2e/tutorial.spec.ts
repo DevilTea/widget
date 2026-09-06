@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 /**
  * Issue #25 P1 tutorial contract. `fixtures.ts` pre-dismisses the Welcome card for every test in this
@@ -199,14 +199,15 @@ test.describe('dirty-draft confirmation dialog', () => {
 			.toBeEnabled()
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toHaveCount(0)
-		await expect(page.getByText('Widget Lab sandbox', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('Widget Lab sandbox', { exact: true }))
 			.toBeVisible() // Preview still shows the ORIGINAL applied text — the draft was never applied
 		// Scoped to Preview on purpose: the dirty draft's text legitimately appears in the Source
 		// panel's Monaco DOM (that IS the preserved draft) — asserting a page-wide count of 0 was a
 		// race against Monaco's async render (it passed only before the editor painted the new text,
 		// which is exactly what slower CI exposed). The contract is "never APPLIED": Preview must not
 		// render it, while the Source editor visibly retaining it proves preservation.
-		await expect(page.locator('[data-tutorial-target="preview"]')
+		await expect(previewFrame(page)
 			.getByText('dirtied by test'))
 			.toHaveCount(0)
 		await expect(page.locator('.view-lines')
@@ -236,7 +237,7 @@ test.describe('dirty-draft confirmation dialog', () => {
 			.toHaveCount(0)
 		// Same Preview-scoped assertion as the Cancel-button test above (see the comment there): the
 		// draft text belongs in the Source editor's DOM; only Preview must never show it un-applied.
-		await expect(page.locator('[data-tutorial-target="preview"]')
+		await expect(previewFrame(page)
 			.getByText('dirtied by test'))
 			.toHaveCount(0)
 		await expect(page.locator('.view-lines')
@@ -337,7 +338,8 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	const nextButton = page.getByRole('button', { name: 'Next', exact: true })
 	await nextButton.click() // step 1 -> 2
 
-	const adults = page.getByLabel('Adults', { exact: true })
+	const adults = previewFrame(page)
+		.getByLabel('Adults', { exact: true })
 	await adults.fill('5')
 	await adults.press('Tab')
 	await expect(rail.getByText('The Live estimate just updated.', { exact: false }))
@@ -347,7 +349,8 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	await nextButton.click() // step 2 -> 3
 	await nextButton.click() // step 3 -> 4
 
-	const returnDate = page.getByLabel('Return date')
+	const returnDate = previewFrame(page)
+		.getByLabel('Return date')
 	await returnDate.fill('2027-04-01')
 	await returnDate.press('Tab')
 	await expect(rail.getByText('Trip days fails with a reason', { exact: false }))
@@ -360,10 +363,12 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 		.toBeEnabled()
 	await nextButton.click() // step 4 -> 5
 
-	const children = page.getByLabel('Children', { exact: true })
+	const children = previewFrame(page)
+		.getByLabel('Children', { exact: true })
 	await children.fill('2')
 	await children.press('Tab')
-	await expect(page.getByText('What matters most while traveling with children?'))
+	await expect(previewFrame(page)
+		.getByText('What matters most while traveling with children?'))
 		.toBeVisible()
 	await children.fill('0')
 	await children.press('Tab')
@@ -371,11 +376,14 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 		.toBeEnabled()
 	await nextButton.click() // step 5 -> 6
 
-	await page.getByRole('button', { name: 'Submit', exact: true })
+	await previewFrame(page)
+		.getByRole('button', { name: 'Submit', exact: true })
 		.click()
-	await page.getByRole('button', { name: 'Generate result', exact: true })
+	await previewFrame(page)
+		.getByRole('button', { name: 'Generate result', exact: true })
 		.click()
-	await expect(page.getByRole('heading', { name: 'Recommendation' }))
+	await expect(previewFrame(page)
+		.getByRole('heading', { name: 'Recommendation' }))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
@@ -404,10 +412,12 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toHaveCount(0)
 	await expect(nextButton)
 		.toBeDisabled()
-	await expect(page.locator('[data-tutorial-target="survey-adults"]'))
+	await expect(previewFrame(page)
+		.locator('[data-tutorial-target="survey-adults"]'))
 		.toHaveClass(/tutorial-spotlight/)
 
-	const adults = page.getByLabel('Adults', { exact: true })
+	const adults = previewFrame(page)
+		.getByLabel('Adults', { exact: true })
 	await adults.fill('5')
 	await adults.press('Tab')
 
@@ -433,7 +443,8 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	const failureObservation = rail.getByText('Trip days fails with a reason', { exact: false })
 	await expect(failureObservation)
 		.toHaveCount(0)
-	const returnDate = page.getByLabel('Return date')
+	const returnDate = previewFrame(page)
+		.getByLabel('Return date')
 	// Default Departure is 2027-04-10 (showcases/survey/presets.ts) — this is strictly before it.
 	await returnDate.fill('2027-04-01')
 	await returnDate.press('Tab')
@@ -456,14 +467,16 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await nextButton.click()
 
 	// Step 5 — dependency: appear, then disappear again (keeps the script submittable at step 6).
-	const familyQuestion = page.getByText('What matters most while traveling with children?')
+	const familyQuestion = previewFrame(page)
+		.getByText('What matters most while traveling with children?')
 	await expect(familyQuestion)
 		.toHaveCount(0)
 	const appearObservation = rail.getByText('A new "Family preferences" section appeared.', { exact: false })
 	await expect(appearObservation)
 		.toHaveCount(0)
 
-	const children = page.getByLabel('Children', { exact: true })
+	const children = previewFrame(page)
+		.getByLabel('Children', { exact: true })
 	await children.fill('2')
 	await children.press('Tab')
 
@@ -489,18 +502,22 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	const methodObservation = rail.getByText('invoke named Methods', { exact: false })
 	await expect(methodObservation)
 		.toHaveCount(0)
-	await expect(page.getByRole('heading', { name: 'Recommendation' }))
+	await expect(previewFrame(page)
+		.getByRole('heading', { name: 'Recommendation' }))
 		.toHaveCount(0)
 
 	// `exact: true` on purpose: the Runtime tab (activated via step 2's "See it in Runtime" link, and
 	// still mounted though inactive) has its own "submit() writes ..." Method-row text, which a
 	// non-exact substring match on "Submit" would ambiguously also match.
-	await page.getByRole('button', { name: 'Submit', exact: true })
+	await previewFrame(page)
+		.getByRole('button', { name: 'Submit', exact: true })
 		.click()
-	await page.getByRole('button', { name: 'Generate result', exact: true })
+	await previewFrame(page)
+		.getByRole('button', { name: 'Generate result', exact: true })
 		.click()
 
-	await expect(page.getByRole('heading', { name: 'Recommendation' }))
+	await expect(previewFrame(page)
+		.getByRole('heading', { name: 'Recommendation' }))
 		.toBeVisible()
 	await expect(methodObservation)
 		.toBeVisible()
@@ -515,13 +532,15 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	const staleObservation = rail.getByText('gained the Stale marker', { exact: false })
 	await expect(staleObservation)
 		.toHaveCount(0)
-	await expect(page.getByText('Stale', { exact: true }))
+	await expect(previewFrame(page)
+		.getByText('Stale', { exact: true }))
 		.toHaveCount(0)
 
 	await adults.fill('6')
 	await adults.press('Tab')
 
-	await expect(page.getByText('Stale', { exact: true }))
+	await expect(previewFrame(page)
+		.getByText('Stale', { exact: true }))
 		.toBeVisible()
 	await expect(staleObservation)
 		.toBeVisible()

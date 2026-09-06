@@ -1,48 +1,44 @@
 <script setup lang="ts">
-/**
- * One Property member row (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly passive"): shows
- * `Never evaluated` until some real Runtime consumer naturally evaluates it, then the latest completed
- * `ExecutionResult` retained by core inspection — a ok value, or a semantic failure rendered via
- * `RuntimePropertyDiagnosticList`. Never labeled `fresh`/`dirty`/`active`/`stale`, and never forces evaluation
- * itself (only reads `getSnapshot()`/`subscribe()`). #43 translates only status/action chrome; the
- * Property name, successful value, and core RuntimePropertyDiagnostic payload remain verbatim.
- */
-import type { RuntimePropertyInspection } from '@deviltea/widget-core/inspection'
+import type { InspectorClient, InspectorRuntimePropertySnapshot, WidgetRef } from '@deviltea/widget-devtools'
 import { computed, ref } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
-import { useMemberSnapshot } from '../../composables/use-runtime-member'
-import { createPropertyMemberViewModel } from '../../runtime-inspector/viewmodel'
+import { useRemoteRuntimeMember } from '../../composables/use-remote-runtime-member'
+import { formatInspectableValue } from '../../runtime-inspector/format-value'
 import RuntimePropertyDiagnosticList from './RuntimePropertyDiagnosticList.vue'
 
 const props = defineProps<{
 	name: string
-	inspection: RuntimePropertyInspection<unknown>
+	client: InspectorClient
+	widgetRef: WidgetRef
+	initial: InspectorRuntimePropertySnapshot
 	selected: boolean
 }>()
 
-const emit = defineEmits<{
-	select: []
-}>()
-
+const emit = defineEmits<{ select: [] }>()
 const i18n = useLabI18n()
-const snapshot = useMemberSnapshot(createPropertyMemberViewModel, () => props.inspection)
 const showDiagnostics = ref(false)
+const snapshot = useRemoteRuntimeMember(
+	() => props.client,
+	() => props.widgetRef,
+	() => ({ type: 'property', name: props.name }),
+	() => props.initial,
+)
 
+const propertySnapshot = computed(() => snapshot.value?.type === 'property' ? snapshot.value.snapshot : null)
 const statusLabel = computed(() => {
-	const current = snapshot.value
+	const current = propertySnapshot.value
 	if (current === null || current.status === 'never-evaluated')
 		return i18n.t('Never evaluated')
 	return current.result.ok
-		? JSON.stringify(current.result.value)
+		? formatInspectableValue(current.result.value)
 		: i18n.t('Failed ({count} {diagnosticWord})', {
-				count: current.result.failure.diagnostics.length,
-				diagnosticWord: current.result.failure.diagnostics.length === 1 ? i18n.t('diagnostic') : i18n.t('diagnostics'),
+				count: current.result.diagnostics.length,
+				diagnosticWord: current.result.diagnostics.length === 1 ? i18n.t('diagnostic') : i18n.t('diagnostics'),
 			})
 })
-
 const failedDiagnostics = computed(() => {
-	const current = snapshot.value
-	return current !== null && current.status === 'completed' && !current.result.ok ? current.result.failure.diagnostics : []
+	const current = propertySnapshot.value
+	return current !== null && current.status === 'completed' && !current.result.ok ? current.result.diagnostics : []
 })
 </script>
 

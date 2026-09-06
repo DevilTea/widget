@@ -1,27 +1,29 @@
 <script setup lang="ts">
-/**
- * One State member row (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly passive"): renders the
- * current passive inspection snapshot from `getSnapshot()` and updates on `subscribe()` notifications.
- * Never calls `state.get()`/`state.set()` — the readonly `RuntimeStateInspection` facade is the only
- * surface this component touches.
- */
-import type { RuntimeStateInspection } from '@deviltea/widget-core/inspection'
+import type { InspectorClient, InspectorRuntimeStateSnapshot, WidgetRef } from '@deviltea/widget-devtools'
 import { computed } from 'vue'
-import { useMemberSnapshot } from '../../composables/use-runtime-member'
-import { createStateMemberViewModel } from '../../runtime-inspector/viewmodel'
+import { useRemoteRuntimeMember } from '../../composables/use-remote-runtime-member'
+import { formatInspectableValue } from '../../runtime-inspector/format-value'
 
 const props = defineProps<{
 	name: string
-	inspection: RuntimeStateInspection<unknown>
+	client: InspectorClient
+	widgetRef: WidgetRef
+	initial: InspectorRuntimeStateSnapshot
 	selected: boolean
 }>()
 
-const emit = defineEmits<{
-	select: []
-}>()
+const emit = defineEmits<{ select: [] }>()
 
-const snapshot = useMemberSnapshot(createStateMemberViewModel, () => props.inspection)
-const displayValue = computed(() => JSON.stringify(snapshot.value?.value ?? null))
+const snapshot = useRemoteRuntimeMember(
+	() => props.client,
+	() => props.widgetRef,
+	() => ({ type: 'state', name: props.name }),
+	() => props.initial,
+)
+const displayValue = computed(() => {
+	const current = snapshot.value
+	return current?.type === 'state' ? formatInspectableValue(current.value) : '—'
+})
 </script>
 
 <template>
