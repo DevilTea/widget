@@ -9,6 +9,7 @@
 		".": "./src/index.ts",
 		"./agent": "./src/agent.ts",
 		"./client": "./src/client.ts",
+		"./frame-bootstrap": "./src/frame-bootstrap.ts",
 		"./projection": "./src/projection.ts",
 		"./protocol": "./src/protocol.ts",
 		"./transport": "./src/transport.ts",
