@@ -1,0 +1,30 @@
+{
+	"name": "@deviltea/widget-devtools",
+	"type": "module",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Private experimental Widget inspector protocol/agent boundary. Package naming is provisional and not a publication commitment.",
+	"license": "MIT",
+	"exports": {
+		".": "./src/index.ts",
+		"./agent": "./src/agent.ts",
+		"./client": "./src/client.ts",
+		"./projection": "./src/projection.ts",
+		"./protocol": "./src/protocol.ts",
+		"./transport": "./src/transport.ts",
+		"./value": "./src/value.ts"
+	},
+	"scripts": {
+		"test": "vitest run --config vitest.config.ts",
+		"typecheck": "tsc --project ./tsconfig.json --noEmit"
+	},
+	"dependencies": {
+		"@deviltea/widget-core": "workspace:*"
+	},
+	"devDependencies": {
+		"@deviltea/tsconfig": "catalog:",
+		"happy-dom": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

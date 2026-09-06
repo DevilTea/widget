@@ -1,0 +1,7 @@
+{
+	"extends": "@deviltea/tsconfig/neutral",
+	"compilerOptions": {
+		"lib": ["ES2022", "DOM", "DOM.Iterable"]
+	},
+	"include": ["./src/**/*.ts"]
+}
