@@ -35,6 +35,7 @@ function onSave(): void {
 		style="display: contents"
 	>
 		<VDialog
+			contained
 			:modelValue="open ?? false"
 			maxWidth="520"
 			@update:modelValue="onDialogUpdate"

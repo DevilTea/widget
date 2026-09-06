@@ -22,6 +22,42 @@ test.beforeEach(async ({ page }) => {
 		.toBeVisible()
 })
 
+test('embedded Vuetify layout and overlays stay contained inside the Preview application boundary', async ({ page }) => {
+	const app = page.getByTestId('vuetify-task-app')
+	const appBar = app.locator('.v-app-bar')
+	const appBox = await app.boundingBox()
+	const appBarBox = await appBar.boundingBox()
+	if (appBox === null || appBarBox === null)
+		throw new Error('Expected the Vuetify application and app bar to have layout boxes.')
+
+	expect(appBarBox.x)
+		.toBeGreaterThanOrEqual(appBox.x)
+	expect(appBarBox.y)
+		.toBeGreaterThanOrEqual(appBox.y)
+	expect(appBarBox.x + appBarBox.width)
+		.toBeLessThanOrEqual(appBox.x + appBox.width + 1)
+	expect(appBarBox.y + appBarBox.height)
+		.toBeLessThanOrEqual(appBox.y + appBox.height + 1)
+
+	await page.getByRole('button', { name: 'New task' })
+		.click()
+	const dialog = page.getByRole('dialog')
+	await expect(dialog)
+		.toBeVisible()
+	const dialogBox = await dialog.boundingBox()
+	if (dialogBox === null)
+		throw new Error('Expected the contained task dialog to have a layout box.')
+
+	expect(dialogBox.x)
+		.toBeGreaterThanOrEqual(appBox.x)
+	expect(dialogBox.y)
+		.toBeGreaterThanOrEqual(appBox.y)
+	expect(dialogBox.x + dialogBox.width)
+		.toBeLessThanOrEqual(appBox.x + appBox.width + 1)
+	expect(dialogBox.y + dialogBox.height)
+		.toBeLessThanOrEqual(appBox.y + appBox.height + 1)
+})
+
 test('search and status filter are Runtime-backed and coherent with the rendered task collection', async ({ page }) => {
 	await expect(page.locator('[data-task-id]'))
 		.toHaveCount(4)

@@ -12,10 +12,11 @@ const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 <template>
 	<VApp
 		v-bind="inspectAnchor"
+		class="task-app-shell"
 		data-testid="vuetify-task-app"
-		style="min-height: 560px"
 	>
 		<VAppBar
+			absolute
 			flat
 			density="comfortable"
 		>
@@ -40,3 +41,17 @@ const inspectAnchor = useInspectAnchor(widgetId, widgetType)
 		<WidgetSlot name="overlay" />
 	</VApp>
 </template>
+
+<style scoped>
+.task-app-shell {
+	position: relative;
+	min-height: 560px;
+	overflow: hidden;
+}
+
+/* VApp defaults to viewport height because it is normally the application root. In Widget Lab this
+ * renderer is an embedded application, so its layout root must stay inside the Preview surface. */
+.task-app-shell :deep(.v-application__wrap) {
+	min-height: 560px;
+}
+</style>

@@ -22,6 +22,7 @@ function onOpenUpdate(nextOpen: boolean): void {
 	>
 		<WidgetSlot name="default" />
 		<VSnackbar
+			contained
 			:modelValue="open ?? false"
 			:color="tone ?? 'info'"
 			:timeout="2400"
