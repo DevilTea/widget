@@ -62,6 +62,8 @@ watchEffect(() => {
 		const el = document.querySelector(`[data-tutorial-target="${CSS.escape(target)}"]`)
 		el?.classList.add('tutorial-spotlight')
 	}
+	// Preview lives in a separate document; project the same semantic target through the host.
+	store.previewHost.setTutorialSpotlight(target)
 })
 
 function onKeydown(event: KeyboardEvent): void {

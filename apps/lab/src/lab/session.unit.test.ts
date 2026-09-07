@@ -20,7 +20,7 @@ function createDeferred<T = void>() {
 }
 
 /**
- * Wraps a real `WidgetSystem` so Document compilation and valid-Blueprint Runtime creation are
+ * Wraps a real `WidgetSystem` so Document compilation and valid-Blueprint remote Preview replacement are
  * observable in the same event trace as the Lab Preview hooks. `getPlugin`/`validateStructure` are
  * copied by reference (they close over the real system's own state, not `this`), so the wrapper is
  * otherwise behaviorally identical.
@@ -31,15 +31,7 @@ function createCompileTrackingSystem(system: WidgetSystem<SandboxPlugins>, event
 		createBlueprint: (definition) => {
 			events.push('compile')
 			const blueprint = system.createBlueprint(definition)
-			if (blueprint.status !== 'valid')
-				return blueprint
-			return {
-				...blueprint,
-				createRuntime: (options) => {
-					events.push('runtime-create')
-					return blueprint.createRuntime(options)
-				},
-			}
+			return blueprint
 		},
 	}
 }
@@ -76,8 +68,6 @@ describe('labSession', () => {
 			.toBe(beforeDocumentRevision)
 		expect(session.preview)
 			.toBe(beforePreview)
-		expect(session.preview!.runtime.isDisposed)
-			.toBe(false)
 	})
 
 	it('keeps the observation trace bounded and drops the oldest entries', async () => {
@@ -100,7 +90,7 @@ describe('labSession', () => {
 	it('routes an Author command through SourcePatch, increments Document revision, promotes a valid Runtime, and cleans JSON', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		const nodeId = inspectBlueprint(session.documentState.blueprint).nodes.find(node => node.resolved && node.node.id === 'title')!.nodeId
-		const oldRuntime = session.preview!.runtime
+		const oldPreview = session.preview!
 
 		const outcome = await session.author(replaceConfigScalar(0, nodeId, 'text', 'edited by Structure'))
 
@@ -110,10 +100,8 @@ describe('labSession', () => {
 			.toBe(1)
 		expect(session.preview?.revision)
 			.toBe(1)
-		expect(session.preview?.runtime)
-			.not.toBe(oldRuntime)
-		expect(oldRuntime.isDisposed)
-			.toBe(true)
+		expect(session.preview)
+			.not.toBe(oldPreview)
 		expect(session.draftSourceText)
 			.toBe(JSON.stringify(session.documentState.blueprint.source, null, 2))
 		expect(session.isDirty)
@@ -135,8 +123,6 @@ describe('labSession', () => {
 			.toBe(previousRevision)
 		expect(session.preview)
 			.toBe(previousPreview)
-		expect(previousPreview.runtime.isDisposed)
-			.toBe(false)
 		expect(session.lastAppliedSourcePatch)
 			.toBeNull()
 		expect(session.documentTrace)
@@ -149,10 +135,8 @@ describe('labSession', () => {
 			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
 		expect(session.documentState.revision)
 			.toBe(previousRevision + 1)
-		expect(session.preview?.runtime)
-			.not.toBe(previousPreview.runtime)
-		expect(previousPreview.runtime.isDisposed)
-			.toBe(true)
+		expect(session.preview)
+			.not.toBe(previousPreview)
 	})
 
 	it('commits an invalid Author command while retaining the prior Preview revision', async () => {
@@ -170,8 +154,6 @@ describe('labSession', () => {
 			.toBe('invalid')
 		expect(session.preview)
 			.toBe(retainedPreview)
-		expect(retainedPreview.runtime.isDisposed)
-			.toBe(false)
 		expect(session.draftSourceText)
 			.toBe(JSON.stringify(session.documentState.blueprint.source, null, 2))
 		expect(session.isDirty)
@@ -186,7 +168,7 @@ describe('labSession', () => {
 		const session = new LabSession({
 			system: sandboxSystem,
 			initialSourceText: validSource,
-			hooks: { detachPreview: () => detach, mountPreview: () => {} },
+			hooks: { replacePreview: () => detach },
 		})
 		const nodeId = inspectBlueprint(session.documentState.blueprint).nodes.find(node => node.resolved && node.node.id === 'title')!.nodeId
 		const concurrentDraft = '{ "id": "root", "type": "Text", "config": { "text": "typed while promoting" } }\n'
@@ -217,7 +199,6 @@ describe('labSession', () => {
 			.toBe(0)
 		expect(session.preview?.blueprint)
 			.toBe(session.documentState.blueprint)
-		expect(session.preview?.runtime).not.toBeNull()
 		expect(session.draftSourceText)
 			.toBe(validSource)
 		expect(session.isDirty)
@@ -246,7 +227,7 @@ describe('labSession', () => {
 
 	it('apply() on a JSON syntax failure leaves the active snapshot untouched and sets a Lab-only SourceParseError', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
-		const activeBefore = session.active
+		const activeBefore = session.documentState
 
 		session.setDraftSourceText('not json at all')
 		const outcome = await session.apply()
@@ -260,32 +241,29 @@ describe('labSession', () => {
 		expect(typeof outcome.error.message)
 			.toBe('string')
 		// Untouched by identity, not merely by value: the old Runtime/Preview must remain live.
-		expect(session.active)
+		expect(session.documentState)
 			.toBe(activeBefore)
 	})
 
 	it('apply() never injects a JSON syntax failure into core Blueprint diagnostics', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: invalidSource })
-		const diagnosticsBefore = session.active.blueprint.diagnostics
+		const diagnosticsBefore = session.documentState.blueprint.diagnostics
 
 		session.setDraftSourceText('{ broken')
 		await session.apply()
 
 		// Same frozen array by identity: the syntax failure never touched the active Blueprint's
 		// own (already non-empty) diagnostics.
-		expect(session.active.blueprint.diagnostics)
+		expect(session.documentState.blueprint.diagnostics)
 			.toBe(diagnosticsBefore)
 	})
 
-	it('commits an invalid Document revision while retaining the exact last-valid Preview Runtime', async () => {
+	it('commits an invalid Document revision while retaining the exact last-valid Preview metadata', async () => {
 		const events: string[] = []
 		const session = new LabSession({
 			system: sandboxSystem,
 			initialSourceText: validSource,
-			hooks: {
-				detachPreview: () => { events.push('detach') },
-				mountPreview: () => { events.push('mount') },
-			},
+			hooks: { replacePreview: () => { events.push('replace') } },
 		})
 		const previewBefore = session.preview!
 
@@ -304,8 +282,6 @@ describe('labSession', () => {
 			.toBe(previewBefore)
 		expect(session.preview!.revision)
 			.toBe(0)
-		expect(session.preview!.runtime.isDisposed)
-			.toBe(false)
 		expect(events)
 			.toEqual([])
 		expect(session.isDirty)
@@ -317,10 +293,7 @@ describe('labSession', () => {
 		const session = new LabSession({
 			system: sandboxSystem,
 			initialSourceText: validSource,
-			hooks: {
-				detachPreview: () => { events.push('detach') },
-				mountPreview: () => { events.push('mount') },
-			},
+			hooks: { replacePreview: () => { events.push('replace') } },
 		})
 		const originalPreview = session.preview!
 
@@ -333,8 +306,6 @@ describe('labSession', () => {
 			.toBe('invalid')
 		expect(session.preview)
 			.toBe(originalPreview)
-		expect(originalPreview.runtime.isDisposed)
-			.toBe(false)
 		expect(events)
 			.toEqual([])
 
@@ -344,33 +315,28 @@ describe('labSession', () => {
 			.toBe(3)
 		expect(session.documentState.blueprint.status)
 			.toBe('valid')
-		expect(originalPreview.runtime.isDisposed)
-			.toBe(true)
 		expect(session.preview?.revision)
 			.toBe(3)
 		expect(session.preview?.blueprint)
 			.toBe(session.documentState.blueprint)
-		expect(session.preview?.runtime)
-			.not.toBe(originalPreview.runtime)
+		expect(session.preview)
+			.not.toBe(originalPreview)
 		expect(events)
-			.toEqual(['detach', 'mount'])
+			.toEqual(['replace'])
 	})
 
-	it('accepts a text-only structural no-op without compiling, revising, or replacing Runtime/Blueprint', async () => {
+	it('accepts a text-only structural no-op without compiling, revising, or replacing Preview/Blueprint', async () => {
 		const events: string[] = []
 		const trackedSystem = createCompileTrackingSystem(sandboxSystem, events)
 		const session = new LabSession({
 			system: trackedSystem,
 			initialSourceText: validSource,
-			hooks: {
-				detachPreview: () => { events.push('detach') },
-				mountPreview: () => { events.push('mount') },
-			},
+			hooks: { replacePreview: () => { events.push('replace') } },
 		})
 		const document = session.documentState
 		const preview = session.preview
 		const equivalentSource = JSON.stringify(JSON.parse(validSource))
-		events.length = 0 // Ignore revision-0 compile/Runtime creation from construction.
+		events.length = 0 // Ignore revision-0 compile from construction.
 
 		session.setDraftSourceText(equivalentSource)
 		const outcome = await session.apply()
@@ -385,8 +351,6 @@ describe('labSession', () => {
 			.toBe(document.blueprint)
 		expect(session.preview)
 			.toBe(preview)
-		expect(preview?.runtime.isDisposed)
-			.toBe(false)
 		expect(events)
 			.toEqual([])
 		expect(session.isDirty)
@@ -398,7 +362,7 @@ describe('labSession', () => {
 		const session = new LabSession({
 			system: sandboxSystem,
 			initialSourceText: validSource,
-			hooks: { detachPreview: () => detach.promise, mountPreview: () => {} },
+			hooks: { replacePreview: () => detach.promise },
 		})
 
 		session.setDraftSourceText(secondValidSource)
@@ -406,7 +370,7 @@ describe('labSession', () => {
 		expect(session.isApplying)
 			.toBe(true)
 
-		// Mutate the draft while the in-flight apply is still stuck awaiting detachPreview().
+		// Mutate the draft while the in-flight apply is still awaiting remote Preview replacement.
 		session.setDraftSourceText(invalidSource)
 
 		detach.resolve()
@@ -414,7 +378,7 @@ describe('labSession', () => {
 
 		expect(outcome)
 			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
-		expect(session.active.sourceText)
+		expect(session.documentState.sourceText)
 			.toBe(secondValidSource)
 		expect(session.draftSourceText)
 			.toBe(invalidSource)
@@ -427,7 +391,7 @@ describe('labSession', () => {
 		const session = new LabSession({
 			system: sandboxSystem,
 			initialSourceText: validSource,
-			hooks: { detachPreview: () => detach.promise, mountPreview: () => {} },
+			hooks: { replacePreview: () => detach.promise },
 		})
 
 		session.setDraftSourceText(secondValidSource)
@@ -443,7 +407,7 @@ describe('labSession', () => {
 			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
 	})
 
-	it('commits the Document before detach/dispose, then creates and mounts the replacement Runtime', async () => {
+	it('commits the Document before awaiting remote Preview replacement acknowledgement', async () => {
 		const events: string[] = []
 		const detach = createDeferred<void>()
 		const trackedSystem = createCompileTrackingSystem(sandboxSystem, events)
@@ -451,45 +415,35 @@ describe('labSession', () => {
 			system: trackedSystem,
 			initialSourceText: validSource,
 			hooks: {
-				detachPreview: async () => {
-					events.push('detach-start')
+				replacePreview: async () => {
+					events.push('replace-start')
 					await detach.promise
-					events.push('detach-end')
-				},
-				mountPreview: () => {
-					events.push('mount')
+					events.push('replace-end')
 				},
 			},
 		})
-		const oldRuntime = session.preview!.runtime
-		// The constructor's initial compile + Runtime creation seed revision 0 and are out of scope for
-		// this Apply-sequencing assertion.
+		const oldPreview = session.preview!
+		// The constructor's initial compile seeds revision 0 and is out of scope for this sequencing assertion.
 		events.length = 0
 
 		session.setDraftSourceText(secondValidSource)
 		const applyPromise = session.apply()
 
-		// `WidgetDocument.applyPatch()` is synchronous: compilation/commit must finish before the first
-		// Preview-detach await begins. The old Runtime remains alive until detach has actually completed.
+		// `WidgetDocument.applyPatch()` is synchronous: compilation/commit finishes before remote replacement is awaited.
 		expect(events)
-			.toEqual(['compile', 'detach-start'])
-		expect(oldRuntime.isDisposed)
-			.toBe(false)
+			.toEqual(['compile', 'replace-start'])
 
 		detach.resolve()
 		await applyPromise
 
 		expect(events)
-			.toEqual(['compile', 'detach-start', 'detach-end', 'runtime-create', 'mount'])
+			.toEqual(['compile', 'replace-start', 'replace-end'])
 		expect(session.documentState.revision)
 			.toBe(1)
 		expect(session.preview?.revision)
 			.toBe(1)
-		expect(oldRuntime.isDisposed)
-			.toBe(true)
-		expect(session.preview?.runtime).not.toBe(oldRuntime)
-		expect(session.preview!.runtime.isDisposed)
-			.toBe(false)
+		expect(session.preview)
+			.not.toBe(oldPreview)
 	})
 
 	it('starts with no Preview for invalid source and keeps it absent across invalid commits', async () => {
@@ -497,14 +451,7 @@ describe('labSession', () => {
 		const session = new LabSession({
 			system: sandboxSystem,
 			initialSourceText: invalidSource,
-			hooks: {
-				detachPreview: () => {
-					events.push('detach')
-				},
-				mountPreview: () => {
-					events.push('mount')
-				},
-			},
+			hooks: { replacePreview: () => { events.push('replace') } },
 		})
 
 		session.setDraftSourceText(invalidSource.replace('does-not-exist', 'still-does-not-exist'))
@@ -528,7 +475,7 @@ describe('labSession', () => {
 
 		expect(session.draftSourceText)
 			.toBe(JSON.stringify({ id: 'root', type: 'Text', config: { text: 'x' } }, null, 2))
-		expect(session.active.sourceText)
+		expect(session.documentState.sourceText)
 			.toBe(validSource)
 		expect(session.isDirty)
 			.toBe(true)
@@ -550,7 +497,7 @@ describe('labSession', () => {
 		session.setDraftSourceText('garbled')
 		await session.apply()
 		expect(session.parseError).not.toBeNull()
-		const activeBefore = session.active
+		const activeBefore = session.documentState
 
 		session.revert()
 
@@ -560,7 +507,7 @@ describe('labSession', () => {
 			.toBeNull()
 		expect(session.isDirty)
 			.toBe(false)
-		expect(session.active)
+		expect(session.documentState)
 			.toBe(activeBefore)
 	})
 
@@ -571,7 +518,7 @@ describe('labSession', () => {
 
 		expect(outcome)
 			.toEqual({ status: 'applied', blueprintStatus: 'invalid' })
-		expect(session.active.sourceText)
+		expect(session.documentState.sourceText)
 			.toBe(invalidSource)
 		expect(session.draftSourceText)
 			.toBe(invalidSource)
@@ -586,7 +533,7 @@ describe('labSession', () => {
 
 		expect(outcome.status)
 			.toBe('parse-error')
-		expect(session.active.sourceText)
+		expect(session.documentState.sourceText)
 			.toBe(validSource)
 	})
 

@@ -1,3 +1,4 @@
+import type { InspectorBlueprintSnapshot } from '@deviltea/widget-devtools'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
@@ -8,10 +9,27 @@ import { LabSession } from './session'
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText
 const invalidSource = sandboxPresets.find(preset => preset.id === 'invalid-semantic')!.sourceText
 
+function remoteSnapshotOf(session: LabSession, runtimeId = 'runtime-test'): InspectorBlueprintSnapshot {
+	const inspection = inspectBlueprint(session.preview!.blueprint)
+	return {
+		runtimeId,
+		rootNodeId: Number(inspection.rootNodeId),
+		nodes: inspection.nodes.map(entry => ({
+			nodeId: Number(entry.nodeId),
+			resolved: entry.node.resolved,
+			...(entry.node.resolved ? { widgetId: entry.node.id, widgetType: entry.node.type } : {}),
+			sourceSlots: [],
+			diagnostics: [],
+		})),
+		invalidCycles: [],
+	}
+}
+
 describe('createInspectorFocusStore', () => {
 	it('synchronizes Document and Preview focus only while their revisions are linked', () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		const store = createInspectorFocusStore(session)
+		store.setPreviewSnapshot(0, remoteSnapshotOf(session))
 		const counterNode = inspectBlueprint(session.preview!.blueprint).nodes
 			.find(node => node.resolved && node.node.id === 'counter-1')
 		if (counterNode === undefined)
@@ -23,17 +41,18 @@ describe('createInspectorFocusStore', () => {
 		expect(store.getScopedFocus('document'))
 			.toMatchObject({ scope: 'document', revision: 0, ...focus })
 		expect(store.getScopedFocus('preview'))
-			.toMatchObject({ scope: 'preview', revision: 0, ...focus })
+			.toMatchObject({ scope: 'preview', revision: 0, runtimeId: 'runtime-test', nodeId: Number(counterNode.nodeId) })
 	})
 
 	it('isolates Preview focus from current Document focus after an invalid commit diverges revisions', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		const store = createInspectorFocusStore(session)
+		store.setPreviewSnapshot(0, remoteSnapshotOf(session))
 		const counterNode = inspectBlueprint(session.preview!.blueprint).nodes
 			.find(node => node.resolved && node.node.id === 'counter-1')
 		if (counterNode === undefined)
 			throw new Error('Expected counter-1 in Preview inspection.')
-		const previewFocus = { nodeId: counterNode.nodeId }
+		const previewFocus = { nodeId: Number(counterNode.nodeId) }
 		store.setFocus('preview', previewFocus)
 
 		await session.applyPreset(invalidSource)
@@ -87,8 +106,6 @@ describe('createInspectorFocusStore', () => {
 			.toBe('invalid')
 		expect(session.preview?.revision)
 			.toBe(0)
-		expect(session.preview?.runtime.isDisposed)
-			.toBe(false)
 		expect(store.getFocus())
 			.toEqual({ nodeId: inspectBlueprint(session.documentSnapshot.blueprint).rootNodeId })
 	})

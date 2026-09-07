@@ -14,7 +14,6 @@ import TaskStatusFilterRenderer from './TaskStatusFilterRenderer.vue'
 import TaskStoreRenderer from './TaskStoreRenderer.vue'
 import ThemeCapabilityRenderer from './ThemeCapabilityRenderer.vue'
 import ThemeControlRenderer from './ThemeControlRenderer.vue'
-import 'vuetify/styles'
 
 export const VuetifyTaskRenderer = createWidgetVueRenderer(vuetifyTaskSystem, renderers =>
 	renderers

@@ -200,6 +200,8 @@ export interface TutorialEngine {
 	 * newly complete) against `reader`. Never moves `stepIndex` — see the file header.
 	 */
 	recheck: (reader: TutorialRuntimeReader) => void
+	/** Applies an externally-evaluated monotonic stage count for the current step (used by remote Preview hosts). */
+	acceptProgress: (progress: number) => void
 	runLink: (linkId: string, actions: TutorialActions) => void
 	/**
 	 * Bootstraps `'completed'` status directly (no step traversal) — the one exception to "only

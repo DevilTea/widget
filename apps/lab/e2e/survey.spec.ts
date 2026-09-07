@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 /**
  * Issue #28 Interactive Survey contract, against the default preset (`survey-default` —
@@ -18,11 +18,12 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('conditional Family preferences question reveals/hides with Children', async ({ page }) => {
-	const familyQuestion = page.getByText('What matters most while traveling with children?')
+	const preview = previewFrame(page)
+	const familyQuestion = preview.getByText('What matters most while traveling with children?')
 	await expect(familyQuestion)
 		.toHaveCount(0)
 
-	const children = page.getByLabel('Children', { exact: true })
+	const children = preview.getByLabel('Children', { exact: true })
 	await children.fill('2')
 	await children.press('Tab')
 	await expect(familyQuestion)
@@ -35,50 +36,52 @@ test('conditional Family preferences question reveals/hides with Children', asyn
 })
 
 test('valid flow: Submit then Generate result renders the Recommendation block', async ({ page }) => {
-	await page.getByRole('button', { name: 'Submit' })
+	const preview = previewFrame(page)
+	await preview.getByRole('button', { name: 'Submit' })
 		.click()
-	await page.getByRole('button', { name: 'Generate result' })
+	await preview.getByRole('button', { name: 'Generate result' })
 		.click()
-	await expect(page.getByRole('heading', { name: 'Recommendation' }))
+	await expect(preview.getByRole('heading', { name: 'Recommendation' }))
 		.toBeVisible()
 })
 
 test('invalid date flow surfaces the issue and correcting it recovers live metrics', async ({ page }) => {
+	const preview = previewFrame(page)
 	const diagnosticMessage = 'Return date must be strictly after the departure date.'
-	await expect(page.getByText(diagnosticMessage))
+	await expect(preview.getByText(diagnosticMessage))
 		.toHaveCount(0)
 
 	// Default Departure date is 2027-04-10 (showcases/survey/presets.ts) — this is strictly before it.
-	const returnDate = page.getByLabel('Return date')
+	const returnDate = preview.getByLabel('Return date')
 	await returnDate.fill('2027-04-01')
 	await returnDate.press('Tab')
-	await expect(page.getByText(diagnosticMessage)
+	await expect(preview.getByText(diagnosticMessage)
 		.first())
 		.toBeVisible()
 
 	// The dependent metrics (issue #26 Finding 2) must show an explicit "Unavailable" representation,
 	// never a fabricated `0.00` — and (Finding 3) their own line is an attributed "Unavailable because
 	// Trip days failed." rather than a repeat of the root-cause message.
-	const budgetPerPersonPerDayValue = page.locator('dt', { hasText: 'Budget / person / day' })
+	const budgetPerPersonPerDayValue = preview.locator('dt', { hasText: 'Budget / person / day' })
 		.locator('xpath=following-sibling::dd[1]')
-	const estimatedBaselineCostValue = page.locator('dt', { hasText: 'Estimated baseline cost' })
+	const estimatedBaselineCostValue = preview.locator('dt', { hasText: 'Estimated baseline cost' })
 		.locator('xpath=following-sibling::dd[1]')
 	await expect(budgetPerPersonPerDayValue)
 		.toHaveText('Unavailable')
 	await expect(estimatedBaselineCostValue)
 		.toHaveText('Unavailable')
-	await expect(page.getByText('Unavailable because Trip days failed.'))
+	await expect(preview.getByText('Unavailable because Trip days failed.'))
 		.toHaveCount(2)
-	await expect(page.getByText('0.00'))
+	await expect(preview.getByText('0.00'))
 		.toHaveCount(0)
 
 	await returnDate.fill('2027-04-20')
 	await returnDate.press('Tab')
-	await expect(page.getByText(diagnosticMessage))
+	await expect(preview.getByText(diagnosticMessage))
 		.toHaveCount(0)
 
 	// Live metrics recover: computeTripDays('2027-04-10', '2027-04-20') === 11 (survey/domain.ts).
-	const tripDaysValue = page.locator('dt', { hasText: 'Trip days' })
+	const tripDaysValue = preview.locator('dt', { hasText: 'Trip days' })
 		.locator('xpath=following-sibling::dd[1]')
 	await expect(tripDaysValue)
 		.toHaveText('11')
@@ -87,24 +90,25 @@ test('invalid date flow surfaces the issue and correcting it recovers live metri
 })
 
 test('mutating an answer after Generate result shows an explicit stale-result state, including while the current answers are also invalid (issue #26)', async ({ page }) => {
-	await page.getByRole('button', { name: 'Submit' })
+	const preview = previewFrame(page)
+	await preview.getByRole('button', { name: 'Submit' })
 		.click()
-	await page.getByRole('button', { name: 'Generate result' })
+	await preview.getByRole('button', { name: 'Generate result' })
 		.click()
-	await expect(page.getByRole('heading', { name: 'Recommendation' }))
+	await expect(preview.getByRole('heading', { name: 'Recommendation' }))
 		.toBeVisible()
 
-	const tripDaysLine = page.getByText('Trip days: 5 · travelers:')
+	const tripDaysLine = preview.getByText('Trip days: 5 · travelers:')
 	await expect(tripDaysLine)
 		.toBeVisible()
-	await expect(page.getByText('Stale'))
+	await expect(preview.getByText('Stale'))
 		.toHaveCount(0)
 
 	// Finding 4 coexistence check: change Return date to an INVALID date (before Departure,
 	// 2027-04-10) so current-answer failures and the retained stale Recommendation are visible at the
 	// same time — all three facts must hold together, not just whichever one a narrower test would have
 	// exercised in isolation.
-	const returnDate = page.getByLabel('Return date')
+	const returnDate = preview.getByLabel('Return date')
 	await returnDate.fill('2027-04-01')
 	await returnDate.press('Tab')
 
@@ -114,12 +118,12 @@ test('mutating an answer after Generate result shows an explicit stale-result st
 	// legitimately read e.g. "1500.00" elsewhere on this same page, which would falsely match a loose
 	// substring check even though it is a real, unrelated success value.
 	const diagnosticMessage = 'Return date must be strictly after the departure date.'
-	await expect(page.getByText(diagnosticMessage)
+	await expect(preview.getByText(diagnosticMessage)
 		.first())
 		.toBeVisible()
-	const budgetPerPersonPerDayValue = page.locator('dt', { hasText: 'Budget / person / day' })
+	const budgetPerPersonPerDayValue = preview.locator('dt', { hasText: 'Budget / person / day' })
 		.locator('xpath=following-sibling::dd[1]')
-	const estimatedBaselineCostValue = page.locator('dt', { hasText: 'Estimated baseline cost' })
+	const estimatedBaselineCostValue = preview.locator('dt', { hasText: 'Estimated baseline cost' })
 		.locator('xpath=following-sibling::dd[1]')
 	await expect(budgetPerPersonPerDayValue)
 		.toHaveText('Unavailable')
@@ -127,9 +131,9 @@ test('mutating an answer after Generate result shows an explicit stale-result st
 		.toHaveText('Unavailable')
 
 	// (2) the stale marker/copy on the retained Recommendation.
-	await expect(page.getByText('Stale'))
+	await expect(preview.getByText('Stale'))
 		.toBeVisible()
-	await expect(page.getByText('Generated from previous answers'))
+	await expect(preview.getByText('Generated from previous answers'))
 		.toBeVisible()
 
 	// (3) the old snapshot's figures remain visibly retained, unaffected by the current-answer failure.
@@ -140,34 +144,35 @@ test('mutating an answer after Generate result shows an explicit stale-result st
 	// metrics recover, but the Recommendation stays stale (still generated from the original answers).
 	await returnDate.fill('2027-04-24')
 	await returnDate.press('Tab')
-	await expect(page.getByText(diagnosticMessage))
+	await expect(preview.getByText(diagnosticMessage))
 		.toHaveCount(0)
 	await expect(budgetPerPersonPerDayValue)
 		.not.toHaveText('Unavailable')
-	await expect(page.getByText('Stale'))
+	await expect(preview.getByText('Stale'))
 		.toBeVisible()
 
-	await page.getByRole('button', { name: 'Submit' })
+	await preview.getByRole('button', { name: 'Submit' })
 		.click()
-	await page.getByRole('button', { name: 'Generate result' })
+	await preview.getByRole('button', { name: 'Generate result' })
 		.click()
 
-	await expect(page.getByText('Stale'))
+	await expect(preview.getByText('Stale'))
 		.toHaveCount(0)
-	await expect(page.getByText('Generated from previous answers'))
+	await expect(preview.getByText('Generated from previous answers'))
 		.toHaveCount(0)
 	// computeTripDays('2027-04-10', '2027-04-24') === 15 (survey/domain.ts).
-	await expect(page.getByText('Trip days: 15 · travelers:'))
+	await expect(preview.getByText('Trip days: 15 · travelers:'))
 		.toBeVisible()
 })
 
 test('clearing Budget makes the dependent metric Unavailable, never a fabricated 0.00 (issue #26 Finding 2)', async ({ page }) => {
-	const budgetPerPersonPerDayValue = page.locator('dt', { hasText: 'Budget / person / day' })
+	const preview = previewFrame(page)
+	const budgetPerPersonPerDayValue = preview.locator('dt', { hasText: 'Budget / person / day' })
 		.locator('xpath=following-sibling::dd[1]')
 	await expect(budgetPerPersonPerDayValue)
 		.not.toHaveText('Unavailable')
 
-	const budget = page.getByLabel('Total trip budget (USD, illustrative)')
+	const budget = preview.getByLabel('Total trip budget (USD, illustrative)')
 	await budget.fill('')
 	await budget.press('Tab')
 

@@ -1,18 +1,18 @@
 /**
- * `LabSession` — the Widget Lab draft + Document/Runtime lifecycle host.
+ * `LabSession` — the Widget Lab draft + Document/remote-Preview promotion host.
  *
  * Normative source: diagnostic #13 (Widget Lab Phase 4) comment "Checkpoint — Source Apply lifecycle and
  * applied snapshot boundary". Framework-agnostic on purpose: this module never imports Vue and never
  * touches the DOM. The Vue layer supplies `LabSessionHooks` (see `types.ts`) as the seam that lets it
- * guarantee Preview unmount-before-dispose ordering; `LabSession` only sequences those hooks.
+ * acknowledge remote Preview replacement; `LabSession` never creates or disposes a Runtime.
  *
  * Authored-state authority belongs to core's public `WidgetDocument`: parsed Lab JSON enters through
  * a root `SourcePatch` replacement, and the Lab reacts to the committed Document snapshot. Runtime
- * promotion remains Lab-owned because a Runtime is permanently associated with one valid Blueprint.
+ * promotion intent remains Lab-owned while Runtime execution is owned exclusively by the iframe Preview host.
  */
 
 import type { AnyWidgetPluginTuple, JsonValue, SourcePatch, WidgetDocument, WidgetDocumentSnapshot, WidgetSystem } from '@deviltea/widget-core'
-import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabActiveSnapshot, LabAppliedSourcePatch, LabDocumentState, LabDocumentTraceEvent, LabPatchOrigin, LabPreviewSnapshot, LabSessionHooks, LabSessionListener, RevisionConflictDemoResult, SourceParseError } from './types'
+import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentState, LabDocumentTraceEvent, LabPatchOrigin, LabPreviewSnapshot, LabSessionHooks, LabSessionListener, RevisionConflictDemoResult, SourceParseError } from './types'
 import { createWidgetDocument } from '@deviltea/widget-core'
 import { createAuthorPatch } from './author'
 
@@ -28,8 +28,7 @@ export interface LabSessionOptions<Plugins extends AnyWidgetPluginTuple> {
 }
 
 const noopHooks: LabSessionHooks = {
-	detachPreview: () => {},
-	mountPreview: () => {},
+	replacePreview: () => {},
 }
 
 function toParseError(sourceText: string, error: unknown): SourceParseError {
@@ -54,7 +53,6 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	private parseErrorValue: SourceParseError | null = null
 	private documentStateValue: LabDocumentState<Plugins>
 	private previewSnapshotValue: LabPreviewSnapshot<Plugins> | null
-	private activeSnapshot: LabActiveSnapshot<Plugins>
 	private lastAppliedSourcePatchValue: LabAppliedSourcePatch | null = null
 	private readonly documentTraceValue: LabDocumentTraceEvent[] = []
 	private applying = false
@@ -72,12 +70,8 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 			blueprint,
 		}
 		this.previewSnapshotValue = blueprint.status === 'valid'
-			? { revision, blueprint, runtime: blueprint.createRuntime() }
+			? { revision, sourceText: options.initialSourceText, blueprint }
 			: null
-		this.activeSnapshot = {
-			...this.documentStateValue,
-			runtime: this.previewSnapshotValue?.runtime ?? null,
-		}
 		this.draftText = options.initialSourceText
 	}
 
@@ -101,11 +95,6 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	/** Last valid Runtime promoted into Preview, or null when this session has never had one. */
 	get preview(): LabPreviewSnapshot<Plugins> | null {
 		return this.previewSnapshotValue
-	}
-
-	/** @deprecated Phase-2 compatibility only. Prefer `documentState` + `preview`. */
-	get active(): LabActiveSnapshot<Plugins> {
-		return this.activeSnapshot
 	}
 
 	/** Core-authored committed state, independent of Runtime promotion timing. */
@@ -170,7 +159,7 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 
 	/**
 	 * Restores `draftSourceText = documentState.sourceText` and clears the Lab parse error. Never touches
-	 * the committed Document revision or the independently owned Preview Runtime.
+	 * the committed Document revision or the independently owned remote Preview.
 	 */
 	revert(): void {
 		this.setDraftSourceText(this.documentStateValue.sourceText)
@@ -181,14 +170,13 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	 *
 	 * - captures the draft at command start; concurrent edits stay in the draft and are not applied;
 	 * - concurrent Apply is disabled — a call while one is already running is a no-op;
-	 * - a `JSON.parse` failure sets a Lab-only `SourceParseError` and leaves `active` untouched;
+	 * - a `JSON.parse` failure sets a Lab-only `SourceParseError` and leaves committed state/Preview untouched;
 	 * - parsed JSON is submitted to the authoritative `WidgetDocument` as one root replacement;
 	 * - a structural no-op (`changed:false`) accepts the Lab-local text representation without
 	 *   inventing a Document revision or replacing the existing Runtime/Preview;
 	 * - a changed invalid Document advances authored state but retains the exact last-valid Preview;
-	 * - a changed valid Document commits/compiles first, then the Lab Runtime Host detaches/disposes the
-	 *   old Preview Runtime, creates a fresh Runtime from the committed valid Blueprint, and mounts it;
-	 * - no Runtime state is migrated between valid revisions.
+	 * - a changed valid Document commits/compiles first, then awaits one remote Preview replacement hook;
+	 * - no Runtime exists in this parent session, and no Runtime state is migrated between revisions.
 	 */
 	async apply(): Promise<ApplyOutcome> {
 		if (this.applying)
@@ -270,7 +258,6 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		origin: LabPatchOrigin,
 	): Promise<ApplyOutcome> {
 		const previousDocument = this.documentStateValue
-		const previousPreview = this.previewSnapshotValue
 		const patchResult = this.document.applyPatch(patch, { expectedRevision: previousDocument.revision })
 
 		if (!patchResult.ok) {
@@ -296,10 +283,6 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 				sourceText: nextSourceText,
 				definition: nextDefinition,
 			}
-			this.activeSnapshot = {
-				...this.documentStateValue,
-				runtime: previousPreview?.runtime ?? null,
-			}
 			await Promise.resolve()
 			return { status: 'applied', blueprintStatus: previousDocument.blueprint.status }
 		}
@@ -314,30 +297,16 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		if (nextBlueprint.status === 'invalid') {
 			// #60 decision 2: authored state advances, but the Runtime Host keeps the exact last-valid
 			// Preview snapshot alive. No detach/dispose/mount side effects occur for invalid commits.
-			this.activeSnapshot = {
-				...this.documentStateValue,
-				runtime: previousPreview?.runtime ?? null,
-			}
 			return { status: 'applied', blueprintStatus: 'invalid' }
 		}
 
-		if (previousPreview !== null) {
-			await this.hooks.detachPreview()
-			previousPreview.runtime.dispose()
-		}
-
-		const runtime = nextBlueprint.createRuntime()
-		this.previewSnapshotValue = {
+		const nextPreview: LabPreviewSnapshot<Plugins> = {
 			revision: documentSnapshot.revision,
+			sourceText: nextSourceText,
 			blueprint: nextBlueprint,
-			runtime,
 		}
-		this.activeSnapshot = {
-			...this.documentStateValue,
-			runtime,
-		}
-
-		await this.hooks.mountPreview()
+		await this.hooks.replacePreview(nextPreview)
+		this.previewSnapshotValue = nextPreview
 		return { status: 'applied', blueprintStatus: 'valid' }
 	}
 

@@ -74,8 +74,6 @@ describe('useGraphEdgeSelection', () => {
 			.toBe('invalid')
 		expect(session.preview?.revision)
 			.toBe(0)
-		expect(session.preview?.runtime.isDisposed)
-			.toBe(false)
 		expect(selection.selected.value)
 			.toBeNull()
 	})

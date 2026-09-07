@@ -80,6 +80,20 @@ export function createTutorialEngine(script: TutorialScript): TutorialEngine {
 		emit()
 	}
 
+	function acceptProgress(progress: number): void {
+		const step = currentStep()
+		if (step === null)
+			return
+		const current = state.progress[state.stepIndex] ?? 0
+		const bounded = Math.max(current, Math.min(Math.floor(progress), step.stages.length))
+		if (bounded === current)
+			return
+		const nextProgress = state.progress.slice()
+		nextProgress[state.stepIndex] = bounded
+		state = { ...state, progress: nextProgress }
+		emit()
+	}
+
 	return {
 		getSnapshot: snapshot,
 
@@ -157,13 +171,10 @@ export function createTutorialEngine(script: TutorialScript): TutorialEngine {
 					break
 				progress++
 			}
-			if (progress !== (state.progress[state.stepIndex] ?? 0)) {
-				const nextProgress = state.progress.slice()
-				nextProgress[state.stepIndex] = progress
-				state = { ...state, progress: nextProgress }
-				emit()
-			}
+			acceptProgress(progress)
 		},
+
+		acceptProgress,
 
 		runLink: (linkId, actions) => {
 			const step = currentStep()

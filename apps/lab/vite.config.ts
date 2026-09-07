@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 import pikacss from '@pikacss/unplugin-pikacss/vite'
 import Vue from 'unplugin-vue/vite'
 import { defineConfig } from 'vite'
@@ -28,5 +29,16 @@ export default defineConfig({
 	// `elkjs` import going through normal ESM bundling rather than being wrapped for classic workers.
 	worker: {
 		format: 'es',
+	},
+	build: {
+		// Phase B2 Preview is a real second HTML document, not a component rendered in the Lab page.
+		// Keep both entries in one Vite build so dev, standalone production, and Pages subpath builds
+		// share the exact same module graph/base handling.
+		rollupOptions: {
+			input: {
+				lab: fileURLToPath(new URL('./index.html', import.meta.url)),
+				previewFrame: fileURLToPath(new URL('./preview-frame.html', import.meta.url)),
+			},
+		},
 	},
 })

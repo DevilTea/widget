@@ -1,16 +1,16 @@
-import type { Locator, Page } from '@playwright/test'
-import { expect, test } from './fixtures'
+import type { FrameLocator, Locator } from '@playwright/test'
+import { expect, previewFrame, test } from './fixtures'
 
-function taskRow(page: Page, title: string): Locator {
-	return page.locator('[data-task-id]')
+function taskRow(preview: FrameLocator, title: string): Locator {
+	return preview.locator('[data-task-id]')
 		.filter({ hasText: title })
 }
 
-async function chooseVuetifySelect(page: Page, label: string, option: string): Promise<void> {
-	const combobox = page.getByRole('combobox', { name: label })
+async function chooseVuetifySelect(preview: FrameLocator, label: string, option: string): Promise<void> {
+	const combobox = preview.getByRole('combobox', { name: label })
 	const field = combobox.locator('xpath=ancestor::div[contains(concat(\" \", normalize-space(@class), \" \"), \" v-field \")][1]')
 	await field.click()
-	await page.getByRole('option', { name: option, exact: true })
+	await preview.getByRole('option', { name: option, exact: true })
 		.click()
 }
 
@@ -18,12 +18,14 @@ test.beforeEach(async ({ page }) => {
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('vuetify-tasks')
-	await expect(page.getByTestId('vuetify-task-app'))
+	await expect(previewFrame(page)
+		.getByTestId('vuetify-task-app'))
 		.toBeVisible()
 })
 
 test('embedded Vuetify layout and overlays stay contained inside the Preview application boundary', async ({ page }) => {
-	const app = page.getByTestId('vuetify-task-app')
+	const preview = previewFrame(page)
+	const app = preview.getByTestId('vuetify-task-app')
 	const appBar = app.locator('.v-app-bar')
 	const appBox = await app.boundingBox()
 	const appBarBox = await appBar.boundingBox()
@@ -39,11 +41,16 @@ test('embedded Vuetify layout and overlays stay contained inside the Preview app
 	expect(appBarBox.y + appBarBox.height)
 		.toBeLessThanOrEqual(appBox.y + appBox.height + 1)
 
-	await page.getByRole('button', { name: 'New task' })
+	await preview.getByRole('button', { name: 'New task' })
 		.click()
-	const dialog = page.getByRole('dialog')
+	const dialog = preview.getByRole('dialog')
 	await expect(dialog)
 		.toBeVisible()
+	// The Vuetify overlay exists only in the iframe document; the Lab shell has no Vuetify dialog/overlay.
+	await expect(page.getByRole('dialog'))
+		.toHaveCount(0)
+	await expect(page.locator('.v-overlay-container'))
+		.toHaveCount(0)
 	const dialogBox = await dialog.boundingBox()
 	if (dialogBox === null)
 		throw new Error('Expected the contained task dialog to have a layout box.')
@@ -59,29 +66,31 @@ test('embedded Vuetify layout and overlays stay contained inside the Preview app
 })
 
 test('search and status filter are Runtime-backed and coherent with the rendered task collection', async ({ page }) => {
-	await expect(page.locator('[data-task-id]'))
+	const preview = previewFrame(page)
+	await expect(preview.locator('[data-task-id]'))
 		.toHaveCount(4)
 
-	await page.getByRole('textbox', { name: 'Search' })
+	await preview.getByRole('textbox', { name: 'Search' })
 		.fill('dialog')
-	await expect(taskRow(page, 'Exercise the editor dialog'))
+	await expect(taskRow(preview, 'Exercise the editor dialog'))
 		.toBeVisible()
-	await expect(page.locator('[data-task-id]'))
+	await expect(preview.locator('[data-task-id]'))
 		.toHaveCount(1)
 
-	await page.getByRole('textbox', { name: 'Search' })
+	await preview.getByRole('textbox', { name: 'Search' })
 		.fill('')
-	await chooseVuetifySelect(page, 'Status', 'Done')
-	await expect(taskRow(page, 'Map Widget state to Vuetify controls'))
+	await chooseVuetifySelect(preview, 'Status', 'Done')
+	await expect(taskRow(preview, 'Map Widget state to Vuetify controls'))
 		.toBeVisible()
-	await expect(page.locator('[data-task-id]'))
+	await expect(preview.locator('[data-task-id]'))
 		.toHaveCount(1)
 })
 
 test('create, edit, complete and delete flow through Widget Methods with snackbar feedback', async ({ page }) => {
-	await page.getByRole('button', { name: 'New task' })
+	const preview = previewFrame(page)
+	await preview.getByRole('button', { name: 'New task' })
 		.click()
-	const dialog = page.getByRole('dialog')
+	const dialog = preview.getByRole('dialog')
 	await expect(dialog)
 		.toBeVisible()
 	await expect(dialog)
@@ -93,12 +102,12 @@ test('create, edit, complete and delete flow through Widget Methods with snackba
 
 	await expect(dialog)
 		.toBeHidden()
-	await expect(taskRow(page, 'Write the browser contract'))
+	await expect(taskRow(preview, 'Write the browser contract'))
 		.toBeVisible()
-	await expect(page.getByText('Task created', { exact: true }))
+	await expect(preview.getByText('Task created', { exact: true }))
 		.toBeVisible()
 
-	const row = taskRow(page, 'Write the browser contract')
+	const row = taskRow(preview, 'Write the browser contract')
 	await row.getByRole('button', { name: 'Edit' })
 		.click()
 	await expect(dialog)
@@ -111,40 +120,41 @@ test('create, edit, complete and delete flow through Widget Methods with snackba
 	await title.fill('Verify the browser contract')
 	await dialog.getByRole('button', { name: 'Save' })
 		.click()
-	await expect(taskRow(page, 'Verify the browser contract'))
+	await expect(taskRow(preview, 'Verify the browser contract'))
 		.toBeVisible()
-	await expect(page.getByText('Task updated', { exact: true }))
+	await expect(preview.getByText('Task updated', { exact: true }))
 		.toBeVisible()
 
-	const updatedRow = taskRow(page, 'Verify the browser contract')
+	const updatedRow = taskRow(preview, 'Verify the browser contract')
 	await updatedRow.getByRole('checkbox')
 		.click()
-	await expect(page.getByText('Task completed', { exact: true }))
+	await expect(preview.getByText('Task completed', { exact: true }))
 		.toBeVisible()
 
 	await updatedRow.getByRole('button', { name: 'Delete' })
 		.click()
-	await expect(taskRow(page, 'Verify the browser contract'))
+	await expect(taskRow(preview, 'Verify the browser contract'))
 		.toHaveCount(0)
-	await expect(page.getByText('Task deleted', { exact: true }))
+	await expect(preview.getByText('Task deleted', { exact: true }))
 		.toBeVisible()
 })
 
 test('locale and theme controls project capability Widget state into Vuetify rendering', async ({ page }) => {
-	const app = page.getByTestId('vuetify-task-app')
+	const preview = previewFrame(page)
+	const app = preview.getByTestId('vuetify-task-app')
 	await expect(app)
 		.toContainText('Widget Task Workspace')
 
-	await page.getByRole('button', { name: 'Language' })
+	await preview.getByRole('button', { name: 'Language' })
 		.click()
 	await expect(app)
 		.toContainText('Widget 任務工作區')
-	await expect(page.getByRole('button', { name: '新增任務' }))
+	await expect(preview.getByRole('button', { name: '新增任務' }))
 		.toBeVisible()
-	await expect(page.getByText('任務', { exact: true }))
+	await expect(preview.getByText('任務', { exact: true }))
 		.toBeVisible()
 
-	const themeButton = page.getByRole('button', { name: '主題' })
+	const themeButton = preview.getByRole('button', { name: '主題' })
 	await expect(themeButton)
 		.toContainText('system')
 	await themeButton.click()

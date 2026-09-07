@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 /**
  * Issue #25 P2 "Preview -> semantic inspector bridge" (Inspect mode) contract.
@@ -34,13 +34,14 @@ async function setDraftSourceText(page: Page, text: string): Promise<void> {
 }
 
 async function selectAuroraDeal(page: Page): Promise<void> {
+	const preview = previewFrame(page)
 	// Selecting a row is itself a normal (non-Inspect) interaction — done before Inspect mode is ever
 	// turned on, since an Inspect-mode click on the table row would resolve to `deal-table` (the whole
 	// `Table` widget is the innermost anchor for a data row) and suppress `selectRow` entirely.
-	await page.getByRole('row')
+	await preview.getByRole('row')
 		.filter({ hasText: 'Aurora Systems' })
 		.click()
-	await expect(page.getByRole('button', { name: 'Change stage' }))
+	await expect(preview.getByRole('button', { name: 'Change stage' }))
 		.toBeVisible()
 }
 
@@ -58,12 +59,17 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 
 		await selectAuroraDeal(page)
 
-		await page.getByRole('button', { name: 'Change stage' })
+		await previewFrame(page)
+			.getByRole('button', { name: 'Change stage' })
 			.click()
-		await expect(page.getByRole('dialog', CHANGE_STAGE_DIALOG))
+		await expect(previewFrame(page)
+			.getByRole('dialog', CHANGE_STAGE_DIALOG))
 			.toBeVisible()
-		await page.keyboard.press('Escape')
-		await expect(page.getByRole('dialog', CHANGE_STAGE_DIALOG))
+		await previewFrame(page)
+			.locator('body')
+			.press('Escape')
+		await expect(previewFrame(page)
+			.getByRole('dialog', CHANGE_STAGE_DIALOG))
 			.toBeHidden()
 	})
 
@@ -76,14 +82,16 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'true')
 
-		const adultsLabel = page.getByText('Adults', { exact: true })
+		const adultsLabel = previewFrame(page)
+			.getByText('Adults', { exact: true })
 		const adultsAnchor = adultsLabel.locator('..')
 
 		await adultsLabel.hover()
 
 		await expect(adultsAnchor)
 			.toHaveClass(/lab-inspect-anchor--highlighted/)
-		await expect(page.getByText('SurveyNumberQuestion#adults'))
+		await expect(previewFrame(page)
+			.getByText('SurveyNumberQuestion#adults'))
 			.toBeVisible()
 	})
 
@@ -95,11 +103,13 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await inspectToggle(page)
 			.click()
 
-		await page.getByRole('button', { name: 'Change stage' })
+		await previewFrame(page)
+			.getByRole('button', { name: 'Change stage' })
 			.click()
 
 		// Suppressed: no modal, no store mutation.
-		await expect(page.getByRole('dialog', CHANGE_STAGE_DIALOG))
+		await expect(previewFrame(page)
+			.getByRole('dialog', CHANGE_STAGE_DIALOG))
 			.toHaveCount(0)
 
 		// Drives the existing shared focus + activates Blueprint for immediate visible feedback.
@@ -132,7 +142,8 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 
 		// `reset-data` (Button) is nested inside `crm-toolbar` (Toolbar) inside `crm-app` (AppShell) —
 		// all three are stamped Inspect anchors.
-		await page.getByRole('button', { name: 'Reset data' })
+		await previewFrame(page)
+			.getByRole('button', { name: 'Reset data' })
 			.click()
 
 		await expect(page.getByRole('tab', { name: 'Blueprint' }))
@@ -151,21 +162,29 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 
 		await inspectToggle(page)
 			.click()
-		const adultsLabel = page.getByText('Adults', { exact: true })
+		const adultsLabel = previewFrame(page)
+			.getByText('Adults', { exact: true })
 		await adultsLabel.hover()
-		await expect(page.getByText('SurveyNumberQuestion#adults'))
+		await expect(previewFrame(page)
+			.getByText('SurveyNumberQuestion#adults'))
 			.toBeVisible()
+		await expect(inspectToggle(page))
+			.toBeEnabled()
 
-		await page.keyboard.press('Escape')
+		// Escape issued in the parent realm must bridge to the isolated Preview Agent.
+		await inspectToggle(page)
+			.press('Escape')
 
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'false')
-		await expect(page.getByText('SurveyNumberQuestion#adults'))
+		await expect(previewFrame(page)
+			.getByText('SurveyNumberQuestion#adults'))
 			.toHaveCount(0)
 
 		// A subsequent click now behaves normally again: writing `Adults` actually reaches the widget's
 		// State (as it would with Inspect never having been turned on).
-		const adultsInput = page.getByLabel('Adults', { exact: true })
+		const adultsInput = previewFrame(page)
+			.getByLabel('Adults', { exact: true })
 		await adultsInput.fill('5')
 		await adultsInput.press('Tab')
 		await expect(adultsInput)
@@ -188,9 +207,11 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'false')
 
-		await page.getByRole('button', { name: 'Change stage' })
+		await previewFrame(page)
+			.getByRole('button', { name: 'Change stage' })
 			.click()
-		await expect(page.getByRole('dialog', CHANGE_STAGE_DIALOG))
+		await expect(previewFrame(page)
+			.getByRole('dialog', CHANGE_STAGE_DIALOG))
 			.toBeVisible()
 	})
 
@@ -207,7 +228,8 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await page.getByLabel('Switch showcase')
 			.selectOption('survey')
 
-		const adultsInput = page.getByLabel('Adults', { exact: true })
+		const adultsInput = previewFrame(page)
+			.getByLabel('Adults', { exact: true })
 		await expect(adultsInput)
 			.toHaveValue('2')
 
@@ -254,14 +276,16 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await page.getByRole('button', { name: 'Apply' })
 			.click()
 
-		await expect(page.getByText('Widget Lab sandbox INSPECT REPLACED', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('Widget Lab sandbox INSPECT REPLACED', { exact: true }))
 			.toBeVisible()
 		await expect(inspectToggle(page))
 			.toBeEnabled()
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'true')
 
-		await page.getByText('count: 0 · doubled: 0', { exact: true })
+		await previewFrame(page)
+			.getByText('count: 0 · doubled: 0', { exact: true })
 			.click()
 		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
 			.toBeVisible()
@@ -273,9 +297,11 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'true')
 
-		const counterValue = page.getByText('count: 0 · doubled: 0', { exact: true })
+		const counterValue = previewFrame(page)
+			.getByText('count: 0 · doubled: 0', { exact: true })
 		await counterValue.hover()
-		await expect(page.getByText('Counter#counter-1'))
+		await expect(previewFrame(page)
+			.getByText('Counter#counter-1'))
 			.toBeVisible()
 
 		await counterValue.click()

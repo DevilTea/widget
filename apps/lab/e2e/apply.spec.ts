@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 /**
  * Issue #28 Source/Apply lifecycle contract, deliberately not involving Monaco at all — it uses the
@@ -28,23 +28,27 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('draft source does not affect Preview until Apply, then Apply updates it', async ({ page }) => {
-	await expect(page.getByText('Widget Lab sandbox', { exact: true }))
+	await expect(previewFrame(page)
+		.getByText('Widget Lab sandbox', { exact: true }))
 		.toBeVisible()
 
 	const draft = defaultSandboxPreset.sourceText.replace('Widget Lab sandbox', 'Widget Lab sandbox DRAFT')
 	await setDraftSourceText(page, draft)
 
 	// Draft-only edit: Preview must still show the prior applied text, and Apply becomes enabled.
-	await expect(page.getByText('Widget Lab sandbox', { exact: true }))
+	await expect(previewFrame(page)
+		.getByText('Widget Lab sandbox', { exact: true }))
 		.toBeVisible()
-	await expect(page.getByText('Widget Lab sandbox DRAFT', { exact: true }))
+	await expect(previewFrame(page)
+		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
 		.toHaveCount(0)
 	await expect(page.getByRole('button', { name: 'Apply' }))
 		.toBeEnabled()
 
 	await page.getByRole('button', { name: 'Apply' })
 		.click()
-	await expect(page.getByText('Widget Lab sandbox DRAFT', { exact: true }))
+	await expect(previewFrame(page)
+		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
 		.toBeVisible()
 })
 
@@ -53,7 +57,8 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 	await setDraftSourceText(page, draft)
 	await page.getByRole('button', { name: 'Apply' })
 		.click()
-	await expect(page.getByText('Widget Lab sandbox DRAFT', { exact: true }))
+	await expect(previewFrame(page)
+		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
 		.toBeVisible()
 
 	// A `JSON.parse` failure at Apply time leaves `active` (and therefore Preview) untouched
@@ -62,7 +67,8 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 	await page.getByRole('button', { name: 'Apply' })
 		.click()
 
-	await expect(page.getByText('Widget Lab sandbox DRAFT', { exact: true }))
+	await expect(previewFrame(page)
+		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
 		.toBeVisible()
 	await expect(page.getByText('Blueprint: valid'))
 		.toBeVisible()

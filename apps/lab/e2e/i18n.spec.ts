@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 const LOCALE_STORAGE_KEY = 'widget-lab:locale'
 const THEME_STORAGE_KEY = 'widget-lab:theme'
@@ -117,9 +117,11 @@ test.describe('lab localization (issue #43)', () => {
 
 	test('changing locale preserves live Runtime state and shared inspector focus', async ({ page }) => {
 		await page.goto('/?lang=en')
-		await page.getByRole('button', { name: '+1', exact: true })
+		await previewFrame(page)
+			.getByRole('button', { name: '+1', exact: true })
 			.click()
-		await expect(page.getByText('count: 1 · doubled: 2', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('count: 1 · doubled: 2', { exact: true }))
 			.toBeVisible()
 
 		await page.getByRole('tab', { name: 'Blueprint' })
@@ -136,7 +138,8 @@ test.describe('lab localization (issue #43)', () => {
 		// Blueprint widget remains focused; no Apply/recompile/showcase replacement is involved.
 		await page.getByRole('tab', { name: 'Preview' })
 			.click()
-		await expect(page.getByText('count: 1 · doubled: 2', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('count: 1 · doubled: 2', { exact: true }))
 			.toBeVisible()
 		await page.getByRole('tab', { name: 'Blueprint' })
 			.click()
@@ -208,25 +211,34 @@ test.describe('lab localization (issue #43)', () => {
 			.selectOption('crm')
 
 		// These strings are hardcoded renderer-owned presentation chrome.
-		await expect(page.getByText('銷售案件 CRM', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('銷售案件 CRM', { exact: true }))
 			.toBeVisible()
-		await expect(page.getByText('互動式產品原型——Showcase B', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('互動式產品原型——Showcase B', { exact: true }))
 			.toBeVisible()
-		await expect(page.getByText('各階段案件數', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('各階段案件數', { exact: true }))
 			.toBeVisible()
-		await expect(page.getByText('案件詳細資料', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('案件詳細資料', { exact: true }))
 			.toBeVisible()
-		await expect(page.getByText('從表格選取案件以查看詳細資料。', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('從表格選取案件以查看詳細資料。', { exact: true }))
 			.toBeVisible()
 
 		// These come from applied Source/config/data and deliberately bypass the presentation translator.
-		await expect(page.getByRole('button', { name: 'Reset data', exact: true }))
+		await expect(previewFrame(page)
+			.getByRole('button', { name: 'Reset data', exact: true }))
 			.toBeVisible()
-		await expect(page.getByText('Visible deals', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('Visible deals', { exact: true }))
 			.toBeVisible()
-		await expect(page.getByRole('columnheader', { name: 'Company', exact: true }))
+		await expect(previewFrame(page)
+			.getByRole('columnheader', { name: 'Company', exact: true }))
 			.toBeVisible()
-		await expect(page.getByText('Aurora Systems', { exact: true }))
+		await expect(previewFrame(page)
+			.getByText('Aurora Systems', { exact: true }))
 			.toBeVisible()
 	})
 })

@@ -1,58 +1,57 @@
 <script setup lang="ts">
 /**
- * Runtime Inspector (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly passive" / "inspectors are
- * readonly consumers of core inspection"). Strictly readonly: opening, selecting a widget/member, or
- * subscribing never calls `state.get()`/`property.get()`, invokes Methods, or otherwise drives Runtime
- * semantics — every fact comes from `@deviltea/widget-core/inspection`'s `inspectRuntime()`.
- *
- * Runtime/Blueprint source is always the Preview snapshot. An invalid current Document may therefore
- * coexist with a usable older Preview and must not make this panel consume a Document-scoped node id.
- * Reuses `BlueprintTree` for navigation: an `inspectRuntime(runtime).blueprint` is identity-equal to
- * `inspectBlueprint(runtime.blueprint)`, so the same tree/shared-focus contract applies within Preview.
- * #43 localizes only Lab-owned
- * explanatory chrome; Runtime member names, values, and core diagnostics remain verbatim.
+ * Remote Runtime Inspector for Phase B2. The panel consumes only Inspector protocol DTOs from the
+ * iframe-owned Runtime; it never imports `inspectRuntime()` and never receives a Core Runtime object.
  */
-import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
-import { inspectRuntime } from '@deviltea/widget-core/inspection'
-import { computed } from 'vue'
+import type { InspectorRuntimeWidgetSnapshot } from '@deviltea/widget-devtools'
+import { computed, shallowRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { getRuntimeInspectorSource } from '../../runtime-inspector/source'
-import BlueprintTree from '../blueprint/BlueprintTree.vue'
 import InspectorPanelShell from '../inspector/InspectorPanelShell.vue'
 import InspectorSplitLayout from '../inspector/InspectorSplitLayout.vue'
+import RuntimeBlueprintTree from '../runtime/RuntimeBlueprintTree.vue'
 import RuntimeNodeDetails from '../runtime/RuntimeNodeDetails.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
-
 const source = computed(() => getRuntimeInspectorSource(store.preview.value, store.documentState.value.revision))
-const runtime = computed(() => source.value.runtime)
-const runtimeInspection = computed(() => {
-	const currentRuntime = runtime.value
-	return currentRuntime === null ? null : inspectRuntime(currentRuntime)
-})
-
-const selectedNodeId = computed<InspectionNodeId | null>(() => store.previewFocus.value?.nodeId ?? null)
-
+const connection = computed(() => store.previewHost.connection.value)
+const blueprint = computed(() => connection.value?.blueprint ?? null)
+const selectedNodeId = computed<number | null>(() => store.previewFocus.value?.nodeId ?? null)
 const selectedNode = computed(() => {
-	const inspection = runtimeInspection.value
+	const snapshot = blueprint.value
 	const nodeId = selectedNodeId.value
-	if (inspection === null || nodeId === null)
+	if (snapshot === null || nodeId === null)
 		return null
-	const node = inspection.blueprint.getNode(nodeId)
-	// A Runtime's Blueprint is always valid, hence every recovered node is resolved; the null/unresolved
-	// branch only guards a forged/out-of-domain focus id defensively.
-	return node !== null && node.resolved ? node : null
+	const node = snapshot.nodes.find(candidate => candidate.nodeId === nodeId) ?? null
+	return node?.resolved ? node : null
 })
+const widgetSnapshot = shallowRef<InspectorRuntimeWidgetSnapshot | null>(null)
 
-const selectedWidgetInspection = computed(() => {
-	const inspection = runtimeInspection.value
-	const nodeId = selectedNodeId.value
-	return inspection === null || nodeId === null ? null : inspection.getWidget(nodeId)
-})
+watch(
+	() => [connection.value, selectedNodeId.value] as const,
+	([current, nodeId], _previous, onCleanup) => {
+		widgetSnapshot.value = null
+		if (current === null || nodeId === null)
+			return
+		let active = true
+		onCleanup(() => {
+			active = false
+		})
+		void current.inspectorClient.request('runtime.getWidgetSnapshot', {
+			ref: { runtimeId: current.runtimeId, nodeId },
+		})
+			.then((snapshot) => {
+				if (active && store.previewHost.connection.value === current)
+					widgetSnapshot.value = snapshot
+			})
+			.catch(() => {})
+	},
+	{ immediate: true },
+)
 
-function selectNode(nodeId: InspectionNodeId): void {
+function selectNode(nodeId: number): void {
 	store.setFocus('preview', { nodeId })
 }
 </script>
@@ -69,15 +68,15 @@ function selectNode(nodeId: InspectionNodeId): void {
 			</span>
 		</div>
 		<div
-			v-if="runtime === null"
+			v-if="blueprint === null"
 			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
 		>
 			<p>{{ i18n.t('Runtime unavailable — there is no valid Preview revision to inspect. Open Blueprint to see current diagnostics, fix Source, then Apply again.') }}</p>
 		</div>
 		<InspectorSplitLayout v-else>
 			<template #tree>
-				<BlueprintTree
-					:inspection="runtimeInspection!.blueprint"
+				<RuntimeBlueprintTree
+					:snapshot="blueprint"
 					:selectedNodeId="selectedNodeId"
 					@select="selectNode"
 				/>
@@ -85,7 +84,8 @@ function selectNode(nodeId: InspectionNodeId): void {
 			<template #details>
 				<RuntimeNodeDetails
 					:node="selectedNode"
-					:widgetInspection="selectedWidgetInspection"
+					:widgetSnapshot="widgetSnapshot"
+					:client="connection?.inspectorClient ?? null"
 				/>
 			</template>
 		</InspectorSplitLayout>
