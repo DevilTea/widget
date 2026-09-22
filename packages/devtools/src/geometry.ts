@@ -42,6 +42,12 @@ function usableRect(rect: { x: number, y: number, width: number, height: number 
 export function createSemanticGeometryController(options: SemanticGeometryControllerOptions): SemanticGeometryController {
 	const document = options.root.ownerDocument
 	const window = document.defaultView
+	const previewTreeRoot = options.root.getRootNode()
+	// Document hit-testing retargets internal Shadow DOM elements to their host.
+	const shadowTreeRoot = previewTreeRoot.nodeType === 11 && 'host' in previewTreeRoot
+		? previewTreeRoot as ShadowRoot
+		: null
+	const hitTestRoot: Document | ShadowRoot = shadowTreeRoot ?? document
 	let revision = 0
 	let invalidationPending = false
 	let frameHandle: number | null = null
@@ -156,7 +162,7 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 		if (point.x < 0 || point.y < 0 || point.x >= viewport.width || point.y >= viewport.height)
 			return null
 
-		const elementsFromPoint = document.elementsFromPoint?.bind(document)
+		const elementsFromPoint = hitTestRoot.elementsFromPoint?.bind(hitTestRoot)
 		if (elementsFromPoint !== undefined) {
 			for (const element of elementsFromPoint(point.x, point.y)) {
 				const target = nearestSemanticAnchor(element)
@@ -167,7 +173,7 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 		}
 		// Some DOM implementations expose only the single-element platform hit-test API.
 		// Prefer its stacking-aware result over a document-order rectangle approximation.
-		const elementFromPoint = document.elementFromPoint?.bind(document)
+		const elementFromPoint = hitTestRoot.elementFromPoint?.bind(hitTestRoot)
 		if (elementFromPoint !== undefined) {
 			const element = elementFromPoint(point.x, point.y)
 			return element === null ? null : nearestSemanticAnchor(element)
@@ -205,6 +211,10 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 	// Both successful and failed resources can change layout, including outside the Preview root.
 	document.addEventListener('load', onResourceSettled, true)
 	document.addEventListener('error', onResourceSettled, true)
+	// load/error and scroll may be non-composed and never reach document from a ShadowRoot.
+	shadowTreeRoot?.addEventListener('scroll', onScroll, true)
+	shadowTreeRoot?.addEventListener('load', onResourceSettled, true)
+	shadowTreeRoot?.addEventListener('error', onResourceSettled, true)
 	window?.addEventListener('resize', onResize)
 
 	const mutationObserver = typeof MutationObserver === 'function'
@@ -221,7 +231,6 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 	mutationObserver?.observe(document.documentElement ?? options.root, mutationOptions)
 	// Document-level observation cannot cross a Shadow DOM boundary. Also watch the Preview's
 	// actual tree root for local mutations and sibling/stylesheet changes inside that tree.
-	const previewTreeRoot = options.root.getRootNode()
 	if (previewTreeRoot !== document)
 		mutationObserver?.observe(previewTreeRoot, mutationOptions)
 
@@ -276,6 +285,9 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 			document.removeEventListener('scroll', onScroll, true)
 			document.removeEventListener('load', onResourceSettled, true)
 			document.removeEventListener('error', onResourceSettled, true)
+			shadowTreeRoot?.removeEventListener('scroll', onScroll, true)
+			shadowTreeRoot?.removeEventListener('load', onResourceSettled, true)
+			shadowTreeRoot?.removeEventListener('error', onResourceSettled, true)
 			window?.removeEventListener('resize', onResize)
 			mutationObserver?.disconnect()
 			anchorRefreshObserver?.disconnect()

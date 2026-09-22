@@ -384,6 +384,136 @@ describe('semantic geometry Inspector protocol', () => {
 			fixture.dispose()
 		}
 	})
+	it('hit-tests an internal Shadow DOM widget when document hit testing returns the host', async () => {
+		const fixture = createGeometryFixture({ shadowRoot: true })
+		const tree = fixture.root.getRootNode() as ShadowRoot
+		const documentStack = Object.getOwnPropertyDescriptor(document, 'elementsFromPoint')
+		const shadowStack = Object.getOwnPropertyDescriptor(tree, 'elementsFromPoint')
+		try {
+			Object.defineProperty(document, 'elementsFromPoint', {
+				configurable: true,
+				value: () => [tree.host],
+			})
+			Object.defineProperty(tree, 'elementsFromPoint', {
+				configurable: true,
+				value: () => [fixture.leaf, fixture.inner, fixture.outer],
+			})
+			const result = await fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			})
+			expect(result.target?.widgetId)
+				.toBe('counter')
+		}
+		finally {
+			if (documentStack !== undefined)
+				Object.defineProperty(document, 'elementsFromPoint', documentStack)
+			else Reflect.deleteProperty(document, 'elementsFromPoint')
+			if (shadowStack !== undefined)
+				Object.defineProperty(tree, 'elementsFromPoint', shadowStack)
+			else Reflect.deleteProperty(tree, 'elementsFromPoint')
+			fixture.dispose()
+		}
+	})
+
+	it('uses ShadowRoot.elementFromPoint when its elementsFromPoint API is unavailable', async () => {
+		const fixture = createGeometryFixture({ shadowRoot: true })
+		const tree = fixture.root.getRootNode() as ShadowRoot
+		const shadowStack = Object.getOwnPropertyDescriptor(tree, 'elementsFromPoint')
+		const shadowSingle = Object.getOwnPropertyDescriptor(tree, 'elementFromPoint')
+		const documentStack = Object.getOwnPropertyDescriptor(document, 'elementsFromPoint')
+		try {
+			Object.defineProperty(tree, 'elementsFromPoint', {
+				configurable: true,
+				value: undefined,
+			})
+			Object.defineProperty(tree, 'elementFromPoint', {
+				configurable: true,
+				value: () => fixture.inner,
+			})
+			Object.defineProperty(document, 'elementsFromPoint', {
+				configurable: true,
+				value: () => [tree.host],
+			})
+			const result = await fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			})
+			expect(result.target?.widgetId)
+				.toBe('counter')
+		}
+		finally {
+			if (shadowStack !== undefined)
+				Object.defineProperty(tree, 'elementsFromPoint', shadowStack)
+			else Reflect.deleteProperty(tree, 'elementsFromPoint')
+			if (shadowSingle !== undefined)
+				Object.defineProperty(tree, 'elementFromPoint', shadowSingle)
+			else Reflect.deleteProperty(tree, 'elementFromPoint')
+			if (documentStack !== undefined)
+				Object.defineProperty(document, 'elementsFromPoint', documentStack)
+			else Reflect.deleteProperty(document, 'elementsFromPoint')
+			fixture.dispose()
+		}
+	})
+
+	it('removes every ShadowRoot event listener on Inspector teardown', () => {
+		const fixture = createGeometryFixture({ shadowRoot: true })
+		const tree = fixture.root.getRootNode() as ShadowRoot
+		const remove = vi.spyOn(tree, 'removeEventListener')
+		try {
+			fixture.agent.dispose()
+			for (const event of ['scroll', 'load', 'error']) {
+				expect(remove)
+					.toHaveBeenCalledWith(event, expect.any(Function), true)
+			}
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
+	it.each(['load', 'error'])('invalidates for a %s resource event contained inside Shadow DOM', async (kind) => {
+		const fixture = createGeometryFixture({ shadowRoot: true })
+		const resource = document.createElement('img')
+		try {
+			fixture.root.append(resource)
+			await nextAnimationFrame()
+			await nextAnimationFrame()
+			const snapshot = await fixture.client.request('blueprint.getSnapshot', { runtimeId: 'runtime-geometry' })
+			const counter = snapshot.nodes.find(node => node.widgetId === 'counter')!
+			const ref = { runtimeId: 'runtime-geometry', nodeId: counter.nodeId }
+			const before = await fixture.client.request('geometry.resolve', { ref })
+			resource.dispatchEvent(new Event(kind, { bubbles: false, composed: false }))
+			const after = await fixture.client.request('geometry.resolve', { ref })
+			expect(after.revision)
+				.toBe(before.revision + 1)
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
+	it('invalidates when a scroll event cannot cross the Shadow DOM boundary', async () => {
+		const fixture = createGeometryFixture({ shadowRoot: true })
+		try {
+			await nextAnimationFrame()
+			await nextAnimationFrame()
+			const snapshot = await fixture.client.request('blueprint.getSnapshot', { runtimeId: 'runtime-geometry' })
+			const counter = snapshot.nodes.find(node => node.widgetId === 'counter')!
+			const ref = { runtimeId: 'runtime-geometry', nodeId: counter.nodeId }
+			const before = await fixture.client.request('geometry.resolve', { ref })
+			fixture.root.dispatchEvent(new Event('scroll', { bubbles: false, composed: false }))
+			const after = await fixture.client.request('geometry.resolve', { ref })
+			expect(after.revision)
+				.toBe(before.revision + 1)
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
 	it('observes geometry-affecting mutations when the Preview root is inside Shadow DOM', async () => {
 		const fixture = createGeometryFixture({ shadowRoot: true })
 		try {
