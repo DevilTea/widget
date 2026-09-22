@@ -8,6 +8,23 @@ import type {
 
 const ANCHOR_SELECTOR = '[data-widget-id][data-widget-type]'
 
+const INSPECTOR_BADGE_SELECTOR = '[data-widget-inspector-badge="true"]'
+
+function isInspectorBadgeNode(node: Node): boolean {
+	const element = node.nodeType === 1 ? node as Element : node.parentElement
+	return element != null && element.closest(INSPECTOR_BADGE_SELECTOR) !== null
+}
+
+function isInspectorBadgeMutation(record: MutationRecord): boolean {
+	// Only Inspector-owned badge updates are presentation chrome, not Preview content changes.
+	if (isInspectorBadgeNode(record.target))
+		return true
+	if (record.type !== 'childList')
+		return false
+	const changed = [...record.addedNodes, ...record.removedNodes]
+	return changed.length > 0 && changed.every(isInspectorBadgeNode)
+}
+
 export interface SemanticGeometryControllerOptions {
 	readonly root: HTMLElement
 	readonly resolveRef: (ref: WidgetRef) => InspectorSemanticTarget | null
@@ -218,7 +235,10 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 	window?.addEventListener('resize', onResize)
 
 	const mutationObserver = typeof MutationObserver === 'function'
-		? new MutationObserver(() => scheduleInvalidation())
+		? new MutationObserver((records) => {
+				if (records.some(record => !isInspectorBadgeMutation(record)))
+					scheduleInvalidation()
+			})
 		: null
 	// Layout depends on ancestors, siblings and stylesheets as well as descendants of the root.
 	// Root-only observation misses e.g. a class change on <body> or a <style> added to <head>.

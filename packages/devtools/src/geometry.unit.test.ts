@@ -347,6 +347,41 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
+	it.each([false, true])('does not re-invalidate from its own badge DOM when Preview is ShadowRoot=%s', async (shadowRoot) => {
+		const fixture = createGeometryFixture({ shadowRoot })
+		try {
+			const blueprint = await fixture.client.request('blueprint.getSnapshot', { runtimeId: 'runtime-geometry' })
+			const root = blueprint.nodes.find(node => node.widgetId === 'root')!
+			const ref = { runtimeId: 'runtime-geometry', nodeId: root.nodeId }
+			const invalidations = vi.fn()
+			fixture.client.on('geometry.invalidated', () => {
+				invalidations()
+				// A remote overlay naturally re-highlights or re-resolves when geometry becomes stale.
+				void fixture.client.request('highlight.show', { ref })
+			})
+			await fixture.client.request('highlight.show', { ref })
+			await nextAnimationFrame()
+			await nextAnimationFrame()
+			expect(invalidations)
+				.toHaveBeenCalledTimes(0)
+			fixture.outer.style.transform = 'translateX(3px)'
+			await vi.waitFor(() => expect(invalidations)
+				.toHaveBeenCalledTimes(1))
+			for (let frame = 0; frame < 5; frame++)
+				await nextAnimationFrame()
+			expect(invalidations)
+				.toHaveBeenCalledTimes(1)
+			await fixture.client.request('highlight.clear', {})
+			await nextAnimationFrame()
+			await nextAnimationFrame()
+			expect(invalidations)
+				.toHaveBeenCalledTimes(1)
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
 	it('advances one global revision immediately and coalesces invalidation notification to one per frame', async () => {
 		const fixture = createGeometryFixture()
 		try {

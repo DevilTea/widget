@@ -267,11 +267,18 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		const badge = ensureBadge()
 		if (badge === null)
 			return
-		badge.textContent = `${anchor.widgetType}#${anchor.widgetId}`
+		const label = `${anchor.widgetType}#${anchor.widgetId}`
+		if (badge.textContent !== label)
+			badge.textContent = label
 		const rootRect = dom.root.getBoundingClientRect()
 		const anchorRect = anchor.element.getBoundingClientRect()
-		badge.style.top = `${anchorRect.top - rootRect.top + dom.root.scrollTop}px`
-		badge.style.left = `${anchorRect.left - rootRect.left + dom.root.scrollLeft}px`
+		const top = `${anchorRect.top - rootRect.top + dom.root.scrollTop}px`
+		const left = `${anchorRect.left - rootRect.left + dom.root.scrollLeft}px`
+		// Re-highlighting unchanged chrome should not mutate the Preview.
+		if (badge.style.top !== top)
+			badge.style.top = top
+		if (badge.style.left !== left)
+			badge.style.left = left
 	}
 
 	function highlightRef(ref: WidgetRef): boolean {
@@ -283,9 +290,16 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		const node = runtimeInspection.blueprint.getNode(nodeId)
 		if (node === null || !node.resolved)
 			return false
+		const matches = (element: Element): boolean =>
+			element.getAttribute('data-widget-id') === node.node.id
+			&& element.getAttribute('data-widget-type') === node.node.type
+		// The Preview root is a valid semantic anchor, not only its descendants.
+		if (matches(dom.root)) {
+			highlightAnchor({ element: dom.root, widgetId: node.node.id, widgetType: node.node.type })
+			return true
+		}
 		for (const element of dom.root.querySelectorAll('[data-widget-id][data-widget-type]')) {
-			if (element.getAttribute('data-widget-id') === node.node.id
-				&& element.getAttribute('data-widget-type') === node.node.type) {
+			if (matches(element)) {
 				highlightAnchor({ element, widgetId: node.node.id, widgetType: node.node.type })
 				return true
 			}
