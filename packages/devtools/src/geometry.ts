@@ -181,12 +181,11 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 
 		const elementsFromPoint = hitTestRoot.elementsFromPoint?.bind(hitTestRoot)
 		if (elementsFromPoint !== undefined) {
-			for (const element of elementsFromPoint(point.x, point.y)) {
-				const target = nearestSemanticAnchor(element)
-				if (target !== null)
-					return target
-			}
-			return null
+			// Only the topmost pointer-intercepting element participates in semantic targeting.
+			// Falling through the stack selects widgets hidden behind non-semantic overlays,
+			// unlike the Inspector's actual pointer-event target resolution.
+			const topmost = elementsFromPoint(point.x, point.y)[0]
+			return topmost === undefined ? null : nearestSemanticAnchor(topmost)
 		}
 		// Some DOM implementations expose only the single-element platform hit-test API.
 		// Prefer its stacking-aware result over a document-order rectangle approximation.

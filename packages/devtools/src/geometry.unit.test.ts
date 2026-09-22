@@ -254,6 +254,46 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
+	it('does not hit through a topmost non-semantic overlay onto a covered Widget', async () => {
+		const fixture = createGeometryFixture()
+		const overlay = document.createElement('div')
+		fixture.root.append(overlay)
+		try {
+			// Native elementsFromPoint is ordered topmost-first, including covered elements.
+			setElementsFromPoint([overlay, fixture.leaf, fixture.inner, fixture.outer])
+			const result = await fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			})
+			expect(result)
+				.toEqual({ target: null })
+		}
+		finally {
+			overlay.remove()
+			fixture.dispose()
+		}
+	})
+
+	it('resolves the topmost overlay own semantic ancestor rather than a covered sibling Widget', async () => {
+		const fixture = createGeometryFixture()
+		const overlay = document.createElement('div')
+		fixture.outer.append(overlay)
+		try {
+			setElementsFromPoint([overlay, fixture.leaf, fixture.inner, fixture.outer])
+			const result = await fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			})
+			expect(result.target?.widgetId)
+				.toBe('root')
+		}
+		finally {
+			overlay.remove()
+			fixture.dispose()
+		}
+	})
 	it('falls back to a registered ancestor when the innermost DOM anchor is stale', async () => {
 		const fixture = createGeometryFixture()
 		try {
