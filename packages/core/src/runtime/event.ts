@@ -8,7 +8,7 @@
 import type { RuntimeEvent } from '../internal/contract'
 import type { WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
-import { invokeListenerIsolated } from './adapter'
+import { invokeListenerIsolated, invokeListenerUntracked } from './adapter'
 
 export interface EventInspectionChannel {
 	subscribe: (listener: (args: readonly unknown[]) => void) => () => void
@@ -52,7 +52,7 @@ export function createEventPrimitive(context: RuntimeContext): EventPrimitive {
 			const occurrenceArgs = Object.freeze([...args])
 			publishInspectionOccurrence(occurrenceArgs)
 			for (const { listener } of listenersSnapshot)
-				listener(...args)
+				invokeListenerUntracked(listener, args)
 		},
 		inspection: {
 			subscribe(listener) {

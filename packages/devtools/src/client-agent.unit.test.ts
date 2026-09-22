@@ -40,7 +40,7 @@ describe('inspectorClient + InspectorAgent', () => {
 		try {
 			const handshake = await client.request('handshake', { protocol: { major: 0, minor: 1 } })
 			expect(handshake.protocol)
-				.toEqual({ major: 0, minor: 2 })
+				.toEqual({ major: 0, minor: 1 })
 			expect(handshake.capabilities.methods)
 				.toEqual([
 					'handshake',
@@ -74,6 +74,51 @@ describe('inspectorClient + InspectorAgent', () => {
 		}
 	})
 
+	it('keeps legacy Blueprint and method capabilities at 0.1 until an explicit 0.2 re-handshake', async () => {
+		const { agent, client } = createConnectedFixture()
+		try {
+			const legacy = await client.request('handshake', { protocol: { major: 0, minor: 1 } })
+			expect(legacy.protocol)
+				.toEqual({ major: 0, minor: 1 })
+			expect(legacy.capabilities.methods)
+				.not.toContain('runtime.subscribeEvent')
+			const snapshot = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-test' })
+			const root = snapshot.nodes.find(node => node.widgetId === 'root')!
+			expect(root.capabilities)
+				.not.toHaveProperty('events')
+			expect(root).not.toHaveProperty('config')
+			expect(root).not.toHaveProperty('events')
+			await expect(client.request('runtime.subscribeEvent', {
+				ref: { runtimeId: 'runtime-test', nodeId: root.nodeId },
+				event: 'anything',
+			}))
+				.rejects.toMatchObject({ code: 'unknown-method' })
+
+			const upgraded = await client.handshake()
+			expect(upgraded.protocol)
+				.toEqual({ major: 0, minor: 2 })
+			expect(upgraded.capabilities.methods)
+				.toContain('runtime.subscribeEvent')
+			const modern = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-test' })
+			const modernRoot = modern.nodes.find(node => node.widgetId === 'root')!
+			expect(modernRoot.capabilities)
+				.toHaveProperty('events', false)
+			expect(modernRoot)
+				.toHaveProperty('config')
+			expect(modernRoot)
+				.toHaveProperty('events')
+			await expect(client.request('runtime.subscribeEvent', {
+				ref: { runtimeId: 'runtime-test', nodeId: modernRoot.nodeId },
+				event: 'anything',
+			}))
+				.rejects.toMatchObject({ code: 'event-not-found' })
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+		}
+	})
+
 	it('uses the lower handshake envelope minor when the params minor is newer', () => {
 		const { runtime } = createDevtoolsTestFixture()
 		const pair = createInProcessInspectorTransportPair()
@@ -98,9 +143,10 @@ describe('inspectorClient + InspectorAgent', () => {
 				.toHaveLength(1)
 			expect(responses[0])
 				.toMatchObject({
-					protocol: { major: 0, minor: 2 },
+					protocol: { major: 0, minor: 1 },
 					ok: true,
 					result: {
+						protocol: { major: 0, minor: 1 },
 						capabilities: {
 							methods: expect.not.arrayContaining(['runtime.subscribeEvent', 'inspect.hitTest', 'geometry.resolve']),
 							events: expect.not.arrayContaining(['runtime.eventOccurred', 'geometry.invalidated']),

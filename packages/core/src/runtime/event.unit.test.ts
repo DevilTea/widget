@@ -1,4 +1,5 @@
 import type { WidgetEventEmitter } from '../index'
+import { computed, signal } from 'alien-signals'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
 
@@ -162,6 +163,29 @@ describe('runtime semantic events', () => {
 		root.methods.emitPing()
 		expect(callback)
 			.toHaveBeenCalledTimes(3)
+	})
+
+	it('does not let public event listeners add accidental reactive dependencies', () => {
+		const { root } = createRuntime()
+		const unrelated = signal(1)
+		const observed: number[] = []
+		root.events.ping.subscribe(() => observed.push(unrelated()))
+
+		let evaluationCount = 0
+		const dependent = computed(() => {
+			++evaluationCount
+			root.methods.emitPing()
+			return evaluationCount
+		})
+		expect(dependent())
+			.toBe(1)
+		expect(observed)
+			.toEqual([1])
+		unrelated(2)
+		expect(dependent())
+			.toBe(1)
+		expect(observed)
+			.toEqual([1])
 	})
 
 	it('propagates subscriber errors immediately and aborts later subscribers', () => {

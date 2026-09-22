@@ -107,6 +107,21 @@ describe('useWidget() event emitter projection', () => {
 			.toHaveBeenCalledWith(7)
 	})
 
+	it('does not touch Runtime when only materializing a declared emitter', () => {
+		const runtime = createRuntime(EventPlugin)
+		const { bridge } = mountWidgetBridge(runtime, 'root', EventPlugin)
+		expect((bridge.emit as unknown as Record<string, unknown>).missing)
+			.toBeUndefined()
+		runtime.dispose()
+		let emitChange: typeof bridge.emit.change | undefined
+		expect(() => {
+			emitChange = bridge.emit.change
+		})
+			.not.toThrow()
+		expect(() => emitChange?.('after-dispose'))
+			.toThrow(WidgetSystemRuntimeDisposedError)
+	})
+
 	it('keeps Core disposal authoritative for renderer emit authority', () => {
 		const runtime = createRuntime(EventPlugin)
 		const { bridge } = mountWidgetBridge(runtime, 'root', EventPlugin)

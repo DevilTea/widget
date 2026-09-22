@@ -100,6 +100,8 @@ export interface CreateInspectorAgentOptions {
 export interface InspectorAgent {
 	readonly runtimeId: string
 	readonly inspectEnabled: boolean
+	/** Host-owned hint after CSSOM/adoptedStyleSheets changes; no Client mutation RPC is exposed. */
+	invalidateGeometry: () => void
 	dispose: () => void
 }
 
@@ -113,6 +115,10 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const dom = options.dom
 	const memberSubscriptions = new Map<string, () => void>()
 	const eventSubscriptions = new Map<string, () => void>()
+	// One Inspector transport has one peer. Re-handshake may explicitly upgrade/downgrade it;
+	// standalone requests remain valid before the first handshake.
+	let negotiatedMinor: number = INSPECTOR_PROTOCOL_VERSION.minor
+	const envelopeVersion = () => ({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: negotiatedMinor })
 	function capabilitiesForMinor(minor: number): { readonly methods: readonly InspectorRequestMethod[], readonly events: readonly InspectorEventName[] } {
 		if (minor < 2) {
 			return {
@@ -135,10 +141,10 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	let badgeElement: HTMLDivElement | null = null
 
 	function emit<Event extends InspectorEventName>(event: Event, payload: InspectorEventMap[Event]): void {
-		if (disposed || options.transport.closed)
+		if (disposed || options.transport.closed || !capabilitiesForMinor(negotiatedMinor).events.includes(event))
 			return
 		options.transport.send({
-			protocol: INSPECTOR_PROTOCOL_VERSION,
+			protocol: envelopeVersion(),
 			kind: 'event',
 			event,
 			payload,
@@ -149,7 +155,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		if (disposed || options.transport.closed)
 			return
 		options.transport.send({
-			protocol: INSPECTOR_PROTOCOL_VERSION,
+			protocol: envelopeVersion(),
 			kind: 'response',
 			requestId: request.requestId,
 			ok: true,
@@ -161,7 +167,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		if (disposed || options.transport.closed)
 			return
 		options.transport.send({
-			protocol: INSPECTOR_PROTOCOL_VERSION,
+			protocol: envelopeVersion(),
 			kind: 'response',
 			requestId,
 			ok: false,
@@ -190,12 +196,17 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	function resolveAnchor(target: EventTarget | null): DomAnchor | null {
 		if (dom === undefined || !(target instanceof Element))
 			return null
-		const element = target.closest('[data-widget-id][data-widget-type]')
-		if (element === null || !dom.root.contains(element))
-			return null
-		const widgetId = element.getAttribute('data-widget-id')
-		const widgetType = element.getAttribute('data-widget-type')
-		return widgetId === null || widgetType === null ? null : { element, widgetId, widgetType }
+		let element: Element | null = target.closest('[data-widget-id][data-widget-type]')
+		while (element !== null && dom.root.contains(element)) {
+			const widgetId = element.getAttribute('data-widget-id')
+			const widgetType = element.getAttribute('data-widget-type')
+			if (widgetId !== null && widgetType !== null && nodeForAnchor({ widgetId, widgetType }) !== null)
+				return { element, widgetId, widgetType }
+			if (element === dom.root)
+				break
+			element = element.parentElement?.closest('[data-widget-id][data-widget-type]') ?? null
+		}
+		return null
 	}
 
 	function semanticTargetForRef(ref: WidgetRef): InspectorSemanticTarget | null {
@@ -458,15 +469,24 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		}
 
+		if (request.method !== 'handshake') {
+			negotiatedMinor = Math.min(negotiatedMinor, request.protocol.minor)
+			if (!capabilitiesForMinor(negotiatedMinor).methods.includes(request.method)) {
+				sendError(request.requestId, protocolError('unknown-method', 'Method unavailable in this Inspector protocol session.'))
+				return
+			}
+		}
+
 		switch (request.method) {
 			case 'handshake': {
 				if (!isCompatibleProtocolVersion(request.params.protocol)) {
 					sendError(request.requestId, protocolError('unsupported-version', `Unsupported Inspector protocol major ${request.params.protocol.major}.`))
 					return
 				}
-				const capabilities = capabilitiesForMinor(Math.min(request.protocol.minor, request.params.protocol.minor))
+				negotiatedMinor = Math.min(INSPECTOR_PROTOCOL_VERSION.minor, request.protocol.minor, request.params.protocol.minor)
+				const capabilities = capabilitiesForMinor(negotiatedMinor)
 				sendSuccess(request, {
-					protocol: INSPECTOR_PROTOCOL_VERSION,
+					protocol: envelopeVersion(),
 					capabilities,
 				})
 				return
@@ -479,7 +499,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
 					return
 				}
-				sendSuccess(request, projectBlueprintSnapshot(runtimeId, runtimeInspection.blueprint))
+				sendSuccess(request, projectBlueprintSnapshot(runtimeId, runtimeInspection.blueprint, negotiatedMinor))
 				return
 			case 'runtime.getWidgetSnapshot': {
 				if (request.params.ref.runtimeId !== runtimeId) {
@@ -603,6 +623,9 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		runtimeId,
 		get inspectEnabled() {
 			return inspectEnabled
+		},
+		invalidateGeometry() {
+			geometry?.invalidate()
 		},
 		dispose() {
 			cleanup(options.closeTransportOnDispose ?? true)

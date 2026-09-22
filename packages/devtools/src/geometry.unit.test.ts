@@ -28,7 +28,7 @@ function setElementsFromPoint(elements: readonly Element[]): void {
 	})
 }
 
-function createGeometryFixture() {
+function createGeometryFixture(options: { shadowRoot?: boolean } = {}) {
 	Object.defineProperty(window, 'innerWidth', { configurable: true, value: 300 })
 	Object.defineProperty(window, 'innerHeight', { configurable: true, value: 200 })
 
@@ -44,7 +44,15 @@ function createGeometryFixture() {
 	inner.append(leaf)
 	outer.append(inner)
 	root.append(outer)
-	document.body.append(root)
+	const shadowHost = options.shadowRoot ? document.createElement('div') : null
+	if (shadowHost !== null) {
+		shadowHost.attachShadow({ mode: 'open' })
+			.append(root)
+		document.body.append(shadowHost)
+	}
+	else {
+		document.body.append(root)
+	}
 
 	setRects(outer, [rect(0, 0, 280, 180)])
 	setRects(inner, [rect(10, 20, 80, 30)])
@@ -71,6 +79,7 @@ function createGeometryFixture() {
 			client.dispose()
 			agent.dispose()
 			root.remove()
+			shadowHost?.remove()
 		},
 	}
 }
@@ -111,6 +120,38 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 		finally {
 			domFixture.dispose()
+		}
+	})
+
+	it('does not leak 0.2-only geometry notifications or methods into a 0.1 session', async () => {
+		const fixture = createGeometryFixture()
+		try {
+			const handshake = await fixture.client.request('handshake', { protocol: { major: 0, minor: 1 } })
+			expect(handshake.protocol)
+				.toEqual({ major: 0, minor: 1 })
+			expect(handshake.capabilities.events).not.toContain('geometry.invalidated')
+			const notifications = vi.fn()
+			fixture.client.on('geometry.invalidated', notifications)
+			await expect(fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			}))
+				.rejects.toMatchObject({ code: 'unknown-method' })
+			document.dispatchEvent(new Event('scroll'))
+			await nextAnimationFrame()
+			expect(notifications).not.toHaveBeenCalled()
+
+			const upgraded = await fixture.client.handshake()
+			expect(upgraded.capabilities.events)
+				.toContain('geometry.invalidated')
+			document.dispatchEvent(new Event('scroll'))
+			await nextAnimationFrame()
+			expect(notifications)
+				.toHaveBeenCalledTimes(1)
+		}
+		finally {
+			fixture.dispose()
 		}
 	})
 
@@ -235,6 +276,61 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
+	it('rejects degenerate rects in rectangle-only hit testing', async () => {
+		const fixture = createGeometryFixture()
+		const previousStack = Object.getOwnPropertyDescriptor(document, 'elementsFromPoint')
+		const previousSingle = Object.getOwnPropertyDescriptor(document, 'elementFromPoint')
+		try {
+			Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: undefined })
+			Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: undefined })
+			setRects(fixture.outer, [])
+			setRects(fixture.inner, [rect(15, 25, 0, 0)])
+			await expect(fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			}))
+				.resolves.toEqual({ target: null })
+		}
+		finally {
+			if (previousStack !== undefined)
+				Object.defineProperty(document, 'elementsFromPoint', previousStack)
+			else Reflect.deleteProperty(document, 'elementsFromPoint')
+			if (previousSingle !== undefined)
+				Object.defineProperty(document, 'elementFromPoint', previousSingle)
+			else Reflect.deleteProperty(document, 'elementFromPoint')
+			fixture.dispose()
+		}
+	})
+
+	it('uses the browser single-element hit test when stack API is missing', async () => {
+		const fixture = createGeometryFixture()
+		const previousStack = Object.getOwnPropertyDescriptor(document, 'elementsFromPoint')
+		const previousSingle = Object.getOwnPropertyDescriptor(document, 'elementFromPoint')
+		try {
+			// Siblings overlap, and the upper layer is later in DOM order.
+			fixture.root.append(fixture.inner)
+			Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: undefined })
+			Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => fixture.inner })
+			const result = await fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			})
+			expect(result.target?.widgetId)
+				.toBe('counter')
+		}
+		finally {
+			if (previousStack !== undefined)
+				Object.defineProperty(document, 'elementsFromPoint', previousStack)
+			else Reflect.deleteProperty(document, 'elementsFromPoint')
+			if (previousSingle !== undefined)
+				Object.defineProperty(document, 'elementFromPoint', previousSingle)
+			else Reflect.deleteProperty(document, 'elementFromPoint')
+			fixture.dispose()
+		}
+	})
+
 	it('returns target:null for a valid Preview point with no semantic anchor', async () => {
 		const fixture = createGeometryFixture()
 		try {
@@ -288,6 +384,75 @@ describe('semantic geometry Inspector protocol', () => {
 			fixture.dispose()
 		}
 	})
+	it('observes geometry-affecting mutations when the Preview root is inside Shadow DOM', async () => {
+		const fixture = createGeometryFixture({ shadowRoot: true })
+		try {
+			const snapshot = await fixture.client.request('blueprint.getSnapshot', { runtimeId: 'runtime-geometry' })
+			const counter = snapshot.nodes.find(node => node.widgetId === 'counter')!
+			const ref = { runtimeId: 'runtime-geometry', nodeId: counter.nodeId }
+			const before = await fixture.client.request('geometry.resolve', { ref })
+			fixture.inner.style.transform = 'translateX(2px)'
+			await vi.waitFor(async () => {
+				const after = await fixture.client.request('geometry.resolve', { ref })
+				expect(after.revision)
+					.toBeGreaterThan(before.revision)
+			})
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
+	it('invalidates when an external resource fails without emitting load', async () => {
+		const fixture = createGeometryFixture()
+		const image = document.createElement('img')
+		try {
+			document.body.append(image)
+			await nextAnimationFrame()
+			await nextAnimationFrame()
+			const snapshot = await fixture.client.request('blueprint.getSnapshot', { runtimeId: 'runtime-geometry' })
+			const counter = snapshot.nodes.find(node => node.widgetId === 'counter')!
+			const ref = { runtimeId: 'runtime-geometry', nodeId: counter.nodeId }
+			const before = await fixture.client.request('geometry.resolve', { ref })
+			image.dispatchEvent(new Event('error'))
+			const after = await fixture.client.request('geometry.resolve', { ref })
+			expect(after.revision)
+				.toBe(before.revision + 1)
+		}
+		finally {
+			image.remove()
+			fixture.dispose()
+		}
+	})
+
+	it('provides host-only invalidation for stylesheet/CSSOM updates without DOM mutation', async () => {
+		const fixture = createGeometryFixture()
+		try {
+			await nextAnimationFrame()
+			await nextAnimationFrame()
+			const snapshot = await fixture.client.request('blueprint.getSnapshot', { runtimeId: 'runtime-geometry' })
+			const counter = snapshot.nodes.find(node => node.widgetId === 'counter')!
+			const ref = { runtimeId: 'runtime-geometry', nodeId: counter.nodeId }
+			const before = await fixture.client.request('geometry.resolve', { ref })
+			const invalidations = vi.fn()
+			fixture.client.on('geometry.invalidated', invalidations)
+
+			fixture.agent.invalidateGeometry()
+			fixture.agent.invalidateGeometry()
+			const current = await fixture.client.request('geometry.resolve', { ref })
+			expect(current.revision)
+				.toBe(before.revision + 1)
+			await nextAnimationFrame()
+			expect(invalidations)
+				.toHaveBeenCalledExactlyOnceWith({ revision: before.revision + 1 })
+			fixture.agent.dispose()
+			fixture.agent.invalidateGeometry()
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
 	it('invalidates geometry after layout-affecting mutations outside the Preview root', async () => {
 		const fixture = createGeometryFixture()
 		try {

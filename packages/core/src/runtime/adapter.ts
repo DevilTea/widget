@@ -50,6 +50,20 @@ export function invokeListenerIsolated<Value>(listener: (value: Value) => void, 
 }
 
 /**
+ * Calls a synchronous semantic event listener without leaking its reads into an enclosing
+ * Property/effect. Unlike reactive value listeners, event listener exceptions propagate immediately.
+ */
+export function invokeListenerUntracked(listener: (...args: readonly unknown[]) => void, args: readonly unknown[]): void {
+	const previous = setActiveSub(undefined)
+	try {
+		listener(...args)
+	}
+	finally {
+		setActiveSub(previous)
+	}
+}
+
+/**
  * Nesting depth of the calls that can drive an `alien-signals` evaluation/flush and therefore have to be
  * back out of the reactive graph before a deferred propagation is safe to release: `RuntimeState`'s
  * `attemptSet`, `RuntimeMethod`'s `invoke` and the tracked read of a Property's result computed. Purely

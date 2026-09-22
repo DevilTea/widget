@@ -19,6 +19,8 @@ export interface SemanticGeometryController {
 	readonly revision: number
 	resolve: (ref: WidgetRef) => InspectorGeometrySnapshot
 	hitTest: (point: InspectorPreviewPoint) => InspectorHitTestResult
+	/** Host-owned invalidation for CSSOM/adoptedStyleSheets changes not exposed to DOM observers. */
+	invalidate: () => void
 	dispose: () => void
 }
 
@@ -133,12 +135,14 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 	function fallbackHitTarget(point: InspectorPreviewPoint): InspectorSemanticTarget | null {
 		let selected: Element | null = null
 		for (const anchor of allAnchors()) {
-			const containsPoint = [...anchor.getClientRects()].some(rect =>
-				point.x >= rect.left
-				&& point.x <= rect.right
-				&& point.y >= rect.top
-				&& point.y <= rect.bottom,
-			)
+			const containsPoint = [...anchor.getClientRects()].some((rawRect) => {
+				const rect = geometryRect(rawRect)
+				return usableRect(rect)
+					&& point.x >= rect.x
+					&& point.x <= rect.x + rect.width
+					&& point.y >= rect.y
+					&& point.y <= rect.y + rect.height
+			})
 			if (!containsPoint || nearestSemanticAnchor(anchor) === null)
 				continue
 			if (selected === null || selected.contains(anchor))
@@ -160,6 +164,13 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 					return target
 			}
 			return null
+		}
+		// Some DOM implementations expose only the single-element platform hit-test API.
+		// Prefer its stacking-aware result over a document-order rectangle approximation.
+		const elementFromPoint = document.elementFromPoint?.bind(document)
+		if (elementFromPoint !== undefined) {
+			const element = elementFromPoint(point.x, point.y)
+			return element === null ? null : nearestSemanticAnchor(element)
 		}
 		return fallbackHitTarget(point)
 	}
@@ -189,10 +200,11 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 
 	const onScroll = (): void => scheduleInvalidation()
 	const onResize = (): void => scheduleInvalidation()
-	const onResourceLoad = (): void => scheduleInvalidation()
+	const onResourceSettled = (): void => scheduleInvalidation()
 	document.addEventListener('scroll', onScroll, true)
-	// Resources outside the Preview root can move its viewport-relative position too.
-	document.addEventListener('load', onResourceLoad, true)
+	// Both successful and failed resources can change layout, including outside the Preview root.
+	document.addEventListener('load', onResourceSettled, true)
+	document.addEventListener('error', onResourceSettled, true)
 	window?.addEventListener('resize', onResize)
 
 	const mutationObserver = typeof MutationObserver === 'function'
@@ -200,12 +212,18 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 		: null
 	// Layout depends on ancestors, siblings and stylesheets as well as descendants of the root.
 	// Root-only observation misses e.g. a class change on <body> or a <style> added to <head>.
-	mutationObserver?.observe(document.documentElement ?? options.root, {
+	const mutationOptions: MutationObserverInit = {
 		subtree: true,
 		childList: true,
 		attributes: true,
 		characterData: true,
-	})
+	}
+	mutationObserver?.observe(document.documentElement ?? options.root, mutationOptions)
+	// Document-level observation cannot cross a Shadow DOM boundary. Also watch the Preview's
+	// actual tree root for local mutations and sibling/stylesheet changes inside that tree.
+	const previewTreeRoot = options.root.getRootNode()
+	if (previewTreeRoot !== document)
+		mutationObserver?.observe(previewTreeRoot, mutationOptions)
 
 	const resizeObserver = typeof ResizeObserver === 'function'
 		? new ResizeObserver(() => scheduleInvalidation())
@@ -250,12 +268,14 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 				return { target: null }
 			return { target, geometry: snapshotForTarget(target) }
 		},
+		invalidate: scheduleInvalidation,
 		dispose() {
 			if (disposed)
 				return
 			disposed = true
 			document.removeEventListener('scroll', onScroll, true)
-			document.removeEventListener('load', onResourceLoad, true)
+			document.removeEventListener('load', onResourceSettled, true)
+			document.removeEventListener('error', onResourceSettled, true)
 			window?.removeEventListener('resize', onResize)
 			mutationObserver?.disconnect()
 			anchorRefreshObserver?.disconnect()

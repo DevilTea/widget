@@ -96,16 +96,22 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	if (capabilities.events) {
 		let emitter: WidgetIntegrationEventEmitter | undefined
 		result.emit = createLazyKeyedSurface((key) => {
-			if (emitter === undefined) {
-				const resolved = getWidgetEventEmitter(
-					runtime as unknown as WidgetSystemRuntime,
-					widget as unknown as RuntimeWidget,
-				)
-				if (resolved === null)
-					throw new WidgetVueIntegrationError('The current widget declares events but Core returned no event emitter.')
-				emitter = resolved
+			// The immutable plugin inventory distinguishes unknown keys without touching the Runtime.
+			if (!plugin.descriptions.events?.has(key))
+				return undefined
+			// Materializing a callable must remain passive; only invoking it acquires the Core emitter.
+			return (...args: readonly unknown[]) => {
+				if (emitter === undefined) {
+					const resolved = getWidgetEventEmitter(
+						runtime as unknown as WidgetSystemRuntime,
+						widget as unknown as RuntimeWidget,
+					)
+					if (resolved === null)
+						throw new WidgetVueIntegrationError('The current widget declares events but Core returned no event emitter.')
+					emitter = resolved
+				}
+				emitter[key]!(...args)
 			}
-			return emitter[key]
 		})
 	}
 

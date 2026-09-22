@@ -71,6 +71,35 @@ describe('inspectorAgent DOM ownership', () => {
 		}
 	})
 
+	it('falls back to a registered ancestor for stale nested DOM anchors', async () => {
+		const { root, outer, inner, agent, client } = createDomFixture()
+		try {
+			inner.dataset.widgetId = 'stale-widget'
+			const selections: unknown[] = []
+			const hovered: unknown[] = []
+			client.on('inspect.selected', value => selections.push(value))
+			client.on('inspect.hovered', value => hovered.push(value))
+			await client.request('inspect.enable', {})
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+			inner.dispatchEvent(click)
+			await flushTransport()
+			expect(outer.classList.contains('test-highlight'))
+				.toBe(true)
+			expect(click.defaultPrevented)
+				.toBe(true)
+			expect(hovered)
+				.toContainEqual(expect.objectContaining({ widgetId: 'root' }))
+			expect(selections)
+				.toContainEqual(expect.objectContaining({ widgetId: 'root' }))
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
 	it('suppresses underlying pointer/click activation while Inspect is enabled and selects the inner widget', async () => {
 		const { root, inner, agent, client } = createDomFixture()
 		try {
