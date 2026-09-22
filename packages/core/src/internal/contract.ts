@@ -39,6 +39,8 @@ import type {
 import type { WidgetSystem } from '../system'
 import type {
 	HasWidgetCapability,
+	WidgetEventArgsOf,
+	WidgetEventKeyOf,
 	WidgetId,
 	WidgetInterfaces,
 	WidgetMemberKey,
@@ -387,6 +389,10 @@ export interface RuntimeMethod<Fn extends (...args: any[]) => any> {
 	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeMethodDiagnostic[]) => void) => () => void
 }
 
+export interface RuntimeEvent<Args extends readonly unknown[]> {
+	subscribe: (listener: (...args: Args) => void) => () => void
+}
+
 export type RuntimeStateSurface<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
 	? {
 			readonly state: {
@@ -404,13 +410,20 @@ export type RuntimePropertySurface<Interfaces extends WidgetInterfaces> = HasWid
 	: unknown
 
 /**
- * Gated on capability presence (`HasWidgetCapability`), not on the declared member-key union: an
- * explicitly-declared-empty `methods: Record<never, never>` capability is present (and therefore
- * exposes an empty `methods` surface), matching Runtime assembly's `definition.methods !== null` check.
- * Gating on `WidgetMethodKeyOf` instead would collapse "declared empty" into "absent" because both have
- * an empty key union; gating on `[WidgetMethodsOf<Interfaces>] extends [never]` would additionally
- * misclassify any capability whose *payload* itself is `never` (diagnostic #10 amendment "declaration-presence
- * semantics and public `WidgetPlugin.capabilities`").
+ * Gated on declaration presence so an explicitly empty events capability remains observable as an
+ * empty `events` surface, distinct from an absent events capability.
+ */
+export type RuntimeEventSurface<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'events'> extends true
+	? {
+			readonly events: {
+				readonly [Name in WidgetEventKeyOf<Interfaces>]: RuntimeEvent<WidgetEventArgsOf<Interfaces, Name>>
+			}
+		}
+	: unknown
+
+/**
+ * Gated on declaration presence so an explicitly empty methods capability remains observable as an
+ * empty `methods` surface, distinct from an absent methods capability.
  */
 export type RuntimeMethodSurface<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
 	? {
@@ -440,6 +453,7 @@ export type RuntimeWidgetFor<
 	& RuntimeStateSurface<WidgetInterfacesOf<Plugin>>
 	& RuntimePropertySurface<WidgetInterfacesOf<Plugin>>
 	& RuntimeMethodSurface<WidgetInterfacesOf<Plugin>>
+	& RuntimeEventSurface<WidgetInterfacesOf<Plugin>>
 
 export type RuntimeWidget<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = Plugins[number] extends infer Plugin
 	? Plugin extends AnyWidgetPlugin

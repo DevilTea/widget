@@ -19,7 +19,7 @@ export function createAuthorCatalogViewModel(system: WidgetSystem<AnyWidgetPlugi
 		catalog: system.catalog,
 		widgets: system.catalog.widgets.map(entry => ({
 			entry,
-			capabilities: capabilitiesByType.get(entry.type) ?? { config: false, slots: false, state: false, properties: false, methods: false },
+			capabilities: capabilitiesByType.get(entry.type) ?? { config: false, slots: false, state: false, properties: false, methods: false, events: false },
 		})),
 	}
 }

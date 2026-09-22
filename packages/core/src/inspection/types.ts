@@ -13,7 +13,7 @@
 import type { BlueprintDependencyReference, RuntimePropertyDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { BlueprintWidgetNode, ResolvedBlueprintWidgetNode, UnresolvedBlueprintWidgetNode } from '../internal/contract'
-import type { AnyWidgetPluginTuple } from '../plugin'
+import type { AnyWidgetPluginTuple, WidgetPluginConfigMetadata } from '../plugin'
 import type { WidgetMemberKey } from '../types'
 
 // -------------------------------------------------------------------------------------------------
@@ -41,6 +41,7 @@ export interface BlueprintInspectionCapabilities {
 	readonly state: boolean
 	readonly properties: boolean
 	readonly methods: boolean
+	readonly events: boolean
 }
 
 export interface BlueprintInspectionSourceSlot {
@@ -108,6 +109,12 @@ export interface BlueprintInspectionPropertyMember {
 	readonly dependencies: readonly BlueprintInspectionDependency[]
 }
 
+export interface BlueprintInspectionEventMember {
+	readonly type: 'event'
+	readonly name: WidgetMemberKey
+	readonly description: string
+}
+
 export interface BlueprintInspectionMethodMember {
 	readonly type: 'method'
 	readonly name: WidgetMemberKey
@@ -137,10 +144,13 @@ export interface ResolvedBlueprintInspectionNode<Plugins extends AnyWidgetPlugin
 	readonly node: ResolvedBlueprintWidgetNode<Plugins>
 	/** Authoritative capability presence (absent vs explicitly declared empty). */
 	readonly capabilities: BlueprintInspectionCapabilities
+	/** Passive config authoring metadata. Null means no config capability. */
+	readonly config: WidgetPluginConfigMetadata | null
 	readonly semanticSlots: readonly BlueprintInspectionSemanticSlot[]
 	readonly state: readonly BlueprintInspectionStateMember[]
 	readonly properties: readonly BlueprintInspectionPropertyMember[]
 	readonly methods: readonly BlueprintInspectionMethodMember[]
+	readonly events: readonly BlueprintInspectionEventMember[]
 }
 
 export type BlueprintInspectionNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
@@ -197,6 +207,10 @@ export type RuntimePropertyInspectionSnapshot<T>
 
 export interface RuntimePropertyInspection<T> extends InspectionObservable<RuntimePropertyInspectionSnapshot<T>> {}
 
+export interface RuntimeEventInspection {
+	subscribe: (listener: (args: readonly unknown[]) => void) => () => void
+}
+
 export interface RuntimeWidgetInspection<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly nodeId: InspectionNodeId
 	readonly blueprintNode: ResolvedBlueprintInspectionNode<Plugins>
@@ -205,6 +219,8 @@ export interface RuntimeWidgetInspection<Plugins extends AnyWidgetPluginTuple = 
 	getState: (key: WidgetMemberKey) => RuntimeStateInspection<unknown> | null
 	/** `null` when the property member/capability does not exist. Dynamic `unknown` typing. */
 	getProperty: (name: WidgetMemberKey) => RuntimePropertyInspection<unknown> | null
+	/** `null` when the event member/capability does not exist. Readonly occurrence observation only. */
+	getEvent: (name: WidgetMemberKey) => RuntimeEventInspection | null
 }
 
 export interface RuntimeInspection<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {

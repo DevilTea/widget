@@ -35,6 +35,7 @@ export interface WidgetInterfaces {
 	state?: Record<any, any>
 	properties?: Record<any, any>
 	methods?: Record<any, (...args: any[]) => any>
+	events?: Record<any, readonly any[]>
 }
 
 /**
@@ -102,6 +103,10 @@ export type WidgetMethodsOf<Interfaces extends WidgetInterfaces> = WidgetCapabil
 	? Methods
 	: never
 
+export type WidgetEventsOf<Interfaces extends WidgetInterfaces> = WidgetCapabilityOf<Interfaces, 'events'> extends infer Events extends Record<WidgetMemberKey, readonly any[]>
+	? Events
+	: never
+
 /**
  * Declared member keys of one section, or `never` when the capability is absent.
  */
@@ -114,6 +119,8 @@ export type WidgetStateKeyOf<Interfaces extends WidgetInterfaces> = WidgetMember
 export type WidgetPropertyKeyOf<Interfaces extends WidgetInterfaces> = WidgetMemberKeysOf<WidgetPropertiesOf<Interfaces>>
 
 export type WidgetMethodKeyOf<Interfaces extends WidgetInterfaces> = WidgetMemberKeysOf<WidgetMethodsOf<Interfaces>>
+
+export type WidgetEventKeyOf<Interfaces extends WidgetInterfaces> = WidgetMemberKeysOf<WidgetEventsOf<Interfaces>>
 
 export type WidgetStateValueOf<
 	Interfaces extends WidgetInterfaces,
@@ -139,6 +146,11 @@ export type WidgetMethodReturnOf<
 	Interfaces extends WidgetInterfaces,
 	Name extends WidgetMemberKey,
 > = ReturnType<WidgetMethodOf<Interfaces, Name>>
+
+export type WidgetEventArgsOf<
+	Interfaces extends WidgetInterfaces,
+	Name extends WidgetMemberKey,
+> = Extract<WidgetMemberValueOf<WidgetEventsOf<Interfaces>, Name>, readonly any[]>
 
 type ContainsPromiseLike<Value> = IsAny<Value> extends true
 	? false
@@ -170,6 +182,18 @@ type SyncMethodReturnViolation<Interfaces extends WidgetInterfaces> = WidgetMeth
 				: never
 	: never
 
+type EventArgsDomainViolation<Interfaces extends WidgetInterfaces> = WidgetEventsOf<Interfaces> extends infer Events
+	? [Events] extends [never]
+			? never
+			: {
+					[Key in keyof Events]-?: Events[Key] extends readonly any[]
+						? number extends Events[Key]['length']
+							? '\'events\' arguments must be declared as tuples'
+							: never
+						: '\'events\' arguments must be declared as tuples'
+				}[keyof Events]
+	: never
+
 type SlotDomainViolation<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'slots'> extends false
 	? never
 	: WidgetMemberKey extends WidgetCapabilityOf<Interfaces, 'slots'>
@@ -190,6 +214,8 @@ export type WidgetInterfacesViolationOf<Interfaces extends WidgetInterfaces>
 	= | MemberKeyDomainViolation<'state', WidgetStateOf<Interfaces>>
 		| MemberKeyDomainViolation<'properties', WidgetPropertiesOf<Interfaces>>
 		| MemberKeyDomainViolation<'methods', WidgetMethodsOf<Interfaces>>
+		| MemberKeyDomainViolation<'events', WidgetEventsOf<Interfaces>>
+		| EventArgsDomainViolation<Interfaces>
 		| SlotDomainViolation<Interfaces>
 		| RawConfigDomainViolation<Interfaces>
 		| SyncValueDomainViolation<'state', WidgetStateOf<Interfaces>>

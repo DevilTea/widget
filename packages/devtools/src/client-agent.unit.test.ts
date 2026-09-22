@@ -38,7 +38,7 @@ describe('inspectorClient + InspectorAgent', () => {
 		try {
 			const handshake = await client.request('handshake', { protocol: { major: 0, minor: 1 } })
 			expect(handshake.protocol)
-				.toEqual({ major: 0, minor: 1 })
+				.toEqual({ major: 0, minor: 2 })
 			expect(handshake.capabilities.methods)
 				.toContain('runtime.getWidgetSnapshot')
 			expect(handshake.capabilities.methods).not.toContain('method.invoke')

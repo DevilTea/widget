@@ -16,6 +16,8 @@
 import type {
 	EmptyRegisteredDeps,
 	WidgetConfigDefinition,
+	WidgetEventArgsOf,
+	WidgetEventsSection,
 	WidgetInterfaces,
 	WidgetInterfacesViolation,
 	WidgetInterfacesViolationOf,
@@ -91,6 +93,17 @@ interface EmptyMethodsCapabilityInterfaces extends WidgetInterfaces {
 	methods: Record<never, never>
 }
 
+interface EmptyEventsCapabilityInterfaces extends WidgetInterfaces {
+	events: Record<never, never>
+}
+
+interface EventInterfaces extends WidgetInterfaces {
+	events: {
+		press: []
+		change: [value: string]
+	}
+}
+
 /**
  * The canonical explicit-empty slots spelling (diagnostic #10 amendment "declaration-presence semantics and
  * public `WidgetPlugin.capabilities`"). Unlike `state`/`properties`/`methods` (whose empty spelling is
@@ -118,6 +131,9 @@ interface AllCapabilitiesInterfaces extends WidgetInterfaces {
 	methods: {
 		m: () => number
 	}
+	events: {
+		changed: [value: number]
+	}
 }
 
 declare const symbolStateKey: unique symbol
@@ -136,6 +152,16 @@ interface SymbolStateKeyInterfaces extends WidgetInterfaces {
 
 interface BroadSlotsInterfaces extends WidgetInterfaces {
 	slots: string
+}
+
+interface BroadEventsIndexInterfaces extends WidgetInterfaces {
+	events: Record<string, []>
+}
+
+interface ArrayEventArgsInterfaces extends WidgetInterfaces {
+	events: {
+		change: string[]
+	}
 }
 
 interface PromiseStateInterfaces extends WidgetInterfaces {
@@ -431,6 +457,68 @@ describe('section keyed-chain typestate (state section, representative of proper
 	})
 })
 
+describe('events capability typestate and tuple contract', () => {
+	it('exposes an independent events phase with named tuple declarations and description metadata', () => {
+		const afterInterfaces = createWidgetPlugin('events-only')
+			.description('Test widget')
+			.interfaces<EventInterfaces>()
+		expectTypeOf(afterInterfaces)
+			.toHaveProperty('events')
+		expectTypeOf(afterInterfaces).not.toHaveProperty('done')
+
+		const afterEvents = afterInterfaces.events((events) => {
+			const afterPress = events.press({ description: 'Pressed' })
+			expectTypeOf(afterPress)
+				.toEqualTypeOf<WidgetEventsSection<EventInterfaces, 'change'>>()
+			return afterPress.change({ description: 'Value changed' })
+		})
+		expectTypeOf(afterEvents)
+			.toHaveProperty('done')
+		expectTypeOf<WidgetEventArgsOf<EventInterfaces, 'press'>>()
+			.toEqualTypeOf<[]>()
+		expectTypeOf<WidgetEventArgsOf<EventInterfaces, 'change'>>()
+			.toEqualTypeOf<[value: string]>()
+
+		const plugin = afterEvents.done()
+		expect(plugin.capabilities.events)
+			.toBe(true)
+		expect(plugin.descriptions.events?.get('press'))
+			.toBe('Pressed')
+		expect(plugin.descriptions.events?.get('change'))
+			.toBe('Value changed')
+	})
+
+	it('requires every declared event member to be consumed before done', () => {
+		const beforeEvents = createWidgetPlugin('events-incomplete')
+			.description('Test widget')
+			.interfaces<EventInterfaces>()
+		// @ts-expect-error 'change' is still unconsumed, so the event section cannot complete
+		beforeEvents.events(events => events.press({ description: 'Pressed' }))
+	})
+
+	it('keeps an explicitly empty events capability distinct from an absent capability', () => {
+		const present = createWidgetPlugin('events-empty')
+			.description('Test widget')
+			.interfaces<EmptyEventsCapabilityInterfaces>()
+			.events(events => events)
+			.done()
+		expect(present.capabilities.events)
+			.toBe(true)
+		expect(present.descriptions.events).not.toBeNull()
+		expect(present.descriptions.events?.size)
+			.toBe(0)
+
+		const absent = createWidgetPlugin('events-absent')
+			.description('Test widget')
+			.interfaces<EmptyInterfaces>()
+			.done()
+		expect(absent.capabilities.events)
+			.toBe(false)
+		expect(absent.descriptions.events)
+			.toBeNull()
+	})
+})
+
 describe('explicit-empty slots capability (`slots: never`), distinct from an absent slots capability (review round 2, diagnostic #10 amendment "declaration-presence semantics")', () => {
 	it('exposes the .slots phase for `slots: never`, which completes via .slots({})', () => {
 		const afterInterfaces = createWidgetPlugin('empty-slots-capability')
@@ -470,7 +558,7 @@ describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declara
 			.done()
 
 		expect(plugin.capabilities)
-			.toEqual({ config: false, slots: false, state: false, properties: false, methods: false })
+			.toEqual({ config: false, slots: false, state: false, properties: false, methods: false, events: false })
 		expect(Object.isFrozen(plugin.capabilities))
 			.toBe(true)
 	})
@@ -491,10 +579,11 @@ describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declara
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => 0,
 			}))
+			.events(events => events.changed({ description: 'Changed' }))
 			.done()
 
 		expect(plugin.capabilities)
-			.toEqual({ config: true, slots: true, state: true, properties: true, methods: true })
+			.toEqual({ config: true, slots: true, state: true, properties: true, methods: true, events: true })
 	})
 
 	it('is true, with an empty inventory, for each explicitly-declared-empty capability', () => {
@@ -528,6 +617,14 @@ describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declara
 			.slots({})
 			.done()
 		expect(slotsPlugin.capabilities.slots)
+			.toBe(true)
+
+		const eventsPlugin = createWidgetPlugin('caps-empty-events')
+			.description('Test widget')
+			.interfaces<EmptyEventsCapabilityInterfaces>()
+			.events(events => events)
+			.done()
+		expect(eventsPlugin.capabilities.events)
 			.toBe(true)
 	})
 })
@@ -565,6 +662,16 @@ describe('widgetInterfaces domain rejection (types.ts type layer)', () => {
 	it('rejects a broad slots capability that is not a finite string literal union', () => {
 		expectTypeOf<WidgetInterfacesViolationOf<BroadSlotsInterfaces>>()
 			.toEqualTypeOf<'\'slots\' must be a finite union of string literals'>()
+	})
+
+	it('rejects a broad string index signature on events', () => {
+		expectTypeOf<WidgetInterfacesViolationOf<BroadEventsIndexInterfaces>>()
+			.toEqualTypeOf<'\'events\' must not be declared with a broad string index signature'>()
+	})
+
+	it('rejects non-tuple event argument arrays', () => {
+		expectTypeOf<WidgetInterfacesViolationOf<ArrayEventArgsInterfaces>>()
+			.toEqualTypeOf<'\'events\' arguments must be declared as tuples'>()
 	})
 
 	it('leaves the interfaces phase unusable once a domain violation is present', () => {

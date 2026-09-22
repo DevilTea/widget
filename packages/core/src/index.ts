@@ -109,6 +109,8 @@ export type {
 	ResolvedBlueprintWidgetNodeFor,
 	ResolvedBlueprintWidgetNodeView,
 	ResolvedBlueprintWidgetNodeViewFor,
+	RuntimeEvent,
+	RuntimeEventSurface,
 	RuntimeMethod,
 	RuntimeMethodSurface,
 	RuntimeProperty,
@@ -133,13 +135,18 @@ export type {
 
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from './json'
 
-export { createWidgetPlugin } from './plugin'
+export { createWidgetPlugin, WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from './plugin'
 
 export type {
 	AnyWidgetPlugin,
 	AnyWidgetPluginTuple,
 	WidgetConfigDefinition,
+	WidgetConfigJsonSchema,
 	WidgetConfigValidateContext,
+	WidgetEventDefinition,
+	WidgetEventEmitter,
+	WidgetEventEmitterContext,
+	WidgetEventsSection,
 	WidgetInterfacesOf,
 	WidgetInterfacesViolation,
 	WidgetMethodDefinition,
@@ -148,9 +155,11 @@ export type {
 	WidgetMethodValidateArgsContext,
 	WidgetPlugin,
 	WidgetPluginCapabilities,
+	WidgetPluginConfigMetadata,
 	WidgetPluginConfigPhase,
 	WidgetPluginDescriptionPhase,
 	WidgetPluginDonePhase,
+	WidgetPluginEventsPhase,
 	WidgetPluginInterfacesPhase,
 	WidgetPluginMethodsPhase,
 	WidgetPluginPropertiesPhase,
@@ -212,6 +221,9 @@ export type {
 	HasWidgetCapability,
 	NonEmptyReadonlyArray,
 	WidgetCapabilityOf,
+	WidgetEventArgsOf,
+	WidgetEventKeyOf,
+	WidgetEventsOf,
 	WidgetId,
 	WidgetInterfaces,
 	WidgetInterfacesViolationOf,

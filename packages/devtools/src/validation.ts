@@ -1,11 +1,13 @@
 import type {
 	InspectorBlueprintCapabilities,
 	InspectorBlueprintNode,
+	InspectorConfigMetadata,
 	InspectorDependency,
 	InspectorDependencyReference,
 	InspectorDiagnostic,
 	InspectorDiagnosticLocation,
 	InspectorEvaluationCycle,
+	InspectorEventMember,
 	InspectorRuntimeDiagnostic,
 	InspectorRuntimeDiagnosticLocation,
 	InspectorRuntimeMemberSnapshot,
@@ -15,6 +17,39 @@ import type { InspectableValue } from './value'
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isJsonValue(value: unknown, seen = new Set<object>()): boolean {
+	if (value === null || typeof value === 'string' || typeof value === 'boolean')
+		return true
+	if (typeof value === 'number')
+		return Number.isFinite(value)
+	if (Array.isArray(value)) {
+		if (seen.has(value))
+			return false
+		seen.add(value)
+		const valid = value.every(item => isJsonValue(item, seen))
+		seen.delete(value)
+		return valid
+	}
+	if (!isRecord(value))
+		return false
+	const prototype = Object.getPrototypeOf(value)
+	if (prototype !== Object.prototype && prototype !== null)
+		return false
+	if (seen.has(value))
+		return false
+	seen.add(value)
+	const valid = Object.values(value)
+		.every(item => isJsonValue(item, seen))
+	seen.delete(value)
+	return valid
+}
+
+function isConfigMetadata(value: unknown): value is InspectorConfigMetadata {
+	return isRecord(value)
+		&& typeof value.description === 'string'
+		&& (value.schema === null || isJsonValue(value.schema))
 }
 
 export function isNodeId(value: unknown): value is number {
@@ -72,6 +107,7 @@ export function isBlueprintCapabilities(value: unknown): value is InspectorBluep
 		&& typeof value.state === 'boolean'
 		&& typeof value.properties === 'boolean'
 		&& typeof value.methods === 'boolean'
+		&& typeof value.events === 'boolean'
 }
 
 export function isSlot(value: unknown): value is InspectorSlot {
@@ -158,6 +194,10 @@ function isPropertyMember(value: unknown): boolean {
 		&& Array.isArray(value.dependencies) && value.dependencies.every(isDependency)
 }
 
+function isEventMember(value: unknown): value is InspectorEventMember {
+	return isRecord(value) && value.type === 'event' && typeof value.name === 'string' && typeof value.description === 'string'
+}
+
 function isMethodMember(value: unknown): boolean {
 	return isRecord(value) && value.type === 'method' && typeof value.name === 'string'
 		&& typeof value.transitivelyWrites === 'boolean'
@@ -174,10 +214,12 @@ export function isBlueprintNode(value: unknown): value is InspectorBlueprintNode
 		return true
 	return typeof value.widgetId === 'string' && typeof value.widgetType === 'string'
 		&& isBlueprintCapabilities(value.capabilities)
+		&& (value.config === null || isConfigMetadata(value.config))
 		&& Array.isArray(value.semanticSlots) && value.semanticSlots.every(isSlot)
 		&& Array.isArray(value.state) && value.state.every(isStateMember)
 		&& Array.isArray(value.properties) && value.properties.every(isPropertyMember)
 		&& Array.isArray(value.methods) && value.methods.every(isMethodMember)
+		&& Array.isArray(value.events) && value.events.every(isEventMember)
 }
 
 export function isEvaluationCycle(value: unknown): value is InspectorEvaluationCycle {

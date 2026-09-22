@@ -6,12 +6,15 @@ import type {
 	InspectorProtocolError,
 	InspectorRequestMessage,
 	InspectorRequestMethod,
+	InspectorSemanticTarget,
 	WidgetRef,
 } from './protocol'
 import type { InspectorTransport } from './transport'
 import { inspectRuntime } from '@deviltea/widget-core/inspection'
+import { createSemanticGeometryController } from './geometry'
 import {
 	projectBlueprintSnapshot,
+	projectEventArgs,
 	projectRuntimeMemberSnapshot,
 	projectRuntimeWidgetSnapshot,
 } from './projection'
@@ -28,17 +31,29 @@ const SUPPORTED_METHODS = Object.freeze([
 	'runtime.getWidgetSnapshot',
 	'runtime.subscribeMember',
 	'runtime.unsubscribeMember',
+	'runtime.subscribeEvent',
+	'runtime.unsubscribeEvent',
 	'inspect.enable',
 	'inspect.disable',
 	'highlight.show',
 	'highlight.clear',
 ] satisfies InspectorRequestMethod[])
 
+const GEOMETRY_METHODS = Object.freeze([
+	'inspect.hitTest',
+	'geometry.resolve',
+] satisfies InspectorRequestMethod[])
+
 const SUPPORTED_EVENTS = Object.freeze([
+	'runtime.eventOccurred',
 	'runtime.memberChanged',
 	'inspect.hovered',
 	'inspect.selected',
 	'agent.status',
+] satisfies InspectorEventName[])
+
+const GEOMETRY_EVENTS = Object.freeze([
+	'geometry.invalidated',
 ] satisfies InspectorEventName[])
 
 let runtimeSequence = 1
@@ -90,7 +105,10 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const runtimeId = options.runtimeId ?? createRuntimeId()
 	const runtimeInspection = inspectRuntime(options.runtime)
 	const dom = options.dom
-	const subscriptions = new Map<string, () => void>()
+	const memberSubscriptions = new Map<string, () => void>()
+	const eventSubscriptions = new Map<string, () => void>()
+	const supportedMethods = dom === undefined ? SUPPORTED_METHODS : Object.freeze([...SUPPORTED_METHODS, ...GEOMETRY_METHODS])
+	const supportedEvents = dom === undefined ? SUPPORTED_EVENTS : Object.freeze([...SUPPORTED_EVENTS, ...GEOMETRY_EVENTS])
 	let inspectEnabled = false
 	let disposed = false
 	let highlightedElement: Element | null = null
@@ -160,6 +178,27 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		return widgetId === null || widgetType === null ? null : { element, widgetId, widgetType }
 	}
 
+	function semanticTargetForRef(ref: WidgetRef): InspectorSemanticTarget | null {
+		const nodeId = resolveNodeId(ref)
+		if (nodeId === null)
+			return null
+		const node = runtimeInspection.blueprint.getNode(nodeId)
+		if (node === null || !node.resolved)
+			return null
+		return { ref, widgetId: node.node.id, widgetType: node.node.type }
+	}
+
+	function semanticTargetForAnchorElement(element: Element): InspectorSemanticTarget | null {
+		if (dom === undefined || !dom.root.contains(element))
+			return null
+		const widgetId = element.getAttribute('data-widget-id')
+		const widgetType = element.getAttribute('data-widget-type')
+		if (widgetId === null || widgetType === null)
+			return null
+		const ref = nodeForAnchor({ widgetId, widgetType })
+		return ref === null ? null : { ref, widgetId, widgetType }
+	}
+
 	function ensureBadge(): HTMLDivElement | null {
 		if (dom === undefined)
 			return null
@@ -222,6 +261,15 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		}
 		return false
 	}
+
+	const geometry = dom === undefined
+		? null
+		: createSemanticGeometryController({
+				root: dom.root,
+				resolveRef: semanticTargetForRef,
+				resolveAnchor: semanticTargetForAnchorElement,
+				onInvalidated: revision => emit('geometry.invalidated', { revision }),
+			})
 
 	function disableInspect(): void {
 		if (!inspectEnabled)
@@ -345,8 +393,43 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			sendError(request.requestId, protocolError('internal-error', 'Unable to subscribe to the Runtime member.'))
 			return
 		}
-		subscriptions.set(subscriptionId, unsubscribe)
+		memberSubscriptions.set(subscriptionId, unsubscribe)
 		sendSuccess(request, { subscriptionId, member: projected })
+	}
+
+	function subscribeEvent(request: Extract<InspectorRequestMessage, { method: 'runtime.subscribeEvent' }>): void {
+		if (request.params.ref.runtimeId !== runtimeId) {
+			sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
+			return
+		}
+		const widget = resolveWidget(request.params.ref)
+		if (widget === null) {
+			sendError(request.requestId, protocolError('widget-not-found', 'The requested widget does not exist in this Runtime snapshot.'))
+			return
+		}
+		const observable = widget.getEvent(request.params.event)
+		if (observable === null) {
+			sendError(request.requestId, protocolError('event-not-found', 'The requested Runtime event does not exist.'))
+			return
+		}
+		const subscriptionId = `event-subscription-${subscriptionSequence++}`
+		let unsubscribe: () => void
+		try {
+			unsubscribe = observable.subscribe((args) => {
+				emit('runtime.eventOccurred', {
+					subscriptionId,
+					ref: request.params.ref,
+					event: request.params.event,
+					args: projectEventArgs(args),
+				})
+			})
+		}
+		catch {
+			sendError(request.requestId, protocolError('internal-error', 'Unable to subscribe to the Runtime event.'))
+			return
+		}
+		eventSubscriptions.set(subscriptionId, unsubscribe)
+		sendSuccess(request, { subscriptionId, event: request.params.event })
 	}
 
 	function handleRequest(request: InspectorRequestMessage): void {
@@ -363,7 +446,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				}
 				sendSuccess(request, {
 					protocol: INSPECTOR_PROTOCOL_VERSION,
-					capabilities: { methods: SUPPORTED_METHODS, events: SUPPORTED_EVENTS },
+					capabilities: { methods: supportedMethods, events: supportedEvents },
 				})
 				return
 			case 'runtime.list':
@@ -393,17 +476,49 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			case 'runtime.subscribeMember':
 				subscribeMember(request)
 				return
+			case 'runtime.subscribeEvent':
+				subscribeEvent(request)
+				return
 			case 'runtime.unsubscribeMember': {
-				const unsubscribe = subscriptions.get(request.params.subscriptionId)
+				const unsubscribe = memberSubscriptions.get(request.params.subscriptionId)
 				if (unsubscribe === undefined) {
 					sendSuccess(request, { removed: false })
 					return
 				}
-				subscriptions.delete(request.params.subscriptionId)
+				memberSubscriptions.delete(request.params.subscriptionId)
 				unsubscribe()
 				sendSuccess(request, { removed: true })
 				return
 			}
+			case 'runtime.unsubscribeEvent': {
+				const unsubscribe = eventSubscriptions.get(request.params.subscriptionId)
+				if (unsubscribe === undefined) {
+					sendSuccess(request, { removed: false })
+					return
+				}
+				eventSubscriptions.delete(request.params.subscriptionId)
+				unsubscribe()
+				sendSuccess(request, { removed: true })
+				return
+			}
+			case 'inspect.hitTest':
+				if (geometry === null) {
+					sendError(request.requestId, protocolError('internal-error', 'DOM geometry is unavailable for this Inspector Agent.'))
+					return
+				}
+				sendSuccess(request, geometry.hitTest(request.params))
+				return
+			case 'geometry.resolve':
+				if (request.params.ref.runtimeId !== runtimeId) {
+					sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
+					return
+				}
+				if (geometry === null) {
+					sendError(request.requestId, protocolError('internal-error', 'DOM geometry is unavailable for this Inspector Agent.'))
+					return
+				}
+				sendSuccess(request, geometry.resolve(request.params.ref))
+				return
 			case 'inspect.enable':
 				inspectEnabled = true
 				emit('agent.status', { inspectEnabled: true })
@@ -445,10 +560,14 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		if (disposed)
 			return
 		disposed = true
-		for (const unsubscribe of subscriptions.values())
+		for (const unsubscribe of memberSubscriptions.values())
 			unsubscribe()
-		subscriptions.clear()
+		memberSubscriptions.clear()
+		for (const unsubscribe of eventSubscriptions.values())
+			unsubscribe()
+		eventSubscriptions.clear()
 		removeDomListeners()
+		geometry?.dispose()
 		clearHighlight()
 		unsubscribeTransport()
 		unsubscribeClose()

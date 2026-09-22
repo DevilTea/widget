@@ -4,9 +4,11 @@
  * Normative source: diagnostic #13 checkpoints C, C addendum, D (both parts), E, F, G.
  */
 
-import type { AnyWidgetPlugin } from '@deviltea/widget-core'
+import type { AnyWidgetPlugin, RuntimeWidget, WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { WidgetIntegrationEventEmitter } from '@deviltea/widget-core/integration'
 import type { CurrentWidgetContextValue, RuntimeWidgetLike } from './context'
 import type { UseWidgetResult } from './types'
+import { getWidgetEventEmitter } from '@deviltea/widget-core/integration'
 import { inject, onScopeDispose } from 'vue'
 import { createDiagnosticsRef, createLazyKeyedSurface, createMethodWrapper, createPropertyRef, createStateRef } from './bridge'
 import { CurrentWidgetContextKey } from './context'
@@ -42,7 +44,7 @@ function getCurrentWidgetContext(): CurrentWidgetContextValue {
  * `state: Record<never, never>`, ...) is present despite an empty/`never` payload, and shape-based
  * heuristics (member-key counts, semantic-slot-map key counts) cannot distinguish that from absence.
  */
-function buildUseWidgetResult(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin): Record<string, unknown> {
+function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetContextValue['runtime'], plugin: AnyWidgetPlugin): Record<string, unknown> {
 	const cleanups: Array<() => void> = []
 	onScopeDispose(() => {
 		for (const cleanup of cleanups)
@@ -91,6 +93,22 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin
 		})
 	}
 
+	if (capabilities.events) {
+		let emitter: WidgetIntegrationEventEmitter | undefined
+		result.emit = createLazyKeyedSurface((key) => {
+			if (emitter === undefined) {
+				const resolved = getWidgetEventEmitter(
+					runtime as unknown as WidgetSystemRuntime,
+					widget as unknown as RuntimeWidget,
+				)
+				if (resolved === null)
+					throw new WidgetVueIntegrationError('The current widget declares events but Core returned no event emitter.')
+				emitter = resolved
+			}
+			return emitter[key]
+		})
+	}
+
 	if (capabilities.methods) {
 		const methods = widget.methods!
 		let surface: Readonly<Record<string, unknown>> | undefined
@@ -128,5 +146,5 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin
 export function useWidget<Plugin extends AnyWidgetPlugin>(plugin: Plugin): UseWidgetResult<Plugin> {
 	const current = getCurrentWidgetContext()
 	assertWidgetMatchesPlugin(current.widget, plugin)
-	return buildUseWidgetResult(current.widget, plugin) as unknown as UseWidgetResult<Plugin>
+	return buildUseWidgetResult(current.widget, current.runtime, plugin) as unknown as UseWidgetResult<Plugin>
 }

@@ -9,6 +9,10 @@ describe('widgetSystem catalog', () => {
 				resolved: { readonly label: string }
 			}
 			slots: 'content'
+			events: {
+				press: []
+				change: [value: string]
+			}
 		}
 
 		const card = createWidgetPlugin('card')
@@ -20,6 +24,9 @@ describe('widgetSystem catalog', () => {
 				resolve: raw => ({ label: raw?.label ?? 'Card' }),
 			})
 			.slots({ content: { description: 'Card content' } })
+			.events(events => events
+				.press({ description: 'Card pressed' })
+				.change({ description: 'Card value changed' }))
 			.done()
 		const label = createWidgetPlugin('label')
 			.description('Label widget')
@@ -37,11 +44,16 @@ describe('widgetSystem catalog', () => {
 			})
 		expect(system.catalog.widgets[0]?.descriptions.slots?.get('content'))
 			.toBe('Card content')
+		expect([...system.catalog.widgets[0]!.descriptions.events!])
+			.toEqual([
+				['press', 'Card pressed'],
+				['change', 'Card value changed'],
+			])
 		expect(system.catalog.widgets[1])
 			.toMatchObject({
 				type: 'label',
 				description: 'Label widget',
-				descriptions: { config: null, slots: null },
+				descriptions: { config: null, slots: null, events: null },
 			})
 		expect(Object.isFrozen(system.catalog))
 			.toBe(true)
