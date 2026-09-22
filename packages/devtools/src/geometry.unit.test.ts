@@ -100,9 +100,14 @@ describe('semantic geometry Inspector protocol', () => {
 		try {
 			const handshake = await domFixture.client.handshake()
 			expect(handshake.capabilities.methods)
-				.toEqual(expect.arrayContaining(['geometry.resolve', 'inspect.hitTest']))
+				.toEqual(expect.arrayContaining([
+					'runtime.subscribeEvent',
+					'runtime.unsubscribeEvent',
+					'geometry.resolve',
+					'inspect.hitTest',
+				]))
 			expect(handshake.capabilities.events)
-				.toContain('geometry.invalidated')
+				.toEqual(expect.arrayContaining(['runtime.eventOccurred', 'geometry.invalidated']))
 		}
 		finally {
 			domFixture.dispose()
@@ -157,6 +162,11 @@ describe('semantic geometry Inspector protocol', () => {
 			expect(clipped.rects)
 				.toEqual([{ x: 350, y: 20, width: 80, height: 30 }])
 
+			setRects(fixture.inner, [rect(Number.POSITIVE_INFINITY, 20, 80, 30)])
+			const invalid = await fixture.client.request('geometry.resolve', { ref })
+			expect(invalid)
+				.toMatchObject({ visibility: 'hidden', rects: [] })
+
 			setRects(fixture.inner, [])
 			const hidden = await fixture.client.request('geometry.resolve', { ref })
 			expect(hidden)
@@ -197,6 +207,28 @@ describe('semantic geometry Inspector protocol', () => {
 			const resolved = await fixture.client.request('geometry.resolve', { ref: result.target.ref })
 			expect(resolved.revision)
 				.toBe(result.geometry.revision)
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
+	it('falls back to a registered ancestor when the innermost DOM anchor is stale', async () => {
+		const fixture = createGeometryFixture()
+		try {
+			fixture.inner.dataset.widgetId = 'no-longer-registered'
+			setElementsFromPoint([fixture.leaf, fixture.inner, fixture.outer])
+			const result = await fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			})
+			if (result.target === null)
+				throw new Error('Expected registered ancestor hit.')
+			expect(result.target.widgetId)
+				.toBe('root')
+			expect(result.geometry.rects)
+				.toEqual([{ x: 0, y: 0, width: 280, height: 180 }])
 		}
 		finally {
 			fixture.dispose()
@@ -254,6 +286,79 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 		finally {
 			fixture.dispose()
+		}
+	})
+	it('invalidates geometry after layout-affecting mutations outside the Preview root', async () => {
+		const fixture = createGeometryFixture()
+		try {
+			const snapshot = await fixture.client.request('blueprint.getSnapshot', { runtimeId: 'runtime-geometry' })
+			const counter = snapshot.nodes.find(node => node.widgetId === 'counter')!
+			const ref = { runtimeId: 'runtime-geometry', nodeId: counter.nodeId }
+			const before = await fixture.client.request('geometry.resolve', { ref })
+			const invalidations = vi.fn()
+			fixture.client.on('geometry.invalidated', invalidations)
+
+			document.body.classList.add('outside-root-geometry-change')
+			await vi.waitFor(async () => {
+				const after = await fixture.client.request('geometry.resolve', { ref })
+				expect(after.revision)
+					.toBeGreaterThan(before.revision)
+			})
+			await nextAnimationFrame()
+			expect(invalidations)
+				.toHaveBeenCalledTimes(1)
+		}
+		finally {
+			document.body.classList.remove('outside-root-geometry-change')
+			fixture.dispose()
+		}
+	})
+
+	it('observes an existing element that becomes a semantic anchor', async () => {
+		const observed = new Set<Element>()
+		let onResize: ResizeObserverCallback | null = null
+		class TestResizeObserver {
+			constructor(callback: ResizeObserverCallback) {
+				onResize = callback
+			}
+
+			observe(element: Element): void {
+				observed.add(element)
+			}
+
+			disconnect(): void {
+				observed.clear()
+			}
+		}
+		vi.stubGlobal('ResizeObserver', TestResizeObserver)
+		const fixture = createGeometryFixture()
+		try {
+			const newAnchor = document.createElement('div')
+			fixture.root.append(newAnchor)
+			newAnchor.dataset.widgetId = 'counter'
+			newAnchor.dataset.widgetType = 'DevtoolsCounter'
+			setRects(newAnchor, [rect(120, 40, 20, 20)])
+
+			await vi.waitFor(() => {
+				expect(observed.has(newAnchor))
+					.toBe(true)
+			})
+			const snapshot = await fixture.client.request('blueprint.getSnapshot', { runtimeId: 'runtime-geometry' })
+			const counter = snapshot.nodes.find(node => node.widgetId === 'counter')!
+			const ref = { runtimeId: 'runtime-geometry', nodeId: counter.nodeId }
+			await nextAnimationFrame()
+			const before = await fixture.client.request('geometry.resolve', { ref })
+			if (onResize === null)
+				throw new Error('Expected a ResizeObserver.')
+			const triggerResize: ResizeObserverCallback = onResize
+			triggerResize([], {} as ResizeObserver)
+			const after = await fixture.client.request('geometry.resolve', { ref })
+			expect(after.revision)
+				.toBe(before.revision + 1)
+		}
+		finally {
+			fixture.dispose()
+			vi.unstubAllGlobals()
 		}
 	})
 })

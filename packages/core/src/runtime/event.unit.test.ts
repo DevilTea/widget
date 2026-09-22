@@ -143,6 +143,27 @@ describe('runtime semantic events', () => {
 			.toEqual(['a', 'c'])
 	})
 
+	it('keeps duplicate callback registrations and their unsubscribe handles independent', () => {
+		const { root } = createRuntime()
+		const callback = vi.fn()
+		const unsubscribeFirst = root.events.ping.subscribe(callback)
+		const unsubscribeSecond = root.events.ping.subscribe(callback)
+
+		root.methods.emitPing()
+		expect(callback)
+			.toHaveBeenCalledTimes(2)
+
+		unsubscribeFirst()
+		root.methods.emitPing()
+		expect(callback)
+			.toHaveBeenCalledTimes(3)
+
+		unsubscribeSecond()
+		root.methods.emitPing()
+		expect(callback)
+			.toHaveBeenCalledTimes(3)
+	})
+
 	it('propagates subscriber errors immediately and aborts later subscribers', () => {
 		const { root } = createRuntime()
 		const error = new Error('subscriber failed')

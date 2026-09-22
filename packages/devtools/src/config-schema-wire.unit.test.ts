@@ -106,6 +106,21 @@ describe('serialized config schema metadata', () => {
 		expect(isInspectorRequestResult('blueprint.getSnapshot', semanticallyInvalidButJsonSafe))
 			.toBe(true)
 
+		const scalarSchemaPayload = structuredClone(semanticallyInvalidButJsonSafe)
+		const scalarConfig = scalarSchemaPayload.nodes[0]!.config
+		expect(scalarConfig)
+			.toBeDefined()
+		for (const scalar of ['not a schema', 42, []]) {
+			const candidate = structuredClone(scalarSchemaPayload) as unknown as { nodes: { config: { schema: unknown } }[] }
+			candidate.nodes[0]!.config.schema = scalar
+			expect(isInspectorRequestResult('blueprint.getSnapshot', candidate))
+				.toBe(false)
+		}
+		const booleanSchemaPayload = structuredClone(scalarSchemaPayload) as unknown as { nodes: { config: { schema: unknown } }[] }
+		booleanSchemaPayload.nodes[0]!.config.schema = false
+		expect(isInspectorRequestResult('blueprint.getSnapshot', booleanSchemaPayload))
+			.toBe(true)
+
 		const nonJsonSchemaPayload = structuredClone(semanticallyInvalidButJsonSafe) as any
 		nonJsonSchemaPayload.nodes[0].config.schema = { bad: () => {} }
 		expect(isInspectorRequestResult('blueprint.getSnapshot', nonJsonSchemaPayload))

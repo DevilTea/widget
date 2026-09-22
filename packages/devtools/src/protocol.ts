@@ -73,7 +73,8 @@ export interface InspectorBlueprintCapabilities {
 	readonly state: boolean
 	readonly properties: boolean
 	readonly methods: boolean
-	readonly events: boolean
+	/** Added in protocol 0.2. Absence on a 0.1 snapshot means the capability is unavailable to that peer. */
+	readonly events?: boolean
 }
 
 export interface InspectorSlot {
@@ -559,12 +560,15 @@ function isRuntimeSummary(value: unknown): value is InspectorRuntimeSummary {
 		&& isWireNodeId(value.rootNodeId)
 }
 
-function isBlueprintSnapshot(value: unknown): value is InspectorBlueprintSnapshot {
+function isBlueprintSnapshot(
+	value: unknown,
+	protocolMinor: number = INSPECTOR_PROTOCOL_VERSION.minor,
+): value is InspectorBlueprintSnapshot {
 	return isRecord(value)
 		&& typeof value.runtimeId === 'string'
 		&& isWireNodeId(value.rootNodeId)
 		&& Array.isArray(value.nodes)
-		&& value.nodes.every(isWireBlueprintNode)
+		&& value.nodes.every(node => isWireBlueprintNode(node, protocolMinor))
 		&& Array.isArray(value.invalidCycles)
 		&& value.invalidCycles.every(isWireEvaluationCycle)
 }
@@ -572,6 +576,7 @@ function isBlueprintSnapshot(value: unknown): value is InspectorBlueprintSnapsho
 export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 	method: Method,
 	value: unknown,
+	protocolMinor: number = INSPECTOR_PROTOCOL_VERSION.minor,
 ): value is InspectorRequestResult<Method> {
 	switch (method) {
 		case 'handshake':
@@ -585,7 +590,7 @@ export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 		case 'runtime.list':
 			return isRecord(value) && Array.isArray(value.runtimes) && value.runtimes.every(isRuntimeSummary)
 		case 'blueprint.getSnapshot':
-			return isBlueprintSnapshot(value)
+			return isBlueprintSnapshot(value, protocolMinor)
 		case 'runtime.getWidgetSnapshot':
 			return isRecord(value)
 				&& isWidgetRef(value.ref)

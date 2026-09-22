@@ -15,6 +15,8 @@ import type {
 } from './protocol'
 import type { InspectableValue } from './value'
 
+const BLUEPRINT_METADATA_PROTOCOL_MINOR: number = 2
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -49,7 +51,11 @@ function isJsonValue(value: unknown, seen = new Set<object>()): boolean {
 function isConfigMetadata(value: unknown): value is InspectorConfigMetadata {
 	return isRecord(value)
 		&& typeof value.description === 'string'
-		&& (value.schema === null || isJsonValue(value.schema))
+		// A Draft 2020-12 document is an object or a boolean schema, not an arbitrary JSON scalar.
+		// Validate the wire shape only; keyword and metaschema validity remain the author's responsibility.
+		&& (value.schema === null
+			|| typeof value.schema === 'boolean'
+			|| (isRecord(value.schema) && isJsonValue(value.schema)))
 }
 
 export function isNodeId(value: unknown): value is number {
@@ -100,14 +106,19 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 	}
 }
 
-export function isBlueprintCapabilities(value: unknown): value is InspectorBlueprintCapabilities {
+export function isBlueprintCapabilities(
+	value: unknown,
+	protocolMinor = BLUEPRINT_METADATA_PROTOCOL_MINOR,
+): value is InspectorBlueprintCapabilities {
 	return isRecord(value)
 		&& typeof value.config === 'boolean'
 		&& typeof value.slots === 'boolean'
 		&& typeof value.state === 'boolean'
 		&& typeof value.properties === 'boolean'
 		&& typeof value.methods === 'boolean'
-		&& typeof value.events === 'boolean'
+		&& (protocolMinor < BLUEPRINT_METADATA_PROTOCOL_MINOR
+			? (value.events === undefined || typeof value.events === 'boolean')
+			: typeof value.events === 'boolean')
 }
 
 export function isSlot(value: unknown): value is InspectorSlot {
@@ -204,7 +215,10 @@ function isMethodMember(value: unknown): boolean {
 		&& Array.isArray(value.dependencies) && value.dependencies.every(isDependency)
 }
 
-export function isBlueprintNode(value: unknown): value is InspectorBlueprintNode {
+export function isBlueprintNode(
+	value: unknown,
+	protocolMinor = BLUEPRINT_METADATA_PROTOCOL_MINOR,
+): value is InspectorBlueprintNode {
 	if (!isRecord(value) || !isNodeId(value.nodeId) || typeof value.resolved !== 'boolean'
 		|| !Array.isArray(value.sourceSlots) || !value.sourceSlots.every(isSlot)
 		|| !Array.isArray(value.diagnostics) || !value.diagnostics.every(isDiagnostic)) {
@@ -213,13 +227,17 @@ export function isBlueprintNode(value: unknown): value is InspectorBlueprintNode
 	if (!value.resolved)
 		return true
 	return typeof value.widgetId === 'string' && typeof value.widgetType === 'string'
-		&& isBlueprintCapabilities(value.capabilities)
-		&& (value.config === null || isConfigMetadata(value.config))
+		&& isBlueprintCapabilities(value.capabilities, protocolMinor)
+		&& (protocolMinor < BLUEPRINT_METADATA_PROTOCOL_MINOR
+			? (value.config === undefined || value.config === null || isConfigMetadata(value.config))
+			: (value.config === null || isConfigMetadata(value.config)))
 		&& Array.isArray(value.semanticSlots) && value.semanticSlots.every(isSlot)
 		&& Array.isArray(value.state) && value.state.every(isStateMember)
 		&& Array.isArray(value.properties) && value.properties.every(isPropertyMember)
 		&& Array.isArray(value.methods) && value.methods.every(isMethodMember)
-		&& Array.isArray(value.events) && value.events.every(isEventMember)
+		&& (protocolMinor < BLUEPRINT_METADATA_PROTOCOL_MINOR
+			? (value.events === undefined || (Array.isArray(value.events) && value.events.every(isEventMember)))
+			: (Array.isArray(value.events) && value.events.every(isEventMember)))
 }
 
 export function isEvaluationCycle(value: unknown): value is InspectorEvaluationCycle {

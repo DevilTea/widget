@@ -24,35 +24,41 @@ import {
 	parseInspectorRequestMessage,
 } from './protocol'
 
-const SUPPORTED_METHODS = Object.freeze([
+const PROTOCOL_0_1_METHODS = Object.freeze([
 	'handshake',
 	'runtime.list',
 	'blueprint.getSnapshot',
 	'runtime.getWidgetSnapshot',
 	'runtime.subscribeMember',
 	'runtime.unsubscribeMember',
-	'runtime.subscribeEvent',
-	'runtime.unsubscribeEvent',
 	'inspect.enable',
 	'inspect.disable',
 	'highlight.show',
 	'highlight.clear',
 ] satisfies InspectorRequestMethod[])
 
-const GEOMETRY_METHODS = Object.freeze([
+const PROTOCOL_0_2_METHODS = Object.freeze([
+	'runtime.subscribeEvent',
+	'runtime.unsubscribeEvent',
+] satisfies InspectorRequestMethod[])
+
+const PROTOCOL_0_2_GEOMETRY_METHODS = Object.freeze([
 	'inspect.hitTest',
 	'geometry.resolve',
 ] satisfies InspectorRequestMethod[])
 
-const SUPPORTED_EVENTS = Object.freeze([
-	'runtime.eventOccurred',
+const PROTOCOL_0_1_EVENTS = Object.freeze([
 	'runtime.memberChanged',
 	'inspect.hovered',
 	'inspect.selected',
 	'agent.status',
 ] satisfies InspectorEventName[])
 
-const GEOMETRY_EVENTS = Object.freeze([
+const PROTOCOL_0_2_EVENTS = Object.freeze([
+	'runtime.eventOccurred',
+] satisfies InspectorEventName[])
+
+const PROTOCOL_0_2_GEOMETRY_EVENTS = Object.freeze([
 	'geometry.invalidated',
 ] satisfies InspectorEventName[])
 
@@ -107,8 +113,22 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const dom = options.dom
 	const memberSubscriptions = new Map<string, () => void>()
 	const eventSubscriptions = new Map<string, () => void>()
-	const supportedMethods = dom === undefined ? SUPPORTED_METHODS : Object.freeze([...SUPPORTED_METHODS, ...GEOMETRY_METHODS])
-	const supportedEvents = dom === undefined ? SUPPORTED_EVENTS : Object.freeze([...SUPPORTED_EVENTS, ...GEOMETRY_EVENTS])
+	function capabilitiesForMinor(minor: number): { readonly methods: readonly InspectorRequestMethod[], readonly events: readonly InspectorEventName[] } {
+		if (minor < 2) {
+			return {
+				methods: PROTOCOL_0_1_METHODS,
+				events: PROTOCOL_0_1_EVENTS,
+			}
+		}
+		return {
+			methods: dom === undefined
+				? Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_2_METHODS])
+				: Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_2_METHODS, ...PROTOCOL_0_2_GEOMETRY_METHODS]),
+			events: dom === undefined
+				? Object.freeze([...PROTOCOL_0_1_EVENTS, ...PROTOCOL_0_2_EVENTS])
+				: Object.freeze([...PROTOCOL_0_1_EVENTS, ...PROTOCOL_0_2_EVENTS, ...PROTOCOL_0_2_GEOMETRY_EVENTS]),
+		}
+	}
 	let inspectEnabled = false
 	let disposed = false
 	let highlightedElement: Element | null = null
@@ -439,16 +459,18 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		}
 
 		switch (request.method) {
-			case 'handshake':
+			case 'handshake': {
 				if (!isCompatibleProtocolVersion(request.params.protocol)) {
 					sendError(request.requestId, protocolError('unsupported-version', `Unsupported Inspector protocol major ${request.params.protocol.major}.`))
 					return
 				}
+				const capabilities = capabilitiesForMinor(Math.min(request.protocol.minor, request.params.protocol.minor))
 				sendSuccess(request, {
 					protocol: INSPECTOR_PROTOCOL_VERSION,
-					capabilities: { methods: supportedMethods, events: supportedEvents },
+					capabilities,
 				})
 				return
+			}
 			case 'runtime.list':
 				sendSuccess(request, { runtimes: [{ runtimeId, rootNodeId: runtimeInspection.blueprint.rootNodeId }] })
 				return

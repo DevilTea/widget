@@ -31,8 +31,10 @@ function geometryRect(rect: DOMRect | DOMRectReadOnly): { x: number, y: number, 
 	}
 }
 
-function usableRect(rect: { width: number, height: number }): boolean {
-	return Number.isFinite(rect.width) && Number.isFinite(rect.height) && rect.width > 0 && rect.height > 0
+function usableRect(rect: { x: number, y: number, width: number, height: number }): boolean {
+	return Number.isFinite(rect.x) && Number.isFinite(rect.y)
+		&& Number.isFinite(rect.width) && Number.isFinite(rect.height)
+		&& rect.width > 0 && rect.height > 0
 }
 
 export function createSemanticGeometryController(options: SemanticGeometryControllerOptions): SemanticGeometryController {
@@ -114,10 +116,18 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 	}
 
 	function nearestSemanticAnchor(element: Element): InspectorSemanticTarget | null {
-		const anchor = element.closest(ANCHOR_SELECTOR)
-		if (anchor === null || !options.root.contains(anchor))
-			return null
-		return options.resolveAnchor(anchor)
+		// DOM anchors need not all resolve to registered Widget identities. If the nearest anchor
+		// is stale/unknown, continue upwards rather than hiding its valid enclosing Widget.
+		let anchor: Element | null = element.closest(ANCHOR_SELECTOR)
+		while (anchor !== null && options.root.contains(anchor)) {
+			const target = options.resolveAnchor(anchor)
+			if (target !== null)
+				return target
+			if (anchor === options.root)
+				break
+			anchor = anchor.parentElement?.closest(ANCHOR_SELECTOR) ?? null
+		}
+		return null
 	}
 
 	function fallbackHitTarget(point: InspectorPreviewPoint): InspectorSemanticTarget | null {
@@ -129,12 +139,12 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 				&& point.y >= rect.top
 				&& point.y <= rect.bottom,
 			)
-			if (!containsPoint || options.resolveAnchor(anchor) === null)
+			if (!containsPoint || nearestSemanticAnchor(anchor) === null)
 				continue
 			if (selected === null || selected.contains(anchor))
 				selected = anchor
 		}
-		return selected === null ? null : options.resolveAnchor(selected)
+		return selected === null ? null : nearestSemanticAnchor(selected)
 	}
 
 	function hitTarget(point: InspectorPreviewPoint): InspectorSemanticTarget | null {
@@ -181,13 +191,16 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 	const onResize = (): void => scheduleInvalidation()
 	const onResourceLoad = (): void => scheduleInvalidation()
 	document.addEventListener('scroll', onScroll, true)
-	options.root.addEventListener('load', onResourceLoad, true)
+	// Resources outside the Preview root can move its viewport-relative position too.
+	document.addEventListener('load', onResourceLoad, true)
 	window?.addEventListener('resize', onResize)
 
 	const mutationObserver = typeof MutationObserver === 'function'
 		? new MutationObserver(() => scheduleInvalidation())
 		: null
-	mutationObserver?.observe(options.root, {
+	// Layout depends on ancestors, siblings and stylesheets as well as descendants of the root.
+	// Root-only observation misses e.g. a class change on <body> or a <style> added to <head>.
+	mutationObserver?.observe(document.documentElement ?? options.root, {
 		subtree: true,
 		childList: true,
 		attributes: true,
@@ -211,7 +224,13 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 	const anchorRefreshObserver = resizeObserver === null || typeof MutationObserver !== 'function'
 		? null
 		: new MutationObserver(() => observeAnchorSizes())
-	anchorRefreshObserver?.observe(options.root, { subtree: true, childList: true })
+	// An existing node may become/stop being an inspect anchor without child-list changes.
+	anchorRefreshObserver?.observe(options.root, {
+		subtree: true,
+		childList: true,
+		attributes: true,
+		attributeFilter: ['data-widget-id', 'data-widget-type'],
+	})
 
 	const fontSet = document.fonts
 	const onFontLayout = (): void => scheduleInvalidation()
@@ -236,7 +255,7 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 				return
 			disposed = true
 			document.removeEventListener('scroll', onScroll, true)
-			options.root.removeEventListener('load', onResourceLoad, true)
+			document.removeEventListener('load', onResourceLoad, true)
 			window?.removeEventListener('resize', onResize)
 			mutationObserver?.disconnect()
 			anchorRefreshObserver?.disconnect()
