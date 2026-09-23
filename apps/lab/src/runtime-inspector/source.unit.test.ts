@@ -13,12 +13,8 @@ describe('getRuntimeInspectorSource', () => {
 		await session.applyPreset(invalidSource)
 
 		const source = getRuntimeInspectorSource(session.preview, session.documentState.revision)
-		expect(source.previewRevision)
-			.toBe(0)
-		expect(source.isStale)
-			.toBe(true)
-		expect(source.isDiverged)
-			.toBe(true)
+		expect(source)
+			.toEqual({ previewRevision: 0, isStale: true, isDiverged: true })
 	})
 
 	it('returns no Preview source when there has never been a valid Preview', () => {

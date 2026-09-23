@@ -228,8 +228,10 @@ describe('labSession', () => {
 	it('apply() on a JSON syntax failure leaves the active snapshot untouched and sets a Lab-only SourceParseError', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		const activeBefore = session.documentState
+		const previewBefore = session.preview
+		const invalidDraft = 'not json at all'
 
-		session.setDraftSourceText('not json at all')
+		session.setDraftSourceText(invalidDraft)
 		const outcome = await session.apply()
 
 		expect(outcome.status)
@@ -237,12 +239,18 @@ describe('labSession', () => {
 		if (outcome.status !== 'parse-error')
 			throw new Error('unreachable')
 		expect(outcome.error.sourceText)
-			.toBe('not json at all')
+			.toBe(invalidDraft)
 		expect(typeof outcome.error.message)
 			.toBe('string')
+		expect(session.draftSourceText)
+			.toBe(invalidDraft)
+		expect(session.isDirty)
+			.toBe(true)
 		// Untouched by identity, not merely by value: the old Runtime/Preview must remain live.
 		expect(session.documentState)
 			.toBe(activeBefore)
+		expect(session.preview)
+			.toBe(previewBefore)
 	})
 
 	it('apply() never injects a JSON syntax failure into core Blueprint diagnostics', async () => {

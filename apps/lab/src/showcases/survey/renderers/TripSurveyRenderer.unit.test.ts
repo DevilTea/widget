@@ -81,6 +81,24 @@ describe('tripSurveyRenderer stale-result presentation (diagnostic #26)', () => 
 			.toContain('Trip days: 5')
 	})
 
+	it('projects the stored recommendation numeric fields into its own budget line', async () => {
+		const { wrapper, runtime } = mountSurvey()
+		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')
+
+		survey.methods.submit()
+		survey.methods.generateResult()
+		await wrapper.vm.$nextTick()
+
+		const recommendation = wrapper.get('[data-tutorial-target="survey-recommendation"]')
+		const budgetLine = recommendation.findAll('p')
+			.find(paragraph => paragraph.text()
+				.startsWith('Budget:'))
+		expect(budgetLine)
+			.toBeDefined()
+		expect(budgetLine?.text())
+			.toBe('Budget: 1800 vs. estimated baseline cost: 1500.00 (gap 300.00) · budget/person/day: 180.00')
+	})
+
 	it('shows the stale copy/badge once a tracked answer changes, while the old result stays visible', async () => {
 		const { wrapper, runtime } = mountSurvey()
 		const survey = widgetOfType(runtime, 'trip-survey', 'TripSurvey')

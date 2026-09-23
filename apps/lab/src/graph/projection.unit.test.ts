@@ -171,6 +171,9 @@ describe('projectSemanticGraph', () => {
 		expect(graph.clusters.map(cluster => cluster.widgetId)
 			.sort())
 			.toEqual(['consumer', 'target'])
+		expect(graph.clusters.map(cluster => cluster.label)
+			.sort())
+			.toEqual(['consumer : graph-consumer', 'target : graph-target'])
 
 		const readerId = vertexIdOf(consumerNode, 'property', 'reader')
 		const writerId = vertexIdOf(consumerNode, 'method', 'writer')
