@@ -110,7 +110,19 @@ test('Implementation owns long-line overflow locally at the 900px minimum suppor
 	const overflow = await sourceScroll.evaluate(element => ({
 		clientWidth: element.clientWidth,
 		scrollWidth: element.scrollWidth,
+		scrollLeft: element.scrollLeft,
 	}))
 	expect(overflow.scrollWidth)
 		.toBeGreaterThan(overflow.clientWidth)
+	expect(overflow.scrollLeft)
+		.toBe(0)
+
+	// The overflow contract is interactive: scrolling the actual source viewport horizontally must
+	// move that local container, while the document itself remains at the left edge (#35 guard).
+	await sourceScroll.hover()
+	await page.mouse.wheel(480, 0)
+	await expect.poll(() => sourceScroll.evaluate(element => element.scrollLeft))
+		.toBeGreaterThan(0)
+	expect(await page.evaluate(() => document.documentElement.scrollLeft))
+		.toBe(0)
 })

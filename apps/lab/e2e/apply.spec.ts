@@ -63,7 +63,14 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 
 	// A `JSON.parse` failure at Apply time leaves `active` (and therefore Preview) untouched
 	// (`LabSession.apply()`) — the Blueprint/Runtime status pills stay exactly as they were.
-	await setDraftSourceText(page, '{ not valid json')
+	const invalidDraft = '{"broken":'
+	await setDraftSourceText(page, invalidDraft)
+	// The invalid draft is still the live Monaco model and must remain editable/visible; Apply is
+	// enabled because it is dirty even though the active Preview snapshot is still valid (#38 guard).
+	await expect(page.locator('.view-lines'))
+		.toHaveText(invalidDraft)
+	await expect(page.getByRole('button', { name: 'Apply' }))
+		.toBeEnabled()
 	await page.getByRole('button', { name: 'Apply' })
 		.click()
 
@@ -74,6 +81,10 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 		.toBeVisible()
 	await expect(page.getByText('Preview r1'))
 		.toBeVisible()
+	await expect(page.locator('.view-lines'))
+		.toHaveText(invalidDraft)
+	await expect(page.getByRole('button', { name: 'Apply' }))
+		.toBeEnabled()
 
 	// Visible status: the Author JSON view's parse-error banner (`AuthorJsonView.vue`'s
 	// `store.parseError.value`) — LabHeader's own status pills never reflect a Lab-only parse error.
