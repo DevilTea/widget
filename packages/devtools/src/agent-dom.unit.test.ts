@@ -273,9 +273,11 @@ describe('inspectorAgent DOM ownership', () => {
 		}
 	})
 
-	it('cleans Agent-owned DOM state when the transport peer disconnects', async () => {
+	it('removes Agent-owned DOM state and restores native activation after peer disconnect', async () => {
 		const { root, inner, pair, agent, client } = createDomFixture()
 		try {
+			const nativeClick = vi.fn()
+			inner.addEventListener('click', nativeClick)
 			await client.request('inspect.enable', {})
 			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
 			expect(inner.classList.contains('test-highlight'))
@@ -287,6 +289,22 @@ describe('inspectorAgent DOM ownership', () => {
 				.toBe(false)
 			expect(root.querySelector('[data-widget-inspector-badge="true"]'))
 				.toBeNull()
+
+			// Chrome can clear even when capture listeners are leaked. Probe actual native activation.
+			const pointerDown = new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+			const pointerUp = new PointerEvent('pointerup', { bubbles: true, cancelable: true })
+			const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+			inner.dispatchEvent(pointerDown)
+			inner.dispatchEvent(pointerUp)
+			inner.dispatchEvent(click)
+			expect(pointerDown.defaultPrevented)
+				.toBe(false)
+			expect(pointerUp.defaultPrevented)
+				.toBe(false)
+			expect(click.defaultPrevented)
+				.toBe(false)
+			expect(nativeClick)
+				.toHaveBeenCalledTimes(1)
 		}
 		finally {
 			client.dispose()

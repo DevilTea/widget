@@ -21,6 +21,20 @@ describe('inspector Agent transport lifecycle', () => {
 				unsubscribe()
 			}
 		}
+		const activeCloseSubscriptions = new Set<() => void>()
+		const subscribeClose = pair.agent.subscribeClose
+		pair.agent.subscribeClose = (listener) => {
+			activeCloseSubscriptions.add(listener)
+			const unsubscribe = subscribeClose(listener)
+			let active = true
+			return () => {
+				if (!active)
+					return
+				active = false
+				activeCloseSubscriptions.delete(listener)
+				unsubscribe()
+			}
+		}
 		const client = createInspectorClient(pair.client)
 		const firstFixture = createDevtoolsTestFixture()
 		const first = createInspectorAgent({
@@ -38,8 +52,12 @@ describe('inspector Agent transport lifecycle', () => {
 		try {
 			expect(activeSubscriptions.size)
 				.toBe(2)
+			expect(activeCloseSubscriptions.size)
+				.toBe(2)
 			first.dispose()
 			expect(activeSubscriptions.size)
+				.toBe(1)
+			expect(activeCloseSubscriptions.size)
 				.toBe(1)
 			expect(pair.agent.closed)
 				.toBe(false)
@@ -50,6 +68,8 @@ describe('inspector Agent transport lifecycle', () => {
 				.toMatchObject({ runtimeId: second.runtimeId })
 			second.dispose()
 			expect(activeSubscriptions.size)
+				.toBe(0)
+			expect(activeCloseSubscriptions.size)
 				.toBe(0)
 		}
 		finally {
