@@ -492,6 +492,49 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
+	it('uses ShadowRoot stacking and suppresses fallback for an overlay sibling outside the bounded root', async () => {
+		const fixture = createGeometryFixture({ shadowRoot: true })
+		const tree = fixture.root.getRootNode() as ShadowRoot
+		const overlay = document.createElement('div')
+		overlay.dataset.widgetId = 'counter'
+		overlay.dataset.widgetType = 'DevtoolsCounter'
+		tree.append(overlay)
+		const documentStack = Object.getOwnPropertyDescriptor(document, 'elementsFromPoint')
+		const shadowStack = Object.getOwnPropertyDescriptor(tree, 'elementsFromPoint')
+		const shadowElementsFromPoint = vi.fn(() => [overlay, fixture.leaf, fixture.inner, fixture.outer])
+		const documentElementsFromPoint = vi.fn(() => [fixture.leaf, fixture.inner, fixture.outer])
+		try {
+			Object.defineProperty(tree, 'elementsFromPoint', {
+				configurable: true,
+				value: shadowElementsFromPoint,
+			})
+			Object.defineProperty(document, 'elementsFromPoint', {
+				configurable: true,
+				value: documentElementsFromPoint,
+			})
+			await expect(fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			}))
+				.resolves.toEqual({ target: null })
+			expect(shadowElementsFromPoint)
+				.toHaveBeenCalledWith(15, 25)
+			expect(documentElementsFromPoint)
+				.not.toHaveBeenCalled()
+		}
+		finally {
+			if (shadowStack !== undefined)
+				Object.defineProperty(tree, 'elementsFromPoint', shadowStack)
+			else Reflect.deleteProperty(tree, 'elementsFromPoint')
+			if (documentStack !== undefined)
+				Object.defineProperty(document, 'elementsFromPoint', documentStack)
+			else Reflect.deleteProperty(document, 'elementsFromPoint')
+			overlay.remove()
+			fixture.dispose()
+		}
+	})
+
 	it('uses ShadowRoot.elementFromPoint when its elementsFromPoint API is unavailable', async () => {
 		const fixture = createGeometryFixture({ shadowRoot: true })
 		const tree = fixture.root.getRootNode() as ShadowRoot
@@ -533,19 +576,24 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
-	it('removes every ShadowRoot event listener on Inspector teardown', () => {
+	it('removes every ShadowRoot event listener with the exact registered callback on Inspector teardown', () => {
+		const add = vi.spyOn(ShadowRoot.prototype, 'addEventListener')
+		const remove = vi.spyOn(ShadowRoot.prototype, 'removeEventListener')
 		const fixture = createGeometryFixture({ shadowRoot: true })
-		const tree = fixture.root.getRootNode() as ShadowRoot
-		const remove = vi.spyOn(tree, 'removeEventListener')
 		try {
 			fixture.agent.dispose()
 			for (const event of ['scroll', 'load', 'error']) {
+				const registered = add.mock.calls.find(call => call[0] === event && call[2] === true)
+				if (registered === undefined)
+					throw new Error(`Expected a ShadowRoot ${event} listener registration.`)
 				expect(remove)
-					.toHaveBeenCalledWith(event, expect.any(Function), true)
+					.toHaveBeenCalledWith(event, registered[1], true)
 			}
 		}
 		finally {
 			fixture.dispose()
+			add.mockRestore()
+			remove.mockRestore()
 		}
 	})
 

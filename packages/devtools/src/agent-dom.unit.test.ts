@@ -158,6 +158,35 @@ describe('inspectorAgent DOM ownership', () => {
 		}
 	})
 
+	it('captures pointerup while enabled and releases the native listener after RPC disable', async () => {
+		const { root, inner, agent, client } = createDomFixture()
+		try {
+			const underlyingPointerUp = vi.fn()
+			inner.addEventListener('pointerup', underlyingPointerUp)
+			await client.request('inspect.enable', {})
+
+			const enabledPointerUp = new PointerEvent('pointerup', { bubbles: true, cancelable: true })
+			inner.dispatchEvent(enabledPointerUp)
+			expect(enabledPointerUp.defaultPrevented)
+				.toBe(true)
+			expect(underlyingPointerUp)
+				.not.toHaveBeenCalled()
+
+			await client.request('inspect.disable', {})
+			const disabledPointerUp = new PointerEvent('pointerup', { bubbles: true, cancelable: true })
+			inner.dispatchEvent(disabledPointerUp)
+			expect(disabledPointerUp.defaultPrevented)
+				.toBe(false)
+			expect(underlyingPointerUp)
+				.toHaveBeenCalledTimes(1)
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
 	it('escape/disable clears Agent-owned chrome and immediately restores normal activation', async () => {
 		const { root, inner, agent, client } = createDomFixture()
 		try {
@@ -178,6 +207,39 @@ describe('inspectorAgent DOM ownership', () => {
 				.toBeNull()
 
 			inner.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+			expect(action)
+				.toHaveBeenCalledTimes(1)
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('disables through the RPC, removes the badge, and restores normal native click actions', async () => {
+		const { root, inner, agent, client } = createDomFixture()
+		try {
+			const action = vi.fn()
+			inner.addEventListener('click', action)
+			await client.request('inspect.enable', {})
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			expect(root.querySelector('[data-widget-inspector-badge="true"]'))
+				.not.toBeNull()
+
+			expect(await client.request('inspect.disable', {}))
+				.toEqual({ enabled: false })
+			expect(agent.inspectEnabled)
+				.toBe(false)
+			expect(inner.classList.contains('test-highlight'))
+				.toBe(false)
+			expect(root.querySelector('[data-widget-inspector-badge="true"]'))
+				.toBeNull()
+
+			const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+			inner.dispatchEvent(click)
+			expect(click.defaultPrevented)
+				.toBe(false)
 			expect(action)
 				.toHaveBeenCalledTimes(1)
 		}
@@ -244,8 +306,15 @@ describe('inspectorAgent DOM ownership', () => {
 			client.on('inspect.selected', payload => events.push(payload))
 			await client.request('inspect.enable', {})
 			outside.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-			outside.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+			const pointerDown = new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+			outside.dispatchEvent(pointerDown)
+			const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+			outside.dispatchEvent(click)
 			await flushTransport()
+			expect(pointerDown.defaultPrevented)
+				.toBe(false)
+			expect(click.defaultPrevented)
+				.toBe(false)
 			expect(events)
 				.toHaveLength(0)
 		}

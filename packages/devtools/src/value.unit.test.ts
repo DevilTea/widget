@@ -56,18 +56,41 @@ describe('encodeInspectableValue', () => {
 			])
 	})
 
-	it('represents cycles and repeated references without throwing', () => {
+	it('uses the assigned ID for repeated references and cyclic self references', () => {
 		const shared: Record<string, unknown> = { value: 1 }
-		const root: Record<string, unknown> = { first: shared, second: shared }
-		root.self = root
+		const cyclic: Record<string, unknown> = {}
+		cyclic.self = cyclic
+		const root: Record<string, unknown> = { cycle: cyclic, first: shared, second: shared }
 
 		const encoded = encodeInspectableValue(root)
-		expect(encoded.type)
-			.toBe('object')
-		const json = JSON.stringify(encoded)
-		expect(json)
-			.toContain('"type":"reference"')
-		expect(() => JSON.parse(json)).not.toThrow()
+		expect(encoded)
+			.toEqual({
+				type: 'object',
+				id: 1,
+				entries: [
+					{
+						key: 'cycle',
+						value: {
+							type: 'object',
+							id: 2,
+							entries: [{ key: 'self', value: { type: 'reference', ref: 2 } }],
+							truncated: false,
+						},
+					},
+					{
+						key: 'first',
+						value: {
+							type: 'object',
+							id: 3,
+							entries: [{ key: 'value', value: { type: 'number', value: 1 } }],
+							truncated: false,
+						},
+					},
+					{ key: 'second', value: { type: 'reference', ref: 3 } },
+				],
+				truncated: false,
+			})
+		expect(() => JSON.parse(JSON.stringify(encoded))).not.toThrow()
 	})
 
 	it('never executes accessors or application toJSON()', () => {
