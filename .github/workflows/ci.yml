@@ -64,10 +64,12 @@ jobs:
           npm init -y >/dev/null
           npm install "$core_tarball" "$vue_tarball" vue@3.5.42 typescript@6.0.3
           cp "$GITHUB_WORKSPACE/scripts/packed-consumer-runtime.mjs" ./packed-consumer-runtime.mjs
+          cp "$GITHUB_WORKSPACE/scripts/packed-consumer-negative.mjs" ./packed-consumer-negative.mjs
           cp "$GITHUB_WORKSPACE/scripts/packed-consumer-types.mts" ./packed-consumer-types.mts
 
           node --version
           node ./packed-consumer-runtime.mjs
+          node ./packed-consumer-negative.mjs
 
           ./node_modules/.bin/tsc \
             --noEmit \
