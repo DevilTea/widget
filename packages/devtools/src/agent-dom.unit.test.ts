@@ -277,7 +277,9 @@ describe('inspectorAgent DOM ownership', () => {
 		const { root, inner, pair, agent, client } = createDomFixture()
 		try {
 			const nativeClick = vi.fn()
+			const nativeKeydown = vi.fn()
 			inner.addEventListener('click', nativeClick)
+			inner.addEventListener('keydown', nativeKeydown)
 			await client.request('inspect.enable', {})
 			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
 			expect(inner.classList.contains('test-highlight'))
@@ -304,6 +306,19 @@ describe('inspectorAgent DOM ownership', () => {
 			expect(click.defaultPrevented)
 				.toBe(false)
 			expect(nativeClick)
+				.toHaveBeenCalledTimes(1)
+
+			// A partial teardown must not revive Inspect chrome or intercept native Escape.
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			expect(inner.classList.contains('test-highlight'))
+				.toBe(false)
+			expect(root.querySelector('[data-widget-inspector-badge="true"]'))
+				.toBeNull()
+			const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+			inner.dispatchEvent(escape)
+			expect(escape.defaultPrevented)
+				.toBe(false)
+			expect(nativeKeydown)
 				.toHaveBeenCalledTimes(1)
 		}
 		finally {

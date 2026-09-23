@@ -71,6 +71,8 @@ describe('inspector Agent transport lifecycle', () => {
 				.toBe(0)
 			expect(activeCloseSubscriptions.size)
 				.toBe(0)
+			expect(pair.agent.closed)
+				.toBe(false)
 		}
 		finally {
 			client.dispose()
