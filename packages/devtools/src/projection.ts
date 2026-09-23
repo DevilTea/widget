@@ -24,6 +24,7 @@ import type {
 	InspectorRuntimeWidgetSnapshot,
 	InspectorSlot,
 } from './protocol'
+import type { InspectableValue } from './value'
 import { encodeInspectableValue } from './value'
 
 function wireNodeId(nodeId: InspectionNodeId): number {
@@ -116,7 +117,11 @@ function projectSourceSlots(sourceSlots: BlueprintInspection['nodes'][number]['s
 	}))
 }
 
-export function projectBlueprintSnapshot(runtimeId: string, inspection: BlueprintInspection): InspectorBlueprintSnapshot {
+export function projectBlueprintSnapshot(
+	runtimeId: string,
+	inspection: BlueprintInspection,
+	protocolMinor = 2,
+): InspectorBlueprintSnapshot {
 	return {
 		runtimeId,
 		rootNodeId: wireNodeId(inspection.rootNodeId),
@@ -137,7 +142,23 @@ export function projectBlueprintSnapshot(runtimeId: string, inspection: Blueprin
 				...base,
 				widgetId: node.node.id,
 				widgetType: node.node.type,
-				capabilities: { ...node.capabilities },
+				capabilities: protocolMinor < 2
+					? {
+							config: node.capabilities.config,
+							slots: node.capabilities.slots,
+							state: node.capabilities.state,
+							properties: node.capabilities.properties,
+							methods: node.capabilities.methods,
+						}
+					: { ...node.capabilities },
+				...(protocolMinor < 2
+					? {}
+					: {
+							config: node.config === null
+								? null
+								: { description: node.config.description, schema: node.config.schema },
+							events: node.events.map(event => ({ ...event })),
+						}),
 				semanticSlots: node.semanticSlots.map(slot => ({
 					name: slot.name,
 					children: slot.children.map(wireNodeId),
@@ -251,4 +272,8 @@ export function projectRuntimeWidgetSnapshot(
 		widgetType: widget.blueprintNode.node.type,
 		members,
 	}
+}
+
+export function projectEventArgs(args: readonly unknown[]): readonly InspectableValue[] {
+	return args.map(value => encodeInspectableValue(value))
 }

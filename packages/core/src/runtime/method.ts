@@ -44,6 +44,7 @@ export interface CreateMethodPrimitiveParams {
 	readonly selfNode: unknown
 	readonly blueprintView: unknown
 	readonly deps: unknown
+	readonly emitFragment: Readonly<Record<string, unknown>>
 }
 
 export function createMethodPrimitive(context: RuntimeContext, params: CreateMethodPrimitiveParams): MethodPrimitive {
@@ -90,6 +91,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				widget: params.selfNode,
 				blueprint: params.blueprintView,
 				deps: params.deps,
+				...params.emitFragment,
 				...params.buildConfigFragment(),
 				addDiagnostic: execCollector.addDiagnostic,
 				hasAnyDiagnostic: execCollector.hasAnyDiagnostic,

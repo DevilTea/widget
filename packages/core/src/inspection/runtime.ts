@@ -17,12 +17,14 @@ import type { InternalNodeId, WidgetSystemRuntime } from '../internal/contract'
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type { RuntimeContext } from '../runtime/context'
 import type { PrimitiveRegistryEntry } from '../runtime/deps'
+import type { EventPrimitive } from '../runtime/event'
 import type { PropertyPrimitive } from '../runtime/property'
 import type { StatePrimitive } from '../runtime/state'
 import type { WidgetMemberKey } from '../types'
 import type {
 	InspectionNodeId,
 	ResolvedBlueprintInspectionNode,
+	RuntimeEventInspection,
 	RuntimeInspection,
 	RuntimePropertyInspection,
 	RuntimePropertyInspectionSnapshot,
@@ -58,6 +60,15 @@ function buildPropertyInspection(context: RuntimeContext, primitive: PropertyPri
 	})
 }
 
+function buildEventInspection(context: RuntimeContext, primitive: EventPrimitive): RuntimeEventInspection {
+	return Object.freeze({
+		subscribe(listener: (args: readonly unknown[]) => void) {
+			context.assertActive()
+			return context.registerSubscription(primitive.inspection.subscribe(listener))
+		},
+	})
+}
+
 function buildRuntimeWidgetInspection<Plugins extends AnyWidgetPluginTuple>(
 	context: RuntimeContext,
 	nodeId: InspectionNodeId,
@@ -69,6 +80,7 @@ function buildRuntimeWidgetInspection<Plugins extends AnyWidgetPluginTuple>(
 	// so they are reclaimed together with the owning Runtime/RuntimeInspection.
 	const stateFacades = new Map<WidgetMemberKey, RuntimeStateInspection<unknown>>()
 	const propertyFacades = new Map<WidgetMemberKey, RuntimePropertyInspection<unknown>>()
+	const eventFacades = new Map<WidgetMemberKey, RuntimeEventInspection>()
 
 	function getState(key: WidgetMemberKey): RuntimeStateInspection<unknown> | null {
 		const primitive = entry.state.get(key)
@@ -79,6 +91,18 @@ function buildRuntimeWidgetInspection<Plugins extends AnyWidgetPluginTuple>(
 		if (facade === undefined) {
 			facade = buildStateInspection(context, primitive)
 			stateFacades.set(key, facade)
+		}
+		return facade
+	}
+
+	function getEvent(name: WidgetMemberKey): RuntimeEventInspection | null {
+		const primitive = entry.events.get(name)
+		if (primitive === undefined)
+			return null
+		let facade = eventFacades.get(name)
+		if (facade === undefined) {
+			facade = buildEventInspection(context, primitive)
+			eventFacades.set(name, facade)
 		}
 		return facade
 	}
@@ -101,6 +125,7 @@ function buildRuntimeWidgetInspection<Plugins extends AnyWidgetPluginTuple>(
 		blueprintNode,
 		getState,
 		getProperty,
+		getEvent,
 	})
 }
 

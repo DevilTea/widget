@@ -26,6 +26,7 @@ import { createRuntimeAggregate } from './aggregate'
 import { buildBlueprintView } from './blueprint-view'
 import { createRuntimeContext } from './context'
 import { materializeDependencyTree } from './deps'
+import { buildEventEmitter, createEventPrimitive } from './event'
 import { runtimeInternals } from './internals'
 import { createMethodPrimitive } from './method'
 import { resolveStateOverrides } from './override'
@@ -48,6 +49,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		state: Map<string, ReturnType<typeof createStatePrimitive>>
 		properties: Map<string, ReturnType<typeof createPropertyPrimitive>>
 		methods: Map<string, ReturnType<typeof createMethodPrimitive>>
+		events: Map<string, ReturnType<typeof createEventPrimitive>>
 	}>()
 
 	function buildConfigFragmentFor(node: CompiledResolvedWidgetNode<Plugins>): () => Record<string, unknown> {
@@ -67,8 +69,15 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			state: new Map<string, ReturnType<typeof createStatePrimitive>>(),
 			properties: new Map<string, ReturnType<typeof createPropertyPrimitive>>(),
 			methods: new Map<string, ReturnType<typeof createMethodPrimitive>>(),
+			events: new Map<string, ReturnType<typeof createEventPrimitive>>(),
 		}
 		registry.set(nodeId, entry)
+
+		const definition = readWidgetPluginDefinition(node.plugin)
+		if (definition.events !== null) {
+			for (const name of definition.events.keys())
+				entry.events.set(name, createEventPrimitive(context))
+		}
 
 		const buildConfigFragment = buildConfigFragmentFor(node)
 
@@ -134,6 +143,10 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			continue
 
 		const buildConfigFragment = buildConfigFragmentFor(node)
+		const definition = readWidgetPluginDefinition(node.plugin)
+		const emitFragment: Readonly<Record<string, unknown>> = definition.events === null
+			? Object.freeze({})
+			: Object.freeze({ emit: buildEventEmitter(entry.events) })
 
 		for (const [name, member] of node.properties) {
 			const deps = materializeDependencyTree(member.deps, {
@@ -175,6 +188,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				selfNode: node.publicNode,
 				blueprintView,
 				deps,
+				emitFragment,
 			})
 			entry.methods.set(name, primitive)
 		}

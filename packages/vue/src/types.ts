@@ -24,6 +24,7 @@ import type {
 	RuntimePropertyDiagnostic,
 	RuntimeStateDiagnostic,
 	RuntimeWidgetDiagnostic,
+	WidgetEventEmitter,
 	WidgetInterfaces,
 	WidgetInterfacesOf,
 	WidgetMethodArgsOf,
@@ -92,6 +93,14 @@ export type UseWidgetPropertyDiagnosticsAccessor<Interfaces extends WidgetInterf
 	? {
 			readonly usePropertyDiagnostics: () => UseWidgetPropertyDiagnosticsSurface<Interfaces>
 		}
+	: unknown
+
+// -------------------------------------------------------------------------------------------------
+// Events
+// -------------------------------------------------------------------------------------------------
+
+export type UseWidgetEventEmitterAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'events'> extends true
+	? { readonly emit: WidgetEventEmitter<Interfaces> }
 	: unknown
 
 // -------------------------------------------------------------------------------------------------
@@ -182,6 +191,7 @@ export type UseWidgetResult<Plugin extends AnyWidgetPlugin> = WidgetInterfacesOf
 	? & UseWidgetStateAccessor<Interfaces>
 	& UseWidgetPropertiesAccessor<Interfaces>
 	& UseWidgetMethodsAccessor<Interfaces>
+	& UseWidgetEventEmitterAccessor<Interfaces>
 	& UseWidgetStateDiagnosticsAccessor<Interfaces>
 	& UseWidgetPropertyDiagnosticsAccessor<Interfaces>
 	& UseWidgetMethodDiagnosticsAccessor<Interfaces>

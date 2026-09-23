@@ -22,6 +22,7 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { DedupeDescriptor } from './collector'
 import type { RuntimeContext } from './context'
 import type { ReceivedBox } from './diagnostics'
+import type { EventPrimitive } from './event'
 import type { MethodPrimitive } from './method'
 import type { PropertyPrimitive } from './property'
 import type { StatePrimitive } from './state'
@@ -33,6 +34,7 @@ export interface PrimitiveRegistryEntry {
 	readonly state: ReadonlyMap<WidgetMemberKey, StatePrimitive>
 	readonly properties: ReadonlyMap<WidgetMemberKey, PropertyPrimitive>
 	readonly methods: ReadonlyMap<WidgetMemberKey, MethodPrimitive>
+	readonly events: ReadonlyMap<WidgetMemberKey, EventPrimitive>
 }
 
 export interface DepsMaterializeParams {

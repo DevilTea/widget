@@ -1,7 +1,9 @@
+import type { WidgetConfigJsonSchema } from '@deviltea/widget-core'
 import type { InspectableValue } from './value'
 import {
 	isBlueprintNode as isWireBlueprintNode,
 	isEvaluationCycle as isWireEvaluationCycle,
+	isInspectableValue as isWireInspectableValue,
 	isNodeId as isWireNodeId,
 	isRuntimeMemberSnapshot as isWireRuntimeMemberSnapshot,
 } from './validation'
@@ -11,7 +13,7 @@ export interface InspectorProtocolVersion {
 	readonly minor: number
 }
 
-export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 1 }) satisfies InspectorProtocolVersion
+export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 2 }) satisfies InspectorProtocolVersion
 
 export interface InspectorCapabilities {
 	readonly methods: readonly InspectorRequestMethod[]
@@ -23,9 +25,46 @@ export interface WidgetRef {
 	readonly nodeId: number
 }
 
+export interface InspectorPreviewPoint {
+	readonly coordinateSpace: 'preview-viewport'
+	readonly x: number
+	readonly y: number
+}
+
+export interface InspectorGeometryRect {
+	readonly x: number
+	readonly y: number
+	readonly width: number
+	readonly height: number
+}
+
+export type InspectorGeometryVisibility = 'visible' | 'clipped' | 'hidden' | 'missing'
+
+export interface InspectorGeometrySnapshot {
+	readonly coordinateSpace: 'preview-viewport'
+	readonly revision: number
+	readonly visibility: InspectorGeometryVisibility
+	readonly rects: readonly InspectorGeometryRect[]
+}
+
+export interface InspectorSemanticTarget {
+	readonly ref: WidgetRef
+	readonly widgetId: string
+	readonly widgetType: string
+}
+
+export type InspectorHitTestResult
+	= | { readonly target: null }
+		| { readonly target: InspectorSemanticTarget, readonly geometry: InspectorGeometrySnapshot }
+
 export interface InspectorMemberRef {
 	readonly type: 'state' | 'property'
 	readonly name: string
+}
+
+export interface InspectorConfigMetadata {
+	readonly description: string
+	readonly schema: WidgetConfigJsonSchema | null
 }
 
 export interface InspectorBlueprintCapabilities {
@@ -34,6 +73,8 @@ export interface InspectorBlueprintCapabilities {
 	readonly state: boolean
 	readonly properties: boolean
 	readonly methods: boolean
+	/** Added in protocol 0.2. Absence on a 0.1 snapshot means the capability is unavailable to that peer. */
+	readonly events?: boolean
 }
 
 export interface InspectorSlot {
@@ -88,6 +129,12 @@ export interface InspectorPropertyMember {
 	readonly dependencies: readonly InspectorDependency[]
 }
 
+export interface InspectorEventMember {
+	readonly type: 'event'
+	readonly name: string
+	readonly description: string
+}
+
 export interface InspectorMethodMember {
 	readonly type: 'method'
 	readonly name: string
@@ -119,11 +166,13 @@ export interface InspectorBlueprintNode {
 	readonly widgetId?: string
 	readonly widgetType?: string
 	readonly capabilities?: InspectorBlueprintCapabilities
+	readonly config?: InspectorConfigMetadata | null
 	readonly sourceSlots: readonly InspectorSlot[]
 	readonly semanticSlots?: readonly InspectorSlot[]
 	readonly state?: readonly InspectorStateMember[]
 	readonly properties?: readonly InspectorPropertyMember[]
 	readonly methods?: readonly InspectorMethodMember[]
+	readonly events?: readonly InspectorEventMember[]
 	readonly diagnostics: readonly InspectorDiagnostic[]
 }
 
@@ -232,6 +281,22 @@ export interface InspectorRequestMap {
 		readonly params: { readonly subscriptionId: string }
 		readonly result: { readonly removed: boolean }
 	}
+	readonly 'runtime.subscribeEvent': {
+		readonly params: { readonly ref: WidgetRef, readonly event: string }
+		readonly result: { readonly subscriptionId: string, readonly event: string }
+	}
+	readonly 'runtime.unsubscribeEvent': {
+		readonly params: { readonly subscriptionId: string }
+		readonly result: { readonly removed: boolean }
+	}
+	readonly 'inspect.hitTest': {
+		readonly params: InspectorPreviewPoint
+		readonly result: InspectorHitTestResult
+	}
+	readonly 'geometry.resolve': {
+		readonly params: { readonly ref: WidgetRef }
+		readonly result: InspectorGeometrySnapshot
+	}
 	readonly 'inspect.enable': {
 		readonly params: Record<string, never>
 		readonly result: { readonly enabled: true }
@@ -263,6 +328,7 @@ export interface InspectorProtocolError {
 		| 'runtime-not-found'
 		| 'widget-not-found'
 		| 'member-not-found'
+		| 'event-not-found'
 		| 'disconnected'
 		| 'internal-error'
 	readonly message: string
@@ -295,6 +361,15 @@ export type InspectorResponseMessage
 	}
 
 export interface InspectorEventMap {
+	readonly 'runtime.eventOccurred': {
+		readonly subscriptionId: string
+		readonly ref: WidgetRef
+		readonly event: string
+		readonly args: readonly InspectableValue[]
+	}
+	readonly 'geometry.invalidated': {
+		readonly revision: number
+	}
 	readonly 'runtime.memberChanged': {
 		readonly subscriptionId: string
 		readonly ref: WidgetRef
@@ -364,6 +439,10 @@ export function isInspectorRequestMethod(value: unknown): value is InspectorRequ
 		|| value === 'runtime.getWidgetSnapshot'
 		|| value === 'runtime.subscribeMember'
 		|| value === 'runtime.unsubscribeMember'
+		|| value === 'runtime.subscribeEvent'
+		|| value === 'runtime.unsubscribeEvent'
+		|| value === 'inspect.hitTest'
+		|| value === 'geometry.resolve'
 		|| value === 'inspect.enable'
 		|| value === 'inspect.disable'
 		|| value === 'highlight.show'
@@ -385,11 +464,20 @@ export function isInspectorRequestParams<Method extends InspectorRequestMethod>(
 		case 'blueprint.getSnapshot':
 			return isRecord(value) && typeof value.runtimeId === 'string'
 		case 'runtime.getWidgetSnapshot':
+		case 'geometry.resolve':
 		case 'highlight.show':
 			return isRecord(value) && isWidgetRef(value.ref)
+		case 'inspect.hitTest':
+			return isRecord(value)
+				&& value.coordinateSpace === 'preview-viewport'
+				&& typeof value.x === 'number' && Number.isFinite(value.x)
+				&& typeof value.y === 'number' && Number.isFinite(value.y)
 		case 'runtime.subscribeMember':
 			return isRecord(value) && isWidgetRef(value.ref) && isMemberRef(value.member)
+		case 'runtime.subscribeEvent':
+			return isRecord(value) && isWidgetRef(value.ref) && typeof value.event === 'string'
 		case 'runtime.unsubscribeMember':
+		case 'runtime.unsubscribeEvent':
 			return isRecord(value) && typeof value.subscriptionId === 'string'
 	}
 }
@@ -410,7 +498,7 @@ export function parseInspectorRequestMessage(value: unknown): InspectorRequestMe
 function isProtocolErrorCode(value: unknown): value is InspectorProtocolError['code'] {
 	return value === 'invalid-message' || value === 'unsupported-version' || value === 'unknown-method'
 		|| value === 'invalid-params' || value === 'runtime-not-found' || value === 'widget-not-found'
-		|| value === 'member-not-found' || value === 'disconnected' || value === 'internal-error'
+		|| value === 'member-not-found' || value === 'event-not-found' || value === 'disconnected' || value === 'internal-error'
 }
 
 function isProtocolError(value: unknown): value is InspectorProtocolError {
@@ -435,18 +523,52 @@ function isRuntimeMemberSnapshot(value: unknown): value is InspectorRuntimeMembe
 	return isWireRuntimeMemberSnapshot(value)
 }
 
+function isGeometryRect(value: unknown): value is InspectorGeometryRect {
+	return isRecord(value)
+		&& typeof value.x === 'number' && Number.isFinite(value.x)
+		&& typeof value.y === 'number' && Number.isFinite(value.y)
+		&& typeof value.width === 'number' && Number.isFinite(value.width) && value.width >= 0
+		&& typeof value.height === 'number' && Number.isFinite(value.height) && value.height >= 0
+}
+
+function isGeometrySnapshot(value: unknown): value is InspectorGeometrySnapshot {
+	return isRecord(value)
+		&& value.coordinateSpace === 'preview-viewport'
+		&& typeof value.revision === 'number' && Number.isSafeInteger(value.revision) && value.revision >= 0
+		&& (value.visibility === 'visible' || value.visibility === 'clipped' || value.visibility === 'hidden' || value.visibility === 'missing')
+		&& Array.isArray(value.rects) && value.rects.every(isGeometryRect)
+}
+
+function isSemanticTarget(value: unknown): value is InspectorSemanticTarget {
+	return isRecord(value)
+		&& isWidgetRef(value.ref)
+		&& typeof value.widgetId === 'string'
+		&& typeof value.widgetType === 'string'
+}
+
+function isHitTestResult(value: unknown): value is InspectorHitTestResult {
+	if (!isRecord(value))
+		return false
+	if (value.target === null)
+		return true
+	return isSemanticTarget(value.target) && isGeometrySnapshot(value.geometry)
+}
+
 function isRuntimeSummary(value: unknown): value is InspectorRuntimeSummary {
 	return isRecord(value)
 		&& typeof value.runtimeId === 'string'
 		&& isWireNodeId(value.rootNodeId)
 }
 
-function isBlueprintSnapshot(value: unknown): value is InspectorBlueprintSnapshot {
+function isBlueprintSnapshot(
+	value: unknown,
+	protocolMinor: number = INSPECTOR_PROTOCOL_VERSION.minor,
+): value is InspectorBlueprintSnapshot {
 	return isRecord(value)
 		&& typeof value.runtimeId === 'string'
 		&& isWireNodeId(value.rootNodeId)
 		&& Array.isArray(value.nodes)
-		&& value.nodes.every(isWireBlueprintNode)
+		&& value.nodes.every(node => isWireBlueprintNode(node, protocolMinor))
 		&& Array.isArray(value.invalidCycles)
 		&& value.invalidCycles.every(isWireEvaluationCycle)
 }
@@ -454,6 +576,7 @@ function isBlueprintSnapshot(value: unknown): value is InspectorBlueprintSnapsho
 export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 	method: Method,
 	value: unknown,
+	protocolMinor: number = INSPECTOR_PROTOCOL_VERSION.minor,
 ): value is InspectorRequestResult<Method> {
 	switch (method) {
 		case 'handshake':
@@ -467,7 +590,7 @@ export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 		case 'runtime.list':
 			return isRecord(value) && Array.isArray(value.runtimes) && value.runtimes.every(isRuntimeSummary)
 		case 'blueprint.getSnapshot':
-			return isBlueprintSnapshot(value)
+			return isBlueprintSnapshot(value, protocolMinor)
 		case 'runtime.getWidgetSnapshot':
 			return isRecord(value)
 				&& isWidgetRef(value.ref)
@@ -479,8 +602,17 @@ export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 			return isRecord(value)
 				&& typeof value.subscriptionId === 'string'
 				&& isRuntimeMemberSnapshot(value.member)
+		case 'runtime.subscribeEvent':
+			return isRecord(value)
+				&& typeof value.subscriptionId === 'string'
+				&& typeof value.event === 'string'
 		case 'runtime.unsubscribeMember':
+		case 'runtime.unsubscribeEvent':
 			return isRecord(value) && typeof value.removed === 'boolean'
+		case 'inspect.hitTest':
+			return isHitTestResult(value)
+		case 'geometry.resolve':
+			return isGeometrySnapshot(value)
 		case 'inspect.enable':
 			return isRecord(value) && value.enabled === true
 		case 'inspect.disable':
@@ -493,7 +625,9 @@ export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 }
 
 function isInspectorEventName(value: unknown): value is InspectorEventName {
-	return value === 'runtime.memberChanged'
+	return value === 'geometry.invalidated'
+		|| value === 'runtime.eventOccurred'
+		|| value === 'runtime.memberChanged'
 		|| value === 'inspect.hovered'
 		|| value === 'inspect.selected'
 		|| value === 'agent.status'
@@ -509,6 +643,20 @@ export function parseInspectorEventMessage(value: unknown): InspectorEventMessag
 	}
 
 	switch (value.event) {
+		case 'geometry.invalidated':
+			return typeof value.payload.revision === 'number'
+				&& Number.isSafeInteger(value.payload.revision)
+				&& value.payload.revision >= 0
+				? value as InspectorEventMessage
+				: null
+		case 'runtime.eventOccurred':
+			return typeof value.payload.subscriptionId === 'string'
+				&& isWidgetRef(value.payload.ref)
+				&& typeof value.payload.event === 'string'
+				&& Array.isArray(value.payload.args)
+				&& value.payload.args.every(isWireInspectableValue)
+				? value as InspectorEventMessage
+				: null
 		case 'runtime.memberChanged':
 			return typeof value.payload.subscriptionId === 'string'
 				&& isWidgetRef(value.payload.ref)

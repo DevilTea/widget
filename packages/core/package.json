@@ -32,6 +32,10 @@
 		"./inspection": {
 			"types": "./dist/inspection/index.d.mts",
 			"import": "./dist/inspection/index.mjs"
+		},
+		"./integration": {
+			"types": "./dist/integration/index.d.mts",
+			"import": "./dist/integration/index.mjs"
 		}
 	},
 	"main": "dist/index.mjs",
@@ -53,7 +57,8 @@
 		"typecheck:test": "tsc --project ./tsconfig.tests.json --noEmit"
 	},
 	"dependencies": {
-		"alien-signals": "catalog:"
+		"alien-signals": "catalog:",
+		"json-schema-typed": "catalog:"
 	},
 	"devDependencies": {
 		"@deviltea/tsconfig": "catalog:",

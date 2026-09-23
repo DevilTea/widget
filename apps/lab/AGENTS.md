@@ -423,9 +423,10 @@ The canonical authored surface is the outer `Author` panel with three Lab-owned 
 `Structure`, and `JSON`. `AuthorJsonView.vue` contains the existing Monaco draft workflow; header
 `Apply`/`Format`/`Revert` controls continue to operate on that same draft. `Catalog` reads the immutable
 public `session.system.catalog` and public `WidgetPlugin.capabilities`; it never reads or derives from the
-curated `ShowcaseEntry.sources` Implementation Explorer registry. Core currently publishes config/slot
-descriptions and capability-presence facts, so the view does not invent state/property/method schemas or
-member definitions that Core does not publish through the catalog contracts.
+curated `ShowcaseEntry.sources` Implementation Explorer registry. Core publishes config/slot/event
+descriptions, capability-presence facts, and optional passive Draft 2020-12 config JSON Schema metadata.
+The view must not invent state/property/method schemas or member definitions that Core does not publish
+through the catalog contracts; config schema metadata is authoring guidance, not Runtime validation truth.
 
 `Structure` renders the current committed Document Blueprint inspection and uses Document-scoped focus.
 Its deliberately narrow operation is replacing an existing scalar config value on the selected inspection

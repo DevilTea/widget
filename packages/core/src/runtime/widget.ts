@@ -59,5 +59,12 @@ export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolv
 		widget.methods = Object.freeze(methodsSurface)
 	}
 
+	if (definition.events !== null) {
+		const eventsSurface: Record<string, unknown> = Object.create(null)
+		for (const [name, primitive] of entry.events)
+			eventsSurface[name] = primitive.public
+		widget.events = Object.freeze(eventsSurface)
+	}
+
 	return Object.freeze(widget)
 }

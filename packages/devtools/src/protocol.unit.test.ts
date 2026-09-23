@@ -56,18 +56,30 @@ describe('deep wire DTO validation', () => {
 				resolved: true,
 				widgetId: 'root',
 				widgetType: 'fixture',
-				capabilities: { config: false, slots: false, state: false, properties: false, methods: false },
+				capabilities: { config: false, slots: false, state: false, properties: false, methods: false, events: false },
+				config: null,
 				sourceSlots: [],
 				semanticSlots: [],
 				state: [],
 				properties: [],
 				methods: [],
+				events: [],
 				diagnostics: [],
 			}],
 			invalidCycles: [],
 		}
 		expect(isInspectorRequestResult('blueprint.getSnapshot', base))
 			.toBe(true)
+
+		const legacy = structuredClone(base)
+		Reflect.deleteProperty(legacy.nodes[0]!, 'config')
+		Reflect.deleteProperty(legacy.nodes[0]!, 'events')
+		Reflect.deleteProperty(legacy.nodes[0]!.capabilities, 'events')
+		expect(isInspectorRequestResult('blueprint.getSnapshot', legacy, 1))
+			.toBe(true)
+		expect(isInspectorRequestResult('blueprint.getSnapshot', legacy, INSPECTOR_PROTOCOL_VERSION.minor))
+			.toBe(false)
+
 		expect(isInspectorRequestResult('blueprint.getSnapshot', {
 			...base,
 			nodes: [{ ...base.nodes[0], properties: [{ type: 'property', name: 'x', dependencies: [{ status: 'resolved', path: [], reference: {}, target: {} }] }] }],

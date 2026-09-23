@@ -110,7 +110,7 @@ export function createInspectorClient(transport: InspectorTransport): InspectorC
 			entry.reject(new InspectorClientError(response.error))
 			return
 		}
-		if (!isInspectorRequestResult(entry.method, response.result)) {
+		if (!isInspectorRequestResult(entry.method, response.result, response.protocol.minor)) {
 			entry.reject(new InspectorClientError({
 				code: 'invalid-message',
 				message: `Invalid ${entry.method} response payload.`,

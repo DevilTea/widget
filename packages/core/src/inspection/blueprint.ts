@@ -26,6 +26,7 @@ import type {
 	BlueprintInspection,
 	BlueprintInspectionCapabilities,
 	BlueprintInspectionDependency,
+	BlueprintInspectionEventMember,
 	BlueprintInspectionInvalidCycle,
 	BlueprintInspectionMemberRef,
 	BlueprintInspectionMethodMember,
@@ -37,6 +38,7 @@ import type {
 	InspectionNodeId,
 } from './types'
 import { isCompiledDependency, readCompiledBlueprint } from '../internal/contract'
+import { readWidgetPluginDefinition } from '../plugin'
 
 // -------------------------------------------------------------------------------------------------
 // Dependency flattening
@@ -172,6 +174,16 @@ function buildPropertyMembers(compiledNode: CompiledResolvedWidgetNode): readonl
 	return Object.freeze(result)
 }
 
+function buildEventMembers(compiledNode: CompiledResolvedWidgetNode): readonly BlueprintInspectionEventMember[] {
+	const definitions = readWidgetPluginDefinition(compiledNode.plugin).events
+	if (definitions === null)
+		return Object.freeze([])
+	const result: BlueprintInspectionEventMember[] = []
+	for (const [name, definition] of definitions)
+		result.push(Object.freeze({ type: 'event' as const, name, description: definition.description }))
+	return Object.freeze(result)
+}
+
 function buildMethodMembers(compiledNode: CompiledResolvedWidgetNode): readonly BlueprintInspectionMethodMember[] {
 	const result: BlueprintInspectionMethodMember[] = []
 	for (const [name, member] of compiledNode.methods) {
@@ -215,10 +227,12 @@ function buildNode<Plugins extends AnyWidgetPluginTuple>(compiledNode: CompiledW
 		sourceSlots,
 		resolved: true,
 		capabilities: buildCapabilities(compiledNode),
+		config: compiledNode.plugin.config,
 		semanticSlots: buildSemanticSlots(compiledNode),
 		state: buildStateMembers(compiledNode),
 		properties: buildPropertyMembers(compiledNode),
 		methods: buildMethodMembers(compiledNode),
+		events: buildEventMembers(compiledNode),
 	}) as BlueprintInspectionNode<Plugins>
 }
 

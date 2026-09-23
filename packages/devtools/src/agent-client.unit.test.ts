@@ -47,6 +47,27 @@ function containsFunction(value: unknown, seen = new Set<object>()): boolean {
 		.some(candidate => containsFunction(candidate, seen))
 }
 
+function createLegacyBlueprintSnapshot() {
+	return {
+		runtimeId: 'runtime-legacy',
+		rootNodeId: 1,
+		nodes: [{
+			nodeId: 1,
+			resolved: true,
+			widgetId: 'root',
+			widgetType: 'legacy-fixture',
+			capabilities: { config: false, slots: false, state: false, properties: false, methods: false },
+			sourceSlots: [],
+			semanticSlots: [],
+			state: [],
+			properties: [],
+			methods: [],
+			diagnostics: [],
+		}],
+		invalidCycles: [],
+	}
+}
+
 describe('inspector client/agent protocol boundary', () => {
 	it('handshakes, lists the Runtime, and projects Blueprint/Runtime facts without leaking Core objects', async () => {
 		const { runtime, getComputeCalls } = createFixture()
@@ -95,6 +116,43 @@ describe('inspector client/agent protocol boundary', () => {
 
 		client.dispose()
 		agent.dispose()
+	})
+
+	it('accepts a valid legacy Blueprint snapshot from a 0.1 response but rejects it as a 0.2 response', async () => {
+		const pair = createInProcessInspectorTransportPair()
+		const client = createInspectorClient(pair.client)
+		const requests: InspectorRequestMessage[] = []
+		const stopListening = pair.agent.subscribe(raw => requests.push(raw as InspectorRequestMessage))
+		const legacy = createLegacyBlueprintSnapshot()
+
+		try {
+			const legacyResult = client.request('blueprint.getSnapshot', { runtimeId: 'runtime-legacy' })
+			const legacyRequest = requests.shift()!
+			pair.agent.send({
+				protocol: { major: 0, minor: 1 },
+				kind: 'response',
+				requestId: legacyRequest.requestId,
+				ok: true,
+				result: legacy,
+			})
+			await expect(legacyResult).resolves.toEqual(legacy)
+
+			const currentResult = client.request('blueprint.getSnapshot', { runtimeId: 'runtime-legacy' })
+			const currentRequest = requests.shift()!
+			pair.agent.send({
+				protocol: INSPECTOR_PROTOCOL_VERSION,
+				kind: 'response',
+				requestId: currentRequest.requestId,
+				ok: true,
+				result: legacy,
+			})
+			await expect(currentResult)
+				.rejects.toMatchObject({ code: 'invalid-message' })
+		}
+		finally {
+			stopListening()
+			client.dispose()
+		}
 	})
 
 	it('correlates concurrent responses by requestId even when the peer replies out of order', async () => {

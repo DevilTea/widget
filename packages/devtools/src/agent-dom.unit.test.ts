@@ -71,6 +71,63 @@ describe('inspectorAgent DOM ownership', () => {
 		}
 	})
 
+	it('highlights a registered Preview root anchor as well as geometry resolves it', async () => {
+		const { root, outer, agent, client } = createDomFixture()
+		try {
+			root.dataset.widgetId = 'root'
+			root.dataset.widgetType = 'DevtoolsRoot'
+			outer.removeAttribute('data-widget-id')
+			outer.removeAttribute('data-widget-type')
+			Object.defineProperty(root, 'getClientRects', {
+				configurable: true,
+				value: () => [new DOMRect(0, 0, 200, 100)],
+			})
+			const snapshot = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-dom' })
+			const ref = { runtimeId: 'runtime-dom', nodeId: snapshot.rootNodeId }
+			const geometry = await client.request('geometry.resolve', { ref })
+			expect(geometry)
+				.toMatchObject({ visibility: 'visible', rects: [{ x: 0, y: 0, width: 200, height: 100 }] })
+			expect(await client.request('highlight.show', { ref }))
+				.toEqual({ highlighted: true })
+			expect(root.classList.contains('test-highlight'))
+				.toBe(true)
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('falls back to a registered ancestor for stale nested DOM anchors', async () => {
+		const { root, outer, inner, agent, client } = createDomFixture()
+		try {
+			inner.dataset.widgetId = 'stale-widget'
+			const selections: unknown[] = []
+			const hovered: unknown[] = []
+			client.on('inspect.selected', value => selections.push(value))
+			client.on('inspect.hovered', value => hovered.push(value))
+			await client.request('inspect.enable', {})
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+			inner.dispatchEvent(click)
+			await flushTransport()
+			expect(outer.classList.contains('test-highlight'))
+				.toBe(true)
+			expect(click.defaultPrevented)
+				.toBe(true)
+			expect(hovered)
+				.toContainEqual(expect.objectContaining({ widgetId: 'root' }))
+			expect(selections)
+				.toContainEqual(expect.objectContaining({ widgetId: 'root' }))
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
 	it('suppresses underlying pointer/click activation while Inspect is enabled and selects the inner widget', async () => {
 		const { root, inner, agent, client } = createDomFixture()
 		try {
