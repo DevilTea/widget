@@ -1,20 +1,47 @@
 import { describe, expect, it } from 'vitest'
 import { createInspectorAgent } from './agent'
+import { createInspectorClient } from './client'
 import { createDevtoolsTestFixture } from './test-fixture'
 import { createInProcessInspectorTransportPair } from './transport'
 
 describe('inspector Agent transport lifecycle', () => {
-	it('can release one Runtime binding without closing a host-owned shared transport', () => {
+	it('releases two Runtime bindings from a host-owned shared transport one subscription at a time', async () => {
 		const pair = createInProcessInspectorTransportPair()
+		const activeSubscriptions = new Set<(message: unknown) => void>()
+		const subscribe = pair.agent.subscribe
+		pair.agent.subscribe = (listener) => {
+			activeSubscriptions.add(listener)
+			const unsubscribe = subscribe(listener)
+			let active = true
+			return () => {
+				if (!active)
+					return
+				active = false
+				activeSubscriptions.delete(listener)
+				unsubscribe()
+			}
+		}
+		const activeCloseSubscriptions = new Set<() => void>()
+		const subscribeClose = pair.agent.subscribeClose
+		pair.agent.subscribeClose = (listener) => {
+			activeCloseSubscriptions.add(listener)
+			const unsubscribe = subscribeClose(listener)
+			let active = true
+			return () => {
+				if (!active)
+					return
+				active = false
+				activeCloseSubscriptions.delete(listener)
+				unsubscribe()
+			}
+		}
+		const client = createInspectorClient(pair.client)
 		const firstFixture = createDevtoolsTestFixture()
 		const first = createInspectorAgent({
 			runtime: firstFixture.runtime,
 			transport: pair.agent,
 			closeTransportOnDispose: false,
 		})
-		first.dispose()
-		expect(pair.agent.closed)
-			.toBe(false)
 
 		const secondFixture = createDevtoolsTestFixture()
 		const second = createInspectorAgent({
@@ -22,11 +49,38 @@ describe('inspector Agent transport lifecycle', () => {
 			transport: pair.agent,
 			closeTransportOnDispose: false,
 		})
-		expect(second.runtimeId).not.toBe(first.runtimeId)
-
-		second.dispose()
-		pair.agent.close()
-		firstFixture.runtime.dispose()
-		secondFixture.runtime.dispose()
+		try {
+			expect(activeSubscriptions.size)
+				.toBe(2)
+			expect(activeCloseSubscriptions.size)
+				.toBe(2)
+			first.dispose()
+			expect(activeSubscriptions.size)
+				.toBe(1)
+			expect(activeCloseSubscriptions.size)
+				.toBe(1)
+			expect(pair.agent.closed)
+				.toBe(false)
+			const runtimes = await client.request('runtime.list', {})
+			expect(runtimes.runtimes)
+				.toHaveLength(1)
+			expect(runtimes.runtimes[0])
+				.toMatchObject({ runtimeId: second.runtimeId })
+			second.dispose()
+			expect(activeSubscriptions.size)
+				.toBe(0)
+			expect(activeCloseSubscriptions.size)
+				.toBe(0)
+			expect(pair.agent.closed)
+				.toBe(false)
+		}
+		finally {
+			client.dispose()
+			first.dispose()
+			second.dispose()
+			pair.agent.close()
+			firstFixture.runtime.dispose()
+			secondFixture.runtime.dispose()
+		}
 	})
 })

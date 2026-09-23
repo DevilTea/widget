@@ -7,6 +7,7 @@ import {
 } from './frame-bootstrap'
 
 const EXPECTED_SOURCE = {} as MessageEventSource
+const WRONG_SOURCE = {} as MessageEventSource
 
 function bootstrapEvent(options: {
 	data?: unknown
@@ -58,6 +59,8 @@ describe('inspector frame bootstrap', () => {
 		channel.port2.close()
 
 		expect(acceptInspectorFrameBootstrap(bootstrapEvent({ origin: 'https://evil.test' }), ACCEPT))
+			.toBeNull()
+		expect(acceptInspectorFrameBootstrap(bootstrapEvent({ source: WRONG_SOURCE }), ACCEPT))
 			.toBeNull()
 		expect(acceptInspectorFrameBootstrap(bootstrapEvent({ source: null }), ACCEPT))
 			.toBeNull()
