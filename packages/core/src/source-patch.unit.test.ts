@@ -39,11 +39,13 @@ describe('sourcePatch', () => {
 		expect(replace)
 			.toMatchObject({ ok: false, failure: { code: 'invalid-array-index', operationIndex: 0 } })
 		expect(structured)
-			.toMatchObject({ ok: true, value: { source: { arr: expect.objectContaining({}) } } })
+			.toMatchObject({ ok: true, value: { source: { arr: expect.objectContaining({ '-': 2 }) } } })
 		if (structured.ok) {
-			const patched = structured.value.source as { arr: object }
+			const patched = structured.value.source as { arr: Record<string, unknown> }
 			expect(Object.hasOwn(patched.arr, '-'))
 				.toBe(true)
+			expect(patched.arr['-'])
+				.toBe(2)
 		}
 	})
 
@@ -233,6 +235,15 @@ describe('sourcePatch', () => {
 			.toEqual({ nested: { value: 1 }, copy: { value: 1 } })
 		expect((result.value.source as { nested: object, copy: object }).copy)
 			.not.toBe(source.nested)
+	})
+
+	it('rejects an RFC6902 test when the expected object has an extra key', () => {
+		const result = applySourcePatch({ account: { name: 'Ada' } }, [
+			{ op: 'test', path: '/account', value: { name: 'Ada', role: 'admin' } },
+		])
+
+		expect(result)
+			.toMatchObject({ ok: false, failure: { code: 'test-failed', operationIndex: 0 } })
 	})
 
 	it('replaces and removes accessor occurrences without invoking accessors, but rejects accessor traversal', () => {

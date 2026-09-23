@@ -221,7 +221,7 @@ describe('separated widget source tooling', () => {
 			])
 	})
 
-	it('recovers cyclic structural references as partial nodes with a cycle diagnostic', () => {
+	it('recovers cyclic structural references as partial nodes with missing-data and cycle diagnostics', () => {
 		const root: { id: string, slots?: Record<string, unknown[]> } = { id: 'root' }
 		const child: { id: string, slots?: Record<string, unknown[]> } = { id: 'child' }
 		root.slots = { items: [child] }
@@ -235,8 +235,32 @@ describe('separated widget source tooling', () => {
 			],
 		})
 
-		expect(() => normalizeSeparatedWidgetSource({ structure: root, widgets: [] }))
-			.not.toThrow()
+		const missingData = normalizeSeparatedWidgetSource({ structure: root, widgets: [] })
+		expect(missingData.source)
+			.toEqual({
+				id: 'root',
+				slots: {
+					items: [{ id: 'child', slots: { back: [{}] } }],
+				},
+			})
+		expect(missingData.diagnostics)
+			.toEqual([
+				expect.objectContaining({
+					code: 'missing-widget-data',
+					widgetId: 'root',
+					location: { area: 'structure', path: ['id'] },
+				}),
+				expect.objectContaining({
+					code: 'missing-widget-data',
+					widgetId: 'child',
+					location: { area: 'structure', path: ['slots', 'items', 0, 'id'] },
+				}),
+				expect.objectContaining({
+					code: 'invalid-separated-structure',
+					reason: 'invalid-node',
+					location: { area: 'structure', path: ['slots', 'items', 0, 'slots', 'back', 0] },
+				}),
+			])
 		expect(normalized.source)
 			.toEqual({
 				id: 'root',
@@ -351,13 +375,22 @@ describe('separated widget source tooling', () => {
 			.not.toBe(hidden)
 		expect(separatedHidden.nested)
 			.not.toBe(hidden.nested)
+		expect((separatedHidden.nested as { value: number }).value)
+			.toBe(1)
 
 		const normalized = normalizeSeparatedWidgetSource(separated)
 		const normalizedConfig = (normalized.source as { config: Record<string, unknown> }).config
 		expect(Object.hasOwn(normalizedConfig, 'hidden'))
 			.toBe(true)
-		expect((normalizedConfig.hidden as Record<string, unknown>).nested)
+		expect(Object.getOwnPropertyDescriptor(normalizedConfig, 'hidden')?.enumerable)
+			.toBe(false)
+		const normalizedHidden = normalizedConfig.hidden as Record<string, unknown>
+		expect(normalizedHidden)
+			.not.toBe(hidden)
+		expect(normalizedHidden.nested)
 			.not.toBe(hidden.nested)
+		expect((normalizedHidden.nested as { value: number }).value)
+			.toBe(1)
 	})
 
 	it('freezes nested separated diagnostic paths', () => {

@@ -947,8 +947,6 @@ describe('blueprint diagnostic/source structures are immutable (finding 37738903
 		const diagnostic = nodeDiagnostics[0]!
 		expect(Object.isFrozen(diagnostic))
 			.toBe(true)
-		expect(Object.isFrozen(diagnostic))
-			.toBe(true)
 		expect(() => {
 			(diagnostic as unknown as { message: string }).message = 'mutated'
 		})

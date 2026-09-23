@@ -55,8 +55,15 @@ describe('widgetDocument', () => {
 	it('checks expectedRevision before evaluating a patch', () => {
 		const { system } = createFixture()
 		const document = createWidgetDocument({ system, source: { type: 'panel' } })
+		const readPatch = vi.fn(() => {
+			throw new Error('the patch must not be read after a revision conflict')
+		})
+		const patch = Object.defineProperty([], '0', {
+			get: readPatch,
+			enumerable: true,
+		}) as unknown as Parameters<typeof document.applyPatch>[0]
 
-		const result = document.applyPatch([{ op: 'remove', path: '/missing' }], { expectedRevision: 99 })
+		const result = document.applyPatch(patch, { expectedRevision: 99 })
 
 		expect(result)
 			.toMatchObject({ ok: false, failure: {
@@ -64,6 +71,8 @@ describe('widgetDocument', () => {
 				expectedRevision: 99,
 				actualRevision: 0,
 			} })
+		expect(readPatch)
+			.not.toHaveBeenCalled()
 	})
 
 	it('rejects root removal without compiling, committing, revising, or notifying', () => {
@@ -99,6 +108,37 @@ describe('widgetDocument', () => {
 			.toBe(1)
 		expect(document.getSnapshot().blueprint.status)
 			.toBe('invalid')
+		expect(listener)
+			.toHaveBeenCalledTimes(1)
+	})
+
+	it('preserves the exact snapshot atomically when changed patch compilation throws', () => {
+		const { system } = createFixture()
+		const createBlueprint = vi.fn(system.createBlueprint)
+		const instrumentedSystem = { ...system, createBlueprint }
+		const document = createWidgetDocument({ system: instrumentedSystem, source: { type: 'panel' } })
+		const listener = vi.fn()
+		document.subscribe(listener)
+		const previousSnapshot = document.getSnapshot()
+		const compilerFailure = new Error('synthetic compiler failure')
+		createBlueprint.mockImplementationOnce(() => {
+			throw compilerFailure
+		})
+
+		expect(() => document.applyPatch([{ op: 'add', path: '/enabled', value: true }]))
+			.toThrow('synthetic compiler failure')
+		expect(document.getSnapshot())
+			.toBe(previousSnapshot)
+		expect(document.getSnapshot().revision)
+			.toBe(0)
+		expect(listener)
+			.not.toHaveBeenCalled()
+
+		const next = document.applyPatch([{ op: 'add', path: '/next', value: true }], { expectedRevision: 0 })
+		expect(next)
+			.toEqual({ ok: true, changed: true })
+		expect(document.getSnapshot().revision)
+			.toBe(1)
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
 	})
