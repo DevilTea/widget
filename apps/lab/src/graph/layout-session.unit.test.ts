@@ -160,10 +160,12 @@ describe('createLayoutSession', () => {
 
 	it('dispose() stops accepting new requests and discards any in-flight one', async () => {
 		const deferred = defer<LayoutedGraph>()
-		const layoutFn: LayoutGraphFn = () => deferred.promise
+		const layoutFn: LayoutGraphFn = vi.fn(() => deferred.promise)
 		const session = createLayoutSession(layoutFn)
 
 		session.request(fakeGraph('a'))
+		expect(layoutFn)
+			.toHaveBeenCalledTimes(1)
 		session.dispose()
 		deferred.resolve(fakeLayout())
 		await Promise.resolve()
@@ -174,6 +176,8 @@ describe('createLayoutSession', () => {
 		const listener = vi.fn()
 		session.subscribe(listener)
 		session.request(fakeGraph('b'))
+		expect(layoutFn)
+			.toHaveBeenCalledTimes(1)
 		expect(listener).not.toHaveBeenCalled()
 		expect(session.getState().status)
 			.toBe('loading')

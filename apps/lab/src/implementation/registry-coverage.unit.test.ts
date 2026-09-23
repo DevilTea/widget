@@ -25,6 +25,15 @@ const showcases: readonly { readonly label: string, readonly system: WidgetSyste
 	{ label: 'vuetify-tasks', system: vuetifyTaskSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: vuetifyTaskSources },
 ]
 
+const fixtureEntry: SourcesRegistry[string] = {
+	files: [{
+		kind: 'plugin',
+		title: 'fixture.ts',
+		path: 'fixture.ts',
+		load: async () => 'fixture',
+	}],
+}
+
 describe('curated sources registries', () => {
 	it.each(showcases)('$label: every curated type is a real plugin type (no dangling entries)', ({ system, sources }) => {
 		expect(findDanglingRegistryTypes(sources, system))
@@ -38,6 +47,33 @@ describe('curated sources registries', () => {
 	it.each(showcases)('$label: every registered plugin type is curated', ({ system, sources }) => {
 		expect(findUncuratedPluginTypes(sources, system))
 			.toEqual([])
+	})
+
+	it('reports both dangling registry keys and uncurated registered plugin types', () => {
+		const system = sandboxSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>
+		const pluginTypes = system.plugins
+			.map(plugin => plugin.type)
+		const fullyCurated = Object.fromEntries(pluginTypes.map(type => [type, fixtureEntry])) as SourcesRegistry
+
+		expect(findDanglingRegistryTypes(fullyCurated, system))
+			.toEqual([])
+		expect(findUncuratedPluginTypes(fullyCurated, system))
+			.toEqual([])
+
+		const withDanglingType = {
+			...fullyCurated,
+			'not-registered': fixtureEntry,
+		}
+		expect(findDanglingRegistryTypes(withDanglingType, system))
+			.toEqual(['not-registered'])
+
+		const omittedType = pluginTypes[0]!
+		const withOmittedType = Object.fromEntries(
+			pluginTypes.slice(1)
+				.map(type => [type, fixtureEntry]),
+		) as SourcesRegistry
+		expect(findUncuratedPluginTypes(withOmittedType, system))
+			.toEqual([omittedType])
 	})
 
 	it.each(showcases)('$label: every curated file entry has a non-empty title/path and a callable load()', ({ sources }) => {
