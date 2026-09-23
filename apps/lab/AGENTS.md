@@ -129,12 +129,15 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
 ```bash
 pnpm dev         # vite dev server
 pnpm build       # vite build
-pnpm typecheck   # generates pika.gen.ts (see below), then vue-tsc over src/
+pnpm typecheck   # generates pika.gen.ts, then vue-tsc over app, unit tests, and browser/Page specs
 pnpm test        # vitest run for this app's colocated *.unit.test.ts
 ```
 
-`vite.config.ts`/`vitest.config.ts`/`pika.config.ts` themselves are not part of `pnpm typecheck`'s
-program, matching every other package in this repo (none type-check their own bundler config files).
+`vite.config.ts`/`vitest.config.ts`/`pika.config.ts` and Playwright config files themselves are not
+part of `pnpm typecheck`'s program, matching every other package in this repo (none type-check their
+own bundler config files). Browser/Page specs under `e2e/` and `e2e-pages/` are typechecked through
+`tsconfig.browser-tests.json`, including their imported sandbox preset fixture, while the two
+Playwright suites remain separate runtime jobs.
 `pnpm typecheck` first runs `pika:codegen` (`scripts/pika-codegen.mjs`), which generates
 `src/pika.gen.ts` directly through `@pikacss/integration` — the same file `@pikacss/unplugin-pikacss`'s
 Vite plugin would otherwise only produce as a side effect of an actual `pnpm dev`/`pnpm build` pass, and

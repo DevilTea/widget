@@ -10,26 +10,19 @@ import { createWidgetVueRenderer, useWidget } from '@deviltea/widget-vue'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
+import { testGlobalProperties } from '../../../test-support'
 import { ConditionalSectionPlugin, SurveySectionPlugin, TripSurveyPlugin } from '../plugins'
 import { defaultSurveyPreset } from '../presets'
 import { surveySystem } from '../system'
+import { makeSurveySlotRenderer } from '../test-support'
 import SurveyDateQuestionRenderer from './SurveyDateQuestionRenderer.vue'
 
 const NoopRenderer = defineComponent({ setup: () => () => null })
 
-function makeSlotRenderer(plugin: any, slotName: string) {
-	return defineComponent({
-		setup() {
-			const { WidgetSlot } = useWidget(plugin)
-			return () => h(WidgetSlot, { name: slotName })
-		},
-	})
-}
-
 const HarnessRenderer = createWidgetVueRenderer(surveySystem, renderers =>
 	renderers
-		.TripSurvey(makeSlotRenderer(TripSurveyPlugin, 'form'))
-		.SurveySection(makeSlotRenderer(SurveySectionPlugin, 'body'))
+		.TripSurvey(makeSurveySlotRenderer(TripSurveyPlugin, 'form'))
+		.SurveySection(makeSurveySlotRenderer(SurveySectionPlugin, 'body'))
 		.ConditionalSection(defineComponent({
 			setup() {
 				const { useProperties, WidgetSlot } = useWidget(ConditionalSectionPlugin)
@@ -54,7 +47,7 @@ describe('surveyDateQuestionRenderer', () => {
 
 		const wrapper = mount(HarnessRenderer, {
 			props: { runtime },
-			global: { config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } } },
+			global: { config: { globalProperties: testGlobalProperties } },
 		})
 		await wrapper.vm.$nextTick()
 

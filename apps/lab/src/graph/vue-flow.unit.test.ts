@@ -91,18 +91,21 @@ describe('toVueFlow', () => {
 
 	it('aggregates multiple edges between same clusters with combined label and count', () => {
 		const graph = fixtureGraph()
-		graph.edges.push({
-			id: '1:property:reader#dep1',
-			sourceVertexId: '1:property:reader',
-			targetVertexId: '2:state:value',
-			operation: 'writes',
-			path: ['w'],
-			reference: { target: { type: 'widget', widgetId: 'target', optional: false }, operation: { type: 'state-get', key: 'value' } },
-			invalidCycle: false,
-		})
+		const graphWithExtraEdge: SemanticGraph = {
+			...graph,
+			edges: [...graph.edges, {
+				id: '1:property:reader#dep1',
+				sourceVertexId: '1:property:reader',
+				targetVertexId: '2:state:value',
+				operation: 'writes',
+				path: ['w'],
+				reference: { target: { type: 'widget', widgetId: 'target', optional: false }, operation: { type: 'state-get', key: 'value' } },
+				invalidCycle: false,
+			}],
+		}
 		const layout = fixtureLayout()
 
-		const { edges } = toVueFlow(graph, layout, {
+		const { edges } = toVueFlow(graphWithExtraEdge, layout, {
 			expandedClusterIds: new Set(),
 		})
 

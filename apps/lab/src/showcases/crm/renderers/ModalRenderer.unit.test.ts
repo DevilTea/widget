@@ -8,6 +8,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { LabI18nKey } from '../../../composables/use-lab-i18n'
+import { testGlobalProperties } from '../../../test-support'
 import { createCrmHarness, createCrmRuntime, widgetOfType } from '../test-support'
 import ModalRenderer from './ModalRenderer.vue'
 
@@ -19,7 +20,7 @@ describe('modalRenderer', () => {
 		const wrapper = mount(HarnessRenderer, {
 			props: { runtime },
 			global: {
-				config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+				config: { globalProperties: testGlobalProperties },
 				provide: {
 					[LabI18nKey as symbol]: {
 						locale: { value: 'en' },

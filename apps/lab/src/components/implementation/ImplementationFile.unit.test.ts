@@ -15,6 +15,7 @@ import type { CuratedSourceFile } from '../../implementation/types'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
+import { testGlobalProperties } from '../../test-support'
 import ImplementationFile from './ImplementationFile.vue'
 
 interface Deferred<T> {
@@ -39,7 +40,7 @@ function createFile(path: string, load: () => Promise<string>): CuratedSourceFil
 
 const globalStubConfig = {
 	global: {
-		config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+		config: { globalProperties: testGlobalProperties },
 		provide: {
 			[LabI18nKey as symbol]: {
 				locale: { value: 'en' },

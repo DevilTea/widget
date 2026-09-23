@@ -12,9 +12,10 @@ const recoverySource = sandboxPresets.find(preset => preset.id === 'raw-slot-rec
 
 function sourceIdOf(node: { readonly node: { readonly source: unknown } }): string | null {
 	const source = node.node.source
-	return typeof source === 'object' && source !== null && !Array.isArray(source) && typeof (source as Record<string, unknown>).id === 'string'
-		? (source as Record<string, string>).id
-		: null
+	if (typeof source !== 'object' || source === null || Array.isArray(source))
+		return null
+	const id = (source as Record<string, unknown>).id
+	return typeof id === 'string' ? id : null
 }
 
 describe('blueprint diagnostic navigation', () => {
@@ -41,7 +42,7 @@ describe('blueprint diagnostic navigation', () => {
 				}),
 			]))
 		const rawSlotDiagnostic = blueprint.diagnostics.find(candidate => 'path' in candidate
-			&& candidate.path.join('.') === 'slots.sidebar')
+			&& Array.isArray(candidate.path) && candidate.path.join('.') === 'slots.sidebar')
 		expect(rawSlotDiagnostic)
 			.toBeDefined()
 		expect(inspectionNodeIdOfDiagnostic(rawSlotDiagnostic!, inspection))

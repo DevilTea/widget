@@ -46,7 +46,7 @@ describe('author command lowering', () => {
 	it('rejects a node id that is absent from the current Blueprint', () => {
 		const blueprint = sandboxSystem.createBlueprint(JSON.parse(validSource))
 
-		expect(createAuthorPatch(blueprint, replaceConfigScalar(0, 'missing-node' as InspectionNodeId, 'text', 'edited'), 0))
+		expect(createAuthorPatch(blueprint, replaceConfigScalar(0, 999_999 as InspectionNodeId, 'text', 'edited'), 0))
 			.toEqual({ ok: false, reason: 'widget-not-found' })
 	})
 
