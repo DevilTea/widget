@@ -90,11 +90,23 @@ test.describe('lab theme (issue #44)', () => {
 			.toContainText('createWidgetPlugin(\'Text\')')
 		const textBefore = await code.textContent()
 		const lightBackground = await pre.evaluate(element => getComputedStyle(element).backgroundColor)
+		const importTokenColor = () => pre.evaluate((element) => {
+			const token = Array.from(element.querySelectorAll<HTMLElement>('span'))
+				.find(candidate => candidate.childElementCount === 0 && candidate.textContent === 'import')
+			if (token === undefined)
+				throw new Error('Could not find the exact Shiki import token')
+			return getComputedStyle(token).color
+		})
+		const lightImportColor = await importTokenColor()
 
 		await page.getByLabel('Theme')
 			.selectOption('dark')
 		await expect.poll(async () => pre.evaluate(element => getComputedStyle(element).backgroundColor))
 			.not.toBe(lightBackground)
+		// Shiki legitimately changes token segmentation between themes, so do not compare span counts.
+		// Locate the same exact `import` token text and prove its computed foreground changed.
+		await expect.poll(importTokenColor)
+			.not.toBe(lightImportColor)
 		expect(await code.textContent())
 			.toBe(textBefore)
 		expect(blockedRequestUrls)

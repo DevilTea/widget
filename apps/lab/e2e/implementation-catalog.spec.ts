@@ -27,6 +27,12 @@ test.describe('implementation registered-plugin catalog (issue #42)', () => {
 			.toHaveAttribute('aria-current', 'true')
 		await expect(page.getByTestId('implementation-code'))
 			.toContainText('createWidgetPlugin(\'Counter\')')
+		await expect(page.getByRole('button', { name: 'renderers.ts', exact: true }))
+			.toBeVisible()
+		await page.getByRole('button', { name: 'renderers.ts', exact: true })
+			.click()
+		await expect(page.getByTestId('implementation-code'))
+			.toContainText('CounterRenderer')
 	})
 
 	test('switching showcases replaces the catalog with the new showcase registry', async ({ page }) => {

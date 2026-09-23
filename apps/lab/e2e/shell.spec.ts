@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 /**
  * Issue #28 Lab shell / workbench contract: the app loads with the header's showcase/preset/Apply
@@ -20,8 +20,38 @@ test('app loads with header controls and all five panel tabs', async ({ page }) 
 		.toBeVisible()
 
 	for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
-		await expect(page.getByRole('tab', { name }))
+		const tab = page.getByRole('tab', { name })
+		await expect(tab)
 			.toBeVisible()
+		await tab.click()
+		const panel = page.getByRole('tabpanel', { name })
+		await expect(panel)
+			.toBeVisible()
+		switch (name) {
+			case 'Author':
+				await expect(panel.locator('.monaco-editor'))
+					.toBeVisible()
+				break
+			case 'Blueprint':
+				await expect(panel.getByTestId('inspector-panel-shell'))
+					.toBeVisible()
+				await expect(panel.getByText('Selected node', { exact: true }))
+					.toBeVisible()
+				break
+			case 'Runtime':
+				await expect(panel.getByText('Live State, Properties, Methods, and Diagnostics of the running widgets', { exact: true }))
+					.toBeVisible()
+				break
+			case 'Dependencies':
+				await expect(panel.locator('.vue-flow'))
+					.toBeVisible()
+				break
+			case 'Preview':
+				await expect(previewFrame(page)
+					.getByText('Widget Lab sandbox', { exact: true }))
+					.toBeVisible()
+				break
+		}
 	}
 })
 

@@ -128,6 +128,14 @@ test('Dependencies view tabs are keyboard-operable and member focus does not mut
 		.first()
 	await expect(clusterIdentity)
 		.toBeVisible({ timeout: 15_000 })
+	// Pin both semantic identity parts on the rendered cluster label. A generic text/visibility check
+	// can pass while the widget id is omitted or replaced by a cluster implementation id (#27 guard).
+	await expect(clusterIdentity)
+		.toHaveAttribute('aria-label', 'TripMetrics #trip-metrics')
+	await expect(clusterIdentity.locator('.graph-cluster-type'))
+		.toHaveText('TripMetrics')
+	await expect(clusterIdentity.locator('.graph-cluster-id'))
+		.toHaveText('#trip-metrics')
 	await clusterIdentity.focus()
 	await clusterIdentity.press('Enter')
 	await expect(graphMembers)

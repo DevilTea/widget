@@ -182,13 +182,22 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.toHaveCount(0)
 
 		// A subsequent click now behaves normally again: writing `Adults` actually reaches the widget's
-		// State (as it would with Inspect never having been turned on).
+		// State (as it would with Inspect never having been turned on). The downstream Travelers Property
+		// is the browser-visible proof that this was a semantic State write, not just an input DOM update
+		// (#11 false-green guard).
 		const adultsInput = previewFrame(page)
 			.getByLabel('Adults', { exact: true })
+		const travelersValue = previewFrame(page)
+			.locator('dt', { hasText: 'Travelers' })
+			.locator('xpath=following-sibling::dd[1]')
+		await expect(travelersValue)
+			.toHaveText('2')
 		await adultsInput.fill('5')
 		await adultsInput.press('Tab')
 		await expect(adultsInput)
 			.toHaveValue('5')
+		await expect(travelersValue)
+			.toHaveText('5')
 	})
 
 	test('toggling off restores normal Preview behavior immediately', async ({ page }) => {

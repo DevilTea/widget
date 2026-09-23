@@ -126,10 +126,28 @@ test('create, edit, complete and delete flow through Widget Methods with snackba
 		.toBeVisible()
 
 	const updatedRow = taskRow(preview, 'Verify the browser contract')
-	await updatedRow.getByRole('checkbox')
+	const doneCheckbox = updatedRow.getByRole('checkbox')
+	await doneCheckbox
 		.click()
+	// Snackbar feedback alone can be emitted by a failed/optimistic renderer path. The row's
+	// persisted semantic state must change its own status and remain present when the Runtime-backed
+	// filter is switched to Done (#12 false-green guard).
+	await expect(doneCheckbox)
+		.toHaveAttribute('aria-label', 'Done: Verify the browser contract')
+	await expect(updatedRow)
+		.toContainText('Done')
 	await expect(preview.getByText('Task completed', { exact: true }))
 		.toBeVisible()
+
+	await chooseVuetifySelect(preview, 'Status', 'Done')
+	await expect(taskRow(preview, 'Verify the browser contract'))
+		.toHaveCount(1)
+	await expect(preview.locator('[data-task-id]'))
+		.toHaveCount(2)
+	await chooseVuetifySelect(preview, 'Status', 'Open')
+	await expect(taskRow(preview, 'Verify the browser contract'))
+		.toHaveCount(0)
+	await chooseVuetifySelect(preview, 'Status', 'All')
 
 	await updatedRow.getByRole('button', { name: 'Delete' })
 		.click()

@@ -34,24 +34,42 @@ async function startTourFromHeader(page: Page): Promise<void> {
  * or on `document.body`, never an outside interactive element" is what is actually sampled, across a few
  * Tab/Shift+Tab presses in both directions.
  */
-async function focusStaysWithinModalBoundary(page: Page): Promise<boolean> {
+async function modalFocusLocation(page: Page): Promise<'body' | 'dialog' | 'outside'> {
 	return page.evaluate(() => {
 		const active = document.activeElement
 		const dialogEl = document.querySelector('dialog[open]')
-		return active === document.body || (dialogEl !== null && dialogEl.contains(active))
+		if (active === document.body)
+			return 'body'
+		if (dialogEl !== null && dialogEl.contains(active))
+			return 'dialog'
+		return 'outside'
 	})
 }
 
 async function sampleTabContainment(page: Page): Promise<void> {
 	for (let i = 0; i < 5; i++) {
 		await page.keyboard.press('Tab')
-		expect(await focusStaysWithinModalBoundary(page))
-			.toBe(true)
+		const location = await modalFocusLocation(page)
+		expect(location)
+			.not.toBe('outside')
+		if (location === 'body') {
+			// Chromium's native modal focus algorithm may transiently rest on BODY at the edge; the
+			// very next Tab must recover into the dialog rather than leave focus there.
+			await page.keyboard.press('Tab')
+			expect(await modalFocusLocation(page))
+				.toBe('dialog')
+		}
 	}
 	for (let i = 0; i < 5; i++) {
 		await page.keyboard.press('Shift+Tab')
-		expect(await focusStaysWithinModalBoundary(page))
-			.toBe(true)
+		const location = await modalFocusLocation(page)
+		expect(location)
+			.not.toBe('outside')
+		if (location === 'body') {
+			await page.keyboard.press('Shift+Tab')
+			expect(await modalFocusLocation(page))
+				.toBe('dialog')
+		}
 	}
 }
 
