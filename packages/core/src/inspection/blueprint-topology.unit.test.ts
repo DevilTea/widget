@@ -144,22 +144,29 @@ describe('source topology projection', () => {
 			.toBe(true)
 	})
 
-	it('one recovered source-slot entry never mixes "slot" and "raw-slot" placements', () => {
+	it('projects declared and unknown raw source slots independently in one recovered topology', () => {
 		const blueprint = system.createBlueprint({
 			id: 'root',
 			type: 'topology-container',
-			slots: { left: [{ id: 'a', type: 'topology-leaf' }], right: [] },
+			slots: {
+				left: [{ id: 'a', type: 'topology-leaf' }],
+				right: [],
+				mystery: [{ id: 'b', type: 'topology-leaf' }],
+			},
 		})
 		const inspection = inspectBlueprint(blueprint)
 		const root = inspection.getNode(inspection.rootNodeId)!
 		if (!root.resolved)
 			throw new Error('test fixture: expected a resolved root')
 
-		for (const slot of root.sourceSlots) {
-			expect(['slot', 'raw-slot'])
-				.toContain(slot.placement)
-		}
-		// Each entry is a single scalar placement, structurally incapable of mixing.
+		expect(root.sourceSlots.map(slot => ({ name: slot.name, placement: slot.placement })))
+			.toEqual([
+				{ name: 'left', placement: 'slot' },
+				{ name: 'right', placement: 'slot' },
+				{ name: 'mystery', placement: 'raw-slot' },
+			])
+		expect(root.semanticSlots.map(slot => slot.name))
+			.toEqual(['left', 'right'])
 	})
 
 	it('a malformed raw slot value produces no sourceSlots entry, and the existing definition Diagnostic is unaffected', () => {

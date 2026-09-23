@@ -8,6 +8,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { isCompiledDependency, readCompiledBlueprint } from '../internal/contract'
 import { inspectBlueprint, inspectRuntime } from './index'
 
 const PROTO_KEY = '__proto__' as const
@@ -126,6 +127,16 @@ describe('disposal / post-mortem', () => {
 			.toBeInstanceOf(WidgetSystemRuntimeDisposedError)
 		expect((caught as Error).name)
 			.toBe('WidgetSystemRuntimeDisposedError')
+	})
+
+	it('a Property inspection subscribe() after dispose throws WidgetSystemRuntimeDisposedError', () => {
+		const { runtime } = createHarness()
+		const propertyInspection = inspectRuntime(runtime)
+			.getWidget(rootIdOf(runtime))!.getProperty('doubled')!
+		runtime.dispose()
+
+		expect(() => propertyInspection.subscribe(() => {}))
+			.toThrow(WidgetSystemRuntimeDisposedError)
 	})
 
 	it('a pre-existing subscription is detached at dispose with no final emission, and its unsubscribe stays idempotent', () => {
@@ -286,6 +297,29 @@ describe('immutability', () => {
 		const dep = root.properties[0]!.dependencies[0]!
 		expect(dep.status)
 			.toBe('resolved')
+		const compiled = readCompiledBlueprint(blueprint)
+		const compiledRoot = compiled.nodes[compiled.rootNodeId]
+		if (!compiledRoot?.resolved)
+			throw new Error('test fixture: expected a resolved compiled root')
+		const compiledProperty = compiledRoot.properties.get('p')
+		const compiledDependency = compiledProperty === undefined
+			? undefined
+			: (compiledProperty.deps as { readonly v?: unknown }).v
+		if (!isCompiledDependency(compiledDependency))
+			throw new Error('test fixture: expected a direct compiled dependency leaf')
+
+		expect(dep.reference)
+			.not.toBe(compiledDependency.reference)
+		expect(dep.reference.target)
+			.not.toBe(compiledDependency.reference.target)
+		expect(dep.reference.operation)
+			.not.toBe(compiledDependency.reference.operation)
+		expect(Object.isFrozen(compiledDependency.reference))
+			.toBe(false)
+		expect(Object.isFrozen(compiledDependency.reference.target))
+			.toBe(false)
+		expect(Object.isFrozen(compiledDependency.reference.operation))
+			.toBe(false)
 
 		expect(() => {
 			(dep.reference.operation as unknown as { key: string }).key = 'corrupted'
@@ -359,6 +393,11 @@ describe('immutability', () => {
 		expect(root.node.source)
 			.toBe(source)
 		expect(Object.isFrozen(source))
+			.toBe(false)
+		expect(Object.isFrozen(source.marker))
+			.toBe(false)
+		source.marker.nested = false
+		expect(source.marker.nested)
 			.toBe(false)
 	})
 

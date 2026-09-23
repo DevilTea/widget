@@ -135,6 +135,8 @@ describe('inspectionNodeId', () => {
 			.not.toBeNull()
 		expect(child!.resolved)
 			.toBe(false)
+		expect(inspection.getNodeId(child!.node))
+			.toBe(childId)
 	})
 
 	it('getNode()/getNodeId() round-trip for every node in the snapshot', () => {

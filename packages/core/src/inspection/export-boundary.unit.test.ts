@@ -51,6 +51,7 @@ describe('no Method runtime inspection surface (type level)', () => {
 		expectTypeOf<RuntimeWidgetInspection>().not.toHaveProperty('getMethod')
 		expectTypeOf<RuntimeWidgetInspection>().not.toHaveProperty('methods')
 		expectTypeOf<RuntimeWidgetInspection>().not.toHaveProperty('invokeHistory')
+		expectTypeOf<RuntimeWidgetInspection>().not.toHaveProperty('invokeMethod')
 	})
 
 	it('runtimeWidgetInspection only exposes the documented readonly surface', () => {

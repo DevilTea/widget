@@ -24,6 +24,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { createOperationCollector } from './collector'
 import { dependencyDedupeDescriptor } from './deps'
 
 describe('dependencyDedupeDescriptor scope excludes message (review finding 3774401609)', () => {
@@ -54,45 +55,59 @@ describe('dependencyDedupeDescriptor scope excludes message (review finding 3774
 	})
 })
 
-describe('end-to-end: the collector dedupes by (scope, anchor) only, discriminating on anchor alone', () => {
-	// A minimal in-repo model of the exact `createOperationCollector` contract `deps.ts` relies on,
-	// exercising `dependencyDedupeDescriptor`'s real output the same way `reportDependencyDiagnostic` does —
-	// without needing to construct a full compiled Blueprint/Runtime just to observe this one mechanism.
-	function dedupe(entries: readonly { readonly leafId: number, readonly message: string, readonly anchor: unknown }[]): number {
-		const seenAnchorsByScope = new Map<string, Set<unknown>>()
-		let kept = 0
-		for (const entry of entries) {
-			const descriptor = dependencyDedupeDescriptor(entry.leafId, entry.anchor)
-			let seenAnchors = seenAnchorsByScope.get(descriptor.scope)
-			if (seenAnchors === undefined) {
-				seenAnchors = new Set()
-				seenAnchorsByScope.set(descriptor.scope, seenAnchors)
-			}
-			if (seenAnchors.has(descriptor.anchor))
-				continue
-			seenAnchors.add(descriptor.anchor)
-			kept++
-		}
-		return kept
-	}
+interface CollectorDiagnostic {
+	readonly code: 'test-diagnostic'
+	readonly location: { readonly type: 'runtime' }
+	readonly message: string
+}
 
+function collectFinalized(entries: readonly { readonly leafId: number, readonly message: string, readonly anchor: unknown }[]): readonly CollectorDiagnostic[] {
+	const collector = createOperationCollector<never, CollectorDiagnostic>()
+	for (const entry of entries) {
+		collector.addFinalizedDiagnostic({
+			code: 'test-diagnostic',
+			location: { type: 'runtime' },
+			message: entry.message,
+		}, dependencyDedupeDescriptor(entry.leafId, entry.anchor))
+	}
+	return collector.finalize(() => {
+		throw new Error('test fixture: no relative diagnostics expected')
+	})
+}
+
+describe('the real operation collector dedupes by (scope, anchor)', () => {
 	it('same leaf, same anchor, different message wording: still dedupes to one', () => {
-		const kept = dedupe([
+		const diagnostics = collectFinalized([
 			{ leafId: 5, message: 'wording A', anchor: 'same-value' },
 			{ leafId: 5, message: 'wording B (completely different)', anchor: 'same-value' },
 		])
 
-		expect(kept)
-			.toBe(1)
+		expect(diagnostics)
+			.toHaveLength(1)
+		expect(diagnostics[0]!.message)
+			.toBe('wording A')
 	})
 
 	it('same leaf, different anchor: both survive regardless of message', () => {
-		const kept = dedupe([
+		const diagnostics = collectFinalized([
 			{ leafId: 5, message: 'wording A', anchor: 'value-1' },
 			{ leafId: 5, message: 'wording A', anchor: 'value-2' },
 		])
 
-		expect(kept)
-			.toBe(2)
+		expect(diagnostics)
+			.toHaveLength(2)
+	})
+
+	it('different scopes keep the same raw anchor as two independent failures', () => {
+		const anchor = {}
+		const diagnostics = collectFinalized([
+			{ leafId: 1, message: 'first leaf', anchor },
+			{ leafId: 2, message: 'second leaf', anchor },
+		])
+
+		expect(diagnostics)
+			.toHaveLength(2)
+		expect(diagnostics.map(diagnostic => diagnostic.message))
+			.toEqual(['first leaf', 'second leaf'])
 	})
 })
