@@ -214,18 +214,33 @@ describe('createLabStore() committed Document bridge', () => {
 })
 
 describe('createLabStore() graph filter preferences', () => {
-	it('survive a successful Apply to a new valid Blueprint', async () => {
+	it('survive a changed successful Apply to a new valid Blueprint', async () => {
 		const store = createLabStore()
 		store.graphShowAbsent.value = true
 		store.graphShowIsolatedMembers.value = true
+		const previousDocument = store.documentState.value
+		const previousPreview = store.preview.value!
 
-		store.setDraftSourceText(store.draftSourceText.value)
-		await store.apply()
+		store.setDraftSourceText(capturedText)
+		const outcome = await store.apply()
 
+		expect(outcome)
+			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
+		expect(store.documentState.value.revision)
+			.toBe(previousDocument.revision + 1)
+		expect(store.documentState.value)
+			.not.toBe(previousDocument)
+		expect(store.documentState.value.blueprint)
+			.not.toBe(previousDocument.blueprint)
+		expect(store.preview.value)
+			.not.toBe(previousPreview)
+		expect(store.preview.value?.revision)
+			.toBe(previousPreview.revision + 1)
 		expect(store.graphShowAbsent.value)
 			.toBe(true)
 		expect(store.graphShowIsolatedMembers.value)
 			.toBe(true)
+		store.dispose()
 	})
 
 	it('survive an Apply that lands on an invalid Blueprint', async () => {

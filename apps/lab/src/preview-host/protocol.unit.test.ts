@@ -47,13 +47,40 @@ describe('preview host protocol', () => {
 	})
 
 	it('validates mounted/evaluated/error responses and observation events', () => {
-		expect(parsePreviewHostResponse({ protocol: 1, kind: 'mounted', requestId: 'r1', generation: 2, revision: 3, runtimeId: 'runtime-a' }))
-			.not.toBeNull()
-		expect(parsePreviewHostResponse({ protocol: 1, kind: 'tutorial.evaluated', requestId: 'r2', tourId: 'survey', stepIndex: 1, progress: 2 }))
-			.not.toBeNull()
-		expect(parsePreviewHostResponse({ protocol: 1, kind: 'error', requestId: 'r3', message: 'boom' }))
-			.not.toBeNull()
-		expect(parsePreviewHostEvent({ protocol: 1, kind: 'tutorial.observation-changed', tourId: 'survey' }))
-			.not.toBeNull()
+		const mounted = { protocol: 1, kind: 'mounted', requestId: 'r1', generation: 2, revision: 3, runtimeId: 'runtime-a' } as const
+		const evaluated = { protocol: 1, kind: 'tutorial.evaluated', requestId: 'r2', tourId: 'survey', stepIndex: 1, progress: 2 } as const
+		const error = { protocol: 1, kind: 'error', requestId: 'r3', message: 'boom' } as const
+		const observation = { protocol: 1, kind: 'tutorial.observation-changed', tourId: 'survey' } as const
+
+		expect(parsePreviewHostResponse(mounted))
+			.toEqual(mounted)
+		expect(parsePreviewHostResponse(evaluated))
+			.toEqual(evaluated)
+		expect(parsePreviewHostResponse(error))
+			.toEqual(error)
+		expect(parsePreviewHostEvent(observation))
+			.toEqual(observation)
+
+		for (const invalid of [
+			{ ...mounted, generation: -1 },
+			{ ...mounted, revision: -1 },
+			{ ...mounted, revision: 1.5 },
+			{ ...mounted, runtimeId: '' },
+			{ ...mounted, requestId: '' },
+			{ ...evaluated, tourId: 'unknown' },
+			{ ...evaluated, stepIndex: -1 },
+			{ ...evaluated, progress: 1.5 },
+			{ ...error, message: 42 },
+		]) {
+			expect(parsePreviewHostResponse(invalid))
+				.toBeNull()
+		}
+		for (const invalid of [
+			{ ...observation, tourId: 'unknown' },
+			{ ...observation, protocol: 99 },
+		]) {
+			expect(parsePreviewHostEvent(invalid))
+				.toBeNull()
+		}
 	})
 })
