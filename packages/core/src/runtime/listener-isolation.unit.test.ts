@@ -321,18 +321,16 @@ describe('external listener is untracked', () => {
 	})
 })
 
-describe('external listener returned Promise is unmanaged', () => {
-	it('a listener returning a rejected Promise is not awaited/caught and does not disrupt subsequent listener dispatch or the operation result', () => {
+describe('external listener returned Promise does not affect synchronous dispatch', () => {
+	it('a listener returning a rejected Promise does not disrupt subsequent listener dispatch or the operation result', () => {
 		const { widget } = createRuntime()
 		const order: string[] = []
 
 		const rejectingListener = (value: number | null): void => {
 			order.push(`first:${String(value)}`)
 			const rejected = Promise.reject(new Error('unmanaged rejection'))
-			// Test hygiene only: silences this deliberately-unmanaged rejection so it cannot be reported
-			// as an unhandled rejection by the test process. This attachment happens in test code, after
-			// core has already returned control to the caller below — it is not part of the behavior
-			// under test and core never sees or touches this promise.
+			// Test hygiene: the Promise is deliberately rejected, but this test only asserts synchronous
+			// dispatch/result isolation; host-level unhandled-rejection ownership is outside this case.
 			rejected.catch(() => {})
 			return rejected as unknown as void
 		}

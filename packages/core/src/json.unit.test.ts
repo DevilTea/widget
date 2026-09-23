@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from './index'
-import { inspectJsonValue, isJsonValue } from './json'
+import { inspectJsonValue, isJsonValue, jsonEqual } from './json'
 
 describe('authored JSON runtime domain', () => {
 	it('rejects symbol-keyed objects and arrays', () => {
@@ -145,6 +145,13 @@ describe('authored JSON runtime domain', () => {
 		const shared = { value: 1 }
 		expect(inspectJsonValue({ left: shared, right: shared }))
 			.toEqual({ compatible: true, diagnostics: [] })
+	})
+
+	it('requires exact object key sets for JSON equality', () => {
+		expect(jsonEqual({ name: 'Ada' }, { name: 'Ada', role: 'admin' }))
+			.toBe(false)
+		expect(jsonEqual({ name: 'Ada', role: 'admin' }, { name: 'Ada' }))
+			.toBe(false)
 	})
 
 	it('retains source-level JSON facts only on the Blueprint aggregate', () => {

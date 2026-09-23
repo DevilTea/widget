@@ -475,7 +475,8 @@ describe('recompile', () => {
 				],
 			},
 		}
-		const initial = system.createBlueprint({ id: 'unrelated-root', type: 'leaf' })
+		const oldSource = { id: 'unrelated-root', type: 'leaf' }
+		const initial = system.createBlueprint(oldSource)
 		const viaRecompile = initial.recompile(definition)
 		const viaFreshCompile = system.createBlueprint(definition)
 
@@ -487,13 +488,24 @@ describe('recompile', () => {
 			.toBe('invalid')
 		expect(viaRecompile.status)
 			.toBe(viaFreshCompile.status)
+		expect(viaRecompile.source)
+			.toBe(definition)
+		expect(viaRecompile.source)
+			.not.toBe(oldSource)
+		expect(viaRecompile.source)
+			.toBe(viaFreshCompile.source)
+		expect(viaRecompile.sourceJsonCompatible)
+			.toBe(viaFreshCompile.sourceJsonCompatible)
+		expect(viaRecompile.root.source)
+			.toBe(definition)
 		expect(summarizeDiagnostics(viaRecompile.diagnostics))
 			.toEqual(summarizeDiagnostics(viaFreshCompile.diagnostics))
 	})
 
 	it('is observably equivalent to system.createBlueprint(next) for a valid definition', () => {
 		const definition = { id: 'root', type: 'leaf' }
-		const initial = system.createBlueprint({ id: 'unrelated-root', type: 'leaf' })
+		const oldSource = { id: 'unrelated-root', type: 'leaf' }
+		const initial = system.createBlueprint(oldSource)
 		const viaRecompile = initial.recompile(definition)
 		const viaFreshCompile = system.createBlueprint(definition)
 
@@ -501,6 +513,21 @@ describe('recompile', () => {
 			.toBe('valid')
 		expect(viaFreshCompile.status)
 			.toBe('valid')
+		expect(viaRecompile.source)
+			.toBe(definition)
+		expect(viaRecompile.source)
+			.not.toBe(oldSource)
+		expect(viaRecompile.source)
+			.toBe(viaFreshCompile.source)
+		expect(viaRecompile.sourceJsonCompatible)
+			.toBe(true)
+		expect(viaRecompile.root.source)
+			.toBe(definition)
+		const root = assertResolved(viaRecompile.root)
+		expect(root.id)
+			.toBe(definition.id)
+		expect(root.type)
+			.toBe(definition.type)
 
 		// The one reference-equality guarantee across a recompile boundary: the canonical empty-diagnostic
 		// snapshot is reused by identity for every successful compile.

@@ -24,6 +24,14 @@ const plugin = createWidgetPlugin('inspection-events')
 		.ping({ description: 'Ping occurrence' }))
 	.done()
 
+const noEventsPlugin = createWidgetPlugin('inspection-no-events')
+	.description('Inspection event-less fixture')
+	.interfaces<{ state: { value: number } }>()
+	.state(state => state.value({
+		validate: (input): input is number => typeof input === 'number',
+	}))
+	.done()
+
 function createHarness() {
 	const system = createWidgetSystem({ plugins: [plugin] })
 	const blueprint = system.createBlueprint({ id: 'root', type: 'inspection-events' })
@@ -52,6 +60,20 @@ describe('event inventory and readonly Runtime inspection', () => {
 			])
 		expect(root.events[0]).not.toHaveProperty('args')
 		expect(root.events[0]).not.toHaveProperty('schema')
+	})
+
+	it('projects no Events declaration as an empty event inventory', () => {
+		const system = createWidgetSystem({ plugins: [noEventsPlugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'inspection-no-events' })
+		const inspection = inspectBlueprint(blueprint)
+		const root = inspection.getNode(inspection.rootNodeId)
+		if (root === null || !root.resolved)
+			throw new Error('Expected resolved inspection root')
+
+		expect(root.capabilities.events)
+			.toBe(false)
+		expect(root.events)
+			.toEqual([])
 	})
 
 	it('exposes occurrence subscription only and no emit authority', () => {

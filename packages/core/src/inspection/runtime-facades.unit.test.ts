@@ -216,6 +216,8 @@ describe('property inspection subscribe truth table', () => {
 		const resultC = widget.properties.controlled.get()
 		expect(resultC)
 			.toEqual(resultA)
+		expect(resultC)
+			.not.toBe(resultA)
 		expect(listener)
 			.toHaveBeenCalledTimes(3)
 		expect(propertyInspection.getSnapshot())
@@ -326,6 +328,13 @@ describe('state inspection passive read + notification truth table', () => {
 		const rejected = widget.state.count.set('not-a-number' as unknown as number)
 		expect(rejected.ok)
 			.toBe(false)
+		expect(widget.state.count.getDiagnostics())
+			.toEqual([{
+				code: 'invalid-state-value',
+				location: { type: 'state', widgetId: 'root', key: 'count' },
+				candidate: 'not-a-number',
+				message: expect.any(String),
+			}])
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
 		expect(stateInspection.getSnapshot())
@@ -375,6 +384,20 @@ describe('no Method runtime inspection surface (runtime)', () => {
 		const widgetInspection = inspectRuntime(runtime)
 			.getWidget(rootIdOf(runtime))!
 		expect((widgetInspection as unknown as Record<string, unknown>).getMethod)
+			.toBeUndefined()
+	})
+
+	it('runtimeWidgetInspection is the exact frozen v1 readonly surface and has no executable invokeMethod alias', () => {
+		const { runtime } = createHarness()
+		const widgetInspection = inspectRuntime(runtime)
+			.getWidget(rootIdOf(runtime))!
+
+		expect(Object.isFrozen(widgetInspection))
+			.toBe(true)
+		expect(Reflect.ownKeys(widgetInspection)
+			.sort())
+			.toEqual(['blueprintNode', 'getEvent', 'getProperty', 'getState', 'nodeId'])
+		expect((widgetInspection as unknown as Record<string, unknown>).invokeMethod)
 			.toBeUndefined()
 	})
 })

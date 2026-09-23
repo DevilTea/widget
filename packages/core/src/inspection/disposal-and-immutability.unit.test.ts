@@ -128,6 +128,16 @@ describe('disposal / post-mortem', () => {
 			.toBe('WidgetSystemRuntimeDisposedError')
 	})
 
+	it('a Property inspection subscribe() after dispose throws WidgetSystemRuntimeDisposedError', () => {
+		const { runtime } = createHarness()
+		const propertyInspection = inspectRuntime(runtime)
+			.getWidget(rootIdOf(runtime))!.getProperty('doubled')!
+		runtime.dispose()
+
+		expect(() => propertyInspection.subscribe(() => {}))
+			.toThrow(WidgetSystemRuntimeDisposedError)
+	})
+
 	it('a pre-existing subscription is detached at dispose with no final emission, and its unsubscribe stays idempotent', () => {
 		const { widget, runtime } = createHarness()
 		const stateInspection = inspectRuntime(runtime)
@@ -272,7 +282,7 @@ describe('immutability', () => {
 			.toBe(true)
 	})
 
-	it('a resolved dependency reference (including nested target/operation) is a frozen, independent clone — mutation throws and cannot influence Runtime behavior (review round 1, finding 2)', () => {
+	it('a resolved dependency reference (including nested target/operation) is readonly and cannot alter Runtime behavior', () => {
 		const blueprint = system.createBlueprint({
 			id: 'root',
 			type: 'immut-container',
@@ -286,7 +296,6 @@ describe('immutability', () => {
 		const dep = root.properties[0]!.dependencies[0]!
 		expect(dep.status)
 			.toBe('resolved')
-
 		expect(() => {
 			(dep.reference.operation as unknown as { key: string }).key = 'corrupted'
 		})
@@ -295,8 +304,7 @@ describe('immutability', () => {
 			(dep.reference.target as unknown as { type: string }).type = 'corrupted'
 		})
 			.toThrow()
-		// The attempted mutations above throw (frozen), so the reference itself never actually changes —
-		// asserted here for completeness rather than because a successful mutation was ever possible.
+		// The public inspection reference remains unchanged after both rejected mutation attempts.
 		expect(dep.reference)
 			.toEqual({ target: { type: 'self' }, operation: { type: 'state-get', key: 'value' } })
 
@@ -307,9 +315,8 @@ describe('immutability', () => {
 		if (widget.type !== 'immut-container')
 			throw new Error('test fixture: expected the "immut-container" widget')
 		widget.state.value.set(41)
-		// Runtime dependency resolution for `p` (the same declared dependency the inspection snapshot
-		// above projects) still resolves correctly against the real, compiler-owned `reference` object —
-		// proof the inspection-exposed clone was never aliased into Runtime materialization.
+		// Reading inspection and attempting to mutate its public projection must not change the
+		// observable result of a subsequent Runtime dependency resolution.
 		expect(widget.properties.p.get())
 			.toEqual({ ok: true, value: 41 })
 		expect(widget.properties.p.getDiagnostics())
@@ -359,6 +366,11 @@ describe('immutability', () => {
 		expect(root.node.source)
 			.toBe(source)
 		expect(Object.isFrozen(source))
+			.toBe(false)
+		expect(Object.isFrozen(source.marker))
+			.toBe(false)
+		source.marker.nested = false
+		expect(source.marker.nested)
 			.toBe(false)
 	})
 

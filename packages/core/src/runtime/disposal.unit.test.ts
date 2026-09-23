@@ -155,12 +155,6 @@ describe('post-dispose live Runtime surface throws WidgetSystemRuntimeDisposedEr
 		expectDisposedError(() => runtime.getDiagnostics())
 	})
 
-	it('runtime.getDiagnostics', () => {
-		const { runtime } = createRuntime()
-		runtime.dispose()
-		expectDisposedError(() => runtime.getDiagnostics())
-	})
-
 	it('runtime.subscribeDiagnostics (new subscription)', () => {
 		const { runtime } = createRuntime()
 		runtime.dispose()

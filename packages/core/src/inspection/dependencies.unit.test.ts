@@ -56,7 +56,11 @@ const depTargetNoStatePlugin = createWidgetPlugin('dep-target-no-state')
 
 interface DepConsumerInterfaces {
 	slots: 'children'
+	state: {
+		local: number
+	}
 	properties: {
+		selfStateProp: number
 		resolvedProp: number
 		optionalMissingProp: number
 		requiredMissingProp: number
@@ -75,7 +79,14 @@ const depConsumerPlugin = createWidgetPlugin('dep-consumer')
 	.description('Test widget')
 	.interfaces<DepConsumerInterfaces>()
 	.slots({ children: { description: 'Test slot' } })
+	.state(state => state.local({
+		validate: (input): input is number => typeof input === 'number',
+	}))
 	.properties(properties => properties
+		.selfStateProp({
+			registerDeps: ({ dep }) => ({ v: dep.self.state.get('local') }),
+			compute: () => 0,
+		})
 		.resolvedProp({
 			registerDeps: ({ dep }) => ({ v: dep.widget('target').state.get('value') }),
 			compute: () => 0,
@@ -264,6 +275,18 @@ describe('dependency status truth table', () => {
 })
 
 describe('resolved endpoint correctness', () => {
+	it('resolves a Property self state dependency to the exact node, member and reference endpoint', () => {
+		const root = inspectRootOf(createFixtureBlueprint())
+		const dependency = propertyDep(root, 'selfStateProp')
+		if (dependency.status !== 'resolved')
+			throw new Error('test fixture: expected the self state dependency to resolve')
+
+		expect(dependency.target)
+			.toEqual({ nodeId: root.nodeId, member: { type: 'state', name: 'local' } })
+		expect(dependency.reference)
+			.toEqual({ target: { type: 'self' }, operation: { type: 'state-get', key: 'local' } })
+	})
+
 	it('resolves all four operation kinds to the correct endpoint; state-get/state-set both target {type:"state"}', () => {
 		const root = inspectRootOf(createFixtureBlueprint())
 		const method = root.methods.find(candidate => candidate.name === 'endpoints')!

@@ -117,6 +117,55 @@ const writeChain3Plugin = createWidgetPlugin('write-chain-3')
 	)
 	.done()
 
+interface CrossWidgetWriterInterfaces {
+	state: {
+		value: number
+	}
+	methods: {
+		write: (value: number) => unknown
+	}
+}
+
+/** A child Widget whose Method writes State directly. */
+const crossWidgetWriterPlugin = createWidgetPlugin('cross-widget-writer')
+	.description('Cross-widget writer')
+	.interfaces<CrossWidgetWriterInterfaces>()
+	.state(state => state.value({
+		validate: (input): input is number => typeof input === 'number',
+	}))
+	.methods(methods => methods.write({
+		registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
+		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
+		execute: () => null,
+	}))
+	.done()
+
+interface CrossWidgetRelayInterfaces {
+	slots: 'children'
+	properties: {
+		reader: unknown
+	}
+	methods: {
+		outer: (value: number) => unknown
+	}
+}
+
+/** Parent `reader` -> `outer` -> child `write` -> child `state.set`. */
+const crossWidgetRelayPlugin = createWidgetPlugin('cross-widget-relay')
+	.description('Cross-widget relay')
+	.interfaces<CrossWidgetRelayInterfaces>()
+	.slots({ children: { description: 'Child widgets' } })
+	.properties(properties => properties.reader({
+		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('outer') }),
+		compute: () => null,
+	}))
+	.methods(methods => methods.outer({
+		registerDeps: ({ dep }) => ({ call: dep.widget('writer').methods.invoke('write') }),
+		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
+		execute: () => null,
+	}))
+	.done()
+
 interface DedupEdgeInterfaces {
 	state: {
 		value: number
@@ -292,6 +341,8 @@ const system = createWidgetSystem({
 		writeDirectPlugin,
 		writeNoInvokePlugin,
 		writeChain3Plugin,
+		crossWidgetWriterPlugin,
+		crossWidgetRelayPlugin,
 		dedupEdgePlugin,
 		selfLoopPlugin,
 		propMethodCyclePlugin,
@@ -397,6 +448,27 @@ describe('write-effect analysis', () => {
 		const diagnostics = expectInvalid(blueprint)
 		expect(diagnostics)
 			.toHaveLength(1)
+	})
+
+	it('propagates Method write effects across Widgets before rejecting a Property that reaches the writer', () => {
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'cross-widget-relay',
+			slots: { children: [{ id: 'writer', type: 'cross-widget-writer' }] },
+		})
+
+		const diagnostics = expectInvalid(blueprint)
+		expect(diagnostics)
+			.toHaveLength(1)
+		const source = dependencyDiagnosticsOf(diagnostics)[0]!
+		expect(source.code)
+			.toBe('property-dependency-has-write-effects')
+		expect(source.location)
+			.toMatchObject({ type: 'property', name: 'reader' })
+		expect(dependencyOf(source))
+			.toMatchObject({ target: { type: 'self' }, operation: { type: 'method-invoke', name: 'outer' } })
+		expect(source.related?.map(location => location.type === 'method' ? { type: location.type, name: location.name } : { type: location.type }))
+			.toEqual([{ type: 'method', name: 'outer' }])
 	})
 })
 

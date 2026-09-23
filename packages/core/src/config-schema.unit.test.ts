@@ -132,10 +132,7 @@ describe('draft 2020-12 config schema metadata', () => {
 			type: 'definitely-not-a-json-schema-type',
 		} as unknown as WidgetConfigJsonSchema
 
-		expect(() => defineConfigPlugin('author-responsibility', malformedByContract))
-			.not.toThrow()
-
-		const plugin = defineConfigPlugin('author-responsibility-2', malformedByContract)
+		const plugin = defineConfigPlugin('author-responsibility', malformedByContract)
 		expect(plugin.config?.schema)
 			.toBe(malformedByContract)
 	})
