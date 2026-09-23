@@ -136,7 +136,7 @@ describe('coordinated live path (checkpoint §1 required demonstration)', () => 
 
 		// store mutates; proposal-filtered table loses that row
 		const filtered = query.properties.filteredDeals.get()
-		expect(filtered.ok && filtered.value.map(deal => deal.id))
+		expect(filtered.ok && filtered.value?.map(deal => deal.id))
 			.toEqual(['deal-4'])
 
 		// count/value/chart recompute

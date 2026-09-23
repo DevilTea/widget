@@ -18,6 +18,7 @@ interface FixtureInterfaces {
 
 function createFixture(computeSpy: () => void) {
 	const plugin = createWidgetPlugin('viewmodel-fixture')
+		.description('Runtime Inspector view-model fixture')
 		.interfaces<FixtureInterfaces>()
 		.state(state => state.count({
 			validate: (input): input is number => typeof input === 'number',

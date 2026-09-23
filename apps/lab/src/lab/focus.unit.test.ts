@@ -66,9 +66,9 @@ describe('createInspectorFocusStore', () => {
 				nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId,
 			})
 
-		const documentFocusBefore = store.getFocus('document')
+		const documentFocusBefore = store.getScopedFocus('document')
 		store.setFocus('preview', { nodeId: previewFocus.nodeId, member: { type: 'state', name: 'count' } })
-		expect(store.getFocus('document'))
+		expect(store.getScopedFocus('document'))
 			.toEqual(documentFocusBefore)
 	})
 

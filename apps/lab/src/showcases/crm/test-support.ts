@@ -5,16 +5,20 @@
  * `@deviltea/widget-core` Blueprint/Runtime against `crmSystem`; nothing here mocks core.
  */
 
-import type { WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { RuntimeWidget, WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { Component } from 'vue'
+import type { crmPlugins } from './plugins'
 import { createWidgetVueRenderer, useWidget } from '@deviltea/widget-vue'
 import { defineComponent, h } from 'vue'
 import { AppShellPlugin, CardPlugin, ToolbarPlugin } from './plugins/structural'
 import { defaultCrmPreset } from './presets'
 import { crmSystem } from './system'
 
+type CrmRuntime = WidgetSystemRuntime<typeof crmPlugins>
+type CrmRuntimeWidget = RuntimeWidget<typeof crmPlugins>
+
 export function createCrmRuntime(sourceText: string = defaultCrmPreset.sourceText): {
-	readonly runtime: WidgetSystemRuntime
+	readonly runtime: CrmRuntime
 } {
 	const definition: unknown = JSON.parse(sourceText)
 	const blueprint = crmSystem.createBlueprint(definition)
@@ -30,11 +34,11 @@ export function createCrmRuntime(sourceText: string = defaultCrmPreset.sourceTex
  * `../survey/test-support.ts`'s `widgetOfType` does, via the discriminated `.type` literal, so callers
  * get the exact `state`/`properties`/`methods` surface for `type`.
  */
-export function widgetOfType<Type extends string>(runtime: WidgetSystemRuntime, id: string, type: Type) {
+export function widgetOfType<Type extends CrmRuntimeWidget['type']>(runtime: CrmRuntime, id: string, type: Type): Extract<CrmRuntimeWidget, { readonly type: Type }> {
 	const widget = runtime.getWidget(id)
 	if (widget === null || widget.type !== type)
 		throw new Error(`Expected widget "${id}" to exist and be of type "${type}".`)
-	return widget as Extract<NonNullable<ReturnType<WidgetSystemRuntime['getWidget']>>, { readonly type: Type }>
+	return widget as Extract<CrmRuntimeWidget, { readonly type: Type }>
 }
 
 const NoopRenderer = defineComponent({ setup: () => () => null })
@@ -44,17 +48,24 @@ const NoopRenderer = defineComponent({ setup: () => () => null })
  * real (never `Noop`) so anything nested under them still mounts (mirrors the single-slot
  * `makeSlotRenderer` helper each survey renderer test defines locally, generalized to N slots).
  */
-function makeMultiSlotRenderer(plugin: any, slotNames: readonly string[]): Component {
+type StructuralSlotPlugin = typeof AppShellPlugin | typeof ToolbarPlugin | typeof CardPlugin
+
+function makeMultiSlotRenderer(plugin: StructuralSlotPlugin, slotNames: readonly string[]): Component {
 	return defineComponent({
 		setup() {
-			// `useWidget<Plugin>`'s return type is built from several nested conditional types keyed off
-			// `Plugin`; called with a `plugin: any` argument (this helper is test-only structural glue,
-			// not a renderer that types against one exact plugin), TypeScript's "conditional types checked
-			// against `any` distribute over every branch" rule surfaces a union that does not uniformly
-			// have `WidgetSlot` — hence the extra `as any` here, discarding that inferred union rather
-			// than fighting it.
-			const { WidgetSlot } = useWidget(plugin) as any
-			return () => slotNames.map(name => h(WidgetSlot, { name, key: name }))
+			if (plugin === AppShellPlugin) {
+				const { WidgetSlot } = useWidget(AppShellPlugin)
+				const names = slotNames as readonly ('header' | 'main' | 'overlay')[]
+				return () => names.map(name => h(WidgetSlot, { name, key: name }))
+			}
+			if (plugin === ToolbarPlugin) {
+				const { WidgetSlot } = useWidget(ToolbarPlugin)
+				const names = slotNames as readonly ('start' | 'end')[]
+				return () => names.map(name => h(WidgetSlot, { name, key: name }))
+			}
+			const { WidgetSlot } = useWidget(CardPlugin)
+			const names = slotNames as readonly 'body'[]
+			return () => names.map(name => h(WidgetSlot, { name, key: name }))
 		},
 	})
 }

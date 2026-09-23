@@ -10,27 +10,19 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { LabI18nKey } from '../../../composables/use-lab-i18n'
+import { testGlobalProperties } from '../../../test-support'
 import { ConditionalSectionPlugin, SurveySectionPlugin } from '../plugins'
 import { defaultSurveyPreset } from '../presets'
 import { surveySystem } from '../system'
-import { widgetOfType } from '../test-support'
+import { makeSurveySlotRenderer, widgetOfType } from '../test-support'
 import TripSurveyRenderer from './TripSurveyRenderer.vue'
 
 const NoopRenderer = defineComponent({ setup: () => () => null })
 
-function makeSlotRenderer(plugin: any, slotName: string) {
-	return defineComponent({
-		setup() {
-			const { WidgetSlot } = useWidget(plugin)
-			return () => h(WidgetSlot, { name: slotName })
-		},
-	})
-}
-
 const HarnessRenderer = createWidgetVueRenderer(surveySystem, renderers =>
 	renderers
 		.TripSurvey(TripSurveyRenderer)
-		.SurveySection(makeSlotRenderer(SurveySectionPlugin, 'body'))
+		.SurveySection(makeSurveySlotRenderer(SurveySectionPlugin, 'body'))
 		.ConditionalSection(defineComponent({
 			setup() {
 				const { useProperties, WidgetSlot } = useWidget(ConditionalSectionPlugin)
@@ -55,7 +47,7 @@ function mountSurvey() {
 	const wrapper = mount(HarnessRenderer, {
 		props: { runtime },
 		global: {
-			config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+			config: { globalProperties: testGlobalProperties },
 			provide: {
 				[LabI18nKey as symbol]: {
 					locale: { value: 'en' },

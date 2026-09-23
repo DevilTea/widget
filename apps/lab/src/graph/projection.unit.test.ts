@@ -22,8 +22,9 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('graph-container')
+	.description('Graph container fixture')
 	.interfaces<ContainerInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: 'Child widgets' } })
 	.done()
 
 interface TargetInterfaces {
@@ -33,6 +34,7 @@ interface TargetInterfaces {
 }
 
 const targetPlugin = createWidgetPlugin('graph-target')
+	.description('Graph target fixture')
 	.interfaces<TargetInterfaces>()
 	.state(state => state.value({ validate: (input): input is number => typeof input === 'number', default: () => 1 }))
 	.properties(properties => properties.val({ compute: () => 2 }))
@@ -52,6 +54,7 @@ interface ConsumerInterfaces {
 }
 
 const consumerPlugin = createWidgetPlugin('graph-consumer')
+	.description('Graph consumer fixture')
 	.interfaces<ConsumerInterfaces>()
 	.properties(properties => properties
 		.reader({
@@ -92,6 +95,7 @@ interface WriteChainInterfaces {
 
 /** `a` -> `b` -> `c` -> direct `state.set` — a 3-layer transitive write chain (mirrors core's own conformance fixture shape). */
 const writeChainPlugin = createWidgetPlugin('graph-write-chain')
+	.description('Graph write-chain fixture')
 	.interfaces<WriteChainInterfaces>()
 	.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
 	.methods(methods => methods
@@ -121,6 +125,7 @@ interface CycleInterfaces {
 
 /** `p1` <-> `p2` — a 2-member Property<->Property invalid evaluation cycle. */
 const cyclePlugin = createWidgetPlugin('graph-cycle')
+	.description('Graph cycle fixture')
 	.interfaces<CycleInterfaces>()
 	.properties(properties => properties
 		.p1({ registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p2') }), compute: () => null })

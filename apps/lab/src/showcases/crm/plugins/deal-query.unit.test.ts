@@ -41,7 +41,7 @@ describe('dealQuery.filteredDeals / count with no search or stage restriction', 
 		expect(query.properties.count.get())
 			.toEqual({ ok: true, value: 8 })
 		const filtered = query.properties.filteredDeals.get()
-		expect(filtered.ok && filtered.value.map(deal => deal.id))
+		expect(filtered.ok && filtered.value?.map(deal => deal.id))
 			.toEqual(['deal-1', 'deal-2', 'deal-3', 'deal-4', 'deal-5', 'deal-6', 'deal-7', 'deal-8'])
 	})
 })
@@ -88,7 +88,7 @@ describe('dealQuery stage filter — \'all\' vs an exact DealStage literal', () 
 		const { query, stageFilter } = setup()
 		stageFilter.state.value.set('proposal')
 		const filtered = query.properties.filteredDeals.get()
-		expect(filtered.ok && filtered.value.map(deal => deal.id))
+		expect(filtered.ok && filtered.value?.map(deal => deal.id))
 			.toEqual(['deal-3', 'deal-4'])
 	})
 
@@ -137,7 +137,7 @@ describe('dealQuery.stageSeries — fixed stage order including zero-valued stag
 				{ label: 'won', value: 1 },
 				{ label: 'lost', value: 1 },
 			])
-		expect(result.ok && result.value.map(point => point.label))
+		expect(result.ok && result.value?.map(point => point.label))
 			.toEqual(dealStageValues)
 	})
 
@@ -168,9 +168,9 @@ describe('dealQuery empty-query behaviors — a search matching nothing', () => 
 		expect(query.properties.weightedValue.get())
 			.toEqual({ ok: true, value: 0 })
 		const result = query.properties.stageSeries.get()
-		expect(result.ok && result.value.every(point => point.value === 0))
+		expect(result.ok && result.value?.every(point => point.value === 0))
 			.toBe(true)
-		expect(result.ok && result.value.map(point => point.label))
+		expect(result.ok && result.value?.map(point => point.label))
 			.toEqual(dealStageValues)
 	})
 })

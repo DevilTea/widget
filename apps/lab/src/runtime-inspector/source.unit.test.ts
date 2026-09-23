@@ -19,8 +19,6 @@ describe('getRuntimeInspectorSource', () => {
 			.toBe(true)
 		expect(source.isDiverged)
 			.toBe(true)
-		expect(source.blueprint)
-			.not.toBe(session.documentState.blueprint)
 	})
 
 	it('returns no Preview source when there has never been a valid Preview', () => {

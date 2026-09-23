@@ -9,12 +9,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { shallowRef } from 'vue'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
 import { LabThemeKey } from '../../composables/use-lab-theme'
+import { testGlobalProperties } from '../../test-support'
 import ImplementationSourceView from './ImplementationSourceView.vue'
 
 const theme = shallowRef<'light' | 'dark'>('dark')
 const globalStubConfig = {
 	global: {
-		config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } },
+		config: { globalProperties: testGlobalProperties },
 		provide: {
 			[LabI18nKey as symbol]: {
 				locale: { value: 'en' },

@@ -8,7 +8,6 @@
  * `storeId` to two independent stores so the missing-id failure is genuinely reachable in isolation.
  */
 
-import type { WidgetSystemRuntime } from '@deviltea/widget-core'
 import { describe, expect, it } from 'vitest'
 import { defaultCrmPreset } from '../presets'
 import { crmSystem } from '../system'
@@ -148,7 +147,7 @@ describe('dealStageForm.canSave', () => {
 // Isolated fixture: DealStageForm.save() propagating a genuine DealStore.updateStage failure.
 // -------------------------------------------------------------------------------------------------
 
-function createIsolatedStoreMismatchRuntime(): WidgetSystemRuntime {
+function createIsolatedStoreMismatchRuntime(): ReturnType<typeof createCrmRuntime>['runtime'] {
 	const source = {
 		id: 'root',
 		type: 'Card',

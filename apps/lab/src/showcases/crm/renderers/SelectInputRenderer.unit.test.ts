@@ -8,6 +8,7 @@
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { testGlobalProperties } from '../../../test-support'
 import { createCrmHarness, createCrmRuntime } from '../test-support'
 import SelectInputRenderer from './SelectInputRenderer.vue'
 
@@ -18,7 +19,7 @@ describe('selectInputRenderer', () => {
 
 		const wrapper = mount(HarnessRenderer, {
 			props: { runtime },
-			global: { config: { globalProperties: { pika: (value: unknown) => JSON.stringify(value) } } },
+			global: { config: { globalProperties: testGlobalProperties } },
 		})
 		await wrapper.vm.$nextTick()
 

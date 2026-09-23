@@ -22,6 +22,7 @@ import { createTutorialStore } from './use-tutorial'
 function createFakeImplementationExplorer(): ImplementationExplorerStore {
 	return {
 		openRequestTick: shallowRef(0),
+		requestedMode: shallowRef<'focused' | 'catalog'>('focused'),
 		open: () => {},
 	}
 }
