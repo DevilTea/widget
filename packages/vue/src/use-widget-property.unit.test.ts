@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { nextTick } from 'vue'
+import { nextTick, watchEffect } from 'vue'
 import { WidgetVueIntegrationError } from './errors'
 import { CounterPlugin, createFixtureRuntime, getCounterWidget, getLabelWidget, LabelPlugin, mountWidgetBridge } from './test-fixtures'
 
@@ -52,14 +52,24 @@ describe('property conformance', () => {
 		const runtime = createFixtureRuntime({ id: 'p4', type: 'Counter' })
 		const { bridge } = mountWidgetBridge(runtime, 'p4', CounterPlugin)
 		const { doubled } = bridge.useProperties()
-		const { count } = bridge.useState()
+		const widget = getCounterWidget(runtime, 'p4')
 
-		expect(doubled.value)
-			.toBe(0)
-		count.value = 3
+		const seenValues: Array<number | null> = []
+		const stop = watchEffect(() => {
+			seenValues.push(doubled.value)
+		})
 		await nextTick()
-		expect(doubled.value)
-			.toBe(6)
+		expect(seenValues)
+			.toEqual([0])
+
+		// Change the authoritative Core State directly. The assertion below must be driven by the
+		// Property subscription's Vue trigger, not by a second manual `.value` read.
+		widget.state.count.set(3)
+		await nextTick()
+		expect(seenValues)
+			.toEqual([0, 6])
+
+		stop()
 	})
 
 	it('does not retain a last-successful fallback value once a Property starts failing', () => {
@@ -105,12 +115,24 @@ describe('property conformance', () => {
 	it('cleans up the property subscription when the owning component unmounts', () => {
 		const runtime = createFixtureRuntime({ id: 'p7', type: 'Counter' })
 		const widget = getCounterWidget(runtime, 'p7')
+		const originalSubscribe = widget.properties.doubled.subscribe.bind(widget.properties.doubled)
+		const unsubscribeSpy = vi.fn()
+		vi.spyOn(widget.properties.doubled, 'subscribe')
+			.mockImplementation((listener) => {
+				const unsubscribe = originalSubscribe(listener)
+				return () => {
+					unsubscribeSpy()
+					unsubscribe()
+				}
+			})
+
 		const { wrapper, bridge } = mountWidgetBridge(runtime, 'p7', CounterPlugin)
 		void bridge.useProperties().doubled.value
 
+		expect(unsubscribeSpy).not.toHaveBeenCalled()
 		wrapper.unmount()
-
-		expect(() => widget.properties.doubled.get()).not.toThrow()
+		expect(unsubscribeSpy)
+			.toHaveBeenCalledTimes(1)
 	})
 
 	it('is genuinely read-only at runtime, not just by TypeScript type: assigning `.value` throws', () => {

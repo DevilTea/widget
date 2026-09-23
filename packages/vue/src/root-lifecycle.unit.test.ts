@@ -19,6 +19,7 @@ import {
 	EmptyStateRenderer,
 	fixtureSystem,
 	getCounterWidget,
+	getLabelWidget,
 	LabelRenderer,
 	LeafRenderer,
 } from './test-fixtures'
@@ -53,7 +54,7 @@ describe('root renderer lifecycle', () => {
 		const originalSubscribe = widgetA.state.count.subscribe.bind(widgetA.state.count)
 		const unsubscribeSpy = vi.fn()
 		vi.spyOn(widgetA.state.count, 'subscribe')
-			.mockImplementation((listener) => {
+			.mockImplementation((listener: Parameters<typeof originalSubscribe>[0]) => {
 				const unsubscribe = originalSubscribe(listener)
 				return () => {
 					unsubscribeSpy()
@@ -77,25 +78,63 @@ describe('root renderer lifecycle', () => {
 	})
 
 	it('cleans up every Vue bridge subscription activated anywhere in the tree on unmount', () => {
-		const runtime = createFixtureRuntime({ id: 'root', type: 'Counter' })
-		const widget = getCounterWidget(runtime, 'root')
+		const runtime = createFixtureRuntime({
+			id: 'root',
+			type: 'Container',
+			slots: {
+				'header': [
+					{ id: 'nested-counter', type: 'Counter' },
+					{ id: 'nested-label', type: 'Label' },
+				],
+				'body': [],
+				'slot-one': [],
+			},
+		})
+		const counterWidget = getCounterWidget(runtime, 'nested-counter')
+		const labelWidget = getLabelWidget(runtime, 'nested-label')
+		const counterStateUnsubscribeSpy = vi.fn()
+		const counterPropertyUnsubscribeSpy = vi.fn()
+		const labelPropertyUnsubscribeSpy = vi.fn()
 
-		const originalSubscribe = widget.properties.doubled.subscribe.bind(widget.properties.doubled)
-		const unsubscribeSpy = vi.fn()
-		vi.spyOn(widget.properties.doubled, 'subscribe')
-			.mockImplementation((listener) => {
-				const unsubscribe = originalSubscribe(listener)
+		const originalCounterStateSubscribe = counterWidget.state.count.subscribe.bind(counterWidget.state.count)
+		vi.spyOn(counterWidget.state.count, 'subscribe')
+			.mockImplementation((listener: Parameters<typeof originalCounterStateSubscribe>[0]) => {
+				const unsubscribe = originalCounterStateSubscribe(listener)
 				return () => {
-					unsubscribeSpy()
+					counterStateUnsubscribeSpy()
+					unsubscribe()
+				}
+			})
+		const originalCounterPropertySubscribe = counterWidget.properties.doubled.subscribe.bind(counterWidget.properties.doubled)
+		vi.spyOn(counterWidget.properties.doubled, 'subscribe')
+			.mockImplementation((listener: Parameters<typeof originalCounterPropertySubscribe>[0]) => {
+				const unsubscribe = originalCounterPropertySubscribe(listener)
+				return () => {
+					counterPropertyUnsubscribeSpy()
+					unsubscribe()
+				}
+			})
+		const originalLabelPropertySubscribe = labelWidget.properties.text.subscribe.bind(labelWidget.properties.text)
+		vi.spyOn(labelWidget.properties.text, 'subscribe')
+			.mockImplementation((listener: Parameters<typeof originalLabelPropertySubscribe>[0]) => {
+				const unsubscribe = originalLabelPropertySubscribe(listener)
+				return () => {
+					labelPropertyUnsubscribeSpy()
 					unsubscribe()
 				}
 			})
 
 		const wrapper = mount(WidgetRenderer, { props: { runtime } })
-		expect(unsubscribeSpy).not.toHaveBeenCalled()
+		expect(counterStateUnsubscribeSpy).not.toHaveBeenCalled()
+		expect(counterPropertyUnsubscribeSpy).not.toHaveBeenCalled()
+		expect(labelPropertyUnsubscribeSpy).not.toHaveBeenCalled()
 
 		wrapper.unmount()
-		expect(unsubscribeSpy)
+		expect(counterStateUnsubscribeSpy)
+			.toHaveBeenCalledTimes(1)
+		expect(counterPropertyUnsubscribeSpy)
+			.toHaveBeenCalledTimes(1)
+		expect(labelPropertyUnsubscribeSpy)
 			.toHaveBeenCalledTimes(1)
 	})
 

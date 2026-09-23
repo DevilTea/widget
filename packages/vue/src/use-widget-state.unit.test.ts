@@ -7,7 +7,7 @@
  * local writes.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { CounterPlugin, createFixtureRuntime, getCounterWidget, mountWidgetBridge } from './test-fixtures'
 
@@ -114,14 +114,23 @@ describe('state conformance', () => {
 	it('cleans up the state subscription when the owning component unmounts', () => {
 		const runtime = createFixtureRuntime({ id: 's7', type: 'Counter' })
 		const widget = getCounterWidget(runtime, 's7')
+		const originalSubscribe = widget.state.count.subscribe.bind(widget.state.count)
+		const unsubscribeSpy = vi.fn()
+		vi.spyOn(widget.state.count, 'subscribe')
+			.mockImplementation((listener) => {
+				const unsubscribe = originalSubscribe(listener)
+				return () => {
+					unsubscribeSpy()
+					unsubscribe()
+				}
+			})
+
 		const { wrapper, bridge } = mountWidgetBridge(runtime, 's7', CounterPlugin)
 		void bridge.useState().count.value
 
+		expect(unsubscribeSpy).not.toHaveBeenCalled()
 		wrapper.unmount()
-
-		// After unmount, the Runtime itself is still alive (never disposed by the bridge) and a write
-		// must not throw — proving the bridge did not leave the Runtime in a broken state, even though
-		// there is no live Vue consumer left to observe it.
-		expect(() => widget.state.count.set(10)).not.toThrow()
+		expect(unsubscribeSpy)
+			.toHaveBeenCalledTimes(1)
 	})
 })

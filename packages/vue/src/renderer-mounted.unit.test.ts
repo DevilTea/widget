@@ -138,12 +138,12 @@ describe('renderer / topology — mounted conformance', () => {
 			.toThrow(WidgetVueIntegrationError)
 	})
 
-	it('throws when useWidget()/WidgetSlot is used outside a widget renderer host', () => {
+	it('throws when useWidget() is used outside a widget renderer host', () => {
 		const Rogue = defineComponent({
 			name: 'RogueSlotUser',
 			setup() {
-				const { WidgetSlot } = useWidget(ContainerPlugin)
-				return () => h(WidgetSlot, { name: 'header' })
+				useWidget(ContainerPlugin)
+				return () => null
 			},
 		})
 
