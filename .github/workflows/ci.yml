@@ -28,7 +28,7 @@ jobs:
       - run: pnpm check
 
   package-node22:
-    name: Packed public contracts (Node 22.14.0)
+    name: Packed packages (Node 22.14)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
