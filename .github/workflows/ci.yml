@@ -63,23 +63,24 @@ jobs:
 
           npm init -y >/dev/null
           npm install "$core_tarball" "$vue_tarball" vue@3.5.42 typescript@6.0.3
-          node --input-type=module -e "await import('@deviltea/widget-core'); await import('@deviltea/widget-vue')"
+          cp "$GITHUB_WORKSPACE/scripts/packed-consumer-runtime.mjs" ./packed-consumer-runtime.mjs
+          cp "$GITHUB_WORKSPACE/scripts/packed-consumer-negative.mjs" ./packed-consumer-negative.mjs
+          cp "$GITHUB_WORKSPACE/scripts/packed-consumer-types.mts" ./packed-consumer-types.mts
 
-          cat > smoke.mts <<'SMOKE'
-          import * as core from '@deviltea/widget-core'
-          import * as widgetVue from '@deviltea/widget-vue'
-
-          void core
-          void widgetVue
-          SMOKE
+          node --version
+          node ./packed-consumer-runtime.mjs
+          node ./packed-consumer-negative.mjs
 
           ./node_modules/.bin/tsc \
             --noEmit \
+            --strict \
+            --noUnusedLocals \
+            --noUnusedParameters \
             --target ES2022 \
             --module NodeNext \
             --moduleResolution NodeNext \
             --lib ES2022,DOM,DOM.Iterable \
-            smoke.mts
+            ./packed-consumer-types.mts
 
   browser-contracts:
     name: Browser contracts (Widget Lab)
