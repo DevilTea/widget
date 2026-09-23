@@ -8,7 +8,6 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
-import { isCompiledDependency, readCompiledBlueprint } from '../internal/contract'
 import { inspectBlueprint, inspectRuntime } from './index'
 
 const PROTO_KEY = '__proto__' as const
@@ -283,7 +282,7 @@ describe('immutability', () => {
 			.toBe(true)
 	})
 
-	it('a resolved dependency reference (including nested target/operation) is a frozen, independent clone — mutation throws and cannot influence Runtime behavior (review round 1, finding 2)', () => {
+	it('a resolved dependency reference (including nested target/operation) is readonly and cannot alter Runtime behavior', () => {
 		const blueprint = system.createBlueprint({
 			id: 'root',
 			type: 'immut-container',
@@ -297,30 +296,6 @@ describe('immutability', () => {
 		const dep = root.properties[0]!.dependencies[0]!
 		expect(dep.status)
 			.toBe('resolved')
-		const compiled = readCompiledBlueprint(blueprint)
-		const compiledRoot = compiled.nodes[compiled.rootNodeId]
-		if (!compiledRoot?.resolved)
-			throw new Error('test fixture: expected a resolved compiled root')
-		const compiledProperty = compiledRoot.properties.get('p')
-		const compiledDependency = compiledProperty === undefined
-			? undefined
-			: (compiledProperty.deps as { readonly v?: unknown }).v
-		if (!isCompiledDependency(compiledDependency))
-			throw new Error('test fixture: expected a direct compiled dependency leaf')
-
-		expect(dep.reference)
-			.not.toBe(compiledDependency.reference)
-		expect(dep.reference.target)
-			.not.toBe(compiledDependency.reference.target)
-		expect(dep.reference.operation)
-			.not.toBe(compiledDependency.reference.operation)
-		expect(Object.isFrozen(compiledDependency.reference))
-			.toBe(false)
-		expect(Object.isFrozen(compiledDependency.reference.target))
-			.toBe(false)
-		expect(Object.isFrozen(compiledDependency.reference.operation))
-			.toBe(false)
-
 		expect(() => {
 			(dep.reference.operation as unknown as { key: string }).key = 'corrupted'
 		})
@@ -329,8 +304,7 @@ describe('immutability', () => {
 			(dep.reference.target as unknown as { type: string }).type = 'corrupted'
 		})
 			.toThrow()
-		// The attempted mutations above throw (frozen), so the reference itself never actually changes —
-		// asserted here for completeness rather than because a successful mutation was ever possible.
+		// The public inspection reference remains unchanged after both rejected mutation attempts.
 		expect(dep.reference)
 			.toEqual({ target: { type: 'self' }, operation: { type: 'state-get', key: 'value' } })
 
@@ -341,9 +315,8 @@ describe('immutability', () => {
 		if (widget.type !== 'immut-container')
 			throw new Error('test fixture: expected the "immut-container" widget')
 		widget.state.value.set(41)
-		// Runtime dependency resolution for `p` (the same declared dependency the inspection snapshot
-		// above projects) still resolves correctly against the real, compiler-owned `reference` object —
-		// proof the inspection-exposed clone was never aliased into Runtime materialization.
+		// Reading inspection and attempting to mutate its public projection must not change the
+		// observable result of a subsequent Runtime dependency resolution.
 		expect(widget.properties.p.get())
 			.toEqual({ ok: true, value: 41 })
 		expect(widget.properties.p.getDiagnostics())

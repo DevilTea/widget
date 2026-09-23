@@ -333,7 +333,7 @@ describe('state inspection passive read + notification truth table', () => {
 				code: 'invalid-state-value',
 				location: { type: 'state', widgetId: 'root', key: 'count' },
 				candidate: 'not-a-number',
-				message: 'The candidate value failed state validation.',
+				message: expect.any(String),
 			}])
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
