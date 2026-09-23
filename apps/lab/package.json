@@ -9,7 +9,7 @@
 		"dev": "vite",
 		"build": "vite build",
 		"preview": "vite preview",
-		"typecheck": "pnpm run pika:codegen && vue-tsc --project ./tsconfig.app.json --noEmit && vue-tsc --project ./tsconfig.tests.json --noEmit",
+		"typecheck": "pnpm run pika:codegen && vue-tsc --project ./tsconfig.app.json --noEmit && vue-tsc --project ./tsconfig.tests.json --noEmit && vue-tsc --project ./tsconfig.browser-tests.json --noEmit",
 		"pika:codegen": "node ./scripts/pika-codegen.mjs",
 		"test": "vitest run --config vitest.config.ts",
 		"test:browser": "playwright test",
