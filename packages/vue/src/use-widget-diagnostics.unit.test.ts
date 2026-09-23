@@ -8,10 +8,51 @@
  * not the Runtime-wide `getDiagnostics()`.
  */
 
-import { describe, expect, it } from 'vitest'
+import type { WidgetInterfaces } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { WidgetVueIntegrationError } from './errors'
 import { CounterPlugin, createFixtureRuntime, getCounterWidget, getLabelWidget, LabelPlugin, mountWidgetBridge } from './test-fixtures'
+
+/**
+ * The shared `LabelPlugin` intentionally has only Properties so the absent-capability tests can use it
+ * as a real comparison fixture. This separate real Core plugin keeps the same failing Label Property
+ * while declaring State and Method too, allowing one RuntimeWidget aggregate to prove all three slices
+ * and their canonical order without changing that existing fixture contract.
+ */
+interface AggregateLabelInterfaces extends WidgetInterfaces {
+	state: {
+		count: number
+	}
+	properties: {
+		failing: string
+	}
+	methods: {
+		increment: (step: number) => number
+	}
+}
+
+const AggregateLabelPlugin = createWidgetPlugin('Label')
+	.description('All-capability Label aggregate fixture')
+	.interfaces<AggregateLabelInterfaces>()
+	.state(state => state.count({
+		validate: (input): input is number => typeof input === 'number' && input >= 0,
+		default: () => 0,
+	}))
+	.properties(properties => properties.failing({
+		compute: ({ addDiagnostic }) => {
+			addDiagnostic({ message: 'aggregate Label property failed' })
+			return ''
+		},
+	}))
+	.methods(methods => methods.increment({
+		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
+		execute: ({ args: [step] }) => step,
+	}))
+	.done()
+
+const aggregateLabelSystem = createWidgetSystem({ plugins: [AggregateLabelPlugin] as const })
 
 describe('diagnostics conformance', () => {
 	it('preserves the exact diagnostic snapshot objects and order returned by the Runtime for a state member', async () => {
@@ -64,17 +105,56 @@ describe('diagnostics conformance', () => {
 			.toBe('invalid-method-arguments')
 	})
 
-	it('every member diagnostic channel is independently lazy: reading one never populates or activates another', () => {
+	it('keeps State and Method diagnostic channels independently lazy with distinct snapshots and cleanup', () => {
 		const runtime = createFixtureRuntime({ id: 'd4', type: 'Counter' })
-		const { bridge } = mountWidgetBridge(runtime, 'd4', CounterPlugin)
-		const { count } = bridge.useStateDiagnostics()
-		const { increment } = bridge.useMethodDiagnostics()
+		const widget = getCounterWidget(runtime, 'd4')
+		const originalStateSubscribe = widget.state.count.subscribeDiagnostics.bind(widget.state.count)
+		const originalMethodSubscribe = widget.methods.increment.subscribeDiagnostics.bind(widget.methods.increment)
+		const stateUnsubscribeSpy = vi.fn()
+		const methodUnsubscribeSpy = vi.fn()
+		const stateSubscribeSpy = vi.spyOn(widget.state.count, 'subscribeDiagnostics')
+			.mockImplementation((listener) => {
+				const unsubscribe = originalStateSubscribe(listener)
+				return () => {
+					stateUnsubscribeSpy()
+					unsubscribe()
+				}
+			})
+		const methodSubscribeSpy = vi.spyOn(widget.methods.increment, 'subscribeDiagnostics')
+			.mockImplementation((listener) => {
+				const unsubscribe = originalMethodSubscribe(listener)
+				return () => {
+					methodUnsubscribeSpy()
+					unsubscribe()
+				}
+			})
 
-		expect(count.value)
-			.toEqual([])
-		// Reading `count`'s diagnostics must not have any bearing on `increment`'s, which was never touched.
-		expect(increment.value)
-			.toEqual([])
+		const { wrapper, bridge } = mountWidgetBridge(runtime, 'd4', CounterPlugin)
+		const { count: stateDiagnostics } = bridge.useStateDiagnostics()
+		const { increment: methodDiagnostics } = bridge.useMethodDiagnostics()
+
+		// Produce two different real Core diagnostics before either Vue channel is read.
+		widget.state.count.set(-1)
+		// @ts-expect-error deliberately calling with the wrong arity to produce a method-args diagnostic
+		widget.methods.increment()
+
+		expect(stateSubscribeSpy).not.toHaveBeenCalled()
+		expect(methodSubscribeSpy).not.toHaveBeenCalled()
+		expect(stateDiagnostics.value.map(diagnostic => diagnostic.code))
+			.toEqual(['invalid-state-value'])
+		expect(stateSubscribeSpy)
+			.toHaveBeenCalledTimes(1)
+		expect(methodSubscribeSpy).not.toHaveBeenCalled()
+		expect(methodDiagnostics.value.map(diagnostic => diagnostic.code))
+			.toEqual(['invalid-method-arguments'])
+		expect(methodSubscribeSpy)
+			.toHaveBeenCalledTimes(1)
+
+		wrapper.unmount()
+		expect(stateUnsubscribeSpy)
+			.toHaveBeenCalledTimes(1)
+		expect(methodUnsubscribeSpy)
+			.toHaveBeenCalledTimes(1)
 	})
 
 	it('useDiagnostics() mirrors RuntimeWidget.getDiagnostics()/subscribeDiagnostics() — the widget-level aggregate, exactly', async () => {
@@ -97,21 +177,33 @@ describe('diagnostics conformance', () => {
 			.toBe('invalid-state-value')
 	})
 
-	it('useDiagnostics() aggregates across every capability that owns an diagnostic, in the widget aggregate order state -> properties -> methods', async () => {
-		const runtime = createFixtureRuntime({ id: 'd6', type: 'Counter' })
-		const widget = getCounterWidget(runtime, 'd6')
-		const { bridge } = mountWidgetBridge(runtime, 'd6', CounterPlugin)
+	it('useDiagnostics() includes a real failing Label Property between State and Method diagnostics in canonical order', async () => {
+		const blueprint = aggregateLabelSystem.createBlueprint({ id: 'd6', type: 'Label' })
+		if (blueprint.status !== 'valid')
+			throw new Error(`test fixture: expected a valid aggregate Label blueprint, got ${JSON.stringify(blueprint.diagnostics)}`)
+
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('d6')
+		if (widget === null)
+			throw new Error('test fixture: expected the aggregate Label widget to resolve')
+
+		const { bridge } = mountWidgetBridge(runtime, 'd6', AggregateLabelPlugin)
 		const diagnostics = bridge.useDiagnostics()
 
-		widget.state.count.set(-1)
+		// Activate the actual failing Label Property so its diagnostic enters the RuntimeWidget aggregate.
+		expect(bridge.useProperties().failing.value)
+			.toBeNull()
+		bridge.useState().count.value = -1
+		const { increment } = bridge.useMethods()
 		// @ts-expect-error deliberately calling with the wrong arity to produce a method-args diagnostic
-		widget.methods.increment()
+		increment()
 		await nextTick()
 
+		const coreSnapshot = widget.getDiagnostics()
+		expect(coreSnapshot.map(diagnostic => diagnostic.code))
+			.toEqual(['invalid-state-value', 'invalid-property-result', 'invalid-method-arguments'])
 		expect(diagnostics.value)
-			.toEqual(widget.getDiagnostics())
-		expect(diagnostics.value.map(diagnostic => diagnostic.code))
-			.toEqual(['invalid-state-value', 'invalid-method-arguments'])
+			.toBe(coreSnapshot)
 	})
 
 	it('never reclassifies or parses diagnostic messages: the message string is forwarded verbatim', () => {

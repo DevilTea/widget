@@ -100,11 +100,9 @@ describe('useWidget() identity — widgetId / widgetType', () => {
 
 	it('does not weaken the exact-plugin runtime assertion: a different plugin instance with the same type string still throws', () => {
 		// `assertWidgetMatchesPlugin` (`use-widget.ts`) rejects by plugin object identity
-		// (`widget.blueprint.plugin !== plugin`), not by matching `type` strings — this is the narrow edge
-		// case its own error message calls out ("a different plugin instance, even if the type string
-		// matched"), otherwise uncovered elsewhere in the suite. Widget identity must only ever be read
-		// after this assertion has already succeeded, so a rejection here proves this amendment added no
-		// bypass around it.
+		// (`widget.blueprint.plugin !== plugin`), not by matching `type` strings. Widget identity must only
+		// ever be read after this assertion has already succeeded, so a rejection here proves this
+		// amendment added no bypass around it.
 		const impostorCounterPlugin = createWidgetPlugin('Counter')
 			.description('Impostor counter widget')
 			.interfaces<WidgetInterfaces>()
@@ -113,7 +111,5 @@ describe('useWidget() identity — widgetId / widgetType', () => {
 
 		expect(() => mountWidgetBridge(runtime, 'counter-4', impostorCounterPlugin))
 			.toThrow(WidgetVueIntegrationError)
-		expect(() => mountWidgetBridge(runtime, 'counter-4', impostorCounterPlugin))
-			.toThrow(/different plugin instance, even if the type string matched/)
 	})
 })

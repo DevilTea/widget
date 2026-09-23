@@ -8,7 +8,8 @@
  * Vue-layer special handling.
  */
 
-import { describe, expect, it } from 'vitest'
+import { WidgetSystemRuntimeDisposedError } from '@deviltea/widget-core'
+import { describe, expect, it, vi } from 'vitest'
 import { CounterPlugin, createFixtureRuntime, getCounterWidget, mountWidgetBridge } from './test-fixtures'
 
 describe('method conformance', () => {
@@ -50,8 +51,22 @@ describe('method conformance', () => {
 		const { increment } = bridge.useMethods()
 
 		runtime.dispose()
-		expect(() => increment(1))
-			.toThrow()
+
+		let thrown: unknown
+		try {
+			increment(1)
+		}
+		catch (error) {
+			thrown = error
+		}
+
+		expect(thrown)
+			.toBeInstanceOf(WidgetSystemRuntimeDisposedError)
+		expect(thrown)
+			.toMatchObject({
+				name: 'WidgetSystemRuntimeDisposedError',
+				code: 'runtime-disposed',
+			})
 	})
 
 	it('gives special JavaScript member names like `then` no special handling — it is a plain callable wrapper', () => {
@@ -68,6 +83,7 @@ describe('method conformance', () => {
 	it('exposes stable callable identity within one useWidget() bridge scope, with no subscription created', () => {
 		const runtime = createFixtureRuntime({ id: 'm6', type: 'Counter' })
 		const widget = getCounterWidget(runtime, 'm6')
+		const subscribeDiagnosticsSpy = vi.spyOn(widget.methods.increment, 'subscribeDiagnostics')
 		const { bridge } = mountWidgetBridge(runtime, 'm6', CounterPlugin)
 
 		const { increment: incrementA } = bridge.useMethods()
@@ -78,7 +94,10 @@ describe('method conformance', () => {
 		// Methods are plain callables, not refs: nothing about calling them subscribes anything.
 		expect('value' in incrementA)
 			.toBe(false)
-		void widget
+		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
+		expect(incrementA(1))
+			.toBe(1)
+		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
 	})
 
 	it('projects method diagnostics on a separate reactive channel, independent of the callable itself', () => {

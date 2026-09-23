@@ -79,6 +79,12 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 			.toEqual([])
 		expect(Object.keys(bridge.usePropertyDiagnostics()))
 			.toEqual([])
+		for (const key of ['__proto__', 'constructor', 'phantom']) {
+			expect(asLooseRecord(bridge.useProperties())[key])
+				.toBeUndefined()
+			expect(asLooseRecord(bridge.usePropertyDiagnostics())[key])
+				.toBeUndefined()
+		}
 		// No state/methods/slots were declared at all — absent, not explicitly empty.
 		expect(asLooseRecord(bridge).useState)
 			.toBeUndefined()
@@ -100,6 +106,12 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 			.toEqual([])
 		expect(Object.keys(bridge.useMethodDiagnostics()))
 			.toEqual([])
+		for (const key of ['__proto__', 'constructor', 'phantom']) {
+			expect(asLooseRecord(bridge.useMethods())[key])
+				.toBeUndefined()
+			expect(asLooseRecord(bridge.useMethodDiagnostics())[key])
+				.toBeUndefined()
+		}
 		expect(asLooseRecord(bridge).useProperties)
 			.toBeUndefined()
 		expect(asLooseRecord(bridge).WidgetSlot)

@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /**
  * Conformance tests — diagnostic #13 checkpoint G "Type-level conformance" (renderer-builder half) and the
  * runtime construction-validation half of checkpoint B.
@@ -6,6 +7,7 @@
 import type { AnyWidgetPlugin, WidgetInterfaces } from '@deviltea/widget-core'
 import type { WidgetVueRendererEntry, WidgetVueRendererSection } from './renderer'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { mount } from '@vue/test-utils'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { WidgetVueIntegrationError } from './errors'
@@ -181,7 +183,7 @@ describe('renderer registry — runtime construction validation', () => {
 			.toThrow(WidgetVueIntegrationError)
 	})
 
-	it('supports arbitrary string-literal renderer keys, including "__proto__" and "constructor"', () => {
+	it('mounts the distinct registered components for arbitrary string-literal keys, including "__proto__" and "constructor"', () => {
 		const weirdPlugin = createWidgetPlugin('__proto__')
 			.description('Prototype-key widget')
 			.interfaces<WidgetInterfaces>()
@@ -198,12 +200,31 @@ describe('renderer registry — runtime construction validation', () => {
 		const protoKey = '__proto__' as const
 		const ctorKey = 'constructor' as const
 
-		const renderer = createWidgetVueRenderer(weirdSystem, (renderers) => {
-			const afterProto = renderers[protoKey](Placeholder)
-			return afterProto[ctorKey](Placeholder)
+		const ProtoRenderer = defineComponent({
+			name: 'ProtoKeyRenderer',
+			setup: () => () => h('div', { 'data-renderer': 'proto' }, 'proto'),
+		})
+		const ConstructorRenderer = defineComponent({
+			name: 'ConstructorKeyRenderer',
+			setup: () => () => h('div', { 'data-renderer': 'constructor' }, 'constructor'),
 		})
 
-		expect(renderer)
-			.toBeDefined()
+		const renderer = createWidgetVueRenderer(weirdSystem, (renderers) => {
+			const afterProto = renderers[protoKey](ProtoRenderer)
+			return afterProto[ctorKey](ConstructorRenderer)
+		})
+
+		const protoBlueprint = weirdSystem.createBlueprint({ id: 'proto-root', type: protoKey })
+		const constructorBlueprint = weirdSystem.createBlueprint({ id: 'constructor-root', type: ctorKey })
+		if (protoBlueprint.status !== 'valid' || constructorBlueprint.status !== 'valid')
+			throw new Error('test fixture: expected valid prototype-key blueprints')
+
+		const protoWrapper = mount(renderer, { props: { runtime: protoBlueprint.createRuntime() } })
+		const constructorWrapper = mount(renderer, { props: { runtime: constructorBlueprint.createRuntime() } })
+
+		expect(protoWrapper.element.getAttribute('data-renderer'))
+			.toBe('proto')
+		expect(constructorWrapper.element.getAttribute('data-renderer'))
+			.toBe('constructor')
 	})
 })

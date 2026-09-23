@@ -81,6 +81,10 @@ describe('useWidget() event emitter projection', () => {
 			.toBeDefined()
 		expect(Object.keys(empty.bridge.emit))
 			.toEqual([])
+		for (const key of ['__proto__', 'constructor', 'phantom']) {
+			expect((empty.bridge.emit as unknown as Record<string, unknown>)[key])
+				.toBeUndefined()
+		}
 	})
 
 	it('emits through the same Core event channel observed by Runtime consumers', () => {
