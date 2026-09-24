@@ -21,6 +21,17 @@ interface HarnessInterfaces {
 	}
 }
 
+interface MutablePropertyPayload {
+	mutable: boolean
+	nested: { count: number }
+}
+
+interface MutablePropertyInterfaces {
+	properties: {
+		payload: MutablePropertyPayload
+	}
+}
+
 function createHarness() {
 	let computeSpyCount = 0
 	let mode: ControlledMode = 'ok'
@@ -145,6 +156,65 @@ describe('zero semantic execution', () => {
 })
 
 describe('property inspection subscribe truth table', () => {
+	it('publishes the frozen successful result wrapper without freezing the plugin-owned payload', () => {
+		const payload: MutablePropertyPayload = {
+			mutable: false,
+			nested: { count: 0 },
+		}
+		const plugin = createWidgetPlugin('mutable-property-payload')
+			.description('Test widget')
+			.interfaces<MutablePropertyInterfaces>()
+			.properties(properties => properties.payload({ compute: () => payload }))
+			.done()
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'mutable-property-payload' })
+		if (blueprint.status !== 'valid')
+			throw new Error('Expected a valid payload Blueprint.')
+
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('root')
+		if (widget === null)
+			throw new Error('Expected the root widget to exist.')
+
+		const runtimeInspection = inspectRuntime(runtime)
+		const propertyInspection = runtimeInspection.getWidget(runtimeInspection.blueprint.rootNodeId)!.getProperty('payload')!
+		const result = widget.properties.payload.get()
+		expect(result.ok)
+			.toBe(true)
+		if (!result.ok)
+			throw new Error('Expected the payload Property to succeed.')
+
+		const snapshot = propertyInspection.getSnapshot()
+		expect(snapshot.status)
+			.toBe('completed')
+		if (snapshot.status !== 'completed')
+			throw new Error('Expected Inspection to retain the completed Property result.')
+		const inspectedResult = snapshot.result
+		expect(inspectedResult.ok)
+			.toBe(true)
+		if (!inspectedResult.ok)
+			throw new Error('Expected the inspected Property result to succeed.')
+		const inspectedPayload = inspectedResult.value as MutablePropertyPayload
+
+		expect(snapshot.result)
+			.toBe(result)
+		expect(inspectedPayload)
+			.toBe(payload)
+		expect(Object.isFrozen(snapshot.result))
+			.toBe(true)
+		expect(Object.isFrozen(payload))
+			.toBe(false)
+		expect(Object.isFrozen(payload.nested))
+			.toBe(false)
+
+		payload.mutable = true
+		payload.nested.count = 1
+		expect(inspectedPayload.mutable)
+			.toBe(true)
+		expect(inspectedPayload.nested.count)
+			.toBe(1)
+	})
+
 	it('subscribe() has no immediate emission', () => {
 		const { runtime } = createHarness()
 		const propertyInspection = inspectRuntime(runtime)
@@ -287,6 +357,34 @@ describe('property inspection subscribe truth table', () => {
 })
 
 describe('state inspection passive read + notification truth table', () => {
+	it('registers the same callback twice and lets each unsubscribe remove only its own registration', () => {
+		const { widget, runtime } = createHarness()
+		const stateInspection = inspectRuntime(runtime)
+			.getWidget(rootIdOf(runtime))!.getState('count')!
+		const listener = vi.fn()
+
+		const unsubscribeFirst = stateInspection.subscribe(listener)
+		const unsubscribeSecond = stateInspection.subscribe(listener)
+		widget.state.count.set(1)
+
+		expect(listener)
+			.toHaveBeenCalledTimes(2)
+		expect(listener.mock.calls.map(([snapshot]) => snapshot))
+			.toEqual([{ value: 1 }, { value: 1 }])
+
+		unsubscribeFirst()
+		widget.state.count.set(2)
+		expect(listener)
+			.toHaveBeenCalledTimes(3)
+		expect(listener.mock.calls[2]![0])
+			.toEqual({ value: 2 })
+
+		unsubscribeSecond()
+		widget.state.count.set(3)
+		expect(listener)
+			.toHaveBeenCalledTimes(3)
+	})
+
 	it('getSnapshot() inside an external alien-signals effect creates no tracked dependency', () => {
 		const { widget, runtime } = createHarness()
 		const stateInspection = inspectRuntime(runtime)

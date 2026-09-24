@@ -251,6 +251,179 @@ describe('runtimeMethod', () => {
 			.toBe(2)
 	})
 
+	it('a cross-widget state.set updates only its target and notifies that target Property subscribers', () => {
+		interface TargetInterfaces {
+			state: { value: number }
+			properties: { doubled: number }
+		}
+		let doubledComputeCount = 0
+		const targetPlugin = createWidgetPlugin('cross-widget-state-target')
+			.description('Target widget')
+			.interfaces<TargetInterfaces>()
+			.state(state => state.value({
+				validate: (input): input is number => typeof input === 'number',
+				default: () => 3,
+			}))
+			.properties(properties => properties.doubled({
+				registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }),
+				compute: ({ deps }) => {
+					doubledComputeCount++
+					const result = deps.value()
+					return result.ok ? (result.value ?? 0) * 2 : -1
+				},
+			}))
+			.done()
+
+		interface CallerInterfaces {
+			slots: 'children'
+			state: { value: number }
+			methods: { writeTarget: (value: number) => number | null }
+		}
+		const callerPlugin = createWidgetPlugin('cross-widget-state-caller')
+			.description('Caller widget')
+			.interfaces<CallerInterfaces>()
+			.slots({ children: { description: 'Target widgets' } })
+			.state(state => state.value({
+				validate: (input): input is number => typeof input === 'number',
+				default: () => 10,
+			}))
+			.methods(methods => methods.writeTarget({
+				registerDeps: ({ dep }) => ({ setValue: dep.widget('target').state.set('value') }),
+				validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
+				execute: ({ args, deps }) => {
+					const result = deps.setValue(args[0]!)
+					return result.ok && typeof result.value === 'number' ? result.value : null
+				},
+			}))
+			.done()
+
+		const system = createWidgetSystem({ plugins: [callerPlugin, targetPlugin] })
+		const blueprint = system.createBlueprint({
+			id: 'caller',
+			type: 'cross-widget-state-caller',
+			slots: { children: [{ id: 'target', type: 'cross-widget-state-target' }] },
+		})
+		if (blueprint.status !== 'valid')
+			throw new Error(`Expected a valid Blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
+
+		const runtime = blueprint.createRuntime()
+		const caller = runtime.getWidget('caller')
+		const target = runtime.getWidget('target')
+		if (caller === null || caller.type !== 'cross-widget-state-caller' || target === null || target.type !== 'cross-widget-state-target')
+			throw new Error('Expected caller and target widgets to exist.')
+
+		expect(target.properties.doubled.get())
+			.toEqual({ ok: true, value: 6 })
+		expect(doubledComputeCount)
+			.toBe(1)
+		const propertyNotifications: unknown[] = []
+		target.properties.doubled.subscribe(result => propertyNotifications.push(result))
+
+		expect(caller.methods.writeTarget(7))
+			.toEqual({ ok: true, value: 7 })
+		expect(caller.state.value.get())
+			.toBe(10)
+		expect(target.state.value.get())
+			.toBe(7)
+		expect(doubledComputeCount)
+			.toBe(2)
+		expect(propertyNotifications)
+			.toEqual([{ ok: true, value: 14 }])
+	})
+
+	it('preserves intermediate dependency failures and each Method’s public semantic provenance', () => {
+		interface NestedMethodInterfaces {
+			methods: {
+				outer: () => string
+				middle: () => string
+				leaf: () => string
+			}
+		}
+		const plugin = createWidgetPlugin('nested-method-failures')
+			.description('Nested Method failures')
+			.interfaces<NestedMethodInterfaces>()
+			.methods(methods => methods
+				.outer({
+					registerDeps: ({ dep }) => ({ middle: dep.self.methods.invoke('middle') }),
+					validateArgs: (args): args is [] => args.length === 0,
+					execute: ({ deps }) => {
+						deps.middle()
+						return 'outer result'
+					},
+				})
+				.middle({
+					registerDeps: ({ dep }) => ({ leaf: dep.self.methods.invoke('leaf') }),
+					validateArgs: (args): args is [] => args.length === 0,
+					execute: ({ deps }) => {
+						deps.leaf()
+						return 'middle result'
+					},
+				})
+				.leaf({
+					validateArgs: (args): args is [] => args.length === 0,
+					execute: ({ addDiagnostic }) => {
+						addDiagnostic({ message: 'leaf failed' })
+						return 'leaf result'
+					},
+				}))
+			.done()
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'nested-method-failures' })
+		if (blueprint.status !== 'valid')
+			throw new Error(`Expected a valid Blueprint, got diagnostics: ${JSON.stringify(blueprint.diagnostics)}`)
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('root')
+		if (widget === null)
+			throw new Error('Expected the root widget to exist.')
+
+		const result = widget.methods.outer()
+		expect(result.ok)
+			.toBe(false)
+		if (result.ok)
+			throw new Error('Expected the outer Method to report the nested failure.')
+		expect(result.failure.diagnostics)
+			.toHaveLength(1)
+		const outer = result.failure.diagnostics[0]!
+		expect(outer.code)
+			.toBe('dependency-target-failed')
+		if (outer.code !== 'dependency-target-failed')
+			throw new Error('Expected the outer diagnostic to retain its failed dependency cause.')
+		expect(outer.location)
+			.toEqual({ type: 'method', widgetId: 'root', name: 'outer' })
+		expect(outer.dependency)
+			.toEqual({
+				target: { type: 'self' },
+				operation: { type: 'method-invoke', name: 'middle' },
+			})
+		expect(outer.related)
+			.toEqual([{ type: 'method', widgetId: 'root', name: 'middle' }])
+
+		const middle = outer.cause
+		expect(middle.code)
+			.toBe('dependency-target-failed')
+		if (middle.code !== 'dependency-target-failed')
+			throw new Error('Expected the intermediate Method diagnostic to be preserved as the cause.')
+		expect(middle.location)
+			.toEqual({ type: 'method', widgetId: 'root', name: 'middle' })
+		expect(middle.dependency)
+			.toEqual({
+				target: { type: 'self' },
+				operation: { type: 'method-invoke', name: 'leaf' },
+			})
+		expect(middle.related)
+			.toEqual([{ type: 'method', widgetId: 'root', name: 'leaf' }])
+
+		const leaf = middle.cause
+		expect(leaf.code)
+			.toBe('invalid-method-result')
+		if (leaf.code !== 'invalid-method-result')
+			throw new Error('Expected the leaf Method result diagnostic at the end of the cause chain.')
+		expect(leaf.location)
+			.toEqual({ type: 'method', widgetId: 'root', name: 'leaf' })
+		expect(leaf.result)
+			.toBe('leaf result')
+	})
+
 	it('an absent optional dependency materializes reads/invocations as ok(null) and state.set as a no-op ok(candidate)', () => {
 		const { widget } = createHarness()
 
