@@ -121,77 +121,19 @@ interface RgbaColor {
 	a: number
 }
 
-function parseCssColor(color: string): RgbaColor {
-	const trimmed = color
-		.trim()
-		.toLowerCase()
+// Chromium serializes the computed RGB values used here as rgb() or rgba().
+function parseRgbColor(color: string): RgbaColor {
+	const trimmed = color.trim()
+	const match = /^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d+(?:\.\d+)?))?\s*\)$/i.exec(trimmed)
+	if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined)
+		throw new Error(`Unsupported Chromium computed RGB color: ${color}`)
 
-	const rgbMatch = trimmed.match(/^rgba?\(\s*([0-9.]+%?)[,\s]+([0-9.]+%?)[,\s]+([0-9.]+%?)(?:[,\s/]+([0-9.]+%?))?\s*\)$/i)
-	if (rgbMatch && rgbMatch[1] !== undefined && rgbMatch[2] !== undefined && rgbMatch[3] !== undefined) {
-		const parseChannel = (val: string): number => (val.endsWith('%') ? (Number.parseFloat(val) / 100) * 255 : Number.parseFloat(val))
-		const parseAlpha = (val?: string): number => {
-			if (val === undefined)
-				return 1
-			return val.endsWith('%') ? Number.parseFloat(val) / 100 : Number.parseFloat(val)
-		}
-		return {
-			r: parseChannel(rgbMatch[1]),
-			g: parseChannel(rgbMatch[2]),
-			b: parseChannel(rgbMatch[3]),
-			a: parseAlpha(rgbMatch[4]),
-		}
+	return {
+		r: Number(match[1]),
+		g: Number(match[2]),
+		b: Number(match[3]),
+		a: match[4] === undefined ? 1 : Number(match[4]),
 	}
-
-	const srgbMatch = trimmed.match(/^color\(\s*srgb\s+([0-9.]+%?)\s+([0-9.]+%?)\s+([0-9.]+%?)(?:\s*\/\s*([0-9.]+%?))?\s*\)$/i)
-	if (srgbMatch && srgbMatch[1] !== undefined && srgbMatch[2] !== undefined && srgbMatch[3] !== undefined) {
-		const parseChannel = (val: string): number => (val.endsWith('%') ? (Number.parseFloat(val) / 100) * 255 : Number.parseFloat(val) * 255)
-		const parseAlpha = (val?: string): number => {
-			if (val === undefined)
-				return 1
-			return val.endsWith('%') ? Number.parseFloat(val) / 100 : Number.parseFloat(val)
-		}
-		return {
-			r: parseChannel(srgbMatch[1]),
-			g: parseChannel(srgbMatch[2]),
-			b: parseChannel(srgbMatch[3]),
-			a: parseAlpha(srgbMatch[4]),
-		}
-	}
-
-	if (trimmed.startsWith('#')) {
-		const hex = trimmed.slice(1)
-		const h0 = hex[0]
-		const h1 = hex[1]
-		const h2 = hex[2]
-		const h3 = hex[3]
-		if ((hex.length === 3 || hex.length === 4) && h0 !== undefined && h1 !== undefined && h2 !== undefined) {
-			const a = hex.length === 4 && h3 !== undefined ? Number.parseInt(h3 + h3, 16) / 255 : 1
-			return {
-				r: Number.parseInt(h0 + h0, 16),
-				g: Number.parseInt(h1 + h1, 16),
-				b: Number.parseInt(h2 + h2, 16),
-				a,
-			}
-		}
-		if (hex.length === 6 || hex.length === 8) {
-			const r = Number.parseInt(hex.slice(0, 2), 16)
-			const g = Number.parseInt(hex.slice(2, 4), 16)
-			const b = Number.parseInt(hex.slice(4, 6), 16)
-			const a = hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) / 255 : 1
-			return { r, g, b, a }
-		}
-	}
-
-	const named: Record<string, RgbaColor> = {
-		white: { r: 255, g: 255, b: 255, a: 1 },
-		black: { r: 0, g: 0, b: 0, a: 1 },
-		transparent: { r: 0, g: 0, b: 0, a: 0 },
-	}
-	const namedColor = named[trimmed]
-	if (namedColor !== undefined)
-		return namedColor
-
-	throw new Error(`Unsupported CSS color format: ${color}`)
 }
 
 function relativeLuminance(color: RgbaColor): number {
@@ -220,7 +162,7 @@ test.describe('native dialog theme foreground (issue #44)', () => {
 	test.use({ welcomeDismissed: false })
 
 	for (const selectedTheme of ['light', 'dark'] as const) {
-		test(`welcome dialog inherits readable foreground in ${selectedTheme} theme`, async ({ context, page }) => {
+		test(`welcome dialog keeps an opaque heading over its solid card surface in ${selectedTheme} theme`, async ({ context, page }) => {
 			await seedTheme(context, selectedTheme)
 			await page.goto('/')
 
@@ -231,31 +173,48 @@ test.describe('native dialog theme foreground (issue #44)', () => {
 			await expect(heading)
 				.toBeVisible()
 			const colors = await heading.evaluate((element) => {
-				let surface: HTMLElement | null = element.parentElement
-				let surfaceColor = ''
-				while (surface) {
-					const bg = getComputedStyle(surface).backgroundColor
-					if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
-						surfaceColor = bg
-						break
-					}
-					surface = surface.parentElement
-				}
-				if (!surfaceColor)
-					surfaceColor = getComputedStyle(document.body).backgroundColor
+				const dialogElement = element.closest('dialog')
+				const cardSurface = element.parentElement
+				if (!dialogElement || !cardSurface || cardSurface.parentElement !== dialogElement || cardSurface.tagName !== 'DIV')
+					throw new Error('Expected the WelcomeCard heading inside its direct child div card surface')
 
+				const opacityViolations: string[] = []
+				let ancestor: HTMLElement | null = element as HTMLElement
+				while (ancestor) {
+					const opacity = getComputedStyle(ancestor).opacity
+					if (opacity !== '1')
+						opacityViolations.push(`${ancestor.tagName.toLowerCase()} opacity=${opacity}`)
+					ancestor = ancestor.parentElement
+				}
+
+				const surfaceStyle = getComputedStyle(cardSurface)
 				return {
 					heading: getComputedStyle(element).color,
 					body: getComputedStyle(document.body).color,
-					surface: surfaceColor,
+					surface: surfaceStyle.backgroundColor,
+					surfaceElement: cardSurface.tagName.toLowerCase(),
+					surfaceImage: surfaceStyle.backgroundImage,
+					opacityViolations,
 				}
 			})
 			expect(colors.heading)
 				.toBe(colors.body)
 
-			const headingColor = parseCssColor(colors.heading)
-			const surfaceColor = parseCssColor(colors.surface)
-			expect(surfaceColor.a)
+			// The supported WelcomeCard surface is a fully opaque solid color. Alpha, ancestor opacity,
+			// or an image changes the rendered pixels, so reject those inputs instead of estimating them
+			// or falling back to an unrelated ancestor such as body.
+			expect(colors.surfaceElement)
+				.toBe('div')
+			expect(colors.surfaceImage)
+				.toBe('none')
+			expect(colors.opacityViolations)
+				.toEqual([])
+
+			const headingColor = parseRgbColor(colors.heading)
+			const surfaceColor = parseRgbColor(colors.surface)
+			expect(headingColor.a, `WelcomeCard heading foreground must be opaque; got ${colors.heading}`)
+				.toBe(1)
+			expect(surfaceColor.a, `WelcomeCard card surface must be opaque; got ${colors.surface}`)
 				.toBe(1)
 			const contrast = contrastRatio(headingColor, surfaceColor)
 			expect(contrast)
