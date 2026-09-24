@@ -63,6 +63,10 @@ function mountRevisions(mount: ReturnType<typeof vi.fn>): number[] {
 	return mount.mock.calls.map(([descriptor]) => (descriptor as PreviewHostDescriptor).revision)
 }
 
+function mountDescriptors(mount: ReturnType<typeof vi.fn>): PreviewHostDescriptor[] {
+	return mount.mock.calls.map(([descriptor]) => descriptor as PreviewHostDescriptor)
+}
+
 function mountShowcases(mount: ReturnType<typeof vi.fn>): string[] {
 	return mount.mock.calls.map(([descriptor]) => (descriptor as PreviewHostDescriptor).showcaseId)
 }
@@ -135,6 +139,53 @@ describe('createLabStore() remote Preview ownership', () => {
 				'driver-dispose',
 				'app-dispose-end',
 			])
+	})
+})
+
+describe('createLabStore() Preview source forwarding', () => {
+	it('mounts authoritative source text initially, after Apply, and after switching showcases', async () => {
+		const store = createLabStore()
+		const recorded = createRecordingDriver()
+		await attachDriver(store, recorded.driver)
+
+		const initialDocument = store.documentState.value
+		const initialMount = mountDescriptors(recorded.mount)[0]!
+		expect(initialMount.showcaseId)
+			.toBe('sandbox')
+		expect(initialMount.revision)
+			.toBe(initialDocument.revision)
+		expect(initialMount.sourceText)
+			.toBe(initialDocument.sourceText)
+
+		store.setDraftSourceText(capturedText)
+		const applyOutcome = await store.apply()
+		expect(applyOutcome)
+			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
+
+		const appliedDocument = store.documentState.value
+		const applyMount = mountDescriptors(recorded.mount)[1]!
+		expect(applyMount.showcaseId)
+			.toBe('sandbox')
+		expect(applyMount.revision)
+			.toBe(appliedDocument.revision)
+		expect(applyMount.sourceText)
+			.toBe(appliedDocument.sourceText)
+		expect(applyMount.sourceText)
+			.toBe(capturedText)
+
+		await store.switchShowcase('survey')
+
+		const switchedDocument = store.documentState.value
+		const switchMount = mountDescriptors(recorded.mount)[2]!
+		expect(switchMount.showcaseId)
+			.toBe('survey')
+		expect(switchMount.revision)
+			.toBe(switchedDocument.revision)
+		expect(switchMount.sourceText)
+			.toBe(switchedDocument.sourceText)
+		expect(switchMount.sourceText)
+			.toBe(store.preview.value?.sourceText)
+		store.dispose()
 	})
 })
 
