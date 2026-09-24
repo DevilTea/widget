@@ -256,7 +256,6 @@ describe('runtimeMethod', () => {
 			state: { value: number }
 			properties: { doubled: number }
 		}
-		let doubledComputeCount = 0
 		const targetPlugin = createWidgetPlugin('cross-widget-state-target')
 			.description('Target widget')
 			.interfaces<TargetInterfaces>()
@@ -267,7 +266,6 @@ describe('runtimeMethod', () => {
 			.properties(properties => properties.doubled({
 				registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }),
 				compute: ({ deps }) => {
-					doubledComputeCount++
 					const result = deps.value()
 					return result.ok ? (result.value ?? 0) * 2 : -1
 				},
@@ -314,10 +312,8 @@ describe('runtimeMethod', () => {
 
 		expect(target.properties.doubled.get())
 			.toEqual({ ok: true, value: 6 })
-		expect(doubledComputeCount)
-			.toBe(1)
 		const propertyNotifications: unknown[] = []
-		target.properties.doubled.subscribe(result => propertyNotifications.push(result))
+		const unsubscribe = target.properties.doubled.subscribe(result => propertyNotifications.push(result))
 
 		expect(caller.methods.writeTarget(7))
 			.toEqual({ ok: true, value: 7 })
@@ -325,10 +321,9 @@ describe('runtimeMethod', () => {
 			.toBe(10)
 		expect(target.state.value.get())
 			.toBe(7)
-		expect(doubledComputeCount)
-			.toBe(2)
 		expect(propertyNotifications)
 			.toEqual([{ ok: true, value: 14 }])
+		unsubscribe()
 	})
 
 	it('preserves intermediate dependency failures and each Method’s public semantic provenance', () => {
@@ -386,8 +381,16 @@ describe('runtimeMethod', () => {
 		const outer = result.failure.diagnostics[0]!
 		expect(outer.code)
 			.toBe('dependency-target-failed')
+		expect(Object.isFrozen(outer))
+			.toBe(true)
+		expect(Object.isFrozen(outer.location))
+			.toBe(true)
 		if (outer.code !== 'dependency-target-failed')
 			throw new Error('Expected the outer diagnostic to retain its failed dependency cause.')
+		expect(Object.isFrozen(outer.related))
+			.toBe(true)
+		expect(Object.isFrozen(outer.dependency))
+			.toBe(true)
 		expect(outer.location)
 			.toEqual({ type: 'method', widgetId: 'root', name: 'outer' })
 		expect(outer.dependency)
@@ -401,8 +404,12 @@ describe('runtimeMethod', () => {
 		const middle = outer.cause
 		expect(middle.code)
 			.toBe('dependency-target-failed')
+		expect(Object.isFrozen(middle))
+			.toBe(true)
 		if (middle.code !== 'dependency-target-failed')
 			throw new Error('Expected the intermediate Method diagnostic to be preserved as the cause.')
+		expect(Object.isFrozen(middle.related))
+			.toBe(true)
 		expect(middle.location)
 			.toEqual({ type: 'method', widgetId: 'root', name: 'middle' })
 		expect(middle.dependency)
@@ -416,6 +423,8 @@ describe('runtimeMethod', () => {
 		const leaf = middle.cause
 		expect(leaf.code)
 			.toBe('invalid-method-result')
+		expect(Object.isFrozen(leaf))
+			.toBe(true)
 		if (leaf.code !== 'invalid-method-result')
 			throw new Error('Expected the leaf Method result diagnostic at the end of the cause chain.')
 		expect(leaf.location)

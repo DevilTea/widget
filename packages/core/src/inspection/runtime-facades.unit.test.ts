@@ -27,6 +27,9 @@ interface MutablePropertyPayload {
 }
 
 interface MutablePropertyInterfaces {
+	state: {
+		count: number
+	}
 	properties: {
 		payload: MutablePropertyPayload
 	}
@@ -164,7 +167,17 @@ describe('property inspection subscribe truth table', () => {
 		const plugin = createWidgetPlugin('mutable-property-payload')
 			.description('Test widget')
 			.interfaces<MutablePropertyInterfaces>()
-			.properties(properties => properties.payload({ compute: () => payload }))
+			.state(state => state.count({
+				validate: (input): input is number => typeof input === 'number',
+				default: () => 0,
+			}))
+			.properties(properties => properties.payload({
+				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
+				compute: ({ deps }) => {
+					deps.count()
+					return payload
+				},
+			}))
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
 		const blueprint = system.createBlueprint({ id: 'root', type: 'mutable-property-payload' })
@@ -198,6 +211,8 @@ describe('property inspection subscribe truth table', () => {
 
 		expect(snapshot.result)
 			.toBe(result)
+		expect(Object.isFrozen(snapshot))
+			.toBe(true)
 		expect(inspectedPayload)
 			.toBe(payload)
 		expect(Object.isFrozen(snapshot.result))
@@ -213,6 +228,36 @@ describe('property inspection subscribe truth table', () => {
 			.toBe(true)
 		expect(inspectedPayload.nested.count)
 			.toBe(1)
+
+		// The subscription publication must preserve the same shallow-frozen envelope
+		// without freezing the plugin-owned payload through a separate callback path.
+		const notifications: unknown[] = []
+		const unsubscribe = propertyInspection.subscribe(nextSnapshot => notifications.push(nextSnapshot))
+		widget.state.count.set(1)
+		const recomputed = widget.properties.payload.get()
+		expect(notifications)
+			.toHaveLength(1)
+		const published = notifications[0] as typeof snapshot
+		expect(published.status)
+			.toBe('completed')
+		if (published.status !== 'completed')
+			throw new Error('Expected the subscribed Property to publish a completed result.')
+		expect(published.result)
+			.toBe(recomputed)
+		expect(published.result.ok)
+			.toBe(true)
+		if (!published.result.ok)
+			throw new Error('Expected the subscribed result to succeed.')
+		expect(published.result.value)
+			.toBe(payload)
+		expect(Object.isFrozen(published))
+			.toBe(true)
+		expect(Object.isFrozen(payload))
+			.toBe(false)
+		payload.nested.count = 2
+		expect((published.result.value as MutablePropertyPayload).nested.count)
+			.toBe(2)
+		unsubscribe()
 	})
 
 	it('subscribe() has no immediate emission', () => {
@@ -372,6 +417,9 @@ describe('state inspection passive read + notification truth table', () => {
 		expect(listener.mock.calls.map(([snapshot]) => snapshot))
 			.toEqual([{ value: 1 }, { value: 1 }])
 
+		unsubscribeFirst()
+		// A repeated release of the first registration must never consume the
+		// second registration, even though both share exactly the same callback.
 		unsubscribeFirst()
 		widget.state.count.set(2)
 		expect(listener)
