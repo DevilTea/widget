@@ -11,6 +11,23 @@ export interface InProcessInspectorTransportPair {
 	readonly agent: InspectorTransport
 }
 
+const MESSAGE_PORT_INSPECTOR_TRANSPORT_TYPE = '@deviltea/widget-devtools/message-port-inspector-transport'
+
+interface MessagePortInspectorTransportCloseEnvelope {
+	readonly type: typeof MESSAGE_PORT_INSPECTOR_TRANSPORT_TYPE
+	readonly version: 1
+	readonly kind: 'close'
+}
+
+function isMessagePortInspectorTransportCloseEnvelope(value: unknown): value is MessagePortInspectorTransportCloseEnvelope {
+	if (typeof value !== 'object' || value === null || Array.isArray(value))
+		return false
+	const candidate = value as Partial<MessagePortInspectorTransportCloseEnvelope>
+	return candidate.type === MESSAGE_PORT_INSPECTOR_TRANSPORT_TYPE
+		&& candidate.version === 1
+		&& candidate.kind === 'close'
+}
+
 function cloneJson(value: unknown): unknown {
 	return JSON.parse(JSON.stringify(value)) as unknown
 }
@@ -77,9 +94,9 @@ export function createInProcessInspectorTransportPair(): InProcessInspectorTrans
  * algorithm. The Inspector protocol intentionally keeps a JSON-safe baseline so iframe and future
  * extension transports cannot observe different wire semantics.
  *
- * HTML MessagePort dispatches `close` to the entangled peer when a port is closed or its owning
- * document is destroyed. Local `close()` notifies this endpoint synchronously because the platform
- * close event is intentionally peer-facing.
+ * The explicit close envelope notifies the peer before the local native port is closed. Browser
+ * integration coverage pins delivery order on Chromium; native peer `close` events remain an
+ * additional signal where the platform implements them.
  */
 export function createMessagePortInspectorTransport(port: MessagePort): InspectorTransport {
 	const messageListeners = new Set<(message: unknown) => void>()
@@ -102,6 +119,15 @@ export function createMessagePortInspectorTransport(port: MessagePort): Inspecto
 	function onMessage(event: MessageEvent<unknown>): void {
 		if (closed)
 			return
+		if (isMessagePortInspectorTransportCloseEnvelope(event.data)) {
+			try {
+				markClosed()
+			}
+			finally {
+				port.close()
+			}
+			return
+		}
 		for (const listener of [...messageListeners])
 			listener(event.data)
 	}
@@ -142,8 +168,23 @@ export function createMessagePortInspectorTransport(port: MessagePort): Inspecto
 		close() {
 			if (closed)
 				return
-			markClosed()
-			port.close()
+			const envelope: MessagePortInspectorTransportCloseEnvelope = {
+				type: MESSAGE_PORT_INSPECTOR_TRANSPORT_TYPE,
+				version: 1,
+				kind: 'close',
+			}
+			try {
+				port.postMessage(envelope)
+			}
+			catch {
+				// The local endpoint still closes if the peer has already detached.
+			}
+			try {
+				markClosed()
+			}
+			finally {
+				port.close()
+			}
 		},
 	}
 }

@@ -30,8 +30,10 @@ describe('messagePort Inspector transport', () => {
 		}
 	})
 
-	it('propagates peer close and rejects pending client requests as disconnected', async () => {
+	it('propagates explicit peer close and rejects pending client requests as disconnected', async () => {
 		const channel = new MessageChannel()
+		const closeMessages: unknown[] = []
+		channel.port1.addEventListener('message', event => closeMessages.push(event.data))
 		const clientTransport = createMessagePortInspectorTransport(channel.port1)
 		const peerTransport = createMessagePortInspectorTransport(channel.port2)
 		const client = createInspectorClient(clientTransport)
@@ -41,6 +43,12 @@ describe('messagePort Inspector transport', () => {
 			peerTransport.close()
 			await closed
 
+			expect(closeMessages)
+				.toEqual([{
+					type: '@deviltea/widget-devtools/message-port-inspector-transport',
+					version: 1,
+					kind: 'close',
+				}])
 			expect(clientTransport.closed)
 				.toBe(true)
 			await expect(pending)

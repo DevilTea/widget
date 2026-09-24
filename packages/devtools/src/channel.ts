@@ -1,6 +1,13 @@
 import type { InspectorTransport } from './transport'
 
 const MESSAGE_PORT_CHANNEL_TYPE = '@deviltea/widget-devtools/message-port-channel'
+const MESSAGE_PORT_CHANNEL_HUB_TYPE = '@deviltea/widget-devtools/message-port-channel-hub'
+
+interface HubCloseEnvelope {
+	readonly type: typeof MESSAGE_PORT_CHANNEL_HUB_TYPE
+	readonly version: 1
+	readonly kind: 'close'
+}
 
 interface ChannelMessageEnvelope {
 	readonly type: typeof MESSAGE_PORT_CHANNEL_TYPE
@@ -45,6 +52,15 @@ function isEnvelope(value: unknown): value is ChannelEnvelope {
 		&& candidate.channel.length > 0
 		&& (candidate.kind === 'message' || candidate.kind === 'close')
 		&& (candidate.kind !== 'message' || 'payload' in candidate)
+}
+
+function isHubCloseEnvelope(value: unknown): value is HubCloseEnvelope {
+	if (typeof value !== 'object' || value === null || Array.isArray(value))
+		return false
+	const candidate = value as Partial<HubCloseEnvelope>
+	return candidate.type === MESSAGE_PORT_CHANNEL_HUB_TYPE
+		&& candidate.version === 1
+		&& candidate.kind === 'close'
 }
 
 /**
@@ -93,7 +109,18 @@ export function createMessagePortChannelHub(port: MessagePort): MessagePortChann
 	}
 
 	function onMessage(event: MessageEvent<unknown>): void {
-		if (closed || !isEnvelope(event.data))
+		if (closed)
+			return
+		if (isHubCloseEnvelope(event.data)) {
+			try {
+				markHubClosed()
+			}
+			finally {
+				port.close()
+			}
+			return
+		}
+		if (!isEnvelope(event.data))
 			return
 		const envelope = event.data
 		const state = stateFor(envelope.channel)
@@ -167,8 +194,23 @@ export function createMessagePortChannelHub(port: MessagePort): MessagePortChann
 		close() {
 			if (closed)
 				return
-			markHubClosed()
-			port.close()
+			const envelope: HubCloseEnvelope = {
+				type: MESSAGE_PORT_CHANNEL_HUB_TYPE,
+				version: 1,
+				kind: 'close',
+			}
+			try {
+				port.postMessage(envelope)
+			}
+			catch {
+				// The local hub still closes if the peer has already detached.
+			}
+			try {
+				markHubClosed()
+			}
+			finally {
+				port.close()
+			}
 		},
 	}
 }

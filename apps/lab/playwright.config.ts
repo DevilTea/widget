@@ -34,9 +34,16 @@ export default defineConfig({
 	projects: [
 		{ name: 'chromium', use: { ...devices['Desktop Chrome'] } },
 	],
-	webServer: {
-		command: 'pnpm run preview -- --port 4173 --strictPort',
-		port: 4173,
-		reuseExistingServer: !process.env.CI,
-	},
+	webServer: [
+		{
+			command: 'pnpm run preview -- --port 4173 --strictPort',
+			port: 4173,
+			reuseExistingServer: !process.env.CI,
+		},
+		{
+			command: 'pnpm exec vite --host 127.0.0.1 --port 4174 --strictPort',
+			port: 4174,
+			reuseExistingServer: !process.env.CI,
+		},
+	],
 })

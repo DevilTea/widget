@@ -80,6 +80,15 @@ export function createPreviewFrameDriver(
 			current.hub.close()
 	}
 
+	function onFrameLoad(): void {
+		if (physical === null)
+			return
+		generation++
+		teardownPhysical()
+	}
+
+	iframe.addEventListener('load', onFrameLoad)
+
 	async function connect(): Promise<PhysicalConnection> {
 		if (disposed)
 			throw new Error('Preview frame driver is disposed.')
@@ -188,6 +197,7 @@ export function createPreviewFrameDriver(
 			disposed = true
 			observationListeners.clear()
 			teardownPhysical()
+			iframe.removeEventListener('load', onFrameLoad)
 			iframe.removeAttribute('src')
 		},
 	}
