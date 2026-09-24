@@ -132,10 +132,13 @@ describe('diagnostics conformance', () => {
 		expect(failingDiagnostics.value[0]?.code)
 			.toBe('invalid-property-result')
 
-		stop()
+		// The Core subscription must outlive the watcher's invalidation: only
+		// the component's own scope disposal may release this bridge subscription.
+		expect(unsubscribeSpy).not.toHaveBeenCalled()
 		wrapper.unmount()
 		expect(unsubscribeSpy)
 			.toHaveBeenCalledTimes(1)
+		stop()
 	})
 
 	it('preserves the exact diagnostic snapshot for a method member', async () => {
