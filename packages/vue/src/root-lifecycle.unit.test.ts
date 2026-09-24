@@ -77,6 +77,42 @@ describe('root renderer lifecycle', () => {
 			.toBe('2')
 	})
 
+	it('preserves subtree identity and does not remount, re-subscribe, or dispose on host re-renders with the same Runtime instance', async () => {
+		const runtime = createFixtureRuntime({ id: 'root', type: 'Counter' }, { overrideStateDefaults: { root: { count: 10 } } })
+		const widget = getCounterWidget(runtime, 'root')
+		const originalSubscribe = widget.state.count.subscribe.bind(widget.state.count)
+		const unsubscribeSpy = vi.fn()
+		const subscribeSpy = vi.spyOn(widget.state.count, 'subscribe')
+			.mockImplementation((listener: Parameters<typeof originalSubscribe>[0]) => {
+				const unsubscribe = originalSubscribe(listener)
+				return () => {
+					unsubscribeSpy()
+					unsubscribe()
+				}
+			})
+		const disposeSpy = vi.spyOn(runtime, 'dispose')
+
+		const wrapper = mount(WidgetRenderer, { props: { runtime } })
+		expect(wrapper.element.getAttribute('data-count'))
+			.toBe('10')
+		expect(subscribeSpy)
+			.toHaveBeenCalledTimes(1)
+		expect(unsubscribeSpy).not.toHaveBeenCalled()
+		expect(disposeSpy).not.toHaveBeenCalled()
+
+		// Trigger host re-render with the exact same runtime instance
+		await wrapper.vm.$forceUpdate()
+		await wrapper.setProps({ runtime })
+
+		// Subtree must NOT be destroyed or recreated; no unmount cleanup, no re-subscription, and no runtime disposal
+		expect(subscribeSpy)
+			.toHaveBeenCalledTimes(1)
+		expect(unsubscribeSpy).not.toHaveBeenCalled()
+		expect(disposeSpy).not.toHaveBeenCalled()
+		expect(runtime.isDisposed)
+			.toBe(false)
+	})
+
 	it('cleans up every Vue bridge subscription activated anywhere in the tree on unmount', () => {
 		const runtime = createFixtureRuntime({
 			id: 'root',

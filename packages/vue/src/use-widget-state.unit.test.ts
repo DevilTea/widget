@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { nextTick } from 'vue'
+import { nextTick, watchEffect } from 'vue'
 import { CounterPlugin, createFixtureRuntime, getCounterWidget, mountWidgetBridge } from './test-fixtures'
 
 describe('state conformance', () => {
@@ -132,5 +132,28 @@ describe('state conformance', () => {
 		wrapper.unmount()
 		expect(unsubscribeSpy)
 			.toHaveBeenCalledTimes(1)
+	})
+
+	it('notifies reactive watchers when authoritative Core state is updated directly', async () => {
+		const runtime = createFixtureRuntime({ id: 's8', type: 'Counter' })
+		const { bridge } = mountWidgetBridge(runtime, 's8', CounterPlugin)
+		const { count } = bridge.useState()
+		const widget = getCounterWidget(runtime, 's8')
+
+		const seenValues: Array<number | null> = []
+		const stop = watchEffect(() => {
+			seenValues.push(count.value)
+		})
+		await nextTick()
+		expect(seenValues)
+			.toEqual([0])
+
+		// Update authoritative state directly in Core; the watcher must be triggered by State's subscription trigger
+		widget.state.count.set(42)
+		await nextTick()
+		expect(seenValues)
+			.toEqual([0, 42])
+
+		stop()
 	})
 })
