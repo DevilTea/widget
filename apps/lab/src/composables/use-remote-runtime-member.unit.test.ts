@@ -95,6 +95,18 @@ describe('useRemoteRuntimeMember()', () => {
 						params: { subscriptionId: 'subscription-r0-late' },
 					},
 				])
+
+			// The new subscription is already established. Disposing the scope must
+			// release its live remote ID, separately from the late-response path.
+			scope.stop()
+			await Promise.resolve()
+			expect(requests)
+				.toHaveLength(4)
+			expect(requests[3])
+				.toMatchObject({
+					method: 'runtime.unsubscribeMember',
+					params: { subscriptionId: 'subscription-r1' },
+				})
 		}
 		finally {
 			scope.stop()
