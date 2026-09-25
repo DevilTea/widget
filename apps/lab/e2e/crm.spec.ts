@@ -1,4 +1,4 @@
-import type { FrameLocator, Locator } from '@playwright/test'
+import type { FrameLocator, Locator, Page } from '@playwright/test'
 import { expect, previewFrame, test } from './fixtures'
 
 /**
@@ -37,6 +37,52 @@ function metricValue(preview: FrameLocator, label: string): Locator {
 function dealRow(preview: FrameLocator, company: string): Locator {
 	return preview.getByRole('row')
 		.filter({ hasText: company })
+}
+
+interface FocusTarget {
+	readonly context: 'body' | 'preview-frame' | 'interactive' | 'other'
+	readonly label: string | null
+}
+
+interface ModalFocusObservation {
+	readonly parent: FocusTarget
+	readonly preview: {
+		readonly context: 'body' | 'dialog' | 'background-interactive' | 'other'
+		readonly dialogOpen: boolean
+	}
+}
+
+/** Observe each document independently; a Preview BODY never stands in for the parent's active element. */
+async function observeModalFocus(page: Page, preview: FrameLocator): Promise<ModalFocusObservation> {
+	const [parent, child] = await Promise.all([
+		page.evaluate(() => {
+			const active = document.activeElement
+			const previewFrame = document.querySelector('iframe[data-testid="preview-frame"]')
+			const interactive = active instanceof HTMLElement
+				&& active.matches('button, a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+			const textContent = active instanceof HTMLElement ? active.textContent : null
+			const text = textContent?.trim()
+				.replace(/\s+/g, ' ')
+				.slice(0, 48) ?? ''
+			return {
+				context: active === document.body ? 'body' as const : active === previewFrame ? 'preview-frame' as const : interactive ? 'interactive' as const : 'other' as const,
+				label: active?.getAttribute('aria-label') ?? (text || null),
+			}
+		}),
+		preview.locator('html')
+			.evaluate(() => {
+				const active = document.activeElement
+				const dialog = document.querySelector('dialog')
+				const inDialog = dialog !== null && dialog.contains(active)
+				const interactive = active instanceof HTMLElement
+					&& active.matches('button, a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+				return {
+					context: active === document.body ? 'body' as const : inDialog ? 'dialog' as const : interactive ? 'background-interactive' as const : 'other' as const,
+					dialogOpen: dialog?.open ?? false,
+				}
+			}),
+	])
+	return { parent, preview: child }
 }
 
 test.beforeEach(async ({ page }) => {
@@ -126,7 +172,7 @@ test('keyboard-selecting rows with Enter and Space both drive Table.selectedRowI
 		.not.toHaveAttribute('aria-current')
 })
 
-test('Change stage dialog: focus/Tab containment, Escape cancels without mutation, Save recomputes', async ({ page }) => {
+test('Preview-local Change stage dialog: child background stays blocked while parent shell remains usable', async ({ page }) => {
 	const preview = previewFrame(page)
 	const row = dealRow(preview, 'Aurora Systems')
 	await row.focus()
@@ -142,39 +188,72 @@ test('Change stage dialog: focus/Tab containment, Escape cancels without mutatio
 	await expect(preview.getByLabel('New stage'))
 		.toBeFocused()
 
-	/**
-	 * Verified in Chromium: a native `<dialog>` shown via `showModal()` makes the rest of the page
-	 * `inert` (so no background control is ever reachable), but Tab past the dialog's last focusable
-	 * control briefly rests focus on `document.body` before the next Tab cycles back to the dialog's
-	 * first control — it does not literally keep `document.activeElement` inside the `<dialog>` element
-	 * at every step. The real, meaningful containment contract is therefore "focus is either inside the
-	 * dialog or on `document.body`, never an outside interactive element" — sampled across a few Tab/
-	 * Shift+Tab presses in both directions.
-	 */
-	async function focusStaysWithinModalBoundary(): Promise<boolean> {
-		return preview.locator('html')
-			.evaluate(() => {
-				const active = document.activeElement
-				const dialogEl = document.querySelector('dialog')
-				return active === document.body || (dialogEl !== null && dialogEl.contains(active))
-			})
+	// Sample both documents after genuine keyboard input. BODY is a valid native-dialog transition in
+	// either document, but parent shell controls are reported separately and never counted as child-modal
+	// containment. Focus must never land on a Preview background control.
+	const forwardTabObservations: ModalFocusObservation[] = []
+	for (let i = 0; i < 10; i++) {
+		await page.keyboard.press('Tab')
+		const observation = await observeModalFocus(page, preview)
+		forwardTabObservations.push(observation)
+		expect(observation.preview.dialogOpen)
+			.toBe(true)
+		expect(['dialog', 'body'])
+			.toContain(observation.preview.context)
+	}
+	const reverseTabObservations: ModalFocusObservation[] = []
+	for (let i = 0; i < 10; i++) {
+		await page.keyboard.press('Shift+Tab')
+		const observation = await observeModalFocus(page, preview)
+		reverseTabObservations.push(observation)
+		expect(observation.preview.dialogOpen)
+			.toBe(true)
+		expect(['dialog', 'body'])
+			.toContain(observation.preview.context)
+	}
+	// Chromium's natural focus order reaches parent header controls after the child dialog boundary in
+	// both directions. Assert those as parent focus, not as a false extension of the iframe dialog.
+	const shellTabStops = new Set(['Switch showcase', 'Load a preset', 'Implementation', 'Document Tools'])
+	for (const observations of [forwardTabObservations, reverseTabObservations]) {
+		expect(observations.some(({ parent }) => parent.context === 'interactive' && shellTabStops.has(parent.label ?? '')))
+			.toBe(true)
 	}
 
-	for (let i = 0; i < 5; i++) {
-		await page.keyboard.press('Tab')
-		expect(await focusStaysWithinModalBoundary())
-			.toBe(true)
-	}
-	for (let i = 0; i < 5; i++) {
-		await page.keyboard.press('Shift+Tab')
-		expect(await focusStaysWithinModalBoundary())
-			.toBe(true)
-	}
+	// A real click and subsequent Tab/Shift+Tab keep the parent toolbar usable while the Preview dialog
+	// remains open. Tab naturally moves from Implementation to its next toolbar control.
+	const implementationButton = page.getByRole('button', { name: 'Implementation', exact: true })
+	const documentToolsButton = page.getByRole('button', { name: 'Document Tools', exact: true })
+	await implementationButton.click()
+	await expect(implementationButton)
+		.toBeFocused()
+	await expect(page.getByRole('tab', { name: 'Implementation', exact: true }))
+		.toHaveAttribute('aria-selected', 'true')
+	await expect(dialog)
+		.toBeVisible()
+	await page.keyboard.press('Tab')
+	await expect(documentToolsButton)
+		.toBeFocused()
+	await page.keyboard.press('Shift+Tab')
+	await expect(implementationButton)
+		.toBeFocused()
+	await expect(dialog)
+		.toBeVisible()
+
+	// A genuine pointer click at the Preview search control's position hits the modal backdrop; the
+	// background field remains unchanged and unfocused. Its focus is never inferred from a parent BODY.
+	const search = preview.getByLabel('Search', { exact: true })
+	const searchBox = await search.boundingBox()
+	expect(searchBox).not.toBeNull()
+	await page.mouse.click(searchBox!.x + searchBox!.width / 2, searchBox!.y + searchBox!.height / 2)
+	await expect(search)
+		.toHaveValue('')
+	await expect(search).not.toBeFocused()
+	await expect(dialog)
+		.toBeVisible()
 
 	// Escape cancels: no mutation, dialog closes, focus returns to the button that opened it.
 	await preview.getByLabel('New stage')
-		.focus()
-	await page.keyboard.press('Escape')
+		.press('Escape')
 	await expect(dialog)
 		.toBeHidden()
 	await expect(changeStageButton)
@@ -184,7 +263,20 @@ test('Change stage dialog: focus/Tab containment, Escape cancels without mutatio
 		.nth(3))
 		.toHaveText('lead')
 
-	// Reopen, change the stage, and Save through the semantic Method flow.
+	// Reopen, change the stage, and cancel through the semantic form. Cancel still leaves Runtime data intact.
+	await changeStageButton.click()
+	await preview.getByLabel('New stage')
+		.selectOption('won')
+	await preview.getByRole('button', { name: 'Cancel', exact: true })
+		.click()
+	await expect(dialog)
+		.toBeHidden()
+	await expect(dealRow(preview, 'Aurora Systems')
+		.locator('td')
+		.nth(3))
+		.toHaveText('lead')
+
+	// Save through the semantic Method flow and verify dependent read models recompute.
 	const weightedValueBefore = await metricValue(preview, 'Weighted value')
 		// eslint-disable-next-line unicorn/prefer-dom-node-text-content -- Playwright's `Locator.innerText()`, not the DOM node API this rule assumes.
 		.innerText()
