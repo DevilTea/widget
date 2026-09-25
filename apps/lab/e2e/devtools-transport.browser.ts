@@ -16,8 +16,28 @@ export interface DevtoolsBrowserContractResult {
 	readonly hubPendingClientRejected: boolean
 	readonly logicalChannelCloseIsolated: boolean
 	readonly payloadWithHubControlTagDelivered: boolean
-	readonly navigationSettledInspectorRequest: 'rejected' | 'pending' | 'resolved'
-	readonly removalSettledPendingInspectorRequest: boolean
+	readonly navigationRequestPendingBeforeLoad: boolean
+	readonly navigationPendingRequestRejectedDisconnected: boolean
+	readonly postNavigationOldClientRejectedDisconnected: boolean
+	readonly navigationRemountAdvancedGeneration: boolean
+	readonly navigationRemountInspectorRequestResolved: boolean
+	readonly removalRequestPendingBeforeDispose: boolean
+	readonly removalPendingRequestRejectedDisconnected: boolean
+}
+
+type PendingRequestOutcome = 'pending' | 'resolved' | 'rejected-disconnected' | 'rejected-other'
+
+function observeRequestOutcome(request: Promise<unknown>): () => PendingRequestOutcome {
+	let outcome: PendingRequestOutcome = 'pending'
+	void request.then(
+		() => { outcome = 'resolved' },
+		(error: unknown) => {
+			outcome = error instanceof InspectorClientError && error.protocolError.code === 'disconnected'
+				? 'rejected-disconnected'
+				: 'rejected-other'
+		},
+	)
+	return () => outcome
 }
 
 function delay(milliseconds: number): Promise<void> {
@@ -145,45 +165,67 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 		) => {
 			mount: (descriptor: { readonly showcaseId: string, readonly revision: number, readonly sourceText: string }) => Promise<{
 				inspectorClient: {
-					request: (method: 'runtime.list', params: Record<string, never>) => Promise<unknown>
+					request: (method: string, params: Record<string, never>) => Promise<unknown>
 				}
+				generation: number
 			}>
 			dispose: () => void
 		}
 	}
 	const driver = createPreviewFrameDriver(iframe, () => ({ locale: 'en', theme: 'light' }))
-	let navigationSettledInspectorRequest: DevtoolsBrowserContractResult['navigationSettledInspectorRequest'] = 'pending'
-	let removalSettledPendingInspectorRequest = false
+	let navigationRequestPendingBeforeLoad = false
+	let navigationPendingRequestRejectedDisconnected = false
+	let postNavigationOldClientRejectedDisconnected = false
+	let navigationRemountAdvancedGeneration = false
+	let navigationRemountInspectorRequestResolved = false
+	let removalRequestPendingBeforeDispose = false
+	let removalPendingRequestRejectedDisconnected = false
 	try {
 		const connection = await driver.mount({
 			showcaseId: 'sandbox',
 			revision: 0,
 			sourceText: defaultSandboxPreset.sourceText,
 		})
-		iframe.src = 'about:blank'
-		await new Promise<void>((resolve) => {
+		// The agent ignores unknown methods, so this safe probe stays pending until its owner closes the client.
+		const navigationPending = connection.inspectorClient.request('devtools.test.no-response', {})
+		const navigationOutcome = observeRequestOutcome(navigationPending)
+		await Promise.resolve()
+		navigationRequestPendingBeforeLoad = navigationOutcome() === 'pending'
+		const navigationLoad = new Promise<void>((resolve) => {
 			iframe.addEventListener('load', () => resolve(), { once: true })
 		})
-		const request = connection.inspectorClient.request('runtime.list', {})
-		void request.then(
-			() => { navigationSettledInspectorRequest = 'resolved' },
-			() => { navigationSettledInspectorRequest = 'rejected' },
-		)
+		iframe.src = 'about:blank'
+		await navigationLoad
 		await Promise.resolve()
+		navigationPendingRequestRejectedDisconnected = navigationOutcome() === 'rejected-disconnected'
 
-		const reconnected = await driver.mount({
-			showcaseId: 'sandbox',
-			revision: 0,
-			sourceText: defaultSandboxPreset.sourceText,
-		})
-		const removalPending = reconnected.inspectorClient.request('runtime.list', {})
-		void removalPending.catch((error: unknown) => {
-			removalSettledPendingInspectorRequest = error instanceof InspectorClientError
-				&& error.protocolError.code === 'disconnected'
-		})
-		iframe.remove()
-		driver.dispose()
+		const postNavigationRequest = connection.inspectorClient.request('runtime.list', {})
+		const postNavigationOutcome = observeRequestOutcome(postNavigationRequest)
 		await Promise.resolve()
+		postNavigationOldClientRejectedDisconnected = postNavigationOutcome() === 'rejected-disconnected'
+
+		// A broken navigation teardown leaves mount() waiting on the stale MessagePort; report its earlier failure directly.
+		if (navigationPendingRequestRejectedDisconnected && postNavigationOldClientRejectedDisconnected) {
+			const reconnected = await driver.mount({
+				showcaseId: 'sandbox',
+				revision: 0,
+				sourceText: defaultSandboxPreset.sourceText,
+			})
+			navigationRemountAdvancedGeneration = reconnected.generation > connection.generation
+			const reconnectedRuntimes = await reconnected.inspectorClient.request('runtime.list', {}) as {
+				readonly runtimes: readonly unknown[]
+			}
+			navigationRemountInspectorRequestResolved = reconnectedRuntimes.runtimes.length > 0
+
+			const removalPending = reconnected.inspectorClient.request('devtools.test.no-response', {})
+			const removalOutcome = observeRequestOutcome(removalPending)
+			await Promise.resolve()
+			removalRequestPendingBeforeDispose = removalOutcome() === 'pending'
+			iframe.remove()
+			driver.dispose()
+			await Promise.resolve()
+			removalPendingRequestRejectedDisconnected = removalOutcome() === 'rejected-disconnected'
+		}
 	}
 	finally {
 		driver.dispose()
@@ -200,7 +242,12 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 		hubPendingClientRejected: hubPendingClientWasRejected,
 		logicalChannelCloseIsolated,
 		payloadWithHubControlTagDelivered,
-		navigationSettledInspectorRequest,
-		removalSettledPendingInspectorRequest,
+		navigationRequestPendingBeforeLoad,
+		navigationPendingRequestRejectedDisconnected,
+		postNavigationOldClientRejectedDisconnected,
+		navigationRemountAdvancedGeneration,
+		navigationRemountInspectorRequestResolved,
+		removalRequestPendingBeforeDispose,
+		removalPendingRequestRejectedDisconnected,
 	}
 }

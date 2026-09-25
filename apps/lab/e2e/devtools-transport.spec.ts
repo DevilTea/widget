@@ -19,7 +19,12 @@ test('native Chromium propagates explicit DevTools closes and settles iframe nav
 			hubPendingClientRejected: true,
 			logicalChannelCloseIsolated: true,
 			payloadWithHubControlTagDelivered: true,
-			navigationSettledInspectorRequest: 'rejected',
-			removalSettledPendingInspectorRequest: true,
+			navigationRequestPendingBeforeLoad: true,
+			navigationPendingRequestRejectedDisconnected: true,
+			postNavigationOldClientRejectedDisconnected: true,
+			navigationRemountAdvancedGeneration: true,
+			navigationRemountInspectorRequestResolved: true,
+			removalRequestPendingBeforeDispose: true,
+			removalPendingRequestRejectedDisconnected: true,
 		})
 })
