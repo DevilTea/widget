@@ -34,6 +34,15 @@ interface PendingRequest {
 	readonly reject: (reason: unknown) => void
 }
 
+function malformedResponseRequestId(value: unknown): string | null {
+	if (typeof value !== 'object' || value === null || Array.isArray(value))
+		return null
+	const candidate = value as { readonly kind?: unknown, readonly requestId?: unknown }
+	return candidate.kind === 'response' && typeof candidate.requestId === 'string'
+		? candidate.requestId
+		: null
+}
+
 export interface InspectorClient {
 	handshake: () => Promise<InspectorRequestResult<'handshake'>>
 	request: <Method extends InspectorRequestMethod>(
@@ -92,8 +101,18 @@ export function createInspectorClient(transport: InspectorTransport): InspectorC
 		}
 
 		const response = parseInspectorResponseMessage(rawMessage)
-		if (response === null)
+		if (response === null) {
+			const requestId = malformedResponseRequestId(rawMessage)
+			const entry = requestId === null ? undefined : pending.get(requestId)
+			if (requestId !== null && entry !== undefined) {
+				pending.delete(requestId)
+				entry.reject(new InspectorClientError({
+					code: 'invalid-message',
+					message: 'Invalid Inspector protocol response envelope.',
+				}))
+			}
 			return
+		}
 		const entry = pending.get(response.requestId)
 		if (entry === undefined)
 			return

@@ -35,6 +35,62 @@ function createConnectedFixture() {
 }
 
 describe('inspectorClient + InspectorAgent', () => {
+	it('rejects a malformed response when its request ID identifies a pending request', async () => {
+		const pair = createInProcessInspectorTransportPair()
+		const client = createInspectorClient(pair.client)
+		let requestId: string | undefined
+		pair.agent.subscribe((message) => {
+			if (typeof message === 'object' && message !== null && 'requestId' in message && typeof message.requestId === 'string')
+				requestId = message.requestId
+		})
+		const pending = client.request('runtime.list', {})
+		let outcome: { readonly status: 'pending' }
+			| { readonly status: 'rejected', readonly error: unknown }
+			| { readonly status: 'resolved' } = { status: 'pending' }
+		void pending.then(
+			() => { outcome = { status: 'resolved' } },
+			(error) => { outcome = { status: 'rejected', error } },
+		)
+
+		try {
+			expect(requestId)
+				.toBe('request-1')
+			pair.agent.send({ kind: 'response', requestId, ok: true })
+			await Promise.resolve()
+			expect(outcome)
+				.toMatchObject({
+					status: 'rejected',
+					error: { protocolError: expect.objectContaining({ code: 'invalid-message' }) },
+				})
+		}
+		finally {
+			client.dispose()
+		}
+	})
+
+	it('rejects a valid response using an incompatible protocol major version', async () => {
+		const pair = createInProcessInspectorTransportPair()
+		const client = createInspectorClient(pair.client)
+		pair.agent.subscribe((message) => {
+			if (typeof message !== 'object' || message === null || !('requestId' in message) || typeof message.requestId !== 'string')
+				return
+			pair.agent.send({
+				protocol: { major: 99, minor: 0 },
+				kind: 'response',
+				requestId: message.requestId,
+				ok: true,
+				result: { runtimes: [] },
+			})
+		})
+		try {
+			await expect(client.request('runtime.list', {}))
+				.rejects.toMatchObject({ protocolError: expect.objectContaining({ code: 'unsupported-version' }) })
+		}
+		finally {
+			client.dispose()
+		}
+	})
+
 	it('handshakes, correlates requests, and exposes only the explicit read-only capability vocabulary', async () => {
 		const { agent, client } = createConnectedFixture()
 		try {

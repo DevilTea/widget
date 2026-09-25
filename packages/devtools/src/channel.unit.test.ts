@@ -67,8 +67,39 @@ describe('messagePort channel hub', () => {
 		}
 	})
 
-	it('disconnects every logical channel when the native peer closes', async () => {
+	it('ignores messages that carry no channel envelope type tag', async () => {
 		const native = new MessageChannel()
+		const leftHub = createMessagePortChannelHub(native.port1)
+		const rightHub = createMessagePortChannelHub(native.port2)
+		const leftInspector = leftHub.openChannel('inspector')
+		const rightInspector = rightHub.openChannel('inspector')
+		const received: unknown[] = []
+		const sentinel = { sentinel: true }
+		const delivered = new Promise<void>((resolve) => {
+			leftInspector.subscribe((message) => {
+				received.push(message)
+				if (message === sentinel || (typeof message === 'object' && message !== null && 'sentinel' in message))
+					resolve()
+			})
+		})
+
+		try {
+			native.port2.postMessage({ channel: 'inspector', kind: 'message', payload: { alien: true } })
+			rightInspector.send(sentinel)
+			await delivered
+			expect(received)
+				.toEqual([sentinel])
+		}
+		finally {
+			leftHub.close()
+			rightHub.close()
+		}
+	})
+
+	it('disconnects every logical channel when the peer explicitly closes the hub', async () => {
+		const native = new MessageChannel()
+		const closeMessages: unknown[] = []
+		native.port1.addEventListener('message', event => closeMessages.push(event.data))
 		const leftHub = createMessagePortChannelHub(native.port1)
 		const rightHub = createMessagePortChannelHub(native.port2)
 		const inspector = leftHub.openChannel('inspector')
@@ -78,6 +109,12 @@ describe('messagePort channel hub', () => {
 
 		rightHub.close()
 		await Promise.all([inspectorClosed, hostClosed])
+		expect(closeMessages)
+			.toEqual([{
+				type: '@deviltea/widget-devtools/message-port-channel-hub',
+				version: 1,
+				kind: 'close',
+			}])
 		expect(leftHub.closed)
 			.toBe(true)
 		expect(inspector.closed)
