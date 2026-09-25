@@ -17,11 +17,15 @@ export interface DevtoolsBrowserContractResult {
 	readonly logicalChannelCloseIsolated: boolean
 	readonly payloadWithHubControlTagDelivered: boolean
 	readonly navigationRequestPendingBeforeLoad: boolean
+	readonly navigationAgentResponseAttempted: boolean
+	readonly navigationOwnerClosedInspectorClient: boolean
 	readonly navigationPendingRequestRejectedDisconnected: boolean
 	readonly postNavigationOldClientRejectedDisconnected: boolean
 	readonly navigationRemountAdvancedGeneration: boolean
 	readonly navigationRemountInspectorRequestResolved: boolean
 	readonly removalRequestPendingBeforeDispose: boolean
+	readonly removalAgentResponseAttempted: boolean
+	readonly removalOwnerClosedInspectorClient: boolean
 	readonly removalPendingRequestRejectedDisconnected: boolean
 }
 
@@ -42,6 +46,119 @@ function observeRequestOutcome(request: Promise<unknown>): () => PendingRequestO
 
 function delay(milliseconds: number): Promise<void> {
 	return new Promise(resolve => setTimeout(resolve, milliseconds))
+}
+
+interface InspectorResponseAttempt {
+	readonly requestId: string
+	readonly runtimeCount: number
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function parseRuntimeListResponseAttempt(message: unknown): InspectorResponseAttempt | null {
+	if (!isRecord(message)
+		|| message.type !== '@deviltea/widget-devtools/message-port-channel'
+		|| message.channel !== 'inspector'
+		|| message.kind !== 'message'
+		|| !isRecord(message.payload)
+		|| message.payload.kind !== 'response'
+		|| typeof message.payload.requestId !== 'string'
+		|| message.payload.ok !== true
+		|| !isRecord(message.payload.result)
+		|| !Array.isArray(message.payload.result.runtimes)) {
+		return null
+	}
+
+	return {
+		requestId: message.payload.requestId,
+		runtimeCount: message.payload.result.runtimes.length,
+	}
+}
+
+function installRuntimeListResponseDrop(frame: HTMLIFrameElement): {
+	attempted: Promise<InspectorResponseAttempt>
+	restore: () => void
+} {
+	const frameWindow = frame.contentWindow
+	if (frameWindow === null)
+		throw new Error('Preview iframe window is unavailable after mount.')
+
+	const prototype = (frameWindow as Window & typeof globalThis).MessagePort.prototype
+	const descriptor = Object.getOwnPropertyDescriptor(prototype, 'postMessage')
+	if (descriptor === undefined || typeof descriptor.value !== 'function')
+		throw new Error('Preview iframe MessagePort.prototype.postMessage is unavailable.')
+
+	const originalPostMessage = descriptor.value as (
+		this: MessagePort,
+		message: unknown,
+		options?: Transferable[] | StructuredSerializeOptions,
+	) => void
+	let resolveAttempt!: (attempt: InspectorResponseAttempt) => void
+	let restored = false
+	let attemptedOnce = false
+	const attempted = new Promise<InspectorResponseAttempt>((resolve) => {
+		resolveAttempt = resolve
+	})
+
+	const restore = () => {
+		if (restored)
+			return
+		restored = true
+		Object.defineProperty(prototype, 'postMessage', descriptor)
+	}
+	const interceptedPostMessage = function (
+		this: MessagePort,
+		message: unknown,
+		options?: Transferable[] | StructuredSerializeOptions,
+	): void {
+		const acknowledgment = attemptedOnce ? null : parseRuntimeListResponseAttempt(message)
+		if (acknowledgment !== null) {
+			attemptedOnce = true
+			// Resolve inside postMessage before returning. The caller waits for this acknowledgment
+			// before navigation/disposal, so the Agent has attempted the valid runtime.list response.
+			restore()
+			resolveAttempt(acknowledgment)
+			return
+		}
+
+		originalPostMessage.call(this, message, options)
+	}
+	Object.defineProperty(prototype, 'postMessage', { ...descriptor, value: interceptedPostMessage })
+	return { attempted, restore }
+}
+
+function withTestTimeout<T>(promise: Promise<T>, label: string, milliseconds = 3_000): Promise<T> {
+	return new Promise((resolve, reject) => {
+		const timeout = setTimeout(() => reject(new Error(`${label} timed out after ${milliseconds} ms.`)), milliseconds)
+		void promise.then(
+			(value) => {
+				clearTimeout(timeout)
+				resolve(value)
+			},
+			(error: unknown) => {
+				clearTimeout(timeout)
+				reject(error)
+			},
+		)
+	})
+}
+
+function observeClientClose(client: { close: () => void }): {
+	readonly wasClosed: () => boolean
+	readonly restore: () => void
+} {
+	const originalClose = client.close
+	let wasClosed = false
+	client.close = () => {
+		wasClosed = true
+		originalClose.call(client)
+	}
+	return {
+		wasClosed: () => wasClosed,
+		restore: () => { client.close = originalClose },
+	}
 }
 
 export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserContractResult> {
@@ -166,6 +283,7 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 			mount: (descriptor: { readonly showcaseId: string, readonly revision: number, readonly sourceText: string }) => Promise<{
 				inspectorClient: {
 					request: (method: string, params: Record<string, never>) => Promise<unknown>
+					close: () => void
 				}
 				generation: number
 			}>
@@ -174,28 +292,43 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 	}
 	const driver = createPreviewFrameDriver(iframe, () => ({ locale: 'en', theme: 'light' }))
 	let navigationRequestPendingBeforeLoad = false
+	let navigationAgentResponseAttempted = false
+	let navigationOwnerClosedInspectorClient = false
 	let navigationPendingRequestRejectedDisconnected = false
 	let postNavigationOldClientRejectedDisconnected = false
 	let navigationRemountAdvancedGeneration = false
 	let navigationRemountInspectorRequestResolved = false
 	let removalRequestPendingBeforeDispose = false
+	let removalAgentResponseAttempted = false
+	let removalOwnerClosedInspectorClient = false
 	let removalPendingRequestRejectedDisconnected = false
+	let restoreResponseInterceptor = () => {}
+	let restoreClientCloseObserver = () => {}
 	try {
 		const connection = await driver.mount({
 			showcaseId: 'sandbox',
 			revision: 0,
 			sourceText: defaultSandboxPreset.sourceText,
 		})
-		// The agent ignores unknown methods, so this safe probe stays pending until its owner closes the client.
-		const navigationPending = connection.inspectorClient.request('devtools.test.no-response', {})
+		const navigationInterceptor = installRuntimeListResponseDrop(iframe)
+		restoreResponseInterceptor = navigationInterceptor.restore
+		const navigationClose = observeClientClose(connection.inspectorClient)
+		restoreClientCloseObserver = navigationClose.restore
+		const navigationPending = connection.inspectorClient.request('runtime.list', {})
 		const navigationOutcome = observeRequestOutcome(navigationPending)
-		await Promise.resolve()
+		const navigationResponse = await withTestTimeout(navigationInterceptor.attempted, 'Navigation runtime.list response attempt')
+		navigationAgentResponseAttempted = navigationResponse.requestId.length > 0 && navigationResponse.runtimeCount > 0
 		navigationRequestPendingBeforeLoad = navigationOutcome() === 'pending'
 		const navigationLoad = new Promise<void>((resolve) => {
 			iframe.addEventListener('load', () => resolve(), { once: true })
 		})
 		iframe.src = 'about:blank'
-		await navigationLoad
+		await withTestTimeout(navigationLoad, 'Preview iframe navigation load')
+		navigationOwnerClosedInspectorClient = navigationClose.wasClosed()
+		navigationInterceptor.restore()
+		navigationClose.restore()
+		restoreResponseInterceptor = () => {}
+		restoreClientCloseObserver = () => {}
 		await Promise.resolve()
 		navigationPendingRequestRejectedDisconnected = navigationOutcome() === 'rejected-disconnected'
 
@@ -217,17 +350,29 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 			}
 			navigationRemountInspectorRequestResolved = reconnectedRuntimes.runtimes.length > 0
 
-			const removalPending = reconnected.inspectorClient.request('devtools.test.no-response', {})
+			const removalInterceptor = installRuntimeListResponseDrop(iframe)
+			restoreResponseInterceptor = removalInterceptor.restore
+			const removalClose = observeClientClose(reconnected.inspectorClient)
+			restoreClientCloseObserver = removalClose.restore
+			const removalPending = reconnected.inspectorClient.request('runtime.list', {})
 			const removalOutcome = observeRequestOutcome(removalPending)
-			await Promise.resolve()
+			const removalResponse = await withTestTimeout(removalInterceptor.attempted, 'Owner-dispose runtime.list response attempt')
+			removalAgentResponseAttempted = removalResponse.requestId.length > 0 && removalResponse.runtimeCount > 0
 			removalRequestPendingBeforeDispose = removalOutcome() === 'pending'
-			iframe.remove()
 			driver.dispose()
+			removalOwnerClosedInspectorClient = removalClose.wasClosed()
+			removalInterceptor.restore()
+			removalClose.restore()
+			restoreResponseInterceptor = () => {}
+			restoreClientCloseObserver = () => {}
+			iframe.remove()
 			await Promise.resolve()
 			removalPendingRequestRejectedDisconnected = removalOutcome() === 'rejected-disconnected'
 		}
 	}
 	finally {
+		restoreResponseInterceptor()
+		restoreClientCloseObserver()
 		driver.dispose()
 		iframe.remove()
 	}
@@ -243,11 +388,15 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 		logicalChannelCloseIsolated,
 		payloadWithHubControlTagDelivered,
 		navigationRequestPendingBeforeLoad,
+		navigationAgentResponseAttempted,
+		navigationOwnerClosedInspectorClient,
 		navigationPendingRequestRejectedDisconnected,
 		postNavigationOldClientRejectedDisconnected,
 		navigationRemountAdvancedGeneration,
 		navigationRemountInspectorRequestResolved,
 		removalRequestPendingBeforeDispose,
+		removalAgentResponseAttempted,
+		removalOwnerClosedInspectorClient,
 		removalPendingRequestRejectedDisconnected,
 	}
 }
