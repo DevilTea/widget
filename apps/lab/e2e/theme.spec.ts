@@ -114,11 +114,55 @@ test.describe('lab theme (issue #44)', () => {
 	})
 })
 
+interface RgbaColor {
+	r: number
+	g: number
+	b: number
+	a: number
+}
+
+// Chromium serializes the computed RGB values used here as rgb() or rgba().
+function parseRgbColor(color: string): RgbaColor {
+	const trimmed = color.trim()
+	const match = /^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d+(?:\.\d+)?))?\s*\)$/i.exec(trimmed)
+	if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined)
+		throw new Error(`Unsupported Chromium computed RGB color: ${color}`)
+
+	return {
+		r: Number(match[1]),
+		g: Number(match[2]),
+		b: Number(match[3]),
+		a: match[4] === undefined ? 1 : Number(match[4]),
+	}
+}
+
+function relativeLuminance(color: RgbaColor): number {
+	const adjust = (channel: number): number => {
+		const srgb = channel / 255
+		return srgb <= 0.04045
+			? srgb / 12.92
+			: ((srgb + 0.055) / 1.055) ** 2.4
+	}
+	return (
+		0.2126 * adjust(color.r)
+		+ 0.7152 * adjust(color.g)
+		+ 0.0722 * adjust(color.b)
+	)
+}
+
+function contrastRatio(color1: RgbaColor, color2: RgbaColor): number {
+	const l1 = relativeLuminance(color1)
+	const l2 = relativeLuminance(color2)
+	const lighter = Math.max(l1, l2)
+	const darker = Math.min(l1, l2)
+	return (lighter + 0.05) / (darker + 0.05)
+}
+
 test.describe('native dialog theme foreground (issue #44)', () => {
 	test.use({ welcomeDismissed: false })
 
 	for (const selectedTheme of ['light', 'dark'] as const) {
-		test(`welcome dialog inherits readable foreground in ${selectedTheme} theme`, async ({ context, page }) => {
+		test(`welcome dialog keeps an opaque heading over its solid card surface in ${selectedTheme} theme`, async ({ context, page }) => {
 			await seedTheme(context, selectedTheme)
 			await page.goto('/')
 
@@ -128,12 +172,53 @@ test.describe('native dialog theme foreground (issue #44)', () => {
 			const heading = dialog.getByRole('heading')
 			await expect(heading)
 				.toBeVisible()
-			const colors = await heading.evaluate(element => ({
-				heading: getComputedStyle(element).color,
-				body: getComputedStyle(document.body).color,
-			}))
+			const colors = await heading.evaluate((element) => {
+				const dialogElement = element.closest('dialog')
+				const cardSurface = element.parentElement
+				if (!dialogElement || !cardSurface || cardSurface.parentElement !== dialogElement || cardSurface.tagName !== 'DIV')
+					throw new Error('Expected the WelcomeCard heading inside its direct child div card surface')
+
+				const opacityViolations: string[] = []
+				let ancestor: HTMLElement | null = element as HTMLElement
+				while (ancestor) {
+					const opacity = getComputedStyle(ancestor).opacity
+					if (opacity !== '1')
+						opacityViolations.push(`${ancestor.tagName.toLowerCase()} opacity=${opacity}`)
+					ancestor = ancestor.parentElement
+				}
+
+				const surfaceStyle = getComputedStyle(cardSurface)
+				return {
+					heading: getComputedStyle(element).color,
+					body: getComputedStyle(document.body).color,
+					surface: surfaceStyle.backgroundColor,
+					surfaceElement: cardSurface.tagName.toLowerCase(),
+					surfaceImage: surfaceStyle.backgroundImage,
+					opacityViolations,
+				}
+			})
 			expect(colors.heading)
 				.toBe(colors.body)
+
+			// The supported WelcomeCard surface is a fully opaque solid color. Alpha, ancestor opacity,
+			// or an image changes the rendered pixels, so reject those inputs instead of estimating them
+			// or falling back to an unrelated ancestor such as body.
+			expect(colors.surfaceElement)
+				.toBe('div')
+			expect(colors.surfaceImage)
+				.toBe('none')
+			expect(colors.opacityViolations)
+				.toEqual([])
+
+			const headingColor = parseRgbColor(colors.heading)
+			const surfaceColor = parseRgbColor(colors.surface)
+			expect(headingColor.a, `WelcomeCard heading foreground must be opaque; got ${colors.heading}`)
+				.toBe(1)
+			expect(surfaceColor.a, `WelcomeCard card surface must be opaque; got ${colors.surface}`)
+				.toBe(1)
+			const contrast = contrastRatio(headingColor, surfaceColor)
+			expect(contrast)
+				.toBeGreaterThanOrEqual(4.5)
 		})
 	}
 })
