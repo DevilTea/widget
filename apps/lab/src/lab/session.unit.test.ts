@@ -519,6 +519,54 @@ describe('labSession', () => {
 			.toBe(activeBefore)
 	})
 
+	it('revert() restores the invalid committed Document source while retaining the older Preview', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const initialDocument = session.documentState
+		const initialPreview = session.preview!
+
+		const outcome = await session.applyPreset(invalidSource)
+		expect(outcome)
+			.toEqual({ status: 'applied', blueprintStatus: 'invalid' })
+
+		const committedDocument = session.documentState
+		const retainedPreview = session.preview!
+		expect(committedDocument)
+			.not.toBe(initialDocument)
+		expect(committedDocument.revision)
+			.toBe(1)
+		expect(committedDocument.sourceText)
+			.toBe(invalidSource)
+		expect(retainedPreview)
+			.toBe(initialPreview)
+		expect(retainedPreview.revision)
+			.toBe(0)
+
+		session.setDraftSourceText(secondValidSource)
+		expect(session.isDirty)
+			.toBe(true)
+		const documentBeforeRevert = session.documentState
+		const previewBeforeRevert = session.preview
+
+		session.revert()
+
+		expect(session.draftSourceText)
+			.toBe(invalidSource)
+		expect(session.isDirty)
+			.toBe(false)
+		expect(session.documentState)
+			.toBe(documentBeforeRevert)
+		expect(session.documentState)
+			.toBe(committedDocument)
+		expect(session.documentState.revision)
+			.toBe(1)
+		expect(session.preview)
+			.toBe(previewBeforeRevert)
+		expect(session.preview)
+			.toBe(retainedPreview)
+		expect(session.preview?.revision)
+			.toBe(0)
+	})
+
 	it('applyPreset() sets the draft and runs the same Apply pipeline as manual editing', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 
