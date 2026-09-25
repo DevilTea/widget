@@ -9,7 +9,7 @@
 
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, nextTick } from 'vue'
 import { WidgetVueIntegrationError } from './errors'
 import { createWidgetVueRenderer, SharedWidgetSlotComponent } from './renderer'
 import {
@@ -19,6 +19,7 @@ import {
 	createFixtureRuntime,
 	EmptyStateRenderer,
 	fixtureSystem,
+	getLeafWidget,
 	LabelPlugin,
 	LabelRenderer,
 	LeafRenderer,
@@ -157,5 +158,26 @@ describe('renderer / topology — mounted conformance', () => {
 		// against the exact shared component identity, without needing a full renderer tree.
 		expect(() => mount(SharedWidgetSlotComponent, { props: { name: 'header' } }))
 			.toThrow(WidgetVueIntegrationError)
+	})
+
+	it('updates mounted DOM when a pure-State widget state changes in the Runtime', async () => {
+		const runtime = createFixtureRuntime({ id: 'leaf-root', type: 'Leaf' }, {
+			overrideStateDefaults: {
+				'leaf-root': { label: 'initial-label' },
+			},
+		})
+
+		const wrapper = mount(WidgetRenderer, { props: { runtime } })
+		expect(wrapper.get('.leaf')
+			.text())
+			.toBe('initial-label')
+
+		const widget = getLeafWidget(runtime, 'leaf-root')
+		widget.state.label.set('updated-label')
+		await nextTick()
+
+		expect(wrapper.get('.leaf')
+			.text())
+			.toBe('updated-label')
 	})
 })

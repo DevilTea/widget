@@ -11,7 +11,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { describe, expect, it, vi } from 'vitest'
-import { nextTick } from 'vue'
+import { nextTick, watchEffect } from 'vue'
 import { WidgetVueIntegrationError } from './errors'
 import { CounterPlugin, createFixtureRuntime, getCounterWidget, getLabelWidget, LabelPlugin, mountWidgetBridge } from './test-fixtures'
 
@@ -85,6 +85,60 @@ describe('diagnostics conformance', () => {
 			.toBe(coreSnapshot)
 		expect(failing.value[0]!.code)
 			.toBe('invalid-property-result')
+	})
+
+	it('subscribes property diagnostics lazily on first read, reactively invalidates on diagnostic changes, and unsubscribes on unmount', async () => {
+		const runtime = createFixtureRuntime({ id: 'd-prop-lifecycle', type: 'Label' })
+		const widget = getLabelWidget(runtime, 'd-prop-lifecycle')
+		const originalSubscribe = widget.properties.failing.subscribeDiagnostics.bind(widget.properties.failing)
+		const unsubscribeSpy = vi.fn()
+		const subscribeSpy = vi.spyOn(widget.properties.failing, 'subscribeDiagnostics')
+			.mockImplementation((listener) => {
+				const unsubscribe = originalSubscribe(listener)
+				return () => {
+					unsubscribeSpy()
+					unsubscribe()
+				}
+			})
+
+		const { wrapper, bridge } = mountWidgetBridge(runtime, 'd-prop-lifecycle', LabelPlugin)
+		const { failing: failingDiagnostics } = bridge.usePropertyDiagnostics()
+
+		// Obtaining the channel must NOT subscribe
+		expect(subscribeSpy).not.toHaveBeenCalled()
+
+		// Set up reactive watcher
+		const seenDiagnosticLengths: number[] = []
+		const stop = watchEffect(() => {
+			seenDiagnosticLengths.push(failingDiagnostics.value.length)
+		})
+		await nextTick()
+
+		// First read inside the watcher activates lazy subscription
+		expect(subscribeSpy)
+			.toHaveBeenCalledTimes(1)
+		expect(unsubscribeSpy).not.toHaveBeenCalled()
+		expect(seenDiagnosticLengths)
+			.toEqual([0])
+
+		// Activating the property evaluation adds a real diagnostic in Core,
+		// which notifies property.subscribeDiagnostics and triggers reactive invalidation of failingDiagnostics
+		expect(bridge.useProperties().failing.value)
+			.toBeNull()
+		await nextTick()
+
+		expect(seenDiagnosticLengths)
+			.toEqual([0, 1])
+		expect(failingDiagnostics.value[0]?.code)
+			.toBe('invalid-property-result')
+
+		// The Core subscription must outlive the watcher's invalidation: only
+		// the component's own scope disposal may release this bridge subscription.
+		expect(unsubscribeSpy).not.toHaveBeenCalled()
+		wrapper.unmount()
+		expect(unsubscribeSpy)
+			.toHaveBeenCalledTimes(1)
+		stop()
 	})
 
 	it('preserves the exact diagnostic snapshot for a method member', async () => {
