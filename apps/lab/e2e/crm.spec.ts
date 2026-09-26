@@ -214,19 +214,16 @@ test('Preview-local Change stage dialog: child background stays blocked while pa
 	await expect(preview.getByLabel('New stage'))
 		.toBeFocused()
 
-	// Follow real Tab input until it reaches a known parent control. The bound is only a safety limit;
+	// Follow real Tab input; allow BODY/BODY crossings without requiring incidental UA focus stops.
+	// The bound is only a safety limit;
 	// reaching the named control, rather than consuming a fixed number of samples, is the milestone.
 	const implementationButton = page.getByRole('button', { name: 'Implementation', exact: true })
 	const maxBoundaryTabSteps = 32
 	let reachedImplementationByTab = false
-	let sawForwardBodyTransition = false
 	for (let i = 0; i < maxBoundaryTabSteps; i++) {
 		await page.keyboard.press('Tab')
 		const observation = await observeModalFocus(page, preview)
-		const position = assertModalFocusObservation(observation, `forward Tab ${i + 1}`)
-		if (position === 'body-transition') {
-			sawForwardBodyTransition = true
-		}
+		assertModalFocusObservation(observation, `forward Tab ${i + 1}`)
 		if (observation.parent.context === 'interactive' && observation.parent.label === 'Implementation') {
 			reachedImplementationByTab = true
 			break
@@ -234,30 +231,22 @@ test('Preview-local Change stage dialog: child background stays blocked while pa
 	}
 	expect(reachedImplementationByTab, `Tab from the focused New stage control must reach the Implementation parent control within ${maxBoundaryTabSteps} steps`)
 		.toBe(true)
-	expect(sawForwardBodyTransition, 'forward Tab must recognize the observed BODY/BODY document-boundary transition without treating parent BODY as dialog containment')
-		.toBe(true)
 	await expect(implementationButton)
 		.toBeFocused()
 
 	// Anchor reverse traversal on the parent control reached by real Tab input, then require a real
 	// reverse-key re-entry into the child dialog. Merely observing a parent control cannot satisfy this.
 	let reenteredPreviewDialog = false
-	let sawReverseBodyTransition = false
 	for (let i = 0; i < maxBoundaryTabSteps; i++) {
 		await page.keyboard.press('Shift+Tab')
 		const observation = await observeModalFocus(page, preview)
 		const position = assertModalFocusObservation(observation, `reverse Shift+Tab ${i + 1}`)
-		if (position === 'body-transition') {
-			sawReverseBodyTransition = true
-		}
 		if (position === 'preview-dialog') {
 			reenteredPreviewDialog = true
 			break
 		}
 	}
 	expect(reenteredPreviewDialog, `Shift+Tab from the focused Implementation parent control must re-enter the still-open Preview dialog within ${maxBoundaryTabSteps} steps`)
-		.toBe(true)
-	expect(sawReverseBodyTransition, 'reverse Shift+Tab must recognize the observed BODY/BODY document-boundary transition without treating parent BODY as dialog containment')
 		.toBe(true)
 
 	// A real click and subsequent Tab/Shift+Tab keep the parent toolbar usable while the Preview dialog
@@ -290,11 +279,15 @@ test('Preview-local Change stage dialog: child background stays blocked while pa
 	await expect(search).not.toBeFocused()
 	// A backdrop may obscure pointer hits without making the background inert. Native showModal()
 	// must also reject programmatic focus of an enabled Preview background input.
-	const searchCanReceiveProgrammaticFocus = await search.evaluate((element) => {
-		(element as HTMLElement).focus()
-		return document.activeElement === element
+	const searchFocusProbe = await search.evaluate((element) => {
+		const input = element as HTMLInputElement
+		const wasDisabled = input.disabled
+		input.focus()
+		return { wasDisabled, receivedFocus: document.activeElement === element }
 	})
-	expect(searchCanReceiveProgrammaticFocus)
+	expect(searchFocusProbe.wasDisabled, 'Preview Search must be enabled before testing modal inertness')
+		.toBe(false)
+	expect(searchFocusProbe.receivedFocus, 'Native modal must reject programmatic focus on Preview background')
 		.toBe(false)
 	await expect(dialog)
 		.toBeVisible()
