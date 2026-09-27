@@ -597,6 +597,36 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
+	it('removes document and window event listeners with the exact registered callback on Inspector teardown', () => {
+		const docAdd = vi.spyOn(document, 'addEventListener')
+		const docRemove = vi.spyOn(document, 'removeEventListener')
+		const winAdd = vi.spyOn(window, 'addEventListener')
+		const winRemove = vi.spyOn(window, 'removeEventListener')
+		const fixture = createGeometryFixture()
+		try {
+			fixture.agent.dispose()
+			for (const event of ['scroll', 'load', 'error']) {
+				const registered = docAdd.mock.calls.find(call => call[0] === event && call[2] === true)
+				if (registered === undefined)
+					throw new Error(`Expected a document ${event} listener registration.`)
+				expect(docRemove)
+					.toHaveBeenCalledWith(event, registered[1], true)
+			}
+			const resizeRegistered = winAdd.mock.calls.find(call => call[0] === 'resize')
+			if (resizeRegistered === undefined)
+				throw new Error('Expected a window resize listener registration.')
+			expect(winRemove)
+				.toHaveBeenCalledWith('resize', resizeRegistered[1])
+		}
+		finally {
+			fixture.dispose()
+			docAdd.mockRestore()
+			docRemove.mockRestore()
+			winAdd.mockRestore()
+			winRemove.mockRestore()
+		}
+	})
+
 	it.each(['load', 'error'])('invalidates for a %s resource event contained inside Shadow DOM', async (kind) => {
 		const fixture = createGeometryFixture({ shadowRoot: true })
 		const resource = document.createElement('img')
