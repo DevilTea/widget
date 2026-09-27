@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { nextTick, watchEffect } from 'vue'
+import { watchEffect } from 'vue'
 import { WidgetVueIntegrationError } from './errors'
 import { CounterPlugin, createFixtureRuntime, getCounterWidget, getLabelWidget, LabelPlugin, mountWidgetBridge } from './test-fixtures'
 
@@ -48,7 +48,7 @@ describe('property conformance', () => {
 			.toBe(false)
 	})
 
-	it('re-evaluates on the next dependency change and keeps notifying successful re-reads exactly once per actual recompute', async () => {
+	it('re-evaluates on the next dependency change and keeps notifying successful re-reads exactly once per actual recompute', () => {
 		const runtime = createFixtureRuntime({ id: 'p4', type: 'Counter' })
 		const { bridge } = mountWidgetBridge(runtime, 'p4', CounterPlugin)
 		const { doubled } = bridge.useProperties()
@@ -57,19 +57,25 @@ describe('property conformance', () => {
 		const seenValues: Array<number | null> = []
 		const stop = watchEffect(() => {
 			seenValues.push(doubled.value)
-		})
-		await nextTick()
+		}, { flush: 'sync' })
 		expect(seenValues)
 			.toEqual([0])
 
+		const recomputedResults: unknown[] = []
+		const unsubscribe = widget.properties.doubled.subscribe(result => recomputedResults.push(result))
+
 		// Change the authoritative Core State directly. The assertion below must be driven by the
-		// Property subscription's Vue trigger, not by a second manual `.value` read.
+		// Property subscription's Vue trigger, not by a second manual `.value` read. The Core listener
+		// independently records its real Property recompute; the synchronous Vue observer preserves
+		// every bridge trigger instead of batching duplicate notifications into one effect run.
 		widget.state.count.set(3)
-		await nextTick()
+		stop()
+		unsubscribe()
+
+		expect(recomputedResults)
+			.toEqual([{ ok: true, value: 6 }])
 		expect(seenValues)
 			.toEqual([0, 6])
-
-		stop()
 	})
 
 	it('does not retain a last-successful fallback value once a Property starts failing', () => {
