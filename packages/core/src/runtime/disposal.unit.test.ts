@@ -76,7 +76,7 @@ function createRuntime() {
 	if (widget === null)
 		throw new Error('test fixture: expected the root widget to resolve')
 
-	return { runtime, widget }
+	return { blueprint, runtime, widget }
 }
 
 /** Asserts `action` throws exactly the stable disposed-runtime error, by discriminator and name only. */
@@ -109,6 +109,44 @@ describe('dispose() idempotency', () => {
 		expect(() => runtime.dispose()).not.toThrow()
 		expect(runtime.isDisposed)
 			.toBe(true)
+	})
+})
+
+describe('runtime disposal ownership', () => {
+	it('disposing one Runtime leaves another Runtime from the same Blueprint operational', () => {
+		const { blueprint, runtime: runtimeA, widget: widgetA } = createRuntime()
+		const runtimeB = blueprint.createRuntime()
+		const widgetB = runtimeB.getWidget('root')
+
+		if (widgetB === null)
+			throw new Error('test fixture: expected the second Runtime root widget to resolve')
+
+		const stateValues: Array<number | null> = []
+		const propertyValues: number[] = []
+		widgetB.state.count.subscribe(value => stateValues.push(value))
+		widgetB.properties.doubled.subscribe((result) => {
+			if (result.ok && result.value !== null)
+				propertyValues.push(result.value)
+		})
+
+		runtimeA.dispose()
+
+		expect(runtimeA.isDisposed)
+			.toBe(true)
+		expectDisposedError(() => widgetA.state.count.get())
+		expect(runtimeB.isDisposed)
+			.toBe(false)
+
+		widgetB.state.count.set(3)
+
+		expect(widgetB.state.count.get())
+			.toBe(3)
+		expect(widgetB.properties.doubled.get())
+			.toEqual({ ok: true, value: 6 })
+		expect(stateValues)
+			.toEqual([3])
+		expect(propertyValues)
+			.toEqual([6])
 	})
 })
 
