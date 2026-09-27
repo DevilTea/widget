@@ -110,7 +110,8 @@ describe('encodeInspectableValue', () => {
 		const cyclic: unknown[] = []
 		cyclic.push(cyclic)
 		const shared = [1, 2]
-		const root: unknown[] = [cyclic, shared, shared]
+		// The intervening array receives id 4, so treating every reference as nextId - 1 is wrong.
+		const root: unknown[] = [cyclic, shared, [99], shared]
 
 		const encoded = encodeInspectableValue(root)
 		expect(encoded)
@@ -131,6 +132,12 @@ describe('encodeInspectableValue', () => {
 							{ type: 'number', value: 1 },
 							{ type: 'number', value: 2 },
 						],
+						truncated: false,
+					},
+					{
+						type: 'array',
+						id: 4,
+						items: [{ type: 'number', value: 99 }],
 						truncated: false,
 					},
 					{ type: 'reference', ref: 3 },
