@@ -602,28 +602,46 @@ describe('semantic geometry Inspector protocol', () => {
 		const docRemove = vi.spyOn(document, 'removeEventListener')
 		const winAdd = vi.spyOn(window, 'addEventListener')
 		const winRemove = vi.spyOn(window, 'removeEventListener')
-		const fixture = createGeometryFixture()
+		let fixture: ReturnType<typeof createGeometryFixture> | undefined
 		try {
+			fixture = createGeometryFixture()
 			fixture.agent.dispose()
+			// Double disposal must not issue duplicate removeEventListener calls.
+			fixture.dispose()
 			for (const event of ['scroll', 'load', 'error']) {
-				const registered = docAdd.mock.calls.find(call => call[0] === event && call[2] === true)
-				if (registered === undefined)
-					throw new Error(`Expected a document ${event} listener registration.`)
-				expect(docRemove)
-					.toHaveBeenCalledWith(event, registered[1], true)
+				const registered = docAdd.mock.calls.filter(call => call[0] === event && call[2] === true)
+				const removed = docRemove.mock.calls.filter(call => call[0] === event && call[2] === true)
+				// A prior unrelated add/remove pair must not stand in for a leaked Agent listener.
+				expect(registered)
+					.toHaveLength(1)
+				expect(removed)
+					.toHaveLength(1)
+				expect(removed[0]?.[1])
+					.toBe(registered[0]?.[1])
 			}
-			const resizeRegistered = winAdd.mock.calls.find(call => call[0] === 'resize')
-			if (resizeRegistered === undefined)
-				throw new Error('Expected a window resize listener registration.')
-			expect(winRemove)
-				.toHaveBeenCalledWith('resize', resizeRegistered[1])
+			const resizeAdds = winAdd.mock.calls.filter(call => call[0] === 'resize')
+			const resizeRemoves = winRemove.mock.calls.filter(call => call[0] === 'resize')
+			expect(resizeAdds)
+				.toHaveLength(1)
+			expect(resizeRemoves)
+				.toHaveLength(1)
+			expect(resizeRemoves[0]?.[1])
+				.toBe(resizeAdds[0]?.[1])
+			const capture = (options: boolean | { capture?: boolean } | undefined): boolean =>
+				typeof options === 'boolean' ? options : options?.capture ?? false
+			expect(capture(resizeRemoves[0]?.[2]))
+				.toBe(capture(resizeAdds[0]?.[2]))
 		}
 		finally {
-			fixture.dispose()
-			docAdd.mockRestore()
-			docRemove.mockRestore()
-			winAdd.mockRestore()
-			winRemove.mockRestore()
+			try {
+				fixture?.dispose()
+			}
+			finally {
+				docAdd.mockRestore()
+				docRemove.mockRestore()
+				winAdd.mockRestore()
+				winRemove.mockRestore()
+			}
 		}
 	})
 
