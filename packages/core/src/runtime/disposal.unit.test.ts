@@ -343,4 +343,26 @@ describe('dispose() emits no final value/diagnostic notification', () => {
 		expect(results)
 			.toEqual([6])
 	})
+
+	it('disposal during an aggregate diagnostic publication stops the remaining listeners', () => {
+		const { runtime, widget } = createRuntime()
+		let listenerCalls = 0
+		widget.subscribeDiagnostics(() => {
+			listenerCalls++
+			runtime.dispose()
+		})
+		widget.subscribeDiagnostics(() => {
+			listenerCalls++
+			runtime.dispose()
+		})
+
+		const result = widget.state.count.set('invalid' as unknown as number)
+
+		expect(result.ok)
+			.toBe(false)
+		expect(runtime.isDisposed)
+			.toBe(true)
+		expect(listenerCalls)
+			.toBe(1)
+	})
 })
