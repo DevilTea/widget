@@ -85,13 +85,33 @@ function summarizeDiagnostics(diagnostics: readonly OurBlueprintDiagnostic[]) {
 }
 
 function topologyOf(blueprint: ReturnType<typeof system.createBlueprint>) {
-	return inspectBlueprint(blueprint).nodes.map(node => ({
-		nodeId: node.nodeId,
-		source: node.node.source,
-		resolved: node.resolved,
-		sourceSlots: node.sourceSlots,
-		semanticSlots: node.resolved ? node.semanticSlots : null,
-	}))
+	const snapshot = inspectBlueprint(blueprint)
+	const ordinalById = new Map(snapshot.nodes.map((node, index) => [node.nodeId, index]))
+	const ordinalOf = (id: typeof snapshot.rootNodeId) => {
+		const ordinal = ordinalById.get(id)
+		if (ordinal === undefined)
+			throw new Error('Expected an inspection slot to reference a recovered node.')
+		return ordinal
+	}
+
+	return {
+		rootOrdinal: ordinalOf(snapshot.rootNodeId),
+		nodes: snapshot.nodes.map(node => ({
+			source: node.node.source,
+			resolved: node.resolved,
+			sourceSlots: node.sourceSlots.map(slot => ({
+				name: slot.name,
+				placement: slot.placement,
+				children: slot.children.map(ordinalOf),
+			})),
+			semanticSlots: node.resolved
+				? node.semanticSlots.map(slot => ({
+						name: slot.name,
+						children: slot.children.map(ordinalOf),
+					}))
+				: null,
+		})),
+	}
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -520,20 +540,18 @@ describe('recompile', () => {
 		expect(earlier.sourceJsonCompatible)
 			.toBe(true)
 
+		const grandchild = { id: 'grandchild', type: 'leaf' }
+		const unknownChild = {
+			id: 'duplicate',
+			type: 'unknown-plugin',
+			slots: { children: [grandchild] },
+		}
+		const leafChild = { id: 'duplicate', type: 'leaf' }
 		const definition = {
 			id: 'root',
 			type: 'container',
 			metadata: () => 'non-JSON source',
-			slots: {
-				children: [
-					{ id: 'duplicate', type: 'leaf' },
-					{
-						id: 'duplicate',
-						type: 'unknown-plugin',
-						slots: { children: [{ id: 'grandchild', type: 'leaf' }] },
-					},
-				],
-			},
+			slots: { children: [leafChild, unknownChild] },
 		}
 		const viaRecompile = earlier.recompile(definition)
 		const viaFreshCompile = system.createBlueprint(definition)
@@ -573,6 +591,19 @@ describe('recompile', () => {
 				viaFreshCompile.getChildrenAt(freshRoot, 'children')
 					.map(child => child.source),
 			)
+		// Snapshot-local InspectionNodeIds cannot be compared across independent Blueprints.
+		// The public recovered-source order is pre-order, so validate the exact source
+		// fragment identity of every recovered node separately from normalized topology.
+		const sourceFragments = [definition, leafChild, unknownChild, grandchild]
+		for (const blueprint of [viaRecompile, viaFreshCompile]) {
+			const recoveredNodes = inspectBlueprint(blueprint).nodes
+			expect(recoveredNodes)
+				.toHaveLength(sourceFragments.length)
+			for (const [index, fragment] of sourceFragments.entries()) {
+				expect(recoveredNodes[index]?.node.source)
+					.toBe(fragment)
+			}
+		}
 		expect(topologyOf(viaRecompile))
 			.toEqual(topologyOf(viaFreshCompile))
 		expect(viaRecompile.diagnostics)
