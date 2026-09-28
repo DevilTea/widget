@@ -9,11 +9,15 @@
  * stable `WidgetSystemRuntimeDisposedError` (checked via `instanceof` and `.name`, never message text).
  * Unsubscribe handles obtained before dispose remain safe idempotent no-ops afterward.
  *
- * Only the public entry (`../index`) is imported; no internal module or `blueprintInternals` access.
+ * Public disposal behavior uses only the public entry (`../index`). One focused ownership handoff assertion
+ * below composes the real aggregate and RuntimeContext constructors so it can observe the raw effect disposer.
  */
 
+import type { PrimitiveRegistryEntry } from './deps'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createRuntimeWidgetDiagnosticsAggregate } from './aggregate'
+import { createRuntimeContext } from './context'
 
 interface CounterInterfaces {
 	state: {
@@ -363,6 +367,36 @@ describe('dispose() emits no final value/diagnostic notification', () => {
 		expect(runtime.isDisposed)
 			.toBe(true)
 		expect(listenerCalls)
+			.toBe(1)
+	})
+
+	it('runtime context disposal invokes the raw effect disposer for an aggregate subscription', () => {
+		const context = createRuntimeContext()
+		let registrationCalls = 0
+		let rawDisposalCalls = 0
+		const registerSubscription = context.registerSubscription.bind(context)
+		context.registerSubscription = (rawDispose) => {
+			registrationCalls++
+			return registerSubscription(() => {
+				rawDisposalCalls++
+				rawDispose()
+			})
+		}
+
+		const entry: PrimitiveRegistryEntry = {
+			state: new Map(),
+			properties: new Map(),
+			methods: new Map(),
+			events: new Map(),
+		}
+		const aggregate = createRuntimeWidgetDiagnosticsAggregate(context, entry)
+		aggregate.subscribeDiagnostics(() => {})
+
+		context.dispose()
+
+		expect(registrationCalls)
+			.toBe(1)
+		expect(rawDisposalCalls)
 			.toBe(1)
 	})
 })
