@@ -1,5 +1,8 @@
+import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { InspectorRequestResult } from '@deviltea/widget-devtools'
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import {
+	createInProcessInspectorTransportPair,
 	createInspectorClient,
 	createMessagePortChannelHub,
 	createMessagePortInspectorTransport,
@@ -9,6 +12,7 @@ import {
 	parseInspectorRequestMessage,
 	parseInspectorResponseMessage,
 } from '@deviltea/widget-devtools'
+import { createInspectorAgent } from '@deviltea/widget-devtools/agent'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
 
 export interface DevtoolsBrowserContractResult {
@@ -527,5 +531,157 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 		removalAgentResponseAttempted,
 		removalOwnerClosedInspectorClient,
 		removalPendingRequestRejectedDisconnected,
+	}
+}
+
+export interface DevtoolsGeometryBrowserContractResult {
+	readonly shadowWidgetTargetWidgetId: string | null
+	readonly shadowWidgetTargetWidgetType: string | null
+	readonly shadowWidgetHitVisibility: string | null
+	readonly overlayCoveredHitResultIsNull: boolean
+	readonly documentElementsFromPointRetargetedToHost: boolean
+	readonly shadowElementsFromPointTopmostIsOverlay: boolean
+}
+
+interface GeometryFixtureRootInterfaces extends WidgetInterfaces {
+	slots: 'items'
+}
+
+interface GeometryFixtureCounterInterfaces extends WidgetInterfaces {
+	state: {
+		count: number
+	}
+}
+
+export async function runDevtoolsGeometryBrowserContracts(): Promise<DevtoolsGeometryBrowserContractResult> {
+	const RootPlugin = createWidgetPlugin('Root')
+		.description('Root fixture')
+		.interfaces<GeometryFixtureRootInterfaces>()
+		.slots({ items: { description: 'Items' } })
+		.done()
+
+	const CounterPlugin = createWidgetPlugin('Counter')
+		.description('Counter fixture')
+		.interfaces<GeometryFixtureCounterInterfaces>()
+		.state(state => state.count({
+			validate: (input): input is number => typeof input === 'number',
+			default: () => 0,
+		}))
+		.done()
+
+	const system = createWidgetSystem({ plugins: [RootPlugin, CounterPlugin] })
+	const blueprint = system.createBlueprint({
+		id: 'root',
+		type: 'Root',
+		slots: {
+			items: [
+				{ id: 'counter-1', type: 'Counter' },
+			],
+		},
+	})
+	if (blueprint.status !== 'valid')
+		throw new Error('Expected valid geometry fixture Blueprint.')
+	const runtime = blueprint.createRuntime()
+
+	const host = document.createElement('div')
+	host.id = 'geometry-shadow-host'
+	host.style.cssText = 'position: absolute; left: 0; top: 0; width: 400px; height: 300px;'
+	document.body.append(host)
+	const shadowRoot = host.attachShadow({ mode: 'open' })
+
+	const style = document.createElement('style')
+	style.textContent = `
+		.preview-root {
+			position: absolute;
+			left: 0;
+			top: 0;
+			width: 400px;
+			height: 300px;
+		}
+		.widget-counter {
+			position: absolute;
+			left: 20px;
+			top: 20px;
+			width: 120px;
+			height: 40px;
+			background: #eee;
+		}
+		.topmost-overlay {
+			position: absolute;
+			left: 10px;
+			top: 10px;
+			width: 140px;
+			height: 60px;
+			z-index: 10;
+			background: rgba(0, 0, 0, 0.5);
+		}
+	`
+	shadowRoot.append(style)
+
+	const root = document.createElement('div')
+	root.className = 'preview-root'
+	root.dataset.widgetId = 'root'
+	root.dataset.widgetType = 'Root'
+
+	const widget = document.createElement('div')
+	widget.className = 'widget-counter'
+	widget.dataset.widgetId = 'counter-1'
+	widget.dataset.widgetType = 'Counter'
+	widget.textContent = 'Counter'
+	root.append(widget)
+	shadowRoot.append(root)
+
+	const overlay = document.createElement('div')
+	overlay.className = 'topmost-overlay'
+
+	const pair = createInProcessInspectorTransportPair()
+	const agent = createInspectorAgent({
+		runtime,
+		transport: pair.agent,
+		runtimeId: 'runtime-geometry-contract',
+		dom: { root },
+	})
+	const client = createInspectorClient(pair.client)
+
+	try {
+		// 1. Without overlay: inspect.hitTest resolves the inner widget inside ShadowRoot
+		const uncovered = await client.request('inspect.hitTest', {
+			coordinateSpace: 'preview-viewport',
+			x: 40,
+			y: 40,
+		})
+
+		// Verify document.elementsFromPoint retargets internal Shadow DOM element to the host
+		const docElements = document.elementsFromPoint(40, 40)
+		const documentElementsFromPointRetargetedToHost = docElements.length > 0 && docElements[0] === host
+
+		// 2. Attach topmost non-semantic overlay as a sibling of bounded root inside shadowRoot
+		shadowRoot.append(overlay)
+
+		// Verify native shadowRoot.elementsFromPoint places the overlay topmost
+		const shadowElements = shadowRoot.elementsFromPoint(40, 40)
+		const shadowElementsFromPointTopmostIsOverlay = shadowElements.length > 0 && shadowElements[0] === overlay
+
+		// With overlay covering the same coordinates: hitTest returns target: null (suppressed)
+		const covered = await client.request('inspect.hitTest', {
+			coordinateSpace: 'preview-viewport',
+			x: 40,
+			y: 40,
+		})
+
+		return {
+			shadowWidgetTargetWidgetId: uncovered.target?.widgetId ?? null,
+			shadowWidgetTargetWidgetType: uncovered.target?.widgetType ?? null,
+			shadowWidgetHitVisibility: uncovered.target !== null ? uncovered.geometry.visibility : null,
+			overlayCoveredHitResultIsNull: covered.target === null,
+			documentElementsFromPointRetargetedToHost,
+			shadowElementsFromPointTopmostIsOverlay,
+		}
+	}
+	finally {
+		client.dispose()
+		agent.dispose()
+		runtime.dispose()
+		host.remove()
 	}
 }
