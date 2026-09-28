@@ -16,6 +16,7 @@ import type {
 } from '../index'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
+import { inspectBlueprint } from '../inspection'
 
 // -------------------------------------------------------------------------------------------------
 // Fixture plugins/system
@@ -81,6 +82,16 @@ function summarizeDiagnostics(diagnostics: readonly OurBlueprintDiagnostic[]) {
 			relatedCount: source.related?.length ?? 0,
 		}
 	})
+}
+
+function topologyOf(blueprint: ReturnType<typeof system.createBlueprint>) {
+	return inspectBlueprint(blueprint).nodes.map(node => ({
+		nodeId: node.nodeId,
+		source: node.node.source,
+		resolved: node.resolved,
+		sourceSlots: node.sourceSlots,
+		semanticSlots: node.resolved ? node.semanticSlots : null,
+	}))
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -500,6 +511,72 @@ describe('recompile', () => {
 			.toBe(definition)
 		expect(summarizeDiagnostics(viaRecompile.diagnostics))
 			.toEqual(summarizeDiagnostics(viaFreshCompile.diagnostics))
+	})
+
+	it('after an earlier diagnostic, recompile matches a fresh compile across source, topology, compatibility, and full diagnostics', () => {
+		const earlier = system.createBlueprint({ id: 'earlier', type: 'unknown-plugin' })
+		expect(earlier.status)
+			.toBe('invalid')
+		expect(earlier.sourceJsonCompatible)
+			.toBe(true)
+
+		const definition = {
+			id: 'root',
+			type: 'container',
+			metadata: () => 'non-JSON source',
+			slots: {
+				children: [
+					{ id: 'duplicate', type: 'leaf' },
+					{
+						id: 'duplicate',
+						type: 'unknown-plugin',
+						slots: { children: [{ id: 'grandchild', type: 'leaf' }] },
+					},
+				],
+			},
+		}
+		const viaRecompile = earlier.recompile(definition)
+		const viaFreshCompile = system.createBlueprint(definition)
+
+		expect(viaRecompile.source)
+			.toBe(definition)
+		expect(viaRecompile.source)
+			.toBe(viaFreshCompile.source)
+		expect(viaRecompile.sourceJsonCompatible)
+			.toBe(false)
+		expect(viaRecompile.sourceJsonCompatible)
+			.toBe(viaFreshCompile.sourceJsonCompatible)
+		expect(viaRecompile.status)
+			.toBe('invalid')
+		expect(viaRecompile.status)
+			.toBe(viaFreshCompile.status)
+
+		const recompiledRoot = assertResolved(viaRecompile.root)
+		const freshRoot = assertResolved(viaFreshCompile.root)
+		if (recompiledRoot.type !== 'container' || freshRoot.type !== 'container')
+			throw new Error('Expected equivalent recompiles to preserve the container root.')
+		expect(recompiledRoot.slots.children)
+			.toBeDefined()
+		expect(
+			recompiledRoot.slots.children
+				.map(child => child.source),
+		)
+			.toEqual(
+				freshRoot.slots.children
+					.map(child => child.source),
+			)
+		expect(
+			viaRecompile.getChildrenAt(recompiledRoot, 'children')
+				.map(child => child.source),
+		)
+			.toEqual(
+				viaFreshCompile.getChildrenAt(freshRoot, 'children')
+					.map(child => child.source),
+			)
+		expect(topologyOf(viaRecompile))
+			.toEqual(topologyOf(viaFreshCompile))
+		expect(viaRecompile.diagnostics)
+			.toEqual(viaFreshCompile.diagnostics)
 	})
 
 	it('is observably equivalent to system.createBlueprint(next) for a valid definition', () => {
