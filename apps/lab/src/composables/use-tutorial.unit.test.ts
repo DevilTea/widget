@@ -196,6 +196,8 @@ describe('createTutorialStore() duplicate start requests', () => {
 		deferredSwitch.resolve()
 		await flush()
 
+		expect(tutorial.startPending.value)
+			.toBe(false)
 		expect(tutorial.snapshot.value.status)
 			.toBe('active')
 
