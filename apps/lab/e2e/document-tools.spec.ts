@@ -83,10 +83,14 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 				value: { writeText: async (text: string) => { (window as unknown as { copiedPatch?: string }).copiedPatch = text } },
 			})
 		})
+		const displayedPatch = (await page.getByTestId('document-tools-patch')
+			.textContent())?.trim()
 		await page.getByTestId('document-tools-copy-patch')
 			.click()
-		await expect.poll(() => page.evaluate(() => (window as unknown as { copiedPatch?: string }).copiedPatch))
-			.toContain('replace')
+		await expect.poll(() => page.evaluate(
+			() => (window as unknown as { copiedPatch?: string }).copiedPatch?.trim(),
+		))
+			.toBe(displayedPatch)
 
 		await page.evaluate(() => (window as any).__WIDGET_LAB_TEST__.setDraftSourceText(JSON.stringify({
 			id: 'root',
