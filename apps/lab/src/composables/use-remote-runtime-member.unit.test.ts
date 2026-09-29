@@ -17,6 +17,86 @@ function respond(pair: ReturnType<typeof createInProcessInspectorTransportPair>,
 }
 
 describe('useRemoteRuntimeMember()', () => {
+	it('ignores queued member changes from the previous Runtime subscription', async () => {
+		const pair = createInProcessInspectorTransportPair()
+		const client = createInspectorClient(pair.client)
+		const requests: InspectorRequestMessage[] = []
+		pair.agent.subscribe((message) => {
+			const request = parseInspectorRequestMessage(message)
+			if (request === null)
+				return
+
+			requests.push(request)
+			if (request.method === 'runtime.unsubscribeMember')
+				respond(pair, request, { removed: true })
+		})
+
+		const oldRef: WidgetRef = { runtimeId: 'runtime-r0', nodeId: 3 }
+		const newRef: WidgetRef = { runtimeId: 'runtime-r1', nodeId: 8 }
+		const member: InspectorMemberRef = { type: 'state', name: 'count' }
+		const oldInitial: InspectorRuntimeMemberSnapshot = { type: 'state', name: 'count', value: { type: 'number', value: 3 } }
+		const newInitial: InspectorRuntimeMemberSnapshot = { type: 'state', name: 'count', value: { type: 'number', value: 8 } }
+		const currentChange: InspectorRuntimeMemberSnapshot = { type: 'state', name: 'count', value: { type: 'number', value: 80 } }
+		const staleChange: InspectorRuntimeMemberSnapshot = { type: 'state', name: 'count', value: { type: 'number', value: 999 } }
+		const selectedRef = ref<WidgetRef | null>(oldRef)
+		const scope = effectScope()
+		const snapshot = scope.run(() => useRemoteRuntimeMember(
+			() => client,
+			() => selectedRef.value,
+			() => member,
+			() => selectedRef.value?.runtimeId === oldRef.runtimeId ? oldInitial : newInitial,
+		))!
+
+		function sendMemberChange(subscriptionId: string, ref: WidgetRef, change: InspectorRuntimeMemberSnapshot): void {
+			pair.agent.send({
+				protocol: INSPECTOR_PROTOCOL_VERSION,
+				kind: 'event',
+				event: 'runtime.memberChanged',
+				payload: { subscriptionId, ref, member: change },
+			})
+		}
+
+		try {
+			const subscribeRequests = () => requests.filter(request => request.method === 'runtime.subscribeMember')
+			expect(subscribeRequests())
+				.toHaveLength(1)
+			const oldSubscribe = subscribeRequests()[0]!
+			expect(oldSubscribe)
+				.toMatchObject({ method: 'runtime.subscribeMember', params: { ref: oldRef, member } })
+			const oldSubscriptionId = 'subscription-r0'
+			respond(pair, oldSubscribe, { subscriptionId: oldSubscriptionId, member: oldInitial })
+			await Promise.resolve()
+			expect(snapshot.value)
+				.toEqual(oldInitial)
+
+			selectedRef.value = newRef
+			await nextTick()
+			expect(subscribeRequests())
+				.toHaveLength(2)
+			const newSubscribe = subscribeRequests()[1]!
+			expect(newSubscribe)
+				.toMatchObject({ method: 'runtime.subscribeMember', params: { ref: newRef, member } })
+			const newSubscriptionId = 'subscription-r1'
+			expect(oldSubscriptionId).not.toBe(newSubscriptionId)
+			respond(pair, newSubscribe, { subscriptionId: newSubscriptionId, member: newInitial })
+			await Promise.resolve()
+			expect(snapshot.value)
+				.toEqual(newInitial)
+
+			sendMemberChange(newSubscriptionId, newRef, currentChange)
+			expect(snapshot.value)
+				.toEqual(currentChange)
+
+			sendMemberChange(oldSubscriptionId, oldRef, staleChange)
+			expect(snapshot.value)
+				.toEqual(currentChange)
+		}
+		finally {
+			scope.stop()
+			client.close()
+		}
+	})
+
 	it('ignores a late subscription response after watcher cleanup and unsubscribes its remote ID', async () => {
 		const pair = createInProcessInspectorTransportPair()
 		const client = createInspectorClient(pair.client)
