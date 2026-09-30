@@ -147,6 +147,11 @@ test('Dependencies view tabs are keyboard-operable and member focus does not mut
 	await relationsViewTab.click()
 	await expect(relationsPanel.getByText('Focused widget'))
 		.toBeVisible()
+	const focusedWidget = relationsPanel.locator('.relations-column--center .relations-focus-card')
+	await expect(focusedWidget.getByText('TripMetrics', { exact: true }))
+		.toBeVisible()
+	await expect(focusedWidget)
+		.toContainText('#trip-metrics')
 
 	const memberChoice = relationsPanel.getByTitle(/^Focus (state|property|method) /)
 		.first()
