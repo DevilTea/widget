@@ -240,10 +240,9 @@ test('full CRM tour end-to-end via real interactions, each observation appearing
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 4 — a Method opens a dialog; another mutates and everything recomputes. Kept as ONE step with
-	// TWO stages (never split into two separate steps): `ModalRenderer.vue`'s dialog is a real native
-	// `showModal()` dialog, which makes the rest of the document — including this rail — `inert` while
-	// open, so Next can only ever be clicked once the visitor has closed it (via Save here).
+	// Step 4 — one step with two stages for teaching continuity. The dialog's `showModal()` is local to
+	// the Preview iframe, so this parent rail remains usable; Runtime observation predicates keep Next
+	// disabled until Save changes the deal.
 	const openObservation = rail.getByText('The dialog opened.', { exact: false })
 	const saveObservation = rail.getByText('Aurora Systems\' stage changed', { exact: false })
 	await expect(openObservation)
@@ -259,8 +258,33 @@ test('full CRM tour end-to-end via real interactions, each observation appearing
 		.getByRole('dialog', { name: 'Change deal stage' })
 	await expect(dialog)
 		.toBeVisible()
-	// Stage 1 revealed via passive Runtime observation while the (native, `inert`-making) dialog is
-	// still open — Next stays disabled; only stage 2's completion (Save) enables it.
+	// Stage 1 is revealed by passive Runtime observation. Next remains disabled because stage 2's deal-
+	// mutation predicate is incomplete, even though the parent rail is outside the Preview modal.
+	await expect(openObservation)
+		.toBeVisible()
+	await expect(nextButton)
+		.toBeDisabled()
+	await expect(saveObservation)
+		.toHaveCount(0)
+	await expect(rail.getByText('Step 4 of 6'))
+		.toBeVisible()
+
+	// The rail is a usable parent-document control while the child dialog stays open. Back shows the
+	// completed selection step and its enabled Next; returning to Step 4 exposes the still-incomplete
+	// save stage, so Next is disabled again by its real tutorial predicate.
+	await rail.getByRole('button', { name: 'Back', exact: true })
+		.click()
+	await expect(rail.getByText('Step 3 of 6'))
+		.toBeVisible()
+	await expect(dialog)
+		.toBeVisible()
+	await expect(nextButton)
+		.toBeEnabled()
+	await nextButton.click()
+	await expect(rail.getByText('Step 4 of 6'))
+		.toBeVisible()
+	await expect(dialog)
+		.toBeVisible()
 	await expect(openObservation)
 		.toBeVisible()
 	await expect(nextButton)

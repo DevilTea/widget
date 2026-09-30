@@ -15,18 +15,12 @@
  * NOT repeat Survey's step 8 six-view walkthrough verbatim (diagnostic #25 P4 ask: "avoid duplicating ... one
  * condensed step is fine").
  *
- * Step 4's two stages are NOT split into two separate steps, and this is a deliberate correction of an
- * earlier draft that DID split them (open the dialog / pick a stage + Save, as two steps each with its
- * own Next click in between): `ModalRenderer.vue`'s dialog is a REAL native `showModal()` dialog, which
- * makes the entire rest of the document — including this tutorial rail, a sibling of Dockview outside
- * the modal — `inert` while it is open. A visitor cannot click the rail's Next button while the Change
- * stage dialog is open, so a step design that requires exactly that is unusable, not merely awkward.
- * Keeping both stages inside ONE step means Next is only ever clicked after the dialog has fully closed
- * (via Save, or a Cancel/Escape detour the copy explicitly invites) — both stages' predicates are
- * satisfied via passive Runtime observation while the dialog is open (their reveal text becomes visible
- * in the — currently non-interactive-but-still-visible, `inert` does not hide content — rail), and Next
- * only needs to be clickable again once the visitor closes the dialog, which they must do anyway to
- * continue using the rest of the workbench.
+ * Step 4 keeps opening the dialog and saving the change as two stages in one step, preserving the
+ * teaching sequence. `ModalRenderer.vue` calls `showModal()` in the Preview iframe's document, so its
+ * background controls become inert while the parent Lab shell and tutorial rail remain interactive.
+ * Each stage's Runtime observation predicate controls progress: opening reveals stage 1, while Next
+ * stays disabled until Save changes the deal and completes stage 2. This does not depend on modal
+ * focus behavior or on the visitor closing the dialog before using the parent shell.
  *
  * Tour-end stage mutation: step 4 leaves Aurora Systems' stage changed from its seed value, and this
  * script makes no attempt to reset it before Finish. This is intentional, not an oversight — see this
@@ -132,12 +126,9 @@ export const crmTourScript: TutorialScript = {
 			title: 'A Method opens a dialog; another mutates — and everything recomputes',
 			target: 'crm-change-stage-button',
 			onEnter: actions => actions.setFocus('deal-stage-form', { type: 'method', name: 'open' }),
-			// Kept as ONE step with two stages, not two steps — see this module's own header for why: the
-			// Change stage dialog is a real native `showModal()` dialog, which makes the rest of the
-			// document (including this rail) `inert` while open, so Next can only ever be clicked once it
-			// has closed. Both stages below reveal via passive Runtime observation while the dialog may
-			// still be open; only the STEP's own Next needs the dialog already closed, which stage 2's own
-			// completion (Save) already guarantees.
+			// Both stages remain in one step for teaching continuity. The Preview-local `showModal()` does
+			// not disable this parent-document rail; these predicates keep Next disabled until Save actually
+			// changes the observed deal, regardless of whether the dialog is still open.
 			stages: [
 				{
 					prompt: 'Try it: click Change stage.',
