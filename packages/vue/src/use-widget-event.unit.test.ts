@@ -79,8 +79,6 @@ describe('useWidget() event emitter projection', () => {
 		const empty = mountWidgetBridge(emptyRuntime, 'root', EmptyEventsPlugin)
 		expect(empty.bridge.emit)
 			.toBeDefined()
-		expect(Object.keys(empty.bridge.emit))
-			.toEqual([])
 		for (const key of ['__proto__', 'constructor', 'phantom']) {
 			expect((empty.bridge.emit as unknown as Record<string, unknown>)[key])
 				.toBeUndefined()

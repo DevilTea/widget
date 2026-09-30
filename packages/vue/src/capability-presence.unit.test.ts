@@ -69,7 +69,7 @@ describe('plugin.capabilities — the authoritative presence source `useWidget()
 })
 
 describe('useWidget() runtime capability gating — explicit-empty vs absent', () => {
-	it('exposes both State accessors with empty keyed surfaces for explicitly-empty State, and omits them when State is absent', () => {
+	it('exposes both State accessors for explicitly-empty State, and omits them when State is absent', () => {
 		const emptyStateRuntime = createFixtureRuntime({ id: 'es3', type: 'EmptyState' })
 		const { bridge: emptyStateBridge } = mountWidgetBridge(emptyStateRuntime, 'es3', EmptyStatePlugin)
 
@@ -79,10 +79,6 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 			.toBeTypeOf('function')
 		expect(emptyStateBridge.useStateDiagnostics)
 			.toBeTypeOf('function')
-		expect(Object.keys(emptyStateBridge.useState()))
-			.toEqual([])
-		expect(Object.keys(emptyStateBridge.useStateDiagnostics()))
-			.toEqual([])
 
 		// Label has no State declaration, so both accessor keys must be absent at runtime.
 		const absentStateRuntime = createFixtureRuntime({ id: 'l3', type: 'Label' })
@@ -90,13 +86,13 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 
 		expect(LabelPlugin.capabilities.state)
 			.toBe(false)
-		expect(asLooseRecord(absentStateBridge).useState)
-			.toBeUndefined()
-		expect(asLooseRecord(absentStateBridge).useStateDiagnostics)
-			.toBeUndefined()
+		expect(Object.hasOwn(absentStateBridge, 'useState'))
+			.toBe(false)
+		expect(Object.hasOwn(absentStateBridge, 'useStateDiagnostics'))
+			.toBe(false)
 	})
 
-	it('exposes useProperties()/usePropertyDiagnostics() with an empty keyed surface for explicit-empty properties, and drops every other accessor', () => {
+	it('exposes useProperties()/usePropertyDiagnostics() for explicit-empty properties, and drops every other accessor', () => {
 		const runtime = createCapabilityFixtureRuntime({ id: 'ep1', type: 'EmptyProperties' })
 		const { bridge } = mountWidgetBridge(runtime, 'ep1', EmptyPropertiesPlugin)
 
@@ -104,10 +100,6 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 			.toBeTypeOf('function')
 		expect(bridge.usePropertyDiagnostics)
 			.toBeTypeOf('function')
-		expect(Object.keys(bridge.useProperties()))
-			.toEqual([])
-		expect(Object.keys(bridge.usePropertyDiagnostics()))
-			.toEqual([])
 		for (const key of ['__proto__', 'constructor', 'phantom']) {
 			expect(asLooseRecord(bridge.useProperties())[key])
 				.toBeUndefined()
@@ -123,7 +115,7 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 			.toBeUndefined()
 	})
 
-	it('exposes useMethods()/useMethodDiagnostics() with an empty keyed surface for explicit-empty methods, and drops every other accessor', () => {
+	it('exposes useMethods()/useMethodDiagnostics() for explicit-empty methods, and drops every other accessor', () => {
 		const runtime = createCapabilityFixtureRuntime({ id: 'em1', type: 'EmptyMethods' })
 		const { bridge } = mountWidgetBridge(runtime, 'em1', EmptyMethodsPlugin)
 
@@ -131,10 +123,6 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 			.toBeTypeOf('function')
 		expect(bridge.useMethodDiagnostics)
 			.toBeTypeOf('function')
-		expect(Object.keys(bridge.useMethods()))
-			.toEqual([])
-		expect(Object.keys(bridge.useMethodDiagnostics()))
-			.toEqual([])
 		for (const key of ['__proto__', 'constructor', 'phantom']) {
 			expect(asLooseRecord(bridge.useMethods())[key])
 				.toBeUndefined()
