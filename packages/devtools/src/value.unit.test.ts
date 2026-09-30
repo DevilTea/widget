@@ -93,6 +93,60 @@ describe('encodeInspectableValue', () => {
 		expect(() => JSON.parse(JSON.stringify(encoded))).not.toThrow()
 	})
 
+	it('uses ref 1 for a direct root self reference', () => {
+		const root: Record<string, unknown> = {}
+		root.self = root
+
+		expect(encodeInspectableValue(root))
+			.toEqual({
+				type: 'object',
+				id: 1,
+				entries: [{ key: 'self', value: { type: 'reference', ref: 1 } }],
+				truncated: false,
+			})
+	})
+
+	it('uses assigned IDs for cyclic and repeated array references', () => {
+		const cyclic: unknown[] = []
+		cyclic.push(cyclic)
+		const shared = [1, 2]
+		// The intervening array receives id 4, so treating every reference as nextId - 1 is wrong.
+		const root: unknown[] = [cyclic, shared, [99], shared]
+
+		const encoded = encodeInspectableValue(root)
+		expect(encoded)
+			.toEqual({
+				type: 'array',
+				id: 1,
+				items: [
+					{
+						type: 'array',
+						id: 2,
+						items: [{ type: 'reference', ref: 2 }],
+						truncated: false,
+					},
+					{
+						type: 'array',
+						id: 3,
+						items: [
+							{ type: 'number', value: 1 },
+							{ type: 'number', value: 2 },
+						],
+						truncated: false,
+					},
+					{
+						type: 'array',
+						id: 4,
+						items: [{ type: 'number', value: 99 }],
+						truncated: false,
+					},
+					{ type: 'reference', ref: 3 },
+				],
+				truncated: false,
+			})
+		expect(() => JSON.parse(JSON.stringify(encoded))).not.toThrow()
+	})
+
 	it('never executes accessors or application toJSON()', () => {
 		const getter = vi.fn(() => 'secret')
 		const toJSON = vi.fn(() => ({ leaked: true }))
