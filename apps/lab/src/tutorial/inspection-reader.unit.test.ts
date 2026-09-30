@@ -149,6 +149,39 @@ describe('subscribeObservationTargets', () => {
 		}
 	})
 
+	it('fires onChange when a subscribed Property member changes after evaluation, and stops after teardown', () => {
+		const runtime = createValidRuntime()
+		try {
+			let calls = 0
+			const teardown = subscribeObservationTargets(
+				runtime,
+				[{ widgetId: 'counter-1', member: { type: 'property', key: 'doubled' } }],
+				() => { calls++ },
+			)
+
+			expect(counterWidget(runtime).properties.doubled.get())
+				.toEqual({ ok: true, value: 0 })
+			expect(calls)
+				.toBe(1)
+
+			counterWidget(runtime).methods.increment(1)
+			expect(counterWidget(runtime).properties.doubled.get())
+				.toEqual({ ok: true, value: 2 })
+			expect(calls)
+				.toBe(2)
+
+			teardown()
+			counterWidget(runtime).methods.increment(1)
+			expect(counterWidget(runtime).properties.doubled.get())
+				.toEqual({ ok: true, value: 4 })
+			expect(calls)
+				.toBe(2)
+		}
+		finally {
+			runtime.dispose()
+		}
+	})
+
 	it('silently skips an unresolvable target rather than throwing', () => {
 		const runtime = createValidRuntime()
 		try {
