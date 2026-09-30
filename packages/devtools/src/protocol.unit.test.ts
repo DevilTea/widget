@@ -90,6 +90,56 @@ describe('inspector protocol validation', () => {
 			.toBe(sharedEvent)
 	})
 
+	it('handles deeply nested InspectableValue payloads without recursion overflow or receive-side depth ceilings', () => {
+		const root: Record<string, unknown> = {
+			type: 'array',
+			id: 1,
+			items: [],
+			truncated: false,
+		}
+		let cursor = root
+		for (let id = 2; id <= 20_000; id++) {
+			const next: Record<string, unknown> = {
+				type: 'array',
+				id,
+				items: [],
+				truncated: false,
+			}
+			;(cursor.items as unknown[]).push(next)
+			cursor = next
+		}
+		;(cursor.items as unknown[]).push({ type: 'number', value: 1 })
+
+		const event = {
+			protocol: INSPECTOR_PROTOCOL_VERSION,
+			kind: 'event',
+			event: 'runtime.eventOccurred',
+			payload: {
+				subscriptionId: 'event-deep',
+				ref: { runtimeId: 'runtime-a', nodeId: 1 },
+				event: 'changed',
+				args: [root],
+			},
+		}
+
+		let parsed: ReturnType<typeof parseInspectorEventMessage> | undefined
+		expect(() => {
+			parsed = parseInspectorEventMessage(event)
+		})
+			.not.toThrow()
+		expect(parsed)
+			.toBe(event)
+
+		;(cursor.items as unknown[])[0] = root
+		parsed = undefined
+		expect(() => {
+			parsed = parseInspectorEventMessage(event)
+		})
+			.not.toThrow()
+		expect(parsed)
+			.toBeNull()
+	})
+
 	it('uses major-version compatibility while allowing minor-version capability negotiation', () => {
 		expect(isCompatibleProtocolVersion({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: 999 }))
 			.toBe(true)
