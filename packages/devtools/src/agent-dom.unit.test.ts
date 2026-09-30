@@ -335,6 +335,10 @@ describe('inspectorAgent DOM ownership', () => {
 		outside.dataset.widgetType = 'DevtoolsCounter'
 		document.body.append(outside)
 		try {
+			const nativePointerDown = vi.fn()
+			const nativeClick = vi.fn()
+			outside.addEventListener('pointerdown', nativePointerDown)
+			outside.addEventListener('click', nativeClick)
 			const events: unknown[] = []
 			client.on('inspect.selected', payload => events.push(payload))
 			await client.request('inspect.enable', {})
@@ -348,6 +352,10 @@ describe('inspectorAgent DOM ownership', () => {
 				.toBe(false)
 			expect(click.defaultPrevented)
 				.toBe(false)
+			expect(nativePointerDown)
+				.toHaveBeenCalledTimes(1)
+			expect(nativeClick)
+				.toHaveBeenCalledTimes(1)
 			expect(events)
 				.toHaveLength(0)
 		}
