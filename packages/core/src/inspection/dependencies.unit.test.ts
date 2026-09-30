@@ -219,34 +219,40 @@ describe('dependency status truth table', () => {
 			.toBeUndefined()
 	})
 
-	it('unique but unresolved target is invalid with a targetNodeId', () => {
+	it('unique but unresolved target is invalid with the exact targetNodeId', () => {
 		const blueprint = createFixtureBlueprint()
 		const root = inspectRootOf(blueprint)
+		const expectedTargetNodeId = inspectBlueprint(blueprint)
+			.getNodeId(blueprint.getWidget('broken')!)
 		const dep = propertyDep(root, 'unresolvedTargetProp')
 		expect(dep.status)
 			.toBe('invalid')
 		expect(dep.status === 'invalid' ? dep.targetNodeId : undefined)
-			.not.toBeUndefined()
+			.toBe(expectedTargetNodeId)
 	})
 
-	it('unique resolved target missing the capability is invalid with a targetNodeId', () => {
+	it('unique resolved target missing the capability is invalid with the exact targetNodeId', () => {
 		const blueprint = createFixtureBlueprint()
 		const root = inspectRootOf(blueprint)
+		const expectedTargetNodeId = inspectBlueprint(blueprint)
+			.getNodeId(blueprint.getWidget('no-state-target')!)
 		const dep = propertyDep(root, 'missingCapabilityProp')
 		expect(dep.status)
 			.toBe('invalid')
 		expect(dep.status === 'invalid' ? dep.targetNodeId : undefined)
-			.not.toBeUndefined()
+			.toBe(expectedTargetNodeId)
 	})
 
-	it('unique resolved target missing the member is invalid with a targetNodeId', () => {
+	it('unique resolved target missing the member is invalid with the exact targetNodeId', () => {
 		const blueprint = createFixtureBlueprint()
 		const root = inspectRootOf(blueprint)
+		const expectedTargetNodeId = inspectBlueprint(blueprint)
+			.getNodeId(blueprint.getWidget('target')!)
 		const dep = propertyDep(root, 'missingMemberProp')
 		expect(dep.status)
 			.toBe('invalid')
 		expect(dep.status === 'invalid' ? dep.targetNodeId : undefined)
-			.not.toBeUndefined()
+			.toBe(expectedTargetNodeId)
 	})
 
 	it('every invalid/absent status is cross-checked against the existing Blueprint Diagnostic surface, never derived from it', () => {
