@@ -35,6 +35,23 @@ test('native Chromium propagates explicit DevTools closes and settles iframe nav
 		})
 })
 
+test('native Chromium bootstraps Preview across origins and ignores an untrusted sender', async ({ page }) => {
+	await page.goto('http://127.0.0.1:4174/e2e/fixtures/devtools-transport.html')
+	const moduleUrl = await page.evaluate(() => new URL('/e2e/devtools-transport.browser.ts', location.origin).href)
+	const result = await page.evaluate(async (url) => {
+		const browserContracts = await import(url)
+		return browserContracts.runCrossOriginPreviewBootstrapBrowserContracts()
+	}, moduleUrl)
+
+	expect(result)
+		.toEqual({
+			parentAndFrameOriginsDiffer: true,
+			untrustedBootstrapDidNotReceiveHostResponse: true,
+			trustedCrossOriginBootstrapMounted: true,
+			trustedCrossOriginInspectorRequestResolved: true,
+		})
+})
+
 test('native Chromium inspect.hitTest resolves ShadowRoot widgets and respects topmost nonsemantic overlays', async ({ page }) => {
 	await page.goto('http://127.0.0.1:4174/e2e/fixtures/devtools-transport.html')
 	const moduleUrl = await page.evaluate(() => new URL('/e2e/devtools-transport.browser.ts', location.origin).href)

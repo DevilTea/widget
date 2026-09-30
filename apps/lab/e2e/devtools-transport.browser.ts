@@ -13,6 +13,7 @@ import {
 	parseInspectorResponseMessage,
 } from '@deviltea/widget-devtools'
 import { createInspectorAgent } from '@deviltea/widget-devtools/agent'
+import { createInspectorFrameBootstrapRequest } from '@deviltea/widget-devtools/frame-bootstrap'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
 
 export interface DevtoolsBrowserContractResult {
@@ -238,6 +239,177 @@ function withTestTimeout<T>(promise: Promise<T>, label: string, milliseconds = 3
 			},
 		)
 	})
+}
+
+export interface CrossOriginPreviewBootstrapBrowserContractResult {
+	readonly parentAndFrameOriginsDiffer: boolean
+	readonly untrustedBootstrapDidNotReceiveHostResponse: boolean
+	readonly trustedCrossOriginBootstrapMounted: boolean
+	readonly trustedCrossOriginInspectorRequestResolved: boolean
+}
+
+function previewFrameUrl(frameOrigin: string, parentOrigin: string, sessionId: string, generation: number): string {
+	const url = new URL('/preview-frame.html', frameOrigin)
+	url.searchParams.set('session', sessionId)
+	url.searchParams.set('generation', String(generation))
+	url.searchParams.set('parentOrigin', parentOrigin)
+	return url.href
+}
+
+export async function runCrossOriginPreviewBootstrapBrowserContracts(): Promise<CrossOriginPreviewBootstrapBrowserContractResult> {
+	const parentOrigin = location.origin
+	const frameOriginUrl = new URL(location.href)
+	frameOriginUrl.hostname = location.hostname === '127.0.0.1' ? 'localhost' : '127.0.0.1'
+	const frameOrigin = frameOriginUrl.origin
+	if (frameOrigin === parentOrigin)
+		throw new Error('Cross-origin bootstrap contract requires distinct parent and frame origins.')
+
+	const untrustedSessionId = 'preview-untrusted-bootstrap-contract'
+	const untrustedGeneration = 2
+	const untrustedTarget = document.createElement('iframe')
+	untrustedTarget.name = 'preview-bootstrap-target'
+	document.body.append(untrustedTarget)
+	const targetLoaded = new Promise<void>((resolve) => {
+		untrustedTarget.addEventListener('load', () => resolve(), { once: true })
+	})
+	untrustedTarget.src = previewFrameUrl(frameOrigin, parentOrigin, untrustedSessionId, untrustedGeneration)
+
+	const attacker = document.createElement('iframe')
+	const attackerUrl = new URL('/e2e/fixtures/preview-bootstrap-attacker.html', frameOrigin)
+	attackerUrl.searchParams.set('parentOrigin', parentOrigin)
+	const attackerLoaded = new Promise<void>((resolve) => {
+		attacker.addEventListener('load', () => resolve(), { once: true })
+	})
+	attacker.src = attackerUrl.href
+	document.body.append(attacker)
+
+	let disposeDriver = () => {}
+	let driverFrame: HTMLIFrameElement | null = null
+	let onForwardedMessage: ((event: MessageEvent<unknown>) => void) | null = null
+	let untrustedHub: ReturnType<typeof createMessagePortChannelHub> | null = null
+	let stopUntrustedResponseListener = () => {}
+	try {
+		await Promise.all([
+			withTestTimeout(targetLoaded, 'Cross-origin preview frame load'),
+			withTestTimeout(attackerLoaded, 'Cross-origin bootstrap attacker load'),
+		])
+		const attackerWindow = attacker.contentWindow
+		if (attackerWindow === null)
+			throw new Error('Cross-origin bootstrap attacker window is unavailable.')
+
+		let resolveForwarded!: () => void
+		const forwarded = new Promise<void>((resolve) => {
+			resolveForwarded = resolve
+		})
+		onForwardedMessage = (event) => {
+			if (event.source !== attackerWindow
+				|| typeof event.data !== 'object'
+				|| event.data === null
+				|| !('type' in event.data)
+				|| event.data.type !== 'preview-bootstrap-forwarded') {
+				return
+			}
+			resolveForwarded()
+		}
+		window.addEventListener('message', onForwardedMessage)
+
+		const attackerChannel = new MessageChannel()
+		untrustedHub = createMessagePortChannelHub(attackerChannel.port1)
+		const untrustedHostTransport = untrustedHub.openChannel('preview-host')
+		const untrustedRequestId = 'preview-bootstrap-untrusted-mount'
+		let resolveUntrustedResponse!: () => void
+		const untrustedResponse = new Promise<void>((resolve) => {
+			resolveUntrustedResponse = resolve
+		})
+		stopUntrustedResponseListener = untrustedHostTransport.subscribe((message) => {
+			if (isRecord(message)
+				&& message.protocol === 1
+				&& message.requestId === untrustedRequestId
+				&& (message.kind === 'mounted' || message.kind === 'error')) {
+				resolveUntrustedResponse()
+			}
+		})
+		untrustedHostTransport.send({
+			protocol: 1,
+			kind: 'mount',
+			requestId: untrustedRequestId,
+			sessionId: untrustedSessionId,
+			generation: untrustedGeneration,
+			preview: {
+				showcaseId: 'sandbox',
+				revision: 0,
+				sourceText: defaultSandboxPreset.sourceText,
+			},
+		})
+		attackerWindow.postMessage({
+			type: 'preview-bootstrap-forward',
+			bootstrap: createInspectorFrameBootstrapRequest(untrustedSessionId, untrustedGeneration),
+			targetOrigin: frameOrigin,
+		}, frameOrigin, [attackerChannel.port2])
+		await withTestTimeout(forwarded, 'Untrusted cross-origin bootstrap relay')
+		const untrustedBootstrapResponded = await Promise.race([
+			untrustedResponse.then(() => true),
+			new Promise<boolean>(resolve => setTimeout(resolve, 3_000, false)),
+		])
+		stopUntrustedResponseListener()
+		stopUntrustedResponseListener = () => {}
+		if (!untrustedHub.closed)
+			untrustedHub.close()
+		untrustedHub = null
+
+		driverFrame = document.createElement('iframe')
+		document.body.append(driverFrame)
+		const driverModuleUrl = new URL('/src/preview-host/frame-driver.ts', parentOrigin).href
+		const { createPreviewFrameDriver } = await import(/* @vite-ignore */ driverModuleUrl) as {
+			createPreviewFrameDriver: (
+				frame: HTMLIFrameElement,
+				presentation: () => { readonly locale: 'en', readonly theme: 'light' },
+				options?: { readonly frameOrigin?: string },
+			) => {
+				mount: (descriptor: { readonly showcaseId: string, readonly revision: number, readonly sourceText: string }) => Promise<{
+					readonly generation: number
+					readonly runtimeId: string
+					readonly inspectorClient: {
+						request: (method: string, params: Record<string, unknown>) => Promise<unknown>
+					}
+				}>
+				dispose: () => void
+			}
+		}
+		const driver = createPreviewFrameDriver(
+			driverFrame,
+			() => ({ locale: 'en', theme: 'light' }),
+			{ frameOrigin },
+		)
+		disposeDriver = () => driver.dispose()
+		const connection = await withTestTimeout(driver.mount({
+			showcaseId: 'sandbox',
+			revision: 0,
+			sourceText: defaultSandboxPreset.sourceText,
+		}), 'Trusted cross-origin Preview bootstrap', 8_000)
+		const runtimes = await withTestTimeout(
+			connection.inspectorClient.request('runtime.list', {}),
+			'Trusted cross-origin Inspector request',
+		) as InspectorRequestResult<'runtime.list'>
+
+		return {
+			parentAndFrameOriginsDiffer: frameOrigin !== parentOrigin,
+			untrustedBootstrapDidNotReceiveHostResponse: !untrustedBootstrapResponded,
+			trustedCrossOriginBootstrapMounted: connection.runtimeId.length > 0 && connection.generation > 0,
+			trustedCrossOriginInspectorRequestResolved: runtimes.runtimes.some(runtime => runtime.runtimeId === connection.runtimeId),
+		}
+	}
+	finally {
+		if (onForwardedMessage !== null)
+			window.removeEventListener('message', onForwardedMessage)
+		stopUntrustedResponseListener()
+		if (untrustedHub !== null && !untrustedHub.closed)
+			untrustedHub.close()
+		disposeDriver()
+		driverFrame?.remove()
+		attacker.remove()
+		untrustedTarget.remove()
+	}
 }
 
 function observeClientClose(client: { close: () => void }): {

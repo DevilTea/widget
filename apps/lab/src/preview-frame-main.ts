@@ -1,5 +1,5 @@
 /**
- * Same-origin Preview execution realm (issue #10 / Phase B2).
+ * Isolated Preview execution realm (issue #10 / Phase B2).
  *
  * The parent transfers exactly one bootstrap MessagePort. This frame owns the actual showcase Runtime,
  * Vue renderer, Vuetify provider, InspectorAgent, tutorial semantic observation, and inspected DOM.
@@ -47,6 +47,18 @@ const params = new URLSearchParams(location.search)
 const sessionId = params.get('session') ?? ''
 const generationValue = Number(params.get('generation'))
 const generation = Number.isSafeInteger(generationValue) && generationValue >= 0 ? generationValue : -1
+const parentOriginValue = params.get('parentOrigin')
+const parentOrigin = (() => {
+	if (parentOriginValue === null)
+		return null
+	try {
+		const parsed = new URL(parentOriginValue)
+		return parsed.origin === parentOriginValue && parsed.origin !== 'null' ? parsed.origin : null
+	}
+	catch {
+		return null
+	}
+})()
 
 const i18n = createLabI18nStore()
 const theme = createLabThemeStore()
@@ -120,11 +132,11 @@ function progressForRequest(request: Extract<PreviewHostRequest, { kind: 'tutori
 }
 
 window.addEventListener('message', (event) => {
-	if (bootstrapAccepted || sessionId.length === 0 || generation < 0)
+	if (bootstrapAccepted || sessionId.length === 0 || generation < 0 || parentOrigin === null)
 		return
 	const accepted = acceptInspectorFrameBootstrap(event, {
 		expectedSource: window.parent,
-		expectedOrigin: location.origin,
+		expectedOrigin: parentOrigin,
 		sessionId,
 		expectedGeneration: generation,
 	})
