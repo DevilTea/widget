@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from './index'
 
 describe('widgetSystem catalog', () => {
+	it('rejects plugins with duplicate types', () => {
+		const first = createWidgetPlugin('duplicate')
+			.description('First')
+			.interfaces<Record<never, never>>()
+			.done()
+		const second = createWidgetPlugin('duplicate')
+			.description('Second')
+			.interfaces<Record<never, never>>()
+			.done()
+
+		expect(() => createWidgetSystem({ plugins: [first, second] }))
+			.toThrow()
+	})
+
 	it('projects intrinsic plugin, config, and slot descriptions in registration order', () => {
 		interface CardInterfaces {
 			config: {
