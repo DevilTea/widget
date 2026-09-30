@@ -116,6 +116,29 @@ describe('runtimeState — valid/invalid set + diagnostic snapshot (diagnostic #
 		expect(listener).not.toHaveBeenCalled()
 	})
 
+	it('a same-value successful write clears diagnostics from a prior invalid write without notifying the value subscriber', () => {
+		const { state } = createCounterRuntime({ default: () => 3 })
+		const valueListener = vi.fn()
+		state.subscribe(valueListener)
+
+		const rejected = state.set('not-a-number' as any)
+
+		expect(rejected.ok)
+			.toBe(false)
+		expect(state.get())
+			.toBe(3)
+		expect(state.getDiagnostics())
+			.toHaveLength(1)
+
+		const accepted = state.set(3)
+
+		expect(accepted)
+			.toEqual({ ok: true, value: 3 })
+		expect(state.getDiagnostics())
+			.toBe(EMPTY_DIAGNOSTICS)
+		expect(valueListener).not.toHaveBeenCalled()
+	})
+
 	it('regression: NaN -> NaN counts as changed (strict `!==`) and notifies the subscriber', () => {
 		const { state } = createCounterRuntime()
 
