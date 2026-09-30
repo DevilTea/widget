@@ -196,6 +196,30 @@ describe('unknown raw slots', () => {
 		expect('mystery' in root.slots)
 			.toBe(false)
 	})
+
+	it('a mixed declared and undeclared raw slot returns exactly two unique children without ordering assertions', () => {
+		const declaredSource = { id: 'declared-child', type: 'leaf' }
+		const rawSource = { id: 'raw-child', type: 'leaf' }
+		const { blueprint, root } = getContainerRoot({
+			id: 'root',
+			type: 'container',
+			slots: {
+				header: [declaredSource],
+				mystery: [rawSource],
+			},
+		})
+
+		const declaredChild = root.slots.header[0]!
+		const rawChild = blueprint.getChildrenAt(root, 'mystery')[0]!
+
+		const children = blueprint.getChildren(root)
+		expect(children)
+			.toHaveLength(2)
+		expect(children)
+			.toContain(declaredChild)
+		expect(children)
+			.toContain(rawChild)
+	})
 })
 
 describe('plugin without slots capability', () => {
