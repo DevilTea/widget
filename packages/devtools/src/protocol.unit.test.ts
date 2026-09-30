@@ -3,6 +3,7 @@ import {
 	INSPECTOR_PROTOCOL_VERSION,
 	isCompatibleProtocolVersion,
 	isInspectorRequestResult,
+	parseInspectorEventMessage,
 	parseInspectorRequestMessage,
 	parseInspectorResponseMessage,
 } from './protocol'
@@ -36,6 +37,57 @@ describe('inspector protocol validation', () => {
 			.toEqual(success)
 		expect(parseInspectorResponseMessage({ ...success, ok: false, error: null }))
 			.toBeNull()
+	})
+
+	it('rejects cyclic InspectableValue event payloads without throwing while allowing acyclic sharing', () => {
+		const cyclic: Record<string, unknown> = {
+			type: 'object',
+			id: 1,
+			entries: [],
+			truncated: false,
+		}
+		;(cyclic.entries as Array<Record<string, unknown>>).push({ key: 'self', value: cyclic })
+		const cyclicEvent = {
+			protocol: INSPECTOR_PROTOCOL_VERSION,
+			kind: 'event',
+			event: 'runtime.eventOccurred',
+			payload: {
+				subscriptionId: 'event-1',
+				ref: { runtimeId: 'runtime-a', nodeId: 1 },
+				event: 'changed',
+				args: [cyclic],
+			},
+		}
+
+		expect(() => parseInspectorEventMessage(cyclicEvent))
+			.not.toThrow()
+		expect(parseInspectorEventMessage(cyclicEvent))
+			.toBeNull()
+
+		const shared = {
+			type: 'object',
+			id: 2,
+			entries: [{ key: 'value', value: { type: 'number', value: 1 } }],
+			truncated: false,
+		}
+		const sharedEvent = {
+			...cyclicEvent,
+			payload: {
+				...cyclicEvent.payload,
+				args: [{
+					type: 'object',
+					id: 3,
+					entries: [
+						{ key: 'left', value: shared },
+						{ key: 'right', value: shared },
+					],
+					truncated: false,
+				}],
+			},
+		}
+
+		expect(parseInspectorEventMessage(sharedEvent))
+			.toBe(sharedEvent)
 	})
 
 	it('uses major-version compatibility while allowing minor-version capability negotiation', () => {

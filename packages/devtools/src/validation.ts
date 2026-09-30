@@ -68,7 +68,7 @@ export function isPath(value: unknown): value is readonly (string | number)[] {
 			|| (typeof segment === 'number' && Number.isInteger(segment)))
 }
 
-export function isInspectableValue(value: unknown): value is InspectableValue {
+function isInspectableValueWithin(value: unknown, ancestors: Set<object>): value is InspectableValue {
 	if (!isRecord(value) || typeof value.type !== 'string')
 		return false
 	switch (value.type) {
@@ -86,14 +86,34 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 				|| value.value === 'negative-infinity' || value.value === 'negative-zero'
 		case 'bigint':
 			return typeof value.value === 'string'
-		case 'array':
-			return isNodeId(value.id) && Array.isArray(value.items)
-				&& value.items.every(isInspectableValue) && typeof value.truncated === 'boolean'
-		case 'object':
-			return isNodeId(value.id) && Array.isArray(value.entries)
-				&& value.entries.every(entry => isRecord(entry)
-					&& typeof entry.key === 'string' && isInspectableValue(entry.value))
-				&& typeof value.truncated === 'boolean'
+		case 'array': {
+			if (!isNodeId(value.id) || !Array.isArray(value.items) || typeof value.truncated !== 'boolean')
+				return false
+			if (ancestors.has(value))
+				return false
+			ancestors.add(value)
+			try {
+				return value.items.every(item => isInspectableValueWithin(item, ancestors))
+			}
+			finally {
+				ancestors.delete(value)
+			}
+		}
+		case 'object': {
+			if (!isNodeId(value.id) || !Array.isArray(value.entries) || typeof value.truncated !== 'boolean')
+				return false
+			if (ancestors.has(value))
+				return false
+			ancestors.add(value)
+			try {
+				return value.entries.every(entry => isRecord(entry)
+					&& typeof entry.key === 'string'
+					&& isInspectableValueWithin(entry.value, ancestors))
+			}
+			finally {
+				ancestors.delete(value)
+			}
+		}
 		case 'reference':
 			return isNodeId(value.ref)
 		case 'opaque':
@@ -104,6 +124,10 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 		default:
 			return false
 	}
+}
+
+export function isInspectableValue(value: unknown): value is InspectableValue {
+	return isInspectableValueWithin(value, new Set())
 }
 
 export function isBlueprintCapabilities(
