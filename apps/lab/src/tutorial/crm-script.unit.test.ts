@@ -64,6 +64,35 @@ describe('crmTourScript "search" step predicate', () => {
 			.toBe(false)
 	})
 
+	it('does NOT complete when the Aurora search is filtered out by the qualified stage filter', () => {
+		const { runtime } = createCrmRuntime()
+		const search = widgetOfType(runtime, 'deal-search', 'TextInput')
+		const stageFilter = widgetOfType(runtime, 'stage-filter', 'SelectInput')
+		const query = widgetOfType(runtime, 'deal-query', 'DealQuery')
+
+		expect(search.state.value.set('Aurora').ok)
+			.toBe(true)
+		expect(stageFilter.state.value.set('qualified').ok)
+			.toBe(true)
+		forceRealEvaluation(query)
+
+		const filtered = query.properties.filteredDeals.get()
+		expect(filtered.ok)
+			.toBe(true)
+		if (!filtered.ok)
+			throw new Error('Expected filteredDeals to evaluate successfully')
+		expect(filtered.value)
+			.toEqual([])
+
+		const reader = createRuntimeReader(runtime)
+		expect(reader.readState('deal-search', 'value'))
+			.toBe('Aurora')
+		expect(reader.readState('stage-filter', 'value'))
+			.toBe('qualified')
+		expect(searchIsComplete(reader))
+			.toBe(false)
+	})
+
 	it('does NOT complete before any search is typed (the unfiltered 8-deal set, deal-1 included but nothing narrowed)', () => {
 		const { runtime } = createCrmRuntime()
 		const query = widgetOfType(runtime, 'deal-query', 'DealQuery')
