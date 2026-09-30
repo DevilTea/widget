@@ -54,11 +54,10 @@ function createSessionId(): string {
 		.slice(2)}`
 }
 
-function frameUrl(sessionId: string, generation: number, parentOrigin: string, targetOrigin: string): string {
+function frameUrl(sessionId: string, generation: number, targetOrigin: string): string {
 	const url = new URL(`${import.meta.env.BASE_URL}preview-frame.html`, targetOrigin)
 	url.searchParams.set('session', sessionId)
 	url.searchParams.set('generation', String(generation))
-	url.searchParams.set('parentOrigin', parentOrigin)
 	return url.href
 }
 
@@ -161,7 +160,11 @@ export function createPreviewFrameDriver(
 			}
 			iframe.addEventListener('load', onLoad, { once: true })
 			iframe.addEventListener('error', onError, { once: true })
-			iframe.src = frameUrl(sessionId, targetGeneration, parentOrigin, targetOrigin)
+			// Let the child bind bootstrap to the browser-reported origin of its actual embedding parent,
+			// without disclosing this shell's path. This is an integration boundary, not a general frame
+			// allowlist or security-sandbox policy.
+			iframe.referrerPolicy = 'origin'
+			iframe.src = frameUrl(sessionId, targetGeneration, targetOrigin)
 		})
 		return connecting
 	}

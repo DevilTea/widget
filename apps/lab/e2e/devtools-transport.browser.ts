@@ -243,16 +243,18 @@ function withTestTimeout<T>(promise: Promise<T>, label: string, milliseconds = 3
 
 export interface CrossOriginPreviewBootstrapBrowserContractResult {
 	readonly parentAndFrameOriginsDiffer: boolean
+	readonly siblingAttackerSharesParentOrigin: boolean
 	readonly untrustedBootstrapDidNotReceiveHostResponse: boolean
 	readonly trustedCrossOriginBootstrapMounted: boolean
 	readonly trustedCrossOriginInspectorRequestResolved: boolean
 }
 
-function previewFrameUrl(frameOrigin: string, parentOrigin: string, sessionId: string, generation: number): string {
+const TRUSTED_CROSS_ORIGIN_BOOTSTRAP_TIMEOUT_MS = 8_000
+
+function previewFrameUrl(frameOrigin: string, sessionId: string, generation: number): string {
 	const url = new URL('/preview-frame.html', frameOrigin)
 	url.searchParams.set('session', sessionId)
 	url.searchParams.set('generation', String(generation))
-	url.searchParams.set('parentOrigin', parentOrigin)
 	return url.href
 }
 
@@ -268,15 +270,18 @@ export async function runCrossOriginPreviewBootstrapBrowserContracts(): Promise<
 	const untrustedGeneration = 2
 	const untrustedTarget = document.createElement('iframe')
 	untrustedTarget.name = 'preview-bootstrap-target'
+	untrustedTarget.referrerPolicy = 'origin'
 	document.body.append(untrustedTarget)
 	const targetLoaded = new Promise<void>((resolve) => {
 		untrustedTarget.addEventListener('load', () => resolve(), { once: true })
 	})
-	untrustedTarget.src = previewFrameUrl(frameOrigin, parentOrigin, untrustedSessionId, untrustedGeneration)
+	untrustedTarget.src = previewFrameUrl(frameOrigin, untrustedSessionId, untrustedGeneration)
 
 	const attacker = document.createElement('iframe')
-	const attackerUrl = new URL('/e2e/fixtures/preview-bootstrap-attacker.html', frameOrigin)
-	attackerUrl.searchParams.set('parentOrigin', parentOrigin)
+	// This attacker is a same-origin sibling of the target. Its bootstrap therefore passes the
+	// event.origin check and must be rejected by the exact event.source check alone.
+	const attackerUrl = new URL('/e2e/fixtures/preview-bootstrap-attacker.html', parentOrigin)
+	attacker.referrerPolicy = 'origin'
 	const attackerLoaded = new Promise<void>((resolve) => {
 		attacker.addEventListener('load', () => resolve(), { once: true })
 	})
@@ -296,6 +301,7 @@ export async function runCrossOriginPreviewBootstrapBrowserContracts(): Promise<
 		const attackerWindow = attacker.contentWindow
 		if (attackerWindow === null)
 			throw new Error('Cross-origin bootstrap attacker window is unavailable.')
+		const siblingAttackerSharesParentOrigin = attackerWindow.location.origin === parentOrigin
 
 		let resolveForwarded!: () => void
 		const forwarded = new Promise<void>((resolve) => {
@@ -345,11 +351,11 @@ export async function runCrossOriginPreviewBootstrapBrowserContracts(): Promise<
 			type: 'preview-bootstrap-forward',
 			bootstrap: createInspectorFrameBootstrapRequest(untrustedSessionId, untrustedGeneration),
 			targetOrigin: frameOrigin,
-		}, frameOrigin, [attackerChannel.port2])
+		}, parentOrigin, [attackerChannel.port2])
 		await withTestTimeout(forwarded, 'Untrusted cross-origin bootstrap relay')
 		const untrustedBootstrapResponded = await Promise.race([
 			untrustedResponse.then(() => true),
-			new Promise<boolean>(resolve => setTimeout(resolve, 3_000, false)),
+			new Promise<boolean>(resolve => setTimeout(resolve, TRUSTED_CROSS_ORIGIN_BOOTSTRAP_TIMEOUT_MS, false)),
 		])
 		stopUntrustedResponseListener()
 		stopUntrustedResponseListener = () => {}
@@ -394,6 +400,7 @@ export async function runCrossOriginPreviewBootstrapBrowserContracts(): Promise<
 
 		return {
 			parentAndFrameOriginsDiffer: frameOrigin !== parentOrigin,
+			siblingAttackerSharesParentOrigin,
 			untrustedBootstrapDidNotReceiveHostResponse: !untrustedBootstrapResponded,
 			trustedCrossOriginBootstrapMounted: connection.runtimeId.length > 0 && connection.generation > 0,
 			trustedCrossOriginInspectorRequestResolved: runtimes.runtimes.some(runtime => runtime.runtimeId === connection.runtimeId),

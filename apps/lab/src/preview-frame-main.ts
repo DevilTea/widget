@@ -18,6 +18,7 @@ import { createApp, defineComponent, h } from 'vue'
 import { createVuetify } from 'vuetify'
 import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
 import { createLabThemeStore, LabThemeKey } from './composables/use-lab-theme'
+import { derivePreviewParentOrigin } from './preview-host/parent-origin'
 import {
 	parsePreviewHostCommand,
 	parsePreviewHostRequest,
@@ -47,18 +48,9 @@ const params = new URLSearchParams(location.search)
 const sessionId = params.get('session') ?? ''
 const generationValue = Number(params.get('generation'))
 const generation = Number.isSafeInteger(generationValue) && generationValue >= 0 ? generationValue : -1
-const parentOriginValue = params.get('parentOrigin')
-const parentOrigin = (() => {
-	if (parentOriginValue === null)
-		return null
-	try {
-		const parsed = new URL(parentOriginValue)
-		return parsed.origin === parentOriginValue && parsed.origin !== 'null' ? parsed.origin : null
-	}
-	catch {
-		return null
-	}
-})()
+// Bind bootstrap to the actual embedding parent reported by the browser. This is Preview's
+// integration-isolation boundary, not a frame-ancestors allowlist or general security-sandbox policy.
+const expectedParentOrigin = derivePreviewParentOrigin(document.referrer)
 
 const i18n = createLabI18nStore()
 const theme = createLabThemeStore()
@@ -132,11 +124,11 @@ function progressForRequest(request: Extract<PreviewHostRequest, { kind: 'tutori
 }
 
 window.addEventListener('message', (event) => {
-	if (bootstrapAccepted || sessionId.length === 0 || generation < 0 || parentOrigin === null)
+	if (bootstrapAccepted || sessionId.length === 0 || generation < 0 || expectedParentOrigin === null)
 		return
 	const accepted = acceptInspectorFrameBootstrap(event, {
 		expectedSource: window.parent,
-		expectedOrigin: parentOrigin,
+		expectedOrigin: expectedParentOrigin,
 		sessionId,
 		expectedGeneration: generation,
 	})
