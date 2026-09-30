@@ -9,10 +9,12 @@
 
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { defineComponent, h, ref, watchEffect } from 'vue'
 import { WidgetVueIntegrationError } from './errors'
-import { createWidgetVueRenderer } from './renderer'
+import { createWidgetVueRenderer, useWidget } from './index'
 import {
 	ContainerRenderer,
+	CounterPlugin,
 	CounterRenderer,
 	createFixtureRuntime,
 	createOtherFixtureRuntime,
@@ -172,6 +174,94 @@ describe('root renderer lifecycle', () => {
 			.toHaveBeenCalledTimes(1)
 		expect(labelPropertyUnsubscribeSpy)
 			.toHaveBeenCalledTimes(1)
+	})
+
+	it('unsubscribes a nested widget aggregate diagnostics bridge on root unmount while an external watcher stays alive', () => {
+		const runtime = createFixtureRuntime({
+			id: 'root',
+			type: 'Container',
+			slots: {
+				'header': [{ id: 'nested-counter', type: 'Counter' }],
+				'body': [],
+				'slot-one': [],
+			},
+		})
+		const counterWidget = getCounterWidget(runtime, 'nested-counter')
+		const disposeSpy = vi.spyOn(runtime, 'dispose')
+		let readNestedDiagnosticCount: (() => number) | undefined
+		const DiagnosticCounterRenderer = defineComponent({
+			name: 'DiagnosticCounterRenderer',
+			setup() {
+				const diagnostics = useWidget(CounterPlugin)
+					.useDiagnostics()
+				readNestedDiagnosticCount = () => diagnostics.value.length
+
+				return () => h('div', {
+					'class': 'diagnostic-counter',
+					'data-diagnostic-count': String(diagnostics.value.length),
+				})
+			},
+		})
+		const DiagnosticWidgetRenderer = createWidgetVueRenderer(fixtureSystem, renderers =>
+			renderers
+				.Counter(DiagnosticCounterRenderer)
+				.Label(LabelRenderer)
+				.Container(ContainerRenderer)
+				.Leaf(LeafRenderer)
+				.EmptyState(EmptyStateRenderer))
+
+		const wrapper = mount(DiagnosticWidgetRenderer, { props: { runtime } })
+		expect(wrapper.find('.diagnostic-counter')
+			.attributes('data-diagnostic-count'))
+			.toBe('0')
+		if (readNestedDiagnosticCount === undefined)
+			throw new Error('test setup error: nested Counter renderer did not expose its diagnostics ref')
+
+		const observedDiagnosticCounts: number[] = []
+		const externalProbe = ref(0)
+		let externalObserverRuns = 0
+		const stopExternalObserver = watchEffect(() => {
+			void externalProbe.value
+			externalObserverRuns++
+			const diagnosticCount = readNestedDiagnosticCount!()
+			if (observedDiagnosticCounts.at(-1) !== diagnosticCount)
+				observedDiagnosticCounts.push(diagnosticCount)
+		}, { flush: 'sync' })
+
+		try {
+			expect(observedDiagnosticCounts)
+				.toEqual([0])
+			expect(externalObserverRuns)
+				.toBe(1)
+
+			wrapper.unmount()
+			expect(runtime.isDisposed)
+				.toBe(false)
+			expect(disposeSpy)
+				.not.toHaveBeenCalled()
+
+			// Prove the observer remains active independently of the unmounted component scope.
+			externalProbe.value++
+			expect(externalObserverRuns)
+				.toBe(2)
+			expect(observedDiagnosticCounts)
+				.toEqual([0])
+
+			// This real Core state rejection creates a diagnostic after Vue unmount. A leaked aggregate
+			// subscription would still trigger the external watcher and append the new count.
+			counterWidget.state.count.set(-1)
+			expect(counterWidget.getDiagnostics()
+				.map(diagnostic => diagnostic.code))
+				.toEqual(['invalid-state-value'])
+			expect(observedDiagnosticCounts)
+				.toEqual([0])
+			expect(runtime.isDisposed)
+				.toBe(false)
+		}
+		finally {
+			stopExternalObserver()
+			wrapper.unmount()
+		}
 	})
 
 	it('never calls runtime.dispose() on unmount', () => {
