@@ -10,7 +10,7 @@
 
 import { WidgetSystemRuntimeDisposedError } from '@deviltea/widget-core'
 import { describe, expect, it, vi } from 'vitest'
-import { CounterPlugin, createFixtureRuntime, getCounterWidget, mountWidgetBridge } from './test-fixtures'
+import { COUNTER_CRASH_ERROR, CounterPlugin, createFixtureRuntime, getCounterWidget, mountWidgetBridge } from './test-fixtures'
 
 describe('method conformance', () => {
 	it('projects a successful invocation to its returned value', () => {
@@ -41,8 +41,16 @@ describe('method conformance', () => {
 		const { bridge } = mountWidgetBridge(runtime, 'm3', CounterPlugin)
 		const { crash } = bridge.useMethods()
 
-		expect(() => crash())
-			.toThrow('crash() always throws — an implementation exception, not an Diagnostic.')
+		let thrown: unknown
+		try {
+			crash()
+		}
+		catch (error) {
+			thrown = error
+		}
+
+		expect(thrown)
+			.toBe(COUNTER_CRASH_ERROR)
 	})
 
 	it('propagates disposed-Runtime exceptions unchanged', () => {
