@@ -74,12 +74,32 @@ describe('crmTourScript "search" step predicate', () => {
 			.toBe(false)
 	})
 
+	it('does NOT complete for a blank search even when the lead stage filter narrows to Aurora Systems', () => {
+		const { runtime } = createCrmRuntime()
+		const search = widgetOfType(runtime, 'deal-search', 'TextInput')
+		const stageFilter = widgetOfType(runtime, 'stage-filter', 'SelectInput')
+		const query = widgetOfType(runtime, 'deal-query', 'DealQuery')
+
+		search.state.value.set('')
+		stageFilter.state.value.set('lead')
+		const filtered = query.properties.filteredDeals.get()
+		forceRealEvaluation(query)
+		expect(filtered.ok && filtered.value?.map(deal => deal.id))
+			.toEqual(['deal-1'])
+
+		const reader = createRuntimeReader(runtime)
+		expect(searchIsComplete(reader))
+			.toBe(false)
+	})
+
 	it('completes for "Aurora", which narrows the table AND leaves deal-1 (Aurora Systems) selectable', () => {
 		const { runtime } = createCrmRuntime()
 		const search = widgetOfType(runtime, 'deal-search', 'TextInput')
+		const stageFilter = widgetOfType(runtime, 'stage-filter', 'SelectInput')
 		const query = widgetOfType(runtime, 'deal-query', 'DealQuery')
 
 		search.state.value.set('Aurora')
+		stageFilter.state.value.set('all')
 		const filtered = query.properties.filteredDeals.get()
 		forceRealEvaluation(query)
 		expect(filtered.ok && filtered.value?.map(deal => deal.id))

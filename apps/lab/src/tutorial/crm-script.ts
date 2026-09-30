@@ -80,17 +80,22 @@ export const crmTourScript: TutorialScript = {
 			title: 'Search, stored as State',
 			target: 'crm-search',
 			onEnter: actions => actions.setFocus('deal-search', { type: 'state', name: 'value' }),
-			// Merge-gate review round 2, blocker 1: "Aurora" is the required action, not merely an example
-			// — the predicate below is pinned to it (via the filtered SET still containing `deal-1`,
-			// rather than a bare "any narrowing query" check). `DealQuery.filteredDeals` is a real
-			// case-insensitive substring filter over company/contact/owner, so an EQUALLY valid search
-			// like "Borealis" would also narrow the table — but it would filter Aurora Systems OUT, and
-			// the very next step is hard-pinned to selecting exactly that row (`deal-1`). Accepting any
-			// narrowing search here would let the tour advance into a state its own next instruction
-			// cannot be completed from, without the visitor independently realizing they must undo it.
+			// "Aurora" is the required Search State, not merely an example, so check for it explicitly.
+			// The filtered set must also narrow while keeping `deal-1`: a stage-filter=lead can produce that
+			// same result with a blank search, and the next step requires Aurora Systems to remain selectable.
+			// `DealQuery.filteredDeals` applies a real case-insensitive substring filter over
+			// company/contact/owner, so any legitimate search like "Borealis" would also narrow the table
+			// but filter Aurora Systems OUT. Accepting any narrowing search would then let the tour advance
+			// into a state its own next instruction cannot be completed from.
 			stages: [{
 				prompt: 'Try it: search for "Aurora".',
 				isComplete: (reader) => {
+					const search = reader.readState('deal-search', 'value')
+					if (typeof search !== 'string' || !search.toLowerCase()
+						.includes('aurora')) {
+						return false
+					}
+
 					const filteredDeals = reader.readProperty('deal-query', 'filteredDeals')
 					if (filteredDeals?.status !== 'completed' || !filteredDeals.result.ok)
 						return false
