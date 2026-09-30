@@ -14,7 +14,7 @@
  */
 
 import type { ImplementationExplorerStore } from './use-implementation-explorer'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { shallowRef } from 'vue'
 import { createLabStore } from './use-lab-store'
 import { createTutorialStore } from './use-tutorial'
@@ -165,6 +165,41 @@ describe('createTutorialStore() "at most one current tour" invariant (selectTour
 		tutorial.selectTour('survey')
 		expect(tutorial.activeTourId.value)
 			.toBe('survey')
+
+		store.dispose()
+	})
+})
+
+describe('createTutorialStore() duplicate start requests', () => {
+	it('makes a rejected synchronous request a no-op while the first showcase switch is pending', async () => {
+		const store = createLabStore()
+		const deferredSwitch = createDeferred<void>()
+		const switchShowcase = vi.fn(() => deferredSwitch.promise)
+		store.switchShowcase = switchShowcase
+
+		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+
+		tutorial.requestStart()
+		tutorial.requestStart()
+
+		// The first request is held at the real load boundary. A rejected duplicate must not start a
+		// second load, prompt, or engine transition while that request is still pending.
+		expect(switchShowcase)
+			.toHaveBeenCalledTimes(1)
+		expect(switchShowcase)
+			.toHaveBeenCalledWith('survey')
+		expect(tutorial.startPending.value)
+			.toBe(true)
+		expect(tutorial.snapshot.value.status)
+			.toBe('idle')
+
+		deferredSwitch.resolve()
+		await flush()
+
+		expect(tutorial.startPending.value)
+			.toBe(false)
+		expect(tutorial.snapshot.value.status)
+			.toBe('active')
 
 		store.dispose()
 	})
