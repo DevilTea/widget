@@ -100,6 +100,26 @@ describe('method conformance', () => {
 		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
 	})
 
+	it('materializes method wrappers without reading or subscribing to the Runtime primitive', () => {
+		const runtime = createFixtureRuntime({ id: 'm8', type: 'Counter' })
+		const widget = getCounterWidget(runtime, 'm8')
+		const getDiagnosticsSpy = vi.spyOn(widget.methods.increment, 'getDiagnostics')
+		const subscribeDiagnosticsSpy = vi.spyOn(widget.methods.increment, 'subscribeDiagnostics')
+		const { bridge } = mountWidgetBridge(runtime, 'm8', CounterPlugin)
+
+		const { increment } = bridge.useMethods()
+		expect(typeof increment)
+			.toBe('function')
+		expect(getDiagnosticsSpy).not.toHaveBeenCalled()
+		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
+
+		// The fixture starts at zero, so this proves materialization did not invoke the method first.
+		expect(increment(1))
+			.toBe(1)
+		expect(getDiagnosticsSpy).not.toHaveBeenCalled()
+		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
+	})
+
 	it('projects method diagnostics on a separate reactive channel, independent of the callable itself', () => {
 		const runtime = createFixtureRuntime({ id: 'm7', type: 'Counter' })
 		const { bridge } = mountWidgetBridge(runtime, 'm7', CounterPlugin)
