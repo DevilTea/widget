@@ -41,7 +41,7 @@ function createCounterRuntime(params: {
 		set: (value: number) => { ok: boolean, value?: number, diagnostics?: readonly unknown[] }
 		subscribe: (listener: (value: number | null) => void) => () => void
 		getDiagnostics: () => readonly { source: unknown }[]
-		subscribeDiagnostics: (listener: (diagnostics: readonly unknown[]) => void) => () => void
+		subscribeDiagnostics: (listener: (diagnostics: readonly { code: string }[]) => void) => () => void
 	} }
 }
 
@@ -119,7 +119,9 @@ describe('runtimeState — valid/invalid set + diagnostic snapshot (diagnostic #
 	it('a same-value successful write clears diagnostics from a prior invalid write without notifying the value subscriber', () => {
 		const { state } = createCounterRuntime({ default: () => 3 })
 		const valueListener = vi.fn()
+		const diagnosticsEvents: (readonly { code: string }[])[] = []
 		state.subscribe(valueListener)
+		state.subscribeDiagnostics(diagnostics => diagnosticsEvents.push(diagnostics))
 
 		const rejected = state.set('not-a-number' as any)
 
@@ -129,12 +131,24 @@ describe('runtimeState — valid/invalid set + diagnostic snapshot (diagnostic #
 			.toBe(3)
 		expect(state.getDiagnostics())
 			.toHaveLength(1)
+		expect(diagnosticsEvents)
+			.toHaveLength(1)
 
 		const accepted = state.set(3)
 
 		expect(accepted)
 			.toEqual({ ok: true, value: 3 })
 		expect(state.getDiagnostics())
+			.toBe(EMPTY_DIAGNOSTICS)
+		expect(diagnosticsEvents.map(snapshot => ({
+			length: snapshot.length,
+			codes: snapshot.map(diagnostic => diagnostic.code),
+		})))
+			.toEqual([
+				{ length: 1, codes: ['invalid-state-value'] },
+				{ length: 0, codes: [] },
+			])
+		expect(diagnosticsEvents[1])
 			.toBe(EMPTY_DIAGNOSTICS)
 		expect(valueListener).not.toHaveBeenCalled()
 	})
