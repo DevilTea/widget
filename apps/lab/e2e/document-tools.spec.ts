@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, previewFrame, test } from './fixtures'
 
 test.describe('Document Tools developer panel (Phase 6)', () => {
 	test('is lazy-added, closable, and reopenable without changing canonical panels', async ({ page }) => {
@@ -76,6 +76,9 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 			.toHaveText(documentStatusBeforeConflict!)
 		await expect(page.getByTestId('preview-status'))
 			.toHaveText(previewStatusBeforeConflict!)
+		await expect(previewFrame(page)
+			.getByText('Document Tools structure patch'))
+			.toBeVisible()
 
 		await page.evaluate(() => {
 			Object.defineProperty(navigator, 'clipboard', {
