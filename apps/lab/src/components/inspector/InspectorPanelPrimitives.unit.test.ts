@@ -41,6 +41,58 @@ describe('inspector presentation primitives', () => {
 			.toBe('Blueprint-owned content')
 	})
 
+	it('dismisses the description bar on click and restores the dismissed state on remount', async () => {
+		const storageKey = 'widget-lab:test:inspector-shell-dismiss'
+		const mountShell = () => mount(InspectorPanelShell, {
+			props: {
+				storageKey,
+				text: 'Dismissable description',
+			},
+			slots: { default: '<div data-testid="caller-content">Blueprint-owned content</div>' },
+			global,
+		})
+
+		const wrapper = mountShell()
+		try {
+			const dismissButton = wrapper.find('button[aria-label="Dismiss"]')
+			expect(dismissButton.exists())
+				.toBe(true)
+
+			await dismissButton.trigger('click')
+
+			expect(wrapper.get('[data-testid="inspector-panel-shell"]')
+				.text())
+				.not.toContain('Dismissable description')
+			expect(wrapper.find('button[aria-label="Dismiss"]')
+				.exists())
+				.toBe(false)
+			expect(wrapper.get('[data-testid="caller-content"]')
+				.text())
+				.toBe('Blueprint-owned content')
+			expect(sessionStorage.getItem(storageKey))
+				.toBe('1')
+		}
+		finally {
+			wrapper.unmount()
+		}
+
+		const remounted = mountShell()
+		try {
+			expect(remounted.get('[data-testid="inspector-panel-shell"]')
+				.text())
+				.not.toContain('Dismissable description')
+			expect(remounted.find('button[aria-label="Dismiss"]')
+				.exists())
+				.toBe(false)
+			expect(remounted.get('[data-testid="caller-content"]')
+				.text())
+				.toBe('Blueprint-owned content')
+		}
+		finally {
+			remounted.unmount()
+		}
+	})
+
 	it('keeps tree and details slots in the shared three-column layout', () => {
 		const wrapper = mount(InspectorSplitLayout, {
 			slots: {
