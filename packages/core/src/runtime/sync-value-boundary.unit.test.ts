@@ -244,13 +244,37 @@ describe('an accepted thenable candidate must not become the live State value', 
 		if (widget === null)
 			throw new Error('test fixture: expected the root widget to resolve')
 
-		const { caught, threw, returned } = captureThrow(() => widget.state.value.set(Promise.resolve('nope')))
+		const candidate = Promise.resolve('nope')
+		widget.state.value.set('previous')
+
+		const { caught, threw, returned } = captureThrow(() => widget.state.value.set(candidate))
 
 		expect(threw)
 			.toBe(false)
-		const result = returned as { ok: boolean, diagnostics?: readonly unknown[] }
+		const result = returned as {
+			ok: boolean
+			failure?: {
+				diagnostics: readonly {
+					code?: string
+					location?: Record<string, unknown>
+					candidate?: unknown
+				}[]
+			}
+		}
 		expect(result.ok)
 			.toBe(false)
+		const diagnostics = result.failure?.diagnostics ?? []
+		expect(diagnostics)
+			.toHaveLength(1)
+		expect(diagnostics[0])
+			.toMatchObject({
+				code: 'invalid-state-value',
+				location: { type: 'state', widgetId: 'root', key: 'value' },
+			})
+		expect(diagnostics[0]?.candidate)
+			.toBe(candidate)
+		expect(widget.state.value.get())
+			.toBe('previous')
 		expect(caught)
 			.toBeUndefined()
 	})
