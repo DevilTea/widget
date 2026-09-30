@@ -4,12 +4,13 @@ import { defineConfig, devices } from '@playwright/test'
 /**
  * Issue #28 browser-contract harness.
  *
- * Runs against the BUILT app via `vite preview`, not the dev server, so contracts exercise the actual
- * deployed artifact. `webServer` below only *serves* `dist/` — it deliberately does not build it, so a
- * caller that already built (CI's `browser-contracts` job runs `pnpm --filter widget-lab... run build`
- * once, before this suite; locally, run `pnpm --filter widget-lab... run build` yourself first) never
- * pays for a second build here. `reuseExistingServer` still lets a `pnpm --filter widget-lab run dev`-
- * adjacent local iteration loop reuse a preview server already listening on the port.
+ * Starts two distinct browser targets. Most Lab E2E specs use the built app served from `dist/` by
+ * `vite preview` on 4173. The DevTools transport contract explicitly visits its fixture on 4174,
+ * where Vite serves source modules; it tests the source implementation, not the built distribution.
+ *
+ * `webServer` only serves these targets; it does not build `dist/`. CI's `browser-contracts` job builds
+ * first, and local runs must run `pnpm --filter widget-lab... run build` before this suite. Each server
+ * can reuse an already-running instance on its own port when `reuseExistingServer` is enabled.
  *
  * Chromium only for this first iteration (issue #28 non-goals: "exhaustive cross-browser matrix in the
  * first iteration").
