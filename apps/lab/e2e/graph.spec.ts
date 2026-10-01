@@ -183,8 +183,47 @@ test('progressive disclosure collapses clusters initially, expands on click, and
 	const members = canvas.locator('.graph-node--member')
 	await expect(members.first())
 		.toBeVisible({ timeout: 15_000 })
-	expect(await members.count())
-		.toBeGreaterThan(0)
+	const expectedMemberIds = [
+		'0:method:generateResult',
+		'0:method:reset',
+		'0:method:submit',
+		'0:property:resultFresh',
+		'0:state:phase',
+		'0:state:result',
+		'0:state:resultInputs',
+		'10:property:visible',
+		'11:method:reset',
+		'11:state:answer',
+		'13:property:budgetPerPersonPerDay',
+		'13:property:estimatedBaselineCost',
+		'13:property:travelerCount',
+		'13:property:tripDays',
+		'14:property:ready',
+		'15:property:result',
+		'2:method:reset',
+		'2:state:answer',
+		'3:method:reset',
+		'3:state:answer',
+		'4:method:reset',
+		'4:state:answer',
+		'5:method:reset',
+		'5:state:answer',
+		'7:method:reset',
+		'7:state:answer',
+		'8:method:reset',
+		'8:state:answer',
+		'9:method:reset',
+		'9:state:answer',
+	]
+	await expect(members)
+		.toHaveCount(expectedMemberIds.length)
+	const memberIds = await members.evaluateAll(elements => elements
+		.map(element => element.closest<HTMLElement>('[data-id]')?.dataset.id ?? '')
+		.sort())
+	expect(memberIds)
+		.toEqual(expectedMemberIds)
+	await expect(canvas.getByRole('button', { name: 'Expand', exact: true }))
+		.toHaveCount(0)
 
 	// Expansion triggers a fresh ELK layout. Automatic fit must recover only after the new generation's
 	// nodes have all been measured; this assertion intentionally does not use the manual Fit button.
