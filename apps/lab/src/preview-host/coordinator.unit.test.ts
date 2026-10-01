@@ -187,6 +187,13 @@ describe('preview host coordinator', () => {
 			.toBe(2)
 		expect(coordinator.error.value)
 			.toBe('frame mount failed')
+
+		await expect(coordinator.replace({ showcaseId: 'survey', revision: 4, sourceText: '{}' }))
+			.resolves.toMatchObject({ revision: 4 })
+		expect(coordinator.connection.value?.revision)
+			.toBe(4)
+		expect(coordinator.error.value)
+			.toBeNull()
 		coordinator.dispose()
 	})
 })

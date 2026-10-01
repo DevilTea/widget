@@ -35,6 +35,44 @@ test('native Chromium propagates explicit DevTools closes and settles iframe nav
 		})
 })
 
+test('Preview mount readiness timeout recovers after a cross-origin redirect drops bootstrap', async ({ page }) => {
+	let previewFrameRequests = 0
+	await page.route('http://127.0.0.1:4174/preview-frame.html*', async (route) => {
+		previewFrameRequests++
+		if (previewFrameRequests !== 1) {
+			await route.continue()
+			return
+		}
+		const redirected = new URL(route.request()
+			.url())
+		redirected.protocol = 'http:'
+		redirected.hostname = 'localhost'
+		redirected.port = '4173'
+		await route.fulfill({
+			status: 302,
+			headers: { location: redirected.href },
+			body: '',
+		})
+	})
+
+	await page.goto('http://127.0.0.1:4174/e2e/fixtures/devtools-transport.html')
+	const moduleUrl = await page.evaluate(() => new URL('/e2e/devtools-transport.browser.ts', location.origin).href)
+	const result = await page.evaluate(async (url) => {
+		const browserContracts = await import(url)
+		return browserContracts.runPreviewReadinessTimeoutContract()
+	}, moduleUrl)
+
+	expect(result)
+		.toEqual({
+			timedOut: true,
+			queueRecovered: true,
+			retryAdvancedGeneration: true,
+			errorCleared: true,
+		})
+	expect(previewFrameRequests)
+		.toBe(2)
+})
+
 test('native Chromium bootstraps Preview across origins and rejects a same-origin sibling sender', async ({ page }) => {
 	await page.goto('http://127.0.0.1:4174/e2e/fixtures/devtools-transport.html')
 	const moduleUrl = await page.evaluate(() => new URL('/e2e/devtools-transport.browser.ts', location.origin).href)

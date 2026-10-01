@@ -564,6 +564,7 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 		createPreviewFrameDriver: (
 			frame: HTMLIFrameElement,
 			presentation: () => { readonly locale: 'en', readonly theme: 'light' },
+			options?: { readonly readinessTimeoutMs?: number },
 		) => {
 			mount: (descriptor: { readonly showcaseId: string, readonly revision: number, readonly sourceText: string }) => Promise<{
 				inspectorClient: {
@@ -576,7 +577,11 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 			dispose: () => void
 		}
 	}
-	const driver = createPreviewFrameDriver(iframe, () => ({ locale: 'en', theme: 'light' }))
+	const driver = createPreviewFrameDriver(
+		iframe,
+		() => ({ locale: 'en', theme: 'light' }),
+		{ readinessTimeoutMs: 60_000 },
+	)
 	let navigationRequestPendingBeforeLoad = false
 	let navigationUnrelatedRpcResponseDidNotAcknowledge = false
 	let navigationAgentResponseAttempted = false
@@ -729,6 +734,78 @@ interface GeometryFixtureRootInterfaces extends WidgetInterfaces {
 interface GeometryFixtureCounterInterfaces extends WidgetInterfaces {
 	state: {
 		count: number
+	}
+}
+
+export interface PreviewReadinessTimeoutContractResult {
+	readonly timedOut: boolean
+	readonly queueRecovered: boolean
+	readonly retryAdvancedGeneration: boolean
+	readonly errorCleared: boolean
+}
+
+export async function runPreviewReadinessTimeoutContract(): Promise<PreviewReadinessTimeoutContractResult> {
+	const iframe = document.createElement('iframe')
+	iframe.setAttribute('aria-hidden', 'true')
+	document.body.append(iframe)
+	const driverModuleUrl = new URL('/src/preview-host/frame-driver.ts', location.origin).href
+	const { createPreviewFrameDriver } = await import(/* @vite-ignore */ driverModuleUrl) as {
+		createPreviewFrameDriver: (
+			frame: HTMLIFrameElement,
+			presentation: () => { readonly locale: 'en', readonly theme: 'light' },
+			options?: { readonly readinessTimeoutMs?: number },
+		) => {
+			mount: (descriptor: { readonly showcaseId: string, readonly revision: number, readonly sourceText: string }) => Promise<{
+				generation: number
+				revision: number
+				runtimeId: string
+			}>
+			dispose: () => void
+		}
+	}
+	const coordinatorModuleUrl = new URL('/src/preview-host/coordinator.ts', location.origin).href
+	const { createPreviewHostCoordinator } = await import(/* @vite-ignore */ coordinatorModuleUrl) as {
+		createPreviewHostCoordinator: () => {
+			connection: { readonly value: { readonly generation: number, readonly revision: number } | null }
+			error: { readonly value: string | null }
+			attachDriver: (driver: ReturnType<typeof createPreviewFrameDriver>) => () => void
+			replace: (descriptor: { readonly showcaseId: string, readonly revision: number, readonly sourceText: string }) => Promise<{
+				generation: number
+				revision: number
+			} | null>
+			dispose: () => void
+		}
+	}
+	const driver = createPreviewFrameDriver(
+		iframe,
+		() => ({ locale: 'en', theme: 'light' }),
+		{ readinessTimeoutMs: 1_000 },
+	)
+	const coordinator = createPreviewHostCoordinator()
+	coordinator.attachDriver(driver)
+
+	try {
+		let timedOut = false
+		try {
+			await coordinator.replace({ showcaseId: 'sandbox', revision: 0, sourceText: defaultSandboxPreset.sourceText })
+		}
+		catch (error) {
+			timedOut = error instanceof Error
+				&& error.name === 'PreviewFrameReadinessTimeoutError'
+				&& error.message.includes('did not become ready')
+		}
+
+		const retry = await coordinator.replace({ showcaseId: 'sandbox', revision: 1, sourceText: defaultSandboxPreset.sourceText })
+		return {
+			timedOut,
+			queueRecovered: retry !== null && retry.revision === 1 && coordinator.connection.value === retry,
+			retryAdvancedGeneration: retry !== null && retry.generation > 1,
+			errorCleared: coordinator.error.value === null,
+		}
+	}
+	finally {
+		coordinator.dispose()
+		iframe.remove()
 	}
 }
 
