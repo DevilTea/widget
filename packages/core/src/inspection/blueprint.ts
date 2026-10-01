@@ -157,8 +157,13 @@ function buildSemanticSlots(compiledNode: CompiledResolvedWidgetNode): readonly 
 
 function buildStateMembers(compiledNode: CompiledResolvedWidgetNode): readonly BlueprintInspectionStateMember[] {
 	const result: BlueprintInspectionStateMember[] = []
-	for (const name of compiledNode.state.keys())
-		result.push(Object.freeze({ type: 'state' as const, name }))
+	for (const [name, member] of compiledNode.state) {
+		result.push(Object.freeze({
+			type: 'state' as const,
+			name,
+			authorWritable: member.definition.authorWritable === true,
+		}))
+	}
 	return Object.freeze(result)
 }
 

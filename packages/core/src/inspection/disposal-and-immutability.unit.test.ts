@@ -354,7 +354,7 @@ describe('immutability', () => {
 		})
 			.toThrow()
 		expect(root.state)
-			.toEqual([{ type: 'state', name: 'value' }])
+			.toEqual([{ type: 'state', name: 'value', authorWritable: false }])
 	})
 
 	it('caller/plugin payload values (source) are never deep-frozen by inspection', () => {

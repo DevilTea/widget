@@ -101,6 +101,7 @@ export type BlueprintInspectionDependency
 export interface BlueprintInspectionStateMember {
 	readonly type: 'state'
 	readonly name: WidgetMemberKey
+	readonly authorWritable: boolean
 }
 
 export interface BlueprintInspectionPropertyMember {
