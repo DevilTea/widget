@@ -8,7 +8,9 @@ Treat `@deviltea/widget-core` and `@deviltea/widget-vue` as independently releas
 `@deviltea/widget-devtools` is currently private and experimental; its package name and publication status are not committed public API.
 
 
-The project was split from `DevilTea/deviltea-labs` after the initial `0.0.1` releases. Historical decision logs referenced by migrated source remain authoritative in the original repository: core semantics are primarily `DevilTea/deviltea-labs#10`, Vue integration is primarily `DevilTea/deviltea-labs#13`, source/document work includes `#54`, and the current Lab redesign includes `#60`. Bare historical issue references in migrated comments refer to `DevilTea/deviltea-labs` unless a later comment explicitly names this repository.
+The project was split from `DevilTea/deviltea-labs` after the initial `0.0.1` releases. Current long-lived Widget architecture is owned by `DevilTea/widget` Discussion #12 ("Widget: canonical design discussion"), which migrated the relevant historical `deviltea-labs` decision logs into this repository. Treat `deviltea-labs` as historical provenance only; do not open or record new Widget architecture decisions there.
+
+Bare historical issue/comment references inside migrated source and Discussion #12 replies may still refer to their original `DevilTea/deviltea-labs` numbers. Resolve current authority through Discussion #12 and current `DevilTea/widget` Issues/Discussions before making semantic changes.
 
 ## Commands
 
