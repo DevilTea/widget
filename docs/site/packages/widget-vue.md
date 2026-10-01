@@ -234,8 +234,8 @@ tree outside that mechanism.
   reinterprets `@deviltea/widget-core` semantics; it only projects the
   existing Runtime surface into Vue-native reactivity.
 
-The canonical, authoritative decision log for this integration is
-[GitHub diagnostic #13](https://github.com/DevilTea/widget/diagnostics/13) —
-"Widget Vue integration — Phase 3 decision log." Its checkpoints, together
-with [diagnostic #10](https://github.com/DevilTea/widget/diagnostics/10) for
-core semantics, are authoritative over this guide.
+The current canonical Widget architecture authority is
+[DevilTea/widget Discussion #12](https://github.com/DevilTea/widget/discussions/12).
+It contains the migrated historical Vue integration (`diagnostic #13`) and Core
+(`diagnostic #10`) decisions together with current accepted amendments; those
+current Discussion #12 decisions are authoritative over this guide.

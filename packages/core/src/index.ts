@@ -1,9 +1,9 @@
 /**
  * `@deviltea/widget-core` public contract.
  *
- * The normative semantic contract is GitHub diagnostic #10 ("Widget composition core architecture —
- * canonical decision log"); its consolidated implementation handoff plus the accepted amendments are
- * authoritative over any comment in this package.
+ * The current normative semantic contract lives in `DevilTea/widget` Discussion #12 under the Core
+ * composition architecture topic. Historical diagnostic #10 decisions were migrated there and remain
+ * provenance; current Discussion #12 amendments are authoritative over comments in this package.
  */
 
 export type {
