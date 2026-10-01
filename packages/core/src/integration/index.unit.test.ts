@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import type { WidgetIntegrationErrorCode } from './index'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import * as core from '../index'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
-import { getWidgetEventEmitter } from './index'
+import { getWidgetEventEmitter, WidgetIntegrationError } from './index'
 
 interface EventInterfaces {
 	methods: {
@@ -53,6 +54,12 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 	it('is not re-exported from the package root', () => {
 		expect('getWidgetEventEmitter' in core)
 			.toBe(false)
+		expect('WidgetIntegrationError' in core)
+			.toBe(false)
+		expectTypeOf<typeof core>()
+			.not.toHaveProperty('WidgetIntegrationError')
+		expectTypeOf<typeof core>()
+			.not.toHaveProperty('getWidgetEventEmitter')
 	})
 
 	it('returns the current widget scoped emitter and reaches public subscriptions synchronously', () => {
@@ -69,11 +76,23 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 			.toHaveBeenCalledWith('integration')
 	})
 
-	it('rejects a RuntimeWidget from a different Runtime instance even when ids/types match', () => {
+	it('rejects a RuntimeWidget from a different Runtime instance with a stable coded integration error', () => {
 		const first = createSingleRuntime(eventPlugin)
 		const second = createSingleRuntime(eventPlugin)
-		expect(() => getWidgetEventEmitter(first.runtime, second.widget))
-			.toThrow()
+		let thrown: unknown
+		try {
+			getWidgetEventEmitter(first.runtime, second.widget)
+		}
+		catch (error) {
+			thrown = error
+		}
+
+		expect(thrown)
+			.toBeInstanceOf(WidgetIntegrationError)
+		expect((thrown as WidgetIntegrationError).code)
+			.toBe('runtime-widget-mismatch')
+		expectTypeOf<WidgetIntegrationErrorCode>()
+			.toEqualTypeOf<'runtime-widget-mismatch'>()
 	})
 
 	it('returns null when the widget has no events capability', () => {

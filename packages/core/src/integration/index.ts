@@ -13,6 +13,19 @@ import { readWidgetPluginDefinition } from '../plugin'
 import { buildEventEmitter } from '../runtime/event'
 import { readRuntimeInternals } from '../runtime/internals'
 
+export type WidgetIntegrationErrorCode = 'runtime-widget-mismatch'
+
+export class WidgetIntegrationError extends Error {
+	override readonly name = 'WidgetIntegrationError'
+
+	constructor(
+		readonly code: WidgetIntegrationErrorCode,
+		message = 'The RuntimeWidget does not belong to the supplied WidgetSystemRuntime instance.',
+	) {
+		super(message)
+	}
+}
+
 export type WidgetIntegrationEventEmitter = Readonly<Record<WidgetMemberKey, (...args: readonly unknown[]) => void>>
 
 export function getWidgetEventEmitter<Plugins extends AnyWidgetPluginTuple>(
@@ -22,7 +35,7 @@ export function getWidgetEventEmitter<Plugins extends AnyWidgetPluginTuple>(
 	const erasedWidget = widget as unknown as { readonly id: WidgetId, readonly blueprint: BlueprintWidgetNode<Plugins> }
 	const current = runtime.getWidget(erasedWidget.id)
 	if (current !== widget)
-		throw new Error('The RuntimeWidget does not belong to the supplied WidgetSystemRuntime instance.')
+		throw new WidgetIntegrationError('runtime-widget-mismatch')
 
 	const compiled = readCompiledBlueprint(runtime.blueprint)
 	const nodeId = compiled.nodeIdByPublicNode.get(erasedWidget.blueprint)
