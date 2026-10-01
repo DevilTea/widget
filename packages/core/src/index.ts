@@ -135,7 +135,7 @@ export type {
 
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from './json'
 
-export { createWidgetPlugin, WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from './plugin'
+export { createWidgetPlugin, createWidgetValueContract, WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from './plugin'
 
 export type {
 	AnyWidgetPlugin,
@@ -180,6 +180,7 @@ export type {
 	WidgetStateMemberDefinition,
 	WidgetStateSection,
 	WidgetStateValidateContext,
+	WidgetValueContract,
 } from './plugin'
 
 export {

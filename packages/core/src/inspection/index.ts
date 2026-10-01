@@ -7,6 +7,7 @@
  */
 
 export { inspectBlueprint } from './blueprint'
+export { inspectPlugin } from './plugin'
 
 export { inspectRuntime } from './runtime'
 export type {
@@ -29,6 +30,9 @@ export type {
 	InspectionNodeId,
 	InspectionObservable,
 	InvalidBlueprintInspectionDependency,
+	PluginInspection,
+	PluginInspectionPropertyMember,
+	PluginInspectionStateMember,
 	ResolvedBlueprintInspectionDependency,
 	ResolvedBlueprintInspectionNode,
 	RuntimeEventInspection,

@@ -167,6 +167,45 @@ createWidgetPlugin('example')
 	)
 ```
 
+### Member declaration facts and value contracts
+
+The keyed member definitions are also the single source of passive declaration
+facts that integration tooling may inspect. These facts live beside the
+executable semantics rather than in a second metadata registry.
+
+For example, State can explicitly opt in to authored initial overrides, and a
+Property can declare a stable semantic value contract:
+
+```ts
+const stringValue = createWidgetValueContract<string>('example/string')
+
+createWidgetPlugin('example')
+	.description('An example widget')
+	.interfaces<ExampleInterfaces>()
+	.state(state => state
+		.count({
+			authorWritable: true,
+			validate: (input): input is number => typeof input === 'number',
+		}))
+	.properties(properties => properties
+		.label({
+			valueContract: stringValue,
+			compute: () => 'Example',
+		}))
+	.done()
+```
+
+`createWidgetValueContract<T>(id)` is a typed Plugin-authoring descriptor.
+The generic `T` prevents assigning an incompatible contract to a Property;
+the runtime/integration identity is only the stable string `id`. Core does
+not interpret, register, validate, or schema-check contract IDs, and Property
+values do not become JSON-only. Omitting `valueContract` simply means there
+is no declared inspectable value contract.
+
+The same declaration facts can be projected through the readonly inspection
+subpath without exposing `validate`, `default`, `registerDeps`, `compute`,
+or other executable callbacks.
+
 ### Config
 
 ```ts
@@ -663,13 +702,39 @@ for building inspectors/DevTools over the compiler and Runtime. It is not
 re-exported from the root entrypoint:
 
 ```ts
-import { inspectBlueprint, inspectRuntime } from '@deviltea/widget-core/inspection'
+import { inspectBlueprint, inspectPlugin, inspectRuntime } from '@deviltea/widget-core/inspection'
 ```
 
 The inspection surface only ever reports facts the core already knows or
 already computed; it never sets State, invokes a Method, forces Property
 evaluation, or otherwise changes the semantic behavior being inspected —
 including when a subscription is active.
+
+### Plugin inspection
+
+`inspectPlugin(plugin)` projects passive member declaration facts before any
+authored View or Blueprint exists:
+
+```ts
+const inspection = inspectPlugin(plugin)
+
+inspection.state
+	?.get('count')
+// { type: 'state', name: 'count', authorWritable: true | false }
+
+inspection.properties
+	?.get('label')
+// { type: 'property', name: 'label', valueContractId: string | null }
+```
+
+The facade is identity-stable for the exact Plugin object and never executes
+Plugin semantics. A member map is `null` when that capability was not
+declared; an explicitly declared empty capability produces an empty readonly
+map. Declaration order and arbitrary string member names are preserved.
+
+Contract descriptor object identity is deliberately not exposed. Integrations
+compare `valueContractId` strings, so dynamically loaded/duplicated module
+instances do not need to share the same JavaScript token object.
 
 ### Blueprint inspection
 
@@ -699,7 +764,9 @@ inspection.getNodeId(node) // null for a foreign/forged node
 - A resolved node additionally carries `capabilities` (declared vs
   explicitly-empty presence for `config` / `slots` / `state` / `properties` /
   `methods`), `semanticSlots`, and `state` / `properties` / `methods` member
-  inventories in declaration order. A method's `transitivelyWrites` and the
+  inventories in declaration order. State members project normalized
+  `authorWritable`; Property members project `valueContractId` alongside their
+  compiler-derived dependencies. A method's `transitivelyWrites` and the
   Blueprint's `invalidCycles` are read directly off the existing compiler
   graph analysis — inspection never re-runs its own SCC or write-effect
   traversal.

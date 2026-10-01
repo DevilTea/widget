@@ -19,19 +19,24 @@ const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
 }
 
 describe('export boundary', () => {
-	it('the root entrypoint does not export inspectBlueprint/inspectRuntime at runtime', () => {
+	it('the root entrypoint does not export inspection facades at runtime', () => {
+		expect((RootModule as Record<string, unknown>).inspectPlugin)
+			.toBeUndefined()
 		expect((RootModule as Record<string, unknown>).inspectBlueprint)
 			.toBeUndefined()
 		expect((RootModule as Record<string, unknown>).inspectRuntime)
 			.toBeUndefined()
 	})
 
-	it('the root entrypoint does not expose inspectBlueprint/inspectRuntime at the type level', () => {
+	it('the root entrypoint does not expose inspection facades at the type level', () => {
+		expectTypeOf<typeof RootModule>().not.toHaveProperty('inspectPlugin')
 		expectTypeOf<typeof RootModule>().not.toHaveProperty('inspectBlueprint')
 		expectTypeOf<typeof RootModule>().not.toHaveProperty('inspectRuntime')
 	})
 
-	it('the ./inspection subpath exports inspectBlueprint and inspectRuntime as functions', () => {
+	it('the ./inspection subpath exports inspectPlugin, inspectBlueprint, and inspectRuntime as functions', () => {
+		expect(typeof InspectionModule.inspectPlugin)
+			.toBe('function')
 		expect(typeof InspectionModule.inspectBlueprint)
 			.toBe('function')
 		expect(typeof InspectionModule.inspectRuntime)
