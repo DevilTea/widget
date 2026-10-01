@@ -82,7 +82,25 @@ for (const showcaseId of ['sandbox', 'survey', 'crm'] as const) {
 	})
 }
 
-test('"Fit graph" affordance restores a useful viewport (issue #27)', async ({ page }) => {
+test('"Fit graph" contains every expected Survey node (issues #27, #104)', async ({ page }) => {
+	const expectedSurveyNodeIds = [
+		'cluster:0',
+		'cluster:2',
+		'cluster:3',
+		'cluster:4',
+		'cluster:5',
+		'cluster:7',
+		'cluster:8',
+		'cluster:9',
+		'cluster:10',
+		'cluster:11',
+		'cluster:13',
+		'cluster:14',
+		'cluster:15',
+	] as const
+	// Playwright reports fractional CSS pixels; 2 px allows subpixel/edge rounding only.
+	const fitTolerancePx = 2
+
 	await page.goto('/')
 	await page.getByLabel('Switch showcase')
 		.selectOption('survey')
@@ -93,6 +111,11 @@ test('"Fit graph" affordance restores a useful viewport (issue #27)', async ({ p
 	const nodes = page.locator('.vue-flow__node')
 	await expect(nodes.first())
 		.toBeVisible({ timeout: 15_000 })
+	await expect(nodes)
+		.toHaveCount(expectedSurveyNodeIds.length)
+	const renderedNodeIds = await nodes.evaluateAll(elements => elements.map(element => element.getAttribute('data-id')))
+	expect(renderedNodeIds.sort())
+		.toEqual([...expectedSurveyNodeIds].sort())
 
 	// Let the automatic first-open fit (issue #27 Finding 1) settle before deliberately panning away.
 	await expect(async () => {
@@ -156,6 +179,21 @@ test('"Fit graph" affordance restores a useful viewport (issue #27)', async ({ p
 		}
 		expect(intersecting)
 			.toBeGreaterThan(0)
+
+		for (const id of expectedSurveyNodeIds) {
+			const box = await canvas.locator(`.vue-flow__node[data-id="${id}"]`)
+				.boundingBox()
+			expect(box, `expected rendered Survey graph node ${id}`)
+				.not.toBeNull()
+			expect(box!.x)
+				.toBeGreaterThanOrEqual(canvasBoxAfterFit!.x - fitTolerancePx)
+			expect(box!.y)
+				.toBeGreaterThanOrEqual(canvasBoxAfterFit!.y - fitTolerancePx)
+			expect(box!.x + box!.width)
+				.toBeLessThanOrEqual(canvasBoxAfterFit!.x + canvasBoxAfterFit!.width + fitTolerancePx)
+			expect(box!.y + box!.height)
+				.toBeLessThanOrEqual(canvasBoxAfterFit!.y + canvasBoxAfterFit!.height + fitTolerancePx)
+		}
 	})
 		.toPass({ timeout: 10_000 })
 })
