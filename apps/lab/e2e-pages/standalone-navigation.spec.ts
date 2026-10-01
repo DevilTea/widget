@@ -4,13 +4,34 @@ const DOCUMENT_LOAD_COUNT_KEY = 'widget-lab:e2e:document-load-count'
 const LOCALE_STORAGE_KEY = 'widget-lab:locale'
 
 test.beforeEach(async ({ page }) => {
-	// A VitePress SPA-router transition changes `location` without creating a new Document. Incrementing
-	// sessionStorage from an init script gives this contract a direct, same-tab proof that the Widget Lab
-	// link caused real document navigation instead of merely reaching the same URL through pushState.
+	// A VitePress SPA-router transition changes `location` without creating a new Document. Count only
+	// top-level initialization: Playwright init scripts also run in child frames, and same-origin Preview
+	// frames share this sessionStorage area with the parent tab.
 	await page.addInitScript((key) => {
+		if (window !== window.top)
+			return
 		const current = Number(sessionStorage.getItem(key) ?? '0')
 		sessionStorage.setItem(key, String(current + 1))
 	}, DOCUMENT_LOAD_COUNT_KEY)
+})
+
+test('document load counter ignores same-origin child-frame documents', async ({ page }) => {
+	await page.goto('/widget/')
+	const before = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
+
+	await page.evaluate(async () => {
+		await new Promise<void>((resolve, reject) => {
+			const iframe = document.createElement('iframe')
+			iframe.addEventListener('load', () => resolve(), { once: true })
+			iframe.addEventListener('error', () => reject(new Error('child frame failed to load')), { once: true })
+			iframe.src = '/widget/packages/widget-vue'
+			document.body.append(iframe)
+		})
+	})
+
+	const after = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
+	expect(after)
+		.toBe(before)
 })
 
 test('VitePress opens Widget Lab as a standalone document and preserves the persisted Lab locale', async ({ page }) => {
@@ -57,7 +78,7 @@ test('VitePress opens Widget Lab as a standalone document and preserves the pers
 		.toHaveValue('zh-TW')
 	const documentLoadsAfterClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
 	expect(documentLoadsAfterClick)
-		.toBeGreaterThan(documentLoadsBeforeClick)
+		.toBe(documentLoadsBeforeClick + 1)
 
 	// Direct reload must stay in the separately-built Lab instead of falling back to VitePress routing.
 	await page.reload()
@@ -99,7 +120,7 @@ test('Home page hero action opens Widget Lab as a standalone document navigation
 
 	const documentLoadsAfterClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
 	expect(documentLoadsAfterClick)
-		.toBeGreaterThan(documentLoadsBeforeClick)
+		.toBe(documentLoadsBeforeClick + 1)
 })
 
 test('Navbar link opens Widget Lab as a standalone document navigation', async ({ page }) => {
@@ -133,7 +154,7 @@ test('Navbar link opens Widget Lab as a standalone document navigation', async (
 
 	const documentLoadsAfterClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
 	expect(documentLoadsAfterClick)
-		.toBeGreaterThan(documentLoadsBeforeClick)
+		.toBe(documentLoadsBeforeClick + 1)
 })
 
 for (const [explicitLocale, storedLocale] of [['en', 'zh-TW'], ['zh-TW', 'en']] as const) {
