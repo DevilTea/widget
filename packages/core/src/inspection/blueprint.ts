@@ -173,6 +173,7 @@ function buildPropertyMembers(compiledNode: CompiledResolvedWidgetNode): readonl
 		result.push(Object.freeze({
 			type: 'property' as const,
 			name,
+			valueContractId: member.definition.valueContract?.id ?? null,
 			dependencies: flattenDependencies(member.deps),
 		}))
 	}

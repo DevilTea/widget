@@ -55,6 +55,28 @@ export const widgetPluginBrand: unique symbol = Symbol('@deviltea/widget-core:wi
 export const widgetSectionKind: unique symbol = Symbol('@deviltea/widget-core:widget-section-kind')
 export const widgetSectionRemaining: unique symbol = Symbol('@deviltea/widget-core:widget-section-remaining')
 
+declare const widgetValueContractType: unique symbol
+
+/**
+ * Passive, runtime-readable semantic value-contract descriptor.
+ *
+ * The generic parameter exists only for Plugin-author type safety. Runtime/integration identity is the
+ * stable string `id`; descriptor object identity has no semantic meaning.
+ */
+export interface WidgetValueContract<Value> {
+	readonly id: string
+	/** Type-only invariant brand; the factory-created runtime descriptor contains only `id`. */
+	readonly [widgetValueContractType]: (value: Value) => Value
+}
+
+/**
+ * Declares a stable semantic value-contract id while retaining the associated TypeScript value type for
+ * Plugin-author checking. Core does not interpret, register, validate, or schema-check contract ids.
+ */
+export function createWidgetValueContract<Value>(id: string): WidgetValueContract<Value> {
+	return Object.freeze({ id }) as WidgetValueContract<Value>
+}
+
 // -------------------------------------------------------------------------------------------------
 // Erased definition records (framework-internal, consumed by Blueprint/Runtime)
 // -------------------------------------------------------------------------------------------------
@@ -88,6 +110,7 @@ export interface ErasedWidgetStateMemberDefinition {
 }
 
 export interface ErasedWidgetPropertyDefinition {
+	readonly valueContract?: { readonly id: string }
 	readonly registerDeps?: (ctx: any) => RegisteredDeps
 	readonly compute: (ctx: any) => unknown
 }
@@ -338,6 +361,8 @@ export interface WidgetPropertyDefinition<
 	Name extends WidgetMemberKey,
 	Deps extends RegisteredDeps,
 > {
+	/** Passive semantic value contract for integration/tooling inspection. */
+	readonly valueContract?: WidgetValueContract<WidgetPropertyValueOf<Interfaces, Name>>
 	readonly registerDeps?: (ctx: WidgetRegisterDepsContext<Interfaces, 'property'>) => Deps
 	readonly compute: (ctx: WidgetPropertyComputeContext<Interfaces, Deps>) => WidgetPropertyValueOf<Interfaces, Name>
 }

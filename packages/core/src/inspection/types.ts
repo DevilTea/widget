@@ -32,6 +32,29 @@ declare const inspectionNodeIdBrand: unique symbol
 export type InspectionNodeId = number & { readonly [inspectionNodeIdBrand]: true }
 
 // -------------------------------------------------------------------------------------------------
+// Plugin inspection
+// -------------------------------------------------------------------------------------------------
+
+export interface PluginInspectionStateMember {
+	readonly type: 'state'
+	readonly name: WidgetMemberKey
+	readonly authorWritable: boolean
+}
+
+export interface PluginInspectionPropertyMember {
+	readonly type: 'property'
+	readonly name: WidgetMemberKey
+	readonly valueContractId: string | null
+}
+
+export interface PluginInspection {
+	/** Null means the State capability was not declared; an empty map means explicitly declared empty. */
+	readonly state: ReadonlyMap<WidgetMemberKey, PluginInspectionStateMember> | null
+	/** Null means the Properties capability was not declared; an empty map means explicitly declared empty. */
+	readonly properties: ReadonlyMap<WidgetMemberKey, PluginInspectionPropertyMember> | null
+}
+
+// -------------------------------------------------------------------------------------------------
 // Blueprint inspection
 // -------------------------------------------------------------------------------------------------
 
@@ -107,6 +130,7 @@ export interface BlueprintInspectionStateMember {
 export interface BlueprintInspectionPropertyMember {
 	readonly type: 'property'
 	readonly name: WidgetMemberKey
+	readonly valueContractId: string | null
 	readonly dependencies: readonly BlueprintInspectionDependency[]
 }
 
