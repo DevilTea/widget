@@ -34,6 +34,8 @@ export interface CounterInterfaces extends WidgetInterfaces {
 	}
 }
 
+export const COUNTER_CRASH_ERROR = new Error('crash() always throws — an implementation exception, not an Diagnostic.')
+
 export const CounterPlugin = createWidgetPlugin('Counter')
 	.description('Counter widget')
 	.interfaces<CounterInterfaces>()
@@ -75,7 +77,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 			.crash({
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: (): never => {
-					throw new Error('crash() always throws — an implementation exception, not an Diagnostic.')
+					throw COUNTER_CRASH_ERROR
 				},
 			})
 			.then({

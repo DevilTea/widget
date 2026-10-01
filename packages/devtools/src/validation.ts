@@ -68,42 +68,184 @@ export function isPath(value: unknown): value is readonly (string | number)[] {
 			|| (typeof segment === 'number' && Number.isInteger(segment)))
 }
 
-export function isInspectableValue(value: unknown): value is InspectableValue {
-	if (!isRecord(value) || typeof value.type !== 'string')
-		return false
-	switch (value.type) {
-		case 'null':
-		case 'undefined':
-			return true
-		case 'boolean':
-			return typeof value.value === 'boolean'
-		case 'string':
-			return typeof value.value === 'string' && typeof value.truncated === 'boolean'
-		case 'number':
-			return typeof value.value === 'number' && Number.isFinite(value.value)
-		case 'number-special':
-			return value.value === 'nan' || value.value === 'positive-infinity'
-				|| value.value === 'negative-infinity' || value.value === 'negative-zero'
-		case 'bigint':
-			return typeof value.value === 'string'
-		case 'array':
-			return isNodeId(value.id) && Array.isArray(value.items)
-				&& value.items.every(isInspectableValue) && typeof value.truncated === 'boolean'
-		case 'object':
-			return isNodeId(value.id) && Array.isArray(value.entries)
-				&& value.entries.every(entry => isRecord(entry)
-					&& typeof entry.key === 'string' && isInspectableValue(entry.value))
-				&& typeof value.truncated === 'boolean'
-		case 'reference':
-			return isNodeId(value.ref)
-		case 'opaque':
-			return value.kind === 'function' || value.kind === 'symbol' || value.kind === 'dom-node'
-				|| value.kind === 'class-instance' || value.kind === 'uninspectable' || value.kind === 'unknown-object'
-		case 'truncated':
-			return value.reason === 'max-depth'
-		default:
-			return false
+function readArrayLength(value: unknown[]): number | null {
+	try {
+		const length = value.length
+		return Number.isInteger(length) && length >= 0 && length <= 0xFFFF_FFFF
+			? length
+			: null
 	}
+	catch {
+		return null
+	}
+}
+
+function hasArrayIndex(value: unknown[], index: number): boolean | null {
+	try {
+		return index in value
+	}
+	catch {
+		return null
+	}
+}
+
+function readArrayIndex(value: unknown[], index: number): { readonly ok: true, readonly value: unknown } | { readonly ok: false } {
+	try {
+		return { ok: true, value: value[index] }
+	}
+	catch {
+		return { ok: false }
+	}
+}
+
+type InspectableValueValidationFrame
+	= | { readonly kind: 'value', readonly value: unknown }
+		| {
+			readonly kind: 'array'
+			readonly value: object
+			readonly items: unknown[]
+			readonly index: number
+			readonly length: number
+		}
+		| {
+			readonly kind: 'object'
+			readonly value: object
+			readonly entries: unknown[]
+			readonly index: number
+			readonly length: number
+		}
+
+export function isInspectableValue(value: unknown): value is InspectableValue {
+	const ancestors = new Set<object>()
+	const stack: InspectableValueValidationFrame[] = [{ kind: 'value', value }]
+
+	while (stack.length > 0) {
+		const frame = stack.pop()!
+		if (frame.kind === 'array') {
+			if (frame.index >= frame.length) {
+				ancestors.delete(frame.value)
+				continue
+			}
+			const present = hasArrayIndex(frame.items, frame.index)
+			if (present === null)
+				return false
+			stack.push({ ...frame, index: frame.index + 1 })
+			if (!present)
+				continue
+			const item = readArrayIndex(frame.items, frame.index)
+			if (!item.ok)
+				return false
+			stack.push({ kind: 'value', value: item.value })
+			continue
+		}
+		if (frame.kind === 'object') {
+			if (frame.index >= frame.length) {
+				ancestors.delete(frame.value)
+				continue
+			}
+			const present = hasArrayIndex(frame.entries, frame.index)
+			if (present === null)
+				return false
+			stack.push({ ...frame, index: frame.index + 1 })
+			if (!present)
+				continue
+			const entryResult = readArrayIndex(frame.entries, frame.index)
+			if (!entryResult.ok)
+				return false
+			const entry = entryResult.value
+			if (!isRecord(entry) || typeof entry.key !== 'string')
+				return false
+			stack.push({ kind: 'value', value: entry.value })
+			continue
+		}
+
+		const candidate = frame.value
+		if (!isRecord(candidate) || typeof candidate.type !== 'string')
+			return false
+
+		switch (candidate.type) {
+			case 'null':
+			case 'undefined':
+				break
+			case 'boolean':
+				if (typeof candidate.value !== 'boolean')
+					return false
+				break
+			case 'string':
+				if (typeof candidate.value !== 'string' || typeof candidate.truncated !== 'boolean')
+					return false
+				break
+			case 'number':
+				if (typeof candidate.value !== 'number' || !Number.isFinite(candidate.value))
+					return false
+				break
+			case 'number-special':
+				if (candidate.value !== 'nan' && candidate.value !== 'positive-infinity'
+					&& candidate.value !== 'negative-infinity' && candidate.value !== 'negative-zero') {
+					return false
+				}
+				break
+			case 'bigint':
+				if (typeof candidate.value !== 'string')
+					return false
+				break
+			case 'array': {
+				if (!isNodeId(candidate.id) || !Array.isArray(candidate.items) || typeof candidate.truncated !== 'boolean')
+					return false
+				if (ancestors.has(candidate))
+					return false
+				const length = readArrayLength(candidate.items)
+				if (length === null)
+					return false
+				ancestors.add(candidate)
+				stack.push({
+					kind: 'array',
+					value: candidate,
+					items: candidate.items,
+					index: 0,
+					length,
+				})
+				break
+			}
+			case 'object': {
+				if (!isNodeId(candidate.id) || !Array.isArray(candidate.entries) || typeof candidate.truncated !== 'boolean')
+					return false
+				if (ancestors.has(candidate))
+					return false
+				const length = readArrayLength(candidate.entries)
+				if (length === null)
+					return false
+				ancestors.add(candidate)
+				stack.push({
+					kind: 'object',
+					value: candidate,
+					entries: candidate.entries,
+					index: 0,
+					length,
+				})
+				break
+			}
+			case 'reference':
+				if (!isNodeId(candidate.ref))
+					return false
+				break
+			case 'opaque':
+				if (candidate.kind !== 'function' && candidate.kind !== 'symbol' && candidate.kind !== 'dom-node'
+					&& candidate.kind !== 'class-instance' && candidate.kind !== 'uninspectable'
+					&& candidate.kind !== 'unknown-object') {
+					return false
+				}
+				break
+			case 'truncated':
+				if (candidate.reason !== 'max-depth')
+					return false
+				break
+			default:
+				return false
+		}
+	}
+
+	return true
 }
 
 export function isBlueprintCapabilities(
@@ -255,7 +397,7 @@ export function isRuntimeDiagnosticLocation(value: unknown): value is InspectorR
 		&& typeof value.name === 'string'
 }
 
-export function isRuntimeDiagnostic(value: unknown): value is InspectorRuntimeDiagnostic {
+function hasValidRuntimeDiagnosticFields(value: unknown): value is Omit<InspectorRuntimeDiagnostic, 'cause'> & { readonly cause?: unknown } {
 	return isRecord(value)
 		&& typeof value.code === 'string'
 		&& typeof value.message === 'string'
@@ -268,7 +410,22 @@ export function isRuntimeDiagnostic(value: unknown): value is InspectorRuntimeDi
 		&& (value.result === undefined || isInspectableValue(value.result))
 		&& (value.args === undefined || (Array.isArray(value.args) && value.args.every(isInspectableValue)))
 		&& (value.related === undefined || (Array.isArray(value.related) && value.related.every(isRuntimeDiagnosticLocation)))
-		&& (value.cause === undefined || isRuntimeDiagnostic(value.cause))
+}
+
+export function isRuntimeDiagnostic(value: unknown): value is InspectorRuntimeDiagnostic {
+	const ancestors = new Set<object>()
+	let current: unknown = value
+
+	while (true) {
+		if (!hasValidRuntimeDiagnosticFields(current))
+			return false
+		if (ancestors.has(current))
+			return false
+		if (current.cause === undefined)
+			return true
+		ancestors.add(current)
+		current = current.cause
+	}
 }
 
 export function isRuntimeMemberSnapshot(value: unknown): value is InspectorRuntimeMemberSnapshot {

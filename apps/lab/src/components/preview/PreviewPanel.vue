@@ -44,7 +44,9 @@ watch(
 		const driver = createPreviewFrameDriver(frame, () => ({
 			locale: i18n.locale.value,
 			theme: theme.theme.value,
-		}))
+		}), {
+			frameOrigin: import.meta.env.VITE_PREVIEW_FRAME_ORIGIN,
+		})
 		const detach = store.previewHost.attachDriver(driver)
 		onCleanup(detach)
 	},

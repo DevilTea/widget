@@ -5,10 +5,11 @@
  * keeps literal U+0009 tabs on the four-column rendering/copy contract.
  */
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
-import { shallowRef } from 'vue'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { nextTick, shallowRef } from 'vue'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
 import { LabThemeKey } from '../../composables/use-lab-theme'
+import * as shikiHighlighter from '../../implementation/shiki-highlighter'
 import { testGlobalProperties } from '../../test-support'
 import ImplementationSourceView from './ImplementationSourceView.vue'
 
@@ -32,6 +33,10 @@ const globalStubConfig = {
 	},
 }
 
+afterEach(() => {
+	vi.restoreAllMocks()
+})
+
 async function waitForCode(wrapper: ReturnType<typeof mount>): Promise<void> {
 	await vi.waitFor(async () => {
 		await flushPromises()
@@ -39,6 +44,40 @@ async function waitForCode(wrapper: ReturnType<typeof mount>): Promise<void> {
 			.exists())
 			.toBe(true)
 	})
+}
+
+interface Deferred<T> {
+	readonly promise: Promise<T>
+	resolve: (value: T) => void
+	reject: (reason: unknown) => void
+}
+
+function createDeferred<T>(): Deferred<T> {
+	let resolve!: (value: T) => void
+	let reject!: (reason: unknown) => void
+	const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+		resolve = resolvePromise
+		reject = rejectPromise
+	})
+	return { promise, resolve, reject }
+}
+
+async function settle<T>(deferred: Deferred<T>): Promise<void> {
+	await deferred.promise.catch(() => undefined)
+	await nextTick()
+}
+
+function expectReadyWithLatestHighlight(wrapper: ReturnType<typeof mount>, marker: string): void {
+	expect(wrapper.find('[data-testid="implementation-code"]')
+		.exists())
+		.toBe(true)
+	expect(wrapper.get('[data-testid="implementation-code"]')
+		.text())
+		.toBe(marker)
+	expect(wrapper.text())
+		.not.toContain('Loading…')
+	expect(wrapper.text())
+		.not.toContain('Failed to render this source.')
 }
 
 describe('implementationSourceView', () => {
@@ -85,5 +124,68 @@ describe('implementationSourceView', () => {
 		await flushPromises()
 		expect(writeText)
 			.toHaveBeenCalledWith(payload)
+	})
+
+	it('keeps the newest highlight when an older successful highlight settles later', async () => {
+		const older = createDeferred<string>()
+		const newer = createDeferred<string>()
+		const highlight = vi.spyOn(shikiHighlighter, 'highlightSource')
+			.mockImplementation(code => code === 'older source' ? older.promise : newer.promise)
+		const wrapper = mount(ImplementationSourceView, {
+			props: { code: 'older source', lang: 'typescript' },
+			...globalStubConfig,
+		})
+
+		expect(highlight)
+			.toHaveBeenCalledTimes(1)
+		expect(wrapper.text())
+			.toContain('Loading…')
+
+		await wrapper.setProps({ code: 'newer source' })
+		expect(highlight)
+			.toHaveBeenCalledTimes(2)
+		expect(wrapper.text())
+			.toContain('Loading…')
+
+		newer.resolve('<span>newer highlighted result</span>')
+		await settle(newer)
+		expectReadyWithLatestHighlight(wrapper, 'newer highlighted result')
+
+		older.resolve('<span>stale older highlighted result</span>')
+		await settle(older)
+		expectReadyWithLatestHighlight(wrapper, 'newer highlighted result')
+		expect(wrapper.get('[data-testid="implementation-code"]')
+			.html())
+			.not.toContain('stale older highlighted result')
+
+		wrapper.unmount()
+	})
+
+	it('keeps the newest highlight when an older rejection settles later', async () => {
+		const older = createDeferred<string>()
+		const newer = createDeferred<string>()
+		const highlight = vi.spyOn(shikiHighlighter, 'highlightSource')
+			.mockImplementation(code => code === 'older source' ? older.promise : newer.promise)
+		const wrapper = mount(ImplementationSourceView, {
+			props: { code: 'older source', lang: 'typescript' },
+			...globalStubConfig,
+		})
+
+		expect(highlight)
+			.toHaveBeenCalledTimes(1)
+
+		await wrapper.setProps({ code: 'newer source' })
+		expect(highlight)
+			.toHaveBeenCalledTimes(2)
+
+		newer.resolve('<span>newer highlighted result</span>')
+		await settle(newer)
+		expectReadyWithLatestHighlight(wrapper, 'newer highlighted result')
+
+		older.reject(new Error('stale older highlight failure'))
+		await settle(older)
+		expectReadyWithLatestHighlight(wrapper, 'newer highlighted result')
+
+		wrapper.unmount()
 	})
 })

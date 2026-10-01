@@ -4,9 +4,9 @@ import { defineConfig, devices } from '@playwright/test'
 /**
  * Issue #28 browser-contract harness.
  *
- * Starts two distinct browser targets. Most Lab E2E specs use the built app served from `dist/` by
- * `vite preview` on 4173. The DevTools transport contract explicitly visits its fixture on 4174,
- * where Vite serves source modules; it tests the source implementation, not the built distribution.
+ * Starts the built Lab on 4173 and the DevTools transport fixture on 4174, where Vite serves source
+ * modules. The configured cross-origin production Preview contract has a separate config/build so
+ * this suite continues to cover the default same-origin Lab setup.
  *
  * `webServer` only serves these targets; it does not build `dist/`. CI's `browser-contracts` job builds
  * first, and local runs must run `pnpm --filter widget-lab... run build` before this suite. Each server
@@ -17,8 +17,10 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
 	testDir: './e2e',
+	testIgnore: '**/preview-origin.spec.ts',
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
+	failOnFlakyTests: !!process.env.CI,
 	retries: process.env.CI ? 1 : 0,
 	// `list` mirrors this repo's terminal-first Vitest output and writes nothing to disk; the HTML
 	// reporter is deliberately not used so this suite never accumulates a report directory to gitignore

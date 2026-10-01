@@ -8,9 +8,9 @@
  * Vue-layer special handling.
  */
 
-import { WidgetSystemRuntimeDisposedError } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '@deviltea/widget-core'
 import { describe, expect, it, vi } from 'vitest'
-import { CounterPlugin, createFixtureRuntime, getCounterWidget, mountWidgetBridge } from './test-fixtures'
+import { COUNTER_CRASH_ERROR, CounterPlugin, createFixtureRuntime, getCounterWidget, mountWidgetBridge } from './test-fixtures'
 
 describe('method conformance', () => {
 	it('projects a successful invocation to its returned value', () => {
@@ -41,8 +41,16 @@ describe('method conformance', () => {
 		const { bridge } = mountWidgetBridge(runtime, 'm3', CounterPlugin)
 		const { crash } = bridge.useMethods()
 
-		expect(() => crash())
-			.toThrow('crash() always throws — an implementation exception, not an Diagnostic.')
+		let thrown: unknown
+		try {
+			crash()
+		}
+		catch (error) {
+			thrown = error
+		}
+
+		expect(thrown)
+			.toBe(COUNTER_CRASH_ERROR)
 	})
 
 	it('propagates disposed-Runtime exceptions unchanged', () => {
@@ -97,6 +105,45 @@ describe('method conformance', () => {
 		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
 		expect(incrementA(1))
 			.toBe(1)
+		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
+	})
+
+	it('materializes method wrappers without invoking, reading, or subscribing to the Runtime primitive', () => {
+		const invocationSpy = vi.fn((args: readonly unknown[]) => args.length === 1 && typeof args[0] === 'number')
+		const invocationPlugin = createWidgetPlugin('InvocationProbe')
+			.description('Runtime method invocation probe')
+			.interfaces<{ methods: { increment: (step: number) => number } }>()
+			.methods(methods => methods.increment({
+				validateArgs: (args): args is [number] => invocationSpy(args),
+				execute: ({ args: [step] }) => step,
+			}))
+			.done()
+		const system = createWidgetSystem({ plugins: [invocationPlugin] })
+		const blueprint = system.createBlueprint({ id: 'm8', type: 'InvocationProbe' })
+		if (blueprint.status !== 'valid')
+			throw new Error(`Invalid invocation probe blueprint: ${JSON.stringify(blueprint.diagnostics)}`)
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('m8')
+		if (widget === null || widget.methods === undefined)
+			throw new Error('Invocation probe fixture did not produce a method surface.')
+		const getDiagnosticsSpy = vi.spyOn(widget.methods.increment, 'getDiagnostics')
+		const subscribeDiagnosticsSpy = vi.spyOn(widget.methods.increment, 'subscribeDiagnostics')
+		const { bridge } = mountWidgetBridge(runtime, 'm8', invocationPlugin)
+
+		const { increment } = bridge.useMethods()
+		expect(typeof increment)
+			.toBe('function')
+		expect(invocationSpy).not.toHaveBeenCalled()
+		expect(getDiagnosticsSpy).not.toHaveBeenCalled()
+		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
+
+		expect(increment(1))
+			.toBe(1)
+		expect(invocationSpy)
+			.toHaveBeenCalledTimes(1)
+		expect(invocationSpy)
+			.toHaveBeenCalledWith([1])
+		expect(getDiagnosticsSpy).not.toHaveBeenCalled()
 		expect(subscribeDiagnosticsSpy).not.toHaveBeenCalled()
 	})
 

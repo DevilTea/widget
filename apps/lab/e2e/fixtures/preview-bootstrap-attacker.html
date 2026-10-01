@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<title>Preview bootstrap attacker fixture</title>
+	</head>
+	<body>
+		<script>
+			const parentOrigin = (() => {
+				try {
+					const origin = new URL(document.referrer).origin
+					return origin === 'null' ? null : origin
+				}
+				catch {
+					return null
+				}
+			})()
+			window.addEventListener('message', (event) => {
+				if (parentOrigin === null
+					|| event.origin !== parentOrigin
+					|| typeof event.data !== 'object'
+					|| event.data === null
+					|| event.data.type !== 'preview-bootstrap-forward') {
+					return
+				}
+
+				const target = window.parent.frames[0]
+				if (target === undefined || typeof event.data.targetOrigin !== 'string')
+					return
+
+				target.postMessage(event.data.bootstrap, event.data.targetOrigin, event.ports)
+				window.parent.postMessage({ type: 'preview-bootstrap-forwarded' }, parentOrigin)
+			})
+		</script>
+	</body>
+</html>

@@ -36,7 +36,6 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 	async function performReplace(descriptor: PreviewHostDescriptor): Promise<PreviewFrameConnection | null> {
 		if (disposed)
 			throw new Error('Preview host coordinator is disposed.')
-		desired = descriptor
 		const selectedDriver = driver
 		const selectedEpoch = epoch
 		if (selectedDriver === null)
