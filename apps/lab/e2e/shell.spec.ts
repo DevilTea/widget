@@ -116,11 +116,11 @@ test('Blueprint and Runtime keep separate outer inspector surfaces', async ({ pa
  * This proves a POSITIVE contract instead: the Source editor actually initializes from local assets
  * with external network blocked — a real Monaco surface (`.monaco-editor`) mounts and renders the
  * active preset's draft text (`.view-lines`, Sandbox's default preset text) — AND that this happens
- * without a single attempted request to esm.sh (or anywhere else off-origin): `fixtures.ts`'s
- * `blockedRequestUrls` fixture records every URL the route handler had to abort, and the assertion
- * below is that none of them contain `esm.sh` — not merely that a blocked one failed silently.
+ * without a request to esm.sh or any other off-origin URL: `fixtures.ts` pins every built-app request
+ * to the preview origin and records attempted violations, so a request to the still-running source
+ * server on :4174 cannot silently satisfy the editor import.
  */
-test('Source editor initializes from local assets with no attempted esm.sh request (issue #30)', async ({ page, blockedRequestUrls }) => {
+test('Source editor initializes only from built preview assets (issues #30, #102)', async ({ page, blockedRequestUrls, offOriginRequestUrls }) => {
 	const pageErrors: Error[] = []
 	page.on('pageerror', error => pageErrors.push(error))
 
@@ -151,6 +151,8 @@ test('Source editor initializes from local assets with no attempted esm.sh reque
 		.toEqual([])
 	expect(blockedRequestUrls.some(url => url.includes('esm.sh')))
 		.toBe(false)
+	expect(offOriginRequestUrls, 'built modules, workers, iframe documents, and vendor assets should use the preview origin')
+		.toEqual([])
 })
 
 test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => {
