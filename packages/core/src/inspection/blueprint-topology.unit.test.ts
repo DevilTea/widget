@@ -318,7 +318,7 @@ describe('capability distinction', () => {
 		expect(root.capabilities.state)
 			.toBe(true)
 		expect(root.state)
-			.toEqual([{ type: 'state', name: 'value' }])
+			.toEqual([{ type: 'state', name: 'value', authorWritable: false }])
 	})
 
 	it('capabilities.config is true for a plugin with config capability and false otherwise', () => {

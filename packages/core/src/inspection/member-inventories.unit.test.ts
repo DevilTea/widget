@@ -110,7 +110,7 @@ describe('member inventories: arbitrary-string safety', () => {
 
 		for (const key of KEYS) {
 			expect(root.state.find(member => member.name === key))
-				.toEqual({ type: 'state', name: key })
+				.toEqual({ type: 'state', name: key, authorWritable: false })
 			expect(root.properties.find(member => member.name === key))
 				.toEqual(expect.objectContaining({ type: 'property', name: key }))
 			expect(root.methods.find(member => member.name === key))

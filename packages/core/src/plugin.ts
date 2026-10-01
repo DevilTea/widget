@@ -82,6 +82,7 @@ export interface ErasedWidgetSlotDefinition {
 }
 
 export interface ErasedWidgetStateMemberDefinition {
+	readonly authorWritable?: boolean
 	readonly validate: (input: unknown, ctx: any) => boolean
 	readonly default?: (ctx: any) => unknown
 }
@@ -326,6 +327,8 @@ export interface WidgetStateMemberDefinition<
 	Interfaces extends WidgetInterfaces,
 	Key extends WidgetMemberKey,
 > {
+	/** Passive authoring policy. Omitted means this State member is not author-writable. */
+	readonly authorWritable?: boolean
 	readonly validate: (input: unknown, ctx: WidgetStateValidateContext<Interfaces>) => input is WidgetStateValueOf<Interfaces, Key>
 	readonly default?: (ctx: WidgetStateDefaultContext<Interfaces>) => WidgetStateValueOf<Interfaces, Key>
 }
