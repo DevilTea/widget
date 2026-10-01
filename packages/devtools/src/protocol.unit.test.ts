@@ -3,6 +3,7 @@ import {
 	INSPECTOR_PROTOCOL_VERSION,
 	isCompatibleProtocolVersion,
 	isInspectorRequestResult,
+	parseInspectorEventMessage,
 	parseInspectorRequestMessage,
 	parseInspectorResponseMessage,
 } from './protocol'
@@ -36,6 +37,224 @@ describe('inspector protocol validation', () => {
 			.toEqual(success)
 		expect(parseInspectorResponseMessage({ ...success, ok: false, error: null }))
 			.toBeNull()
+	})
+
+	it('rejects cyclic InspectableValue event payloads without throwing while allowing acyclic sharing', () => {
+		const cyclic: Record<string, unknown> = {
+			type: 'object',
+			id: 1,
+			entries: [],
+			truncated: false,
+		}
+		;(cyclic.entries as Array<Record<string, unknown>>).push({ key: 'self', value: cyclic })
+		const cyclicEvent = {
+			protocol: INSPECTOR_PROTOCOL_VERSION,
+			kind: 'event',
+			event: 'runtime.eventOccurred',
+			payload: {
+				subscriptionId: 'event-1',
+				ref: { runtimeId: 'runtime-a', nodeId: 1 },
+				event: 'changed',
+				args: [cyclic],
+			},
+		}
+
+		expect(() => parseInspectorEventMessage(cyclicEvent))
+			.not.toThrow()
+		expect(parseInspectorEventMessage(cyclicEvent))
+			.toBeNull()
+
+		const shared = {
+			type: 'object',
+			id: 2,
+			entries: [{ key: 'value', value: { type: 'number', value: 1 } }],
+			truncated: false,
+		}
+		const sharedEvent = {
+			...cyclicEvent,
+			payload: {
+				...cyclicEvent.payload,
+				args: [{
+					type: 'object',
+					id: 3,
+					entries: [
+						{ key: 'left', value: shared },
+						{ key: 'right', value: shared },
+					],
+					truncated: false,
+				}],
+			},
+		}
+
+		expect(parseInspectorEventMessage(sharedEvent))
+			.toBe(sharedEvent)
+	})
+
+	it('handles deeply nested InspectableValue payloads without recursion overflow or receive-side depth ceilings', () => {
+		const root: Record<string, unknown> = {
+			type: 'array',
+			id: 1,
+			items: [],
+			truncated: false,
+		}
+		let cursor = root
+		for (let id = 2; id <= 20_000; id++) {
+			const next: Record<string, unknown> = {
+				type: 'array',
+				id,
+				items: [],
+				truncated: false,
+			}
+			;(cursor.items as unknown[]).push(next)
+			cursor = next
+		}
+		;(cursor.items as unknown[]).push({ type: 'number', value: 1 })
+
+		const event = {
+			protocol: INSPECTOR_PROTOCOL_VERSION,
+			kind: 'event',
+			event: 'runtime.eventOccurred',
+			payload: {
+				subscriptionId: 'event-deep',
+				ref: { runtimeId: 'runtime-a', nodeId: 1 },
+				event: 'changed',
+				args: [root],
+			},
+		}
+
+		let parsed: ReturnType<typeof parseInspectorEventMessage> | undefined
+		expect(() => {
+			parsed = parseInspectorEventMessage(event)
+		})
+			.not.toThrow()
+		expect(parsed)
+			.toBe(event)
+
+		;(cursor.items as unknown[])[0] = root
+		parsed = undefined
+		expect(() => {
+			parsed = parseInspectorEventMessage(event)
+		})
+			.not.toThrow()
+		expect(parsed)
+			.toBeNull()
+	})
+
+	it('short-circuits wide InspectableValue containers before reading later siblings', () => {
+		const siblingWidth = 100_000
+		for (const containerType of ['array', 'object'] as const) {
+			let siblingReads = 0
+			const children = new Proxy([] as unknown[], {
+				get(target, property, receiver) {
+					if (property === 'length')
+						return siblingWidth
+					if (typeof property === 'string' && /^\d+$/.test(property)) {
+						siblingReads++
+						const value = property === '0' ? { type: 'invalid' } : { type: 'null' }
+						return containerType === 'array' ? value : { key: property, value }
+					}
+					return Reflect.get(target, property, receiver)
+				},
+				has(_target, property) {
+					return typeof property === 'string' && /^\d+$/.test(property)
+				},
+			})
+			const value = containerType === 'array'
+				? { type: 'array', id: 1, items: children, truncated: false }
+				: { type: 'object', id: 1, entries: children, truncated: false }
+			const event = {
+				protocol: INSPECTOR_PROTOCOL_VERSION,
+				kind: 'event',
+				event: 'runtime.eventOccurred',
+				payload: {
+					subscriptionId: `event-wide-invalid-${containerType}`,
+					ref: { runtimeId: 'runtime-a', nodeId: 1 },
+					event: 'changed',
+					args: [value],
+				},
+			}
+
+			expect(parseInspectorEventMessage(event))
+				.toBeNull()
+			expect(siblingReads)
+				.toBe(1)
+		}
+	})
+
+	it('rejects InspectableValue arrays with invalid proxy lengths without iterating indexes', () => {
+		for (const invalidLength of [0.5, Number.POSITIVE_INFINITY]) {
+			for (const containerType of ['array', 'object'] as const) {
+				let indexReads = 0
+				const children = new Proxy([] as unknown[], {
+					get(target, property, receiver) {
+						if (property === 'length')
+							return invalidLength
+						if (typeof property === 'string' && /^\d+$/.test(property)) {
+							indexReads++
+							if (indexReads > 3)
+								throw new Error('Validator continued iterating an invalid array length.')
+							const value = { type: 'null' }
+							return containerType === 'array' ? value : { key: property, value }
+						}
+						return Reflect.get(target, property, receiver)
+					},
+					has(_target, property) {
+						return typeof property === 'string' && /^\d+$/.test(property)
+					},
+				})
+				const value = containerType === 'array'
+					? { type: 'array', id: 1, items: children, truncated: false }
+					: { type: 'object', id: 1, entries: children, truncated: false }
+				const event = {
+					protocol: INSPECTOR_PROTOCOL_VERSION,
+					kind: 'event',
+					event: 'runtime.eventOccurred',
+					payload: {
+						subscriptionId: `event-invalid-length-${containerType}`,
+						ref: { runtimeId: 'runtime-a', nodeId: 1 },
+						event: 'changed',
+						args: [value],
+					},
+				}
+
+				let parsed: ReturnType<typeof parseInspectorEventMessage> | undefined
+				expect(() => {
+					parsed = parseInspectorEventMessage(event)
+				})
+					.not.toThrow()
+				expect(parsed)
+					.toBeNull()
+				expect(indexReads)
+					.toBe(0)
+			}
+		}
+	})
+
+	it('preserves sparse InspectableValue array hole semantics', () => {
+		for (const containerType of ['array', 'object'] as const) {
+			const children: unknown[] = []
+			children.length = 2
+			children[1] = containerType === 'array'
+				? { type: 'null' }
+				: { key: 'present', value: { type: 'null' } }
+			const value = containerType === 'array'
+				? { type: 'array', id: 1, items: children, truncated: false }
+				: { type: 'object', id: 1, entries: children, truncated: false }
+			const event = {
+				protocol: INSPECTOR_PROTOCOL_VERSION,
+				kind: 'event',
+				event: 'runtime.eventOccurred',
+				payload: {
+					subscriptionId: `event-sparse-${containerType}`,
+					ref: { runtimeId: 'runtime-a', nodeId: 1 },
+					event: 'changed',
+					args: [value],
+				},
+			}
+
+			expect(parseInspectorEventMessage(event))
+				.toBe(event)
+		}
 	})
 
 	it('uses major-version compatibility while allowing minor-version capability negotiation', () => {
