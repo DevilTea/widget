@@ -2,20 +2,15 @@ import type { FrameLocator, Page } from '@playwright/test'
 import { test as base, expect } from '@playwright/test'
 
 /**
- * Shared fixture for every spec in this suite (issue #28 "no external network"): aborts every request
- * whose hostname is not the local preview server, so the suite can never pass by accident depending on
- * something off-repo being reachable. Historically this was most notably `modern-monaco`'s esm.sh CDN
- * load; issue #30 Scope A self-hosts the editor engine instead (see
- * `src/composables/use-monaco-editor.ts` and `vite-plugin-vendor-modern-monaco-editor-core.ts`), so
- * this block is now also the mechanism `shell.spec.ts`'s offline Source-editor contract uses to prove
- * no such request is even attempted anymore. Routing at the Playwright layer (rather than, say, an
- * OS-level firewall) keeps this self-contained in the harness and gives a blocked request a clear,
- * deterministic `net::ERR_BLOCKED_BY_CLIENT` outcome instead of a real, slow DNS/TLS failure.
+ * Shared request boundary for the browser suite. Built-app tests default to the exact origin in
+ * `baseURL` (the `vite preview` server on :4173), so same-host requests to Vite's source server on
+ * :4174 cannot satisfy a built asset request. The DevTools source-fixture spec opts into its own
+ * exact :4174 origin below; that allowance does not apply to built-app tests.
  *
- * `127.0.0.1`/`localhost` are both allowed since `webServer`/`baseURL` in `playwright.config.ts` use
- * `localhost`, but a redirect or absolute asset URL could resolve either form.
+ * `blob:`, `data:`, and `about:` URLs are browser-local resources rather than network origins and
+ * remain available. Every other off-origin request is recorded and aborted at the Playwright layer,
+ * which keeps the suite offline and makes a wrong-origin asset request deterministic.
  */
-const ALLOWED_HOSTNAMES = new Set(['localhost', '127.0.0.1'])
 
 /**
  * Issue #25 P1: `App.vue` now shows a first-entry Welcome card whenever
@@ -30,8 +25,14 @@ const ALLOWED_HOSTNAMES = new Set(['localhost', '127.0.0.1'])
  * exactly what part of it tests) — it opts out via the `welcomeDismissed: false` fixture option below
  * rather than a second fixture file, keeping "which specs see the welcome card" declared in one place.
  */
-export const test = base.extend<{ blockedRequestUrls: string[], welcomeDismissed: boolean }>({
+export const test = base.extend<{
+	blockedRequestUrls: string[]
+	expectedRequestOrigin: string | null
+	offOriginRequestUrls: string[]
+	welcomeDismissed: boolean
+}>({
 	welcomeDismissed: [true, { option: true }],
+	expectedRequestOrigin: [null, { option: true }],
 
 	// Populated by the `page` fixture below as requests are blocked; a plain array captured by
 	// reference so both fixtures share the same instance for a given test. No other fixture
@@ -41,16 +42,34 @@ export const test = base.extend<{ blockedRequestUrls: string[], welcomeDismissed
 	blockedRequestUrls: async ({}, use) => {
 		await use([])
 	},
+	// eslint-disable-next-line no-empty-pattern
+	offOriginRequestUrls: async ({}, use) => {
+		await use([])
+	},
 
-	page: async ({ page, blockedRequestUrls }, use) => {
-		await page.route('**/*', async (route) => {
+	page: async ({
+		baseURL,
+		blockedRequestUrls,
+		context,
+		expectedRequestOrigin,
+		offOriginRequestUrls,
+		page,
+	}, use) => {
+		const expectedOrigin = new URL(expectedRequestOrigin ?? baseURL ?? 'http://localhost:4173').origin
+		await context.route('**/*', async (route) => {
 			const url = route.request()
 				.url()
-			const hostname = new URL(url).hostname
-			if (ALLOWED_HOSTNAMES.has(hostname)) {
+			const parsedUrl = new URL(url)
+			if (
+				parsedUrl.protocol === 'blob:'
+				|| parsedUrl.protocol === 'data:'
+				|| parsedUrl.protocol === 'about:'
+				|| parsedUrl.origin === expectedOrigin
+			) {
 				await route.continue()
 				return
 			}
+			offOriginRequestUrls.push(url)
 			blockedRequestUrls.push(url)
 			await route.abort('blockedbyclient')
 		})

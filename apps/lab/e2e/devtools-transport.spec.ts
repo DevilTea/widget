@@ -1,5 +1,10 @@
 import { expect, test } from './fixtures'
 
+// This spec intentionally loads the DevTools source fixture from Vite :4174. The override is local
+// to these source-fixture tests; every built-app spec remains pinned to the preview origin from
+// Playwright's `baseURL` (:4173).
+test.use({ expectedRequestOrigin: 'http://127.0.0.1:4174' })
+
 test('native Chromium propagates explicit DevTools closes and settles iframe navigation locally', async ({ page }) => {
 	await page.goto('http://127.0.0.1:4174/e2e/fixtures/devtools-transport.html')
 	const moduleUrl = await page.evaluate(() => new URL('/e2e/devtools-transport.browser.ts', location.origin).href)
