@@ -155,6 +155,9 @@ describe('inspector protocol validation', () => {
 					}
 					return Reflect.get(target, property, receiver)
 				},
+				has(_target, property) {
+					return typeof property === 'string' && /^\d+$/.test(property)
+				},
 			})
 			const value = containerType === 'array'
 				? { type: 'array', id: 1, items: children, truncated: false }
@@ -175,6 +178,82 @@ describe('inspector protocol validation', () => {
 				.toBeNull()
 			expect(siblingReads)
 				.toBe(1)
+		}
+	})
+
+	it('rejects InspectableValue arrays with invalid proxy lengths without iterating indexes', () => {
+		for (const invalidLength of [0.5, Number.POSITIVE_INFINITY]) {
+			for (const containerType of ['array', 'object'] as const) {
+				let indexReads = 0
+				const children = new Proxy([] as unknown[], {
+					get(target, property, receiver) {
+						if (property === 'length')
+							return invalidLength
+						if (typeof property === 'string' && /^\d+$/.test(property)) {
+							indexReads++
+							if (indexReads > 3)
+								throw new Error('Validator continued iterating an invalid array length.')
+							const value = { type: 'null' }
+							return containerType === 'array' ? value : { key: property, value }
+						}
+						return Reflect.get(target, property, receiver)
+					},
+					has(_target, property) {
+						return typeof property === 'string' && /^\d+$/.test(property)
+					},
+				})
+				const value = containerType === 'array'
+					? { type: 'array', id: 1, items: children, truncated: false }
+					: { type: 'object', id: 1, entries: children, truncated: false }
+				const event = {
+					protocol: INSPECTOR_PROTOCOL_VERSION,
+					kind: 'event',
+					event: 'runtime.eventOccurred',
+					payload: {
+						subscriptionId: `event-invalid-length-${containerType}`,
+						ref: { runtimeId: 'runtime-a', nodeId: 1 },
+						event: 'changed',
+						args: [value],
+					},
+				}
+
+				let parsed: ReturnType<typeof parseInspectorEventMessage> | undefined
+				expect(() => {
+					parsed = parseInspectorEventMessage(event)
+				})
+					.not.toThrow()
+				expect(parsed)
+					.toBeNull()
+				expect(indexReads)
+					.toBe(0)
+			}
+		}
+	})
+
+	it('preserves sparse InspectableValue array hole semantics', () => {
+		for (const containerType of ['array', 'object'] as const) {
+			const children: unknown[] = []
+			children.length = 2
+			children[1] = containerType === 'array'
+				? { type: 'null' }
+				: { key: 'present', value: { type: 'null' } }
+			const value = containerType === 'array'
+				? { type: 'array', id: 1, items: children, truncated: false }
+				: { type: 'object', id: 1, entries: children, truncated: false }
+			const event = {
+				protocol: INSPECTOR_PROTOCOL_VERSION,
+				kind: 'event',
+				event: 'runtime.eventOccurred',
+				payload: {
+					subscriptionId: `event-sparse-${containerType}`,
+					ref: { runtimeId: 'runtime-a', nodeId: 1 },
+					event: 'changed',
+					args: [value],
+				},
+			}
+
+			expect(parseInspectorEventMessage(event))
+				.toBe(event)
 		}
 	})
 

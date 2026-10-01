@@ -68,6 +68,36 @@ export function isPath(value: unknown): value is readonly (string | number)[] {
 			|| (typeof segment === 'number' && Number.isInteger(segment)))
 }
 
+function readArrayLength(value: unknown[]): number | null {
+	try {
+		const length = value.length
+		return Number.isInteger(length) && length >= 0 && length <= 0xFFFF_FFFF
+			? length
+			: null
+	}
+	catch {
+		return null
+	}
+}
+
+function hasArrayIndex(value: unknown[], index: number): boolean | null {
+	try {
+		return index in value
+	}
+	catch {
+		return null
+	}
+}
+
+function readArrayIndex(value: unknown[], index: number): { readonly ok: true, readonly value: unknown } | { readonly ok: false } {
+	try {
+		return { ok: true, value: value[index] }
+	}
+	catch {
+		return { ok: false }
+	}
+}
+
 type InspectableValueValidationFrame
 	= | { readonly kind: 'value', readonly value: unknown }
 		| {
@@ -92,23 +122,39 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 	while (stack.length > 0) {
 		const frame = stack.pop()!
 		if (frame.kind === 'array') {
-			if (frame.index === frame.length) {
+			if (frame.index >= frame.length) {
 				ancestors.delete(frame.value)
 				continue
 			}
+			const present = hasArrayIndex(frame.items, frame.index)
+			if (present === null)
+				return false
 			stack.push({ ...frame, index: frame.index + 1 })
-			stack.push({ kind: 'value', value: frame.items[frame.index] })
+			if (!present)
+				continue
+			const item = readArrayIndex(frame.items, frame.index)
+			if (!item.ok)
+				return false
+			stack.push({ kind: 'value', value: item.value })
 			continue
 		}
 		if (frame.kind === 'object') {
-			if (frame.index === frame.length) {
+			if (frame.index >= frame.length) {
 				ancestors.delete(frame.value)
 				continue
 			}
-			const entry = frame.entries[frame.index]
-			if (!isRecord(entry) || typeof entry.key !== 'string')
+			const present = hasArrayIndex(frame.entries, frame.index)
+			if (present === null)
 				return false
 			stack.push({ ...frame, index: frame.index + 1 })
+			if (!present)
+				continue
+			const entryResult = readArrayIndex(frame.entries, frame.index)
+			if (!entryResult.ok)
+				return false
+			const entry = entryResult.value
+			if (!isRecord(entry) || typeof entry.key !== 'string')
+				return false
 			stack.push({ kind: 'value', value: entry.value })
 			continue
 		}
@@ -143,10 +189,13 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 				if (typeof candidate.value !== 'string')
 					return false
 				break
-			case 'array':
+			case 'array': {
 				if (!isNodeId(candidate.id) || !Array.isArray(candidate.items) || typeof candidate.truncated !== 'boolean')
 					return false
 				if (ancestors.has(candidate))
+					return false
+				const length = readArrayLength(candidate.items)
+				if (length === null)
 					return false
 				ancestors.add(candidate)
 				stack.push({
@@ -154,13 +203,17 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 					value: candidate,
 					items: candidate.items,
 					index: 0,
-					length: candidate.items.length,
+					length,
 				})
 				break
-			case 'object':
+			}
+			case 'object': {
 				if (!isNodeId(candidate.id) || !Array.isArray(candidate.entries) || typeof candidate.truncated !== 'boolean')
 					return false
 				if (ancestors.has(candidate))
+					return false
+				const length = readArrayLength(candidate.entries)
+				if (length === null)
 					return false
 				ancestors.add(candidate)
 				stack.push({
@@ -168,9 +221,10 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 					value: candidate,
 					entries: candidate.entries,
 					index: 0,
-					length: candidate.entries.length,
+					length,
 				})
 				break
+			}
 			case 'reference':
 				if (!isNodeId(candidate.ref))
 					return false
