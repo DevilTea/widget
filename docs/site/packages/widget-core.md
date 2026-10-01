@@ -856,8 +856,8 @@ widgetInspection.getProperty('doubled')
   caching, invalidation, and batching; this package only builds observable
   semantics on top of it and does not implement a second reactive engine.
 
-The canonical, authoritative decision log for this architecture is
-[GitHub diagnostic #10](https://github.com/DevilTea/widget/diagnostics/10) —
-"Widget composition core architecture — canonical decision log." Its
-consolidated implementation handoff comment, together with any later accepted
-amendment, is authoritative over this guide.
+The current canonical architecture authority is
+[DevilTea/widget Discussion #12](https://github.com/DevilTea/widget/discussions/12).
+Its Core composition architecture topic contains the migrated historical
+`diagnostic #10` decisions plus current accepted amendments; those current
+Discussion #12 decisions are authoritative over this guide.
