@@ -157,6 +157,57 @@ test('Navbar link opens Widget Lab as a standalone document navigation', async (
 		.toBe(documentLoadsBeforeClick + 1)
 })
 
+test('built Widget Lab runtime assets execute under the Pages base', async ({ page }) => {
+	const requestedPaths = new Set<string>()
+	const workerPaths = new Set<string>()
+	page.on('request', (request) => {
+		const url = new URL(request.url())
+		if (url.protocol === 'http:' || url.protocol === 'https:')
+			requestedPaths.add(url.pathname)
+	})
+	page.on('worker', (worker) => {
+		const url = new URL(worker.url())
+		if (url.protocol === 'http:' || url.protocol === 'https:')
+			workerPaths.add(url.pathname)
+	})
+
+	await page.goto('/widget/lab/')
+	await expect(page.getByText('Widget Lab', { exact: true })
+		.first())
+		.toBeVisible()
+
+	const previewFrame = page.locator('[data-testid="preview-frame"]')
+	await expect(previewFrame)
+		.toBeVisible()
+	await expect.poll(async () => previewFrame.evaluate((element) => {
+		if (!(element instanceof HTMLIFrameElement))
+			throw new TypeError('expected Preview to be an iframe')
+		return new URL(element.src).pathname
+	}))
+		.toBe('/widget/lab/preview-frame.html')
+	await expect(page.frameLocator('[data-testid="preview-frame"]')
+		.getByText('Widget Lab sandbox', { exact: true }))
+		.toBeVisible({ timeout: 15_000 })
+
+	await expect(page.locator('.monaco-editor'))
+		.toBeVisible({ timeout: 15_000 })
+	await expect.poll(() => requestedPaths.has('/widget/lab/vendor/modern-monaco/editor-core.mjs'))
+		.toBe(true)
+
+	await page.getByRole('button', { name: 'Explore on my own' })
+		.click()
+	await page.getByRole('tab', { name: 'Dependencies' })
+		.click()
+	const graphNodes = page.locator('.vue-flow__node')
+	await expect(graphNodes.first())
+		.toBeVisible({ timeout: 15_000 })
+	expect(await graphNodes.count())
+		.toBeGreaterThan(0)
+	await expect.poll(() => [...requestedPaths, ...workerPaths]
+		.some(path => /^\/widget\/lab\/assets\/layout\.worker-[^/]+\.js$/.test(path)))
+		.toBe(true)
+})
+
 for (const [explicitLocale, storedLocale] of [['en', 'zh-TW'], ['zh-TW', 'en']] as const) {
 	test(`direct Widget Lab ?lang=${explicitLocale} remains authoritative over stored ${storedLocale}`, async ({ page }) => {
 		await page.goto('/widget/packages/widget-vue')
