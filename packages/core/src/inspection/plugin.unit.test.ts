@@ -22,6 +22,9 @@ interface FixtureInterfaces {
 		translated: TranslationResult
 		untyped: number
 	}
+	events: {
+		changed: [value: string]
+	}
 }
 
 let computeCalls = 0
@@ -58,10 +61,11 @@ const plugin = createWidgetPlugin('plugin-inspection')
 				return 1
 			},
 		}))
+	.events(events => events.changed({ description: 'Value changed' }))
 	.done()
 
 describe('plugin inspection', () => {
-	it('is identity-stable and projects only passive State/Property declaration facts', () => {
+	it('is identity-stable and projects only passive State/Property/Event declaration facts', () => {
 		const first = inspectPlugin(plugin)
 		const second = inspectPlugin(plugin)
 
@@ -77,6 +81,8 @@ describe('plugin inspection', () => {
 			.toEqual({ type: 'property', name: 'translated', valueContractId: 'example/translation-result' })
 		expect(first.properties?.get('untyped'))
 			.toEqual({ type: 'property', name: 'untyped', valueContractId: null })
+		expect(first.events?.get('changed'))
+			.toEqual({ type: 'event', name: 'changed', description: 'Value changed' })
 		expect(Object.keys(first.properties?.get('text') ?? {}))
 			.toEqual(['type', 'name', 'valueContractId'])
 		expect(computeCalls)
@@ -92,6 +98,8 @@ describe('plugin inspection', () => {
 		expect(Object.isFrozen(inspection.state))
 			.toBe(true)
 		expect(Object.isFrozen(inspection.properties))
+			.toBe(true)
+		expect(Object.isFrozen(inspection.events))
 			.toBe(true)
 		expect(Object.isFrozen(text))
 			.toBe(true)
@@ -113,18 +121,24 @@ describe('plugin inspection', () => {
 			.interfaces<{
 			state: Record<never, never>
 			properties: Record<never, never>
+			events: Record<never, never>
 		}>()
 			.state(state => state)
 			.properties(properties => properties)
+			.events(events => events)
 			.done()
 
 		expect(inspectPlugin(absent).state)
 			.toBeNull()
 		expect(inspectPlugin(absent).properties)
 			.toBeNull()
+		expect(inspectPlugin(absent).events)
+			.toBeNull()
 		expect(inspectPlugin(empty).state?.size)
 			.toBe(0)
 		expect(inspectPlugin(empty).properties?.size)
+			.toBe(0)
+		expect(inspectPlugin(empty).events?.size)
 			.toBe(0)
 	})
 
@@ -138,6 +152,10 @@ describe('plugin inspection', () => {
 				__proto__: string
 				constructor: string
 			}
+			events: {
+				__proto__: []
+				constructor: []
+			}
 		}
 
 		const special = createWidgetPlugin('inspection-special-names')
@@ -147,12 +165,16 @@ describe('plugin inspection', () => {
 				.constructor({ validate: (input): input is number => typeof input === 'number' }))
 			.properties(properties => properties[PROTO_KEY]({ valueContract: stringContract, compute: () => '__proto__' })
 				.constructor({ valueContract: stringContract, compute: () => 'constructor' }))
+			.events(events => events[PROTO_KEY]({ description: 'Prototype event' })
+				.constructor({ description: 'Constructor event' }))
 			.done()
 		const inspection = inspectPlugin(special)
 
 		expect([...inspection.state!.keys()])
 			.toEqual(['__proto__', 'constructor'])
 		expect([...inspection.properties!.keys()])
+			.toEqual(['__proto__', 'constructor'])
+		expect([...inspection.events!.keys()])
 			.toEqual(['__proto__', 'constructor'])
 	})
 
@@ -176,6 +198,8 @@ describe('plugin inspection', () => {
 				{ type: 'property', name: 'translated', valueContractId: 'example/translation-result' },
 				{ type: 'property', name: 'untyped', valueContractId: null },
 			])
+		expect(root.events)
+			.toEqual([{ type: 'event', name: 'changed', description: 'Value changed' }])
 		expect(computeCalls)
 			.toBe(0)
 	})

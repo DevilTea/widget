@@ -35,6 +35,10 @@ export type RuntimeMethodLike = ((...args: readonly unknown[]) => { readonly ok:
 	subscribeDiagnostics: (listener: (diagnostics: readonly unknown[]) => void) => () => void
 }
 
+export interface RuntimeEventLike {
+	subscribe: (listener: (...args: readonly unknown[]) => void) => () => void
+}
+
 export interface RuntimeWidgetLike {
 	readonly id: string
 	readonly type: string
@@ -47,6 +51,7 @@ export interface RuntimeWidgetLike {
 	readonly state?: Readonly<Record<string, RuntimeStateLike>>
 	readonly properties?: Readonly<Record<string, RuntimePropertyLike>>
 	readonly methods?: Readonly<Record<string, RuntimeMethodLike>>
+	readonly events?: Readonly<Record<string, RuntimeEventLike>>
 }
 
 export interface RuntimeLike {

@@ -143,18 +143,19 @@ createWidgetPlugin('counter')
 	.state(state => state /* ... */) // only if `state` is declared
 	.properties(properties => properties /* ... */) // only if `properties` is declared
 	.methods(methods => methods /* ... */) // only if `methods` is declared
+	.events(events => events /* ... */) // only if `events` is declared
 	.done()
 ```
 
 Each phase only exists on the builder chain when its capability was declared,
 so a plugin with no `slots` never exposes a `.slots()` step.
 
-`state`, `properties`, and `methods` are **not** object-map sections. Each one
+`state`, `properties`, `methods`, and `events` are **not** object-map sections. Each one
 is a keyed-chain builder: every declared member key becomes a chainable
 method on the section object, and calling it consumes that key. The section
 callback can only return once every declared key has been called exactly
 once — there is no `.define()`, `.add()`, or a framework-owned `.done()` for
-these three sections specifically (only the outer builder has `.done()`).
+these member sections specifically (only the outer builder has `.done()`).
 
 ```ts
 createWidgetPlugin('example')
@@ -725,10 +726,16 @@ inspection.state
 inspection.properties
 	?.get('label')
 // { type: 'property', name: 'label', valueContractId: string | null }
+
+inspection.events
+	?.get('change')
+// { type: 'event', name: 'change', description: string }
 ```
 
 The facade is identity-stable for the exact Plugin object and never executes
-Plugin semantics. A member map is `null` when that capability was not
+Plugin semantics. State, Property, and Event member facts with demonstrated
+pre-Blueprint consumers are projected here; this is not speculative reflection
+of every Plugin definition. A member map is `null` when that capability was not
 declared; an explicitly declared empty capability produces an empty readonly
 map. Declaration order and arbitrary string member names are preserved.
 

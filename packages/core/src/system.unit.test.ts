@@ -58,16 +58,13 @@ describe('widgetSystem catalog', () => {
 			})
 		expect(system.catalog.widgets[0]?.descriptions.slots?.get('content'))
 			.toBe('Card content')
-		expect([...system.catalog.widgets[0]!.descriptions.events!])
-			.toEqual([
-				['press', 'Card pressed'],
-				['change', 'Card value changed'],
-			])
+		expect(system.catalog.widgets[0]!.descriptions)
+			.not.toHaveProperty('events')
 		expect(system.catalog.widgets[1])
 			.toMatchObject({
 				type: 'label',
 				description: 'Label widget',
-				descriptions: { config: null, slots: null, events: null },
+				descriptions: { config: null, slots: null },
 			})
 		expect(Object.isFrozen(system.catalog))
 			.toBe(true)
