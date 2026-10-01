@@ -23,6 +23,7 @@ import {
 	LabelPlugin,
 	LeafPlugin,
 	mountWidgetBridge,
+	topologyDefinition,
 } from './test-fixtures'
 
 /**
@@ -156,6 +157,19 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 
 		expect(first)
 			.toBe(second)
+	})
+
+	it('returns one shared WidgetSlot identity across populated and explicitly-empty slot widgets', () => {
+		const populatedRuntime = createFixtureRuntime(topologyDefinition)
+		const rootBridge = mountWidgetBridge(populatedRuntime, 'root', ContainerPlugin).bridge
+		const nestedBridge = mountWidgetBridge(populatedRuntime, 'nested', ContainerPlugin).bridge
+		const emptyRuntime = createCapabilityFixtureRuntime({ id: 'es3', type: 'EmptySlots' })
+		const emptyBridge = mountWidgetBridge(emptyRuntime, 'es3', EmptySlotsPlugin).bridge
+
+		expect(nestedBridge.WidgetSlot)
+			.toBe(rootBridge.WidgetSlot)
+		expect(emptyBridge.WidgetSlot)
+			.toBe(rootBridge.WidgetSlot)
 	})
 
 	it('drops WidgetSlot entirely for a plugin with no slots capability at all (absence, not explicit-empty)', () => {
