@@ -29,6 +29,11 @@ export interface PreviewFrameDriver {
 	dispose: () => void
 }
 
+export interface PreviewFrameDriverOptions {
+	/** Exact origin that serves preview-frame.html. Defaults to the parent document's origin. */
+	readonly frameOrigin?: string
+}
+
 interface PhysicalConnection {
 	readonly generation: number
 	readonly hub: ReturnType<typeof createMessagePortChannelHub>
@@ -49,19 +54,24 @@ function createSessionId(): string {
 		.slice(2)}`
 }
 
-function frameUrl(sessionId: string, generation: number): string {
-	const url = new URL(`${import.meta.env.BASE_URL}preview-frame.html`, location.origin)
+function frameUrl(sessionId: string, generation: number, targetOrigin: string): string {
+	const url = new URL(`${import.meta.env.BASE_URL}preview-frame.html`, targetOrigin)
 	url.searchParams.set('session', sessionId)
 	url.searchParams.set('generation', String(generation))
 	return url.href
 }
 
-/** Browser-only owner of one same-origin Preview iframe and its transferred MessagePort. */
+/** Browser-only owner of one Preview iframe and its transferred MessagePort. */
 export function createPreviewFrameDriver(
 	iframe: HTMLIFrameElement,
 	presentation: () => { readonly locale: LabLocale, readonly theme: LabTheme },
+	options: PreviewFrameDriverOptions = {},
 ): PreviewFrameDriver {
 	const sessionId = createSessionId()
+	const parentOrigin = location.origin
+	const targetOrigin = new URL(options.frameOrigin ?? parentOrigin).origin
+	if (targetOrigin === 'null')
+		throw new TypeError('Preview frame origin must be a non-opaque origin.')
 	const observationListeners = new Set<(tourId: 'survey' | 'crm') => void>()
 	let generation = 0
 	let physical: PhysicalConnection | null = null
@@ -141,7 +151,7 @@ export function createPreviewFrameDriver(
 				})
 				target.postMessage(
 					createInspectorFrameBootstrapRequest(sessionId, targetGeneration),
-					location.origin,
+					targetOrigin,
 					[native.port2],
 				)
 				physical = result
@@ -150,7 +160,11 @@ export function createPreviewFrameDriver(
 			}
 			iframe.addEventListener('load', onLoad, { once: true })
 			iframe.addEventListener('error', onError, { once: true })
-			iframe.src = frameUrl(sessionId, targetGeneration)
+			// Let the child bind bootstrap to the browser-reported origin of its actual embedding parent,
+			// without disclosing this shell's path. This is an integration boundary, not a general frame
+			// allowlist or security-sandbox policy.
+			iframe.referrerPolicy = 'origin'
+			iframe.src = frameUrl(sessionId, targetGeneration, targetOrigin)
 		})
 		return connecting
 	}
