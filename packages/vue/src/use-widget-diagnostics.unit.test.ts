@@ -141,6 +141,53 @@ describe('diagnostics conformance', () => {
 		stop()
 	})
 
+	it('synchronously invalidates a property diagnostic ref once per Core diagnostic event and forwards the exact snapshot', () => {
+		const runtime = createFixtureRuntime({ id: 'd-prop-sync-invalidation', type: 'Label' })
+		const widget = getLabelWidget(runtime, 'd-prop-sync-invalidation')
+		const coreSnapshots: ReturnType<typeof widget.properties.failing.getDiagnostics>[] = []
+		const unsubscribeCoreObserver = widget.properties.failing.subscribeDiagnostics(snapshot => coreSnapshots.push(snapshot))
+		const { wrapper, bridge } = mountWidgetBridge(runtime, 'd-prop-sync-invalidation', LabelPlugin)
+		const { failing: failingDiagnostics } = bridge.usePropertyDiagnostics()
+		const initialSnapshot = widget.properties.failing.getDiagnostics()
+		const observedSnapshots: typeof coreSnapshots = []
+		const stop = watchEffect(() => {
+			observedSnapshots.push(failingDiagnostics.value)
+		}, { flush: 'sync' })
+
+		try {
+			expect(coreSnapshots)
+				.toEqual([])
+			expect(observedSnapshots)
+				.toHaveLength(1)
+			expect(observedSnapshots[0])
+				.toBe(initialSnapshot)
+			expect(initialSnapshot)
+				.toHaveLength(0)
+
+			// Evaluating this real Core Property commits exactly one diagnostic snapshot and emits one event.
+			expect(bridge.useProperties().failing.value)
+				.toBeNull()
+			expect(coreSnapshots)
+				.toHaveLength(1)
+			const diagnosticSnapshot = coreSnapshots[0]!
+			expect(diagnosticSnapshot)
+				.toBe(widget.properties.failing.getDiagnostics())
+			expect(diagnosticSnapshot.map(diagnostic => diagnostic.code))
+				.toEqual(['invalid-property-result'])
+
+			// `flush: 'sync'` makes duplicate trigger() calls observable as duplicate effect executions.
+			expect(observedSnapshots)
+				.toHaveLength(2)
+			expect(observedSnapshots[1])
+				.toBe(diagnosticSnapshot)
+		}
+		finally {
+			stop()
+			unsubscribeCoreObserver()
+			wrapper.unmount()
+		}
+	})
+
 	it('preserves the exact diagnostic snapshot for a method member', async () => {
 		const runtime = createFixtureRuntime({ id: 'd3', type: 'Counter' })
 		const widget = getCounterWidget(runtime, 'd3')
