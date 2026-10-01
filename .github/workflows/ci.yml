@@ -99,6 +99,10 @@ jobs:
         run: pnpm --filter widget-lab exec playwright install --with-deps chromium
       - name: Run browser contract suite
         run: pnpm --filter widget-lab run test:browser
+      - name: Build configured Preview host contract
+        run: VITE_PREVIEW_FRAME_ORIGIN=http://127.0.0.1:4175 pnpm --filter widget-lab... run build
+      - name: Run production Preview host contract
+        run: pnpm --filter widget-lab exec playwright test --config playwright.preview-origin.config.ts
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v6
