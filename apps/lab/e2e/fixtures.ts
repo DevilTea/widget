@@ -26,12 +26,14 @@ import { test as base, expect } from '@playwright/test'
  * rather than a second fixture file, keeping "which specs see the welcome card" declared in one place.
  */
 export const test = base.extend<{
+	additionalRequestOrigin: string | null
 	blockedRequestUrls: string[]
 	expectedRequestOrigin: string | null
 	offOriginRequestUrls: string[]
 	welcomeDismissed: boolean
 }>({
 	welcomeDismissed: [true, { option: true }],
+	additionalRequestOrigin: [null, { option: true }],
 	expectedRequestOrigin: [null, { option: true }],
 
 	// Populated by the `page` fixture below as requests are blocked; a plain array captured by
@@ -48,6 +50,7 @@ export const test = base.extend<{
 	},
 
 	page: async ({
+		additionalRequestOrigin,
 		baseURL,
 		blockedRequestUrls,
 		context,
@@ -56,6 +59,9 @@ export const test = base.extend<{
 		page,
 	}, use) => {
 		const expectedOrigin = new URL(expectedRequestOrigin ?? baseURL ?? 'http://localhost:4173').origin
+		const additionalOrigin = additionalRequestOrigin === null
+			? null
+			: new URL(additionalRequestOrigin).origin
 		await context.route('**/*', async (route) => {
 			const url = route.request()
 				.url()
@@ -65,6 +71,7 @@ export const test = base.extend<{
 				|| parsedUrl.protocol === 'data:'
 				|| parsedUrl.protocol === 'about:'
 				|| parsedUrl.origin === expectedOrigin
+				|| parsedUrl.origin === additionalOrigin
 			) {
 				await route.continue()
 				return
