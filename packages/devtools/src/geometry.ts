@@ -192,7 +192,7 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 		const elementFromPoint = hitTestRoot.elementFromPoint?.bind(hitTestRoot)
 		if (elementFromPoint !== undefined) {
 			const element = elementFromPoint(point.x, point.y)
-			return element === null ? null : nearestSemanticAnchor(element)
+			return element == null ? null : nearestSemanticAnchor(element)
 		}
 		return fallbackHitTarget(point)
 	}

@@ -576,6 +576,81 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
+	it('uses ShadowRoot.elementFromPoint to reject a covered Widget when the stack API is unavailable', async () => {
+		const fixture = createGeometryFixture({ shadowRoot: true })
+		const tree = fixture.root.getRootNode() as ShadowRoot
+		const overlay = document.createElement('div')
+		tree.append(overlay)
+		const shadowStack = Object.getOwnPropertyDescriptor(tree, 'elementsFromPoint')
+		const shadowSingle = Object.getOwnPropertyDescriptor(tree, 'elementFromPoint')
+		const shadowElementFromPoint = vi.fn(() => overlay)
+		try {
+			Object.defineProperty(tree, 'elementsFromPoint', {
+				configurable: true,
+				value: undefined,
+			})
+			Object.defineProperty(tree, 'elementFromPoint', {
+				configurable: true,
+				value: shadowElementFromPoint,
+			})
+
+			await expect(fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			}))
+				.resolves.toEqual({ target: null })
+			expect(shadowElementFromPoint)
+				.toHaveBeenCalledWith(15, 25)
+		}
+		finally {
+			if (shadowStack !== undefined)
+				Object.defineProperty(tree, 'elementsFromPoint', shadowStack)
+			else Reflect.deleteProperty(tree, 'elementsFromPoint')
+			if (shadowSingle !== undefined)
+				Object.defineProperty(tree, 'elementFromPoint', shadowSingle)
+			else Reflect.deleteProperty(tree, 'elementFromPoint')
+			overlay.remove()
+			fixture.dispose()
+		}
+	})
+
+	it('treats an undefined ShadowRoot.elementFromPoint result as no hit without rectangle fallback', async () => {
+		const fixture = createGeometryFixture({ shadowRoot: true })
+		const tree = fixture.root.getRootNode() as ShadowRoot
+		const shadowStack = Object.getOwnPropertyDescriptor(tree, 'elementsFromPoint')
+		const shadowSingle = Object.getOwnPropertyDescriptor(tree, 'elementFromPoint')
+		const shadowElementFromPoint = vi.fn(() => undefined)
+		try {
+			Object.defineProperty(tree, 'elementsFromPoint', {
+				configurable: true,
+				value: undefined,
+			})
+			Object.defineProperty(tree, 'elementFromPoint', {
+				configurable: true,
+				value: shadowElementFromPoint,
+			})
+
+			await expect(fixture.client.request('inspect.hitTest', {
+				coordinateSpace: 'preview-viewport',
+				x: 15,
+				y: 25,
+			}))
+				.resolves.toEqual({ target: null })
+			expect(shadowElementFromPoint)
+				.toHaveBeenCalledWith(15, 25)
+		}
+		finally {
+			if (shadowStack !== undefined)
+				Object.defineProperty(tree, 'elementsFromPoint', shadowStack)
+			else Reflect.deleteProperty(tree, 'elementsFromPoint')
+			if (shadowSingle !== undefined)
+				Object.defineProperty(tree, 'elementFromPoint', shadowSingle)
+			else Reflect.deleteProperty(tree, 'elementFromPoint')
+			fixture.dispose()
+		}
+	})
+
 	it('removes every ShadowRoot event listener with the exact registered callback on Inspector teardown', () => {
 		const add = vi.spyOn(ShadowRoot.prototype, 'addEventListener')
 		const remove = vi.spyOn(ShadowRoot.prototype, 'removeEventListener')
