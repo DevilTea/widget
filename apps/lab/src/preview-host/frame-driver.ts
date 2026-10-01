@@ -29,6 +29,19 @@ export interface PreviewFrameDriver {
 	dispose: () => void
 }
 
+export interface PreviewFrameDriverOptions {
+	readonly readinessTimeoutMs?: number
+}
+
+const DEFAULT_PREVIEW_READINESS_TIMEOUT_MS = 15_000
+
+class PreviewFrameReadinessTimeoutError extends Error {
+	constructor(timeoutMs: number) {
+		super(`Preview iframe did not become ready within ${timeoutMs} ms.`)
+		this.name = 'PreviewFrameReadinessTimeoutError'
+	}
+}
+
 interface PhysicalConnection {
 	readonly generation: number
 	readonly hub: ReturnType<typeof createMessagePortChannelHub>
@@ -60,7 +73,11 @@ function frameUrl(sessionId: string, generation: number): string {
 export function createPreviewFrameDriver(
 	iframe: HTMLIFrameElement,
 	presentation: () => { readonly locale: LabLocale, readonly theme: LabTheme },
+	options: PreviewFrameDriverOptions = {},
 ): PreviewFrameDriver {
+	const readinessTimeoutMs = options.readinessTimeoutMs ?? DEFAULT_PREVIEW_READINESS_TIMEOUT_MS
+	if (!Number.isFinite(readinessTimeoutMs) || readinessTimeoutMs <= 0)
+		throw new TypeError('Preview frame readiness timeout must be a positive finite number.')
 	const sessionId = createSessionId()
 	const observationListeners = new Set<(tourId: 'survey' | 'crm') => void>()
 	let generation = 0
@@ -85,6 +102,25 @@ export function createPreviewFrameDriver(
 			return
 		generation++
 		teardownPhysical()
+	}
+
+	async function awaitReadiness<T>(current: PhysicalConnection, operation: Promise<T>): Promise<T> {
+		let timeout: ReturnType<typeof setTimeout> | null = null
+		const deadline = new Promise<never>((_resolve, reject) => {
+			timeout = setTimeout(() => reject(new PreviewFrameReadinessTimeoutError(readinessTimeoutMs)), readinessTimeoutMs)
+		})
+		try {
+			return await Promise.race([operation, deadline])
+		}
+		catch (cause) {
+			if (cause instanceof PreviewFrameReadinessTimeoutError && physical === current)
+				teardownPhysical()
+			throw cause
+		}
+		finally {
+			if (timeout !== null)
+				clearTimeout(timeout)
+		}
 	}
 
 	iframe.addEventListener('load', onFrameLoad)
@@ -157,19 +193,21 @@ export function createPreviewFrameDriver(
 
 	async function mount(descriptor: PreviewHostDescriptor): Promise<PreviewFrameConnection> {
 		const current = await connect()
-		const currentPresentation = presentation()
-		current.hostClient.updatePresentation(currentPresentation.locale, currentPresentation.theme)
-		const mounted = await current.hostClient.mount(sessionId, current.generation, descriptor)
-		await current.inspectorClient.handshake()
-		const blueprint = await current.inspectorClient.request('blueprint.getSnapshot', { runtimeId: mounted.runtimeId })
-		return {
-			generation: current.generation,
-			revision: mounted.revision,
-			runtimeId: mounted.runtimeId,
-			blueprint,
-			inspectorClient: current.inspectorClient,
-			hostClient: current.hostClient,
-		}
+		return await awaitReadiness(current, (async () => {
+			const currentPresentation = presentation()
+			current.hostClient.updatePresentation(currentPresentation.locale, currentPresentation.theme)
+			const mounted = await current.hostClient.mount(sessionId, current.generation, descriptor)
+			await current.inspectorClient.handshake()
+			const blueprint = await current.inspectorClient.request('blueprint.getSnapshot', { runtimeId: mounted.runtimeId })
+			return {
+				generation: current.generation,
+				revision: mounted.revision,
+				runtimeId: mounted.runtimeId,
+				blueprint,
+				inspectorClient: current.inspectorClient,
+				hostClient: current.hostClient,
+			}
+		})())
 	}
 
 	return {
