@@ -13,6 +13,7 @@
  * to the actual async `loadTourDefault()` boundary.
  */
 
+import type { PreviewFrameConnection, PreviewFrameDriver } from '../preview-host/frame-driver'
 import type { ImplementationExplorerStore } from './use-implementation-explorer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { shallowRef } from 'vue'
@@ -43,6 +44,60 @@ function createDeferred<T>(): { promise: Promise<T>, resolve: (value: T) => void
  */
 async function flush(): Promise<void> {
 	await new Promise(resolve => setTimeout(resolve, 0))
+}
+
+interface DeferredTutorialEvaluation {
+	tourId: 'survey' | 'crm'
+	stepIndex: number
+	progress: number
+	resolve: (progress: number) => void
+}
+
+function previewConnection(revision: number): PreviewFrameConnection {
+	const runtimeId = `runtime-${revision}`
+	return {
+		generation: 1,
+		revision,
+		runtimeId,
+		blueprint: { runtimeId, rootNodeId: 0, nodes: [], invalidCycles: [] },
+		inspectorClient: {} as PreviewFrameConnection['inspectorClient'],
+		hostClient: {} as PreviewFrameConnection['hostClient'],
+	}
+}
+
+function createFakePreviewDriver(): {
+	driver: PreviewFrameDriver
+	evaluations: DeferredTutorialEvaluation[]
+	emitTutorialObservation: (tourId: 'survey' | 'crm') => void
+} {
+	const evaluations: DeferredTutorialEvaluation[] = []
+	const observationListeners = new Set<(tourId: 'survey' | 'crm') => void>()
+	const driver: PreviewFrameDriver = {
+		mount: async descriptor => previewConnection(descriptor.revision),
+		updatePresentation: () => {},
+		setTutorialSpotlight: () => {},
+		evaluateTutorial: (tourId, stepIndex, progress) => {
+			// The first step has an unconditional stage so the test can advance to a predicate-backed step.
+			if (stepIndex === 0)
+				return Promise.resolve(1)
+
+			return new Promise<number>((resolve) => {
+				evaluations.push({ tourId, stepIndex, progress, resolve })
+			})
+		},
+		onTutorialObservation: (listener) => {
+			observationListeners.add(listener)
+			return () => observationListeners.delete(listener)
+		},
+		dispose: () => {},
+	}
+	return {
+		driver,
+		evaluations,
+		emitTutorialObservation: (tourId) => {
+			for (const listener of [...observationListeners]) listener(tourId)
+		},
+	}
 }
 
 beforeEach(() => {
@@ -200,6 +255,58 @@ describe('createTutorialStore() duplicate start requests', () => {
 			.toBe(false)
 		expect(tutorial.snapshot.value.status)
 			.toBe('active')
+
+		store.dispose()
+	})
+})
+
+describe('createTutorialStore() Preview recheck ordering', () => {
+	it('ignores an older completed response after a newer response reports no progress', async () => {
+		const store = createLabStore()
+		await store.switchShowcase('survey')
+		const preview = createFakePreviewDriver()
+		store.previewHost.attachDriver(preview.driver)
+		await vi.waitFor(() => expect(store.previewHost.connection.value)
+			.not.toBeNull())
+
+		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+		tutorial.requestStart()
+		await vi.waitFor(() => expect(tutorial.snapshot.value.canAdvance)
+			.toBe(true))
+		tutorial.next()
+
+		expect(tutorial.snapshot.value.stepIndex)
+			.toBe(1)
+		// A frame observation requests another evaluation of the same active step while the first is pending.
+		preview.emitTutorialObservation('survey')
+		await vi.waitFor(() => expect(preview.evaluations.filter(evaluation => evaluation.stepIndex === 1).length)
+			.toBeGreaterThanOrEqual(2))
+
+		const stepRechecks = preview.evaluations.filter(evaluation => evaluation.tourId === 'survey' && evaluation.stepIndex === 1)
+		const newest = stepRechecks.at(-1)!
+		const older = stepRechecks.slice(0, -1)
+		expect(newest.progress)
+			.toBe(0)
+		expect(older.length)
+			.toBeGreaterThanOrEqual(1)
+
+		// The later frame evaluation observes no completion for the currently active step.
+		newest.resolve(0)
+		await flush()
+		expect(tutorial.snapshot.value.revealed)
+			.toHaveLength(0)
+		expect(tutorial.snapshot.value.canAdvance)
+			.toBe(false)
+
+		// Earlier evaluations still carry a completed result, but their responses are stale now.
+		for (const evaluation of older) evaluation.resolve(1)
+		await flush()
+		expect(tutorial.snapshot.value.stepIndex)
+			.toBe(1)
+		expect(tutorial.snapshot.value.revealed)
+			.toHaveLength(0)
+		expect(tutorial.snapshot.value.canAdvance)
+			.toBe(false)
 
 		store.dispose()
 	})
