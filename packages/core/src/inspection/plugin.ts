@@ -8,6 +8,7 @@
 import type { AnyWidgetPlugin } from '../plugin'
 import type {
 	PluginInspection,
+	PluginInspectionEventMember,
 	PluginInspectionPropertyMember,
 	PluginInspectionStateMember,
 } from './types'
@@ -48,6 +49,22 @@ function buildPropertyMembers(plugin: AnyWidgetPlugin): PluginInspection['proper
 	return createReadonlyMap(members)
 }
 
+function buildEventMembers(plugin: AnyWidgetPlugin): PluginInspection['events'] {
+	const definitions = readWidgetPluginDefinition(plugin).events
+	if (definitions === null)
+		return null
+
+	const members: Array<readonly [string, PluginInspectionEventMember]> = []
+	for (const [name, definition] of definitions) {
+		members.push([name, Object.freeze({
+			type: 'event' as const,
+			name,
+			description: definition.description,
+		})])
+	}
+	return createReadonlyMap(members)
+}
+
 /**
  * Returns an identity-stable, readonly/passive projection for the exact completed Plugin object.
  */
@@ -59,6 +76,7 @@ export function inspectPlugin(plugin: AnyWidgetPlugin): PluginInspection {
 	const inspection: PluginInspection = Object.freeze({
 		state: buildStateMembers(plugin),
 		properties: buildPropertyMembers(plugin),
+		events: buildEventMembers(plugin),
 	})
 	inspectionCache.set(plugin, inspection)
 	return inspection

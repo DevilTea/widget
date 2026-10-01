@@ -47,11 +47,19 @@ export interface PluginInspectionPropertyMember {
 	readonly valueContractId: string | null
 }
 
+export interface PluginInspectionEventMember {
+	readonly type: 'event'
+	readonly name: WidgetMemberKey
+	readonly description: string
+}
+
 export interface PluginInspection {
 	/** Null means the State capability was not declared; an empty map means explicitly declared empty. */
 	readonly state: ReadonlyMap<WidgetMemberKey, PluginInspectionStateMember> | null
 	/** Null means the Properties capability was not declared; an empty map means explicitly declared empty. */
 	readonly properties: ReadonlyMap<WidgetMemberKey, PluginInspectionPropertyMember> | null
+	/** Null means the Events capability was not declared; an empty map means explicitly declared empty. */
+	readonly events: ReadonlyMap<WidgetMemberKey, PluginInspectionEventMember> | null
 }
 
 // -------------------------------------------------------------------------------------------------

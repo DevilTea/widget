@@ -94,10 +94,12 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	}
 
 	if (capabilities.events) {
+		const events = widget.events!
 		let emitter: WidgetIntegrationEventEmitter | undefined
 		result.emit = createLazyKeyedSurface((key) => {
-			// The immutable plugin inventory distinguishes unknown keys without touching the Runtime.
-			if (!plugin.descriptions.events?.has(key))
+			// The Runtime Event surface is the authoritative declared member inventory. Looking up a key
+			// is passive and does not subscribe or acquire emit authority.
+			if (events[key] === undefined)
 				return undefined
 			// Materializing a callable must remain passive; only invoking it acquires the Core emitter.
 			return (...args: readonly unknown[]) => {

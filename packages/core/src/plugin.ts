@@ -189,7 +189,6 @@ export interface WidgetPlugin<
 	readonly descriptions: {
 		readonly config: string | null
 		readonly slots: ReadonlyMap<WidgetMemberKey, string> | null
-		readonly events: ReadonlyMap<WidgetMemberKey, string> | null
 	}
 	readonly [widgetPluginBrand]: WidgetPluginBrand<Interfaces>
 }
@@ -672,9 +671,6 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 				slots: definition.slots === null
 					? null
 					: createReadonlyMap([...definition.slots].map(([key, slot]) => [key, slot.description] as const)),
-				events: definition.events === null
-					? null
-					: createReadonlyMap([...definition.events].map(([key, event]) => [key, event.description] as const)),
 			})
 
 			return Object.freeze({

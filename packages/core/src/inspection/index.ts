@@ -31,6 +31,7 @@ export type {
 	InspectionObservable,
 	InvalidBlueprintInspectionDependency,
 	PluginInspection,
+	PluginInspectionEventMember,
 	PluginInspectionPropertyMember,
 	PluginInspectionStateMember,
 	ResolvedBlueprintInspectionDependency,

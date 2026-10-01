@@ -19,7 +19,6 @@ export interface WidgetCatalogEntry {
 	readonly descriptions: {
 		readonly config: string | null
 		readonly slots: ReadonlyMap<string, string> | null
-		readonly events: ReadonlyMap<string, string> | null
 	}
 }
 
@@ -87,9 +86,6 @@ export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple>(
 				slots: plugin.descriptions.slots === null
 					? null
 					: createReadonlyMap(plugin.descriptions.slots),
-				events: plugin.descriptions.events === null
-					? null
-					: createReadonlyMap(plugin.descriptions.events),
 			}),
 		}))),
 	})

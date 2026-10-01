@@ -482,10 +482,8 @@ describe('events capability typestate and tuple contract', () => {
 		const plugin = afterEvents.done()
 		expect(plugin.capabilities.events)
 			.toBe(true)
-		expect(plugin.descriptions.events?.get('press'))
-			.toBe('Pressed')
-		expect(plugin.descriptions.events?.get('change'))
-			.toBe('Value changed')
+		expect(plugin.descriptions)
+			.not.toHaveProperty('events')
 	})
 
 	it('requires every declared event member to be consumed before done', () => {
@@ -504,9 +502,8 @@ describe('events capability typestate and tuple contract', () => {
 			.done()
 		expect(present.capabilities.events)
 			.toBe(true)
-		expect(present.descriptions.events).not.toBeNull()
-		expect(present.descriptions.events?.size)
-			.toBe(0)
+		expect(present.descriptions)
+			.not.toHaveProperty('events')
 
 		const absent = createWidgetPlugin('events-absent')
 			.description('Test widget')
@@ -514,8 +511,8 @@ describe('events capability typestate and tuple contract', () => {
 			.done()
 		expect(absent.capabilities.events)
 			.toBe(false)
-		expect(absent.descriptions.events)
-			.toBeNull()
+		expect(absent.descriptions)
+			.not.toHaveProperty('events')
 	})
 })
 
