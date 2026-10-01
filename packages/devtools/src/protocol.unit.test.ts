@@ -3,6 +3,7 @@ import {
 	INSPECTOR_PROTOCOL_VERSION,
 	isCompatibleProtocolVersion,
 	isInspectorRequestResult,
+	parseInspectorEventMessage,
 	parseInspectorRequestMessage,
 	parseInspectorResponseMessage,
 } from './protocol'
@@ -95,6 +96,102 @@ describe('deep wire DTO validation', () => {
 			invalidCycles: [{ members: [{ nodeId: 1, member: { type: 'state', name: 'not-valid-in-cycle' } }] }],
 		}))
 			.toBe(false)
+	})
+
+	it('rejects cyclic RuntimeDiagnostic cause chains without throwing', () => {
+		const diagnostic: Record<string, unknown> = {
+			code: 'dependency-target-failed',
+			message: 'Dependency failed.',
+			location: { type: 'property', widgetId: 'root', name: 'value' },
+		}
+		diagnostic.cause = diagnostic
+		const event = {
+			protocol: INSPECTOR_PROTOCOL_VERSION,
+			kind: 'event',
+			event: 'runtime.memberChanged',
+			payload: {
+				subscriptionId: 'member-1',
+				ref: { runtimeId: 'runtime-a', nodeId: 1 },
+				member: {
+					type: 'property',
+					name: 'value',
+					snapshot: {
+						status: 'completed',
+						result: { ok: false, diagnostics: [diagnostic] },
+					},
+				},
+			},
+		}
+
+		let parsed: ReturnType<typeof parseInspectorEventMessage> | undefined
+		expect(() => {
+			parsed = parseInspectorEventMessage(event)
+		})
+			.not.toThrow()
+		expect(parsed)
+			.toBeNull()
+	})
+
+	it('accepts deep acyclic and shared RuntimeDiagnostic cause objects', () => {
+		const leaf = {
+			code: 'leaf',
+			message: 'Leaf diagnostic.',
+			location: { type: 'property', widgetId: 'root', name: 'value' },
+		}
+		const first = {
+			code: 'first',
+			message: 'First diagnostic.',
+			location: { type: 'property', widgetId: 'root', name: 'value' },
+			cause: leaf,
+		}
+		const second = {
+			code: 'second',
+			message: 'Second diagnostic.',
+			location: { type: 'property', widgetId: 'root', name: 'value' },
+			cause: leaf,
+		}
+		const eventFor = (diagnostics: readonly unknown[]) => ({
+			protocol: INSPECTOR_PROTOCOL_VERSION,
+			kind: 'event',
+			event: 'runtime.memberChanged',
+			payload: {
+				subscriptionId: 'member-shared',
+				ref: { runtimeId: 'runtime-a', nodeId: 1 },
+				member: {
+					type: 'property',
+					name: 'value',
+					snapshot: {
+						status: 'completed',
+						result: { ok: false, diagnostics },
+					},
+				},
+			},
+		})
+
+		const sharedEvent = eventFor([first, second])
+		expect(parseInspectorEventMessage(sharedEvent))
+			.toBe(sharedEvent)
+
+		const deepRoot: Record<string, unknown> = {
+			code: 'deep-0',
+			message: 'Deep diagnostic.',
+			location: { type: 'property', widgetId: 'root', name: 'value' },
+		}
+		let cursor = deepRoot
+		for (let index = 1; index <= 20_000; index++) {
+			const next: Record<string, unknown> = {
+				code: `deep-${index}`,
+				message: 'Deep diagnostic.',
+				location: { type: 'property', widgetId: 'root', name: 'value' },
+			}
+			cursor.cause = next
+			cursor = next
+		}
+		const deepEvent = eventFor([deepRoot])
+		expect(() => parseInspectorEventMessage(deepEvent))
+			.not.toThrow()
+		expect(parseInspectorEventMessage(deepEvent))
+			.toBe(deepEvent)
 	})
 
 	it('rejects unknown handshake events, unknown error codes, and malformed failed Runtime diagnostics', () => {

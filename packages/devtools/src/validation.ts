@@ -255,7 +255,7 @@ export function isRuntimeDiagnosticLocation(value: unknown): value is InspectorR
 		&& typeof value.name === 'string'
 }
 
-export function isRuntimeDiagnostic(value: unknown): value is InspectorRuntimeDiagnostic {
+function hasValidRuntimeDiagnosticFields(value: unknown): value is Omit<InspectorRuntimeDiagnostic, 'cause'> & { readonly cause?: unknown } {
 	return isRecord(value)
 		&& typeof value.code === 'string'
 		&& typeof value.message === 'string'
@@ -268,7 +268,22 @@ export function isRuntimeDiagnostic(value: unknown): value is InspectorRuntimeDi
 		&& (value.result === undefined || isInspectableValue(value.result))
 		&& (value.args === undefined || (Array.isArray(value.args) && value.args.every(isInspectableValue)))
 		&& (value.related === undefined || (Array.isArray(value.related) && value.related.every(isRuntimeDiagnosticLocation)))
-		&& (value.cause === undefined || isRuntimeDiagnostic(value.cause))
+}
+
+export function isRuntimeDiagnostic(value: unknown): value is InspectorRuntimeDiagnostic {
+	const ancestors = new Set<object>()
+	let current: unknown = value
+
+	while (true) {
+		if (!hasValidRuntimeDiagnosticFields(current))
+			return false
+		if (ancestors.has(current))
+			return false
+		if (current.cause === undefined)
+			return true
+		ancestors.add(current)
+		current = current.cause
+	}
 }
 
 export function isRuntimeMemberSnapshot(value: unknown): value is InspectorRuntimeMemberSnapshot {
