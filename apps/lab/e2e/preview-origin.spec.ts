@@ -1,5 +1,7 @@
 import { expect, previewFrame, test } from './fixtures'
 
+test.use({ additionalRequestOrigin: 'http://127.0.0.1:4175' })
+
 test('built PreviewPanel uses the configured cross-origin Preview host', async ({ page }) => {
 	await page.goto('/')
 	await page.getByRole('tab', { name: 'Preview' })
