@@ -140,6 +140,44 @@ describe('inspector protocol validation', () => {
 			.toBeNull()
 	})
 
+	it('short-circuits wide InspectableValue containers before reading later siblings', () => {
+		const siblingWidth = 100_000
+		for (const containerType of ['array', 'object'] as const) {
+			let siblingReads = 0
+			const children = new Proxy([] as unknown[], {
+				get(target, property, receiver) {
+					if (property === 'length')
+						return siblingWidth
+					if (typeof property === 'string' && /^\d+$/.test(property)) {
+						siblingReads++
+						const value = property === '0' ? { type: 'invalid' } : { type: 'null' }
+						return containerType === 'array' ? value : { key: property, value }
+					}
+					return Reflect.get(target, property, receiver)
+				},
+			})
+			const value = containerType === 'array'
+				? { type: 'array', id: 1, items: children, truncated: false }
+				: { type: 'object', id: 1, entries: children, truncated: false }
+			const event = {
+				protocol: INSPECTOR_PROTOCOL_VERSION,
+				kind: 'event',
+				event: 'runtime.eventOccurred',
+				payload: {
+					subscriptionId: `event-wide-invalid-${containerType}`,
+					ref: { runtimeId: 'runtime-a', nodeId: 1 },
+					event: 'changed',
+					args: [value],
+				},
+			}
+
+			expect(parseInspectorEventMessage(event))
+				.toBeNull()
+			expect(siblingReads)
+				.toBe(1)
+		}
+	})
+
 	it('uses major-version compatibility while allowing minor-version capability negotiation', () => {
 		expect(isCompatibleProtocolVersion({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: 999 }))
 			.toBe(true)

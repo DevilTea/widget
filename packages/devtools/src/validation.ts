@@ -70,7 +70,20 @@ export function isPath(value: unknown): value is readonly (string | number)[] {
 
 type InspectableValueValidationFrame
 	= | { readonly kind: 'value', readonly value: unknown }
-		| { readonly kind: 'leave', readonly value: object }
+		| {
+			readonly kind: 'array'
+			readonly value: object
+			readonly items: unknown[]
+			readonly index: number
+			readonly length: number
+		}
+		| {
+			readonly kind: 'object'
+			readonly value: object
+			readonly entries: unknown[]
+			readonly index: number
+			readonly length: number
+		}
 
 export function isInspectableValue(value: unknown): value is InspectableValue {
 	const ancestors = new Set<object>()
@@ -78,8 +91,25 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 
 	while (stack.length > 0) {
 		const frame = stack.pop()!
-		if (frame.kind === 'leave') {
-			ancestors.delete(frame.value)
+		if (frame.kind === 'array') {
+			if (frame.index === frame.length) {
+				ancestors.delete(frame.value)
+				continue
+			}
+			stack.push({ ...frame, index: frame.index + 1 })
+			stack.push({ kind: 'value', value: frame.items[frame.index] })
+			continue
+		}
+		if (frame.kind === 'object') {
+			if (frame.index === frame.length) {
+				ancestors.delete(frame.value)
+				continue
+			}
+			const entry = frame.entries[frame.index]
+			if (!isRecord(entry) || typeof entry.key !== 'string')
+				return false
+			stack.push({ ...frame, index: frame.index + 1 })
+			stack.push({ kind: 'value', value: entry.value })
 			continue
 		}
 
@@ -119,9 +149,13 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 				if (ancestors.has(candidate))
 					return false
 				ancestors.add(candidate)
-				stack.push({ kind: 'leave', value: candidate })
-				for (let index = candidate.items.length - 1; index >= 0; index--)
-					stack.push({ kind: 'value', value: candidate.items[index] })
+				stack.push({
+					kind: 'array',
+					value: candidate,
+					items: candidate.items,
+					index: 0,
+					length: candidate.items.length,
+				})
 				break
 			case 'object':
 				if (!isNodeId(candidate.id) || !Array.isArray(candidate.entries) || typeof candidate.truncated !== 'boolean')
@@ -129,13 +163,13 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 				if (ancestors.has(candidate))
 					return false
 				ancestors.add(candidate)
-				stack.push({ kind: 'leave', value: candidate })
-				for (let index = candidate.entries.length - 1; index >= 0; index--) {
-					const entry = candidate.entries[index]
-					if (!isRecord(entry) || typeof entry.key !== 'string')
-						return false
-					stack.push({ kind: 'value', value: entry.value })
-				}
+				stack.push({
+					kind: 'object',
+					value: candidate,
+					entries: candidate.entries,
+					index: 0,
+					length: candidate.entries.length,
+				})
 				break
 			case 'reference':
 				if (!isNodeId(candidate.ref))
