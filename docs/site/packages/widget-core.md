@@ -696,6 +696,37 @@ catch (error) {
 }
 ```
 
+## Renderer adapter integration
+
+`@deviltea/widget-core/integration` is a deliberately narrow adapter-only subpath.
+It is not re-exported from the package root. Renderer integrations use
+`getWidgetEventEmitter(runtime, widget)` to obtain scoped Event emit authority;
+ordinary Runtime consumers remain subscribe-only.
+
+Passing a `RuntimeWidget` from a different Runtime instance is rejected with a
+stable coded integration exception:
+
+```ts
+import {
+	getWidgetEventEmitter,
+	WidgetIntegrationError,
+} from '@deviltea/widget-core/integration'
+
+try {
+	getWidgetEventEmitter(runtime, widget)
+}
+catch (error) {
+	if (error instanceof WidgetIntegrationError
+		&& error.code === 'runtime-widget-mismatch') {
+		// Adapter supplied a RuntimeWidget owned by another Runtime instance.
+	}
+}
+```
+
+The error message is descriptive only; consumers discriminate by class and
+`code`. Runtime disposal continues to use `WidgetSystemRuntimeDisposedError`
+rather than being wrapped as an integration error.
+
 ## Inspection (DevTools)
 
 `@deviltea/widget-core/inspection` is a dedicated, strictly readonly subpath
