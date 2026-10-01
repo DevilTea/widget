@@ -20,12 +20,8 @@ vi.mock('@deviltea/widget-core/inspection', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('@deviltea/widget-core/inspection')>()
 
 	function observeUnsubscribe(unsubscribe: () => void, observed: () => void): () => void {
-		let active = true
 		return () => {
-			if (active) {
-				active = false
-				observed()
-			}
+			observed()
 			unsubscribe()
 		}
 	}
