@@ -26,8 +26,9 @@ export default defineConfig({
 	webServer: {
 		// Run VitePress directly rather than forwarding CLI arguments through the docs package script;
 		// bind IPv4 explicitly so the readiness probe and preview server share the same address family.
+		// Never attach to an arbitrary local process that happens to own this port.
 		command: 'pnpm --dir ../../docs/site exec vitepress preview . --host 127.0.0.1 --port 4174',
 		url: 'http://127.0.0.1:4174/widget/',
-		reuseExistingServer: !process.env.CI,
+		reuseExistingServer: false,
 	},
 })

@@ -9,8 +9,8 @@ import { defineConfig, devices } from '@playwright/test'
  * this suite continues to cover the default same-origin Lab setup.
  *
  * `webServer` only serves these targets; it does not build `dist/`. CI's `browser-contracts` job builds
- * first, and local runs must run `pnpm --filter widget-lab... run build` before this suite. Each server
- * can reuse an already-running instance on its own port when `reuseExistingServer` is enabled.
+ * first, and local runs must run `pnpm --filter widget-lab... run build` before this suite. The suite
+ * always owns these ports; a pre-existing process must fail startup rather than being silently reused.
  *
  * Chromium only for this first iteration (issue #28 non-goals: "exhaustive cross-browser matrix in the
  * first iteration").
@@ -41,12 +41,12 @@ export default defineConfig({
 		{
 			command: 'pnpm run preview -- --port 4173 --strictPort',
 			port: 4173,
-			reuseExistingServer: !process.env.CI,
+			reuseExistingServer: false,
 		},
 		{
 			command: 'pnpm exec vite --host 127.0.0.1 --port 4174 --strictPort',
 			port: 4174,
-			reuseExistingServer: !process.env.CI,
+			reuseExistingServer: false,
 		},
 	],
 })
