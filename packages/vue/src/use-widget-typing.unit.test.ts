@@ -3,6 +3,12 @@
  * exact capability/member/slot inference and the absent-vs-explicitly-empty distinction.
  */
 
+import type {
+	RuntimeMethodDiagnostic,
+	RuntimePropertyDiagnostic,
+	RuntimeStateDiagnostic,
+	RuntimeWidgetDiagnostic,
+} from '@deviltea/widget-core'
 import type { Ref } from 'vue'
 import type {
 	ContainerPlugin,
@@ -140,5 +146,20 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 		expectTypeOf<ReadonlyRef<number>>()
 			.toHaveProperty('value')
 		expectTypeOf<ReadonlyRef<number>>().not.toHaveProperty('effect')
+
+		type CounterResult = UseWidgetResult<typeof CounterPlugin>
+		type LabelResult = UseWidgetResult<typeof LabelPlugin>
+
+		// Check the actual public accessor results against the promised abstraction. Exact type equality
+		// rejects a ComputedRef widening (which is assignable to ReadonlyRef but adds `.effect`) without
+		// prescribing which Ref factory backs the projection at runtime.
+		expectTypeOf<ReturnType<CounterResult['useStateDiagnostics']>['count']>()
+			.toEqualTypeOf<ReadonlyRef<readonly RuntimeStateDiagnostic[]>>()
+		expectTypeOf<ReturnType<LabelResult['usePropertyDiagnostics']>['failing']>()
+			.toEqualTypeOf<ReadonlyRef<readonly RuntimePropertyDiagnostic[]>>()
+		expectTypeOf<ReturnType<CounterResult['useMethodDiagnostics']>['increment']>()
+			.toEqualTypeOf<ReadonlyRef<readonly RuntimeMethodDiagnostic[]>>()
+		expectTypeOf<ReturnType<CounterResult['useDiagnostics']>>()
+			.toEqualTypeOf<ReadonlyRef<readonly RuntimeWidgetDiagnostic[]>>()
 	})
 })
