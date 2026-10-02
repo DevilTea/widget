@@ -125,12 +125,10 @@ async function openReleasePullRequest(id: string, release: string, autoConfirm: 
 
 	const url = (await $`gh pr create --base main --head ${branch} --title ${`chore(${id}): release v${version}`} --body ${body}`).stdout.trim()
 
-	await $`gh pr merge ${url} --auto --squash --delete-branch`
-
 	await git('switch', 'main')
 
-	outro(`Pull request opened with auto-merge: ${url}`)
-	log.info(`It merges once the required checks pass; then run \`pnpm release:tag ${id}\`.`)
+	outro(`Pull request opened: ${url}`)
+	log.info(`Merge it after the required checks pass; then run \`pnpm release:tag ${id}\`.`)
 }
 
 async function pushReleaseTag(id: string, autoConfirm: boolean) {
