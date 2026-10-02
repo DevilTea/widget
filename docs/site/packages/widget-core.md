@@ -178,7 +178,7 @@ For example, State can explicitly opt in to authored initial overrides, and a
 Property can declare a stable semantic value contract:
 
 ```ts
-const stringValue = createWidgetValueContract<string>('example/string')
+import { stringValueContract } from '@example/integration/widget-contracts'
 
 createWidgetPlugin('example')
 	.description('An example widget')
@@ -190,18 +190,33 @@ createWidgetPlugin('example')
 		}))
 	.properties(properties => properties
 		.label({
-			valueContract: stringValue,
+			valueContract: stringValueContract,
 			compute: () => 'Example',
 		}))
 	.done()
 ```
 
-`createWidgetValueContract<T>(id)` is a typed Plugin-authoring descriptor.
-The generic `T` prevents assigning an incompatible contract to a Property;
-the runtime/integration identity is only the stable string `id`. Core does
-not interpret, register, validate, or schema-check contract IDs, and Property
-values do not become JSON-only. Omitting `valueContract` simply means there
-is no declared inspectable value contract.
+A semantic-contract owner normally defines and exports the typed token once:
+
+```ts
+export const stringValueContract
+	= createWidgetValueContract<string>('example/string@1')
+```
+
+Plugin authors then import that shared token instead of recreating the
+contract locally. `createWidgetValueContract<T>(id)` is the low-level typed
+definition primitive: its generic `T` prevents assigning an incompatible
+contract to a Property, while the runtime/integration identity remains only
+the stable string `id`. Core does not interpret, register, validate, or
+schema-check contract IDs, and Property values do not become JSON-only.
+Omitting `valueContract` simply means there is no declared inspectable value
+contract.
+
+A value contract is not a Plugin capability and does not have its own builder
+phase. It describes the external semantic contract claimed by one Property;
+ownership therefore belongs to the integration/protocol that defines that
+contract, while the Plugin Builder remains the declaration site that opts a
+Property into it.
 
 The same declaration facts can be projected through the readonly inspection
 subpath without exposing `validate`, `default`, `registerDeps`, `compute`,
