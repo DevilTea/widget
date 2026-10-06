@@ -1,7 +1,7 @@
 # @deviltea/widget-vue
 
 Cross-cutting Diagnostic/Result/Failure/Error conventions are maintained in
-[Widget API conventions](../../../docs/architecture/widget-api-conventions.md).
+[Widget API conventions](https://github.com/DevilTea/widget/blob/main/docs/architecture/widget-api-conventions.md).
 
 > ESM-only package.
 
@@ -113,6 +113,12 @@ const { value: valueDiagnostics } = useStateDiagnostics()
 - `useStateDiagnostics()` / `usePropertyDiagnostics()` / `useMethodDiagnostics()` mirror the
   corresponding Runtime primitive's `getDiagnostics()`/`subscribeDiagnostics()` as a
   separate reactive channel, keyed the same way as their value counterpart.
+- `emit` (only when the plugin declares `events`) exposes one `void`-returning
+  callable per declared event, typed from its arguments. Looking up a member is
+  passive; the first call acquires the Core event emitter and forwards the
+  arguments. An undeclared name yields `undefined`.
+- `widgetId` / `widgetType` are always present, plain readonly values (not refs)
+  identifying the current widget; the adapter stamps no DOM attributes from them.
 - `useDiagnostics()` mirrors `RuntimeWidget.getDiagnostics()`/`subscribeDiagnostics()` — this
   widget's own aggregate, not the Runtime-wide collected aggregate.
 - Every accessor is gated on the plugin's declared capabilities: an absent
