@@ -4,7 +4,7 @@
 
 ## Required external cutover
 
-Before the first post-split release, update each npm package's Trusted Publisher from repository `DevilTea/deviltea-labs` to repository `DevilTea/widget`, workflow `publish.yml`, owner `DevilTea`. Do not use a long-lived npm token as a fallback.
+Each npm package's Trusted Publisher must name repository `DevilTea/widget`, workflow `publish.yml`, owner `DevilTea` (it originally named `DevilTea/deviltea-labs`). Do not use a long-lived npm token as a fallback.
 
 ## Release flow
 
