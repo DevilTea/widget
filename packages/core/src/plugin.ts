@@ -453,44 +453,114 @@ export interface WidgetPluginDonePhase<Type extends string, Interfaces extends W
 	done: () => WidgetPlugin<Type, Interfaces>
 }
 
+/**
+ * Outer capability phases in their fixed call order. Part of the type-level order diagnostics only;
+ * the runtime builder is order-agnostic.
+ */
+type WidgetPluginPhaseOrder = readonly ['config', 'slots', 'state', 'properties', 'methods', 'events']
+
+type WidgetPluginPhaseName = WidgetPluginPhaseOrder[number]
+
+/** The phases whose capability was declared in `Interfaces`. */
+type WidgetPluginDeclaredPhaseName<Interfaces extends WidgetInterfaces> = {
+	[Phase in WidgetPluginPhaseName]: HasWidgetCapability<Interfaces, Phase> extends true ? Phase : never
+}[WidgetPluginPhaseName]
+
+type WidgetPluginPhaseIsBefore<
+	A extends WidgetPluginPhaseName,
+	B extends WidgetPluginPhaseName,
+	Order extends readonly WidgetPluginPhaseName[] = WidgetPluginPhaseOrder,
+> = Order extends readonly [infer Head, ...infer Tail extends readonly WidgetPluginPhaseName[]]
+	? Head extends A ? true : Head extends B ? false : WidgetPluginPhaseIsBefore<A, B, Tail>
+	: false
+
+/**
+ * Type-only order marker: the message of the compile error raised when a declared phase is called at
+ * the wrong position. The marker name and reason text are diagnostics, not protocol.
+ */
+export interface WidgetPluginPhaseOrderViolation<Reason extends string> {
+	readonly 'widget-core: builder phase order violation': Reason
+}
+
+/**
+ * Argument list of a misplaced marker: the real phase's arguments, with the first one intersected with
+ * the order violation. The call therefore fails at its first argument with the violation (and its
+ * reason) in the message, while the function constituent keeps callbacks contextually typed, so no
+ * implicit-`any` follow-on errors appear. Section builders may return anything.
+ */
+type WidgetPluginMisplacedArguments<Interfaces extends WidgetInterfaces, Phase extends WidgetPluginPhaseName, Violation>
+	= Phase extends 'config' ? [definition: Violation & WidgetConfigDefinition<Interfaces>]
+		: Phase extends 'slots' ? [definitions: Violation & WidgetSlotDefinitions<Interfaces>, validateStructure?: WidgetPluginValidateStructure<Interfaces>]
+			: Phase extends 'state' ? [build: Violation & ((section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>) => unknown)]
+				: Phase extends 'properties' ? [build: Violation & ((section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>) => unknown)]
+					: Phase extends 'methods' ? [build: Violation & ((section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>) => unknown)]
+						: [build: Violation & ((section: WidgetEventsSection<Interfaces, WidgetEventKeyOf<Interfaces>>) => unknown)]
+
+type WidgetPluginPhaseOrderReason<
+	Phase extends WidgetPluginPhaseName,
+	Stage extends WidgetPluginPhaseName | 'done',
+> = Stage extends WidgetPluginPhaseName
+	? WidgetPluginPhaseIsBefore<Phase, Stage> extends true
+		? `'.${Phase}()' was already called or must be called earlier; the next phase is '.${Stage}()'. Order: description -> interfaces -> config? -> slots? -> state? -> properties? -> methods? -> events? -> done()`
+		: `'.${Phase}()' is called too early; call '.${Stage}()' first. Order: description -> interfaces -> config? -> slots? -> state? -> properties? -> methods? -> events? -> done()`
+	: `'.${Phase}()' cannot be called here; the declared phases are already complete, so only '.done()' remains. Order: description -> interfaces -> config? -> slots? -> state? -> properties? -> methods? -> events? -> done()`
+
+/**
+ * Adds type-only order markers for every declared phase that is not callable at `Stage`. A marker
+ * fails the call with an order-specific diagnostic, accepts any arguments (so a callback passed to it
+ * gets no implicit-`any` follow-on errors), and returns the same phase, so a misplaced call never
+ * advances the chain.
+ */
+export type WidgetPluginOrderedPhase<
+	Phase,
+	Interfaces extends WidgetInterfaces,
+	Stage extends WidgetPluginPhaseName | 'done',
+> = [Exclude<WidgetPluginDeclaredPhaseName<Interfaces>, Stage>] extends [never]
+	? Phase
+	: Phase & {
+		[Misplaced in Exclude<WidgetPluginDeclaredPhaseName<Interfaces>, Stage>]: (
+			...args: WidgetPluginMisplacedArguments<Interfaces, Misplaced, WidgetPluginPhaseOrderViolation<WidgetPluginPhaseOrderReason<Misplaced, Stage>>>
+		) => WidgetPluginOrderedPhase<Phase, Interfaces, Stage>
+	}
+
 export type WidgetPluginEventsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'events'> extends true
-	? {
-			events: (
-				build: (
-					section: WidgetEventsSection<Interfaces, WidgetEventKeyOf<Interfaces>>,
-				) => WidgetEventsSection<Interfaces, never>,
-			) => WidgetPluginDonePhase<Type, Interfaces>
-		}
-	: WidgetPluginDonePhase<Type, Interfaces>
+	? WidgetPluginOrderedPhase<{
+		events: (
+			build: (
+				section: WidgetEventsSection<Interfaces, WidgetEventKeyOf<Interfaces>>,
+			) => WidgetEventsSection<Interfaces, never>,
+		) => WidgetPluginOrderedPhase<WidgetPluginDonePhase<Type, Interfaces>, Interfaces, 'done'>
+	}, Interfaces, 'events'>
+	: WidgetPluginOrderedPhase<WidgetPluginDonePhase<Type, Interfaces>, Interfaces, 'done'>
 
 export type WidgetPluginMethodsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
-	? {
-			methods: (
-				build: (
-					section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>,
-				) => WidgetMethodsSection<Interfaces, never>,
-			) => WidgetPluginEventsPhase<Type, Interfaces>
-		}
+	? WidgetPluginOrderedPhase<{
+		methods: (
+			build: (
+				section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>,
+			) => WidgetMethodsSection<Interfaces, never>,
+		) => WidgetPluginEventsPhase<Type, Interfaces>
+	}, Interfaces, 'methods'>
 	: WidgetPluginEventsPhase<Type, Interfaces>
 
 export type WidgetPluginPropertiesPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'properties'> extends true
-	? {
-			properties: (
-				build: (
-					section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>,
-				) => WidgetPropertiesSection<Interfaces, never>,
-			) => WidgetPluginMethodsPhase<Type, Interfaces>
-		}
+	? WidgetPluginOrderedPhase<{
+		properties: (
+			build: (
+				section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>,
+			) => WidgetPropertiesSection<Interfaces, never>,
+		) => WidgetPluginMethodsPhase<Type, Interfaces>
+	}, Interfaces, 'properties'>
 	: WidgetPluginMethodsPhase<Type, Interfaces>
 
 export type WidgetPluginStatePhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
-	? {
-			state: (
-				build: (
-					section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>,
-				) => WidgetStateSection<Interfaces, never>,
-			) => WidgetPluginPropertiesPhase<Type, Interfaces>
-		}
+	? WidgetPluginOrderedPhase<{
+		state: (
+			build: (
+				section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>,
+			) => WidgetStateSection<Interfaces, never>,
+		) => WidgetPluginPropertiesPhase<Type, Interfaces>
+	}, Interfaces, 'state'>
 	: WidgetPluginPropertiesPhase<Type, Interfaces>
 
 /**
@@ -501,18 +571,18 @@ export type WidgetPluginStatePhase<Type extends string, Interfaces extends Widge
  * exactly `{}`.
  */
 export type WidgetPluginSlotsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'slots'> extends true
-	? {
-			slots: <const Definitions extends ExactWidgetSlotDefinitions<Interfaces, Definitions>>(
-				definitions: Definitions,
-				validateStructure?: WidgetPluginValidateStructure<Interfaces>,
-			) => WidgetPluginStatePhase<Type, Interfaces>
-		}
+	? WidgetPluginOrderedPhase<{
+		slots: <const Definitions extends ExactWidgetSlotDefinitions<Interfaces, Definitions>>(
+			definitions: Definitions,
+			validateStructure?: WidgetPluginValidateStructure<Interfaces>,
+		) => WidgetPluginStatePhase<Type, Interfaces>
+	}, Interfaces, 'slots'>
 	: WidgetPluginStatePhase<Type, Interfaces>
 
 export type WidgetPluginConfigPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
-	? {
-			config: (definition: WidgetConfigDefinition<Interfaces>) => WidgetPluginSlotsPhase<Type, Interfaces>
-		}
+	? WidgetPluginOrderedPhase<{
+		config: (definition: WidgetConfigDefinition<Interfaces>) => WidgetPluginSlotsPhase<Type, Interfaces>
+	}, Interfaces, 'config'>
 	: WidgetPluginSlotsPhase<Type, Interfaces>
 
 export interface WidgetPluginInterfacesPhase<Type extends string> {
@@ -565,8 +635,10 @@ function createSection(sink: Map<WidgetMemberKey, any>): unknown {
 /**
  * Starts the plugin builder for one plugin `type`.
  *
- * Phase order is `interfaces -> config? -> slots? -> state? -> properties? -> methods? -> events? -> done()`;
- * a phase exists only when its capability is declared.
+ * Phase order is `description -> interfaces -> config? -> slots? -> state? -> properties? -> methods? -> events? -> done()`;
+ * a phase exists only when its capability is declared. Calling a declared phase out of order (or
+ * repeating it) fails type-checking with an order-specific diagnostic; the runtime builder itself is
+ * order-agnostic.
  */
 export function createWidgetPlugin<const Type extends string>(type: Type): WidgetPluginDescriptionPhase<Type> {
 	const draft: WidgetPluginDraft = {
