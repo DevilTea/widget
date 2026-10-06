@@ -10,6 +10,7 @@ import { createImplementationExplorerStore, ImplementationExplorerKey } from './
 import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
 import { createLabThemeStore, LabThemeKey } from './composables/use-lab-theme'
+import { useSupportedWorkbenchViewport } from './composables/use-supported-workbench-viewport'
 import { createTutorialStore, TutorialStoreKey } from './composables/use-tutorial'
 import { disposeLayoutWorker } from './graph/layout-client'
 import { installLabTestSeam } from './lab-test-seam'
@@ -66,12 +67,26 @@ watchEffect(() => {
 	store.previewHost.setTutorialSpotlight(target)
 })
 
+// Presentation mirror of the CSS narrow-viewport gate: while unsupported, the still-mounted workbench is
+// made `inert` so it cannot be focused or tabbed to behind the overlay (it stays mounted, per #27).
+const supportedViewport = useSupportedWorkbenchViewport()
+
 function onKeydown(event: KeyboardEvent): void {
-	// Cmd/Ctrl+Enter is a UX shortcut for the same Apply command the header button invokes.
-	if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-		event.preventDefault()
-		void store.apply()
-	}
+	// Cmd/Ctrl+Enter is a UX shortcut for the same Apply command the header button invokes, so it honors
+	// the button's enabled condition (`isDirty && !isApplying`). It yields to IME composition (keyCode 229
+	// covers engines that report it without `isComposing`), key repeat, handlers that already claimed the
+	// event (Monaco preventDefaults+stops keys it binds, so an editor-handled Cmd+Enter never reaches here),
+	// and open tutorial modal dialogs.
+	if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey))
+		return
+	if (event.isComposing || event.keyCode === 229 || event.repeat || event.defaultPrevented)
+		return
+	if (tutorial.welcomeVisible.value || tutorial.confirmVisible.value)
+		return
+	if (!store.isDirty.value || store.isApplying.value)
+		return
+	event.preventDefault()
+	void store.apply()
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown))
@@ -90,7 +105,10 @@ onUnmounted(() => disposeLayoutWorker())
 <template>
 	<div class="lab-app">
 		<LabHeader />
-		<div class="lab-body">
+		<div
+			class="lab-body"
+			:inert="!supportedViewport"
+		>
 			<Workbench />
 			<TutorialRail v-if="tutorialRailVisible" />
 		</div>
