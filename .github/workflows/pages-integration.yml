@@ -6,16 +6,22 @@ on:
     paths:
       - apps/lab/**
       - docs/site/**
+      - packages/**
       - scripts/build-pages.ts
       - .github/workflows/pages-integration.yml
+      - package.json
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
   pull_request:
     paths:
       - apps/lab/**
       - docs/site/**
+      - packages/**
       - scripts/build-pages.ts
       - .github/workflows/pages-integration.yml
+      - package.json
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
   workflow_dispatch:
 
 permissions:
