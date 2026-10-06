@@ -11,6 +11,7 @@ export default defineConfig({
 	testMatch: '**/preview-origin.spec.ts',
 	fullyParallel: false,
 	forbidOnly: !!process.env.CI,
+	failOnFlakyTests: !!process.env.CI,
 	retries: process.env.CI ? 1 : 0,
 	reporter: 'list',
 	use: {
