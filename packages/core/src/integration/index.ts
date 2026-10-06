@@ -5,22 +5,23 @@
  * delivery/emission; renderer adapters use this bridge to obtain only the current widget's emitter.
  */
 
-import type { BlueprintWidgetNode, RuntimeWidget, WidgetSystemRuntime } from '../internal/contract'
+import type { RuntimeWidget, WidgetSystemRuntime } from '../internal/contract'
 import type { AnyWidgetPluginTuple } from '../plugin'
-import type { WidgetId, WidgetMemberKey } from '../types'
-import { readCompiledBlueprint } from '../internal/contract'
+import type { WidgetMemberKey } from '../types'
 import { readWidgetPluginDefinition } from '../plugin'
 import { buildEventEmitter } from '../runtime/event'
-import { readRuntimeInternals } from '../runtime/internals'
+import { isCoreRuntime, readRuntimeInternals } from '../runtime/internals'
 
-export type WidgetIntegrationErrorCode = 'runtime-widget-mismatch'
+export type WidgetIntegrationErrorCode = 'runtime-widget-mismatch' | 'foreign-runtime'
 
 export class WidgetIntegrationError extends Error {
 	override readonly name = 'WidgetIntegrationError'
 
 	constructor(
 		readonly code: WidgetIntegrationErrorCode,
-		message = 'The RuntimeWidget does not belong to the supplied WidgetSystemRuntime instance.',
+		message = code === 'foreign-runtime'
+			? 'The supplied WidgetSystemRuntime was not produced by this widget core instance.'
+			: 'The RuntimeWidget does not belong to the supplied WidgetSystemRuntime instance.',
 	) {
 		super(message)
 	}
@@ -32,17 +33,22 @@ export function getWidgetEventEmitter<Plugins extends AnyWidgetPluginTuple>(
 	runtime: WidgetSystemRuntime<Plugins>,
 	widget: RuntimeWidget<Plugins>,
 ): WidgetIntegrationEventEmitter | null {
-	const erasedWidget = widget as unknown as { readonly id: WidgetId, readonly blueprint: BlueprintWidgetNode<Plugins> }
-	const current = runtime.getWidget(erasedWidget.id)
-	if (current !== widget)
+	// Provenance first, then exact Runtime/Widget pairing through Core-owned state (never the
+	// caller-supplied objects' public shape).
+	if (!isCoreRuntime(runtime))
+		throw new WidgetIntegrationError('foreign-runtime')
+
+	const internals = readRuntimeInternals(runtime)
+	internals.context.assertActive()
+
+	const nodeId = typeof widget === 'object' && widget !== null
+		? internals.nodeIdByRuntimeWidget.get(widget)
+		: undefined
+	if (nodeId === undefined)
 		throw new WidgetIntegrationError('runtime-widget-mismatch')
 
-	const compiled = readCompiledBlueprint(runtime.blueprint)
-	const nodeId = compiled.nodeIdByPublicNode.get(erasedWidget.blueprint)
-	if (nodeId === undefined)
-		throw new Error('The RuntimeWidget is not backed by the supplied Runtime Blueprint.')
-
-	const node = compiled.nodes[nodeId]
+	// Post-validation invariants: pairing guarantees the node exists and is resolved.
+	const node = internals.compiled.nodes[nodeId]
 	if (node === undefined || !node.resolved)
 		throw new Error('The RuntimeWidget is not backed by a resolved Runtime node.')
 
@@ -50,7 +56,7 @@ export function getWidgetEventEmitter<Plugins extends AnyWidgetPluginTuple>(
 	if (definition.events === null)
 		return null
 
-	const entry = readRuntimeInternals(runtime).registry.get(nodeId)
+	const entry = internals.registry.get(nodeId)
 	if (entry === undefined)
 		throw new Error('The RuntimeWidget event implementation was not found in the supplied Runtime.')
 

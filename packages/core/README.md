@@ -63,6 +63,17 @@ empty — a completed plugin exposes these facts at runtime as
 [Reading capability presence at runtime](https://deviltea.github.io/widget/packages/widget-core#reading-capability-presence-at-runtime-plugin-capabilities)
 in the full guide.
 
+`createWidgetSystem` rejects invalid plugin registration with the coded
+`WidgetSystemConfigurationError`: `foreign-plugin` (entry not created by this
+loaded module instance; fields `pluginIndex`, `pluginType`) and
+`duplicate-plugin-type` (fields `pluginIndex`, `pluginType`, `firstPluginIndex`).
+Inspection entries throw `WidgetInspectionError` (`@deviltea/widget-core/inspection`)
+and `getWidgetEventEmitter` throws `WidgetIntegrationError`
+(`@deviltea/widget-core/integration`, code `foreign-runtime`) for foreign inputs.
+See
+[Plugin registration errors](https://deviltea.github.io/widget/packages/widget-core#plugin-registration-errors)
+in the full guide.
+
 Plugin, config, and slot descriptions are required intrinsic metadata. The
 immutable `system.catalog` is a passive projection of registered widget types,
 descriptions, and capability descriptions; it does not contain Blueprint or

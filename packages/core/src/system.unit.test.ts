@@ -1,5 +1,85 @@
-import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from './index'
+import { describe, expect, it, vi } from 'vitest'
+import * as core from './index'
+import { createWidgetPlugin, createWidgetSystem, WidgetSystemConfigurationError } from './index'
+
+function plain(type: string) {
+	return createWidgetPlugin(type)
+		.description(type)
+		.interfaces<Record<never, never>>()
+		.done()
+}
+
+function capture(run: () => unknown): unknown {
+	try {
+		run()
+	}
+	catch (error) {
+		return error
+	}
+	return undefined
+}
+
+/** A separately evaluated copy of the module: its brand Symbols differ from this instance's. */
+async function loadForeignCore(): Promise<typeof core> {
+	vi.resetModules()
+	return await import('./index')
+}
+
+describe('createWidgetSystem plugin registration errors', () => {
+	it('is exported from the package root with its code union', () => {
+		expect(typeof core.WidgetSystemConfigurationError)
+			.toBe('function')
+	})
+
+	it('rejects a plugin completed by another module instance with foreign-plugin', async () => {
+		const foreign = await loadForeignCore()
+		const foreignPlugin = foreign.createWidgetPlugin('alien')
+			.description('Alien')
+			.interfaces<Record<never, never>>()
+			.done()
+
+		const error = capture(() => createWidgetSystem({ plugins: [plain('ok'), foreignPlugin] as never }))
+
+		expect(error)
+			.toBeInstanceOf(WidgetSystemConfigurationError)
+		expect(error)
+			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 1, pluginType: 'alien' })
+	})
+
+	it('rejects null and structural look-alike entries with foreign-plugin', () => {
+		const nullError = capture(() => createWidgetSystem({ plugins: [null] as never }))
+		expect(nullError)
+			.toBeInstanceOf(WidgetSystemConfigurationError)
+		expect(nullError)
+			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 0, pluginType: null })
+
+		const lookAlike = { type: 'X', description: 'X', capabilities: {}, config: null, descriptions: { config: null, slots: null } }
+		const lookAlikeError = capture(() => createWidgetSystem({ plugins: [plain('ok'), lookAlike] as never }))
+		expect(lookAlikeError)
+			.toBeInstanceOf(WidgetSystemConfigurationError)
+		expect(lookAlikeError)
+			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 1, pluginType: 'X' })
+	})
+
+	it('reports duplicate-plugin-type with both indexes', () => {
+		const error = capture(() => createWidgetSystem({ plugins: [plain('a'), plain('dup'), plain('b'), plain('dup')] }))
+
+		expect(error)
+			.toBeInstanceOf(WidgetSystemConfigurationError)
+		expect(error)
+			.toMatchObject({ code: 'duplicate-plugin-type', pluginIndex: 3, pluginType: 'dup', firstPluginIndex: 1 })
+	})
+
+	it('throws for the first offending index, and provenance precedes the duplicate check', () => {
+		const dupThenForeign = capture(() => createWidgetSystem({ plugins: [plain('d'), plain('d'), null] as never }))
+		expect(dupThenForeign)
+			.toMatchObject({ code: 'duplicate-plugin-type', pluginIndex: 1 })
+
+		const foreignThenDup = capture(() => createWidgetSystem({ plugins: [plain('d'), { type: 'd' }, plain('d')] as never }))
+		expect(foreignThenDup)
+			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 1, pluginType: 'd' })
+	})
+})
 
 describe('widgetSystem catalog', () => {
 	it('rejects plugins with duplicate types', () => {
@@ -12,8 +92,8 @@ describe('widgetSystem catalog', () => {
 			.interfaces<Record<never, never>>()
 			.done()
 
-		expect(() => createWidgetSystem({ plugins: [first, second] }))
-			.toThrow()
+		expect(capture(() => createWidgetSystem({ plugins: [first, second] })))
+			.toBeInstanceOf(WidgetSystemConfigurationError)
 	})
 
 	it('projects intrinsic plugin, config, and slot descriptions in registration order', () => {

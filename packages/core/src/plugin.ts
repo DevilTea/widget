@@ -206,6 +206,18 @@ export type WidgetInterfacesOf<Plugin extends AnyWidgetPlugin> = Plugin extends 
 	: never
 
 /**
+ * Provenance probe: true only for plugins completed by this loaded module instance. A plugin from
+ * another module instance (its brand is a different Symbol) or a structural look-alike is foreign.
+ * Capability separation, not a security sandbox.
+ */
+export function isCoreWidgetPlugin(value: unknown): value is AnyWidgetPlugin {
+	if (typeof value !== 'object' || value === null)
+		return false
+	const brand = (value as Partial<Record<typeof widgetPluginBrand, { readonly definition?: unknown }>>)[widgetPluginBrand]
+	return typeof brand === 'object' && brand !== null && typeof brand.definition === 'object' && brand.definition !== null
+}
+
+/**
  * Reads the erased definition record of a plugin.
  */
 export function readWidgetPluginDefinition(plugin: AnyWidgetPlugin): WidgetPluginDefinition {

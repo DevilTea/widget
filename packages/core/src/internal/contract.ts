@@ -670,6 +670,15 @@ export interface BlueprintInternalsCarrier<Plugins extends AnyWidgetPluginTuple 
 }
 
 /**
+ * Provenance probe: true only for Blueprints produced by this loaded module instance.
+ */
+export function isCoreBlueprint(value: unknown): boolean {
+	if (typeof value !== 'object' || value === null)
+		return false
+	return (value as Partial<BlueprintInternalsCarrier>)[blueprintInternals] !== undefined
+}
+
+/**
  * Reads the compiled snapshot carried by a Blueprint.
  */
 export function readCompiledBlueprint<Plugins extends AnyWidgetPluginTuple>(

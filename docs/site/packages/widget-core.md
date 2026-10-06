@@ -48,7 +48,9 @@ Ownership rules that shape everything below:
 
 - `WidgetSystem` is instance-scoped and immutable; the registered plugin tuple
   defines that instance's TypeScript universe. There is no global/module
-  augmentation, and a duplicate `plugin.type` is rejected at construction.
+  augmentation. Invalid plugin registration is rejected at construction with a
+  coded `WidgetSystemConfigurationError` (see
+  [Plugin registration errors](#plugin-registration-errors)).
 - A Blueprint is an immutable semantic snapshot. Editing a widget tree means
   compiling different source through `system.createBlueprint()` or
   `blueprint.recompile()`, never mutating a Blueprint in place.
@@ -423,6 +425,47 @@ dep.parent
 	  consumer-local `dependency-target-failed` / `dependency-value-rejected` diagnostic rather
   than exposed as the target's own diagnostic type.
 
+### Plugin registration errors
+
+Plugins, Blueprints, and Runtimes are recognized by brands private to one loaded
+`@deviltea/widget-core` module instance. An object produced by another module
+instance (duplicate install, version skew, inlined copy) or a structural
+look-alike is *foreign*. Core does not distinguish "another widget-core copy"
+from "not a widget object"; provenance is capability separation, not a security
+sandbox.
+
+`createWidgetSystem` validates the `plugins` tuple in order and throws
+`WidgetSystemConfigurationError` (exported from the root) for the first
+offending entry, before any System exists:
+
+| `code` | Meaning | Fields |
+|---|---|---|
+| `foreign-plugin` | the entry was not completed by this module instance | `pluginIndex`, `pluginType` (the entry's `type` when a string, else `null`) |
+| `duplicate-plugin-type` | the entry repeats an earlier plugin's `type` | `pluginIndex`, `pluginType`, `firstPluginIndex` |
+
+Provenance is checked before the duplicate check. `firstPluginIndex` is `null`
+for `foreign-plugin`.
+
+```ts
+import { createWidgetSystem, WidgetSystemConfigurationError } from '@deviltea/widget-core'
+
+try {
+	createWidgetSystem({ plugins })
+}
+catch (error) {
+	if (error instanceof WidgetSystemConfigurationError
+		&& error.code === 'foreign-plugin') {
+		// plugins[error.pluginIndex] came from another widget-core copy.
+	}
+}
+```
+
+There is no boolean `isWidgetPlugin` guard; hosts validate a candidate adapter
+export with `inspectPlugin(candidate)` (coded `foreign-plugin`) or through
+`pluginIndex` at construction. Consumers discriminate by class and `code`; the
+`message` is descriptive only. Reusing a code string across classes is
+intentional.
+
 ## Compiling a blueprint
 
 ### Compilation boundary and recovery
@@ -738,6 +781,11 @@ catch (error) {
 }
 ```
 
+A Runtime that was not produced by this loaded module instance (another module
+instance or a structural look-alike) is rejected with code `foreign-runtime`
+before any pairing check. Pairing is then validated against Core-owned state,
+never the caller-supplied objects' public shape.
+
 The error message is descriptive only; consumers discriminate by class and
 `code`. Runtime disposal continues to use `WidgetSystemRuntimeDisposedError`
 rather than being wrapped as an integration error.
@@ -788,6 +836,15 @@ map. Declaration order and arbitrary string member names are preserved.
 Contract descriptor object identity is deliberately not exposed. Integrations
 compare `valueContractId` strings, so dynamically loaded/duplicated module
 instances do not need to share the same JavaScript token object.
+
+### Foreign inputs
+
+`inspectPlugin`, `inspectBlueprint`, and `inspectRuntime` throw
+`WidgetInspectionError` (exported from the inspection subpath, not the root)
+when the argument was not produced by this loaded module instance, with `code`
+`foreign-plugin`, `foreign-blueprint`, or `foreign-runtime` respectively. A
+well-formed look-alike or an object from another `@deviltea/widget-core` copy is
+rejected the same way. Discriminate by class and `code`.
 
 ### Blueprint inspection
 
