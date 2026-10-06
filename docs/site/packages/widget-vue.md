@@ -247,6 +247,41 @@ cross-widget interaction stays mediated by `@deviltea/widget-core`
 dependencies (`registerDeps`); renderer code cannot reach across the widget
 tree outside that mechanism.
 
+## Server rendering
+
+Server-side rendering of `WidgetRenderer` is **unsupported** under the current
+contract: do not render a long-lived or shared `WidgetSystemRuntime` through
+Vue's server renderer. This is a declared non-goal, not a bridge bug awaiting
+a fix; there is no SSR-specific code path, flag, or hydration guarantee.
+Client-side rendering is the supported mode, including renderers mounted only
+on the client inside an SSR application.
+
+Why: the first `.value` read of a State, Property, or Diagnostics ref
+activates one Core subscription, and each `useWidget()` bridge releases all of
+its subscriptions together in `onScopeDispose`. Vue's server renderer runs
+`setup()` and render but never stops component effect scopes, so those cleanup
+callbacks never run. Every server render therefore leaves its activated
+subscriptions registered with the Runtime until `runtime.dispose()`. With a
+long-lived Runtime they accumulate on each request, growing memory without
+bound and fanning every later change out into stale `customRef` triggers.
+
+Creating a Runtime per request and disposing it after rendering does release
+these subscriptions, because the Runtime owns their teardown. That pattern is
+still unsupported, because the open gaps below remain.
+
+A future SSR design would need, and this guide does not decide:
+
+- an explicit render lifetime (snapshot-only reads with no Core subscription
+  activation during SSR, or request-scoped cleanup owned by the adapter);
+- a Runtime ownership model (per request or shared) consistent with
+  "`WidgetRenderer` never disposes the Runtime";
+- a hydration contract for how client Runtime state matches server output,
+  given that Runtime state is never part of authored source, and how mismatches
+  are handled;
+- defined `emit` and Method semantics during server render;
+- conformance tests under `@vue/server-renderer`, including subscription-count
+  assertions across repeated renders against one Runtime.
+
 ## Design constraints
 
 - **No domain widgets.** Survey/Product Prototype (or any other) domain

@@ -91,6 +91,10 @@ or to the widgets it hosts, never to this package.
   exceptions (`WidgetVueIntegrationError`), never a Widget Issue.
 - The root renderer never calls `runtime.dispose()`, on unmount or on `runtime` prop replacement.
   Runtime lifetime is owned by the caller.
+- Server rendering against long-lived Runtimes is an accepted non-goal (Discussion #12 amendment
+  "`@deviltea/widget-vue` does not support server rendering against long-lived Runtimes"): bridge
+  subscriptions are released only by `onScopeDispose`, which Vue's server renderer never runs. Do not add
+  ad-hoc SSR branches, flags, or hydration behavior without a new amendment.
 
 ## Unit-test standard
 
