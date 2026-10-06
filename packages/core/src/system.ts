@@ -90,6 +90,19 @@ export class WidgetSystemConfigurationError extends Error {
 }
 
 /**
+ * Best-effort read of a foreign entry's `type`; a throwing accessor must not leak as an uncoded failure.
+ */
+function readForeignPluginType(entry: unknown): string | null {
+	try {
+		const type = (entry as { readonly type?: unknown } | null | undefined)?.type
+		return typeof type === 'string' ? type : null
+	}
+	catch {
+		return null
+	}
+}
+
+/**
  * Creates an instance-scoped, immutable widget system. Duplicate `plugin.type` is rejected.
  */
 export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple>(
@@ -102,8 +115,7 @@ export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple>(
 	// Tuple order; the first offending index wins, and provenance precedes the duplicate check.
 	for (const [index, plugin] of plugins.entries()) {
 		if (!isCoreWidgetPlugin(plugin)) {
-			const type = (plugin as { readonly type?: unknown } | null | undefined)?.type
-			throw new WidgetSystemConfigurationError('foreign-plugin', index, typeof type === 'string' ? type : null)
+			throw new WidgetSystemConfigurationError('foreign-plugin', index, readForeignPluginType(plugin))
 		}
 
 		const firstIndex = firstIndexByType.get(plugin.type)

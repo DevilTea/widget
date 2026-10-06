@@ -65,8 +65,9 @@ in the full guide.
 
 `createWidgetSystem` rejects invalid plugin registration with the coded
 `WidgetSystemConfigurationError`: `foreign-plugin` (entry not created by this
-loaded module instance; fields `pluginIndex`, `pluginType`) and
-`duplicate-plugin-type` (fields `pluginIndex`, `pluginType`, `firstPluginIndex`).
+loaded module instance; fields `pluginIndex`, `pluginType`, with
+`firstPluginIndex` always `null`) and `duplicate-plugin-type` (fields
+`pluginIndex`, `pluginType`, `firstPluginIndex`).
 Inspection entries throw `WidgetInspectionError` (`@deviltea/widget-core/inspection`)
 and `getWidgetEventEmitter` throws `WidgetIntegrationError`
 (`@deviltea/widget-core/integration`, code `foreign-runtime`) for foreign inputs.

@@ -171,6 +171,39 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 		}
 	})
 
+	it('rejects a RuntimeWidget from a second Runtime of the same Blueprint with runtime-widget-mismatch', () => {
+		const system = createWidgetSystem({ plugins: [eventPlugin] as const })
+		const blueprint = system.createBlueprint({ id: 'root', type: eventPlugin.type })
+		if (blueprint.status !== 'valid')
+			throw new Error('Expected valid blueprint')
+		const first = blueprint.createRuntime()
+		const second = blueprint.createRuntime()
+		const secondWidget = second.getWidget('root')!
+
+		let thrown: unknown
+		try {
+			getWidgetEventEmitter(first, secondWidget)
+		}
+		catch (error) {
+			thrown = error
+		}
+		expect(thrown)
+			.toBeInstanceOf(WidgetIntegrationError)
+		expect((thrown as WidgetIntegrationError).code)
+			.toBe('runtime-widget-mismatch')
+		expect(getWidgetEventEmitter(second, secondWidget))
+			.not.toBeNull()
+	})
+
+	it('exposes WidgetIntegrationError with the foreign-runtime code from the integration subpath', () => {
+		const error = new WidgetIntegrationError('foreign-runtime')
+
+		expect(error)
+			.toBeInstanceOf(WidgetIntegrationError)
+		expect(error.code)
+			.toBe('foreign-runtime')
+	})
+
 	it('rejects a forged RuntimeWidget against a genuine Runtime with runtime-widget-mismatch', () => {
 		const { runtime, widget } = createSingleRuntime(eventPlugin)
 		const forgedWidgets = [

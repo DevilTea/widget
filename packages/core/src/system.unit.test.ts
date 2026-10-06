@@ -61,6 +61,28 @@ describe('createWidgetSystem plugin registration errors', () => {
 			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 1, pluginType: 'X' })
 	})
 
+	it('still throws foreign-plugin when the foreign entry has a throwing type getter', () => {
+		const hostile = Object.defineProperty({}, 'type', {
+			get() {
+				throw new Error('boom')
+			},
+		})
+
+		const error = capture(() => createWidgetSystem({ plugins: [hostile] as never }))
+
+		expect(error)
+			.toBeInstanceOf(WidgetSystemConfigurationError)
+		expect(error)
+			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 0, pluginType: null, firstPluginIndex: null })
+	})
+
+	it('lets a foreign plugin at index 0 win over a later valid duplicate', () => {
+		const error = capture(() => createWidgetSystem({ plugins: [{ type: 'd' }, plain('d'), plain('d')] as never }))
+
+		expect(error)
+			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 0, pluginType: 'd' })
+	})
+
 	it('reports duplicate-plugin-type with both indexes', () => {
 		const error = capture(() => createWidgetSystem({ plugins: [plain('a'), plain('dup'), plain('b'), plain('dup')] }))
 
