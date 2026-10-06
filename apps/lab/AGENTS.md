@@ -1,12 +1,15 @@
 # AGENTS.md — widget-lab
 
-Current-state operating guide for this app. GitHub issue #13 is the historical Widget Lab decision
-log; issue #60 tracks the current post-`WidgetDocument` Lab redesign and accepted migration decisions;
-issue #10 (with its detailed source/document design in #54) is the semantic authority for
+Current-state operating guide for this app. Issue numbers in this file (`#10`, `#13`, `#25`–`#30`, `#54`,
+`#60`) are historical `DevilTea/deviltea-labs` numbers (see `docs/migration/source-history.md`); current
+authority is `DevilTea/widget` Discussion #12 and current `DevilTea/widget` Issues/Discussions.
+`DevilTea/deviltea-labs#13` is the historical Widget Lab decision
+log; `DevilTea/deviltea-labs#60` tracked the post-`WidgetDocument` Lab redesign and accepted migration decisions;
+`DevilTea/deviltea-labs#10` (with its detailed source/document design in `DevilTea/deviltea-labs#54`) was the semantic authority for
 `@deviltea/widget-core` that this app never reinterprets. This file describes what is
 true in the repository right now so a fresh agent can work without replaying the issue timeline —
-when it conflicts with repo reality, fix this file; current accepted decisions in #10/#54/#60 win over
-stale prose here or historical #13 checkpoints that #60 explicitly supersedes.
+when it conflicts with repo reality, fix this file; current accepted decisions in Discussion #12 win over
+stale prose here or historical `DevilTea/deviltea-labs#13` checkpoints that `DevilTea/deviltea-labs#60` explicitly supersedes.
 
 ## Scope and layout
 
@@ -16,8 +19,9 @@ Private, never-published workspace application with two roles:
    and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
    `@deviltea/widget-vue`.
 2. **Released showcases** — switchable via the header's showcase selector, all served by the same
-   shell and Document-backed authoring model: `Sandbox` (minimal fixtures), Showcase A `Interactive Survey`, and
-   Showcase B `Sales Pipeline CRM`.
+   shell and Document-backed authoring model: `Sandbox` (minimal fixtures), `Interactive Survey` (`survey`),
+   `Product Prototype` (`crm`), and `Vuetify Task Workspace` (`vuetify-tasks`), as registered in
+   `src/showcases/registry.ts`.
 
 The app deploys to GitHub Pages together with `docs/site` (see "Deployment" below).
 
@@ -55,7 +59,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   `property.get()` — so opening/subscribing an inspector can never activate a lazy Property.
 - `src/graph/` — pure dependency projections plus the Graph layout pipeline; see "Dependencies inspector" below.
 - `src/implementation/` — the curated Implementation source explorer's framework-agnostic core (issue
-  #25 P3): `types.ts` (`SourcesRegistry`/`CuratedSourceFile` — metadata only, `load()` thunks are the
+  `DevilTea/deviltea-labs#25` P3): `types.ts` (`SourcesRegistry`/`CuratedSourceFile` — metadata only, `load()` thunks are the
   lazy boundary), `registry-coverage.ts` (dangling/uncurated-type sanity used by unit tests),
   `applied-instance.ts` (pure extraction of a widget's own JSON fragment from the *applied* source
   text), `focused-widget.ts` (shared focus -> plain `{ id, type }`), and `shiki-highlighter.ts` (the
@@ -74,12 +78,12 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   comes from `issue.source`.
 - `src/components/` — the app shell: `LabHeader.vue` (compact header: showcase selector, preset,
   status, Apply), `Workbench.vue` (`dockview-vue` two-column default layout), `NonClosableTab.vue`
-  (a custom Dockview `tabComponent` — issue #27 Finding 2: registered as `tabComponents.nonClosable` and
+  (a custom Dockview `tabComponent` — `DevilTea/deviltea-labs#27` Finding 2: registered as `tabComponents.nonClosable` and
   selected via `AddPanelOptions.tabComponent` on each of the five canonical panels' `addPanel()` calls, it
   renders only a title, no close control, so those panels can never be closed; Dockview's own `Tab`
   wrapper — drag/reorder/dock/resize/activate — is untouched, since a `tabComponent` only replaces what
   that wrapper renders as content), `panels/*` (Author/Blueprint/Runtime/Dependencies tabs, plus the
-  lazily-registered `ImplementationPanel.vue` — issue #25 P3; it is the one panel `Workbench.vue`
+  lazily-registered `ImplementationPanel.vue` — `DevilTea/deviltea-labs#25` P3; it is the one panel `Workbench.vue`
   registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
   deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
   which consumes the private `@deviltea/widget-devtools` client/agent boundary for Inspect mode. Phase B1
@@ -94,7 +98,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   Runtime; these components own no semantic data, revision labels, or focus state), `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list; the selected-node
   detail also carries a "View implementation" entry point), `runtime/*` (Runtime Inspector's member rows
   + property-issue list), `dependencies/*` (the Dependencies view switcher + Relations UI), `graph/*` (the Vue Flow canvas + panel-local edge details).
-- `src/App.vue` also renders a narrow-viewport gate (issue #27 Finding 3): a pure CSS
+- `src/App.vue` also renders a narrow-viewport gate (`DevilTea/deviltea-labs#27` Finding 3): a pure CSS
   `@media (max-width: 899px)` rule (no JS resize listener/state) shows a `position: fixed` explanatory
   overlay ("Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.") covering
   the whole viewport below 900px width, and hides it again above that width; `Workbench`/Dockview stay
@@ -155,7 +159,7 @@ boundaries — only build output is combined. If you touch the Lab's asset/worke
 it still resolves under that subpath, not just under `/`.
 
 `modern-monaco`'s editor engine is self-hosted rather than loaded from its default esm.sh CDN — see
-issue #30 Scope A. `vite-plugin-vendor-modern-monaco-editor-core.ts` (project root, alongside
+`DevilTea/deviltea-labs#30` Scope A. `vite-plugin-vendor-modern-monaco-editor-core.ts` (project root, alongside
 `vite.config.ts`) reads `editor-core.mjs` plus its two Worker-chain siblings
 (`editor-worker-main.mjs`, `editor-worker.mjs`) straight out of `modern-monaco`'s installed
 `node_modules` package — never committed to git — and (a) serves them from Vite dev middleware at
@@ -171,7 +175,7 @@ used to trigger a separate, unrelated esm.sh fetch for the theme JSON).
 
 ## Loading policy
 
-Intentional, not incidental (issue #30 Scope B) — the production artifact's chunk shape, verified by
+Intentional, not incidental (`DevilTea/deviltea-labs#30` Scope B) — the production artifact's chunk shape, verified by
 building this app in isolation:
 
 ```text
@@ -223,13 +227,13 @@ CSS (index-*.css)                       ~120 KB raw / ~11 KB gzip   — eager
   activity still never re-triggers a relayout (that guarantee is unaffected and unrelated to this
   paragraph); what does not currently hold is "ELK stays uninitialized until a user opens Graph." Fixing
   that would mean gating panel *mount* (not just tab selection) on Dockview activity for Blueprint/
-  Runtime/Graph, which is a Workbench/Dockview panel-lifecycle change out of scope for issue #30 — noted
+  Runtime/Graph, which is a Workbench/Dockview panel-lifecycle change out of scope for `DevilTea/deviltea-labs#30` — noted
   here as known, current-state behavior rather than silently left undocumented.
 - Neither of the two heavy, on-load fetches above is a *regression*: this document only makes explicit
   what was already true before this issue's change (Monaco and ELK both already loaded on initial mount
   before self-hosting), and self-hosting Monaco's engine does not move it into, or out of, that eager
   path — it only removes the esm.sh dependency for the fetch that already happened at that same moment.
-- **Implementation panel + Shiki + curated raw-source chunks (issue #25 P3)**: unlike Monaco/ELK above,
+- **Implementation panel + Shiki + curated raw-source chunks (`DevilTea/deviltea-labs#25` P3)**: unlike Monaco/ELK above,
   these genuinely stay lazy — `ImplementationPanel.vue` is registered in `Workbench.vue`'s `components`
   map through `defineAsyncComponent(() => import('./panels/ImplementationPanel.vue'))`, and the panel
   itself is only ever added to Dockview (`api.addPanel({ id: 'implementation', ... })`) the first time
@@ -264,7 +268,7 @@ live source workflow, and the showcases. It must not own, and must not gain:
 - an editor-command/undo architecture — Source text editing plus explicit Apply is the whole model.
 
 When Lab work exposes a genuine gap in widget-core/widget-vue's public contract, canonicalize it on
-GitHub (#10/#13) instead of silently working around it in Lab-private code — implementation evidence
+GitHub (`DevilTea/deviltea-labs#10`/`#13`) instead of silently working around it in Lab-private code — implementation evidence
 may challenge architecture, but never rewrites it locally.
 
 ## Inspectors are readonly
@@ -360,7 +364,7 @@ equal Document/Preview revisions synchronize the two scopes, while diverged revi
 `InspectionNodeId`s between them. A changed Document resets Document focus; a replaced Preview resets
 Preview focus.
 
-Viewport fit policy (issue #27 Finding 1 & reliable lifecycle):
+Viewport fit policy (`DevilTea/deviltea-labs#27` Finding 1 & reliable lifecycle):
 `GraphCanvas.vue` coordinates `fitView()` with both layout readiness and container dimensions. In
 Dockview, tabs mounted in inactive/background state have 0 client dimensions, which caused an initial
 `fitView()` in `onNodesInitialized` to fail. `GraphCanvas.vue` pairs `onNodesInitialized` with a
@@ -511,13 +515,13 @@ Blueprint/Runtime separation, Dependencies, and Implementation entry points rema
 Post-convergence usability/hardening work is tracked on GitHub; read the issue before working in its
 area, and keep implementation truth in those threads rather than expanding this file:
 
-- issue #25 — guided onboarding/tutorial + curated widget/component implementation source explorer;
-- issue #26 — Survey semantic presentation correctness (result freshness, failed-Property display,
+- `DevilTea/deviltea-labs#25` — guided onboarding/tutorial + curated widget/component implementation source explorer;
+- `DevilTea/deviltea-labs#26` — Survey semantic presentation correctness (result freshness, failed-Property display,
   dependency-issue propagation);
-- issue #27 — Graph/workbench correctness and recovery;
-- issue #28 — real-browser contract tests + baseline accessibility semantics;
-- issue #29 — this document's current-state refresh;
-- issue #30 — self-contained deployment / Monaco self-hosting / lazy-loading policy.
+- `DevilTea/deviltea-labs#27` — Graph/workbench correctness and recovery;
+- `DevilTea/deviltea-labs#28` — real-browser contract tests + baseline accessibility semantics;
+- `DevilTea/deviltea-labs#29` — this document's current-state refresh;
+- `DevilTea/deviltea-labs#30` — self-contained deployment / Monaco self-hosting / lazy-loading policy.
 
 ## Testing
 
@@ -531,7 +535,7 @@ browser/workbench/DOM/focus/integration behavior -> narrow real-browser contract
 Unit tests are colocated `*.unit.test.ts` against real `@deviltea/widget-core` fixtures (no mocked
 core): `src/lab/`, `src/graph/`, `src/runtime-inspector/`, `src/implementation/`, `src/sandbox/`,
 `src/composables/`, and `src/showcases/**` (plugin semantics, preset validity, and selected renderer contracts via
-`@vue/test-utils` + `happy-dom`). The real-browser contract harness is being introduced by issue #28;
+`@vue/test-utils` + `happy-dom`). The real-browser contract harness is being introduced by `DevilTea/deviltea-labs#28`;
 until it lands, workbench/editor/browser-integration behavior has no automated coverage here — do not
 compensate by writing broad DOM-simulation tests for it, and once the harness exists, put
 browser-semantics assertions (focus, keyboard navigation, dialog behavior) there instead of in

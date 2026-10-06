@@ -6,9 +6,11 @@ A thin Vue 3 integration over `@deviltea/widget-core` Runtime semantics: a keyed
 builder (`createWidgetVueRenderer`), the recursive `WidgetRenderer` root component, and the
 widget-scoped `useWidget(Plugin)` bridge (lazy `Ref`/callable projections of state, properties,
 methods, diagnostics, and slots, plus the unconditional `widgetId`/`widgetType` identity fields — see
-"Package boundaries" below). The normative semantic contract for this package lives in GitHub issue #13
-("Widget Vue integration — Phase 3 decision log"); GitHub issue #10 remains the core semantic authority
-and this package never reimplements or reinterprets it.
+"Package boundaries" below). The normative semantic contract for this package lives in `DevilTea/deviltea-labs#13`
+("Widget Vue integration — Phase 3 decision log"); `DevilTea/deviltea-labs#10` remains the core semantic authority
+and this package never reimplements or reinterprets it. These bare `#N` numbers are historical
+`DevilTea/deviltea-labs` issue numbers (see `docs/migration/source-history.md`); current authority is
+`DevilTea/widget` Discussion #12 and current `DevilTea/widget` Issues/Discussions.
 
 - `src/index.ts` — public entry; only export the public contract surface.
 - `src/context.ts` — private Vue injection types/key linking the internal host tree to `useWidget()`. Never exported.
@@ -28,7 +30,7 @@ pnpm typecheck   # package + tests tsconfig
 pnpm build       # tsdown (includes publint)
 ```
 
-## Package boundaries (issue #13 checkpoint A)
+## Package boundaries (`DevilTea/deviltea-labs#13` checkpoint A)
 
 This package owns the renderer/lifecycle/reactivity adapter surface only. It must not own:
 
@@ -42,9 +44,9 @@ or to the widgets it hosts, never to this package.
 
 ## Implementation rules
 
-- Do not resolve implementation difficulty by silently reintroducing a design issue #13 marks
-  discarded/superseded; a genuine semantic change requires a new amendment on issue #13 first, and
-  must never contradict issue #10's core semantics.
+- Do not resolve implementation difficulty by silently reintroducing a design `DevilTea/deviltea-labs#13` marks
+  discarded/superseded; a genuine semantic change requires a new amendment on `DevilTea/deviltea-labs#13` first, and
+  must never contradict `DevilTea/deviltea-labs#10`'s core semantics.
 - The Runtime is the sole source of truth. Every value bridge is a `customRef` (or equivalent) with
   no authoritative mirrored cache and no optimistic local writes; Runtime subscriptions only ever
   `trigger()` Vue invalidation, they never carry a value payload the adapter caches.
@@ -56,7 +58,7 @@ or to the widgets it hosts, never to this package.
   mediated by `@deviltea/widget-core` dependencies (`registerDeps`), never by renderer code reaching
   across the tree.
 - `useWidget(Plugin)` additionally returns flat, unconditional `widgetId: string` /
-  `widgetType: Plugin['type']` (issue #13 checkpoint amendment "`useWidget()` may expose readonly
+  `widgetType: Plugin['type']` (`DevilTea/deviltea-labs#13` checkpoint amendment "`useWidget()` may expose readonly
   local widget identity") — plain values projected once from the already-injected current
   `RuntimeWidget`, never refs, never gated by `plugin.capabilities`. This is identity only: it must
   never grow into exposing the `RuntimeWidget` object, Blueprint node, parent/child traversal, or a
@@ -70,15 +72,15 @@ or to the widgets it hosts, never to this package.
 - Collision-safety matters the same way it does in `@deviltea/widget-core`: arbitrary plugin-type and
   member-key strings, including `__proto__` and `constructor`, must work through `Map`/Proxy/
   null-prototype storage, never plain-object bracket assignment.
-- Capability presence (`state`/`properties`/`methods`/`slots`) is read from `plugin.capabilities` (issue
-  #10 amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`") — never
+- Capability presence (`state`/`properties`/`methods`/`slots`) is read from `plugin.capabilities` (
+  `DevilTea/deviltea-labs#10` amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`") — never
   inferred from Blueprint/Runtime object shape (member-key counts, semantic-slot-map key counts, or any
   `[Payload] extends [never]` heuristic). A capability can be explicitly-declared-empty (`slots: never`,
   `properties: Record<never, never>`, ...) and still present; shape-based heuristics cannot distinguish
   that from absence. The type-level mirror is `HasWidgetCapability<Interfaces, Key>`, never
   `[WidgetCapabilityOf<Interfaces, Key>] extends [never]`.
-- Property and every issue projection (`useStateIssues`/`usePropertyIssues`/`useMethodIssues`/
-  `useIssues`) are publicly typed `ReadonlyRef<T>` (`Readonly<Ref<T>>`), never `ComputedRef<T>`: they
+- Property and every diagnostics projection (`useStateDiagnostics`/`usePropertyDiagnostics`/
+  `useMethodDiagnostics`/`useDiagnostics`) are publicly typed `ReadonlyRef<T>` (`Readonly<Ref<T>>`), never `ComputedRef<T>`: they
   are backed by `customRef()`, a plain `Ref`, and `ComputedRef` would over-promise computed-only public
   surface (e.g. `.effect`) that does not exist at runtime. `WidgetSlot`'s public type is a non-callable
   component/constructor shape (`new () => { $props }`), never `FunctionalComponent`, because the shared
@@ -92,7 +94,7 @@ or to the widgets it hosts, never to this package.
 
 ## Unit-test standard
 
-Follow the conformance matrix recorded in issue #13 checkpoint G: type-level conformance (registry
+Follow the conformance matrix recorded in `DevilTea/deviltea-labs#13` checkpoint G: type-level conformance (registry
 typestate, arbitrary string keys, broadened-`string`-universe rejection, exact `useWidget(Plugin)`
 capability/member/slot inference, absent-vs-explicitly-empty), lazy bridge invariants (activation
 timing, subscription counts, identity stability), state/property/method/diagnostics conformance, and

@@ -6,7 +6,7 @@ persistent Preview, and readonly Blueprint/Runtime/Dependency Graph inspectors.
 
 See [AGENTS.md](AGENTS.md) for the architectural boundaries this app must keep (public-contract-only
 consumption of `@deviltea/widget-core`/`@deviltea/widget-vue`, readonly inspectors, no
-persistence/editor-domain state, sandbox fixtures vs. future showcases).
+persistence/editor-domain state, sandbox fixtures vs. showcases).
 
 ## Stack
 
@@ -31,6 +31,8 @@ pnpm --filter widget-lab dev
 pnpm --filter widget-lab build
 pnpm --filter widget-lab typecheck
 pnpm --filter widget-lab test
+pnpm --filter widget-lab test:browser
+pnpm --filter widget-lab test:pages
 ```
 
 ## Sandbox
@@ -39,8 +41,8 @@ pnpm --filter widget-lab test
 the last demonstrating a cross-widget `registerDeps` dependency) with three preset source texts: a
 fully valid interactive one, one that is intentionally semantically invalid (to demo diagnostics), and
 one that exercises Blueprint recovery (an unresolved node and a raw-slot placement). These are dev
-fixtures for this shell, not the "Interactive Survey" / "Product Prototype" showcases planned for a
-later phase.
+fixtures for this shell, separate from the "Interactive Survey", "Product Prototype", and "Vuetify Task
+Workspace" showcases registered in `src/showcases/registry.ts`.
 
 ## Dependency Graph
 
