@@ -11,4 +11,4 @@ The extraction preserved the Git history for:
 
 The release tags `widget-core@0.0.1` and `widget-vue@0.0.1` are preserved.
 
-Historical architectural decision logs were not migrated as GitHub Issues. References such as `issue #10`, `#13`, `#25`–`#30`, `#54`, and `#60` in migrated source refer to the original `DevilTea/deviltea-labs` issue tracker unless the reference explicitly names `DevilTea/widget`.
+Historical architectural decision logs were not migrated as GitHub Issues; the relevant decisions were migrated into `DevilTea/widget` Discussion #12 ("Widget: canonical design discussion"). References such as `issue #10`, `#13`, `#25`–`#30`, `#54`, and `#60` in migrated source refer to the original `DevilTea/deviltea-labs` issue tracker unless the reference explicitly names `DevilTea/widget`.
