@@ -87,7 +87,7 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 			attachTo: document.body,
 			global: {
 				stubs: {
-					LabHeader: true,
+					LabHeader: defineComponent({ name: 'LabHeader', render: () => h('header', { 'data-testid': 'header-probe' }) }),
 					TutorialConfirmDialog: true,
 					TutorialRail: true,
 					WelcomeCard: TutorialProbe,
@@ -191,27 +191,33 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 		wrapper.unmount()
 	})
 
-	it('makes .lab-body inert only while the narrow-viewport gate is active', async () => {
+	it('makes the header and .lab-body inert, but not the gate, only while the gate is active', async () => {
 		const wrapper = mountApp()
-		const body = wrapper.get('.lab-body')
-		expect(body.attributes('inert'))
-			.toBeUndefined()
+		const inertOf = (selector: string) => wrapper.get(selector).element.closest('[inert]') !== null
+		expect(inertOf('[data-testid="header-probe"]'))
+			.toBe(false)
+		expect(inertOf('.lab-body'))
+			.toBe(false)
 
 		media.matches = false
 		for (const l of media.listeners)
 			l({ matches: false })
 		await wrapper.vm.$nextTick()
-		expect(wrapper.get('.lab-body')
-			.attributes('inert'))
-			.toBeDefined()
+		expect(inertOf('[data-testid="header-probe"]'))
+			.toBe(true)
+		expect(inertOf('.lab-body'))
+			.toBe(true)
+		expect(inertOf('.narrow-viewport-gate'))
+			.toBe(false)
 
 		media.matches = true
 		for (const l of media.listeners)
 			l({ matches: true })
 		await wrapper.vm.$nextTick()
-		expect(wrapper.get('.lab-body')
-			.attributes('inert'))
-			.toBeUndefined()
+		expect(inertOf('[data-testid="header-probe"]'))
+			.toBe(false)
+		expect(inertOf('.lab-body'))
+			.toBe(false)
 		wrapper.unmount()
 	})
 })

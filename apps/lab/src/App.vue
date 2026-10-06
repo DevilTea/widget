@@ -104,13 +104,16 @@ onUnmounted(() => disposeLayoutWorker())
 
 <template>
 	<div class="lab-app">
-		<LabHeader />
+		<!-- `display: contents` keeps header/body direct flex items of `.lab-app`; the wrapper only carries `inert`. -->
 		<div
-			class="lab-body"
+			class="lab-covered"
 			:inert="!supportedViewport"
 		>
-			<Workbench />
-			<TutorialRail v-if="tutorialRailVisible" />
+			<LabHeader />
+			<div class="lab-body">
+				<Workbench />
+				<TutorialRail v-if="tutorialRailVisible" />
+			</div>
 		</div>
 		<!--
 			diagnostic #25 P1 merge-gate review (blocker 1): both dialogs stay always-mounted now — each is a
@@ -137,6 +140,10 @@ onUnmounted(() => disposeLayoutWorker())
 	display: flex;
 	flex-direction: column;
 	height: 100%;
+}
+
+.lab-covered {
+	display: contents;
 }
 
 /*
