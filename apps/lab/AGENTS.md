@@ -1,7 +1,7 @@
 # AGENTS.md — widget-lab
 
 Current-state operating guide for this app. Issue numbers in this file (`#10`, `#13`, `#25`–`#30`, `#54`,
-`#60`) are historical `DevilTea/deviltea-labs` numbers (see `docs/migration/source-history.md`); current
+`#60`) are historical `DevilTea/deviltea-labs` numbers (`DevilTea/widget#5` and `DevilTea/widget#8` below are current issues) (see `docs/migration/source-history.md`); current
 authority is `DevilTea/widget` Discussion #12 and current `DevilTea/widget` Issues/Discussions.
 `DevilTea/deviltea-labs#13` is the historical Widget Lab decision
 log; `DevilTea/deviltea-labs#60` tracked the post-`WidgetDocument` Lab redesign and accepted migration decisions;
@@ -87,13 +87,13 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
   deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
   which consumes the private `@deviltea/widget-devtools` client/agent boundary for Inspect mode. Phase B1
-  (#8) now runs that same-realm bridge over a real asynchronous `MessageChannel` rather than the A1
+  (`DevilTea/widget#8`) now runs that same-realm bridge over a real asynchronous `MessageChannel` rather than the A1
   in-process pair; the Agent still owns bounded Preview DOM hit-testing, pointer suppression,
   highlight/badge chrome, and Escape cleanup, while the panel only translates scoped `WidgetRef`
   selection events into the existing Preview focus/navigation rules. `src/preview-host/lifecycle.ts` is
   the generation-aware remote-host state machine (`booting`/`ready`/`replacing`/`disconnected`/`error`)
-  for the next iframe step. Preview Runtime ownership has **not** moved into an iframe yet; #8 owns Phase B
-  implementation and #5 remains the iframe/extension umbrella,
+  for the next iframe step. Preview Runtime ownership has **not** moved into an iframe yet; `DevilTea/widget#8` owns Phase B
+  implementation and `DevilTea/widget#5` remains the iframe/extension umbrella,
   `inspector/*` (presentation-only inspector shell and tree/details split layout shared by Blueprint and
   Runtime; these components own no semantic data, revision labels, or focus state), `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list; the selected-node
   detail also carries a "View implementation" entry point), `runtime/*` (Runtime Inspector's member rows
@@ -268,7 +268,7 @@ live source workflow, and the showcases. It must not own, and must not gain:
 - an editor-command/undo architecture — Source text editing plus explicit Apply is the whole model.
 
 When Lab work exposes a genuine gap in widget-core/widget-vue's public contract, canonicalize it on
-GitHub (`DevilTea/deviltea-labs#10`/`#13`) instead of silently working around it in Lab-private code — implementation evidence
+GitHub (`DevilTea/deviltea-labs#10`/`DevilTea/deviltea-labs#13`) instead of silently working around it in Lab-private code — implementation evidence
 may challenge architecture, but never rewrites it locally.
 
 ## Inspectors are readonly
