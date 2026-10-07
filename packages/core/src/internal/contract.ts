@@ -310,12 +310,15 @@ export type WidgetSource<Plugins extends AnyWidgetPluginTuple> = Plugins[number]
 export interface WidgetSystemBlueprintBase<Plugins extends AnyWidgetPluginTuple, Source = unknown> {
 	readonly system: WidgetSystem<Plugins>
 	/**
-	 * The exact entire unknown input this Blueprint was compiled from.
+	 * The exact entire unknown input this Blueprint was compiled from: the same reference that was
+	 * passed in, never cloned or frozen by Core. Callers and readers must not mutate it; ownership of
+	 * the graph transferred to Core when it was handed over (behavior after mutation is unspecified).
 	 */
 	readonly source: Source
 	readonly sourceJsonCompatible: boolean
 	/**
-	 * Observably equivalent to `blueprint.system.createBlueprint(next)`.
+	 * Observably equivalent to `blueprint.system.createBlueprint(next)`. `definition` is retained by
+	 * reference and ownership transfers exactly as for `createBlueprint`.
 	 */
 	recompile: (definition: unknown) => WidgetSystemBlueprint<Plugins>
 }
@@ -667,6 +670,15 @@ export const blueprintInternals: unique symbol = Symbol('@deviltea/widget-core:b
  */
 export interface BlueprintInternalsCarrier<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly [blueprintInternals]: CompiledBlueprint<Plugins>
+}
+
+/**
+ * Provenance probe: true only for Blueprints produced by this loaded module instance.
+ */
+export function isCoreBlueprint(value: unknown): boolean {
+	if (typeof value !== 'object' || value === null)
+		return false
+	return (value as Partial<BlueprintInternalsCarrier>)[blueprintInternals] !== undefined
 }
 
 /**

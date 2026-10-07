@@ -32,7 +32,7 @@ jobs:
       - name: Verify tag and resolve package
         id: target
         run: |
-          git fetch origin main --depth=1
+          git fetch origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
           package_id="$(pnpm exec tsx scripts/release-package.ts verify-tag "$GITHUB_REF_NAME")"
           package_name="$(pnpm exec tsx scripts/release-package.ts package-name "$package_id")"
@@ -62,4 +62,11 @@ jobs:
       - name: Publish with npm trusted publishing
         env:
           TARBALL: ${{ steps.tarball.outputs.path }}
-        run: npm publish "$TARBALL" --access public --provenance
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          # Prerelease versions must never take the default `latest` dist-tag.
+          tag_args=()
+          if [[ "$VERSION" == *-* ]]; then
+            tag_args=(--tag next)
+          fi
+          npm publish "$TARBALL" --access public --provenance "${tag_args[@]}"

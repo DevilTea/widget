@@ -7,6 +7,8 @@
  */
 
 export { inspectBlueprint } from './blueprint'
+export { WidgetInspectionError } from './errors'
+export type { WidgetInspectionErrorCode } from './errors'
 export { inspectPlugin } from './plugin'
 
 export { inspectRuntime } from './runtime'

@@ -32,8 +32,9 @@ import type {
 	RuntimeStateInspectionSnapshot,
 	RuntimeWidgetInspection,
 } from './types'
-import { readRuntimeInternals } from '../runtime/internals'
+import { isCoreRuntime, readRuntimeInternals } from '../runtime/internals'
 import { inspectBlueprint } from './blueprint'
+import { WidgetInspectionError } from './errors'
 
 function buildStateInspection(context: RuntimeContext, primitive: StatePrimitive): RuntimeStateInspection<unknown> {
 	return Object.freeze({
@@ -177,6 +178,9 @@ const runtimeInspectionCache = new WeakMap<WidgetSystemRuntime<any>, RuntimeInsp
 export function inspectRuntime<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>(
 	runtime: WidgetSystemRuntime<Plugins>,
 ): RuntimeInspection<Plugins> {
+	if (!isCoreRuntime(runtime))
+		throw new WidgetInspectionError('foreign-runtime')
+
 	const cached = runtimeInspectionCache.get(runtime)
 	if (cached !== undefined)
 		return cached as RuntimeInspection<Plugins>

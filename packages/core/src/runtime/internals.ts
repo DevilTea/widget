@@ -8,7 +8,7 @@
  * on Runtime disposal, without the ordinary Runtime contract itself ever exposing them.
  */
 
-import type { InternalNodeId, WidgetSystemRuntime } from '../internal/contract'
+import type { CompiledBlueprint, InternalNodeId, WidgetSystemRuntime } from '../internal/contract'
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type { RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
@@ -21,6 +21,14 @@ export interface RuntimeInternals {
 	 * Indexed by `InternalNodeId`, same universe as the owning Blueprint's compiled node array.
 	 */
 	readonly registry: ReadonlyMap<InternalNodeId, PrimitiveRegistryEntry>
+	/**
+	 * The compiled Blueprint this Runtime was built from (Core-owned pairing state).
+	 */
+	readonly compiled: CompiledBlueprint
+	/**
+	 * Core-owned exact Runtime-widget pairing: every RuntimeWidget this Runtime produced, keyed by identity.
+	 */
+	readonly nodeIdByRuntimeWidget: ReadonlyMap<object, InternalNodeId>
 }
 
 /**
@@ -29,6 +37,15 @@ export interface RuntimeInternals {
  */
 export interface RuntimeInternalsCarrier {
 	readonly [runtimeInternals]: RuntimeInternals
+}
+
+/**
+ * Provenance probe: true only for Runtimes produced by this loaded module instance.
+ */
+export function isCoreRuntime(value: unknown): boolean {
+	if (typeof value !== 'object' || value === null)
+		return false
+	return (value as Partial<RuntimeInternalsCarrier>)[runtimeInternals] !== undefined
 }
 
 /**

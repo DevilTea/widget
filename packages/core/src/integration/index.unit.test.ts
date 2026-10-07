@@ -92,7 +92,7 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 		expect((thrown as WidgetIntegrationError).code)
 			.toBe('runtime-widget-mismatch')
 		expectTypeOf<WidgetIntegrationErrorCode>()
-			.toEqualTypeOf<'runtime-widget-mismatch'>()
+			.toEqualTypeOf<'runtime-widget-mismatch' | 'foreign-runtime'>()
 	})
 
 	it('returns null when the widget has no events capability', () => {
@@ -119,5 +119,112 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 			.toThrow(WidgetSystemRuntimeDisposedError)
 		expect(() => getWidgetEventEmitter(runtime, widget))
 			.toThrow(WidgetSystemRuntimeDisposedError)
+	})
+
+	it('rejects a Runtime from another module instance with foreign-runtime', async () => {
+		vi.resetModules()
+		const foreignCore = await import('../index')
+		const foreignPlugin = foreignCore.createWidgetPlugin('plain')
+			.description('Plain')
+			.interfaces<Record<never, never>>()
+			.done()
+		const foreignSystem = foreignCore.createWidgetSystem({ plugins: [foreignPlugin] as const })
+		const foreignBlueprint = foreignSystem.createBlueprint({ id: 'root', type: 'plain' })
+		if (foreignBlueprint.status !== 'valid')
+			throw new Error('Expected valid blueprint')
+		const foreignRuntime = foreignBlueprint.createRuntime()
+		const foreignWidget = foreignRuntime.getWidget('root')
+
+		let thrown: unknown
+		try {
+			getWidgetEventEmitter(foreignRuntime as never, foreignWidget as never)
+		}
+		catch (error) {
+			thrown = error
+		}
+		expect(thrown)
+			.toBeInstanceOf(WidgetIntegrationError)
+		expect((thrown as WidgetIntegrationError).code)
+			.toBe('foreign-runtime')
+	})
+
+	it('rejects structural look-alike and delegating Runtime forgeries with foreign-runtime', () => {
+		const { runtime, widget } = createSingleRuntime(eventPlugin)
+		const forgeries = [
+			{ getWidget: () => widget, blueprint: runtime.blueprint },
+			{ getWidget: runtime.getWidget, blueprint: runtime.blueprint, isDisposed: false },
+			null,
+		]
+
+		for (const forged of forgeries) {
+			let thrown: unknown
+			try {
+				getWidgetEventEmitter(forged as never, widget)
+			}
+			catch (error) {
+				thrown = error
+			}
+			expect(thrown)
+				.toBeInstanceOf(WidgetIntegrationError)
+			expect((thrown as WidgetIntegrationError).code)
+				.toBe('foreign-runtime')
+		}
+	})
+
+	it('rejects a RuntimeWidget from a second Runtime of the same Blueprint with runtime-widget-mismatch', () => {
+		const system = createWidgetSystem({ plugins: [eventPlugin] as const })
+		const blueprint = system.createBlueprint({ id: 'root', type: eventPlugin.type })
+		if (blueprint.status !== 'valid')
+			throw new Error('Expected valid blueprint')
+		const first = blueprint.createRuntime()
+		const second = blueprint.createRuntime()
+		const secondWidget = second.getWidget('root')!
+
+		let thrown: unknown
+		try {
+			getWidgetEventEmitter(first, secondWidget)
+		}
+		catch (error) {
+			thrown = error
+		}
+		expect(thrown)
+			.toBeInstanceOf(WidgetIntegrationError)
+		expect((thrown as WidgetIntegrationError).code)
+			.toBe('runtime-widget-mismatch')
+		expect(getWidgetEventEmitter(second, secondWidget))
+			.not.toBeNull()
+	})
+
+	it('exposes WidgetIntegrationError with the foreign-runtime code from the integration subpath', () => {
+		const error = new WidgetIntegrationError('foreign-runtime')
+
+		expect(error)
+			.toBeInstanceOf(WidgetIntegrationError)
+		expect(error.code)
+			.toBe('foreign-runtime')
+	})
+
+	it('rejects a forged RuntimeWidget against a genuine Runtime with runtime-widget-mismatch', () => {
+		const { runtime, widget } = createSingleRuntime(eventPlugin)
+		const forgedWidgets = [
+			{ id: 'root', blueprint: (widget as unknown as { blueprint: unknown }).blueprint },
+			{ ...(widget as object) },
+			{ id: 'missing' },
+			null,
+		]
+
+		for (const forged of forgedWidgets) {
+			let thrown: unknown
+			try {
+				getWidgetEventEmitter(runtime, forged as never)
+			}
+			catch (error) {
+				thrown = error
+			}
+			expect(thrown)
+				.toBeInstanceOf(WidgetIntegrationError)
+			expect((thrown as WidgetIntegrationError).code)
+				.toBe('runtime-widget-mismatch')
+		}
 	})
 })

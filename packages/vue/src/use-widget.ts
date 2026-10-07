@@ -46,12 +46,19 @@ function getCurrentWidgetContext(): CurrentWidgetContextValue {
  */
 function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetContextValue['runtime'], plugin: AnyWidgetPlugin): Record<string, unknown> {
 	const cleanups: Array<() => void> = []
+	let disposed = false
 	onScopeDispose(() => {
-		for (const cleanup of cleanups)
+		disposed = true
+		for (const cleanup of cleanups.splice(0))
 			cleanup()
 	})
 	const registerCleanup = (cleanup: () => void): void => {
-		cleanups.push(cleanup)
+		// A ref first read after its owning scope was disposed activates a subscription nobody will
+		// ever dispose; release it immediately. The read itself still returns the live Runtime value.
+		if (disposed)
+			cleanup()
+		else
+			cleanups.push(cleanup)
 	}
 
 	const result: Record<string, unknown> = Object.create(null)

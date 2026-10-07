@@ -206,7 +206,7 @@ export function isJsonValue(value: unknown): value is JsonValue {
 	return inspectJsonValue(value).compatible
 }
 
-/** JSON-domain equality used by RFC6902 `test` and by SourcePatch no-op detection. */
+/** JSON-domain equality used by the RFC6902 `test` operation. (SourcePatch no-op detection uses `structurallyEqual` in `source-patch.ts`.) */
 export function jsonEqual(left: unknown, right: unknown, seen = new Set<unknown>()): boolean {
 	if (Object.is(left, right))
 		return true

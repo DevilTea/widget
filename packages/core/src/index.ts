@@ -207,7 +207,7 @@ export type {
 	SourcePath,
 } from './source-patch'
 
-export { createWidgetSystem } from './system'
+export { createWidgetSystem, WidgetSystemConfigurationError } from './system'
 
 export type {
 	CreateWidgetSystemOptions,
@@ -215,6 +215,7 @@ export type {
 	WidgetCatalogEntry,
 	WidgetPluginOf,
 	WidgetSystem,
+	WidgetSystemConfigurationErrorCode,
 	WidgetSystemValidateStructure,
 	WidgetSystemValidateStructureContext,
 } from './system'
