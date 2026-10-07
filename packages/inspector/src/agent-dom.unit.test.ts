@@ -2,15 +2,44 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
-import { createDevtoolsTestFixture } from './test-fixture'
+import { createInspectorTestFixture } from './test-fixture'
 import { createInProcessInspectorTransportPair } from './transport'
 
 async function flushTransport(): Promise<void> {
 	await Promise.resolve()
 }
 
+interface Box { x: number, y: number, width: number, height: number }
+
+const OUTER_BOX: Box = { x: 0, y: 0, width: 200, height: 100 }
+const INNER_BOX: Box = { x: 10, y: 30, width: 80, height: 20 }
+
+function mockRects(element: Element, boxes: readonly Box[]): void {
+	Object.defineProperty(element, 'getClientRects', {
+		configurable: true,
+		value: () => boxes.map(box => new DOMRect(box.x, box.y, box.width, box.height)),
+	})
+}
+
+function overlayHost(): HTMLElement | null {
+	return document.querySelector<HTMLElement>('[data-widget-inspector-overlay="true"]')
+}
+
+function drawnBoxes(): Box[] {
+	return [...overlayHost()?.shadowRoot?.querySelectorAll<HTMLElement>('.rect') ?? []].map(element => ({
+		x: Number.parseFloat(element.style.left),
+		y: Number.parseFloat(element.style.top),
+		width: Number.parseFloat(element.style.width),
+		height: Number.parseFloat(element.style.height),
+	}))
+}
+
+function drawnLabel(): string | null {
+	return overlayHost()?.shadowRoot?.querySelector('.badge')?.textContent ?? null
+}
+
 function createDomFixture() {
-	const fixture = createDevtoolsTestFixture()
+	const fixture = createInspectorTestFixture()
 	const root = document.createElement('div')
 	root.style.position = 'relative'
 	const outer = document.createElement('section')
@@ -24,17 +53,15 @@ function createDomFixture() {
 	outer.append(inner)
 	root.append(outer)
 	document.body.append(root)
+	mockRects(outer, [OUTER_BOX])
+	mockRects(inner, [INNER_BOX])
 
 	const pair = createInProcessInspectorTransportPair()
 	const agent = createInspectorAgent({
 		runtime: fixture.runtime,
 		transport: pair.agent,
 		runtimeId: 'runtime-dom',
-		dom: {
-			root,
-			highlightClass: 'test-highlight',
-			badgeClass: 'test-badge',
-		},
+		dom: { root },
 	})
 	const client = createInspectorClient(pair.client)
 	return { ...fixture, root, outer, inner, pair, agent, client }
@@ -50,13 +77,20 @@ describe('inspectorAgent DOM ownership', () => {
 			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
 			await flushTransport()
 
-			expect(inner.classList.contains('test-highlight'))
-				.toBe(true)
-			const badge = root.querySelector<HTMLElement>('[data-widget-inspector-badge="true"]')
-			expect(badge?.textContent)
+			expect(drawnBoxes())
+				.toStrictEqual([INNER_BOX])
+			expect(drawnLabel())
 				.toBe('DevtoolsCounter#counter')
-			expect(badge?.style.pointerEvents)
+			expect(overlayHost()?.style.pointerEvents)
 				.toBe('none')
+			// The Agent never mutates renderer elements or the renderer subtree.
+			expect(inner.getAttributeNames()
+				.sort())
+				.toStrictEqual(['data-widget-id', 'data-widget-type', 'type'])
+			expect(root.querySelector('[data-widget-inspector-overlay]'))
+				.toBeNull()
+			expect(overlayHost()?.parentElement)
+				.toBe(document.body)
 			expect(events)
 				.toContainEqual(expect.objectContaining({
 					ref: expect.objectContaining({ runtimeId: 'runtime-dom' }),
@@ -89,8 +123,8 @@ describe('inspectorAgent DOM ownership', () => {
 				.toMatchObject({ visibility: 'visible', rects: [{ x: 0, y: 0, width: 200, height: 100 }] })
 			expect(await client.request('highlight.show', { ref }))
 				.toEqual({ highlighted: true })
-			expect(root.classList.contains('test-highlight'))
-				.toBe(true)
+			expect(drawnBoxes())
+				.toStrictEqual([OUTER_BOX])
 		}
 		finally {
 			client.dispose()
@@ -100,7 +134,7 @@ describe('inspectorAgent DOM ownership', () => {
 	})
 
 	it('falls back to a registered ancestor for stale nested DOM anchors', async () => {
-		const { root, outer, inner, agent, client } = createDomFixture()
+		const { root, inner, agent, client } = createDomFixture()
 		try {
 			inner.dataset.widgetId = 'stale-widget'
 			const selections: unknown[] = []
@@ -112,8 +146,8 @@ describe('inspectorAgent DOM ownership', () => {
 			const click = new MouseEvent('click', { bubbles: true, cancelable: true })
 			inner.dispatchEvent(click)
 			await flushTransport()
-			expect(outer.classList.contains('test-highlight'))
-				.toBe(true)
+			expect(drawnBoxes())
+				.toStrictEqual([OUTER_BOX])
 			expect(click.defaultPrevented)
 				.toBe(true)
 			expect(hovered)
@@ -194,16 +228,16 @@ describe('inspectorAgent DOM ownership', () => {
 			inner.addEventListener('click', action)
 			await client.request('inspect.enable', {})
 			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-			expect(inner.classList.contains('test-highlight'))
-				.toBe(true)
+			expect(overlayHost())
+				.not.toBeNull()
 
 			document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
 			await flushTransport()
 			expect(agent.inspectEnabled)
 				.toBe(false)
-			expect(inner.classList.contains('test-highlight'))
-				.toBe(false)
-			expect(root.querySelector('[data-widget-inspector-badge="true"]'))
+			expect(overlayHost())
+				.toBeNull()
+			expect(overlayHost())
 				.toBeNull()
 
 			inner.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
@@ -224,16 +258,16 @@ describe('inspectorAgent DOM ownership', () => {
 			inner.addEventListener('click', action)
 			await client.request('inspect.enable', {})
 			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-			expect(root.querySelector('[data-widget-inspector-badge="true"]'))
+			expect(overlayHost())
 				.not.toBeNull()
 
 			expect(await client.request('inspect.disable', {}))
 				.toEqual({ enabled: false })
 			expect(agent.inspectEnabled)
 				.toBe(false)
-			expect(inner.classList.contains('test-highlight'))
-				.toBe(false)
-			expect(root.querySelector('[data-widget-inspector-badge="true"]'))
+			expect(overlayHost())
+				.toBeNull()
+			expect(overlayHost())
 				.toBeNull()
 
 			const click = new MouseEvent('click', { bubbles: true, cancelable: true })
@@ -282,14 +316,14 @@ describe('inspectorAgent DOM ownership', () => {
 			inner.addEventListener('keydown', nativeKeydown)
 			await client.request('inspect.enable', {})
 			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-			expect(inner.classList.contains('test-highlight'))
-				.toBe(true)
+			expect(overlayHost())
+				.not.toBeNull()
 
 			pair.client.close()
 
-			expect(inner.classList.contains('test-highlight'))
-				.toBe(false)
-			expect(root.querySelector('[data-widget-inspector-badge="true"]'))
+			expect(overlayHost())
+				.toBeNull()
+			expect(overlayHost())
 				.toBeNull()
 
 			// Chrome can clear even when capture listeners are leaked. Probe actual native activation.
@@ -310,9 +344,9 @@ describe('inspectorAgent DOM ownership', () => {
 
 			// A partial teardown must not revive Inspect chrome or intercept native Escape.
 			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-			expect(inner.classList.contains('test-highlight'))
-				.toBe(false)
-			expect(root.querySelector('[data-widget-inspector-badge="true"]'))
+			expect(overlayHost())
+				.toBeNull()
+			expect(overlayHost())
 				.toBeNull()
 			const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
 			inner.dispatchEvent(escape)
@@ -361,6 +395,192 @@ describe('inspectorAgent DOM ownership', () => {
 		}
 		finally {
 			outside.remove()
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+})
+
+describe('inspectorAgent ShadowRoot overlay', () => {
+	it('draws the highlight inside an open ShadowRoot on a fixed, pointer-transparent, aria-hidden host', async () => {
+		const { root, agent, client, inner } = createDomFixture()
+		try {
+			await client.request('inspect.enable', {})
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+
+			const host = overlayHost()
+			expect(host?.shadowRoot)
+				.not.toBeNull()
+			expect(host?.getAttribute('aria-hidden'))
+				.toBe('true')
+			expect(host?.style.position)
+				.toBe('fixed')
+			expect(host?.style.pointerEvents)
+				.toBe('none')
+			// Presentation lives inside the ShadowRoot, so document CSS cannot restyle or leak into it.
+			expect(host?.shadowRoot?.querySelector('style')?.textContent)
+				.toContain('.rect')
+			expect(host?.querySelector('.rect'))
+				.toBeNull()
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('highlights every fragment of a Widget with one label, in document order', async () => {
+		const { root, outer, inner, agent, client } = createDomFixture()
+		const second = document.createElement('button')
+		second.dataset.widgetId = 'counter'
+		second.dataset.widgetType = 'DevtoolsCounter'
+		outer.append(second)
+		const secondBox: Box = { x: 10, y: 60, width: 80, height: 20 }
+		const wrappedA: Box = { x: 100, y: 30, width: 40, height: 10 }
+		const wrappedB: Box = { x: 100, y: 40, width: 30, height: 10 }
+		mockRects(second, [secondBox])
+		mockRects(inner, [INNER_BOX, wrappedA, wrappedB])
+		try {
+			const snapshot = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-dom' })
+			const counter = snapshot.nodes.find(node => node.resolved && node.widgetId === 'counter')
+			const ref = { runtimeId: 'runtime-dom', nodeId: counter!.nodeId }
+			expect(await client.request('highlight.show', { ref }))
+				.toEqual({ highlighted: true })
+
+			expect(drawnBoxes())
+				.toStrictEqual([INNER_BOX, wrappedA, wrappedB, secondBox])
+			expect(overlayHost()?.shadowRoot?.querySelectorAll('.badge'))
+				.toHaveLength(1)
+			expect(drawnLabel())
+				.toBe('DevtoolsCounter#counter')
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('survives a renderer re-render and follows the replaced anchors', async () => {
+		const { root, outer, inner, agent, client } = createDomFixture()
+		try {
+			await client.request('inspect.enable', {})
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			expect(drawnBoxes())
+				.toStrictEqual([INNER_BOX])
+
+			// Simulate a Vue re-render: the renderer patches classes and swaps the anchor element.
+			inner.className = 'patched-by-renderer'
+			const replacement = document.createElement('button')
+			replacement.dataset.widgetId = 'counter'
+			replacement.dataset.widgetType = 'DevtoolsCounter'
+			const moved: Box = { x: 20, y: 40, width: 90, height: 24 }
+			mockRects(replacement, [moved])
+			inner.replaceWith(replacement)
+			outer.className = 'patched-by-renderer'
+
+			await vi.waitFor(() => expect(drawnBoxes())
+				.toStrictEqual([moved]))
+			expect(overlayHost())
+				.not.toBeNull()
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('removes the drawn rects when the highlighted Widget unmounts and redraws if it returns', async () => {
+		const { root, outer, inner, agent, client } = createDomFixture()
+		try {
+			await client.request('inspect.enable', {})
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			expect(overlayHost())
+				.not.toBeNull()
+
+			inner.remove()
+			await vi.waitFor(() => expect(overlayHost())
+				.toBeNull())
+
+			const remounted = document.createElement('button')
+			remounted.dataset.widgetId = 'counter'
+			remounted.dataset.widgetType = 'DevtoolsCounter'
+			mockRects(remounted, [INNER_BOX])
+			outer.append(remounted)
+			await vi.waitFor(() => expect(drawnBoxes())
+				.toStrictEqual([INNER_BOX]))
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('does not report its own overlay as a geometry change', async () => {
+		const { root, inner, agent, client } = createDomFixture()
+		try {
+			const invalidations: unknown[] = []
+			client.on('geometry.invalidated', payload => invalidations.push(payload))
+			await client.handshake()
+			await client.request('inspect.enable', {})
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			inner.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }))
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
+			await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
+			expect(invalidations)
+				.toHaveLength(0)
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('highlight.show returns false without drawing when the Widget has no anchor element', async () => {
+		const { root, inner, agent, client } = createDomFixture()
+		try {
+			inner.remove()
+			const snapshot = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-dom' })
+			const counter = snapshot.nodes.find(node => node.resolved && node.widgetId === 'counter')
+			expect(await client.request('highlight.show', { ref: { runtimeId: 'runtime-dom', nodeId: counter!.nodeId } }))
+				.toEqual({ highlighted: false })
+			expect(overlayHost())
+				.toBeNull()
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('removes the overlay on highlight.clear and on dispose', async () => {
+		const { root, agent, client } = createDomFixture()
+		try {
+			const snapshot = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-dom' })
+			const ref = { runtimeId: 'runtime-dom', nodeId: snapshot.rootNodeId }
+			await client.request('highlight.show', { ref })
+			expect(overlayHost())
+				.not.toBeNull()
+			expect(await client.request('highlight.clear', {}))
+				.toEqual({ highlighted: false })
+			expect(overlayHost())
+				.toBeNull()
+
+			await client.request('highlight.show', { ref })
+			expect(overlayHost())
+				.not.toBeNull()
+			agent.dispose()
+			expect(overlayHost())
+				.toBeNull()
+		}
+		finally {
 			client.dispose()
 			agent.dispose()
 			root.remove()

@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
-import { createDevtoolsTestFixture } from './test-fixture'
+import { createInspectorTestFixture } from './test-fixture'
 import { createInProcessInspectorTransportPair } from './transport'
 
 function rect(x: number, y: number, width: number, height: number): DOMRect {
@@ -32,7 +32,7 @@ function createGeometryFixture(options: { shadowRoot?: boolean } = {}) {
 	Object.defineProperty(window, 'innerWidth', { configurable: true, value: 300 })
 	Object.defineProperty(window, 'innerHeight', { configurable: true, value: 200 })
 
-	const fixture = createDevtoolsTestFixture()
+	const fixture = createInspectorTestFixture()
 	const root = document.createElement('div')
 	const outer = document.createElement('section')
 	outer.dataset.widgetId = 'root'
@@ -90,7 +90,7 @@ function nextAnimationFrame(): Promise<void> {
 
 describe('semantic geometry Inspector protocol', () => {
 	it('advertises geometry only for DOM-backed Agents', async () => {
-		const fixture = createDevtoolsTestFixture()
+		const fixture = createInspectorTestFixture()
 		const pair = createInProcessInspectorTransportPair()
 		const agent = createInspectorAgent({ runtime: fixture.runtime, transport: pair.agent, runtimeId: 'runtime-no-dom' })
 		const client = createInspectorClient(pair.client)

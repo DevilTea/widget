@@ -1,28 +1,36 @@
 import type {
+	InspectorGeometryRect,
 	InspectorGeometrySnapshot,
 	InspectorHitTestResult,
 	InspectorPreviewPoint,
 	InspectorSemanticTarget,
 	WidgetRef,
 } from './protocol'
+import { INSPECT_ANCHOR_ID_ATTRIBUTE, INSPECT_ANCHOR_TYPE_ATTRIBUTE } from './anchor'
+import { INSPECTOR_OVERLAY_HOST_SELECTOR } from './overlay'
 
-const ANCHOR_SELECTOR = '[data-widget-id][data-widget-type]'
+export const ANCHOR_SELECTOR = `[${INSPECT_ANCHOR_ID_ATTRIBUTE}][${INSPECT_ANCHOR_TYPE_ATTRIBUTE}]`
 
-const INSPECTOR_BADGE_SELECTOR = '[data-widget-inspector-badge="true"]'
-
-function isInspectorBadgeNode(node: Node): boolean {
-	const element = node.nodeType === 1 ? node as Element : node.parentElement
-	return element != null && element.closest(INSPECTOR_BADGE_SELECTOR) !== null
+/** Reads an element's anchor identity, or `null` when it does not carry both anchor attributes. */
+export function readAnchorIdentity(element: Element): { readonly widgetId: string, readonly widgetType: string } | null {
+	const widgetId = element.getAttribute(INSPECT_ANCHOR_ID_ATTRIBUTE)
+	const widgetType = element.getAttribute(INSPECT_ANCHOR_TYPE_ATTRIBUTE)
+	return widgetId === null || widgetType === null ? null : { widgetId, widgetType }
 }
 
-function isInspectorBadgeMutation(record: MutationRecord): boolean {
-	// Only Inspector-owned badge updates are presentation chrome, not Preview content changes.
-	if (isInspectorBadgeNode(record.target))
+function isInspectorOverlayNode(node: Node): boolean {
+	const element = node.nodeType === 1 ? node as Element : node.parentElement
+	return element != null && element.closest(INSPECTOR_OVERLAY_HOST_SELECTOR) !== null
+}
+
+function isInspectorOverlayMutation(record: MutationRecord): boolean {
+	// Only Inspector-owned overlay updates are presentation chrome, not Preview content changes.
+	if (isInspectorOverlayNode(record.target))
 		return true
 	if (record.type !== 'childList')
 		return false
 	const changed = [...record.addedNodes, ...record.removedNodes]
-	return changed.length > 0 && changed.every(isInspectorBadgeNode)
+	return changed.length > 0 && changed.every(isInspectorOverlayNode)
 }
 
 export interface SemanticGeometryControllerOptions {
@@ -32,9 +40,18 @@ export interface SemanticGeometryControllerOptions {
 	readonly onInvalidated: (revision: number) => void
 }
 
+export interface SemanticGeometryMeasurement {
+	/** Number of anchor elements currently carrying this Widget's identity inside the root. */
+	readonly anchorCount: number
+	/** Every usable client rect of every anchor, in document order. */
+	readonly rects: readonly InspectorGeometryRect[]
+}
+
 export interface SemanticGeometryController {
 	readonly revision: number
 	resolve: (ref: WidgetRef) => InspectorGeometrySnapshot
+	/** Measures a resolved semantic target without projecting it to a protocol snapshot. */
+	measure: (target: InspectorSemanticTarget) => SemanticGeometryMeasurement
 	hitTest: (point: InspectorPreviewPoint) => InspectorHitTestResult
 	/** Host-owned invalidation for CSSOM/adoptedStyleSheets changes not exposed to DOM observers. */
 	invalidate: () => void
@@ -87,22 +104,25 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 
 	function targetAnchors(target: InspectorSemanticTarget): Element[] {
 		return allAnchors()
-			.filter(element =>
-				element.getAttribute('data-widget-id') === target.widgetId
-				&& element.getAttribute('data-widget-type') === target.widgetType,
-			)
+			.filter((element) => {
+				const identity = readAnchorIdentity(element)
+				return identity !== null
+					&& identity.widgetId === target.widgetId
+					&& identity.widgetType === target.widgetType
+			})
 	}
 
-	function rectsForTarget(target: InspectorSemanticTarget): readonly { x: number, y: number, width: number, height: number }[] {
-		const rects: { x: number, y: number, width: number, height: number }[] = []
-		for (const element of targetAnchors(target)) {
+	function measureTarget(target: InspectorSemanticTarget): SemanticGeometryMeasurement {
+		const anchors = targetAnchors(target)
+		const rects: InspectorGeometryRect[] = []
+		for (const element of anchors) {
 			for (const rect of element.getClientRects()) {
 				const projected = geometryRect(rect)
 				if (usableRect(projected))
 					rects.push(projected)
 			}
 		}
-		return rects
+		return { anchorCount: anchors.length, rects }
 	}
 
 	function snapshotForTarget(target: InspectorSemanticTarget | null): InspectorGeometrySnapshot {
@@ -115,7 +135,7 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 			}
 		}
 
-		const rects = rectsForTarget(target)
+		const { rects } = measureTarget(target)
 		if (rects.length === 0) {
 			return {
 				coordinateSpace: 'preview-viewport',
@@ -235,7 +255,7 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 
 	const mutationObserver = typeof MutationObserver === 'function'
 		? new MutationObserver((records) => {
-				if (records.some(record => !isInspectorBadgeMutation(record)))
+				if (records.some(record => !isInspectorOverlayMutation(record)))
 					scheduleInvalidation()
 			})
 		: null
@@ -275,7 +295,7 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 		subtree: true,
 		childList: true,
 		attributes: true,
-		attributeFilter: ['data-widget-id', 'data-widget-type'],
+		attributeFilter: [INSPECT_ANCHOR_ID_ATTRIBUTE, INSPECT_ANCHOR_TYPE_ATTRIBUTE],
 	})
 
 	const fontSet = document.fonts
@@ -290,6 +310,7 @@ export function createSemanticGeometryController(options: SemanticGeometryContro
 		resolve(ref) {
 			return snapshotForTarget(options.resolveRef(ref))
 		},
+		measure: measureTarget,
 		hitTest(point) {
 			const target = hitTarget(point)
 			if (target === null)

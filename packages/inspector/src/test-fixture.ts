@@ -54,7 +54,7 @@ const CounterPlugin = createWidgetPlugin('DevtoolsCounter')
 
 export const devtoolsTestSystem = createWidgetSystem({ plugins: [RootPlugin, CounterPlugin] })
 
-export function createDevtoolsTestFixture() {
+export function createInspectorTestFixture() {
 	const blueprint = devtoolsTestSystem.createBlueprint({
 		id: 'root',
 		type: 'DevtoolsRoot',
