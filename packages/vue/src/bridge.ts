@@ -87,7 +87,7 @@ export function createPropertyRef(property: RuntimePropertyLike, registerCleanup
 			return result.ok ? result.value : null
 		},
 		set() {
-			throw new WidgetVueIntegrationError('This Vue projection is read-only: properties cannot be written through `useProperties()`.')
+			throw new WidgetVueIntegrationError('readonly-projection-write', 'This Vue projection is read-only: properties cannot be written through `useProperties()`.')
 		},
 	}))
 }
@@ -114,7 +114,7 @@ export function createDiagnosticsRef<Diagnostic>(
 			return getDiagnostics()
 		},
 		set() {
-			throw new WidgetVueIntegrationError('This Vue projection is read-only: diagnostic snapshots cannot be written.')
+			throw new WidgetVueIntegrationError('readonly-projection-write', 'This Vue projection is read-only: diagnostic snapshots cannot be written.')
 		},
 	}))
 }

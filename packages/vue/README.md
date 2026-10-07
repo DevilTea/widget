@@ -163,8 +163,8 @@ declaration order, with no filtering/sorting/fallback semantics of its own.
 `WidgetRenderer`'s only semantic prop is `runtime`. It validates
 `runtime.blueprint.system` against the exact `WidgetSystem` instance
 `createWidgetVueRenderer` was bound to (a mismatch throws
-`WidgetVueIntegrationError`, a programmer/configuration exception, never a
-Widget Diagnostic), fully unmounts and remounts its internal tree whenever the
+`WidgetVueIntegrationError` with code `runtime-system-mismatch`, a
+programmer/configuration exception, never a Widget Diagnostic), fully unmounts and remounts its internal tree whenever the
 `runtime` prop identity changes (even for a structurally identical root), and
 never calls `runtime.dispose()` itself — Runtime lifetime stays owned by the
 caller.

@@ -5,8 +5,10 @@
  * module path).
  */
 
+import type { WidgetVueIntegrationErrorCode } from './index'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import * as entry from './index'
 import { createWidgetVueRenderer, useWidget, WidgetVueIntegrationError } from './index'
 import {
 	ContainerRenderer,
@@ -38,5 +40,25 @@ describe('public entry point', () => {
 	it('re-exports a working useWidget/WidgetVueIntegrationError pair', () => {
 		expect(() => useWidget(CounterPlugin))
 			.toThrow(WidgetVueIntegrationError)
+	})
+
+	it('exports WidgetVueIntegrationErrorCode as a type-only root export of exactly the five stable codes', () => {
+		expectTypeOf<WidgetVueIntegrationErrorCode>()
+			.toEqualTypeOf<
+				| 'invalid-renderer-registry'
+				| 'runtime-system-mismatch'
+				| 'outside-widget-renderer'
+				| 'widget-plugin-mismatch'
+				| 'readonly-projection-write'
+		>()
+		expectTypeOf<InstanceType<typeof WidgetVueIntegrationError>['code']>()
+			.toEqualTypeOf<WidgetVueIntegrationErrorCode>()
+		expectTypeOf<InstanceType<typeof WidgetVueIntegrationError>['missingTypes']>()
+			.toEqualTypeOf<readonly string[] | null>()
+
+		// A type has no runtime export; the value surface stays exactly these three.
+		expect(Object.keys(entry)
+			.sort())
+			.toEqual(['WidgetVueIntegrationError', 'createWidgetVueRenderer', 'useWidget'].sort())
 	})
 })
