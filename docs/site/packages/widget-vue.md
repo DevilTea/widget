@@ -107,7 +107,10 @@ const {
 	usePropertyDiagnostics,
 	useMethodDiagnostics,
 	useDiagnostics,
+	emit,
 	WidgetSlot,
+	widgetId,
+	widgetType,
 } = useWidget(SectionPlugin)
 ```
 
@@ -197,6 +200,31 @@ lazy per member. `useDiagnostics()` mirrors the widget-level aggregate —
 `WidgetSystemRuntime.getDiagnostics()`. Every projection preserves the
 core snapshot objects and order exactly: no message parsing, no
 reclassification, no invented aggregation.
+
+### Events
+
+```ts
+const { emit } = useWidget(SectionPlugin)
+
+emit.saved(...args) // void
+```
+
+`emit` is present only when the plugin declares an `events` capability. Each
+member is a callable typed from the declared event arguments and returning
+`void`. Looking up or materializing a member is passive: it neither subscribes
+nor acquires emit authority, and a name that is not a declared event yields
+`undefined`. The first call acquires the widget's Core event emitter and
+forwards the arguments to it. If Core returns no emitter, the call throws a
+`WidgetVueIntegrationError`.
+
+### Identity
+
+`widgetId` and `widgetType` are always present on the `useWidget()` result,
+regardless of declared capabilities. They are plain readonly values (not refs)
+projected once from the current rendered widget: `widgetId` is its
+semantic/Blueprint id (`string`) and `widgetType` is its plugin type. The
+adapter itself stamps no DOM attributes from them; a renderer may project them
+onto its own markup.
 
 ### Slots
 

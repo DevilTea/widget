@@ -544,6 +544,34 @@ if (result.ok && result.changed)
 	console.log(document.getSnapshot().revision) // 1
 ```
 
+`applyPatch(patch, options?)` returns `{ ok: true, changed }` or
+`{ ok: false, failure }`. A patch that leaves the source structurally equal
+returns `{ ok: true, changed: false }`: the revision does not advance and
+subscribers are not notified. A changing patch compiles the next Blueprint once
+after all operations succeed, commits it at `revision + 1`, then notifies
+subscribers. `failure.code` is one of:
+
+- `reentrant-apply`: `applyPatch()` was called while the Document was applying
+  or notifying (for example from a subscriber). It is checked first.
+- `document-revision-conflict`: `options.expectedRevision` was supplied and
+  differs from the current revision. The failure carries `expectedRevision` and
+  `actualRevision`. Omitting `options` skips this check, and the check runs
+  before any operation is evaluated.
+- An operation failure `{ code, operationIndex, message }`, where `code` is
+  `invalid-path`, `path-not-found`, `path-not-traversable`,
+  `invalid-array-index`, `invalid-move-target`, `test-failed`, or
+  `source-access-failed`, and `operationIndex` is the failing operation's
+  position in the patch. A failed patch leaves the committed source and revision
+  unchanged.
+
+`document.subscribe(listener)` registers `listener` and returns an idempotent
+unsubscribe function. The listener is not called on subscription; it receives
+the new snapshot after each committed (`changed: true`) patch, in subscription
+order, over the subscriber list as it stood when notification began. An
+exception thrown by a listener does not fail `applyPatch()` or stop the
+remaining listeners, and it is reported outside `applyPatch()`; the reporting
+mechanism is not part of the contract.
+
 ### Explicit separated-source tooling
 
 `WidgetSource` remains the canonical nested authored form. Core also exports an
