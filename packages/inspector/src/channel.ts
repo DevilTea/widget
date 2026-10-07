@@ -1,7 +1,7 @@
 import type { InspectorTransport } from './transport'
 
-const MESSAGE_PORT_CHANNEL_TYPE = '@deviltea/widget-devtools/message-port-channel'
-const MESSAGE_PORT_CHANNEL_HUB_TYPE = '@deviltea/widget-devtools/message-port-channel-hub'
+const MESSAGE_PORT_CHANNEL_TYPE = '@deviltea/widget-inspector/message-port-channel'
+const MESSAGE_PORT_CHANNEL_HUB_TYPE = '@deviltea/widget-inspector/message-port-channel-hub'
 
 interface HubCloseEnvelope {
 	readonly type: typeof MESSAGE_PORT_CHANNEL_HUB_TYPE

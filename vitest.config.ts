@@ -13,11 +13,13 @@ export default defineConfig({
 			provider: 'v8',
 			include: [
 				'packages/core/src/**/*.ts',
+				'packages/inspector/src/**/*.ts',
 				'packages/vue/src/**/*.ts',
 			],
 			exclude: [
 				'**/*.unit.test.ts',
 				'**/dist/**',
+				'packages/inspector/src/test-fixture.ts',
 				'packages/vue/src/test-fixtures.ts',
 				'apps/lab/**',
 			],

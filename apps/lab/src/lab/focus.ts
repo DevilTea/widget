@@ -8,7 +8,7 @@
 
 import type { AnyWidgetPluginTuple, WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
-import type { InspectorBlueprintNode, InspectorBlueprintSnapshot } from '@deviltea/widget-devtools'
+import type { InspectorBlueprintNode, InspectorBlueprintSnapshot } from '@deviltea/widget-inspector/protocol'
 import type { LabSession } from './session'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import type { InspectorClient } from '@deviltea/widget-inspector/client'
 /** Remote Runtime Inspector member list. All live values arrive through InspectorClient DTOs. */
-import type { InspectorBlueprintNode, InspectorClient, InspectorRuntimePropertySnapshot, InspectorRuntimeStateSnapshot, InspectorRuntimeWidgetSnapshot } from '@deviltea/widget-devtools'
+import type { InspectorBlueprintNode, InspectorRuntimePropertySnapshot, InspectorRuntimeStateSnapshot, InspectorRuntimeWidgetSnapshot } from '@deviltea/widget-inspector/protocol'
 import type { InspectorFocusMember } from '../../lab/focus'
 import { computed } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'

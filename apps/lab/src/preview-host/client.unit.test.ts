@@ -1,4 +1,4 @@
-import { createInProcessInspectorTransportPair } from '@deviltea/widget-devtools'
+import { createInProcessInspectorTransportPair } from '@deviltea/widget-inspector/transport'
 import { describe, expect, it } from 'vitest'
 import { createPreviewHostClient, PreviewHostClientError } from './client'
 import { parsePreviewHostRequest, PREVIEW_HOST_PROTOCOL_VERSION } from './protocol'

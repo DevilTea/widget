@@ -1,0 +1,85 @@
+{
+	"name": "@deviltea/widget-inspector",
+	"type": "module",
+	"publishConfig": {
+		"access": "public"
+	},
+	"version": "0.0.0",
+	"description": "Read-only Widget inspector protocol, client, DOM agent, and transports for @deviltea/widget-core Runtimes.",
+	"author": "DevilTea <ch19980814@gmail.com>",
+	"license": "MIT",
+	"homepage": "https://github.com/DevilTea/widget/tree/main/packages/inspector#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/DevilTea/widget.git",
+		"directory": "packages/inspector"
+	},
+	"bugs": {
+		"url": "https://github.com/DevilTea/widget/issues"
+	},
+	"keywords": [
+		"widget",
+		"inspector",
+		"devtools",
+		"protocol"
+	],
+	"exports": {
+		"./agent": {
+			"types": "./dist/agent.d.mts",
+			"import": "./dist/agent.mjs"
+		},
+		"./anchor": {
+			"types": "./dist/anchor.d.mts",
+			"import": "./dist/anchor.mjs"
+		},
+		"./channel": {
+			"types": "./dist/channel.d.mts",
+			"import": "./dist/channel.mjs"
+		},
+		"./client": {
+			"types": "./dist/client.d.mts",
+			"import": "./dist/client.mjs"
+		},
+		"./frame-bootstrap": {
+			"types": "./dist/frame-bootstrap.d.mts",
+			"import": "./dist/frame-bootstrap.mjs"
+		},
+		"./protocol": {
+			"types": "./dist/protocol.d.mts",
+			"import": "./dist/protocol.mjs"
+		},
+		"./transport": {
+			"types": "./dist/transport.d.mts",
+			"import": "./dist/transport.mjs"
+		},
+		"./value": {
+			"types": "./dist/value.d.mts",
+			"import": "./dist/value.mjs"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"engines": {
+		"node": "^22.14.0 || ^24.0.0"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"build:pack": "pnpm build && pnpm pack",
+		"dev": "tsdown --watch",
+		"test": "vitest run --config vitest.config.ts",
+		"typecheck": "pnpm typecheck:package && pnpm typecheck:test",
+		"typecheck:package": "tsc --project ./tsconfig.package.json --noEmit",
+		"typecheck:test": "tsc --project ./tsconfig.tests.json --noEmit"
+	},
+	"peerDependencies": {
+		"@deviltea/widget-core": ">=0.0.2 <0.1.0"
+	},
+	"devDependencies": {
+		"@deviltea/tsconfig": "catalog:",
+		"@deviltea/widget-core": "workspace:*",
+		"happy-dom": "catalog:",
+		"tsdown": "catalog:",
+		"vitest": "catalog:"
+	}
+}

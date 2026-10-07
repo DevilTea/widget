@@ -111,7 +111,7 @@ describe('messagePort channel hub', () => {
 		await Promise.all([inspectorClosed, hostClosed])
 		expect(closeMessages)
 			.toEqual([{
-				type: '@deviltea/widget-devtools/message-port-channel-hub',
+				type: '@deviltea/widget-inspector/message-port-channel-hub',
 				version: 1,
 				kind: 'close',
 			}])

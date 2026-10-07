@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { InspectorClient, InspectorRuntimeStateSnapshot, WidgetRef } from '@deviltea/widget-devtools'
+import type { InspectorClient } from '@deviltea/widget-inspector/client'
+import type { InspectorRuntimeStateSnapshot, WidgetRef } from '@deviltea/widget-inspector/protocol'
 import { computed } from 'vue'
 import { useRemoteRuntimeMember } from '../../composables/use-remote-runtime-member'
 import { formatInspectableValue } from '../../runtime-inspector/format-value'

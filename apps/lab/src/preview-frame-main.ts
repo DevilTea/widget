@@ -6,14 +6,14 @@
  * The parent never receives Runtime/Blueprint objects or arbitrary Runtime values.
  */
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
-import type { InspectorAgent } from '@deviltea/widget-devtools/agent'
+import type { InspectorAgent } from '@deviltea/widget-inspector/agent'
 import type { App } from 'vue'
 import type { PreviewHostRequest } from './preview-host/protocol'
-import { createMessagePortChannelHub } from '@deviltea/widget-devtools'
-import { createInspectorAgent } from '@deviltea/widget-devtools/agent'
+import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
+import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
 import {
 	acceptInspectorFrameBootstrap,
-} from '@deviltea/widget-devtools/frame-bootstrap'
+} from '@deviltea/widget-inspector/frame-bootstrap'
 import { createApp, defineComponent, h } from 'vue'
 import { createVuetify } from 'vuetify'
 import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
@@ -237,11 +237,7 @@ window.addEventListener('message', (event) => {
 				runtime,
 				transport: inspectorTransport,
 				closeTransportOnDispose: false,
-				dom: {
-					root,
-					highlightClass: 'lab-inspect-anchor--highlighted',
-					badgeClass: 'lab-inspector-agent-badge',
-				},
+				dom: { root },
 			})
 
 			const script = request.preview.showcaseId === SURVEY_TOUR_ID

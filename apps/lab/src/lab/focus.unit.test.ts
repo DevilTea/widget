@@ -1,4 +1,4 @@
-import type { InspectorBlueprintSnapshot } from '@deviltea/widget-devtools'
+import type { InspectorBlueprintSnapshot } from '@deviltea/widget-inspector/protocol'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'

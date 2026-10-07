@@ -1,4 +1,4 @@
-export const INSPECTOR_FRAME_BOOTSTRAP_TYPE = '@deviltea/widget-devtools/frame-bootstrap'
+export const INSPECTOR_FRAME_BOOTSTRAP_TYPE = '@deviltea/widget-inspector/frame-bootstrap'
 export const INSPECTOR_FRAME_BOOTSTRAP_VERSION = 1
 
 export interface InspectorFrameBootstrapRequest {

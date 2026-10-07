@@ -45,7 +45,7 @@ describe('messagePort Inspector transport', () => {
 
 			expect(closeMessages)
 				.toEqual([{
-					type: '@deviltea/widget-devtools/message-port-inspector-transport',
+					type: '@deviltea/widget-inspector/message-port-inspector-transport',
 					version: 1,
 					kind: 'close',
 				}])

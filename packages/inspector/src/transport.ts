@@ -11,7 +11,7 @@ export interface InProcessInspectorTransportPair {
 	readonly agent: InspectorTransport
 }
 
-const MESSAGE_PORT_INSPECTOR_TRANSPORT_TYPE = '@deviltea/widget-devtools/message-port-inspector-transport'
+const MESSAGE_PORT_INSPECTOR_TRANSPORT_TYPE = '@deviltea/widget-inspector/message-port-inspector-transport'
 
 interface MessagePortInspectorTransportCloseEnvelope {
 	readonly type: typeof MESSAGE_PORT_INSPECTOR_TRANSPORT_TYPE

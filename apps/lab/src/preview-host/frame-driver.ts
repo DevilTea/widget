@@ -1,13 +1,12 @@
-import type { InspectorBlueprintSnapshot, InspectorClient } from '@deviltea/widget-devtools'
+import type { InspectorClient } from '@deviltea/widget-inspector/client'
+import type { InspectorBlueprintSnapshot } from '@deviltea/widget-inspector/protocol'
 import type { LabLocale } from '../i18n/locale'
 import type { LabTheme } from '../theme/theme'
 import type { PreviewHostClient } from './client'
 import type { PreviewHostDescriptor } from './protocol'
-import {
-	createInspectorClient,
-	createMessagePortChannelHub,
-} from '@deviltea/widget-devtools'
-import { createInspectorFrameBootstrapRequest } from '@deviltea/widget-devtools/frame-bootstrap'
+import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
+import { createInspectorClient } from '@deviltea/widget-inspector/client'
+import { createInspectorFrameBootstrapRequest } from '@deviltea/widget-inspector/frame-bootstrap'
 import { createPreviewHostClient } from './client'
 import { PREVIEW_HOST_CHANNEL, PREVIEW_INSPECTOR_CHANNEL } from './protocol'
 
