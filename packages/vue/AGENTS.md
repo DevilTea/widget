@@ -67,6 +67,9 @@ or to the widgets it hosts, never to this package.
   member-lookup-by-name escape hatch. This package must not itself stamp any DOM attribute/directive
   from these fields (no automatic `data-widget-id`/`data-widget-type`, no Inspect-specific
   presentation behavior) — a renderer/Lab may deliberately project them onto its own rendered root.
+  The attribute contract for that projection (names, identity-only shape, nesting and multi-fragment semantics) is owned by
+  `@deviltea/widget-inspector/anchor` (`inspectAnchorAttributes`), not by this package; this package neither imports nor
+  re-exports it.
 - Renderer components never receive a `widget` prop. The current `RuntimeWidget` is injected
   privately through `CurrentWidgetContext`; renderer code only ever calls `useWidget(Plugin)`.
 - `WidgetSlot` is always the one shared internal component identity (`SharedWidgetSlotComponent` in

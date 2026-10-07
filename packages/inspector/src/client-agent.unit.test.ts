@@ -7,7 +7,7 @@ import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
 import { projectBlueprintSnapshot } from './projection'
 import { parseInspectorResponseMessage } from './protocol'
-import { createDevtoolsTestFixture, devtoolsTestSystem } from './test-fixture'
+import { createInspectorTestFixture, devtoolsTestSystem } from './test-fixture'
 import { createInProcessInspectorTransportPair } from './transport'
 
 function containsFunction(value: unknown, seen = new WeakSet<object>()): boolean {
@@ -27,7 +27,7 @@ function containsFunction(value: unknown, seen = new WeakSet<object>()): boolean
 }
 
 function createConnectedFixture() {
-	const fixture = createDevtoolsTestFixture()
+	const fixture = createInspectorTestFixture()
 	const pair = createInProcessInspectorTransportPair()
 	const agent = createInspectorAgent({ runtime: fixture.runtime, transport: pair.agent, runtimeId: 'runtime-test' })
 	const client = createInspectorClient(pair.client)
@@ -152,7 +152,7 @@ describe('inspectorClient + InspectorAgent', () => {
 
 			const upgraded = await client.handshake()
 			expect(upgraded.protocol)
-				.toEqual({ major: 0, minor: 2 })
+				.toEqual({ major: 0, minor: 3 })
 			expect(upgraded.capabilities.methods)
 				.toContain('runtime.subscribeEvent')
 			const modern = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-test' })
@@ -176,7 +176,7 @@ describe('inspectorClient + InspectorAgent', () => {
 	})
 
 	it('uses the lower handshake envelope minor when the params minor is newer', () => {
-		const { runtime } = createDevtoolsTestFixture()
+		const { runtime } = createInspectorTestFixture()
 		const pair = createInProcessInspectorTransportPair()
 		const agent = createInspectorAgent({ runtime, transport: pair.agent, runtimeId: 'runtime-test' })
 		const responses: InspectorResponseMessage[] = []
@@ -398,7 +398,7 @@ describe('core inspection projection', () => {
 	})
 
 	it('clones Core dependency references instead of retaining inspection object identity', () => {
-		const { blueprint } = createDevtoolsTestFixture()
+		const { blueprint } = createInspectorTestFixture()
 		const inspection = inspectBlueprint(blueprint)
 		const coreCounter = inspection.nodes.find(node => node.resolved && node.node.id === 'counter')
 		if (coreCounter === undefined || !coreCounter.resolved)

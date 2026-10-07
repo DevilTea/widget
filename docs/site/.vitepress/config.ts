@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
 	base: '/widget/',
 	title: 'DevilTea Widget',
-	description: 'Documentation for @deviltea/widget-core and @deviltea/widget-vue.',
+	description: 'Documentation for @deviltea/widget-core, @deviltea/widget-inspector, and @deviltea/widget-vue.',
 	ignoreDeadLinks: [/^\/lab\//],
 	themeConfig: {
 		nav: [
@@ -16,6 +16,7 @@ export default defineConfig({
 					text: 'Packages',
 					items: [
 						{ text: '@deviltea/widget-core', link: '/packages/widget-core' },
+						{ text: '@deviltea/widget-inspector', link: '/packages/widget-inspector' },
 						{ text: '@deviltea/widget-vue', link: '/packages/widget-vue' },
 					],
 				},

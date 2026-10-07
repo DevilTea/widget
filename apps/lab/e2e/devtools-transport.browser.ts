@@ -1,19 +1,12 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
-import type { InspectorRequestResult } from '@deviltea/widget-devtools'
+import type { InspectorRequestResult } from '@deviltea/widget-inspector/protocol'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
-import {
-	createInProcessInspectorTransportPair,
-	createInspectorClient,
-	createMessagePortChannelHub,
-	createMessagePortInspectorTransport,
-	InspectorClientError,
-	isCompatibleProtocolVersion,
-	isInspectorRequestResult,
-	parseInspectorRequestMessage,
-	parseInspectorResponseMessage,
-} from '@deviltea/widget-devtools'
-import { createInspectorAgent } from '@deviltea/widget-devtools/agent'
-import { createInspectorFrameBootstrapRequest } from '@deviltea/widget-devtools/frame-bootstrap'
+import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
+import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
+import { createInspectorClient, InspectorClientError } from '@deviltea/widget-inspector/client'
+import { createInspectorFrameBootstrapRequest } from '@deviltea/widget-inspector/frame-bootstrap'
+import { isCompatibleProtocolVersion, isInspectorRequestResult, parseInspectorRequestMessage, parseInspectorResponseMessage } from '@deviltea/widget-inspector/protocol'
+import { createInProcessInspectorTransportPair, createMessagePortInspectorTransport } from '@deviltea/widget-inspector/transport'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
 
 export interface DevtoolsBrowserContractResult {
@@ -80,7 +73,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function inspectorChannelPayload(message: unknown): unknown | null {
 	if (!isRecord(message)
-		|| message.type !== '@deviltea/widget-devtools/message-port-channel'
+		|| message.type !== '@deviltea/widget-inspector/message-port-channel'
 		|| message.channel !== 'inspector'
 		|| message.kind !== 'message'
 		|| !('payload' in message)) {
@@ -443,7 +436,7 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 			if (typeof event.data === 'object'
 				&& event.data !== null
 				&& 'type' in event.data
-				&& event.data.type === '@deviltea/widget-devtools/message-port-inspector-transport'
+				&& event.data.type === '@deviltea/widget-inspector/message-port-inspector-transport'
 				&& 'version' in event.data
 				&& event.data.version === 1
 				&& 'kind' in event.data
@@ -486,7 +479,7 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 			if (typeof event.data === 'object'
 				&& event.data !== null
 				&& 'type' in event.data
-				&& event.data.type === '@deviltea/widget-devtools/message-port-channel-hub'
+				&& event.data.type === '@deviltea/widget-inspector/message-port-channel-hub'
 				&& 'version' in event.data
 				&& event.data.version === 1
 				&& 'kind' in event.data
@@ -522,7 +515,7 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 				&& 'kind' in payload
 				&& payload.kind === 'close'
 				&& 'type' in payload
-				&& payload.type === '@deviltea/widget-devtools/message-port-channel-hub') {
+				&& payload.type === '@deviltea/widget-inspector/message-port-channel-hub') {
 				payloadWithHubControlTagDelivered = true
 				resolve()
 			}
@@ -536,7 +529,7 @@ export async function runDevtoolsBrowserContracts(): Promise<DevtoolsBrowserCont
 		hubPendingClientRejected = error instanceof InspectorClientError
 			&& error.protocolError.code === 'disconnected'
 	})
-	leftInspector.send({ type: '@deviltea/widget-devtools/message-port-channel-hub', kind: 'close' })
+	leftInspector.send({ type: '@deviltea/widget-inspector/message-port-channel-hub', kind: 'close' })
 	await payloadDelivered
 	leftAuxiliary.close()
 	await withTestTimeout(auxiliaryChannelClosed, 'Logical auxiliary channel close')

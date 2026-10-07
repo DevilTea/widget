@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
-import { createDevtoolsTestFixture } from './test-fixture'
+import { createInspectorTestFixture } from './test-fixture'
 import { createInProcessInspectorTransportPair } from './transport'
 
 describe('inspector Agent transport lifecycle', () => {
@@ -36,14 +36,14 @@ describe('inspector Agent transport lifecycle', () => {
 			}
 		}
 		const client = createInspectorClient(pair.client)
-		const firstFixture = createDevtoolsTestFixture()
+		const firstFixture = createInspectorTestFixture()
 		const first = createInspectorAgent({
 			runtime: firstFixture.runtime,
 			transport: pair.agent,
 			closeTransportOnDispose: false,
 		})
 
-		const secondFixture = createDevtoolsTestFixture()
+		const secondFixture = createInspectorTestFixture()
 		const second = createInspectorAgent({
 			runtime: secondFixture.runtime,
 			transport: pair.agent,

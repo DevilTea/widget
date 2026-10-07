@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { InspectorClient, InspectorRuntimePropertySnapshot, WidgetRef } from '@deviltea/widget-devtools'
+import type { InspectorClient } from '@deviltea/widget-inspector/client'
+import type { InspectorRuntimePropertySnapshot, WidgetRef } from '@deviltea/widget-inspector/protocol'
 import { computed, ref } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useRemoteRuntimeMember } from '../../composables/use-remote-runtime-member'

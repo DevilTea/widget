@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 
-import type { InspectorMemberRef, InspectorRequestMessage, InspectorRuntimeMemberSnapshot, WidgetRef } from '@deviltea/widget-devtools'
-import { createInProcessInspectorTransportPair, createInspectorClient, INSPECTOR_PROTOCOL_VERSION, parseInspectorRequestMessage } from '@deviltea/widget-devtools'
+import type { InspectorMemberRef, InspectorRequestMessage, InspectorRuntimeMemberSnapshot, WidgetRef } from '@deviltea/widget-inspector/protocol'
+import { createInspectorClient } from '@deviltea/widget-inspector/client'
+import { INSPECTOR_PROTOCOL_VERSION, parseInspectorRequestMessage } from '@deviltea/widget-inspector/protocol'
+import { createInProcessInspectorTransportPair } from '@deviltea/widget-inspector/transport'
 import { describe, expect, it } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
 import { useRemoteRuntimeMember } from './use-remote-runtime-member'

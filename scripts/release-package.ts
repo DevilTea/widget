@@ -10,6 +10,10 @@ const packages = {
 		directory: 'packages/core',
 		name: '@deviltea/widget-core',
 	},
+	'widget-inspector': {
+		directory: 'packages/inspector',
+		name: '@deviltea/widget-inspector',
+	},
 	'widget-vue': {
 		directory: 'packages/vue',
 		name: '@deviltea/widget-vue',

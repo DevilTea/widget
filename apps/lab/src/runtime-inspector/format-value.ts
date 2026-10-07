@@ -1,4 +1,4 @@
-import type { InspectableValue } from '@deviltea/widget-devtools'
+import type { InspectableValue } from '@deviltea/widget-inspector/value'
 
 /** Human-readable, bounded rendering of DevTools' JSON-safe value encoding. */
 export function formatInspectableValue(value: InspectableValue): string {

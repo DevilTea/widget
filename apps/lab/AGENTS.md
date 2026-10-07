@@ -40,6 +40,10 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   itself (not derived from `session`) so they survive Apply.
 - `src/composables/use-monaco-editor.ts` + `src/components/editor/MonacoJsonEditor.vue` — the entire
   `modern-monaco` integration surface. Nothing else in this app imports `modern-monaco`.
+- `src/composables/use-inspect-anchor.ts` — the Lab's one-line-per-renderer projection of `useWidget()` identity onto a
+  renderer's root element. It only wraps `inspectAnchorAttributes` from `@deviltea/widget-inspector/anchor`, which owns
+  the attribute contract (names, identity-only shape, nesting/multi-fragment semantics); `@deviltea/widget-vue` itself
+  still stamps no DOM attributes. Browser coverage lives in `e2e/inspect-anchors.spec.ts` (real `widget-vue` renderers).
 - `src/composables/use-runtime-member.ts` — Vue bridge for one Runtime Inspector member view model
   (`src/runtime-inspector/viewmodel.ts`): adapts its `getSnapshot()`/`subscribe()` shape into a ref and
   disposes the previous view model whenever the reactive observable source changes (different selected
@@ -86,10 +90,10 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   lazily-registered `ImplementationPanel.vue` — `DevilTea/deviltea-labs#25` P3; it is the one panel `Workbench.vue`
   registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
   deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
-  which consumes the private `@deviltea/widget-devtools` client/agent boundary for Inspect mode. Phase B1
+  which consumes the published `@deviltea/widget-inspector` client/agent boundary for Inspect mode through its public subpaths only (never a root entry or an internal module). Phase B1
   (`DevilTea/widget#8`) now runs that same-realm bridge over a real asynchronous `MessageChannel` rather than the A1
   in-process pair; the Agent still owns bounded Preview DOM hit-testing, pointer suppression,
-  highlight/badge chrome, and Escape cleanup, while the panel only translates scoped `WidgetRef`
+  an Agent-owned ShadowRoot overlay for highlight/badge chrome (renderer elements are never mutated; the Lab only themes it through `--widget-inspector-*` custom properties in `global.css`), and Escape cleanup, while the panel only translates scoped `WidgetRef`
   selection events into the existing Preview focus/navigation rules. `src/preview-host/lifecycle.ts` is
   the generation-aware remote-host state machine (`booting`/`ready`/`replacing`/`disconnected`/`error`)
   for the next iframe step. Preview Runtime ownership has **not** moved into an iframe yet; `DevilTea/widget#8` owns Phase B

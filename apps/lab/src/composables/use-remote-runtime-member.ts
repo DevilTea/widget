@@ -1,4 +1,5 @@
-import type { InspectorClient, InspectorMemberRef, InspectorRuntimeMemberSnapshot, WidgetRef } from '@deviltea/widget-devtools'
+import type { InspectorClient } from '@deviltea/widget-inspector/client'
+import type { InspectorMemberRef, InspectorRuntimeMemberSnapshot, WidgetRef } from '@deviltea/widget-inspector/protocol'
 import type { Ref } from 'vue'
 import { shallowRef, watch } from 'vue'
 

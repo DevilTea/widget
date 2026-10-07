@@ -1,4 +1,4 @@
-import type { InspectorTransport } from '@deviltea/widget-devtools'
+import type { InspectorTransport } from '@deviltea/widget-inspector/transport'
 import type {
 	PreviewHostDescriptor,
 	PreviewHostEvent,

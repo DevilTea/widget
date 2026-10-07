@@ -6,7 +6,7 @@
  * This component owns only the iframe element, presentation controls and the remote InspectorClient UI.
  * No Core Runtime or frame DOM is reachable through this component's state.
  */
-import type { InspectorClient } from '@deviltea/widget-devtools'
+import type { InspectorClient } from '@deviltea/widget-inspector/client'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
 import { useLabI18n } from '../../composables/use-lab-i18n'

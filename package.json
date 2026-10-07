@@ -18,7 +18,7 @@
 		"docs:preview": "pnpm --filter docs run preview",
 		"lint": "eslint .",
 		"prepare": "simple-git-hooks",
-		"publint": "pnpm --filter @deviltea/widget-core exec publint && pnpm --filter @deviltea/widget-vue exec publint",
+		"publint": "pnpm --filter @deviltea/widget-core exec publint && pnpm --filter @deviltea/widget-inspector exec publint && pnpm --filter @deviltea/widget-vue exec publint",
 		"release": "tsx scripts/release.ts open",
 		"release:tag": "tsx scripts/release.ts tag",
 		"test": "pnpm run test:unit",

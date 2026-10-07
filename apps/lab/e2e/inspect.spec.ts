@@ -88,8 +88,26 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 
 		await adultsLabel.hover()
 
+		// The highlight is an Agent-owned ShadowRoot overlay drawn over the anchor, not a class on it.
+		const overlayRect = previewFrame(page)
+			.locator('[data-widget-inspector-overlay="true"] .rect')
+		await expect(overlayRect)
+			.toHaveCount(1)
 		await expect(adultsAnchor)
-			.toHaveClass(/lab-inspect-anchor--highlighted/)
+			.not
+			.toHaveClass(/highlight/)
+		const [anchorBox, overlayBox] = await Promise.all([adultsAnchor.boundingBox(), overlayRect.boundingBox()])
+		expect(anchorBox)
+			.not
+			.toBeNull()
+		expect(overlayBox?.x)
+			.toBeCloseTo(anchorBox!.x, 0)
+		expect(overlayBox?.y)
+			.toBeCloseTo(anchorBox!.y, 0)
+		expect(overlayBox?.width)
+			.toBeCloseTo(anchorBox!.width, 0)
+		expect(overlayBox?.height)
+			.toBeCloseTo(anchorBox!.height, 0)
 		await expect(previewFrame(page)
 			.getByText('SurveyNumberQuestion#adults'))
 			.toBeVisible()

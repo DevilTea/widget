@@ -3,7 +3,7 @@
  * Remote Runtime Inspector for Phase B2. The panel consumes only Inspector protocol DTOs from the
  * iframe-owned Runtime; it never imports `inspectRuntime()` and never receives a Core Runtime object.
  */
-import type { InspectorRuntimeWidgetSnapshot } from '@deviltea/widget-devtools'
+import type { InspectorRuntimeWidgetSnapshot } from '@deviltea/widget-inspector/protocol'
 import { computed, shallowRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'

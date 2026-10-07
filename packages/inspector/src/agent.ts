@@ -11,7 +11,8 @@ import type {
 } from './protocol'
 import type { InspectorTransport } from './transport'
 import { inspectRuntime } from '@deviltea/widget-core/inspection'
-import { createSemanticGeometryController } from './geometry'
+import { ANCHOR_SELECTOR, createSemanticGeometryController, readAnchorIdentity } from './geometry'
+import { createInspectorOverlay } from './overlay'
 import {
 	projectBlueprintSnapshot,
 	projectEventArgs,
@@ -83,9 +84,12 @@ interface DomAnchor {
 }
 
 export interface InspectorAgentDomOptions {
+	/**
+	 * The inspected renderer root. Anchors (see `@deviltea/widget-inspector/anchor`) are only read from
+	 * inside it. The Agent never mutates renderer elements: highlight chrome is an Agent-owned
+	 * ShadowRoot overlay attached to the root's document.
+	 */
 	readonly root: HTMLElement
-	readonly highlightClass?: string
-	readonly badgeClass?: string
 }
 
 export interface CreateInspectorAgentOptions {
@@ -95,6 +99,13 @@ export interface CreateInspectorAgentOptions {
 	readonly dom?: InspectorAgentDomOptions
 	/** Keep a host-owned shared transport alive when replacing only this Agent/Runtime binding. */
 	readonly closeTransportOnDispose?: boolean
+	/**
+	 * Optional cap on this Agent's live Runtime member and event subscriptions, counted together.
+	 * There is no default: unlimited unless configured. Once the cap is reached, further subscribe
+	 * requests fail with `subscription-limit` (protocol 0.3+; an older-minor peer receives
+	 * `internal-error` instead). Must be a positive safe integer.
+	 */
+	readonly maxSubscriptions?: number
 }
 
 export interface InspectorAgent {
@@ -110,6 +121,9 @@ function protocolError(code: InspectorProtocolError['code'], message: string): I
 }
 
 export function createInspectorAgent(options: CreateInspectorAgentOptions): InspectorAgent {
+	const maxSubscriptions = options.maxSubscriptions
+	if (maxSubscriptions !== undefined && !(Number.isSafeInteger(maxSubscriptions) && maxSubscriptions >= 1))
+		throw new RangeError('maxSubscriptions must be a positive safe integer when configured.')
 	const runtimeId = options.runtimeId ?? createRuntimeId()
 	const runtimeInspection = inspectRuntime(options.runtime)
 	const dom = options.dom
@@ -137,8 +151,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 	let inspectEnabled = false
 	let disposed = false
-	let highlightedElement: Element | null = null
-	let badgeElement: HTMLDivElement | null = null
+	const overlay = dom === undefined ? null : createInspectorOverlay(dom.root.ownerDocument)
+	let highlightedTarget: InspectorSemanticTarget | null = null
 
 	function emit<Event extends InspectorEventName>(event: Event, payload: InspectorEventMap[Event]): void {
 		if (disposed || options.transport.closed || !capabilitiesForMinor(negotiatedMinor).events.includes(event))
@@ -196,15 +210,15 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	function resolveAnchor(target: EventTarget | null): DomAnchor | null {
 		if (dom === undefined || !(target instanceof Element))
 			return null
-		let element: Element | null = target.closest('[data-widget-id][data-widget-type]')
+		// Innermost resolvable anchor wins; stale/unknown anchors fall through to their ancestors.
+		let element: Element | null = target.closest(ANCHOR_SELECTOR)
 		while (element !== null && dom.root.contains(element)) {
-			const widgetId = element.getAttribute('data-widget-id')
-			const widgetType = element.getAttribute('data-widget-type')
-			if (widgetId !== null && widgetType !== null && nodeForAnchor({ widgetId, widgetType }) !== null)
-				return { element, widgetId, widgetType }
+			const identity = readAnchorIdentity(element)
+			if (identity !== null && nodeForAnchor(identity) !== null)
+				return { element, ...identity }
 			if (element === dom.root)
 				break
-			element = element.parentElement?.closest('[data-widget-id][data-widget-type]') ?? null
+			element = element.parentElement?.closest(ANCHOR_SELECTOR) ?? null
 		}
 		return null
 	}
@@ -222,89 +236,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	function semanticTargetForAnchorElement(element: Element): InspectorSemanticTarget | null {
 		if (dom === undefined || !dom.root.contains(element))
 			return null
-		const widgetId = element.getAttribute('data-widget-id')
-		const widgetType = element.getAttribute('data-widget-type')
-		if (widgetId === null || widgetType === null)
+		const identity = readAnchorIdentity(element)
+		if (identity === null)
 			return null
-		const ref = nodeForAnchor({ widgetId, widgetType })
-		return ref === null ? null : { ref, widgetId, widgetType }
-	}
-
-	function ensureBadge(): HTMLDivElement | null {
-		if (dom === undefined)
-			return null
-		if (badgeElement !== null)
-			return badgeElement
-		const badge = dom.root.ownerDocument.createElement('div')
-		badge.setAttribute('aria-hidden', 'true')
-		badge.dataset.widgetInspectorBadge = 'true'
-		badge.style.pointerEvents = 'none'
-		if (dom.badgeClass !== undefined)
-			badge.classList.add(dom.badgeClass)
-		dom.root.append(badge)
-		badgeElement = badge
-		return badge
-	}
-
-	function clearHighlight(): void {
-		if (highlightedElement !== null && dom?.highlightClass !== undefined)
-			highlightedElement.classList.remove(dom.highlightClass)
-		highlightedElement = null
-		badgeElement?.remove()
-		badgeElement = null
-	}
-
-	function highlightAnchor(anchor: DomAnchor): void {
-		if (dom === undefined)
-			return
-		if (highlightedElement !== anchor.element) {
-			clearHighlight()
-			if (dom.highlightClass !== undefined)
-				anchor.element.classList.add(dom.highlightClass)
-			highlightedElement = anchor.element
-		}
-
-		const badge = ensureBadge()
-		if (badge === null)
-			return
-		const label = `${anchor.widgetType}#${anchor.widgetId}`
-		if (badge.textContent !== label)
-			badge.textContent = label
-		const rootRect = dom.root.getBoundingClientRect()
-		const anchorRect = anchor.element.getBoundingClientRect()
-		const top = `${anchorRect.top - rootRect.top + dom.root.scrollTop}px`
-		const left = `${anchorRect.left - rootRect.left + dom.root.scrollLeft}px`
-		// Re-highlighting unchanged chrome should not mutate the Preview.
-		if (badge.style.top !== top)
-			badge.style.top = top
-		if (badge.style.left !== left)
-			badge.style.left = left
-	}
-
-	function highlightRef(ref: WidgetRef): boolean {
-		if (dom === undefined)
-			return false
-		const nodeId = resolveNodeId(ref)
-		if (nodeId === null)
-			return false
-		const node = runtimeInspection.blueprint.getNode(nodeId)
-		if (node === null || !node.resolved)
-			return false
-		const matches = (element: Element): boolean =>
-			element.getAttribute('data-widget-id') === node.node.id
-			&& element.getAttribute('data-widget-type') === node.node.type
-		// The Preview root is a valid semantic anchor, not only its descendants.
-		if (matches(dom.root)) {
-			highlightAnchor({ element: dom.root, widgetId: node.node.id, widgetType: node.node.type })
-			return true
-		}
-		for (const element of dom.root.querySelectorAll('[data-widget-id][data-widget-type]')) {
-			if (matches(element)) {
-				highlightAnchor({ element, widgetId: node.node.id, widgetType: node.node.type })
-				return true
-			}
-		}
-		return false
+		const ref = nodeForAnchor(identity)
+		return ref === null ? null : { ref, ...identity }
 	}
 
 	const geometry = dom === undefined
@@ -313,8 +249,41 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				root: dom.root,
 				resolveRef: semanticTargetForRef,
 				resolveAnchor: semanticTargetForAnchorElement,
-				onInvalidated: revision => emit('geometry.invalidated', { revision }),
+				onInvalidated: (revision) => {
+					// Layout, scroll, or a renderer re-render moved/replaced anchors: follow them.
+					drawHighlight()
+					emit('geometry.invalidated', { revision })
+				},
 			})
+
+	function clearHighlight(): void {
+		highlightedTarget = null
+		overlay?.clear()
+	}
+
+	/** Draws every fragment of the highlighted Widget; returns whether any anchor element exists. */
+	function drawHighlight(): boolean {
+		if (overlay === null || geometry === null || highlightedTarget === null)
+			return false
+		const measurement = geometry.measure(highlightedTarget)
+		if (measurement.rects.length === 0)
+			overlay.clear()
+		else
+			overlay.show({ label: `${highlightedTarget.widgetType}#${highlightedTarget.widgetId}`, rects: measurement.rects })
+		return measurement.anchorCount > 0
+	}
+
+	function highlightTarget(target: InspectorSemanticTarget): boolean {
+		if (geometry === null || overlay === null || geometry.measure(target).anchorCount === 0)
+			return false
+		highlightedTarget = target
+		return drawHighlight()
+	}
+
+	function highlightRef(ref: WidgetRef): boolean {
+		const target = semanticTargetForRef(ref)
+		return target !== null && highlightTarget(target)
+	}
 
 	function disableInspect(): void {
 		if (!inspectEnabled)
@@ -340,7 +309,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			emit('inspect.hovered', { ref: null })
 			return
 		}
-		highlightAnchor(anchor)
+		highlightTarget({ ref, widgetId: anchor.widgetId, widgetType: anchor.widgetType })
 		emit('inspect.hovered', { ref, widgetId: anchor.widgetId, widgetType: anchor.widgetType })
 	}
 
@@ -403,6 +372,16 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		}
 	}
 
+	/** With no configured cap this never rejects: unlimited is the default. */
+	function rejectAtSubscriptionLimit(request: InspectorRequestMessage): boolean {
+		if (maxSubscriptions === undefined || memberSubscriptions.size + eventSubscriptions.size < maxSubscriptions)
+			return false
+		const message = `This Inspector Agent allows at most ${maxSubscriptions} live subscriptions.`
+		// A peer negotiated below protocol 0.3 cannot parse the new code; keep it within its vocabulary.
+		sendError(request.requestId, protocolError(negotiatedMinor >= 3 ? 'subscription-limit' : 'internal-error', message))
+		return true
+	}
+
 	function subscribeMember(request: Extract<InspectorRequestMessage, { method: 'runtime.subscribeMember' }>): void {
 		if (request.params.ref.runtimeId !== runtimeId) {
 			sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
@@ -420,6 +399,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			sendError(request.requestId, protocolError('member-not-found', 'The requested Runtime member does not exist.'))
 			return
 		}
+		if (rejectAtSubscriptionLimit(request))
+			return
 		const subscriptionId = `subscription-${subscriptionSequence++}`
 		let unsubscribe: () => void
 		try {
@@ -457,6 +438,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			sendError(request.requestId, protocolError('event-not-found', 'The requested Runtime event does not exist.'))
 			return
 		}
+		if (rejectAtSubscriptionLimit(request))
+			return
 		const subscriptionId = `event-subscription-${subscriptionSequence++}`
 		let unsubscribe: () => void
 		try {

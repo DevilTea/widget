@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { InspectableValue, InspectorDependencyReference, InspectorRuntimeDiagnostic } from '@deviltea/widget-devtools'
+import type { InspectorDependencyReference, InspectorRuntimeDiagnostic } from '@deviltea/widget-inspector/protocol'
+import type { InspectableValue } from '@deviltea/widget-inspector/value'
 import { formatDependencyReference, formatDiagnosticPath } from '../../lib/diagnostic-format'
 import { formatInspectableValue } from '../../runtime-inspector/format-value'
 

@@ -17,7 +17,7 @@
 	},
 	"dependencies": {
 		"@deviltea/widget-core": "workspace:*",
-		"@deviltea/widget-devtools": "workspace:*",
+		"@deviltea/widget-inspector": "workspace:*",
 		"@deviltea/widget-vue": "workspace:*",
 		"@shikijs/core": "catalog:",
 		"@shikijs/engine-javascript": "catalog:",

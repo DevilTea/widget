@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InspectorBlueprintSnapshot } from '@deviltea/widget-devtools'
+import type { InspectorBlueprintSnapshot } from '@deviltea/widget-inspector/protocol'
 import { computed } from 'vue'
 
 const props = defineProps<{

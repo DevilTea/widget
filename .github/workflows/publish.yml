@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'widget-core@*'
+      - 'widget-inspector@*'
       - 'widget-vue@*'
 
 permissions:

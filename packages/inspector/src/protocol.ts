@@ -13,7 +13,7 @@ export interface InspectorProtocolVersion {
 	readonly minor: number
 }
 
-export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 2 }) satisfies InspectorProtocolVersion
+export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 3 }) satisfies InspectorProtocolVersion
 
 export interface InspectorCapabilities {
 	readonly methods: readonly InspectorRequestMethod[]
@@ -330,6 +330,7 @@ export interface InspectorProtocolError {
 		| 'member-not-found'
 		| 'event-not-found'
 		| 'disconnected'
+		| 'subscription-limit'
 		| 'internal-error'
 	readonly message: string
 }
@@ -495,14 +496,17 @@ export function parseInspectorRequestMessage(value: unknown): InspectorRequestMe
 	return value as InspectorRequestMessage
 }
 
-function isProtocolErrorCode(value: unknown): value is InspectorProtocolError['code'] {
+function isProtocolErrorCode(value: unknown, protocolMinor: number): value is InspectorProtocolError['code'] {
+	// `subscription-limit` was added in protocol 0.3; an older-minor envelope cannot carry it.
+	if (value === 'subscription-limit')
+		return protocolMinor >= 3
 	return value === 'invalid-message' || value === 'unsupported-version' || value === 'unknown-method'
 		|| value === 'invalid-params' || value === 'runtime-not-found' || value === 'widget-not-found'
 		|| value === 'member-not-found' || value === 'event-not-found' || value === 'disconnected' || value === 'internal-error'
 }
 
-function isProtocolError(value: unknown): value is InspectorProtocolError {
-	return isRecord(value) && isProtocolErrorCode(value.code) && typeof value.message === 'string'
+function isProtocolError(value: unknown, protocolMinor: number): value is InspectorProtocolError {
+	return isRecord(value) && isProtocolErrorCode(value.code, protocolMinor) && typeof value.message === 'string'
 }
 
 export function parseInspectorResponseMessage(value: unknown): InspectorResponseMessage | null {
@@ -516,7 +520,7 @@ export function parseInspectorResponseMessage(value: unknown): InspectorResponse
 
 	if (value.ok)
 		return 'result' in value ? value as InspectorResponseMessage : null
-	return isProtocolError(value.error) ? value as InspectorResponseMessage : null
+	return isProtocolError(value.error, value.protocol.minor) ? value as InspectorResponseMessage : null
 }
 
 function isRuntimeMemberSnapshot(value: unknown): value is InspectorRuntimeMemberSnapshot {
