@@ -76,12 +76,14 @@ function onKeydown(event: KeyboardEvent): void {
 	// the button's enabled condition (`isDirty && !isApplying`). It yields to IME composition (keyCode 229
 	// covers engines that report it without `isComposing`), key repeat, handlers that already claimed the
 	// event (Monaco preventDefaults+stops keys it binds, so an editor-handled Cmd+Enter never reaches here),
-	// and open tutorial modal dialogs.
+	// open tutorial modal dialogs, and the narrow-viewport gate (the workbench is `inert` behind it).
 	if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey))
 		return
 	if (event.isComposing || event.keyCode === 229 || event.repeat || event.defaultPrevented)
 		return
 	if (tutorial.welcomeVisible.value || tutorial.confirmVisible.value)
+		return
+	if (!supportedViewport.value)
 		return
 	if (!store.isDirty.value || store.isApplying.value)
 		return

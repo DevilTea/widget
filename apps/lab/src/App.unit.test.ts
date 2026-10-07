@@ -191,6 +191,28 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 		wrapper.unmount()
 	})
 
+	it('ignores the shortcut while the narrow-viewport gate is active and resumes afterwards', async () => {
+		const wrapper = mountApp()
+		tutorial!.dismissWelcome()
+		media.matches = false
+		for (const l of media.listeners)
+			l({ matches: false })
+		await wrapper.vm.$nextTick()
+		const gated = press()
+		expect(apply).not.toHaveBeenCalled()
+		expect(gated.defaultPrevented)
+			.toBe(false)
+
+		media.matches = true
+		for (const l of media.listeners)
+			l({ matches: true })
+		await wrapper.vm.$nextTick()
+		press()
+		expect(apply)
+			.toHaveBeenCalledTimes(1)
+		wrapper.unmount()
+	})
+
 	it('makes the header and .lab-body inert, but not the gate, only while the gate is active', async () => {
 		const wrapper = mountApp()
 		const inertOf = (selector: string) => wrapper.get(selector).element.closest('[inert]') !== null
