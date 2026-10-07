@@ -9,6 +9,7 @@ import type { DiagnosticCollector, RelativeSystemStructureDiagnosticInput } from
 import type { BlueprintCompileView, WidgetSystemBlueprint } from './internal/contract'
 import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetPluginConfigMetadata, WidgetPluginTypeOf } from './plugin'
 import { compileBlueprint } from './blueprint/index'
+import { isCoreWidgetPlugin } from './plugin'
 import { createReadonlyMap } from './readonly-map'
 
 export interface WidgetCatalogEntry {
@@ -67,6 +68,47 @@ export interface WidgetSystem<Plugins extends AnyWidgetPluginTuple = AnyWidgetPl
 	createBlueprint: (definition: unknown) => WidgetSystemBlueprint<Plugins>
 }
 
+export type WidgetSystemConfigurationErrorCode = 'foreign-plugin' | 'duplicate-plugin-type'
+
+/**
+ * Thrown by `createWidgetSystem` for an invalid plugin registration. Discriminate by class and `code`;
+ * `message` is not protocol.
+ *
+ * - `foreign-plugin`: the entry at `pluginIndex` was not completed by this loaded module instance
+ *   (another module instance or a structural look-alike). `pluginType` is its `type` when a string,
+ *   else `null`. `firstPluginIndex` is `null`.
+ * - `duplicate-plugin-type`: the entry at `pluginIndex` repeats `pluginType`, first registered at
+ *   `firstPluginIndex`.
+ */
+export class WidgetSystemConfigurationError extends Error {
+	override readonly name = 'WidgetSystemConfigurationError'
+
+	constructor(
+		readonly code: WidgetSystemConfigurationErrorCode,
+		readonly pluginIndex: number,
+		readonly pluginType: string | null,
+		readonly firstPluginIndex: number | null = null,
+		message = code === 'foreign-plugin'
+			? `The widget plugin at index ${pluginIndex} was not created by this widget core instance.`
+			: `Duplicate widget plugin type "${pluginType}" at index ${pluginIndex} (first registered at index ${firstPluginIndex}).`,
+	) {
+		super(message)
+	}
+}
+
+/**
+ * Best-effort read of a foreign entry's `type`; a throwing accessor must not leak as an uncoded failure.
+ */
+function readForeignPluginType(entry: unknown): string | null {
+	try {
+		const type = (entry as { readonly type?: unknown } | null | undefined)?.type
+		return typeof type === 'string' ? type : null
+	}
+	catch {
+		return null
+	}
+}
+
 /**
  * Creates an instance-scoped, immutable widget system. Duplicate `plugin.type` is rejected.
  */
@@ -75,11 +117,19 @@ export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple>(
 ): WidgetSystem<Plugins> {
 	const plugins = Object.freeze([...options.plugins]) as unknown as Plugins
 	const pluginsByType = new Map<string, AnyWidgetPlugin>()
+	const firstIndexByType = new Map<string, number>()
 
-	for (const plugin of plugins) {
-		if (pluginsByType.has(plugin.type))
-			throw new Error(`Duplicate widget plugin type: "${plugin.type}".`)
+	// Tuple order; the first offending index wins, and provenance precedes the duplicate check.
+	for (const [index, plugin] of plugins.entries()) {
+		if (!isCoreWidgetPlugin(plugin)) {
+			throw new WidgetSystemConfigurationError('foreign-plugin', index, readForeignPluginType(plugin))
+		}
 
+		const firstIndex = firstIndexByType.get(plugin.type)
+		if (firstIndex !== undefined)
+			throw new WidgetSystemConfigurationError('duplicate-plugin-type', index, plugin.type, firstIndex)
+
+		firstIndexByType.set(plugin.type, index)
 		pluginsByType.set(plugin.type, plugin)
 	}
 

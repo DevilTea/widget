@@ -12,8 +12,9 @@ import type {
 	PluginInspectionPropertyMember,
 	PluginInspectionStateMember,
 } from './types'
-import { readWidgetPluginDefinition } from '../plugin'
+import { isCoreWidgetPlugin, readWidgetPluginDefinition } from '../plugin'
 import { createReadonlyMap } from '../readonly-map'
+import { WidgetInspectionError } from './errors'
 
 const inspectionCache = new WeakMap<AnyWidgetPlugin, PluginInspection>()
 
@@ -69,6 +70,9 @@ function buildEventMembers(plugin: AnyWidgetPlugin): PluginInspection['events'] 
  * Returns an identity-stable, readonly/passive projection for the exact completed Plugin object.
  */
 export function inspectPlugin(plugin: AnyWidgetPlugin): PluginInspection {
+	if (!isCoreWidgetPlugin(plugin))
+		throw new WidgetInspectionError('foreign-plugin')
+
 	const existing = inspectionCache.get(plugin)
 	if (existing !== undefined)
 		return existing

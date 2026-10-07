@@ -196,11 +196,14 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 
 	// 8. Build the live diagnostic aggregate.
 	const runtimeWidgetsByNodeId = new Map<InternalNodeId, unknown>()
+	const nodeIdByRuntimeWidget = new Map<object, InternalNodeId>()
 	for (const [nodeId, entry] of registry) {
 		const node = compiled.nodes[nodeId]
 		if (node === undefined || !node.resolved)
 			continue
-		runtimeWidgetsByNodeId.set(nodeId, buildRuntimeWidget(context, node, entry))
+		const runtimeWidget = buildRuntimeWidget(context, node, entry)
+		runtimeWidgetsByNodeId.set(nodeId, runtimeWidget)
+		nodeIdByRuntimeWidget.set(runtimeWidget as object, nodeId)
 	}
 
 	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelDiagnostics)
@@ -232,7 +235,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 
 	// Attaches the framework-internal carrier the dedicated `@deviltea/widget-core/inspection` subpath
 	// reads (registry + disposal context); not part of the published Runtime contract.
-	;(runtime as unknown as Record<PropertyKey, unknown>)[runtimeInternals] = { context, registry }
+	;(runtime as unknown as Record<PropertyKey, unknown>)[runtimeInternals] = { context, registry, compiled, nodeIdByRuntimeWidget }
 
 	return runtime as unknown as WidgetSystemRuntime<Plugins>
 }

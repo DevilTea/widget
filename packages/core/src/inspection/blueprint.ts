@@ -37,8 +37,9 @@ import type {
 	BlueprintInspectionStateMember,
 	InspectionNodeId,
 } from './types'
-import { isCompiledDependency, readCompiledBlueprint } from '../internal/contract'
+import { isCompiledDependency, isCoreBlueprint, readCompiledBlueprint } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
+import { WidgetInspectionError } from './errors'
 
 // -------------------------------------------------------------------------------------------------
 // Dependency flattening
@@ -321,6 +322,9 @@ const blueprintInspectionCache = new WeakMap<WidgetSystemBlueprint<any>, Bluepri
 export function inspectBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>(
 	blueprint: WidgetSystemBlueprint<Plugins>,
 ): BlueprintInspection<Plugins> {
+	if (!isCoreBlueprint(blueprint))
+		throw new WidgetInspectionError('foreign-blueprint')
+
 	const cached = blueprintInspectionCache.get(blueprint)
 	if (cached !== undefined)
 		return cached as BlueprintInspection<Plugins>
