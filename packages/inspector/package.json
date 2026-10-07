@@ -73,7 +73,7 @@
 		"typecheck:test": "tsc --project ./tsconfig.tests.json --noEmit"
 	},
 	"peerDependencies": {
-		"@deviltea/widget-core": ">=0.0.2 <0.1.0"
+		"@deviltea/widget-core": ">=0.0.3 <0.1.0"
 	},
 	"devDependencies": {
 		"@deviltea/tsconfig": "catalog:",
