@@ -5,7 +5,7 @@
 A thin Vue 3 integration over `@deviltea/widget-core` Runtime semantics: a keyed renderer registry
 builder (`createWidgetVueRenderer`), the recursive `WidgetRenderer` root component, and the
 widget-scoped `useWidget(Plugin)` bridge (lazy `Ref`/callable projections of state, properties,
-methods, diagnostics, and slots, plus the unconditional `widgetId`/`widgetType` identity fields — see
+methods, diagnostics, events (`emit`), and slots, plus the unconditional `widgetId`/`widgetType` identity fields — see
 "Package boundaries" below). The normative semantic contract for this package lives in `DevilTea/deviltea-labs#13`
 ("Widget Vue integration — Phase 3 decision log"); `DevilTea/deviltea-labs#10` remains the core semantic authority
 and this package never reimplements or reinterprets it. These bare `#N` numbers are historical
@@ -53,6 +53,8 @@ or to the widgets it hosts, never to this package.
 - Every `useXxx()` accessor and every member surface is lazy: obtaining a capability accessor must
   never read or subscribe the Runtime, and materializing a member wrapper must not either — only the
   first `.value` read (or, for methods, the first call) may touch the Runtime.
+- A ref first activated after its owning scope is disposed returns the current Runtime value but
+  releases its subscription immediately and is not reactive afterwards.
 - `useWidget(Plugin)` is the single renderer integration boundary. It must never expose
   `runtime`/`system`/an unrestricted `getWidget` escape hatch — every cross-widget interaction stays
   mediated by `@deviltea/widget-core` dependencies (`registerDeps`), never by renderer code reaching
@@ -72,7 +74,7 @@ or to the widgets it hosts, never to this package.
 - Collision-safety matters the same way it does in `@deviltea/widget-core`: arbitrary plugin-type and
   member-key strings, including `__proto__` and `constructor`, must work through `Map`/Proxy/
   null-prototype storage, never plain-object bracket assignment.
-- Capability presence (`state`/`properties`/`methods`/`slots`) is read from `plugin.capabilities` (
+- Capability presence (`state`/`properties`/`methods`/`events`/`slots`) is read from `plugin.capabilities` (
   `DevilTea/deviltea-labs#10` amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`") — never
   inferred from Blueprint/Runtime object shape (member-key counts, semantic-slot-map key counts, or any
   `[Payload] extends [never]` heuristic). A capability can be explicitly-declared-empty (`slots: never`,

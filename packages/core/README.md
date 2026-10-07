@@ -271,7 +271,8 @@ unsubscribe function. The listener is not called on subscription; it receives
 the new snapshot after each committed (`changed: true`) patch, in subscription
 order, over the subscriber list as it stood when notification began. An
 exception thrown by a listener does not fail `applyPatch()` or stop the
-remaining listeners; it is rethrown asynchronously through a microtask.
+remaining listeners, and it is reported outside `applyPatch()`; the reporting
+mechanism is not part of the contract.
 
 ### SeparatedWidgetSource tooling
 
