@@ -51,6 +51,8 @@ or to the widgets it hosts, never to this package.
 - Every `useXxx()` accessor and every member surface is lazy: obtaining a capability accessor must
   never read or subscribe the Runtime, and materializing a member wrapper must not either — only the
   first `.value` read (or, for methods, the first call) may touch the Runtime.
+- A ref first activated after its owning scope is disposed returns the current Runtime value but
+  releases its subscription immediately and is not reactive afterwards.
 - `useWidget(Plugin)` is the single renderer integration boundary. It must never expose
   `runtime`/`system`/an unrestricted `getWidget` escape hatch — every cross-widget interaction stays
   mediated by `@deviltea/widget-core` dependencies (`registerDeps`), never by renderer code reaching
