@@ -27,7 +27,7 @@ function readText(relative: string): string {
 const pkg = JSON.parse(readText('../package.json')) as PackageJson
 
 describe('published package boundary', () => {
-	it('is a public package under the accepted name, still at the 0.0.0 workspace version', () => {
+	it('is a public package under the accepted name, with a release-managed semver version', () => {
 		expect(pkg.name)
 			.toBe('@deviltea/widget-inspector')
 		expect(pkg.private)
@@ -35,7 +35,7 @@ describe('published package boundary', () => {
 		expect(pkg.publishConfig?.access)
 			.toBe('public')
 		expect(pkg.version)
-			.toBe('0.0.0')
+			.toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Z.-]+)?$/i)
 		expect(pkg.files)
 			.toStrictEqual(['dist'])
 	})
