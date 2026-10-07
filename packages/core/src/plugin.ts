@@ -519,8 +519,10 @@ type WidgetPluginPhaseOrderReason<
 
 /**
  * Adds type-only order markers for every declared phase that is not callable at `Stage`. A marker
- * fails the call with an order-specific diagnostic, accepts any arguments (so a callback passed to it
- * gets no implicit-`any` follow-on errors), and returns the same phase, so a misplaced call never
+ * takes the real phase's arguments with the first one intersected with
+ * `WidgetPluginPhaseOrderViolation`, so no real value satisfies it and the call fails with an
+ * order-specific diagnostic (the function constituent keeps a callback passed to it contextually typed,
+ * so no implicit-`any` follow-on errors appear). It returns the same phase, so a misplaced call never
  * advances the chain.
  */
 export type WidgetPluginOrderedPhase<
