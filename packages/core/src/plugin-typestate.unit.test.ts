@@ -322,7 +322,10 @@ describe('builder capability-phase ordering', () => {
 		expectTypeOf(afterInterfaces).not.toHaveProperty('slots')
 		expectTypeOf(afterInterfaces).not.toHaveProperty('state')
 		expectTypeOf(afterInterfaces).not.toHaveProperty('properties')
-		expectTypeOf(afterInterfaces).not.toHaveProperty('methods')
+		// `methods` is declared but not callable yet: it exists only as a type-level order marker
+		// (see plugin-phase-order.unit.test.ts); the only real next phase is `config`.
+		expectTypeOf<keyof typeof afterInterfaces>()
+			.toEqualTypeOf<'config' | 'methods'>()
 
 		const afterConfig = afterInterfaces.config({
 			description: 'Test config',

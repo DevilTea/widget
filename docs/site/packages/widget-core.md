@@ -169,6 +169,18 @@ createWidgetPlugin('counter')
 Each phase only exists on the builder chain when its capability was declared,
 so a plugin with no `slots` never exposes a `.slots()` step.
 
+The order is fixed: a declared phase called too early, after its position, or twice fails
+type-checking at the misplaced call with an order-specific diagnostic that names the phase
+and what must come first, instead of a bare "property does not exist" error. A misplaced
+call never advances the chain, so `.done()` does not become available because of it.
+Calling a phase whose capability was **not** declared keeps the ordinary "does not exist"
+error. Because declared-but-misplaced phases appear as type-only order markers on the
+builder type, editor completion can list them next to the phase that is actually callable.
+
+This check is type-only. The runtime builder accepts any order and cannot tell which
+capabilities were declared, so untyped or transpile-only code (for example a dynamically
+loaded plugin module) gets no order check; hosts must validate untyped plugins themselves.
+
 `state`, `properties`, `methods`, and `events` are **not** object-map sections. Each one
 is a keyed-chain builder: every declared member key becomes a chainable
 method on the section object, and calling it consumes that key. The section

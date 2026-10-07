@@ -162,6 +162,7 @@ export type {
 	WidgetPluginEventsPhase,
 	WidgetPluginInterfacesPhase,
 	WidgetPluginMethodsPhase,
+	WidgetPluginPhaseOrderViolation,
 	WidgetPluginPropertiesPhase,
 	WidgetPluginSlotsPhase,
 	WidgetPluginStatePhase,
