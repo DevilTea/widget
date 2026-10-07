@@ -154,6 +154,19 @@ describe('authored JSON runtime domain', () => {
 			.toBe(false)
 	})
 
+	it('compares primitives by SameValueZero so 0 equals -0 at any depth', () => {
+		expect(jsonEqual(0, -0))
+			.toBe(true)
+		expect(jsonEqual(-0, 0))
+			.toBe(true)
+		expect(jsonEqual({ list: [{ n: -0 }] }, { list: [{ n: 0 }] }))
+			.toBe(true)
+		expect(jsonEqual(0, 1))
+			.toBe(false)
+		expect(jsonEqual(Number.NaN, Number.NaN))
+			.toBe(true)
+	})
+
 	it('retains source-level JSON facts only on the Blueprint aggregate', () => {
 		const plugin = createWidgetPlugin('leaf')
 			.description('Leaf widget')

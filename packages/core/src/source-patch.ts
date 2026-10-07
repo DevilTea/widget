@@ -1,5 +1,5 @@
 import type { JsonValue } from './json'
-import { isJsonValue, jsonEqual } from './json'
+import { isJsonValue, jsonEqual, sameValueZero } from './json'
 
 export type SourcePath = readonly (string | number)[] | string
 
@@ -11,8 +11,19 @@ export type SourcePatchOperation
 		| { readonly op: 'copy', readonly from: SourcePath, readonly path: SourcePath }
 		| { readonly op: 'test', readonly path: SourcePath, readonly value: JsonValue }
 
+/**
+ * An RFC 6902-style patch over JSON-domain authored source. Arrays are addressed only by canonical
+ * index (append is the JSON Pointer `/items/-` only). `test` and no-op detection compare numbers by
+ * SameValueZero (`0` equals `-0`), and explicit `add`/`replace` operands write `-0` as `+0`.
+ */
 export type SourcePatch = readonly SourcePatchOperation[]
 
+/**
+ * Operation failure codes. `invalid-array-index` covers any non-canonical-index segment on an Array
+ * parent (`'length'`, `'foo'`, `'01'`, structured `'-'`) in both path forms. `json-incompatible-value`
+ * is an `add`/`replace`/`test` operand outside Core's JSON domain; `source-access-failed` concerns
+ * unsafe access to source material only.
+ */
 export type SourcePatchOperationFailureCode
 	= | 'invalid-path'
 		| 'path-not-found'
@@ -20,6 +31,7 @@ export type SourcePatchOperationFailureCode
 		| 'invalid-array-index'
 		| 'invalid-move-target'
 		| 'test-failed'
+		| 'json-incompatible-value'
 		| 'source-access-failed'
 
 export interface SourcePatchOperationFailure {
@@ -48,6 +60,7 @@ const PATCH_ERROR_MESSAGES: Record<SourcePatchOperationFailureCode, string> = {
 	'invalid-array-index': 'The SourcePath contains an invalid Array index.',
 	'invalid-move-target': 'The move destination is invalid relative to its source.',
 	'test-failed': 'The test operation did not match the addressed value.',
+	'json-incompatible-value': 'The SourcePatch operand is outside the JSON value domain.',
 	'source-access-failed': 'The source could not be inspected safely.',
 }
 
@@ -121,10 +134,14 @@ function isCanonicalArrayIndex(key: string): boolean {
 	return /^(?:0|[1-9]\d*)$/.test(key) && Number(key) < 4_294_967_295
 }
 
-function getArrayIndex(path: ParsedPath, segment: string | number, allowAppend = false): PatchResult<number | null> {
+/**
+ * Arrays have only index members: after path normalization, any segment that is not a canonical
+ * index fails `invalid-array-index` in both path forms. `null` means the JSON Pointer append
+ * position and is only returned when the caller allows it (callers pass `allowAppend` only for a
+ * final JSON Pointer `-` on an add-like operation).
+ */
+function getArrayIndex(segment: string | number, allowAppend = false): PatchResult<number | null> {
 	const key = String(segment)
-	if (!path.pointer && typeof segment === 'string' && !isCanonicalArrayIndex(key))
-		return { ok: true, value: null }
 	if (key === '-' && allowAppend)
 		return { ok: true, value: null }
 	if (key === '-' || !isCanonicalArrayIndex(key))
@@ -172,7 +189,7 @@ function readAt(source: unknown, path: ParsedPath): PatchResult<unknown> {
 		if (container.value === 'opaque')
 			return failure('path-not-traversable')
 		if (container.value === 'array') {
-			const indexResult = getArrayIndex(path, segment)
+			const indexResult = getArrayIndex(segment)
 			if (!indexResult.ok)
 				return indexResult
 			const length = readArrayLength(current as object)
@@ -252,13 +269,11 @@ function rebuildObject(
 	const append = isArray && pointer && segment === '-' && allowArrayAppend
 	const effectiveKey = append ? String(arrayLength.value) : key
 	const arrayIndexResult = isArray
-		? getArrayIndex({ segments: [], append: false, pointer }, segment, allowArrayAppend)
+		? getArrayIndex(segment, append)
 		: { ok: true as const, value: null }
 	if (!arrayIndexResult.ok)
 		return arrayIndexResult
 	const arrayIndex = append ? arrayLength.value : arrayIndexResult.value
-	if (isArray && pointer && segment === '-' && !allowArrayAppend)
-		return failure('invalid-array-index')
 	if (isArray && arrayIndex !== null) {
 		if (action === 'add' && arrayIndex > arrayLength.value)
 			return failure('invalid-array-index')
@@ -328,7 +343,7 @@ function modifyAt(
 		if (index === path.segments.length - 1)
 			return modify(container as object, segment)
 		if (containerKind.value === 'array') {
-			const indexResult = getArrayIndex(path, segment)
+			const indexResult = getArrayIndex(segment)
 			if (!indexResult.ok)
 				return indexResult
 			const length = readArrayLength(container as object)
@@ -355,9 +370,14 @@ function modifyRoot(source: unknown, value: unknown): PatchResult<unknown> {
 	return { ok: true, value }
 }
 
-function copyValue(value: unknown): PatchResult<unknown> {
+/**
+ * Structurally copies `value`. With `canonicalizeNegativeZero` (explicit `add`/`replace` operands),
+ * every `-0` at any depth is written as `+0`; `copy`/`move` relocate existing material unchanged.
+ */
+function copyValue(value: unknown, canonicalizeNegativeZero = false): PatchResult<unknown> {
+	const canonical = (primitive: unknown): unknown => canonicalizeNegativeZero && Object.is(primitive, -0) ? 0 : primitive
 	if (value === null || typeof value !== 'object')
-		return { ok: true, value }
+		return { ok: true, value: canonical(value) }
 	const containerKind = inspectStructuralContainer(value)
 	if (!containerKind.ok)
 		return containerKind
@@ -385,7 +405,7 @@ function copyValue(value: unknown): PatchResult<unknown> {
 			if (!('value' in descriptor))
 				return failure('path-not-traversable', 'Accessor-backed source properties cannot be copied.')
 			const child = descriptor.value
-			let copied: PatchResult<unknown> = { ok: true, value: child }
+			let copied: PatchResult<unknown> = { ok: true, value: canonical(child) }
 			if (child !== null && typeof child === 'object') {
 				const childKind = inspectStructuralContainer(child)
 				if (!childKind.ok)
@@ -409,7 +429,7 @@ function structurallyEqual(left: unknown, right: unknown): boolean {
 	const matched = new WeakMap<object, object>()
 
 	function equal(currentLeft: unknown, currentRight: unknown): boolean {
-		if (Object.is(currentLeft, currentRight))
+		if (sameValueZero(currentLeft, currentRight))
 			return true
 		if (typeof currentLeft !== 'object' || currentLeft === null || typeof currentRight !== 'object' || currentRight === null)
 			return false
@@ -511,8 +531,8 @@ export function applySourcePatch(source: unknown, patch: SourcePatch): InternalA
 			case 'replace': {
 				const value = (operation as { value?: unknown }).value
 				if (!isJsonValue(value))
-					return { ok: false, failure: operationError(operationIndex, { code: 'source-access-failed', message: 'SourcePatch operands must be JsonValue.' }) }
-				const copied = copyValue(value)
+					return { ok: false, failure: operationError(operationIndex, { code: 'json-incompatible-value', message: PATCH_ERROR_MESSAGES['json-incompatible-value'] }) }
+				const copied = copyValue(value, true)
 				if (!copied.ok)
 					return { ok: false, failure: operationError(operationIndex, copied.error) }
 				if (path.segments.length === 0)
@@ -530,7 +550,7 @@ export function applySourcePatch(source: unknown, patch: SourcePatch): InternalA
 			case 'test': {
 				const value = (operation as { value?: unknown }).value
 				if (!isJsonValue(value))
-					return { ok: false, failure: operationError(operationIndex, { code: 'source-access-failed', message: 'SourcePatch operands must be JsonValue.' }) }
+					return { ok: false, failure: operationError(operationIndex, { code: 'json-incompatible-value', message: PATCH_ERROR_MESSAGES['json-incompatible-value'] }) }
 				const actual = readAt(working, path)
 				if (!actual.ok)
 					return { ok: false, failure: operationError(operationIndex, actual.error) }

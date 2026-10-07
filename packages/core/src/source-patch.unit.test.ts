@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from './index'
 import { applySourcePatch } from './source-patch'
 
 describe('sourcePatch', () => {
@@ -28,25 +29,23 @@ describe('sourcePatch', () => {
 			.toEqual({ ok: true, value: { changed: true, source: { arr: [2, 1] } } })
 	})
 
-	it('rejects final `-` for non-add-like operations while keeping structured `-` ordinary', () => {
+	it('rejects final `-` for non-add-like operations and structured `-` on an Array, while keeping structured `-` ordinary on objects', () => {
 		const replace = applySourcePatch({ arr: [1] }, [
 			{ op: 'replace', path: '/arr/-', value: 2 },
 		])
-		const structured = applySourcePatch({ arr: [1] }, [
+		const structuredArray = applySourcePatch({ arr: [1] }, [
 			{ op: 'add', path: ['arr', '-'], value: 2 },
+		])
+		const structuredObject = applySourcePatch({ obj: {} }, [
+			{ op: 'add', path: ['obj', '-'], value: 2 },
 		])
 
 		expect(replace)
 			.toMatchObject({ ok: false, failure: { code: 'invalid-array-index', operationIndex: 0 } })
-		expect(structured)
-			.toMatchObject({ ok: true, value: { source: { arr: expect.objectContaining({ '-': 2 }) } } })
-		if (structured.ok) {
-			const patched = structured.value.source as { arr: Record<string, unknown> }
-			expect(Object.hasOwn(patched.arr, '-'))
-				.toBe(true)
-			expect(patched.arr['-'])
-				.toBe(2)
-		}
+		expect(structuredArray)
+			.toMatchObject({ ok: false, failure: { code: 'invalid-array-index', operationIndex: 0 } })
+		expect(structuredObject)
+			.toEqual({ ok: true, value: { changed: true, source: { obj: { '-': 2 } } } })
 	})
 
 	it('rejects removing the document root as an atomic invalid-path failure', () => {
@@ -189,37 +188,31 @@ describe('sourcePatch', () => {
 		const numeric = applySourcePatch(source, [{ op: 'add', path: ['arr', 0], value: 20 }])
 		const named = applySourcePatch(source, [{ op: 'add', path: ['arr', '01'], value: 'renamed' }])
 
-		if (!numeric.ok || !named.ok)
-			throw new Error('expected both structured paths to succeed')
+		if (!numeric.ok)
+			throw new Error('expected the structured numeric path to succeed')
 		const numericSource = numeric.value.source as { arr: (number | string)[] }
-		const namedSource = named.value.source as { arr: (number | string)[] }
 		expect(Array.from(numericSource.arr))
 			.toEqual([20, 10])
 		expect(Object.getOwnPropertyDescriptor(numericSource.arr, '01')?.value)
 			.toBe('named')
-		expect(Array.from(namedSource.arr))
-			.toEqual([10])
-		expect(Object.getOwnPropertyDescriptor(namedSource.arr, '01')?.value)
-			.toBe('renamed')
+		expect(named)
+			.toMatchObject({ ok: false, failure: { code: 'invalid-array-index', operationIndex: 0 } })
 	})
 
-	it('treats canonical structured string keys as Array indexes while keeping noncanonical strings ordinary', () => {
+	it('treats canonical structured string keys as Array indexes and rejects noncanonical strings', () => {
 		const source = { arr: ['zero', 'one', 'two'] }
 		Object.defineProperty(source.arr, '01', { value: 'named', enumerable: true, configurable: true, writable: true })
 
 		const canonical = applySourcePatch(source, [{ op: 'remove', path: ['arr', '1'] }])
 		const noncanonical = applySourcePatch(source, [{ op: 'replace', path: ['arr', '01'], value: 'renamed' }])
 
-		if (!canonical.ok || !noncanonical.ok)
-			throw new Error('expected both structured paths to succeed')
+		if (!canonical.ok)
+			throw new Error('expected the canonical structured path to succeed')
 		const canonicalArray = (canonical.value.source as { arr: string[] }).arr
 		expect(Array.from(canonicalArray))
 			.toEqual(['zero', 'two'])
-		const patched = noncanonical.value.source as { arr: string[] }
-		expect(Array.from(patched.arr))
-			.toEqual(['zero', 'one', 'two'])
-		expect(Object.getOwnPropertyDescriptor(patched.arr, '01')?.value)
-			.toBe('renamed')
+		expect(noncanonical)
+			.toMatchObject({ ok: false, failure: { code: 'invalid-array-index', operationIndex: 0 } })
 	})
 
 	it('deep-copies copy operands and compares nested JSON values for test', () => {
@@ -320,6 +313,377 @@ describe('sourcePatch', () => {
 		const result = applySourcePatch({ value: 1 }, forged)
 
 		expect(result)
+			.toMatchObject({ ok: false, failure: { code: 'json-incompatible-value', operationIndex: 0 } })
+	})
+})
+
+type Patch = Parameters<typeof applySourcePatch>[1]
+
+function patchOf(...operations: readonly Record<string, unknown>[]): Patch {
+	return operations as unknown as Patch
+}
+
+describe('sourcePatch Array members are indexes only', () => {
+	const arraySource = (): { items: unknown[] } => ({ items: [{ a: 1 }, 2] })
+	const segments = ['length', 'foo', '01'] as const
+
+	function invalidArrayIndex(operationIndex = 0) {
+		return { ok: false, failure: { code: 'invalid-array-index', operationIndex } }
+	}
+
+	describe.each(segments)('segment %j', (segment) => {
+		const pointer = `/items/${segment}`
+		const forms = [
+			['JSON Pointer', pointer, `${pointer}/a`],
+			['structured', ['items', segment], ['items', segment, 'a']],
+		] as const
+
+		describe.each(forms)('%s', (_label, target, deep) => {
+			it('fails every operation at the target position', () => {
+				const patches: Patch[] = [
+					patchOf({ op: 'add', path: target, value: 1 }),
+					patchOf({ op: 'replace', path: target, value: 1 }),
+					patchOf({ op: 'remove', path: target }),
+					patchOf({ op: 'test', path: target, value: 2 }),
+					patchOf({ op: 'copy', from: '/items/0', path: target }),
+					patchOf({ op: 'move', from: '/items/0', path: target }),
+				]
+				for (const patch of patches) {
+					expect(applySourcePatch(arraySource(), patch))
+						.toMatchObject(invalidArrayIndex())
+				}
+			})
+
+			it('fails every operation at the traversal position', () => {
+				const patches: Patch[] = [
+					patchOf({ op: 'add', path: deep, value: 1 }),
+					patchOf({ op: 'replace', path: deep, value: 1 }),
+					patchOf({ op: 'remove', path: deep }),
+					patchOf({ op: 'test', path: deep, value: 1 }),
+					patchOf({ op: 'copy', from: '/items/1', path: deep }),
+					patchOf({ op: 'move', from: '/items/1', path: deep }),
+				]
+				for (const patch of patches) {
+					expect(applySourcePatch(arraySource(), patch))
+						.toMatchObject(invalidArrayIndex())
+				}
+			})
+
+			it('fails copy and move at the from position', () => {
+				for (const op of ['copy', 'move']) {
+					expect(applySourcePatch(arraySource(), patchOf({ op, from: target, path: '/other' })))
+						.toMatchObject(invalidArrayIndex())
+					expect(applySourcePatch(arraySource(), patchOf({ op, from: deep, path: '/other' })))
+						.toMatchObject(invalidArrayIndex())
+				}
+			})
+
+			it('reports the failing operation index and leaves the source untouched', () => {
+				const source = arraySource()
+				const result = applySourcePatch(source, patchOf(
+					{ op: 'add', path: '/ok', value: 1 },
+					{ op: 'replace', path: target, value: 1 },
+				))
+
+				expect(result)
+					.toMatchObject(invalidArrayIndex(1))
+				expect(source)
+					.toEqual(arraySource())
+			})
+		})
+	})
+
+	it('fails a structured `-` at every position on an Array', () => {
+		const patches: Patch[] = [
+			patchOf({ op: 'add', path: ['items', '-'], value: 1 }),
+			patchOf({ op: 'replace', path: ['items', '-'], value: 1 }),
+			patchOf({ op: 'remove', path: ['items', '-'] }),
+			patchOf({ op: 'test', path: ['items', '-'], value: 1 }),
+			patchOf({ op: 'copy', from: ['items', '-'], path: '/other' }),
+			patchOf({ op: 'move', from: ['items', '-'], path: '/other' }),
+			patchOf({ op: 'copy', from: '/items/0', path: ['items', '-'] }),
+			patchOf({ op: 'move', from: '/items/0', path: ['items', '-'] }),
+			patchOf({ op: 'add', path: ['items', '-', 'a'], value: 1 }),
+		]
+		for (const patch of patches) {
+			expect(applySourcePatch(arraySource(), patch))
+				.toMatchObject(invalidArrayIndex())
+		}
+	})
+
+	it('does not read or create non-index members through length-like segments', () => {
+		const source = arraySource()
+		expect(applySourcePatch(source, patchOf({ op: 'test', path: '/items/length', value: 2 })))
+			.toMatchObject(invalidArrayIndex())
+		expect(applySourcePatch(source, patchOf({ op: 'copy', from: '/items/length', path: '/copied' })))
+			.toMatchObject(invalidArrayIndex())
+		expect(applySourcePatch(source, patchOf({ op: 'move', from: '/items/0', path: ['items', 'foo'] })))
+			.toMatchObject(invalidArrayIndex())
+		expect(source)
+			.toEqual(arraySource())
+	})
+
+	it('rejects non-index segments on a recovery Array carrying an extra property, so repair goes through an ancestor', () => {
+		const items: unknown[] = [1]
+		Object.defineProperty(items, 'extra', { value: 'x', enumerable: true, configurable: true, writable: true })
+
+		expect(applySourcePatch({ items }, patchOf({ op: 'remove', path: '/items/extra' })))
+			.toMatchObject(invalidArrayIndex())
+		const repaired = applySourcePatch({ items }, patchOf({ op: 'replace', path: '/items', value: [1] }))
+		expect(repaired)
+			.toEqual({ ok: true, value: { changed: true, source: { items: [1] } } })
+	})
+
+	it('keeps append JSON-Pointer-only, structured `-` an ordinary key on objects, and bounds checks unchanged', () => {
+		expect(applySourcePatch(arraySource(), patchOf({ op: 'add', path: '/items/-', value: 3 })))
+			.toMatchObject({ ok: true, value: { source: { items: [{ a: 1 }, 2, 3] } } })
+		expect(applySourcePatch({ obj: { '-': 1 } }, patchOf({ op: 'replace', path: ['obj', '-'], value: 2 })))
+			.toEqual({ ok: true, value: { changed: true, source: { obj: { '-': 2 } } } })
+		expect(applySourcePatch({ obj: { '-': 1 } }, patchOf({ op: 'test', path: '/obj/-', value: 1 })))
+			.toMatchObject({ ok: true, value: { changed: false } })
+		expect(applySourcePatch(arraySource(), patchOf({ op: 'add', path: ['items', 2], value: 3 })))
+			.toMatchObject({ ok: true, value: { source: { items: [{ a: 1 }, 2, 3] } } })
+		expect(applySourcePatch(arraySource(), patchOf({ op: 'add', path: ['items', 3], value: 3 })))
+			.toMatchObject(invalidArrayIndex())
+		expect(applySourcePatch(arraySource(), patchOf({ op: 'replace', path: '/items/2', value: 3 })))
+			.toMatchObject(invalidArrayIndex())
+		expect(applySourcePatch(arraySource(), patchOf({ op: 'remove', path: ['items', 1.5] })))
+			.toMatchObject(invalidArrayIndex())
+	})
+})
+
+describe('sourcePatch SameValueZero numbers', () => {
+	it('treats replacing 0 with -0 as a no-op that leaves the source untouched', () => {
+		const source = { a: 0 }
+		const result = applySourcePatch(source, patchOf({ op: 'replace', path: '/a', value: -0 }))
+
+		expect(result)
+			.toMatchObject({ ok: true, value: { changed: false } })
+		expect(Object.is(source.a, 0))
+			.toBe(true)
+	})
+
+	it('treats replacing a pre-existing -0 with 0 as a no-op that keeps the -0', () => {
+		const source = { a: -0 }
+		const result = applySourcePatch(source, patchOf({ op: 'replace', path: '/a', value: 0 }))
+
+		expect(result)
+			.toMatchObject({ ok: true, value: { changed: false } })
+		expect(Object.is(source.a, -0))
+			.toBe(true)
+	})
+
+	it('passes test for 0 against -0 in either direction', () => {
+		expect(applySourcePatch({ a: 0 }, patchOf({ op: 'test', path: '/a', value: -0 })))
+			.toMatchObject({ ok: true, value: { changed: false } })
+		expect(applySourcePatch({ a: -0 }, patchOf({ op: 'test', path: '/a', value: 0 })))
+			.toMatchObject({ ok: true, value: { changed: false } })
+		expect(applySourcePatch({ a: [{ b: -0 }] }, patchOf({ op: 'test', path: '/a', value: [{ b: 0 }] })))
+			.toMatchObject({ ok: true })
+		expect(applySourcePatch({ a: 0 }, patchOf({ op: 'test', path: '/a', value: 1 })))
+			.toMatchObject({ ok: false, failure: { code: 'test-failed', operationIndex: 0 } })
+	})
+
+	it('writes +0 when a multi-op patch commits an explicit -0 operand', () => {
+		const result = applySourcePatch({ a: 0, b: 1 }, patchOf(
+			{ op: 'replace', path: '/a', value: -0 },
+			{ op: 'replace', path: '/b', value: 2 },
+			{ op: 'add', path: '/c', value: -0 },
+		))
+
+		if (!result.ok)
+			throw new Error('expected the patch to succeed')
+		const patched = result.value.source as { a: number, b: number, c: number }
+		expect(result.value.changed)
+			.toBe(true)
+		expect(patched.b)
+			.toBe(2)
+		expect(Object.is(patched.a, 0))
+			.toBe(true)
+		expect(Object.is(patched.c, 0))
+			.toBe(true)
+	})
+
+	it('writes +0 when an explicit 0 replaces an existing -0 in a committing patch', () => {
+		const result = applySourcePatch({ a: -0, b: 1 }, patchOf(
+			{ op: 'replace', path: '/a', value: 0 },
+			{ op: 'replace', path: '/b', value: 2 },
+		))
+
+		if (!result.ok)
+			throw new Error('expected the patch to succeed')
+		expect(result.value.changed)
+			.toBe(true)
+		expect(Object.is((result.value.source as { a: number }).a, 0))
+			.toBe(true)
+	})
+
+	it('canonicalizes -0 at every depth of an explicit operand without mutating the operand', () => {
+		const operand = { x: [-0, { y: -0 }], z: -0 }
+		const result = applySourcePatch({}, patchOf({ op: 'add', path: '/n', value: operand }))
+
+		if (!result.ok)
+			throw new Error('expected the patch to succeed')
+		const patched = (result.value.source as { n: { x: [number, { y: number }], z: number } }).n
+		expect(Object.is(patched.x[0], 0))
+			.toBe(true)
+		expect(Object.is(patched.x[1].y, 0))
+			.toBe(true)
+		expect(Object.is(patched.z, 0))
+			.toBe(true)
+		expect(Object.is(operand.z, -0))
+			.toBe(true)
+		expect(Object.is(operand.x[0], -0))
+			.toBe(true)
+	})
+
+	it('detects a nested -0 operand over a nested 0 as a no-op', () => {
+		const source = { n: { x: [0, { y: 0 }] } }
+		const result = applySourcePatch(source, patchOf({ op: 'replace', path: '/n', value: { x: [-0, { y: -0 }] } }))
+
+		expect(result)
+			.toMatchObject({ ok: true, value: { changed: false } })
+	})
+
+	it('relocates an existing -0 unchanged with copy and move', () => {
+		const copied = applySourcePatch({ a: -0, nested: [-0] }, patchOf(
+			{ op: 'copy', from: '/a', path: '/b' },
+			{ op: 'copy', from: '/nested', path: '/nestedCopy' },
+		))
+		const moved = applySourcePatch({ a: -0 }, patchOf({ op: 'move', from: '/a', path: '/b' }))
+
+		if (!copied.ok || !moved.ok)
+			throw new Error('expected both patches to succeed')
+		const copiedSource = copied.value.source as { a: number, b: number, nestedCopy: number[] }
+		expect(Object.is(copiedSource.b, -0))
+			.toBe(true)
+		expect(Object.is(copiedSource.nestedCopy[0], -0))
+			.toBe(true)
+		expect(Object.is((moved.value.source as { b: number }).b, -0))
+			.toBe(true)
+	})
+
+	it('keeps Document revision and source unchanged for a +0/-0-only replace', () => {
+		const plugin = createWidgetPlugin('panel')
+			.description('A panel')
+			.interfaces<Record<never, never>>()
+			.done()
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const source = { type: 'panel', config: { a: -0 } }
+		const document = createWidgetDocument({ system, source })
+
+		const result = document.applyPatch([{ op: 'replace', path: '/config/a', value: 0 }])
+
+		expect(result)
+			.toEqual({ ok: true, changed: false })
+		expect(document.getSnapshot().revision)
+			.toBe(0)
+		expect(Object.is((document.getSnapshot().blueprint.source as typeof source).config.a, -0))
+			.toBe(true)
+	})
+})
+
+describe('sourcePatch non-JSON operands', () => {
+	function throwingProxy(): unknown {
+		return new Proxy({}, {
+			getPrototypeOf() {
+				throw new Error('boom')
+			},
+		})
+	}
+
+	function cyclic(): unknown {
+		const value: Record<string, unknown> = {}
+		value.self = value
+		return value
+	}
+
+	function accessor(): unknown {
+		return Object.defineProperty({}, 'x', { get: () => 1, enumerable: true })
+	}
+
+	function sparse(): unknown {
+		// eslint-disable-next-line no-sparse-arrays
+		return [1, , 3]
+	}
+
+	function arrayWithExtra(): unknown {
+		return Object.assign([1], { extra: true })
+	}
+
+	function symbolKeyed(): unknown {
+		return { [Symbol('k')]: 1 }
+	}
+
+	const kinds: readonly (readonly [string, unknown])[] = [
+		['undefined', undefined],
+		['function', () => undefined],
+		['bigint', 1n],
+		['symbol', Symbol('s')],
+		['NaN', Number.NaN],
+		['Infinity', Number.POSITIVE_INFINITY],
+		['-Infinity', Number.NEGATIVE_INFINITY],
+		['cycle', cyclic()],
+		['Date', new Date(0)],
+		['Map', new Map()],
+		['class instance', new (class Foo {})()],
+		['sparse Array', sparse()],
+		['Array with extra property', arrayWithExtra()],
+		['accessor', accessor()],
+		['symbol key', symbolKeyed()],
+		['throwing reflection', throwingProxy()],
+		['nested NaN', { deep: [{ n: Number.NaN }] }],
+	]
+
+	describe.each(kinds)('%s operand', (_label, operand) => {
+		it.each(['add', 'replace', 'test'])('fails %s with json-incompatible-value', (op) => {
+			const source = { a: 1 }
+			const result = applySourcePatch(source, patchOf(
+				{ op: 'test', path: '/a', value: 1 },
+				{ op, path: '/a', value: operand },
+			))
+
+			expect(result)
+				.toMatchObject({ ok: false, failure: { code: 'json-incompatible-value', operationIndex: 1 } })
+			expect(source)
+				.toEqual({ a: 1 })
+		})
+	})
+
+	it.each(['add', 'replace', 'test'])('fails %s with a missing value', (op) => {
+		expect(applySourcePatch({ a: 1 }, patchOf({ op, path: '/a' })))
+			.toMatchObject({ ok: false, failure: { code: 'json-incompatible-value', operationIndex: 0 } })
+	})
+
+	it('checks operands before evaluating the operation', () => {
+		expect(applySourcePatch({}, patchOf({ op: 'replace', path: '/missing/deep', value: Number.NaN })))
+			.toMatchObject({ ok: false, failure: { code: 'json-incompatible-value', operationIndex: 0 } })
+		expect(applySourcePatch({ a: 1 }, patchOf({ op: 'test', path: '/missing', value: undefined })))
+			.toMatchObject({ ok: false, failure: { code: 'json-incompatible-value', operationIndex: 0 } })
+	})
+
+	it('still reports path-shape failures before operand inspection', () => {
+		expect(applySourcePatch({}, patchOf({ op: 'add', path: 'no-slash', value: Number.NaN })))
+			.toMatchObject({ ok: false, failure: { code: 'invalid-path', operationIndex: 0 } })
+	})
+
+	it('keeps source-access-failed for unsafe access to source material', () => {
+		const source = new Proxy({}, {
+			getPrototypeOf() {
+				throw new Error('boom')
+			},
+		})
+
+		expect(applySourcePatch(source, patchOf({ op: 'replace', path: '/a', value: 1 })))
 			.toMatchObject({ ok: false, failure: { code: 'source-access-failed', operationIndex: 0 } })
+	})
+
+	it('keeps malformed operation shapes as invalid-path', () => {
+		expect(applySourcePatch({}, patchOf({ op: 'bogus', path: '/a' })))
+			.toMatchObject({ ok: false, failure: { code: 'invalid-path', operationIndex: 0 } })
+		expect(applySourcePatch({}, patchOf({ path: '/a' })))
+			.toMatchObject({ ok: false, failure: { code: 'invalid-path', operationIndex: 0 } })
+		expect(applySourcePatch({}, patchOf({ op: 'add', value: 1 })))
+			.toMatchObject({ ok: false, failure: { code: 'invalid-path', operationIndex: 0 } })
 	})
 })
