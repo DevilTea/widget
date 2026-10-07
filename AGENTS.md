@@ -28,9 +28,9 @@ pnpm check
 
 ## Releasing
 
-Releases are driven locally: `pnpm release <package> <release>` bumps the package and opens its release pull request with auto-merge enabled, and `pnpm release:tag <package>` pushes the annotated tag after that pull request merges. Only the tag push triggers publishing, which happens exclusively in `publish.yml` via npm Trusted Publishing. Both commands push to `origin` and the second one publishes to npm, so never run them without an explicit instruction to release.
+Releases are driven locally: `pnpm release <package> <release>` bumps the package and opens its release pull request (merge it yourself once the required checks pass), and `pnpm release:tag <package>` pushes the annotated tag after that pull request merges. Only the tag push triggers publishing, which happens exclusively in `publish.yml` via npm Trusted Publishing. Both commands push to `origin` and the second one publishes to npm, so never run them without an explicit instruction to release.
 
-The npm Trusted Publisher configuration must name repository `DevilTea/widget` before the first post-split release. See `docs/migration/release-cutover.md`.
+The npm Trusted Publisher configuration must name repository `DevilTea/widget` and workflow `publish.yml` for every published package; releases from this repository depend on it. See `docs/migration/release-cutover.md`.
 
 ## Testing policy
 

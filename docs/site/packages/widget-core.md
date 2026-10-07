@@ -53,7 +53,24 @@ Ownership rules that shape everything below:
   [Plugin registration errors](#plugin-registration-errors)).
 - A Blueprint is an immutable semantic snapshot. Editing a widget tree means
   compiling different source through `system.createBlueprint()` or
-  `blueprint.recompile()`, never mutating a Blueprint in place.
+  `blueprint.recompile()`, never mutating a Blueprint in place. "Immutable"
+  describes Core's API: Core exposes no mutation operation and never mutates a
+  Blueprint or its source. It is not a defensive copy against someone else
+  mutating a graph they still hold (see the next rule).
+- Authored source is handed to Core by reference. `system.createBlueprint(source)`,
+  `blueprint.recompile(source)` and `createWidgetDocument({ system, source })`
+  retain `source` as given: `blueprint.source` is the exact value passed in,
+  and each recovered node's `source` is a reference into that same graph. Core
+  does not clone, freeze, or Proxy-wrap it. Handing source to Core transfers
+  semantic ownership, so after the call neither the caller nor any reader of
+  `blueprint.source` or a node's `source` may mutate that graph or anything
+  inside it; behavior after such a mutation is unspecified. Core does not
+  re-derive compiled status, Diagnostics, resolved config, Runtime facts, or
+  the `sourceJsonCompatible` proof, so a `JsonValue` narrowing can stop being
+  true. A caller that wants to keep editing its own object should pass Core a
+  copy (for example `structuredClone` for JSON-domain data). Opaque values in
+  recovery input (class instances, functions, and similar) are terminal leaves
+  and keep their identity.
 - A Runtime can only be created from a Blueprint whose `status` is `'valid'`.
 - Runtime state is never part of a persisted/raw widget definition.
 - Runtime-changing interactions (reading another widget's state/property,
@@ -587,6 +604,44 @@ if (result.ok && result.changed)
 	console.log(document.getSnapshot().revision) // 1
 ```
 
+`createWidgetDocument` retains `source` by reference as revision 0's
+`blueprint.source`, so the ownership rule in [Core model](#core-model) applies.
+`applyPatch` never mutates the accepted source in place. It structurally
+copies the operands of explicit `add`/`replace` operations, but each new
+revision **shares** untouched subtrees with the previous one (copy-on-write),
+so any revision can share structure with the original construction input.
+Mutating that input therefore corrupts later revisions as well as revision 0.
+A host that keeps its own editable model should copy it before constructing a
+`WidgetDocument`.
+
+`applyPatch(patch, options?)` returns `{ ok: true, changed }` or
+`{ ok: false, failure }`. A patch that leaves the source structurally equal
+returns `{ ok: true, changed: false }`: the revision does not advance and
+subscribers are not notified. A changing patch compiles the next Blueprint once
+after all operations succeed, commits it at `revision + 1`, then notifies
+subscribers. `failure.code` is one of:
+
+- `reentrant-apply`: `applyPatch()` was called while the Document was applying
+  or notifying (for example from a subscriber). It is checked first.
+- `document-revision-conflict`: `options.expectedRevision` was supplied and
+  differs from the current revision. The failure carries `expectedRevision` and
+  `actualRevision`. Omitting `options` skips this check, and the check runs
+  before any operation is evaluated.
+- An operation failure `{ code, operationIndex, message }`, where `code` is
+  `invalid-path`, `path-not-found`, `path-not-traversable`,
+  `invalid-array-index`, `invalid-move-target`, `test-failed`, or
+  `source-access-failed`, and `operationIndex` is the failing operation's
+  position in the patch. A failed patch leaves the committed source and revision
+  unchanged.
+
+`document.subscribe(listener)` registers `listener` and returns an idempotent
+unsubscribe function. The listener is not called on subscription; it receives
+the new snapshot after each committed (`changed: true`) patch, in subscription
+order, over the subscriber list as it stood when notification began. An
+exception thrown by a listener does not fail `applyPatch()` or stop the
+remaining listeners, and it is reported outside `applyPatch()`; the reporting
+mechanism is not part of the contract.
+
 ### Explicit separated-source tooling
 
 `WidgetSource` remains the canonical nested authored form. Core also exports an
@@ -690,6 +745,56 @@ propagation atomicity, not a transaction: writes performed before a later
 failure or a thrown callback remain committed, and the batch still ends via
 `finally`.
 
+### Events
+
+An Event is a public semantic notification declared by the plugin. Its
+arguments are a typed tuple in the plugin's `events` interface, and each
+declared member carries a `description`:
+
+```ts
+interface ChangeInterfaces {
+	methods: { fire: (value: string) => void }
+	events: { change: [value: string] }
+}
+
+createWidgetPlugin('notifier')
+	.description('A notifier widget')
+	.interfaces<ChangeInterfaces>()
+	.methods(methods =>
+		methods.fire({
+			validateArgs: (args): args is [string] =>
+				args.length === 1 && typeof args[0] === 'string',
+			execute: ({ args, emit }) => emit.change(args[0]),
+		}),
+	)
+	.events(events => events.change({ description: 'Changed value' }))
+	.done()
+```
+
+```ts
+const unsubscribe = runtime.getWidget('notifier-1')!.events.change.subscribe(
+	(value) => { /* ... */ },
+)
+```
+
+- Consumers subscribe through `runtime.getWidget(id).events[name].subscribe(listener)`,
+  which returns an unsubscribe function. A public event surface is
+  subscribe-only.
+- Emit authority belongs to Widget implementation contexts: the `emit` object
+  passed to a Method's `execute`, and renderer adapters through
+  [`@deviltea/widget-core/integration`](#renderer-adapter-integration).
+- Argument types are checked by TypeScript only; there is no runtime payload
+  validation.
+- Delivery is synchronous. A nested emit is delivered depth-first, and the
+  public listener list is snapshotted when `emit` starts.
+- If a public listener throws, the error propagates to the emit caller and the
+  remaining public listeners for that occurrence do not run.
+- Subscriptions are scoped to the Runtime and cleared by `runtime.dispose()`.
+  Calling `emit` after disposal throws `WidgetSystemRuntimeDisposedError`.
+
+Events can additionally be observed passively through
+[Runtime inspection](#runtime-inspection) (`getEvent(name)`).
+
 ### Diagnostics
 
 Every state write, property evaluation, and method invocation keeps only its
@@ -790,11 +895,13 @@ The error message is descriptive only; consumers discriminate by class and
 `code`. Runtime disposal continues to use `WidgetSystemRuntimeDisposedError`
 rather than being wrapped as an integration error.
 
-## Inspection (DevTools)
+## Inspection
 
 `@deviltea/widget-core/inspection` is a dedicated, strictly readonly subpath
-for building inspectors/DevTools over the compiler and Runtime. It is not
-re-exported from the root entrypoint:
+and a supported, semver-governed observation surface for any host: DevTools,
+prototype players, test harnesses, and other inspectors over the compiler and
+Runtime. "DevTools" describes where it came from, not a lower support tier. It
+is not re-exported from the root entrypoint:
 
 ```ts
 import { inspectBlueprint, inspectPlugin, inspectRuntime } from '@deviltea/widget-core/inspection'
@@ -873,8 +980,10 @@ inspection.getNodeId(node) // null for a foreign/forged node
   and a malformed raw slot value produces no entry at all).
 - A resolved node additionally carries `capabilities` (declared vs
   explicitly-empty presence for `config` / `slots` / `state` / `properties` /
-  `methods`), `semanticSlots`, and `state` / `properties` / `methods` member
-  inventories in declaration order. State members project normalized
+  `methods` / `events`), `semanticSlots`, and `state` / `properties` /
+  `methods` / `events` member inventories in declaration order. An Event
+  member projects its `name` and `description` only; no argument metadata is
+  invented. State members project normalized
   `authorWritable`; Property members project `valueContractId` alongside their
   compiler-derived dependencies. A method's `transitivelyWrites` and the
   Blueprint's `invalidCycles` are read directly off the existing compiler
@@ -907,6 +1016,8 @@ widgetInspection.getState('count')
 	?.getSnapshot() // { value: T | null }
 widgetInspection.getProperty('doubled')
 	?.getSnapshot() // never-evaluated | completed
+widgetInspection.getEvent('change')
+	?.subscribe((args) => { /* readonly occurrence args */ })
 ```
 
 - `getState` / `getProperty` return `null` only when the member/capability
@@ -940,6 +1051,41 @@ widgetInspection.getProperty('doubled')
   emission) and their unsubscribe functions stay safe/idempotent. Inspection
   retains no history, method calls, timestamps, or profiling data beyond the
   already-documented current/last facts.
+
+#### Event inspection: `getEvent(name)`
+
+`RuntimeWidgetInspection.getEvent(name)` is a passive occurrence channel for
+Events (see [Events](#events)). Unlike State and Property inspection it has no
+`getSnapshot()`: it reports occurrences only. It makes these guarantees:
+
+1. It returns `null` only when the Event member or capability is absent. The
+   facade is identity-stable and can still be obtained after dispose.
+2. It is passive: it grants no emit authority and never changes emission,
+   public listener membership or order, or any exception the emitter sees.
+3. For one emit, all inspection listeners run **before** any public listener.
+   The public audience is snapshotted before inspection listeners run, so an
+   inspection callback cannot join the current public delivery.
+4. The inspection audience is snapshotted per occurrence. Subscribing or
+   unsubscribing during delivery affects only later emits.
+5. A throwing inspection listener is isolated. The error does not reach the
+   emitter, other inspection listeners, or public listeners, and it is
+   reported outside the emit call. The reporting mechanism is not normative.
+6. Each occurrence passes one **shallow-frozen** args array, shared by that
+   occurrence's inspection listeners. The elements are the emitted references;
+   Core does not clone or deep-freeze them. Core retains nothing after `emit`
+   returns.
+7. The occurrence is published when `emit` starts. Inspection observes it even
+   if a later public listener throws.
+8. Future occurrences only: no replay, history, or immediate emission.
+9. After dispose, a new `subscribe()` throws `WidgetSystemRuntimeDisposedError`.
+   Earlier subscriptions are detached without a final call, and unsubscribe
+   stays idempotent.
+10. Listeners run untracked: reading Runtime facts inside one adds no reactive
+    dependency.
+
+Not guaranteed: what happens when an inspection listener synchronously writes
+State or invokes Methods, beyond ordinary Runtime rules. Hosts that react to
+an occurrence should defer the work, for example to a microtask.
 
 ## Design constraints
 

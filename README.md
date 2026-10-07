@@ -31,4 +31,4 @@ pnpm release <widget-core|widget-vue> <patch|minor|major|prerelease|version>
 pnpm release:tag <widget-core|widget-vue>
 ```
 
-Publishing uses npm Trusted Publishing from GitHub Actions. The Trusted Publisher repository must be updated to `DevilTea/widget` before the first post-split release.
+Publishing uses npm Trusted Publishing from GitHub Actions. Each package's npm Trusted Publisher must name repository `DevilTea/widget` and workflow `publish.yml`.

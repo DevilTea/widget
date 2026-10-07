@@ -240,6 +240,22 @@ export type RuntimePropertyInspectionSnapshot<T>
 
 export interface RuntimePropertyInspection<T> extends InspectionObservable<RuntimePropertyInspectionSnapshot<T>> {}
 
+/**
+ * Passive, readonly observation of one Event member's occurrences. It grants no emit authority and never
+ * changes emission, public listener membership or order, or any exception the emitter sees.
+ *
+ * For one emit, every inspection listener runs **before** any public listener; the public audience is
+ * fixed before inspection listeners run, so an inspection callback cannot join the current public
+ * delivery. The inspection audience is snapshotted per occurrence. A throwing listener is isolated (it
+ * reaches neither the emitter, peer inspection listeners nor public listeners) and is reported outside
+ * the emit call; the reporting mechanism is not normative. Each occurrence passes one shallow-frozen
+ * args array shared by that occurrence's listeners; elements are the emitted references and are not
+ * cloned or deep-frozen. Only future occurrences are delivered (no replay or history). After
+ * `runtime.dispose()`, a new `subscribe()` throws `WidgetSystemRuntimeDisposedError`, earlier
+ * subscriptions receive nothing further, and unsubscribe stays idempotent. What a listener does by
+ * synchronously writing State or invoking Methods is not guaranteed beyond ordinary Runtime rules;
+ * defer such work, for example to a microtask.
+ */
 export interface RuntimeEventInspection {
 	subscribe: (listener: (args: readonly unknown[]) => void) => () => void
 }

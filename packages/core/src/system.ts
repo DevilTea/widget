@@ -57,6 +57,13 @@ export interface WidgetSystem<Plugins extends AnyWidgetPluginTuple = AnyWidgetPl
 	/**
 	 * The compilation boundary. The input is `unknown` because JSON-parsed/untrusted document data is
 	 * the real boundary; malformed input still produces an inspectable Blueprint.
+	 *
+	 * Ownership: `definition` is retained **by reference**. `blueprint.source` is that exact value and
+	 * each recovered node's `source` is a reference into the same graph; Core never clones, freezes or
+	 * Proxy-wraps it. Passing it here transfers semantic ownership: neither the caller nor any reader of
+	 * `blueprint.source` may mutate it (or anything inside it) afterwards, and behavior after such a
+	 * mutation is unspecified. Pass a copy (for example `structuredClone` for JSON-domain data) to keep
+	 * editing your own object.
 	 */
 	createBlueprint: (definition: unknown) => WidgetSystemBlueprint<Plugins>
 }
