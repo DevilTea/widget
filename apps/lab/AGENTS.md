@@ -154,7 +154,16 @@ which augments Vue's `ComponentCustomProperties` so `pika()` type-checks inside 
 
 ## Deployment (GitHub Pages)
 
-The Lab deploys as part of the docs Pages artifact: `.github/workflows/docs.yml` runs
+The Lab deploys as part of the docs Pages artifact: `.github/workflows/docs.yml` runs after the
+`Pages integration` workflow succeeds on a `main` push (or via manual `workflow_dispatch` of `main`).
+Its `gate` job always deploys the **current tip of `main`**: it requires the `CI` run (and the
+`Pages integration` run, when one exists) for that commit to have succeeded, so a stale re-run never
+rolls the site back and a docs commit whose CI was cancelled by a newer non-docs commit still ships
+through that newer tip. If the tip has its own `Pages integration` run, that run's trigger deploys it
+instead. `deploy-pages` cannot take a commit, so the GitHub deployment record shows the workflow's
+`GITHUB_SHA` (the `main` tip when the run started); the gate's job summary records the deployed sha. The
+Pages `push` path filter in `pages-integration.yml` must keep covering every path that affects the Pages
+artifact, because it also decides when a deploy is triggered. The build runs
 `pnpm docs:build:pages` (`scripts/build-pages.ts`), which builds `widget-lab` **and its workspace
 dependencies** in topological order with `WIDGET_LAB_BASE=/widget/lab/` (consumed by
 `vite.config.ts`'s `base`), builds `docs/site`, then copies the Lab build under the docs dist's

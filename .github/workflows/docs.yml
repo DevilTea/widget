@@ -1,18 +1,23 @@
 name: Deploy documentation
 
+# Deploys are gated on the checks that already run for the commit; the test matrix is
+# not duplicated here.
+#
+# - `Pages integration` is the trigger. Its `push` path filter is kept identical to the
+#   paths that affect the Pages artifact, so it runs exactly for the commits that need a
+#   deploy, and a successful run means the built Pages bundle already passed its contracts.
+# - The `gate` job deploys the CURRENT tip of `main`, not necessarily the triggering
+#   commit, and requires the `CI` run for the deployed commit to have succeeded (waiting
+#   for it if it is still running). Deploying the tip means a stale re-run can never roll
+#   the site back, and a docs commit whose CI was cancelled by a newer non-docs commit is
+#   still deployed (the tip contains it).
+# - `workflow_dispatch` redeploys the tip of `main` under the same gate; it is not an
+#   override. Use it to recover from a failed deploy or a flaky upstream run.
 on:
-  push:
+  workflow_run:
+    workflows: [Pages integration]
+    types: [completed]
     branches: [main]
-    paths:
-      - .github/workflows/docs.yml
-      - .github/actions/setup-node-pnpm/**
-      - docs/site/**
-      - apps/lab/**
-      - packages/**
-      - scripts/build-pages.ts
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
   workflow_dispatch:
 
 permissions:
@@ -20,16 +25,152 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
+  gate:
+    name: Require passing checks
+    # workflow_run runs from the default branch with a write-capable token, so only act
+    # on successful push runs of this repository's main branch (never PRs or forks).
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      proceed: ${{ steps.gate.outputs.proceed }}
+      sha: ${{ steps.gate.outputs.sha }}
+    steps:
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 25 * 60))
+
+          emit() { # <sha> <proceed>
+            {
+              echo "sha=$1"
+              echo "proceed=$2"
+            } >> "$GITHUB_OUTPUT"
+            echo "Deploy target: $1 (triggered by $HEAD_SHA), proceed=$2" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          # Sets STATE to "<status>:<conclusion>" of the latest push run of a workflow on a
+          # commit, or "" when there is none. An API failure must not look like "no run".
+          run_state() { # <workflow file> <sha>
+            STATE="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$1" \
+              --commit "$2" --event push --limit 1 \
+              --json status,conclusion --jq '.[0] // empty | "\(.status):\(.conclusion)"')" \
+              || { echo "::error::Could not query $1 runs for $2."; exit 1; }
+          }
+
+          fetch_tip() {
+            TIP="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" \
+              || { echo "::error::Could not resolve the tip of main."; exit 1; }
+          }
+
+          # Wait for the push run of a workflow on a commit and require it to succeed.
+          # required=true: the run must exist; otherwise a missing run (path filter did not
+          # match) is accepted. Returns 10 when the run was cancelled.
+          require_success() { # <name> <workflow file> <required> <sha>
+            local name="$1" file="$2" required="$3" sha="$4"
+            while true; do
+              run_state "$file" "$sha"
+              case "$STATE" in
+                completed:success)
+                  echo "$name: success for $sha"
+                  return 0
+                  ;;
+                completed:cancelled)
+                  echo "$name was cancelled for $sha."
+                  return 10
+                  ;;
+                completed:*)
+                  echo "::error::$name finished with '${STATE#completed:}' for $sha; not deploying."
+                  exit 1
+                  ;;
+                "")
+                  if [ "$required" != "true" ]; then
+                    echo "$name: no push run for $sha (path filter); not required."
+                    return 0
+                  fi
+                  echo "$name: no run found for $sha yet."
+                  ;;
+                *)
+                  echo "$name: $STATE for $sha, waiting."
+                  ;;
+              esac
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "::error::Timed out waiting for $name on $sha."
+                exit 1
+              fi
+              sleep 30
+            done
+          }
+
+          target="$HEAD_SHA"
+          while true; do
+            if [ "$EVENT_NAME" = workflow_run ]; then
+              # Deploy the current tip of main. If the tip is a newer commit that has its own
+              # Pages integration run, that run will trigger the deploy for it.
+              fetch_tip
+              target="$TIP"
+              if [ "$TIP" != "$HEAD_SHA" ]; then
+                run_state pages-integration.yml "$TIP"
+                if [ -n "$STATE" ]; then
+                  echo "::notice::main moved to $TIP, which has its own Pages integration run ($STATE); it will deploy. Not deploying $HEAD_SHA."
+                  emit "$TIP" false
+                  exit 0
+                fi
+                echo "main moved from $HEAD_SHA to $TIP, which did not trigger Pages integration; gating $TIP instead."
+              fi
+            fi
+
+            # CI runs for every push to main; Pages integration only when its paths match.
+            rc=0
+            require_success "CI" ci.yml true "$target" || rc=$?
+            if [ "$rc" -eq 0 ]; then
+              require_success "Pages integration" pages-integration.yml false "$target" || rc=$?
+            fi
+
+            if [ "$rc" -eq 0 ]; then
+              emit "$target" true
+              exit 0
+            fi
+            if [ "$rc" -ne 10 ]; then
+              exit "$rc"
+            fi
+
+            # A run was cancelled. That is only acceptable when a newer commit superseded it
+            # (workflow_run): re-evaluate against the new tip. Otherwise fail visibly.
+            if [ "$EVENT_NAME" = workflow_run ]; then
+              fetch_tip
+              if [ "$TIP" != "$target" ] && [ "$SECONDS" -lt "$deadline" ]; then
+                echo "main moved to $TIP while gating $target; re-evaluating."
+                continue
+              fi
+            fi
+            echo "::error::Checks for $target were cancelled and no newer commit superseded them; not deploying."
+            exit 1
+          done
+
   build:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
       - uses: ./.github/actions/setup-node-pnpm
         with:
           node-version: 24
@@ -44,6 +185,12 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Serialize deployments, never cancelling one that is already running. This lives on
+    # the job (not the workflow) so runs that the gate skips cannot displace a pending
+    # deploy from the queue.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
