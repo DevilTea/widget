@@ -206,9 +206,20 @@ export function isJsonValue(value: unknown): value is JsonValue {
 	return inspectJsonValue(value).compatible
 }
 
-/** JSON-domain equality used by the RFC6902 `test` operation. (SourcePatch no-op detection uses `structurallyEqual` in `source-patch.ts`.) */
+/**
+ * SameValueZero: `+0` equals `-0` and `NaN` equals `NaN`. Used only for SourcePatch comparisons
+ * (`test` and no-op detection); Runtime State has its own equality rule and does not use this.
+ */
+export function sameValueZero(left: unknown, right: unknown): boolean {
+	return left === right || (typeof left === 'number' && typeof right === 'number' && Number.isNaN(left) && Number.isNaN(right))
+}
+
+/**
+ * JSON-domain equality used by the RFC6902 `test` operation; primitives compare by SameValueZero,
+ * so `-0` equals `0`. (SourcePatch no-op detection uses `structurallyEqual` in `source-patch.ts`.)
+ */
 export function jsonEqual(left: unknown, right: unknown, seen = new Set<unknown>()): boolean {
-	if (Object.is(left, right))
+	if (sameValueZero(left, right))
 		return true
 	if (typeof left !== 'object' || left === null || typeof right !== 'object' || right === null)
 		return false

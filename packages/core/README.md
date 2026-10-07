@@ -273,10 +273,38 @@ subscribers. `failure.code` is one of:
   before any operation is evaluated.
 - An operation failure `{ code, operationIndex, message }`, where `code` is
   `invalid-path`, `path-not-found`, `path-not-traversable`,
-  `invalid-array-index`, `invalid-move-target`, `test-failed`, or
-  `source-access-failed`, and `operationIndex` is the failing operation's
-  position in the patch. A failed patch leaves the committed source and revision
-  unchanged.
+  `invalid-array-index`, `invalid-move-target`, `test-failed`,
+  `json-incompatible-value`, or `source-access-failed`, and `operationIndex`
+  is the failing operation's position in the patch. A failed patch leaves the
+  committed source and revision unchanged.
+
+  | `code` | Meaning |
+  | --- | --- |
+  | `invalid-path` | malformed path or operation shape |
+  | `path-not-found` | the path does not identify an existing location |
+  | `path-not-traversable` | the path passes through a non-traversable value |
+  | `invalid-array-index` | an Array parent was addressed by anything other than an in-bounds canonical index (see below) |
+  | `invalid-move-target` | a `move` into its own descendant |
+  | `test-failed` | a `test` operand did not match the addressed value |
+  | `json-incompatible-value` | an `add`/`replace`/`test` `value` is outside Core's JSON domain (missing or `undefined`, functions, `bigint`, symbols, `NaN`/`±Infinity`, cycles, non-plain prototypes, sparse or extra-property Arrays, accessors, symbol keys, or reflection that throws); checked after path parsing and before the operation is evaluated |
+  | `source-access-failed` | unsafe access to the *source* material only |
+
+Three edge semantics apply to every operation:
+
+- **Arrays have only index members.** After path normalization, any segment on
+  an Array parent that is not a canonical index (`'length'`, `'foo'`, `'01'`, or a
+  structured `'-'`) fails `invalid-array-index`, at every position (traversal,
+  target, and `from`) and in both path forms. Append remains JSON-Pointer-only
+  (`/items/-`); a structured `'-'` never appends and is an ordinary key on
+  objects. Non-index properties already present on a recovery Array are repaired
+  by replacing that Array or an ancestor.
+- **Numbers compare by SameValueZero.** `test` and no-op detection treat `0` and
+  `-0` as equal, so replacing `0` with `-0` (or the reverse) returns
+  `{ ok: true, changed: false }` and the source keeps its original value.
+  Explicit `add`/`replace` operands are copied with `-0` written as `+0` at
+  every depth; `copy`/`move` relocate existing material unchanged.
+- **Operands must be JSON values.** A non-JSON operand fails with
+  `json-incompatible-value`, not `source-access-failed`.
 
 `document.subscribe(listener)` registers `listener` and returns an idempotent
 unsubscribe function. The listener is not called on subscription; it receives
