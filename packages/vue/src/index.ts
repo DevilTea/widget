@@ -8,6 +8,8 @@
 
 export { WidgetVueIntegrationError } from './errors'
 
+export type { WidgetVueIntegrationErrorCode } from './errors'
+
 export { createWidgetVueRenderer } from './renderer'
 
 export type {

@@ -65,8 +65,8 @@ const WidgetRenderer = createWidgetVueRenderer(
 - Construction also validates coverage against the actual `system` instance at
   runtime (type-level completeness alone cannot stop `any`/untyped call
   sites): missing, unknown, or duplicate renderer registration all throw
-  `WidgetVueIntegrationError` — a programmer/configuration exception, never a
-  Widget Diagnostic.
+  `WidgetVueIntegrationError` (code `invalid-renderer-registry`) — a
+  programmer/configuration exception, never a Widget Diagnostic.
 - The returned component is bound to the exact `WidgetSystem` instance
   supplied; a `WidgetSystemRuntime` from a different (even structurally
   identical) `WidgetSystem` is rejected the same way.
@@ -94,7 +94,7 @@ through a private Vue injection context and renders the registered component
 for that widget's exact plugin type. Renderer components never receive a
 `widget` prop — they call `useWidget(Plugin)`, and `Plugin` doubles as the
 compile-time type witness and a runtime exact-identity assertion (a mismatch
-throws `WidgetVueIntegrationError`).
+throws `WidgetVueIntegrationError` with code `widget-plugin-mismatch`).
 
 ## `useWidget(Plugin)`
 
@@ -214,8 +214,7 @@ member is a callable typed from the declared event arguments and returning
 `void`. Looking up or materializing a member is passive: it neither subscribes
 nor acquires emit authority, and a name that is not a declared event yields
 `undefined`. The first call acquires the widget's Core event emitter and
-forwards the arguments to it. If Core returns no emitter, the call throws a
-`WidgetVueIntegrationError`.
+forwards the arguments to it.
 
 ### Identity
 
@@ -246,6 +245,49 @@ No `runtime`, `system`, or unrestricted `getWidget` escape hatch. Every
 cross-widget interaction stays mediated by `@deviltea/widget-core`
 dependencies (`registerDeps`); renderer code cannot reach across the widget
 tree outside that mechanism.
+
+## Integration errors
+
+Caller-reachable misuse throws `WidgetVueIntegrationError` (exported from the
+root). Discriminate by class and `code`; `message` is descriptive only. The
+code union is exported as the type `WidgetVueIntegrationErrorCode`.
+
+| `code` | Condition |
+|---|---|
+| `invalid-renderer-registry` | `createWidgetVueRenderer` coverage is not exactly-once against the bound System |
+| `runtime-system-mismatch` | the `runtime` prop was not created from the exact bound System |
+| `outside-widget-renderer` | `useWidget()` or `WidgetSlot` is used without a current widget host |
+| `widget-plugin-mismatch` | `useWidget(Plugin)` and the current widget's exact plugin instance differ |
+| `readonly-projection-write` | a Property or Diagnostics ref is written |
+
+`invalid-renderer-registry` reports every defect together in three fields:
+`missingTypes` (in System plugin order), `unknownTypes` and `duplicateTypes`
+(each in first-registration order). They are frozen arrays for this code
+(possibly empty) and `null` for every other code. The other codes carry no
+extra fields.
+
+```ts
+import { createWidgetVueRenderer, WidgetVueIntegrationError } from '@deviltea/widget-vue'
+
+try {
+	createWidgetVueRenderer(system, build)
+}
+catch (error) {
+	if (error instanceof WidgetVueIntegrationError
+		&& error.code === 'invalid-renderer-registry') {
+		// error.missingTypes, error.unknownTypes, error.duplicateTypes
+	}
+}
+```
+
+`runtime-system-mismatch` is checked before any other root-render check. Core
+errors (for example `WidgetSystemRuntimeDisposedError` and the `/integration`
+errors) and exceptions thrown by your own callbacks propagate unchanged.
+
+States that the exact-plugin, registry and System-identity checks make
+impossible are internal invariants. They throw a plain `Error`, not
+`WidgetVueIntegrationError`, and are not part of the contract. Only an object
+that imitates a Runtime can reach them.
 
 ## Server rendering
 

@@ -18,6 +18,7 @@ import { SharedWidgetSlotComponent } from './renderer'
 function assertWidgetMatchesPlugin(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin): void {
 	if (widget.blueprint.plugin !== plugin) {
 		throw new WidgetVueIntegrationError(
+			'widget-plugin-mismatch',
 			`useWidget() was called with plugin type "${plugin.type}", but the currently rendered widget ("${widget.id}") is of type "${widget.type}" (a different plugin instance, even if the type string matched).`,
 		)
 	}
@@ -30,6 +31,7 @@ function getCurrentWidgetContext(): CurrentWidgetContextValue {
 	const current = inject(CurrentWidgetContextKey, null)
 	if (current === null || current === undefined) {
 		throw new WidgetVueIntegrationError(
+			'outside-widget-renderer',
 			'useWidget() was called outside a widget renderer component rendered by a WidgetRenderer produced by createWidgetVueRenderer().',
 		)
 	}
@@ -116,7 +118,7 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 						widget as unknown as RuntimeWidget,
 					)
 					if (resolved === null)
-						throw new WidgetVueIntegrationError('The current widget declares events but Core returned no event emitter.')
+						throw new Error('The current widget declares events but Core returned no event emitter.')
 					emitter = resolved
 				}
 				emitter[key]!(...args)

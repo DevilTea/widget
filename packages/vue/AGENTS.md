@@ -18,7 +18,7 @@ and this package never reimplements or reinterprets it. These bare `#N` numbers 
 - `src/renderer.ts` — the renderer registry builder, the internal recursive host, the shared `WidgetSlot` component, and `createWidgetVueRenderer`.
 - `src/use-widget.ts` — `useWidget(Plugin)`.
 - `src/types.ts` — the public `useWidget()` return-type surface.
-- `src/errors.ts` — `WidgetVueIntegrationError`, the single programmer/configuration exception type.
+- `src/errors.ts` — `WidgetVueIntegrationError` and `WidgetVueIntegrationErrorCode`, the single programmer/configuration exception class. Consumers discriminate by class and `code` (never `message`); the five codes are `invalid-renderer-registry` (with frozen `missingTypes`/`unknownTypes`/`duplicateTypes`, `null` for every other code), `runtime-system-mismatch`, `outside-widget-renderer`, `widget-plugin-mismatch`, and `readonly-projection-write`. Only caller-reachable misuse gets a code; states made impossible by exact-plugin, registry and System-identity validation are internal invariants and throw a plain `Error`. Add a code only for a materially different caller-reachable problem.
 - `src/test-fixtures.ts` — real `@deviltea/widget-core` plugins/system/runtime fixtures shared by the colocated tests. Not part of the public contract; excluded from `tsconfig.package.json`.
 - `src/**/*.unit.test.ts` — colocated Vitest unit tests (run by the root config too).
 

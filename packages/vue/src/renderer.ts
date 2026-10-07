@@ -158,7 +158,11 @@ function finalizeRegistry(system: WidgetSystem<AnyWidgetPluginTuple>, registrati
 				.join(', ')} registered more than once`)
 		}
 
-		throw new WidgetVueIntegrationError(`Invalid @deviltea/widget-vue renderer registry: ${parts.join('; ')}.`)
+		throw new WidgetVueIntegrationError(
+			'invalid-renderer-registry',
+			`Invalid @deviltea/widget-vue renderer registry: ${parts.join('; ')}.`,
+			{ missingTypes, unknownTypes, duplicateTypes: duplicatedTypes },
+		)
 	}
 
 	const rendererByType = new Map<string, Component>()
@@ -182,6 +186,7 @@ function getCurrentWidgetContextOrThrow(source: string) {
 	const current = inject(CurrentWidgetContextKey, null)
 	if (current === null || current === undefined) {
 		throw new WidgetVueIntegrationError(
+			'outside-widget-renderer',
 			`${source} was called outside a widget renderer component rendered by a WidgetRenderer produced by createWidgetVueRenderer().`,
 		)
 	}
@@ -214,7 +219,7 @@ const InternalWidgetHost = defineComponent({
 		return () => {
 			const ActualRenderer = props.rendererByType.get(props.widget.type)
 			if (ActualRenderer === undefined) {
-				throw new WidgetVueIntegrationError(
+				throw new Error(
 					`No renderer is registered for plugin type "${props.widget.type}". This should have been rejected at createWidgetVueRenderer() construction time.`,
 				)
 			}
@@ -242,7 +247,7 @@ export const SharedWidgetSlotComponent = defineComponent({
 			return children.map((childNode) => {
 				const childWidget = current.runtime.getWidget(childNode.id)
 				if (childWidget === null) {
-					throw new WidgetVueIntegrationError(
+					throw new Error(
 						`Widget "${childNode.id}" declared in slot "${props.name}" of widget "${current.widget.id}" was not found by the current Runtime.`,
 					)
 				}
@@ -297,6 +302,7 @@ export function createWidgetVueRenderer<Plugins extends AnyWidgetPluginTuple>(
 				const runtime = props.runtime as unknown as ErasedRuntime
 				if (runtime.blueprint.system !== system) {
 					throw new WidgetVueIntegrationError(
+						'runtime-system-mismatch',
 						'The `runtime` prop passed to this WidgetRenderer was not created from the exact WidgetSystem instance it is bound to.',
 					)
 				}
@@ -304,7 +310,7 @@ export function createWidgetVueRenderer<Plugins extends AnyWidgetPluginTuple>(
 				const rootPublicNode = runtime.blueprint.root
 				const rootWidget = runtime.getWidget(rootPublicNode.id)
 				if (rootWidget === null) {
-					throw new WidgetVueIntegrationError(`The supplied runtime has no root widget for id "${rootPublicNode.id}".`)
+					throw new Error(`The supplied runtime has no root widget for id "${rootPublicNode.id}".`)
 				}
 
 				return h(InternalWidgetHost, {
