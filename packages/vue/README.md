@@ -169,6 +169,19 @@ Widget Diagnostic), fully unmounts and remounts its internal tree whenever the
 never calls `runtime.dispose()` itself — Runtime lifetime stays owned by the
 caller.
 
+## Server rendering
+
+Server-side rendering with a long-lived or shared Runtime is **unsupported**
+(a declared non-goal for now). `useWidget()` activates Core subscriptions
+lazily on the first `.value` read and releases them only through Vue's
+`onScopeDispose`; Vue's server renderer never stops component effect scopes, so
+every server render would leave subscriptions registered on the Runtime until
+`runtime.dispose()`, accumulating on each request. There is no SSR-specific
+code path or hydration guarantee. Mount `WidgetRenderer` on the client only
+(client-only components inside an SSR application are fine). See
+[Server rendering](https://deviltea.github.io/widget/packages/widget-vue#server-rendering)
+in the full guide for the reasoning and open prerequisites.
+
 ## License
 
 [MIT](https://github.com/DevilTea/widget/blob/main/LICENSE) License © 2023-PRESENT [DevilTea](https://github.com/DevilTea)

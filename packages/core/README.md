@@ -234,6 +234,18 @@ if (result.ok && result.changed)
 	console.log(document.getSnapshot().revision) // 1
 ```
 
+Authored source is handed to Core **by reference**: `createBlueprint`,
+`recompile` and `createWidgetDocument` keep `source` as given, so
+`blueprint.source` is the exact input and Core never clones or freezes it.
+Passing source transfers ownership; do not mutate it afterwards (behavior is
+unspecified), and pass a copy such as `structuredClone` if you keep editing
+your own object. "Immutable" Blueprint describes Core's API, not a defensive
+copy. `applyPatch` never mutates the accepted source, but copy-on-write
+revisions share untouched subtrees with the previous revision and so with the
+original input. See the
+[Core model](https://deviltea.github.io/widget/packages/widget-core#core-model)
+ownership rules.
+
 `applyPatch(patch, options?)` returns `{ ok: true, changed }` or
 `{ ok: false, failure }`. A patch that leaves the source structurally equal
 returns `{ ok: true, changed: false }`: the revision does not advance and
@@ -289,6 +301,12 @@ later occurrence is de-identified with its available subtree preserved.
 
 ### Runtime semantics
 
+- Declared `events` are public notifications: subscribe through
+  `widget.events[name].subscribe(listener)`. Delivery is synchronous and
+  depth-first for nested emits; a throwing public listener propagates to the
+  emit caller and stops the remaining public listeners. Emit authority belongs
+  to Method `execute` (`emit`) and, for renderers, `@deviltea/widget-core/integration`.
+  See [Events](https://deviltea.github.io/widget/packages/widget-core#events).
 - `widget.state[key].get()` returns `T | null` directly — it is not an
   `ExecutionResult`.
 - `widget.properties[name].get()` / `.subscribe(listener)` and
@@ -320,19 +338,22 @@ later occurrence is de-identified with its available subtree preserved.
   `WidgetSystemRuntimeDisposedError`; unsubscribe functions obtained before
   disposal remain safe idempotent no-ops.
 
-### Inspection (DevTools)
+### Inspection
 
-A dedicated, strictly readonly subpath exposes compiler/runtime facts for
-building inspectors — it never mutates state, invokes methods, or forces
-Property evaluation:
+A dedicated, strictly readonly subpath is a supported observation surface for
+any host (DevTools, prototype players, test harnesses). It exposes
+compiler/runtime facts, including passive Event occurrence observation through
+`getEvent(name).subscribe(...)`, and never mutates state, invokes methods, or
+forces Property evaluation:
 
 ```typescript
 import { inspectBlueprint, inspectRuntime } from '@deviltea/widget-core/inspection'
 ```
 
 `@deviltea/widget-core`'s root entrypoint does not export this surface. See
-[Inspection](https://deviltea.github.io/widget/packages/widget-core#inspection-devtools)
-in the full guide for the exact contract.
+[Inspection](https://deviltea.github.io/widget/packages/widget-core#inspection)
+in the full guide for the exact contract, including the Event inspection
+delivery guarantees.
 
 The full guide at
 [docs/site/packages/widget-core.md](https://deviltea.github.io/widget/packages/widget-core)

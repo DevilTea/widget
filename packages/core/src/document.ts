@@ -49,6 +49,15 @@ export interface CreateWidgetDocumentOptions<Plugins extends AnyWidgetPluginTupl
 	readonly source: unknown
 }
 
+/**
+ * Creates a revisioned source + Blueprint coordinator.
+ *
+ * Ownership: `options.source` is retained by reference as revision 0's `blueprint.source`, and Core
+ * never mutates it. Handing it over transfers ownership, so it must not be mutated afterwards. Patches
+ * are copy-on-write: each new revision shares untouched subtrees with the previous one, so any revision
+ * can share structure with this original input, and mutating the input corrupts later revisions too.
+ * A host that keeps its own editable model should pass a copy (for example `structuredClone`).
+ */
 export function createWidgetDocument<const Plugins extends AnyWidgetPluginTuple>(
 	options: CreateWidgetDocumentOptions<Plugins>,
 ): WidgetDocument<Plugins> {
