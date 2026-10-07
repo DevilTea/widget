@@ -1,18 +1,20 @@
 name: Deploy documentation
 
+# Deploys are gated on the checks that already run for the commit; the test matrix is
+# not duplicated here.
+#
+# - `Pages integration` is the trigger. Its `push` path filter is kept identical to the
+#   paths that affect the Pages artifact, so it runs exactly for the commits that need a
+#   deploy, and a successful run means the built Pages bundle already passed its contracts.
+# - The `gate` job additionally requires the `CI` run for the same commit to have
+#   succeeded (waiting for it if it is still running).
+# - `workflow_dispatch` redeploys the tip of `main` under the same gate; it is not an
+#   override. Use it to recover from a failed deploy or a flaky upstream run.
 on:
-  push:
+  workflow_run:
+    workflows: [Pages integration]
+    types: [completed]
     branches: [main]
-    paths:
-      - .github/workflows/docs.yml
-      - .github/actions/setup-node-pnpm/**
-      - docs/site/**
-      - apps/lab/**
-      - packages/**
-      - scripts/build-pages.ts
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
   workflow_dispatch:
 
 permissions:
@@ -20,16 +22,102 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
+  gate:
+    name: Require passing checks
+    # workflow_run runs from the default branch with a write-capable token, so only act
+    # on successful push runs of this repository's main branch (never PRs or forks).
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      proceed: ${{ steps.gate.outputs.proceed }}
+      sha: ${{ steps.gate.outputs.sha }}
+    steps:
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          deadline=$((SECONDS + 25 * 60))
+
+          # Wait for the push run of a workflow on $SHA and require it to succeed.
+          # $3 = required: the run must exist. Otherwise a missing run (path filter did not
+          # match) is accepted. Returns 10 when the run was cancelled (superseded).
+          require_success() {
+            local name="$1" file="$2" required="$3" state
+            while true; do
+              # An API failure must not look like "no run found", so fail explicitly.
+              state="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$file" \
+                --commit "$SHA" --event push --limit 1 \
+                --json status,conclusion --jq '.[0] // empty | "\(.status):\(.conclusion)"')" \
+                || { echo "::error::Could not query $name runs for $SHA."; exit 1; }
+              case "$state" in
+                completed:success)
+                  echo "$name: success"
+                  return 0
+                  ;;
+                completed:cancelled)
+                  echo "::notice::$name was cancelled for $SHA (superseded by a newer commit); not deploying."
+                  return 10
+                  ;;
+                completed:*)
+                  echo "::error::$name finished with '${state#completed:}' for $SHA; not deploying."
+                  exit 1
+                  ;;
+                "")
+                  if [ "$required" != "true" ]; then
+                    echo "$name: no push run for $SHA (path filter); not required."
+                    return 0
+                  fi
+                  echo "$name: no run found for $SHA yet."
+                  ;;
+                *)
+                  echo "$name: $state, waiting."
+                  ;;
+              esac
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "::error::Timed out waiting for $name on $SHA."
+                exit 1
+              fi
+              sleep 30
+            done
+          }
+
+          # CI runs for every push to main; Pages integration only when its paths match.
+          rc=0
+          require_success "CI" ci.yml true || rc=$?
+          if [ "$rc" -eq 0 ]; then
+            require_success "Pages integration" pages-integration.yml false || rc=$?
+          fi
+          if [ "$rc" -eq 0 ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$rc" -eq 10 ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            exit "$rc"
+          fi
+
   build:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
       - uses: ./.github/actions/setup-node-pnpm
         with:
           node-version: 24
@@ -44,6 +132,12 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Serialize deployments, never cancelling one that is already running. This lives on
+    # the job (not the workflow) so runs that the gate skips cannot displace a pending
+    # deploy from the queue.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

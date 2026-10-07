@@ -154,7 +154,9 @@ which augments Vue's `ComponentCustomProperties` so `pika()` type-checks inside 
 
 ## Deployment (GitHub Pages)
 
-The Lab deploys as part of the docs Pages artifact: `.github/workflows/docs.yml` runs
+The Lab deploys as part of the docs Pages artifact: `.github/workflows/docs.yml` runs after the
+`Pages integration` workflow succeeds on a `main` push (or via manual `workflow_dispatch` of `main`)
+and only deploys once the `CI` run for the same commit has also succeeded. It runs
 `pnpm docs:build:pages` (`scripts/build-pages.ts`), which builds `widget-lab` **and its workspace
 dependencies** in topological order with `WIDGET_LAB_BASE=/widget/lab/` (consumed by
 `vite.config.ts`'s `base`), builds `docs/site`, then copies the Lab build under the docs dist's

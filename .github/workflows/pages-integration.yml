@@ -1,9 +1,14 @@
 name: Pages integration
 
+# The `push` path filter below also decides when `docs.yml` deploys (it is triggered by
+# this workflow's successful completion on main). Keep it covering every path that
+# affects the Pages artifact.
 on:
   push:
     branches: [main]
     paths:
+      - .github/actions/setup-node-pnpm/**
+      - .github/workflows/docs.yml
       - apps/lab/**
       - docs/site/**
       - packages/**
@@ -14,6 +19,8 @@ on:
       - pnpm-workspace.yaml
   pull_request:
     paths:
+      - .github/actions/setup-node-pnpm/**
+      - .github/workflows/docs.yml
       - apps/lab/**
       - docs/site/**
       - packages/**
