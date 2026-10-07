@@ -6,7 +6,7 @@ DevilTea Widget is a renderer-agnostic widget composition system with a Vue 3 ad
 | --- | --- |
 | [`@deviltea/widget-core`](packages/core) | Widget plugins, systems, blueprints, documents, runtime semantics, and readonly inspection. |
 | [`@deviltea/widget-vue`](packages/vue) | Thin Vue 3 renderer and reactivity integration over the core runtime. |
-| [`@deviltea/widget-devtools`](packages/devtools) | Private experimental serializable inspector protocol, client/agent boundary, and in-process transport. |
+| [`@deviltea/widget-inspector`](packages/inspector) | Read-only, versioned Inspector protocol, client, DOM agent, transports, and the inspect-anchor attribute contract (`0.x` experimental; core is a peer dependency). |
 | [`widget-lab`](apps/lab) | Private workbench, inspectors, source editing, dependency graph, and showcases. |
 
 Documentation is built for `https://deviltea.github.io/widget/`, with Widget Lab served under `/widget/lab/`.
@@ -26,9 +26,9 @@ This repository was split from [`DevilTea/deviltea-labs`](https://github.com/Dev
 ## Releasing
 
 ```sh
-pnpm release <widget-core|widget-vue> <patch|minor|major|prerelease|version>
+pnpm release <widget-core|widget-inspector|widget-vue> <patch|minor|major|prerelease|version>
 # after the release PR merges:
-pnpm release:tag <widget-core|widget-vue>
+pnpm release:tag <widget-core|widget-inspector|widget-vue>
 ```
 
 Publishing uses npm Trusted Publishing from GitHub Actions. Each package's npm Trusted Publisher must name repository `DevilTea/widget` and workflow `publish.yml`.
