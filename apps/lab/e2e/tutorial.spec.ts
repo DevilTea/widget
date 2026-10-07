@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { expect, previewFrame, test } from './fixtures'
 
 /**
@@ -71,6 +71,40 @@ async function sampleTabContainment(page: Page): Promise<void> {
 				.toBe('dialog')
 		}
 	}
+}
+
+/**
+ * WCAG 2.2 SC 2.5.8 "Target Size (Minimum)": the smallest pointer target a control may expose.
+ */
+const MIN_TARGET_SIZE_PX = 24
+
+/**
+ * Clicks a Preview control through the part of it the tutorial rail does NOT cover, after proving that
+ * part is at least a minimum-size pointer target.
+ *
+ * At the 900px minimum-supported width the `position: fixed` rail overlays the right ~320px of the
+ * persistent Preview by design (`TutorialRail.vue`'s viewport contract), so several required Survey
+ * controls straddle the rail's left edge in every environment. A plain `locator.click()` hit-tests only
+ * the control's center point, which made the old contract depend on whether font metrics happened to
+ * put "Generate result"'s center left of the rail edge (CI) or ~0.7px right of it (macOS system font).
+ * This measures the unobscured slice explicitly instead, then clicks inside it with Playwright's normal
+ * actionability checks — the click still fails if the rail (or anything else) intercepts that point.
+ */
+async function clickBesideRail(page: Page, control: Locator): Promise<void> {
+	await control.scrollIntoViewIfNeeded()
+	const railBox = await page.getByRole('complementary', { name: RAIL_LABEL })
+		.boundingBox()
+	const controlBox = await control.boundingBox()
+	expect(railBox)
+		.not.toBeNull()
+	expect(controlBox)
+		.not.toBeNull()
+	const unobscuredWidth = Math.min(controlBox!.x + controlBox!.width, railBox!.x) - controlBox!.x
+	expect(unobscuredWidth, 'unobscured width left of the tutorial rail')
+		.toBeGreaterThanOrEqual(MIN_TARGET_SIZE_PX)
+	expect(controlBox!.height)
+		.toBeGreaterThanOrEqual(MIN_TARGET_SIZE_PX)
+	await control.click({ position: { x: unobscuredWidth / 2, y: controlBox!.height / 2 } })
 }
 
 test.describe('welcome card', () => {
@@ -348,16 +382,19 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	 * only ~220px of Preview's own ~540px width actually unclipped. Rather than assert around that
 	 * occlusion, this runs the real, representative action-bearing tour path — Adults, Return date
 	 * break+fix, Children, Submit, Generate result — with the rail open the entire time, using the exact
-	 * same real `getByLabel()`/`getByRole()` interactions the full walkthrough test uses. Playwright's
-	 * actionability checks (an element must be visible AND not obscured by another element at its click
-	 * point) would fail/timeout here if the rail actually covered any of these controls — this test
-	 * passing IS the proof the required controls stay usable, not an assumption.
+	 * same real `getByLabel()`/`getByRole()` locators the full walkthrough test uses. Each control is
+	 * pointer-targeted through `clickBesideRail()`, which requires a minimum-size slice of it to remain
+	 * uncovered by the rail and clicks inside that slice with Playwright's actionability checks (visible,
+	 * enabled, stable, and not obscured at the click point) — so this passes only if every required
+	 * control stays reachable, independent of where font metrics put the control's center relative to
+	 * the rail's left edge.
 	 */
 	const nextButton = page.getByRole('button', { name: 'Next', exact: true })
 	await nextButton.click() // step 1 -> 2
 
 	const adults = previewFrame(page)
 		.getByLabel('Adults', { exact: true })
+	await clickBesideRail(page, adults)
 	await adults.fill('5')
 	await adults.press('Tab')
 	await expect(rail.getByText('The Live estimate just updated.', { exact: false }))
@@ -369,6 +406,7 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 
 	const returnDate = previewFrame(page)
 		.getByLabel('Return date')
+	await clickBesideRail(page, returnDate)
 	await returnDate.fill('2027-04-01')
 	await returnDate.press('Tab')
 	await expect(rail.getByText('Trip days fails with a reason', { exact: false }))
@@ -383,6 +421,7 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 
 	const children = previewFrame(page)
 		.getByLabel('Children', { exact: true })
+	await clickBesideRail(page, children)
 	await children.fill('2')
 	await children.press('Tab')
 	await expect(previewFrame(page)
@@ -394,12 +433,10 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 		.toBeEnabled()
 	await nextButton.click() // step 5 -> 6
 
-	await previewFrame(page)
-		.getByRole('button', { name: 'Submit', exact: true })
-		.click()
-	await previewFrame(page)
-		.getByRole('button', { name: 'Generate result', exact: true })
-		.click()
+	await clickBesideRail(page, previewFrame(page)
+		.getByRole('button', { name: 'Submit', exact: true }))
+	await clickBesideRail(page, previewFrame(page)
+		.getByRole('button', { name: 'Generate result', exact: true }))
 	await expect(previewFrame(page)
 		.getByRole('heading', { name: 'Recommendation' }))
 		.toBeVisible()
