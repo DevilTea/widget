@@ -559,13 +559,15 @@ resolved node's `.slots` field is the separate, complete *semantic* topology
 Every diagnostic has top-level `code`, `location`, and `message` fields.
 Variant-specific facts are direct fields; structured `path` and `related` are
 not nested under a generic `source` object. Codes are stable lowercase
-kebab-case values.
+kebab-case values. A diagnostic's `code` is fixed where Core creates the
+diagnostic and never depends on its `message`, which is not part of the
+stable contract.
 
 | `code` family | Owns |
 |---|---|
 | `invalid-widget-*` / `unknown-widget-type` | malformed widget identity and authored shape |
 | `invalid-widget-config` | `config.validate` failures on a resolved node |
-| `invalid-widget-structure` | slot-level / plugin-level / system-level `validateStructure` failures |
+| `invalid-widget-structure` | slot-level / plugin-level / system-level `validateStructure` failures; carries the authored `reason` when `addDiagnostic` supplied one |
 | `json-incompatible-value` | confirmed whole-source JSON-domain violations; carries a source-rooted `path` and closed framework `reason` |
 | `source-access-failed` | whole-source compatibility could not be safely proven for the source-rooted `path` |
 | `*-dependency-*` / `property-evaluation-cycle` | dependency target/member failures, Property purity violations, and Property-containing evaluation cycles |

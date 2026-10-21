@@ -462,3 +462,36 @@ describe('dependency reference stability', () => {
 			.toEqual(['operation', 'target'])
 	})
 })
+
+describe('dependency diagnostic codes do not depend on message text', () => {
+	it('a missing widget id containing "ambiguous" is still missing-dependency-target', () => {
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'prober',
+			config: { widgetId: 'ambiguous', optional: false, op: 'property', key: 'double' },
+		})
+
+		const codes = dependencyDiagnosticsOf(expectInvalid(blueprint))
+			.map(diagnostic => diagnostic.code)
+		expect(codes)
+			.toEqual(['missing-dependency-target'])
+	})
+
+	it('a missing member whose name contains "does not exist" is still missing-dependency-member', () => {
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'container',
+			slots: {
+				child: [
+					{ id: 'leaf', type: 'leaf' },
+					{ id: 'probe', type: 'prober', config: { widgetId: 'leaf', optional: false, op: 'state', key: 'does not exist' } },
+				],
+			},
+		})
+
+		const codes = dependencyDiagnosticsOf(expectInvalid(blueprint))
+			.map(diagnostic => diagnostic.code)
+		expect(codes)
+			.toEqual(['missing-dependency-member'])
+	})
+})
