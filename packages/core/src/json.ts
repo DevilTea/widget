@@ -40,9 +40,12 @@ function accessDiagnostic(path: readonly PropertyKey[]): SourceAccessDiagnostic 
 	}
 }
 
+/**
+ * `path` is one shared stack, pushed before and popped after each child visit; diagnostics copy it.
+ */
 function inspectJsonValueAt(
 	value: unknown,
-	path: readonly PropertyKey[],
+	path: PropertyKey[],
 	active: Set<object>,
 	diagnostics: JsonInspectionDiagnostic[],
 ): void {
@@ -156,7 +159,9 @@ function inspectJsonValueAt(
 					diagnostics.push(jsonDiagnostic([...path, index], 'accessor-property'))
 					continue
 				}
-				inspectJsonValueAt(descriptor.value, [...path, index], active, diagnostics)
+				path.push(index)
+				inspectJsonValueAt(descriptor.value, path, active, diagnostics)
+				path.pop()
 			}
 			return
 		}
@@ -183,7 +188,9 @@ function inspectJsonValueAt(
 				diagnostics.push(jsonDiagnostic([...path, key], 'accessor-property'))
 				continue
 			}
-			inspectJsonValueAt(descriptor.value, [...path, key], active, diagnostics)
+			path.push(key)
+			inspectJsonValueAt(descriptor.value, path, active, diagnostics)
+			path.pop()
 		}
 	}
 	finally {

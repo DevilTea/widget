@@ -90,13 +90,20 @@ function buildCompiledNodes(nodes: readonly WorkingNode[], diagnosticsByNode: Re
 	})
 }
 
+const JSON_PROVEN_BY_CONSTRUCTION = Object.freeze({ compatible: true, diagnostics: Object.freeze([]) })
+
+/**
+ * `sourceJsonProven` is set only for a value Core itself produced with `JSON.parse` (no reviver): such a
+ * value cannot hold anything `inspectJsonValue` rejects, so the inspection would prove nothing new.
+ */
 export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 	system: WidgetSystem<Plugins>,
 	definition: unknown,
+	sourceJsonProven = false,
 ): WidgetSystemBlueprint<Plugins> {
 	const recovery = recoverBlueprint(system, definition)
 	const { nodes, rootNodeId, nodeIdByPublicNode, nodeIdsByWidgetId, finalDiagnostics, diagnosticsByNode } = recovery
-	const jsonInspection = inspectJsonValue(definition)
+	const jsonInspection = sourceJsonProven ? JSON_PROVEN_BY_CONSTRUCTION : inspectJsonValue(definition)
 	const sourceJsonCompatible = jsonInspection.compatible
 	finalDiagnostics.push(...jsonInspection.diagnostics)
 

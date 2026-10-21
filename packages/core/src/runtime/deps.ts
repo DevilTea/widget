@@ -178,12 +178,16 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 
 	switch (operation.type) {
 		case 'state-get': {
+			// Resolved on the first call (see `resolveEntry`), then reused.
+			let target: ReturnType<PrimitiveRegistryEntry['state']['get']>
 			return () => {
-				const target = resolveEntry(params, leaf.targetNodeId).state.get(operation.key)
+				target ??= resolveEntry(params, leaf.targetNodeId).state.get(operation.key)
 				if (target === undefined)
 					throw new Error(`widget-core: internal error — resolved state-get target "${operation.key}" is missing.`)
 
 				const raw = target.internal.get()
+				if (leaf.refinements.length === 0)
+					return { ok: true, value: raw }
 				const refined = applyRefinements(raw, leaf.refinements)
 				if (!refined.ok) {
 					const diagnostic = consumerDependencyDiagnostic(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)
@@ -215,8 +219,10 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 		}
 
 		case 'property-get': {
+			// Resolved on the first call (see `resolveEntry`), then reused.
+			let target: ReturnType<PrimitiveRegistryEntry['properties']['get']>
 			return () => {
-				const target = resolveEntry(params, leaf.targetNodeId).properties.get(operation.name)
+				target ??= resolveEntry(params, leaf.targetNodeId).properties.get(operation.name)
 				if (target === undefined)
 					throw new Error(`widget-core: internal error — resolved property-get target "${operation.name}" is missing.`)
 
@@ -226,6 +232,8 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 					return { ok: false, failure: { diagnostics: wrapped } }
 				}
 
+				if (leaf.refinements.length === 0)
+					return { ok: true, value: targetResult.value }
 				const refined = applyRefinements(targetResult.value, leaf.refinements)
 				if (!refined.ok) {
 					const diagnostic = consumerDependencyDiagnostic(params, reference, 'The dependency value failed validation.', { value: refined.received }, related)

@@ -531,6 +531,15 @@ document data is the real boundary. Compilation never throws merely because
 the input is malformed; it always produces an inspectable Blueprint through
 best-effort recovery, down to a recovered root.
 
+When the source is JSON text, `system.createBlueprintFromJson(text)` is
+observably equivalent to `system.createBlueprint(JSON.parse(text))` but
+cheaper: a value Core parsed itself with `JSON.parse` is in the authored JSON
+domain by construction, so the whole-source JSON-domain inspection is skipped
+and `sourceJsonCompatible` is `true`. Invalid JSON text throws the
+`SyntaxError` from `JSON.parse` unchanged. There is no option to skip the
+inspection for an arbitrary value: `sourceJsonCompatible` is a proof, and
+`createBlueprint` stays fail-closed for untrusted input.
+
 A node becomes **resolved** once its `WidgetId`, plugin `type`, and a
 matching registered plugin are all established. After that point, config,
 slot, structure, or dependency errors keep the node resolved while the
@@ -751,6 +760,28 @@ never falls back to the plugin default; it leaves the state `null` with an
 	ordinary `invalid-state-value` diagnostic. `createRuntime` never fails: malformed
 override input (unknown widget, unknown key, wrong shape) still produces a
 	Runtime, recorded as Runtime-level `unknown-state-override-*` diagnostics.
+
+#### Reusing a Runtime: `resetState()`
+
+```ts
+runtime.resetState()
+```
+
+Hosts that evaluate many independent inputs against one Blueprint (server-side
+validation, batch checks) can keep one Runtime and reset it between inputs
+instead of calling `createRuntime()` each time. `resetState()` restores every
+State member of every widget to its initialization outcome: the same value and
+the same diagnostic snapshot the member had when this Runtime was created,
+including `overrideStateDefaults` and a default that failed validation. It
+does not run `validate` again, so a validator never needs to accept a
+placeholder value only to support resets.
+
+All restored writes form one batch: dependents recompute once, and State
+subscribers are notified only for members whose value changed. Property and
+Method diagnostic snapshots are not reset; Properties re-evaluate through
+ordinary invalidation, so every value read after a reset equals the value a
+freshly created Runtime would return for the same subsequent writes. After
+`dispose()`, `resetState()` throws `WidgetSystemRuntimeDisposedError`.
 
 `runtime.getWidget(id)` returns a `RuntimeWidget | null` distributed over the
 registered plugin tuple. When more than one plugin is registered, narrow on
@@ -1180,6 +1211,10 @@ an occurrence should defer the work, for example to a microtask.
   `compute`, `validateArgs`, `execute`) is synchronous. A returned
   Promise/thenable is a contract violation on the plugin author's side, not
   a `Diagnostic` and not an `ExecutionResult.failure`.
+- **Callback-context lifetime.** A callback's `addDiagnostic` /
+  `hasAnyDiagnostic` belong to that synchronous call. Calling one after the
+  callback returned or threw (from a retained context or deferred code) throws
+  a `TypeError`, because the operation's diagnostics are already final.
 - **Renderer-agnostic.** The core has no concept of an editor, a document
   envelope, persistence versioning/migration, or UI. A `WidgetSystemRuntime`
   is the only thing an integration/renderer layer consumes; how it's drawn is

@@ -50,6 +50,15 @@ export interface CreateMethodPrimitiveParams {
 export function createMethodPrimitive(context: RuntimeContext, params: CreateMethodPrimitiveParams): MethodPrimitive {
 	const diagnosticsSignal = signal<readonly RuntimeMethodDiagnostic[]>(EMPTY_DIAGNOSTICS)
 
+	// Untracked mirror of `diagnosticsSignal`'s value: an unchanged snapshot skips the write.
+	let committedDiagnostics: readonly RuntimeMethodDiagnostic[] = EMPTY_DIAGNOSTICS
+	function commitDiagnostics(next: readonly RuntimeMethodDiagnostic[]): void {
+		if (next === committedDiagnostics)
+			return
+		committedDiagnostics = next
+		writeDeferringFlush(() => diagnosticsSignal(next))
+	}
+
 	function invoke(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
 		context.assertActive()
 		return runRuntimeOperation(() => invokeWithinOperation(...args))
@@ -65,16 +74,24 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				hasAnyDiagnostic: argsCollector.hasAnyDiagnostic,
 			}
 
-			const validArgs = params.definition.validateArgs(args, argsCtx)
-			assertSyncValue(validArgs, `Method "${params.name}"'s validateArgs`)
+			let validArgs: unknown
+			let hasArgsDiagnostic: boolean
+			try {
+				validArgs = params.definition.validateArgs(args, argsCtx)
+				assertSyncValue(validArgs, `Method "${params.name}"'s validateArgs`)
+				hasArgsDiagnostic = argsCollector.hasAnyDiagnostic()
+			}
+			finally {
+				argsCollector.close()
+			}
 
-			if (!validArgs || argsCollector.hasAnyDiagnostic()) {
+			if (!validArgs || hasArgsDiagnostic) {
 				const finalized = argsCollector.finalize(input => buildMethodArgsDiagnostic(params.widgetId, params.name, args, input))
 				// `finalize()` already returns a deep-frozen array; the generic-fallback branch builds
 				// a fresh array here and needs the same immutable-snapshot treatment (diagnostic #10
 				// diagnostic-snapshot contract).
 				const diagnostics = finalized.length > 0 ? finalized : freezeDiagnosticSnapshot([buildDefaultMethodArgsDiagnostic(params.widgetId, params.name, args)])
-				writeDeferringFlush(() => diagnosticsSignal(diagnostics))
+				commitDiagnostics(diagnostics)
 				// `invoke()` doesn't cache its return value, so mutating it can't corrupt a later call
 				// the way Property's cached computed result could — freezing the wrapper here is a
 				// consistency/defense-in-depth measure, not a fix for a persistence hazard.
@@ -97,11 +114,17 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				hasAnyDiagnostic: execCollector.hasAnyDiagnostic,
 			}
 
-			const value = context.withActiveCollector(sink, () => params.definition.execute(executeCtx))
+			let value: unknown
+			try {
+				value = context.withActiveCollector(sink, () => params.definition.execute(executeCtx))
+			}
+			finally {
+				execCollector.close()
+			}
 			assertSyncValue(value, `Method "${params.name}"'s execute`)
 
 			const diagnostics = execCollector.finalize(input => buildMethodResultDiagnostic(params.widgetId, params.name, value, input))
-			writeDeferringFlush(() => diagnosticsSignal(toDiagnosticSnapshot(diagnostics)))
+			commitDiagnostics(toDiagnosticSnapshot(diagnostics))
 
 			// Same consistency rationale as the validateArgs-failure branch above: not a persistence
 			// hazard (each `invoke()` builds a fresh wrapper), but freezing it keeps every

@@ -478,6 +478,14 @@ export interface WidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple = AnyW
 	readonly isDisposed: boolean
 	getWidget: (id: WidgetId) => RuntimeWidget<Plugins> | null
 	/**
+	 * Restores every State member of every widget to its initialization outcome (override > default >
+	 * `null`, as validated when this Runtime was created): the same value and the same diagnostic snapshot,
+	 * without running `validate` again. All writes form one batch, so dependents recompute and subscribers
+	 * are notified once. Property and Method diagnostic snapshots are not reset; Properties re-evaluate
+	 * through ordinary invalidation.
+	 */
+	resetState: () => void
+	/**
 	 * Runtime-level diagnostics plus the current state/property/method diagnostic snapshots, in deterministic
 	 * order. Never history, and never activates property evaluation.
 	 */
