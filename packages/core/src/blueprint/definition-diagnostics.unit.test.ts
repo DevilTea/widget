@@ -424,3 +424,24 @@ describe('deterministic diagnostic ordering', () => {
 			.toEqual([['config'], ['slots']])
 	})
 })
+
+describe('definition diagnostic codes do not depend on message text', () => {
+	interface KeywordSlotInterfaces {
+		slots: 'not declared'
+	}
+
+	const keywordSlotPlugin = createWidgetPlugin('keyword-slot')
+		.description('Test widget')
+		.interfaces<KeywordSlotInterfaces>()
+		.slots({ 'not declared': { description: 'Test slot' } })
+		.done()
+
+	const keywordSystem = createWidgetSystem({ plugins: [keywordSlotPlugin] })
+
+	it('a declared slot named "not declared" holding a non-array is still invalid-widget-slot', () => {
+		const blueprint = keywordSystem.createBlueprint({ id: 'root', type: 'keyword-slot', slots: { 'not declared': 'oops' } })
+
+		expect(blueprint.diagnostics.map(diagnostic => diagnostic.code))
+			.toEqual(['invalid-widget-slot'])
+	})
+})

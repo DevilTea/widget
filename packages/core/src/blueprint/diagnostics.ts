@@ -52,30 +52,7 @@ export function methodLocation(node: ResolvedBlueprintWidgetNode, name: WidgetMe
 	return { type: 'method', node, name }
 }
 
-function definitionCode(message: string, path: DiagnosticPath | undefined): BlueprintDefinitionDiagnostic['code'] {
-	if (path === undefined)
-		return 'invalid-widget-definition'
-	const first = path[0]
-	if (first === 'id')
-		return 'invalid-widget-id'
-	if (first === 'type')
-		return message.startsWith('Unknown plugin type') ? 'unknown-widget-type' : 'invalid-widget-type'
-	if (first === 'config')
-		return message.includes('no config capability') ? 'unexpected-widget-config' : 'invalid-widget-definition'
-	if (first === 'slots') {
-		if (message.includes('not declared'))
-			return 'undeclared-widget-slot'
-		if (message.includes('must be an array'))
-			return 'invalid-widget-slot'
-		if (message.includes('no slots capability'))
-			return 'unexpected-widget-slots'
-		return 'invalid-widget-slots'
-	}
-	return 'invalid-widget-definition'
-}
-
-export function definitionDiagnostic(node: BlueprintWidgetNode, message: string, path?: DiagnosticPath, related?: readonly BlueprintWidgetDiagnosticLocation[]): BlueprintDiagnostic {
-	const code = definitionCode(message, path)
+export function definitionDiagnostic(node: BlueprintWidgetNode, code: BlueprintDefinitionDiagnostic['code'], message: string, path?: DiagnosticPath, related?: readonly BlueprintWidgetDiagnosticLocation[]): BlueprintDiagnostic {
 	const location = widgetLocation(node)
 	return {
 		code,
@@ -109,28 +86,12 @@ export function structureDiagnostic(node: ResolvedBlueprintWidgetNode, message: 
 	}
 }
 
-function dependencyCode(message: string): BlueprintDependencyDiagnostic['code'] {
-	if (message.includes('ambiguous'))
-		return 'ambiguous-dependency-target'
-	if (message.includes('could not be resolved'))
-		return 'unresolved-dependency-target'
-	if (message.includes('does not exist'))
-		return 'missing-dependency-target'
-	if (message.includes('no state capability') || message.includes('no properties capability') || message.includes('no methods capability'))
-		return 'missing-dependency-capability'
-	if (message.includes('no state member') || message.includes('no property') || message.includes('no method'))
-		return 'missing-dependency-member'
-	if (message.includes('invokes writeful'))
-		return 'property-dependency-has-write-effects'
-	return 'property-evaluation-cycle'
-}
-
-export function dependencyDiagnostic(node: ResolvedBlueprintWidgetNode, member: BlueprintDependencyMember, message: string, dependency?: BlueprintDependencyReference, related?: readonly BlueprintDependencyDiagnosticLocation[]): BlueprintDependencyDiagnostic {
+export function dependencyDiagnostic(node: ResolvedBlueprintWidgetNode, member: BlueprintDependencyMember, code: BlueprintDependencyDiagnostic['code'], message: string, dependency?: BlueprintDependencyReference, related?: readonly BlueprintDependencyDiagnosticLocation[]): BlueprintDependencyDiagnostic {
 	const location: BlueprintDependencyDiagnosticLocation = member.type === 'property'
 		? propertyLocation(node, member.name)
 		: methodLocation(node, member.name)
 	return {
-		code: dependencyCode(message),
+		code,
 		location,
 		message,
 		...(dependency === undefined ? {} : { dependency }),

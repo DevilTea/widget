@@ -76,6 +76,7 @@ function emitPurityDiagnostics(nodes: readonly WorkingNode[], edges: ReadonlyMap
 		finalDiagnostics.push(dependencyDiagnostic(
 			ownerNode,
 			{ type: 'property', name: edge.fromName },
+			'property-dependency-has-write-effects',
 			`Property "${edge.fromName}" invokes writeful method "${edge.toName}".`,
 			edge.reference,
 			[methodLocation(targetNode, edge.toName)],
@@ -174,6 +175,7 @@ function emitCycleDiagnostics(
 			finalDiagnostics.push(dependencyDiagnostic(
 				ownerNode,
 				{ type: 'property', name: property.name },
+				'property-evaluation-cycle',
 				`Property "${property.name}" participates in an evaluation cycle.`,
 				undefined,
 				related,

@@ -234,3 +234,59 @@ describe('type contract: structure locations', () => {
 			.toBeDefined()
 	})
 })
+
+describe('structure diagnostic reason', () => {
+	interface ReasonListInterfaces extends WidgetInterfaces {
+		slots: 'items'
+	}
+
+	const reasonListPlugin = createWidgetPlugin('reason-list')
+		.description('Test widget')
+		.interfaces<ReasonListInterfaces>()
+		.slots(
+			{
+				items: {
+					description: 'Test slot',
+					validateStructure: (ctx) => {
+						ctx.addDiagnostic({ message: 'slot', reason: 'slot-reason' })
+						ctx.addDiagnostic({ message: 'slot-child', index: 0, reason: 'slot-child-reason' })
+					},
+				},
+			},
+			(ctx) => {
+				ctx.addDiagnostic({ message: 'plugin', reason: 'plugin-reason' })
+				ctx.addDiagnostic({ message: 'plugin-slot', slot: 'items', reason: 'plugin-slot-reason' })
+			},
+		)
+		.done()
+
+	const reasonSystem = createWidgetSystem({
+		plugins: [reasonListPlugin, itemPlugin],
+		validateStructure: (ctx) => {
+			const root = ctx.blueprint.root
+			if (root.resolved)
+				ctx.addDiagnostic({ message: 'system', location: { type: 'widget', node: root }, reason: 'system-reason' })
+		},
+	})
+
+	it('keeps the reason authored at slot, plugin and system level', () => {
+		const blueprint = reasonSystem.createBlueprint({ id: 'root', type: 'reason-list', slots: { items: [{ id: 'a', type: 'item' }] } })
+		const reasons = (blueprint.diagnostics as readonly BlueprintStructureDiagnostic[])
+			.map(diagnostic => [diagnostic.message, diagnostic.reason])
+
+		expect(reasons)
+			.toEqual([
+				['slot', 'slot-reason'],
+				['slot-child', 'slot-child-reason'],
+				['plugin', 'plugin-reason'],
+				['plugin-slot', 'plugin-slot-reason'],
+				['system', 'system-reason'],
+			])
+	})
+
+	it('omits reason when none was authored', () => {
+		const blueprint = system.createBlueprint({ id: 'root', type: 'list', slots: { items: [{ id: 'a', type: 'item' }] } })
+		expect(blueprint.diagnostics.every(diagnostic => !('reason' in diagnostic)))
+			.toBe(true)
+	})
+})

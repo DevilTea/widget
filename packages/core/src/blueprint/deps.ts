@@ -159,13 +159,13 @@ function resolveLeaf(
 		if ((target.type === 'parent' || target.type === 'widget') && target.optional)
 			return absent()
 
-		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, describeMissingTarget(target), reference))
+		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-target', describeMissingTarget(target), reference))
 		return invalid()
 	}
 
 	if (candidateIds.length > 1) {
 		const related = candidateIds.map(id => widgetLocation(nodes[id]!.publicNode))
-		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target is ambiguous: multiple widgets share that id.', reference, related))
+		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'ambiguous-dependency-target', 'Dependency target is ambiguous: multiple widgets share that id.', reference, related))
 		return invalid()
 	}
 
@@ -173,7 +173,7 @@ function resolveLeaf(
 	const targetWorking = nodes[targetNodeId]!
 
 	if (!targetWorking.resolved) {
-		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target could not be resolved to a widget.', reference, [widgetLocation(targetWorking.publicNode)]))
+		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'unresolved-dependency-target', 'Dependency target could not be resolved to a widget.', reference, [widgetLocation(targetWorking.publicNode)]))
 		return invalid(targetNodeId)
 	}
 
@@ -182,11 +182,11 @@ function resolveLeaf(
 
 	if (operation.type === 'state-get' || operation.type === 'state-set') {
 		if (targetDefinition.state === null) {
-			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target has no state capability.', reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-capability', 'Dependency target has no state capability.', reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		if (!targetDefinition.state.has(operation.key)) {
-			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, `Dependency target has no state member "${operation.key}".`, reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no state member "${operation.key}".`, reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		if (operation.type === 'state-set' && member.type === 'method')
@@ -194,11 +194,11 @@ function resolveLeaf(
 	}
 	else if (operation.type === 'property-get') {
 		if (targetDefinition.properties === null) {
-			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target has no properties capability.', reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-capability', 'Dependency target has no properties capability.', reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		if (!targetDefinition.properties.has(operation.name)) {
-			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, `Dependency target has no property "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no property "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		const key = edgeKey(member.type, ownerNodeId, member.name, 'property', targetNodeId, operation.name)
@@ -207,11 +207,11 @@ function resolveLeaf(
 	}
 	else {
 		if (targetDefinition.methods === null) {
-			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'Dependency target has no methods capability.', reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-capability', 'Dependency target has no methods capability.', reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		if (!targetDefinition.methods.has(operation.name)) {
-			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, `Dependency target has no method "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
+			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no method "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
 		const key = edgeKey(member.type, ownerNodeId, member.name, 'method', targetNodeId, operation.name)

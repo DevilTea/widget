@@ -174,7 +174,7 @@ export function runStructureValidation(
 				assertSyncValue(result, `Slot "${slotName}"'s validateStructure`)
 
 				for (const item of items)
-					finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slotName, item.index))
+					finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slotName, item.index, undefined, item.reason))
 			}
 		}
 
@@ -192,7 +192,7 @@ export function runStructureValidation(
 			for (const item of items) {
 				const slot = 'slot' in item ? item.slot : undefined
 				const index = 'index' in item ? item.index : undefined
-				finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slot, index))
+				finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slot, index, undefined, item.reason))
 			}
 		}
 	}
@@ -220,6 +220,7 @@ export function runStructureValidation(
 				location.type === 'widget' ? undefined : location.slot,
 				location.type === 'slot-child' ? location.index : undefined,
 				normalizeRelated(nodes, semanticOrderIndex, compileFacade.resolveNodeId, related),
+				item.reason,
 			))
 		}
 	}

@@ -195,14 +195,14 @@ function buildNode(
 	const raw = isRecoverableObject(rawValue) ? rawValue : null
 
 	if (raw === null) {
-		localDiagnostics.push(definitionDiagnostic(publicNode, 'Widget definition must be a plain object.'))
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-definition', 'Widget definition must be a plain object.'))
 		finalizeShell(shell, working)
 		flushDiagnostics(ctx, localDiagnostics)
 		return nodeId
 	}
 
 	if (ctx.activeSourceObjects.has(raw)) {
-		localDiagnostics.push(definitionDiagnostic(publicNode, 'Widget definition contains a cyclic source reference.'))
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-definition', 'Widget definition contains a cyclic source reference.'))
 		finalizeShell(shell, working)
 		flushDiagnostics(ctx, localDiagnostics)
 		return nodeId
@@ -214,7 +214,7 @@ function buildNode(
 	const rawId = idProperty.accessible ? idProperty.value : undefined
 	const hasValidId = idProperty.found && idProperty.accessible && typeof rawId === 'string'
 	if (!hasValidId)
-		localDiagnostics.push(definitionDiagnostic(publicNode, 'Widget "id" is missing or is not a string.', ['id']))
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-id', 'Widget "id" is missing or is not a string.', ['id']))
 
 	// --- type ---
 	const typeProperty = readOwnDataProperty(raw, 'type')
@@ -222,12 +222,12 @@ function buildNode(
 	const hasValidTypeShape = typeProperty.found && typeProperty.accessible && typeof rawType === 'string'
 	let plugin: AnyWidgetPlugin | null = null
 	if (!hasValidTypeShape) {
-		localDiagnostics.push(definitionDiagnostic(publicNode, 'Widget "type" is missing or is not a string.', ['type']))
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-type', 'Widget "type" is missing or is not a string.', ['type']))
 	}
 	else {
 		plugin = ctx.pluginsByType.get(rawType) ?? null
 		if (plugin === null)
-			localDiagnostics.push(definitionDiagnostic(publicNode, `Unknown plugin type "${rawType}".`, ['type']))
+			localDiagnostics.push(definitionDiagnostic(publicNode, 'unknown-widget-type', `Unknown plugin type "${rawType}".`, ['type']))
 	}
 
 	const resolved = hasValidId && hasValidTypeShape && plugin !== null
@@ -290,7 +290,7 @@ function buildNode(
 			}
 		}
 		else if (configProperty.found) {
-			localDiagnostics.push(definitionDiagnostic(publicNode, 'Widget declares "config" but its plugin has no config capability.', ['config']))
+			localDiagnostics.push(definitionDiagnostic(publicNode, 'unexpected-widget-config', 'Widget declares "config" but its plugin has no config capability.', ['config']))
 		}
 	}
 
@@ -357,24 +357,24 @@ function recoverSlots(
 		return
 	}
 	if (!slotsProperty.accessible) {
-		localDiagnostics.push(definitionDiagnostic(publicNode, 'Widget "slots" could not be inspected safely.', ['slots']))
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-slots', 'Widget "slots" could not be inspected safely.', ['slots']))
 		fillMissingDeclaredSlots()
 		return
 	}
 
 	const rawSlotsValue = slotsProperty.value
 	if (!isRecoverableObject(rawSlotsValue)) {
-		localDiagnostics.push(definitionDiagnostic(publicNode, 'Widget "slots" must be a plain object.', ['slots']))
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-slots', 'Widget "slots" must be a plain object.', ['slots']))
 		fillMissingDeclaredSlots()
 		return
 	}
 
 	if (plugin !== null && declaredSlots === null)
-		localDiagnostics.push(definitionDiagnostic(publicNode, 'Widget declares "slots" but its plugin has no slots capability.', ['slots']))
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'unexpected-widget-slots', 'Widget declares "slots" but its plugin has no slots capability.', ['slots']))
 
 	const slotNames = readOwnEnumerableStringKeys(rawSlotsValue)
 	if (slotNames === null) {
-		localDiagnostics.push(definitionDiagnostic(publicNode, 'Widget "slots" could not be inspected safely.', ['slots']))
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-slots', 'Widget "slots" could not be inspected safely.', ['slots']))
 		fillMissingDeclaredSlots()
 		return
 	}
@@ -389,11 +389,11 @@ function recoverSlots(
 		// raw value is also malformed. Neither diagnostic suppresses the other, and a malformed value never
 		// recovers children regardless.
 		if (declaredSlots !== null && !isDeclared)
-			localDiagnostics.push(definitionDiagnostic(publicNode, `Widget slot "${slotName}" is not declared by its plugin.`, ['slots', slotName]))
+			localDiagnostics.push(definitionDiagnostic(publicNode, 'undeclared-widget-slot', `Widget slot "${slotName}" is not declared by its plugin.`, ['slots', slotName]))
 
 		const slotArray = readArrayInfo(slotProperty.value)
 		if (!slotProperty.found || !slotProperty.accessible || !slotArray.isArray || !slotArray.accessible) {
-			localDiagnostics.push(definitionDiagnostic(publicNode, `Widget slot "${slotName}" must be an array.`, ['slots', slotName]))
+			localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-slot', `Widget slot "${slotName}" must be an array.`, ['slots', slotName]))
 			continue
 		}
 
@@ -465,7 +465,7 @@ function emitDuplicateIdDiagnostics(ctx: BuildContext, index: ReadonlyMap<Widget
 			const related = ids
 				.filter(otherId => otherId !== nodeId)
 				.map(otherId => widgetLocation(ctx.nodes[otherId]!.publicNode))
-			ctx.finalDiagnostics.push(definitionDiagnostic(node.publicNode, `Duplicate widget id "${node.id}".`, ['id'], related))
+			ctx.finalDiagnostics.push(definitionDiagnostic(node.publicNode, 'invalid-widget-id', `Duplicate widget id "${node.id}".`, ['id'], related))
 		}
 	}
 }
