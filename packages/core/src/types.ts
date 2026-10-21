@@ -27,7 +27,12 @@ export type WidgetMemberKey = string
  */
 export interface WidgetInterfaces {
 	config?: {
-		raw: Record<any, any>
+		/**
+		 * The authored config values the plugin accepts. `config.validate` always runs, and an omitted
+		 * config is validated as `null`, so include `null` (e.g. `raw: MyConfig | null`) when config may be
+		 * omitted; leave it out to make config required.
+		 */
+		raw: Record<any, any> | null
 		resolved: Record<any, any>
 	}
 

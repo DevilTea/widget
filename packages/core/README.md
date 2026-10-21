@@ -75,6 +75,14 @@ See
 [Plugin registration errors](https://deviltea.github.io/widget/packages/widget-core#plugin-registration-errors)
 in the full guide.
 
+A plugin with a config capability always runs `config.validate`. An omitted
+raw `config` is validated as `null`, so required-ness comes from the raw config
+type: declare `raw: Config | null` (and accept `null` in the validator) when
+config may be omitted, or `raw: Config` to require it. A rejected config yields
+`invalid-widget-config` and resolves through `resolve(null)`. See
+[Config](https://deviltea.github.io/widget/packages/widget-core#config) in the
+full guide.
+
 Plugin, config, and slot descriptions are required intrinsic metadata. The
 immutable `system.catalog` is a passive projection of registered widget types,
 descriptions, and capability descriptions; it does not contain Blueprint or

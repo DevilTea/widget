@@ -93,7 +93,7 @@ A plugin's shape is declared once, as a `WidgetInterfaces`:
 import type { JsonValue } from '@deviltea/widget-core'
 
 interface WidgetInterfaces {
-	config?: { raw: Record<string, JsonValue>, resolved: Record<any, any> }
+	config?: { raw: Record<string, JsonValue> | null, resolved: Record<any, any> }
 	slots?: string
 	state?: Record<any, any>
 	properties?: Record<any, any>
@@ -102,7 +102,8 @@ interface WidgetInterfaces {
 ```
 
 `RawConfig` is authored JSON data: its values must stay within `JsonValue`
-(including nested arrays and objects with string keys). Resolved config is a
+(including nested arrays and objects with string keys). Include `null` in it
+when the config may be omitted (see [Config](#config)). Resolved config is a
 runtime domain and may use richer values.
 
 Every section is a capability:
@@ -258,7 +259,7 @@ or other executable callbacks.
 ```ts
 interface BadgeInterfaces {
 	config: {
-		raw: { label?: string }
+		raw: { label?: string } | null
 		resolved: { label: string }
 	}
 }
@@ -268,21 +269,43 @@ createWidgetPlugin('badge')
 	.interfaces<BadgeInterfaces>()
 	.config({
 		description: 'Badge configuration',
-		validate: (input): input is { label?: string } =>
-			typeof input === 'object' && input !== null,
+		validate: (input): input is { label?: string } | null =>
+			input === null || (typeof input === 'object' && !Array.isArray(input)),
 		resolve: rawConfig => ({ label: rawConfig?.label ?? 'Badge' }),
 	})
 	// ...
 ```
 
+- `config.validate` always runs when the plugin declares a config capability.
+  Raw config presence is own-property based, and an omitted raw `config` field
+  is validated as the candidate `null` — the same as an explicit
+  `config: null`. An explicit `config: undefined` is not omission; it is
+  validated as `undefined`.
+- Required-ness is expressed by the raw config type and the validator, not by
+  a separate flag:
+
+  | Raw config type | Validator accepts `null` | Omitted config |
+  |---|---|---|
+  | `Config` | no | invalid: `invalid-widget-config` |
+  | `Config \| null` | yes | valid: `rawConfig = null`, `resolve(null)` |
+
+  The typed authored source (`WidgetSourceFor`) follows the same rule: its
+  `config` field is optional only when the raw config type admits `null`.
+- A validator may report why the `null` candidate is rejected, for example
+  `ctx.addDiagnostic({ message: 'A title is required.', path: ['title'] })`.
+  Without its own diagnostic, a `false` result gets a framework fallback
+  diagnostic.
+- Validation fails when `validate` returns `false` or reports any
+  diagnostic. Then the node gets `invalid-widget-config` diagnostics, the typed
+  raw config becomes `null`, and the semantic config still resolves through
+  `resolve(null)` so the invalid Blueprint stays inspectable. `resolve(null)`
+  therefore runs both for an accepted omission and for recovery; validity is
+  carried by Blueprint status and diagnostics, not by the resolved value.
+- A raw `config` that cannot be inspected safely (an accessor, or a
+  descriptor read that throws) gets a config diagnostic and resolves through
+  `resolve(null)` without calling `validate`.
 - `resolve` is required and has no Blueprint/topology access — it is pure
   normalization from raw to resolved config.
-- Raw config presence is own-property based: an omitted raw `config` field
-  resolves as `resolve(null)`.
-- An explicitly present but invalid raw config produces a Blueprint `config`
-  diagnostic, the typed raw config becomes unavailable, and the semantic config
-  still resolves through `resolve(null)` so the invalid Blueprint stays
-  inspectable.
 - `validate` is an authoritative predicate (`input is RawConfig`), not a
   coercion step.
 

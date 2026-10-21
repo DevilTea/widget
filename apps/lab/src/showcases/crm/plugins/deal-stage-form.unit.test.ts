@@ -151,6 +151,7 @@ function createIsolatedStoreMismatchRuntime(): ReturnType<typeof createCrmRuntim
 	const source = {
 		id: 'root',
 		type: 'Card',
+		config: {},
 		slots: {
 			body: [
 				{ id: 'store-a', type: 'DealStore', config: { seedDeals: [{ id: 'ghost-deal', company: 'Ghost Co', contact: 'G', owner: 'O', stage: 'lead', amount: 100 }] } },

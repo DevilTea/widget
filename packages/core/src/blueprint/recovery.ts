@@ -245,13 +245,7 @@ function buildNode(
 
 		const configProperty = readOwnDataProperty(raw, 'config')
 		if (definition.config !== null) {
-			if (!configProperty.found) {
-				const resolved = definition.config.resolve(null)
-				assertSyncValue(resolved, 'config.resolve')
-				working.rawConfig = null
-				working.config = resolved
-			}
-			else if (!configProperty.accessible) {
+			if (configProperty.found && !configProperty.accessible) {
 				localDiagnostics.push(configDiagnostic(publicNode as ResolvedBlueprintWidgetNode, 'Widget config could not be inspected safely.'))
 				const resolved = definition.config.resolve(null)
 				assertSyncValue(resolved, 'config.resolve')
@@ -259,7 +253,9 @@ function buildNode(
 				working.config = resolved
 			}
 			else {
-				const rawConfigValue = configProperty.value
+				// An omitted config is the candidate `null`: required-ness is expressed by the plugin's raw
+				// config type and validator, not by presence.
+				const rawConfigValue = configProperty.found ? configProperty.value : null
 				const { collector, items } = createCollector<{ message: string, path?: readonly PropertyKey[], reason?: string }>()
 				let ok = false
 				try {
