@@ -44,7 +44,7 @@ const ConfigPlugin = createWidgetPlugin('ConfigWireFixture')
 
 function createFixture() {
 	const system = createWidgetSystem({ plugins: [ConfigPlugin] })
-	const blueprint = system.createBlueprint({ id: 'root', type: 'ConfigWireFixture' })
+	const blueprint = system.createBlueprint({ id: 'root', type: 'ConfigWireFixture', config: {} })
 	if (blueprint.status !== 'valid')
 		throw new Error('Expected config wire fixture to compile.')
 	const runtime = blueprint.createRuntime()

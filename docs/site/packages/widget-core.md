@@ -93,7 +93,7 @@ A plugin's shape is declared once, as a `WidgetInterfaces`:
 import type { JsonValue } from '@deviltea/widget-core'
 
 interface WidgetInterfaces {
-	config?: { raw: Record<string, JsonValue>, resolved: Record<any, any> }
+	config?: { raw: Record<string, JsonValue> | null, resolved: Record<any, any> }
 	slots?: string
 	state?: Record<any, any>
 	properties?: Record<any, any>
@@ -102,7 +102,8 @@ interface WidgetInterfaces {
 ```
 
 `RawConfig` is authored JSON data: its values must stay within `JsonValue`
-(including nested arrays and objects with string keys). Resolved config is a
+(including nested arrays and objects with string keys). Include `null` in it
+when the config may be omitted (see [Config](#config)). Resolved config is a
 runtime domain and may use richer values.
 
 Every section is a capability:
@@ -258,7 +259,7 @@ or other executable callbacks.
 ```ts
 interface BadgeInterfaces {
 	config: {
-		raw: { label?: string }
+		raw: { label?: string } | null
 		resolved: { label: string }
 	}
 }
@@ -268,21 +269,43 @@ createWidgetPlugin('badge')
 	.interfaces<BadgeInterfaces>()
 	.config({
 		description: 'Badge configuration',
-		validate: (input): input is { label?: string } =>
-			typeof input === 'object' && input !== null,
+		validate: (input): input is { label?: string } | null =>
+			input === null || (typeof input === 'object' && !Array.isArray(input)),
 		resolve: rawConfig => ({ label: rawConfig?.label ?? 'Badge' }),
 	})
 	// ...
 ```
 
+- `config.validate` always runs when the plugin declares a config capability.
+  Raw config presence is own-property based, and an omitted raw `config` field
+  is validated as the candidate `null` — the same as an explicit
+  `config: null`. An explicit `config: undefined` is not omission; it is
+  validated as `undefined`.
+- Required-ness is expressed by the raw config type and the validator, not by
+  a separate flag:
+
+  | Raw config type | Validator accepts `null` | Omitted config |
+  |---|---|---|
+  | `Config` | no | invalid: `invalid-widget-config` |
+  | `Config \| null` | yes | valid: `rawConfig = null`, `resolve(null)` |
+
+  The typed authored source (`WidgetSourceFor`) follows the same rule: its
+  `config` field is optional only when the raw config type admits `null`.
+- A validator may report why the `null` candidate is rejected, for example
+  `ctx.addDiagnostic({ message: 'A title is required.', path: ['title'] })`.
+  Without its own diagnostic, a `false` result gets a framework fallback
+  diagnostic.
+- Validation fails when `validate` returns `false` or reports any
+  diagnostic. Then the node gets `invalid-widget-config` diagnostics, the typed
+  raw config becomes `null`, and the semantic config still resolves through
+  `resolve(null)` so the invalid Blueprint stays inspectable. `resolve(null)`
+  therefore runs both for an accepted omission and for recovery; validity is
+  carried by Blueprint status and diagnostics, not by the resolved value.
+- A raw `config` that cannot be inspected safely (an accessor, or a
+  descriptor read that throws) gets a config diagnostic and resolves through
+  `resolve(null)` without calling `validate`.
 - `resolve` is required and has no Blueprint/topology access — it is pure
   normalization from raw to resolved config.
-- Raw config presence is own-property based: an omitted raw `config` field
-  resolves as `resolve(null)`.
-- An explicitly present but invalid raw config produces a Blueprint `config`
-  diagnostic, the typed raw config becomes unavailable, and the semantic config
-  still resolves through `resolve(null)` so the invalid Blueprint stays
-  inspectable.
 - `validate` is an authoritative predicate (`input is RawConfig`), not a
   coercion step.
 
@@ -865,6 +888,27 @@ runtime.getDiagnostics() // complete aggregate: Runtime-level, then RuntimeWidge
 runtime.subscribeDiagnostics(listener)
 ```
 
+#### Dependency failures fail the consumer
+
+When a Property's `compute` or a Method's `execute` reads, writes or invokes
+a dependency that fails (`dependency-target-failed`) or whose value fails a
+`.validate()` refinement (`dependency-value-rejected`), Core adds a
+consumer-local dependency diagnostic to the consumer's **active** diagnostic
+collector at the moment of the call. The callback still receives the failed
+`ExecutionResult` and may continue, for example by computing a fallback value.
+That does not make the consumer's operation successful:
+
+- a Property whose evaluation recorded any diagnostic returns
+  `{ ok: false, failure }`, and the computed fallback value is not exposed as
+  `value`;
+- a Method whose invocation recorded any diagnostic returns a failure with an
+  `invalid-method-result` diagnostic, as described in [Methods](#methods).
+
+Handling a failed dependency therefore never hides it. To succeed without the
+dependency, the consumer must avoid the failing call; for a target that may be
+absent, declare the dependency `.optional()`. `ctx.hasAnyDiagnostic()` tells
+the callback whether its current operation has already recorded a diagnostic.
+
 `RuntimeWidget.getDiagnostics()` / `subscribeDiagnostics()` and
 `WidgetSystemRuntime.getDiagnostics()` / `subscribeDiagnostics()`
 read diagnostic signals only and never activate property evaluation. The aggregate may legitimately list both a failing
@@ -1144,6 +1188,27 @@ an occurrence should defer the work, for example to a microtask.
 - **Reactive ownership.** `alien-signals` owns dependency tracking, laziness,
   caching, invalidation, and batching; this package only builds observable
   semantics on top of it and does not implement a second reactive engine.
+
+### Host requirements
+
+Core is platform-neutral and runs in browsers, Node.js, and embedded engines
+such as QuickJS (for example through `rquickjs`, or a bundled single-file
+IIFE). The current implementation needs:
+
+- **ES2022.** The published build targets `es2022`.
+- **A global `queueMicrotask` and a drained job queue.** When a reactive
+  value or diagnostic listener (`subscribe` / `subscribeDiagnostics`)
+  throws, Core isolates the throw from the reactive flush and rethrows it in a
+  queued microtask. An embedded host must run its pending jobs (for example
+  `rquickjs`'s pending-job execution, or `JS_ExecutePendingJob` in
+  QuickJS); otherwise these listener errors never surface. Without a global
+  `queueMicrotask`, the rethrow itself fails with a `ReferenceError` at the
+  point of the listener failure.
+
+Core does not use timers, `console`, `process`, DOM globals, or Promises at
+runtime. These are requirements of the current implementation, not
+architecture rules: `queueMicrotask` is how isolated listener errors are
+reported today, and the mechanism may change.
 
 The current canonical architecture authority is
 [DevilTea/widget Discussion #12](https://github.com/DevilTea/widget/discussions/12).

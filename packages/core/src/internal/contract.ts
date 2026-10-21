@@ -288,7 +288,10 @@ export type WidgetSourceFor<
 		readonly type: WidgetPluginTypeOf<Plugin>
 	}
 	& (HasWidgetCapability<WidgetInterfacesOf<Plugin>, 'config'> extends true
-		? { readonly config?: WidgetRawConfigOf<WidgetInterfacesOf<Plugin>> }
+		// An omitted config is validated as `null`, so it may be omitted only when the raw type admits `null`.
+		? [null] extends [WidgetRawConfigOf<WidgetInterfacesOf<Plugin>>]
+				? { readonly config?: WidgetRawConfigOf<WidgetInterfacesOf<Plugin>> }
+				: { readonly config: WidgetRawConfigOf<WidgetInterfacesOf<Plugin>> }
 		: unknown)
 	& (HasWidgetCapability<WidgetInterfacesOf<Plugin>, 'slots'> extends true
 		? {

@@ -3,8 +3,8 @@
  * COMMENT 14 (relative `addDiagnostic()` authoring / framework finalization).
  */
 
-import type { BlueprintConfigDiagnostic, BlueprintDefinitionDiagnostic, WidgetInterfaces } from '../index'
-import { describe, expect, it } from 'vitest'
+import type { BlueprintConfigDiagnostic, BlueprintDefinitionDiagnostic, WidgetInterfaces, WidgetSourceFor } from '../index'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
 type ConfigMode = 'false-no-diagnostic' | 'false-with-diagnostic' | 'ok' | 'true-with-diagnostic'
@@ -58,6 +58,57 @@ const configProbePlugin = createWidgetPlugin('config-probe')
 	})
 	.done()
 
+interface OptionalConfigRaw {
+	readonly label: string
+}
+
+interface OptionalConfigInterfaces extends WidgetInterfaces {
+	config: {
+		raw: OptionalConfigRaw | null
+		resolved: { readonly label: string }
+	}
+}
+
+const optionalConfigCalls: unknown[] = []
+
+// Accepts omission: its raw config type admits `null` and its validator accepts it.
+const optionalConfigPlugin = createWidgetPlugin('optional-config')
+	.description('Test widget')
+	.interfaces<OptionalConfigInterfaces>()
+	.config({
+		description: 'Test config',
+		validate: (input): input is OptionalConfigRaw | null => {
+			optionalConfigCalls.push(input)
+			return input === null || (typeof input === 'object' && typeof (input as { label?: unknown }).label === 'string')
+		},
+		resolve: rawConfig => ({ label: rawConfig?.label ?? 'default' }),
+	})
+	.done()
+
+interface RequiredConfigInterfaces extends WidgetInterfaces {
+	config: {
+		raw: { readonly title: string }
+		resolved: { readonly title: string }
+	}
+}
+
+// Requires config and reports its own diagnostic for the `null` candidate.
+const requiredConfigPlugin = createWidgetPlugin('required-config')
+	.description('Test widget')
+	.interfaces<RequiredConfigInterfaces>()
+	.config({
+		description: 'Test config',
+		validate: (input, ctx): input is { title: string } => {
+			if (input === null) {
+				ctx.addDiagnostic({ message: 'A title is required.', path: ['title'], reason: 'required' })
+				return false
+			}
+			return typeof input === 'object' && typeof (input as { title?: unknown }).title === 'string'
+		},
+		resolve: rawConfig => ({ title: rawConfig?.title ?? '' }),
+	})
+	.done()
+
 interface BareInterfaces extends WidgetInterfaces {}
 
 const barePlugin = createWidgetPlugin('bare')
@@ -65,7 +116,7 @@ const barePlugin = createWidgetPlugin('bare')
 	.interfaces<BareInterfaces>()
 	.done()
 
-const system = createWidgetSystem({ plugins: [configProbePlugin, barePlugin] })
+const system = createWidgetSystem({ plugins: [configProbePlugin, optionalConfigPlugin, requiredConfigPlugin, barePlugin] })
 
 function getProbeRoot(definition: unknown) {
 	const blueprint = system.createBlueprint(definition)
@@ -76,10 +127,101 @@ function getProbeRoot(definition: unknown) {
 }
 
 describe('config presence', () => {
-	it('an omitted config resolves via resolve(null) without invoking validate', () => {
+	it('an omitted config is validated as the candidate null; a validator rejecting null makes the Blueprint invalid', () => {
 		configProbeCalls.length = 0
 
 		const { blueprint, root } = getProbeRoot({ id: 'root', type: 'config-probe' })
+
+		expect(configProbeCalls)
+			.toEqual([null])
+		expect(root.rawConfig)
+			.toBeNull()
+		expect(root.config)
+			.toEqual({ mode: 'none' })
+		expect(blueprint.status)
+			.toBe('invalid')
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
+			.toHaveLength(1)
+		const source = diagnostics[0]! as BlueprintConfigDiagnostic
+		expect(source.code)
+			.toBe('invalid-widget-config')
+		expect(source.location.node)
+			.toBe(root)
+	})
+
+	it('an omitted config is valid when the validator accepts null, and resolves via resolve(null)', () => {
+		optionalConfigCalls.length = 0
+
+		const blueprint = system.createBlueprint({ id: 'root', type: 'optional-config' })
+		const root = blueprint.root
+		if (!root.resolved || root.type !== 'optional-config')
+			throw new Error('expected a resolved optional-config root')
+
+		expect(optionalConfigCalls)
+			.toEqual([null])
+		expect(root.rawConfig)
+			.toBeNull()
+		expect(root.config)
+			.toEqual({ label: 'default' })
+		expect(blueprint.status)
+			.toBe('valid')
+		expect(blueprint.diagnostics)
+			.toEqual([])
+	})
+
+	it('an omitted config and an explicit config: null are validated identically', () => {
+		optionalConfigCalls.length = 0
+		configProbeCalls.length = 0
+
+		const omittedOptional = system.createBlueprint({ id: 'root', type: 'optional-config' })
+		const nullOptional = system.createBlueprint({ id: 'root', type: 'optional-config', config: null })
+		const omittedProbe = system.createBlueprint({ id: 'root', type: 'config-probe' })
+		const nullProbe = system.createBlueprint({ id: 'root', type: 'config-probe', config: null })
+
+		expect(optionalConfigCalls)
+			.toEqual([null, null])
+		expect(configProbeCalls)
+			.toEqual([null, null])
+		expect([omittedOptional.status, nullOptional.status])
+			.toEqual(['valid', 'valid'])
+		expect([omittedProbe.status, nullProbe.status])
+			.toEqual(['invalid', 'invalid'])
+		expect(omittedProbe.diagnostics.map(diagnostic => diagnostic.code))
+			.toEqual(nullProbe.diagnostics.map(diagnostic => diagnostic.code))
+	})
+
+	it('a validator reports its own diagnostic for an omitted required config', () => {
+		const blueprint = system.createBlueprint({ id: 'root', type: 'required-config' })
+		const root = blueprint.root
+		if (!root.resolved || root.type !== 'required-config')
+			throw new Error('expected a resolved required-config root')
+
+		expect(root.rawConfig)
+			.toBeNull()
+		expect(root.config)
+			.toEqual({ title: '' })
+		expect(blueprint.status)
+			.toBe('invalid')
+		const diagnostics = blueprint.diagnostics
+		expect(diagnostics)
+			.toHaveLength(1)
+		const source = diagnostics[0]! as BlueprintConfigDiagnostic
+		expect(source.code)
+			.toBe('invalid-widget-config')
+		expect(source.path)
+			.toEqual(['title'])
+		expect(source.reason)
+			.toBe('required')
+	})
+
+	it('a config that cannot be inspected safely is diagnosed without invoking validate', () => {
+		configProbeCalls.length = 0
+
+		const definition = { id: 'root', type: 'config-probe' }
+		Object.defineProperty(definition, 'config', { enumerable: true, get: () => ({ mode: 'ok' }) })
+
+		const { blueprint, root } = getProbeRoot(definition)
 
 		expect(configProbeCalls)
 			.toEqual([])
@@ -88,9 +230,9 @@ describe('config presence', () => {
 		expect(root.config)
 			.toEqual({ mode: 'none' })
 		expect(blueprint.status)
-			.toBe('valid')
-		expect(blueprint.diagnostics)
-			.toEqual([])
+			.toBe('invalid')
+		expect(blueprint.diagnostics.some(diagnostic => diagnostic.code === 'invalid-widget-config'))
+			.toBe(true)
 	})
 
 	it('an own-property config: undefined is passed to semantic validation and independently diagnosed outside the authored JSON domain', () => {
@@ -252,5 +394,29 @@ describe('config.validate finalization (COMMENT 2 predicate + collector table)',
 			.toBe('string')
 		expect(diagnostics[0]!.message.length)
 			.toBeGreaterThan(0)
+	})
+})
+
+describe('config raw type expresses required-ness', () => {
+	it('a raw config type that admits null is accepted by .interfaces()', () => {
+		expectTypeOf(createWidgetPlugin('optional')
+			.description('Test widget')
+			.interfaces<OptionalConfigInterfaces>())
+			.toHaveProperty('config')
+	})
+
+	it('typed authored source makes config optional only when the raw type admits null', () => {
+		type OptionalSource = WidgetSourceFor<typeof optionalConfigPlugin, [typeof optionalConfigPlugin]>
+		type RequiredSource = WidgetSourceFor<typeof requiredConfigPlugin, [typeof requiredConfigPlugin]>
+
+		expectTypeOf<{ id: 'a', type: 'optional-config' }>()
+			.toExtend<OptionalSource>()
+		expectTypeOf<{ id: 'a', type: 'optional-config', config: null }>()
+			.toExtend<OptionalSource>()
+		expectTypeOf<{ id: 'a', type: 'required-config' }>()
+			.not
+			.toExtend<RequiredSource>()
+		expectTypeOf<{ id: 'a', type: 'required-config', config: { title: string } }>()
+			.toExtend<RequiredSource>()
 	})
 })
