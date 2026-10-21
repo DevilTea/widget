@@ -161,17 +161,22 @@ export function runStructureValidation(
 					continue
 
 				const children = (node.semanticSlots.get(slotName) ?? []).map(id => compileFacade.facadeForNodeId(id))
-				const { collector, items } = createCollector<RelativeSlotStructureDiagnosticInput>()
+				const { collector, items, close } = createCollector<RelativeSlotStructureDiagnosticInput>()
 
-				const result: unknown = slotDefinition.validateStructure({
-					widget: widgetFacade,
-					slot: slotName,
-					children,
-					blueprint: compileFacade.view,
-					...configFragment(node),
-					...collector,
-				})
-				assertSyncValue(result, `Slot "${slotName}"'s validateStructure`)
+				try {
+					const result: unknown = slotDefinition.validateStructure({
+						widget: widgetFacade,
+						slot: slotName,
+						children,
+						blueprint: compileFacade.view,
+						...configFragment(node),
+						...collector,
+					})
+					assertSyncValue(result, `Slot "${slotName}"'s validateStructure`)
+				}
+				finally {
+					close()
+				}
 
 				for (const item of items)
 					finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slotName, item.index, undefined, item.reason))
@@ -179,15 +184,20 @@ export function runStructureValidation(
 		}
 
 		if (definition.validateStructure !== null) {
-			const { collector, items } = createCollector<RelativePluginStructureDiagnosticInput>()
+			const { collector, items, close } = createCollector<RelativePluginStructureDiagnosticInput>()
 
-			const result: unknown = definition.validateStructure({
-				widget: widgetFacade,
-				blueprint: compileFacade.view,
-				...configFragment(node),
-				...collector,
-			})
-			assertSyncValue(result, `Plugin "${node.type}"'s validateStructure`)
+			try {
+				const result: unknown = definition.validateStructure({
+					widget: widgetFacade,
+					blueprint: compileFacade.view,
+					...configFragment(node),
+					...collector,
+				})
+				assertSyncValue(result, `Plugin "${node.type}"'s validateStructure`)
+			}
+			finally {
+				close()
+			}
 
 			for (const item of items) {
 				const slot = 'slot' in item ? item.slot : undefined
@@ -198,13 +208,18 @@ export function runStructureValidation(
 	}
 
 	if (system.validateStructure !== null) {
-		const { collector, items } = createCollector<RelativeSystemStructureDiagnosticInput>()
+		const { collector, items, close } = createCollector<RelativeSystemStructureDiagnosticInput>()
 
-		const result: unknown = system.validateStructure({
-			blueprint: compileFacade.view,
-			...collector,
-		})
-		assertSyncValue(result, 'System-level validateStructure')
+		try {
+			const result: unknown = system.validateStructure({
+				blueprint: compileFacade.view,
+				...collector,
+			})
+			assertSyncValue(result, 'System-level validateStructure')
+		}
+		finally {
+			close()
+		}
 
 		const semanticOrderIndex = new Map<InternalNodeId, number>()
 		semanticOrder.forEach((nodeId, index) => semanticOrderIndex.set(nodeId, index))

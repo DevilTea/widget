@@ -20,8 +20,10 @@ import type {
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetId } from '../types'
 import type { PrimitiveRegistryEntry } from './deps'
+import { endBatch, startBatch } from 'alien-signals'
 import { readCompiledBlueprint } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
+import { runRuntimeOperation } from './adapter'
 import { createRuntimeAggregate } from './aggregate'
 import { buildBlueprintView } from './blueprint-view'
 import { createRuntimeContext } from './context'
@@ -54,9 +56,9 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 
 	function buildConfigFragmentFor(node: CompiledResolvedWidgetNode<Plugins>): () => Record<string, unknown> {
 		const definition = readWidgetPluginDefinition(node.plugin)
-		if (definition.config === null)
-			return () => ({})
-		return () => ({ config: node.config })
+		// One frozen fragment per node: callers spread it into their own context objects.
+		const fragment: Record<string, unknown> = definition.config === null ? Object.freeze({}) : Object.freeze({ config: node.config })
+		return () => fragment
 	}
 
 	// 1. Runtime/widget indexes + 2. create all states (null + empty diagnostic snapshot).
@@ -121,13 +123,14 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				hasCandidate = true
 			}
 			else if (member.definition.default) {
-				candidate = member.definition.default(buildConfigFragment())
+				candidate = member.definition.default({ ...buildConfigFragment() })
 				assertSyncValue(candidate, `State "${key}"'s default`)
 				hasCandidate = true
 			}
 
 			if (hasCandidate)
 				primitive.internal.attemptSet(candidate)
+			primitive.internal.captureInitial()
 		}
 	}
 
@@ -221,6 +224,22 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		return runtimeWidgetsByNodeId.get(nodeId) ?? null
 	}
 
+	function resetState(): void {
+		context.assertActive()
+		runRuntimeOperation(() => {
+			startBatch()
+			try {
+				for (const entry of registry.values()) {
+					for (const primitive of entry.state.values())
+						primitive.internal.restoreInitial()
+				}
+			}
+			finally {
+				endBatch()
+			}
+		})
+	}
+
 	// 9. Finalize Runtime.
 	const runtime = {
 		blueprint,
@@ -228,6 +247,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			return context.isDisposed()
 		},
 		getWidget,
+		resetState,
 		getDiagnostics: aggregate.getDiagnostics,
 		subscribeDiagnostics: aggregate.subscribeDiagnostics,
 		dispose: () => context.dispose(),

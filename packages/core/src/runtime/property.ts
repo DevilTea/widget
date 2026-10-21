@@ -75,7 +75,11 @@ export interface CreatePropertyPrimitiveParams {
 export function createPropertyPrimitive(context: RuntimeContext, params: CreatePropertyPrimitiveParams): PropertyPrimitive {
 	const diagnosticsSignal = signal<readonly RuntimePropertyDiagnostic[]>(EMPTY_DIAGNOSTICS)
 
-	let inspectionSnapshot: PropertyInspectionSnapshot = NEVER_EVALUATED_SNAPSHOT
+	// Untracked mirror of `diagnosticsSignal`'s value: an unchanged snapshot skips the write.
+	let committedDiagnostics: readonly RuntimePropertyDiagnostic[] = EMPTY_DIAGNOSTICS
+	// Built on demand from `lastPublishedResult` while no inspection listener is attached; the same object
+	// is returned until the next completed evaluation.
+	let inspectionSnapshot: PropertyInspectionSnapshot | null = NEVER_EVALUATED_SNAPSHOT
 	// Plain lazy-allocated registration list (not a `Set` keyed by the listener function itself — two
 	// independent `subscribe(sameFn)` calls must stay two independent registrations, exactly like the
 	// alien-signals-effect-backed `createTrackedSubscription` never dedupes by listener identity either).
@@ -83,16 +87,21 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	let inspectionListeners: ListenerEntry[] | null = null
 	let lastPublishedResult: ExecutionResult<unknown, RuntimePropertyDiagnostic> | null = null
 
-	function publishInspectionCompletion(result: ExecutionResult<unknown, RuntimePropertyDiagnostic>): void {
-		inspectionSnapshot = Object.freeze({ status: 'completed', result })
-		if (inspectionListeners === null)
+	function readInspectionSnapshot(): PropertyInspectionSnapshot {
+		return inspectionSnapshot ??= Object.freeze({ status: 'completed', result: lastPublishedResult! })
+	}
+
+	function publishInspectionCompletion(): void {
+		inspectionSnapshot = null
+		if (inspectionListeners === null || inspectionListeners.length === 0)
 			return
+		const snapshot = readInspectionSnapshot()
 		// Iterate a stable snapshot taken at publication start: a listener that itself calls `subscribe()`
 		// during this loop must not have its new registration visited by *this* publication (future-changes
 		// -only / no-immediate-emission), which a live-array/live-Set iteration could otherwise do.
 		const listenersSnapshot = inspectionListeners.slice()
 		for (const entry of listenersSnapshot)
-			invokeListenerIsolated(entry.listener, inspectionSnapshot)
+			invokeListenerIsolated(entry.listener, snapshot)
 	}
 
 	const resultComputed = computed<ExecutionResult<unknown, RuntimePropertyDiagnostic>>(() => {
@@ -110,7 +119,13 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			hasAnyDiagnostic: collector.hasAnyDiagnostic,
 		}
 
-		const value = context.withActiveCollector(sink, () => params.definition.compute(ctx))
+		let value: unknown
+		try {
+			value = context.withActiveCollector(sink, () => params.definition.compute(ctx))
+		}
+		finally {
+			collector.close()
+		}
 		assertSyncValue(value, `Property "${params.name}"'s compute`)
 
 		const diagnostics = collector.finalize(input => buildPropertyResultDiagnostic(params.widgetId, params.name, value, input))
@@ -120,7 +135,11 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		// alien-signals flush while this computed is mid-`updateComputed`, which permanently marks the
 		// Property's other dependents clean-but-stale; `writeDeferringFlush` documents the exact
 		// alien-signals@3.2.1 mechanism.
-		writeDeferringFlush(() => diagnosticsSignal(toDiagnosticSnapshot(diagnostics)))
+		const snapshot = toDiagnosticSnapshot(diagnostics)
+		if (snapshot !== committedDiagnostics) {
+			committedDiagnostics = snapshot
+			writeDeferringFlush(() => diagnosticsSignal(snapshot))
+		}
 
 		// The alien computed caches this exact object as its reactive value and reuses it for every
 		// `.get()`/dependency read until the next actual recompute; shallow-freeze the wrapper so external
@@ -159,7 +178,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		const result = runRuntimeOperation(resultComputed)
 		if (result !== lastPublishedResult) {
 			lastPublishedResult = result
-			publishInspectionCompletion(result)
+			publishInspectionCompletion()
 		}
 		return result
 	}
@@ -168,7 +187,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		getResult: getResultWithInspectionPublish,
 		getDiagnostics: () => diagnosticsSignal(),
 		inspection: {
-			getSnapshot: () => inspectionSnapshot,
+			getSnapshot: readInspectionSnapshot,
 			subscribe: (listener) => {
 				const entry: ListenerEntry = { listener }
 				if (inspectionListeners === null)

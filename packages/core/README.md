@@ -197,7 +197,9 @@ runtime.dispose()
 ### Blueprint diagnostics
 
 `createBlueprint` accepts `unknown`; malformed input never throws — it always
-produces an inspectable Blueprint. Every diagnostic has top-level `code`,
+produces an inspectable Blueprint. `createBlueprintFromJson(text)` is the
+equivalent of `createBlueprint(JSON.parse(text))` that skips the JSON-domain
+inspection, because Core parsed the value itself. Every diagnostic has top-level `code`,
 `location`, and `message` fields. Variant-specific facts are direct fields;
 structured `path` and `related` fields are not hidden behind a `source` object.
 Codes are stable lowercase kebab-case values such as
@@ -371,6 +373,12 @@ later occurrence is de-identified with its available subtree preserved.
   active diagnostic collector. Computing a fallback value after the failure
   does not make the operation succeed: the result is still `ok: false`. See
   [Dependency failures fail the consumer](https://deviltea.github.io/widget/packages/widget-core#dependency-failures-fail-the-consumer).
+- `runtime.resetState()` restores every State member to its initialization
+  outcome (value and diagnostic snapshot) in one batch without re-running
+  `validate`, so one Runtime can evaluate many independent inputs. See
+  [Reusing a Runtime](https://deviltea.github.io/widget/packages/widget-core#reusing-a-runtime-resetstate).
+- A callback's `addDiagnostic` / `hasAnyDiagnostic` throw a `TypeError` when
+  called after that callback returned.
 - Every state write, property evaluation, and method invocation keeps the
   **latest completed** diagnostic snapshot only (`getDiagnostics()` /
   `subscribeDiagnostics()`), never a history.

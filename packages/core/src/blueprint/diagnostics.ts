@@ -16,14 +16,31 @@ import type {
 } from '../diagnostic'
 import type { BlueprintWidgetNode, ResolvedBlueprintWidgetNode } from '../internal/contract'
 import type { NonEmptyReadonlyArray, WidgetMemberKey } from '../types'
+import { throwClosedCollector } from '../runtime/sync'
 
-export function createCollector<Input>(): { readonly collector: DiagnosticCollector<Input>, readonly items: Input[] } {
+/**
+ * A compile-time callback's collector. `close()` ends its plugin-facing lifetime once the callback has
+ * returned or thrown; a later `addDiagnostic` / `hasAnyDiagnostic` call then throws.
+ */
+export function createCollector<Input>(): { readonly collector: DiagnosticCollector<Input>, readonly items: Input[], readonly close: () => void } {
 	const items: Input[] = []
+	let closed = false
 	return {
 		items,
 		collector: {
-			addDiagnostic: diagnostic => items.push(diagnostic),
-			hasAnyDiagnostic: () => items.length > 0,
+			addDiagnostic: (diagnostic) => {
+				if (closed)
+					throwClosedCollector('addDiagnostic')
+				items.push(diagnostic)
+			},
+			hasAnyDiagnostic: () => {
+				if (closed)
+					throwClosedCollector('hasAnyDiagnostic')
+				return items.length > 0
+			},
+		},
+		close: () => {
+			closed = true
 		},
 	}
 }

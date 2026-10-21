@@ -19,3 +19,12 @@ export function assertSyncValue(value: unknown, description: string): void {
 		throw new TypeError(`${description} returned a thenable. The widget-core semantic boundary is synchronous only.`)
 	}
 }
+
+/**
+ * Callback-context lifetime guard: a callback's `addDiagnostic` / `hasAnyDiagnostic` belong to the
+ * synchronous call that received them. Calling one after that callback returned or threw is an
+ * implementation-contract violation (the operation's diagnostics are already final), so it throws.
+ */
+export function throwClosedCollector(method: 'addDiagnostic' | 'hasAnyDiagnostic'): never {
+	throw new TypeError(`${method} was called after its callback returned. Diagnostics must be reported synchronously while the callback runs.`)
+}

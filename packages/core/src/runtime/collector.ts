@@ -22,7 +22,9 @@
  */
 
 import type { DiagnosticCollector } from '../diagnostic'
+import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { freezeDiagnosticSnapshot } from './diagnostics'
+import { throwClosedCollector } from './sync'
 
 type CollectorEntry<RelativeInput, FinalDiagnostic>
 	= | { readonly kind: 'relative', readonly input: RelativeInput }
@@ -56,20 +58,30 @@ export interface OperationCollector<RelativeInput, FinalDiagnostic> extends Diag
 	 * plugin callbacks.
 	 */
 	finalize: (toFinalDiagnostic: (input: RelativeInput) => FinalDiagnostic) => readonly FinalDiagnostic[]
+	/**
+	 * Ends the plugin-facing lifetime: a later `addDiagnostic` / `hasAnyDiagnostic` call throws. Called
+	 * once the operation no longer reads the collector, whether its callback returned or threw.
+	 */
+	close: () => void
 }
 
 export function createOperationCollector<RelativeInput, FinalDiagnostic>(): OperationCollector<RelativeInput, FinalDiagnostic> {
-	const entries: CollectorEntry<RelativeInput, FinalDiagnostic>[] = []
+	// Allocated on first use: most operations complete without any diagnostic.
+	let entries: CollectorEntry<RelativeInput, FinalDiagnostic>[] | null = null
 	// Operation-local (this collector's lifetime only, discarded with it): never a module-global table,
 	// so distinct `Symbol`s/objects passed through here never accumulate beyond one operation.
-	const seenAnchorsByScope = new Map<string, Set<unknown>>()
+	let seenAnchorsByScope: Map<string, Set<unknown>> | null = null
+	let closed = false
 
 	return {
 		addDiagnostic(input: RelativeInput) {
-			entries.push({ kind: 'relative', input })
+			if (closed)
+				throwClosedCollector('addDiagnostic')
+			;(entries ??= []).push({ kind: 'relative', input })
 		},
 		addFinalizedDiagnostic(diagnostic: FinalDiagnostic, dedupe?: DedupeDescriptor) {
 			if (dedupe !== undefined) {
+				seenAnchorsByScope ??= new Map()
 				let seenAnchors = seenAnchorsByScope.get(dedupe.scope)
 				if (seenAnchors === undefined) {
 					seenAnchors = new Set()
@@ -79,10 +91,12 @@ export function createOperationCollector<RelativeInput, FinalDiagnostic>(): Oper
 					return
 				seenAnchors.add(dedupe.anchor)
 			}
-			entries.push({ kind: 'final', diagnostic })
+			;(entries ??= []).push({ kind: 'final', diagnostic })
 		},
 		hasAnyDiagnostic() {
-			return entries.length > 0
+			if (closed)
+				throwClosedCollector('hasAnyDiagnostic')
+			return entries !== null
 		},
 		finalize(toFinalDiagnostic: (input: RelativeInput) => FinalDiagnostic) {
 			// A completed non-empty diagnostic snapshot is an immutable final artifact (diagnostic #10 diagnostic-
@@ -91,8 +105,13 @@ export function createOperationCollector<RelativeInput, FinalDiagnostic>(): Oper
 			// mutation of one must not silently corrupt the other. `freezeDiagnosticSnapshot` deep-freezes
 			// each diagnostic's framework-owned structure (not just the top-level diagnostic object) plus the
 			// array itself.
+			if (entries === null)
+				return EMPTY_DIAGNOSTICS
 			const finalized = entries.map(entry => entry.kind === 'relative' ? toFinalDiagnostic(entry.input) : entry.diagnostic)
 			return freezeDiagnosticSnapshot(finalized)
+		},
+		close() {
+			closed = true
 		},
 	}
 }

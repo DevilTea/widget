@@ -66,6 +66,14 @@ export interface WidgetSystem<Plugins extends AnyWidgetPluginTuple = AnyWidgetPl
 	 * editing your own object.
 	 */
 	createBlueprint: (definition: unknown) => WidgetSystemBlueprint<Plugins>
+	/**
+	 * Parses `text` with `JSON.parse` and compiles the result. Observably equivalent to
+	 * `createBlueprint(JSON.parse(text))`, but cheaper: a value produced by `JSON.parse` (without a
+	 * reviver) is in the authored JSON domain by construction, so Core skips the whole-source JSON-domain
+	 * inspection and `sourceJsonCompatible` is `true`. Invalid JSON text throws the `SyntaxError` from
+	 * `JSON.parse`, unchanged. The parsed source is referenced by nothing but the Blueprint.
+	 */
+	createBlueprintFromJson: (text: string) => WidgetSystemBlueprint<Plugins>
 }
 
 export type WidgetSystemConfigurationErrorCode = 'foreign-plugin' | 'duplicate-plugin-type'
@@ -158,6 +166,10 @@ export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple>(
 
 		createBlueprint(definition) {
 			return compileBlueprint(system, definition)
+		},
+
+		createBlueprintFromJson(text) {
+			return compileBlueprint(system, JSON.parse(text), true)
 		},
 	}
 

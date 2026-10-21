@@ -45,6 +45,13 @@ export interface StatePrimitiveInternal {
 	attemptSet: (candidate: unknown) => ExecutionResult<unknown, RuntimeStateDiagnostic>
 	/** Readonly-inspection retained-fact channel. See {@link StateInspectionChannel}. */
 	readonly inspection: StateInspectionChannel
+	/** Records the current value and diagnostic snapshot as this member's initialization outcome. */
+	captureInitial: () => void
+	/**
+	 * Restores the captured initialization outcome without running `validate`. The caller owns the
+	 * surrounding Runtime operation and batch.
+	 */
+	restoreInitial: () => void
 }
 
 export interface StatePrimitive {
@@ -92,6 +99,16 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	 * out of the graph, so the propagations they deferred are released here: still inside the very `set()`
 	 * call that caused them, before its `ExecutionResult` reaches the caller.
 	 */
+	// Untracked mirror of `diagnosticsSignal`'s value: an unchanged snapshot skips the write and its
+	// deferred-flush bookkeeping, which alien-signals would not propagate anyway.
+	let committedDiagnostics: readonly RuntimeStateDiagnostic[] = EMPTY_DIAGNOSTICS
+	function commitDiagnostics(next: readonly RuntimeStateDiagnostic[]): void {
+		if (next === committedDiagnostics)
+			return
+		committedDiagnostics = next
+		writeDeferringFlush(() => diagnosticsSignal(next))
+	}
+
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
 		return runRuntimeOperation(() => attemptSetWithinOperation(candidate))
 	}
@@ -104,16 +121,24 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 			hasAnyDiagnostic: collector.hasAnyDiagnostic,
 		}
 
-		const isValid = params.definition.validate(candidate, ctx)
-		assertSyncValue(isValid, `State "${params.key}"'s validate`)
+		let isValid: unknown
+		let hasDiagnostic: boolean
+		try {
+			isValid = params.definition.validate(candidate, ctx)
+			assertSyncValue(isValid, `State "${params.key}"'s validate`)
+			hasDiagnostic = collector.hasAnyDiagnostic()
+		}
+		finally {
+			collector.close()
+		}
 
-		if (!isValid || collector.hasAnyDiagnostic()) {
+		if (!isValid || hasDiagnostic) {
 			const finalized = collector.finalize(input => buildStateValidationDiagnostic(params.widgetId, params.key, candidate, input))
 			// `finalize()` already returns a deep-frozen array; the generic-fallback branch builds a
 			// fresh array here and needs the same immutable-snapshot treatment (diagnostic #10 diagnostic-snapshot
 			// contract).
 			const diagnostics = finalized.length > 0 ? finalized : freezeDiagnosticSnapshot([buildDefaultStateValidationDiagnostic(params.widgetId, params.key, candidate)])
-			writeDeferringFlush(() => diagnosticsSignal(diagnostics))
+			commitDiagnostics(diagnostics)
 			return { ok: false, failure: { diagnostics: diagnostics as readonly [RuntimeStateDiagnostic, ...RuntimeStateDiagnostic[]] } }
 		}
 
@@ -129,13 +154,27 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		// looser change detector.
 		const previous = valueSignal()
 		valueSignal(candidate)
-		writeDeferringFlush(() => diagnosticsSignal(EMPTY_DIAGNOSTICS))
+		commitDiagnostics(EMPTY_DIAGNOSTICS)
 		if (candidate !== previous)
 			publishInspectionSnapshot(candidate)
 		return { ok: true, value: candidate }
 	}
 
+	let initialValue: unknown = null
+	let initialDiagnostics: readonly RuntimeStateDiagnostic[] = EMPTY_DIAGNOSTICS
+
 	const internal: StatePrimitiveInternal = {
+		captureInitial() {
+			initialValue = valueSignal()
+			initialDiagnostics = committedDiagnostics
+		},
+		restoreInitial() {
+			const previous = valueSignal()
+			valueSignal(initialValue)
+			commitDiagnostics(initialDiagnostics)
+			if (initialValue !== previous)
+				publishInspectionSnapshot(initialValue)
+		},
 		get: () => valueSignal(),
 		getDiagnostics: () => diagnosticsSignal(),
 		attemptSet,
