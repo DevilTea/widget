@@ -888,6 +888,27 @@ runtime.getDiagnostics() // complete aggregate: Runtime-level, then RuntimeWidge
 runtime.subscribeDiagnostics(listener)
 ```
 
+#### Dependency failures fail the consumer
+
+When a Property's `compute` or a Method's `execute` reads, writes or invokes
+a dependency that fails (`dependency-target-failed`) or whose value fails a
+`.validate()` refinement (`dependency-value-rejected`), Core adds a
+consumer-local dependency diagnostic to the consumer's **active** diagnostic
+collector at the moment of the call. The callback still receives the failed
+`ExecutionResult` and may continue, for example by computing a fallback value.
+That does not make the consumer's operation successful:
+
+- a Property whose evaluation recorded any diagnostic returns
+  `{ ok: false, failure }`, and the computed fallback value is not exposed as
+  `value`;
+- a Method whose invocation recorded any diagnostic returns a failure with an
+  `invalid-method-result` diagnostic, as described in [Methods](#methods).
+
+Handling a failed dependency therefore never hides it. To succeed without the
+dependency, the consumer must avoid the failing call; for a target that may be
+absent, declare the dependency `.optional()`. `ctx.hasAnyDiagnostic()` tells
+the callback whether its current operation has already recorded a diagnostic.
+
 `RuntimeWidget.getDiagnostics()` / `subscribeDiagnostics()` and
 `WidgetSystemRuntime.getDiagnostics()` / `subscribeDiagnostics()`
 read diagnostic signals only and never activate property evaluation. The aggregate may legitimately list both a failing
@@ -1167,6 +1188,27 @@ an occurrence should defer the work, for example to a microtask.
 - **Reactive ownership.** `alien-signals` owns dependency tracking, laziness,
   caching, invalidation, and batching; this package only builds observable
   semantics on top of it and does not implement a second reactive engine.
+
+### Host requirements
+
+Core is platform-neutral and runs in browsers, Node.js, and embedded engines
+such as QuickJS (for example through `rquickjs`, or a bundled single-file
+IIFE). The current implementation needs:
+
+- **ES2022.** The published build targets `es2022`.
+- **A global `queueMicrotask` and a drained job queue.** When a reactive
+  value or diagnostic listener (`subscribe` / `subscribeDiagnostics`)
+  throws, Core isolates the throw from the reactive flush and rethrows it in a
+  queued microtask. An embedded host must run its pending jobs (for example
+  `rquickjs`'s pending-job execution, or `JS_ExecutePendingJob` in
+  QuickJS); otherwise these listener errors never surface. Without a global
+  `queueMicrotask`, the rethrow itself fails with a `ReferenceError` at the
+  point of the listener failure.
+
+Core does not use timers, `console`, `process`, DOM globals, or Promises at
+runtime. These are requirements of the current implementation, not
+architecture rules: `queueMicrotask` is how isolated listener errors are
+reported today, and the mechanism may change.
 
 The current canonical architecture authority is
 [DevilTea/widget Discussion #12](https://github.com/DevilTea/widget/discussions/12).

@@ -366,6 +366,11 @@ later occurrence is de-identified with its available subtree preserved.
 - Every `RuntimeMethod` invocation batches its dependency/state writes; the
   batch flushes once the method returns, so partial writes from nested method
   calls are not observed mid-flight by outside subscribers.
+- A failed dependency call adds a consumer-local `dependency-target-failed` /
+  `dependency-value-rejected` diagnostic to the calling Property or Method's
+  active diagnostic collector. Computing a fallback value after the failure
+  does not make the operation succeed: the result is still `ok: false`. See
+  [Dependency failures fail the consumer](https://deviltea.github.io/widget/packages/widget-core#dependency-failures-fail-the-consumer).
 - Every state write, property evaluation, and method invocation keeps the
   **latest completed** diagnostic snapshot only (`getDiagnostics()` /
   `subscribeDiagnostics()`), never a history.
@@ -402,6 +407,15 @@ import { inspectBlueprint, inspectRuntime } from '@deviltea/widget-core/inspecti
 [Inspection](https://deviltea.github.io/widget/packages/widget-core#inspection)
 in the full guide for the exact contract, including the Event inspection
 delivery guarantees.
+
+### Host requirements
+
+The current implementation needs an ES2022 engine and a global
+`queueMicrotask` whose jobs the host actually runs: a throwing `subscribe` /
+`subscribeDiagnostics` listener is isolated and rethrown in a microtask.
+Embedded engines such as QuickJS (`rquickjs`) must drain their pending jobs,
+or those listener errors never surface. See
+[Host requirements](https://deviltea.github.io/widget/packages/widget-core#host-requirements).
 
 The full guide at
 [docs/site/packages/widget-core.md](https://deviltea.github.io/widget/packages/widget-core)
