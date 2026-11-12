@@ -44,12 +44,15 @@ dependency phases), which is different from the Runtime aggregate's semantic
 pre-order.
 
 Diagnostic callbacks are an ordinary semantic result channel. Observer
-exceptions are isolated from the operation that caused a notification, without
-exception: a throwing State, Property, diagnostic, Event, inspection or
-`WidgetDocument` listener never reaches the writer and never stops the other
-listeners, and Core reports it asynchronously. Plugin or framework
-implementation exceptions remain thrown conditions; they are not converted into
-diagnostics.
+exceptions are isolated from the operation that caused a notification: a
+throwing State, Property, diagnostic, Event, inspection or `WidgetDocument`
+listener never reaches the writer and never stops the other listeners, and Core
+reports it asynchronously. The one exception is a runaway Event loop: the emit
+re-entrancy guard's `WidgetSystemRuntimeReentrancyError`, and an engine stack
+overflow raised inside an Event listener, pass through Event listener isolation
+so they reach the operation that started the loop instead of being retried at
+every nesting level. Plugin or framework implementation exceptions remain thrown
+conditions; they are not converted into diagnostics.
 
 Blueprint `status` and `sourceJsonCompatible` are snapshot facts, not Result
 success flags: a semantically invalid but JSON-safe Blueprint remains an
@@ -122,8 +125,9 @@ intentional.
 |---|---|---|
 | `WidgetSystemConfigurationError` | `createWidgetSystem` | `invalid-options`, `foreign-plugin`, `duplicate-plugin-type` |
 | `WidgetSystemRuntimeDisposedError` | any live Runtime operation after `dispose()` | `runtime-disposed` |
+| `WidgetSystemRuntimeReentrancyError` (a `RangeError`) | an `emit` nested more than 128 levels deep in one Runtime (a runaway Event loop) | `emit-depth-exceeded` |
 | `WidgetInspectionError` (`@deviltea/widget-core/inspection`) | `inspectPlugin`, `inspectBlueprint`, `inspectRuntime` | `foreign-plugin`, `foreign-blueprint`, `foreign-runtime` |
-| `WidgetIntegrationError` (`@deviltea/widget-core/integration`) | `getWidgetEventEmitter` | `foreign-runtime`, `runtime-widget-mismatch` |
+| `WidgetIntegrationError` (`@deviltea/widget-core/integration`) | `getWidgetEventEmitter`, `assertCoreRuntime` | `foreign-runtime`, `runtime-widget-mismatch` |
 | `WidgetVueIntegrationError` (`@deviltea/widget-vue`) | the Vue integration | `invalid-renderer-registry`, `runtime-system-mismatch`, `outside-widget-renderer`, `widget-plugin-mismatch`, `readonly-projection-write` |
 
 The Inspector reports a failed request over the wire as an `ok: false` response
@@ -133,7 +137,8 @@ protocol, rather than as a thrown error.
 Uncoded `TypeError`s signal callback contract violations: a malformed plugin
 declaration, a returned Promise or thenable, a diagnostic collector used after its
 callback returned, a dependency or `emit` callable used outside its own running
-callback, and a structure validator that reports a location that does not exist.
+callback (including from a listener or a `validate`-style callback running inside
+it), and a structure validator that reports a location that does not exist.
 They are thrown at plugin build, compile, or call time and are never converted
 into Diagnostics.
 
@@ -141,7 +146,9 @@ Plugin exceptions propagate unchanged: an exception thrown by a `compute`,
 `execute` or other callback reaches the caller that triggered the evaluation
 as-is (the exception to this is listener isolation, above). `JSON.parse`'s
 `SyntaxError` from `createBlueprintFromJson` and a `RangeError` from runaway
-recursion are likewise passed through.
+recursion are likewise passed through. A runaway Event loop is cut off by a
+non-semantic guard that throws `WidgetSystemRuntimeReentrancyError` instead of
+waiting for the stack to run out.
 
 ## Vue projections
 

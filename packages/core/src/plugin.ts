@@ -342,41 +342,49 @@ type IsAny<T> = 0 extends 1 & T ? true : false
 type IsExactlyVoid<T> = (<X>() => X extends T ? 1 : 2) extends (<X>() => X extends void ? 1 : 2) ? true : false
 
 /**
- * An object result that is not a thenable. The `then` text is the compile-error message shown when a
- * PromiseLike/thenable is returned; no callable `then` satisfies it.
+ * Whether `Value` can be a thenable: anything with a callable `then`, which is what the runtime guard
+ * rejects (not only a native `PromiseLike`). An object whose `then` is not a function is not one. For a
+ * value of a type parameter the check stays deferred, which TypeScript accepts.
  */
-interface WidgetSynchronousObjectResult {
-	readonly then?: 'widget-core: semantic callbacks are synchronous; returning a PromiseLike/thenable is a contract violation'
-	readonly [key: string]: any
+type MayBeThenable<Value> = [Extract<Value, { readonly then: (...args: never) => unknown }>] extends [never] ? false : true
+
+/**
+ * What a thenable result is checked against. The `then` text is the compile-error message; no callable
+ * `then` satisfies it.
+ */
+interface WidgetSynchronousResultViolation {
+	readonly then: 'widget-core: semantic callbacks are synchronous; returning a PromiseLike/thenable is a contract violation'
 }
 
 /**
- * The result type of a semantic callback declared to return `void`: any synchronous value, but never a
- * PromiseLike/thenable. A plain `void` return type would accept an `async` function (TypeScript lets a
- * `void`-returning function type accept any return), whose synchronous prefix runs before Core rejects
- * the returned thenable at runtime.
+ * The return type a semantic callback is checked against, given `Result`, the callback's own return type:
+ * `Result` itself unless it can be a thenable. A `void` (or `unknown`) return type cannot do this on its own:
+ * TypeScript lets a `void`-returning function type accept any function, an `async` one included, and every
+ * value is assignable to `unknown`. Gating on the callback's own return type rejects a thenable while every
+ * synchronous value — an `unknown`-typed expression, a value of a type parameter, an object whose `then` is
+ * not a function — still type-checks.
+ *
+ * `Result` is inferred where the callback is written into the builder (a Method's `execute`, a slot's or the
+ * plugin's `validateStructure`) or into `createWidgetSystem`'s options. A standalone definition type has no
+ * callback to infer from, so `Result` defaults to `unknown` and it accepts any return: a thenable reaching
+ * Core through a callback typed only by such an annotation is caught by the runtime guard instead, which
+ * throws a `TypeError`.
  */
-export type WidgetSynchronousVoidResult
-	= | void
-		| string
-		| number
-		| boolean
-		| bigint
-		| symbol
-		| null
-		| undefined
-		| WidgetSynchronousObjectResult
+export type WidgetSynchronousResult<Result> = Result & (MayBeThenable<Result> extends true ? WidgetSynchronousResultViolation : unknown)
 
 /**
- * A declared callback result type, with exactly `void` replaced by `WidgetSynchronousVoidResult` so that
- * a `void` declaration does not reopen the synchronous boundary. Other declared types already reject a
- * PromiseLike (see `WidgetInterfacesViolationOf`); `any` stays unchecked.
+ * `execute`'s return type for the declared Method return `Declared`. A declared type a thenable is
+ * assignable to — exactly `void`, `unknown`, `{}`, `object` — gates on the `execute`'s own return type
+ * `Result` (see {@link WidgetSynchronousResult}); any other declared type already rejects a PromiseLike (see
+ * `WidgetInterfacesViolationOf`). `any` stays unchecked.
  */
-type WidgetSynchronousResult<Value> = IsAny<Value> extends true
-	? Value
-	: IsExactlyVoid<Value> extends true
-		? WidgetSynchronousVoidResult
-		: Value
+type WidgetMethodExecuteResult<Declared, Result> = IsAny<Declared> extends true
+	? Declared
+	: IsExactlyVoid<Declared> extends true
+		? WidgetSynchronousResult<Result>
+		: PromiseLike<unknown> extends Declared
+			? Declared & WidgetSynchronousResult<Result>
+			: Declared
 
 // -------------------------------------------------------------------------------------------------
 // Member declarations
@@ -390,29 +398,40 @@ export interface WidgetConfigDefinition<Interfaces extends WidgetInterfaces> {
 	readonly resolve: (rawConfig: WidgetRawConfigOf<Interfaces> | null) => WidgetResolvedConfigOf<Interfaces>
 }
 
+/** `Result` is the slot validator's own return type (see {@link WidgetSynchronousResult}). */
 export interface WidgetSlotDefinition<
 	Interfaces extends WidgetInterfaces,
 	SlotName extends WidgetMemberKey,
+	Result = unknown,
 > {
 	readonly description: string
-	readonly validateStructure?: (ctx: WidgetSlotValidateStructureContext<Interfaces, SlotName>) => WidgetSynchronousVoidResult
+	readonly validateStructure?: (ctx: WidgetSlotValidateStructureContext<Interfaces, SlotName>) => WidgetSynchronousResult<Result>
 }
 
 export type WidgetSlotDefinitions<Interfaces extends WidgetInterfaces> = {
 	readonly [Name in WidgetSlotNameOf<Interfaces>]: WidgetSlotDefinition<Interfaces, Name>
 }
 
+/** The return type of the `validateStructure` a slots object declares for `Name`, or `unknown`. */
+type WidgetSlotStructureResultOf<Definitions, Name extends PropertyKey> = Definitions extends { readonly [Key in Name]: { readonly validateStructure?: (...args: never) => infer Result } }
+	? Result
+	: unknown
+
 /**
  * Rejects a slots object that carries a slot the interfaces never declared, including when the
- * object is supplied through a variable instead of a fresh object literal.
+ * object is supplied through a variable instead of a fresh object literal, and a slot validator that
+ * returns a thenable.
  */
 export type ExactWidgetSlotDefinitions<Interfaces extends WidgetInterfaces, Definitions>
-	= & WidgetSlotDefinitions<Interfaces>
-		& {
-			readonly [Name in keyof Definitions as Name extends WidgetSlotNameOf<Interfaces> ? never : Name]: never
-		}
+	= & {
+		readonly [Name in WidgetSlotNameOf<Interfaces>]: WidgetSlotDefinition<Interfaces, Name, WidgetSlotStructureResultOf<Definitions, Name>>
+	}
+	& {
+		readonly [Name in keyof Definitions as Name extends WidgetSlotNameOf<Interfaces> ? never : Name]: never
+	}
 
-export type WidgetPluginValidateStructure<Interfaces extends WidgetInterfaces> = (ctx: WidgetPluginValidateStructureContext<Interfaces>) => WidgetSynchronousVoidResult
+/** `Result` is the validator's own return type (see {@link WidgetSynchronousResult}). */
+export type WidgetPluginValidateStructure<Interfaces extends WidgetInterfaces, Result = unknown> = (ctx: WidgetPluginValidateStructureContext<Interfaces>) => WidgetSynchronousResult<Result>
 
 export interface WidgetStateMemberDefinition<
 	Interfaces extends WidgetInterfaces,
@@ -435,14 +454,16 @@ export interface WidgetPropertyDefinition<
 	readonly compute: (ctx: WidgetPropertyComputeContext<Interfaces, Deps>) => WidgetPropertyValueOf<Interfaces, Name>
 }
 
+/** `Result` is `execute`'s own return type (see {@link WidgetMethodExecuteResult}). */
 export interface WidgetMethodDefinition<
 	Interfaces extends WidgetInterfaces,
 	Name extends WidgetMemberKey,
 	Deps extends RegisteredDeps,
+	Result = unknown,
 > {
 	readonly registerDeps?: (ctx: WidgetRegisterDepsContext<Interfaces, 'method'>) => Deps
 	readonly validateArgs: (args: readonly unknown[], ctx: WidgetMethodValidateArgsContext<Interfaces>) => args is WidgetMethodArgsOf<Interfaces, Name>
-	readonly execute: (ctx: WidgetMethodExecuteContext<Interfaces, Name, Deps>) => WidgetSynchronousResult<WidgetMethodReturnOf<Interfaces, Name>>
+	readonly execute: (ctx: WidgetMethodExecuteContext<Interfaces, Name, Deps>) => WidgetMethodExecuteResult<WidgetMethodReturnOf<Interfaces, Name>, Result>
 }
 
 export interface WidgetEventDefinition {
@@ -490,8 +511,8 @@ export type WidgetMethodsSection<
 >
 	= & WidgetSectionMarker<'methods', Remaining>
 		& {
-			[Name in Remaining]: <const Deps extends RegisteredDeps = EmptyRegisteredDeps>(
-				definition: WidgetMethodDefinition<Interfaces, Name, Deps>,
+			[Name in Remaining]: <const Deps extends RegisteredDeps = EmptyRegisteredDeps, Result = unknown>(
+				definition: WidgetMethodDefinition<Interfaces, Name, Deps, Result>,
 			) => WidgetMethodsSection<Interfaces, Exclude<Remaining, Name>>
 		}
 
@@ -662,7 +683,7 @@ type WidgetPluginStructureStage<
 	Next extends WidgetPluginPhaseName | 'done',
 	NextMembers,
 > = WidgetPluginOrderedPhase<{
-	structure: (validateStructure: WidgetPluginValidateStructure<Interfaces>) => WidgetPluginStatePhase<Type, Interfaces>
+	structure: <Result = unknown>(validateStructure: WidgetPluginValidateStructure<Interfaces, Result>) => WidgetPluginStatePhase<Type, Interfaces>
 } & NextMembers, Interfaces, Next, 'structure' | Next>
 
 /**

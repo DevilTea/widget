@@ -24,7 +24,7 @@ import { readCompiledBlueprint } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
 import { createRuntimeAggregate } from './aggregate'
 import { buildBlueprintView } from './blueprint-view'
-import { createCallbackOwner, createRuntimeContext } from './context'
+import { createCallbackOwner, createRuntimeContext, runOutsideCallbacks } from './context'
 import { materializeDependencyTree } from './deps'
 import { buildCallbackEventEmitter, createEventPrimitive } from './event'
 import { runtimeInternals } from './internals'
@@ -133,7 +133,10 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				hasCandidate = true
 			}
 			else if (member.definition.default) {
-				candidate = member.definition.default({ ...buildConfigFragment() })
+				// `default` owns no dependency or `emit` callables: a Runtime created while a Method runs must
+				// not let it use that Method's (see `callbackScope`).
+				const { definition } = member
+				candidate = runOutsideCallbacks(() => definition.default!({ ...buildConfigFragment() }))
 				assertSyncValue(candidate, `State "${key}"'s default`)
 				hasCandidate = true
 			}

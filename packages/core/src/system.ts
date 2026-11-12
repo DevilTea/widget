@@ -7,7 +7,7 @@
 
 import type { DiagnosticCollector, RelativeSystemStructureDiagnosticInput } from './diagnostic'
 import type { BlueprintCompileView, WidgetSystemBlueprint } from './internal/contract'
-import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetPluginConfigMetadata, WidgetPluginTypeOf, WidgetSynchronousVoidResult } from './plugin'
+import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetPluginConfigMetadata, WidgetPluginTypeOf, WidgetSynchronousResult } from './plugin'
 import { compileBlueprint } from './blueprint/index'
 import { isCoreWidgetPlugin } from './plugin'
 import { createReadonlyMap } from './readonly-map'
@@ -33,11 +33,12 @@ export type WidgetSystemValidateStructureContext<Plugins extends AnyWidgetPlugin
 	}
 	& DiagnosticCollector<RelativeSystemStructureDiagnosticInput<Plugins>>
 
-export type WidgetSystemValidateStructure<Plugins extends AnyWidgetPluginTuple> = (ctx: WidgetSystemValidateStructureContext<Plugins>) => WidgetSynchronousVoidResult
+/** `Result` is the validator's own return type (see `WidgetSynchronousResult`). */
+export type WidgetSystemValidateStructure<Plugins extends AnyWidgetPluginTuple, Result = unknown> = (ctx: WidgetSystemValidateStructureContext<Plugins>) => WidgetSynchronousResult<Result>
 
-export interface CreateWidgetSystemOptions<Plugins extends AnyWidgetPluginTuple> {
+export interface CreateWidgetSystemOptions<Plugins extends AnyWidgetPluginTuple, Result = unknown> {
 	readonly plugins: Plugins
-	readonly validateStructure?: WidgetSystemValidateStructure<Plugins>
+	readonly validateStructure?: WidgetSystemValidateStructure<Plugins, Result>
 }
 
 /**
@@ -171,8 +172,8 @@ function readForeignPluginType(entry: unknown): string | null {
  * Creates an instance-scoped, immutable widget system. Malformed options, foreign plugins and duplicate
  * `plugin.type` are rejected with a `WidgetSystemConfigurationError`.
  */
-export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple>(
-	options: CreateWidgetSystemOptions<Plugins>,
+export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple, Result = unknown>(
+	options: CreateWidgetSystemOptions<Plugins, Result>,
 ): WidgetSystem<Plugins> {
 	assertWidgetSystemOptions(options)
 

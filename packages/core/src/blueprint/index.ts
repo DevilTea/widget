@@ -31,6 +31,7 @@ import type { WorkingNode } from './recovery'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { blueprintInternals } from '../internal/contract'
 import { inspectJsonValue, inspectParsedJsonValue } from '../json'
+import { runOutsideCallbacks } from '../runtime/context'
 import { freezeDiagnosticSnapshot } from '../runtime/diagnostics'
 import { createWidgetSystemRuntime } from '../runtime/index'
 import { resolveDependencies } from './deps'
@@ -97,17 +98,31 @@ function buildCompiledNodes(nodes: readonly WorkingNode[], diagnosticsByNode: Re
  * `sourceJsonProven` is set only for a value Core itself produced with `JSON.parse` (no reviver): such a
  * value can only leave the JSON domain through a non-finite number (`1e400`), so a cheap scan replaces the
  * full `inspectJsonValue` inspection and the result stays equivalent to `createBlueprint(JSON.parse(text))`.
+ *
+ * Compile-time plugin callbacks (config, structure, `registerDeps`) own no dependency or `emit` callables,
+ * so a Blueprint compiled while a Method runs must not let them use that Method's (see `callbackScope`).
  */
 export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 	system: WidgetSystem<Plugins>,
 	definition: unknown,
 	sourceJsonProven = false,
 ): WidgetSystemBlueprint<Plugins> {
+	return runOutsideCallbacks(() => compileBlueprintOutsideCallbacks(system, definition, sourceJsonProven))
+}
+
+function compileBlueprintOutsideCallbacks<Plugins extends AnyWidgetPluginTuple>(
+	system: WidgetSystem<Plugins>,
+	definition: unknown,
+	sourceJsonProven: boolean,
+): WidgetSystemBlueprint<Plugins> {
 	const recovery = recoverBlueprint(system, definition)
 	const { nodes, rootNodeId, nodeIdByPublicNode, nodeIdsByWidgetId, finalDiagnostics, diagnosticsByNode } = recovery
 	const jsonInspection = sourceJsonProven ? inspectParsedJsonValue(definition) : inspectJsonValue(definition)
 	const sourceJsonCompatible = jsonInspection.compatible
-	finalDiagnostics.push(...jsonInspection.diagnostics)
+	// One push per diagnostic, never `push(...diagnostics)`: wide input can produce more diagnostics than an
+	// engine accepts as call arguments.
+	for (const diagnostic of jsonInspection.diagnostics)
+		finalDiagnostics.push(diagnostic)
 
 	const semanticOrder = computeSemanticOrder(nodes, rootNodeId)
 	// `navigator` (full public nodes) backs only the *finalized* Blueprint's own navigation methods

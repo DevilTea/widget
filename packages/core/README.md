@@ -92,7 +92,10 @@ object, `plugins` not an array, or a non-function `validateStructure`),
 and `getPlugin(type)`, which returns `null` for an unregistered type.
 Inspection entries throw `WidgetInspectionError` (`@deviltea/widget-core/inspection`)
 and `getWidgetEventEmitter` throws `WidgetIntegrationError`
-(`@deviltea/widget-core/integration`, code `foreign-runtime`) for foreign inputs.
+(`@deviltea/widget-core/integration`, code `foreign-runtime`) for foreign inputs;
+`assertCoreRuntime(runtime)` from the same subpath performs only that passive
+provenance check, so a renderer adapter can fail fast at mount when it and the
+application loaded two copies of Core.
 See
 [Plugin registration errors](https://deviltea.github.io/widget/packages/widget-core#plugin-registration-errors)
 in the full guide.
@@ -246,7 +249,9 @@ Blueprint invalid; `meta` is the reserved extension key (any JSON value,
 preserved and never interpreted). An `id` is any string, including `''`.
 Authored source may nest at most `MAX_JSON_DEPTH` (256) containers deep.
 `blueprint.getSourcePath(node)` returns the structured `SourcePath` of a node
-inside `blueprint.source`, usable directly as a `SourcePatch` path.
+inside `blueprint.source`, usable directly as a `SourcePatch` path — also for the
+node recovery stops at for depth, whose path has at most `MAX_JSON_DEPTH + 2`
+segments, the longest path a `SourcePatch` accepts.
 
 Recovery is best-effort: even invalid input still yields a navigable root and
 node tree via `blueprint.getWidget` / `getParent` / `getChildren` /
@@ -377,7 +382,7 @@ subscribers. `failure.code` is one of:
   | --- | --- |
   | `invalid-operation` | the patch is not an array, an operation is not an object, or its `op` is unknown |
   | `invalid-path` | a malformed path only |
-  | `max-depth-exceeded` | a path longer than `MAX_JSON_DEPTH`, or a `copy`/`move` source nested deeper than that |
+  | `max-depth-exceeded` | a path longer than `MAX_JSON_DEPTH + 2` segments (the longest source path of a node a Blueprint materializes), or a `copy`/`move` source nested deeper than `MAX_JSON_DEPTH` |
   | `path-not-found` | the path does not identify an existing location |
   | `path-not-traversable` | the path passes through a non-traversable value |
   | `invalid-array-index` | an Array parent was addressed by anything other than an in-bounds canonical index (see below) |
@@ -454,8 +459,11 @@ later occurrence is de-identified with its available subtree preserved.
   `widget.events[name].subscribe(listener)`. Delivery is synchronous and
   depth-first for nested emits; a throwing public listener is isolated like every
   other listener (the remaining listeners and the emitting Method still run, and
-  the error is reported asynchronously). Events are host-facing and cannot be
-  dependency targets. Emit authority belongs
+  the error is reported asynchronously). A runaway loop (a listener that keeps
+  re-invoking the emitting Method) is cut off once one Runtime's emits nest more
+  than 128 deep: `WidgetSystemRuntimeReentrancyError` (a `RangeError`, code
+  `emit-depth-exceeded`) unwinds to the call that started the loop. Events are
+  host-facing and cannot be dependency targets. Emit authority belongs
   to Method `execute` (`emit`) and, for renderers, `@deviltea/widget-core/integration`.
   See [Events](https://deviltea.github.io/widget/packages/widget-core#events).
 - `widget.state[key].get()` returns `T | null` directly — it is not an
@@ -470,7 +478,10 @@ later occurrence is de-identified with its available subtree preserved.
   Always `set()` a new value.
 - A throwing Property `compute` never makes a writer (`state.set`, a Method call,
   `resetState()`) throw and never suppresses other subscribers; it is reported
-  asynchronously, while `get()` and dependency reads still rethrow.
+  asynchronously, while `get()` and dependency reads still rethrow. The exception
+  stays cached until a dependency changes — except a stack overflow (a first
+  read of a chain of on the order of a thousand Properties), which the next read
+  evaluates again, so a long chain can be warmed bottom-up.
 - `runtime.snapshotState()` returns the current State as a plain
   `Record<WidgetId, Record<string, unknown>>` (`null` members omitted) that is
   directly usable as `overrideStateDefaults`; `widget.resetState()` resets one
@@ -478,7 +489,8 @@ later occurrence is de-identified with its available subtree preserved.
   [Reusing a Runtime](https://deviltea.github.io/widget/packages/widget-core#reusing-a-runtime-resetstate).
 - `deps.*` and `emit` callables are valid only while their own callback is the
   innermost running callback. A retained callable, a timer or promise
-  continuation, or a nested callback gets a `TypeError` (and
+  continuation, a nested callback, or a listener or `validate`-style callback
+  running inside the Method gets a `TypeError` (and
   `WidgetSystemRuntimeDisposedError` after dispose). A Property can never write
   State. Core is synchronous by design; see
   [Async work](https://deviltea.github.io/widget/packages/widget-core#async-work)

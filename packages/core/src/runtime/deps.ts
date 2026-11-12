@@ -130,18 +130,28 @@ export function dependencyDedupeDescriptor(leafId: number, failureAnchor: unknow
  * is captured as `unknown` and passed through the sync-boundary guard *before* being interpreted as a
  * boolean — a `Promise.resolve(false)` escape hatch is truthy and would otherwise make a rejection look
  * like an accepted refinement.
+ *
+ * A refinement owns no dependency or `emit` callables, so no callback is open while it runs (see
+ * `callbackScope`): not even the consumer whose dependency read invoked it.
  */
 function applyRefinements(
 	value: unknown,
 	refinements: readonly DependencyRefinement[],
 ): { readonly ok: true, readonly value: unknown } | { readonly ok: false, readonly received: unknown } {
-	for (const refine of refinements) {
-		const accepted: unknown = refine(value)
-		assertSyncValue(accepted, 'A dependency .validate() refinement')
-		if (!accepted)
-			return { ok: false, received: value }
+	const previousOwner = callbackScope.owner
+	callbackScope.owner = null
+	try {
+		for (const refine of refinements) {
+			const accepted: unknown = refine(value)
+			assertSyncValue(accepted, 'A dependency .validate() refinement')
+			if (!accepted)
+				return { ok: false, received: value }
+		}
+		return { ok: true, value }
 	}
-	return { ok: true, value }
+	finally {
+		callbackScope.owner = previousOwner
+	}
 }
 
 function locationOf(operation: BlueprintDependencyReference['operation'], widgetId: WidgetId): RuntimeDiagnosticLocation {

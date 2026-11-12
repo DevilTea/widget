@@ -1,6 +1,6 @@
 import type { DiagnosticPath, JsonCompatibilityReason } from './diagnostic'
 import type { JsonValue } from './json'
-import { inspectJsonValue, jsonEqual, MAX_JSON_DEPTH, sameValueZero } from './json'
+import { findFirstJsonViolation, jsonEqual, MAX_JSON_DEPTH, sameValueZero } from './json'
 
 export type SourcePath = readonly (string | number)[] | string
 
@@ -24,8 +24,9 @@ export type SourcePatch = readonly SourcePatchOperation[]
  * parent (`'length'`, `'foo'`, `'01'`, structured `'-'`) in both path forms. `invalid-operation` is a
  * patch that is not an Array, or an operation that is not an object or has an unknown `op`.
  * `json-incompatible-value` is an `add`/`replace`/`test` operand outside Core's JSON domain (including one
- * nested deeper than `MAX_JSON_DEPTH`); `max-depth-exceeded` is a path with more than `MAX_JSON_DEPTH`
- * segments or a `copy`/`move` source value nested deeper than that; `source-access-failed` concerns unsafe
+ * nested deeper than `MAX_JSON_DEPTH`); `max-depth-exceeded` is a path with more than `MAX_JSON_DEPTH + 2`
+ * segments (the longest path of a node a Blueprint materializes) or a `copy`/`move` source value nested
+ * deeper than `MAX_JSON_DEPTH`; `source-access-failed` concerns unsafe
  * access to source material only.
  */
 export type SourcePatchOperationFailureCode
@@ -85,11 +86,19 @@ function failure(code: SourcePatchOperationFailureCode, message = PATCH_ERROR_ME
 	return { ok: false, error: { code, message } }
 }
 
+/**
+ * The most segments a SourcePatch path may have: the longest source path of a widget node a Blueprint
+ * materializes. Recovery stops at a node nested inside `MAX_JSON_DEPTH` or more containers, and that node is
+ * three segments (`slots`, slot name, index) below a parent nested inside fewer, so its path has at most
+ * `MAX_JSON_DEPTH + 2` segments. Removing or replacing exactly that node must stay possible.
+ */
+const MAX_PATH_SEGMENTS = MAX_JSON_DEPTH + 2
+
 function parsePath(path: unknown): PatchResult<ParsedPath> {
 	const parsed = parsePathSegments(path)
-	// A path addresses a value nested inside that many containers; deeper cannot exist in admitted source, and
-	// the recursive rebuild below must stay bounded.
-	if (parsed.ok && parsed.value.segments.length > MAX_JSON_DEPTH)
+	// A path addresses a value nested inside that many containers, and the recursive rebuild below must stay
+	// bounded.
+	if (parsed.ok && parsed.value.segments.length > MAX_PATH_SEGMENTS)
 		return failure('max-depth-exceeded')
 	return parsed
 }
@@ -545,10 +554,9 @@ function operationError(index: number, error: PatchError): SourcePatchOperationF
  * of the operand (the same facts the Blueprint reports for the same code).
  */
 function operandFailure(value: unknown): PatchError | null {
-	const inspection = inspectJsonValue(value)
-	if (inspection.compatible)
+	const first = findFirstJsonViolation(value)
+	if (first === null)
 		return null
-	const first = inspection.diagnostics[0]!
 	return {
 		code: 'json-incompatible-value',
 		message: PATCH_ERROR_MESSAGES['json-incompatible-value'],

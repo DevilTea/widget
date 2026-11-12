@@ -241,6 +241,27 @@ describe('the compute exception is reported outside the flush', () => {
 			.toEqual([['boom', 14], ['boom', 15]])
 	})
 
+	it('reports one exception once, however many subscriptions re-read it in the same turn', async () => {
+		const harness = createHarness()
+		subscribeAll(harness, ['boom', 'boom'])
+		harness.widget.properties.downstream.subscribe(() => {})
+
+		harness.widget.state.n.set(BOOM)
+		await waitForAsyncReporting()
+
+		expect(messagesOf(reported))
+			.toEqual([`boom at ${BOOM}`])
+
+		// A later turn that reads the same cached exception reports it again.
+		harness.widget.properties.boom.subscribe(() => {})
+		await waitForAsyncReporting()
+
+		expect(messagesOf(reported))
+			.toEqual([`boom at ${BOOM}`, `boom at ${BOOM}`])
+		expect(reported[1])
+			.toBe(reported[0])
+	})
+
 	it('isolates a subscription whose first evaluation throws and notifies it on the next completed recompute', async () => {
 		const harness = createHarness(BOOM)
 		const results: Array<ExecutionResult<number | null, unknown>> = []

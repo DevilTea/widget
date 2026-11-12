@@ -28,7 +28,7 @@ export type {
 	UnknownTargetStateDependencyOperations,
 } from './dep'
 
-export { EMPTY_DIAGNOSTICS, WidgetSystemRuntimeDisposedError } from './diagnostic'
+export { EMPTY_DIAGNOSTICS, WidgetSystemRuntimeDisposedError, WidgetSystemRuntimeReentrancyError } from './diagnostic'
 
 export type {
 	BlueprintConfigDiagnostic,

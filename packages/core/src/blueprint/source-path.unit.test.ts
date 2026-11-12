@@ -192,6 +192,23 @@ describe('blueprint.getSourcePath', () => {
 			.toEqual([[], ['slots', 'children', 0]])
 	})
 
+	it('gives unresolved inspection nodes their own source path too', () => {
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'container',
+			slots: { children: [{ id: 'a', type: 'leaf' }, { id: 'ghost', type: 'unknown', slots: { footer: [{ type: 'leaf' }] } }] },
+		})
+		const inspection = inspectBlueprint(blueprint)
+		const unresolved = inspection.nodes.filter(node => !node.resolved)
+
+		expect(unresolved.map(node => node.sourcePath))
+			.toEqual([['slots', 'children', 1], ['slots', 'children', 1, 'slots', 'footer', 0]])
+		for (const node of unresolved) {
+			expect(node.sourcePath)
+				.toEqual(blueprint.getSourcePath(node.node))
+		}
+	})
+
 	it('returns an immutable path', () => {
 		const blueprint = system.createBlueprint({ id: 'root', type: 'container', slots: { children: [{ id: 'a', type: 'leaf' }] } })
 		const path = blueprint.getSourcePath(blueprint.getWidget('a')!)!

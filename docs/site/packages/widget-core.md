@@ -642,9 +642,14 @@ order for every resolved node, and each reports through its own collector:
 read-only compile view (`root`, `getWidget`, `getParent`, `getLocation`,
 `getChildren`, `getChildrenAt`). Every diagnostic input has a `message` and an
 optional `reason` string, which is carried onto the resulting
-`invalid-widget-structure` diagnostic. Each validator must be synchronous; an
-`async` validator, or one returning a thenable, is a type error (and a runtime
-`TypeError` for untyped code).
+`invalid-widget-structure` diagnostic. Each validator must be synchronous. Written
+into the builder (`.slots()`, `.structure()`) or into `createWidgetSystem`'s
+options, an `async` validator, or one returning anything with a callable `then`,
+is a type error, while any synchronous return value type-checks. A validator
+typed only through a standalone annotation (`WidgetPluginValidateStructure`,
+`WidgetSlotDefinition`, `WidgetSystemValidateStructure`) is not checked this way,
+because the annotation cannot see the function's own return type; the runtime
+guard still throws a `TypeError` for a thenable result.
 
 A validator that reports a location that does not exist in the Blueprint (for
 example a `slot` the widget never declared, or a node that is not part of this
@@ -843,9 +848,13 @@ createWidgetPlugin('counter')
 - A Method's success value is typed exactly as declared (`T`, never
   `T | null`); a `void` Method returns `{ ok: true, value: undefined }`, typed
   `ExecutionResult<void, …>`, so there is nothing meaningful to read from it.
-  A Method declared to return `void` rejects an `async` or thenable `execute`
-  at compile time; async work is not part of Core (see
-  [Async work](#async-work)).
+  An `execute` written into the builder that returns a thenable (an `async`
+  function, or anything with a callable `then`) is a compile-time error even
+  when the Method is declared to return `void` or `unknown`, while any
+  synchronous value — an `unknown`-typed dependency read included — type-checks.
+  A standalone `WidgetMethodDefinition` annotation cannot see the function's own
+  return type, so there only the runtime guard rejects a thenable. Async work is
+  not part of Core (see [Async work](#async-work)).
 - Method dependency registration never binds invocation arguments — a
   registered `methods.invoke('name')` dependency is a callable that accepts
   runtime arguments when the consumer calls it, validated by the *target*
@@ -914,6 +923,13 @@ is valid only for that call:
   `setTimeout` or promise continuation, or from a different callback running
   inside it — they throw a `TypeError` and do nothing. After the Runtime is
   disposed they throw `WidgetSystemRuntimeDisposedError` instead.
+- Code that is not such a callback never counts as one, even while it runs
+  inside one. While an external listener (State, Property, diagnostics, Event,
+  `WidgetDocument` or inspection) or a plugin callback that receives no
+  dependency callables (`validate`, `validateArgs`, `default`, a dependency
+  `.validate()` refinement, config and structure callbacks) runs, no callback is
+  open, so a callable retained from the Method that triggered it throws. The
+  Method's own callables work again once that code has returned or thrown.
 
 Consequences, stated plainly:
 
@@ -925,6 +941,12 @@ Consequences, stated plainly:
 - A Property can never write State, even through a setter that a Method
   retained: while a Property computes it is the innermost callback, so the
   Method's setter is rejected.
+- An Event listener notified by a Method's `emit`, or a State `validate` run by
+  the Method's own write, cannot use that Method's `deps` or `emit` either.
+
+One case is not detected: the check compares members, not invocations, so a
+callable a Method retained from an earlier invocation still works while a later
+invocation of the same Method is running. Do not rely on it.
 
 To do work later, return from the callback and perform the later step from the
 host through the public Runtime surface (see [Async work](#async-work)).
@@ -1054,10 +1076,13 @@ exactly these recognized own keys:
   roughly 85 levels of widgets. Deeper input is reported as
   `json-incompatible-value` with reason `max-depth-exceeded`, and the
   over-deep node as `invalid-widget-definition`; no entry point throws a
-  `RangeError` for deep input.
+  `RangeError` for deep input, nor for wide input (a node with hundreds of
+  thousands of unknown keys, or an array with as many invalid elements, yields
+  one diagnostic per problem).
 - `isJsonValue(value)` (exported from the root) is the type guard for the same
   JSON domain: finite numbers, strings, booleans, `null`, plain objects and
-  dense arrays, within `MAX_JSON_DEPTH`, with no cycles.
+  dense arrays, within `MAX_JSON_DEPTH`, with no cycles. It answers at the first
+  value outside the domain without inspecting the rest.
 
 ### Compilation boundary and recovery
 
@@ -1089,7 +1114,11 @@ identity (missing/invalid id or type, unknown plugin type) produces an
 **unresolved** node. An unresolved node still exposes best-effort hints:
 `id: string | null` (the authored `id` when it is a string) and
 `type: string | null` (the authored `type` when it is a string, even an
-unknown one).
+unknown one). That includes the node at which recovery stops because it is
+nested too deep and a node that repeats an ancestor's object in a cycle. An
+unresolved node with an `id` hint is found by `getWidget` and takes part in
+`duplicate-widget-id` like any other node, except a cyclic repeat, which is the
+same authored object as its ancestor and is not indexed again.
 
 Navigation works on both valid and invalid Blueprints:
 
@@ -1113,8 +1142,12 @@ inside `blueprint.source` (`[]` for the root, `['slots', 'content', 0]` for the
 first child in `content`), or `null` for a node that does not belong to this
 Blueprint. The path is usable verbatim as a `SourcePatch` path against the same
 source, which is how a diagnostic's `location.node` becomes an edit (see
-[Persisted documents](#persisted-documents)). Blueprint inspection nodes carry
-the same value as `sourcePath`.
+[Persisted documents](#persisted-documents)). That holds for every node the
+Blueprint materializes, including the one recovery stops at for depth: a node
+is recovered further only while it is nested inside fewer than `MAX_JSON_DEPTH`
+containers, so no node's path has more than `MAX_JSON_DEPTH + 2` segments,
+which is exactly the longest path a `SourcePatch` accepts. Blueprint inspection
+nodes carry the same value as `sourcePath`.
 
 ### Diagnostics
 
@@ -1361,7 +1394,7 @@ operations succeed, commits it at `revision + 1`, then notifies subscribers.
   | --- | --- |
   | `invalid-operation` | the patch is not an array, an operation is not an object, or its `op` is unknown |
   | `invalid-path` | a malformed path only (for example a JSON Pointer without a leading `/` or with a bad `~` escape, or a non-finite number segment) |
-  | `max-depth-exceeded` | a path with more than `MAX_JSON_DEPTH` segments, or a `copy`/`move` source value nested deeper than that |
+  | `max-depth-exceeded` | a path with more than `MAX_JSON_DEPTH + 2` segments (the longest source path of a node a Blueprint materializes), or a `copy`/`move` source value nested deeper than `MAX_JSON_DEPTH` |
   | `path-not-found` | the path does not identify an existing location |
   | `path-not-traversable` | the path passes through a non-traversable value |
   | `invalid-array-index` | an Array parent was addressed by anything other than an in-bounds canonical index (see below) |
@@ -1594,17 +1627,25 @@ A `compute` that **throws** (an implementation exception, not a Diagnostic)
 never breaks the writer that invalidated it: `state.set`, a Method call and
 `resetState()` return normally, and the other subscribers are still notified.
 Core reports the exception asynchronously (a queued microtask, see
-[Host requirements](#host-requirements)); that subscription is skipped for this
-recompute and resumes on the next completed recompute. A direct `get()` and a
-dependency read of the Property still rethrow synchronously, and
-`subscribe()` whose first evaluation throws still returns a live handle.
+[Host requirements](#host-requirements)), once per synchronous turn even when
+several subscriptions (the Property's own and its dependents') re-read it; that
+subscription is skipped for this recompute and resumes on the next completed
+recompute. A direct `get()` and a dependency read of the Property still rethrow
+synchronously, and `subscribe()` whose first evaluation throws still returns a
+live handle. The exception stays the Property's cached outcome until a
+dependency changes, so reads in between rethrow it without running `compute`
+again.
 
 A first read of a long chain of Properties that each depend on the previous one
-is evaluated recursively. Roughly 1,500 to 2,000 chained Properties exhausted
-the default stack in a measured Node 24 run (the exact figure depends on how
-much stack each `compute` uses), surfacing as a `RangeError`. Keep dependency
-chains well below that, and read intermediate Properties first when a chain must
-be long.
+is evaluated recursively. On the order of a thousand chained Properties
+exhaust the default stack (about 1,250 to 1,400 in measured Node 24 runs; the
+figure depends on the engine's stack size and on how much stack each `compute`
+uses), surfacing as a `RangeError`. A stack overflow is the one exception that
+is not kept as a cached outcome: it reflects how deep the read was, not the
+Property's inputs, so a later read evaluates again. A chain that is too long for
+one read can therefore be warmed bottom-up, reading every few hundred
+Properties from the start of the chain before the end. Keep dependency chains
+well below the limit where you can.
 
 ### Runtime Methods
 
@@ -1714,6 +1755,19 @@ runtime.dispose()
   remaining listeners captured at emit start still run, the emitting Method
   completes normally, and the error is reported asynchronously (see
   [Host requirements](#host-requirements)).
+- A listener may call a Method that emits again, a few levels deep. A loop that
+  never ends — a listener that keeps re-invoking the Method that emitted — is
+  cut off by a safety guard: when one Runtime's emits nest more than 128 levels
+  deep, the next `emit` throws `WidgetSystemRuntimeReentrancyError` (a
+  `RangeError`, `code: 'emit-depth-exceeded'`). That error, and an engine stack
+  overflow raised inside a listener, are the only exceptions Event listener
+  isolation does not swallow: every emit of the Runtime still on the stack
+  rethrows it, even if listener code caught it, so it reaches the call that
+  started the loop after work proportional to the depth. The guard bounds work;
+  it does not make any Blueprint invalid. 128 levels is generous for real
+  re-entrancy (an event bubbled through the deepest widget tree `MAX_JSON_DEPTH`
+  admits, one Method per level, fits) and far below the roughly 650 nested
+  emits at which a minimal loop exhausts Node's default stack.
 - Subscriptions are scoped to the Runtime and cleared by `runtime.dispose()`.
   Calling `emit` after disposal throws `WidgetSystemRuntimeDisposedError`.
 - Events are host-facing. A widget's callbacks cannot subscribe to an Event, and
@@ -1987,6 +2041,39 @@ instance or a structural look-alike) is rejected with code `foreign-runtime`
 before any pairing check. Pairing is then validated against Core-owned state,
 never the caller-supplied objects' public shape.
 
+`assertCoreRuntime(runtime)` performs only that provenance check: it throws
+`WidgetIntegrationError` with code `foreign-runtime` unless `runtime` was
+produced by this loaded copy of Core, and otherwise returns nothing. It is
+passive — it reads no Runtime state, grants no emit authority, and also accepts a
+disposed Runtime — so an adapter can call it when it mounts to fail fast when the
+application and the adapter resolved two different copies of
+`@deviltea/widget-core`:
+
+<!-- sample: integration-assert run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { assertCoreRuntime, WidgetIntegrationError } from '@deviltea/widget-core/integration'
+
+const plugin = createWidgetPlugin('label')
+	.description('A label widget')
+	.interfaces<Record<never, never>>()
+	.done()
+const blueprint = createWidgetSystem({ plugins: [plugin] })
+	.createBlueprint({ id: 'l', type: 'label' })
+if (blueprint.status !== 'valid')
+	throw new Error('invalid')
+
+assertCoreRuntime(blueprint.createRuntime()) // passes: produced by this copy of Core
+
+try {
+	assertCoreRuntime({ getWidget: () => null }) // a structural look-alike
+}
+catch (error) {
+	if (error instanceof WidgetIntegrationError)
+		console.log(error.code) // foreign-runtime
+}
+```
+
 The error message is descriptive only; consumers discriminate by class and
 `code`. Runtime disposal continues to use `WidgetSystemRuntimeDisposedError`
 rather than being wrapped as an integration error.
@@ -2019,7 +2106,11 @@ provides and which Core's own tests exercise:
   `WidgetSystemRuntimeDisposedError`.
 - **Listener exceptions are isolated.** A throwing listener never disturbs the
   writer or other listeners (see [Runtime diagnostics](#runtime-diagnostics)),
-  so an adapter's listeners need not guard against each other.
+  so an adapter's listeners need not guard against each other. The one
+  exception is a runaway Event loop: the emit re-entrancy guard's
+  `WidgetSystemRuntimeReentrancyError` (and an engine stack overflow) passes
+  through Event listeners, including through an emitter obtained from
+  `getWidgetEventEmitter` (see [Events](#events)).
 - **Do not mutate what you read.** State values and the resolved config are
   passed by reference.
 
@@ -2611,9 +2702,11 @@ Release a library's own dependents after Core, never before.
   (`validate`, `resolve`, `default`, `validateStructure`, `registerDeps`,
   `compute`, `validateArgs`, `execute`) is synchronous. A returned
   Promise/thenable is a contract violation on the plugin author's side, not
-  a `Diagnostic` and not an `ExecutionResult.failure`. For `void`-returning
-  Methods and for the structure validators (slot, plugin, system) an `async`
-  function is rejected by the type checker too.
+  a `Diagnostic` and not an `ExecutionResult.failure`. An `execute` or
+  structure validator (slot, plugin, system) written into the builder or the
+  System options that returns a thenable is rejected by the type checker too,
+  whatever the declared return type; a callback typed only by a standalone
+  definition type is caught by the runtime guard alone.
 - **Callback-context lifetime.** A callback's `addDiagnostic` /
   `hasAnyDiagnostic`, its dependency callables and its `emit` callables belong
   to that synchronous call (see
@@ -2638,15 +2731,17 @@ you who is responsible.
 |---|---|---|
 | Diagnostics | facts about authored data and runtime values; a normal result, never thrown | every code in [Diagnostics](#diagnostics) and [Runtime diagnostics](#runtime-diagnostics) |
 | Result envelopes | `ExecutionResult` from Runtime operations (`ok`, `value` or `failure.diagnostics`); `{ ok, changed }` or a single coded failure from `WidgetDocument.applyPatch`; `{ ..., diagnostics }` returns from the separated-source tools | `state.set()`, a Method call, `applyPatch()` |
-| Coded `Error` classes | a boundary was used wrongly; discriminate by class and `code`, never by `message` | `WidgetSystemConfigurationError` (`invalid-options`, `foreign-plugin`, `duplicate-plugin-type`) from `createWidgetSystem`; `WidgetSystemRuntimeDisposedError` (`runtime-disposed`) from a disposed Runtime; `WidgetInspectionError` (`foreign-plugin`, `foreign-blueprint`, `foreign-runtime`) from `@deviltea/widget-core/inspection`; `WidgetIntegrationError` (`runtime-widget-mismatch`, `foreign-runtime`) from `@deviltea/widget-core/integration` |
+| Coded `Error` classes | a boundary was used wrongly; discriminate by class and `code`, never by `message` | `WidgetSystemConfigurationError` (`invalid-options`, `foreign-plugin`, `duplicate-plugin-type`) from `createWidgetSystem`; `WidgetSystemRuntimeDisposedError` (`runtime-disposed`) from a disposed Runtime; `WidgetSystemRuntimeReentrancyError` (`emit-depth-exceeded`, a `RangeError`) from the emit re-entrancy guard; `WidgetInspectionError` (`foreign-plugin`, `foreign-blueprint`, `foreign-runtime`) from `@deviltea/widget-core/inspection`; `WidgetIntegrationError` (`runtime-widget-mismatch`, `foreign-runtime`) from `@deviltea/widget-core/integration` |
 | Uncoded `TypeError` and others | a plugin or callback broke its contract: a malformed declaration, a returned thenable, a closed collector or callable used late, a structure validator reporting a location that does not exist | thrown at plugin build, compile or call time; an implementation bug, not a Diagnostic |
 
 Plugin exceptions are not wrapped or converted: a `compute` or `execute` that
 throws propagates unchanged to the caller that triggered it (for a Method call
 and for `get()`), and `createBlueprintFromJson` throws the `SyntaxError` from
-`JSON.parse` unchanged. Runaway recursion surfaces as a `RangeError`. Listener
-exceptions are the exception to propagation: they are isolated (see
-[Host requirements](#host-requirements)).
+`JSON.parse` unchanged. Runaway recursion surfaces as a `RangeError`; a runaway
+Event loop surfaces as `WidgetSystemRuntimeReentrancyError` (see
+[Events](#events)). Listener exceptions are the exception to propagation: they
+are isolated (see [Host requirements](#host-requirements)), except that Event
+listener isolation lets that guard error and an engine stack overflow through.
 
 There are two different `reason` fields. On a diagnostic a plugin authored
 (`invalid-widget-config`, `invalid-widget-structure`, `invalid-state-value`,
@@ -2669,7 +2764,8 @@ IIFE). The current implementation needs:
   listener (`subscribe` / `subscribeDiagnostics`), a throwing public Event
   listener, a throwing inspection listener, a throwing `WidgetDocument`
   subscriber, and a Property `compute` that throws while a subscription
-  re-evaluates it. An embedded host must run its pending jobs (for example
+  re-evaluates it (one report per exception and synchronous turn, however many
+  subscriptions re-read it). An embedded host must run its pending jobs (for example
   `rquickjs`'s pending-job execution, or `JS_ExecutePendingJob` in
   QuickJS); otherwise these errors never surface. Without a global
   `queueMicrotask`, the rethrow itself fails with a `ReferenceError` at the

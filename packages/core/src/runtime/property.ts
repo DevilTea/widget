@@ -12,7 +12,9 @@
  * A `compute` that throws never throws out of the alien computed: the exception is cached as the
  * computed's outcome (see {@link ComputeException}) and rethrown by every tracked/direct read. An
  * exception escaping a computed would otherwise escape alien-signals' flush from whichever effect's
- * dirty check re-evaluated it, through an unrelated writer, and drop the rest of that flush's queue.
+ * dirty check re-evaluated it, through an unrelated writer, and drop the rest of that flush's queue. An
+ * engine stack overflow is the one outcome a later read does not reuse: it reflects the stack depth of the
+ * read that produced it, not the compute's inputs.
  *
  * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §14, amendment "Implementation verification —
  * alien-signals@3.2.1 conformance" (#4).
@@ -26,7 +28,7 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './context'
 import { computed, signal } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
-import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
+import { createTrackedSubscription, invokeListenerIsolated, isEngineStackOverflow, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { callbackScope } from './context'
 import { buildPropertyResultDiagnostic, toDiagnosticSnapshot } from './diagnostics'
@@ -48,7 +50,9 @@ const computeExceptionKey: unique symbol = Symbol('@deviltea/widget-core:compute
 /**
  * The cached outcome of an evaluation whose `compute` (or its sync-boundary check) threw. Like a completed
  * result it stays cached until a dependency changes, so every read in between rethrows the same exception
- * instead of re-running `compute`. A plain symbol-keyed record, never confused with an `ExecutionResult`.
+ * instead of re-running `compute` — except an engine stack overflow, which the next read evaluates again
+ * (see `getResultWithInspectionPublish`). A plain symbol-keyed record, never confused with an
+ * `ExecutionResult`.
  */
 interface ComputeException {
 	readonly [computeExceptionKey]: unknown
@@ -128,24 +132,37 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			invokeListenerIsolated(entry.listener, snapshot)
 	}
 
-	const resultComputed = computed<PropertyOutcome>(() => {
-		const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimePropertyDiagnostic>()
-		const sink: ActiveDiagnosticSink = {
-			addFinalizedDiagnostic: (diagnostic, dedupe) => collector.addFinalizedDiagnostic(diagnostic as RuntimePropertyDiagnostic, dedupe),
-		}
+	// Stack-overflow recovery bookkeeping (see `getResultWithInspectionPublish`): how many evaluations have
+	// started, and the per-Property signal a read writes to make the computed evaluate again. The signal is
+	// created by the first evaluation, so a Property that is never read costs nothing.
+	let evaluations = 0
+	let retries = 0
+	let retrySignal: { (): number, (value: number): void } | null = null
 
-		const ctx = {
-			widget: params.selfNode,
-			blueprint: params.blueprintView,
-			deps: params.deps,
-			...params.buildConfigFragment(),
-			addDiagnostic: collector.addDiagnostic,
-			hasAnyDiagnostic: collector.hasAnyDiagnostic,
-		}
+	function evaluate(): PropertyOutcome {
+		++evaluations
+		// Tracked first, before anything that could throw, so every evaluation that produced an outcome depends
+		// on it. Outside the `try`: an evaluation that cannot even read it never produces an outcome (see
+		// `getResultWithInspectionPublish` for how that case is recovered).
+		;(retrySignal ??= signal(0))()
 
 		// Everything below is caught: this getter can run inside any effect's dirty check during a flush, and
 		// an exception escaping it would escape that flush (see the module doc).
 		try {
+			const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimePropertyDiagnostic>()
+			const sink: ActiveDiagnosticSink = {
+				addFinalizedDiagnostic: (diagnostic, dedupe) => collector.addFinalizedDiagnostic(diagnostic as RuntimePropertyDiagnostic, dedupe),
+			}
+
+			const ctx = {
+				widget: params.selfNode,
+				blueprint: params.blueprintView,
+				deps: params.deps,
+				...params.buildConfigFragment(),
+				addDiagnostic: collector.addDiagnostic,
+				hasAnyDiagnostic: collector.hasAnyDiagnostic,
+			}
+
 			// This Property becomes the innermost running callback for the duration of `compute` (see
 			// `callbackScope`): only its own dependency callables are usable, and they report into `sink`.
 			// Saved and restored with plain assignments, so the restore survives an exhausted stack.
@@ -195,7 +212,21 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			// the exception used to propagate out of the computed.
 			return { [computeExceptionKey]: error }
 		}
-	})
+	}
+
+	let resultComputed = computed<PropertyOutcome>(evaluate)
+
+	/**
+	 * Makes the computed evaluate again although no dependency changed, for a cached outcome that is an
+	 * engine stack overflow: that depends on how deep the stack was when the evaluation ran, not on the
+	 * compute's inputs. The write marks this Property (and through it its dependents) stale; its propagation
+	 * is held until the enclosing Runtime operation leaves, like any write made while an evaluation may run.
+	 */
+	function reevaluateAfterStackOverflow(): PropertyOutcome {
+		const signal = retrySignal!
+		writeDeferringFlush(() => signal(++retries))
+		return resultComputed()
+	}
 
 	/**
 	 * Reads the computed result through the exact same call every existing consumer already makes, then
@@ -216,14 +247,34 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 *
 	 * A cached {@link ComputeException} is rethrown here, after the computed read has linked the caller
 	 * (an enclosing evaluation or a subscription effect) to this Property, and is never published.
+	 *
+	 * Two outcomes are not kept, because they depend on the stack depth of an earlier read rather than on
+	 * the Property's inputs, and a later read from a shallower stack must be able to succeed (warming a long
+	 * chain bottom-up relies on it):
+	 *
+	 * - a cached engine stack overflow that this read did not just produce is evaluated again (see
+	 *   {@link reevaluateAfterStackOverflow}); one this read produced is thrown, since retrying at the same
+	 *   depth would only overflow again;
+	 * - a computed with no outcome at all: the stack ran out inside alien-signals' own bookkeeping or at the
+	 *   very start of the first evaluation, so the exception escaped the computed and left it marked clean
+	 *   without a value. Nothing ever linked to a computed whose evaluation never completed (alien-signals
+	 *   links the reader only after a read returns), so it is replaced by a fresh one.
 	 */
 	function getResultWithInspectionPublish(): ExecutionResult<unknown, RuntimePropertyDiagnostic> {
+		const evaluationsBefore = evaluations
 		// `runRuntimeOperation` only records that an evaluation may start here: when this read is the
 		// outermost such call, the diagnostic-snapshot propagations deferred during the evaluation are released
 		// as soon as the computed has committed — before the inspection publication below, exactly the
 		// order a direct in-evaluator write produced. A nested read (a dependent Property's evaluator, or
 		// an effect run inside a state write's flush) leaves the release to the outermost call instead.
-		const result = runRuntimeOperation(resultComputed)
+		let result = runRuntimeOperation(resultComputed) as PropertyOutcome | undefined
+		if (result === undefined) {
+			resultComputed = computed<PropertyOutcome>(evaluate)
+			result = runRuntimeOperation(resultComputed)
+		}
+		else if (computeExceptionKey in result && evaluations === evaluationsBefore && isEngineStackOverflow(result[computeExceptionKey])) {
+			result = runRuntimeOperation(reevaluateAfterStackOverflow)
+		}
 		if (computeExceptionKey in result)
 			throw result[computeExceptionKey]
 		if (result !== lastPublishedResult) {

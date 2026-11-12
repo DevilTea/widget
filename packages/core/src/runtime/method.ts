@@ -86,12 +86,17 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 
 			let validArgs: unknown
 			let hasArgsDiagnostic: boolean
+			// `validateArgs` owns no dependency or `emit` callables, so no callback is open while it runs (see
+			// `callbackScope`), even when the invoking Method or Property is still running.
+			const previousArgsOwner = callbackScope.owner
+			callbackScope.owner = null
 			try {
 				validArgs = params.definition.validateArgs(args, argsCtx)
 				assertSyncValue(validArgs, `Method "${params.name}"'s validateArgs`)
 				hasArgsDiagnostic = argsCollector.hasAnyDiagnostic()
 			}
 			finally {
+				callbackScope.owner = previousArgsOwner
 				argsCollector.close()
 			}
 

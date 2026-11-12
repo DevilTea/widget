@@ -5,14 +5,30 @@
  * listener list snapshotted at emit start and inspection listeners first. Like every other external
  * listener, a throwing public event listener is isolated — reported outside the emit, never aborting the
  * remaining listeners or the emitting Method (amends Discussion #12 C0R154, which propagated it).
+ *
+ * Because of that isolation a listener that re-invokes the emitting Method would not fail fast: each
+ * nesting level would retry its remaining listeners after the deeper one failed. A non-semantic
+ * re-entrancy guard therefore bounds one Runtime's nested emits at {@link MAX_EMIT_DEPTH}. Its
+ * `WidgetSystemRuntimeReentrancyError` (and an engine stack overflow raised inside a listener) is never
+ * isolated; while it unwinds, every emit of this Runtime still on the stack rethrows it — even one whose
+ * listener swallowed it — so the loop ends at the operation that started it after linear work.
  */
 
 import type { RuntimeEvent } from '../internal/contract'
 import type { WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
+import { WidgetSystemRuntimeReentrancyError } from '../diagnostic'
 import { invokeEventListenerIsolated, invokeListenerIsolated } from './adapter'
 import { callbackScope } from './context'
 import { throwClosedCallbackMember } from './sync'
+
+/**
+ * How deeply one Runtime's event emits may nest. Generous for legitimate re-entrancy: an event bubbled up
+ * through the deepest widget tree `MAX_JSON_DEPTH` admits (86 levels) by one listener-invoked Method per
+ * level fits with room to spare. Still far below where a minimal loop exhausts Node's default stack
+ * (about 650 nested emits), so on common engines the guard, not the stack, ends a runaway loop.
+ */
+export const MAX_EMIT_DEPTH = 128
 
 export interface EventInspectionChannel {
 	subscribe: (listener: (args: readonly unknown[]) => void) => () => void
@@ -50,13 +66,38 @@ export function createEventPrimitive(context: RuntimeContext): EventPrimitive {
 		public: publicEvent,
 		emit(...args) {
 			context.assertActive()
-			// Public membership is fixed at emit start, before an inspection callback can itself subscribe
-			// or unsubscribe through some separately-held Runtime handle.
-			const listenersSnapshot = [...listeners]
-			const occurrenceArgs = Object.freeze([...args])
-			publishInspectionOccurrence(occurrenceArgs)
-			for (const { listener } of listenersSnapshot)
-				invokeEventListenerIsolated(listener, args)
+			const nesting = context.emitNesting
+			if (nesting.unwinding !== null)
+				throw nesting.unwinding
+			if (nesting.depth >= MAX_EMIT_DEPTH)
+				throw (nesting.unwinding = new WidgetSystemRuntimeReentrancyError(`Event emits nested deeper than ${MAX_EMIT_DEPTH} levels in one Runtime: an event listener keeps re-invoking a Method that emits.`))
+			// Plain updates only, so the bookkeeping survives an exhausted stack.
+			++nesting.depth
+			try {
+				// Public membership is fixed at emit start, before an inspection callback can itself subscribe
+				// or unsubscribe through some separately-held Runtime handle.
+				const listenersSnapshot = [...listeners]
+				const occurrenceArgs = Object.freeze([...args])
+				publishInspectionOccurrence(occurrenceArgs)
+				for (const { listener } of listenersSnapshot) {
+					// A listener (or the code between it and a deeper emit) swallowed an unwinding error.
+					if (nesting.unwinding !== null)
+						throw nesting.unwinding
+					invokeEventListenerIsolated(listener, args)
+				}
+				if (nesting.unwinding !== null)
+					throw nesting.unwinding
+			}
+			catch (error) {
+				// Only an error isolation does not swallow gets here (see `isEmitLoopError`), possibly raised in
+				// another Runtime: it unwinds this Runtime's nested emits too.
+				nesting.unwinding ??= error
+				throw error
+			}
+			finally {
+				if (--nesting.depth === 0)
+					nesting.unwinding = null
+			}
 		},
 		inspection: {
 			subscribe(listener) {

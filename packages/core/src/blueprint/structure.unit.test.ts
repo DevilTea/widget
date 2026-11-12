@@ -423,3 +423,54 @@ describe('structure validator locations must exist in the Blueprint being compil
 			.toHaveLength(1)
 	})
 })
+
+describe('compile-view facades of unresolved nodes', () => {
+	const source = { id: 'root', type: 'list', slots: { items: [{ id: 'ghost', type: 'unknown' }, { type: 7 }] } }
+	const expectedHints = [
+		{ resolved: false, id: 'ghost', type: 'unknown' },
+		{ resolved: false, id: null, type: null },
+	]
+
+	function hintsOf(nodes: readonly { resolved: boolean, id?: unknown, type?: unknown }[]) {
+		return nodes.map(node => ({ resolved: node.resolved, id: node.id, type: node.type }))
+	}
+
+	it('carry the authored id and type hints in a structure validator', () => {
+		let seen: unknown
+		const hintSystem = createWidgetSystem({
+			plugins: [listPlugin, itemPlugin],
+			validateStructure: ({ blueprint }) => {
+				seen = hintsOf(blueprint.getChildren(blueprint.root))
+			},
+		})
+		hintSystem.createBlueprint(source)
+
+		expect(seen)
+			.toEqual(expectedHints)
+	})
+
+	it('carry the authored id and type hints in registerDeps', () => {
+		interface ProbeInterfaces extends WidgetInterfaces {
+			slots: 'items'
+			properties: { probe: number }
+		}
+		let seen: unknown
+		const probePlugin = createWidgetPlugin('list')
+			.description('Test widget')
+			.interfaces<ProbeInterfaces>()
+			.slots({ items: { description: 'Test slot' } })
+			.properties(properties => properties.probe({
+				registerDeps: ({ blueprint, widget }) => {
+					seen = hintsOf(blueprint.getChildrenAt(widget, 'items'))
+					return {}
+				},
+				compute: () => 0,
+			}))
+			.done()
+		createWidgetSystem({ plugins: [probePlugin] })
+			.createBlueprint(source)
+
+		expect(seen)
+			.toEqual(expectedHints)
+	})
+})
