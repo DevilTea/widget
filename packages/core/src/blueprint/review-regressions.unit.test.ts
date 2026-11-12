@@ -138,8 +138,9 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 			.slots({
 				items: {
 					description: 'Test slot',
-					// TypeScript's `void`-return contextual typing allows this async function through;
-					// the sync-boundary guard must still catch it at runtime.
+					// The type rejects this async function; the sync-boundary guard must still catch it at
+					// runtime for untyped callers.
+					// @ts-expect-error an async structure validator is a type error
 					validateStructure: async () => {},
 				},
 			})
@@ -166,6 +167,7 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 			.description('Test widget')
 			.interfaces<ListInterfaces>()
 			.slots({ items: { description: 'Test slot' } })
+			// @ts-expect-error an async structure validator is a type error; the runtime guard covers untyped callers
 			.structure(async () => {})
 			.done()
 
@@ -191,6 +193,7 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 
 		const system = createWidgetSystem({
 			plugins: [plugin],
+			// @ts-expect-error an async structure validator is a type error; the runtime guard covers untyped callers
 			validateStructure: async () => {},
 		})
 

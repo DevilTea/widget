@@ -14,6 +14,7 @@
  */
 
 import type {
+	AnyWidgetPluginTuple,
 	EmptyRegisteredDeps,
 	WidgetConfigDefinition,
 	WidgetEventArgsOf,
@@ -23,8 +24,11 @@ import type {
 	WidgetInterfacesViolationOf,
 	WidgetMethodDefinition,
 	WidgetPluginDonePhase,
+	WidgetPluginValidateStructure,
 	WidgetPropertyDefinition,
+	WidgetSlotDefinition,
 	WidgetStateSection,
+	WidgetSystemValidateStructure,
 } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { createWidgetPlugin } from './index'
@@ -222,6 +226,16 @@ interface SimpleMethodInterfaces extends WidgetInterfaces {
 	methods: {
 		run: () => string
 	}
+}
+
+interface VoidMethodInterfaces extends WidgetInterfaces {
+	methods: {
+		submit: () => void
+	}
+}
+
+interface SlotsOnlyInterfaces extends WidgetInterfaces {
+	slots: 'items'
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -752,6 +766,54 @@ describe('semantic callbacks stay synchronous and are not widened to MaybePromis
 		}
 		expect(typeof definition.execute)
 			.toBe('function')
+	})
+
+	it('rejects an async `execute` even when the Method is declared to return `void`', () => {
+		const definition: WidgetMethodDefinition<VoidMethodInterfaces, 'submit', EmptyRegisteredDeps> = {
+			validateArgs: (args): args is [] => args.length === 0,
+			// @ts-expect-error a `void` return does not widen `execute` to MaybePromise; an async `execute` would write State in its synchronous prefix and fail afterwards
+			execute: async () => {},
+		}
+		const thenable: WidgetMethodDefinition<VoidMethodInterfaces, 'submit', EmptyRegisteredDeps> = {
+			validateArgs: (args): args is [] => args.length === 0,
+			// @ts-expect-error any thenable result is rejected, not only a native Promise
+			execute: () => ({ then: (resolve: (value: undefined) => void) => resolve(undefined) }),
+		}
+		expect(typeof definition.execute)
+			.toBe('function')
+		expect(typeof thenable.execute)
+			.toBe('function')
+	})
+
+	it('keeps accepting any synchronous result from the `execute` of a `void` Method', () => {
+		const results: ReadonlyArray<WidgetMethodDefinition<VoidMethodInterfaces, 'submit', EmptyRegisteredDeps>['execute']> = [
+			() => {},
+			() => undefined,
+			() => 1,
+			() => 'done',
+			() => null,
+			() => ({ ok: true }),
+			() => [1, 2],
+			() => () => {},
+		]
+		expect(results)
+			.toHaveLength(8)
+	})
+
+	it('rejects an async structure validator at the slot, plugin and system level', () => {
+		const slot: WidgetSlotDefinition<SlotsOnlyInterfaces, 'items'> = {
+			description: 'Items',
+			// @ts-expect-error a structure validator returns nothing; an async one would report diagnostics after compilation ended
+			validateStructure: async () => {},
+		}
+		// @ts-expect-error the plugin-level validator (`.structure()`) must stay synchronous
+		const plugin: WidgetPluginValidateStructure<SlotsOnlyInterfaces> = async () => {}
+		// @ts-expect-error the system-level validator must stay synchronous
+		const system: WidgetSystemValidateStructure<AnyWidgetPluginTuple> = async () => {}
+		const synchronous: WidgetPluginValidateStructure<SlotsOnlyInterfaces> = ctx => ctx.addDiagnostic({ message: 'sync' })
+
+		expect([typeof slot.validateStructure, typeof plugin, typeof system, typeof synchronous])
+			.toEqual(['function', 'function', 'function', 'function'])
 	})
 
 	it('allows a method argument to carry a PromiseLike value while `execute` still resolves synchronously', () => {

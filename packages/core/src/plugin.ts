@@ -322,6 +322,51 @@ export type WidgetMethodExecuteContext<
 	& WidgetEventEmitterContext<Interfaces>
 
 // -------------------------------------------------------------------------------------------------
+// Synchronous results
+// -------------------------------------------------------------------------------------------------
+
+type IsAny<T> = 0 extends 1 & T ? true : false
+
+type IsExactlyVoid<T> = (<X>() => X extends T ? 1 : 2) extends (<X>() => X extends void ? 1 : 2) ? true : false
+
+/**
+ * An object result that is not a thenable. The `then` text is the compile-error message shown when a
+ * PromiseLike/thenable is returned; no callable `then` satisfies it.
+ */
+interface WidgetSynchronousObjectResult {
+	readonly then?: 'widget-core: semantic callbacks are synchronous; returning a PromiseLike/thenable is a contract violation'
+	readonly [key: string]: any
+}
+
+/**
+ * The result type of a semantic callback declared to return `void`: any synchronous value, but never a
+ * PromiseLike/thenable. A plain `void` return type would accept an `async` function (TypeScript lets a
+ * `void`-returning function type accept any return), whose synchronous prefix runs before Core rejects
+ * the returned thenable at runtime.
+ */
+export type WidgetSynchronousVoidResult
+	= | void
+		| string
+		| number
+		| boolean
+		| bigint
+		| symbol
+		| null
+		| undefined
+		| WidgetSynchronousObjectResult
+
+/**
+ * A declared callback result type, with exactly `void` replaced by `WidgetSynchronousVoidResult` so that
+ * a `void` declaration does not reopen the synchronous boundary. Other declared types already reject a
+ * PromiseLike (see `WidgetInterfacesViolationOf`); `any` stays unchecked.
+ */
+type WidgetSynchronousResult<Value> = IsAny<Value> extends true
+	? Value
+	: IsExactlyVoid<Value> extends true
+		? WidgetSynchronousVoidResult
+		: Value
+
+// -------------------------------------------------------------------------------------------------
 // Member declarations
 // -------------------------------------------------------------------------------------------------
 
@@ -338,7 +383,7 @@ export interface WidgetSlotDefinition<
 	SlotName extends WidgetMemberKey,
 > {
 	readonly description: string
-	readonly validateStructure?: (ctx: WidgetSlotValidateStructureContext<Interfaces, SlotName>) => void
+	readonly validateStructure?: (ctx: WidgetSlotValidateStructureContext<Interfaces, SlotName>) => WidgetSynchronousVoidResult
 }
 
 export type WidgetSlotDefinitions<Interfaces extends WidgetInterfaces> = {
@@ -355,7 +400,7 @@ export type ExactWidgetSlotDefinitions<Interfaces extends WidgetInterfaces, Defi
 			readonly [Name in keyof Definitions as Name extends WidgetSlotNameOf<Interfaces> ? never : Name]: never
 		}
 
-export type WidgetPluginValidateStructure<Interfaces extends WidgetInterfaces> = (ctx: WidgetPluginValidateStructureContext<Interfaces>) => void
+export type WidgetPluginValidateStructure<Interfaces extends WidgetInterfaces> = (ctx: WidgetPluginValidateStructureContext<Interfaces>) => WidgetSynchronousVoidResult
 
 export interface WidgetStateMemberDefinition<
 	Interfaces extends WidgetInterfaces,
@@ -385,7 +430,7 @@ export interface WidgetMethodDefinition<
 > {
 	readonly registerDeps?: (ctx: WidgetRegisterDepsContext<Interfaces, 'method'>) => Deps
 	readonly validateArgs: (args: readonly unknown[], ctx: WidgetMethodValidateArgsContext<Interfaces>) => args is WidgetMethodArgsOf<Interfaces, Name>
-	readonly execute: (ctx: WidgetMethodExecuteContext<Interfaces, Name, Deps>) => WidgetMethodReturnOf<Interfaces, Name>
+	readonly execute: (ctx: WidgetMethodExecuteContext<Interfaces, Name, Deps>) => WidgetSynchronousResult<WidgetMethodReturnOf<Interfaces, Name>>
 }
 
 export interface WidgetEventDefinition {
