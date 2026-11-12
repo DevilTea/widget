@@ -13,6 +13,7 @@
  * precise generics at its public surface.
  */
 
+import type { RuntimeEvent, RuntimeMethod, RuntimeProperty, RuntimeState, RuntimeWidget, WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { Component, InjectionKey } from 'vue'
 import { provide } from 'vue'
 
@@ -81,3 +82,25 @@ export function provideCurrentWidgetContext(widget: RuntimeWidgetLike, runtime: 
 		rendererByType,
 	})
 }
+
+// -------------------------------------------------------------------------------------------------
+// Compile-time conformance with `@deviltea/widget-core`
+// -------------------------------------------------------------------------------------------------
+
+type Assignable<From, To> = [From] extends [To] ? true : false
+type MustBeTrue<Check extends true> = Check
+
+/**
+ * The `*Like` shapes above deliberately re-declare only what this package reads. These checks make
+ * core's real Runtime types assignable to them at compile time, so renaming or reshaping a member in
+ * core fails `typecheck` here instead of surfacing as an unchecked-cast runtime failure. Type-only
+ * (erased from the build) and not re-exported from the public entry.
+ */
+export type RuntimeLikeConformance = [
+	MustBeTrue<Assignable<RuntimeState<unknown>, RuntimeStateLike>>,
+	MustBeTrue<Assignable<RuntimeProperty<unknown>, RuntimePropertyLike>>,
+	MustBeTrue<Assignable<RuntimeMethod<(...args: any[]) => unknown>, RuntimeMethodLike>>,
+	MustBeTrue<Assignable<RuntimeEvent<readonly unknown[]>, RuntimeEventLike>>,
+	MustBeTrue<Assignable<RuntimeWidget, RuntimeWidgetLike>>,
+	MustBeTrue<Assignable<WidgetSystemRuntime, RuntimeLike>>,
+]
