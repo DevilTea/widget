@@ -27,6 +27,16 @@ export class WidgetIntegrationError extends Error {
 	}
 }
 
+/**
+ * Passive provenance assertion: throws `WidgetIntegrationError('foreign-runtime')` unless `runtime` was
+ * produced by this loaded core instance. It reads no Runtime state and acquires no emit authority, so a
+ * renderer adapter can verify at mount that the app and the adapter share one core copy.
+ */
+export function assertCoreRuntime(runtime: unknown): void {
+	if (!isCoreRuntime(runtime))
+		throw new WidgetIntegrationError('foreign-runtime')
+}
+
 export type WidgetIntegrationEventEmitter = Readonly<Record<WidgetMemberKey, (...args: readonly unknown[]) => void>>
 
 export function getWidgetEventEmitter<Plugins extends AnyWidgetPluginTuple>(
