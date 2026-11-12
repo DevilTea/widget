@@ -1,4 +1,4 @@
-import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetSystem } from './index'
+import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetSystem, WidgetSystemConfigurationErrorCode } from './index'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import * as core from './index'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemConfigurationError } from './index'
@@ -91,6 +91,44 @@ describe('createWidgetSystem plugin registration errors', () => {
 			.toBeInstanceOf(WidgetSystemConfigurationError)
 		expect(error)
 			.toMatchObject({ code: 'duplicate-plugin-type', pluginIndex: 3, pluginType: 'dup', firstPluginIndex: 1 })
+	})
+
+	it('rejects a malformed options value with invalid-options', () => {
+		const malformed: readonly unknown[] = [
+			undefined,
+			null,
+			'plugins',
+			{},
+			{ plugins: undefined },
+			{ plugins: 'a' },
+			{ plugins: new Set([plain('a')]) },
+			{ plugins: [plain('a')], validateStructure: 42 },
+			{ plugins: [plain('a')], validateStructure: {} },
+		]
+
+		for (const options of malformed) {
+			const error = capture(() => createWidgetSystem(options as never))
+			expect(error)
+				.toBeInstanceOf(WidgetSystemConfigurationError)
+			expect(error)
+				.toMatchObject({ code: 'invalid-options', pluginIndex: null, pluginType: null, firstPluginIndex: null })
+		}
+		expectTypeOf<'invalid-options'>()
+			.toExtend<WidgetSystemConfigurationErrorCode>()
+	})
+
+	it('checks the options shape before any plugin entry', () => {
+		const error = capture(() => createWidgetSystem({ plugins: [null, plain('d'), plain('d')], validateStructure: 42 } as never))
+
+		expect(error)
+			.toMatchObject({ code: 'invalid-options' })
+	})
+
+	it('accepts an omitted or null validateStructure', () => {
+		expect(createWidgetSystem({ plugins: [plain('a')] }).validateStructure)
+			.toBeNull()
+		expect(createWidgetSystem({ plugins: [plain('a')], validateStructure: null } as never).validateStructure)
+			.toBeNull()
 	})
 
 	it('throws for the first offending index, and provenance precedes the duplicate check', () => {

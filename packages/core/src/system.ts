@@ -95,12 +95,16 @@ export interface WidgetSystem<Plugins extends AnyWidgetPluginTuple = AnyWidgetPl
 	createBlueprintFromJson: (text: string) => WidgetSystemBlueprint<Plugins>
 }
 
-export type WidgetSystemConfigurationErrorCode = 'foreign-plugin' | 'duplicate-plugin-type'
+export type WidgetSystemConfigurationErrorCode = 'invalid-options' | 'foreign-plugin' | 'duplicate-plugin-type'
 
 /**
- * Thrown by `createWidgetSystem` for an invalid plugin registration. Discriminate by class and `code`;
- * `message` is not protocol.
+ * Thrown by `createWidgetSystem` for invalid options or an invalid plugin registration. Discriminate by
+ * class and `code`; `message` is not protocol. The options shape is checked first, then the plugin
+ * entries in tuple order.
  *
+ * - `invalid-options`: `options` is not an object, `options.plugins` is not an array, or
+ *   `options.validateStructure` is present (neither `undefined` nor `null`) but not a function.
+ *   `pluginIndex`, `pluginType` and `firstPluginIndex` are `null`.
  * - `foreign-plugin`: the entry at `pluginIndex` was not completed by this loaded module instance
  *   (another module instance or a structural look-alike). `pluginType` is its `type` when a string,
  *   else `null`. `firstPluginIndex` is `null`.
@@ -112,15 +116,39 @@ export class WidgetSystemConfigurationError extends Error {
 
 	constructor(
 		readonly code: WidgetSystemConfigurationErrorCode,
-		readonly pluginIndex: number,
+		readonly pluginIndex: number | null,
 		readonly pluginType: string | null,
 		readonly firstPluginIndex: number | null = null,
-		message = code === 'foreign-plugin'
-			? `The widget plugin at index ${pluginIndex} was not created by this widget core instance.`
-			: `Duplicate widget plugin type "${pluginType}" at index ${pluginIndex} (first registered at index ${firstPluginIndex}).`,
+		message = code === 'invalid-options'
+			? 'The createWidgetSystem options are malformed.'
+			: code === 'foreign-plugin'
+				? `The widget plugin at index ${pluginIndex} was not created by this widget core instance.`
+				: `Duplicate widget plugin type "${pluginType}" at index ${pluginIndex} (first registered at index ${firstPluginIndex}).`,
 	) {
 		super(message)
 	}
+}
+
+function describeOptionValue(value: unknown): string {
+	return value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value
+}
+
+function invalidOptions(problem: string): WidgetSystemConfigurationError {
+	return new WidgetSystemConfigurationError('invalid-options', null, null, null, `Invalid createWidgetSystem options: ${problem}.`)
+}
+
+/**
+ * Checks the options shape before any plugin entry is inspected.
+ */
+function assertWidgetSystemOptions(options: unknown): asserts options is CreateWidgetSystemOptions<AnyWidgetPluginTuple> {
+	if (typeof options !== 'object' || options === null)
+		throw invalidOptions(`expected an options object, got ${describeOptionValue(options)}`)
+
+	const { plugins, validateStructure } = options as { readonly plugins?: unknown, readonly validateStructure?: unknown }
+	if (!Array.isArray(plugins))
+		throw invalidOptions(`"plugins" must be an array of widget plugins, got ${describeOptionValue(plugins)}`)
+	if (validateStructure !== undefined && validateStructure !== null && typeof validateStructure !== 'function')
+		throw invalidOptions(`"validateStructure" must be a function when provided, got ${describeOptionValue(validateStructure)}`)
 }
 
 /**
@@ -137,11 +165,14 @@ function readForeignPluginType(entry: unknown): string | null {
 }
 
 /**
- * Creates an instance-scoped, immutable widget system. Duplicate `plugin.type` is rejected.
+ * Creates an instance-scoped, immutable widget system. Malformed options, foreign plugins and duplicate
+ * `plugin.type` are rejected with a `WidgetSystemConfigurationError`.
  */
 export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple>(
 	options: CreateWidgetSystemOptions<Plugins>,
 ): WidgetSystem<Plugins> {
+	assertWidgetSystemOptions(options)
+
 	const plugins = Object.freeze([...options.plugins]) as unknown as Plugins
 	const pluginsByType = new Map<string, AnyWidgetPlugin>()
 	const firstIndexByType = new Map<string, number>()
