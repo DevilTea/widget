@@ -199,6 +199,7 @@ export type {
 	SeparatedWidgetSourceDiagnostic,
 	SeparatedWidgetSourceDiagnosticCode,
 	SeparatedWidgetSourceNormalization,
+	SeparatedWidgetSourceProjection,
 	SeparatedWidgetStructure,
 } from './separated-source'
 

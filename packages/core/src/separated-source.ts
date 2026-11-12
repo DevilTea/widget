@@ -9,11 +9,9 @@
  */
 
 import type { DiagnosticBase } from './diagnostic'
-import type { WidgetSource } from './internal/contract'
 import type { JsonValue } from './json'
-import type { AnyWidgetPluginTuple } from './plugin'
 import type { WidgetId } from './types'
-import { isJsonValue } from './json'
+import { isJsonValue, MAX_JSON_DEPTH } from './json'
 
 /** The tree half of a {@link SeparatedWidgetSource}. */
 export interface SeparatedWidgetStructure {
@@ -26,6 +24,8 @@ export interface SeparatedWidgetData {
 	readonly id: WidgetId
 	readonly type: string
 	readonly config?: JsonValue
+	/** The authored `meta` extension value, carried through losslessly and never interpreted. */
+	readonly meta?: JsonValue
 }
 
 /**
@@ -37,12 +37,20 @@ export interface SeparatedWidgetSource {
 	readonly widgets: readonly SeparatedWidgetData[]
 }
 
-/** A representation-aware source location, independent from Blueprint semantic locations. */
+/**
+ * A representation-aware source location, independent from Blueprint semantic locations. `widgets` and
+ * `structure` locate a fact in a separated input (`index` is absent when the fact concerns the whole `widgets`
+ * value); `source` locates a fact in the nested source given to {@link separateWidgetSource} by its path there.
+ */
 export type SeparatedSourceLocation
 	= | {
 		readonly area: 'widgets'
-		readonly index: number
+		readonly index?: number
 		readonly path?: readonly PropertyKey[]
+	}
+	| {
+		readonly area: 'source'
+		readonly path: readonly PropertyKey[]
 	}
 	| {
 		readonly area: 'structure'
@@ -69,10 +77,10 @@ export type SeparatedWidgetSourceDiagnostic
 		readonly reason: 'missing-structure' | 'invalid-widgets'
 	})
 	| (DiagnosticBase<'invalid-separated-structure', SeparatedSourceLocation> & {
-		readonly reason: 'invalid-node' | 'invalid-slots' | 'invalid-slot-children'
+		readonly reason: 'invalid-node' | 'invalid-slots' | 'invalid-slot-children' | 'max-depth-exceeded'
 	})
 	| (DiagnosticBase<'invalid-separated-widget', SeparatedSourceLocation> & {
-		readonly reason: 'invalid-entry' | 'invalid-id' | 'invalid-type'
+		readonly reason: 'invalid-entry' | 'invalid-id' | 'invalid-type' | 'invalid-config' | 'invalid-meta' | 'unexpected-field'
 	})
 	| (DiagnosticBase<'duplicate-widget-id', SeparatedSourceLocation> & {
 		readonly widgetId: WidgetId
@@ -86,6 +94,16 @@ export type SeparatedWidgetSourceDiagnostic
 	| (DiagnosticBase<'duplicate-structure-id', SeparatedSourceLocation> & {
 		readonly widgetId: WidgetId
 	})
+
+/**
+ * Result of {@link separateWidgetSource}. `separated` is best-effort: it is non-null whenever `diagnostics` is
+ * empty, and null only when the root itself cannot be projected. When `diagnostics` is empty,
+ * `normalizeSeparatedWidgetSource(separated).source` is structurally equal to the projected source.
+ */
+export interface SeparatedWidgetSourceProjection {
+	readonly separated: SeparatedWidgetSource | null
+	readonly diagnostics: readonly SeparatedWidgetSourceDiagnostic[]
+}
 
 /** Result of explicit separated-source normalization. */
 export interface SeparatedWidgetSourceNormalization {
@@ -238,44 +256,165 @@ function diagnosticPath(path: readonly PropertyKey[], key: PropertyKey): readonl
 	return [...path, key]
 }
 
+/** The own keys of an authored widget node; everything else cannot be carried by the separated representation. */
+const SOURCE_WIDGET_FIELDS: ReadonlySet<PropertyKey> = new Set(['id', 'type', 'config', 'slots', 'meta'])
+
 /**
  * Projects canonical nested authored source into the explicit separated representation.
+ *
+ * The input is `unknown`: projection never throws on malformed input. Everything it cannot project
+ * faithfully (a malformed shape, a duplicate id, a non-JSON `config`/`meta`, a cyclic or too deep tree, an
+ * unrecognized field) is reported as a diagnostic located by its path in the input (`area: 'source'`), and
+ * the unprojectable part is left out of the best-effort result. When `diagnostics` is empty,
+ * `normalizeSeparatedWidgetSource(separated).source` is structurally equal to `source`.
+ *
  * Projection preserves nested slot order and emits flat data in deterministic depth-first order.
  */
-export function separateWidgetSource<const Plugins extends AnyWidgetPluginTuple>(
-	source: WidgetSource<Plugins>,
-): SeparatedWidgetSource {
+export function separateWidgetSource(source: unknown): SeparatedWidgetSourceProjection {
+	const diagnostics: SeparatedWidgetSourceDiagnostic[] = []
 	const widgets: SeparatedWidgetData[] = []
+	const seenIds = new Set<WidgetId>()
+	const activeNodes = new Set<object>()
 
-	function projectNode(node: WidgetSource<Plugins>): SeparatedWidgetStructure {
-		const value = node as unknown as Record<string, unknown>
-		const id = value.id as WidgetId
-		const data: SeparatedWidgetData = {
-			id,
-			type: value.type as string,
-		}
-		if (Object.hasOwn(value, 'config'))
-			(data as { config?: JsonValue }).config = cloneJsonValue(value.config as JsonValue)
-		widgets.push(Object.freeze(data))
-
-		const structure: { id: WidgetId, slots?: Record<string, readonly SeparatedWidgetStructure[]> } = { id }
-		if (Object.hasOwn(value, 'slots')) {
-			const slotsValue = value.slots as Record<string, readonly WidgetSource<Plugins>[]>
-			const slots: Record<string, readonly SeparatedWidgetStructure[]> = Object.create(null) as Record<string, readonly SeparatedWidgetStructure[]>
-			const slotNames = ownStringKeys(slotsValue)
-			if (slotNames === null)
-				throw new TypeError('WidgetSource slots could not be inspected safely.')
-			for (const slot of slotNames) {
-				const children = slotsValue[slot]!
-				slots[slot] = Object.freeze(children.map(projectNode))
-			}
-			structure.slots = slots
-		}
-		return Object.freeze(structure)
+	const addDiagnostic = (
+		code: SeparatedWidgetSourceDiagnosticCode,
+		path: readonly PropertyKey[],
+		message: string,
+		fields?: Record<string, unknown>,
+	): void => {
+		diagnostics.push(freezeDiagnostic(code, { area: 'source', path }, message, fields))
 	}
 
-	const structure = projectNode(source)
-	return Object.freeze({ structure, widgets: Object.freeze(widgets) })
+	function readJsonField(node: Record<string, unknown>, key: 'config' | 'meta', path: readonly PropertyKey[], reason: 'invalid-config' | 'invalid-meta'): { readonly present: boolean, readonly value?: JsonValue } {
+		const property = readDataProperty(node, key)
+		if (!property.found)
+			return { present: false }
+		if (!property.accessible || !isJsonValue(property.value)) {
+			addDiagnostic('invalid-separated-widget', diagnosticPath(path, key), `Widget "${key}" must be an accessible JSON value.`, { reason })
+			return { present: false }
+		}
+		try {
+			return { present: true, value: cloneJsonValue(property.value) }
+		}
+		catch {
+			addDiagnostic('invalid-separated-widget', diagnosticPath(path, key), `Widget "${key}" must be an accessible JSON value.`, { reason })
+			return { present: false }
+		}
+	}
+
+	function projectNode(value: unknown, path: readonly PropertyKey[]): SeparatedWidgetStructure | null {
+		if (!isPlainObject(value)) {
+			addDiagnostic('invalid-separated-structure', path, 'Widget source must be a plain object.', { reason: 'invalid-node' })
+			return null
+		}
+		// Same boundary as Blueprint recovery: this node's own container is nested inside `path.length` others.
+		if (path.length >= MAX_JSON_DEPTH) {
+			addDiagnostic('invalid-separated-structure', path, `Widget source is nested deeper than the maximum supported depth (${MAX_JSON_DEPTH}).`, { reason: 'max-depth-exceeded' })
+			return null
+		}
+		if (activeNodes.has(value)) {
+			addDiagnostic('invalid-separated-structure', path, 'Widget source contains a cyclic reference; the repeated node was omitted.', { reason: 'invalid-node' })
+			return null
+		}
+
+		const idProperty = readDataProperty(value, 'id')
+		if (!idProperty.found || !idProperty.accessible || typeof idProperty.value !== 'string') {
+			addDiagnostic('invalid-separated-widget', diagnosticPath(path, 'id'), 'Widget source must have a string id.', { reason: 'invalid-id' })
+			return null
+		}
+		const id = idProperty.value
+
+		activeNodes.add(value)
+		try {
+			const typeProperty = readDataProperty(value, 'type')
+			const hasType = typeProperty.found && typeProperty.accessible && typeof typeProperty.value === 'string'
+			if (!hasType)
+				addDiagnostic('invalid-separated-widget', diagnosticPath(path, 'type'), 'Widget source must have a string type.', { reason: 'invalid-type' })
+
+			// The flat list keeps duplicate ids observable, but its first entry wins when normalized, so only the first
+			// occurrence can carry data: a later one would silently take the first one's type and config back.
+			const duplicate = seenIds.has(id)
+			if (duplicate)
+				addDiagnostic('duplicate-widget-id', diagnosticPath(path, 'id'), `Widget source id "${id}" occurs more than once.`, { widgetId: id })
+			seenIds.add(id)
+
+			let keys: readonly PropertyKey[]
+			try {
+				keys = Reflect.ownKeys(value)
+			}
+			catch {
+				keys = []
+			}
+			for (const key of keys) {
+				if (!SOURCE_WIDGET_FIELDS.has(key))
+					addDiagnostic('invalid-separated-widget', diagnosticPath(path, key), `Widget field "${String(key)}" cannot be carried by the separated representation.`, { reason: 'unexpected-field' })
+			}
+
+			const config = readJsonField(value, 'config', path, 'invalid-config')
+			const meta = readJsonField(value, 'meta', path, 'invalid-meta')
+			if (hasType && !duplicate) {
+				const data: { id: WidgetId, type: string, config?: JsonValue, meta?: JsonValue } = { id, type: typeProperty.value as string }
+				if (config.present)
+					data.config = config.value
+				if (meta.present)
+					data.meta = meta.value
+				widgets.push(Object.freeze(data))
+			}
+
+			const structure: { id: WidgetId, slots?: Record<string, readonly SeparatedWidgetStructure[]> } = { id }
+			const slotsProperty = readDataProperty(value, 'slots')
+			const slotsPath = diagnosticPath(path, 'slots')
+			if (slotsProperty.found) {
+				if (!slotsProperty.accessible || !isPlainObject(slotsProperty.value)) {
+					addDiagnostic('invalid-separated-structure', slotsPath, 'Widget slots must be an accessible plain object.', { reason: 'invalid-slots' })
+				}
+				else {
+					const slotNames = ownStringKeys(slotsProperty.value)
+					if (slotNames === null) {
+						addDiagnostic('invalid-separated-structure', slotsPath, 'Widget slots could not be inspected safely.', { reason: 'invalid-slots' })
+					}
+					else {
+						const slots: Record<string, readonly SeparatedWidgetStructure[]> = Object.create(null) as Record<string, readonly SeparatedWidgetStructure[]>
+						for (const slot of slotNames) {
+							const slotPath = diagnosticPath(slotsPath, slot)
+							const slotProperty = readDataProperty(slotsProperty.value, slot)
+							const slotArray = readArrayInfo(slotProperty.value)
+							if (!slotProperty.found || !slotProperty.accessible || !slotArray.isArray || !slotArray.accessible) {
+								addDiagnostic('invalid-separated-structure', slotPath, 'Widget slot must be an Array.', { reason: 'invalid-slot-children' })
+								continue
+							}
+
+							const children: SeparatedWidgetStructure[] = []
+							const childArray = slotProperty.value as readonly unknown[]
+							for (let index = 0; index < slotArray.length!; index++) {
+								const childPath = diagnosticPath(slotPath, index)
+								const childProperty = readDataProperty(childArray, String(index))
+								if (!childProperty.found || !childProperty.accessible) {
+									addDiagnostic('invalid-separated-structure', childPath, 'Widget slot child could not be inspected safely.', { reason: 'invalid-slot-children' })
+									continue
+								}
+								const child = projectNode(childProperty.value, childPath)
+								if (child !== null)
+									children.push(child)
+							}
+							slots[slot] = Object.freeze(children)
+						}
+						structure.slots = slots
+					}
+				}
+			}
+			return Object.freeze(structure)
+		}
+		finally {
+			activeNodes.delete(value)
+		}
+	}
+
+	const structure = projectNode(source, [])
+	return Object.freeze({
+		separated: structure === null ? null : Object.freeze({ structure, widgets: Object.freeze(widgets) }),
+		diagnostics: Object.freeze(diagnostics),
+	})
 }
 
 /**
@@ -361,6 +500,12 @@ export function normalizeSeparatedWidgetSource(input: unknown): SeparatedWidgetS
 			return value
 		}
 
+		// Same boundary as Blueprint recovery: this node's own container is nested inside `path.length` others.
+		if (path.length >= MAX_JSON_DEPTH) {
+			addDiagnostic('invalid-separated-structure', { area: 'structure', path }, `structure is nested deeper than the maximum supported depth (${MAX_JSON_DEPTH}); the node was omitted.`, { reason: 'max-depth-exceeded' })
+			return Object.create(null)
+		}
+
 		const objectValue = value as object
 		if (activeStructureNodes.has(objectValue)) {
 			addDiagnostic('invalid-separated-structure', { area: 'structure', path }, 'structure contains a cyclic reference; the repeated node was omitted.', { reason: 'invalid-node' })
@@ -410,6 +555,11 @@ export function normalizeSeparatedWidgetSource(input: unknown): SeparatedWidgetS
 						output.config = copyRecoveryValue(configProperty.value)
 					else if (configProperty.found && !configProperty.accessible)
 						addDiagnostic('invalid-separated-widget', { area: 'widgets', index: data.index, path: ['config'] }, 'flat Widget data config could not be inspected safely.', { reason: 'invalid-entry' })
+					const metaProperty = readDataProperty(data.value, 'meta')
+					if (metaProperty.found && metaProperty.accessible)
+						output.meta = copyRecoveryValue(metaProperty.value)
+					else if (metaProperty.found && !metaProperty.accessible)
+						addDiagnostic('invalid-separated-widget', { area: 'widgets', index: data.index, path: ['meta'] }, 'flat Widget data meta could not be inspected safely.', { reason: 'invalid-entry' })
 				}
 			}
 
