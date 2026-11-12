@@ -37,7 +37,7 @@ import type {
 	WidgetStateKeyOf,
 	WidgetStateValueOf,
 } from '@deviltea/widget-core'
-import type { Ref } from 'vue'
+import type { Ref, Slot } from 'vue'
 
 /**
  * Truthful readonly-Ref projection shape. Property and every diagnostic channel are backed by `customRef`
@@ -200,6 +200,32 @@ export interface UseWidgetIdentityAccessor<Plugin extends AnyWidgetPlugin> {
  */
 export type WidgetSlotComponent<SlotName extends string> = new () => {
 	$props: { readonly name: SlotName }
+	$slots: { default?: Slot<WidgetSlotScope> }
+}
+
+/**
+ * A component that renders one child widget through the normal host (its registered renderer, its
+ * own `useWidget()` context, its own subscriptions). Takes no props. Obtained from the scoped
+ * `WidgetSlot` default slot; the identity is stable for a given child across re-renders, so wrapping it
+ * in other markup never remounts the child widget.
+ */
+export type WidgetSlotChildComponent = new () => {
+	$props: Record<never, never>
+}
+
+/**
+ * What the `WidgetSlot` default slot receives, once per child in Blueprint order. No Runtime handle
+ * is exposed: the renderer decides how to wrap each child and whether to render it at all.
+ */
+export interface WidgetSlotScope {
+	/** Renders this child widget through the normal host. */
+	readonly Child: WidgetSlotChildComponent
+	/** The child's widget id. */
+	readonly id: string
+	/** The child's plugin type. */
+	readonly type: string
+	/** The child's position in this slot, counting children the renderer chooses to skip. */
+	readonly index: number
 }
 
 export type UseWidgetSlotAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'slots'> extends true

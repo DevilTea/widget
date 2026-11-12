@@ -40,7 +40,9 @@ export type {
 	UseWidgetStateDiagnosticsAccessor,
 	UseWidgetStateDiagnosticsSurface,
 	UseWidgetStateSurface,
+	WidgetSlotChildComponent,
 	WidgetSlotComponent,
+	WidgetSlotScope,
 } from './types'
 
 export { useWidget } from './use-widget'

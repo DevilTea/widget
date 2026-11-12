@@ -6,8 +6,9 @@
 
 import type { AnyWidgetPluginTuple, WidgetPluginTypeOf, WidgetSystem, WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { Component, PropType } from 'vue'
-import type { RuntimeLike, RuntimeWidgetLike } from './context'
-import { defineComponent, h, inject, provide } from 'vue'
+import type { CurrentWidgetContextValue, RuntimeLike, RuntimeWidgetLike } from './context'
+import type { WidgetSlotChildComponent, WidgetSlotScope } from './types'
+import { defineComponent, Fragment, h, inject, provide } from 'vue'
 import { CurrentWidgetContextKey } from './context'
 import { WidgetVueIntegrationError } from './errors'
 import { assertWidgetRuntime } from './runtime-guard'
@@ -256,30 +257,65 @@ export const SharedWidgetSlotComponent = defineComponent({
 	props: {
 		name: { type: String, required: true },
 	},
-	setup(props) {
+	setup(props, { slots }) {
 		const current = getCurrentWidgetContextOrThrow('WidgetSlot')
+
+		// One `Child` component per child widget, created on first use and reused by every later render:
+		// a fresh component definition per render would remount the child whenever the renderer wraps it.
+		const childComponents = new Map<string, Component>()
+		const getChildComponent = (childWidget: RuntimeWidgetLike): Component => {
+			let Child = childComponents.get(childWidget.id)
+			if (Child === undefined) {
+				Child = defineComponent({
+					name: 'WidgetChild',
+					setup: () => () => renderChildHost(current, childWidget),
+				})
+				childComponents.set(childWidget.id, Child)
+			}
+			return Child
+		}
 
 		return () => {
 			const children = current.widget.blueprint.slots[props.name] ?? []
 
-			return children.map((childNode) => {
+			const resolve = (childNode: { readonly id: string }): RuntimeWidgetLike => {
 				const childWidget = current.runtime.getWidget(childNode.id)
 				if (childWidget === null) {
 					throw new Error(
 						`Widget "${childNode.id}" declared in slot "${props.name}" of widget "${current.widget.id}" was not found by the current Runtime.`,
 					)
 				}
+				return childWidget
+			}
 
-				return h(InternalWidgetHost, {
-					key: childNode.id,
-					widget: childWidget,
-					runtime: current.runtime as unknown as WidgetSystemRuntime<AnyWidgetPluginTuple>,
-					rendererByType: current.rendererByType,
-				})
+			const renderScoped = slots.default
+			if (renderScoped === undefined)
+				return children.map(childNode => renderChildHost(current, resolve(childNode), childNode.id))
+
+			// Scoped form: the renderer's output for each child sits in a keyed fragment so skipping or
+			// re-wrapping one child never makes Vue remount a sibling.
+			return children.map((childNode, index) => {
+				const childWidget = resolve(childNode)
+				const scope: WidgetSlotScope = {
+					Child: getChildComponent(childWidget) as unknown as WidgetSlotChildComponent,
+					id: childWidget.id,
+					type: childWidget.type,
+					index,
+				}
+				return h(Fragment, { key: childNode.id }, renderScoped(scope))
 			})
 		}
 	},
 })
+
+function renderChildHost(current: CurrentWidgetContextValue, childWidget: RuntimeWidgetLike, key?: string) {
+	return h(InternalWidgetHost, {
+		key,
+		widget: childWidget,
+		runtime: current.runtime as unknown as WidgetSystemRuntime<AnyWidgetPluginTuple>,
+		rendererByType: current.rendererByType,
+	})
+}
 
 // -------------------------------------------------------------------------------------------------
 // Root renderer component
