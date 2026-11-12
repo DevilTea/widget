@@ -58,6 +58,21 @@ function malformedResponseRequestId(value: unknown): string | null {
 		: null
 }
 
+/**
+ * Runs one listener so that a throw cannot starve the listeners after it. Like Core's isolated
+ * listeners, the failure is reported outside the dispatch with a queued microtask rethrow.
+ */
+function invokeIsolated(listener: () => void): void {
+	try {
+		listener()
+	}
+	catch (error) {
+		queueMicrotask(() => {
+			throw error
+		})
+	}
+}
+
 export interface CreateInspectorClientOptions {
 	/**
 	 * Rejects a request that has received no response after this many milliseconds with an
@@ -210,11 +225,11 @@ export function createInspectorClient(transport: InspectorTransport, options: Cr
 		if (event === null)
 			return
 		for (const listener of [...messageListeners])
-			listener(event)
+			invokeIsolated(() => listener(event))
 		const listeners = eventListeners.get(event.event)
 		if (listeners !== undefined) {
 			for (const listener of [...listeners])
-				listener(event.payload as never)
+				invokeIsolated(() => listener(event.payload as never))
 		}
 	})
 	unsubscribeClose = transport.subscribeClose(() => {

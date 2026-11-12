@@ -1,6 +1,7 @@
 import type { InspectorTransport } from './transport'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInspectorClient, InspectorClientError } from './client'
+import { createInProcessInspectorTransportPair } from './transport'
 
 /** A transport that hands messages over by reference, so the test controls exactly what the client sees. */
 function createScriptedTransport() {
@@ -231,6 +232,43 @@ describe('inspectorClient robustness', () => {
 		})
 		await expect(pending)
 			.rejects.toMatchObject({ code: 'unknown-error', peerCode: 'subscription-limit', message: 'Cap.' })
+		client.close()
+	})
+
+	it('isolates throwing listeners from each other and reports the failure outside the dispatch', () => {
+		const reported: (() => void)[] = []
+		vi.stubGlobal('queueMicrotask', (callback: () => void) => reported.push(callback))
+		const pair = createInProcessInspectorTransportPair()
+		const client = createInspectorClient(pair.client)
+		const seen: string[] = []
+		client.subscribe(() => {
+			seen.push('subscribe-1')
+			throw new Error('subscribe boom')
+		})
+		client.subscribe(() => seen.push('subscribe-2'))
+		client.on('agent.status', () => {
+			seen.push('on-1')
+			throw new Error('on boom')
+		})
+		client.on('agent.status', () => seen.push('on-2'))
+
+		expect(() => pair.agent.send({
+			protocol: { major: 0, minor: 3 },
+			kind: 'event',
+			event: 'agent.status',
+			payload: { inspectEnabled: true },
+		}))
+			.not
+			.toThrow()
+
+		expect(seen)
+			.toEqual(['subscribe-1', 'subscribe-2', 'on-1', 'on-2'])
+		expect(reported)
+			.toHaveLength(2)
+		expect(() => reported[0]!())
+			.toThrow('subscribe boom')
+		expect(() => reported[1]!())
+			.toThrow('on boom')
 		client.close()
 	})
 
