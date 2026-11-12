@@ -446,7 +446,7 @@ export function normalizeSeparatedWidgetSource(input: unknown): SeparatedWidgetS
 		addDiagnostic(
 			'invalid-separated-source',
 			{ area: 'structure', path: [] },
-			' separated source must contain an accessible structure root.',
+			'separated source must contain an accessible structure root.',
 			{ reason: 'missing-structure' },
 		)
 	}
@@ -455,8 +455,8 @@ export function normalizeSeparatedWidgetSource(input: unknown): SeparatedWidgetS
 	if (!widgetsProperty.found || !widgetsProperty.accessible || !widgetsArray.isArray || !widgetsArray.accessible) {
 		addDiagnostic(
 			'invalid-separated-source',
-			{ area: 'widgets', index: 0 },
-			' separated source widgets must be an Array.',
+			{ area: 'widgets' },
+			'separated source widgets must be an Array.',
 			{ reason: 'invalid-widgets' },
 		)
 	}

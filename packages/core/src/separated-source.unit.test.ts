@@ -416,6 +416,30 @@ describe('separated widget source tooling', () => {
 	})
 })
 
+describe('separated envelope diagnostics', () => {
+	it('words envelope messages without a stray leading space', () => {
+		const missing = normalizeSeparatedWidgetSource({ widgets: [] })
+		const badWidgets = normalizeSeparatedWidgetSource({ structure: { id: 'a' }, widgets: 'x' })
+
+		for (const diagnostic of [...missing.diagnostics, ...badWidgets.diagnostics]) {
+			expect(diagnostic.message)
+				.toBe(diagnostic.message.trim())
+		}
+	})
+
+	it('locates a non-Array widgets value at the widgets area without fabricating an entry index', () => {
+		const normalized = normalizeSeparatedWidgetSource({ structure: { id: 'a' }, widgets: 'x' })
+		const diagnostic = normalized.diagnostics.find(candidate => candidate.code === 'invalid-separated-source')
+
+		expect(diagnostic)
+			.toMatchObject({ reason: 'invalid-widgets', location: { area: 'widgets' } })
+		expect(diagnostic?.location)
+			.toEqual({ area: 'widgets' })
+		expect(diagnostic?.location && 'index' in diagnostic.location)
+			.toBe(false)
+	})
+})
+
 describe('separateWidgetSource on arbitrary input', () => {
 	it('never throws, reporting malformed shapes as located diagnostics', () => {
 		const result = separateWidgetSource({
