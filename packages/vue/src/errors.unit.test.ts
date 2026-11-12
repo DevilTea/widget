@@ -6,7 +6,7 @@
 
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createWidgetVueRenderer, useWidget, WidgetVueIntegrationError } from './index'
 import { SharedWidgetSlotComponent } from './renderer'
@@ -47,6 +47,8 @@ function expectNullRegistryFields(error: WidgetVueIntegrationError): void {
 	expect(error.unknownTypes)
 		.toBeNull()
 	expect(error.duplicateTypes)
+		.toBeNull()
+	expect(error.invalidTypes)
 		.toBeNull()
 }
 
@@ -152,6 +154,56 @@ describe('widgetVueIntegrationError codes', () => {
 				.toEqual([])
 			expect(error.duplicateTypes)
 				.toEqual([])
+		})
+
+		it('reports a registered non-component value in invalidTypes, in first-registration order', () => {
+			const error = registryError((r) => {
+				r.Label!(undefined)
+				r.Counter!(CounterRenderer)
+				r.Container!(null)
+				r.Leaf!('not a component')
+				r.EmptyState!(EmptyStateRenderer)
+				r.Zulu!(42)
+			})
+
+			expect(error.invalidTypes)
+				.toEqual(['Label', 'Container', 'Leaf', 'Zulu'])
+			expect(error.missingTypes)
+				.toEqual([])
+			expect(error.unknownTypes)
+				.toEqual(['Zulu'])
+			expect(error.duplicateTypes)
+				.toEqual([])
+			expect(Object.isFrozen(error.invalidTypes))
+				.toBe(true)
+		})
+
+		it('accepts function and object components and keeps invalidTypes empty', () => {
+			const error = registryError((r) => {
+				r.Counter!(() => null)
+				r.Label!(LabelRenderer)
+			})
+
+			expect(error.invalidTypes)
+				.toEqual([])
+		})
+
+		it('narrows the registry defect lists to non-null arrays once `code` is checked', () => {
+			const error = registryError(() => {})
+
+			if (error.code === 'invalid-renderer-registry') {
+				expectTypeOf(error.missingTypes)
+					.toEqualTypeOf<readonly string[]>()
+				expectTypeOf(error.invalidTypes)
+					.toEqualTypeOf<readonly string[]>()
+				expect(error.missingTypes.length)
+					.toBeGreaterThan(0)
+			}
+			else {
+				expectTypeOf(error.missingTypes)
+					.toEqualTypeOf<null>()
+				expect.unreachable()
+			}
 		})
 
 		it('exposes frozen arrays, including empty ones', () => {

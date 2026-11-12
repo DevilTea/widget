@@ -101,6 +101,15 @@ function quote(value: string): string {
 }
 
 /**
+ * A Vue `Component` is a component options object or a functional component. The registry typestate
+ * only demands "some Vue component", but JS/`any` call sites can pass anything, and a non-component
+ * would otherwise be accepted silently and render as an empty comment.
+ */
+function isVueComponent(value: unknown): value is Component {
+	return typeof value === 'function' || (typeof value === 'object' && value !== null)
+}
+
+/**
  * Vue vnode `key` only accepts a `PropertyKey`, not an arbitrary object, so a `WidgetSystemRuntime`
  * instance cannot be used as a `key` directly. This assigns one stable `symbol` per distinct Runtime
  * object identity (never per Runtime-shape-equality) the first time it is seen, giving the
@@ -134,17 +143,21 @@ function finalizeRegistry(system: WidgetSystem<AnyWidgetPluginTuple>, registrati
 
 	const unknownTypes: string[] = []
 	const duplicatedTypes: string[] = []
+	const invalidTypes: string[] = []
 
 	for (const [type, components] of registrations) {
 		if (!pluginTypes.has(type))
 			unknownTypes.push(type)
 		else if (components.length > 1)
 			duplicatedTypes.push(type)
+
+		if (!components.every(isVueComponent))
+			invalidTypes.push(type)
 	}
 
 	const missingTypes = [...pluginTypes].filter(type => !registrations.has(type))
 
-	if (missingTypes.length > 0 || unknownTypes.length > 0 || duplicatedTypes.length > 0) {
+	if (missingTypes.length > 0 || unknownTypes.length > 0 || duplicatedTypes.length > 0 || invalidTypes.length > 0) {
 		const parts: string[] = []
 		if (missingTypes.length > 0) {
 			parts.push(`missing renderer registration for plugin type(s) ${missingTypes.map(quote)
@@ -158,11 +171,15 @@ function finalizeRegistry(system: WidgetSystem<AnyWidgetPluginTuple>, registrati
 			parts.push(`plugin type(s) ${duplicatedTypes.map(quote)
 				.join(', ')} registered more than once`)
 		}
+		if (invalidTypes.length > 0) {
+			parts.push(`renderer for plugin type(s) ${invalidTypes.map(quote)
+				.join(', ')} is not a Vue component (expected a component object or function)`)
+		}
 
 		throw new WidgetVueIntegrationError(
 			'invalid-renderer-registry',
 			`Invalid @deviltea/widget-vue renderer registry: ${parts.join('; ')}.`,
-			{ missingTypes, unknownTypes, duplicateTypes: duplicatedTypes },
+			{ missingTypes, unknownTypes, duplicateTypes: duplicatedTypes, invalidTypes },
 		)
 	}
 

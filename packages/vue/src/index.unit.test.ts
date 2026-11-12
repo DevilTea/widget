@@ -53,9 +53,9 @@ describe('public entry point', () => {
 				| 'widget-plugin-mismatch'
 				| 'readonly-projection-write'
 		>()
-		expectTypeOf<InstanceType<typeof WidgetVueIntegrationError>['code']>()
+		expectTypeOf<WidgetVueIntegrationError['code']>()
 			.toEqualTypeOf<WidgetVueIntegrationErrorCode>()
-		expectTypeOf<InstanceType<typeof WidgetVueIntegrationError>['missingTypes']>()
+		expectTypeOf<WidgetVueIntegrationError['missingTypes']>()
 			.toEqualTypeOf<readonly string[] | null>()
 
 		// A type has no runtime export; the value surface stays exactly these three.
