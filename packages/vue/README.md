@@ -31,8 +31,16 @@ yarn add @deviltea/widget-vue @deviltea/widget-core vue
 pnpm add @deviltea/widget-vue @deviltea/widget-core vue
 ```
 
-`vue` (^3.5) is a peer dependency; `@deviltea/widget-core` is a regular
-dependency because this package's own published types are built on top of it.
+`vue` (^3.5) and `@deviltea/widget-core` are both peer dependencies, so install
+them next to this package as shown above. Core must be a peer rather than a
+nested dependency: it recognizes its own Runtimes by module-local identity, so
+an application that ends up with two copies of `@deviltea/widget-core` (for
+example through version skew) would build a Runtime with one copy and hand it to
+an adapter that imports the other. `WidgetRenderer` detects this when it is
+first given the Runtime and throws `WidgetVueIntegrationError` with code
+`foreign-runtime`, instead of rendering and failing on the first `emit`. If you
+see that error, make your package manager resolve a single
+`@deviltea/widget-core` copy.
 
 ## Usage
 

@@ -42,10 +42,12 @@ describe('public entry point', () => {
 			.toThrow(WidgetVueIntegrationError)
 	})
 
-	it('exports WidgetVueIntegrationErrorCode as a type-only root export of exactly the five stable codes', () => {
+	it('exports WidgetVueIntegrationErrorCode as a type-only root export of exactly the stable codes', () => {
 		expectTypeOf<WidgetVueIntegrationErrorCode>()
 			.toEqualTypeOf<
 				| 'invalid-renderer-registry'
+				| 'invalid-runtime'
+				| 'foreign-runtime'
 				| 'runtime-system-mismatch'
 				| 'outside-widget-renderer'
 				| 'widget-plugin-mismatch'

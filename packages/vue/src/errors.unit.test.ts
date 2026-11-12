@@ -6,7 +6,7 @@
 
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createWidgetVueRenderer, useWidget, WidgetVueIntegrationError } from './index'
 import { SharedWidgetSlotComponent } from './renderer'
@@ -186,14 +186,14 @@ describe('widgetVueIntegrationError codes', () => {
 		})
 
 		it('checks System identity before looking up the root widget', () => {
-			const runtime = {
-				blueprint: { system: {}, root: { id: 'root' } },
-				getWidget: () => null,
-			}
+			const runtime = createOtherFixtureRuntime({ id: 'root', type: 'Counter' })
+			const getWidget = vi.spyOn(runtime, 'getWidget')
 
-			const error = capture(() => mount(WidgetRenderer, { props: { runtime: runtime as never } }))
+			const error = capture(() => mount(WidgetRenderer, { props: { runtime } }))
 
 			expectCode(error, 'runtime-system-mismatch')
+			expect(getWidget)
+				.not.toHaveBeenCalled()
 		})
 	})
 

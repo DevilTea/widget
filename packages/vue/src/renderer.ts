@@ -10,6 +10,7 @@ import type { RuntimeLike, RuntimeWidgetLike } from './context'
 import { defineComponent, h, inject, provide } from 'vue'
 import { CurrentWidgetContextKey } from './context'
 import { WidgetVueIntegrationError } from './errors'
+import { assertWidgetRuntime } from './runtime-guard'
 
 // -------------------------------------------------------------------------------------------------
 // Registry builder typestate
@@ -299,6 +300,7 @@ export function createWidgetVueRenderer<Plugins extends AnyWidgetPluginTuple>(
 				// is a distributive conditional type over a still-generic `Plugins`, which TypeScript
 				// cannot narrow to a concrete member shape here — exactly why `@deviltea/widget-core`'s own
 				// Runtime factory never touches such a type directly either, only through an erased view.
+				assertWidgetRuntime(props.runtime)
 				const runtime = props.runtime as unknown as ErasedRuntime
 				if (runtime.blueprint.system !== system) {
 					throw new WidgetVueIntegrationError(

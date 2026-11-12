@@ -10,6 +10,7 @@ export default defineConfig({
 	clean: true,
 	publint: true,
 	deps: {
-		neverBundle: ['vue'],
+		// Core is a peerDependency: a bundled second copy would make the root renderer reject the host's Runtime.
+		neverBundle: ['vue', /^@deviltea\/widget-core(?:\/|$)/],
 	},
 })

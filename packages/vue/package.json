@@ -22,6 +22,7 @@
 		"renderer",
 		"composition"
 	],
+	"sideEffects": false,
 	"exports": {
 		".": {
 			"types": "./dist/index.d.mts",
@@ -35,7 +36,7 @@
 		"dist"
 	],
 	"engines": {
-		"node": "^22.14.0 || ^24.0.0"
+		"node": ">=22.14.0"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -47,13 +48,12 @@
 		"typecheck:test": "tsc --project ./tsconfig.tests.json --noEmit"
 	},
 	"peerDependencies": {
+		"@deviltea/widget-core": "workspace:^",
 		"vue": "^3.5.0"
-	},
-	"dependencies": {
-		"@deviltea/widget-core": "workspace:*"
 	},
 	"devDependencies": {
 		"@deviltea/tsconfig": "catalog:",
+		"@deviltea/widget-core": "workspace:*",
 		"@vue/test-utils": "catalog:",
 		"happy-dom": "catalog:",
 		"tsdown": "catalog:",
