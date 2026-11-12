@@ -174,15 +174,20 @@ export interface WidgetPluginCapabilities {
 	readonly events: boolean
 }
 
-/**
- * A completed plugin. Plugin-specific integration options are captured by the plugin factory's
- * closure; there is no `pluginConfig` / `globalConfig`.
- */
+/** Passive RawConfig authoring metadata of a plugin with a config capability. */
 export interface WidgetPluginConfigMetadata {
 	readonly description: string
 	readonly schema: WidgetConfigJsonSchema | null
 }
 
+/**
+ * A completed plugin. Plugin-specific integration options are captured by the plugin factory's
+ * closure; there is no `pluginConfig` / `globalConfig`.
+ *
+ * A completed plugin is immutable: `done()` freezes it, every section builder is sealed once its build
+ * callback returns, and every config, slot and member definition was captured by value when declared,
+ * so neither a retained builder section nor later mutation of the author's definition objects changes it.
+ */
 export interface WidgetPlugin<
 	Type extends string = string,
 	Interfaces extends WidgetInterfaces = WidgetInterfaces,
