@@ -24,10 +24,30 @@ interface ChannelCloseEnvelope {
 
 type ChannelEnvelope = ChannelMessageEnvelope | ChannelCloseEnvelope
 
+/**
+ * A message that arrives for a channel nobody has subscribed to yet (the peer opened it first) is buffered,
+ * at most this many per channel; beyond that the OLDEST buffered message is dropped. The latest messages
+ * matter most for a request/response protocol whose peer retries, and a flood cannot grow memory.
+ */
+const MAX_BUFFERED_MESSAGES_PER_CHANNEL = 64
+
+/**
+ * At most this many channel names the local side has not opened yet may hold state for the peer. A message
+ * for any further unknown name is dropped without creating state, so a peer cannot grow the map without bound.
+ */
+const MAX_UNOPENED_CHANNELS = 16
+
 interface ChannelState {
 	readonly messageListeners: Set<(message: unknown) => void>
 	readonly closeListeners: Set<() => void>
+	/** Messages that arrived while no listener was subscribed, oldest first; see the limits above. */
+	readonly buffer: unknown[]
 	closed: boolean
+	/** The local side called `openChannel` for this generation of the name. */
+	opened: boolean
+	/** The peer (not the local side) closed this generation, so a new message means the peer reopened it. */
+	closedByPeer: boolean
+	flushScheduled: boolean
 }
 
 export interface MessagePortChannelHub {
@@ -74,23 +94,32 @@ export function createMessagePortChannelHub(port: MessagePort): MessagePortChann
 	const states = new Map<string, ChannelState>()
 	let closed = false
 
-	function stateFor(name: string): ChannelState {
-		let state = states.get(name)
-		if (state === undefined) {
-			state = {
-				messageListeners: new Set(),
-				closeListeners: new Set(),
-				closed,
-			}
-			states.set(name, state)
+	function createState(): ChannelState {
+		return {
+			messageListeners: new Set(),
+			closeListeners: new Set(),
+			buffer: [],
+			closed: false,
+			opened: false,
+			closedByPeer: false,
+			flushScheduled: false,
 		}
-		return state
+	}
+
+	function unopenedCount(): number {
+		let count = 0
+		for (const state of states.values()) {
+			if (!state.opened && !state.closed)
+				count++
+		}
+		return count
 	}
 
 	function markChannelClosed(state: ChannelState): void {
 		if (state.closed)
 			return
 		state.closed = true
+		state.buffer.length = 0
 		state.messageListeners.clear()
 		const listeners = [...state.closeListeners]
 		state.closeListeners.clear()
@@ -123,15 +152,73 @@ export function createMessagePortChannelHub(port: MessagePort): MessagePortChann
 		if (!isEnvelope(event.data))
 			return
 		const envelope = event.data
-		const state = stateFor(envelope.channel)
-		if (state.closed)
-			return
+		let state = states.get(envelope.channel)
 		if (envelope.kind === 'close') {
-			markChannelClosed(state)
+			if (state === undefined || state.closed)
+				return
+			if (state.opened) {
+				state.closedByPeer = true
+				markChannelClosed(state)
+			}
+			else {
+				// Closed before the local side ever opened it: nothing is left to deliver or to report.
+				states.delete(envelope.channel)
+			}
 			return
 		}
-		for (const listener of [...state.messageListeners])
-			listener(envelope.payload)
+		if (state === undefined || (state.closed && state.closedByPeer)) {
+			// A name nobody here has opened yet, or one the peer closed and has now reopened.
+			if (state === undefined && unopenedCount() >= MAX_UNOPENED_CHANNELS)
+				return
+			state = createState()
+			states.set(envelope.channel, state)
+		}
+		else if (state.closed) {
+			// The local side closed this generation: messages still in flight from the peer are stale.
+			return
+		}
+		deliver(state, envelope.payload)
+	}
+
+	/** Delivers buffered messages, in order, to whoever is subscribed when it runs. */
+	function flush(state: ChannelState): void {
+		state.flushScheduled = false
+		while (state.buffer.length > 0 && state.messageListeners.size > 0 && !state.closed) {
+			const message = state.buffer.shift()
+			for (const listener of [...state.messageListeners]) {
+				try {
+					listener(message)
+				}
+				catch (error) {
+					// One failing listener must not strand the rest of the buffer; report it outside the loop.
+					queueMicrotask(() => {
+						throw error
+					})
+				}
+			}
+		}
+	}
+
+	function scheduleFlush(state: ChannelState): void {
+		if (state.flushScheduled)
+			return
+		state.flushScheduled = true
+		// A microtask, so a subscriber finishes its own setup before the first buffered message arrives.
+		queueMicrotask(() => flush(state))
+	}
+
+	function deliver(state: ChannelState, payload: unknown): void {
+		// Stay behind anything already buffered so order is preserved across the first subscription.
+		if (state.messageListeners.size > 0 && state.buffer.length === 0 && !state.flushScheduled) {
+			for (const listener of [...state.messageListeners])
+				listener(payload)
+			return
+		}
+		state.buffer.push(payload)
+		if (state.buffer.length > MAX_BUFFERED_MESSAGES_PER_CHANNEL)
+			state.buffer.shift()
+		if (state.messageListeners.size > 0)
+			scheduleFlush(state)
 	}
 
 	function onPortClose(): void {
@@ -149,7 +236,14 @@ export function createMessagePortChannelHub(port: MessagePort): MessagePortChann
 		openChannel(name) {
 			if (name.length === 0)
 				throw new TypeError('MessagePort channel name must not be empty.')
-			const state = stateFor(name)
+			const existing = states.get(name)
+			// Either a first open, or the previous generation of this name was closed: start fresh.
+			const state = existing !== undefined && !existing.closed ? existing : createState()
+			if (state !== existing) {
+				state.closed = closed
+				states.set(name, state)
+			}
+			state.opened = true
 			return {
 				get closed() {
 					return state.closed
@@ -169,6 +263,8 @@ export function createMessagePortChannelHub(port: MessagePort): MessagePortChann
 					if (closed || state.closed)
 						return () => {}
 					state.messageListeners.add(listener)
+					if (state.buffer.length > 0)
+						scheduleFlush(state)
 					return () => state.messageListeners.delete(listener)
 				},
 				subscribeClose(listener) {
