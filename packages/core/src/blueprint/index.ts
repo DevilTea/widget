@@ -107,7 +107,10 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 	const { nodes, rootNodeId, nodeIdByPublicNode, nodeIdsByWidgetId, finalDiagnostics, diagnosticsByNode } = recovery
 	const jsonInspection = sourceJsonProven ? inspectParsedJsonValue(definition) : inspectJsonValue(definition)
 	const sourceJsonCompatible = jsonInspection.compatible
-	finalDiagnostics.push(...jsonInspection.diagnostics)
+	// One push per diagnostic, never `push(...diagnostics)`: wide input can produce more diagnostics than an
+	// engine accepts as call arguments.
+	for (const diagnostic of jsonInspection.diagnostics)
+		finalDiagnostics.push(diagnostic)
 
 	const semanticOrder = computeSemanticOrder(nodes, rootNodeId)
 	// `navigator` (full public nodes) backs only the *finalized* Blueprint's own navigation methods

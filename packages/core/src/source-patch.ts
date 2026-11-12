@@ -1,6 +1,6 @@
 import type { DiagnosticPath, JsonCompatibilityReason } from './diagnostic'
 import type { JsonValue } from './json'
-import { inspectJsonValue, jsonEqual, MAX_JSON_DEPTH, sameValueZero } from './json'
+import { findFirstJsonViolation, jsonEqual, MAX_JSON_DEPTH, sameValueZero } from './json'
 
 export type SourcePath = readonly (string | number)[] | string
 
@@ -545,10 +545,9 @@ function operationError(index: number, error: PatchError): SourcePatchOperationF
  * of the operand (the same facts the Blueprint reports for the same code).
  */
 function operandFailure(value: unknown): PatchError | null {
-	const inspection = inspectJsonValue(value)
-	if (inspection.compatible)
+	const first = findFirstJsonViolation(value)
+	if (first === null)
 		return null
-	const first = inspection.diagnostics[0]!
 	return {
 		code: 'json-incompatible-value',
 		message: PATCH_ERROR_MESSAGES['json-incompatible-value'],

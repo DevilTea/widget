@@ -461,8 +461,13 @@ function recoverSlots(
 	fillMissingDeclaredSlots()
 }
 
+/**
+ * One push per diagnostic, never `push(...diagnostics)`: a node with very many unknown keys produces more
+ * diagnostics than an engine accepts as call arguments.
+ */
 function flushDiagnostics(ctx: BuildContext, diagnostics: readonly BlueprintDiagnostic[]): void {
-	ctx.finalDiagnostics.push(...diagnostics)
+	for (const diagnostic of diagnostics)
+		ctx.finalDiagnostics.push(diagnostic)
 }
 
 /**

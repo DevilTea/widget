@@ -52,7 +52,9 @@ function accessDiagnostic(path: readonly PropertyKey[]): SourceAccessDiagnostic 
 }
 
 /**
- * `path` is one shared stack, pushed before and popped after each child visit; diagnostics copy it.
+ * `path` is one shared stack, pushed before and popped after each child visit; diagnostics copy it. With
+ * `firstOnly` the walk stops at the first diagnostic, so a caller that only needs to know whether (and where
+ * first) a value leaves the JSON domain never diagnoses the rest of it.
  */
 function inspectJsonValueAt(
 	value: unknown,
@@ -60,6 +62,7 @@ function inspectJsonValueAt(
 	active: Set<object>,
 	diagnostics: JsonInspectionDiagnostic[],
 	depth: number,
+	firstOnly: boolean,
 ): void {
 	if (value === null || typeof value === 'string' || typeof value === 'boolean')
 		return
@@ -149,6 +152,8 @@ function inspectJsonValueAt(
 			}
 
 			for (const key of keys) {
+				if (firstOnly && diagnostics.length > 0)
+					return
 				if (typeof key === 'symbol') {
 					diagnostics.push(jsonDiagnostic([...path, key], 'symbol-key'))
 					continue
@@ -161,6 +166,8 @@ function inspectJsonValueAt(
 			}
 
 			for (let index = 0; index < length; index++) {
+				if (firstOnly && diagnostics.length > 0)
+					return
 				let descriptor: PropertyDescriptor | undefined
 				try {
 					descriptor = Object.getOwnPropertyDescriptor(value, String(index))
@@ -178,13 +185,15 @@ function inspectJsonValueAt(
 					continue
 				}
 				path.push(index)
-				inspectJsonValueAt(descriptor.value, path, active, diagnostics, depth + 1)
+				inspectJsonValueAt(descriptor.value, path, active, diagnostics, depth + 1, firstOnly)
 				path.pop()
 			}
 			return
 		}
 
 		for (const key of keys) {
+			if (firstOnly && diagnostics.length > 0)
+				return
 			if (typeof key === 'symbol') {
 				diagnostics.push(jsonDiagnostic([...path, key], 'symbol-key'))
 				continue
@@ -207,7 +216,7 @@ function inspectJsonValueAt(
 				continue
 			}
 			path.push(key)
-			inspectJsonValueAt(descriptor.value, path, active, diagnostics, depth + 1)
+			inspectJsonValueAt(descriptor.value, path, active, diagnostics, depth + 1, firstOnly)
 			path.pop()
 		}
 	}
@@ -223,8 +232,18 @@ function inspectJsonValueAt(
  */
 export function inspectJsonValue(value: unknown): JsonValueInspection {
 	const diagnostics: JsonInspectionDiagnostic[] = []
-	inspectJsonValueAt(value, [], new Set(), diagnostics, 0)
+	inspectJsonValueAt(value, [], new Set(), diagnostics, 0, false)
 	return { compatible: diagnostics.length === 0, diagnostics }
+}
+
+/**
+ * The first diagnostic {@link inspectJsonValue} reports for `value`, found by the same walk, or `null` when
+ * `value` is inside the JSON domain. The walk stops there instead of diagnosing the rest of the value.
+ */
+export function findFirstJsonViolation(value: unknown): JsonInspectionDiagnostic | null {
+	const diagnostics: JsonInspectionDiagnostic[] = []
+	inspectJsonValueAt(value, [], new Set(), diagnostics, 0, true)
+	return diagnostics[0] ?? null
 }
 
 const JSON_PARSE_PROVEN: JsonValueInspection = Object.freeze({ compatible: true, diagnostics: Object.freeze([]) })
@@ -262,7 +281,7 @@ export function inspectParsedJsonValue(value: unknown): JsonValueInspection {
 }
 
 export function isJsonValue(value: unknown): value is JsonValue {
-	return inspectJsonValue(value).compatible
+	return findFirstJsonViolation(value) === null
 }
 
 /**
