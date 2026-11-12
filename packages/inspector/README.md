@@ -154,7 +154,7 @@ A listener that throws does not affect other listeners or the transport: the fai
 
 **Subscribe/unsubscribe lifecycle.** `runtime.subscribeMember` (State or Property) and `runtime.subscribeEvent` return a `subscriptionId`; later `runtime.memberChanged` / `runtime.eventOccurred` events carry it. Release with `runtime.unsubscribeMember` / `runtime.unsubscribeEvent` (`{ removed }` is `false` for an unknown id). The Agent releases everything when it is disposed or the transport closes. Subscriptions are passive: subscribing never evaluates a Property.
 
-**Capabilities.** The handshake result lists the methods and events available at the negotiated minor. Anything not listed is unavailable for the session and answers `unknown-method`. DOM-dependent methods and `geometry.invalidated` are only offered by an Agent created with `dom`; `runtime.disposed` only from 0.4.
+**Capabilities.** The handshake result lists the methods and events available at the negotiated minor. Anything not listed is unavailable for the session and answers `unknown-method`. DOM-dependent methods and `geometry.invalidated` are only offered by an Agent created with `dom`; `runtime.disposed` only from 0.4. A peer that never performs the handshake is served at the Agent's highest minor for events (only the handshake sets the negotiated minor); its responses use the lower of that and the request envelope's minor.
 
 ### Events
 

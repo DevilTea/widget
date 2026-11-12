@@ -43,7 +43,7 @@ An Agent created without `dom` serves the Runtime-level methods only. The DOM-de
 ## Two version axes
 
 - **npm semver** governs the TypeScript API.
-- **Protocol `major.minor`** governs cross-realm compatibility. Minors only add negotiated capabilities, and every params validator ignores unknown extra fields, so a newer peer's additions never break an older one; a peer negotiated at an older minor sees exactly the wire shapes of that minor. A breaking DTO change bumps the major. Only the handshake sets the negotiated minor.
+- **Protocol `major.minor`** governs cross-realm compatibility. Minors only add negotiated capabilities, and every params validator ignores unknown extra fields, so a newer peer's additions never break an older one; a peer negotiated at an older minor sees exactly the wire shapes of that minor. A breaking DTO change bumps the major. Only the handshake sets the negotiated minor. A peer that never performs the handshake is served at the Agent's highest minor for events, and its responses use the lower of that and the request envelope's minor.
 
 The protocol is currently `0.4`: 0.2 added event subscriptions and geometry, 0.3 the `subscription-limit` error code, and 0.4 the `authorWritable` / `valueContractId` member fields, the `runtime.disposed` event, the `runtime-disposed` error code and the `keyTruncated` marker.
 
