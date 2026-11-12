@@ -82,7 +82,7 @@ function at<T>(array: readonly T[], index: number): T {
 function isDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple>(
 	diagnostic: BlueprintDiagnostic<Plugins>,
 ): diagnostic is BlueprintDefinitionDiagnostic<Plugins> {
-	return ['invalid-widget-definition', 'invalid-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
+	return ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
 }
 
 function isConfigDiagnostic<Plugins extends AnyWidgetPluginTuple>(
@@ -233,6 +233,24 @@ describe('duplicate id', () => {
 			.filter(diagnostic => arraysEqual(pathOf(diagnostic), ['id']))
 		expect(allDuplicateIdDiagnostics)
 			.toHaveLength(3)
+		expect(allDuplicateIdDiagnostics.map(diagnostic => diagnostic.code))
+			.toEqual(['duplicate-widget-id', 'duplicate-widget-id', 'duplicate-widget-id'])
+	})
+
+	it('reserves invalid-widget-id for a missing or non-string id and never attaches related to it', () => {
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'container',
+			slots: { children: [{ type: 'leaf' }, { id: 7, type: 'leaf' }] },
+		})
+
+		const diagnostics = blueprint.diagnostics.filter(isDefinitionDiagnostic)
+		expect(diagnostics.map(diagnostic => diagnostic.code))
+			.toEqual(['invalid-widget-id', 'invalid-widget-id'])
+		for (const diagnostic of diagnostics) {
+			expect('related' in diagnostic)
+				.toBe(false)
+		}
 	})
 })
 

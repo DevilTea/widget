@@ -70,7 +70,7 @@ function assertResolved(node: BlueprintWidgetNode<OurPlugins>): ResolvedBlueprin
 function isDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple>(
 	diagnostic: BlueprintDiagnostic<Plugins>,
 ): diagnostic is BlueprintDefinitionDiagnostic<Plugins> {
-	return ['invalid-widget-definition', 'invalid-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
+	return ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
 }
 
 function summarizeDiagnostics(diagnostics: readonly OurBlueprintDiagnostic[]) {

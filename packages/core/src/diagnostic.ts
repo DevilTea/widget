@@ -149,7 +149,8 @@ type BlueprintDiagnosticRelated<Plugins extends AnyWidgetPluginTuple> = NonEmpty
 
 export type BlueprintDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
 	= | DiagnosticBase<'invalid-widget-definition', BlueprintWidgetDiagnosticLocation<Plugins>>
-		| (DiagnosticBase<'invalid-widget-id', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath, readonly related?: BlueprintDiagnosticRelated<Plugins> })
+		| (DiagnosticBase<'invalid-widget-id', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
+		| (DiagnosticBase<'duplicate-widget-id', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath, readonly related: BlueprintDiagnosticRelated<Plugins> })
 		| (DiagnosticBase<'invalid-widget-type', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 		| (DiagnosticBase<'unknown-widget-type', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 		| (DiagnosticBase<'unexpected-widget-config', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })

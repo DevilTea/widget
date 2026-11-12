@@ -468,7 +468,7 @@ function emitDuplicateIdDiagnostics(ctx: BuildContext, index: ReadonlyMap<Widget
 			const related = ids
 				.filter(otherId => otherId !== nodeId)
 				.map(otherId => widgetLocation(ctx.nodes[otherId]!.publicNode))
-			ctx.finalDiagnostics.push(definitionDiagnostic(node.publicNode, 'invalid-widget-id', `Duplicate widget id "${node.id}".`, ['id'], related))
+			ctx.finalDiagnostics.push(definitionDiagnostic(node.publicNode, 'duplicate-widget-id', `Duplicate widget id "${node.id}".`, ['id'], related))
 		}
 	}
 }
