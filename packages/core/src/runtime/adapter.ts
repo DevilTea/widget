@@ -60,13 +60,17 @@ export function invokeListenerIsolated<Value>(listener: (value: Value) => void, 
 }
 
 /**
- * Calls a synchronous semantic event listener without leaking its reads into an enclosing
- * Property/effect. Unlike reactive value listeners, event listener exceptions propagate immediately.
+ * {@link invokeListenerIsolated} for a synchronous semantic event listener and its argument tuple: no
+ * reads leak into an enclosing Property/effect, and a throw is reported outside the emit instead of
+ * aborting the emitting Method and the remaining listeners.
  */
-export function invokeListenerUntracked(listener: (...args: readonly unknown[]) => void, args: readonly unknown[]): void {
+export function invokeEventListenerIsolated(listener: (...args: readonly unknown[]) => void, args: readonly unknown[]): void {
 	const previous = setActiveSub(undefined)
 	try {
 		listener(...args)
+	}
+	catch (error) {
+		reportIsolatedException(error)
 	}
 	finally {
 		setActiveSub(previous)
