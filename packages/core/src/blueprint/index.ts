@@ -10,6 +10,7 @@
 
 import type { BlueprintDiagnostic, BlueprintNodeDiagnostic } from '../diagnostic'
 import type {
+	BlueprintSourcePath,
 	BlueprintWidgetNode,
 	CompiledBlueprint,
 	CompiledWidgetNode,
@@ -18,6 +19,7 @@ import type {
 	ResolvedBlueprintWidgetNode,
 	ValidWidgetSystemBlueprint,
 	WidgetLocation,
+	WidgetSource,
 	WidgetSystemBlueprint,
 	WidgetSystemBlueprintStatus,
 } from '../internal/contract'
@@ -28,7 +30,8 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { WorkingNode } from './recovery'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { blueprintInternals } from '../internal/contract'
-import { inspectJsonValue } from '../json'
+import { inspectJsonValue, inspectParsedJsonValue } from '../json'
+import { runOutsideCallbacks } from '../runtime/context'
 import { freezeDiagnosticSnapshot } from '../runtime/diagnostics'
 import { createWidgetSystemRuntime } from '../runtime/index'
 import { resolveDependencies } from './deps'
@@ -67,12 +70,13 @@ function buildCompiledNodes(nodes: readonly WorkingNode[], diagnosticsByNode: Re
 			source: node.source,
 			parentNodeId: node.parentNodeId,
 			location: node.location,
+			sourcePath: node.sourcePath,
 			rawSlots: Object.freeze(node.rawSlots),
 			diagnostics,
 		}
 
 		if (!node.resolved)
-			return { ...base, resolved: false, id: node.id }
+			return { ...base, resolved: false, id: node.id, type: node.typeHint }
 
 		return {
 			...base,
@@ -90,22 +94,35 @@ function buildCompiledNodes(nodes: readonly WorkingNode[], diagnosticsByNode: Re
 	})
 }
 
-const JSON_PROVEN_BY_CONSTRUCTION = Object.freeze({ compatible: true, diagnostics: Object.freeze([]) })
-
 /**
  * `sourceJsonProven` is set only for a value Core itself produced with `JSON.parse` (no reviver): such a
- * value cannot hold anything `inspectJsonValue` rejects, so the inspection would prove nothing new.
+ * value can only leave the JSON domain through a non-finite number (`1e400`), so a cheap scan replaces the
+ * full `inspectJsonValue` inspection and the result stays equivalent to `createBlueprint(JSON.parse(text))`.
+ *
+ * Compile-time plugin callbacks (config, structure, `registerDeps`) own no dependency or `emit` callables,
+ * so a Blueprint compiled while a Method runs must not let them use that Method's (see `callbackScope`).
  */
 export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 	system: WidgetSystem<Plugins>,
 	definition: unknown,
 	sourceJsonProven = false,
 ): WidgetSystemBlueprint<Plugins> {
+	return runOutsideCallbacks(() => compileBlueprintOutsideCallbacks(system, definition, sourceJsonProven))
+}
+
+function compileBlueprintOutsideCallbacks<Plugins extends AnyWidgetPluginTuple>(
+	system: WidgetSystem<Plugins>,
+	definition: unknown,
+	sourceJsonProven: boolean,
+): WidgetSystemBlueprint<Plugins> {
 	const recovery = recoverBlueprint(system, definition)
 	const { nodes, rootNodeId, nodeIdByPublicNode, nodeIdsByWidgetId, finalDiagnostics, diagnosticsByNode } = recovery
-	const jsonInspection = sourceJsonProven ? JSON_PROVEN_BY_CONSTRUCTION : inspectJsonValue(definition)
+	const jsonInspection = sourceJsonProven ? inspectParsedJsonValue(definition) : inspectJsonValue(definition)
 	const sourceJsonCompatible = jsonInspection.compatible
-	finalDiagnostics.push(...jsonInspection.diagnostics)
+	// One push per diagnostic, never `push(...diagnostics)`: wide input can produce more diagnostics than an
+	// engine accepts as call arguments.
+	for (const diagnostic of jsonInspection.diagnostics)
+		finalDiagnostics.push(diagnostic)
 
 	const semanticOrder = computeSemanticOrder(nodes, rootNodeId)
 	// `navigator` (full public nodes) backs only the *finalized* Blueprint's own navigation methods
@@ -160,19 +177,21 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 			getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 			getParent: (node: BlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 			getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+			getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 			getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 			getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 		}
 
 		const blueprint: ValidWidgetSystemBlueprint<Plugins> = {
 			system,
-			source: definition as JsonValue,
+			source: definition as WidgetSource<Plugins>,
 			sourceJsonCompatible: true,
 			status: 'valid',
 			root: validNavigator.root,
 			getWidget: validNavigator.getWidget,
 			getParent: validNavigator.getParent,
 			getLocation: validNavigator.getLocation,
+			getSourcePath: validNavigator.getSourcePath,
 			getChildren: validNavigator.getChildren,
 			getChildrenAt: validNavigator.getChildrenAt,
 			diagnostics: EMPTY_DIAGNOSTICS,
@@ -191,6 +210,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 		getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins> | null
 		getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins> | null
 		getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins> | null
+		getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 		getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins>[]
 		getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins>[]
 	}
@@ -201,6 +221,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 			getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins, JsonValue> | null
 			getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins, JsonValue> | null
 			getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+			getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 			getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins, JsonValue>[]
 			getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins, JsonValue>[]
 		}
@@ -213,6 +234,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 			getWidget: jsonInvalidNavigator.getWidget,
 			getParent: jsonInvalidNavigator.getParent,
 			getLocation: jsonInvalidNavigator.getLocation,
+			getSourcePath: jsonInvalidNavigator.getSourcePath,
 			getChildren: jsonInvalidNavigator.getChildren,
 			getChildrenAt: jsonInvalidNavigator.getChildrenAt,
 			diagnostics: finalDiagnostics,
@@ -231,6 +253,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 		getWidget: invalidNavigator.getWidget,
 		getParent: invalidNavigator.getParent,
 		getLocation: invalidNavigator.getLocation,
+		getSourcePath: invalidNavigator.getSourcePath,
 		getChildren: invalidNavigator.getChildren,
 		getChildrenAt: invalidNavigator.getChildrenAt,
 		diagnostics: finalDiagnostics,

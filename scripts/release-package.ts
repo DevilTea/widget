@@ -44,6 +44,31 @@ export function packageVersion(id: string) {
 	return packageJson.version
 }
 
+/**
+ * `widget-vue` and `widget-inspector` declare `@deviltea/widget-core` as a `workspace:^` peer, which packs
+ * as `^<core version>`. While Core is `0.0.x` that caret is an exact pin (`^0.0.6` is `0.0.6`), contradicting
+ * the documented `^0.N.0` policy, so a dependent must not be released until Core is at least `0.1.0`.
+ * Returns the reason to refuse, or `null` when the release may proceed. Pure: takes Core's version.
+ */
+export function corePeerRangeProblem(id: string, coreVersion: string): string | null {
+	if (id !== 'widget-vue' && id !== 'widget-inspector')
+		return null
+	const match = /^(\d+)\.(\d+)\.(\d+)/.exec(coreVersion)
+	if (match === null)
+		return `Cannot read the workspace @deviltea/widget-core version "${coreVersion}", so the published peer range of ${id} cannot be checked.`
+	if (Number(match[1]) === 0 && Number(match[2]) === 0) {
+		return `The workspace @deviltea/widget-core is ${coreVersion}, so the \`workspace:^\` peer would publish as \`^${coreVersion}\`, which pins that exact patch instead of admitting later patches. Release \`widget-core\` as 0.1.0 first (Core is released before its dependents), then release ${id}.`
+	}
+	return null
+}
+
+/** Refuses (throws) when the packed Core peer range of a dependent would be an exact pin. */
+export function assertCorePeerRange(id: string) {
+	const problem = corePeerRangeProblem(id, packageVersion('widget-core'))
+	if (problem !== null)
+		fail(problem)
+}
+
 export function packageTag(id: string) {
 	return `${id}@${packageVersion(id)}`
 }

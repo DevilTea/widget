@@ -1,8 +1,9 @@
 /**
  * Plugin-side readonly inspection projection.
  *
- * This surface projects only passive declaration facts required before any authored View/Blueprint exists.
- * It never exposes executable member definitions/callbacks and never executes Plugin semantics.
+ * This surface projects only passive declaration facts required before any authored View/Blueprint exists:
+ * everything the catalog entry carries plus capability presence and member facts. It never exposes
+ * executable member definitions/callbacks and never executes Plugin semantics.
  */
 
 import type { AnyWidgetPlugin } from '../plugin'
@@ -10,6 +11,7 @@ import type {
 	PluginInspection,
 	PluginInspectionEventMember,
 	PluginInspectionPropertyMember,
+	PluginInspectionSlot,
 	PluginInspectionStateMember,
 } from './types'
 import { isCoreWidgetPlugin, readWidgetPluginDefinition } from '../plugin'
@@ -17,6 +19,22 @@ import { createReadonlyMap } from '../readonly-map'
 import { WidgetInspectionError } from './errors'
 
 const inspectionCache = new WeakMap<AnyWidgetPlugin, PluginInspection>()
+
+function buildSlots(plugin: AnyWidgetPlugin): PluginInspection['slots'] {
+	const definitions = readWidgetPluginDefinition(plugin).slots
+	if (definitions === null)
+		return null
+
+	const slots: Array<readonly [string, PluginInspectionSlot]> = []
+	for (const [name, definition] of definitions) {
+		slots.push([name, Object.freeze({
+			type: 'slot' as const,
+			name,
+			description: definition.description,
+		})])
+	}
+	return createReadonlyMap(slots)
+}
 
 function buildStateMembers(plugin: AnyWidgetPlugin): PluginInspection['state'] {
 	const definitions = readWidgetPluginDefinition(plugin).state
@@ -78,6 +96,11 @@ export function inspectPlugin(plugin: AnyWidgetPlugin): PluginInspection {
 		return existing
 
 	const inspection: PluginInspection = Object.freeze({
+		type: plugin.type,
+		description: plugin.description,
+		capabilities: plugin.capabilities,
+		config: plugin.config,
+		slots: buildSlots(plugin),
 		state: buildStateMembers(plugin),
 		properties: buildPropertyMembers(plugin),
 		events: buildEventMembers(plugin),

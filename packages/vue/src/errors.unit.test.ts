@@ -5,9 +5,9 @@
  */
 
 import { createWidgetPlugin } from '@deviltea/widget-core'
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
-import { defineComponent } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { defineComponent, h, Suspense } from 'vue'
 import { createWidgetVueRenderer, useWidget, WidgetVueIntegrationError } from './index'
 import { SharedWidgetSlotComponent } from './renderer'
 import {
@@ -47,6 +47,8 @@ function expectNullRegistryFields(error: WidgetVueIntegrationError): void {
 	expect(error.unknownTypes)
 		.toBeNull()
 	expect(error.duplicateTypes)
+		.toBeNull()
+	expect(error.invalidTypes)
 		.toBeNull()
 }
 
@@ -154,6 +156,54 @@ describe('widgetVueIntegrationError codes', () => {
 				.toEqual([])
 		})
 
+		it('reports a registered non-component value in invalidTypes, in first-registration order', () => {
+			const error = registryError((r) => {
+				r.Label!(undefined)
+				r.Counter!(CounterRenderer)
+				r.Container!(null)
+				r.Leaf!('not a component')
+				r.EmptyState!(EmptyStateRenderer)
+				r.Zulu!(42)
+			})
+
+			expect(error.invalidTypes)
+				.toEqual(['Label', 'Container', 'Leaf', 'Zulu'])
+			expect(error.missingTypes)
+				.toEqual([])
+			expect(error.unknownTypes)
+				.toEqual(['Zulu'])
+			expect(error.duplicateTypes)
+				.toEqual([])
+			expect(Object.isFrozen(error.invalidTypes))
+				.toBe(true)
+		})
+
+		it('accepts function and object components and keeps invalidTypes empty', () => {
+			const error = registryError((r) => {
+				r.Counter!(() => null)
+				r.Label!(LabelRenderer)
+			})
+
+			expect(error.invalidTypes)
+				.toEqual([])
+		})
+
+		it('types the registry defect lists as nullable and non-null exactly for invalid-renderer-registry', () => {
+			const error = registryError(() => {})
+
+			expectTypeOf(error.missingTypes)
+				.toEqualTypeOf<readonly string[] | null>()
+			expectTypeOf(error.invalidTypes)
+				.toEqualTypeOf<readonly string[] | null>()
+			expect(error.code)
+				.toBe('invalid-renderer-registry')
+			expect(error.missingTypes)
+				.not
+				.toBeNull()
+			expect(error.missingTypes?.length)
+				.toBeGreaterThan(0)
+		})
+
 		it('exposes frozen arrays, including empty ones', () => {
 			const error = registryError((r) => {
 				r.Counter!(CounterRenderer)
@@ -172,6 +222,72 @@ describe('widgetVueIntegrationError codes', () => {
 
 			expect(error.name)
 				.toBe('WidgetVueIntegrationError')
+			expect(error.constructor.name)
+				.toBe('WidgetVueIntegrationError')
+		})
+	})
+
+	describe('class identity', () => {
+		it('is an ordinary class: instanceof Error and the exported class, with a stable constructor name', () => {
+			const error = new WidgetVueIntegrationError('invalid-runtime', 'boom')
+
+			expect(error)
+				.toBeInstanceOf(Error)
+			expect(error)
+				.toBeInstanceOf(WidgetVueIntegrationError)
+			expect(error.constructor)
+				.toBe(WidgetVueIntegrationError)
+			expect(WidgetVueIntegrationError.name)
+				.toBe('WidgetVueIntegrationError')
+			expect(error.constructor.name)
+				.toBe('WidgetVueIntegrationError')
+			expect(error.name)
+				.toBe('WidgetVueIntegrationError')
+			expect(Object.getPrototypeOf(WidgetVueIntegrationError))
+				.toBe(Error)
+			expect(error.message)
+				.toBe('boom')
+			expect(error.code)
+				.toBe('invalid-runtime')
+			expectNullRegistryFields(error)
+		})
+
+		it('can be subclassed, and the subclass keeps instanceof and its own name', () => {
+			class MyError extends WidgetVueIntegrationError {
+				override readonly name = 'MyError'
+			}
+
+			const error = new MyError('unknown-widget', 'nope')
+
+			expect(error)
+				.toBeInstanceOf(MyError)
+			expect(error)
+				.toBeInstanceOf(WidgetVueIntegrationError)
+			expect(error)
+				.toBeInstanceOf(Error)
+			expect(error.name)
+				.toBe('MyError')
+			expect(error.constructor.name)
+				.toBe('MyError')
+			expect(error.code)
+				.toBe('unknown-widget')
+			expectNullRegistryFields(error)
+		})
+
+		it('freezes copies of the defect lists passed for invalid-renderer-registry', () => {
+			const missing = ['A']
+			const error = new WidgetVueIntegrationError('invalid-renderer-registry', 'bad', {
+				missingTypes: missing,
+				unknownTypes: [],
+				duplicateTypes: [],
+				invalidTypes: [],
+			})
+			missing.push('B')
+
+			expect(error.missingTypes)
+				.toEqual(['A'])
+			expect(Object.isFrozen(error.missingTypes))
+				.toBe(true)
 		})
 	})
 
@@ -186,14 +302,14 @@ describe('widgetVueIntegrationError codes', () => {
 		})
 
 		it('checks System identity before looking up the root widget', () => {
-			const runtime = {
-				blueprint: { system: {}, root: { id: 'root' } },
-				getWidget: () => null,
-			}
+			const runtime = createOtherFixtureRuntime({ id: 'root', type: 'Counter' })
+			const getWidget = vi.spyOn(runtime, 'getWidget')
 
-			const error = capture(() => mount(WidgetRenderer, { props: { runtime: runtime as never } }))
+			const error = capture(() => mount(WidgetRenderer, { props: { runtime } }))
 
 			expectCode(error, 'runtime-system-mismatch')
+			expect(getWidget)
+				.not.toHaveBeenCalled()
 		})
 	})
 
@@ -216,6 +332,34 @@ describe('widgetVueIntegrationError codes', () => {
 			const error = capture(() => useWidget(CounterPlugin))
 
 			expectCode(error, 'outside-widget-renderer')
+		})
+
+		it('tells an async setup() that useWidget() must be called synchronously, before the first await', async () => {
+			let error: unknown
+			const AsyncRenderer = defineComponent({
+				async setup() {
+					await Promise.resolve()
+					error = capture(() => useWidget(CounterPlugin))
+					return () => null
+				},
+			})
+			const Renderer = createWidgetVueRenderer(fixtureSystem, renderers =>
+				renderers
+					.Counter(AsyncRenderer)
+					.Label(LabelRenderer)
+					.Container(ContainerRenderer)
+					.Leaf(LeafRenderer)
+					.EmptyState(EmptyStateRenderer))
+			const runtime = createFixtureRuntime({ id: 'root', type: 'Counter' })
+
+			mount(defineComponent({ render: () => h(Suspense, null, { default: () => h(Renderer, { runtime }) }) }))
+			await flushPromises()
+
+			expectCode(error, 'outside-widget-renderer')
+			expect((error as WidgetVueIntegrationError).message)
+				.toContain('synchronously during setup()')
+			expect((error as WidgetVueIntegrationError).message)
+				.toContain('before the first await')
 		})
 
 		it('is thrown by the shared WidgetSlot component mounted with no widget host', () => {

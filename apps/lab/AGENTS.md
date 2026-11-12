@@ -44,10 +44,11 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   renderer's root element. It only wraps `inspectAnchorAttributes` from `@deviltea/widget-inspector/anchor`, which owns
   the attribute contract (names, identity-only shape, nesting/multi-fragment semantics); `@deviltea/widget-vue` itself
   still stamps no DOM attributes. Browser coverage lives in `e2e/inspect-anchors.spec.ts` (real `widget-vue` renderers).
-- `src/composables/use-runtime-member.ts` — Vue bridge for one Runtime Inspector member view model
-  (`src/runtime-inspector/viewmodel.ts`): adapts its `getSnapshot()`/`subscribe()` shape into a ref and
-  disposes the previous view model whenever the reactive observable source changes (different selected
-  member, or a Runtime replaced by Apply) or the component unmounts.
+- `src/composables/use-remote-runtime-member.ts` — Vue bridge for one remote Runtime Inspector member
+  (State or Property row): it observes the member through the `@deviltea/widget-inspector` client's
+  `runtime.memberChanged` events, and unsubscribes the previous remote subscription whenever the
+  connection, selected widget, or member changes (for example a Preview Runtime replaced by Apply) or the
+  component unmounts.
 - `src/composables/use-dependency-graph.ts` — Vue bridge for the Dependencies panel's Graph view: projects the
   current Document Blueprint through `projectSemanticGraph()` and drives a `LayoutSession`
   (`src/graph/layout-session.ts`) that only requests a fresh ELK layout when the projected graph itself
@@ -57,16 +58,17 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   panel, paralleling the Implementation explorer lifecycle.
 - `src/composables/use-graph-edge-selection.ts` — panel-local Graph edge-selection state (edge
   selection never expands into the shared cross-inspector focus).
-- `src/runtime-inspector/viewmodel.ts` — framework-agnostic passive view models
-  (`createStateMemberViewModel`/`createPropertyMemberViewModel`) over `RuntimeStateInspection`/
-  `RuntimePropertyInspection`. Calls only `getSnapshot()`/`subscribe()` — never `state.get()`/
-  `property.get()` — so opening/subscribing an inspector can never activate a lazy Property.
+- `src/runtime-inspector/` — small framework-agnostic helpers for the Runtime Inspector: `source.ts`
+  (Document-vs-Preview revision metadata: stale/diverged) and `format-value.ts` (display formatting of
+  Inspector value DTOs). The member data itself comes from the remote Preview connection, never from a
+  local Runtime (see "Runtime Inspector is strictly passive").
 - `src/graph/` — pure dependency projections plus the Graph layout pipeline; see "Dependencies inspector" below.
 - `src/implementation/` — the curated Implementation source explorer's framework-agnostic core (issue
   `DevilTea/deviltea-labs#25` P3): `types.ts` (`SourcesRegistry`/`CuratedSourceFile` — metadata only, `load()` thunks are the
   lazy boundary), `registry-coverage.ts` (dangling/uncurated-type sanity used by unit tests),
-  `applied-instance.ts` (pure extraction of a widget's own JSON fragment from the *applied* source
-  text), `focused-widget.ts` (shared focus -> plain `{ id, type }`), and `shiki-highlighter.ts` (the
+  `applied-instance.ts` (pure extraction of the focused widget's own authored JSON fragment from the
+  *applied* Document Blueprint, through Core's inspection node — never by searching the source text or by
+  widget id), `focused-widget.ts` (shared focus -> plain `{ id, type }`), and `shiki-highlighter.ts` (the
   lazy, self-contained Shiki fine-grained highlighter — see "Loading policy" below for its chunk and
   engine-choice rationale). Each showcase's `sources.ts` (`src/showcases/survey/sources.ts`,
   `src/showcases/crm/sources.ts`, `src/sandbox/sources.ts`) is the actual curated registry, wired into
@@ -76,10 +78,12 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   use-implementation-explorer.ts` is the small, deliberately parallel open/activate bridge to
   `Workbench.vue`'s Dockview instance (see that file's header for why it is not an extension of
   `LabStore.activeTab`).
-- `src/lib/issue-format.ts` — shared structured-issue formatting helpers (`formatIssuePath`,
-  `formatDependencyReference`, ...) reused by `blueprint/IssueList.vue` and
-  `runtime/RuntimePropertyIssueList.vue`. `message` is never parsed for structure; every field beyond it
-  comes from `issue.source`.
+- `src/lib/diagnostic-format.ts` — shared structured-diagnostic formatting helpers (`formatDiagnosticPath`,
+  `formatDependencyReference`, `formatSeparatedSourceLocation`, ...) reused by `blueprint/DiagnosticList.vue`,
+  `runtime/RuntimePropertyDiagnosticList.vue`, the Dependencies/Graph detail views, and the Document Tools
+  panel. `message` is never parsed for structure; every field beyond it comes from the diagnostic's own
+  structured fields (`code`, `location`, `path`, `reason`, ...). The Lab does not enumerate or label
+  diagnostic/failure codes: a code is shown verbatim, so a new Core code needs no Lab change.
 - `src/components/` — the app shell: `LabHeader.vue` (compact header: showcase selector, preset,
   status, Apply), `Workbench.vue` (`dockview-vue` two-column default layout), `NonClosableTab.vue`
   (a custom Dockview `tabComponent` — `DevilTea/deviltea-labs#27` Finding 2: registered as `tabComponents.nonClosable` and
@@ -90,13 +94,16 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   lazily-registered `ImplementationPanel.vue` — `DevilTea/deviltea-labs#25` P3; it is the one panel `Workbench.vue`
   registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
   deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
-  which consumes the published `@deviltea/widget-inspector` client/agent boundary for Inspect mode through its public subpaths only (never a root entry or an internal module). Phase B1
-  (`DevilTea/widget#8`) now runs that same-realm bridge over a real asynchronous `MessageChannel` rather than the A1
-  in-process pair; the Agent still owns bounded Preview DOM hit-testing, pointer suppression,
-  an Agent-owned ShadowRoot overlay for highlight/badge chrome (renderer elements are never mutated; the Lab only themes it through `--widget-inspector-*` custom properties in `global.css`), and Escape cleanup, while the panel only translates scoped `WidgetRef`
-  selection events into the existing Preview focus/navigation rules. `src/preview-host/lifecycle.ts` is
-  the generation-aware remote-host state machine (`booting`/`ready`/`replacing`/`disconnected`/`error`)
-  for the next iframe step. Preview Runtime ownership has **not** moved into an iframe yet; `DevilTea/widget#8` owns Phase B
+  which consumes the published `@deviltea/widget-inspector` client/agent boundary for Inspect mode through its public subpaths only (never a root entry or an internal module). The Preview Runtime, Vue
+  renderer tree and `InspectorAgent` live in an isolated iframe realm (`preview-frame.html` ->
+  `src/preview-frame-main.ts`); the parent owns only the iframe element, the remote `InspectorClient`, and
+  the `src/preview-host/` machinery (`coordinator.ts` serializes Preview promotions, `frame-driver.ts`
+  boots a frame and connects over a transferred `MessagePort`, `client.ts`/`protocol.ts` are the
+  host-command protocol, `lifecycle.ts` is the generation-aware `booting`/`ready`/`replacing`/
+  `disconnected`/`error` state machine). The parent never holds a Core Runtime or frame DOM. The Agent
+  owns bounded Preview DOM hit-testing, pointer suppression, an Agent-owned ShadowRoot overlay for
+  highlight/badge chrome (renderer elements are never mutated; the Lab only themes it through `--widget-inspector-*` custom properties in `global.css`), and Escape cleanup, while the panel only translates scoped `WidgetRef`
+  selection events into the existing Preview focus/navigation rules. `DevilTea/widget#8` tracked the Phase B
   implementation and `DevilTea/widget#5` remains the iframe/extension umbrella,
   `inspector/*` (presentation-only inspector shell and tree/details split layout shared by Blueprint and
   Runtime; these components own no semantic data, revision labels, or focus state), `blueprint/*` (the Blueprint Inspector's tree + selected-node detail + issue list; the selected-node
@@ -125,6 +132,13 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.
+  - Historical note: several showcase plugins project their resolved `config` into Properties purely so
+    renderers can display it, because the Vue adapter did not expose `config` to renderers. That projection
+    is for rendering only and is not a semantic requirement; once `@deviltea/widget-vue` exposes `config`
+    to renderers, those renderers may read it directly (do not change the showcases for this alone).
+  - Authored sources the Lab ships (presets, tutorial, e2e fixtures) must use only Core's recognized widget
+    keys (`id`, `type`, `config`, `slots`, and the reserved `meta` extension key); any other own key makes
+    the Blueprint invalid (`unexpected-widget-field`). `src/showcases/registry.unit.test.ts` pins this.
 - `pika.config.ts` — the Lab's small PikaCSS token set (`variables.definitions`, safe-listed so the
   hand-authored `src/styles/dockview-theme.css` can reference them via plain `var()`).
 - `src/**/*.unit.test.ts` — colocated Vitest unit tests for `src/lab/`, `src/graph/`,
@@ -275,6 +289,10 @@ live source workflow, and the showcases. It must not own, and must not gain:
   renderer/lifecycle/reactivity adapter surface — both are consumed exclusively through their public
   entry points (`@deviltea/widget-core`, `@deviltea/widget-core/inspection`, `@deviltea/widget-vue`);
   no private/internal import from either package;
+- any part of `@deviltea/widget-inspector`'s protocol, transport, client or agent — it is consumed
+  exclusively through its public subpaths (`/agent`, `/anchor`, `/channel`, `/client`, `/frame-bootstrap`,
+  `/protocol`, `/transport`, `/value`), never its root entry or an internal module; `@deviltea/widget-vue`
+  stamps no DOM attributes, so the Lab projects identity onto renderers only through `/anchor`;
 - persistence/versioning/migration of any kind — `LabSession`'s `draftSourceText`/`documentState` and
   `preview` snapshots are in-memory only, and Monaco's own workspace/IndexedDB machinery is deliberately not used (see
   `use-monaco-editor.ts`) so it can never become a second, competing source of truth;
@@ -286,14 +304,18 @@ may challenge architecture, but never rewrites it locally.
 
 ## Inspectors are readonly
 
-Blueprint/Runtime/Dependencies panels consume `@deviltea/widget-core/inspection` (`inspectBlueprint`,
-`inspectRuntime`) as pure, passive projections. They must never:
+The Blueprint and Dependencies panels consume `@deviltea/widget-core/inspection` (`inspectBlueprint`) of the
+Document Blueprint, and the Runtime panel consumes the Inspector protocol (see below), as pure, passive
+projections. They must never:
 
 - call `state.set()`, invoke a Method, or otherwise force Property evaluation from inspector UI;
-- reconstruct semantic status from Issues, or run their own graph/SCC analysis — every fact comes from
+- reconstruct semantic status from diagnostics, or run their own graph/SCC analysis — every fact comes from
   core's compiler/runtime-authoritative data;
-- treat `issue.message` as a machine protocol — only `issue.source.type` and structured `related`
-  locations drive navigation/rendering.
+- treat `diagnostic.message` as a machine protocol — only the structured `code`, `location` (including its
+  `type`), `path` and `related` locations drive navigation/rendering;
+- read the authored source to rediscover what Core already exposes: a node's identity comes from the resolved
+  `id`/`type` or the unresolved node's `id`/`type` hints, and its position in the source from the node's
+  `sourcePath` (or `blueprint.getSourcePath()`), never from a hand-written traversal of the source grammar.
 
 Real semantic interaction (State/Property/Method activity) stays exclusively in Preview
 (`src/components/preview/PreviewPanel.vue`, via `useWidget()` from `@deviltea/widget-vue`). There is no
@@ -301,17 +323,20 @@ Real semantic interaction (State/Property/Method activity) stays exclusively in 
 
 ## Runtime Inspector is strictly passive
 
-`src/components/panels/RuntimePanel.vue` and `src/components/runtime/*` consume `inspectRuntime()`
-readonly. State members render `RuntimeStateInspection.getSnapshot()`/`subscribe()` only — never
-`state.get()`. Property members render `Never evaluated` until `RuntimePropertyInspection`'s snapshot
-reports `status: 'completed'` — the latest `ExecutionResult` some *real* Runtime consumer (Preview)
-naturally produced — and never `fresh`/`dirty`/`active`/`stale` labels. Methods are inventory only (name
-+ the compiler's `transitivelyWrites` fact); there is no invocation affordance. The Runtime Inspector
-always consumes `store.preview`'s Blueprint/Runtime and shows its Preview revision; an invalid current
+`src/components/panels/RuntimePanel.vue` and `src/components/runtime/*` never touch a Core Runtime: the
+Runtime lives in the Preview iframe, and the panel consumes only `@deviltea/widget-inspector` protocol DTOs
+through the remote `InspectorClient` of `store.previewHost.connection` (`runtime.getWidgetSnapshot`, then
+`runtime.memberChanged` events via `use-remote-runtime-member.ts`). It never imports `inspectRuntime()`.
+State members render the remote member snapshot only — nothing in the inspector reads `state.get()` or
+`property.get()`. Property members render `Never evaluated` until the member snapshot reports
+`status: 'completed'` — the latest result some *real* Runtime consumer (Preview) naturally produced — and
+never `fresh`/`dirty`/`active`/`stale` labels. Methods are inventory only (name + the compiler's
+`transitivelyWrites` fact); there is no invocation affordance. The Runtime Inspector always follows the
+Preview connection and shows its Preview revision (`runtime-inspector/source.ts`); an invalid current
 Document may leave an older valid Preview running, so it is not an unavailable Runtime state by itself.
-Only a session with no valid Preview has an unavailable Runtime panel. `src/runtime-inspector/viewmodel.ts`
-is the passive-projection layer this panel is built on — see its file-level comment and colocated tests
-for the exact contract.
+Only a session with no valid Preview has an unavailable Runtime panel. The only Lab code that calls
+`inspectRuntime()` is the Preview frame's tutorial observation (`src/tutorial/inspection-reader.ts`), which
+holds the same `getSnapshot()`/`subscribe()`-only discipline.
 
 ## Dependencies inspector
 
@@ -452,7 +477,7 @@ through the catalog contracts; config schema metadata is authoring guidance, not
 Its deliberately narrow operation is replacing an existing scalar config value on the selected inspection
 node. `ReplaceConfigScalarCommand` carries both the current Document `InspectionNodeId` and Document
 revision; `src/lab/author.ts` resolves that exact snapshot node and lowers the command to an array-form
-`SourcePatch`. The component never constructs a patch and never targets a widget by id, which keeps
+`SourcePatch` addressed by the node's Core-computed `sourcePath`. The component never constructs a patch and never targets a widget by id, which keeps
 duplicate authored ids and cross-revision focus safe. Unsupported/non-scalar fields and mechanical patch
 failures are explicit outcomes.
 
@@ -515,7 +540,9 @@ Core's returned result; it has no Lab-owned conflict model and must leave both D
 revisions unchanged.
 
 The separated-source section uses Core's public `separateWidgetSource()` only when the current Blueprint
-is valid. It is a read-only projection of the current Document source, never an alternate source
+is valid. `separateWidgetSource()` never throws and returns `{ separated, diagnostics }`; the section shows
+`separated` and lists Core's representation diagnostics (`code`, `{ area, path }` location, `message`) when
+there are any. It is a read-only projection of the current Document source, never an alternate source
 authority or validator; invalid/recovery Documents show that the Core precondition is unavailable.
 
 The Document trace is a finite, session-only ring of Lab-observed parse/commit/patch/conflict metadata.

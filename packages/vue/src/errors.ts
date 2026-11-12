@@ -4,6 +4,9 @@
  */
 export type WidgetVueIntegrationErrorCode
 	= | 'invalid-renderer-registry'
+		| 'invalid-runtime'
+		| 'foreign-runtime'
+		| 'unknown-widget'
 		| 'runtime-system-mismatch'
 		| 'outside-widget-renderer'
 		| 'widget-plugin-mismatch'
@@ -16,6 +19,7 @@ interface WidgetVueRegistryDefects {
 	readonly missingTypes: readonly string[]
 	readonly unknownTypes: readonly string[]
 	readonly duplicateTypes: readonly string[]
+	readonly invalidTypes: readonly string[]
 }
 
 /**
@@ -31,28 +35,35 @@ interface WidgetVueRegistryDefects {
  *
  * - `invalid-renderer-registry`: `createWidgetVueRenderer` coverage is not exactly-once against the
  *   bound System. One error reports every defect together: `missingTypes` (in System plugin order),
- *   `unknownTypes` and `duplicateTypes` (in first-registration order). Each is a frozen array
+ *   `unknownTypes` and `duplicateTypes` (in first-registration order), and `invalidTypes` (registered
+ *   values that are not Vue components, in first-registration order). Each is a frozen array
  *   (possibly empty) for this code.
+ * - `invalid-runtime`: the `runtime` prop is not an object at all (for example `null` or `undefined`).
+ * - `foreign-runtime`: the `runtime` prop was not produced by the `@deviltea/widget-core` instance this
+ *   package imports, because two copies of core are installed. Checked when the root renderer is first
+ *   given a Runtime, before the System-identity check.
+ * - `unknown-widget`: `createWidgetTestHost()` (from `@deviltea/widget-vue/testing`) was given a widget
+ *   id the Runtime does not contain.
  * - `runtime-system-mismatch`: the `runtime` prop was not created from the exact bound System.
  * - `outside-widget-renderer`: `useWidget()` or `WidgetSlot` was used without a current widget host.
  * - `widget-plugin-mismatch`: `useWidget(Plugin)` received a plugin instance other than the current
  *   widget's exact plugin.
  * - `readonly-projection-write`: a Property or Diagnostics ref was written.
  *
- * `missingTypes`, `unknownTypes` and `duplicateTypes` are `null` for every other code. States made
+ * `missingTypes`, `unknownTypes`, `duplicateTypes` and `invalidTypes` are `null` for every other code (the
+ * lists are typed `readonly string[] | null`; handle `null` even after checking `code`). States made
  * impossible by exact-plugin, registry and System-identity validation are internal invariants and
  * throw a plain `Error`, not this class.
  *
  * This error never appears in any `getDiagnostics()` / `subscribeDiagnostics()` snapshot.
  */
 export class WidgetVueIntegrationError extends Error {
-	override readonly name = 'WidgetVueIntegrationError'
+	override readonly name: string = 'WidgetVueIntegrationError'
 	readonly missingTypes: readonly string[] | null
 	readonly unknownTypes: readonly string[] | null
 	readonly duplicateTypes: readonly string[] | null
+	readonly invalidTypes: readonly string[] | null
 
-	constructor(code: 'invalid-renderer-registry', message: string, defects: WidgetVueRegistryDefects)
-	constructor(code: Exclude<WidgetVueIntegrationErrorCode, 'invalid-renderer-registry'>, message: string)
 	constructor(
 		readonly code: WidgetVueIntegrationErrorCode,
 		message: string,
@@ -62,5 +73,6 @@ export class WidgetVueIntegrationError extends Error {
 		this.missingTypes = defects === undefined ? null : Object.freeze([...defects.missingTypes])
 		this.unknownTypes = defects === undefined ? null : Object.freeze([...defects.unknownTypes])
 		this.duplicateTypes = defects === undefined ? null : Object.freeze([...defects.duplicateTypes])
+		this.invalidTypes = defects === undefined ? null : Object.freeze([...defects.invalidTypes])
 	}
 }

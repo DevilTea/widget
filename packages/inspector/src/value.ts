@@ -1,7 +1,22 @@
 export interface InspectableValueEncodingOptions {
+	/** Maximum nesting depth of containers; deeper values encode as `{ type: 'truncated' }`. Default 4. */
 	readonly maxDepth?: number
+	/** Maximum entries/items emitted per array or object. Default 50. */
 	readonly maxEntries?: number
+	/** Maximum length of any string value or object key (UTF-16 code units). Default 500. */
 	readonly maxStringLength?: number
+	/**
+	 * Total budget of encoded values (every emitted node counts, leaves included) across the whole encoding,
+	 * on top of the per-level limits. Once spent, remaining entries/items are left out and their container
+	 * reports `truncated: true`. The root is always emitted. Default 1000.
+	 */
+	readonly maxNodes?: number
+	/**
+	 * Cut object keys longer than `maxStringLength` and mark the entry with `keyTruncated: true`. Default true.
+	 * When false, keys are emitted in full and never cut: the Agent turns it off for peers negotiated below
+	 * protocol 0.4, which predate the marker and must see the same shapes as before.
+	 */
+	readonly markTruncatedKeys?: boolean
 }
 
 export type InspectableValue
@@ -20,12 +35,17 @@ export type InspectableValue
 
 export interface InspectableObjectEntry {
 	readonly key: string
+	/** Present (and `true`) only when `key` was cut to the string limit. Added in protocol 0.4. */
+	readonly keyTruncated?: boolean
 	readonly value: InspectableValue
 }
 
-const DEFAULT_MAX_DEPTH = 4
-const DEFAULT_MAX_ENTRIES = 50
-const DEFAULT_MAX_STRING_LENGTH = 500
+export const DEFAULT_INSPECTABLE_VALUE_LIMITS: Readonly<Required<Omit<InspectableValueEncodingOptions, 'markTruncatedKeys'>>> = Object.freeze({
+	maxDepth: 4,
+	maxEntries: 50,
+	maxStringLength: 500,
+	maxNodes: 1000,
+})
 
 function encodeString(value: string, maxLength: number): Extract<InspectableValue, { type: 'string' }> {
 	const truncated = value.length > maxLength
@@ -52,17 +72,49 @@ function isDomNode(value: object): boolean {
 	}
 }
 
+/**
+ * The `limit` smallest keys in code-unit order, without sorting (or copying) the whole key list: one pass
+ * with a bounded sorted window, so the work beyond listing the keys is proportional to the keys emitted.
+ */
+function smallestKeys(keys: readonly string[], limit: number): string[] {
+	const selected: string[] = []
+	if (limit <= 0)
+		return selected
+	for (const key of keys) {
+		if (selected.length === limit && key >= selected[limit - 1]!)
+			continue
+		let low = 0
+		let high = selected.length
+		while (low < high) {
+			const middle = (low + high) >>> 1
+			if (selected[middle]! < key)
+				low = middle + 1
+			else
+				high = middle
+		}
+		selected.splice(low, 0, key)
+		if (selected.length > limit)
+			selected.pop()
+	}
+	return selected
+}
+
 export function encodeInspectableValue(
 	value: unknown,
 	options: InspectableValueEncodingOptions = {},
 ): InspectableValue {
-	const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH
-	const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
-	const maxStringLength = options.maxStringLength ?? DEFAULT_MAX_STRING_LENGTH
+	const maxDepth = options.maxDepth ?? DEFAULT_INSPECTABLE_VALUE_LIMITS.maxDepth
+	const maxEntries = options.maxEntries ?? DEFAULT_INSPECTABLE_VALUE_LIMITS.maxEntries
+	const maxStringLength = options.maxStringLength ?? DEFAULT_INSPECTABLE_VALUE_LIMITS.maxStringLength
+	const maxNodes = options.maxNodes ?? DEFAULT_INSPECTABLE_VALUE_LIMITS.maxNodes
+	const markTruncatedKeys = options.markTruncatedKeys ?? true
 	const seen = new WeakMap<object, number>()
 	let nextId = 1
+	// Every value this encoding emits, leaves and placeholders included, spends one unit of `maxNodes`.
+	let nodes = 0
 
 	function encode(current: unknown, depth: number): InspectableValue {
+		nodes++
 		if (current === null)
 			return { type: 'null' }
 		if (current === undefined)
@@ -122,34 +174,40 @@ export function encodeInspectableValue(
 
 			const limit = Math.min(length, maxEntries)
 			const items: InspectableValue[] = []
-			for (let index = 0; index < limit; index++) {
+			for (let index = 0; index < limit && nodes < maxNodes; index++) {
 				let descriptor: PropertyDescriptor | undefined
 				try {
 					descriptor = Object.getOwnPropertyDescriptor(objectValue, String(index))
 				}
 				catch {
+					nodes++
 					items.push(opaque('uninspectable'))
 					continue
 				}
-				items.push(descriptor !== undefined && 'value' in descriptor
-					? encode(descriptor.value, depth + 1)
-					: opaque('uninspectable'))
+				if (descriptor !== undefined && 'value' in descriptor) {
+					items.push(encode(descriptor.value, depth + 1))
+				}
+				else {
+					nodes++
+					items.push(opaque('uninspectable'))
+				}
 			}
 			return {
 				type: 'array',
 				id,
 				items,
-				truncated: length > limit,
+				truncated: length > items.length,
 			}
 		}
 
-		let prototype: object | null
-		let descriptors: Record<PropertyKey, PropertyDescriptor>
+		let keys: string[]
 		try {
-			prototype = Object.getPrototypeOf(objectValue) as object | null
+			const prototype = Object.getPrototypeOf(objectValue) as object | null
 			if (prototype !== Object.prototype && prototype !== null)
 				return opaque('class-instance')
-			descriptors = Object.getOwnPropertyDescriptors(objectValue)
+			// One linear listing of the own enumerable string keys; no per-key descriptor objects and no
+			// full sort, so a huge object costs far less than the entries it actually emits.
+			keys = Object.keys(objectValue)
 		}
 		catch {
 			return opaque('uninspectable')
@@ -161,18 +219,34 @@ export function encodeInspectableValue(
 		const id = nextId++
 		seen.set(objectValue, id)
 
-		const keys = Object.keys(descriptors)
-			.sort()
 		const entries: InspectableObjectEntry[] = []
-		for (const key of keys.slice(0, maxEntries)) {
-			const descriptor = descriptors[key]
+		for (const key of smallestKeys(keys, maxEntries)) {
+			if (nodes >= maxNodes)
+				break
+			let descriptor: PropertyDescriptor | undefined
+			try {
+				descriptor = Object.getOwnPropertyDescriptor(objectValue, key)
+			}
+			catch {
+				descriptor = undefined
+			}
 			if (descriptor === undefined)
 				continue
+			// Without the marker (peers below 0.4) a cut key would be indistinguishable from a real one and two
+			// distinct long keys could collide, so such peers keep receiving keys in full, as before 0.4.
+			const keyTruncated = markTruncatedKeys && key.length > maxStringLength
+			let entryValue: InspectableValue
+			if ('value' in descriptor) {
+				entryValue = encode(descriptor.value, depth + 1)
+			}
+			else {
+				nodes++
+				entryValue = opaque('uninspectable')
+			}
 			entries.push({
-				key,
-				value: 'value' in descriptor
-					? encode(descriptor.value, depth + 1)
-					: opaque('uninspectable'),
+				key: keyTruncated ? key.slice(0, maxStringLength) : key,
+				...(keyTruncated ? { keyTruncated: true } : {}),
+				value: entryValue,
 			})
 		}
 		return {

@@ -32,11 +32,12 @@ import type {
 	WidgetMethodReturnOf,
 	WidgetPropertyKeyOf,
 	WidgetPropertyValueOf,
+	WidgetResolvedConfigOf,
 	WidgetSlotNameOf,
 	WidgetStateKeyOf,
 	WidgetStateValueOf,
 } from '@deviltea/widget-core'
-import type { Ref } from 'vue'
+import type { Ref, Slot } from 'vue'
 
 /**
  * Truthful readonly-Ref projection shape. Property and every diagnostic channel are backed by `customRef`
@@ -46,6 +47,30 @@ import type { Ref } from 'vue'
  * `Readonly<Ref<T>>` types exactly the `{ readonly value: T }` shape a `customRef` genuinely provides.
  */
 export type ReadonlyRef<T> = Readonly<Ref<T>>
+
+// -------------------------------------------------------------------------------------------------
+// Config
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * Recursively read-only view of a resolved config. Functions are left alone; arrays and tuples keep
+ * their shape but become readonly.
+ */
+type DeepReadonly<T> = T extends (...args: never[]) => unknown
+	? T
+	: T extends object
+		? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+		: T
+
+/**
+ * The widget's resolved config (the value the plugin's `config.resolve` returned), present exactly when
+ * the plugin declares the `config` capability. It is the Runtime widget's own object, neither cloned
+ * nor reactive: within one Runtime a widget's resolved config never changes. Renderers must treat it
+ * as read-only; the type enforces that deeply.
+ */
+export type UseWidgetConfigAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
+	? { readonly config: DeepReadonly<WidgetResolvedConfigOf<Interfaces>> }
+	: unknown
 
 // -------------------------------------------------------------------------------------------------
 // State
@@ -175,6 +200,34 @@ export interface UseWidgetIdentityAccessor<Plugin extends AnyWidgetPlugin> {
  */
 export type WidgetSlotComponent<SlotName extends string> = new () => {
 	$props: { readonly name: SlotName }
+	$slots: { default?: Slot<WidgetSlotScope> }
+}
+
+/**
+ * A component that renders one child widget through the normal host (its registered renderer, its
+ * own `useWidget()` context, its own subscriptions). Takes no props. Obtained from the scoped
+ * `WidgetSlot` default slot; the identity is stable for a given child across re-renders, so re-rendering
+ * the surrounding markup with a stable wrapper never remounts the child widget. As with any Vue
+ * component, changing the wrapper element/component type, or skipping a child and showing it again,
+ * unmounts and remounts it.
+ */
+export type WidgetSlotChildComponent = new () => {
+	$props: Record<never, never>
+}
+
+/**
+ * What the `WidgetSlot` default slot receives, once per child in Blueprint order. No Runtime handle
+ * is exposed: the renderer decides how to wrap each child and whether to render it at all.
+ */
+export interface WidgetSlotScope {
+	/** Renders this child widget through the normal host. */
+	readonly Child: WidgetSlotChildComponent
+	/** The child's widget id. */
+	readonly id: string
+	/** The child's plugin type. */
+	readonly type: string
+	/** The child's position in this slot, counting children the renderer chooses to skip. */
+	readonly index: number
 }
 
 export type UseWidgetSlotAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'slots'> extends true
@@ -188,7 +241,8 @@ export type UseWidgetSlotAccessor<Interfaces extends WidgetInterfaces> = HasWidg
 // -------------------------------------------------------------------------------------------------
 
 export type UseWidgetResult<Plugin extends AnyWidgetPlugin> = WidgetInterfacesOf<Plugin> extends infer Interfaces extends WidgetInterfaces
-	? & UseWidgetStateAccessor<Interfaces>
+	? & UseWidgetConfigAccessor<Interfaces>
+	& UseWidgetStateAccessor<Interfaces>
 	& UseWidgetPropertiesAccessor<Interfaces>
 	& UseWidgetMethodsAccessor<Interfaces>
 	& UseWidgetEventEmitterAccessor<Interfaces>

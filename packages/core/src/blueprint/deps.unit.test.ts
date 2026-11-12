@@ -6,7 +6,7 @@
  * no-graph-edge behavior of an absent compiled dependency, and the exclusion of consumer `.validate()`
  * refinements from the stable `BlueprintDependencyReference`.
  *
- * Normative source: diagnostic #10 amendments "dependency resolution and compiled-edge invariants"
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendments "dependency resolution and compiled-edge invariants"
  * (COMMENT 11), "graph-analysis diagnostics" (COMMENT 12) and "Blueprint diagnostic locations and
  * dependency diagnostic surface" (COMMENT 13), consolidated handoff §8/§9.
  */

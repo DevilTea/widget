@@ -1,11 +1,12 @@
 # widget-lab
 
 Private, never-published Widget Lab application shell for `@deviltea/widget-core` /
-`@deviltea/widget-vue`: a workbench with a live JSON Source editor, an explicit Apply lifecycle, a
-persistent Preview, and readonly Blueprint/Runtime/Dependency Graph inspectors.
+`@deviltea/widget-vue` / `@deviltea/widget-inspector`: a workbench with a live JSON Source editor, an
+explicit Apply lifecycle, a persistent Preview (an isolated iframe realm that owns the Runtime), and
+readonly Blueprint/Runtime/Dependency Graph inspectors.
 
-See [AGENTS.md](AGENTS.md) for the architectural boundaries this app must keep (public-contract-only
-consumption of `@deviltea/widget-core`/`@deviltea/widget-vue`, readonly inspectors, no
+See [AGENTS.md](AGENTS.md) for the architectural boundaries this app must keep (public-entry-point-only
+consumption of `@deviltea/widget-core`/`@deviltea/widget-vue`/`@deviltea/widget-inspector`, readonly inspectors, no
 persistence/editor-domain state, sandbox fixtures vs. showcases).
 
 ## Stack

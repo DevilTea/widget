@@ -9,7 +9,7 @@ import type { WidgetIntegrationEventEmitter } from '@deviltea/widget-core/integr
 import type { CurrentWidgetContextValue, RuntimeWidgetLike } from './context'
 import type { UseWidgetResult } from './types'
 import { getWidgetEventEmitter } from '@deviltea/widget-core/integration'
-import { inject, onScopeDispose } from 'vue'
+import { hasInjectionContext, inject, onScopeDispose } from 'vue'
 import { createDiagnosticsRef, createLazyKeyedSurface, createMethodWrapper, createPropertyRef, createStateRef } from './bridge'
 import { CurrentWidgetContextKey } from './context'
 import { WidgetVueIntegrationError } from './errors'
@@ -30,6 +30,14 @@ function getCurrentWidgetContext(): CurrentWidgetContextValue {
 	// must be treated as "no context" here.
 	const current = inject(CurrentWidgetContextKey, null)
 	if (current === null || current === undefined) {
+		// No injection context at all means the call did not run synchronously inside `setup()`; the
+		// classic cause is a hand-written `async setup()` calling it after an `await`.
+		if (!hasInjectionContext()) {
+			throw new WidgetVueIntegrationError(
+				'outside-widget-renderer',
+				'useWidget() must be called synchronously during setup() of a widget renderer component: there is no current component instance. In an async setup(), call useWidget() before the first await (<script setup> top-level await is fine).',
+			)
+		}
 		throw new WidgetVueIntegrationError(
 			'outside-widget-renderer',
 			'useWidget() was called outside a widget renderer component rendered by a WidgetRenderer produced by createWidgetVueRenderer().',
@@ -72,16 +80,21 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	result.widgetId = widget.id
 	result.widgetType = widget.type
 
+	// The widget's resolved config, by identity: within one Runtime it never changes, so it is neither
+	// reactive nor cloned. Typed read-only; renderers must not mutate it.
+	if (capabilities.config)
+		result.config = widget.blueprint.config
+
 	if (capabilities.state) {
 		const state = widget.state!
 		let surface: Readonly<Record<string, unknown>> | undefined
-		result.useState = () => surface ??= createLazyKeyedSurface((key) => {
+		result.useState = () => surface ??= createLazyKeyedSurface(state, (key) => {
 			const primitive = state[key]
 			return primitive === undefined ? undefined : createStateRef(primitive, registerCleanup)
 		})
 
 		let diagnosticsSurface: Readonly<Record<string, unknown>> | undefined
-		result.useStateDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface((key) => {
+		result.useStateDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface(state, (key) => {
 			const primitive = state[key]
 			return primitive === undefined ? undefined : createDiagnosticsRef(primitive.getDiagnostics, primitive.subscribeDiagnostics, registerCleanup)
 		})
@@ -90,13 +103,13 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	if (capabilities.properties) {
 		const properties = widget.properties!
 		let surface: Readonly<Record<string, unknown>> | undefined
-		result.useProperties = () => surface ??= createLazyKeyedSurface((key) => {
+		result.useProperties = () => surface ??= createLazyKeyedSurface(properties, (key) => {
 			const primitive = properties[key]
 			return primitive === undefined ? undefined : createPropertyRef(primitive, registerCleanup)
 		})
 
 		let diagnosticsSurface: Readonly<Record<string, unknown>> | undefined
-		result.usePropertyDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface((key) => {
+		result.usePropertyDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface(properties, (key) => {
 			const primitive = properties[key]
 			return primitive === undefined ? undefined : createDiagnosticsRef(primitive.getDiagnostics, primitive.subscribeDiagnostics, registerCleanup)
 		})
@@ -105,7 +118,7 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	if (capabilities.events) {
 		const events = widget.events!
 		let emitter: WidgetIntegrationEventEmitter | undefined
-		result.emit = createLazyKeyedSurface((key) => {
+		result.emit = createLazyKeyedSurface(events, (key) => {
 			// The Runtime Event surface is the authoritative declared member inventory. Looking up a key
 			// is passive and does not subscribe or acquire emit authority.
 			if (events[key] === undefined)
@@ -129,13 +142,13 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	if (capabilities.methods) {
 		const methods = widget.methods!
 		let surface: Readonly<Record<string, unknown>> | undefined
-		result.useMethods = () => surface ??= createLazyKeyedSurface((key) => {
+		result.useMethods = () => surface ??= createLazyKeyedSurface(methods, (key) => {
 			const primitive = methods[key]
 			return primitive === undefined ? undefined : createMethodWrapper(primitive)
 		})
 
 		let diagnosticsSurface: Readonly<Record<string, unknown>> | undefined
-		result.useMethodDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface((key) => {
+		result.useMethodDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface(methods, (key) => {
 			const primitive = methods[key]
 			return primitive === undefined ? undefined : createDiagnosticsRef(primitive.getDiagnostics, primitive.subscribeDiagnostics, registerCleanup)
 		})

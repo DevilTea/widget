@@ -15,33 +15,40 @@ import { WidgetVueIntegrationError } from './errors'
 export type RegisterCleanup = (cleanup: () => void) => void
 
 /**
- * Collision-safe lazy keyed surface: `materialize` runs at most once per accessed key (including
- * `__proto__` / `constructor`), and the returned Proxy caches the result by identity so repeated
- * access returns the exact same member wrapper. Keys with no backing Runtime member materialize to
- * `undefined` without being cached, matching plain-object "unknown property" behavior.
+ * Collision-safe lazy keyed surface over the Runtime's declared `members` (the Runtime's own keyed
+ * surface object, the authoritative member inventory). The surface is an ordinary, frozen,
+ * null-prototype object whose own enumerable properties are exactly the declared members (including
+ * `__proto__` / `constructor`), each an accessor that runs `materialize` at most once on first read
+ * and caches the result by identity, so repeated access returns the exact same member wrapper. `in`,
+ * `Object.keys`, `Reflect.ownKeys` and property descriptors reflect exactly the declared members: an
+ * undeclared key is `undefined` and absent from `in`. Listing keys materializes nothing and never
+ * reads or subscribes the Runtime (spread reads each member, which materializes its wrapper
+ * passively). Being frozen, assigning to a member or adding/defining a property throws instead of
+ * writing anywhere hidden, and `Object.freeze`/`seal`/`preventExtensions` on it are harmless.
  */
-export function createLazyKeyedSurface<T>(materialize: (key: string) => T | undefined): Readonly<Record<string, T>> {
-	const cache = new Map<string, T>()
+export function createLazyKeyedSurface<T>(members: object, materialize: (key: string) => T | undefined): Readonly<Record<string, T>> {
+	const surface = Object.create(null) as Record<string, T>
 
-	return new Proxy(Object.create(null), {
-		get(_target, key) {
-			if (typeof key !== 'string')
-				return undefined
+	for (const key of Object.keys(members)) {
+		let cached: T | undefined
+		Object.defineProperty(surface, key, {
+			get() {
+				if (cached !== undefined)
+					return cached
 
-			const cached = cache.get(key)
-			if (cached !== undefined)
-				return cached
+				const value = materialize(key)
+				if (value !== undefined)
+					cached = value
 
-			const value = materialize(key)
-			if (value !== undefined)
-				cache.set(key, value)
+				return value
+			},
+			set: undefined,
+			enumerable: true,
+			configurable: false,
+		})
+	}
 
-			return value
-		},
-		has(_target, key) {
-			return typeof key === 'string'
-		},
-	}) as Readonly<Record<string, T>>
+	return Object.freeze(surface)
 }
 
 /**

@@ -16,36 +16,62 @@ import type {
 import type { InspectableValue } from './value'
 
 const BLUEPRINT_METADATA_PROTOCOL_MINOR: number = 2
+/** `authorWritable` and `valueContractId` were added to the member DTOs in protocol 0.4. */
+const MEMBER_METADATA_PROTOCOL_MINOR: number = 4
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isJsonValue(value: unknown, seen = new Set<object>()): boolean {
-	if (value === null || typeof value === 'string' || typeof value === 'boolean')
-		return true
-	if (typeof value === 'number')
-		return Number.isFinite(value)
-	if (Array.isArray(value)) {
-		if (seen.has(value))
+/**
+ * Iterative so that peer-controlled nesting depth can never overflow the call stack; `ancestors` still
+ * rejects a cyclic graph (a custom transport may hand over objects by reference). Structured clone keeps
+ * shared references, so each distinct object is validated once (`verified`): the walk is linear in the
+ * number of distinct objects, not in the number of paths to them.
+ */
+function isJsonValue(value: unknown): boolean {
+	const ancestors = new Set<object>()
+	const verified = new Set<object>()
+	// A frame is either a value to check or a marker that a container's children are all checked.
+	const stack: { readonly value: unknown, readonly exit: boolean }[] = [{ value, exit: false }]
+	while (stack.length > 0) {
+		const frame = stack.pop()!
+		if (frame.exit) {
+			ancestors.delete(frame.value as object)
+			verified.add(frame.value as object)
+			continue
+		}
+		const current = frame.value
+		if (current === null || typeof current === 'string' || typeof current === 'boolean')
+			continue
+		if (typeof current === 'number') {
+			if (!Number.isFinite(current))
+				return false
+			continue
+		}
+		// Already checked in full (reached again through another path): do not read it a second time.
+		if (verified.has(current as object))
+			continue
+		let children: unknown[]
+		if (Array.isArray(current)) {
+			children = current
+		}
+		else {
+			if (!isRecord(current))
+				return false
+			const prototype = Object.getPrototypeOf(current)
+			if (prototype !== Object.prototype && prototype !== null)
+				return false
+			children = Object.values(current)
+		}
+		if (ancestors.has(current as object))
 			return false
-		seen.add(value)
-		const valid = value.every(item => isJsonValue(item, seen))
-		seen.delete(value)
-		return valid
+		ancestors.add(current as object)
+		stack.push({ value: current, exit: true })
+		for (const child of children)
+			stack.push({ value: child, exit: false })
 	}
-	if (!isRecord(value))
-		return false
-	const prototype = Object.getPrototypeOf(value)
-	if (prototype !== Object.prototype && prototype !== null)
-		return false
-	if (seen.has(value))
-		return false
-	seen.add(value)
-	const valid = Object.values(value)
-		.every(item => isJsonValue(item, seen))
-	seen.delete(value)
-	return valid
+	return true
 }
 
 function isConfigMetadata(value: unknown): value is InspectorConfigMetadata {
@@ -117,6 +143,9 @@ type InspectableValueValidationFrame
 
 export function isInspectableValue(value: unknown): value is InspectableValue {
 	const ancestors = new Set<object>()
+	// Distinct nodes already validated in full: a node shared by several paths (structured clone keeps
+	// shared references) is validated once, so the walk stays linear in the number of distinct nodes.
+	const verified = new Set<object>()
 	const stack: InspectableValueValidationFrame[] = [{ kind: 'value', value }]
 
 	while (stack.length > 0) {
@@ -124,6 +153,7 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 		if (frame.kind === 'array') {
 			if (frame.index >= frame.length) {
 				ancestors.delete(frame.value)
+				verified.add(frame.value)
 				continue
 			}
 			const present = hasArrayIndex(frame.items, frame.index)
@@ -141,6 +171,7 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 		if (frame.kind === 'object') {
 			if (frame.index >= frame.length) {
 				ancestors.delete(frame.value)
+				verified.add(frame.value)
 				continue
 			}
 			const present = hasArrayIndex(frame.entries, frame.index)
@@ -153,13 +184,17 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 			if (!entryResult.ok)
 				return false
 			const entry = entryResult.value
-			if (!isRecord(entry) || typeof entry.key !== 'string')
+			if (!isRecord(entry) || typeof entry.key !== 'string'
+				|| (entry.keyTruncated !== undefined && typeof entry.keyTruncated !== 'boolean')) {
 				return false
+			}
 			stack.push({ kind: 'value', value: entry.value })
 			continue
 		}
 
 		const candidate = frame.value
+		if (typeof candidate === 'object' && candidate !== null && verified.has(candidate))
+			continue
 		if (!isRecord(candidate) || typeof candidate.type !== 'string')
 			return false
 
@@ -338,12 +373,18 @@ export function isDiagnostic(value: unknown): value is InspectorDiagnostic {
 		&& (value.dependency === undefined || isDependencyReference(value.dependency))
 }
 
-function isStateMember(value: unknown): boolean {
+function isStateMember(value: unknown, protocolMinor: number): boolean {
 	return isRecord(value) && value.type === 'state' && typeof value.name === 'string'
+		&& (protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR
+			? (value.authorWritable === undefined || typeof value.authorWritable === 'boolean')
+			: typeof value.authorWritable === 'boolean')
 }
 
-function isPropertyMember(value: unknown): boolean {
+function isPropertyMember(value: unknown, protocolMinor: number): boolean {
 	return isRecord(value) && value.type === 'property' && typeof value.name === 'string'
+		&& (protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR
+			? (value.valueContractId === undefined || value.valueContractId === null || typeof value.valueContractId === 'string')
+			: (value.valueContractId === null || typeof value.valueContractId === 'string'))
 		&& Array.isArray(value.dependencies) && value.dependencies.every(isDependency)
 }
 
@@ -374,8 +415,8 @@ export function isBlueprintNode(
 			? (value.config === undefined || value.config === null || isConfigMetadata(value.config))
 			: (value.config === null || isConfigMetadata(value.config)))
 		&& Array.isArray(value.semanticSlots) && value.semanticSlots.every(isSlot)
-		&& Array.isArray(value.state) && value.state.every(isStateMember)
-		&& Array.isArray(value.properties) && value.properties.every(isPropertyMember)
+		&& Array.isArray(value.state) && value.state.every(member => isStateMember(member, protocolMinor))
+		&& Array.isArray(value.properties) && value.properties.every(member => isPropertyMember(member, protocolMinor))
 		&& Array.isArray(value.methods) && value.methods.every(isMethodMember)
 		&& (protocolMinor < BLUEPRINT_METADATA_PROTOCOL_MINOR
 			? (value.events === undefined || (Array.isArray(value.events) && value.events.every(isEventMember)))

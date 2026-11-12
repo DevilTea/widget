@@ -2,7 +2,7 @@
  * Raw topology recovery, id/type/plugin identity, config validate+resolve and semantic slot
  * projection — compile pipeline steps 1-5 (consolidated handoff §10).
  *
- * Normative source: diagnostic #10 amendments "Blueprint recovery edge-case contract" (COMMENT 24) and
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendments "Blueprint recovery edge-case contract" (COMMENT 24) and
  * "Blueprint definition diagnostic paths and exact recovery cases" (COMMENT 25).
  *
  * Raw topology recovery and widget semantic resolution are separate concerns: an unresolved ancestor
@@ -29,6 +29,7 @@ import type { AnyWidgetPlugin, AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetSystem } from '../system'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
+import { MAX_JSON_DEPTH } from '../json'
 import { readWidgetPluginDefinition } from '../plugin'
 import { assertSyncValue } from '../runtime/sync'
 import { configDiagnostic, createCollector, definitionDiagnostic, widgetLocation } from './diagnostics'
@@ -43,9 +44,15 @@ export interface WorkingNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPlu
 	readonly source: unknown
 	readonly rawSlots: CompiledRawSlot[]
 	location: WidgetLocation<Plugins>
+	/** Structured `SourcePath` (array form) of this node's authored object, computed while recovering. */
+	readonly sourcePath: readonly (string | number)[]
 	resolved: boolean
 	id: WidgetId | null
 	type: string | null
+	/** The authored `type` when it is a string, even for an unresolved node (e.g. an unknown plugin type). */
+	typeHint: string | null
+	/** A cyclic repeat of an ancestor's authored object: it carries that object's hints but is not indexed by id. */
+	repeatsAncestor: boolean
 	plugin: AnyWidgetPlugin | null
 	rawConfig: unknown
 	config: unknown
@@ -110,6 +117,9 @@ function readOwnEnumerableStringKeys(object: object): readonly string[] | null {
 	}
 }
 
+/** The own keys of an authored widget node; `meta` is the reserved, uninterpreted extension key. */
+const RECOGNIZED_WIDGET_FIELDS: ReadonlySet<string> = new Set(['id', 'type', 'config', 'slots', 'meta'])
+
 interface ReadArrayInfo {
 	readonly isArray: boolean
 	readonly accessible: boolean
@@ -170,15 +180,23 @@ function buildNode(
 			? { type: 'slot', parent: parentPublicNode as ResolvedBlueprintWidgetNode, slot: placement.slot, index: placement.index }
 			: { type: 'raw-slot', parent: parentPublicNode!, slot: placement.slot, index: placement.index })
 
+	// The path is a product of the recovered topology, never found by searching the source afterwards.
+	const sourcePath: readonly (string | number)[] = Object.freeze(placement.kind === 'root'
+		? []
+		: [...ctx.nodes[parentNodeId!]!.sourcePath, 'slots', placement.slot, placement.index])
+
 	const working: WorkingNode = {
 		nodeId,
 		parentNodeId,
 		source: rawValue,
 		rawSlots: [],
 		location,
+		sourcePath,
 		resolved: false,
 		id: null,
 		type: null,
+		typeHint: null,
+		repeatsAncestor: false,
 		plugin: null,
 		rawConfig: null,
 		config: null,
@@ -201,7 +219,34 @@ function buildNode(
 		return nodeId
 	}
 
+	// The authored `id` and `type` are read first, so even a node recovery stops at below carries them as
+	// best-effort identity hints.
+	const idProperty = readOwnDataProperty(raw, 'id')
+	const rawId = idProperty.accessible ? idProperty.value : undefined
+	const hasValidId = idProperty.found && idProperty.accessible && typeof rawId === 'string'
+	const typeProperty = readOwnDataProperty(raw, 'type')
+	const rawType = typeProperty.accessible ? typeProperty.value : undefined
+	const hasValidTypeShape = typeProperty.found && typeProperty.accessible && typeof rawType === 'string'
+	working.id = hasValidId ? (rawId as string) : null
+	working.typeHint = hasValidTypeShape ? (rawType as string) : null
+
+	// Recovery recurses once per tree level, so it must stop where the source leaves the JSON domain for depth
+	// (`MAX_JSON_DEPTH`; the source-level `json-incompatible-value` diagnostic reports the same boundary). This
+	// node's own container is nested inside `sourcePath.length` others. Only nodes nested inside fewer than
+	// `MAX_JSON_DEPTH` containers have their slots recovered, and a child is three path segments below its
+	// parent, so no materialized node's path is longer than `MAX_JSON_DEPTH + 2` — the longest path a
+	// SourcePatch accepts.
+	if (sourcePath.length >= MAX_JSON_DEPTH) {
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-definition', `Widget definition is nested deeper than the maximum supported depth (${MAX_JSON_DEPTH}).`))
+		finalizeShell(shell, working)
+		flushDiagnostics(ctx, localDiagnostics)
+		return nodeId
+	}
+
 	if (ctx.activeSourceObjects.has(raw)) {
+		// The repeat shows its object's hints, but it is not a widget of its own: indexing its id would make the
+		// ancestor it repeats look like a duplicate.
+		working.repeatsAncestor = true
 		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-definition', 'Widget definition contains a cyclic source reference.'))
 		finalizeShell(shell, working)
 		flushDiagnostics(ctx, localDiagnostics)
@@ -210,16 +255,10 @@ function buildNode(
 	ctx.activeSourceObjects.add(raw)
 
 	// --- id ---
-	const idProperty = readOwnDataProperty(raw, 'id')
-	const rawId = idProperty.accessible ? idProperty.value : undefined
-	const hasValidId = idProperty.found && idProperty.accessible && typeof rawId === 'string'
 	if (!hasValidId)
 		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-id', 'Widget "id" is missing or is not a string.', ['id']))
 
 	// --- type ---
-	const typeProperty = readOwnDataProperty(raw, 'type')
-	const rawType = typeProperty.accessible ? typeProperty.value : undefined
-	const hasValidTypeShape = typeProperty.found && typeProperty.accessible && typeof rawType === 'string'
 	let plugin: AnyWidgetPlugin | null = null
 	if (!hasValidTypeShape) {
 		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-type', 'Widget "type" is missing or is not a string.', ['type']))
@@ -232,7 +271,6 @@ function buildNode(
 
 	const resolved = hasValidId && hasValidTypeShape && plugin !== null
 	working.resolved = resolved
-	working.id = hasValidId ? (rawId as string) : null
 
 	if (resolved) {
 		working.type = rawType as string
@@ -309,6 +347,18 @@ function buildNode(
 	// --- slots ---
 	recoverSlots(ctx, working, raw, resolved ? working.plugin : null, localDiagnostics)
 
+	// --- unexpected own fields ---
+	// `meta` is the reserved extension key: any JSON value, preserved in `source`, never interpreted.
+	// Every other unrecognized own key is diagnosed (typos like "slot" must not silently drop content);
+	// recovery of this node and its descendants is unaffected.
+	const ownKeys = readOwnEnumerableStringKeys(raw)
+	if (ownKeys !== null) {
+		for (const key of ownKeys) {
+			if (!RECOGNIZED_WIDGET_FIELDS.has(key))
+				localDiagnostics.push(definitionDiagnostic(publicNode, 'unexpected-widget-field', `Widget field "${key}" is not recognized; extension data belongs under "meta".`, [key]))
+		}
+	}
+
 	ctx.activeSourceObjects.delete(raw)
 	finalizeShell(shell, working)
 	flushDiagnostics(ctx, localDiagnostics)
@@ -327,6 +377,11 @@ function finalizeShell(shell: Record<string, unknown>, working: WorkingNode): vo
 		}
 		// `.slots` is filled in later, once children are known, by `finalizeSlots`.
 		shell.slots = {}
+	}
+	else {
+		// Best-effort identity hints: the authored values when they are strings, else `null`.
+		shell.id = working.id
+		shell.type = working.typeHint
 	}
 }
 
@@ -418,8 +473,13 @@ function recoverSlots(
 	fillMissingDeclaredSlots()
 }
 
+/**
+ * One push per diagnostic, never `push(...diagnostics)`: a node with very many unknown keys produces more
+ * diagnostics than an engine accepts as call arguments.
+ */
 function flushDiagnostics(ctx: BuildContext, diagnostics: readonly BlueprintDiagnostic[]): void {
-	ctx.finalDiagnostics.push(...diagnostics)
+	for (const diagnostic of diagnostics)
+		ctx.finalDiagnostics.push(diagnostic)
 }
 
 /**
@@ -447,7 +507,7 @@ export function finalizeSlots(ctx: BuildContext): void {
 function computeWidgetIdIndex(ctx: BuildContext): Map<WidgetId, InternalNodeId[]> {
 	const index = new Map<WidgetId, InternalNodeId[]>()
 	for (const node of ctx.nodes) {
-		if (node.id === null)
+		if (node.id === null || node.repeatsAncestor)
 			continue
 		const list = index.get(node.id)
 		if (list === undefined)
@@ -468,7 +528,7 @@ function emitDuplicateIdDiagnostics(ctx: BuildContext, index: ReadonlyMap<Widget
 			const related = ids
 				.filter(otherId => otherId !== nodeId)
 				.map(otherId => widgetLocation(ctx.nodes[otherId]!.publicNode))
-			ctx.finalDiagnostics.push(definitionDiagnostic(node.publicNode, 'invalid-widget-id', `Duplicate widget id "${node.id}".`, ['id'], related))
+			ctx.finalDiagnostics.push(definitionDiagnostic(node.publicNode, 'duplicate-widget-id', `Duplicate widget id "${node.id}".`, ['id'], related))
 		}
 	}
 }

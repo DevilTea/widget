@@ -42,18 +42,21 @@ describe('public entry point', () => {
 			.toThrow(WidgetVueIntegrationError)
 	})
 
-	it('exports WidgetVueIntegrationErrorCode as a type-only root export of exactly the five stable codes', () => {
+	it('exports WidgetVueIntegrationErrorCode as a type-only root export of exactly the stable codes', () => {
 		expectTypeOf<WidgetVueIntegrationErrorCode>()
 			.toEqualTypeOf<
 				| 'invalid-renderer-registry'
+				| 'invalid-runtime'
+				| 'foreign-runtime'
+				| 'unknown-widget'
 				| 'runtime-system-mismatch'
 				| 'outside-widget-renderer'
 				| 'widget-plugin-mismatch'
 				| 'readonly-projection-write'
 		>()
-		expectTypeOf<InstanceType<typeof WidgetVueIntegrationError>['code']>()
+		expectTypeOf<WidgetVueIntegrationError['code']>()
 			.toEqualTypeOf<WidgetVueIntegrationErrorCode>()
-		expectTypeOf<InstanceType<typeof WidgetVueIntegrationError>['missingTypes']>()
+		expectTypeOf<WidgetVueIntegrationError['missingTypes']>()
 			.toEqualTypeOf<readonly string[] | null>()
 
 		// A type has no runtime export; the value surface stays exactly these three.

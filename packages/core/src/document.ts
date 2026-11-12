@@ -10,6 +10,19 @@ export interface WidgetDocumentSnapshot<Plugins extends AnyWidgetPluginTuple = A
 	readonly blueprint: WidgetSystemBlueprint<Plugins>
 }
 
+/**
+ * What a committed `applyPatch` changed, passed to every listener beside the new snapshot: the snapshot it
+ * replaced and the exact patch that produced the new one (the same array that was applied, not a copy).
+ * Only an actual change commits; a no-op patch notifies nobody.
+ */
+export interface WidgetDocumentCommit<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
+	readonly previous: WidgetDocumentSnapshot<Plugins>
+	readonly patch: SourcePatch
+}
+
+export type WidgetDocumentListener<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
+	= (snapshot: WidgetDocumentSnapshot<Plugins>, commit: WidgetDocumentCommit<Plugins>) => void
+
 export interface ApplyPatchOptions {
 	readonly expectedRevision: number
 }
@@ -37,11 +50,11 @@ export type ApplyPatchResult = Result<{ readonly changed: boolean }, ApplyPatchF
 export interface WidgetDocument<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	getSnapshot: () => WidgetDocumentSnapshot<Plugins>
 	applyPatch: (patch: SourcePatch, options?: ApplyPatchOptions) => ApplyPatchResult
-	subscribe: (listener: (snapshot: WidgetDocumentSnapshot<Plugins>) => void) => () => void
+	subscribe: (listener: WidgetDocumentListener<Plugins>) => () => void
 }
 
 interface Subscriber<Plugins extends AnyWidgetPluginTuple> {
-	readonly listener: (snapshot: WidgetDocumentSnapshot<Plugins>) => void
+	readonly listener: WidgetDocumentListener<Plugins>
 }
 
 export interface CreateWidgetDocumentOptions<Plugins extends AnyWidgetPluginTuple> {
@@ -105,13 +118,16 @@ export function createWidgetDocument<const Plugins extends AnyWidgetPluginTuple>
 			// mechanical operations have succeeded. A callback contract violation throws and leaves the old
 			// snapshot committed because the assignment below has not happened yet.
 			const nextBlueprint = options.system.createBlueprint(result.value.source)
+			const previous = snapshot
 			blueprint = nextBlueprint
 			snapshot = Object.freeze({ revision: snapshot.revision + 1, blueprint: nextBlueprint })
+			const committed = snapshot
+			const commit: WidgetDocumentCommit<Plugins> = Object.freeze({ previous, patch })
 
 			phase = 'notifying'
 			const audience = subscribers.slice()
 			for (const subscriber of audience)
-				invokeListenerIsolated(subscriber.listener, snapshot)
+				invokeListenerIsolated(() => subscriber.listener(committed, commit), undefined)
 
 			return { ok: true, changed: true }
 		}
@@ -120,7 +136,7 @@ export function createWidgetDocument<const Plugins extends AnyWidgetPluginTuple>
 		}
 	}
 
-	function subscribe(listener: (snapshot: WidgetDocumentSnapshot<Plugins>) => void): () => void {
+	function subscribe(listener: WidgetDocumentListener<Plugins>): () => void {
 		const subscriber: Subscriber<Plugins> = { listener }
 		subscribers.push(subscriber)
 		let active = true

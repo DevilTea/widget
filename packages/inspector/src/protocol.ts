@@ -1,4 +1,3 @@
-import type { WidgetConfigJsonSchema } from '@deviltea/widget-core'
 import type { InspectableValue } from './value'
 import {
 	isBlueprintNode as isWireBlueprintNode,
@@ -13,7 +12,7 @@ export interface InspectorProtocolVersion {
 	readonly minor: number
 }
 
-export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 3 }) satisfies InspectorProtocolVersion
+export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 4 }) satisfies InspectorProtocolVersion
 
 export interface InspectorCapabilities {
 	readonly methods: readonly InspectorRequestMethod[]
@@ -62,9 +61,24 @@ export interface InspectorMemberRef {
 	readonly name: string
 }
 
+/** Any JSON value; the wire carries config schemas as plain JSON documents. */
+export type InspectorJsonValue
+	= | null
+		| boolean
+		| number
+		| string
+		| readonly InspectorJsonValue[]
+		| { readonly [key: string]: InspectorJsonValue }
+
+/**
+ * A JSON Schema Draft 2020-12 document (an object or a boolean schema), typed only as plain JSON so that
+ * this protocol needs nothing from Core. Keyword and metaschema validity stay the plugin author's concern.
+ */
+export type InspectorConfigSchema = boolean | { readonly [key: string]: InspectorJsonValue }
+
 export interface InspectorConfigMetadata {
 	readonly description: string
-	readonly schema: WidgetConfigJsonSchema | null
+	readonly schema: InspectorConfigSchema | null
 }
 
 export interface InspectorBlueprintCapabilities {
@@ -121,11 +135,15 @@ export type InspectorDependency
 export interface InspectorStateMember {
 	readonly type: 'state'
 	readonly name: string
+	/** Added in protocol 0.4: whether Blueprint authors may write this State. Absent below 0.4. */
+	readonly authorWritable?: boolean
 }
 
 export interface InspectorPropertyMember {
 	readonly type: 'property'
 	readonly name: string
+	/** Added in protocol 0.4: the declared value-contract id, or `null`. Absent below 0.4. */
+	readonly valueContractId?: string | null
 	readonly dependencies: readonly InspectorDependency[]
 }
 
@@ -331,6 +349,7 @@ export interface InspectorProtocolError {
 		| 'event-not-found'
 		| 'disconnected'
 		| 'subscription-limit'
+		| 'runtime-disposed'
 		| 'internal-error'
 	readonly message: string
 }
@@ -389,6 +408,14 @@ export interface InspectorEventMap {
 	readonly 'agent.status': {
 		readonly inspectEnabled: boolean
 	}
+	/**
+	 * Added in protocol 0.4. The Runtime this Agent inspects is gone: either the Agent observed it being
+	 * disposed, or the Agent itself was disposed while the transport stays open. Sent at most once per Agent.
+	 */
+	readonly 'runtime.disposed': {
+		readonly runtimeId: string
+		readonly reason: 'runtime-disposed' | 'agent-disposed'
+	}
 }
 
 export type InspectorEventName = keyof InspectorEventMap
@@ -405,10 +432,6 @@ export type InspectorMessage = InspectorRequestMessage | InspectorResponseMessag
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function hasOnlyEmptyRecord(value: unknown): value is Record<string, never> {
-	return isRecord(value) && Object.keys(value).length === 0
 }
 
 function isProtocolVersion(value: unknown): value is InspectorProtocolVersion {
@@ -461,7 +484,8 @@ export function isInspectorRequestParams<Method extends InspectorRequestMethod>(
 		case 'inspect.enable':
 		case 'inspect.disable':
 		case 'highlight.clear':
-			return hasOnlyEmptyRecord(value)
+			// Like every other params validator, ignore unknown extra fields: a newer peer may add some.
+			return isRecord(value)
 		case 'blueprint.getSnapshot':
 			return isRecord(value) && typeof value.runtimeId === 'string'
 		case 'runtime.getWidgetSnapshot':
@@ -483,23 +507,51 @@ export function isInspectorRequestParams<Method extends InspectorRequestMethod>(
 	}
 }
 
-export function parseInspectorRequestMessage(value: unknown): InspectorRequestMessage | null {
-	if (!isRecord(value)
-		|| value.kind !== 'request'
-		|| !isProtocolVersion(value.protocol)
-		|| typeof value.requestId !== 'string'
-		|| !isInspectorRequestMethod(value.method)
-		|| !isInspectorRequestParams(value.method, value.params)) {
-		return null
-	}
+export type InspectorRequestRejectionCode = 'invalid-message' | 'unknown-method' | 'invalid-params'
 
-	return value as InspectorRequestMessage
+export type InspectorRequestClassification
+	= | { readonly ok: true, readonly request: InspectorRequestMessage }
+		| {
+			readonly ok: false
+			/** The id to answer under, or `null` when the value carries none (nothing to correlate an answer with). */
+			readonly requestId: string | null
+			/** The sender's envelope version when it is well-formed, so a receiver can check the major first. */
+			readonly protocol: InspectorProtocolVersion | null
+			readonly code: InspectorRequestRejectionCode
+		}
+
+/**
+ * Classifies an incoming value as a request, or names why it is not one: `invalid-message` for an
+ * envelope that is not a request at all, `unknown-method` for a well-formed envelope naming a method this
+ * protocol does not define, and `invalid-params` for a known method whose params do not validate.
+ */
+export function classifyInspectorRequest(value: unknown): InspectorRequestClassification {
+	if (!isRecord(value) || value.kind !== 'request') {
+		return { ok: false, requestId: null, protocol: null, code: 'invalid-message' }
+	}
+	const requestId = typeof value.requestId === 'string' ? value.requestId : null
+	const protocol = isProtocolVersion(value.protocol) ? value.protocol : null
+	if (requestId === null || protocol === null || typeof value.method !== 'string')
+		return { ok: false, requestId, protocol, code: 'invalid-message' }
+	if (!isInspectorRequestMethod(value.method))
+		return { ok: false, requestId, protocol, code: 'unknown-method' }
+	if (!isInspectorRequestParams(value.method, value.params))
+		return { ok: false, requestId, protocol, code: 'invalid-params' }
+	return { ok: true, request: value as InspectorRequestMessage }
+}
+
+export function parseInspectorRequestMessage(value: unknown): InspectorRequestMessage | null {
+	const classified = classifyInspectorRequest(value)
+	return classified.ok ? classified.request : null
 }
 
 function isProtocolErrorCode(value: unknown, protocolMinor: number): value is InspectorProtocolError['code'] {
-	// `subscription-limit` was added in protocol 0.3; an older-minor envelope cannot carry it.
+	// `subscription-limit` was added in protocol 0.3 and `runtime-disposed` in 0.4; an older-minor
+	// envelope cannot carry them.
 	if (value === 'subscription-limit')
 		return protocolMinor >= 3
+	if (value === 'runtime-disposed')
+		return protocolMinor >= 4
 	return value === 'invalid-message' || value === 'unsupported-version' || value === 'unknown-method'
 		|| value === 'invalid-params' || value === 'runtime-not-found' || value === 'widget-not-found'
 		|| value === 'member-not-found' || value === 'event-not-found' || value === 'disconnected' || value === 'internal-error'
@@ -521,6 +573,38 @@ export function parseInspectorResponseMessage(value: unknown): InspectorResponse
 	if (value.ok)
 		return 'result' in value ? value as InspectorResponseMessage : null
 	return isProtocolError(value.error, value.protocol.minor) ? value as InspectorResponseMessage : null
+}
+
+export interface InspectorUnrecognizedErrorResponse {
+	readonly requestId: string
+	readonly protocol: InspectorProtocolVersion
+	/** The peer's code string, verbatim: a code this protocol version does not define (yet). */
+	readonly code: string
+	readonly message: string
+}
+
+/**
+ * Recognizes an otherwise well-formed error response whose code is not part of this protocol version's
+ * vocabulary (a newer peer's code), so a receiver can surface it generically instead of dropping it.
+ */
+export function parseInspectorUnrecognizedErrorResponse(value: unknown): InspectorUnrecognizedErrorResponse | null {
+	if (!isRecord(value)
+		|| value.kind !== 'response'
+		|| value.ok !== false
+		|| !isProtocolVersion(value.protocol)
+		|| typeof value.requestId !== 'string'
+		|| !isRecord(value.error)
+		|| typeof value.error.code !== 'string'
+		|| typeof value.error.message !== 'string'
+		|| isProtocolErrorCode(value.error.code, value.protocol.minor)) {
+		return null
+	}
+	return {
+		requestId: value.requestId,
+		protocol: value.protocol,
+		code: value.error.code,
+		message: value.error.message,
+	}
 }
 
 function isRuntimeMemberSnapshot(value: unknown): value is InspectorRuntimeMemberSnapshot {
@@ -630,6 +714,7 @@ export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 
 function isInspectorEventName(value: unknown): value is InspectorEventName {
 	return value === 'geometry.invalidated'
+		|| value === 'runtime.disposed'
 		|| value === 'runtime.eventOccurred'
 		|| value === 'runtime.memberChanged'
 		|| value === 'inspect.hovered'
@@ -681,6 +766,11 @@ export function parseInspectorEventMessage(value: unknown): InspectorEventMessag
 				: null
 		case 'agent.status':
 			return typeof value.payload.inspectEnabled === 'boolean' ? value as InspectorEventMessage : null
+		case 'runtime.disposed':
+			return typeof value.payload.runtimeId === 'string'
+				&& (value.payload.reason === 'runtime-disposed' || value.payload.reason === 'agent-disposed')
+				? value as InspectorEventMessage
+				: null
 	}
 }
 

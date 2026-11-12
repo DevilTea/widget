@@ -2,7 +2,7 @@ import type { WidgetIntegrationErrorCode } from './index'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import * as core from '../index'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
-import { getWidgetEventEmitter, WidgetIntegrationError } from './index'
+import { assertCoreRuntime, getWidgetEventEmitter, WidgetIntegrationError } from './index'
 
 interface EventInterfaces {
 	methods: {
@@ -226,5 +226,62 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 			expect((thrown as WidgetIntegrationError).code)
 				.toBe('runtime-widget-mismatch')
 		}
+	})
+
+	describe('assertCoreRuntime', () => {
+		it('accepts a Runtime produced by this core instance without acquiring emit authority', () => {
+			const { runtime } = createSingleRuntime(eventPlugin)
+			expect(assertCoreRuntime(runtime))
+				.toBeUndefined()
+		})
+
+		it('does not require an active Runtime, so a disposed Runtime still passes the provenance check', () => {
+			const { runtime } = createSingleRuntime(eventPlugin)
+			runtime.dispose()
+			expect(() => assertCoreRuntime(runtime)).not.toThrow()
+		})
+
+		it('rejects a Runtime from another module instance with foreign-runtime', async () => {
+			vi.resetModules()
+			const foreignCore = await import('../index')
+			const foreignSystem = foreignCore.createWidgetSystem({
+				plugins: [foreignCore.createWidgetPlugin('plain')
+					.description('Plain')
+					.interfaces<Record<never, never>>()
+					.done()] as const,
+			})
+			const foreignBlueprint = foreignSystem.createBlueprint({ id: 'root', type: 'plain' })
+			if (foreignBlueprint.status !== 'valid')
+				throw new Error('Expected valid blueprint')
+
+			let thrown: unknown
+			try {
+				assertCoreRuntime(foreignBlueprint.createRuntime())
+			}
+			catch (error) {
+				thrown = error
+			}
+			expect(thrown)
+				.toBeInstanceOf(WidgetIntegrationError)
+			expect((thrown as WidgetIntegrationError).code)
+				.toBe('foreign-runtime')
+		})
+
+		it('rejects structural look-alikes and non-objects with foreign-runtime', () => {
+			const { runtime } = createSingleRuntime(eventPlugin)
+			for (const forged of [{ getWidget: runtime.getWidget, blueprint: runtime.blueprint }, null, undefined, 'runtime']) {
+				let thrown: unknown
+				try {
+					assertCoreRuntime(forged)
+				}
+				catch (error) {
+					thrown = error
+				}
+				expect(thrown)
+					.toBeInstanceOf(WidgetIntegrationError)
+				expect((thrown as WidgetIntegrationError).code)
+					.toBe('foreign-runtime')
+			}
+		})
 	})
 })

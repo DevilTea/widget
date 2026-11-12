@@ -2,15 +2,15 @@
  * Restricted read-only Blueprint facade handed to Property/Method semantic callbacks as `ctx.blueprint`.
  *
  * `compute`/`execute` are typed against `ValidBlueprintView` (navigation only: `root`/`getWidget`/
- * `getParent`/`getLocation`/`getChildren`/`getChildrenAt`), but passing the full
- * `ValidWidgetSystemBlueprint` object through relied entirely on that static type to keep callbacks away
- * from `system`, `source`, `recompile()`, `getDiagnostics()` and `createRuntime()`. Plain
- * JS / `any` inside a callback could reach all of those — Runtime machinery and full-Blueprint
- * capabilities the callback matrix explicitly withholds, since Runtime interaction is meant to happen
- * only through declared deps. This builds an actual object exposing only the `ValidBlueprintView`
- * surface, so the restriction is a real runtime boundary, not only a compile-time one.
+ * `getParent`/`getLocation`/`getChildren`/`getChildrenAt`). Handing them the full
+ * `ValidWidgetSystemBlueprint` would leave only that static type between a callback and `system`,
+ * `source`, `sourceJsonCompatible`, `status`, `diagnostics`, `recompile()` and `createRuntime()`: plain
+ * JS / `any` could reach Runtime machinery and full-Blueprint capabilities the callback matrix
+ * withholds, since Runtime interaction is meant to happen only through declared deps. This builds an
+ * actual frozen object exposing only the `ValidBlueprintView` surface, so the restriction is a real
+ * runtime boundary, not only a compile-time one.
  *
- * Normative source: diagnostic #10 consolidated handoff callback capability matrix ("Property/Method
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff callback capability matrix ("Property/Method
  * callbacks receive the valid read-only view; they do not receive Runtime/RuntimeWidget").
  */
 

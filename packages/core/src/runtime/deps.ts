@@ -9,7 +9,14 @@
  * order: a forward `Property -> later Property`, any `Property -> read-only Method`, a dependency on a
  * later widget, and a valid Method-only cycle (`A <-> B`) must all materialize and invoke correctly.
  *
- * Normative source: diagnostic #10 consolidated handoff §12 (target-failure 1:1 wrapping,
+ * Every callable — absent leaves included — first checks the Runtime is not disposed and then that its
+ * owner (the Property/Method member it was materialized for) is the innermost running callback (see
+ * `callbackScope` in `./context`), so a callable retained past its callback, or reached from another
+ * callback, throws before reading, writing or invoking anything. The owner check also routes wrapped
+ * dependency diagnostics into that owner's own running collector, never into whichever operation happens
+ * to be executing.
+ *
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §12 (target-failure 1:1 wrapping,
  * `property-dependency`/`method-dependency`), U1 handoff §5 (resolved/absent x
  * state-get/property-get/method-invoke/state-set materialization table).
  */
@@ -20,15 +27,16 @@ import type { ExecutionResult } from '../execution-result'
 import type { CompiledDependency, CompiledDependencyTree, CompiledWidgetNode } from '../internal/contract'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { DedupeDescriptor } from './collector'
-import type { RuntimeContext } from './context'
+import type { CallbackOwner, RuntimeContext } from './context'
 import type { ReceivedBox } from './diagnostics'
 import type { EventPrimitive } from './event'
 import type { MethodPrimitive } from './method'
 import type { PropertyPrimitive } from './property'
 import type { StatePrimitive } from './state'
 import { isCompiledDependency } from '../internal/contract'
+import { callbackScope } from './context'
 import { buildMethodDependencyDiagnostic, buildPropertyDependencyDiagnostic, deepFreezeDiagnostic, freezeDiagnosticSnapshot } from './diagnostics'
-import { assertSyncValue } from './sync'
+import { assertSyncValue, throwClosedCallbackMember } from './sync'
 
 export interface PrimitiveRegistryEntry {
 	readonly state: ReadonlyMap<WidgetMemberKey, StatePrimitive>
@@ -44,6 +52,18 @@ export interface DepsMaterializeParams {
 	readonly registry: ReadonlyMap<number, PrimitiveRegistryEntry>
 	readonly nodes: readonly CompiledWidgetNode[]
 	readonly context: RuntimeContext
+	/** The consuming member's callback; its callables are valid only while it is the innermost one. */
+	readonly owner: CallbackOwner
+}
+
+/**
+ * The guard every materialized callable runs before anything else: disposal first (the established
+ * post-dispose error surface), then the callback-context lifetime.
+ */
+function assertCallableOpen(params: DepsMaterializeParams): void {
+	params.context.assertActive()
+	if (callbackScope.owner !== params.owner)
+		throwClosedCallbackMember('deps')
 }
 
 function consumerDependencyDiagnostic(
@@ -71,8 +91,8 @@ function reportDependencyDiagnostic(
 	diagnostic: RuntimePropertyDependencyDiagnostic | RuntimeMethodDependencyDiagnostic,
 	dedupe: DedupeDescriptor,
 ): void {
-	params.context.getActiveCollector()
-		?.addFinalizedDiagnostic(diagnostic, dedupe)
+	// `assertCallableOpen` passed, so the owner is running and `sink` is its current invocation's.
+	params.owner.sink?.addFinalizedDiagnostic(diagnostic, dedupe)
 }
 
 /**
@@ -110,18 +130,28 @@ export function dependencyDedupeDescriptor(leafId: number, failureAnchor: unknow
  * is captured as `unknown` and passed through the sync-boundary guard *before* being interpreted as a
  * boolean — a `Promise.resolve(false)` escape hatch is truthy and would otherwise make a rejection look
  * like an accepted refinement.
+ *
+ * A refinement owns no dependency or `emit` callables, so no callback is open while it runs (see
+ * `callbackScope`): not even the consumer whose dependency read invoked it.
  */
 function applyRefinements(
 	value: unknown,
 	refinements: readonly DependencyRefinement[],
 ): { readonly ok: true, readonly value: unknown } | { readonly ok: false, readonly received: unknown } {
-	for (const refine of refinements) {
-		const accepted: unknown = refine(value)
-		assertSyncValue(accepted, 'A dependency .validate() refinement')
-		if (!accepted)
-			return { ok: false, received: value }
+	const previousOwner = callbackScope.owner
+	callbackScope.owner = null
+	try {
+		for (const refine of refinements) {
+			const accepted: unknown = refine(value)
+			assertSyncValue(accepted, 'A dependency .validate() refinement')
+			if (!accepted)
+				return { ok: false, received: value }
+		}
+		return { ok: true, value }
 	}
-	return { ok: true, value }
+	finally {
+		callbackScope.owner = previousOwner
+	}
 }
 
 function locationOf(operation: BlueprintDependencyReference['operation'], widgetId: WidgetId): RuntimeDiagnosticLocation {
@@ -143,15 +173,24 @@ function resolveTargetWidgetId(nodes: readonly CompiledWidgetNode[], nodeId: num
 	return node.id
 }
 
-function materializeAbsentLeaf(operation: BlueprintDependencyReference['operation']): unknown {
+function materializeAbsentLeaf(operation: BlueprintDependencyReference['operation'], params: DepsMaterializeParams): unknown {
 	switch (operation.type) {
 		case 'state-set':
-			return (candidate: unknown) => ({ ok: true, value: candidate }) satisfies ExecutionResult<unknown, never>
+			return (candidate: unknown) => {
+				assertCallableOpen(params)
+				return { ok: true, value: candidate } satisfies ExecutionResult<unknown, never>
+			}
 		case 'method-invoke':
-			return (..._args: readonly unknown[]) => ({ ok: true, value: null }) satisfies ExecutionResult<unknown, never>
+			return (..._args: readonly unknown[]) => {
+				assertCallableOpen(params)
+				return { ok: true, value: null } satisfies ExecutionResult<unknown, never>
+			}
 		case 'state-get':
 		case 'property-get':
-			return () => ({ ok: true, value: null }) satisfies ExecutionResult<unknown, never>
+			return () => {
+				assertCallableOpen(params)
+				return { ok: true, value: null } satisfies ExecutionResult<unknown, never>
+			}
 	}
 }
 
@@ -181,6 +220,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 			// Resolved on the first call (see `resolveEntry`), then reused.
 			let target: ReturnType<PrimitiveRegistryEntry['state']['get']>
 			return () => {
+				assertCallableOpen(params)
 				target ??= resolveEntry(params, leaf.targetNodeId).state.get(operation.key)
 				if (target === undefined)
 					throw new Error(`widget-core: internal error — resolved state-get target "${operation.key}" is missing.`)
@@ -205,6 +245,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 
 		case 'state-set': {
 			return (candidate: unknown) => {
+				assertCallableOpen(params)
 				const target = resolveEntry(params, leaf.targetNodeId).state.get(operation.key)
 				if (target === undefined)
 					throw new Error(`widget-core: internal error — resolved state-set target "${operation.key}" is missing.`)
@@ -222,6 +263,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 			// Resolved on the first call (see `resolveEntry`), then reused.
 			let target: ReturnType<PrimitiveRegistryEntry['properties']['get']>
 			return () => {
+				assertCallableOpen(params)
 				target ??= resolveEntry(params, leaf.targetNodeId).properties.get(operation.name)
 				if (target === undefined)
 					throw new Error(`widget-core: internal error — resolved property-get target "${operation.name}" is missing.`)
@@ -251,6 +293,7 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 
 		case 'method-invoke': {
 			return (...args: readonly unknown[]) => {
+				assertCallableOpen(params)
 				const target = resolveEntry(params, leaf.targetNodeId).methods.get(operation.name)
 				if (target === undefined)
 					throw new Error(`widget-core: internal error — resolved method-invoke target "${operation.name}" is missing.`)
@@ -309,7 +352,7 @@ function wrapTargetFailure(
 
 function materializeLeaf(leaf: CompiledDependency, params: DepsMaterializeParams): unknown {
 	if (leaf.status === 'absent')
-		return materializeAbsentLeaf(leaf.reference.operation)
+		return materializeAbsentLeaf(leaf.reference.operation, params)
 
 	// `invalid` is always accompanied by a Blueprint dependency Diagnostic, so a Blueprint carrying one is
 	// always `invalid` — Runtime is only ever created from a valid Blueprint (diagnostic #10 inspection

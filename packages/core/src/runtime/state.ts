@@ -12,10 +12,11 @@ import type { RuntimeState } from '../internal/contract'
 import type { ErasedWidgetStateMemberDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
-import { signal } from 'alien-signals'
+import { endBatch, signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
+import { callbackScope } from './context'
 import { buildDefaultStateValidationDiagnostic, buildStateValidationDiagnostic, freezeDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
@@ -65,6 +66,33 @@ export interface CreateStatePrimitiveParams {
 	readonly definition: ErasedWidgetStateMemberDefinition
 	/** Returns `{ config }` when the owning widget has config capability, `{}` otherwise. */
 	readonly buildConfigFragment: () => Record<string, unknown>
+	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
+	readonly onDiagnosticsCommitted: () => void
+}
+
+/**
+ * Restores the captured initialization outcome of every State member of `widgets` — the shared
+ * implementation of `WidgetSystemRuntime.resetState()` (every widget) and `RuntimeWidget.resetState()`
+ * (one widget). `validate` does not run again, all writes form one batch so dependents recompute and
+ * subscribers are notified once, and Property/Method diagnostic snapshots are left untouched.
+ */
+export function restoreInitialState(
+	context: RuntimeContext,
+	widgets: Iterable<{ readonly state: ReadonlyMap<WidgetMemberKey, StatePrimitive> }>,
+): void {
+	context.assertActive()
+	runRuntimeOperation(() => {
+		startBatch()
+		try {
+			for (const widget of widgets) {
+				for (const primitive of widget.state.values())
+					primitive.internal.restoreInitial()
+			}
+		}
+		finally {
+			endBatch()
+		}
+	})
 }
 
 export function createStatePrimitive(context: RuntimeContext, params: CreateStatePrimitiveParams): StatePrimitive {
@@ -106,7 +134,10 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		if (next === committedDiagnostics)
 			return
 		committedDiagnostics = next
-		writeDeferringFlush(() => diagnosticsSignal(next))
+		writeDeferringFlush(() => {
+			diagnosticsSignal(next)
+			params.onDiagnosticsCommitted()
+		})
 	}
 
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
@@ -123,12 +154,17 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 
 		let isValid: unknown
 		let hasDiagnostic: boolean
+		// `validate` owns no dependency or `emit` callables, so no callback is open while it runs (see
+		// `callbackScope`), even when a Method's dependency setter triggered it.
+		const previousOwner = callbackScope.owner
+		callbackScope.owner = null
 		try {
 			isValid = params.definition.validate(candidate, ctx)
 			assertSyncValue(isValid, `State "${params.key}"'s validate`)
 			hasDiagnostic = collector.hasAnyDiagnostic()
 		}
 		finally {
+			callbackScope.owner = previousOwner
 			collector.close()
 		}
 

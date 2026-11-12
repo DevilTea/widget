@@ -1,7 +1,7 @@
 /**
  * Public type contract of the dedicated `@deviltea/widget-core/inspection` subpath.
  *
- * Normative source: diagnostic #10 amendments "Promote renderer-agnostic inspection support into core",
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendments "Promote renderer-agnostic inspection support into core",
  * "inspection identity may expose snapshot-local node IDs", "inspection is a readonly public subpath",
  * "readonly inspection subscription and disposal semantics", "inspection exact API v1 (part 1: Blueprint
  * inspection)" and "inspection exact API v1 (part 2: Runtime inspection, materialization, disposal,
@@ -12,8 +12,8 @@
 
 import type { BlueprintDependencyReference, RuntimePropertyDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
-import type { BlueprintWidgetNode, ResolvedBlueprintWidgetNode, UnresolvedBlueprintWidgetNode } from '../internal/contract'
-import type { AnyWidgetPluginTuple, WidgetPluginConfigMetadata } from '../plugin'
+import type { BlueprintSourcePath, BlueprintWidgetNode, ResolvedBlueprintWidgetNode, UnresolvedBlueprintWidgetNode } from '../internal/contract'
+import type { AnyWidgetPluginTuple, WidgetPluginCapabilities, WidgetPluginConfigMetadata } from '../plugin'
 import type { WidgetMemberKey } from '../types'
 
 // -------------------------------------------------------------------------------------------------
@@ -53,7 +53,29 @@ export interface PluginInspectionEventMember {
 	readonly description: string
 }
 
+export interface PluginInspectionSlot {
+	readonly type: 'slot'
+	readonly name: WidgetMemberKey
+	readonly description: string
+}
+
+/**
+ * Everything passive one completed plugin declares, in one call: a superset of its `system.catalog`
+ * entry (`type`, `description`, config metadata, slot descriptions) plus capability presence and the
+ * State/Property/Event member facts.
+ */
 export interface PluginInspection {
+	readonly type: string
+	readonly description: string
+	/** Authoritative capability presence (absent vs explicitly declared empty); same facts as `plugin.capabilities`. */
+	readonly capabilities: WidgetPluginCapabilities
+	/** Passive config authoring metadata. Null means no config capability. */
+	readonly config: WidgetPluginConfigMetadata | null
+	/**
+	 * Slot descriptions in declaration order. Null means the Slots capability was not declared; an empty
+	 * map means explicitly declared empty.
+	 */
+	readonly slots: ReadonlyMap<WidgetMemberKey, PluginInspectionSlot> | null
 	/** Null means the State capability was not declared; an empty map means explicitly declared empty. */
 	readonly state: ReadonlyMap<WidgetMemberKey, PluginInspectionStateMember> | null
 	/** Null means the Properties capability was not declared; an empty map means explicitly declared empty. */
@@ -165,11 +187,20 @@ export interface BlueprintInspectionNodeBase<Plugins extends AnyWidgetPluginTupl
 	readonly node: BlueprintWidgetNode<Plugins>
 	/** Best-effort recovered source topology (not a raw `slots` mirror). */
 	readonly sourceSlots: readonly BlueprintInspectionSourceSlot[]
+	/**
+	 * The structured `SourcePath` of this node's authored object within `blueprint.source`, computed by the
+	 * compiler; identical to `blueprint.getSourcePath(node)`.
+	 */
+	readonly sourcePath: BlueprintSourcePath
 }
 
 export interface UnresolvedBlueprintInspectionNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends BlueprintInspectionNodeBase<Plugins> {
 	readonly resolved: false
 	readonly node: UnresolvedBlueprintWidgetNode<Plugins>
+	/** Best-effort identity hint: the authored `id` when it is a string, else `null`. */
+	readonly id: string | null
+	/** Best-effort identity hint: the authored `type` when it is a string, else `null`. */
+	readonly type: string | null
 }
 
 export interface ResolvedBlueprintInspectionNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends BlueprintInspectionNodeBase<Plugins> {
@@ -235,7 +266,7 @@ export type RuntimePropertyInspectionSnapshot<T>
 	= | { readonly status: 'never-evaluated' }
 		| {
 			readonly status: 'completed'
-			readonly result: ExecutionResult<T | null, RuntimePropertyDiagnostic>
+			readonly result: ExecutionResult<T, RuntimePropertyDiagnostic>
 		}
 
 export interface RuntimePropertyInspection<T> extends InspectionObservable<RuntimePropertyInspectionSnapshot<T>> {}

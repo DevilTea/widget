@@ -196,7 +196,7 @@ describe('runtime event inspection delivery guarantees', () => {
 			.toEqual([failure])
 	})
 
-	it('still publishes the occurrence to inspection when a later public listener throws', () => {
+	it('still publishes the occurrence to inspection when a later public listener throws', async () => {
 		const { widget, change } = createHarness()
 		const failure = new Error('public listener failure')
 		const observed = vi.fn()
@@ -207,14 +207,19 @@ describe('runtime event inspection delivery guarantees', () => {
 		})
 		widget.events.change.subscribe(laterPublic)
 
-		expect(() => widget.methods.fire('x'))
-			.toThrow(failure)
+		// Public listener exceptions are isolated like inspection listener exceptions.
+		expect(() => widget.methods.fire('x')).not.toThrow()
 
 		expect(observed)
 			.toHaveBeenCalledTimes(1)
 		expect(observed.mock.calls[0]![0])
 			.toEqual(['x'])
-		expect(laterPublic).not.toHaveBeenCalled()
+		expect(laterPublic)
+			.toHaveBeenCalledTimes(1)
+
+		await flushAsyncReports()
+		expect(uncaught)
+			.toEqual([failure])
 	})
 
 	it('shares one shallow-frozen args array across inspection listeners without cloning or freezing elements', () => {

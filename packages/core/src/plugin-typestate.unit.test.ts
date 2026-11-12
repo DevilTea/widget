@@ -5,7 +5,7 @@
  * keyed-chain typestate (`state` / `properties` / `methods`), `.done()` gating, and the PromiseLike /
  * MaybePromise rejection rules on `WidgetInterfacesViolationOf`, `compute` and `execute`.
  *
- * Normative source: diagnostic #10 COMMENT 26 §1, COMMENT 0 (checkpoint A), COMMENT 16 (synchronous
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 COMMENT 26 §1, COMMENT 0 (checkpoint A), COMMENT 16 (synchronous
  * boundary), COMMENT 22 (`WidgetMemberKey` domain), COMMENT 23 (builder completion typestate).
  *
  * Positive assertions use `expectTypeOf`; negative assertions use `@ts-expect-error` with a one-line
@@ -14,6 +14,7 @@
  */
 
 import type {
+	AnyWidgetPluginTuple,
 	EmptyRegisteredDeps,
 	WidgetConfigDefinition,
 	WidgetEventArgsOf,
@@ -23,11 +24,14 @@ import type {
 	WidgetInterfacesViolationOf,
 	WidgetMethodDefinition,
 	WidgetPluginDonePhase,
+	WidgetPluginValidateStructure,
 	WidgetPropertyDefinition,
+	WidgetSlotDefinition,
 	WidgetStateSection,
+	WidgetSystemValidateStructure,
 } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin } from './index'
+import { createWidgetPlugin, createWidgetSystem } from './index'
 
 // -------------------------------------------------------------------------------------------------
 // Fixture interfaces
@@ -69,6 +73,13 @@ interface NonJsonConfigInterfaces extends WidgetInterfaces {
 	config: {
 		raw: { readonly callback: () => void }
 		resolved: { readonly label: string }
+	}
+}
+
+interface RawConfigInterfaces<Raw extends Record<any, any> | null> extends WidgetInterfaces {
+	config: {
+		raw: Raw
+		resolved: Record<string, never>
 	}
 }
 
@@ -224,6 +235,16 @@ interface SimpleMethodInterfaces extends WidgetInterfaces {
 	}
 }
 
+interface VoidMethodInterfaces extends WidgetInterfaces {
+	methods: {
+		submit: () => void
+	}
+}
+
+interface SlotsOnlyInterfaces extends WidgetInterfaces {
+	slots: 'items'
+}
+
 // -------------------------------------------------------------------------------------------------
 // Shared fixture definitions
 // -------------------------------------------------------------------------------------------------
@@ -322,10 +343,10 @@ describe('builder capability-phase ordering', () => {
 		expectTypeOf(afterInterfaces).not.toHaveProperty('slots')
 		expectTypeOf(afterInterfaces).not.toHaveProperty('state')
 		expectTypeOf(afterInterfaces).not.toHaveProperty('properties')
-		// `methods` is declared but not callable yet: it exists only as a type-level order marker
-		// (see plugin-phase-order.unit.test.ts); the only real next phase is `config`.
+		// `methods` and the optional `structure` are not callable yet: they exist only as type-level order
+		// markers (see plugin-phase-order.unit.test.ts); the only real next phase is `config`.
 		expectTypeOf<keyof typeof afterInterfaces>()
-			.toEqualTypeOf<'config' | 'methods'>()
+			.toEqualTypeOf<'config' | 'methods' | 'structure'>()
 
 		const afterConfig = afterInterfaces.config({
 			description: 'Test config',
@@ -352,12 +373,14 @@ describe('builder capability-phase ordering', () => {
 			.toBe(true)
 	})
 
-	it('reaches `done` immediately after `.interfaces()` when no capability is declared', () => {
+	it('reaches `done` (next to the optional `structure`) immediately after `.interfaces()` when no capability is declared', () => {
 		const afterInterfaces = createWidgetPlugin('empty')
 			.description('Test widget')
 			.interfaces<EmptyInterfaces>()
-		expectTypeOf(afterInterfaces)
-			.toEqualTypeOf<WidgetPluginDonePhase<'empty', EmptyInterfaces>>()
+		expectTypeOf<keyof typeof afterInterfaces>()
+			.toEqualTypeOf<'structure' | 'done'>()
+		expectTypeOf(afterInterfaces.done)
+			.toEqualTypeOf<WidgetPluginDonePhase<'empty', EmptyInterfaces>['done']>()
 
 		const plugin = afterInterfaces.done()
 		expect(plugin.type)
@@ -367,7 +390,7 @@ describe('builder capability-phase ordering', () => {
 	})
 
 	it('rejects a slots object literal (even via a variable) that declares an extra, undeclared slot', () => {
-		const slotsWithExtra = { header: {}, body: {}, extra: {} }
+		const slotsWithExtra = { header: { description: 'Test slot' }, body: { description: 'Test slot' }, extra: { description: 'Test slot' } }
 		const beforeSlots = createWidgetPlugin('extra-slot')
 			.description('Test widget')
 			.interfaces<FullInterfaces>()
@@ -635,6 +658,23 @@ describe('widgetInterfaces domain rejection (types.ts type layer)', () => {
 			.toEqualTypeOf<'authored values must be JSON-compatible'>()
 	})
 
+	it('reports a class instance inside authored RawConfig as a non-plain object, not as a key problem', () => {
+		type PlainObjectReason = 'authored JSON objects must be plain objects, not class instances such as Date, Map or Set'
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ when: Date }>>>()
+			.toEqualTypeOf<PlainObjectReason>()
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ lookup: Map<string, string> }>>>()
+			.toEqualTypeOf<PlainObjectReason>()
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ tags: Set<string> }>>>()
+			.toEqualTypeOf<PlainObjectReason>()
+		// A user symbol key keeps the key reason; only class instances get the plain-object reason.
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ [symbolStateKey]: string, n: bigint }>>>()
+			.toEqualTypeOf<'authored JSON objects may only have string keys'>()
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ n: bigint }>>>()
+			.toEqualTypeOf<'authored values must be JSON-compatible'>()
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ label?: string, n: number[] }>>>()
+			.toBeNever()
+	})
+
 	it('leaves the interfaces phase unusable for a non-JSON RawConfig', () => {
 		const violation = createWidgetPlugin('non-json-config')
 			.description('Test widget')
@@ -750,6 +790,78 @@ describe('semantic callbacks stay synchronous and are not widened to MaybePromis
 		}
 		expect(typeof definition.execute)
 			.toBe('function')
+	})
+
+	it('rejects an async `execute` written into the builder even when the Method is declared to return `void`', () => {
+		const asyncPhase = createWidgetPlugin('void-async')
+			.description('Test widget')
+			.interfaces<VoidMethodInterfaces>()
+			.methods(methods => methods.submit({
+				validateArgs: (args): args is [] => args.length === 0,
+				// @ts-expect-error a `void` return does not widen `execute` to MaybePromise; an async `execute` would write State in its synchronous prefix and fail afterwards
+				execute: async () => {},
+			}))
+		const thenablePhase = createWidgetPlugin('void-thenable')
+			.description('Test widget')
+			.interfaces<VoidMethodInterfaces>()
+			.methods(methods => methods.submit({
+				validateArgs: (args): args is [] => args.length === 0,
+				// @ts-expect-error any thenable result is rejected, not only a native Promise
+				execute: () => ({ then: (resolve: (value: undefined) => void) => resolve(undefined) }),
+			}))
+		expect([asyncPhase, thenablePhase])
+			.toHaveLength(2)
+	})
+
+	it('leaves a standalone `void` execute type unable to see a thenable (the runtime guard catches it)', () => {
+		// The standalone type has no callback to infer the own return type from, so it accepts any return.
+		const definition: WidgetMethodDefinition<VoidMethodInterfaces, 'submit', EmptyRegisteredDeps> = {
+			validateArgs: (args): args is [] => args.length === 0,
+			execute: async () => {},
+		}
+		expect(typeof definition.execute)
+			.toBe('function')
+	})
+
+	it('keeps accepting any synchronous result from the `execute` of a `void` Method', () => {
+		const results: ReadonlyArray<WidgetMethodDefinition<VoidMethodInterfaces, 'submit', EmptyRegisteredDeps>['execute']> = [
+			() => {},
+			() => undefined,
+			() => 1,
+			() => 'done',
+			() => null,
+			() => ({ ok: true }),
+			() => [1, 2],
+			() => () => {},
+		]
+		expect(results)
+			.toHaveLength(8)
+	})
+
+	it('rejects an async structure validator at the slot, plugin and system level', () => {
+		const slot = createWidgetPlugin('async-slot')
+			.description('Test widget')
+			.interfaces<SlotsOnlyInterfaces>()
+			// @ts-expect-error a structure validator returns nothing; an async one would report diagnostics after compilation ended
+			.slots({ items: { description: 'Items', validateStructure: async () => {} } })
+		const plugin = createWidgetPlugin('async-plugin')
+			.description('Test widget')
+			.interfaces<SlotsOnlyInterfaces>()
+			.slots({ items: { description: 'Items' } })
+			// @ts-expect-error the plugin-level validator (`.structure()`) must stay synchronous
+			.structure(async () => {})
+		// @ts-expect-error the system-level validator must stay synchronous
+		const system = createWidgetSystem({ plugins: [], validateStructure: async () => {} })
+		// The standalone types have no callback to infer the own return type from (the runtime guard catches a thenable).
+		const standalone: [WidgetSlotDefinition<SlotsOnlyInterfaces, 'items'>, WidgetPluginValidateStructure<SlotsOnlyInterfaces>, WidgetSystemValidateStructure<AnyWidgetPluginTuple>] = [
+			{ description: 'Items', validateStructure: async () => {} },
+			async () => {},
+			async () => {},
+		]
+		const synchronous: WidgetPluginValidateStructure<SlotsOnlyInterfaces> = ctx => ctx.addDiagnostic({ message: 'sync' })
+
+		expect([slot, plugin, system, ...standalone, synchronous])
+			.toHaveLength(7)
 	})
 
 	it('allows a method argument to carry a PromiseLike value while `execute` still resolves synchronously', () => {

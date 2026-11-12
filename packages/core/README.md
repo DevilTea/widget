@@ -31,6 +31,17 @@ yarn add @deviltea/widget-core
 pnpm add @deviltea/widget-core
 ```
 
+Requires Node.js `>=22.14.0` (or any ES2022 runtime with a global
+`queueMicrotask`).
+
+While the package is `0.x`, a breaking change bumps the **minor** version
+(`0.N.0`), so use a `^0.N.0` range. Core recognizes its own plugins, Blueprints
+and Runtimes by brands private to one loaded copy of the module, so an
+application must load exactly one copy. A library that ships plugins or a
+renderer adapter must declare `@deviltea/widget-core` as a **peer dependency**
+(not a regular dependency) and must not bundle it; `@deviltea/widget-vue` and
+`@deviltea/widget-inspector` do the same.
+
 ## Core model
 
 ```text
@@ -55,22 +66,36 @@ contract described below. See
 [Design constraints](https://deviltea.github.io/widget/packages/widget-core#design-constraints)
 in the full guide for the exact boundary.
 
-Capability presence (`config`/`slots`/`state`/`properties`/`methods`) is
-declaration presence, independent of whether a capability's own domain is
+Capability presence (`config`/`slots`/`state`/`properties`/`methods`/`events`)
+is declaration presence, independent of whether a capability's own domain is
 empty — a completed plugin exposes these facts at runtime as
-`plugin.capabilities: { config, slots, state, properties, methods }`
+`plugin.capabilities: { config, slots, state, properties, methods, events }`
 (all `boolean`, immutable). See
 [Reading capability presence at runtime](https://deviltea.github.io/widget/packages/widget-core#reading-capability-presence-at-runtime-plugin-capabilities)
 in the full guide.
 
-`createWidgetSystem` rejects invalid plugin registration with the coded
-`WidgetSystemConfigurationError`: `foreign-plugin` (entry not created by this
-loaded module instance; fields `pluginIndex`, `pluginType`, with
-`firstPluginIndex` always `null`) and `duplicate-plugin-type` (fields
-`pluginIndex`, `pluginType`, `firstPluginIndex`).
+The phase order of `createWidgetPlugin` is
+`description → interfaces → config? → slots? → structure? → state? → properties? → methods? → events? → done`.
+`.structure(validateStructure)` is an optional plugin-level structure validator
+available to every plugin (it is not a capability); `.slots(definitions)` takes
+only the slot definitions. Declarations are validated when the plugin is built,
+so a malformed member throws a `TypeError` naming the plugin, section, member
+and field.
+
+`createWidgetSystem` rejects invalid options and plugin registration with the
+coded `WidgetSystemConfigurationError`: `invalid-options` (options not an
+object, `plugins` not an array, or a non-function `validateStructure`),
+`foreign-plugin` (entry not created by this loaded module instance; fields
+`pluginIndex`, `pluginType`, with `firstPluginIndex` always `null`) and
+`duplicate-plugin-type` (fields `pluginIndex`, `pluginType`,
+`firstPluginIndex`). The System exposes `plugins`, `catalog`, `validateStructure`
+and `getPlugin(type)`, which returns `null` for an unregistered type.
 Inspection entries throw `WidgetInspectionError` (`@deviltea/widget-core/inspection`)
 and `getWidgetEventEmitter` throws `WidgetIntegrationError`
-(`@deviltea/widget-core/integration`, code `foreign-runtime`) for foreign inputs.
+(`@deviltea/widget-core/integration`, code `foreign-runtime`) for foreign inputs;
+`assertCoreRuntime(runtime)` from the same subpath performs only that passive
+provenance check, so a renderer adapter can fail fast at mount when it and the
+application loaded two copies of Core.
 See
 [Plugin registration errors](https://deviltea.github.io/widget/packages/widget-core#plugin-registration-errors)
 in the full guide.
@@ -91,8 +116,12 @@ Runtime state.
 ## Usage
 
 Here is a complete widget: one plugin with `state`, `properties`, and
-`methods`, registered into a system, compiled, and run.
+`methods`, registered into a system, compiled, and run. The
+[full guide](https://deviltea.github.io/widget/packages/widget-core#quick-start)
+has a larger end-to-end example with config, slots, an Event, and a container
+that aggregates its children.
 
+<!-- sample: usage run -->
 ```typescript
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 
@@ -197,17 +226,32 @@ runtime.dispose()
 ### Blueprint diagnostics
 
 `createBlueprint` accepts `unknown`; malformed input never throws — it always
-produces an inspectable Blueprint. `createBlueprintFromJson(text)` is the
-equivalent of `createBlueprint(JSON.parse(text))` that skips the JSON-domain
-inspection, because Core parsed the value itself. Every diagnostic has top-level `code`,
-`location`, and `message` fields. Variant-specific facts are direct fields;
-structured `path` and `related` fields are not hidden behind a `source` object.
-Codes are stable lowercase kebab-case values such as
-`invalid-widget-id`, `invalid-widget-config`, `invalid-widget-structure`, and
+produces an inspectable Blueprint. `createBlueprintFromJson(text)` is equivalent
+to `createBlueprint(JSON.parse(text))`, including its diagnostics (an
+overflowing literal such as `1e400` is still diagnosed as
+`json-incompatible-value`); it only replaces the full JSON-domain inspection
+with a cheaper scan, because Core parsed the value itself. Every diagnostic has
+top-level `code`, `location`, and `message` fields. Variant-specific facts are
+direct fields; structured `path` and `related` fields are not hidden behind a
+`source` object. Codes are stable lowercase kebab-case values such as
+`invalid-widget-id`, `duplicate-widget-id`, `unexpected-widget-field`,
+`invalid-widget-config`, `invalid-widget-structure`, and
 `missing-dependency-target`. Whole-source JSON inspection adds aggregate-only
 `json-incompatible-value` diagnostics with a source-rooted `path` and closed
 `reason`, while `source-access-failed` means Core could not safely complete the
 inspection. These source-level facts do not appear in a node's `.diagnostics`.
+The full code tables are in the
+[guide](https://deviltea.github.io/widget/packages/widget-core#diagnostics).
+
+A widget node has exactly the own keys `id`, `type`, `config`, `slots` and
+`meta`. Any other key is reported as `unexpected-widget-field` and makes the
+Blueprint invalid; `meta` is the reserved extension key (any JSON value,
+preserved and never interpreted). An `id` is any string, including `''`.
+Authored source may nest at most `MAX_JSON_DEPTH` (256) containers deep.
+`blueprint.getSourcePath(node)` returns the structured `SourcePath` of a node
+inside `blueprint.source`, usable directly as a `SourcePatch` path — also for the
+node recovery stops at for depth, whose path has at most `MAX_JSON_DEPTH + 2`
+segments, the longest path a `SourcePatch` accepts.
 
 Recovery is best-effort: even invalid input still yields a navigable root and
 node tree via `blueprint.getWidget` / `getParent` / `getChildren` /
@@ -240,21 +284,67 @@ JSON Pointer strings or structured string/number segments, operands are
 failure is atomic; a successful patch may still commit a semantically invalid
 Blueprint for inspection.
 
+<!-- sample: document-patch run -->
 ```typescript
-import { createWidgetDocument } from '@deviltea/widget-core'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+interface CounterInterfaces {
+	config: {
+		raw: { step: number }
+		resolved: { step: number }
+	}
+}
+
+const counterPlugin = createWidgetPlugin('counter')
+	.description('A counter widget')
+	.interfaces<CounterInterfaces>()
+	.config({
+		description: 'Counter configuration',
+		validate: (input): input is { step: number } =>
+			typeof input === 'object' && input !== null && typeof (input as { step?: unknown }).step === 'number',
+		resolve: rawConfig => ({ step: rawConfig?.step ?? 1 }),
+	})
+	.done()
+
+const system = createWidgetSystem({ plugins: [counterPlugin] })
 
 const document = createWidgetDocument({
 	system,
-	source: { id: 'counter-1', type: 'counter' },
+	source: { id: 'counter-1', type: 'counter', config: { step: 1 } },
 })
 
+const unsubscribe = document.subscribe((snapshot, { previous, patch }) => {
+	console.log(`revision ${previous.revision} -> ${snapshot.revision}`, patch)
+})
+
+// Success: `/config/step` exists, so the replace commits revision 1.
 const result = document.applyPatch([
 	{ op: 'replace', path: '/config/step', value: 2 },
 ], { expectedRevision: 0 })
 
 if (result.ok && result.changed)
 	console.log(document.getSnapshot().revision) // 1
+
+// Failure: a path that does not exist, a stale revision, and a malformed operation.
+const missing = document.applyPatch([{ op: 'replace', path: '/config/missing', value: 1 }])
+if (!missing.ok)
+	console.log(missing.failure.code) // path-not-found
+
+const stale = document.applyPatch([{ op: 'replace', path: '/config/step', value: 3 }], { expectedRevision: 0 })
+if (!stale.ok && stale.failure.code === 'document-revision-conflict')
+	console.log(stale.failure.expectedRevision, stale.failure.actualRevision) // 0 1
+
+const malformed = document.applyPatch([{ op: 'frobnicate', path: '/config' }] as never)
+if (!malformed.ok)
+	console.log(malformed.failure.code) // invalid-operation
+
+console.log(document.getSnapshot().revision) // 1: a failed patch changes nothing
+unsubscribe()
 ```
+
+A patch is an array of `{ op: 'add' | 'replace' | 'test', path, value }`,
+`{ op: 'remove', path }` and `{ op: 'move' | 'copy', from, path }` operations
+(`SourcePatchOperation`).
 
 Authored source is handed to Core **by reference**: `createBlueprint`,
 `recompile` and `createWidgetDocument` keep `source` as given, so
@@ -282,21 +372,23 @@ subscribers. `failure.code` is one of:
   `actualRevision`. Omitting `options` skips this check, and the check runs
   before any operation is evaluated.
 - An operation failure `{ code, operationIndex, message }`, where `code` is
-  `invalid-path`, `path-not-found`, `path-not-traversable`,
-  `invalid-array-index`, `invalid-move-target`, `test-failed`,
-  `json-incompatible-value`, or `source-access-failed`, and `operationIndex`
-  is the failing operation's position in the patch. A failed patch leaves the
-  committed source and revision unchanged.
+  `invalid-operation`, `invalid-path`, `max-depth-exceeded`, `path-not-found`,
+  `path-not-traversable`, `invalid-array-index`, `invalid-move-target`,
+  `test-failed`, `json-incompatible-value`, or `source-access-failed`, and
+  `operationIndex` is the failing operation's position in the patch. A failed
+  patch leaves the committed source and revision unchanged.
 
   | `code` | Meaning |
   | --- | --- |
-  | `invalid-path` | malformed path or operation shape |
+  | `invalid-operation` | the patch is not an array, an operation is not an object, or its `op` is unknown |
+  | `invalid-path` | a malformed path only |
+  | `max-depth-exceeded` | a path longer than `MAX_JSON_DEPTH + 2` segments (the longest source path of a node a Blueprint materializes), or a `copy`/`move` source nested deeper than `MAX_JSON_DEPTH` |
   | `path-not-found` | the path does not identify an existing location |
   | `path-not-traversable` | the path passes through a non-traversable value |
   | `invalid-array-index` | an Array parent was addressed by anything other than an in-bounds canonical index (see below) |
   | `invalid-move-target` | a `move` into its own descendant |
   | `test-failed` | a `test` operand did not match the addressed value |
-  | `json-incompatible-value` | an `add`/`replace`/`test` `value` is outside Core's JSON domain (missing or `undefined`, functions, `bigint`, symbols, `NaN`/`±Infinity`, cycles, non-plain prototypes, sparse or extra-property Arrays, accessors, symbol keys, or reflection that throws); checked after path parsing and before the operation is evaluated |
+  | `json-incompatible-value` | an `add`/`replace`/`test` `value` is outside Core's JSON domain (missing or `undefined`, functions, `bigint`, symbols, `NaN`/`±Infinity`, cycles, non-plain prototypes, sparse or extra-property Arrays, accessors, symbol keys, nesting deeper than `MAX_JSON_DEPTH`, or reflection that throws); checked after path parsing and before the operation is evaluated. The failure carries an optional operand-relative `path` and a `reason` |
   | `source-access-failed` | unsafe access to the *source* material only |
 
 Three edge semantics apply to every operation:
@@ -317,9 +409,10 @@ Three edge semantics apply to every operation:
   `json-incompatible-value`, not `source-access-failed`.
 
 `document.subscribe(listener)` registers `listener` and returns an idempotent
-unsubscribe function. The listener is not called on subscription; it receives
-the new snapshot after each committed (`changed: true`) patch, in subscription
-order, over the subscriber list as it stood when notification began. An
+unsubscribe function. The listener is not called on subscription; after each
+committed (`changed: true`) patch it receives `(snapshot, { previous, patch })`,
+in subscription order, over the subscriber list as it stood when notification
+began. No-op detection is JSON-domain equality. An
 exception thrown by a listener does not fail `applyPatch()` or stop the
 remaining listeners, and it is reported outside `applyPatch()`; the reporting
 mechanism is not part of the contract.
@@ -331,17 +424,28 @@ mechanism is not part of the contract.
 `widgets` data list; it is useful for authoring tools and normalization, but it
 is not another `createBlueprint` or `WidgetDocument` input mode.
 
+<!-- sample: separated-source run -->
 ```typescript
-import {
-	normalizeSeparatedWidgetSource,
-	separateWidgetSource,
-} from '@deviltea/widget-core'
+import { normalizeSeparatedWidgetSource, separateWidgetSource } from '@deviltea/widget-core'
 
-const separated = separateWidgetSource(canonicalSource)
-const normalized = normalizeSeparatedWidgetSource(separated)
+const canonical = {
+	id: 'panel-1',
+	type: 'panel',
+	meta: { note: 'kept' },
+	slots: { content: [{ id: 'counter-1', type: 'counter', config: { step: 2 } }] },
+}
 
-normalized.source // best-effort nested source, still unknown for recovery
-normalized.diagnostics // representation diagnostics, separate from Blueprint diagnostics
+// `separateWidgetSource(source: unknown)` never throws: it returns `{ separated, diagnostics }`.
+// `separated` is null only when the root cannot be projected; an empty `diagnostics` guarantees
+// a lossless round trip through `normalizeSeparatedWidgetSource`.
+const { separated, diagnostics } = separateWidgetSource(canonical)
+console.log(diagnostics.length) // 0: nothing was lost
+
+if (separated !== null) {
+	const normalized = normalizeSeparatedWidgetSource(separated)
+	console.log(normalized.diagnostics.length) // 0, representation diagnostics (separate from Blueprint diagnostics)
+	console.log(JSON.stringify(normalized.source) === JSON.stringify(canonical)) // true: best-effort nested source
+}
 ```
 
 Normalization is deterministic and non-destructive: the first flat data entry
@@ -353,15 +457,44 @@ later occurrence is de-identified with its available subtree preserved.
 
 - Declared `events` are public notifications: subscribe through
   `widget.events[name].subscribe(listener)`. Delivery is synchronous and
-  depth-first for nested emits; a throwing public listener propagates to the
-  emit caller and stops the remaining public listeners. Emit authority belongs
+  depth-first for nested emits; a throwing public listener is isolated like every
+  other listener (the remaining listeners and the emitting Method still run, and
+  the error is reported asynchronously). A runaway loop (a listener that keeps
+  re-invoking the emitting Method) is cut off once one Runtime's emits nest more
+  than 128 deep: `WidgetSystemRuntimeReentrancyError` (a `RangeError`, code
+  `emit-depth-exceeded`) unwinds to the call that started the loop. Events are
+  host-facing and cannot be dependency targets. Emit authority belongs
   to Method `execute` (`emit`) and, for renderers, `@deviltea/widget-core/integration`.
   See [Events](https://deviltea.github.io/widget/packages/widget-core#events).
 - `widget.state[key].get()` returns `T | null` directly — it is not an
   `ExecutionResult`.
 - `widget.properties[name].get()` / `.subscribe(listener)` and
-  `widget.methods[name](...)` all return an `ExecutionResult<T, Diagnostic>`:
-	  `{ ok: true, value }` or `{ ok: false, failure: { diagnostics: [...] } }`.
+  `widget.methods[name](...)` all return an `ExecutionResult<T, Diagnostic>`
+  with `T` exactly as declared (never `T | null`):
+  `{ ok: true, value }` or `{ ok: false, failure: { diagnostics: [...] } }`.
+  A `void` Method returns `{ ok: true, value: undefined }`.
+- State values are immutable by contract: change detection is identity-based, so
+  mutating a value in place and setting the same reference notifies nobody.
+  Always `set()` a new value.
+- A throwing Property `compute` never makes a writer (`state.set`, a Method call,
+  `resetState()`) throw and never suppresses other subscribers; it is reported
+  asynchronously, while `get()` and dependency reads still rethrow. The exception
+  stays cached until a dependency changes — except a stack overflow (a first
+  read of a chain of on the order of a thousand Properties), which the next read
+  evaluates again, so a long chain can be warmed bottom-up.
+- `runtime.snapshotState()` returns the current State as a plain
+  `Record<WidgetId, Record<string, unknown>>` (`null` members omitted) that is
+  directly usable as `overrideStateDefaults`; `widget.resetState()` resets one
+  widget. See
+  [Reusing a Runtime](https://deviltea.github.io/widget/packages/widget-core#reusing-a-runtime-resetstate).
+- `deps.*` and `emit` callables are valid only while their own callback is the
+  innermost running callback. A retained callable, a timer or promise
+  continuation, a nested callback, or a listener or `validate`-style callback
+  running inside the Method gets a `TypeError` (and
+  `WidgetSystemRuntimeDisposedError` after dispose). A Property can never write
+  State. Core is synchronous by design; see
+  [Async work](https://deviltea.github.io/widget/packages/widget-core#async-work)
+  for the host recipe.
 - Properties are lazily evaluated and cached through `alien-signals`; a
   subscription has no immediate emission and notifies once per actual
   completed recompute.
@@ -386,15 +519,21 @@ later occurrence is de-identified with its available subtree preserved.
   `subscribeDiagnostics()`: the union of only that widget's own primitive-owned
   diagnostics (state members -> property members -> method members, declaration
   order within each capability, each primitive's own local diagnostic order),
-	  never Runtime-level diagnostics even when a diagnostic mentions the same
-	  `widgetId`. `runtime.getDiagnostics()` is the complete aggregate: Runtime-
-	  boundary diagnostics first, followed by each `RuntimeWidget.getDiagnostics()`
-	  in Blueprint semantic widget order; `subscribeDiagnostics()` observes that same
-  aggregate, and none of these reads/subscriptions activate Property
-  evaluation.
+  never Runtime-level diagnostics even when a diagnostic mentions the same
+  `widgetId`. `runtime.getDiagnostics()` is the aggregate over the whole Runtime:
+  Runtime-boundary diagnostics first, followed by each
+  `RuntimeWidget.getDiagnostics()` in Blueprint semantic widget order;
+  `subscribeDiagnostics()` observes that same aggregate, and none of these
+  reads/subscriptions activate Property evaluation. Because Properties are lazy,
+  the aggregate only contains diagnostics of Properties that have been
+  evaluated, and `resetState()` does not clear retained Property or Method
+  diagnostics. To validate a Runtime headlessly, read every Property you rely on
+  before reading the aggregate (a runnable recipe is in
+  [Runtime diagnostics](https://deviltea.github.io/widget/packages/widget-core#runtime-diagnostics)).
 - `runtime.dispose()` is idempotent. After disposal, `runtime.isDisposed` and
   `runtime.blueprint` stay readable, but every live query/operation
-  (including `RuntimeWidget.getDiagnostics()`) and every new subscription
+  (including `snapshotState()`, `resetState()` and
+  `RuntimeWidget.getDiagnostics()`) and every new subscription
   (including `RuntimeWidget.subscribeDiagnostics()`) throws
   `WidgetSystemRuntimeDisposedError`; unsubscribe functions obtained before
   disposal remain safe idempotent no-ops.
@@ -405,10 +544,12 @@ A dedicated, strictly readonly subpath is a supported observation surface for
 any host (DevTools, prototype players, test harnesses). It exposes
 compiler/runtime facts, including passive Event occurrence observation through
 `getEvent(name).subscribe(...)`, and never mutates state, invokes methods, or
-forces Property evaluation:
+forces Property evaluation. `inspectPlugin(plugin)` is a superset of the
+plugin's `system.catalog` entry (type, description, capabilities, config
+metadata, slots, and the State/Property/Event member facts):
 
 ```typescript
-import { inspectBlueprint, inspectRuntime } from '@deviltea/widget-core/inspection'
+import { inspectBlueprint, inspectPlugin, inspectRuntime } from '@deviltea/widget-core/inspection'
 ```
 
 `@deviltea/widget-core`'s root entrypoint does not export this surface. See
@@ -419,16 +560,18 @@ delivery guarantees.
 ### Host requirements
 
 The current implementation needs an ES2022 engine and a global
-`queueMicrotask` whose jobs the host actually runs: a throwing `subscribe` /
-`subscribeDiagnostics` listener is isolated and rethrown in a microtask.
-Embedded engines such as QuickJS (`rquickjs`) must drain their pending jobs,
-or those listener errors never surface. See
+`queueMicrotask` whose jobs the host actually runs: a throwing State, Property,
+diagnostic, Event, inspection or `WidgetDocument` listener, and a Property
+`compute` that throws during a subscription's re-evaluation, is isolated and
+rethrown in a microtask. Embedded engines such as QuickJS (`rquickjs`) must
+drain their pending jobs, or those errors never surface. See
 [Host requirements](https://deviltea.github.io/widget/packages/widget-core#host-requirements).
 
 The full guide at
 [docs/site/packages/widget-core.md](https://deviltea.github.io/widget/packages/widget-core)
-covers the dependency grammar, the compile pipeline, and every Runtime
-primitive in detail.
+covers the dependency grammar, the compile pipeline, every Runtime primitive,
+the complete diagnostic and error tables, and guides for async work, persisted
+documents, generic plugin factories and renderer adapters.
 
 ## License
 
@@ -442,5 +585,5 @@ primitive in detail.
 [npm-downloads-href]: https://npmjs.com/package/@deviltea/widget-core
 [bundle-src]: https://img.shields.io/bundlephobia/minzip/@deviltea/widget-core?style=flat&colorA=080f12&colorB=1fa669&label=minzip
 [bundle-href]: https://bundlephobia.com/result?p=@deviltea/widget-core
-[license-src]: https://img.shields.io/github/license/DevilTea/deviltea-labs.svg?style=flat&colorA=080f12&colorB=1fa669
+[license-src]: https://img.shields.io/github/license/DevilTea/widget.svg?style=flat&colorA=080f12&colorB=1fa669
 [license-href]: https://github.com/DevilTea/widget/blob/main/LICENSE

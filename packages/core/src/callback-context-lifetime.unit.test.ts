@@ -33,19 +33,17 @@ const probePlugin = createWidgetPlugin('probe')
 		},
 		resolve: raw => ({ ok: raw?.ok ?? false }),
 	})
-	.slots(
-		{
-			items: {
-				description: 'Test slot',
-				validateStructure: (ctx) => {
-					retained.slot = ctx as DiagnosticCollector<never>
-				},
+	.slots({
+		items: {
+			description: 'Test slot',
+			validateStructure: (ctx) => {
+				retained.slot = ctx as DiagnosticCollector<never>
 			},
 		},
-		(ctx) => {
-			retained.plugin = ctx as DiagnosticCollector<never>
-		},
-	)
+	})
+	.structure((ctx) => {
+		retained.plugin = ctx as DiagnosticCollector<never>
+	})
 	.state(state => state.value({
 		validate: (input, ctx): input is number => {
 			retained.state = ctx as DiagnosticCollector<never>

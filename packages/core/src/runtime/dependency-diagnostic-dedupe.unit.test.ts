@@ -2,7 +2,7 @@
  * Regression coverage for PR #12 review finding 3773310841 (`runtime/collector.ts` unconditional
  * dependency-diagnostic insertion).
  *
- * Normative source: diagnostic #10 consolidated handoff §12 — "repeated reads of the same failing
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §12 — "repeated reads of the same failing
  * dependency within one execution scope should avoid duplicating the same dependency diagnostic insertion."
  * The operation-local collector used to append every wrapped/refinement dependency diagnostic
  * unconditionally, so reading the same failing dependency twice inside one Property compute / Method

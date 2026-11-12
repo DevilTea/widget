@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest'
+import * as publicApi from './index'
 import { createWidgetPlugin, createWidgetSystem } from './index'
 import { inspectJsonValue, isJsonValue, jsonEqual } from './json'
 
 describe('authored JSON runtime domain', () => {
+	it('exports the guard the Blueprint proof uses from the package entry', () => {
+		expect(publicApi.isJsonValue)
+			.toBe(isJsonValue)
+
+		const samples: unknown[] = [null, 1, 'a', true, [1, { a: [] }], { a: null }, Number.NaN, undefined, 1n, () => 1, new Date(0), Array.from({ length: 2 }), { get a() {
+			return 1
+		} }]
+		for (const sample of samples) {
+			expect(publicApi.isJsonValue(sample))
+				.toBe(createWidgetSystem({ plugins: [] })
+					.createBlueprint(sample).sourceJsonCompatible)
+		}
+	})
+
 	it('rejects symbol-keyed objects and arrays', () => {
 		const object = { value: 1 }
 		Object.defineProperty(object, Symbol('malformed'), { value: true })
@@ -173,7 +188,7 @@ describe('authored JSON runtime domain', () => {
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
-		const blueprint = system.createBlueprint({ id: 'root', type: 'leaf', extra: new Date() })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'leaf', meta: new Date() })
 
 		expect(blueprint.status)
 			.toBe('invalid')
@@ -183,7 +198,7 @@ describe('authored JSON runtime domain', () => {
 			.toEqual([expect.objectContaining({
 				code: 'json-incompatible-value',
 				location: { type: 'source' },
-				path: ['extra'],
+				path: ['meta'],
 				reason: 'unsupported-object-prototype',
 			})])
 		expect(blueprint.root.diagnostics)

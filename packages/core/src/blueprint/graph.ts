@@ -2,7 +2,7 @@
  * Method write-effect analysis, Property purity diagnostics and evaluation-cycle analysis — compile
  * pipeline steps 10-13 (consolidated handoff §10).
  *
- * Normative source: diagnostic #10 amendment "simplify method graph semantics; only Property safety is
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendment "simplify method graph semantics; only Property safety is
  * normative" (COMMENT 18, superseding COMMENT 12's Property-reachable method-only SCC rule) and
  * consolidated handoff §9.
  *

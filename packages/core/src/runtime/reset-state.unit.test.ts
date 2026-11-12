@@ -205,3 +205,114 @@ describe('resetState', () => {
 			.toThrow(WidgetSystemRuntimeDisposedError)
 	})
 })
+
+describe('runtimeWidget.resetState', () => {
+	const group = createWidgetPlugin('group')
+		.description('Test widget')
+		.interfaces<{ slots: 'children' }>()
+		.slots({ children: { description: 'Children' } })
+		.done()
+	const groupSystem = createWidgetSystem({ plugins: [resetPlugin, group] })
+	const compiledGroup = groupSystem.createBlueprint({
+		id: 'group',
+		type: 'group',
+		slots: { children: [{ id: 'first', type: 'reset' }, { id: 'second', type: 'reset' }] },
+	})
+	if (compiledGroup.status !== 'valid')
+		throw new Error('fixture setup error: expected a valid Blueprint')
+	const groupBlueprint = compiledGroup
+
+	function resetWidget(runtime: ReturnType<typeof groupBlueprint.createRuntime>, id: string) {
+		const widget = runtime.getWidget(id)
+		if (widget === null || widget.type !== 'reset')
+			throw new Error('expected a reset widget')
+		return widget
+	}
+
+	function snapshotOf(runtime: ReturnType<typeof groupBlueprint.createRuntime>, id: string) {
+		const widget = resetWidget(runtime, id)
+		return {
+			values: [widget.state.plain.get(), widget.state.withDefault.get(), widget.state.badDefault.get()],
+			diagnostics: [widget.state.plain.getDiagnostics(), widget.state.withDefault.getDiagnostics(), widget.state.badDefault.getDiagnostics()],
+		}
+	}
+
+	function mutateWidget(runtime: ReturnType<typeof groupBlueprint.createRuntime>, id: string) {
+		const widget = resetWidget(runtime, id)
+		widget.state.plain.set('changed')
+		widget.state.withDefault.set(42)
+		widget.state.badDefault.set(7)
+		widget.state.plain.set(123 as unknown as string)
+	}
+
+	it('restores only that widget\'s State members to their initialization outcome', () => {
+		const options = { overrideStateDefaults: { first: { withDefault: 5 } } }
+		const fresh = groupBlueprint.createRuntime(options)
+		const reused = groupBlueprint.createRuntime(options)
+		mutateWidget(reused, 'first')
+		mutateWidget(reused, 'second')
+		const secondBefore = snapshotOf(reused, 'second')
+
+		resetWidget(reused, 'first')
+			.resetState()
+
+		expect(snapshotOf(reused, 'first'))
+			.toEqual(snapshotOf(fresh, 'first'))
+		expect(snapshotOf(reused, 'first').values)
+			.toEqual([null, 5, null])
+		expect(snapshotOf(reused, 'second'))
+			.toEqual(secondBefore)
+		expect(snapshotOf(reused, 'second').values)
+			.toEqual(['changed', 42, 7])
+	})
+
+	it('does not run validate and batches the writes', () => {
+		const runtime = groupBlueprint.createRuntime()
+		mutateWidget(runtime, 'first')
+		const widget = resetWidget(runtime, 'first')
+		const notified: unknown[] = []
+		widget.properties.summary.subscribe(result => notified.push(result.ok ? result.value : null))
+		validateCalls = 0
+		summaryComputes = 0
+
+		widget.resetState()
+
+		expect(validateCalls)
+			.toBe(0)
+		expect(notified)
+			.toEqual(['-:1'])
+		expect(summaryComputes)
+			.toBe(1)
+	})
+
+	it('keeps Property and Method diagnostic snapshots', () => {
+		const runtime = groupBlueprint.createRuntime()
+		const widget = resetWidget(runtime, 'first')
+		widget.methods.fail()
+		const before = widget.methods.fail.getDiagnostics()
+
+		widget.resetState()
+
+		expect(widget.methods.fail.getDiagnostics())
+			.toBe(before)
+	})
+
+	it('exists only on widgets with the state capability', () => {
+		const runtime = groupBlueprint.createRuntime()
+		const groupWidget = runtime.getWidget('group')!
+
+		expect('resetState' in groupWidget)
+			.toBe(false)
+		expect(typeof resetWidget(runtime, 'first').resetState)
+			.toBe('function')
+	})
+
+	it('throws WidgetSystemRuntimeDisposedError after dispose', () => {
+		const runtime = groupBlueprint.createRuntime()
+		const widget = resetWidget(runtime, 'first')
+		runtime.dispose()
+
+		expect(() => widget.resetState())
+			.toThrow(WidgetSystemRuntimeDisposedError)
+	})
+})

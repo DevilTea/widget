@@ -1,3 +1,4 @@
+import type { BlueprintInspectionNode } from '@deviltea/widget-core/inspection'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
@@ -10,12 +11,8 @@ const validSource = sandboxPresets.find(preset => preset.id === 'valid-interacti
 const invalidSource = sandboxPresets.find(preset => preset.id === 'invalid-semantic')!.sourceText
 const recoverySource = sandboxPresets.find(preset => preset.id === 'raw-slot-recovery')!.sourceText
 
-function sourceIdOf(node: { readonly node: { readonly source: unknown } }): string | null {
-	const source = node.node.source
-	if (typeof source !== 'object' || source === null || Array.isArray(source))
-		return null
-	const id = (source as Record<string, unknown>).id
-	return typeof id === 'string' ? id : null
+function sourceIdOf(node: BlueprintInspectionNode): string | null {
+	return node.resolved ? node.node.id : node.id
 }
 
 describe('blueprint diagnostic navigation', () => {

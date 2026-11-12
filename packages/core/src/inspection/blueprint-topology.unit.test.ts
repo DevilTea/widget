@@ -87,7 +87,7 @@ const explicitEmptyPlugin = createWidgetPlugin('explicit-empty')
 
 const system = createWidgetSystem({ plugins: [leafPlugin, containerPlugin, zebraApplePlugin, configuredPlugin, explicitEmptyPlugin] })
 
-function widgetIdOf(node: { readonly node: { readonly resolved: boolean, readonly id?: string } }): string | null {
+function widgetIdOf(node: { readonly node: { readonly resolved: boolean, readonly id?: string | null } }): string | null {
 	return node.node.resolved ? (node.node.id as string) : null
 }
 
@@ -183,7 +183,7 @@ describe('source topology projection', () => {
 		expect(root.sourceSlots.some(slot => slot.name === 'left'))
 			.toBe(false)
 		expect(root.node.diagnostics
-			.some(diagnostic => ['invalid-widget-definition', 'invalid-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)))
+			.some(diagnostic => ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'unexpected-widget-field', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)))
 			.toBe(true)
 	})
 })

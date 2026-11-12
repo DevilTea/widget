@@ -1,7 +1,8 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-	entry: ['src/index.ts'],
+	// Exactly the public subpaths; `context` (the private injection key) is only reachable through their shared chunk.
+	entry: ['src/index.ts', 'src/testing.ts'],
 	format: 'esm',
 	target: 'es2022',
 	dts: {
@@ -10,6 +11,7 @@ export default defineConfig({
 	clean: true,
 	publint: true,
 	deps: {
-		neverBundle: ['vue'],
+		// Core is a peerDependency: a bundled second copy would make the root renderer reject the host's Runtime.
+		neverBundle: ['vue', /^@deviltea\/widget-core(?:\/|$)/],
 	},
 })

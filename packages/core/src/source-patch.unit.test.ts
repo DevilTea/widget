@@ -678,12 +678,108 @@ describe('sourcePatch non-JSON operands', () => {
 			.toMatchObject({ ok: false, failure: { code: 'source-access-failed', operationIndex: 0 } })
 	})
 
-	it('keeps malformed operation shapes as invalid-path', () => {
+	it('reports malformed operation shapes as invalid-operation and a malformed path as invalid-path', () => {
 		expect(applySourcePatch({}, patchOf({ op: 'bogus', path: '/a' })))
-			.toMatchObject({ ok: false, failure: { code: 'invalid-path', operationIndex: 0 } })
+			.toMatchObject({ ok: false, failure: { code: 'invalid-operation', operationIndex: 0 } })
 		expect(applySourcePatch({}, patchOf({ path: '/a' })))
-			.toMatchObject({ ok: false, failure: { code: 'invalid-path', operationIndex: 0 } })
+			.toMatchObject({ ok: false, failure: { code: 'invalid-operation', operationIndex: 0 } })
+		expect(applySourcePatch({}, patchOf({ op: 'bogus' })))
+			.toMatchObject({ ok: false, failure: { code: 'invalid-operation', operationIndex: 0 } })
 		expect(applySourcePatch({}, patchOf({ op: 'add', value: 1 })))
 			.toMatchObject({ ok: false, failure: { code: 'invalid-path', operationIndex: 0 } })
+	})
+
+	it('reports a patch that is not an Array, and an operation that is null or not an object, as invalid-operation', () => {
+		expect(applySourcePatch({}, { op: 'add', path: '/a', value: 1 } as never))
+			.toMatchObject({ ok: false, failure: { code: 'invalid-operation', operationIndex: 0 } })
+		expect(applySourcePatch({}, [{ op: 'test', path: '', value: {} }, null] as never))
+			.toMatchObject({ ok: false, failure: { code: 'invalid-operation', operationIndex: 1 } })
+		expect(applySourcePatch({}, ['add'] as never))
+			.toMatchObject({ ok: false, failure: { code: 'invalid-operation', operationIndex: 0 } })
+	})
+
+	it('locates the offending part of a json-incompatible operand, relative to the operand', () => {
+		const result = applySourcePatch({}, patchOf({ op: 'add', path: '/slots/children/-', value: { id: 'c', config: { items: [1, 2, { deep: Number.NaN }] } } }))
+
+		expect(result)
+			.toMatchObject({
+				ok: false,
+				failure: { code: 'json-incompatible-value', operationIndex: 0, path: ['config', 'items', 2, 'deep'], reason: 'non-finite-number' },
+			})
+	})
+
+	it('locates a json-incompatible operand that is itself the offending value', () => {
+		expect(applySourcePatch({ a: 1 }, patchOf({ op: 'replace', path: '/a', value: undefined })))
+			.toMatchObject({ ok: false, failure: { code: 'json-incompatible-value', path: [], reason: 'undefined' } })
+		expect(applySourcePatch({ a: 1 }, patchOf({ op: 'test', path: '/a', value: [new Date(0)] })))
+			.toMatchObject({ ok: false, failure: { code: 'json-incompatible-value', path: [0], reason: 'unsupported-object-prototype' } })
+	})
+
+	it('omits reason when the operand could not be inspected safely, and never adds path/reason to other codes', () => {
+		const hostile = new Proxy({}, { getPrototypeOf() {
+			throw new Error('boom')
+		} })
+		const unsafe = applySourcePatch({ a: 1 }, patchOf({ op: 'replace', path: '/a', value: hostile }))
+		expect(unsafe)
+			.toMatchObject({ ok: false, failure: { code: 'json-incompatible-value', path: [] } })
+		if (unsafe.ok)
+			throw new Error('expected a failure')
+		expect('reason' in unsafe.failure)
+			.toBe(false)
+
+		const notFound = applySourcePatch({}, patchOf({ op: 'remove', path: '/missing' }))
+		if (notFound.ok)
+			throw new Error('expected a failure')
+		expect('path' in notFound.failure || 'reason' in notFound.failure)
+			.toBe(false)
+	})
+
+	describe('no-op detection uses JSON-domain equality, regardless of prototypes', () => {
+		function nullProto<T extends object>(value: T): T {
+			const copy = Object.create(null) as Record<string, unknown>
+			for (const [key, child] of Object.entries(value))
+				copy[key] = child !== null && typeof child === 'object' && !Array.isArray(child) ? nullProto(child) : child
+			return copy as T
+		}
+
+		it('reports changed: false for a replace with an equal JSON value on a null-prototype source', () => {
+			const source = nullProto({ id: 'root', config: { a: 1, nested: { b: [1, 2] } } })
+
+			expect(applySourcePatch(source, patchOf({ op: 'replace', path: '/config', value: { a: 1, nested: { b: [1, 2] } } })))
+				.toMatchObject({ ok: true, value: { changed: false } })
+			expect(applySourcePatch(source, patchOf({ op: 'test', path: '/config', value: { a: 1, nested: { b: [1, 2] } } })))
+				.toMatchObject({ ok: true, value: { changed: false } })
+		})
+
+		it('reports changed: false for a replace of a plain source by an equal value, and for a copy onto an equal value', () => {
+			expect(applySourcePatch({ a: { x: 1 } }, patchOf({ op: 'replace', path: '/a', value: { x: 1 } })))
+				.toMatchObject({ ok: true, value: { changed: false } })
+			expect(applySourcePatch({ a: { x: 1 }, b: { x: 1 } }, patchOf({ op: 'copy', from: '/a', path: '/b' })))
+				.toMatchObject({ ok: true, value: { changed: false } })
+		})
+
+		it('still reports changed: true when the JSON value differs, for both prototype kinds', () => {
+			expect(applySourcePatch(nullProto({ config: { a: 1 } }), patchOf({ op: 'replace', path: '/config', value: { a: 2 } })))
+				.toMatchObject({ ok: true, value: { changed: true } })
+			expect(applySourcePatch(nullProto({ config: { a: 1 } }), patchOf({ op: 'replace', path: '/config', value: [1] })))
+				.toMatchObject({ ok: true, value: { changed: true } })
+			expect(applySourcePatch({ config: [] }, patchOf({ op: 'replace', path: '/config', value: {} })))
+				.toMatchObject({ ok: true, value: { changed: true } })
+		})
+
+		it('does not advance a Document revision for a no-op patch on a null-prototype source', () => {
+			const system = createWidgetSystem({
+				plugins: [createWidgetPlugin('leaf')
+					.description('Test widget')
+					.interfaces<Record<never, never>>()
+					.done()],
+			})
+			const document = createWidgetDocument({ system, source: nullProto({ id: 'root', type: 'leaf', meta: { a: 1 } }) })
+
+			expect(document.applyPatch([{ op: 'replace', path: '/meta', value: { a: 1 } }]))
+				.toEqual({ ok: true, changed: false })
+			expect(document.getSnapshot().revision)
+				.toBe(0)
+		})
 	})
 })

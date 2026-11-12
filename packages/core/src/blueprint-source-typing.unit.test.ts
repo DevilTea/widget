@@ -3,9 +3,11 @@ import type {
 	JsonValue,
 	ResolvedBlueprintWidgetNode,
 	ValidBlueprintView,
+	WidgetSource,
 	WidgetSystemBlueprint,
 } from './index'
-import { describe, expectTypeOf, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from './index'
 
 type Blueprint = WidgetSystemBlueprint
 
@@ -83,5 +85,45 @@ describe('blueprint sourceJsonCompatible proof', () => {
 	it('narrows source through every finalized navigation surface', () => {
 		expectTypeOf(assertJsonSourceProof).returns.toBeVoid()
 		expectTypeOf(assertValidViewSourceProof).returns.toBeVoid()
+	})
+})
+
+describe('valid blueprint source typing', () => {
+	const leaf = createWidgetPlugin('leaf')
+		.description('Leaf')
+		.interfaces<Record<never, never>>()
+		.done()
+	const typedSystem = createWidgetSystem({ plugins: [leaf] })
+	type Plugins = (typeof typedSystem)['plugins']
+
+	it('types the root source of a valid Blueprint as the authored source type of its System', () => {
+		const blueprint = typedSystem.createBlueprint({ id: 'root', type: 'leaf', meta: { note: 'x' } })
+		if (blueprint.status !== 'valid')
+			throw new Error('expected a valid Blueprint')
+
+		// No cast is needed to treat it as authored source (for example to read its fields)...
+		expectTypeOf(blueprint.source)
+			.toEqualTypeOf<WidgetSource<Plugins>>()
+		expectTypeOf(blueprint.source.id)
+			.toEqualTypeOf<string>()
+		expectTypeOf(blueprint.source.type)
+			.toEqualTypeOf<'leaf'>()
+		expectTypeOf(blueprint.source.meta)
+			.toEqualTypeOf<JsonValue | undefined>()
+		// ...and it stays assignable to the JSON domain.
+		const asJson: JsonValue = blueprint.source
+		void asJson
+		expect(blueprint.source.id)
+			.toBe('root')
+	})
+
+	it('feeds createWidgetDocument without a cast', () => {
+		const blueprint = typedSystem.createBlueprint({ id: 'root', type: 'leaf' })
+		if (blueprint.status !== 'valid')
+			throw new Error('expected a valid Blueprint')
+
+		const document = createWidgetDocument({ system: typedSystem, source: blueprint.source })
+		expect(document.getSnapshot().blueprint.status)
+			.toBe('valid')
 	})
 })

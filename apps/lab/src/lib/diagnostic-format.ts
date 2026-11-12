@@ -5,7 +5,7 @@
  * never parsed to infer taxonomy or ownership.
  */
 
-import type { BlueprintDependencyOperation, BlueprintDependencyReference, BlueprintDependencyTarget, DiagnosticPath } from '@deviltea/widget-core'
+import type { BlueprintDependencyOperation, BlueprintDependencyReference, BlueprintDependencyTarget, DiagnosticPath, SeparatedSourceLocation } from '@deviltea/widget-core'
 
 /** `[a, 0, 'b']` -> `a[0].b`. `DiagnosticPath` segments stay verbatim (never dot-joined into a lossy string). */
 export function formatDiagnosticPath(path: DiagnosticPath | undefined): string | null {
@@ -45,4 +45,15 @@ export function formatDependencyOperation(operation: BlueprintDependencyOperatio
 
 export function formatDependencyReference(reference: BlueprintDependencyReference): string {
 	return `${formatDependencyTarget(reference.target)} -> ${formatDependencyOperation(reference.operation)}`
+}
+
+/** `{ area: 'widgets', index: 2, path: ['id'] }` -> `widgets[2].id`; a whole-`widgets` fact is just `widgets`. */
+export function formatSeparatedSourceLocation(location: SeparatedSourceLocation): string {
+	const segments = (path: readonly PropertyKey[] | undefined): string => path === undefined
+		? ''
+		: path.map(segment => typeof segment === 'number' ? `[${segment}]` : `.${String(segment)}`)
+				.join('')
+	if (location.area === 'widgets')
+		return `widgets${location.index === undefined ? '' : `[${location.index}]`}${segments(location.path)}`
+	return `${location.area}${segments(location.path)}`
 }

@@ -19,10 +19,6 @@ const emit = defineEmits<{
 	select: [nodeId: InspectionNodeId]
 }>()
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 const inspectionNode = computed(() => props.inspection.getNode(props.nodeId))
 
 const label = computed(() => {
@@ -32,11 +28,8 @@ const label = computed(() => {
 	if (node.resolved)
 		return `${node.node.id} : ${node.node.type}`
 
-	// Unresolved: best-effort display hints from `source` only — never treated as semantic identity.
-	const raw = node.node.source
-	const hintedId = isPlainObject(raw) && typeof raw.id === 'string' ? raw.id : '?'
-	const hintedType = isPlainObject(raw) && typeof raw.type === 'string' ? raw.type : '?'
-	return `${hintedId} : ${hintedType}`
+	// Unresolved: Core's best-effort `id`/`type` hints — display only, never semantic identity.
+	return `${node.id ?? '?'} : ${node.type ?? '?'}`
 })
 
 const diagnosticCount = computed(() => inspectionNode.value?.node.diagnostics.length ?? 0)

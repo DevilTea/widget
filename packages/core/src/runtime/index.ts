@@ -6,7 +6,7 @@
  * `attemptSet`), materializes dependency callables, creates Property/Method primitives, assembles
  * RuntimeWidget objects and wires the deterministic aggregate.
  *
- * Normative source: diagnostic #10 consolidated handoff §11 (Runtime creation/initialization pipeline).
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §11 (Runtime creation/initialization pipeline).
  */
 
 import type {
@@ -18,24 +18,26 @@ import type {
 	WidgetSystemRuntime,
 } from '../internal/contract'
 import type { AnyWidgetPluginTuple } from '../plugin'
-import type { WidgetId } from '../types'
+import type { WidgetId, WidgetMemberKey } from '../types'
 import type { PrimitiveRegistryEntry } from './deps'
-import { endBatch, startBatch } from 'alien-signals'
 import { readCompiledBlueprint } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
-import { runRuntimeOperation } from './adapter'
 import { createRuntimeAggregate } from './aggregate'
 import { buildBlueprintView } from './blueprint-view'
-import { createRuntimeContext } from './context'
+import { createCallbackOwner, createRuntimeContext, runOutsideCallbacks } from './context'
 import { materializeDependencyTree } from './deps'
-import { buildEventEmitter, createEventPrimitive } from './event'
+import { buildCallbackEventEmitter, createEventPrimitive } from './event'
 import { runtimeInternals } from './internals'
 import { createMethodPrimitive } from './method'
 import { resolveStateOverrides } from './override'
 import { createPropertyPrimitive } from './property'
-import { createStatePrimitive } from './state'
+import { createStatePrimitive, restoreInitialState } from './state'
 import { assertSyncValue } from './sync'
 import { buildRuntimeWidget } from './widget'
+
+function defineOwnValue(record: Record<string, unknown>, key: string, value: unknown): void {
+	Object.defineProperty(record, key, { value, enumerable: true, writable: true, configurable: true })
+}
 
 export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	blueprint: ValidWidgetSystemBlueprint<Plugins>,
@@ -44,7 +46,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	const compiled: CompiledBlueprint<Plugins> = readCompiledBlueprint(blueprint)
 	const context = createRuntimeContext()
 	// A real restricted facade, not the full Blueprint object: `compute`/`execute` must not be able to
-	// reach `createRuntime`/`recompile`/`getDiagnostics`/`system`/`source` through JS/`any`.
+	// reach `createRuntime`/`recompile`/`diagnostics`/`system`/`source` through JS/`any`.
 	const blueprintView = buildBlueprintView(blueprint)
 
 	const registry = new Map<InternalNodeId, PrimitiveRegistryEntry & {
@@ -60,6 +62,13 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		const fragment: Record<string, unknown> = definition.config === null ? Object.freeze({}) : Object.freeze({ config: node.config })
 		return () => fragment
 	}
+
+	// The override topology diagnostics (step 4) depend on no primitive, so they are resolved up front:
+	// the live diagnostic aggregate (step 8) has to exist before the primitives that report into it.
+	const overrideResolution = resolveStateOverrides(compiled, options?.overrideStateDefaults)
+	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelDiagnostics)
+	// One commit hook per widget, shared by all of its primitives.
+	const commitHooks: Array<() => void> = []
 
 	// 1. Runtime/widget indexes + 2. create all states (null + empty diagnostic snapshot).
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
@@ -82,6 +91,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		}
 
 		const buildConfigFragment = buildConfigFragmentFor(node)
+		const onDiagnosticsCommitted = aggregate.commitHookFor(nodeId)
+		commitHooks[nodeId] = onDiagnosticsCommitted
 
 		for (const [key, member] of node.state) {
 			const primitive = createStatePrimitive(context, {
@@ -89,15 +100,14 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				key,
 				definition: member.definition,
 				buildConfigFragment,
+				onDiagnosticsCommitted,
 			})
 			entry.state.set(key, primitive)
 		}
 	}
 
-	// 3. Apply override/default precedence through authoritative validation +
-	// 4. collect override topology runtime-level diagnostics.
-	const overrideResolution = resolveStateOverrides(compiled, options?.overrideStateDefaults)
-
+	// 3. Apply override/default precedence through authoritative validation (4. the override topology
+	// runtime-level diagnostics were collected above).
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
 		if (node === undefined || !node.resolved)
@@ -123,7 +133,10 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				hasCandidate = true
 			}
 			else if (member.definition.default) {
-				candidate = member.definition.default({ ...buildConfigFragment() })
+				// `default` owns no dependency or `emit` callables: a Runtime created while a Method runs must
+				// not let it use that Method's (see `callbackScope`).
+				const { definition } = member
+				candidate = runOutsideCallbacks(() => definition.default!({ ...buildConfigFragment() }))
 				assertSyncValue(candidate, `State "${key}"'s default`)
 				hasCandidate = true
 			}
@@ -146,12 +159,15 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			continue
 
 		const buildConfigFragment = buildConfigFragmentFor(node)
+		const onDiagnosticsCommitted = commitHooks[nodeId]!
 		const definition = readWidgetPluginDefinition(node.plugin)
-		const emitFragment: Readonly<Record<string, unknown>> = definition.events === null
+		const emitter = definition.events === null ? null : buildCallbackEventEmitter(context, entry.events)
+		const emitFragment: Readonly<Record<string, unknown>> = emitter === null
 			? Object.freeze({})
-			: Object.freeze({ emit: buildEventEmitter(entry.events) })
+			: Object.freeze({ emit: emitter })
 
 		for (const [name, member] of node.properties) {
+			const owner = createCallbackOwner(null)
 			const deps = materializeDependencyTree(member.deps, {
 				consumer: 'property',
 				ownerWidgetId: node.id,
@@ -159,6 +175,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				registry,
 				nodes: compiled.nodes,
 				context,
+				owner,
 			})
 
 			const primitive = createPropertyPrimitive(context, {
@@ -169,11 +186,14 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				selfNode: node.publicNode,
 				blueprintView,
 				deps,
+				owner,
+				onDiagnosticsCommitted,
 			})
 			entry.properties.set(name, primitive)
 		}
 
 		for (const [name, member] of node.methods) {
+			const owner = createCallbackOwner(emitter)
 			const deps = materializeDependencyTree(member.deps, {
 				consumer: 'method',
 				ownerWidgetId: node.id,
@@ -181,6 +201,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				registry,
 				nodes: compiled.nodes,
 				context,
+				owner,
 			})
 
 			const primitive = createMethodPrimitive(context, {
@@ -192,12 +213,14 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				blueprintView,
 				deps,
 				emitFragment,
+				owner,
+				onDiagnosticsCommitted,
 			})
 			entry.methods.set(name, primitive)
 		}
 	}
 
-	// 8. Build the live diagnostic aggregate.
+	// 8. Build the RuntimeWidgets (the live Runtime-level diagnostic aggregate was created up front).
 	const runtimeWidgetsByNodeId = new Map<InternalNodeId, unknown>()
 	const nodeIdByRuntimeWidget = new Map<object, InternalNodeId>()
 	for (const [nodeId, entry] of registry) {
@@ -208,8 +231,6 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		runtimeWidgetsByNodeId.set(nodeId, runtimeWidget)
 		nodeIdByRuntimeWidget.set(runtimeWidget as object, nodeId)
 	}
-
-	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelDiagnostics)
 
 	function getWidget(id: WidgetId): unknown {
 		context.assertActive()
@@ -225,19 +246,30 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	}
 
 	function resetState(): void {
+		restoreInitialState(context, registry.values())
+	}
+
+	function snapshotState(): Record<WidgetId, Record<WidgetMemberKey, unknown>> {
 		context.assertActive()
-		runRuntimeOperation(() => {
-			startBatch()
-			try {
-				for (const entry of registry.values()) {
-					for (const primitive of entry.state.values())
-						primitive.internal.restoreInitial()
-				}
+		// Plain objects owned by the caller. Keys are arbitrary strings (`__proto__` included), so they are
+		// defined as own data properties instead of assigned.
+		const snapshot: Record<WidgetId, Record<WidgetMemberKey, unknown>> = {}
+		for (const nodeId of compiled.semanticOrder) {
+			const node = compiled.nodes[nodeId]
+			const entry = registry.get(nodeId)
+			if (node === undefined || !node.resolved || entry === undefined)
+				continue
+
+			let values: Record<WidgetMemberKey, unknown> | null = null
+			for (const [key, primitive] of entry.state) {
+				const value = primitive.internal.get()
+				if (value !== null)
+					defineOwnValue(values ??= {}, key, value)
 			}
-			finally {
-				endBatch()
-			}
-		})
+			if (values !== null)
+				defineOwnValue(snapshot, node.id, values)
+		}
+		return snapshot
 	}
 
 	// 9. Finalize Runtime.
@@ -248,6 +280,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		},
 		getWidget,
 		resetState,
+		snapshotState,
 		getDiagnostics: aggregate.getDiagnostics,
 		subscribeDiagnostics: aggregate.subscribeDiagnostics,
 		dispose: () => context.dispose(),

@@ -9,7 +9,7 @@
  * semantics") — this module deliberately does not call the generic live-operation disposed guard from
  * any other path.
  *
- * Normative source: diagnostic #10 amendment "inspection exact API v1 (part 2: Runtime inspection,
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendment "inspection exact API v1 (part 2: Runtime inspection,
  * materialization, disposal, conformance)".
  */
 

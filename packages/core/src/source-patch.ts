@@ -1,5 +1,6 @@
+import type { DiagnosticPath, JsonCompatibilityReason } from './diagnostic'
 import type { JsonValue } from './json'
-import { isJsonValue, jsonEqual, sameValueZero } from './json'
+import { findFirstJsonViolation, jsonEqual, MAX_JSON_DEPTH, sameValueZero } from './json'
 
 export type SourcePath = readonly (string | number)[] | string
 
@@ -20,16 +21,22 @@ export type SourcePatch = readonly SourcePatchOperation[]
 
 /**
  * Operation failure codes. `invalid-array-index` covers any non-canonical-index segment on an Array
- * parent (`'length'`, `'foo'`, `'01'`, structured `'-'`) in both path forms. `json-incompatible-value`
- * is an `add`/`replace`/`test` operand outside Core's JSON domain; `source-access-failed` concerns
- * unsafe access to source material only.
+ * parent (`'length'`, `'foo'`, `'01'`, structured `'-'`) in both path forms. `invalid-operation` is a
+ * patch that is not an Array, or an operation that is not an object or has an unknown `op`.
+ * `json-incompatible-value` is an `add`/`replace`/`test` operand outside Core's JSON domain (including one
+ * nested deeper than `MAX_JSON_DEPTH`); `max-depth-exceeded` is a path with more than `MAX_JSON_DEPTH + 2`
+ * segments (the longest path of a node a Blueprint materializes) or a `copy`/`move` source value nested
+ * deeper than `MAX_JSON_DEPTH`; `source-access-failed` concerns unsafe
+ * access to source material only.
  */
 export type SourcePatchOperationFailureCode
 	= | 'invalid-path'
+		| 'invalid-operation'
 		| 'path-not-found'
 		| 'path-not-traversable'
 		| 'invalid-array-index'
 		| 'invalid-move-target'
+		| 'max-depth-exceeded'
 		| 'test-failed'
 		| 'json-incompatible-value'
 		| 'source-access-failed'
@@ -38,6 +45,13 @@ export interface SourcePatchOperationFailure {
 	readonly code: SourcePatchOperationFailureCode
 	readonly operationIndex: number
 	readonly message: string
+	/**
+	 * Only for `json-incompatible-value`: where in the operand (`value`) the first offending part is, relative
+	 * to the operand root (`[]` for the operand itself), like a Blueprint diagnostic of the same code.
+	 */
+	readonly path?: DiagnosticPath
+	/** Only for `json-incompatible-value`: why that part is outside the JSON domain, when known. */
+	readonly reason?: JsonCompatibilityReason
 }
 
 interface ParsedPath {
@@ -49,16 +63,20 @@ interface ParsedPath {
 interface PatchError {
 	readonly code: SourcePatchOperationFailureCode
 	readonly message: string
+	readonly path?: DiagnosticPath
+	readonly reason?: JsonCompatibilityReason
 }
 
 type PatchResult<T> = { readonly ok: true, readonly value: T } | { readonly ok: false, readonly error: PatchError }
 
 const PATCH_ERROR_MESSAGES: Record<SourcePatchOperationFailureCode, string> = {
 	'invalid-path': 'The SourcePath is malformed.',
+	'invalid-operation': 'The SourcePatch operation is malformed.',
 	'path-not-found': 'The SourcePath does not identify an existing location.',
 	'path-not-traversable': 'The SourcePath passes through a non-traversable value.',
 	'invalid-array-index': 'The SourcePath contains an invalid Array index.',
 	'invalid-move-target': 'The move destination is invalid relative to its source.',
+	'max-depth-exceeded': 'The SourcePatch path or the addressed value is nested deeper than the maximum JSON depth.',
 	'test-failed': 'The test operation did not match the addressed value.',
 	'json-incompatible-value': 'The SourcePatch operand is outside the JSON value domain.',
 	'source-access-failed': 'The source could not be inspected safely.',
@@ -68,7 +86,24 @@ function failure(code: SourcePatchOperationFailureCode, message = PATCH_ERROR_ME
 	return { ok: false, error: { code, message } }
 }
 
+/**
+ * The most segments a SourcePatch path may have: the longest source path of a widget node a Blueprint
+ * materializes. Recovery stops at a node nested inside `MAX_JSON_DEPTH` or more containers, and that node is
+ * three segments (`slots`, slot name, index) below a parent nested inside fewer, so its path has at most
+ * `MAX_JSON_DEPTH + 2` segments. Removing or replacing exactly that node must stay possible.
+ */
+const MAX_PATH_SEGMENTS = MAX_JSON_DEPTH + 2
+
 function parsePath(path: unknown): PatchResult<ParsedPath> {
+	const parsed = parsePathSegments(path)
+	// A path addresses a value nested inside that many containers, and the recursive rebuild below must stay
+	// bounded.
+	if (parsed.ok && parsed.value.segments.length > MAX_PATH_SEGMENTS)
+		return failure('max-depth-exceeded')
+	return parsed
+}
+
+function parsePathSegments(path: unknown): PatchResult<ParsedPath> {
 	if (typeof path === 'string') {
 		if (path === '')
 			return { ok: true, value: { segments: [], append: false, pointer: true } }
@@ -385,10 +420,13 @@ function copyValue(value: unknown, canonicalizeNegativeZero = false): PatchResul
 		return { ok: true, value }
 
 	const seen = new WeakMap<object, object>()
-	function clone(current: object): PatchResult<object> {
+	// `depth` is the nesting level of `current`'s own container; bounded so a deep source cannot exhaust the stack.
+	function clone(current: object, depth: number): PatchResult<object> {
 		const previous = seen.get(current)
 		if (previous !== undefined)
 			return { ok: true, value: previous }
+		if (depth > MAX_JSON_DEPTH)
+			return failure('max-depth-exceeded')
 		const result = createContainer(current)
 		if (!result.ok)
 			return result
@@ -411,7 +449,7 @@ function copyValue(value: unknown, canonicalizeNegativeZero = false): PatchResul
 				if (!childKind.ok)
 					return childKind
 				if (childKind.value !== 'opaque')
-					copied = clone(child)
+					copied = clone(child, depth + 1)
 			}
 			if (!copied.ok)
 				return copied
@@ -422,13 +460,13 @@ function copyValue(value: unknown, canonicalizeNegativeZero = false): PatchResul
 		return result
 	}
 
-	return clone(value)
+	return clone(value, 1)
 }
 
 function structurallyEqual(left: unknown, right: unknown): boolean {
 	const matched = new WeakMap<object, object>()
 
-	function equal(currentLeft: unknown, currentRight: unknown): boolean {
+	function equal(currentLeft: unknown, currentRight: unknown, depth: number): boolean {
 		if (sameValueZero(currentLeft, currentRight))
 			return true
 		if (typeof currentLeft !== 'object' || currentLeft === null || typeof currentRight !== 'object' || currentRight === null)
@@ -439,6 +477,9 @@ function structurallyEqual(left: unknown, right: unknown): boolean {
 			return false
 		if (leftKind.value === 'opaque' || rightKind.value === 'opaque')
 			return false
+		// Only shared (identical) subtrees can legitimately be this deep; never recurse past the bound.
+		if (depth > MAX_JSON_DEPTH)
+			return false
 
 		const previous = matched.get(currentLeft)
 		if (previous !== undefined)
@@ -446,7 +487,9 @@ function structurallyEqual(left: unknown, right: unknown): boolean {
 		matched.set(currentLeft, currentRight)
 
 		try {
-			if (Object.getPrototypeOf(currentLeft) !== Object.getPrototypeOf(currentRight))
+			// Compare JSON-domain kinds, never prototypes: a plain object and a null-prototype object with the
+			// same members are the same JSON value (`jsonEqual`, and so `test`, already agree).
+			if (leftKind.value !== rightKind.value)
 				return false
 
 			const leftKeys = Reflect.ownKeys(currentLeft)
@@ -467,7 +510,7 @@ function structurallyEqual(left: unknown, right: unknown): boolean {
 				if (leftData !== rightData)
 					return false
 				if (leftData) {
-					if (!equal(leftDescriptor.value, rightDescriptor.value))
+					if (!equal(leftDescriptor.value, rightDescriptor.value, depth + 1))
 						return false
 				}
 				else if (leftDescriptor.get !== rightDescriptor.get || leftDescriptor.set !== rightDescriptor.set) {
@@ -481,7 +524,7 @@ function structurallyEqual(left: unknown, right: unknown): boolean {
 		}
 	}
 
-	return equal(left, right)
+	return equal(left, right, 1)
 }
 
 function samePathSegment(left: string | number, right: string | number): boolean {
@@ -497,8 +540,32 @@ function samePath(left: readonly (string | number)[], right: readonly (string | 
 }
 
 function operationError(index: number, error: PatchError): SourcePatchOperationFailure {
-	return Object.freeze({ code: error.code, operationIndex: index, message: error.message })
+	return Object.freeze({
+		code: error.code,
+		operationIndex: index,
+		message: error.message,
+		...(error.path === undefined ? {} : { path: error.path }),
+		...(error.reason === undefined ? {} : { reason: error.reason }),
+	})
 }
+
+/**
+ * `null` when `value` is inside Core's JSON domain; otherwise the failure locating the first offending part
+ * of the operand (the same facts the Blueprint reports for the same code).
+ */
+function operandFailure(value: unknown): PatchError | null {
+	const first = findFirstJsonViolation(value)
+	if (first === null)
+		return null
+	return {
+		code: 'json-incompatible-value',
+		message: PATCH_ERROR_MESSAGES['json-incompatible-value'],
+		path: Object.freeze([...first.path]),
+		...(first.code === 'json-incompatible-value' ? { reason: first.reason } : {}),
+	}
+}
+
+const PATCH_OPERATIONS: ReadonlySet<unknown> = new Set(['add', 'remove', 'replace', 'move', 'copy', 'test'])
 
 interface InternalAppliedSourcePatch {
 	readonly changed: boolean
@@ -511,13 +578,13 @@ type InternalApplySourcePatchResult
 
 export function applySourcePatch(source: unknown, patch: SourcePatch): InternalApplySourcePatchResult {
 	if (!Array.isArray(patch))
-		return { ok: false, failure: operationError(0, { code: 'invalid-path', message: 'SourcePatch must be an array.' }) }
+		return { ok: false, failure: operationError(0, { code: 'invalid-operation', message: 'SourcePatch must be an array.' }) }
 
 	let working = source
 	for (let operationIndex = 0; operationIndex < patch.length; operationIndex++) {
 		const operation = patch[operationIndex] as unknown
-		if (typeof operation !== 'object' || operation === null || !('op' in operation))
-			return { ok: false, failure: operationError(operationIndex, { code: 'invalid-path', message: 'SourcePatch operation is malformed.' }) }
+		if (typeof operation !== 'object' || operation === null || !('op' in operation) || !PATCH_OPERATIONS.has((operation as { op?: unknown }).op))
+			return { ok: false, failure: operationError(operationIndex, { code: 'invalid-operation', message: 'SourcePatch operation is malformed.' }) }
 
 		const op = (operation as { op?: unknown }).op
 		const pathResult = parsePath((operation as { path?: unknown }).path)
@@ -530,8 +597,9 @@ export function applySourcePatch(source: unknown, patch: SourcePatch): InternalA
 			case 'add':
 			case 'replace': {
 				const value = (operation as { value?: unknown }).value
-				if (!isJsonValue(value))
-					return { ok: false, failure: operationError(operationIndex, { code: 'json-incompatible-value', message: PATCH_ERROR_MESSAGES['json-incompatible-value'] }) }
+				const operandProblem = operandFailure(value)
+				if (operandProblem !== null)
+					return { ok: false, failure: operationError(operationIndex, operandProblem) }
 				const copied = copyValue(value, true)
 				if (!copied.ok)
 					return { ok: false, failure: operationError(operationIndex, copied.error) }
@@ -549,8 +617,9 @@ export function applySourcePatch(source: unknown, patch: SourcePatch): InternalA
 				break
 			case 'test': {
 				const value = (operation as { value?: unknown }).value
-				if (!isJsonValue(value))
-					return { ok: false, failure: operationError(operationIndex, { code: 'json-incompatible-value', message: PATCH_ERROR_MESSAGES['json-incompatible-value'] }) }
+				const operandProblem = operandFailure(value)
+				if (operandProblem !== null)
+					return { ok: false, failure: operationError(operationIndex, operandProblem) }
 				const actual = readAt(working, path)
 				if (!actual.ok)
 					return { ok: false, failure: operationError(operationIndex, actual.error) }
@@ -596,7 +665,7 @@ export function applySourcePatch(source: unknown, patch: SourcePatch): InternalA
 				break
 			}
 			default:
-				return { ok: false, failure: operationError(operationIndex, { code: 'invalid-path', message: 'SourcePatch operation is malformed.' }) }
+				return { ok: false, failure: operationError(operationIndex, { code: 'invalid-operation', message: 'SourcePatch operation is malformed.' }) }
 		}
 
 		if (!next.ok)

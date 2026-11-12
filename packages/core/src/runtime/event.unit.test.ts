@@ -188,17 +188,68 @@ describe('runtime semantic events', () => {
 			.toEqual([1])
 	})
 
-	it('propagates subscriber errors immediately and aborts later subscribers', () => {
+	it('isolates subscriber errors: every snapshotted subscriber runs and the emitting Method completes', async () => {
 		const { root } = createRuntime()
 		const error = new Error('subscriber failed')
-		const later = vi.fn()
-		root.events.change.subscribe(() => {
+		const order: string[] = []
+		const reported: unknown[] = []
+		const onUncaughtException = (thrown: unknown): void => {
+			reported.push(thrown)
+		}
+		root.events.change.subscribe((value) => {
+			order.push(`first:${value}`)
 			throw error
 		})
-		root.events.change.subscribe(later)
-		expect(() => root.methods.emitChange('x'))
-			.toThrow(error)
-		expect(later).not.toHaveBeenCalled()
+		root.events.change.subscribe(value => order.push(`later:${value}`))
+
+		process.on('uncaughtException', onUncaughtException)
+		try {
+			expect(root.methods.emitChange('x'))
+				.toEqual({ ok: true, value: undefined })
+			expect(order)
+				.toEqual(['first:x', 'later:x'])
+			// Reported outside the emit call, like a throwing value listener.
+			expect(reported)
+				.toEqual([])
+
+			await new Promise<void>(resolve => setTimeout(resolve, 0))
+
+			expect(reported)
+				.toEqual([error])
+		}
+		finally {
+			process.off('uncaughtException', onUncaughtException)
+		}
+	})
+
+	it('keeps depth-first ordering when a subscriber of a nested emit throws', async () => {
+		const { root } = createRuntime()
+		const order: string[] = []
+		root.events.chain.subscribe((value) => {
+			order.push(`${value}:a`)
+			if (value === 'outer')
+				order.push(`nested:${JSON.stringify(root.methods.emitChain('inner'))}`)
+		})
+		root.events.chain.subscribe((value) => {
+			order.push(`${value}:b`)
+			if (value === 'inner')
+				throw new Error('subscriber failed')
+		})
+		root.events.chain.subscribe(value => order.push(`${value}:c`))
+		const onUncaughtException = (): void => {}
+
+		process.on('uncaughtException', onUncaughtException)
+		try {
+			root.methods.emitChain('outer')
+
+			expect(order)
+				.toEqual(['outer:a', 'inner:a', 'inner:b', 'inner:c', 'nested:{"ok":true}', 'outer:b', 'outer:c'])
+
+			await new Promise<void>(resolve => setTimeout(resolve, 0))
+		}
+		finally {
+			process.off('uncaughtException', onUncaughtException)
+		}
 	})
 
 	it('scopes same-named events to one widget instance', () => {

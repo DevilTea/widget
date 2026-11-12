@@ -7,7 +7,7 @@
  * shape preservation and recursive readonly-ness, the conservative `MaybeOptional` nullability rule,
  * and `.validate()` refinement.
  *
- * Normative source: diagnostic #10 COMMENT 26 §1, COMMENT 9 (recursive shape + conservative optional
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 COMMENT 26 §1, COMMENT 9 (recursive shape + conservative optional
  * typing), COMMENT 10 (dependency fluent grammar locked), COMMENT 11 (resolution / compiled-edge
  * invariants).
  *
@@ -293,12 +293,12 @@ describe('dep.self is strongly typed; root/parent/widget stay unknown', () => {
 		expectTypeOf(readCount).returns.toEqualTypeOf<StateGetDepExpression<number | null, false>>()
 	})
 
-	it('types dep.self.properties.get(name) using the plugin\'s own Properties value', () => {
-		expectTypeOf(readTotal).returns.toEqualTypeOf<PropertyGetDepExpression<number | null, false>>()
+	it('types dep.self.properties.get(name) using the plugin\'s own Properties value (no spurious null: a self target is never absent)', () => {
+		expectTypeOf(readTotal).returns.toEqualTypeOf<PropertyGetDepExpression<number, false>>()
 	})
 
-	it('types dep.self.methods.invoke(name) using the plugin\'s own Method signature', () => {
-		expectTypeOf(invokeRun).returns.toEqualTypeOf<MethodInvokeDepExpression<[number], string | null, false>>()
+	it('types dep.self.methods.invoke(name) using the plugin\'s own Method signature (no spurious null: a self target is never absent)', () => {
+		expectTypeOf(invokeRun).returns.toEqualTypeOf<MethodInvokeDepExpression<[number], string, false>>()
 	})
 
 	it('rejects an unknown member key on dep.self (member keys are statically checked for self)', () => {

@@ -14,6 +14,17 @@ export interface JsonObject {
 
 export type JsonValue = JsonPrimitive | JsonArray | JsonObject
 
+/**
+ * The maximum JSON nesting depth of authored source and SourcePatch operands: the number of containers
+ * (objects and arrays) a value may be nested inside, counting the value's own container. A value nested
+ * deeper is outside the JSON domain (`json-incompatible-value`, reason `max-depth-exceeded`) and is never
+ * descended into, so arbitrarily deep input yields a diagnostic or an operation failure instead of exhausting
+ * the call stack. A widget node nests three containers per tree level (node, `slots`, slot Array), so the
+ * limit allows widget trees about 85 levels deep. The value leaves a wide margin below the call-stack limit of
+ * Node 22/24 and of smaller-stack embedded engines, and is part of the public contract.
+ */
+export const MAX_JSON_DEPTH = 256
+
 type JsonInspectionDiagnostic = JsonCompatibilityDiagnostic | SourceAccessDiagnostic
 
 export interface JsonValueInspection {
@@ -41,13 +52,17 @@ function accessDiagnostic(path: readonly PropertyKey[]): SourceAccessDiagnostic 
 }
 
 /**
- * `path` is one shared stack, pushed before and popped after each child visit; diagnostics copy it.
+ * `path` is one shared stack, pushed before and popped after each child visit; diagnostics copy it. With
+ * `firstOnly` the walk stops at the first diagnostic, so a caller that only needs to know whether (and where
+ * first) a value leaves the JSON domain never diagnoses the rest of it.
  */
 function inspectJsonValueAt(
 	value: unknown,
 	path: PropertyKey[],
 	active: Set<object>,
 	diagnostics: JsonInspectionDiagnostic[],
+	depth: number,
+	firstOnly: boolean,
 ): void {
 	if (value === null || typeof value === 'string' || typeof value === 'boolean')
 		return
@@ -76,6 +91,12 @@ function inspectJsonValueAt(
 	}
 	if (typeof value !== 'object')
 		return
+
+	// `depth` counts the containers enclosing `value`; `value` itself is one more.
+	if (depth >= MAX_JSON_DEPTH) {
+		diagnostics.push(jsonDiagnostic(path, 'max-depth-exceeded'))
+		return
+	}
 
 	let isArray: boolean
 	try {
@@ -131,6 +152,8 @@ function inspectJsonValueAt(
 			}
 
 			for (const key of keys) {
+				if (firstOnly && diagnostics.length > 0)
+					return
 				if (typeof key === 'symbol') {
 					diagnostics.push(jsonDiagnostic([...path, key], 'symbol-key'))
 					continue
@@ -143,6 +166,8 @@ function inspectJsonValueAt(
 			}
 
 			for (let index = 0; index < length; index++) {
+				if (firstOnly && diagnostics.length > 0)
+					return
 				let descriptor: PropertyDescriptor | undefined
 				try {
 					descriptor = Object.getOwnPropertyDescriptor(value, String(index))
@@ -160,13 +185,15 @@ function inspectJsonValueAt(
 					continue
 				}
 				path.push(index)
-				inspectJsonValueAt(descriptor.value, path, active, diagnostics)
+				inspectJsonValueAt(descriptor.value, path, active, diagnostics, depth + 1, firstOnly)
 				path.pop()
 			}
 			return
 		}
 
 		for (const key of keys) {
+			if (firstOnly && diagnostics.length > 0)
+				return
 			if (typeof key === 'symbol') {
 				diagnostics.push(jsonDiagnostic([...path, key], 'symbol-key'))
 				continue
@@ -189,7 +216,7 @@ function inspectJsonValueAt(
 				continue
 			}
 			path.push(key)
-			inspectJsonValueAt(descriptor.value, path, active, diagnostics)
+			inspectJsonValueAt(descriptor.value, path, active, diagnostics, depth + 1, firstOnly)
 			path.pop()
 		}
 	}
@@ -205,12 +232,56 @@ function inspectJsonValueAt(
  */
 export function inspectJsonValue(value: unknown): JsonValueInspection {
 	const diagnostics: JsonInspectionDiagnostic[] = []
-	inspectJsonValueAt(value, [], new Set(), diagnostics)
+	inspectJsonValueAt(value, [], new Set(), diagnostics, 0, false)
 	return { compatible: diagnostics.length === 0, diagnostics }
 }
 
+/**
+ * The first diagnostic {@link inspectJsonValue} reports for `value`, found by the same walk, or `null` when
+ * `value` is inside the JSON domain. The walk stops there instead of diagnosing the rest of the value.
+ */
+export function findFirstJsonViolation(value: unknown): JsonInspectionDiagnostic | null {
+	const diagnostics: JsonInspectionDiagnostic[] = []
+	inspectJsonValueAt(value, [], new Set(), diagnostics, 0, true)
+	return diagnostics[0] ?? null
+}
+
+const JSON_PARSE_PROVEN: JsonValueInspection = Object.freeze({ compatible: true, diagnostics: Object.freeze([]) })
+
+/**
+ * {@link inspectJsonValue} for a value Core itself produced with `JSON.parse` (no reviver). Such a value
+ * is made only of plain objects, arrays, strings, booleans, `null` and numbers, so the only way it can be
+ * outside the JSON domain is a non-finite number (`JSON.parse('1e400')` is `Infinity`) or nesting deeper
+ * than {@link MAX_JSON_DEPTH}. A cheap iterative scan therefore stands in for the full descriptor-level
+ * inspection; as soon as it finds anything the scan cannot prove, the full inspection supplies the exact
+ * diagnostics.
+ */
+export function inspectParsedJsonValue(value: unknown): JsonValueInspection {
+	const pending: unknown[] = [value]
+	// `depths[i]` is the number of containers enclosing `pending[i]`.
+	const depths: number[] = [0]
+	while (pending.length > 0) {
+		const current = pending.pop()
+		const depth = depths.pop()!
+		if (typeof current === 'number') {
+			if (!Number.isFinite(current))
+				return inspectJsonValue(value)
+		}
+		else if (typeof current === 'object' && current !== null) {
+			if (depth >= MAX_JSON_DEPTH)
+				return inspectJsonValue(value)
+			// Not `push(...children)`: a very large array would exceed the engine's argument limit.
+			for (const child of Array.isArray(current) ? current : Object.values(current)) {
+				pending.push(child)
+				depths.push(depth + 1)
+			}
+		}
+	}
+	return JSON_PARSE_PROVEN
+}
+
 export function isJsonValue(value: unknown): value is JsonValue {
-	return inspectJsonValue(value).compatible
+	return findFirstJsonViolation(value) === null
 }
 
 /**
@@ -277,6 +348,13 @@ type OptionalKeys<T extends object> = {
 	[Key in keyof T]-?: Record<never, never> extends Pick<T, Key> ? Key : never
 }[keyof T]
 
+/**
+ * Well-known-symbol members that only class instances carry (`Date`, `Map`, `Set`, iterables, ...).
+ * Checked before the string-key rule, so such a value reports the non-plain-object reason instead of
+ * "may only have string keys".
+ */
+type ClassInstanceSymbolKey = typeof Symbol.iterator | typeof Symbol.asyncIterator | typeof Symbol.toPrimitive | typeof Symbol.toStringTag
+
 export type JsonDomainViolation<Value> = IsAny<Value> extends true
 	? 'authored JSON values cannot contain any'
 	: [Value] extends [never]
@@ -290,11 +368,13 @@ export type JsonDomainViolation<Value> = IsAny<Value> extends true
 							: Value extends readonly (infer Element)[]
 								? JsonDomainViolation<Element>
 								: Value extends object
-									? Exclude<keyof Value, string> extends never
-										? {
-												[Key in keyof Value]-?: Key extends OptionalKeys<Value>
-													? JsonDomainViolation<Exclude<Value[Key], undefined>>
-													: JsonDomainViolation<Value[Key]>
-											}[keyof Value]
-										: 'authored JSON objects may only have string keys'
+									? [Extract<keyof Value, ClassInstanceSymbolKey>] extends [never]
+											? Exclude<keyof Value, string> extends never
+												? {
+														[Key in keyof Value]-?: Key extends OptionalKeys<Value>
+															? JsonDomainViolation<Exclude<Value[Key], undefined>>
+															: JsonDomainViolation<Value[Key]>
+													}[keyof Value]
+												: 'authored JSON objects may only have string keys'
+											: 'authored JSON objects must be plain objects, not class instances such as Date, Map or Set'
 									: 'authored values must be JSON-compatible'

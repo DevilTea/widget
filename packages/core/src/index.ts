@@ -28,7 +28,7 @@ export type {
 	UnknownTargetStateDependencyOperations,
 } from './dep'
 
-export { EMPTY_DIAGNOSTICS, WidgetSystemRuntimeDisposedError } from './diagnostic'
+export { EMPTY_DIAGNOSTICS, WidgetSystemRuntimeDisposedError, WidgetSystemRuntimeReentrancyError } from './diagnostic'
 
 export type {
 	BlueprintConfigDiagnostic,
@@ -89,6 +89,8 @@ export type {
 	DocumentRevisionConflictFailure,
 	ReentrantApplyFailure,
 	WidgetDocument,
+	WidgetDocumentCommit,
+	WidgetDocumentListener,
 	WidgetDocumentSnapshot,
 } from './document'
 export { createWidgetDocument } from './document'
@@ -100,6 +102,7 @@ export type {
 	BlueprintNodeConfigFields,
 	BlueprintSemanticSlots,
 	BlueprintSemanticSlotsView,
+	BlueprintSourcePath,
 	BlueprintWidgetNode,
 	BlueprintWidgetNodeBase,
 	BlueprintWidgetNodeView,
@@ -132,6 +135,8 @@ export type {
 	WidgetSystemBlueprintStatus,
 	WidgetSystemRuntime,
 } from './internal/contract'
+
+export { isJsonValue, MAX_JSON_DEPTH } from './json'
 
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from './json'
 
@@ -166,6 +171,7 @@ export type {
 	WidgetPluginPropertiesPhase,
 	WidgetPluginSlotsPhase,
 	WidgetPluginStatePhase,
+	WidgetPluginStructurePhase,
 	WidgetPluginTypeOf,
 	WidgetPluginValidateStructure,
 	WidgetPluginValidateStructureContext,
@@ -196,6 +202,7 @@ export type {
 	SeparatedWidgetSourceDiagnostic,
 	SeparatedWidgetSourceDiagnosticCode,
 	SeparatedWidgetSourceNormalization,
+	SeparatedWidgetSourceProjection,
 	SeparatedWidgetStructure,
 } from './separated-source'
 
