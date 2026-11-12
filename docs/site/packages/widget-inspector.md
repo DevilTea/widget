@@ -118,7 +118,7 @@ A `WidgetRef` is `{ runtimeId, nodeId }`: `runtime.list` gives each Runtime's `r
 
 ## Lifecycle
 
-Core has no disposal notification, so the Agent observes `runtime.dispose()` when a request arrives, before it emits another event, and when the Agent is disposed. From protocol 0.4 it sends one `runtime.disposed` event, `runtime.list` stops listing the Runtime, and requests addressed to it answer `runtime-disposed`. Disposing the Agent while the transport stays open sends the same event with `reason: 'agent-disposed'`. Dispose the Agent when you dispose the Runtime.
+Core has no disposal notification, so the Agent observes `runtime.dispose()` when a request arrives, before it emits another event, and when the Agent is disposed. From protocol 0.4 it sends one `runtime.disposed` event, `runtime.list` stops listing the Runtime, and requests addressed to it, plus `inspect.hitTest`, `inspect.enable` and `highlight.clear`, answer `runtime-disposed` (releasing calls such as `runtime.unsubscribe*` and `inspect.disable` stay answerable). Disposing the Agent while the transport stays open sends the same event with `reason: 'agent-disposed'`. Dispose the Agent when you dispose the Runtime.
 
 ## Inspect anchors
 

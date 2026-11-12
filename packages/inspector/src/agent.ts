@@ -584,6 +584,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		}
 	}
 
+	/** Methods that address no Runtime id but still act on the live Runtime's inspected document. */
+	function dependsOnLiveRuntime(request: InspectorRequestMessage): boolean {
+		return request.method === 'inspect.hitTest' || request.method === 'inspect.enable' || request.method === 'highlight.clear'
+	}
+
 	function handleRequest(request: InspectorRequestMessage): void {
 		try {
 			handleRequestAtMinor(request)
@@ -607,8 +612,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				sendError(request.requestId, protocolError('unknown-method', 'Method unavailable in this Inspector protocol session.'))
 				return
 			}
-			// From 0.4 a disposed Runtime is no longer addressable; older peers keep the earlier behavior.
-			if (runtimeDisposed && requestMinor >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR && addressedRuntimeId(request) === runtimeId) {
+			// From 0.4 a disposed Runtime is no longer addressable and the methods that act on the live Runtime
+			// (hit testing, inspect mode, highlight) stop answering; older peers keep the earlier behavior.
+			// Releasing things the peer holds (`unsubscribe*`, `inspect.disable`) stays answerable.
+			if (runtimeDisposed && requestMinor >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR
+				&& (addressedRuntimeId(request) === runtimeId || dependsOnLiveRuntime(request))) {
 				sendError(request.requestId, protocolError('runtime-disposed', 'The requested Runtime has been disposed.'))
 				return
 			}
