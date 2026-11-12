@@ -28,7 +28,7 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { WorkingNode } from './recovery'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { blueprintInternals } from '../internal/contract'
-import { inspectJsonValue } from '../json'
+import { inspectJsonValue, inspectParsedJsonValue } from '../json'
 import { freezeDiagnosticSnapshot } from '../runtime/diagnostics'
 import { createWidgetSystemRuntime } from '../runtime/index'
 import { resolveDependencies } from './deps'
@@ -90,11 +90,10 @@ function buildCompiledNodes(nodes: readonly WorkingNode[], diagnosticsByNode: Re
 	})
 }
 
-const JSON_PROVEN_BY_CONSTRUCTION = Object.freeze({ compatible: true, diagnostics: Object.freeze([]) })
-
 /**
  * `sourceJsonProven` is set only for a value Core itself produced with `JSON.parse` (no reviver): such a
- * value cannot hold anything `inspectJsonValue` rejects, so the inspection would prove nothing new.
+ * value can only leave the JSON domain through a non-finite number (`1e400`), so a cheap scan replaces the
+ * full `inspectJsonValue` inspection and the result stays equivalent to `createBlueprint(JSON.parse(text))`.
  */
 export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 	system: WidgetSystem<Plugins>,
@@ -103,7 +102,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 ): WidgetSystemBlueprint<Plugins> {
 	const recovery = recoverBlueprint(system, definition)
 	const { nodes, rootNodeId, nodeIdByPublicNode, nodeIdsByWidgetId, finalDiagnostics, diagnosticsByNode } = recovery
-	const jsonInspection = sourceJsonProven ? JSON_PROVEN_BY_CONSTRUCTION : inspectJsonValue(definition)
+	const jsonInspection = sourceJsonProven ? inspectParsedJsonValue(definition) : inspectJsonValue(definition)
 	const sourceJsonCompatible = jsonInspection.compatible
 	finalDiagnostics.push(...jsonInspection.diagnostics)
 

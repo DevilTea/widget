@@ -209,6 +209,32 @@ export function inspectJsonValue(value: unknown): JsonValueInspection {
 	return { compatible: diagnostics.length === 0, diagnostics }
 }
 
+const JSON_PARSE_PROVEN: JsonValueInspection = Object.freeze({ compatible: true, diagnostics: Object.freeze([]) })
+
+/**
+ * {@link inspectJsonValue} for a value Core itself produced with `JSON.parse` (no reviver). Such a value
+ * is made only of plain objects, arrays, strings, booleans, `null` and numbers, so the only way it can be
+ * outside the JSON domain is a non-finite number (`JSON.parse('1e400')` is `Infinity`). A cheap iterative
+ * scan therefore stands in for the full descriptor-level inspection; as soon as it finds anything the
+ * scan cannot prove, the full inspection supplies the exact diagnostics.
+ */
+export function inspectParsedJsonValue(value: unknown): JsonValueInspection {
+	const pending: unknown[] = [value]
+	while (pending.length > 0) {
+		const current = pending.pop()
+		if (typeof current === 'number') {
+			if (!Number.isFinite(current))
+				return inspectJsonValue(value)
+		}
+		else if (typeof current === 'object' && current !== null) {
+			// Not `push(...children)`: a very large array would exceed the engine's argument limit.
+			for (const child of Array.isArray(current) ? current : Object.values(current))
+				pending.push(child)
+		}
+	}
+	return JSON_PARSE_PROVEN
+}
+
 export function isJsonValue(value: unknown): value is JsonValue {
 	return inspectJsonValue(value).compatible
 }
