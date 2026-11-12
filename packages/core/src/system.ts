@@ -45,6 +45,24 @@ export interface CreateWidgetSystemOptions<Plugins extends AnyWidgetPluginTuple>
  */
 export type WidgetPluginOf<Plugins extends AnyWidgetPluginTuple, Type extends string> = Extract<Plugins[number], { readonly type: Type }>
 
+/** The registered plugin types that are string literals; a plugin typed with a broad `string` adds none. */
+type WidgetPluginLiteralTypeOf<Plugins extends AnyWidgetPluginTuple> = WidgetPluginTypeOf<Plugins[number]> extends infer Type
+	? Type extends string ? (string extends Type ? never : Type) : never
+	: never
+
+/**
+ * `getPlugin` overloads. `Plugins` appears only in type-parameter constraints and in `WidgetPluginOf`, so
+ * a precisely typed System stays assignable to a loosely typed one (`WidgetSystem`).
+ */
+interface WidgetSystemGetPlugin<Plugins extends AnyWidgetPluginTuple> {
+	/** A registered literal type (or a union of them): that exact plugin. */
+	<Type extends WidgetPluginLiteralTypeOf<Plugins>>(type: Type): WidgetPluginOf<Plugins, Type>
+	/** Any type on a loosely typed System (one with a broad `string` plugin type), which may be unregistered. */
+	<Type extends WidgetPluginTypeOf<Plugins[number]>>(type: Type): AnyWidgetPlugin | null
+	/** A broad `string`, which may name no registered plugin. An unregistered literal on a precisely typed System stays a type error. */
+	<Type extends string>(type: string extends Type ? Type : never): AnyWidgetPlugin | null
+}
+
 export interface WidgetSystem<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	/**
 	 * The registered plugin tuple. It defines this instance's TypeScript universe; there is no
@@ -53,7 +71,8 @@ export interface WidgetSystem<Plugins extends AnyWidgetPluginTuple = AnyWidgetPl
 	readonly plugins: Plugins
 	readonly validateStructure: WidgetSystemValidateStructure<Plugins> | null
 	readonly catalog: WidgetCatalog
-	getPlugin: <Type extends WidgetPluginTypeOf<Plugins[number]>>(type: Type) => WidgetPluginOf<Plugins, Type>
+	/** The registered plugin of `type`, or `null` when no plugin of that type is registered. */
+	getPlugin: WidgetSystemGetPlugin<Plugins>
 	/**
 	 * The compilation boundary. The input is `unknown` because JSON-parsed/untrusted document data is
 	 * the real boundary; malformed input still produces an inspectable Blueprint.
@@ -160,9 +179,7 @@ export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple>(
 		validateStructure: options.validateStructure ?? null,
 		catalog,
 
-		getPlugin(type) {
-			return pluginsByType.get(type) as WidgetPluginOf<Plugins, typeof type>
-		},
+		getPlugin: ((type: string) => pluginsByType.get(type) ?? null) as WidgetSystemGetPlugin<Plugins>,
 
 		createBlueprint(definition) {
 			return compileBlueprint(system, definition)

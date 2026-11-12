@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetSystem } from './index'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import * as core from './index'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemConfigurationError } from './index'
 
@@ -100,6 +101,63 @@ describe('createWidgetSystem plugin registration errors', () => {
 		const foreignThenDup = capture(() => createWidgetSystem({ plugins: [plain('d'), { type: 'd' }, plain('d')] as never }))
 		expect(foreignThenDup)
 			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 1, pluginType: 'd' })
+	})
+})
+
+describe('widgetSystem.getPlugin', () => {
+	function literal<const Type extends string>(type: Type) {
+		return createWidgetPlugin(type)
+			.description(type)
+			.interfaces<Record<never, never>>()
+			.done()
+	}
+	const button = literal('button')
+	const label = literal('label')
+	const system = createWidgetSystem({ plugins: [button, label] })
+
+	it('returns the registered plugin, or null for an unregistered type', () => {
+		expect(system.getPlugin('button'))
+			.toBe(button)
+		expect(system.getPlugin('nope' as string))
+			.toBeNull()
+		expect(system.getPlugin('__proto__' as string))
+			.toBeNull()
+	})
+
+	it('types a registered literal of a precisely typed System as that exact plugin', () => {
+		expectTypeOf(system.getPlugin('button'))
+			.toEqualTypeOf<typeof button>()
+		expectTypeOf(system.getPlugin('button' as 'button' | 'label'))
+			.toEqualTypeOf<typeof button | typeof label>()
+		// @ts-expect-error an unregistered literal on a precisely typed System is a type error
+		expect(system.getPlugin('nope'))
+			.toBeNull()
+	})
+
+	it('admits absence for a `string` argument and on a loosely typed System', () => {
+		const loose: WidgetSystem = system
+		const erased: WidgetSystem<AnyWidgetPluginTuple> = system
+		const type: string = 'button'
+
+		expectTypeOf(system.getPlugin(type))
+			.toEqualTypeOf<AnyWidgetPlugin | null>()
+		expectTypeOf(loose.getPlugin('button'))
+			.toEqualTypeOf<AnyWidgetPlugin | null>()
+		expectTypeOf(loose.getPlugin(type))
+			.toEqualTypeOf<AnyWidgetPlugin | null>()
+		expect(erased.getPlugin('label'))
+			.toBe(label)
+		expect(loose.getPlugin('nope'))
+			.toBeNull()
+	})
+
+	it('admits absence for any literal on a System of plugins typed with a broad `string` type', () => {
+		const broad = createWidgetSystem({ plugins: [plain('button')] })
+
+		expectTypeOf(broad.getPlugin('button'))
+			.toEqualTypeOf<AnyWidgetPlugin | null>()
+		expect(broad.getPlugin('nope'))
+			.toBeNull()
 	})
 })
 
