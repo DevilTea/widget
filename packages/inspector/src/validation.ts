@@ -25,16 +25,20 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Iterative so that peer-controlled nesting depth can never overflow the call stack; `ancestors` still
- * rejects a cyclic graph (a custom transport may hand over objects by reference).
+ * rejects a cyclic graph (a custom transport may hand over objects by reference). Structured clone keeps
+ * shared references, so each distinct object is validated once (`verified`): the walk is linear in the
+ * number of distinct objects, not in the number of paths to them.
  */
 function isJsonValue(value: unknown): boolean {
 	const ancestors = new Set<object>()
+	const verified = new Set<object>()
 	// A frame is either a value to check or a marker that a container's children are all checked.
 	const stack: { readonly value: unknown, readonly exit: boolean }[] = [{ value, exit: false }]
 	while (stack.length > 0) {
 		const frame = stack.pop()!
 		if (frame.exit) {
 			ancestors.delete(frame.value as object)
+			verified.add(frame.value as object)
 			continue
 		}
 		const current = frame.value
@@ -45,6 +49,9 @@ function isJsonValue(value: unknown): boolean {
 				return false
 			continue
 		}
+		// Already checked in full (reached again through another path): do not read it a second time.
+		if (verified.has(current as object))
+			continue
 		let children: unknown[]
 		if (Array.isArray(current)) {
 			children = current
@@ -136,6 +143,9 @@ type InspectableValueValidationFrame
 
 export function isInspectableValue(value: unknown): value is InspectableValue {
 	const ancestors = new Set<object>()
+	// Distinct nodes already validated in full: a node shared by several paths (structured clone keeps
+	// shared references) is validated once, so the walk stays linear in the number of distinct nodes.
+	const verified = new Set<object>()
 	const stack: InspectableValueValidationFrame[] = [{ kind: 'value', value }]
 
 	while (stack.length > 0) {
@@ -143,6 +153,7 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 		if (frame.kind === 'array') {
 			if (frame.index >= frame.length) {
 				ancestors.delete(frame.value)
+				verified.add(frame.value)
 				continue
 			}
 			const present = hasArrayIndex(frame.items, frame.index)
@@ -160,6 +171,7 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 		if (frame.kind === 'object') {
 			if (frame.index >= frame.length) {
 				ancestors.delete(frame.value)
+				verified.add(frame.value)
 				continue
 			}
 			const present = hasArrayIndex(frame.entries, frame.index)
@@ -181,6 +193,8 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 		}
 
 		const candidate = frame.value
+		if (typeof candidate === 'object' && candidate !== null && verified.has(candidate))
+			continue
 		if (!isRecord(candidate) || typeof candidate.type !== 'string')
 			return false
 
