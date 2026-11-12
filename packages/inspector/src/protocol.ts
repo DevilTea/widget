@@ -349,6 +349,7 @@ export interface InspectorProtocolError {
 		| 'event-not-found'
 		| 'disconnected'
 		| 'subscription-limit'
+		| 'runtime-disposed'
 		| 'internal-error'
 	readonly message: string
 }
@@ -406,6 +407,14 @@ export interface InspectorEventMap {
 	}
 	readonly 'agent.status': {
 		readonly inspectEnabled: boolean
+	}
+	/**
+	 * Added in protocol 0.4. The Runtime this Agent inspects is gone: either the Agent observed it being
+	 * disposed, or the Agent itself was disposed while the transport stays open. Sent at most once per Agent.
+	 */
+	readonly 'runtime.disposed': {
+		readonly runtimeId: string
+		readonly reason: 'runtime-disposed' | 'agent-disposed'
 	}
 }
 
@@ -537,9 +546,12 @@ export function parseInspectorRequestMessage(value: unknown): InspectorRequestMe
 }
 
 function isProtocolErrorCode(value: unknown, protocolMinor: number): value is InspectorProtocolError['code'] {
-	// `subscription-limit` was added in protocol 0.3; an older-minor envelope cannot carry it.
+	// `subscription-limit` was added in protocol 0.3 and `runtime-disposed` in 0.4; an older-minor
+	// envelope cannot carry them.
 	if (value === 'subscription-limit')
 		return protocolMinor >= 3
+	if (value === 'runtime-disposed')
+		return protocolMinor >= 4
 	return value === 'invalid-message' || value === 'unsupported-version' || value === 'unknown-method'
 		|| value === 'invalid-params' || value === 'runtime-not-found' || value === 'widget-not-found'
 		|| value === 'member-not-found' || value === 'event-not-found' || value === 'disconnected' || value === 'internal-error'
@@ -702,6 +714,7 @@ export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 
 function isInspectorEventName(value: unknown): value is InspectorEventName {
 	return value === 'geometry.invalidated'
+		|| value === 'runtime.disposed'
 		|| value === 'runtime.eventOccurred'
 		|| value === 'runtime.memberChanged'
 		|| value === 'inspect.hovered'
@@ -753,6 +766,11 @@ export function parseInspectorEventMessage(value: unknown): InspectorEventMessag
 				: null
 		case 'agent.status':
 			return typeof value.payload.inspectEnabled === 'boolean' ? value as InspectorEventMessage : null
+		case 'runtime.disposed':
+			return typeof value.payload.runtimeId === 'string'
+				&& (value.payload.reason === 'runtime-disposed' || value.payload.reason === 'agent-disposed')
+				? value as InspectorEventMessage
+				: null
 	}
 }
 

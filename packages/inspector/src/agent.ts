@@ -63,6 +63,13 @@ const PROTOCOL_0_2_GEOMETRY_EVENTS = Object.freeze([
 	'geometry.invalidated',
 ] satisfies InspectorEventName[])
 
+const PROTOCOL_0_4_EVENTS = Object.freeze([
+	'runtime.disposed',
+] satisfies InspectorEventName[])
+
+/** `runtime.disposed` and the `runtime-disposed` error code exist from this protocol minor on. */
+const RUNTIME_LIFECYCLE_PROTOCOL_MINOR = 4
+
 let runtimeSequence = 1
 let subscriptionSequence = 1
 
@@ -149,9 +156,12 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			methods: dom === undefined
 				? Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_2_METHODS])
 				: Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_2_METHODS, ...PROTOCOL_0_2_GEOMETRY_METHODS]),
-			events: dom === undefined
-				? Object.freeze([...PROTOCOL_0_1_EVENTS, ...PROTOCOL_0_2_EVENTS])
-				: Object.freeze([...PROTOCOL_0_1_EVENTS, ...PROTOCOL_0_2_EVENTS, ...PROTOCOL_0_2_GEOMETRY_EVENTS]),
+			events: Object.freeze([
+				...PROTOCOL_0_1_EVENTS,
+				...PROTOCOL_0_2_EVENTS,
+				...(dom === undefined ? [] : PROTOCOL_0_2_GEOMETRY_EVENTS),
+				...(minor < RUNTIME_LIFECYCLE_PROTOCOL_MINOR ? [] : PROTOCOL_0_4_EVENTS),
+			]),
 		}
 	}
 	let inspectEnabled = false
@@ -159,15 +169,50 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const overlay = dom === undefined ? null : createInspectorOverlay(dom.root.ownerDocument)
 	let highlightedTarget: InspectorSemanticTarget | null = null
 
+	// Set once the peer has been told (or could not be told) that this Agent's Runtime is gone.
+	let runtimeDisposalAnnounced = false
+
 	function emit<Event extends InspectorEventName>(event: Event, payload: InspectorEventMap[Event]): void {
+		if (event !== 'runtime.disposed')
+			observeRuntimeDisposal()
 		if (disposed || options.transport.closed || !capabilitiesForMinor(negotiatedMinor).events.includes(event))
 			return
-		options.transport.send({
-			protocol: envelopeVersion(),
-			kind: 'event',
-			event,
-			payload,
-		})
+		try {
+			options.transport.send({
+				protocol: { major: INSPECTOR_PROTOCOL_VERSION.major, minor: negotiatedMinor },
+				kind: 'event',
+				event,
+				payload,
+			})
+		}
+		catch {
+			// An event that cannot be delivered must not break the Runtime/DOM callback that produced it.
+		}
+	}
+
+	/**
+	 * Core offers no disposal notification, so the Agent observes it where it can: when any request arrives,
+	 * before it emits any other event, and when the Agent itself is disposed.
+	 */
+	function observeRuntimeDisposal(): boolean {
+		if (!options.runtime.isDisposed)
+			return false
+		if (!runtimeDisposalAnnounced) {
+			runtimeDisposalAnnounced = true
+			// Core already tore down its side of every live subscription; release the Agent's bookkeeping.
+			releaseSubscriptions()
+			emit('runtime.disposed', { runtimeId, reason: 'runtime-disposed' })
+		}
+		return true
+	}
+
+	function releaseSubscriptions(): void {
+		for (const unsubscribe of memberSubscriptions.values())
+			unsubscribe()
+		memberSubscriptions.clear()
+		for (const unsubscribe of eventSubscriptions.values())
+			unsubscribe()
+		eventSubscriptions.clear()
 	}
 
 	function sendSuccess(request: InspectorRequestMessage, result: unknown): void {
@@ -465,6 +510,22 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		sendSuccess(request, { subscriptionId, event: request.params.event })
 	}
 
+	/** The Runtime id a request addresses (directly or through a WidgetRef), if it addresses one. */
+	function addressedRuntimeId(request: InspectorRequestMessage): string | null {
+		switch (request.method) {
+			case 'blueprint.getSnapshot':
+				return request.params.runtimeId
+			case 'runtime.getWidgetSnapshot':
+			case 'runtime.subscribeMember':
+			case 'runtime.subscribeEvent':
+			case 'geometry.resolve':
+			case 'highlight.show':
+				return request.params.ref.runtimeId
+			default:
+				return null
+		}
+	}
+
 	function handleRequest(request: InspectorRequestMessage): void {
 		try {
 			handleRequestAtMinor(request)
@@ -480,10 +541,17 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		}
 
+		const runtimeDisposed = observeRuntimeDisposal()
+
 		if (request.method !== 'handshake') {
 			requestMinor = Math.min(negotiatedMinor, request.protocol.minor)
 			if (!capabilitiesForMinor(requestMinor).methods.includes(request.method)) {
 				sendError(request.requestId, protocolError('unknown-method', 'Method unavailable in this Inspector protocol session.'))
+				return
+			}
+			// From 0.4 a disposed Runtime is no longer addressable; older peers keep the earlier behavior.
+			if (runtimeDisposed && requestMinor >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR && addressedRuntimeId(request) === runtimeId) {
+				sendError(request.requestId, protocolError('runtime-disposed', 'The requested Runtime has been disposed.'))
 				return
 			}
 		}
@@ -503,7 +571,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				return
 			}
 			case 'runtime.list':
-				sendSuccess(request, { runtimes: [{ runtimeId, rootNodeId: runtimeInspection.blueprint.rootNodeId }] })
+				sendSuccess(request, {
+					runtimes: runtimeDisposed && currentMinor() >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR
+						? []
+						: [{ runtimeId, rootNodeId: runtimeInspection.blueprint.rootNodeId }],
+				})
 				return
 			case 'blueprint.getSnapshot':
 				if (request.params.runtimeId !== runtimeId) {
@@ -642,13 +714,14 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	function cleanup(closeTransport: boolean): void {
 		if (disposed)
 			return
+		// A peer that keeps the transport open learns the binding is gone; one whose transport closes
+		// learns it from the disconnect.
+		if (!closeTransport && !runtimeDisposalAnnounced) {
+			runtimeDisposalAnnounced = true
+			emit('runtime.disposed', { runtimeId, reason: options.runtime.isDisposed ? 'runtime-disposed' : 'agent-disposed' })
+		}
 		disposed = true
-		for (const unsubscribe of memberSubscriptions.values())
-			unsubscribe()
-		memberSubscriptions.clear()
-		for (const unsubscribe of eventSubscriptions.values())
-			unsubscribe()
-		eventSubscriptions.clear()
+		releaseSubscriptions()
 		removeDomListeners()
 		geometry?.dispose()
 		clearHighlight()

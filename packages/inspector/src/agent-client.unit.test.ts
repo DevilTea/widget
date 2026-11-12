@@ -265,7 +265,7 @@ describe('inspector client/agent protocol boundary', () => {
 		await expect(client.request('runtime.subscribeMember', {
 			ref: { runtimeId: 'runtime-test', nodeId: runtimes[0]!.rootNodeId },
 			member: { type: 'property', name: 'doubled' },
-		})).rejects.toMatchObject({ code: 'internal-error' })
+		})).rejects.toMatchObject({ code: 'runtime-disposed' })
 
 		client.dispose()
 		agent.dispose()
