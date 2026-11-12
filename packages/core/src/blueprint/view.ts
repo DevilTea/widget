@@ -157,6 +157,10 @@ export function createCompileFacade<Plugins extends AnyWidgetPluginTuple>(
 				slots[slotName] = Object.freeze(childIds.map(childId => facadeForNodeId(childId)))
 			shell.slots = Object.freeze(slots)
 		}
+		else {
+			shell.id = working.id
+			shell.type = working.typeHint
+		}
 
 		const facade = Object.freeze(shell) as unknown as BlueprintWidgetNodeView
 		facadeByNodeId.set(nodeId, facade)

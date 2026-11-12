@@ -233,6 +233,56 @@ describe('unknown plugin type', () => {
 	})
 })
 
+describe('identity hints on unresolved nodes', () => {
+	it.each([
+		['an unknown plugin type', { id: 'a', type: 'mystery' }, 'a', 'mystery'],
+		['a missing id', { type: 'leaf' }, null, 'leaf'],
+		['a non-string id', { id: 7, type: 'leaf' }, null, 'leaf'],
+		['a missing type', { id: 'a' }, 'a', null],
+		['a non-string type', { id: 'a', type: 3 }, 'a', null],
+		['neither', { config: {} }, null, null],
+		['a non-object node', 'not-a-widget', null, null],
+	])('exposes the authored string id/type of an unresolved node with %s', (_label, definition, id, type) => {
+		const blueprint = system.createBlueprint(definition)
+
+		expect(blueprint.root.resolved)
+			.toBe(false)
+		expect(blueprint.root.id)
+			.toBe(id)
+		expect(blueprint.root.type)
+			.toBe(type)
+
+		const inspectionNode = inspectBlueprint(blueprint)
+			.getNode(inspectBlueprint(blueprint).rootNodeId)!
+		if (inspectionNode.resolved)
+			throw new Error('Expected an unresolved inspection node.')
+		expect(inspectionNode.id)
+			.toBe(id)
+		expect(inspectionNode.type)
+			.toBe(type)
+	})
+
+	it('exposes the hints on an unresolved child, and leaves resolved nodes untouched', () => {
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'container',
+			slots: { children: [{ id: 'kid', type: 'mystery' }] },
+		})
+
+		const [kid] = blueprint.getChildren(blueprint.root)
+		expect(kid?.resolved)
+			.toBe(false)
+		expect(kid?.id)
+			.toBe('kid')
+		expect(kid?.type)
+			.toBe('mystery')
+		expect(blueprint.root.id)
+			.toBe('root')
+		expect(blueprint.root.type)
+			.toBe('container')
+	})
+})
+
 describe('unresolved ancestors do not truncate recoverable descendants', () => {
 	it('recovers a resolved grandchild beneath an unresolved root', () => {
 		const definition = {

@@ -72,7 +72,7 @@ function buildCompiledNodes(nodes: readonly WorkingNode[], diagnosticsByNode: Re
 		}
 
 		if (!node.resolved)
-			return { ...base, resolved: false, id: node.id }
+			return { ...base, resolved: false, id: node.id, type: node.typeHint }
 
 		return {
 			...base,

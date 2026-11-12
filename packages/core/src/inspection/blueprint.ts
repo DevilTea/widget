@@ -225,6 +225,8 @@ function buildNode<Plugins extends AnyWidgetPluginTuple>(compiledNode: CompiledW
 			node: compiledNode.publicNode,
 			sourceSlots,
 			resolved: false,
+			id: compiledNode.id,
+			type: compiledNode.type,
 		}) as BlueprintInspectionNode<Plugins>
 	}
 

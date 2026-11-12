@@ -46,6 +46,8 @@ export interface WorkingNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPlu
 	resolved: boolean
 	id: WidgetId | null
 	type: string | null
+	/** The authored `type` when it is a string, even for an unresolved node (e.g. an unknown plugin type). */
+	typeHint: string | null
 	plugin: AnyWidgetPlugin | null
 	rawConfig: unknown
 	config: unknown
@@ -182,6 +184,7 @@ function buildNode(
 		resolved: false,
 		id: null,
 		type: null,
+		typeHint: null,
 		plugin: null,
 		rawConfig: null,
 		config: null,
@@ -236,6 +239,7 @@ function buildNode(
 	const resolved = hasValidId && hasValidTypeShape && plugin !== null
 	working.resolved = resolved
 	working.id = hasValidId ? (rawId as string) : null
+	working.typeHint = hasValidTypeShape ? (rawType as string) : null
 
 	if (resolved) {
 		working.type = rawType as string
@@ -342,6 +346,11 @@ function finalizeShell(shell: Record<string, unknown>, working: WorkingNode): vo
 		}
 		// `.slots` is filled in later, once children are known, by `finalizeSlots`.
 		shell.slots = {}
+	}
+	else {
+		// Best-effort identity hints: the authored values when they are strings, else `null`.
+		shell.id = working.id
+		shell.type = working.typeHint
 	}
 }
 

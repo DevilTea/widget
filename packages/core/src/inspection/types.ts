@@ -170,6 +170,10 @@ export interface BlueprintInspectionNodeBase<Plugins extends AnyWidgetPluginTupl
 export interface UnresolvedBlueprintInspectionNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends BlueprintInspectionNodeBase<Plugins> {
 	readonly resolved: false
 	readonly node: UnresolvedBlueprintWidgetNode<Plugins>
+	/** Best-effort identity hint: the authored `id` when it is a string, else `null`. */
+	readonly id: string | null
+	/** Best-effort identity hint: the authored `type` when it is a string, else `null`. */
+	readonly type: string | null
 }
 
 export interface ResolvedBlueprintInspectionNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends BlueprintInspectionNodeBase<Plugins> {

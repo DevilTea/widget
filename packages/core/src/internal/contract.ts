@@ -78,6 +78,10 @@ export interface BlueprintWidgetNodeBase<
  */
 export interface UnresolvedBlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown> extends BlueprintWidgetNodeBase<Plugins, Source> {
 	readonly resolved: false
+	/** Best-effort identity hint: the authored `id` when it is a string, else `null`. */
+	readonly id: string | null
+	/** Best-effort identity hint: the authored `type` when it is a string (even an unknown one), else `null`. */
+	readonly type: string | null
 }
 
 /**
@@ -610,6 +614,8 @@ export interface CompiledUnresolvedWidgetNode<Plugins extends AnyWidgetPluginTup
 	 * A valid string id participates in the id index even when the node itself is unresolved.
 	 */
 	readonly id: WidgetId | null
+	/** The authored `type` when it is a string, even though no plugin resolved from it. */
+	readonly type: string | null
 }
 
 export interface CompiledResolvedWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends CompiledWidgetNodeBase<Plugins> {
