@@ -9,6 +9,11 @@
  * committed through `writeDeferringFlush`, so watching the diagnostics channel can never perturb value
  * propagation (see the `alien-signals@3.2.1` mechanism documented on that helper).
  *
+ * A `compute` that throws never throws out of the alien computed: the exception is cached as the
+ * computed's outcome (see {@link ComputeException}) and rethrown by every tracked/direct read. An
+ * exception escaping a computed would otherwise escape alien-signals' flush from whichever effect's
+ * dirty check re-evaluated it, through an unrelated writer, and drop the rest of that flush's queue.
+ *
  * Normative source: diagnostic #10 consolidated handoff §14, amendment "Implementation verification —
  * alien-signals@3.2.1 conformance" (#4).
  */
@@ -18,11 +23,12 @@ import type { ExecutionResult } from '../execution-result'
 import type { RuntimeProperty } from '../internal/contract'
 import type { ErasedWidgetPropertyDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
-import type { ActiveDiagnosticSink, RuntimeContext } from './context'
+import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './context'
 import { computed, signal } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
+import { callbackScope } from './context'
 import { buildPropertyResultDiagnostic, toDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
@@ -36,6 +42,19 @@ export type PropertyInspectionSnapshot
 
 /** The frozen singleton every Property inspection channel starts at and returns to before first evaluation. */
 const NEVER_EVALUATED_SNAPSHOT: PropertyInspectionSnapshot = Object.freeze({ status: 'never-evaluated' })
+
+const computeExceptionKey: unique symbol = Symbol('@deviltea/widget-core:compute-exception')
+
+/**
+ * The cached outcome of an evaluation whose `compute` (or its sync-boundary check) threw. Like a completed
+ * result it stays cached until a dependency changes, so every read in between rethrows the same exception
+ * instead of re-running `compute`. A plain symbol-keyed record, never confused with an `ExecutionResult`.
+ */
+interface ComputeException {
+	readonly [computeExceptionKey]: unknown
+}
+
+type PropertyOutcome = ExecutionResult<unknown, RuntimePropertyDiagnostic> | ComputeException
 
 /**
  * One retained-fact channel for the readonly `@deviltea/widget-core/inspection` subpath. Published only
@@ -70,9 +89,14 @@ export interface CreatePropertyPrimitiveParams {
 	readonly selfNode: unknown
 	readonly blueprintView: unknown
 	readonly deps: unknown
+	/** The owner `deps` was materialized for. */
+	readonly owner: CallbackOwner
+	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
+	readonly onDiagnosticsCommitted: () => void
 }
 
 export function createPropertyPrimitive(context: RuntimeContext, params: CreatePropertyPrimitiveParams): PropertyPrimitive {
+	const { owner } = params
 	const diagnosticsSignal = signal<readonly RuntimePropertyDiagnostic[]>(EMPTY_DIAGNOSTICS)
 
 	// Untracked mirror of `diagnosticsSignal`'s value: an unchanged snapshot skips the write.
@@ -104,7 +128,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			invokeListenerIsolated(entry.listener, snapshot)
 	}
 
-	const resultComputed = computed<ExecutionResult<unknown, RuntimePropertyDiagnostic>>(() => {
+	const resultComputed = computed<PropertyOutcome>(() => {
 		const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimePropertyDiagnostic>()
 		const sink: ActiveDiagnosticSink = {
 			addFinalizedDiagnostic: (diagnostic, dedupe) => collector.addFinalizedDiagnostic(diagnostic as RuntimePropertyDiagnostic, dedupe),
@@ -119,37 +143,58 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			hasAnyDiagnostic: collector.hasAnyDiagnostic,
 		}
 
-		let value: unknown
+		// Everything below is caught: this getter can run inside any effect's dirty check during a flush, and
+		// an exception escaping it would escape that flush (see the module doc).
 		try {
-			value = context.withActiveCollector(sink, () => params.definition.compute(ctx))
-		}
-		finally {
-			collector.close()
-		}
-		assertSyncValue(value, `Property "${params.name}"'s compute`)
+			// This Property becomes the innermost running callback for the duration of `compute` (see
+			// `callbackScope`): only its own dependency callables are usable, and they report into `sink`.
+			// Saved and restored with plain assignments, so the restore survives an exhausted stack.
+			const previousOwner = callbackScope.owner
+			const previousSink = owner.sink
+			callbackScope.owner = owner
+			owner.sink = sink
+			let value: unknown
+			try {
+				value = params.definition.compute(ctx)
+			}
+			finally {
+				callbackScope.owner = previousOwner
+				owner.sink = previousSink
+				collector.close()
+			}
+			assertSyncValue(value, `Property "${params.name}"'s compute`)
 
-		const diagnostics = collector.finalize(input => buildPropertyResultDiagnostic(params.widgetId, params.name, value, input))
-		// Commit the snapshot here — the fact-commit point every consumer's `getDiagnostics()` must already
-		// reflect — but hold its *propagation* inside an alien batch until this evaluation (and whatever
-		// drove it) is done. A watched signal write from inside a computed's own evaluator starts a nested
-		// alien-signals flush while this computed is mid-`updateComputed`, which permanently marks the
-		// Property's other dependents clean-but-stale; `writeDeferringFlush` documents the exact
-		// alien-signals@3.2.1 mechanism.
-		const snapshot = toDiagnosticSnapshot(diagnostics)
-		if (snapshot !== committedDiagnostics) {
-			committedDiagnostics = snapshot
-			writeDeferringFlush(() => diagnosticsSignal(snapshot))
-		}
+			const diagnostics = collector.finalize(input => buildPropertyResultDiagnostic(params.widgetId, params.name, value, input))
+			// Commit the snapshot here — the fact-commit point every consumer's `getDiagnostics()` must already
+			// reflect — but hold its *propagation* inside an alien batch until this evaluation (and whatever
+			// drove it) is done. A watched signal write from inside a computed's own evaluator starts a nested
+			// alien-signals flush while this computed is mid-`updateComputed`, which permanently marks the
+			// Property's other dependents clean-but-stale; `writeDeferringFlush` documents the exact
+			// alien-signals@3.2.1 mechanism.
+			const snapshot = toDiagnosticSnapshot(diagnostics)
+			if (snapshot !== committedDiagnostics) {
+				committedDiagnostics = snapshot
+				writeDeferringFlush(() => {
+					diagnosticsSignal(snapshot)
+					params.onDiagnosticsCommitted()
+				})
+			}
 
-		// The alien computed caches this exact object as its reactive value and reuses it for every
-		// `.get()`/dependency read until the next actual recompute; shallow-freeze the wrapper so external
-		// code cannot rewrite `.value`/`.ok` in place with no invalidation. `diagnostics` is already
-		// deep-frozen (via `finalize()`); `value` is the plugin's own payload and is deliberately left
-		// untouched.
-		const result: ExecutionResult<unknown, RuntimePropertyDiagnostic> = diagnostics.length > 0
-			? { ok: false, failure: { diagnostics: diagnostics as readonly [RuntimePropertyDiagnostic, ...RuntimePropertyDiagnostic[]] } }
-			: { ok: true, value }
-		return Object.freeze(result)
+			// The alien computed caches this exact object as its reactive value and reuses it for every
+			// `.get()`/dependency read until the next actual recompute; shallow-freeze the wrapper so external
+			// code cannot rewrite `.value`/`.ok` in place with no invalidation. `diagnostics` is already
+			// deep-frozen (via `finalize()`); `value` is the plugin's own payload and is deliberately left
+			// untouched.
+			const result: ExecutionResult<unknown, RuntimePropertyDiagnostic> = diagnostics.length > 0
+				? { ok: false, failure: { diagnostics: diagnostics as readonly [RuntimePropertyDiagnostic, ...RuntimePropertyDiagnostic[]] } }
+				: { ok: true, value }
+			return Object.freeze(result)
+		}
+		catch (error) {
+			// The in-progress collector is discarded and the previous diagnostic snapshot kept, exactly as when
+			// the exception used to propagate out of the computed.
+			return { [computeExceptionKey]: error }
+		}
 	})
 
 	/**
@@ -168,6 +213,9 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 * made. Every actual recompute produces a brand-new frozen `ExecutionResult` literal (see above), so
 	 * comparing by reference — never by value — still notifies twice for two equal-value completions while
 	 * never re-publishing a merely-re-read, already-cached result.
+	 *
+	 * A cached {@link ComputeException} is rethrown here, after the computed read has linked the caller
+	 * (an enclosing evaluation or a subscription effect) to this Property, and is never published.
 	 */
 	function getResultWithInspectionPublish(): ExecutionResult<unknown, RuntimePropertyDiagnostic> {
 		// `runRuntimeOperation` only records that an evaluation may start here: when this read is the
@@ -176,6 +224,8 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		// order a direct in-evaluator write produced. A nested read (a dependent Property's evaluator, or
 		// an effect run inside a state write's flush) leaves the release to the outermost call instead.
 		const result = runRuntimeOperation(resultComputed)
+		if (computeExceptionKey in result)
+			throw result[computeExceptionKey]
 		if (result !== lastPublishedResult) {
 			lastPublishedResult = result
 			publishInspectionCompletion()

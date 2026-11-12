@@ -4,7 +4,9 @@
  * Every invocation is one `alien-signals` batch boundary (start before `validateArgs`, end only after
  * the method's final diagnostic snapshot commits, `endBatch()` always in `finally`). Nested
  * dependency-invoked methods reuse this exact same pipeline, so nested calls naturally nest batch
- * depth; only the outermost `endBatch()` flushes.
+ * depth; only the outermost `endBatch()` flushes. When runaway recursion (a valid Method <-> Method
+ * cycle) exhausts the stack, the deepest frames' `endBatch()` calls can themselves overflow; the
+ * outermost `runRuntimeOperation` frame closes those leaked levels (see `releaseBatches` in the adapter).
  *
  * The diagnostic-snapshot commits go through `writeDeferringFlush`, which keeps that rule true one level
  * further out: a Property may declare a dependency on a write-free Method, so `invoke` can run inside a
@@ -22,11 +24,12 @@ import type { ExecutionResult } from '../execution-result'
 import type { RuntimeMethod } from '../internal/contract'
 import type { ErasedWidgetMethodDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
-import type { ActiveDiagnosticSink, RuntimeContext } from './context'
+import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './context'
 import { endBatch, signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
+import { callbackScope } from './context'
 import { buildDefaultMethodArgsDiagnostic, buildMethodArgsDiagnostic, buildMethodResultDiagnostic, freezeDiagnosticSnapshot, toDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
@@ -45,6 +48,10 @@ export interface CreateMethodPrimitiveParams {
 	readonly blueprintView: unknown
 	readonly deps: unknown
 	readonly emitFragment: Readonly<Record<string, unknown>>
+	/** The owner `deps` was materialized for; its `emitter` is `emitFragment.emit` (or `null`). */
+	readonly owner: CallbackOwner
+	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
+	readonly onDiagnosticsCommitted: () => void
 }
 
 export function createMethodPrimitive(context: RuntimeContext, params: CreateMethodPrimitiveParams): MethodPrimitive {
@@ -56,7 +63,10 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 		if (next === committedDiagnostics)
 			return
 		committedDiagnostics = next
-		writeDeferringFlush(() => diagnosticsSignal(next))
+		writeDeferringFlush(() => {
+			diagnosticsSignal(next)
+			params.onDiagnosticsCommitted()
+		})
 	}
 
 	function invoke(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
@@ -114,11 +124,21 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				hasAnyDiagnostic: execCollector.hasAnyDiagnostic,
 			}
 
+			// This Method becomes the innermost running callback for the duration of `execute` (see
+			// `callbackScope`): only its own dependency callables and its widget's `emit` are usable, and
+			// they report into `sink`. Plain-assignment save/restore, so it survives an exhausted stack.
+			const { owner } = params
+			const previousOwner = callbackScope.owner
+			const previousSink = owner.sink
+			callbackScope.owner = owner
+			owner.sink = sink
 			let value: unknown
 			try {
-				value = context.withActiveCollector(sink, () => params.definition.execute(executeCtx))
+				value = params.definition.execute(executeCtx)
 			}
 			finally {
+				callbackScope.owner = previousOwner
+				owner.sink = previousSink
 				execCollector.close()
 			}
 			assertSyncValue(value, `Method "${params.name}"'s execute`)
@@ -127,8 +147,10 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 			commitDiagnostics(toDiagnosticSnapshot(diagnostics))
 
 			// Same consistency rationale as the validateArgs-failure branch above: not a persistence
-			// hazard (each `invoke()` builds a fresh wrapper), but freezing it keeps every
-			// `ExecutionResult` returned to plugin/consumer code equally immutable.
+			// hazard (each `invoke()` builds a fresh wrapper). Only Method and Property results are frozen:
+			// `RuntimeState.set()` and dependency-callable results are equally fresh per call and never
+			// retained by Core, so mutating one cannot corrupt Runtime state, and freezing them was
+			// measured at roughly a fifth of a dependency-heavy invocation's cost.
 			const result: ExecutionResult<unknown, RuntimeMethodDiagnostic> = diagnostics.length > 0
 				? { ok: false, failure: { diagnostics: diagnostics as readonly [RuntimeMethodDiagnostic, ...RuntimeMethodDiagnostic[]] } }
 				: { ok: true, value }

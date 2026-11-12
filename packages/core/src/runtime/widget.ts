@@ -1,13 +1,15 @@
 /**
  * RuntimeWidget assembly.
  *
- * Distributed by plugin type; only conditionally exposes `state`/`properties`/`methods` when the
- * corresponding compiled member map is non-empty. Identity/static fields (`id`, `type`, `blueprint`)
+ * Distributed by plugin type; exposes `state`/`properties`/`methods`/`events` exactly when the plugin
+ * declares that capability (declaration presence, so an explicitly empty capability still yields an
+ * empty surface). Identity/static fields (`id`, `type`, `blueprint`)
  * stay readable after Runtime disposal because they are plain immutable references, not live
  * operations. `getDiagnostics`/`subscribeDiagnostics` are unconditional — every widget aggregates to its own
  * diagnostic surface regardless of declared capabilities, per diagnostic #10 amendment "RuntimeWidget aggregate
  * diagnostic surface" — and are live operations, so they throw `WidgetSystemRuntimeDisposedError` after
- * Runtime disposal like every other live query/subscription.
+ * Runtime disposal like every other live query/subscription. A widget with the state capability also
+ * gets `resetState()`, the widget-scoped form of the Runtime's (same shared implementation).
  *
  * Member names are not restricted (`constructor`/`__proto__` stay legitimate keys), so every surface
  * keyed by an arbitrary member name is built on a null-prototype record rather than plain `{}` —
@@ -24,6 +26,7 @@ import type { RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
 import { readWidgetPluginDefinition } from '../plugin'
 import { createRuntimeWidgetDiagnosticsAggregate } from './aggregate'
+import { restoreInitialState } from './state'
 
 export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolvedWidgetNode, entry: PrimitiveRegistryEntry): unknown {
 	const diagnosticsAggregate = createRuntimeWidgetDiagnosticsAggregate(context, entry)
@@ -43,6 +46,7 @@ export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolv
 		for (const [key, primitive] of entry.state)
 			stateSurface[key] = primitive.public
 		widget.state = Object.freeze(stateSurface)
+		widget.resetState = () => restoreInitialState(context, [entry])
 	}
 
 	if (definition.properties !== null) {

@@ -9,7 +9,9 @@
  * 1. suppress the effect's bootstrap run so `subscribe`/`subscribeDiagnostics` have no immediate emission;
  * 2. invoke external listeners with no active alien subscriber, so listener code reading other Runtime
  *    primitives cannot silently extend the dependency graph;
- * 3. isolate listener exceptions outside the current alien-signals flush;
+ * 3. isolate listener exceptions — and exceptions a subscription's own tracked read throws, i.e. a
+ *    Property `compute` throwing while its subscription re-evaluates it — outside the current
+ *    alien-signals flush;
  * 4. hold an diagnostic-snapshot commit performed *during* an evaluation inside an alien batch until the call
  *    that drove that evaluation has returned, so its propagation can never re-enter alien-signals' flush
  *    while a computed is still mid-evaluation (see {@link writeDeferringFlush}).
@@ -20,7 +22,7 @@
  */
 
 import type { RuntimeContext } from './context'
-import { effect, endBatch, setActiveSub, startBatch } from 'alien-signals'
+import { effect, endBatch, getBatchDepth, setActiveSub, startBatch } from 'alien-signals'
 
 /**
  * `queueMicrotask` is a host global (browser + Node), not part of the ECMAScript lib this
@@ -30,9 +32,19 @@ import { effect, endBatch, setActiveSub, startBatch } from 'alien-signals'
 declare function queueMicrotask(callback: () => void): void
 
 /**
+ * Reports an exception isolated from the current operation through the host's error-reporting
+ * boundary, outside the current alien-signals flush. Baseline reporting is a queued microtask rethrow.
+ */
+function reportIsolatedException(error: unknown): void {
+	queueMicrotask(() => {
+		throw error
+	})
+}
+
+/**
  * Invokes `listener(value)` with no active alien subscriber (restoring the previous one afterward) and
- * isolates a synchronous throw so it cannot escape into the current alien-signals flush. Baseline
- * reporting for an isolated exception is a queued microtask rethrow.
+ * isolates a synchronous throw so it cannot escape into the current alien-signals flush (see
+ * {@link reportIsolatedException}).
  */
 export function invokeListenerIsolated<Value>(listener: (value: Value) => void, value: Value): void {
 	const previous = setActiveSub(undefined)
@@ -40,9 +52,18 @@ export function invokeListenerIsolated<Value>(listener: (value: Value) => void, 
 		listener(value)
 	}
 	catch (error) {
-		queueMicrotask(() => {
-			throw error
-		})
+		reportIsolatedException(error)
+	}
+	finally {
+		setActiveSub(previous)
+	}
+}
+
+/** Runs `read` with no active alien subscriber, so whatever it reads is not tracked by the caller. */
+export function readUntracked<Value>(read: () => Value): Value {
+	const previous = setActiveSub(undefined)
+	try {
+		return read()
 	}
 	finally {
 		setActiveSub(previous)
@@ -50,13 +71,17 @@ export function invokeListenerIsolated<Value>(listener: (value: Value) => void, 
 }
 
 /**
- * Calls a synchronous semantic event listener without leaking its reads into an enclosing
- * Property/effect. Unlike reactive value listeners, event listener exceptions propagate immediately.
+ * {@link invokeListenerIsolated} for a synchronous semantic event listener and its argument tuple: no
+ * reads leak into an enclosing Property/effect, and a throw is reported outside the emit instead of
+ * aborting the emitting Method and the remaining listeners.
  */
-export function invokeListenerUntracked(listener: (...args: readonly unknown[]) => void, args: readonly unknown[]): void {
+export function invokeEventListenerIsolated(listener: (...args: readonly unknown[]) => void, args: readonly unknown[]): void {
 	const previous = setActiveSub(undefined)
 	try {
 		listener(...args)
+	}
+	catch (error) {
+		reportIsolatedException(error)
 	}
 	finally {
 		setActiveSub(previous)
@@ -66,48 +91,61 @@ export function invokeListenerUntracked(listener: (...args: readonly unknown[]) 
 /**
  * Nesting depth of the calls that can drive an `alien-signals` evaluation/flush and therefore have to be
  * back out of the reactive graph before a deferred propagation is safe to release: `RuntimeState`'s
- * `attemptSet`, `RuntimeMethod`'s `invoke` and the tracked read of a Property's result computed. Purely
- * local bookkeeping for {@link writeDeferringFlush}, not a semantic boundary of its own.
+ * `attemptSet`, `RuntimeMethod`'s `invoke`, `resetState` and the tracked read of a Property's result
+ * computed. Purely local bookkeeping for {@link writeDeferringFlush}, not a semantic boundary of its own.
  */
 let operationDepth = 0
 
-/** Number of `startBatch()` calls {@link writeDeferringFlush} has opened and not yet closed. */
-let deferredFlushDepth = 0
+/**
+ * alien-signals' batch depth when the outermost {@link runRuntimeOperation} frame was entered. Every batch
+ * level opened inside that operation — a `RuntimeMethod` invocation's own batch, `resetState`'s batch and
+ * every level {@link writeDeferringFlush} opened — is above it.
+ */
+let entryBatchDepth = 0
 
 /**
- * Closes every batch level {@link writeDeferringFlush} left open, letting alien-signals flush the
+ * Closes every batch level opened inside the outermost Runtime operation, letting alien-signals flush the
  * notifications it already queued.
+ *
+ * In normal operation the only levels still open here are the ones {@link writeDeferringFlush} opened:
+ * every other level is closed by its own `endBatch()` in a `finally`. But that `finally` cannot be relied
+ * on when runaway recursion (a valid Method <-> Method cycle) exhausts the engine's stack: the deepest
+ * frames' `endBatch()` calls themselves overflow and never decrement. Draining to the depth recorded on
+ * entry, rather than counting the levels this module opened, closes those leaked levels too, so a
+ * `RangeError` can never leave the realm permanently batched.
  *
  * The loop condition is re-tested after every `endBatch()`: that flush can run an effect whose Property
  * recompute commits its own diagnostic snapshot, which opens a fresh level this same drain must then close.
- * A recompute that throws inside one of those flushes must not leave alien-signals permanently batched
- * (every later flush in the Runtime's life would be silently suspended), so the remaining levels are
+ * Runtime subscriptions never throw out of a flush (listener and tracked-read exceptions are isolated),
+ * but any other alien effect sharing the realm can; such a throw must not leave alien-signals permanently
+ * batched (every later flush in the realm would be silently suspended), so the remaining levels are
  * closed before the throw is rethrown.
  */
-function releaseDeferredFlushes(): void {
-	while (deferredFlushDepth > 0) {
-		--deferredFlushDepth
+function releaseBatches(): void {
+	while (getBatchDepth() > entryBatchDepth) {
 		try {
 			endBatch()
 		}
 		catch (error) {
-			releaseDeferredFlushes()
+			releaseBatches()
 			throw error
 		}
 	}
 }
 
 /**
- * Tracks one nesting level of the calls that can drive an evaluation, and releases every flush
- * {@link writeDeferringFlush} deferred inside it once the outermost level is leaving.
+ * Tracks one nesting level of the calls that can drive an evaluation, and closes every batch level opened
+ * inside it (see {@link releaseBatches}) once the outermost level is leaving.
  *
  * The release runs while the depth is still `1`, so a listener that the release's own flush invokes and
- * that re-enters the Runtime cannot re-enter the drain loop. The decrement is unconditional: a Property
- * recompute that throws inside the release's flush (`createTrackedSubscription` isolates the external
- * listener, never the tracked read) must not leave the depth pinned above `0`, or every later call would
- * look nested and no release would ever run again.
+ * that re-enters the Runtime cannot re-enter the drain loop. The decrement is unconditional: a throw
+ * inside the release's flush must not leave the depth pinned above `0`, or every later call would look
+ * nested and no release would ever run again. Both depth updates are plain expressions, never calls, so
+ * they still run when the stack is exhausted.
  */
 export function runRuntimeOperation<Result>(fn: () => Result): Result {
+	if (operationDepth === 0)
+		entryBatchDepth = getBatchDepth()
 	++operationDepth
 	try {
 		return fn()
@@ -115,7 +153,7 @@ export function runRuntimeOperation<Result>(fn: () => Result): Result {
 	finally {
 		try {
 			if (operationDepth === 1)
-				releaseDeferredFlushes()
+				releaseBatches()
 		}
 		finally {
 			--operationDepth
@@ -172,7 +210,6 @@ export function writeDeferringFlush(write: () => void): void {
 	}
 
 	startBatch()
-	++deferredFlushDepth
 	write()
 }
 
@@ -181,6 +218,13 @@ export function writeDeferringFlush(write: () => void): void {
  * bootstrap run, and invokes `listener` through {@link invokeListenerIsolated} on every actual
  * subsequent run. Returns an idempotent unsubscribe function registered with the Runtime's disposal
  * bookkeeping.
+ *
+ * `read()` itself can throw: a Property's tracked result read rethrows its `compute`'s exception (the
+ * Property primitive caches that outcome instead of letting it escape the computed). Such a run is
+ * isolated like a listener exception — the write that triggered it and every other subscriber are
+ * unaffected — and only skips this subscription's notification. The tracked read had already linked the
+ * effect to the Property before rethrowing, so the subscription stays live and resumes on the next
+ * completed recompute. A bootstrap run that throws is isolated the same way.
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
@@ -190,7 +234,15 @@ export function createTrackedSubscription<Value>(
 	let isBootstrap = true
 
 	const rawDispose = effect(() => {
-		const value = read()
+		let value: Value
+		try {
+			value = read()
+		}
+		catch (error) {
+			isBootstrap = false
+			reportIsolatedException(error)
+			return
+		}
 
 		if (isBootstrap) {
 			isBootstrap = false

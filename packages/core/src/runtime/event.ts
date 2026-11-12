@@ -1,14 +1,18 @@
 /**
  * Runtime semantic event channel.
  *
- * Event delivery deliberately does not use alien-signals: unlike value/diagnostic subscriptions,
- * event subscriber exceptions are part of synchronous emit semantics and must propagate immediately.
+ * Event delivery deliberately does not use alien-signals: it is synchronous and depth-first, with the
+ * listener list snapshotted at emit start and inspection listeners first. Like every other external
+ * listener, a throwing public event listener is isolated — reported outside the emit, never aborting the
+ * remaining listeners or the emitting Method (amends Discussion #12 C0R154, which propagated it).
  */
 
 import type { RuntimeEvent } from '../internal/contract'
 import type { WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
-import { invokeListenerIsolated, invokeListenerUntracked } from './adapter'
+import { invokeEventListenerIsolated, invokeListenerIsolated } from './adapter'
+import { callbackScope } from './context'
+import { throwClosedCallbackMember } from './sync'
 
 export interface EventInspectionChannel {
 	subscribe: (listener: (args: readonly unknown[]) => void) => () => void
@@ -52,7 +56,7 @@ export function createEventPrimitive(context: RuntimeContext): EventPrimitive {
 			const occurrenceArgs = Object.freeze([...args])
 			publishInspectionOccurrence(occurrenceArgs)
 			for (const { listener } of listenersSnapshot)
-				invokeListenerUntracked(listener, args)
+				invokeEventListenerIsolated(listener, args)
 		},
 		inspection: {
 			subscribe(listener) {
@@ -72,9 +76,32 @@ export function createEventPrimitive(context: RuntimeContext): EventPrimitive {
 	}
 }
 
+/** The renderer-integration emitter (`@deviltea/widget-core/integration`): valid until disposal. */
 export function buildEventEmitter(events: ReadonlyMap<WidgetMemberKey, EventPrimitive>): Readonly<Record<string, (...args: readonly unknown[]) => void>> {
 	const emitter: Record<string, (...args: readonly unknown[]) => void> = Object.create(null)
 	for (const [name, primitive] of events)
 		emitter[name] = (...args: readonly unknown[]) => primitive.emit(...args)
+	return Object.freeze(emitter)
+}
+
+/**
+ * The `emit` surface one widget's Method `execute` callbacks receive (shared by that widget's Methods).
+ * Besides the disposal guard, each call requires the innermost running callback to be one of those
+ * Methods — its `CallbackOwner.emitter` is this very object — so an emitter retained past its callback,
+ * or reached from a Property `compute`, throws without delivering.
+ */
+export function buildCallbackEventEmitter(
+	context: RuntimeContext,
+	events: ReadonlyMap<WidgetMemberKey, EventPrimitive>,
+): Readonly<Record<string, (...args: readonly unknown[]) => void>> {
+	const emitter: Record<string, (...args: readonly unknown[]) => void> = Object.create(null)
+	for (const [name, primitive] of events) {
+		emitter[name] = (...args: readonly unknown[]) => {
+			context.assertActive()
+			if (callbackScope.owner?.emitter !== emitter)
+				throwClosedCallbackMember('emit')
+			primitive.emit(...args)
+		}
+	}
 	return Object.freeze(emitter)
 }

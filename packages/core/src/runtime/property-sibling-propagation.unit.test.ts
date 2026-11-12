@@ -565,8 +565,8 @@ describe('property value propagation under a State diagnostics-subscription', ()
 	})
 })
 
-describe('deferred diagnostic propagation released after a throw', () => {
-	it('leaves later independent operations flushing normally', () => {
+describe('deferred diagnostic propagation released with a throwing recompute', () => {
+	it('isolates the throw and leaves later independent operations flushing normally', async () => {
 		const { widget } = createHarness()
 
 		// `healthy` shares nothing with the throwing Property: it is the independent witness that the
@@ -576,7 +576,8 @@ describe('deferred diagnostic propagation released after a throw', () => {
 		widget.properties.healthy.subscribe(result => healthyValues.push(result))
 		widget.properties.healthy.subscribeDiagnostics(diagnostics => healthyDiagnosticLengths.push(diagnostics.length))
 		// Subscribed so its recompute is a *queued* effect run by the deferred release, not by the write.
-		widget.properties.poisoned.subscribe(() => {})
+		const poisonedValues: unknown[] = []
+		widget.properties.poisoned.subscribe(result => poisonedValues.push(result))
 
 		expect(widget.properties.healthy.get())
 			.toEqual({ ok: true, value: 1 })
@@ -585,19 +586,29 @@ describe('deferred diagnostic propagation released after a throw', () => {
 
 		// A Method invocation batches its state write, so the queued `poisoned` recompute only runs when
 		// the deferred diagnostic propagation is released — and that recompute throws (an implementation
-		// contract violation, isolated for external listeners but never for a tracked read).
-		let caught: unknown
-		try {
-			widget.methods.setPoison(13)
+		// contract violation). The subscription isolates it like a listener exception: the invocation
+		// completes normally and the exception is reported outside the flush.
+		const reported: unknown[] = []
+		const onUncaughtException = (error: unknown): void => {
+			reported.push(error)
 		}
-		catch (error) {
-			caught = error
+		process.on('uncaughtException', onUncaughtException)
+		try {
+			expect(widget.methods.setPoison(13))
+				.toEqual({ ok: true, value: 13 })
+			expect(poisonedValues)
+				.toEqual([])
+			expect(() => widget.properties.poisoned.get())
+				.toThrow('poisoned: compute boom')
+
+			await new Promise<void>(resolve => setTimeout(resolve, 0))
+		}
+		finally {
+			process.off('uncaughtException', onUncaughtException)
 		}
 
-		expect(caught)
-			.toBeInstanceOf(Error)
-		expect((caught as Error).message)
-			.toBe('poisoned: compute boom')
+		expect(reported.map(error => (error as Error).message))
+			.toEqual(['poisoned: compute boom'])
 
 		healthyValues.length = 0
 		healthyDiagnosticLengths.length = 0
