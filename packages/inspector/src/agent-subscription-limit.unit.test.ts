@@ -111,9 +111,9 @@ describe('inspectorAgent subscription limit', () => {
 		}
 	})
 
-	it('advertises the limit code only at protocol 0.3', () => {
-		expect(INSPECTOR_PROTOCOL_VERSION)
-			.toEqual({ major: 0, minor: 3 })
+	it('advertises the limit code from protocol 0.3 on', () => {
+		expect(INSPECTOR_PROTOCOL_VERSION.minor)
+			.toBeGreaterThanOrEqual(3)
 		const code = { code: 'subscription-limit', message: 'x' }
 		expect(parseInspectorResponseMessage({ protocol: { major: 0, minor: 3 }, kind: 'response', requestId: 'r', ok: false, error: code }))
 			.not

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
 import { projectBlueprintSnapshot } from './projection'
-import { parseInspectorResponseMessage } from './protocol'
+import { INSPECTOR_PROTOCOL_VERSION, parseInspectorResponseMessage } from './protocol'
 import { createInspectorTestFixture, devtoolsTestSystem } from './test-fixture'
 import { createInProcessInspectorTransportPair } from './transport'
 
@@ -152,7 +152,7 @@ describe('inspectorClient + InspectorAgent', () => {
 
 			const upgraded = await client.handshake()
 			expect(upgraded.protocol)
-				.toEqual({ major: 0, minor: 3 })
+				.toEqual(INSPECTOR_PROTOCOL_VERSION)
 			expect(upgraded.capabilities.methods)
 				.toContain('runtime.subscribeEvent')
 			const modern = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-test' })

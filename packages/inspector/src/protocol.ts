@@ -1,4 +1,3 @@
-import type { WidgetConfigJsonSchema } from '@deviltea/widget-core'
 import type { InspectableValue } from './value'
 import {
 	isBlueprintNode as isWireBlueprintNode,
@@ -13,7 +12,7 @@ export interface InspectorProtocolVersion {
 	readonly minor: number
 }
 
-export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 3 }) satisfies InspectorProtocolVersion
+export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 4 }) satisfies InspectorProtocolVersion
 
 export interface InspectorCapabilities {
 	readonly methods: readonly InspectorRequestMethod[]
@@ -62,9 +61,24 @@ export interface InspectorMemberRef {
 	readonly name: string
 }
 
+/** Any JSON value; the wire carries config schemas as plain JSON documents. */
+export type InspectorJsonValue
+	= | null
+		| boolean
+		| number
+		| string
+		| readonly InspectorJsonValue[]
+		| { readonly [key: string]: InspectorJsonValue }
+
+/**
+ * A JSON Schema Draft 2020-12 document (an object or a boolean schema), typed only as plain JSON so that
+ * this protocol needs nothing from Core. Keyword and metaschema validity stay the plugin author's concern.
+ */
+export type InspectorConfigSchema = boolean | { readonly [key: string]: InspectorJsonValue }
+
 export interface InspectorConfigMetadata {
 	readonly description: string
-	readonly schema: WidgetConfigJsonSchema | null
+	readonly schema: InspectorConfigSchema | null
 }
 
 export interface InspectorBlueprintCapabilities {
@@ -121,11 +135,15 @@ export type InspectorDependency
 export interface InspectorStateMember {
 	readonly type: 'state'
 	readonly name: string
+	/** Added in protocol 0.4: whether Blueprint authors may write this State. Absent below 0.4. */
+	readonly authorWritable?: boolean
 }
 
 export interface InspectorPropertyMember {
 	readonly type: 'property'
 	readonly name: string
+	/** Added in protocol 0.4: the declared value-contract id, or `null`. Absent below 0.4. */
+	readonly valueContractId?: string | null
 	readonly dependencies: readonly InspectorDependency[]
 }
 

@@ -14,6 +14,7 @@ import type {
 } from '@deviltea/widget-core/inspection'
 import type {
 	InspectorBlueprintSnapshot,
+	InspectorConfigSchema,
 	InspectorDependency,
 	InspectorDependencyReference,
 	InspectorDiagnostic,
@@ -27,14 +28,46 @@ import type {
 import type { InspectableValue } from './value'
 import { encodeInspectableValue } from './value'
 
+/** `authorWritable` and `valueContractId` are emitted from protocol 0.4 on. */
+const MEMBER_METADATA_PROTOCOL_MINOR: number = 4
+
 function wireNodeId(nodeId: InspectionNodeId): number {
 	return nodeId
 }
 
+// Every DTO below is built by naming its fields. Spreading a Core object would let any field Core adds
+// later reach the wire at whatever protocol minor is negotiated.
+
+function projectDependencyTarget(target: BlueprintDependencyReference['target']): InspectorDependencyReference['target'] {
+	switch (target.type) {
+		case 'self':
+			return { type: 'self' }
+		case 'root':
+			return { type: 'root' }
+		case 'parent':
+			return { type: 'parent', optional: target.optional }
+		case 'widget':
+			return { type: 'widget', widgetId: target.widgetId, optional: target.optional }
+	}
+}
+
+function projectDependencyOperation(operation: BlueprintDependencyReference['operation']): InspectorDependencyReference['operation'] {
+	switch (operation.type) {
+		case 'state-get':
+			return { type: 'state-get', key: operation.key }
+		case 'state-set':
+			return { type: 'state-set', key: operation.key }
+		case 'property-get':
+			return { type: 'property-get', name: operation.name }
+		case 'method-invoke':
+			return { type: 'method-invoke', name: operation.name }
+	}
+}
+
 function projectDependencyReference(reference: BlueprintDependencyReference): InspectorDependencyReference {
 	return {
-		target: { ...reference.target },
-		operation: { ...reference.operation },
+		target: projectDependencyTarget(reference.target),
+		operation: projectDependencyOperation(reference.operation),
 	}
 }
 
@@ -49,7 +82,7 @@ function projectDependency(dependency: BlueprintInspectionDependency): Inspector
 			status: 'resolved',
 			target: {
 				nodeId: wireNodeId(dependency.target.nodeId),
-				member: { ...dependency.target.member },
+				member: { type: dependency.target.member.type, name: dependency.target.member.name },
 			},
 		}
 	}
@@ -150,26 +183,42 @@ export function projectBlueprintSnapshot(
 							properties: node.capabilities.properties,
 							methods: node.capabilities.methods,
 						}
-					: { ...node.capabilities },
+					: {
+							config: node.capabilities.config,
+							slots: node.capabilities.slots,
+							state: node.capabilities.state,
+							properties: node.capabilities.properties,
+							methods: node.capabilities.methods,
+							events: node.capabilities.events,
+						},
 				...(protocolMinor < 2
 					? {}
 					: {
 							config: node.config === null
 								? null
-								: { description: node.config.description, schema: node.config.schema },
-							events: node.events.map(event => ({ ...event })),
+								// Core types the schema document precisely; on the wire it is plain JSON (see `InspectorConfigSchema`).
+								: { description: node.config.description, schema: node.config.schema as InspectorConfigSchema | null },
+							events: node.events.map(event => ({ type: 'event' as const, name: event.name, description: event.description })),
 						}),
 				semanticSlots: node.semanticSlots.map(slot => ({
 					name: slot.name,
 					children: slot.children.map(wireNodeId),
 				})),
-				state: node.state.map(member => ({ ...member })),
+				state: node.state.map(member => ({
+					type: 'state' as const,
+					name: member.name,
+					...(protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR ? {} : { authorWritable: member.authorWritable }),
+				})),
 				properties: node.properties.map(member => ({
-					...member,
+					type: 'property' as const,
+					name: member.name,
+					...(protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR ? {} : { valueContractId: member.valueContractId }),
 					dependencies: member.dependencies.map(projectDependency),
 				})),
 				methods: node.methods.map(member => ({
-					...member,
+					type: 'method' as const,
+					name: member.name,
+					transitivelyWrites: member.transitivelyWrites,
 					dependencies: member.dependencies.map(projectDependency),
 				})),
 			}
@@ -177,7 +226,7 @@ export function projectBlueprintSnapshot(
 		invalidCycles: inspection.invalidCycles.map(cycle => ({
 			members: cycle.members.map(member => ({
 				nodeId: wireNodeId(member.nodeId),
-				member: { ...member.member },
+				member: { type: member.member.type, name: member.member.name },
 			})),
 		})),
 	}
