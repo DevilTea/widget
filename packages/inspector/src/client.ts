@@ -94,7 +94,7 @@ export interface InspectorClient {
 		listener: (payload: InspectorEventMap[Event]) => void,
 	) => () => void
 	close: () => void
-	/** Alias retained for owner-lifecycle terminology used by Lab integration/tests. */
+	/** Alias of `close`, for owner-lifecycle terminology. */
 	dispose: () => void
 }
 
