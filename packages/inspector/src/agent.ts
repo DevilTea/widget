@@ -20,9 +20,9 @@ import {
 	projectRuntimeWidgetSnapshot,
 } from './projection'
 import {
+	classifyInspectorRequest,
 	INSPECTOR_PROTOCOL_VERSION,
 	isCompatibleProtocolVersion,
-	parseInspectorRequestMessage,
 } from './protocol'
 
 const PROTOCOL_0_1_METHODS = Object.freeze([
@@ -129,10 +129,15 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const dom = options.dom
 	const memberSubscriptions = new Map<string, () => void>()
 	const eventSubscriptions = new Map<string, () => void>()
-	// One Inspector transport has one peer. Re-handshake may explicitly upgrade/downgrade it;
+	// One Inspector transport has one peer. Only a handshake sets (or re-sets) the negotiated minor;
 	// standalone requests remain valid before the first handshake.
 	let negotiatedMinor: number = INSPECTOR_PROTOCOL_VERSION.minor
-	const envelopeVersion = () => ({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: negotiatedMinor })
+	// While one request is handled, answers use the lower of the negotiated minor and the request's own
+	// envelope minor, so a peer that never handshakes still sees the shapes of the minor it speaks. This
+	// never changes `negotiatedMinor`, which event delivery uses.
+	let requestMinor: number | null = null
+	const currentMinor = () => requestMinor ?? negotiatedMinor
+	const envelopeVersion = () => ({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: currentMinor() })
 	function capabilitiesForMinor(minor: number): { readonly methods: readonly InspectorRequestMethod[], readonly events: readonly InspectorEventName[] } {
 		if (minor < 2) {
 			return {
@@ -378,7 +383,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return false
 		const message = `This Inspector Agent allows at most ${maxSubscriptions} live subscriptions.`
 		// A peer negotiated below protocol 0.3 cannot parse the new code; keep it within its vocabulary.
-		sendError(request.requestId, protocolError(negotiatedMinor >= 3 ? 'subscription-limit' : 'internal-error', message))
+		sendError(request.requestId, protocolError(currentMinor() >= 3 ? 'subscription-limit' : 'internal-error', message))
 		return true
 	}
 
@@ -461,14 +466,23 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	function handleRequest(request: InspectorRequestMessage): void {
+		try {
+			handleRequestAtMinor(request)
+		}
+		finally {
+			requestMinor = null
+		}
+	}
+
+	function handleRequestAtMinor(request: InspectorRequestMessage): void {
 		if (!isCompatibleProtocolVersion(request.protocol)) {
 			sendError(request.requestId, protocolError('unsupported-version', `Unsupported Inspector protocol major ${request.protocol.major}.`))
 			return
 		}
 
 		if (request.method !== 'handshake') {
-			negotiatedMinor = Math.min(negotiatedMinor, request.protocol.minor)
-			if (!capabilitiesForMinor(negotiatedMinor).methods.includes(request.method)) {
+			requestMinor = Math.min(negotiatedMinor, request.protocol.minor)
+			if (!capabilitiesForMinor(requestMinor).methods.includes(request.method)) {
 				sendError(request.requestId, protocolError('unknown-method', 'Method unavailable in this Inspector protocol session.'))
 				return
 			}
@@ -496,7 +510,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
 					return
 				}
-				sendSuccess(request, projectBlueprintSnapshot(runtimeId, runtimeInspection.blueprint, negotiatedMinor))
+				sendSuccess(request, projectBlueprintSnapshot(runtimeId, runtimeInspection.blueprint, currentMinor()))
 				return
 			case 'runtime.getWidgetSnapshot': {
 				if (request.params.ref.runtimeId !== runtimeId) {
@@ -584,16 +598,27 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const unsubscribeTransport = options.transport.subscribe((raw) => {
 		let requestId: string | null = null
 		try {
-			const request = parseInspectorRequestMessage(raw)
-			if (request !== null) {
-				requestId = request.requestId
-				handleRequest(request)
+			const classified = classifyInspectorRequest(raw)
+			if (classified.ok) {
+				requestId = classified.request.requestId
+				handleRequest(classified.request)
 				return
 			}
-			if (typeof raw === 'object' && raw !== null
-				&& 'kind' in raw && raw.kind === 'request'
-				&& 'requestId' in raw && typeof raw.requestId === 'string') {
-				sendError(raw.requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
+			// Without a request id there is nothing to correlate an answer with.
+			if (classified.requestId === null)
+				return
+			requestId = classified.requestId
+			if (classified.protocol !== null && !isCompatibleProtocolVersion(classified.protocol)) {
+				sendError(requestId, protocolError('unsupported-version', `Unsupported Inspector protocol major ${classified.protocol.major}.`))
+			}
+			else if (classified.code === 'unknown-method') {
+				sendError(requestId, protocolError('unknown-method', 'The requested method is not defined by this Inspector protocol.'))
+			}
+			else if (classified.code === 'invalid-params') {
+				sendError(requestId, protocolError('invalid-params', 'Invalid parameters for the requested Inspector method.'))
+			}
+			else {
+				sendError(requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
 			}
 		}
 		catch {

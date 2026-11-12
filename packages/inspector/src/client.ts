@@ -14,25 +14,31 @@ import {
 	isInspectorRequestResult,
 	parseInspectorEventMessage,
 	parseInspectorResponseMessage,
+	parseInspectorUnrecognizedErrorResponse,
 } from './protocol'
 
 /** Codes a protocol peer sends, plus the ones only the Client itself produces. */
-export type InspectorClientErrorCode = InspectorProtocolError['code'] | 'timeout'
+export type InspectorClientErrorCode = InspectorProtocolError['code'] | 'timeout' | 'unknown-error'
 
 export interface InspectorClientErrorInfo {
 	readonly code: InspectorClientErrorCode
 	readonly message: string
+	/** For `unknown-error` only: the peer's own code string, verbatim. */
+	readonly peerCode?: string
 }
 
 export class InspectorClientError extends Error {
 	override readonly name = 'InspectorClientError'
 	readonly code: InspectorClientErrorCode
 	readonly protocolError: InspectorClientErrorInfo
+	/** Set when `code` is `unknown-error`: the code a newer peer sent, which this client does not define. */
+	readonly peerCode: string | undefined
 
 	constructor(error: InspectorClientErrorInfo) {
 		super(error.message)
 		this.code = error.code
 		this.protocolError = error
+		this.peerCode = error.peerCode
 	}
 }
 
@@ -122,6 +128,25 @@ export function createInspectorClient(transport: InspectorTransport, options: Cr
 	function handleResponse(rawMessage: unknown): void {
 		const response = parseInspectorResponseMessage(rawMessage)
 		if (response === null) {
+			const unrecognized = parseInspectorUnrecognizedErrorResponse(rawMessage)
+			if (unrecognized !== null) {
+				const entry = takePending(unrecognized.requestId)
+				if (entry === undefined)
+					return
+				if (!isCompatibleProtocolVersion(unrecognized.protocol)) {
+					entry.reject(new InspectorClientError({
+						code: 'unsupported-version',
+						message: 'Inspector response uses an incompatible protocol major version.',
+					}))
+					return
+				}
+				entry.reject(new InspectorClientError({
+					code: 'unknown-error',
+					message: unrecognized.message,
+					peerCode: unrecognized.code,
+				}))
+				return
+			}
 			const requestId = malformedResponseRequestId(rawMessage)
 			const entry = requestId === null ? undefined : takePending(requestId)
 			entry?.reject(new InspectorClientError({

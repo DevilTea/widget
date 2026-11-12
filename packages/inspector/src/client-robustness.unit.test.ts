@@ -199,6 +199,41 @@ describe('inspectorClient robustness', () => {
 		client.close()
 	})
 
+	it('maps an error code it does not know to a generic coded error that preserves the peer code and message', async () => {
+		const { transport, sent, deliver } = createScriptedTransport()
+		const client = createInspectorClient(transport)
+		const pending = client.request('runtime.list', {})
+		deliver({
+			protocol: { major: 0, minor: 9 },
+			kind: 'response',
+			requestId: sent[0]!.requestId,
+			ok: false,
+			error: { code: 'quota-exceeded', message: 'Too many things.' },
+		})
+		const error = await pending.catch((reason: unknown) => reason)
+		expect(error)
+			.toBeInstanceOf(InspectorClientError)
+		expect(error)
+			.toMatchObject({ code: 'unknown-error', peerCode: 'quota-exceeded', message: 'Too many things.' })
+		client.close()
+	})
+
+	it('treats a code the envelope minor predates as an unknown code too', async () => {
+		const { transport, sent, deliver } = createScriptedTransport()
+		const client = createInspectorClient(transport)
+		const pending = client.request('runtime.list', {})
+		deliver({
+			protocol: { major: 0, minor: 2 },
+			kind: 'response',
+			requestId: sent[0]!.requestId,
+			ok: false,
+			error: { code: 'subscription-limit', message: 'Cap.' },
+		})
+		await expect(pending)
+			.rejects.toMatchObject({ code: 'unknown-error', peerCode: 'subscription-limit', message: 'Cap.' })
+		client.close()
+	})
+
 	it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])('rejects an invalid requestTimeoutMs of %s', (requestTimeoutMs) => {
 		const { transport } = createScriptedTransport()
 		expect(() => createInspectorClient(transport, { requestTimeoutMs }))

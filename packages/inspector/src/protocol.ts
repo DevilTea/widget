@@ -407,10 +407,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function hasOnlyEmptyRecord(value: unknown): value is Record<string, never> {
-	return isRecord(value) && Object.keys(value).length === 0
-}
-
 function isProtocolVersion(value: unknown): value is InspectorProtocolVersion {
 	return isRecord(value)
 		&& Number.isInteger(value.major)
@@ -461,7 +457,8 @@ export function isInspectorRequestParams<Method extends InspectorRequestMethod>(
 		case 'inspect.enable':
 		case 'inspect.disable':
 		case 'highlight.clear':
-			return hasOnlyEmptyRecord(value)
+			// Like every other params validator, ignore unknown extra fields: a newer peer may add some.
+			return isRecord(value)
 		case 'blueprint.getSnapshot':
 			return isRecord(value) && typeof value.runtimeId === 'string'
 		case 'runtime.getWidgetSnapshot':
@@ -483,17 +480,42 @@ export function isInspectorRequestParams<Method extends InspectorRequestMethod>(
 	}
 }
 
-export function parseInspectorRequestMessage(value: unknown): InspectorRequestMessage | null {
-	if (!isRecord(value)
-		|| value.kind !== 'request'
-		|| !isProtocolVersion(value.protocol)
-		|| typeof value.requestId !== 'string'
-		|| !isInspectorRequestMethod(value.method)
-		|| !isInspectorRequestParams(value.method, value.params)) {
-		return null
-	}
+export type InspectorRequestRejectionCode = 'invalid-message' | 'unknown-method' | 'invalid-params'
 
-	return value as InspectorRequestMessage
+export type InspectorRequestClassification
+	= | { readonly ok: true, readonly request: InspectorRequestMessage }
+		| {
+			readonly ok: false
+			/** The id to answer under, or `null` when the value carries none (nothing to correlate an answer with). */
+			readonly requestId: string | null
+			/** The sender's envelope version when it is well-formed, so a receiver can check the major first. */
+			readonly protocol: InspectorProtocolVersion | null
+			readonly code: InspectorRequestRejectionCode
+		}
+
+/**
+ * Classifies an incoming value as a request, or names why it is not one: `invalid-message` for an
+ * envelope that is not a request at all, `unknown-method` for a well-formed envelope naming a method this
+ * protocol does not define, and `invalid-params` for a known method whose params do not validate.
+ */
+export function classifyInspectorRequest(value: unknown): InspectorRequestClassification {
+	if (!isRecord(value) || value.kind !== 'request') {
+		return { ok: false, requestId: null, protocol: null, code: 'invalid-message' }
+	}
+	const requestId = typeof value.requestId === 'string' ? value.requestId : null
+	const protocol = isProtocolVersion(value.protocol) ? value.protocol : null
+	if (requestId === null || protocol === null || typeof value.method !== 'string')
+		return { ok: false, requestId, protocol, code: 'invalid-message' }
+	if (!isInspectorRequestMethod(value.method))
+		return { ok: false, requestId, protocol, code: 'unknown-method' }
+	if (!isInspectorRequestParams(value.method, value.params))
+		return { ok: false, requestId, protocol, code: 'invalid-params' }
+	return { ok: true, request: value as InspectorRequestMessage }
+}
+
+export function parseInspectorRequestMessage(value: unknown): InspectorRequestMessage | null {
+	const classified = classifyInspectorRequest(value)
+	return classified.ok ? classified.request : null
 }
 
 function isProtocolErrorCode(value: unknown, protocolMinor: number): value is InspectorProtocolError['code'] {
@@ -521,6 +543,38 @@ export function parseInspectorResponseMessage(value: unknown): InspectorResponse
 	if (value.ok)
 		return 'result' in value ? value as InspectorResponseMessage : null
 	return isProtocolError(value.error, value.protocol.minor) ? value as InspectorResponseMessage : null
+}
+
+export interface InspectorUnrecognizedErrorResponse {
+	readonly requestId: string
+	readonly protocol: InspectorProtocolVersion
+	/** The peer's code string, verbatim: a code this protocol version does not define (yet). */
+	readonly code: string
+	readonly message: string
+}
+
+/**
+ * Recognizes an otherwise well-formed error response whose code is not part of this protocol version's
+ * vocabulary (a newer peer's code), so a receiver can surface it generically instead of dropping it.
+ */
+export function parseInspectorUnrecognizedErrorResponse(value: unknown): InspectorUnrecognizedErrorResponse | null {
+	if (!isRecord(value)
+		|| value.kind !== 'response'
+		|| value.ok !== false
+		|| !isProtocolVersion(value.protocol)
+		|| typeof value.requestId !== 'string'
+		|| !isRecord(value.error)
+		|| typeof value.error.code !== 'string'
+		|| typeof value.error.message !== 'string'
+		|| isProtocolErrorCode(value.error.code, value.protocol.minor)) {
+		return null
+	}
+	return {
+		requestId: value.requestId,
+		protocol: value.protocol,
+		code: value.error.code,
+		message: value.error.message,
+	}
 }
 
 function isRuntimeMemberSnapshot(value: unknown): value is InspectorRuntimeMemberSnapshot {

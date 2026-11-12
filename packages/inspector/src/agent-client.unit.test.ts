@@ -228,7 +228,7 @@ describe('inspector client/agent protocol boundary', () => {
 
 		expect(responses)
 			.toEqual([
-				expect.objectContaining({ requestId: 'bad-params', ok: false, error: expect.objectContaining({ code: 'invalid-message' }) }),
+				expect.objectContaining({ requestId: 'bad-params', ok: false, error: expect.objectContaining({ code: 'invalid-params' }) }),
 				expect.objectContaining({ requestId: 'bad-version', ok: false, error: expect.objectContaining({ code: 'unsupported-version' }) }),
 			])
 		agent.dispose()
