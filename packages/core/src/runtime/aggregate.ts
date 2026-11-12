@@ -26,7 +26,7 @@
  * surface" and "Framework-owned snapshot immutability".
  */
 
-import type { RuntimeLevelDiagnostic, RuntimeWidgetDiagnostic, WidgetSystemRuntimeDiagnostic } from '../diagnostic'
+import type { RuntimeDiagnostic, RuntimeLevelDiagnostic, RuntimeWidgetDiagnostic } from '../diagnostic'
 import type { CompiledBlueprint, InternalNodeId } from '../internal/contract'
 import type { RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
@@ -96,8 +96,8 @@ export function createRuntimeWidgetDiagnosticsAggregate(
 }
 
 export interface RuntimeAggregate {
-	getDiagnostics: () => readonly WidgetSystemRuntimeDiagnostic[]
-	subscribeDiagnostics: (listener: (diagnostics: readonly WidgetSystemRuntimeDiagnostic[]) => void) => () => void
+	getDiagnostics: () => readonly RuntimeDiagnostic[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeDiagnostic[]) => void) => () => void
 	/**
 	 * The hook every primitive of widget `nodeId` calls right after committing a new diagnostic snapshot,
 	 * inside the same deferred write (so the revision signal is subject to the same flush deferral).
@@ -146,7 +146,7 @@ export function createRuntimeAggregate(
 	let dirtyPositions: number[] = []
 	const isDirty = new Uint8Array(semanticOrder.length)
 	let needsFullScan = true
-	let cached: readonly WidgetSystemRuntimeDiagnostic[] | null = null
+	let cached: readonly RuntimeDiagnostic[] | null = null
 
 	let revision = 0
 	const revisionSignal = signal(revision)
@@ -193,10 +193,10 @@ export function createRuntimeAggregate(
 		return changed
 	}
 
-	function compose(): readonly WidgetSystemRuntimeDiagnostic[] {
+	function compose(): readonly RuntimeDiagnostic[] {
 		if (nonEmptyPositions.length === 0)
 			return runtimeLevelDiagnostics.length === 0 ? EMPTY_DIAGNOSTICS : runtimeLevelDiagnostics
-		const result: WidgetSystemRuntimeDiagnostic[] = [...runtimeLevelDiagnostics]
+		const result: RuntimeDiagnostic[] = [...runtimeLevelDiagnostics]
 		for (const position of nonEmptyPositions) {
 			for (const diagnostic of widgetSnapshots[position]!)
 				result.push(diagnostic)
@@ -204,7 +204,7 @@ export function createRuntimeAggregate(
 		return toDiagnosticSnapshot(result)
 	}
 
-	const snapshot = (): readonly WidgetSystemRuntimeDiagnostic[] => {
+	const snapshot = (): readonly RuntimeDiagnostic[] => {
 		// Tracked: a root subscription re-runs after any commit. The primitive signals behind the dirty
 		// widgets are read untracked, so the subscription never depends on every primitive.
 		revisionSignal()

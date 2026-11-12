@@ -7,10 +7,13 @@
 
 import type {
 	ExecutionResult,
+	RuntimeDiagnostic,
+	RuntimeLevelDiagnostic,
 	RuntimeMethodDependencyDiagnostic,
 	RuntimeMethodDiagnostic,
 	RuntimePropertyDependencyDiagnostic,
 	RuntimePropertyDiagnostic,
+	RuntimeWidgetDiagnostic,
 } from '../index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
@@ -124,5 +127,30 @@ describe('property and method success values are typed exactly', () => {
 
 		expectTypeOf(widget.state.count.get())
 			.toEqualTypeOf<number | null>()
+	})
+})
+
+describe('runtime diagnostic unions', () => {
+	it('types RuntimeDiagnostic as the complete union and RuntimeWidgetDiagnostic as the widget-only one', () => {
+		const blueprint = createWidgetSystem({ plugins: [plugin] })
+			.createBlueprint({ id: 'typed', type: 'typed' })
+		if (blueprint.status !== 'valid')
+			throw new Error('expected a valid Blueprint')
+		const runtime = blueprint.createRuntime()
+		const widget = runtime.getWidget('typed')!
+
+		expectTypeOf<RuntimeLevelDiagnostic>()
+			.toExtend<RuntimeDiagnostic>()
+		expectTypeOf<RuntimeLevelDiagnostic>()
+			.not
+			.toExtend<RuntimeWidgetDiagnostic>()
+		expectTypeOf<RuntimeWidgetDiagnostic>()
+			.toExtend<RuntimeDiagnostic>()
+		expectTypeOf(runtime.getDiagnostics)
+			.returns
+			.toEqualTypeOf<readonly RuntimeDiagnostic[]>()
+		expectTypeOf(widget.getDiagnostics)
+			.returns
+			.toEqualTypeOf<readonly RuntimeWidgetDiagnostic[]>()
 	})
 })

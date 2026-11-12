@@ -18,11 +18,11 @@ import type {
 	BlueprintDependencyReference,
 	BlueprintDiagnostic,
 	BlueprintNodeDiagnostic,
+	RuntimeDiagnostic,
 	RuntimeMethodDiagnostic,
 	RuntimePropertyDiagnostic,
 	RuntimeStateDiagnostic,
 	RuntimeWidgetDiagnostic,
-	WidgetSystemRuntimeDiagnostic,
 } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { JsonValue } from '../json'
@@ -523,8 +523,8 @@ export interface WidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple = AnyW
 	 * Runtime-level diagnostics plus the current state/property/method diagnostic snapshots, in deterministic
 	 * order. Never history, and never activates property evaluation.
 	 */
-	getDiagnostics: () => readonly WidgetSystemRuntimeDiagnostic[]
-	subscribeDiagnostics: (listener: (diagnostics: readonly WidgetSystemRuntimeDiagnostic[]) => void) => () => void
+	getDiagnostics: () => readonly RuntimeDiagnostic[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeDiagnostic[]) => void) => () => void
 	dispose: () => void
 }
 

@@ -9,7 +9,7 @@
  * diagnostic too).
  */
 
-import type { WidgetSystemRuntimeDiagnostic } from '../index'
+import type { RuntimeDiagnostic } from '../index'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -42,7 +42,7 @@ function createValidBlueprint(definition: unknown) {
 	return blueprint
 }
 
-function stateOverrideDiagnostics(diagnostics: readonly WidgetSystemRuntimeDiagnostic[]) {
+function stateOverrideDiagnostics(diagnostics: readonly RuntimeDiagnostic[]) {
 	return diagnostics.filter(diagnostic => diagnostic.code === 'invalid-state-overrides'
 		|| diagnostic.code === 'unknown-state-override-widget'
 		|| diagnostic.code === 'unsupported-state-override-target'

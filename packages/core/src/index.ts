@@ -72,13 +72,13 @@ export type {
 	RuntimeMethodDependencyDiagnostic,
 	RuntimeMethodDiagnostic,
 	RuntimeMethodResultDiagnostic,
+	RuntimePrimitiveDiagnosticLocation,
 	RuntimePropertyDependencyDiagnostic,
 	RuntimePropertyDiagnostic,
 	RuntimePropertyResultDiagnostic,
 	RuntimeStateDiagnostic,
 	RuntimeWidgetDiagnostic,
 	SourceAccessDiagnostic,
-	WidgetSystemRuntimeDiagnostic,
 } from './diagnostic'
 
 export type {
