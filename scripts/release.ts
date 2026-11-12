@@ -1,7 +1,7 @@
 import process from 'node:process'
 import { cancel, confirm, intro, isCancel, log, outro } from '@clack/prompts'
 import { $ } from 'zx'
-import { fail, packageEntry, packageIds, packageVersion, workspaceRoot } from './release-package'
+import { assertCorePeerRange, fail, packageEntry, packageIds, packageVersion, workspaceRoot } from './release-package'
 
 const REPOSITORY = 'DevilTea/widget'
 const PUBLISH_WORKFLOW_URL = `https://github.com/${REPOSITORY}/actions/workflows/publish.yml`
@@ -72,6 +72,7 @@ async function openReleasePullRequest(id: string, release: string, autoConfirm: 
 
 	intro(`Release ${entry.name}`)
 
+	assertCorePeerRange(id)
 	await assertGitHubCliReady()
 	await assertCleanWorktree()
 	await assertSyncedMain()
@@ -136,6 +137,7 @@ async function pushReleaseTag(id: string, autoConfirm: boolean) {
 
 	intro(`Tag ${entry.name}`)
 
+	assertCorePeerRange(id)
 	await assertCleanWorktree()
 	await git('fetch', 'origin', 'main', '--tags')
 	await git('switch', 'main')

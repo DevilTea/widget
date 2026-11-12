@@ -7,6 +7,7 @@ export default defineConfig({
 		include: [
 			'packages/**/src/**/*.unit.test.ts',
 			'apps/**/src/**/*.unit.test.ts',
+			'scripts/**/*.unit.test.ts',
 		],
 		coverage: {
 			enabled: true,
