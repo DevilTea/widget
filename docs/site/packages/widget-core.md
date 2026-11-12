@@ -1936,7 +1936,7 @@ runtime.dispose() // idempotent
 ```
 
 After disposal, `runtime.isDisposed` and `runtime.blueprint` remain readable,
-and previously obtained `RuntimeWidget.id` / `.type` / `.blueprint` stay
+and previously obtained `RuntimeWidget.id` / `.type` / `.blueprintNode` stay
 readable. Every live query/operation (`runtime.getWidget`, state/property
 reads and writes, method invocations, `runtime.snapshotState()`, `resetState()`,
 `RuntimeWidget.getDiagnostics()`) and every

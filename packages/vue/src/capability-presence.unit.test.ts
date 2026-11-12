@@ -142,8 +142,8 @@ describe('useWidget() runtime capability gating — explicit-empty vs absent', (
 
 		// The resolved semantic slot map is `{}` here, exactly as it is for a widget whose plugin has no
 		// `slots` capability at all — proving presence cannot be read from `blueprint.slots`'s own shape.
-		const widget = runtime.getWidget('es1') as unknown as { blueprint: { slots: object } }
-		expect(Object.keys(widget.blueprint.slots))
+		const widget = runtime.getWidget('es1') as unknown as { blueprintNode: { slots: object } }
+		expect(Object.keys(widget.blueprintNode.slots))
 			.toEqual([])
 
 		expect(bridge.WidgetSlot)

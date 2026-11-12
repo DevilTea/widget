@@ -472,7 +472,7 @@ export type RuntimeWidgetFor<
 	= & {
 		readonly id: WidgetId
 		readonly type: WidgetPluginTypeOf<Plugin>
-		readonly blueprint: ResolvedBlueprintWidgetNodeFor<Plugin, Plugins>
+		readonly blueprintNode: ResolvedBlueprintWidgetNodeFor<Plugin, Plugins>
 		/**
 		 * This widget's own aggregate diagnostic snapshot: state members -> property members -> method
 		 * members, declaration order within each capability, each primitive's own local diagnostic order.
