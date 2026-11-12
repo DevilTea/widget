@@ -342,7 +342,7 @@ export interface WidgetSystemBlueprintBase<Plugins extends AnyWidgetPluginTuple,
 	recompile: (definition: unknown) => WidgetSystemBlueprint<Plugins>
 }
 
-export interface ValidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends WidgetSystemBlueprintBase<Plugins, JsonValue> {
+export interface ValidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends WidgetSystemBlueprintBase<Plugins, WidgetSource<Plugins>> {
 	readonly status: 'valid'
 	readonly sourceJsonCompatible: true
 	readonly root: ResolvedBlueprintWidgetNode<Plugins, JsonValue>

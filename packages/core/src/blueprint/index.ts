@@ -19,6 +19,7 @@ import type {
 	ResolvedBlueprintWidgetNode,
 	ValidWidgetSystemBlueprint,
 	WidgetLocation,
+	WidgetSource,
 	WidgetSystemBlueprint,
 	WidgetSystemBlueprintStatus,
 } from '../internal/contract'
@@ -168,7 +169,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 
 		const blueprint: ValidWidgetSystemBlueprint<Plugins> = {
 			system,
-			source: definition as JsonValue,
+			source: definition as WidgetSource<Plugins>,
 			sourceJsonCompatible: true,
 			status: 'valid',
 			root: validNavigator.root,
