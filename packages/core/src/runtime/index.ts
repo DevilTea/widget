@@ -46,7 +46,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	const compiled: CompiledBlueprint<Plugins> = readCompiledBlueprint(blueprint)
 	const context = createRuntimeContext()
 	// A real restricted facade, not the full Blueprint object: `compute`/`execute` must not be able to
-	// reach `createRuntime`/`recompile`/`getDiagnostics`/`system`/`source` through JS/`any`.
+	// reach `createRuntime`/`recompile`/`diagnostics`/`system`/`source` through JS/`any`.
 	const blueprintView = buildBlueprintView(blueprint)
 
 	const registry = new Map<InternalNodeId, PrimitiveRegistryEntry & {

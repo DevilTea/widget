@@ -147,8 +147,10 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 			commitDiagnostics(toDiagnosticSnapshot(diagnostics))
 
 			// Same consistency rationale as the validateArgs-failure branch above: not a persistence
-			// hazard (each `invoke()` builds a fresh wrapper), but freezing it keeps every
-			// `ExecutionResult` returned to plugin/consumer code equally immutable.
+			// hazard (each `invoke()` builds a fresh wrapper). Only Method and Property results are frozen:
+			// `RuntimeState.set()` and dependency-callable results are equally fresh per call and never
+			// retained by Core, so mutating one cannot corrupt Runtime state, and freezing them was
+			// measured at roughly a fifth of a dependency-heavy invocation's cost.
 			const result: ExecutionResult<unknown, RuntimeMethodDiagnostic> = diagnostics.length > 0
 				? { ok: false, failure: { diagnostics: diagnostics as readonly [RuntimeMethodDiagnostic, ...RuntimeMethodDiagnostic[]] } }
 				: { ok: true, value }

@@ -1,8 +1,9 @@
 /**
  * RuntimeWidget assembly.
  *
- * Distributed by plugin type; only conditionally exposes `state`/`properties`/`methods` when the
- * corresponding compiled member map is non-empty. Identity/static fields (`id`, `type`, `blueprint`)
+ * Distributed by plugin type; exposes `state`/`properties`/`methods`/`events` exactly when the plugin
+ * declares that capability (declaration presence, so an explicitly empty capability still yields an
+ * empty surface). Identity/static fields (`id`, `type`, `blueprint`)
  * stay readable after Runtime disposal because they are plain immutable references, not live
  * operations. `getDiagnostics`/`subscribeDiagnostics` are unconditional — every widget aggregates to its own
  * diagnostic surface regardless of declared capabilities, per diagnostic #10 amendment "RuntimeWidget aggregate
