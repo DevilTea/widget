@@ -32,9 +32,9 @@ export function throwClosedCollector(method: 'addDiagnostic' | 'hasAnyDiagnostic
 /**
  * The same lifetime guard for a callback's dependency callables (`deps.*`) and `emit` callables. They
  * are valid only while the callback that received them is the innermost running callback (see
- * `callbackScope` in `./context`): a call after it returned or threw, or from another callback running
- * inside it, is an implementation-contract violation and performs nothing.
+ * `callbackScope` in `./context`): a call after it returned or threw, or from a listener or another
+ * callback running inside it, is an implementation-contract violation and performs nothing.
  */
 export function throwClosedCallbackMember(member: 'deps' | 'emit'): never {
-	throw new TypeError(`${member === 'deps' ? 'A dependency' : 'An emit'} callable was called outside the callback that received it. Dependency and emit callables must be used synchronously while that callback runs, not after it returned and not from another callback running inside it.`)
+	throw new TypeError(`${member === 'deps' ? 'A dependency' : 'An emit'} callable was called outside the callback that received it. Dependency and emit callables must be used synchronously while that callback runs, not after it returned and not from a listener or another callback running inside it.`)
 }

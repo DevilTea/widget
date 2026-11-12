@@ -16,6 +16,7 @@ import { endBatch, signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
+import { callbackScope } from './context'
 import { buildDefaultStateValidationDiagnostic, buildStateValidationDiagnostic, freezeDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
@@ -153,12 +154,17 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 
 		let isValid: unknown
 		let hasDiagnostic: boolean
+		// `validate` owns no dependency or `emit` callables, so no callback is open while it runs (see
+		// `callbackScope`), even when a Method's dependency setter triggered it.
+		const previousOwner = callbackScope.owner
+		callbackScope.owner = null
 		try {
 			isValid = params.definition.validate(candidate, ctx)
 			assertSyncValue(isValid, `State "${params.key}"'s validate`)
 			hasDiagnostic = collector.hasAnyDiagnostic()
 		}
 		finally {
+			callbackScope.owner = previousOwner
 			collector.close()
 		}
 

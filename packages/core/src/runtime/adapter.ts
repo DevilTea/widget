@@ -25,6 +25,7 @@
 import type { RuntimeContext } from './context'
 import { effect, endBatch, getBatchDepth, setActiveSub, startBatch } from 'alien-signals'
 import { WidgetSystemRuntimeReentrancyError } from '../diagnostic'
+import { callbackScope } from './context'
 
 /**
  * `queueMicrotask` is a host global (browser + Node), not part of the ECMAScript lib this
@@ -44,11 +45,14 @@ function reportIsolatedException(error: unknown): void {
 }
 
 /**
- * Invokes `listener(value)` with no active alien subscriber (restoring the previous one afterward) and
- * isolates a synchronous throw so it cannot escape into the current alien-signals flush (see
- * {@link reportIsolatedException}).
+ * Invokes `listener(value)` with no active alien subscriber and no open callback (see `callbackScope`), so
+ * neither its reads nor a dependency or `emit` callable it retained from a running Method reach into the
+ * operation that notified it, restoring both afterward. A synchronous throw is isolated so it cannot escape
+ * into the current alien-signals flush (see {@link reportIsolatedException}).
  */
 export function invokeListenerIsolated<Value>(listener: (value: Value) => void, value: Value): void {
+	const previousOwner = callbackScope.owner
+	callbackScope.owner = null
 	const previous = setActiveSub(undefined)
 	try {
 		listener(value)
@@ -57,6 +61,8 @@ export function invokeListenerIsolated<Value>(listener: (value: Value) => void, 
 		reportIsolatedException(error)
 	}
 	finally {
+		// The plain assignment first: it still runs when the stack is exhausted.
+		callbackScope.owner = previousOwner
 		setActiveSub(previous)
 	}
 }
@@ -106,6 +112,8 @@ export function isEmitLoopError(error: unknown): boolean {
  * the rethrow cannot strand another subscriber's queued notification.
  */
 export function invokeEventListenerIsolated(listener: (...args: readonly unknown[]) => void, args: readonly unknown[]): void {
+	const previousOwner = callbackScope.owner
+	callbackScope.owner = null
 	const previous = setActiveSub(undefined)
 	try {
 		listener(...args)
@@ -116,6 +124,8 @@ export function invokeEventListenerIsolated(listener: (...args: readonly unknown
 		reportIsolatedException(error)
 	}
 	finally {
+		// The plain assignment first: it still runs when the stack is exhausted.
+		callbackScope.owner = previousOwner
 		setActiveSub(previous)
 	}
 }
