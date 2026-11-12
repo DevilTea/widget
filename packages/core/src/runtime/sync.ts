@@ -28,3 +28,13 @@ export function assertSyncValue(value: unknown, description: string): void {
 export function throwClosedCollector(method: 'addDiagnostic' | 'hasAnyDiagnostic'): never {
 	throw new TypeError(`${method} was called after its callback returned. Diagnostics must be reported synchronously while the callback runs.`)
 }
+
+/**
+ * The same lifetime guard for a callback's dependency callables (`deps.*`) and `emit` callables. They
+ * are valid only while the callback that received them is the innermost running callback (see
+ * `callbackScope` in `./context`): a call after it returned or threw, or from another callback running
+ * inside it, is an implementation-contract violation and performs nothing.
+ */
+export function throwClosedCallbackMember(member: 'deps' | 'emit'): never {
+	throw new TypeError(`${member === 'deps' ? 'A dependency' : 'An emit'} callable was called outside the callback that received it. Dependency and emit callables must be used synchronously while that callback runs, not after it returned and not from another callback running inside it.`)
+}

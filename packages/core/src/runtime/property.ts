@@ -23,11 +23,12 @@ import type { ExecutionResult } from '../execution-result'
 import type { RuntimeProperty } from '../internal/contract'
 import type { ErasedWidgetPropertyDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
-import type { ActiveDiagnosticSink, RuntimeContext } from './context'
+import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './context'
 import { computed, signal } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
+import { callbackScope } from './context'
 import { buildPropertyResultDiagnostic, toDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
@@ -88,9 +89,12 @@ export interface CreatePropertyPrimitiveParams {
 	readonly selfNode: unknown
 	readonly blueprintView: unknown
 	readonly deps: unknown
+	/** The owner `deps` was materialized for. */
+	readonly owner: CallbackOwner
 }
 
 export function createPropertyPrimitive(context: RuntimeContext, params: CreatePropertyPrimitiveParams): PropertyPrimitive {
+	const { owner } = params
 	const diagnosticsSignal = signal<readonly RuntimePropertyDiagnostic[]>(EMPTY_DIAGNOSTICS)
 
 	// Untracked mirror of `diagnosticsSignal`'s value: an unchanged snapshot skips the write.
@@ -140,11 +144,20 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		// Everything below is caught: this getter can run inside any effect's dirty check during a flush, and
 		// an exception escaping it would escape that flush (see the module doc).
 		try {
+			// This Property becomes the innermost running callback for the duration of `compute` (see
+			// `callbackScope`): only its own dependency callables are usable, and they report into `sink`.
+			// Saved and restored with plain assignments, so the restore survives an exhausted stack.
+			const previousOwner = callbackScope.owner
+			const previousSink = owner.sink
+			callbackScope.owner = owner
+			owner.sink = sink
 			let value: unknown
 			try {
-				value = context.withActiveCollector(sink, () => params.definition.compute(ctx))
+				value = params.definition.compute(ctx)
 			}
 			finally {
+				callbackScope.owner = previousOwner
+				owner.sink = previousSink
 				collector.close()
 			}
 			assertSyncValue(value, `Property "${params.name}"'s compute`)

@@ -24,11 +24,12 @@ import type { ExecutionResult } from '../execution-result'
 import type { RuntimeMethod } from '../internal/contract'
 import type { ErasedWidgetMethodDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
-import type { ActiveDiagnosticSink, RuntimeContext } from './context'
+import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './context'
 import { endBatch, signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
+import { callbackScope } from './context'
 import { buildDefaultMethodArgsDiagnostic, buildMethodArgsDiagnostic, buildMethodResultDiagnostic, freezeDiagnosticSnapshot, toDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
@@ -47,6 +48,8 @@ export interface CreateMethodPrimitiveParams {
 	readonly blueprintView: unknown
 	readonly deps: unknown
 	readonly emitFragment: Readonly<Record<string, unknown>>
+	/** The owner `deps` was materialized for; its `emitter` is `emitFragment.emit` (or `null`). */
+	readonly owner: CallbackOwner
 }
 
 export function createMethodPrimitive(context: RuntimeContext, params: CreateMethodPrimitiveParams): MethodPrimitive {
@@ -116,11 +119,21 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				hasAnyDiagnostic: execCollector.hasAnyDiagnostic,
 			}
 
+			// This Method becomes the innermost running callback for the duration of `execute` (see
+			// `callbackScope`): only its own dependency callables and its widget's `emit` are usable, and
+			// they report into `sink`. Plain-assignment save/restore, so it survives an exhausted stack.
+			const { owner } = params
+			const previousOwner = callbackScope.owner
+			const previousSink = owner.sink
+			callbackScope.owner = owner
+			owner.sink = sink
 			let value: unknown
 			try {
-				value = context.withActiveCollector(sink, () => params.definition.execute(executeCtx))
+				value = params.definition.execute(executeCtx)
 			}
 			finally {
+				callbackScope.owner = previousOwner
+				owner.sink = previousSink
 				execCollector.close()
 			}
 			assertSyncValue(value, `Method "${params.name}"'s execute`)

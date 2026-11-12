@@ -9,6 +9,8 @@ import type { RuntimeEvent } from '../internal/contract'
 import type { WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
 import { invokeListenerIsolated, invokeListenerUntracked } from './adapter'
+import { callbackScope } from './context'
+import { throwClosedCallbackMember } from './sync'
 
 export interface EventInspectionChannel {
 	subscribe: (listener: (args: readonly unknown[]) => void) => () => void
@@ -72,9 +74,32 @@ export function createEventPrimitive(context: RuntimeContext): EventPrimitive {
 	}
 }
 
+/** The renderer-integration emitter (`@deviltea/widget-core/integration`): valid until disposal. */
 export function buildEventEmitter(events: ReadonlyMap<WidgetMemberKey, EventPrimitive>): Readonly<Record<string, (...args: readonly unknown[]) => void>> {
 	const emitter: Record<string, (...args: readonly unknown[]) => void> = Object.create(null)
 	for (const [name, primitive] of events)
 		emitter[name] = (...args: readonly unknown[]) => primitive.emit(...args)
+	return Object.freeze(emitter)
+}
+
+/**
+ * The `emit` surface one widget's Method `execute` callbacks receive (shared by that widget's Methods).
+ * Besides the disposal guard, each call requires the innermost running callback to be one of those
+ * Methods — its `CallbackOwner.emitter` is this very object — so an emitter retained past its callback,
+ * or reached from a Property `compute`, throws without delivering.
+ */
+export function buildCallbackEventEmitter(
+	context: RuntimeContext,
+	events: ReadonlyMap<WidgetMemberKey, EventPrimitive>,
+): Readonly<Record<string, (...args: readonly unknown[]) => void>> {
+	const emitter: Record<string, (...args: readonly unknown[]) => void> = Object.create(null)
+	for (const [name, primitive] of events) {
+		emitter[name] = (...args: readonly unknown[]) => {
+			context.assertActive()
+			if (callbackScope.owner?.emitter !== emitter)
+				throwClosedCallbackMember('emit')
+			primitive.emit(...args)
+		}
+	}
 	return Object.freeze(emitter)
 }
