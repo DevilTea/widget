@@ -6,6 +6,7 @@
 import type { JsonValue, WidgetInterfaces } from './index'
 import { describe, expect, it } from 'vitest'
 import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, isJsonValue, MAX_JSON_DEPTH } from './index'
+import { inspectBlueprint } from './inspection'
 
 interface NoteInterfaces extends WidgetInterfaces {
 	config: {
@@ -170,6 +171,92 @@ describe('createBlueprint with deep input', () => {
 		expect(() => system.createBlueprint(root))
 			.not
 			.toThrow()
+	})
+})
+
+describe('the node at which recovery stops', () => {
+	/** The levels of the deepest widget chain whose containers stay within the bound. */
+	const fittingLevels = Math.floor((MAX_JSON_DEPTH - 1) / 3) + 1
+
+	function deepestNode(blueprint: ReturnType<typeof system.createBlueprint>) {
+		let node = blueprint.root
+		for (let children = blueprint.getChildren(node); children.length > 0; children = blueprint.getChildren(node))
+			node = children[0]!
+		return node
+	}
+
+	it('has a source path the patch engine accepts, so removing or replacing it works', () => {
+		for (const op of ['remove', 'replace'] as const) {
+			const document = createWidgetDocument({ system, source: widgetChain(fittingLevels + 1) })
+			const blueprint = document.getSnapshot().blueprint
+			const cutOff = deepestNode(blueprint)
+			const path = blueprint.getSourcePath(cutOff)!
+
+			expect(cutOff.diagnostics.map(diagnostic => diagnostic.code))
+				.toEqual(['invalid-widget-definition'])
+			expect(path)
+				.toHaveLength(MAX_JSON_DEPTH + 2)
+			expect(inspectBlueprint(blueprint).nodes.find(node => node.node === cutOff)?.sourcePath)
+				.toEqual(path)
+
+			const patch = op === 'remove' ? [{ op, path }] as const : [{ op, path, value: { id: 'replacement', type: 'note' } }] as const
+			expect(document.applyPatch(patch))
+				.toEqual({ ok: true, changed: true })
+			const patched = document.getSnapshot().blueprint
+			const deepest = deepestNode(patched)
+			if (op === 'remove') {
+				// Its parent is now the deepest node; its (empty) slots are still beyond the bound.
+				expect(deepest.id)
+					.toBe(`n${fittingLevels - 1}`)
+				expect(codes(patched))
+					.not
+					.toContain('invalid-widget-definition')
+			}
+			else {
+				expect(deepest)
+					.toMatchObject({ resolved: false, id: 'replacement', type: 'note' })
+				expect(patched.getSourcePath(deepest))
+					.toEqual(path)
+			}
+		}
+	})
+
+	it('accepts SourcePatch paths up to MAX_JSON_DEPTH + 2 segments and rejects longer ones', () => {
+		const document = createWidgetDocument({ system, source: { id: 'root', type: 'note', config: {} } })
+		const longest = Array.from({ length: MAX_JSON_DEPTH + 2 })
+			.fill('a') as string[]
+
+		expect(document.applyPatch([{ op: 'remove', path: longest }]))
+			.toMatchObject({ ok: false, failure: { code: 'path-not-found' } })
+		expect(document.applyPatch([{ op: 'remove', path: [...longest, 'a'] }]))
+			.toMatchObject({ ok: false, failure: { code: 'max-depth-exceeded' } })
+	})
+
+	it('carries the authored id and type as hints, like any unresolved node', () => {
+		const blueprint = system.createBlueprint(widgetChain(fittingLevels + 1))
+		const cutOff = deepestNode(blueprint)
+
+		expect(cutOff)
+			.toMatchObject({ resolved: false, id: `n${fittingLevels}`, type: 'note' })
+		expect(inspectBlueprint(blueprint).nodes.find(node => node.node === cutOff))
+			.toMatchObject({ resolved: false, id: `n${fittingLevels}`, type: 'note' })
+		expect(blueprint.getWidget(`n${fittingLevels}`))
+			.toBe(cutOff)
+	})
+
+	it('gives a cyclic repeat the hints of the object it repeats without indexing it as a duplicate', () => {
+		const root: Record<string, unknown> = { id: 'root', type: 'note', slots: { children: [] } }
+		;(root.slots as { children: unknown[] }).children.push(root)
+		const blueprint = system.createBlueprint(root)
+		const repeat = blueprint.getChildren(blueprint.root)[0]!
+
+		expect(repeat)
+			.toMatchObject({ resolved: false, id: 'root', type: 'note' })
+		expect(blueprint.getWidget('root'))
+			.toBe(blueprint.root)
+		expect(codes(blueprint))
+			.not
+			.toContain('duplicate-widget-id')
 	})
 })
 
