@@ -22,51 +22,6 @@ interface WidgetVueRegistryDefects {
 	readonly invalidTypes: readonly string[]
 }
 
-// Named so stack traces and `constructor.name` keep reading `WidgetVueIntegrationError`.
-const WidgetVueIntegrationErrorImpl = class WidgetVueIntegrationError extends Error {
-	override readonly name = 'WidgetVueIntegrationError'
-	readonly missingTypes: readonly string[] | null
-	readonly unknownTypes: readonly string[] | null
-	readonly duplicateTypes: readonly string[] | null
-	readonly invalidTypes: readonly string[] | null
-
-	constructor(
-		readonly code: WidgetVueIntegrationErrorCode,
-		message: string,
-		defects?: WidgetVueRegistryDefects,
-	) {
-		super(message)
-		this.missingTypes = defects === undefined ? null : Object.freeze([...defects.missingTypes])
-		this.unknownTypes = defects === undefined ? null : Object.freeze([...defects.unknownTypes])
-		this.duplicateTypes = defects === undefined ? null : Object.freeze([...defects.duplicateTypes])
-		this.invalidTypes = defects === undefined ? null : Object.freeze([...defects.invalidTypes])
-	}
-}
-
-interface WidgetVueIntegrationErrorBase extends Error {
-	readonly name: 'WidgetVueIntegrationError'
-}
-
-/** The `invalid-renderer-registry` member of {@link WidgetVueIntegrationError}: the defect lists are non-null. */
-interface WidgetVueRegistryIntegrationError extends WidgetVueIntegrationErrorBase, WidgetVueRegistryDefects {
-	readonly code: 'invalid-renderer-registry'
-}
-
-/** Every other member of {@link WidgetVueIntegrationError}: the defect lists are `null`. */
-interface WidgetVueUsageIntegrationError extends WidgetVueIntegrationErrorBase {
-	readonly code: Exclude<WidgetVueIntegrationErrorCode, 'invalid-renderer-registry'>
-	readonly missingTypes: null
-	readonly unknownTypes: null
-	readonly duplicateTypes: null
-	readonly invalidTypes: null
-}
-
-/**
- * An instance is a union discriminated by `code`: after `error.code === 'invalid-renderer-registry'`
- * the registry defect lists are typed as `readonly string[]` rather than `readonly string[] | null`.
- */
-export type WidgetVueIntegrationError = WidgetVueRegistryIntegrationError | WidgetVueUsageIntegrationError
-
 /**
  * Programmer/configuration exception surface.
  *
@@ -95,16 +50,29 @@ export type WidgetVueIntegrationError = WidgetVueRegistryIntegrationError | Widg
  *   widget's exact plugin.
  * - `readonly-projection-write`: a Property or Diagnostics ref was written.
  *
- * `missingTypes`, `unknownTypes`, `duplicateTypes` and `invalidTypes` are `null` for every other code. States made
+ * `missingTypes`, `unknownTypes`, `duplicateTypes` and `invalidTypes` are `null` for every other code (the
+ * lists are typed `readonly string[] | null`; handle `null` even after checking `code`). States made
  * impossible by exact-plugin, registry and System-identity validation are internal invariants and
  * throw a plain `Error`, not this class.
  *
  * This error never appears in any `getDiagnostics()` / `subscribeDiagnostics()` snapshot.
  */
-// The exported value and type deliberately share one name, like a class, so `instanceof` narrows to the union.
-// eslint-disable-next-line ts/no-redeclare
-export const WidgetVueIntegrationError: {
-	new (code: 'invalid-renderer-registry', message: string, defects: WidgetVueRegistryDefects): WidgetVueRegistryIntegrationError
-	new (code: Exclude<WidgetVueIntegrationErrorCode, 'invalid-renderer-registry'>, message: string): WidgetVueUsageIntegrationError
-	readonly prototype: WidgetVueIntegrationError
-} = WidgetVueIntegrationErrorImpl as unknown as typeof WidgetVueIntegrationError
+export class WidgetVueIntegrationError extends Error {
+	override readonly name: string = 'WidgetVueIntegrationError'
+	readonly missingTypes: readonly string[] | null
+	readonly unknownTypes: readonly string[] | null
+	readonly duplicateTypes: readonly string[] | null
+	readonly invalidTypes: readonly string[] | null
+
+	constructor(
+		readonly code: WidgetVueIntegrationErrorCode,
+		message: string,
+		defects?: WidgetVueRegistryDefects,
+	) {
+		super(message)
+		this.missingTypes = defects === undefined ? null : Object.freeze([...defects.missingTypes])
+		this.unknownTypes = defects === undefined ? null : Object.freeze([...defects.unknownTypes])
+		this.duplicateTypes = defects === undefined ? null : Object.freeze([...defects.duplicateTypes])
+		this.invalidTypes = defects === undefined ? null : Object.freeze([...defects.invalidTypes])
+	}
+}

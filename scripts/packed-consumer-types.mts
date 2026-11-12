@@ -128,10 +128,10 @@ type InternalTestFixture = typeof import('@deviltea/widget-inspector/test-fixtur
 const unreachableBoundaryWitness: [RootEntry?, InternalGeometry?, InternalProjection?, InternalValidation?, InternalOverlay?, InternalTestFixture?] | undefined = undefined
 void unreachableBoundaryWitness
 
-// The registry error detail narrows by `code`: the defect lists are non-null arrays after the check.
+// The registry defect lists are `readonly string[] | null`: non-null exactly for `invalid-renderer-registry`.
 export function readRegistryDefects(error: WidgetVueIntegrationError): number {
 	if (error.code === 'invalid-renderer-registry')
-		return error.missingTypes.length + error.unknownTypes.length + error.duplicateTypes.length + error.invalidTypes.length
+		return (error.missingTypes?.length ?? 0) + (error.unknownTypes?.length ?? 0) + (error.duplicateTypes?.length ?? 0) + (error.invalidTypes?.length ?? 0)
 	return 0
 }
 

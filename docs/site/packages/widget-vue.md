@@ -426,8 +426,11 @@ code union is exported as the type `WidgetVueIntegrationErrorCode`.
 first-registration order. They are frozen arrays for this code (possibly empty)
 and `null` for every other code. The other codes carry no extra fields.
 
-The error type is a union discriminated by `code`, so after checking `code` the
-defect lists are typed as `readonly string[]`, not `readonly string[] | null`:
+`WidgetVueIntegrationError` is an ordinary exported class extending `Error`
+(`instanceof` works and it can be subclassed). The four lists are always typed
+`readonly string[] | null`; they are non-null exactly when `code` is
+`invalid-renderer-registry`, but the type does not narrow by `code`, so handle
+`null` explicitly:
 
 ```ts
 import { createWidgetVueRenderer, WidgetVueIntegrationError } from '@deviltea/widget-vue'
@@ -438,7 +441,10 @@ try {
 catch (error) {
 	if (error instanceof WidgetVueIntegrationError
 		&& error.code === 'invalid-renderer-registry') {
-		console.error(error.missingTypes.join(', '), error.invalidTypes.length)
+		console.error(
+			(error.missingTypes ?? []).join(', '),
+			error.invalidTypes?.length ?? 0,
+		)
 	}
 }
 ```

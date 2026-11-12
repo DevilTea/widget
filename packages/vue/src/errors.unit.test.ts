@@ -188,22 +188,20 @@ describe('widgetVueIntegrationError codes', () => {
 				.toEqual([])
 		})
 
-		it('narrows the registry defect lists to non-null arrays once `code` is checked', () => {
+		it('types the registry defect lists as nullable and non-null exactly for invalid-renderer-registry', () => {
 			const error = registryError(() => {})
 
-			if (error.code === 'invalid-renderer-registry') {
-				expectTypeOf(error.missingTypes)
-					.toEqualTypeOf<readonly string[]>()
-				expectTypeOf(error.invalidTypes)
-					.toEqualTypeOf<readonly string[]>()
-				expect(error.missingTypes.length)
-					.toBeGreaterThan(0)
-			}
-			else {
-				expectTypeOf(error.missingTypes)
-					.toEqualTypeOf<null>()
-				expect.unreachable()
-			}
+			expectTypeOf(error.missingTypes)
+				.toEqualTypeOf<readonly string[] | null>()
+			expectTypeOf(error.invalidTypes)
+				.toEqualTypeOf<readonly string[] | null>()
+			expect(error.code)
+				.toBe('invalid-renderer-registry')
+			expect(error.missingTypes)
+				.not
+				.toBeNull()
+			expect(error.missingTypes?.length)
+				.toBeGreaterThan(0)
 		})
 
 		it('exposes frozen arrays, including empty ones', () => {
@@ -226,6 +224,70 @@ describe('widgetVueIntegrationError codes', () => {
 				.toBe('WidgetVueIntegrationError')
 			expect(error.constructor.name)
 				.toBe('WidgetVueIntegrationError')
+		})
+	})
+
+	describe('class identity', () => {
+		it('is an ordinary class: instanceof Error and the exported class, with a stable constructor name', () => {
+			const error = new WidgetVueIntegrationError('invalid-runtime', 'boom')
+
+			expect(error)
+				.toBeInstanceOf(Error)
+			expect(error)
+				.toBeInstanceOf(WidgetVueIntegrationError)
+			expect(error.constructor)
+				.toBe(WidgetVueIntegrationError)
+			expect(WidgetVueIntegrationError.name)
+				.toBe('WidgetVueIntegrationError')
+			expect(error.constructor.name)
+				.toBe('WidgetVueIntegrationError')
+			expect(error.name)
+				.toBe('WidgetVueIntegrationError')
+			expect(Object.getPrototypeOf(WidgetVueIntegrationError))
+				.toBe(Error)
+			expect(error.message)
+				.toBe('boom')
+			expect(error.code)
+				.toBe('invalid-runtime')
+			expectNullRegistryFields(error)
+		})
+
+		it('can be subclassed, and the subclass keeps instanceof and its own name', () => {
+			class MyError extends WidgetVueIntegrationError {
+				override readonly name = 'MyError'
+			}
+
+			const error = new MyError('unknown-widget', 'nope')
+
+			expect(error)
+				.toBeInstanceOf(MyError)
+			expect(error)
+				.toBeInstanceOf(WidgetVueIntegrationError)
+			expect(error)
+				.toBeInstanceOf(Error)
+			expect(error.name)
+				.toBe('MyError')
+			expect(error.constructor.name)
+				.toBe('MyError')
+			expect(error.code)
+				.toBe('unknown-widget')
+			expectNullRegistryFields(error)
+		})
+
+		it('freezes copies of the defect lists passed for invalid-renderer-registry', () => {
+			const missing = ['A']
+			const error = new WidgetVueIntegrationError('invalid-renderer-registry', 'bad', {
+				missingTypes: missing,
+				unknownTypes: [],
+				duplicateTypes: [],
+				invalidTypes: [],
+			})
+			missing.push('B')
+
+			expect(error.missingTypes)
+				.toEqual(['A'])
+			expect(Object.isFrozen(error.missingTypes))
+				.toBe(true)
 		})
 	})
 
