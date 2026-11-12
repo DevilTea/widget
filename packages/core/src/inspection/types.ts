@@ -266,7 +266,7 @@ export type RuntimePropertyInspectionSnapshot<T>
 	= | { readonly status: 'never-evaluated' }
 		| {
 			readonly status: 'completed'
-			readonly result: ExecutionResult<T | null, RuntimePropertyDiagnostic>
+			readonly result: ExecutionResult<T, RuntimePropertyDiagnostic>
 		}
 
 export interface RuntimePropertyInspection<T> extends InspectionObservable<RuntimePropertyInspectionSnapshot<T>> {}
