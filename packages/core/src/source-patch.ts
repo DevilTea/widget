@@ -1,5 +1,6 @@
+import type { DiagnosticPath, JsonCompatibilityReason } from './diagnostic'
 import type { JsonValue } from './json'
-import { isJsonValue, jsonEqual, sameValueZero } from './json'
+import { inspectJsonValue, jsonEqual, sameValueZero } from './json'
 
 export type SourcePath = readonly (string | number)[] | string
 
@@ -20,12 +21,14 @@ export type SourcePatch = readonly SourcePatchOperation[]
 
 /**
  * Operation failure codes. `invalid-array-index` covers any non-canonical-index segment on an Array
- * parent (`'length'`, `'foo'`, `'01'`, structured `'-'`) in both path forms. `json-incompatible-value`
- * is an `add`/`replace`/`test` operand outside Core's JSON domain; `source-access-failed` concerns
- * unsafe access to source material only.
+ * parent (`'length'`, `'foo'`, `'01'`, structured `'-'`) in both path forms. `invalid-operation` is a
+ * patch that is not an Array, or an operation that is not an object or has an unknown `op`.
+ * `json-incompatible-value` is an `add`/`replace`/`test` operand outside Core's JSON domain;
+ * `source-access-failed` concerns unsafe access to source material only.
  */
 export type SourcePatchOperationFailureCode
 	= | 'invalid-path'
+		| 'invalid-operation'
 		| 'path-not-found'
 		| 'path-not-traversable'
 		| 'invalid-array-index'
@@ -38,6 +41,13 @@ export interface SourcePatchOperationFailure {
 	readonly code: SourcePatchOperationFailureCode
 	readonly operationIndex: number
 	readonly message: string
+	/**
+	 * Only for `json-incompatible-value`: where in the operand (`value`) the first offending part is, relative
+	 * to the operand root (`[]` for the operand itself), like a Blueprint diagnostic of the same code.
+	 */
+	readonly path?: DiagnosticPath
+	/** Only for `json-incompatible-value`: why that part is outside the JSON domain, when known. */
+	readonly reason?: JsonCompatibilityReason
 }
 
 interface ParsedPath {
@@ -49,12 +59,15 @@ interface ParsedPath {
 interface PatchError {
 	readonly code: SourcePatchOperationFailureCode
 	readonly message: string
+	readonly path?: DiagnosticPath
+	readonly reason?: JsonCompatibilityReason
 }
 
 type PatchResult<T> = { readonly ok: true, readonly value: T } | { readonly ok: false, readonly error: PatchError }
 
 const PATCH_ERROR_MESSAGES: Record<SourcePatchOperationFailureCode, string> = {
 	'invalid-path': 'The SourcePath is malformed.',
+	'invalid-operation': 'The SourcePatch operation is malformed.',
 	'path-not-found': 'The SourcePath does not identify an existing location.',
 	'path-not-traversable': 'The SourcePath passes through a non-traversable value.',
 	'invalid-array-index': 'The SourcePath contains an invalid Array index.',
@@ -446,7 +459,9 @@ function structurallyEqual(left: unknown, right: unknown): boolean {
 		matched.set(currentLeft, currentRight)
 
 		try {
-			if (Object.getPrototypeOf(currentLeft) !== Object.getPrototypeOf(currentRight))
+			// Compare JSON-domain kinds, never prototypes: a plain object and a null-prototype object with the
+			// same members are the same JSON value (`jsonEqual`, and so `test`, already agree).
+			if (leftKind.value !== rightKind.value)
 				return false
 
 			const leftKeys = Reflect.ownKeys(currentLeft)
@@ -497,8 +512,33 @@ function samePath(left: readonly (string | number)[], right: readonly (string | 
 }
 
 function operationError(index: number, error: PatchError): SourcePatchOperationFailure {
-	return Object.freeze({ code: error.code, operationIndex: index, message: error.message })
+	return Object.freeze({
+		code: error.code,
+		operationIndex: index,
+		message: error.message,
+		...(error.path === undefined ? {} : { path: error.path }),
+		...(error.reason === undefined ? {} : { reason: error.reason }),
+	})
 }
+
+/**
+ * `null` when `value` is inside Core's JSON domain; otherwise the failure locating the first offending part
+ * of the operand (the same facts the Blueprint reports for the same code).
+ */
+function operandFailure(value: unknown): PatchError | null {
+	const inspection = inspectJsonValue(value)
+	if (inspection.compatible)
+		return null
+	const first = inspection.diagnostics[0]!
+	return {
+		code: 'json-incompatible-value',
+		message: PATCH_ERROR_MESSAGES['json-incompatible-value'],
+		path: Object.freeze([...first.path]),
+		...(first.code === 'json-incompatible-value' ? { reason: first.reason } : {}),
+	}
+}
+
+const PATCH_OPERATIONS: ReadonlySet<unknown> = new Set(['add', 'remove', 'replace', 'move', 'copy', 'test'])
 
 interface InternalAppliedSourcePatch {
 	readonly changed: boolean
@@ -511,13 +551,13 @@ type InternalApplySourcePatchResult
 
 export function applySourcePatch(source: unknown, patch: SourcePatch): InternalApplySourcePatchResult {
 	if (!Array.isArray(patch))
-		return { ok: false, failure: operationError(0, { code: 'invalid-path', message: 'SourcePatch must be an array.' }) }
+		return { ok: false, failure: operationError(0, { code: 'invalid-operation', message: 'SourcePatch must be an array.' }) }
 
 	let working = source
 	for (let operationIndex = 0; operationIndex < patch.length; operationIndex++) {
 		const operation = patch[operationIndex] as unknown
-		if (typeof operation !== 'object' || operation === null || !('op' in operation))
-			return { ok: false, failure: operationError(operationIndex, { code: 'invalid-path', message: 'SourcePatch operation is malformed.' }) }
+		if (typeof operation !== 'object' || operation === null || !('op' in operation) || !PATCH_OPERATIONS.has((operation as { op?: unknown }).op))
+			return { ok: false, failure: operationError(operationIndex, { code: 'invalid-operation', message: 'SourcePatch operation is malformed.' }) }
 
 		const op = (operation as { op?: unknown }).op
 		const pathResult = parsePath((operation as { path?: unknown }).path)
@@ -530,8 +570,9 @@ export function applySourcePatch(source: unknown, patch: SourcePatch): InternalA
 			case 'add':
 			case 'replace': {
 				const value = (operation as { value?: unknown }).value
-				if (!isJsonValue(value))
-					return { ok: false, failure: operationError(operationIndex, { code: 'json-incompatible-value', message: PATCH_ERROR_MESSAGES['json-incompatible-value'] }) }
+				const operandProblem = operandFailure(value)
+				if (operandProblem !== null)
+					return { ok: false, failure: operationError(operationIndex, operandProblem) }
 				const copied = copyValue(value, true)
 				if (!copied.ok)
 					return { ok: false, failure: operationError(operationIndex, copied.error) }
@@ -549,8 +590,9 @@ export function applySourcePatch(source: unknown, patch: SourcePatch): InternalA
 				break
 			case 'test': {
 				const value = (operation as { value?: unknown }).value
-				if (!isJsonValue(value))
-					return { ok: false, failure: operationError(operationIndex, { code: 'json-incompatible-value', message: PATCH_ERROR_MESSAGES['json-incompatible-value'] }) }
+				const operandProblem = operandFailure(value)
+				if (operandProblem !== null)
+					return { ok: false, failure: operationError(operationIndex, operandProblem) }
 				const actual = readAt(working, path)
 				if (!actual.ok)
 					return { ok: false, failure: operationError(operationIndex, actual.error) }
@@ -596,7 +638,7 @@ export function applySourcePatch(source: unknown, patch: SourcePatch): InternalA
 				break
 			}
 			default:
-				return { ok: false, failure: operationError(operationIndex, { code: 'invalid-path', message: 'SourcePatch operation is malformed.' }) }
+				return { ok: false, failure: operationError(operationIndex, { code: 'invalid-operation', message: 'SourcePatch operation is malformed.' }) }
 		}
 
 		if (!next.ok)

@@ -134,6 +134,8 @@ export type {
 	WidgetSystemRuntime,
 } from './internal/contract'
 
+export { isJsonValue } from './json'
+
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from './json'
 
 export { createWidgetPlugin, createWidgetValueContract, WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from './plugin'
