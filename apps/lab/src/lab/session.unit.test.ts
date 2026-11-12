@@ -70,6 +70,23 @@ describe('labSession', () => {
 			.toBe(beforePreview)
 	})
 
+	it('reports a too-deeply-nested JSON draft as a json-incompatible-value patch failure with operand path and reason', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		let deep: unknown = 0
+		for (let level = 0; level < 300; level++)
+			deep = [deep]
+		session.setDraftSourceText(JSON.stringify(deep))
+
+		const outcome = await session.apply()
+
+		expect(outcome)
+			.toMatchObject({ status: 'patch-error', failure: { code: 'json-incompatible-value', reason: 'max-depth-exceeded' } })
+		expect(session.documentState.revision)
+			.toBe(0)
+		expect(session.documentTrace.at(-1))
+			.toMatchObject({ kind: 'patch-error', revision: 0, code: 'json-incompatible-value', reason: 'max-depth-exceeded', path: expect.any(Array) })
+	})
+
 	it('keeps the observation trace bounded and drops the oldest entries', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 

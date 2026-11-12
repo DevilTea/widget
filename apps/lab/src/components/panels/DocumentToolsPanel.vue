@@ -9,7 +9,7 @@ import { separateWidgetSource } from '@deviltea/widget-core'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
-import { formatSeparatedSourceLocation } from '../../lib/diagnostic-format'
+import { formatDiagnosticPath, formatSeparatedSourceLocation } from '../../lib/diagnostic-format'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
@@ -232,7 +232,11 @@ function runConflictDemo(): void {
 							{{ i18n.t('JSON draft parse error observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }}
 						</template>
 						<template v-else-if="event.kind === 'patch-error'">
-							{{ i18n.t('SourcePatch failure observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }} · <code>{{ event.code }}</code>
+							{{ i18n.t('SourcePatch failure observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }} · <code>{{ event.code }}</code><template v-if="event.reason !== undefined">
+								· <code>{{ event.reason }}</code>
+							</template><template v-if="formatDiagnosticPath(event.path) !== null">
+								· <code>{{ formatDiagnosticPath(event.path) }}</code>
+							</template>
 						</template>
 						<template v-else>
 							{{ i18n.t('Conflict demonstration observed') }} · {{ i18n.t('expectedRevision') }} <code>{{ event.expectedRevision }}</code> · {{ i18n.t('actualRevision') }} <code>{{ event.actualRevision }}</code> · <code>{{ event.failureCode ?? i18n.t('accepted') }}</code>
