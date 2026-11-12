@@ -43,6 +43,8 @@ export interface WorkingNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPlu
 	readonly source: unknown
 	readonly rawSlots: CompiledRawSlot[]
 	location: WidgetLocation<Plugins>
+	/** Structured `SourcePath` (array form) of this node's authored object, computed while recovering. */
+	readonly sourcePath: readonly (string | number)[]
 	resolved: boolean
 	id: WidgetId | null
 	type: string | null
@@ -175,12 +177,18 @@ function buildNode(
 			? { type: 'slot', parent: parentPublicNode as ResolvedBlueprintWidgetNode, slot: placement.slot, index: placement.index }
 			: { type: 'raw-slot', parent: parentPublicNode!, slot: placement.slot, index: placement.index })
 
+	// The path is a product of the recovered topology, never found by searching the source afterwards.
+	const sourcePath: readonly (string | number)[] = Object.freeze(placement.kind === 'root'
+		? []
+		: [...ctx.nodes[parentNodeId!]!.sourcePath, 'slots', placement.slot, placement.index])
+
 	const working: WorkingNode = {
 		nodeId,
 		parentNodeId,
 		source: rawValue,
 		rawSlots: [],
 		location,
+		sourcePath,
 		resolved: false,
 		id: null,
 		type: null,

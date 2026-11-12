@@ -100,6 +100,7 @@ export type {
 	BlueprintNodeConfigFields,
 	BlueprintSemanticSlots,
 	BlueprintSemanticSlotsView,
+	BlueprintSourcePath,
 	BlueprintWidgetNode,
 	BlueprintWidgetNodeBase,
 	BlueprintWidgetNodeView,

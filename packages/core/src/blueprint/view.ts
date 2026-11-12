@@ -20,6 +20,7 @@
 
 import type {
 	BlueprintCompileView,
+	BlueprintSourcePath,
 	BlueprintWidgetNode,
 	BlueprintWidgetNodeView,
 	InternalNodeId,
@@ -34,7 +35,9 @@ import { readWidgetPluginDefinition } from '../plugin'
 const EMPTY_CHILDREN: readonly BlueprintWidgetNode[] = Object.freeze([])
 const EMPTY_FACADE_CHILDREN: readonly BlueprintWidgetNodeView[] = Object.freeze([])
 
-export interface Navigator<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends BlueprintCompileView<Plugins> {}
+export interface Navigator<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends BlueprintCompileView<Plugins> {
+	readonly getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
+}
 
 /**
  * The real navigator, over full public nodes. Not exposed to plugin callbacks directly — only used to
@@ -71,6 +74,13 @@ export function createNavigator<Plugins extends AnyWidgetPluginTuple>(
 			if (nodeId === undefined)
 				return null
 			return nodes[nodeId]!.location as WidgetLocation<Plugins>
+		},
+
+		getSourcePath(node) {
+			const nodeId = nodeIdByPublicNode.get(node)
+			if (nodeId === undefined)
+				return null
+			return nodes[nodeId]!.sourcePath
 		},
 
 		getChildren(node) {

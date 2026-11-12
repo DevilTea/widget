@@ -10,6 +10,7 @@
 
 import type { BlueprintDiagnostic, BlueprintNodeDiagnostic } from '../diagnostic'
 import type {
+	BlueprintSourcePath,
 	BlueprintWidgetNode,
 	CompiledBlueprint,
 	CompiledWidgetNode,
@@ -67,6 +68,7 @@ function buildCompiledNodes(nodes: readonly WorkingNode[], diagnosticsByNode: Re
 			source: node.source,
 			parentNodeId: node.parentNodeId,
 			location: node.location,
+			sourcePath: node.sourcePath,
 			rawSlots: Object.freeze(node.rawSlots),
 			diagnostics,
 		}
@@ -159,6 +161,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 			getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 			getParent: (node: BlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 			getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+			getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 			getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 			getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 		}
@@ -172,6 +175,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 			getWidget: validNavigator.getWidget,
 			getParent: validNavigator.getParent,
 			getLocation: validNavigator.getLocation,
+			getSourcePath: validNavigator.getSourcePath,
 			getChildren: validNavigator.getChildren,
 			getChildrenAt: validNavigator.getChildrenAt,
 			diagnostics: EMPTY_DIAGNOSTICS,
@@ -190,6 +194,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 		getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins> | null
 		getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins> | null
 		getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins> | null
+		getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 		getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins>[]
 		getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins>[]
 	}
@@ -200,6 +205,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 			getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins, JsonValue> | null
 			getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins, JsonValue> | null
 			getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+			getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 			getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins, JsonValue>[]
 			getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins, JsonValue>[]
 		}
@@ -212,6 +218,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 			getWidget: jsonInvalidNavigator.getWidget,
 			getParent: jsonInvalidNavigator.getParent,
 			getLocation: jsonInvalidNavigator.getLocation,
+			getSourcePath: jsonInvalidNavigator.getSourcePath,
 			getChildren: jsonInvalidNavigator.getChildren,
 			getChildrenAt: jsonInvalidNavigator.getChildrenAt,
 			diagnostics: finalDiagnostics,
@@ -230,6 +237,7 @@ export function compileBlueprint<Plugins extends AnyWidgetPluginTuple>(
 		getWidget: invalidNavigator.getWidget,
 		getParent: invalidNavigator.getParent,
 		getLocation: invalidNavigator.getLocation,
+		getSourcePath: invalidNavigator.getSourcePath,
 		getChildren: invalidNavigator.getChildren,
 		getChildrenAt: invalidNavigator.getChildrenAt,
 		diagnostics: finalDiagnostics,

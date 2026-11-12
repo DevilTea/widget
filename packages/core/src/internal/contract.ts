@@ -61,6 +61,13 @@ import type {
 
 export type WidgetSystemBlueprintStatus = 'valid' | 'invalid'
 
+/**
+ * The structured (array form) `SourcePath` of one Blueprint node's authored object within `blueprint.source`,
+ * e.g. `[]` for the root and `['slots', 'children', 0]` for its first child. Used verbatim as a `SourcePatch`
+ * path against the same source it addresses exactly that node.
+ */
+export type BlueprintSourcePath = readonly (string | number)[]
+
 export interface BlueprintWidgetNodeBase<
 	Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple,
 	Source = unknown,
@@ -342,6 +349,7 @@ export interface ValidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple
 	getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 	getParent: (node: BlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 	getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+	getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 	getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 	getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 	readonly diagnostics: readonly never[]
@@ -355,6 +363,7 @@ export interface InvalidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTup
 	getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins, Source> | null
 	getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins, Source> | null
 	getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, Source> | null
+	getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 	getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins, Source>[]
 	getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins, Source>[]
 	readonly diagnostics: readonly BlueprintDiagnostic<Plugins>[]
@@ -604,6 +613,7 @@ export interface CompiledWidgetNodeBase<Plugins extends AnyWidgetPluginTuple = A
 	readonly source: unknown
 	readonly parentNodeId: InternalNodeId | null
 	readonly location: WidgetLocation<Plugins>
+	readonly sourcePath: BlueprintSourcePath
 	readonly rawSlots: readonly CompiledRawSlot[]
 	readonly diagnostics: readonly BlueprintNodeDiagnostic<Plugins>[]
 }
