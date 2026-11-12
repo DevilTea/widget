@@ -22,7 +22,8 @@ interface WidgetVueRegistryDefects {
 	readonly invalidTypes: readonly string[]
 }
 
-class WidgetVueIntegrationErrorImpl extends Error {
+// Named so stack traces and `constructor.name` keep reading `WidgetVueIntegrationError`.
+const WidgetVueIntegrationErrorImpl = class WidgetVueIntegrationError extends Error {
 	override readonly name = 'WidgetVueIntegrationError'
 	readonly missingTypes: readonly string[] | null
 	readonly unknownTypes: readonly string[] | null

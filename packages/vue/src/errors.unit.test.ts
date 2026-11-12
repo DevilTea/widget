@@ -224,6 +224,8 @@ describe('widgetVueIntegrationError codes', () => {
 
 			expect(error.name)
 				.toBe('WidgetVueIntegrationError')
+			expect(error.constructor.name)
+				.toBe('WidgetVueIntegrationError')
 		})
 	})
 
