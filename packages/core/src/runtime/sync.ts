@@ -1,7 +1,7 @@
 /**
  * Synchronous semantic-boundary guard.
  *
- * Normative source: diagnostic #10 amendment "synchronous core boundary and future async seams" /
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendment "synchronous core boundary and future async seams" /
  * consolidated handoff §16: a semantic callback returning a thenable is an implementation-contract
  * violation, not a Blueprint/Runtime Diagnostic and not an `ExecutionResult.failure`, so it throws.
  *

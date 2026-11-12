@@ -1,7 +1,7 @@
 /**
  * Public Blueprint/Runtime surface plus the framework-internal Blueprint -> Runtime data model.
  *
- * Normative source: diagnostic #10 checkpoint B/C/E/F, amendments "Blueprint recovery edge-case contract",
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 checkpoint B/C/E/F, amendments "Blueprint recovery edge-case contract",
  * "dependency resolution and compiled-edge invariants", "simplify method graph semantics",
  * "disposed Runtime exact error surface", "overrideStateDefaults is best-effort" and consolidated
  * handoff §6/§9/§11/§13/§14/§15/§19/§20.

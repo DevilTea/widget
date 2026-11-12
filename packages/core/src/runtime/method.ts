@@ -15,7 +15,7 @@
  * documents the mechanism). The still-open deferral level keeps this `endBatch()` from reaching depth `0`,
  * and the flush happens once the outermost enclosing read/write call is leaving instead.
  *
- * Normative source: diagnostic #10 consolidated handoff §15, amendment "RuntimeMethod invocation as
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §15, amendment "RuntimeMethod invocation as
  * alien-signals batch boundary".
  */
 

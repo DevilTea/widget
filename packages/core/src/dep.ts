@@ -1,7 +1,7 @@
 /**
  * Dependency declaration grammar and registered/executed dependency type mapping.
  *
- * Normative source: diagnostic #10 checkpoint D, amendments "RegisteredDeps recursive shape + conservative
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 checkpoint D, amendments "RegisteredDeps recursive shape + conservative
  * optional typing", "dependency fluent grammar locked", "dependency resolution and compiled-edge
  * invariants" and consolidated handoff §8.
  */

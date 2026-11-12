@@ -6,7 +6,7 @@
  * semantic execution, zero own SCC/DFS analysis and never reconstructs a dependency's status from
  * Diagnostics — adversarial review gate (1)/(3) of diagnostic #10's inspection amendments.
  *
- * Normative source: diagnostic #10 amendments "inspection exact API v1 (part 1: Blueprint inspection)" and
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendments "inspection exact API v1 (part 1: Blueprint inspection)" and
  * the earlier locked inspection amendments it composes with.
  */
 

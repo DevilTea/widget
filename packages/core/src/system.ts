@@ -1,7 +1,7 @@
 /**
  * Immutable registered plugin universe.
  *
- * Normative source: diagnostic #10 amendment "reconciliation audit" (WidgetSystem registration details)
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendment "reconciliation audit" (WidgetSystem registration details)
  * and consolidated handoff §5.
  */
 

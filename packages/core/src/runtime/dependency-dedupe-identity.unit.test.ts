@@ -2,7 +2,7 @@
  * Regression coverage for PR #12 review finding 3774401609 (`runtime/deps.ts` dedupe `scope` leaking
  * `message` into machine identity).
  *
- * Normative source: diagnostic #10 — "`message` is human-readable only, never a machine protocol." Before
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 — "`message` is human-readable only, never a machine protocol." Before
  * this fix, `dependencyDedupeDescriptor()` built its collector `scope` as `` `${leafId}|${message}` ``,
  * so the dependency-diagnostic dedupe mechanism keyed on message text alongside the leaf identity — a
  * machine-logic dependency on human-readable text.

@@ -5,7 +5,7 @@
  * keyed-chain typestate (`state` / `properties` / `methods`), `.done()` gating, and the PromiseLike /
  * MaybePromise rejection rules on `WidgetInterfacesViolationOf`, `compute` and `execute`.
  *
- * Normative source: diagnostic #10 COMMENT 26 §1, COMMENT 0 (checkpoint A), COMMENT 16 (synchronous
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 COMMENT 26 §1, COMMENT 0 (checkpoint A), COMMENT 16 (synchronous
  * boundary), COMMENT 22 (`WidgetMemberKey` domain), COMMENT 23 (builder completion typestate).
  *
  * Positive assertions use `expectTypeOf`; negative assertions use `@ts-expect-error` with a one-line

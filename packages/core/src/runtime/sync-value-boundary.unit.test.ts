@@ -11,7 +11,7 @@
  * failure. A candidate *rejected* by `state.validate` stays an ordinary validation failure even when it
  * happens to be thenable.
  *
- * Normative source: diagnostic #10 amendment "synchronous core boundary and future async seams" (COMMENT
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendment "synchronous core boundary and future async seams" (COMMENT
  * 16) — "top-level semantic execution values must not be PromiseLike ... state values" — and
  * consolidated handoff §16.
  */

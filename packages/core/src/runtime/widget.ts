@@ -16,7 +16,7 @@
  * bracket-assigning a `"__proto__"` key into an ordinary object mutates its prototype instead of
  * creating an own member.
  *
- * Normative source: diagnostic #10 consolidated handoff §20, amendment "builder/member-key" (special
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §20, amendment "builder/member-key" (special
  * JavaScript names stay safe via `Map`/null-prototype storage rather than ordinary object semantics),
  * amendment "RuntimeWidget aggregate diagnostic surface".
  */

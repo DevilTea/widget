@@ -1,7 +1,7 @@
 /**
  * Core identity, capability and member-key domain types.
  *
- * Normative source: diagnostic #10 (consolidated handoff §2, amendments
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 (consolidated handoff §2, amendments
  * "WidgetMemberKey domain" and "builder completion typestate and finite member-key universe").
  */
 

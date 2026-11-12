@@ -10,7 +10,7 @@
  * actual frozen object exposing only the `ValidBlueprintView` surface, so the restriction is a real
  * runtime boundary, not only a compile-time one.
  *
- * Normative source: diagnostic #10 consolidated handoff callback capability matrix ("Property/Method
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff callback capability matrix ("Property/Method
  * callbacks receive the valid read-only view; they do not receive Runtime/RuntimeWidget").
  */
 

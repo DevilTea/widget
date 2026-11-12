@@ -7,7 +7,7 @@
  * `received: undefined` *own property* on `source` — distinguishable, by key presence, from a wrapped
  * target-primitive failure, which never carries a `received` field at all.
  *
- * Normative source: diagnostic #10 consolidated handoff §12 ("a dependency refinement failure ... becomes a
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §12 ("a dependency refinement failure ... becomes a
  * consumer-local dependency Diagnostic carrying the rejected `received` value").
  */
 

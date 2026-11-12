@@ -10,7 +10,7 @@
  * signal update ever running. `EMPTY_DIAGNOSTICS` was already frozen; this closes the same gap for every
  * non-empty completed snapshot across State, Property and Method.
  *
- * Normative source: diagnostic #10 diagnostic-snapshot contract (consolidated handoff §16).
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 diagnostic-snapshot contract (consolidated handoff §16).
  */
 
 import { describe, expect, it } from 'vitest'

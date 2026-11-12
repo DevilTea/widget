@@ -1,7 +1,7 @@
 /**
  * Public type contract of the dedicated `@deviltea/widget-core/inspection` subpath.
  *
- * Normative source: diagnostic #10 amendments "Promote renderer-agnostic inspection support into core",
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendments "Promote renderer-agnostic inspection support into core",
  * "inspection identity may expose snapshot-local node IDs", "inspection is a readonly public subpath",
  * "readonly inspection subscription and disposal semantics", "inspection exact API v1 (part 1: Blueprint
  * inspection)" and "inspection exact API v1 (part 2: Runtime inspection, materialization, disposal,

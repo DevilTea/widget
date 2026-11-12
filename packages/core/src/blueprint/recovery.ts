@@ -2,7 +2,7 @@
  * Raw topology recovery, id/type/plugin identity, config validate+resolve and semantic slot
  * projection — compile pipeline steps 1-5 (consolidated handoff §10).
  *
- * Normative source: diagnostic #10 amendments "Blueprint recovery edge-case contract" (COMMENT 24) and
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendments "Blueprint recovery edge-case contract" (COMMENT 24) and
  * "Blueprint definition diagnostic paths and exact recovery cases" (COMMENT 25).
  *
  * Raw topology recovery and widget semantic resolution are separate concerns: an unresolved ancestor

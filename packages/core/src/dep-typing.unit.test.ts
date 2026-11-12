@@ -7,7 +7,7 @@
  * shape preservation and recursive readonly-ness, the conservative `MaybeOptional` nullability rule,
  * and `.validate()` refinement.
  *
- * Normative source: diagnostic #10 COMMENT 26 §1, COMMENT 9 (recursive shape + conservative optional
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 COMMENT 26 §1, COMMENT 9 (recursive shape + conservative optional
  * typing), COMMENT 10 (dependency fluent grammar locked), COMMENT 11 (resolution / compiled-edge
  * invariants).
  *
