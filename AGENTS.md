@@ -7,6 +7,8 @@ This repository owns the DevilTea Widget project. It publishes the renderer-agno
 Treat `@deviltea/widget-core`, `@deviltea/widget-inspector`, and `@deviltea/widget-vue` as independently releasable packages, but keep them in this repository because the Vue adapter, Inspector, and Lab intentionally integrate against the exact core workspace contract.
 `@deviltea/widget-inspector` is the single published Inspector boundary (accepted in Discussion #12 C5, replacing the former private `@deviltea/widget-devtools`). It is `0.x` experimental with a protocol-major guarantee only: while on `0.x` an npm minor release may break the TypeScript API, and cross-realm compatibility is governed by the protocol `major.minor`. `@deviltea/widget-core` is its peer dependency, and `@deviltea/widget-vue` never stamps DOM attributes.
 
+`@deviltea/widget-vue` and `@deviltea/widget-inspector` declare `@deviltea/widget-core` as `peerDependencies` with `workspace:^` (published as `^0.N.0`), with a workspace dev dependency for local work. Core identifies its own plugins, Blueprints and Runtimes by module-private brands, so an application must load exactly one Core instance: dependents, plugin libraries and renderer libraries must depend on Core as a peer and must never bundle it. All three packages declare `engines.node` `>=22.14.0` and `sideEffects: false`.
+
 
 The project was split from `DevilTea/deviltea-labs` after the initial `0.0.1` releases. Current long-lived Widget architecture is owned by `DevilTea/widget` Discussion #12 ("Widget: canonical design discussion"), which migrated the relevant historical `deviltea-labs` decision logs into this repository. Treat `deviltea-labs` as historical provenance only; do not open or record new Widget architecture decisions there.
 
@@ -29,6 +31,8 @@ pnpm check
 ## Releasing
 
 Releases are driven locally: `pnpm release <package> <release>` bumps the package and opens its release pull request (merge it yourself once the required checks pass), and `pnpm release:tag <package>` pushes the annotated tag after that pull request merges. Only the tag push triggers publishing, which happens exclusively in `publish.yml` via npm Trusted Publishing. Both commands push to `origin` and the second one publishes to npm, so never run them without an explicit instruction to release.
+
+Version policy: while the packages are `0.x`, a breaking change bumps the **minor** (`0.N.0`), never the patch, and a `^0.N.0` peer range accepts only that minor line. Pick the release type accordingly: the unreleased Core changes since `0.0.6` are breaking, so the next `@deviltea/widget-core` release must be `0.1.0`. Release order is Core first, then its dependents (`@deviltea/widget-vue`, `@deviltea/widget-inspector`), so a dependent's published peer range never points at a Core version that does not exist yet. A dependent that needs a newer Core minor gets its own release after Core's.
 
 The npm Trusted Publisher configuration must name repository `DevilTea/widget` and workflow `publish.yml` for every published package (`@deviltea/widget-core`, `@deviltea/widget-inspector`, `@deviltea/widget-vue`); releases from this repository depend on it. A `0.0.0` placeholder of `@deviltea/widget-inspector` is published manually only to enable Trusted Publishing; it is not a release, and real releases always go through `pnpm release`, `pnpm release:tag`, and `publish.yml`. See `docs/migration/release-cutover.md`.
 
