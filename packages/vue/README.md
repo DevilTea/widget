@@ -149,8 +149,12 @@ const { value: valueDiagnostics } = useStateDiagnostics()
   or subscribes the Runtime by itself — only the first `.value` read (or
   method call) does, and exactly one Runtime subscription is created per
   bridge member per `useWidget()` call, cleaned up when the owning component
-  unmounts. A keyed surface lists exactly the declared members through
-  `Object.keys`, spread, `in` and `toRefs()`, without subscribing anything.
+  unmounts. A keyed surface is an ordinary frozen object whose own enumerable
+  properties are exactly the declared members: `Object.keys`, spread and `in`
+  list them without subscribing anything, and assigning to a member or adding
+  a property throws. Members are already refs, so destructure the surface
+  (`const { count } = useState()`); `toRefs()` is not supported (it expects a
+  reactive object and logs a Vue dev warning).
 
 ### Slots
 

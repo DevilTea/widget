@@ -55,7 +55,7 @@ or to the widgets it hosts, never to this package.
 - The Runtime is the sole source of truth. Every value bridge is a `customRef` (or equivalent) with
   no authoritative mirrored cache and no optimistic local writes; Runtime subscriptions only ever
   `trigger()` Vue invalidation, they never carry a value payload the adapter caches.
-- Keyed surfaces (`createLazyKeyedSurface(members, materialize)`) reflect exactly the Runtime's declared members through `get`, `in`, `Object.keys`, spread and `toRefs`; listing keys materializes nothing. They are keyed by the Runtime's own member object, never by a trap that answers for every string.
+- Keyed surfaces (`createLazyKeyedSurface(members, materialize)`) reflect exactly the Runtime's declared members through `get`, `in`, `Object.keys` and spread; listing keys materializes nothing. A surface is an ordinary frozen null-prototype object with one lazy caching accessor per declared member, never a Proxy (Proxy invariants break `Object.freeze`/`preventExtensions`), and it is keyed by the Runtime's own member object. `toRefs()` is deliberately unsupported: members are already refs and destructuring the surface is the idiom.
 - Every `useXxx()` accessor and every member surface is lazy: obtaining a capability accessor must
   never read or subscribe the Runtime, and materializing a member wrapper must not either — only the
   first `.value` read (or, for methods, the first call) may touch the Runtime.
