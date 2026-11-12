@@ -16,10 +16,10 @@ import type {
 } from './diagnostic'
 import type {
 	BlueprintCompileView,
+	BlueprintRuntimeView,
 	BlueprintWidgetNodeView,
 	SelfBlueprintWidgetNode,
 	SelfBlueprintWidgetNodeView,
-	ValidBlueprintView,
 } from './internal/contract'
 import type {
 	HasWidgetCapability,
@@ -304,7 +304,7 @@ export type WidgetPropertyComputeContext<
 >
 	= & {
 		readonly widget: SelfBlueprintWidgetNode<Interfaces>
-		readonly blueprint: ValidBlueprintView
+		readonly blueprint: BlueprintRuntimeView
 		readonly deps: ToExecutedDeps<Deps, 'property'>
 	}
 	& DiagnosticCollector<RelativeValueDiagnosticInput>
@@ -326,7 +326,7 @@ export type WidgetMethodExecuteContext<
 	= & {
 		readonly args: WidgetMethodArgsOf<Interfaces, Name>
 		readonly widget: SelfBlueprintWidgetNode<Interfaces>
-		readonly blueprint: ValidBlueprintView
+		readonly blueprint: BlueprintRuntimeView
 		readonly deps: ToExecutedDeps<Deps, 'method'>
 	}
 	& DiagnosticCollector<RelativeValueDiagnosticInput>

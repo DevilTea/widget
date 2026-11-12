@@ -99,6 +99,7 @@ export type { ExecutionFailure, ExecutionResult } from './execution-result'
 export type {
 	BlueprintCompileView,
 	BlueprintNodeConfigFields,
+	BlueprintRuntimeView,
 	BlueprintSemanticSlots,
 	BlueprintSemanticSlotsView,
 	BlueprintSourcePath,
@@ -124,7 +125,6 @@ export type {
 	SelfBlueprintWidgetNode,
 	SelfBlueprintWidgetNodeView,
 	UnresolvedBlueprintWidgetNode,
-	ValidBlueprintView,
 	ValidWidgetSystemBlueprint,
 	WidgetLocation,
 	WidgetLocationView,

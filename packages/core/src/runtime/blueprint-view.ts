@@ -1,27 +1,27 @@
 /**
  * Restricted read-only Blueprint facade handed to Property/Method semantic callbacks as `ctx.blueprint`.
  *
- * `compute`/`execute` are typed against `ValidBlueprintView` (navigation only: `root`/`getWidget`/
+ * `compute`/`execute` are typed against `BlueprintRuntimeView` (navigation only: `root`/`getWidget`/
  * `getParent`/`getLocation`/`getChildren`/`getChildrenAt`). Handing them the full
  * `ValidWidgetSystemBlueprint` would leave only that static type between a callback and `system`,
  * `source`, `sourceJsonCompatible`, `status`, `diagnostics`, `recompile()` and `createRuntime()`: plain
  * JS / `any` could reach Runtime machinery and full-Blueprint capabilities the callback matrix
  * withholds, since Runtime interaction is meant to happen only through declared deps. This builds an
- * actual frozen object exposing only the `ValidBlueprintView` surface, so the restriction is a real
+ * actual frozen object exposing only the `BlueprintRuntimeView` surface, so the restriction is a real
  * runtime boundary, not only a compile-time one.
  *
  * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff callback capability matrix ("Property/Method
  * callbacks receive the valid read-only view; they do not receive Runtime/RuntimeWidget").
  */
 
-import type { ResolvedBlueprintWidgetNode, ValidBlueprintView, ValidWidgetSystemBlueprint } from '../internal/contract'
+import type { BlueprintRuntimeView, ResolvedBlueprintWidgetNode, ValidWidgetSystemBlueprint } from '../internal/contract'
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
 
 export function buildBlueprintView<Plugins extends AnyWidgetPluginTuple>(
 	blueprint: ValidWidgetSystemBlueprint<Plugins>,
-): ValidBlueprintView<Plugins> {
-	const view: ValidBlueprintView<Plugins> = {
+): BlueprintRuntimeView<Plugins> {
+	const view: BlueprintRuntimeView<Plugins> = {
 		root: blueprint.root,
 		getWidget: (id: WidgetId) => blueprint.getWidget(id),
 		getParent: (node: ResolvedBlueprintWidgetNode<Plugins>) => blueprint.getParent(node),

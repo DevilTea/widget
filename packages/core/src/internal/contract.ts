@@ -273,7 +273,7 @@ export interface BlueprintCompileView<Plugins extends AnyWidgetPluginTuple = Any
 /**
  * Read-only valid-Blueprint view handed to runtime semantic callbacks (`compute`, `execute`).
  */
-export interface ValidBlueprintView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
+export interface BlueprintRuntimeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly root: ResolvedBlueprintWidgetNode<Plugins, JsonValue>
 	getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 	getParent: (node: ResolvedBlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null

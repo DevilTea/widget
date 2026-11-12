@@ -1,8 +1,8 @@
 import type {
+	BlueprintRuntimeView,
 	BlueprintWidgetNode,
 	JsonValue,
 	ResolvedBlueprintWidgetNode,
-	ValidBlueprintView,
 	WidgetSource,
 	WidgetSystemBlueprint,
 } from './index'
@@ -61,7 +61,7 @@ function assertJsonSourceProof(blueprint: Blueprint): void {
 	void locationParentSource
 }
 
-function assertValidViewSourceProof(view: ValidBlueprintView): void {
+function assertValidViewSourceProof(view: BlueprintRuntimeView): void {
 	const ordinaryResolvedNode: ResolvedBlueprintWidgetNode = view.root
 	const rootSource: JsonValue = view.root.source
 	const widgetSource: JsonValue | undefined = view.getWidget('root')?.source
