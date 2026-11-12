@@ -76,6 +76,13 @@ interface NonJsonConfigInterfaces extends WidgetInterfaces {
 	}
 }
 
+interface RawConfigInterfaces<Raw extends Record<any, any> | null> extends WidgetInterfaces {
+	config: {
+		raw: Raw
+		resolved: Record<string, never>
+	}
+}
+
 interface KeyedChainInterfaces extends WidgetInterfaces {
 	state: {
 		'a': number
@@ -649,6 +656,23 @@ describe('widgetInterfaces domain rejection (types.ts type layer)', () => {
 	it('rejects a function inside authored RawConfig', () => {
 		expectTypeOf<WidgetInterfacesViolationOf<NonJsonConfigInterfaces>>()
 			.toEqualTypeOf<'authored values must be JSON-compatible'>()
+	})
+
+	it('reports a class instance inside authored RawConfig as a non-plain object, not as a key problem', () => {
+		type PlainObjectReason = 'authored JSON objects must be plain objects, not class instances such as Date, Map or Set'
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ when: Date }>>>()
+			.toEqualTypeOf<PlainObjectReason>()
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ lookup: Map<string, string> }>>>()
+			.toEqualTypeOf<PlainObjectReason>()
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ tags: Set<string> }>>>()
+			.toEqualTypeOf<PlainObjectReason>()
+		// A user symbol key keeps the key reason; only class instances get the plain-object reason.
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ [symbolStateKey]: string, n: bigint }>>>()
+			.toEqualTypeOf<'authored JSON objects may only have string keys'>()
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ n: bigint }>>>()
+			.toEqualTypeOf<'authored values must be JSON-compatible'>()
+		expectTypeOf<WidgetInterfacesViolationOf<RawConfigInterfaces<{ label?: string, n: number[] }>>>()
+			.toBeNever()
 	})
 
 	it('leaves the interfaces phase unusable for a non-JSON RawConfig', () => {
