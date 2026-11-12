@@ -45,6 +45,28 @@ function reportIsolatedException(error: unknown): void {
 }
 
 /**
+ * Exception objects a subscription's tracked read threw that are queued for reporting and not reported yet.
+ * One failing Property is re-read by each of its subscriptions and by every dependent's, and each read
+ * rethrows the one cached exception object; it is reported once per synchronous turn, not once per read.
+ */
+const queuedReadExceptions = new Set<unknown>()
+
+function reportTrackedReadException(error: unknown): void {
+	// Only objects: two equal thrown primitives may be unrelated failures.
+	if ((typeof error !== 'object' || error === null) && typeof error !== 'function') {
+		reportIsolatedException(error)
+		return
+	}
+	if (queuedReadExceptions.has(error))
+		return
+	queuedReadExceptions.add(error)
+	queueMicrotask(() => {
+		queuedReadExceptions.delete(error)
+		throw error
+	})
+}
+
+/**
  * Invokes `listener(value)` with no active alien subscriber and no open callback (see `callbackScope`), so
  * neither its reads nor a dependency or `emit` callable it retained from a running Method reach into the
  * operation that notified it, restoring both afterward. A synchronous throw is isolated so it cannot escape
@@ -266,7 +288,8 @@ export function writeDeferringFlush(write: () => void): void {
  * isolated like a listener exception — the write that triggered it and every other subscriber are
  * unaffected — and only skips this subscription's notification. The tracked read had already linked the
  * effect to the Property before rethrowing, so the subscription stays live and resumes on the next
- * completed recompute. A bootstrap run that throws is isolated the same way.
+ * completed recompute. A bootstrap run that throws is isolated the same way. The exception is reported once
+ * per synchronous turn however many subscriptions re-read it (see {@link reportTrackedReadException}).
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
@@ -282,7 +305,7 @@ export function createTrackedSubscription<Value>(
 		}
 		catch (error) {
 			isBootstrap = false
-			reportIsolatedException(error)
+			reportTrackedReadException(error)
 			return
 		}
 
