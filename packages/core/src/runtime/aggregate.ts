@@ -130,12 +130,16 @@ export function createRuntimeAggregate(
 	runtimeLevelDiagnostics: readonly RuntimeLevelDiagnostic[],
 ): RuntimeAggregate {
 	const { semanticOrder } = compiled
-	const positionByNodeId = new Map<InternalNodeId, number>()
+	// Internal node ids are dense array indexes, so a typed array (-1: not in semantic order) is the
+	// cheapest position index to build per Runtime.
+	const positionByNodeId = new Int32Array(compiled.nodes.length)
+		.fill(-1)
 	for (let position = 0; position < semanticOrder.length; position++)
-		positionByNodeId.set(semanticOrder[position]!, position)
+		positionByNodeId[semanticOrder[position]!] = position
 
 	// Each widget's last aggregated snapshot, by semantic-order position.
-	const widgetSnapshots: (readonly RuntimeWidgetDiagnostic[])[] = Array.from(semanticOrder, () => EMPTY_DIAGNOSTICS)
+	const widgetSnapshots: (readonly RuntimeWidgetDiagnostic[])[] = Array.from<readonly RuntimeWidgetDiagnostic[]>({ length: semanticOrder.length })
+		.fill(EMPTY_DIAGNOSTICS)
 	// Ascending positions whose last aggregated snapshot is non-empty: composition visits only these.
 	const nonEmptyPositions: number[] = []
 	// Positions committed to since the last aggregation, each listed once.
@@ -230,9 +234,9 @@ export function createRuntimeAggregate(
 			})
 		},
 		commitHookFor(nodeId) {
-			const position = positionByNodeId.get(nodeId)
+			const position = positionByNodeId[nodeId] ?? -1
 			return () => {
-				if (position !== undefined)
+				if (position !== -1)
 					markDirty(position)
 				revisionSignal(++revision)
 			}

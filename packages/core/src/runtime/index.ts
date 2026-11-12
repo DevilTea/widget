@@ -67,6 +67,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	// the live diagnostic aggregate (step 8) has to exist before the primitives that report into it.
 	const overrideResolution = resolveStateOverrides(compiled, options?.overrideStateDefaults)
 	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelDiagnostics)
+	// One commit hook per widget, shared by all of its primitives.
+	const commitHooks: Array<() => void> = []
 
 	// 1. Runtime/widget indexes + 2. create all states (null + empty diagnostic snapshot).
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
@@ -90,6 +92,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 
 		const buildConfigFragment = buildConfigFragmentFor(node)
 		const onDiagnosticsCommitted = aggregate.commitHookFor(nodeId)
+		commitHooks[nodeId] = onDiagnosticsCommitted
 
 		for (const [key, member] of node.state) {
 			const primitive = createStatePrimitive(context, {
@@ -153,7 +156,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			continue
 
 		const buildConfigFragment = buildConfigFragmentFor(node)
-		const onDiagnosticsCommitted = aggregate.commitHookFor(nodeId)
+		const onDiagnosticsCommitted = commitHooks[nodeId]!
 		const definition = readWidgetPluginDefinition(node.plugin)
 		const emitter = definition.events === null ? null : buildCallbackEventEmitter(context, entry.events)
 		const emitFragment: Readonly<Record<string, unknown>> = emitter === null
