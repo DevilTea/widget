@@ -4,7 +4,9 @@
  * Every invocation is one `alien-signals` batch boundary (start before `validateArgs`, end only after
  * the method's final diagnostic snapshot commits, `endBatch()` always in `finally`). Nested
  * dependency-invoked methods reuse this exact same pipeline, so nested calls naturally nest batch
- * depth; only the outermost `endBatch()` flushes.
+ * depth; only the outermost `endBatch()` flushes. When runaway recursion (a valid Method <-> Method
+ * cycle) exhausts the stack, the deepest frames' `endBatch()` calls can themselves overflow; the
+ * outermost `runRuntimeOperation` frame closes those leaked levels (see `releaseBatches` in the adapter).
  *
  * The diagnostic-snapshot commits go through `writeDeferringFlush`, which keeps that rule true one level
  * further out: a Property may declare a dependency on a write-free Method, so `invoke` can run inside a

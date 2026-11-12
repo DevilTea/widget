@@ -22,7 +22,7 @@
  */
 
 import type { RuntimeContext } from './context'
-import { effect, endBatch, setActiveSub, startBatch } from 'alien-signals'
+import { effect, endBatch, getBatchDepth, setActiveSub, startBatch } from 'alien-signals'
 
 /**
  * `queueMicrotask` is a host global (browser + Node), not part of the ECMAScript lib this
@@ -76,17 +76,28 @@ export function invokeListenerUntracked(listener: (...args: readonly unknown[]) 
 /**
  * Nesting depth of the calls that can drive an `alien-signals` evaluation/flush and therefore have to be
  * back out of the reactive graph before a deferred propagation is safe to release: `RuntimeState`'s
- * `attemptSet`, `RuntimeMethod`'s `invoke` and the tracked read of a Property's result computed. Purely
- * local bookkeeping for {@link writeDeferringFlush}, not a semantic boundary of its own.
+ * `attemptSet`, `RuntimeMethod`'s `invoke`, `resetState` and the tracked read of a Property's result
+ * computed. Purely local bookkeeping for {@link writeDeferringFlush}, not a semantic boundary of its own.
  */
 let operationDepth = 0
 
-/** Number of `startBatch()` calls {@link writeDeferringFlush} has opened and not yet closed. */
-let deferredFlushDepth = 0
+/**
+ * alien-signals' batch depth when the outermost {@link runRuntimeOperation} frame was entered. Every batch
+ * level opened inside that operation — a `RuntimeMethod` invocation's own batch, `resetState`'s batch and
+ * every level {@link writeDeferringFlush} opened — is above it.
+ */
+let entryBatchDepth = 0
 
 /**
- * Closes every batch level {@link writeDeferringFlush} left open, letting alien-signals flush the
+ * Closes every batch level opened inside the outermost Runtime operation, letting alien-signals flush the
  * notifications it already queued.
+ *
+ * In normal operation the only levels still open here are the ones {@link writeDeferringFlush} opened:
+ * every other level is closed by its own `endBatch()` in a `finally`. But that `finally` cannot be relied
+ * on when runaway recursion (a valid Method <-> Method cycle) exhausts the engine's stack: the deepest
+ * frames' `endBatch()` calls themselves overflow and never decrement. Draining to the depth recorded on
+ * entry, rather than counting the levels this module opened, closes those leaked levels too, so a
+ * `RangeError` can never leave the realm permanently batched.
  *
  * The loop condition is re-tested after every `endBatch()`: that flush can run an effect whose Property
  * recompute commits its own diagnostic snapshot, which opens a fresh level this same drain must then close.
@@ -95,29 +106,31 @@ let deferredFlushDepth = 0
  * batched (every later flush in the realm would be silently suspended), so the remaining levels are
  * closed before the throw is rethrown.
  */
-function releaseDeferredFlushes(): void {
-	while (deferredFlushDepth > 0) {
-		--deferredFlushDepth
+function releaseBatches(): void {
+	while (getBatchDepth() > entryBatchDepth) {
 		try {
 			endBatch()
 		}
 		catch (error) {
-			releaseDeferredFlushes()
+			releaseBatches()
 			throw error
 		}
 	}
 }
 
 /**
- * Tracks one nesting level of the calls that can drive an evaluation, and releases every flush
- * {@link writeDeferringFlush} deferred inside it once the outermost level is leaving.
+ * Tracks one nesting level of the calls that can drive an evaluation, and closes every batch level opened
+ * inside it (see {@link releaseBatches}) once the outermost level is leaving.
  *
  * The release runs while the depth is still `1`, so a listener that the release's own flush invokes and
  * that re-enters the Runtime cannot re-enter the drain loop. The decrement is unconditional: a throw
  * inside the release's flush must not leave the depth pinned above `0`, or every later call would look
- * nested and no release would ever run again.
+ * nested and no release would ever run again. Both depth updates are plain expressions, never calls, so
+ * they still run when the stack is exhausted.
  */
 export function runRuntimeOperation<Result>(fn: () => Result): Result {
+	if (operationDepth === 0)
+		entryBatchDepth = getBatchDepth()
 	++operationDepth
 	try {
 		return fn()
@@ -125,7 +138,7 @@ export function runRuntimeOperation<Result>(fn: () => Result): Result {
 	finally {
 		try {
 			if (operationDepth === 1)
-				releaseDeferredFlushes()
+				releaseBatches()
 		}
 		finally {
 			--operationDepth
@@ -182,7 +195,6 @@ export function writeDeferringFlush(write: () => void): void {
 	}
 
 	startBatch()
-	++deferredFlushDepth
 	write()
 }
 
