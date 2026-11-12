@@ -72,6 +72,11 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	result.widgetId = widget.id
 	result.widgetType = widget.type
 
+	// The widget's resolved config, by identity: within one Runtime it never changes, so it is neither
+	// reactive nor cloned. Typed read-only; renderers must not mutate it.
+	if (capabilities.config)
+		result.config = widget.blueprint.config
+
 	if (capabilities.state) {
 		const state = widget.state!
 		let surface: Readonly<Record<string, unknown>> | undefined

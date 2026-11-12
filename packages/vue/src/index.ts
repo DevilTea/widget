@@ -22,6 +22,7 @@ export type {
 
 export type {
 	ReadonlyRef,
+	UseWidgetConfigAccessor,
 	UseWidgetDiagnosticsAccessor,
 	UseWidgetEventEmitterAccessor,
 	UseWidgetIdentityAccessor,

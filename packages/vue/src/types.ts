@@ -32,6 +32,7 @@ import type {
 	WidgetMethodReturnOf,
 	WidgetPropertyKeyOf,
 	WidgetPropertyValueOf,
+	WidgetResolvedConfigOf,
 	WidgetSlotNameOf,
 	WidgetStateKeyOf,
 	WidgetStateValueOf,
@@ -46,6 +47,30 @@ import type { Ref } from 'vue'
  * `Readonly<Ref<T>>` types exactly the `{ readonly value: T }` shape a `customRef` genuinely provides.
  */
 export type ReadonlyRef<T> = Readonly<Ref<T>>
+
+// -------------------------------------------------------------------------------------------------
+// Config
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * Recursively read-only view of a resolved config. Functions are left alone; arrays and tuples keep
+ * their shape but become readonly.
+ */
+type DeepReadonly<T> = T extends (...args: never[]) => unknown
+	? T
+	: T extends object
+		? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+		: T
+
+/**
+ * The widget's resolved config (the value the plugin's `config.resolve` returned), present exactly when
+ * the plugin declares the `config` capability. It is the Runtime widget's own object, neither cloned
+ * nor reactive: within one Runtime a widget's resolved config never changes. Renderers must treat it
+ * as read-only; the type enforces that deeply.
+ */
+export type UseWidgetConfigAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
+	? { readonly config: DeepReadonly<WidgetResolvedConfigOf<Interfaces>> }
+	: unknown
 
 // -------------------------------------------------------------------------------------------------
 // State
@@ -188,7 +213,8 @@ export type UseWidgetSlotAccessor<Interfaces extends WidgetInterfaces> = HasWidg
 // -------------------------------------------------------------------------------------------------
 
 export type UseWidgetResult<Plugin extends AnyWidgetPlugin> = WidgetInterfacesOf<Plugin> extends infer Interfaces extends WidgetInterfaces
-	? & UseWidgetStateAccessor<Interfaces>
+	? & UseWidgetConfigAccessor<Interfaces>
+	& UseWidgetStateAccessor<Interfaces>
 	& UseWidgetPropertiesAccessor<Interfaces>
 	& UseWidgetMethodsAccessor<Interfaces>
 	& UseWidgetEventEmitterAccessor<Interfaces>

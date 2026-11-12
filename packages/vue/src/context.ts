@@ -44,6 +44,7 @@ export interface RuntimeWidgetLike {
 	readonly type: string
 	readonly blueprint: {
 		readonly plugin: unknown
+		readonly config?: unknown
 		readonly slots: Readonly<Record<string, readonly { readonly id: string }[]>>
 	}
 	getDiagnostics: () => readonly unknown[]
