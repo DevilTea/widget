@@ -1,7 +1,7 @@
 /**
  * The one module under `src/tutorial/` that actually touches `@deviltea/widget-core`/`inspection` —
  * every other file in this directory only sees the abstract `TutorialRuntimeReader`/`TutorialActions`
- * shapes from `types.ts`. Mirrors `src/runtime-inspector/viewmodel.ts`'s passive-projection discipline:
+ * shapes from `types.ts`. Keeps the Runtime Inspector's passive-projection discipline (see `src/composables/use-remote-runtime-member.ts`):
  * every read here is `getSnapshot()`/`subscribe()` only — never `state.set()`, a Method invocation, or
  * anything that could force a lazy Property to evaluate. Widget Lab's own Preview is the only real
  * Runtime consumer; this module only observes whatever Preview's ordinary use already produced.

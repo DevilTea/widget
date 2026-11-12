@@ -41,38 +41,6 @@ export function getAuthorConfigScalars(node: BlueprintInspectionNode): readonly 
 		.map(([key, value]) => ({ key, value }))
 }
 
-function findSourcePath(source: unknown, target: unknown): readonly (string | number)[] | null {
-	const visited = new Set<object>()
-
-	function visit(value: unknown, path: readonly (string | number)[]): readonly (string | number)[] | null {
-		if (value === target)
-			return path
-		if (typeof value !== 'object' || value === null || visited.has(value))
-			return null
-		visited.add(value)
-
-		if (Array.isArray(value)) {
-			for (let index = 0; index < value.length; index++) {
-				const result = visit(value[index], [...path, index])
-				if (result !== null)
-					return result
-			}
-			return null
-		}
-
-		if (!isPlainObject(value))
-			return null
-		for (const [key, child] of Object.entries(value)) {
-			const result = visit(child, [...path, key])
-			if (result !== null)
-				return result
-		}
-		return null
-	}
-
-	return visit(source, [])
-}
-
 function findNodeById<Plugins extends AnyWidgetPluginTuple>(blueprint: WidgetSystemBlueprint<Plugins>, nodeId: InspectionNodeId): BlueprintInspectionNode<Plugins> | null {
 	const inspection = inspectBlueprint(blueprint)
 	return inspection.getNode(nodeId)
@@ -103,15 +71,11 @@ export function createAuthorPatch<Plugins extends AnyWidgetPluginTuple>(
 	if (!isJsonPrimitive(config[command.configKey]))
 		return { ok: false, reason: 'config-value-not-scalar' }
 
-	const widgetPath = findSourcePath(blueprint.source, node.node.source)
-	if (widgetPath === null)
-		return { ok: false, reason: 'widget-not-found' }
-
 	return {
 		ok: true,
 		patch: [{
 			op: 'replace',
-			path: [...widgetPath, 'config', command.configKey],
+			path: [...node.sourcePath, 'config', command.configKey],
 			value: command.value,
 		}],
 	}

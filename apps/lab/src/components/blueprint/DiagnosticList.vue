@@ -46,17 +46,12 @@ function locationLabel(diagnostic: BlueprintDiagnostic, inspection: BlueprintIns
 		return 'source'
 	const nodeId = nodeIdOf(location.node, inspection)
 	const node = nodeId === null ? null : inspection.getNode(nodeId)
-	const nodeLabel = node?.resolved
-		? `${node.node.id} : ${node.node.type}`
-		: (() => {
-				const source = node?.node.source
-				if (typeof source === 'object' && source !== null && !Array.isArray(source)) {
-					const hintedId = typeof (source as Record<string, unknown>).id === 'string' ? (source as Record<string, string>).id : '?'
-					const hintedType = typeof (source as Record<string, unknown>).type === 'string' ? (source as Record<string, string>).type : '?'
-					return `${hintedId} : ${hintedType} (unresolved)`
-				}
-				return 'unresolved node'
-			})()
+	// Unresolved nodes carry Core's best-effort `id`/`type` hints (`null` when the authored value is not a string).
+	const nodeLabel = node === null
+		? 'unresolved node'
+		: node.resolved
+			? `${node.node.id} : ${node.node.type}`
+			: `${node.id ?? '?'} : ${node.type ?? '?'} (unresolved)`
 	switch (location.type) {
 		case 'widget': return `widget "${nodeLabel}"`
 		case 'slot': return `widget "${nodeLabel}" · slot "${location.slot}"`

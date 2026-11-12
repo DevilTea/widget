@@ -67,10 +67,10 @@ const displayedType = computed(() => mode.value === 'focused' ? focusedWidget.va
 const appliedInstance = computed(() => {
 	if (mode.value !== 'focused')
 		return null
-	const widget = focusedWidget.value
-	if (widget === null)
+	const focus = store.documentFocus.value
+	if (focusedWidget.value === null || focus === null)
 		return null
-	return extractAppliedInstance(store.documentState.value.sourceText, widget.id)
+	return extractAppliedInstance(store.documentState.value.blueprint, focus.nodeId)
 })
 
 /**

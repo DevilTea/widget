@@ -261,7 +261,14 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		const patchResult = this.document.applyPatch(patch, { expectedRevision: previousDocument.revision })
 
 		if (!patchResult.ok) {
-			this.recordDocumentTrace({ kind: 'patch-error', revision: previousDocument.revision, code: patchResult.failure.code })
+			const failure = patchResult.failure
+			this.recordDocumentTrace({
+				kind: 'patch-error',
+				revision: previousDocument.revision,
+				code: failure.code,
+				...('path' in failure && failure.path !== undefined ? { path: failure.path } : {}),
+				...('reason' in failure && failure.reason !== undefined ? { reason: failure.reason } : {}),
+			})
 			return { status: 'patch-error', failure: patchResult.failure }
 		}
 

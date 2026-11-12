@@ -6,7 +6,7 @@
  * `@deviltea/widget-core`'s public Blueprint/Runtime contract and never reinterprets it.
  */
 
-import type { AnyWidgetPluginTuple, ApplyPatchFailure, ApplyPatchResult, JsonPrimitive, SourcePatch, ValidWidgetSystemBlueprint, WidgetSystemBlueprint } from '@deviltea/widget-core'
+import type { AnyWidgetPluginTuple, ApplyPatchFailure, ApplyPatchResult, DiagnosticPath, JsonCompatibilityReason, JsonPrimitive, SourcePatch, ValidWidgetSystemBlueprint, WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 
 /** The deliberately narrow semantic command surface exposed by the Phase 3 Structure view. */
@@ -104,6 +104,9 @@ export type LabDocumentTraceEvent
 		readonly kind: 'patch-error'
 		readonly revision: number
 		readonly code: ApplyPatchFailure['code']
+		/** Only for `json-incompatible-value`: Core's operand-relative location and reason, when it reports them. */
+		readonly path?: DiagnosticPath
+		readonly reason?: JsonCompatibilityReason
 	}
 	| {
 		readonly kind: 'conflict-demo'
