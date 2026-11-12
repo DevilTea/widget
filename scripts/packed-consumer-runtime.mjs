@@ -20,6 +20,7 @@ import {
 	createWidgetVueRenderer,
 	useWidget,
 } from '@deviltea/widget-vue'
+import { createWidgetTestHost } from '@deviltea/widget-vue/testing'
 
 const exportedFunctions = [
 	['@deviltea/widget-core:createWidgetDocument', createWidgetDocument],
@@ -37,6 +38,7 @@ const exportedFunctions = [
 	['@deviltea/widget-inspector/value:encodeInspectableValue', encodeInspectableValue],
 	['@deviltea/widget-vue:createWidgetVueRenderer', createWidgetVueRenderer],
 	['@deviltea/widget-vue:useWidget', useWidget],
+	['@deviltea/widget-vue/testing:createWidgetTestHost', createWidgetTestHost],
 ]
 
 for (const [name, exported] of exportedFunctions) {

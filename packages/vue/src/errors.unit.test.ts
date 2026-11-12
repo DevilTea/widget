@@ -5,9 +5,9 @@
  */
 
 import { createWidgetPlugin } from '@deviltea/widget-core'
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
-import { defineComponent } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { defineComponent, h, Suspense } from 'vue'
 import { createWidgetVueRenderer, useWidget, WidgetVueIntegrationError } from './index'
 import { SharedWidgetSlotComponent } from './renderer'
 import {
@@ -47,6 +47,8 @@ function expectNullRegistryFields(error: WidgetVueIntegrationError): void {
 	expect(error.unknownTypes)
 		.toBeNull()
 	expect(error.duplicateTypes)
+		.toBeNull()
+	expect(error.invalidTypes)
 		.toBeNull()
 }
 
@@ -154,6 +156,56 @@ describe('widgetVueIntegrationError codes', () => {
 				.toEqual([])
 		})
 
+		it('reports a registered non-component value in invalidTypes, in first-registration order', () => {
+			const error = registryError((r) => {
+				r.Label!(undefined)
+				r.Counter!(CounterRenderer)
+				r.Container!(null)
+				r.Leaf!('not a component')
+				r.EmptyState!(EmptyStateRenderer)
+				r.Zulu!(42)
+			})
+
+			expect(error.invalidTypes)
+				.toEqual(['Label', 'Container', 'Leaf', 'Zulu'])
+			expect(error.missingTypes)
+				.toEqual([])
+			expect(error.unknownTypes)
+				.toEqual(['Zulu'])
+			expect(error.duplicateTypes)
+				.toEqual([])
+			expect(Object.isFrozen(error.invalidTypes))
+				.toBe(true)
+		})
+
+		it('accepts function and object components and keeps invalidTypes empty', () => {
+			const error = registryError((r) => {
+				r.Counter!(() => null)
+				r.Label!(LabelRenderer)
+			})
+
+			expect(error.invalidTypes)
+				.toEqual([])
+		})
+
+		it('narrows the registry defect lists to non-null arrays once `code` is checked', () => {
+			const error = registryError(() => {})
+
+			if (error.code === 'invalid-renderer-registry') {
+				expectTypeOf(error.missingTypes)
+					.toEqualTypeOf<readonly string[]>()
+				expectTypeOf(error.invalidTypes)
+					.toEqualTypeOf<readonly string[]>()
+				expect(error.missingTypes.length)
+					.toBeGreaterThan(0)
+			}
+			else {
+				expectTypeOf(error.missingTypes)
+					.toEqualTypeOf<null>()
+				expect.unreachable()
+			}
+		})
+
 		it('exposes frozen arrays, including empty ones', () => {
 			const error = registryError((r) => {
 				r.Counter!(CounterRenderer)
@@ -172,6 +224,8 @@ describe('widgetVueIntegrationError codes', () => {
 
 			expect(error.name)
 				.toBe('WidgetVueIntegrationError')
+			expect(error.constructor.name)
+				.toBe('WidgetVueIntegrationError')
 		})
 	})
 
@@ -186,14 +240,14 @@ describe('widgetVueIntegrationError codes', () => {
 		})
 
 		it('checks System identity before looking up the root widget', () => {
-			const runtime = {
-				blueprint: { system: {}, root: { id: 'root' } },
-				getWidget: () => null,
-			}
+			const runtime = createOtherFixtureRuntime({ id: 'root', type: 'Counter' })
+			const getWidget = vi.spyOn(runtime, 'getWidget')
 
-			const error = capture(() => mount(WidgetRenderer, { props: { runtime: runtime as never } }))
+			const error = capture(() => mount(WidgetRenderer, { props: { runtime } }))
 
 			expectCode(error, 'runtime-system-mismatch')
+			expect(getWidget)
+				.not.toHaveBeenCalled()
 		})
 	})
 
@@ -216,6 +270,34 @@ describe('widgetVueIntegrationError codes', () => {
 			const error = capture(() => useWidget(CounterPlugin))
 
 			expectCode(error, 'outside-widget-renderer')
+		})
+
+		it('tells an async setup() that useWidget() must be called synchronously, before the first await', async () => {
+			let error: unknown
+			const AsyncRenderer = defineComponent({
+				async setup() {
+					await Promise.resolve()
+					error = capture(() => useWidget(CounterPlugin))
+					return () => null
+				},
+			})
+			const Renderer = createWidgetVueRenderer(fixtureSystem, renderers =>
+				renderers
+					.Counter(AsyncRenderer)
+					.Label(LabelRenderer)
+					.Container(ContainerRenderer)
+					.Leaf(LeafRenderer)
+					.EmptyState(EmptyStateRenderer))
+			const runtime = createFixtureRuntime({ id: 'root', type: 'Counter' })
+
+			mount(defineComponent({ render: () => h(Suspense, null, { default: () => h(Renderer, { runtime }) }) }))
+			await flushPromises()
+
+			expectCode(error, 'outside-widget-renderer')
+			expect((error as WidgetVueIntegrationError).message)
+				.toContain('synchronously during setup()')
+			expect((error as WidgetVueIntegrationError).message)
+				.toContain('before the first await')
 		})
 
 		it('is thrown by the shared WidgetSlot component mounted with no widget host', () => {

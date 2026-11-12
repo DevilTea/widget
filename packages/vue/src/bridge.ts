@@ -15,31 +15,47 @@ import { WidgetVueIntegrationError } from './errors'
 export type RegisterCleanup = (cleanup: () => void) => void
 
 /**
- * Collision-safe lazy keyed surface: `materialize` runs at most once per accessed key (including
- * `__proto__` / `constructor`), and the returned Proxy caches the result by identity so repeated
- * access returns the exact same member wrapper. Keys with no backing Runtime member materialize to
- * `undefined` without being cached, matching plain-object "unknown property" behavior.
+ * Collision-safe lazy keyed surface over the Runtime's declared `members` (the Runtime's own keyed
+ * surface object, the authoritative member inventory). `materialize` runs at most once per declared
+ * key (including `__proto__` / `constructor`), and the returned Proxy caches the result by identity so
+ * repeated access returns the exact same member wrapper. `get`, `in`, `Object.keys`, spread and
+ * `toRefs` all reflect exactly the declared members: an undeclared key is `undefined` and absent from
+ * `in`. Listing keys materializes nothing and never reads or subscribes the Runtime (spread reads
+ * each member, which materializes its wrapper passively).
  */
-export function createLazyKeyedSurface<T>(materialize: (key: string) => T | undefined): Readonly<Record<string, T>> {
+export function createLazyKeyedSurface<T>(members: object, materialize: (key: string) => T | undefined): Readonly<Record<string, T>> {
 	const cache = new Map<string, T>()
+	const isDeclared = (key: string | symbol): key is string => typeof key === 'string' && Object.hasOwn(members, key)
+
+	const getMember = (key: string): T | undefined => {
+		const cached = cache.get(key)
+		if (cached !== undefined)
+			return cached
+
+		const value = materialize(key)
+		if (value !== undefined)
+			cache.set(key, value)
+
+		return value
+	}
 
 	return new Proxy(Object.create(null), {
 		get(_target, key) {
-			if (typeof key !== 'string')
-				return undefined
-
-			const cached = cache.get(key)
-			if (cached !== undefined)
-				return cached
-
-			const value = materialize(key)
-			if (value !== undefined)
-				cache.set(key, value)
-
-			return value
+			return isDeclared(key) ? getMember(key) : undefined
 		},
 		has(_target, key) {
-			return typeof key === 'string'
+			return isDeclared(key)
+		},
+		ownKeys() {
+			return Object.keys(members)
+		},
+		getOwnPropertyDescriptor(_target, key) {
+			if (!isDeclared(key))
+				return undefined
+
+			// A getter keeps `Object.keys` and friends from materializing anything: only reading the value
+			// does. Reported configurable because the (empty) target has no such property.
+			return { get: () => getMember(key), set: undefined, enumerable: true, configurable: true }
 		},
 	}) as Readonly<Record<string, T>>
 }

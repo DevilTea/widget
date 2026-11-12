@@ -6,10 +6,12 @@
 
 import type { AnyWidgetPluginTuple, WidgetPluginTypeOf, WidgetSystem, WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { Component, PropType } from 'vue'
-import type { RuntimeLike, RuntimeWidgetLike } from './context'
-import { defineComponent, h, inject, provide } from 'vue'
-import { CurrentWidgetContextKey } from './context'
+import type { CurrentWidgetContextValue, RuntimeWidgetLike } from './context'
+import type { WidgetSlotChildComponent, WidgetSlotScope } from './types'
+import { defineComponent, Fragment, h, inject } from 'vue'
+import { CurrentWidgetContextKey, provideCurrentWidgetContext } from './context'
 import { WidgetVueIntegrationError } from './errors'
+import { assertWidgetRuntime } from './runtime-guard'
 
 // -------------------------------------------------------------------------------------------------
 // Registry builder typestate
@@ -100,6 +102,15 @@ function quote(value: string): string {
 }
 
 /**
+ * A Vue `Component` is a component options object or a functional component. The registry typestate
+ * only demands "some Vue component", but JS/`any` call sites can pass anything, and a non-component
+ * would otherwise be accepted silently and render as an empty comment.
+ */
+function isVueComponent(value: unknown): value is Component {
+	return typeof value === 'function' || (typeof value === 'object' && value !== null)
+}
+
+/**
  * Vue vnode `key` only accepts a `PropertyKey`, not an arbitrary object, so a `WidgetSystemRuntime`
  * instance cannot be used as a `key` directly. This assigns one stable `symbol` per distinct Runtime
  * object identity (never per Runtime-shape-equality) the first time it is seen, giving the
@@ -133,17 +144,21 @@ function finalizeRegistry(system: WidgetSystem<AnyWidgetPluginTuple>, registrati
 
 	const unknownTypes: string[] = []
 	const duplicatedTypes: string[] = []
+	const invalidTypes: string[] = []
 
 	for (const [type, components] of registrations) {
 		if (!pluginTypes.has(type))
 			unknownTypes.push(type)
 		else if (components.length > 1)
 			duplicatedTypes.push(type)
+
+		if (!components.every(isVueComponent))
+			invalidTypes.push(type)
 	}
 
 	const missingTypes = [...pluginTypes].filter(type => !registrations.has(type))
 
-	if (missingTypes.length > 0 || unknownTypes.length > 0 || duplicatedTypes.length > 0) {
+	if (missingTypes.length > 0 || unknownTypes.length > 0 || duplicatedTypes.length > 0 || invalidTypes.length > 0) {
 		const parts: string[] = []
 		if (missingTypes.length > 0) {
 			parts.push(`missing renderer registration for plugin type(s) ${missingTypes.map(quote)
@@ -157,11 +172,15 @@ function finalizeRegistry(system: WidgetSystem<AnyWidgetPluginTuple>, registrati
 			parts.push(`plugin type(s) ${duplicatedTypes.map(quote)
 				.join(', ')} registered more than once`)
 		}
+		if (invalidTypes.length > 0) {
+			parts.push(`renderer for plugin type(s) ${invalidTypes.map(quote)
+				.join(', ')} is not a Vue component (expected a component object or function)`)
+		}
 
 		throw new WidgetVueIntegrationError(
 			'invalid-renderer-registry',
 			`Invalid @deviltea/widget-vue renderer registry: ${parts.join('; ')}.`,
-			{ missingTypes, unknownTypes, duplicateTypes: duplicatedTypes },
+			{ missingTypes, unknownTypes, duplicateTypes: duplicatedTypes, invalidTypes },
 		)
 	}
 
@@ -210,11 +229,7 @@ const InternalWidgetHost = defineComponent({
 		// Topology is static for the lifetime of one Runtime (an immutable Blueprint), so this host's
 		// props never change after creation; a plain snapshot is sufficient, no reactive indirection
 		// needed.
-		provide(CurrentWidgetContextKey, {
-			widget: props.widget,
-			runtime: props.runtime as unknown as RuntimeLike,
-			rendererByType: props.rendererByType,
-		})
+		provideCurrentWidgetContext(props.widget, props.runtime, props.rendererByType)
 
 		return () => {
 			const ActualRenderer = props.rendererByType.get(props.widget.type)
@@ -238,30 +253,65 @@ export const SharedWidgetSlotComponent = defineComponent({
 	props: {
 		name: { type: String, required: true },
 	},
-	setup(props) {
+	setup(props, { slots }) {
 		const current = getCurrentWidgetContextOrThrow('WidgetSlot')
+
+		// One `Child` component per child widget, created on first use and reused by every later render:
+		// a fresh component definition per render would remount the child whenever the renderer wraps it.
+		const childComponents = new Map<string, Component>()
+		const getChildComponent = (childWidget: RuntimeWidgetLike): Component => {
+			let Child = childComponents.get(childWidget.id)
+			if (Child === undefined) {
+				Child = defineComponent({
+					name: 'WidgetChild',
+					setup: () => () => renderChildHost(current, childWidget),
+				})
+				childComponents.set(childWidget.id, Child)
+			}
+			return Child
+		}
 
 		return () => {
 			const children = current.widget.blueprint.slots[props.name] ?? []
 
-			return children.map((childNode) => {
+			const resolve = (childNode: { readonly id: string }): RuntimeWidgetLike => {
 				const childWidget = current.runtime.getWidget(childNode.id)
 				if (childWidget === null) {
 					throw new Error(
 						`Widget "${childNode.id}" declared in slot "${props.name}" of widget "${current.widget.id}" was not found by the current Runtime.`,
 					)
 				}
+				return childWidget
+			}
 
-				return h(InternalWidgetHost, {
-					key: childNode.id,
-					widget: childWidget,
-					runtime: current.runtime as unknown as WidgetSystemRuntime<AnyWidgetPluginTuple>,
-					rendererByType: current.rendererByType,
-				})
+			const renderScoped = slots.default
+			if (renderScoped === undefined)
+				return children.map(childNode => renderChildHost(current, resolve(childNode), childNode.id))
+
+			// Scoped form: the renderer's output for each child sits in a keyed fragment so skipping or
+			// re-wrapping one child never makes Vue remount a sibling.
+			return children.map((childNode, index) => {
+				const childWidget = resolve(childNode)
+				const scope: WidgetSlotScope = {
+					Child: getChildComponent(childWidget) as unknown as WidgetSlotChildComponent,
+					id: childWidget.id,
+					type: childWidget.type,
+					index,
+				}
+				return h(Fragment, { key: childNode.id }, renderScoped(scope))
 			})
 		}
 	},
 })
+
+function renderChildHost(current: CurrentWidgetContextValue, childWidget: RuntimeWidgetLike, key?: string) {
+	return h(InternalWidgetHost, {
+		key,
+		widget: childWidget,
+		runtime: current.runtime as unknown as WidgetSystemRuntime<AnyWidgetPluginTuple>,
+		rendererByType: current.rendererByType,
+	})
+}
 
 // -------------------------------------------------------------------------------------------------
 // Root renderer component
@@ -299,6 +349,7 @@ export function createWidgetVueRenderer<Plugins extends AnyWidgetPluginTuple>(
 				// is a distributive conditional type over a still-generic `Plugins`, which TypeScript
 				// cannot narrow to a concrete member shape here — exactly why `@deviltea/widget-core`'s own
 				// Runtime factory never touches such a type directly either, only through an erased view.
+				assertWidgetRuntime(props.runtime)
 				const runtime = props.runtime as unknown as ErasedRuntime
 				if (runtime.blueprint.system !== system) {
 					throw new WidgetVueIntegrationError(
