@@ -512,7 +512,15 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		}
 		memberSubscriptions.set(subscriptionId, unsubscribe)
-		sendSuccess(request, { subscriptionId, member: projected })
+		try {
+			sendSuccess(request, { subscriptionId, member: projected })
+		}
+		catch (error) {
+			// The peer never learned this id: registration and response are atomic, so roll back.
+			memberSubscriptions.delete(subscriptionId)
+			unsubscribe()
+			throw error
+		}
 	}
 
 	function subscribeEvent(request: Extract<InspectorRequestMessage, { method: 'runtime.subscribeEvent' }>): void {
@@ -549,7 +557,15 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		}
 		eventSubscriptions.set(subscriptionId, unsubscribe)
-		sendSuccess(request, { subscriptionId, event: request.params.event })
+		try {
+			sendSuccess(request, { subscriptionId, event: request.params.event })
+		}
+		catch (error) {
+			// The peer never learned this id: registration and response are atomic, so roll back.
+			eventSubscriptions.delete(subscriptionId)
+			unsubscribe()
+			throw error
+		}
 	}
 
 	/** The Runtime id a request addresses (directly or through a WidgetRef), if it addresses one. */
@@ -566,6 +582,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			default:
 				return null
 		}
+	}
+
+	/** Methods that address no Runtime id but still act on the live Runtime's inspected document. */
+	function dependsOnLiveRuntime(request: InspectorRequestMessage): boolean {
+		return request.method === 'inspect.hitTest' || request.method === 'inspect.enable' || request.method === 'highlight.clear'
 	}
 
 	function handleRequest(request: InspectorRequestMessage): void {
@@ -591,8 +612,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				sendError(request.requestId, protocolError('unknown-method', 'Method unavailable in this Inspector protocol session.'))
 				return
 			}
-			// From 0.4 a disposed Runtime is no longer addressable; older peers keep the earlier behavior.
-			if (runtimeDisposed && requestMinor >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR && addressedRuntimeId(request) === runtimeId) {
+			// From 0.4 a disposed Runtime is no longer addressable and the methods that act on the live Runtime
+			// (hit testing, inspect mode, highlight) stop answering; older peers keep the earlier behavior.
+			// Releasing things the peer holds (`unsubscribe*`, `inspect.disable`) stays answerable.
+			if (runtimeDisposed && requestMinor >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR
+				&& (addressedRuntimeId(request) === runtimeId || dependsOnLiveRuntime(request))) {
 				sendError(request.requestId, protocolError('runtime-disposed', 'The requested Runtime has been disposed.'))
 				return
 			}
@@ -740,9 +764,13 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				sendError(requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
 			}
 		}
-		catch {
+		catch (error) {
 			// Catch-all: every request that carries an id gets exactly one answer, and the Agent keeps
-			// serving. The failure detail stays in this realm; the peer only learns it was internal.
+			// serving. The failure detail never reaches the peer (it only learns the failure was internal);
+			// it is reported in this realm out-of-band, like Core's isolated listener failures.
+			queueMicrotask(() => {
+				throw error
+			})
 			try {
 				if (requestId === null && typeof raw === 'object' && raw !== null
 					&& 'requestId' in raw && typeof raw.requestId === 'string') {

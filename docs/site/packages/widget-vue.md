@@ -171,17 +171,24 @@ and `WidgetSlot`'s gating aside, this mirrors exactly how
 widget itself.
 
 `useState()`, `useProperties()`, `useMethods()` and the three member-diagnostics
-accessors each return a typed keyed Proxy-like surface (`emit` is the same kind
+accessors each return a typed keyed surface (`emit` is the same kind
 of surface); `useDiagnostics()` is different: it returns a single readonly ref
 for the whole widget, not a keyed surface. Obtaining a surface, and accessing a
 member off it, never reads or subscribes the Runtime — only materializes/caches
 that member's Vue wrapper. Both the capability-surface object and each member
 wrapper are stable/cached within one `useWidget(Plugin)` call.
 
-A keyed surface is truthful about its members: `Object.keys(surface)`, spread,
-`in` and `toRefs()` reflect exactly the members the plugin declared (and
-nothing else), while enumerating keys still materializes nothing and
+A keyed surface is truthful about its members: it is an ordinary frozen,
+null-prototype object whose own enumerable properties are exactly the members
+the plugin declared (and nothing else), so `Object.keys(surface)`, spread and
+`in` reflect them, while enumerating keys still materializes nothing and
 subscribes nothing. An undeclared name is `undefined` and absent from `in`.
+Because the surface is frozen, assigning to a member or adding a property
+throws rather than writing anywhere hidden; `Object.freeze`, `Object.seal` and
+`JSON.stringify` on it behave as they do for any plain object. Members are
+already refs, so destructure the surface (`const { count } = useState()`);
+`toRefs(surface)` is not supported because the surface is not a reactive
+object (Vue logs a dev warning).
 
 Because a failed Property or Method projects to `null` (see below), a member
 whose own type includes `null` cannot distinguish "failed" from a legitimate
@@ -269,7 +276,7 @@ const diagnostics = useDiagnostics()
 
 `useStateDiagnostics()` / `usePropertyDiagnostics()` / `useMethodDiagnostics()` mirror the
 corresponding Runtime primitive's `getDiagnostics()`/`subscribeDiagnostics()` through
-the same lazy keyed-Proxy model as their value counterpart, independently
+the same lazy keyed-surface model as their value counterpart, independently
 lazy per member. `useDiagnostics()` mirrors the widget-level aggregate —
 `RuntimeWidget.getDiagnostics()`/`subscribeDiagnostics()` — never the Runtime-wide
 `WidgetSystemRuntime.getDiagnostics()`. Every projection preserves the
@@ -340,8 +347,10 @@ each child:
 - The renderer decides the wrapping markup and whether to render a child at
   all (render nothing to skip it). An empty slot never calls the slot.
 - `Child` is the same component for a given child on every re-render, so
-  changing the wrapper markup or skipping a sibling never remounts the child
-  widget. The slot props are typed publicly as `WidgetSlotScope`
+  re-rendering the surrounding markup with a stable wrapper, or skipping a
+  sibling, never remounts the child widget. As with any Vue component,
+  changing the wrapper element/component type, or skipping a child and showing
+  it again, unmounts and remounts it. The slot props are typed publicly as `WidgetSlotScope`
   (`Child: WidgetSlotChildComponent`).
 
 ### What `useWidget()` deliberately does not expose
@@ -426,8 +435,11 @@ code union is exported as the type `WidgetVueIntegrationErrorCode`.
 first-registration order. They are frozen arrays for this code (possibly empty)
 and `null` for every other code. The other codes carry no extra fields.
 
-The error type is a union discriminated by `code`, so after checking `code` the
-defect lists are typed as `readonly string[]`, not `readonly string[] | null`:
+`WidgetVueIntegrationError` is an ordinary exported class extending `Error`
+(`instanceof` works and it can be subclassed). The four lists are always typed
+`readonly string[] | null`; they are non-null exactly when `code` is
+`invalid-renderer-registry`, but the type does not narrow by `code`, so handle
+`null` explicitly:
 
 ```ts
 import { createWidgetVueRenderer, WidgetVueIntegrationError } from '@deviltea/widget-vue'
@@ -438,7 +450,10 @@ try {
 catch (error) {
 	if (error instanceof WidgetVueIntegrationError
 		&& error.code === 'invalid-renderer-registry') {
-		console.error(error.missingTypes.join(', '), error.invalidTypes.length)
+		console.error(
+			(error.missingTypes ?? []).join(', '),
+			error.invalidTypes?.length ?? 0,
+		)
 	}
 }
 ```

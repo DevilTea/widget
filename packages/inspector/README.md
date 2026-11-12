@@ -136,7 +136,7 @@ Rules this pins:
 const client = createInspectorClient(transport, { requestTimeoutMs: 5000 })
 ```
 
-`createInspectorClient(transport, options?)` — `options.requestTimeoutMs` (positive finite number, no default) rejects a request that gets no response within that time with an `InspectorClientError` coded `timeout`; a late response is ignored.
+`createInspectorClient(transport, options?)` — `options.requestTimeoutMs` (positive finite number, no default) rejects a request that gets no response within that time with an `InspectorClientError` coded `timeout`; a late response is ignored, except that a late successful `runtime.subscribeMember` or `runtime.subscribeEvent` response makes the client send the matching unsubscribe (best effort, the last 256 timed-out subscribe requests are remembered), so the Agent does not keep a subscription whose id the caller never learned.
 
 | Member | Behavior |
 | --- | --- |
@@ -154,7 +154,7 @@ A listener that throws does not affect other listeners or the transport: the fai
 
 **Subscribe/unsubscribe lifecycle.** `runtime.subscribeMember` (State or Property) and `runtime.subscribeEvent` return a `subscriptionId`; later `runtime.memberChanged` / `runtime.eventOccurred` events carry it. Release with `runtime.unsubscribeMember` / `runtime.unsubscribeEvent` (`{ removed }` is `false` for an unknown id). The Agent releases everything when it is disposed or the transport closes. Subscriptions are passive: subscribing never evaluates a Property.
 
-**Capabilities.** The handshake result lists the methods and events available at the negotiated minor. Anything not listed is unavailable for the session and answers `unknown-method`. DOM-dependent methods and `geometry.invalidated` are only offered by an Agent created with `dom`; `runtime.disposed` only from 0.4.
+**Capabilities.** The handshake result lists the methods and events available at the negotiated minor. Anything not listed is unavailable for the session and answers `unknown-method`. DOM-dependent methods and `geometry.invalidated` are only offered by an Agent created with `dom`; `runtime.disposed` only from 0.4. A peer that never performs the handshake is served at the Agent's highest minor for events (only the handshake sets the negotiated minor); its responses use the lower of that and the request envelope's minor.
 
 ### Events
 
@@ -173,7 +173,7 @@ A listener that throws does not affect other listeners or the transport: the fai
 
 ### Lifecycle
 
-Core offers no disposal notification, so the Agent observes `runtime.dispose()` when any request arrives, before it emits any other event, and when the Agent itself is disposed. From protocol 0.4 it then sends one `runtime.disposed` event (`reason: 'runtime-disposed'`), `runtime.list` stops listing the Runtime, and requests addressed to it answer `runtime-disposed`. Disposing the Agent while the transport stays open (`closeTransportOnDispose: false`) sends the same event with `reason: 'agent-disposed'`. Dispose the Agent when you dispose the Runtime. Peers negotiated below 0.4 never see the event or code and keep the earlier behavior.
+Core offers no disposal notification, so the Agent observes `runtime.dispose()` when any request arrives, before it emits any other event, and when the Agent itself is disposed. From protocol 0.4 it then sends one `runtime.disposed` event (`reason: 'runtime-disposed'`), `runtime.list` stops listing the Runtime, and requests addressed to it, plus `inspect.hitTest`, `inspect.enable` and `highlight.clear`, answer `runtime-disposed` (releasing calls such as `runtime.unsubscribe*` and `inspect.disable` stay answerable). Disposing the Agent while the transport stays open (`closeTransportOnDispose: false`) sends the same event with `reason: 'agent-disposed'`. Dispose the Agent when you dispose the Runtime. Peers negotiated below 0.4 never see the event or code and keep the earlier behavior.
 
 ### Value encoding limits
 
@@ -183,7 +183,7 @@ Runtime values and event arguments are encoded as `InspectableValue` (see `/valu
 | --- | --- | --- |
 | `maxDepth` | 4 | Container nesting; deeper values become `{ type: 'truncated' }`. |
 | `maxEntries` | 50 | Entries or items per array/object (objects keep their smallest keys, in sorted order). |
-| `maxStringLength` | 500 | String values **and object keys** (a cut key sets `keyTruncated: true`, 0.4+). |
+| `maxStringLength` | 500 | String values **and object keys** (a cut key sets `keyTruncated: true`, 0.4+; peers negotiated below 0.4 receive keys in full, never cut). |
 | `maxNodes` | 1000 | Total encoded values per encoded value, leaves included. Once spent, remaining entries are left out and their container reports `truncated: true`. |
 
 Truncation is always explicit in the encoding. Config schema documents are not encoded this way: they are transmitted whole as JSON metadata. The encoder lists an object's keys once (linear in the key count) but selects, sorts and describes only the entries it emits.
@@ -225,7 +225,7 @@ The Inspector is a read-only debugging boundary, not an access-control system.
 - **What a peer can read.** The full Blueprint structure (ids, types, slots, config schemas and descriptions, diagnostics, dependency graph), every State value, every Property result and diagnostic, and every event argument of the inspected Runtime, encoded within the limits above. There is no redaction hook: anything in a Runtime value is visible to the peer. Do not attach an Agent to a Runtime holding secrets you would not show the Inspector's user.
 - **What a peer cannot do.** Mutate State, invoke Methods, evaluate code, or reach Runtime, Blueprint or DOM objects: only JSON DTOs cross the boundary.
 - **The Runtime is read-only; the page is not untouched.** While Inspect mode is enabled the Agent installs capture-phase `pointerdown`, `pointerup` and `click` handlers on the inspected root that `preventDefault()` and `stopPropagation()` activation of anchored elements, a capture-phase `keydown` handler (Escape) on the document, and a fixed overlay element (open ShadowRoot) in the inspected document. Renderer elements themselves are never modified.
-- Requests are validated defensively: any failure while handling one answers `internal-error` for that request id and the Agent keeps serving; response validation on the client is not recursive on peer-controlled depth.
+- Requests are validated defensively: any failure while handling one answers `internal-error` for that request id (the peer never sees the cause) and the Agent keeps serving, reporting the original exception in its own realm with a queued rethrow (`queueMicrotask(() => { throw error })`, like isolated listener failures), so it surfaces as an uncaught error in the host; response validation on the client is not recursive on peer-controlled depth.
 
 ## Known limitations
 
@@ -252,4 +252,4 @@ Two independent axes:
 
 The protocol is currently `0.4`.
 
-**Core peer range.** `@deviltea/widget-core` is a peer dependency published as `^0.N.0` (the workspace uses `workspace:^`). A breaking change in Core's inspection surface bumps Core's minor, so a given Inspector release works with the Core minor it was released against and its patches.
+**Core peer range.** `@deviltea/widget-core` is a peer dependency published as `^0.N.0` (the workspace uses `workspace:^`). A breaking change in Core's inspection surface bumps Core's minor, so a given Inspector release works with the Core minor it was released against. Once Core is `0.1.0` or newer that range also admits that minor's later patches; while Core is still `0.0.x`, `^0.0.N` pins exactly one Core patch, so the release scripts refuse to release the Inspector until Core is `0.1.0`.

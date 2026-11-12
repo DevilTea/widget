@@ -7,7 +7,7 @@
 
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { describe, expect, it, vi } from 'vitest'
-import { toRefs } from 'vue'
+import { isRef } from 'vue'
 import {
 	CounterPlugin,
 	createCapabilityFixtureRuntime,
@@ -100,24 +100,37 @@ describe('lazy keyed surfaces — enumeration and membership', () => {
 			.toBe(false)
 	})
 
-	it('makes toRefs expose exactly the declared members', () => {
+	it('exposes members that are already refs, so destructuring the surface is the idiom', () => {
 		const { bridge } = mountCounter()
 		const state = bridge.useState()
-		// Vue warns that `toRefs()` expects a reactive object; the surface is deliberately a plain Proxy.
-		const warn = vi.spyOn(console, 'warn')
-			.mockImplementation(() => {})
+		const { count } = state
 
-		const refs = toRefs(state)
-		warn.mockRestore()
-
-		expect(Object.keys(refs))
-			.toEqual(['count'])
-		// Vue unwraps the nested member ref, so the toRefs entry reads and writes through to the Runtime.
-		expect(refs.count.value)
+		expect(count)
+			.toBe(state.count)
+		expect(isRef(count))
+			.toBe(true)
+		expect(count.value)
 			.toBe(0)
-		refs.count.value = 5
+		count.value = 5
 		expect(state.count.value)
 			.toBe(5)
+	})
+
+	it('supports freezing a surface obtained from useState() and keeps it enumerable', () => {
+		const { bridge } = mountCounter()
+		const state = bridge.useState()
+
+		Object.freeze(state)
+		Object.preventExtensions(bridge.useProperties())
+
+		expect(Object.isFrozen(state))
+			.toBe(true)
+		expect(Object.keys(state))
+			.toEqual(['count'])
+		expect(Object.keys(bridge.useProperties()))
+			.toEqual(['doubled'])
+		expect(state.count.value)
+			.toBe(0)
 	})
 
 	it('enumerates declared events through the emit surface, including a `__proto__` event', () => {

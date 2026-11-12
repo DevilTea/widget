@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient, InspectorClientError } from './client'
 import { createInspectorTestFixture } from './test-fixture'
@@ -9,7 +9,15 @@ const originalElementsFromPoint = document.elementsFromPoint
 
 afterEach(() => {
 	document.elementsFromPoint = originalElementsFromPoint
+	vi.unstubAllGlobals()
 })
+
+/** The catch-all reports the cause out-of-band with a queued rethrow; capture it instead of crashing the run. */
+function captureOutOfBandReports(): (() => void)[] {
+	const reported: (() => void)[] = []
+	vi.stubGlobal('queueMicrotask', (callback: () => void) => reported.push(callback))
+	return reported
+}
 
 function failHitTesting(): void {
 	document.elementsFromPoint = () => {
@@ -19,6 +27,7 @@ function failHitTesting(): void {
 
 describe('inspectorAgent request catch-all', () => {
 	it('answers a throwing handler with an internal-error InspectorClientError and keeps serving (in-process)', async () => {
+		captureOutOfBandReports()
 		failHitTesting()
 		const fixture = createInspectorTestFixture()
 		const root = document.createElement('div')
@@ -47,6 +56,7 @@ describe('inspectorAgent request catch-all', () => {
 	})
 
 	it('settles the request over a MessagePort instead of leaving it pending forever', async () => {
+		vi.stubGlobal('queueMicrotask', () => {})
 		failHitTesting()
 		const fixture = createInspectorTestFixture()
 		const root = document.createElement('div')
@@ -72,6 +82,7 @@ describe('inspectorAgent request catch-all', () => {
 	})
 
 	it('answers internal-error when the response itself cannot be serialized, then keeps serving', async () => {
+		captureOutOfBandReports()
 		const fixture = createInspectorTestFixture()
 		const pair = createInProcessInspectorTransportPair()
 		const responses: unknown[] = []
@@ -94,6 +105,53 @@ describe('inspectorAgent request catch-all', () => {
 					{ requestId: 'a', ok: false, error: { code: 'internal-error' } },
 					{ requestId: 'b', ok: true },
 				])
+		}
+		finally {
+			agent.dispose()
+		}
+	})
+
+	it('reports the swallowed cause out-of-band with a queued rethrow, in addition to answering internal-error', async () => {
+		const reported = captureOutOfBandReports()
+		failHitTesting()
+		const fixture = createInspectorTestFixture()
+		const root = document.createElement('div')
+		document.body.append(root)
+		const pair = createInProcessInspectorTransportPair()
+		const agent = createInspectorAgent({ runtime: fixture.runtime, transport: pair.agent, runtimeId: 'runtime-x', dom: { root } })
+		const client = createInspectorClient(pair.client)
+		try {
+			await expect(client.request('inspect.hitTest', { coordinateSpace: 'preview-viewport', x: 1, y: 1 }))
+				.rejects.toMatchObject({ code: 'internal-error' })
+
+			expect(reported)
+				.toHaveLength(1)
+			expect(() => reported[0]!())
+				.toThrow('synthetic DOM failure')
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('reports the cause even when the internal-error answer cannot be sent, and does not throw into the transport', () => {
+		const reported = captureOutOfBandReports()
+		const fixture = createInspectorTestFixture()
+		const pair = createInProcessInspectorTransportPair()
+		const agent = createInspectorAgent({ runtime: fixture.runtime, transport: pair.agent, runtimeId: 'runtime-x' })
+		pair.agent.send = () => {
+			throw new TypeError('transport down')
+		}
+		try {
+			expect(() => pair.client.send({ protocol: { major: 0, minor: 4 }, kind: 'request', requestId: 'a', method: 'runtime.list', params: {} }))
+				.not
+				.toThrow()
+			expect(reported)
+				.toHaveLength(1)
+			expect(() => reported[0]!())
+				.toThrow('transport down')
 		}
 		finally {
 			agent.dispose()

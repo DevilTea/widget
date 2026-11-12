@@ -43,11 +43,11 @@ An Agent created without `dom` serves the Runtime-level methods only. The DOM-de
 ## Two version axes
 
 - **npm semver** governs the TypeScript API.
-- **Protocol `major.minor`** governs cross-realm compatibility. Minors only add negotiated capabilities, and every params validator ignores unknown extra fields, so a newer peer's additions never break an older one; a peer negotiated at an older minor sees exactly the wire shapes of that minor. A breaking DTO change bumps the major. Only the handshake sets the negotiated minor.
+- **Protocol `major.minor`** governs cross-realm compatibility. Minors only add negotiated capabilities, and every params validator ignores unknown extra fields, so a newer peer's additions never break an older one; a peer negotiated at an older minor sees exactly the wire shapes of that minor. A breaking DTO change bumps the major. Only the handshake sets the negotiated minor. A peer that never performs the handshake is served at the Agent's highest minor for events, and its responses use the lower of that and the request envelope's minor.
 
 The protocol is currently `0.4`: 0.2 added event subscriptions and geometry, 0.3 the `subscription-limit` error code, and 0.4 the `authorWritable` / `valueContractId` member fields, the `runtime.disposed` event, the `runtime-disposed` error code and the `keyTruncated` marker.
 
-The Core peer is published as `^0.N.0` (`workspace:^` in the workspace): a breaking change in Core's inspection surface bumps Core's minor, so an Inspector release works with the Core minor it was released against and that minor's patches.
+The Core peer is published as `^0.N.0` (`workspace:^` in the workspace): a breaking change in Core's inspection surface bumps Core's minor, so an Inspector release works with the Core minor it was released against. Once Core is `0.1.0` or newer that range also admits that minor's later patches; while Core is still `0.0.x`, `^0.0.N` pins exactly one Core patch, so the release scripts refuse to release the Inspector until Core is `0.1.0`.
 
 ## Cross-frame setup
 
@@ -118,7 +118,7 @@ A `WidgetRef` is `{ runtimeId, nodeId }`: `runtime.list` gives each Runtime's `r
 
 ## Lifecycle
 
-Core has no disposal notification, so the Agent observes `runtime.dispose()` when a request arrives, before it emits another event, and when the Agent is disposed. From protocol 0.4 it sends one `runtime.disposed` event, `runtime.list` stops listing the Runtime, and requests addressed to it answer `runtime-disposed`. Disposing the Agent while the transport stays open sends the same event with `reason: 'agent-disposed'`. Dispose the Agent when you dispose the Runtime.
+Core has no disposal notification, so the Agent observes `runtime.dispose()` when a request arrives, before it emits another event, and when the Agent is disposed. From protocol 0.4 it sends one `runtime.disposed` event, `runtime.list` stops listing the Runtime, and requests addressed to it, plus `inspect.hitTest`, `inspect.enable` and `highlight.clear`, answer `runtime-disposed` (releasing calls such as `runtime.unsubscribe*` and `inspect.disable` stay answerable). Disposing the Agent while the transport stays open sends the same event with `reason: 'agent-disposed'`. Dispose the Agent when you dispose the Runtime.
 
 ## Inspect anchors
 
@@ -141,7 +141,7 @@ Rects and points use the `preview-viewport` coordinate space: CSS pixels relativ
 
 ## Value encoding limits
 
-Runtime values and event arguments are encoded as bounded, accessor-safe `InspectableValue`s. Defaults, overridable through the Agent's `valueLimits` option: `maxDepth` 4 (container nesting), `maxEntries` 50 (per array or object; objects keep their smallest keys in sorted order), `maxStringLength` 500 (string values and object keys; a cut key sets `keyTruncated: true` from 0.4), and `maxNodes` 1000 (total encoded values per value; once spent, remaining entries are left out and their container reports `truncated: true`). Truncation is always explicit. Config schema documents are transmitted whole, not through this encoder.
+Runtime values and event arguments are encoded as bounded, accessor-safe `InspectableValue`s. Defaults, overridable through the Agent's `valueLimits` option: `maxDepth` 4 (container nesting), `maxEntries` 50 (per array or object; objects keep their smallest keys in sorted order), `maxStringLength` 500 (string values and object keys; a cut key sets `keyTruncated: true` from 0.4; peers negotiated below 0.4 receive keys in full, never cut), and `maxNodes` 1000 (total encoded values per value; once spent, remaining entries are left out and their container reports `truncated: true`). Truncation is always explicit. Config schema documents are transmitted whole, not through this encoder.
 
 ## Security model
 
@@ -149,7 +149,7 @@ Runtime values and event arguments are encoded as bounded, accessor-safe `Inspec
 - **A peer can read** the full Blueprint structure, every State value, every Property result and diagnostic, and every event argument of the inspected Runtime, within the limits above. There is no redaction hook: do not attach an Agent to a Runtime holding secrets you would not show the Inspector's user.
 - **A peer cannot** mutate State, invoke Methods, evaluate code, or reach Runtime, Blueprint or DOM objects: only JSON DTOs cross the boundary.
 - **The Runtime is read-only; the page is not untouched.** While Inspect mode is enabled the Agent installs capture-phase `pointerdown`, `pointerup` and `click` handlers on the inspected root that stop activation of anchored elements, a capture-phase Escape `keydown` handler on the document, and a fixed overlay element in the inspected document. Renderer elements are never modified.
-- Any failure while handling a request answers `internal-error` for that request and the Agent keeps serving.
+- Any failure while handling a request answers `internal-error` for that request and the Agent keeps serving. The peer never sees the cause; the Agent reports the original exception in its own realm with a queued rethrow (`queueMicrotask(() => { throw error })`), so it surfaces as an uncaught error in the host. A subscribe request whose success response cannot be sent is rolled back, leaving no subscription under an id the peer never learned.
 
 ## Known limitations
 
