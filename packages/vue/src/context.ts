@@ -14,6 +14,7 @@
  */
 
 import type { Component, InjectionKey } from 'vue'
+import { provide } from 'vue'
 
 export interface RuntimeStateLike {
 	get: () => unknown
@@ -67,3 +68,16 @@ export interface CurrentWidgetContextValue {
 }
 
 export const CurrentWidgetContextKey: InjectionKey<CurrentWidgetContextValue> = Symbol('@deviltea/widget-vue:current-widget-context')
+
+/**
+ * The one place a widget context is constructed and provided: the internal host used by the real
+ * renderer and the `./testing` host both call it, so a component under test sees exactly the context
+ * the real renderer would give it. Must be called during `setup()`.
+ */
+export function provideCurrentWidgetContext(widget: RuntimeWidgetLike, runtime: unknown, rendererByType: ReadonlyMap<string, Component>): void {
+	provide(CurrentWidgetContextKey, {
+		widget,
+		runtime: runtime as RuntimeLike,
+		rendererByType,
+	})
+}

@@ -1,7 +1,8 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-	entry: ['src/index.ts'],
+	// Exactly the public subpaths; `context` (the private injection key) is only reachable through their shared chunk.
+	entry: ['src/index.ts', 'src/testing.ts'],
 	format: 'esm',
 	target: 'es2022',
 	dts: {

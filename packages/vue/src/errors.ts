@@ -6,6 +6,7 @@ export type WidgetVueIntegrationErrorCode
 	= | 'invalid-renderer-registry'
 		| 'invalid-runtime'
 		| 'foreign-runtime'
+		| 'unknown-widget'
 		| 'runtime-system-mismatch'
 		| 'outside-widget-renderer'
 		| 'widget-plugin-mismatch'
@@ -85,6 +86,8 @@ export type WidgetVueIntegrationError = WidgetVueRegistryIntegrationError | Widg
  * - `foreign-runtime`: the `runtime` prop was not produced by the `@deviltea/widget-core` instance this
  *   package imports, because two copies of core are installed. Checked when the root renderer is first
  *   given a Runtime, before the System-identity check.
+ * - `unknown-widget`: `createWidgetTestHost()` (from `@deviltea/widget-vue/testing`) was given a widget
+ *   id the Runtime does not contain.
  * - `runtime-system-mismatch`: the `runtime` prop was not created from the exact bound System.
  * - `outside-widget-renderer`: `useWidget()` or `WidgetSlot` was used without a current widget host.
  * - `widget-plugin-mismatch`: `useWidget(Plugin)` received a plugin instance other than the current

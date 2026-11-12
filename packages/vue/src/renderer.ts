@@ -6,10 +6,10 @@
 
 import type { AnyWidgetPluginTuple, WidgetPluginTypeOf, WidgetSystem, WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { Component, PropType } from 'vue'
-import type { CurrentWidgetContextValue, RuntimeLike, RuntimeWidgetLike } from './context'
+import type { CurrentWidgetContextValue, RuntimeWidgetLike } from './context'
 import type { WidgetSlotChildComponent, WidgetSlotScope } from './types'
-import { defineComponent, Fragment, h, inject, provide } from 'vue'
-import { CurrentWidgetContextKey } from './context'
+import { defineComponent, Fragment, h, inject } from 'vue'
+import { CurrentWidgetContextKey, provideCurrentWidgetContext } from './context'
 import { WidgetVueIntegrationError } from './errors'
 import { assertWidgetRuntime } from './runtime-guard'
 
@@ -229,11 +229,7 @@ const InternalWidgetHost = defineComponent({
 		// Topology is static for the lifetime of one Runtime (an immutable Blueprint), so this host's
 		// props never change after creation; a plain snapshot is sufficient, no reactive indirection
 		// needed.
-		provide(CurrentWidgetContextKey, {
-			widget: props.widget,
-			runtime: props.runtime as unknown as RuntimeLike,
-			rendererByType: props.rendererByType,
-		})
+		provideCurrentWidgetContext(props.widget, props.runtime, props.rendererByType)
 
 		return () => {
 			const ActualRenderer = props.rendererByType.get(props.widget.type)

@@ -48,6 +48,7 @@ describe('public entry point', () => {
 				| 'invalid-renderer-registry'
 				| 'invalid-runtime'
 				| 'foreign-runtime'
+				| 'unknown-widget'
 				| 'runtime-system-mismatch'
 				| 'outside-widget-renderer'
 				| 'widget-plugin-mismatch'
