@@ -624,26 +624,53 @@ interface WidgetPluginDraft {
 	events: Map<WidgetMemberKey, ErasedWidgetEventDefinition> | null
 }
 
+type WidgetPluginSectionName = 'state' | 'properties' | 'methods' | 'events'
+
+function describeValue(value: unknown): string {
+	return value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value
+}
+
 /**
- * Builds the section keyed-chain object.
+ * Runs one section build callback against the section keyed-chain object, registering its members into
+ * `members` in declaration order.
  *
  * Declared member keys exist only at the type level, so every string member access resolves to a
- * consuming function; the returned chain object is the same object by identity.
+ * registrar; the returned chain object is the same object by identity. A registrar accepts only a
+ * definition object, which it captures by value (shallow copy, frozen), so probing the section
+ * (`JSON.stringify`, string coercion, thenable detection) registers nothing. The section is sealed once
+ * the build callback returns or throws: a later registrar call (from a retained section) throws and
+ * changes nothing. These are plugin contract violations, so they throw uncoded `TypeError`s.
  */
-function createSection(sink: Map<WidgetMemberKey, any>): unknown {
+function buildSection(
+	pluginType: string,
+	sectionName: WidgetPluginSectionName,
+	members: Map<WidgetMemberKey, any>,
+	build: (section: any) => unknown,
+): void {
+	let sealed = false
 	const section: unknown = new Proxy({}, {
 		get(_target, key) {
 			if (typeof key !== 'string')
 				return undefined
 
 			return (definition: unknown) => {
-				sink.set(key, definition)
+				if (sealed)
+					throw new TypeError(`Widget plugin "${pluginType}": member "${key}" of section "${sectionName}" was declared after the section's build callback returned. This is a plugin implementation bug.`)
+				if (typeof definition !== 'object' || definition === null)
+					throw new TypeError(`Widget plugin "${pluginType}": member "${key}" of section "${sectionName}" must be declared with a definition object, got ${describeValue(definition)}. This is a plugin implementation bug.`)
+
+				members.set(key, Object.freeze({ ...definition }))
 				return section
 			}
 		},
 	})
 
-	return section
+	try {
+		build(section)
+	}
+	finally {
+		sealed = true
+	}
 }
 
 /**
@@ -685,7 +712,8 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 			definitions: Readonly<Record<WidgetMemberKey, ErasedWidgetSlotDefinition>>,
 			validateStructure?: (ctx: any) => void,
 		) {
-			draft.slots = new Map(Object.entries(definitions))
+			draft.slots = new Map(Object.entries(definitions)
+				.map(([name, slot]) => [name, Object.freeze({ ...slot })]))
 			draft.validateStructure = validateStructure ?? null
 			return builder
 		},
@@ -693,28 +721,28 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 		state(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetStateMemberDefinition>()
 			draft.state = members
-			build(createSection(members))
+			buildSection(type, 'state', members, build)
 			return builder
 		},
 
 		properties(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetPropertyDefinition>()
 			draft.properties = members
-			build(createSection(members))
+			buildSection(type, 'properties', members, build)
 			return builder
 		},
 
 		methods(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetMethodDefinition>()
 			draft.methods = members
-			build(createSection(members))
+			buildSection(type, 'methods', members, build)
 			return builder
 		},
 
 		events(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetEventDefinition>()
 			draft.events = members
-			build(createSection(members))
+			buildSection(type, 'events', members, build)
 			return builder
 		},
 
