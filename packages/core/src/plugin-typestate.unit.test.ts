@@ -31,7 +31,7 @@ import type {
 	WidgetSystemValidateStructure,
 } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin } from './index'
+import { createWidgetPlugin, createWidgetSystem } from './index'
 
 // -------------------------------------------------------------------------------------------------
 // Fixture interfaces
@@ -792,20 +792,34 @@ describe('semantic callbacks stay synchronous and are not widened to MaybePromis
 			.toBe('function')
 	})
 
-	it('rejects an async `execute` even when the Method is declared to return `void`', () => {
+	it('rejects an async `execute` written into the builder even when the Method is declared to return `void`', () => {
+		const asyncPhase = createWidgetPlugin('void-async')
+			.description('Test widget')
+			.interfaces<VoidMethodInterfaces>()
+			.methods(methods => methods.submit({
+				validateArgs: (args): args is [] => args.length === 0,
+				// @ts-expect-error a `void` return does not widen `execute` to MaybePromise; an async `execute` would write State in its synchronous prefix and fail afterwards
+				execute: async () => {},
+			}))
+		const thenablePhase = createWidgetPlugin('void-thenable')
+			.description('Test widget')
+			.interfaces<VoidMethodInterfaces>()
+			.methods(methods => methods.submit({
+				validateArgs: (args): args is [] => args.length === 0,
+				// @ts-expect-error any thenable result is rejected, not only a native Promise
+				execute: () => ({ then: (resolve: (value: undefined) => void) => resolve(undefined) }),
+			}))
+		expect([asyncPhase, thenablePhase])
+			.toHaveLength(2)
+	})
+
+	it('leaves a standalone `void` execute type unable to see a thenable (the runtime guard catches it)', () => {
+		// The standalone type has no callback to infer the own return type from, so it accepts any return.
 		const definition: WidgetMethodDefinition<VoidMethodInterfaces, 'submit', EmptyRegisteredDeps> = {
 			validateArgs: (args): args is [] => args.length === 0,
-			// @ts-expect-error a `void` return does not widen `execute` to MaybePromise; an async `execute` would write State in its synchronous prefix and fail afterwards
 			execute: async () => {},
 		}
-		const thenable: WidgetMethodDefinition<VoidMethodInterfaces, 'submit', EmptyRegisteredDeps> = {
-			validateArgs: (args): args is [] => args.length === 0,
-			// @ts-expect-error any thenable result is rejected, not only a native Promise
-			execute: () => ({ then: (resolve: (value: undefined) => void) => resolve(undefined) }),
-		}
 		expect(typeof definition.execute)
-			.toBe('function')
-		expect(typeof thenable.execute)
 			.toBe('function')
 	})
 
@@ -825,19 +839,29 @@ describe('semantic callbacks stay synchronous and are not widened to MaybePromis
 	})
 
 	it('rejects an async structure validator at the slot, plugin and system level', () => {
-		const slot: WidgetSlotDefinition<SlotsOnlyInterfaces, 'items'> = {
-			description: 'Items',
+		const slot = createWidgetPlugin('async-slot')
+			.description('Test widget')
+			.interfaces<SlotsOnlyInterfaces>()
 			// @ts-expect-error a structure validator returns nothing; an async one would report diagnostics after compilation ended
-			validateStructure: async () => {},
-		}
-		// @ts-expect-error the plugin-level validator (`.structure()`) must stay synchronous
-		const plugin: WidgetPluginValidateStructure<SlotsOnlyInterfaces> = async () => {}
+			.slots({ items: { description: 'Items', validateStructure: async () => {} } })
+		const plugin = createWidgetPlugin('async-plugin')
+			.description('Test widget')
+			.interfaces<SlotsOnlyInterfaces>()
+			.slots({ items: { description: 'Items' } })
+			// @ts-expect-error the plugin-level validator (`.structure()`) must stay synchronous
+			.structure(async () => {})
 		// @ts-expect-error the system-level validator must stay synchronous
-		const system: WidgetSystemValidateStructure<AnyWidgetPluginTuple> = async () => {}
+		const system = createWidgetSystem({ plugins: [], validateStructure: async () => {} })
+		// The standalone types have no callback to infer the own return type from (the runtime guard catches a thenable).
+		const standalone: [WidgetSlotDefinition<SlotsOnlyInterfaces, 'items'>, WidgetPluginValidateStructure<SlotsOnlyInterfaces>, WidgetSystemValidateStructure<AnyWidgetPluginTuple>] = [
+			{ description: 'Items', validateStructure: async () => {} },
+			async () => {},
+			async () => {},
+		]
 		const synchronous: WidgetPluginValidateStructure<SlotsOnlyInterfaces> = ctx => ctx.addDiagnostic({ message: 'sync' })
 
-		expect([typeof slot.validateStructure, typeof plugin, typeof system, typeof synchronous])
-			.toEqual(['function', 'function', 'function', 'function'])
+		expect([slot, plugin, system, ...standalone, synchronous])
+			.toHaveLength(7)
 	})
 
 	it('allows a method argument to carry a PromiseLike value while `execute` still resolves synchronously', () => {
