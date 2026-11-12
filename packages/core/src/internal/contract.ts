@@ -382,15 +382,17 @@ export interface RuntimeState<T> {
 	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeStateDiagnostic[]) => void) => () => void
 }
 
+/** A completed result's ok value is exactly what `compute` returned (never an added `null`). */
 export interface RuntimeProperty<T> {
-	get: () => ExecutionResult<T | null, RuntimePropertyDiagnostic>
-	subscribe: (listener: (result: ExecutionResult<T | null, RuntimePropertyDiagnostic>) => void) => () => void
+	get: () => ExecutionResult<T, RuntimePropertyDiagnostic>
+	subscribe: (listener: (result: ExecutionResult<T, RuntimePropertyDiagnostic>) => void) => () => void
 	getDiagnostics: () => readonly RuntimePropertyDiagnostic[]
 	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimePropertyDiagnostic[]) => void) => () => void
 }
 
+/** A successful invocation's ok value is exactly what `execute` returned (never an added `null`). */
 export interface RuntimeMethod<Fn extends (...args: any[]) => any> {
-	(...args: Parameters<Fn>): ExecutionResult<ReturnType<Fn> | null, RuntimeMethodDiagnostic>
+	(...args: Parameters<Fn>): ExecutionResult<ReturnType<Fn>, RuntimeMethodDiagnostic>
 	getDiagnostics: () => readonly RuntimeMethodDiagnostic[]
 	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeMethodDiagnostic[]) => void) => () => void
 }

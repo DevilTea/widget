@@ -222,12 +222,17 @@ export type SelfStateDependencyOperations<Interfaces extends WidgetInterfaces, C
 			}
 		: unknown)
 
+/**
+ * A self Property read yields exactly what its `compute` returned: a self target is never absent, so no
+ * `null` is added (unlike a State read, whose member may hold `null`).
+ */
 export interface SelfPropertyDependencyOperations<Interfaces extends WidgetInterfaces> {
-	get: <Name extends WidgetPropertyKeyOf<Interfaces>>(name: Name) => PropertyGetDepExpression<WidgetPropertyValueOf<Interfaces, Name> | null, false>
+	get: <Name extends WidgetPropertyKeyOf<Interfaces>>(name: Name) => PropertyGetDepExpression<WidgetPropertyValueOf<Interfaces, Name>, false>
 }
 
+/** A self Method invocation yields exactly what its `execute` returned; see {@link SelfPropertyDependencyOperations}. */
 export interface SelfMethodDependencyOperations<Interfaces extends WidgetInterfaces> {
-	invoke: <Name extends WidgetMethodKeyOf<Interfaces>>(name: Name) => MethodInvokeDepExpression<WidgetMethodArgsOf<Interfaces, Name>, WidgetMethodReturnOf<Interfaces, Name> | null, false>
+	invoke: <Name extends WidgetMethodKeyOf<Interfaces>>(name: Name) => MethodInvokeDepExpression<WidgetMethodArgsOf<Interfaces, Name>, WidgetMethodReturnOf<Interfaces, Name>, false>
 }
 
 /**
