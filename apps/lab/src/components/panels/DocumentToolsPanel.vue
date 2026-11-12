@@ -4,12 +4,12 @@
  * data and invokes the public WidgetDocument conflict contract through the session; it is never an
  * authoring surface, semantic validator, or history store.
  */
-import type { AnyWidgetPluginTuple, WidgetSource } from '@deviltea/widget-core'
 import type { RevisionConflictDemoResult } from '../../lab/types'
 import { separateWidgetSource } from '@deviltea/widget-core'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
+import { formatSeparatedSourceLocation } from '../../lib/diagnostic-format'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const store = useLabStore()
@@ -19,9 +19,13 @@ const latestPatch = computed(() => store.lastAppliedSourcePatch.value)
 const patchText = computed(() => latestPatch.value === null ? '' : JSON.stringify(latestPatch.value.patch, null, 2))
 const separatedProjection = computed(() => {
 	const blueprint = store.documentState.value.blueprint
-	return blueprint.status === 'valid' ? separateWidgetSource(blueprint.source as WidgetSource<AnyWidgetPluginTuple>) : null
+	return blueprint.status === 'valid' ? separateWidgetSource(blueprint.source) : null
 })
-const separatedProjectionText = computed(() => separatedProjection.value === null ? null : JSON.stringify(separatedProjection.value, null, 2))
+const separatedProjectionText = computed(() => {
+	const separated = separatedProjection.value?.separated
+	return separated === undefined || separated === null ? null : JSON.stringify(separated, null, 2)
+})
+const separatedDiagnostics = computed(() => separatedProjection.value?.diagnostics ?? [])
 const conflictDemo = ref<RevisionConflictDemoResult | null>(null)
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
 const trace = computed(() => store.documentTrace.value)
@@ -183,8 +187,20 @@ function runConflictDemo(): void {
 					v-else
 					:class="pika({ margin: '6px 0 0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
 				>
-					{{ i18n.t('Projection is available only for a valid Core WidgetSource.') }}
+					{{ i18n.t(separatedProjection === null ? 'Projection is available only for a valid Core WidgetSource.' : 'Core could not project this source.') }}
 				</p>
+				<ul
+					v-if="separatedDiagnostics.length > 0"
+					data-testid="document-tools-separated-diagnostics"
+					:class="pika({ listStyle: 'none', margin: '6px 0 0', padding: '0', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px' })"
+				>
+					<li
+						v-for="(diagnostic, index) in separatedDiagnostics"
+						:key="index"
+					>
+						<code>{{ diagnostic.code }}</code> · <code>{{ formatSeparatedSourceLocation(diagnostic.location) }}</code> · {{ diagnostic.message }}
+					</li>
+				</ul>
 			</section>
 
 			<section data-testid="document-tools-trace">

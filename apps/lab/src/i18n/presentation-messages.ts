@@ -67,6 +67,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Separated-source projection': 'Separated-source projection',
 	'Core projection of the current Document source; read-only and not an alternate authoring representation.': '目前 Document source 的 Core projection；唯讀，不是另一種 authoring representation。',
 	'Projection is available only for a valid Core WidgetSource.': 'Projection 僅適用於有效的 Core WidgetSource。',
+	'Core could not project this source.': 'Core 無法投影這份 source。',
 	'Bounded session trace (observation only)': '有界 session trace（僅供觀察）',
 	'This finite trace is telemetry only: it cannot replay, restore, undo, or redo Document state.': '此有限 trace 僅是 telemetry：無法 replay、還原、undo 或 redo Document state。',
 	'No Document observations yet.': '尚無 Document 觀察紀錄。',
