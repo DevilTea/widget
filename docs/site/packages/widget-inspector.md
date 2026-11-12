@@ -141,7 +141,7 @@ Rects and points use the `preview-viewport` coordinate space: CSS pixels relativ
 
 ## Value encoding limits
 
-Runtime values and event arguments are encoded as bounded, accessor-safe `InspectableValue`s. Defaults, overridable through the Agent's `valueLimits` option: `maxDepth` 4 (container nesting), `maxEntries` 50 (per array or object; objects keep their smallest keys in sorted order), `maxStringLength` 500 (string values and object keys; a cut key sets `keyTruncated: true` from 0.4), and `maxNodes` 1000 (total encoded values per value; once spent, remaining entries are left out and their container reports `truncated: true`). Truncation is always explicit. Config schema documents are transmitted whole, not through this encoder.
+Runtime values and event arguments are encoded as bounded, accessor-safe `InspectableValue`s. Defaults, overridable through the Agent's `valueLimits` option: `maxDepth` 4 (container nesting), `maxEntries` 50 (per array or object; objects keep their smallest keys in sorted order), `maxStringLength` 500 (string values and object keys; a cut key sets `keyTruncated: true` from 0.4; peers negotiated below 0.4 receive keys in full, never cut), and `maxNodes` 1000 (total encoded values per value; once spent, remaining entries are left out and their container reports `truncated: true`). Truncation is always explicit. Config schema documents are transmitted whole, not through this encoder.
 
 ## Security model
 

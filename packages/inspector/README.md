@@ -183,7 +183,7 @@ Runtime values and event arguments are encoded as `InspectableValue` (see `/valu
 | --- | --- | --- |
 | `maxDepth` | 4 | Container nesting; deeper values become `{ type: 'truncated' }`. |
 | `maxEntries` | 50 | Entries or items per array/object (objects keep their smallest keys, in sorted order). |
-| `maxStringLength` | 500 | String values **and object keys** (a cut key sets `keyTruncated: true`, 0.4+). |
+| `maxStringLength` | 500 | String values **and object keys** (a cut key sets `keyTruncated: true`, 0.4+; peers negotiated below 0.4 receive keys in full, never cut). |
 | `maxNodes` | 1000 | Total encoded values per encoded value, leaves included. Once spent, remaining entries are left out and their container reports `truncated: true`. |
 
 Truncation is always explicit in the encoding. Config schema documents are not encoded this way: they are transmitted whole as JSON metadata. The encoder lists an object's keys once (linear in the key count) but selects, sorts and describes only the entries it emits.

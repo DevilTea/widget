@@ -90,12 +90,14 @@ describe('encodeInspectableValue key truncation', () => {
 		expect(byValue[2]).not.toHaveProperty('keyTruncated')
 	})
 
-	it('honours maxStringLength for keys and can omit the marker', () => {
-		const encoded = encodeInspectableValue({ abcdef: 1 }, { maxStringLength: 3, markTruncatedKeys: false })
-		expect(encoded)
-			.toMatchObject({ entries: [{ key: 'abc', value: { type: 'number', value: 1 } }] })
-		if (encoded.type === 'object')
-			expect(encoded.entries[0]).not.toHaveProperty('keyTruncated')
+	it('emits keys in full, unmarked, when the marker is off, so distinct long keys never collide', () => {
+		const encoded = encodeInspectableValue({ abcdef: 1, abcxyz: 2 }, { maxStringLength: 3, markTruncatedKeys: false })
+		if (encoded.type !== 'object')
+			throw new Error('Expected object encoding.')
+		expect(encoded.entries.map(entry => entry.key))
+			.toEqual(['abcdef', 'abcxyz'])
+		for (const entry of encoded.entries)
+			expect(entry).not.toHaveProperty('keyTruncated')
 	})
 
 	it('validates the optional marker on the wire', () => {
@@ -214,13 +216,17 @@ describe('inspectorAgent valueLimits', () => {
 		}
 	})
 
-	it('marks truncated keys only for peers negotiated at 0.4 or newer', async () => {
+	it('cuts and marks long keys only for peers negotiated at 0.4 or newer; older peers see them in full', async () => {
 		const { agent, client } = createFixture({ valueLimits: { maxEntries: 200 } })
 		try {
 			await client.request('handshake', { protocol: { major: 0, minor: 3 } })
 			const previous = await blobValue(client)
-			const previousLong = previous.entries.find(entry => entry.key.length === 500)!
+			const previousLong = previous.entries.find(entry => entry.key.length === 600)!
+			expect(previousLong.key)
+				.toBe('x'.repeat(600))
 			expect(previousLong).not.toHaveProperty('keyTruncated')
+			expect(previous.entries.some(entry => entry.key.length === 500))
+				.toBe(false)
 
 			await client.request('handshake', { protocol: { major: 0, minor: 4 } })
 			const current = await blobValue(client)

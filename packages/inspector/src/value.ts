@@ -12,8 +12,9 @@ export interface InspectableValueEncodingOptions {
 	 */
 	readonly maxNodes?: number
 	/**
-	 * Mark an object entry whose key was cut to `maxStringLength` with `keyTruncated: true`. Default true.
-	 * The Agent turns it off for peers negotiated below protocol 0.4, which predate the marker.
+	 * Cut object keys longer than `maxStringLength` and mark the entry with `keyTruncated: true`. Default true.
+	 * When false, keys are emitted in full and never cut: the Agent turns it off for peers negotiated below
+	 * protocol 0.4, which predate the marker and must see the same shapes as before.
 	 */
 	readonly markTruncatedKeys?: boolean
 }
@@ -231,7 +232,9 @@ export function encodeInspectableValue(
 			}
 			if (descriptor === undefined)
 				continue
-			const keyTruncated = key.length > maxStringLength
+			// Without the marker (peers below 0.4) a cut key would be indistinguishable from a real one and two
+			// distinct long keys could collide, so such peers keep receiving keys in full, as before 0.4.
+			const keyTruncated = markTruncatedKeys && key.length > maxStringLength
 			let entryValue: InspectableValue
 			if ('value' in descriptor) {
 				entryValue = encode(descriptor.value, depth + 1)
@@ -242,7 +245,7 @@ export function encodeInspectableValue(
 			}
 			entries.push({
 				key: keyTruncated ? key.slice(0, maxStringLength) : key,
-				...(keyTruncated && markTruncatedKeys ? { keyTruncated: true } : {}),
+				...(keyTruncated ? { keyTruncated: true } : {}),
 				value: entryValue,
 			})
 		}
