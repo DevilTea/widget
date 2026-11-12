@@ -22,7 +22,7 @@
  * "Framework-owned snapshot immutability"). Individual elements are already deep-frozen at their owning
  * primitive, so composition only ever needs to freeze the new wrapper array, never the diagnostics inside it.
  *
- * Normative source: diagnostic #10 consolidated handoff §5/§16/§20, amendments "RuntimeWidget aggregate diagnostic
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §5/§16/§20, amendments "RuntimeWidget aggregate diagnostic
  * surface" and "Framework-owned snapshot immutability".
  */
 

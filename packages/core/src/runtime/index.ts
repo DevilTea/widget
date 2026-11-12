@@ -6,7 +6,7 @@
  * `attemptSet`), materializes dependency callables, creates Property/Method primitives, assembles
  * RuntimeWidget objects and wires the deterministic aggregate.
  *
- * Normative source: diagnostic #10 consolidated handoff §11 (Runtime creation/initialization pipeline).
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §11 (Runtime creation/initialization pipeline).
  */
 
 import type {

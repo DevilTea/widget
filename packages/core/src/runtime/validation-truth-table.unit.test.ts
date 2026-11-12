@@ -2,7 +2,7 @@
  * Regression coverage for PR #12 review findings 3773310820 (`runtime/state.ts`) and 3773310824
  * (`runtime/method.ts`): the locked validator truth table.
  *
- * Normative source: diagnostic #10 §7 / consolidated handoff §15 finalization table:
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 §7 / consolidated handoff §15 finalization table:
  *
  * ```text
  * true  + no diagnostics -> ok

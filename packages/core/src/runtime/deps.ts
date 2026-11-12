@@ -16,7 +16,7 @@
  * dependency diagnostics into that owner's own running collector, never into whichever operation happens
  * to be executing.
  *
- * Normative source: diagnostic #10 consolidated handoff §12 (target-failure 1:1 wrapping,
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §12 (target-failure 1:1 wrapping,
  * `property-dependency`/`method-dependency`), U1 handoff §5 (resolved/absent x
  * state-get/property-get/method-invoke/state-set materialization table).
  */

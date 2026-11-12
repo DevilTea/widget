@@ -14,7 +14,7 @@
  * exception escaping a computed would otherwise escape alien-signals' flush from whichever effect's
  * dirty check re-evaluated it, through an unrelated writer, and drop the rest of that flush's queue.
  *
- * Normative source: diagnostic #10 consolidated handoff §14, amendment "Implementation verification —
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §14, amendment "Implementation verification —
  * alien-signals@3.2.1 conformance" (#4).
  */
 

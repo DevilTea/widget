@@ -1,7 +1,7 @@
 /**
  * Immutable registered plugin universe.
  *
- * Normative source: diagnostic #10 amendment "reconciliation audit" (WidgetSystem registration details)
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendment "reconciliation audit" (WidgetSystem registration details)
  * and consolidated handoff §5.
  */
 
@@ -86,11 +86,14 @@ export interface WidgetSystem<Plugins extends AnyWidgetPluginTuple = AnyWidgetPl
 	 */
 	createBlueprint: (definition: unknown) => WidgetSystemBlueprint<Plugins>
 	/**
-	 * Parses `text` with `JSON.parse` and compiles the result. Observably equivalent to
-	 * `createBlueprint(JSON.parse(text))`, but cheaper: a value produced by `JSON.parse` (without a
-	 * reviver) is in the authored JSON domain by construction, so Core skips the whole-source JSON-domain
-	 * inspection and `sourceJsonCompatible` is `true`. Invalid JSON text throws the `SyntaxError` from
-	 * `JSON.parse`, unchanged. The parsed source is referenced by nothing but the Blueprint.
+	 * Parses `text` with `JSON.parse` and compiles the result. Equivalent to
+	 * `createBlueprint(JSON.parse(text))`, including its diagnostics: a value Core parsed itself can only
+	 * leave the authored JSON domain through a non-finite number (`1e400` parses to `Infinity`, diagnosed as
+	 * `json-incompatible-value` / `non-finite-number`) or through nesting deeper than `MAX_JSON_DEPTH`, so Core
+	 * replaces the descriptor-level JSON-domain inspection with a cheaper scan for exactly those two cases and
+	 * runs the full inspection when the scan finds either. `sourceJsonCompatible` is `true` only when that
+	 * proof succeeds. Invalid JSON text throws the `SyntaxError` from `JSON.parse`, unchanged. The parsed
+	 * source is referenced by nothing but the Blueprint.
 	 */
 	createBlueprintFromJson: (text: string) => WidgetSystemBlueprint<Plugins>
 }

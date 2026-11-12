@@ -6,7 +6,7 @@
  * at least one Property invalidates the Blueprint (COMMENT 18 — method-only cycles, including ones a
  * Property can reach without the cycle returning to it, must stay valid).
  *
- * Normative source: diagnostic #10 amendments "graph-analysis diagnostics" (COMMENT 12) and "simplify method
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendments "graph-analysis diagnostics" (COMMENT 12) and "simplify method
  * graph semantics; only Property safety is normative" (COMMENT 18), consolidated handoff §9.
  */
 

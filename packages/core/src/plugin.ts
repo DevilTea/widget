@@ -1,7 +1,7 @@
 /**
  * Plugin semantic contract and the ordered capability-phase builder.
  *
- * Normative source: diagnostic #10 checkpoint A/B/C/D, amendments "reconciliation audit",
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 checkpoint A/B/C/D, amendments "reconciliation audit",
  * "WidgetMemberKey domain", "builder completion typestate and finite member-key universe" and
  * consolidated handoff §2/§3/§4.
  */

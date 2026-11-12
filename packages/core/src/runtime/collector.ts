@@ -15,7 +15,7 @@
  * every JS value — including two distinct `Symbol` instances that happen to share a description, which
  * a naive `` `${typeof value}:${String(value)}` `` encoding would incorrectly conflate.
  *
- * Normative source: diagnostic #10 consolidated handoff §12/§15/§16 ("local execution collectors",
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §12/§15/§16 ("local execution collectors",
  * "finalize pending ... diagnostics", "automatically insert wrapped consumer Diagnostics into the active
  * operation-local collector", "repeated reads of the same failing dependency ... avoid duplicating the
  * same dependency diagnostic insertion").

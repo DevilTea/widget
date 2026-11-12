@@ -1,7 +1,7 @@
 /**
  * Conformance coverage for diagnostic #10 COMMENT 26 §2 (Blueprint recovery contract).
  *
- * Normative source: diagnostic #10 checkpoint B (COMMENT 1), amendment "Blueprint recovery edge-case
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 checkpoint B (COMMENT 1), amendment "Blueprint recovery edge-case
  * contract" (COMMENT 24), and the U2 blueprint-compiler handoff notes. Only public Blueprint surface
  * imported from the package entry (`../index`) is exercised; internal modules and `blueprintInternals`
  * are out of scope.

@@ -2,7 +2,7 @@
  * `registerDeps` invocation and dependency target/member resolution — compile pipeline steps 7-9
  * (consolidated handoff §10).
  *
- * Normative source: diagnostic #10 checkpoint D, amendments "dependency resolution and compiled-edge
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 checkpoint D, amendments "dependency resolution and compiled-edge
  * invariants" (COMMENT 11) and "graph-analysis diagnostics" (COMMENT 12), consolidated handoff §8.
  */
 

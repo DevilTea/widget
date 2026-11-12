@@ -3,7 +3,7 @@
  * plus the realm-wide callback scope that bounds the lifetime of a callback context's dependency and
  * `emit` callables and routes dependency-leaf diagnostics into the running operation-local collector.
  *
- * Normative source: diagnostic #10 consolidated handoff §12 ("automatically insert wrapped consumer Diagnostics
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §12 ("automatically insert wrapped consumer Diagnostics
  * into the active operation-local collector"), §19 (disposal), §17 (alien-signals adapter disposal
  * bookkeeping); Discussion #12 C0R159 (callback-context lifetime).
  */

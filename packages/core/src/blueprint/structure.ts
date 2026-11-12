@@ -1,7 +1,7 @@
 /**
  * Structure validation — compile pipeline step 6 (consolidated handoff §10).
  *
- * Normative source: diagnostic #10 checkpoint C ("Structure validation"), amendment "callback addDiagnostic()
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 checkpoint C ("Structure validation"), amendment "callback addDiagnostic()
  * relative authoring" (COMMENT 14), amendment "synchronous core boundary and future async seams"
  * (every semantic callback here is sync-only), amendment "diagnostic-location contract" (system-level
  * `related` normalization), amendment "compile-view contract" (callbacks receive a restricted, frozen

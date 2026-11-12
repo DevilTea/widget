@@ -2,7 +2,7 @@
  * Regression coverage for PR #12 review finding 3773310848 (`runtime/widget.ts` unsafe `{}` +
  * bracket-assignment for arbitrary member-name surfaces).
  *
- * Normative source: diagnostic #10 builder/member-key amendment — `constructor`/`__proto__` are not
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 builder/member-key amendment — `constructor`/`__proto__` are not
  * forbidden member names; implementation must represent member-keyed surfaces with `Map` or a
  * null-prototype record rather than relying on ordinary object prototype semantics. Bracket-assigning a
  * `"__proto__"` key into a plain `{}` mutates the object's own `[[Prototype]]` instead of creating an

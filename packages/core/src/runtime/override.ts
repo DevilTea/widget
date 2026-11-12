@@ -6,7 +6,7 @@
  * as Runtime-level `state-override` Diagnostics at the documented granularity, and every other usable
  * fragment still initializes independently.
  *
- * Normative source: diagnostic #10 amendments "overrideStateDefaults is best-effort", "rename Runtime
+ * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 amendments "overrideStateDefaults is best-effort", "rename Runtime
  * override diagnostic to state-override" and consolidated handoff §11.
  */
 
