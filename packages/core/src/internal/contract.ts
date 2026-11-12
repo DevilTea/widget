@@ -286,6 +286,11 @@ export type WidgetSourceFor<
 	= & {
 		readonly id: WidgetId
 		readonly type: WidgetPluginTypeOf<Plugin>
+		/**
+		 * The reserved extension key: any JSON value, preserved in `source` and never interpreted by
+		 * Core. Every other unrecognized own key is diagnosed as `unexpected-widget-field`.
+		 */
+		readonly meta?: JsonValue
 	}
 	& (HasWidgetCapability<WidgetInterfacesOf<Plugin>, 'config'> extends true
 		// An omitted config is validated as `null`, so it may be omitted only when the raw type admits `null`.

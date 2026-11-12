@@ -82,7 +82,7 @@ function at<T>(array: readonly T[], index: number): T {
 function isDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple>(
 	diagnostic: BlueprintDiagnostic<Plugins>,
 ): diagnostic is BlueprintDefinitionDiagnostic<Plugins> {
-	return ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
+	return ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'unexpected-widget-field', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
 }
 
 function isConfigDiagnostic<Plugins extends AnyWidgetPluginTuple>(
@@ -400,16 +400,84 @@ describe('malformed child attribution', () => {
 // Unreserved fields
 // -------------------------------------------------------------------------------------------------
 
-describe('unreserved extra fields', () => {
+describe('unexpected widget fields', () => {
 	it.each([
-		['a primitive extra field', { id: 'x', type: 'leaf', revision: 3 }],
-		['an object extra field', { id: 'x', type: 'leaf', meta: { createdBy: 'someone' } }],
-		['a function-valued extra field', { id: 'x', type: 'leaf', onSomething: () => {} }],
-	])('produces no definition diagnostic for %s', (_label, definition) => {
+		['a primitive extra field', { id: 'x', type: 'leaf', revision: 3 }, ['revision']],
+		['a function-valued extra field', { id: 'x', type: 'leaf', onSomething: () => {} }, ['onSomething']],
+		['a typo of slots', { id: 'x', type: 'container', slot: { children: [] } }, ['slot']],
+	])('emits an unexpected-widget-field diagnostic at the node for %s', (_label, definition, keys) => {
 		const blueprint = system.createBlueprint(definition)
-		expect(blueprint.root.diagnostics
-			.filter(isDefinitionDiagnostic))
-			.toHaveLength(0)
+
+		expect(blueprint.status)
+			.toBe('invalid')
+		const diagnostics = blueprint.root.diagnostics
+			.filter(diagnostic => diagnostic.code === 'unexpected-widget-field')
+		expect(diagnostics.map(diagnostic => pathOf(diagnostic)))
+			.toEqual(keys.map(key => [key]))
+		for (const diagnostic of diagnostics) {
+			expect(diagnostic.location.type)
+				.toBe('widget')
+			expect(diagnostic.location.node)
+				.toBe(blueprint.root)
+		}
+	})
+
+	it('emits one diagnostic per unknown key in own-key order and keeps recovering the node', () => {
+		const blueprint = system.createBlueprint({
+			zeta: 1,
+			id: 'root',
+			type: 'container',
+			alpha: 2,
+			slots: { children: [{ id: 'child', type: 'leaf', beta: 3 }] },
+		})
+
+		expect(blueprint.root.resolved)
+			.toBe(true)
+		expect(blueprint.diagnostics.map(diagnostic => [diagnostic.code, pathOf(diagnostic)]))
+			.toEqual([
+				['unexpected-widget-field', ['beta']],
+				['unexpected-widget-field', ['zeta']],
+				['unexpected-widget-field', ['alpha']],
+			])
+		expect(blueprint.getWidget('child')?.diagnostics)
+			.toHaveLength(1)
+	})
+
+	it('diagnoses unknown keys on an unresolved node too', () => {
+		const blueprint = system.createBlueprint({ type: 'leaf', label: 'x' })
+
+		expect(blueprint.root.resolved)
+			.toBe(false)
+		expect(blueprint.root.diagnostics.map(diagnostic => [diagnostic.code, pathOf(diagnostic)]))
+			.toEqual([['invalid-widget-id', ['id']], ['unexpected-widget-field', ['label']]])
+	})
+
+	it.each([
+		['an object', { createdBy: 'someone', tags: ['a', 1, null] }],
+		['a string', 'note'],
+		['null', null],
+		['a number', 3],
+	])('accepts meta holding %s, preserving it in source without interpretation', (_label, meta) => {
+		const definition = { id: 'x', type: 'leaf', meta }
+		const blueprint = system.createBlueprint(definition)
+
+		expect(blueprint.status)
+			.toBe('valid')
+		expect(blueprint.root.source)
+			.toBe(definition)
+		expect(blueprint.diagnostics)
+			.toEqual([])
+	})
+
+	it('still applies the JSON-domain proof to meta', () => {
+		const blueprint = system.createBlueprint({ id: 'x', type: 'leaf', meta: { when: new Date(0) } })
+
+		expect(blueprint.status)
+			.toBe('invalid')
+		expect(blueprint.sourceJsonCompatible)
+			.toBe(false)
+		expect(blueprint.diagnostics)
+			.toEqual([expect.objectContaining({ code: 'json-incompatible-value', path: ['meta', 'when'], reason: 'unsupported-object-prototype' })])
 	})
 })
 

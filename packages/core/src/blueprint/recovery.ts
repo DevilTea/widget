@@ -110,6 +110,9 @@ function readOwnEnumerableStringKeys(object: object): readonly string[] | null {
 	}
 }
 
+/** The own keys of an authored widget node; `meta` is the reserved, uninterpreted extension key. */
+const RECOGNIZED_WIDGET_FIELDS: ReadonlySet<string> = new Set(['id', 'type', 'config', 'slots', 'meta'])
+
 interface ReadArrayInfo {
 	readonly isArray: boolean
 	readonly accessible: boolean
@@ -308,6 +311,18 @@ function buildNode(
 
 	// --- slots ---
 	recoverSlots(ctx, working, raw, resolved ? working.plugin : null, localDiagnostics)
+
+	// --- unexpected own fields ---
+	// `meta` is the reserved extension key: any JSON value, preserved in `source`, never interpreted.
+	// Every other unrecognized own key is diagnosed (typos like "slot" must not silently drop content);
+	// recovery of this node and its descendants is unaffected.
+	const ownKeys = readOwnEnumerableStringKeys(raw)
+	if (ownKeys !== null) {
+		for (const key of ownKeys) {
+			if (!RECOGNIZED_WIDGET_FIELDS.has(key))
+				localDiagnostics.push(definitionDiagnostic(publicNode, 'unexpected-widget-field', `Widget field "${key}" is not recognized; extension data belongs under "meta".`, [key]))
+		}
+	}
 
 	ctx.activeSourceObjects.delete(raw)
 	finalizeShell(shell, working)

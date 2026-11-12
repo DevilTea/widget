@@ -158,6 +158,7 @@ export type BlueprintDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple =
 		| (DiagnosticBase<'unexpected-widget-slots', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 		| (DiagnosticBase<'undeclared-widget-slot', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 		| (DiagnosticBase<'invalid-widget-slot', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
+		| (DiagnosticBase<'unexpected-widget-field', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 
 export type BlueprintConfigDiagnostic<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = DiagnosticBase<'invalid-widget-config', BlueprintWidgetDiagnosticLocation<Plugins>> & {
 	readonly path?: DiagnosticPath

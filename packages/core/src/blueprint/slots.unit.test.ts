@@ -173,7 +173,7 @@ describe('unknown raw slots', () => {
 		expect(blueprint.status)
 			.toBe('invalid')
 		const diagnostics = blueprint.diagnostics
-		const defDiagnostic = diagnostics.find(diagnostic => ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code) && 'path' in diagnostic && diagnostic.path?.[1] === 'mystery')
+		const defDiagnostic = diagnostics.find(diagnostic => ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'unexpected-widget-field', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code) && 'path' in diagnostic && diagnostic.path?.[1] === 'mystery')
 		expect(defDiagnostic)
 			.toBeDefined()
 		expect('path' in defDiagnostic! ? defDiagnostic.path : undefined)

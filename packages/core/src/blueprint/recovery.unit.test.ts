@@ -70,7 +70,7 @@ function assertResolved(node: BlueprintWidgetNode<OurPlugins>): ResolvedBlueprin
 function isDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple>(
 	diagnostic: BlueprintDiagnostic<Plugins>,
 ): diagnostic is BlueprintDefinitionDiagnostic<Plugins> {
-	return ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
+	return ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'unexpected-widget-field', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code)
 }
 
 function summarizeDiagnostics(diagnostics: readonly OurBlueprintDiagnostic[]) {
@@ -429,17 +429,19 @@ describe('getWidget id cardinality collapsing', () => {
 // Unreserved fields and own-property semantics
 // -------------------------------------------------------------------------------------------------
 
-describe('unreserved extra fields', () => {
-	it('retains unreserved extra fields in source by reference, without producing an diagnostic', () => {
-		const definition = { id: 'root', type: 'leaf', extra: 42, nested: { a: [1, 2, 3] }, tag: 'meta' }
+describe('widget fields beyond id/type/config/slots/meta', () => {
+	it('retains every field in source by reference and diagnoses only the unrecognized ones', () => {
+		const definition = { id: 'root', type: 'leaf', meta: { a: [1, 2, 3] }, extra: 42, tag: 'meta' }
 		const blueprint = system.createBlueprint(definition)
 
 		expect(blueprint.status)
-			.toBe('valid')
+			.toBe('invalid')
 		expect(blueprint.root.source)
 			.toBe(definition)
-		expect(blueprint.root.diagnostics)
-			.toEqual(EMPTY_DIAGNOSTICS)
+		expect(blueprint.root.resolved)
+			.toBe(true)
+		expect(blueprint.root.diagnostics.map(diagnostic => [diagnostic.code, 'path' in diagnostic ? diagnostic.path : undefined]))
+			.toEqual([['unexpected-widget-field', ['extra']], ['unexpected-widget-field', ['tag']]])
 	})
 })
 

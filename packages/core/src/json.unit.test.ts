@@ -173,7 +173,7 @@ describe('authored JSON runtime domain', () => {
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
-		const blueprint = system.createBlueprint({ id: 'root', type: 'leaf', extra: new Date() })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'leaf', meta: new Date() })
 
 		expect(blueprint.status)
 			.toBe('invalid')
@@ -183,7 +183,7 @@ describe('authored JSON runtime domain', () => {
 			.toEqual([expect.objectContaining({
 				code: 'json-incompatible-value',
 				location: { type: 'source' },
-				path: ['extra'],
+				path: ['meta'],
 				reason: 'unsupported-object-prototype',
 			})])
 		expect(blueprint.root.diagnostics)
