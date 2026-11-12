@@ -200,7 +200,9 @@ once per child, in Blueprint order, with `{ Child, id, type, index }`:
 
 `Child` renders that child widget through the normal host (same renderer, `useWidget()`
 context, subscriptions and nesting as the unscoped form) and is the same component on every
-re-render, so wrapping it never remounts the child. `id` and `type` are the child's widget id
+re-render, so re-rendering surrounding markup with a stable wrapper never remounts the child. As with any
+Vue component, changing the wrapper element/component type, or skipping a child and showing it again,
+remounts it. `id` and `type` are the child's widget id
 and plugin type, `index` its position in the slot. No Runtime handle is exposed; render
 nothing for a child to skip it. Without a default slot `WidgetSlot` is unchanged.
 

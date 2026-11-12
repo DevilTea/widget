@@ -158,6 +158,43 @@ describe('widgetSlot scoped default slot', () => {
 			.toEqual(['leaf-b'])
 	})
 
+	it('remounts a child when the renderer changes the wrapper element type or skips and re-shows it, as any Vue component would', async () => {
+		const asSection = ref(false)
+		const skipB = ref(false)
+		const { wrapper, mounted, unmounted, tick } = setup(({ Child, id }) =>
+			skipB.value && id === 'leaf-b' ? null : h(asSection.value ? 'section' : 'li', { 'data-id': id }, [h(Child)]))
+
+		expect(mounted)
+			.toHaveBeenCalledTimes(3)
+
+		// A stable wrapper keeps every child mounted while the surrounding markup re-renders.
+		tick.value++
+		await nextTick()
+		expect(mounted)
+			.toHaveBeenCalledTimes(3)
+		expect(unmounted).not.toHaveBeenCalled()
+
+		// Skipping and re-showing one child unmounts it and mounts a fresh instance.
+		skipB.value = true
+		await nextTick()
+		skipB.value = false
+		await nextTick()
+		expect(unmounted.mock.calls.map(([id]) => id))
+			.toEqual(['leaf-b'])
+		expect(mounted.mock.calls.map(([id]) => id))
+			.toEqual(['leaf-a', 'leaf-b', 'leaf-c', 'leaf-b'])
+
+		// A different wrapper element type remounts every child.
+		asSection.value = true
+		await nextTick()
+		expect(wrapper.findAll('section'))
+			.toHaveLength(3)
+		expect(unmounted)
+			.toHaveBeenCalledTimes(4)
+		expect(mounted)
+			.toHaveBeenCalledTimes(7)
+	})
+
 	it('hands the same Child component identity to every render of a given child', async () => {
 		const { scopes, tick } = setup(({ Child }) => h(Child))
 

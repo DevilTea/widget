@@ -206,8 +206,10 @@ export type WidgetSlotComponent<SlotName extends string> = new () => {
 /**
  * A component that renders one child widget through the normal host (its registered renderer, its
  * own `useWidget()` context, its own subscriptions). Takes no props. Obtained from the scoped
- * `WidgetSlot` default slot; the identity is stable for a given child across re-renders, so wrapping it
- * in other markup never remounts the child widget.
+ * `WidgetSlot` default slot; the identity is stable for a given child across re-renders, so re-rendering
+ * the surrounding markup with a stable wrapper never remounts the child widget. As with any Vue
+ * component, changing the wrapper element/component type, or skipping a child and showing it again,
+ * unmounts and remounts it.
  */
 export type WidgetSlotChildComponent = new () => {
 	$props: Record<never, never>

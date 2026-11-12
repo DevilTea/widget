@@ -288,8 +288,10 @@ export const SharedWidgetSlotComponent = defineComponent({
 			if (renderScoped === undefined)
 				return children.map(childNode => renderChildHost(current, resolve(childNode), childNode.id))
 
-			// Scoped form: the renderer's output for each child sits in a keyed fragment so skipping or
-			// re-wrapping one child never makes Vue remount a sibling.
+			// Scoped form: one fragment per child, always in Blueprint order and never dropped (a skipped
+			// child renders an empty fragment), so Vue patches the fragments positionally. What keeps a child
+			// from remounting is only the stable `Child` identity above: a changed wrapper element/component
+			// type or a skipped-then-shown child remounts it, as with any Vue component.
 			return children.map((childNode, index) => {
 				const childWidget = resolve(childNode)
 				const scope: WidgetSlotScope = {
@@ -298,7 +300,7 @@ export const SharedWidgetSlotComponent = defineComponent({
 					type: childWidget.type,
 					index,
 				}
-				return h(Fragment, { key: childNode.id }, renderScoped(scope))
+				return h(Fragment, null, renderScoped(scope))
 			})
 		}
 	},

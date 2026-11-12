@@ -347,8 +347,10 @@ each child:
 - The renderer decides the wrapping markup and whether to render a child at
   all (render nothing to skip it). An empty slot never calls the slot.
 - `Child` is the same component for a given child on every re-render, so
-  changing the wrapper markup or skipping a sibling never remounts the child
-  widget. The slot props are typed publicly as `WidgetSlotScope`
+  re-rendering the surrounding markup with a stable wrapper, or skipping a
+  sibling, never remounts the child widget. As with any Vue component,
+  changing the wrapper element/component type, or skipping a child and showing
+  it again, unmounts and remounts it. The slot props are typed publicly as `WidgetSlotScope`
   (`Child: WidgetSlotChildComponent`).
 
 ### What `useWidget()` deliberately does not expose
