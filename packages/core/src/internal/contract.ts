@@ -488,6 +488,14 @@ export interface WidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple = AnyW
 	 */
 	resetState: () => void
 	/**
+	 * The current value of every State member, keyed by widget id and then member key, in exactly the
+	 * shape `overrideStateDefaults` accepts: `blueprint.createRuntime({ overrideStateDefaults:
+	 * runtime.snapshotState() })` reproduces every non-null value. Members whose value is `null` are
+	 * omitted, and so are widgets left with no entry. Returns a fresh plain object owned by the caller;
+	 * the values themselves are passed by reference, not cloned.
+	 */
+	snapshotState: () => Record<WidgetId, Record<WidgetMemberKey, unknown>>
+	/**
 	 * Runtime-level diagnostics plus the current state/property/method diagnostic snapshots, in deterministic
 	 * order. Never history, and never activates property evaluation.
 	 */

@@ -18,7 +18,7 @@ import type {
 	WidgetSystemRuntime,
 } from '../internal/contract'
 import type { AnyWidgetPluginTuple } from '../plugin'
-import type { WidgetId } from '../types'
+import type { WidgetId, WidgetMemberKey } from '../types'
 import type { PrimitiveRegistryEntry } from './deps'
 import { endBatch, startBatch } from 'alien-signals'
 import { readCompiledBlueprint } from '../internal/contract'
@@ -36,6 +36,10 @@ import { createPropertyPrimitive } from './property'
 import { createStatePrimitive } from './state'
 import { assertSyncValue } from './sync'
 import { buildRuntimeWidget } from './widget'
+
+function defineOwnValue(record: Record<string, unknown>, key: string, value: unknown): void {
+	Object.defineProperty(record, key, { value, enumerable: true, writable: true, configurable: true })
+}
 
 export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	blueprint: ValidWidgetSystemBlueprint<Plugins>,
@@ -253,6 +257,29 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		})
 	}
 
+	function snapshotState(): Record<WidgetId, Record<WidgetMemberKey, unknown>> {
+		context.assertActive()
+		// Plain objects owned by the caller. Keys are arbitrary strings (`__proto__` included), so they are
+		// defined as own data properties instead of assigned.
+		const snapshot: Record<WidgetId, Record<WidgetMemberKey, unknown>> = {}
+		for (const nodeId of compiled.semanticOrder) {
+			const node = compiled.nodes[nodeId]
+			const entry = registry.get(nodeId)
+			if (node === undefined || !node.resolved || entry === undefined)
+				continue
+
+			let values: Record<WidgetMemberKey, unknown> | null = null
+			for (const [key, primitive] of entry.state) {
+				const value = primitive.internal.get()
+				if (value !== null)
+					defineOwnValue(values ??= {}, key, value)
+			}
+			if (values !== null)
+				defineOwnValue(snapshot, node.id, values)
+		}
+		return snapshot
+	}
+
 	// 9. Finalize Runtime.
 	const runtime = {
 		blueprint,
@@ -261,6 +288,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		},
 		getWidget,
 		resetState,
+		snapshotState,
 		getDiagnostics: aggregate.getDiagnostics,
 		subscribeDiagnostics: aggregate.subscribeDiagnostics,
 		dispose: () => context.dispose(),
