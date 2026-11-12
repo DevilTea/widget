@@ -20,6 +20,7 @@ import type { InspectorTransport } from '@deviltea/widget-inspector/transport'
 import type { InspectableValue } from '@deviltea/widget-inspector/value'
 import type {
 	ReadonlyRef,
+	UseWidgetConfigAccessor,
 	UseWidgetDiagnosticsAccessor,
 	UseWidgetEventEmitterAccessor,
 	UseWidgetIdentityAccessor,
@@ -37,13 +38,17 @@ import type {
 	UseWidgetStateDiagnosticsAccessor,
 	UseWidgetStateDiagnosticsSurface,
 	UseWidgetStateSurface,
+	WidgetSlotChildComponent,
 	WidgetSlotComponent,
+	WidgetSlotScope,
+	WidgetVueIntegrationError,
 	WidgetVueRenderer,
 	WidgetVueRendererEntry,
 	WidgetVueRendererProps,
 	WidgetVueRendererSection,
 	WidgetVueRendererSectionMarker,
 } from '@deviltea/widget-vue'
+import type { WidgetTestRenderers } from '@deviltea/widget-vue/testing'
 
 interface PublishedContracts {
 	readonly root: {
@@ -76,6 +81,7 @@ interface PublishedContracts {
 		readonly rendererProps: WidgetVueRendererProps<AnyWidgetPluginTuple>
 		readonly rendererSection: WidgetVueRendererSection<string>
 		readonly rendererSectionMarker: WidgetVueRendererSectionMarker<string>
+		readonly configAccessor: UseWidgetConfigAccessor<WidgetInterfaces>
 		readonly diagnosticsAccessor: UseWidgetDiagnosticsAccessor
 		readonly eventEmitterAccessor: UseWidgetEventEmitterAccessor<WidgetInterfaces>
 		readonly identityAccessor: UseWidgetIdentityAccessor<AnyWidgetPlugin>
@@ -89,11 +95,17 @@ interface PublishedContracts {
 		readonly propertyDiagnosticsSurface: UseWidgetPropertyDiagnosticsSurface<WidgetInterfaces>
 		readonly result: UseWidgetResult<AnyWidgetPlugin>
 		readonly slotAccessor: UseWidgetSlotAccessor<WidgetInterfaces>
+		readonly slotChildComponent: WidgetSlotChildComponent
 		readonly slotComponent: WidgetSlotComponent<string>
+		readonly slotScope: WidgetSlotScope
 		readonly stateAccessor: UseWidgetStateAccessor<WidgetInterfaces>
 		readonly stateDiagnosticsAccessor: UseWidgetStateDiagnosticsAccessor<WidgetInterfaces>
 		readonly stateDiagnosticsSurface: UseWidgetStateDiagnosticsSurface<WidgetInterfaces>
 		readonly stateSurface: UseWidgetStateSurface<WidgetInterfaces>
+	}
+	readonly vueTesting: {
+		readonly host: typeof import('@deviltea/widget-vue/testing').createWidgetTestHost
+		readonly renderers: WidgetTestRenderers<AnyWidgetPluginTuple>
 	}
 }
 
@@ -115,3 +127,18 @@ type InternalOverlay = typeof import('@deviltea/widget-inspector/overlay')
 type InternalTestFixture = typeof import('@deviltea/widget-inspector/test-fixture')
 const unreachableBoundaryWitness: [RootEntry?, InternalGeometry?, InternalProjection?, InternalValidation?, InternalOverlay?, InternalTestFixture?] | undefined = undefined
 void unreachableBoundaryWitness
+
+// The registry error detail narrows by `code`: the defect lists are non-null arrays after the check.
+export function readRegistryDefects(error: WidgetVueIntegrationError): number {
+	if (error.code === 'invalid-renderer-registry')
+		return error.missingTypes.length + error.unknownTypes.length + error.duplicateTypes.length + error.invalidTypes.length
+	return 0
+}
+
+// The private injection context and the internal modules are not importable.
+// @ts-expect-error -- `context` is internal.
+type InternalContext = typeof import('@deviltea/widget-vue/context')
+// @ts-expect-error -- `runtime-guard` is internal.
+type InternalRuntimeGuard = typeof import('@deviltea/widget-vue/runtime-guard')
+const unreachableVueWitness: [InternalContext?, InternalRuntimeGuard?] | undefined = undefined
+void unreachableVueWitness
