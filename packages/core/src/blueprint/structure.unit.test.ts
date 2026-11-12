@@ -290,3 +290,139 @@ describe('structure diagnostic reason', () => {
 			.toBe(true)
 	})
 })
+
+describe('structure validator locations must exist in the Blueprint being compiled', () => {
+	const foreign = createWidgetSystem({ plugins: [itemPlugin] })
+		.createBlueprint({ id: 'other', type: 'item' })
+
+	function listWith(options: {
+		slot?: (ctx: { addDiagnostic: (input: { message: string, index?: number }) => void }) => void
+		plugin?: (ctx: { addDiagnostic: (input: any) => void }) => void
+		system?: (ctx: { blueprint: any, addDiagnostic: (input: any) => void }) => void
+	}) {
+		const plugin = createWidgetPlugin('guarded-list')
+			.description('Test widget')
+			.interfaces<ListInterfaces>()
+			.slots({ items: { description: 'Test slot', validateStructure: ctx => options.slot?.(ctx) } }, ctx => options.plugin?.(ctx))
+			.done()
+		return createWidgetSystem({ plugins: [plugin, itemPlugin], validateStructure: ctx => options.system?.(ctx as never) })
+	}
+
+	const source = { id: 'root', type: 'guarded-list', slots: { items: [{ id: 'a', type: 'item' }, { id: 'b', type: 'item' }] } }
+
+	it.each([
+		['an index beyond the slot', 999],
+		['a negative index', -1],
+		['a fractional index', 0.5],
+		['an index equal to the child count', 2],
+	])('throws a TypeError naming `index` when a slot validator reports %s', (_label, index) => {
+		const guarded = listWith({ slot: ctx => ctx.addDiagnostic({ message: 'bad', index }) })
+
+		expect(() => guarded.createBlueprint(source))
+			.toThrow(TypeError)
+		expect(() => guarded.createBlueprint(source))
+			.toThrow(/\bindex\b/)
+	})
+
+	it('throws when a slot validator reports an index on an empty slot', () => {
+		const guarded = listWith({ slot: ctx => ctx.addDiagnostic({ message: 'bad', index: 0 }) })
+
+		expect(() => guarded.createBlueprint({ id: 'root', type: 'guarded-list' }))
+			.toThrow(/\bindex\b/)
+	})
+
+	it('accepts every existing child index from a slot validator', () => {
+		const guarded = listWith({ slot: ctx => ctx.addDiagnostic({ message: 'ok', index: 1 }) })
+
+		expect(guarded.createBlueprint(source).diagnostics)
+			.toHaveLength(1)
+	})
+
+	it('throws a TypeError naming `slot` when a plugin validator reports an undeclared slot', () => {
+		const guarded = listWith({ plugin: ctx => ctx.addDiagnostic({ message: 'bad', slot: 'nope' }) })
+
+		expect(() => guarded.createBlueprint(source))
+			.toThrow(TypeError)
+		expect(() => guarded.createBlueprint(source))
+			.toThrow(/\bslot\b/)
+	})
+
+	it('throws a TypeError naming `index` when a plugin validator reports an out-of-range slot child', () => {
+		const guarded = listWith({ plugin: ctx => ctx.addDiagnostic({ message: 'bad', slot: 'items', index: 2 }) })
+
+		expect(() => guarded.createBlueprint(source))
+			.toThrow(TypeError)
+		expect(() => guarded.createBlueprint(source))
+			.toThrow(/\bindex\b/)
+	})
+
+	it('throws when a plugin validator reports an index without a slot', () => {
+		const guarded = listWith({ plugin: ctx => ctx.addDiagnostic({ message: 'bad', index: 0 }) })
+
+		expect(() => guarded.createBlueprint(source))
+			.toThrow(/\bindex\b/)
+	})
+
+	it('throws a TypeError naming `location.node` for a node of another Blueprint or a fabricated node', () => {
+		for (const node of [foreign.root, { fake: true }]) {
+			const guarded = listWith({ system: ctx => ctx.addDiagnostic({ message: 'bad', location: { type: 'widget', node } }) })
+
+			expect(() => guarded.createBlueprint(source))
+				.toThrow(TypeError)
+			expect(() => guarded.createBlueprint(source))
+				.toThrow(/location\.node/)
+		}
+	})
+
+	it('throws naming `location.slot` for an undeclared slot and for a slot of an unresolved node', () => {
+		const undeclared = listWith({ system: ctx => ctx.addDiagnostic({ message: 'bad', location: { type: 'slot', node: ctx.blueprint.root, slot: 'zzz' } }) })
+		expect(() => undeclared.createBlueprint(source))
+			.toThrow(/location\.slot/)
+
+		const unresolved = listWith({
+			system: (ctx) => {
+				const ghost = ctx.blueprint.getChildrenAt(ctx.blueprint.root, 'items')[0]
+				ctx.addDiagnostic({ message: 'bad', location: { type: 'slot', node: ghost, slot: 'items' } })
+			},
+		})
+		expect(() => unresolved.createBlueprint({ id: 'root', type: 'guarded-list', slots: { items: [{ id: 'g', type: 'unknown' }] } }))
+			.toThrow(/location\.slot/)
+	})
+
+	it('throws naming `location.index` for a slot-child index outside the slot', () => {
+		const guarded = listWith({ system: ctx => ctx.addDiagnostic({ message: 'bad', location: { type: 'slot-child', node: ctx.blueprint.root, slot: 'items', index: 999 } }) })
+
+		expect(() => guarded.createBlueprint(source))
+			.toThrow(/location\.index/)
+	})
+
+	it('validates related locations and names the offending entry', () => {
+		const guarded = listWith({
+			system: ctx => ctx.addDiagnostic({
+				message: 'bad',
+				location: { type: 'widget', node: ctx.blueprint.root },
+				related: [{ type: 'widget', node: ctx.blueprint.root }, { type: 'slot-child', node: ctx.blueprint.root, slot: 'items', index: 5 }],
+			}),
+		})
+
+		expect(() => guarded.createBlueprint(source))
+			.toThrow(/related\[1\]\.index/)
+	})
+
+	it('still accepts every valid system location', () => {
+		const guarded = listWith({
+			system: (ctx) => {
+				const root = ctx.blueprint.root
+				const [first] = ctx.blueprint.getChildrenAt(root, 'items')
+				ctx.addDiagnostic({
+					message: 'ok',
+					location: { type: 'slot-child', node: root, slot: 'items', index: 1 },
+					related: [{ type: 'widget', node: first }, { type: 'slot', node: root, slot: 'items' }],
+				})
+			},
+		})
+
+		expect(guarded.createBlueprint(source).diagnostics)
+			.toHaveLength(1)
+	})
+})

@@ -29,6 +29,56 @@ import { readWidgetPluginDefinition } from '../plugin'
 import { assertSyncValue } from '../runtime/sync'
 import { createCollector, dedupeBy, structureDiagnostic } from './diagnostics'
 
+/**
+ * A structure validator that reports a location absent from the Blueprint being compiled (an index outside
+ * the slot, an undeclared slot, a node of another Blueprint) violates the callback contract, exactly like
+ * the other callback-contract escapes (`blueprint/deps.ts`): it is an implementation bug, not an Issue.
+ */
+function structureLocationViolation(scope: string, field: string, detail: string): TypeError {
+	return new TypeError(`${scope} reported a structure diagnostic whose ${field} ${detail}; this is a plugin implementation bug.`)
+}
+
+function assertSlotIndex(scope: string, field: string, index: unknown, childCount: number): void {
+	if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= childCount)
+		throw structureLocationViolation(scope, field, `is not an existing child index (the slot has ${childCount} children)`)
+}
+
+function assertDeclaredSlot(scope: string, field: string, node: WorkingNode, slot: unknown): asserts slot is WidgetMemberKey {
+	if (typeof slot !== 'string' || !node.resolved || !node.semanticSlots.has(slot))
+		throw structureLocationViolation(scope, field, 'is not a slot declared by the widget\'s plugin')
+}
+
+/**
+ * Validates one system-level location (`location` or a `related` entry) against the Blueprint being compiled.
+ * `field` names the offending field path, e.g. `location` or `related[1]`.
+ */
+function assertSystemLocation(
+	nodes: readonly WorkingNode[],
+	resolveNodeId: (node: unknown) => InternalNodeId | undefined,
+	field: string,
+	location: unknown,
+): void {
+	const scope = 'System-level validateStructure'
+	if (typeof location !== 'object' || location === null)
+		throw structureLocationViolation(scope, field, 'is not a location object')
+
+	// Validated field by field: a JS / `any` callback can hand over any shape.
+	const { type, node: locationNode, slot, index } = location as { type?: unknown, node?: unknown, slot?: unknown, index?: unknown }
+	if (type !== 'widget' && type !== 'slot' && type !== 'slot-child')
+		throw structureLocationViolation(scope, `${field}.type`, 'is not "widget", "slot" or "slot-child"')
+
+	const nodeId = resolveNodeId(locationNode)
+	if (nodeId === undefined)
+		throw structureLocationViolation(scope, `${field}.node`, 'is not a node of the Blueprint being compiled')
+	if (type === 'widget')
+		return
+
+	const node = nodes[nodeId]!
+	assertDeclaredSlot(scope, `${field}.slot`, node, slot)
+	if (type === 'slot-child')
+		assertSlotIndex(scope, `${field}.index`, index, node.semanticSlots.get(slot)!.length)
+}
+
 function configFragment(node: WorkingNode): Record<string, unknown> {
 	return node.plugin !== null && readWidgetPluginDefinition(node.plugin).config !== null
 		? { config: node.config }
@@ -178,8 +228,11 @@ export function runStructureValidation(
 					close()
 				}
 
-				for (const item of items)
+				for (const item of items) {
+					if (item.index !== undefined)
+						assertSlotIndex(`Slot "${slotName}"'s validateStructure`, 'index', item.index, children.length)
 					finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slotName, item.index, undefined, item.reason))
+				}
 			}
 		}
 
@@ -202,6 +255,15 @@ export function runStructureValidation(
 			for (const item of items) {
 				const slot = 'slot' in item ? item.slot : undefined
 				const index = 'index' in item ? item.index : undefined
+				const scope = `Plugin "${node.type}"'s validateStructure`
+				if (slot !== undefined) {
+					assertDeclaredSlot(scope, 'slot', node, slot)
+					if (index !== undefined)
+						assertSlotIndex(scope, 'index', index, node.semanticSlots.get(slot)!.length)
+				}
+				else if (index !== undefined) {
+					throw structureLocationViolation(scope, 'index', 'has no slot to be an index of')
+				}
 				finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slot, index, undefined, item.reason))
 			}
 		}
@@ -226,6 +288,8 @@ export function runStructureValidation(
 
 		for (const item of items) {
 			const { location, related } = item
+			assertSystemLocation(nodes, compileFacade.resolveNodeId, 'location', location)
+			related?.forEach((relatedLocation, relatedIndex) => assertSystemLocation(nodes, compileFacade.resolveNodeId, `related[${relatedIndex}]`, relatedLocation))
 			const nodeId = compileFacade.resolveNodeId(location.node)
 			const realNode = nodeId !== undefined ? nodes[nodeId]!.publicNode as ResolvedBlueprintWidgetNode : (location.node as unknown as ResolvedBlueprintWidgetNode)
 
