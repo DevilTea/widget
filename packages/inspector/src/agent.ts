@@ -512,7 +512,15 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		}
 		memberSubscriptions.set(subscriptionId, unsubscribe)
-		sendSuccess(request, { subscriptionId, member: projected })
+		try {
+			sendSuccess(request, { subscriptionId, member: projected })
+		}
+		catch (error) {
+			// The peer never learned this id: registration and response are atomic, so roll back.
+			memberSubscriptions.delete(subscriptionId)
+			unsubscribe()
+			throw error
+		}
 	}
 
 	function subscribeEvent(request: Extract<InspectorRequestMessage, { method: 'runtime.subscribeEvent' }>): void {
@@ -549,7 +557,15 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		}
 		eventSubscriptions.set(subscriptionId, unsubscribe)
-		sendSuccess(request, { subscriptionId, event: request.params.event })
+		try {
+			sendSuccess(request, { subscriptionId, event: request.params.event })
+		}
+		catch (error) {
+			// The peer never learned this id: registration and response are atomic, so roll back.
+			eventSubscriptions.delete(subscriptionId)
+			unsubscribe()
+			throw error
+		}
 	}
 
 	/** The Runtime id a request addresses (directly or through a WidgetRef), if it addresses one. */
@@ -740,9 +756,13 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				sendError(requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
 			}
 		}
-		catch {
+		catch (error) {
 			// Catch-all: every request that carries an id gets exactly one answer, and the Agent keeps
-			// serving. The failure detail stays in this realm; the peer only learns it was internal.
+			// serving. The failure detail never reaches the peer (it only learns the failure was internal);
+			// it is reported in this realm out-of-band, like Core's isolated listener failures.
+			queueMicrotask(() => {
+				throw error
+			})
 			try {
 				if (requestId === null && typeof raw === 'object' && raw !== null
 					&& 'requestId' in raw && typeof raw.requestId === 'string') {

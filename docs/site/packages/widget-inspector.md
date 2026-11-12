@@ -149,7 +149,7 @@ Runtime values and event arguments are encoded as bounded, accessor-safe `Inspec
 - **A peer can read** the full Blueprint structure, every State value, every Property result and diagnostic, and every event argument of the inspected Runtime, within the limits above. There is no redaction hook: do not attach an Agent to a Runtime holding secrets you would not show the Inspector's user.
 - **A peer cannot** mutate State, invoke Methods, evaluate code, or reach Runtime, Blueprint or DOM objects: only JSON DTOs cross the boundary.
 - **The Runtime is read-only; the page is not untouched.** While Inspect mode is enabled the Agent installs capture-phase `pointerdown`, `pointerup` and `click` handlers on the inspected root that stop activation of anchored elements, a capture-phase Escape `keydown` handler on the document, and a fixed overlay element in the inspected document. Renderer elements are never modified.
-- Any failure while handling a request answers `internal-error` for that request and the Agent keeps serving.
+- Any failure while handling a request answers `internal-error` for that request and the Agent keeps serving. The peer never sees the cause; the Agent reports the original exception in its own realm with a queued rethrow (`queueMicrotask(() => { throw error })`), so it surfaces as an uncaught error in the host. A subscribe request whose success response cannot be sent is rolled back, leaving no subscription under an id the peer never learned.
 
 ## Known limitations
 
