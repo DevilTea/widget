@@ -295,3 +295,55 @@ describe('declared member shapes are validated before done() returns', () => {
 			.toBe(false)
 	})
 })
+
+describe('the optional `.structure()` phase', () => {
+	function leafPlugin(type: string, withStructure: boolean) {
+		const afterInterfaces = createWidgetPlugin(type)
+			.description('Leaf widget')
+			.interfaces<CountInterfaces>()
+		const afterStructure = withStructure
+			? afterInterfaces.structure((ctx) => {
+					if (ctx.blueprint.getLocation(ctx.widget)?.type === 'root')
+						ctx.addDiagnostic({ message: 'a leaf cannot be the root' })
+				})
+			: afterInterfaces
+		return afterStructure
+			.state(state => state.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
+			.done()
+	}
+
+	it('lets a plugin without slots validate its own placement', () => {
+		const blueprint = createWidgetSystem({ plugins: [leafPlugin('leaf', true)] })
+			.createBlueprint({ id: 'root', type: 'leaf' })
+
+		expect(blueprint.status)
+			.toBe('invalid')
+		expect(blueprint.diagnostics.map(({ code, message }) => ({ code, message })))
+			.toEqual([{ code: 'invalid-widget-structure', message: 'a leaf cannot be the root' }])
+	})
+
+	it('is not a capability: capabilities, catalog entry and plugin inspection are unaffected', () => {
+		const withStructure = leafPlugin('leaf', true)
+		const withoutStructure = leafPlugin('leaf', false)
+
+		expect(withStructure.capabilities)
+			.toEqual(withoutStructure.capabilities)
+		expect(withStructure.capabilities.slots)
+			.toBe(false)
+		expect(createWidgetSystem({ plugins: [withStructure] }).catalog)
+			.toEqual(createWidgetSystem({ plugins: [withoutStructure] }).catalog)
+		expect([...inspectPlugin(withStructure).state!.entries()])
+			.toEqual([...inspectPlugin(withoutStructure).state!.entries()])
+		expect(Object.keys(inspectPlugin(withStructure)))
+			.toEqual(Object.keys(inspectPlugin(withoutStructure)))
+	})
+
+	it('rejects a non-function validator, and a validator still passed to `.slots()`, with a TypeError', () => {
+		const untyped: any = createWidgetPlugin('structure-arg')
+			.description('d')
+			.interfaces()
+
+		expectContractViolation(capture(() => untyped.structure(42)), ['structure-arg', 'structure'])
+		expectContractViolation(capture(() => untyped.slots({ body: { description: 'b' } }, () => {})), ['structure-arg', 'slots', 'structure'])
+	})
+})

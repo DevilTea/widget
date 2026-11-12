@@ -30,24 +30,22 @@ interface ListInterfaces extends WidgetInterfaces {
 const listPlugin = createWidgetPlugin('list')
 	.description('Test widget')
 	.interfaces<ListInterfaces>()
-	.slots(
-		{
-			items: {
-				description: 'Test slot',
-				validateStructure: (ctx) => {
-					callOrder.push('slot')
-					ctx.addDiagnostic({ message: 'slot:widget-slot' })
-					ctx.addDiagnostic({ message: 'slot:widget-slot-child', index: 0 })
-				},
+	.slots({
+		items: {
+			description: 'Test slot',
+			validateStructure: (ctx) => {
+				callOrder.push('slot')
+				ctx.addDiagnostic({ message: 'slot:widget-slot' })
+				ctx.addDiagnostic({ message: 'slot:widget-slot-child', index: 0 })
 			},
 		},
-		(ctx) => {
-			callOrder.push('plugin')
-			ctx.addDiagnostic({ message: 'plugin:widget' })
-			ctx.addDiagnostic({ message: 'plugin:widget-slot', slot: 'items' })
-			ctx.addDiagnostic({ message: 'plugin:widget-slot-child', slot: 'items', index: 0 })
-		},
-	)
+	})
+	.structure((ctx) => {
+		callOrder.push('plugin')
+		ctx.addDiagnostic({ message: 'plugin:widget' })
+		ctx.addDiagnostic({ message: 'plugin:widget-slot', slot: 'items' })
+		ctx.addDiagnostic({ message: 'plugin:widget-slot-child', slot: 'items', index: 0 })
+	})
 	.done()
 
 const system = createWidgetSystem({
@@ -243,21 +241,19 @@ describe('structure diagnostic reason', () => {
 	const reasonListPlugin = createWidgetPlugin('reason-list')
 		.description('Test widget')
 		.interfaces<ReasonListInterfaces>()
-		.slots(
-			{
-				items: {
-					description: 'Test slot',
-					validateStructure: (ctx) => {
-						ctx.addDiagnostic({ message: 'slot', reason: 'slot-reason' })
-						ctx.addDiagnostic({ message: 'slot-child', index: 0, reason: 'slot-child-reason' })
-					},
+		.slots({
+			items: {
+				description: 'Test slot',
+				validateStructure: (ctx) => {
+					ctx.addDiagnostic({ message: 'slot', reason: 'slot-reason' })
+					ctx.addDiagnostic({ message: 'slot-child', index: 0, reason: 'slot-child-reason' })
 				},
 			},
-			(ctx) => {
-				ctx.addDiagnostic({ message: 'plugin', reason: 'plugin-reason' })
-				ctx.addDiagnostic({ message: 'plugin-slot', slot: 'items', reason: 'plugin-slot-reason' })
-			},
-		)
+		})
+		.structure((ctx) => {
+			ctx.addDiagnostic({ message: 'plugin', reason: 'plugin-reason' })
+			ctx.addDiagnostic({ message: 'plugin-slot', slot: 'items', reason: 'plugin-slot-reason' })
+		})
 		.done()
 
 	const reasonSystem = createWidgetSystem({

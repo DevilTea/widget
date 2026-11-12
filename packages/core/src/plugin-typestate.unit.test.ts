@@ -322,10 +322,10 @@ describe('builder capability-phase ordering', () => {
 		expectTypeOf(afterInterfaces).not.toHaveProperty('slots')
 		expectTypeOf(afterInterfaces).not.toHaveProperty('state')
 		expectTypeOf(afterInterfaces).not.toHaveProperty('properties')
-		// `methods` is declared but not callable yet: it exists only as a type-level order marker
-		// (see plugin-phase-order.unit.test.ts); the only real next phase is `config`.
+		// `methods` and the optional `structure` are not callable yet: they exist only as type-level order
+		// markers (see plugin-phase-order.unit.test.ts); the only real next phase is `config`.
 		expectTypeOf<keyof typeof afterInterfaces>()
-			.toEqualTypeOf<'config' | 'methods'>()
+			.toEqualTypeOf<'config' | 'methods' | 'structure'>()
 
 		const afterConfig = afterInterfaces.config({
 			description: 'Test config',
@@ -352,12 +352,14 @@ describe('builder capability-phase ordering', () => {
 			.toBe(true)
 	})
 
-	it('reaches `done` immediately after `.interfaces()` when no capability is declared', () => {
+	it('reaches `done` (next to the optional `structure`) immediately after `.interfaces()` when no capability is declared', () => {
 		const afterInterfaces = createWidgetPlugin('empty')
 			.description('Test widget')
 			.interfaces<EmptyInterfaces>()
-		expectTypeOf(afterInterfaces)
-			.toEqualTypeOf<WidgetPluginDonePhase<'empty', EmptyInterfaces>>()
+		expectTypeOf<keyof typeof afterInterfaces>()
+			.toEqualTypeOf<'structure' | 'done'>()
+		expectTypeOf(afterInterfaces.done)
+			.toEqualTypeOf<WidgetPluginDonePhase<'empty', EmptyInterfaces>['done']>()
 
 		const plugin = afterInterfaces.done()
 		expect(plugin.type)

@@ -166,6 +166,7 @@ export type {
 	WidgetPluginPropertiesPhase,
 	WidgetPluginSlotsPhase,
 	WidgetPluginStatePhase,
+	WidgetPluginStructurePhase,
 	WidgetPluginTypeOf,
 	WidgetPluginValidateStructure,
 	WidgetPluginValidateStructureContext,
