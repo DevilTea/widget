@@ -12,7 +12,7 @@ import type { RuntimeState } from '../internal/contract'
 import type { ErasedWidgetStateMemberDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
-import { signal } from 'alien-signals'
+import { endBatch, signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
@@ -67,6 +67,31 @@ export interface CreateStatePrimitiveParams {
 	readonly buildConfigFragment: () => Record<string, unknown>
 	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
 	readonly onDiagnosticsCommitted: () => void
+}
+
+/**
+ * Restores the captured initialization outcome of every State member of `widgets` — the shared
+ * implementation of `WidgetSystemRuntime.resetState()` (every widget) and `RuntimeWidget.resetState()`
+ * (one widget). `validate` does not run again, all writes form one batch so dependents recompute and
+ * subscribers are notified once, and Property/Method diagnostic snapshots are left untouched.
+ */
+export function restoreInitialState(
+	context: RuntimeContext,
+	widgets: Iterable<{ readonly state: ReadonlyMap<WidgetMemberKey, StatePrimitive> }>,
+): void {
+	context.assertActive()
+	runRuntimeOperation(() => {
+		startBatch()
+		try {
+			for (const widget of widgets) {
+				for (const primitive of widget.state.values())
+					primitive.internal.restoreInitial()
+			}
+		}
+		finally {
+			endBatch()
+		}
+	})
 }
 
 export function createStatePrimitive(context: RuntimeContext, params: CreateStatePrimitiveParams): StatePrimitive {

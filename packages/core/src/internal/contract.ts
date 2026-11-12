@@ -406,6 +406,12 @@ export type RuntimeStateSurface<Interfaces extends WidgetInterfaces> = HasWidget
 			readonly state: {
 				readonly [Key in WidgetStateKeyOf<Interfaces>]: RuntimeState<WidgetStateValueOf<Interfaces, Key>>
 			}
+			/**
+			 * `WidgetSystemRuntime.resetState()` scoped to this widget: restores its State members to their
+			 * initialization outcome without running `validate`, in one batch; Property/Method diagnostic
+			 * snapshots are not reset. Throws `WidgetSystemRuntimeDisposedError` after dispose.
+			 */
+			resetState: () => void
 		}
 	: unknown
 

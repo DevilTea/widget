@@ -20,10 +20,8 @@ import type {
 import type { AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { PrimitiveRegistryEntry } from './deps'
-import { endBatch, startBatch } from 'alien-signals'
 import { readCompiledBlueprint } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
-import { runRuntimeOperation } from './adapter'
 import { createRuntimeAggregate } from './aggregate'
 import { buildBlueprintView } from './blueprint-view'
 import { createCallbackOwner, createRuntimeContext } from './context'
@@ -33,7 +31,7 @@ import { runtimeInternals } from './internals'
 import { createMethodPrimitive } from './method'
 import { resolveStateOverrides } from './override'
 import { createPropertyPrimitive } from './property'
-import { createStatePrimitive } from './state'
+import { createStatePrimitive, restoreInitialState } from './state'
 import { assertSyncValue } from './sync'
 import { buildRuntimeWidget } from './widget'
 
@@ -242,19 +240,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	}
 
 	function resetState(): void {
-		context.assertActive()
-		runRuntimeOperation(() => {
-			startBatch()
-			try {
-				for (const entry of registry.values()) {
-					for (const primitive of entry.state.values())
-						primitive.internal.restoreInitial()
-				}
-			}
-			finally {
-				endBatch()
-			}
-		})
+		restoreInitialState(context, registry.values())
 	}
 
 	function snapshotState(): Record<WidgetId, Record<WidgetMemberKey, unknown>> {
