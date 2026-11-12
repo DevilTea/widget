@@ -21,31 +21,48 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isJsonValue(value: unknown, seen = new Set<object>()): boolean {
-	if (value === null || typeof value === 'string' || typeof value === 'boolean')
-		return true
-	if (typeof value === 'number')
-		return Number.isFinite(value)
-	if (Array.isArray(value)) {
-		if (seen.has(value))
+/**
+ * Iterative so that peer-controlled nesting depth can never overflow the call stack; `ancestors` still
+ * rejects a cyclic graph (a custom transport may hand over objects by reference).
+ */
+function isJsonValue(value: unknown): boolean {
+	const ancestors = new Set<object>()
+	// A frame is either a value to check or a marker that a container's children are all checked.
+	const stack: { readonly value: unknown, readonly exit: boolean }[] = [{ value, exit: false }]
+	while (stack.length > 0) {
+		const frame = stack.pop()!
+		if (frame.exit) {
+			ancestors.delete(frame.value as object)
+			continue
+		}
+		const current = frame.value
+		if (current === null || typeof current === 'string' || typeof current === 'boolean')
+			continue
+		if (typeof current === 'number') {
+			if (!Number.isFinite(current))
+				return false
+			continue
+		}
+		let children: unknown[]
+		if (Array.isArray(current)) {
+			children = current
+		}
+		else {
+			if (!isRecord(current))
+				return false
+			const prototype = Object.getPrototypeOf(current)
+			if (prototype !== Object.prototype && prototype !== null)
+				return false
+			children = Object.values(current)
+		}
+		if (ancestors.has(current as object))
 			return false
-		seen.add(value)
-		const valid = value.every(item => isJsonValue(item, seen))
-		seen.delete(value)
-		return valid
+		ancestors.add(current as object)
+		stack.push({ value: current, exit: true })
+		for (const child of children)
+			stack.push({ value: child, exit: false })
 	}
-	if (!isRecord(value))
-		return false
-	const prototype = Object.getPrototypeOf(value)
-	if (prototype !== Object.prototype && prototype !== null)
-		return false
-	if (seen.has(value))
-		return false
-	seen.add(value)
-	const valid = Object.values(value)
-		.every(item => isJsonValue(item, seen))
-	seen.delete(value)
-	return valid
+	return true
 }
 
 function isConfigMetadata(value: unknown): value is InspectorConfigMetadata {

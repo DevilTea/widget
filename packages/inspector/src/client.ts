@@ -16,12 +16,20 @@ import {
 	parseInspectorResponseMessage,
 } from './protocol'
 
+/** Codes a protocol peer sends, plus the ones only the Client itself produces. */
+export type InspectorClientErrorCode = InspectorProtocolError['code'] | 'timeout'
+
+export interface InspectorClientErrorInfo {
+	readonly code: InspectorClientErrorCode
+	readonly message: string
+}
+
 export class InspectorClientError extends Error {
 	override readonly name = 'InspectorClientError'
-	readonly code: InspectorProtocolError['code']
-	readonly protocolError: InspectorProtocolError
+	readonly code: InspectorClientErrorCode
+	readonly protocolError: InspectorClientErrorInfo
 
-	constructor(error: InspectorProtocolError) {
+	constructor(error: InspectorClientErrorInfo) {
 		super(error.message)
 		this.code = error.code
 		this.protocolError = error
@@ -32,6 +40,7 @@ interface PendingRequest {
 	readonly method: InspectorRequestMethod
 	readonly resolve: (value: unknown) => void
 	readonly reject: (reason: unknown) => void
+	readonly timer: ReturnType<typeof setTimeout> | null
 }
 
 function malformedResponseRequestId(value: unknown): string | null {
@@ -41,6 +50,15 @@ function malformedResponseRequestId(value: unknown): string | null {
 	return candidate.kind === 'response' && typeof candidate.requestId === 'string'
 		? candidate.requestId
 		: null
+}
+
+export interface CreateInspectorClientOptions {
+	/**
+	 * Rejects a request that has received no response after this many milliseconds with an
+	 * `InspectorClientError` coded `timeout`. There is no default: unlimited unless configured. Must be a
+	 * positive finite number. A late response to a timed-out request is ignored.
+	 */
+	readonly requestTimeoutMs?: number
 }
 
 export interface InspectorClient {
@@ -59,7 +77,10 @@ export interface InspectorClient {
 	dispose: () => void
 }
 
-export function createInspectorClient(transport: InspectorTransport): InspectorClient {
+export function createInspectorClient(transport: InspectorTransport, options: CreateInspectorClientOptions = {}): InspectorClient {
+	const requestTimeoutMs = options.requestTimeoutMs
+	if (requestTimeoutMs !== undefined && !(Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0))
+		throw new RangeError('requestTimeoutMs must be a positive finite number when configured.')
 	let requestSequence = 0
 	let closed = false
 	const pending = new Map<string, PendingRequest>()
@@ -68,6 +89,16 @@ export function createInspectorClient(transport: InspectorTransport): InspectorC
 	let unsubscribeMessages: () => void = () => {}
 	let unsubscribeClose: () => void = () => {}
 
+	/** Removes and returns the pending entry for a request, cancelling its timeout. */
+	function takePending(requestId: string): PendingRequest | undefined {
+		const entry = pending.get(requestId)
+		if (entry !== undefined) {
+			pending.delete(requestId)
+			clearTimeout(entry.timer ?? undefined)
+		}
+		return entry
+	}
+
 	function finalizeClose(message: string, closeTransport: boolean): void {
 		if (closed)
 			return
@@ -75,6 +106,7 @@ export function createInspectorClient(transport: InspectorTransport): InspectorC
 		unsubscribeMessages()
 		unsubscribeClose()
 		for (const entry of pending.values()) {
+			clearTimeout(entry.timer ?? undefined)
 			entry.reject(new InspectorClientError({
 				code: 'disconnected',
 				message,
@@ -87,36 +119,20 @@ export function createInspectorClient(transport: InspectorTransport): InspectorC
 			transport.close()
 	}
 
-	unsubscribeMessages = transport.subscribe((rawMessage) => {
-		const event = parseInspectorEventMessage(rawMessage)
-		if (event !== null && isCompatibleProtocolVersion(event.protocol)) {
-			for (const listener of [...messageListeners])
-				listener(event)
-			const listeners = eventListeners.get(event.event)
-			if (listeners !== undefined) {
-				for (const listener of [...listeners])
-					listener(event.payload as never)
-			}
-			return
-		}
-
+	function handleResponse(rawMessage: unknown): void {
 		const response = parseInspectorResponseMessage(rawMessage)
 		if (response === null) {
 			const requestId = malformedResponseRequestId(rawMessage)
-			const entry = requestId === null ? undefined : pending.get(requestId)
-			if (requestId !== null && entry !== undefined) {
-				pending.delete(requestId)
-				entry.reject(new InspectorClientError({
-					code: 'invalid-message',
-					message: 'Invalid Inspector protocol response envelope.',
-				}))
-			}
+			const entry = requestId === null ? undefined : takePending(requestId)
+			entry?.reject(new InspectorClientError({
+				code: 'invalid-message',
+				message: 'Invalid Inspector protocol response envelope.',
+			}))
 			return
 		}
-		const entry = pending.get(response.requestId)
+		const entry = takePending(response.requestId)
 		if (entry === undefined)
 			return
-		pending.delete(response.requestId)
 
 		if (!isCompatibleProtocolVersion(response.protocol)) {
 			entry.reject(new InspectorClientError({
@@ -129,7 +145,14 @@ export function createInspectorClient(transport: InspectorTransport): InspectorC
 			entry.reject(new InspectorClientError(response.error))
 			return
 		}
-		if (!isInspectorRequestResult(entry.method, response.result, response.protocol.minor)) {
+		let valid: boolean
+		try {
+			valid = isInspectorRequestResult(entry.method, response.result, response.protocol.minor)
+		}
+		catch {
+			valid = false
+		}
+		if (!valid) {
 			entry.reject(new InspectorClientError({
 				code: 'invalid-message',
 				message: `Invalid ${entry.method} response payload.`,
@@ -137,6 +160,37 @@ export function createInspectorClient(transport: InspectorTransport): InspectorC
 			return
 		}
 		entry.resolve(response.result)
+	}
+
+	unsubscribeMessages = transport.subscribe((rawMessage) => {
+		let event: InspectorEventMessage | null = null
+		try {
+			event = parseInspectorEventMessage(rawMessage)
+			if (event === null || !isCompatibleProtocolVersion(event.protocol)) {
+				event = null
+				handleResponse(rawMessage)
+			}
+		}
+		catch {
+			// Validation must never throw out of the transport listener: the request this message
+			// answers (if any) is rejected with a coded error instead of staying pending forever.
+			const requestId = malformedResponseRequestId(rawMessage)
+			const entry = requestId === null ? undefined : takePending(requestId)
+			entry?.reject(new InspectorClientError({
+				code: 'invalid-message',
+				message: 'Unable to process the Inspector protocol response.',
+			}))
+			return
+		}
+		if (event === null)
+			return
+		for (const listener of [...messageListeners])
+			listener(event)
+		const listeners = eventListeners.get(event.event)
+		if (listeners !== undefined) {
+			for (const listener of [...listeners])
+				listener(event.payload as never)
+		}
 	})
 	unsubscribeClose = transport.subscribeClose(() => {
 		finalizeClose('Inspector transport disconnected.', false)
@@ -159,6 +213,15 @@ export function createInspectorClient(transport: InspectorTransport): InspectorC
 				method,
 				resolve: resolve as (value: unknown) => void,
 				reject,
+				timer: requestTimeoutMs === undefined
+					? null
+					: setTimeout(() => {
+							takePending(requestId)
+							reject(new InspectorClientError({
+								code: 'timeout',
+								message: `Inspector request ${method} timed out after ${requestTimeoutMs}ms.`,
+							}))
+						}, requestTimeoutMs),
 			})
 			try {
 				transport.send({
@@ -170,7 +233,7 @@ export function createInspectorClient(transport: InspectorTransport): InspectorC
 				})
 			}
 			catch (error) {
-				pending.delete(requestId)
+				takePending(requestId)
 				reject(error)
 			}
 		})

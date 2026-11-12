@@ -582,15 +582,34 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 
 	const removeDomListeners = installDomListeners()
 	const unsubscribeTransport = options.transport.subscribe((raw) => {
-		const request = parseInspectorRequestMessage(raw)
-		if (request !== null) {
-			handleRequest(request)
-			return
+		let requestId: string | null = null
+		try {
+			const request = parseInspectorRequestMessage(raw)
+			if (request !== null) {
+				requestId = request.requestId
+				handleRequest(request)
+				return
+			}
+			if (typeof raw === 'object' && raw !== null
+				&& 'kind' in raw && raw.kind === 'request'
+				&& 'requestId' in raw && typeof raw.requestId === 'string') {
+				sendError(raw.requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
+			}
 		}
-		if (typeof raw === 'object' && raw !== null
-			&& 'kind' in raw && raw.kind === 'request'
-			&& 'requestId' in raw && typeof raw.requestId === 'string') {
-			sendError(raw.requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
+		catch {
+			// Catch-all: every request that carries an id gets exactly one answer, and the Agent keeps
+			// serving. The failure detail stays in this realm; the peer only learns it was internal.
+			try {
+				if (requestId === null && typeof raw === 'object' && raw !== null
+					&& 'requestId' in raw && typeof raw.requestId === 'string') {
+					requestId = raw.requestId
+				}
+				if (requestId !== null)
+					sendError(requestId, protocolError('internal-error', 'The Inspector Agent failed to handle the request.'))
+			}
+			catch {
+				// The transport itself is unusable; its close notification owns cleanup.
+			}
 		}
 	})
 	let unsubscribeClose: () => void = () => {}
