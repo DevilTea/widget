@@ -5,9 +5,9 @@
  */
 
 import { createWidgetPlugin } from '@deviltea/widget-core'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { defineComponent } from 'vue'
+import { defineComponent, h, Suspense } from 'vue'
 import { createWidgetVueRenderer, useWidget, WidgetVueIntegrationError } from './index'
 import { SharedWidgetSlotComponent } from './renderer'
 import {
@@ -268,6 +268,34 @@ describe('widgetVueIntegrationError codes', () => {
 			const error = capture(() => useWidget(CounterPlugin))
 
 			expectCode(error, 'outside-widget-renderer')
+		})
+
+		it('tells an async setup() that useWidget() must be called synchronously, before the first await', async () => {
+			let error: unknown
+			const AsyncRenderer = defineComponent({
+				async setup() {
+					await Promise.resolve()
+					error = capture(() => useWidget(CounterPlugin))
+					return () => null
+				},
+			})
+			const Renderer = createWidgetVueRenderer(fixtureSystem, renderers =>
+				renderers
+					.Counter(AsyncRenderer)
+					.Label(LabelRenderer)
+					.Container(ContainerRenderer)
+					.Leaf(LeafRenderer)
+					.EmptyState(EmptyStateRenderer))
+			const runtime = createFixtureRuntime({ id: 'root', type: 'Counter' })
+
+			mount(defineComponent({ render: () => h(Suspense, null, { default: () => h(Renderer, { runtime }) }) }))
+			await flushPromises()
+
+			expectCode(error, 'outside-widget-renderer')
+			expect((error as WidgetVueIntegrationError).message)
+				.toContain('synchronously during setup()')
+			expect((error as WidgetVueIntegrationError).message)
+				.toContain('before the first await')
 		})
 
 		it('is thrown by the shared WidgetSlot component mounted with no widget host', () => {

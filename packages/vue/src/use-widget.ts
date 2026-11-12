@@ -9,7 +9,7 @@ import type { WidgetIntegrationEventEmitter } from '@deviltea/widget-core/integr
 import type { CurrentWidgetContextValue, RuntimeWidgetLike } from './context'
 import type { UseWidgetResult } from './types'
 import { getWidgetEventEmitter } from '@deviltea/widget-core/integration'
-import { inject, onScopeDispose } from 'vue'
+import { hasInjectionContext, inject, onScopeDispose } from 'vue'
 import { createDiagnosticsRef, createLazyKeyedSurface, createMethodWrapper, createPropertyRef, createStateRef } from './bridge'
 import { CurrentWidgetContextKey } from './context'
 import { WidgetVueIntegrationError } from './errors'
@@ -30,6 +30,14 @@ function getCurrentWidgetContext(): CurrentWidgetContextValue {
 	// must be treated as "no context" here.
 	const current = inject(CurrentWidgetContextKey, null)
 	if (current === null || current === undefined) {
+		// No injection context at all means the call did not run synchronously inside `setup()`; the
+		// classic cause is a hand-written `async setup()` calling it after an `await`.
+		if (!hasInjectionContext()) {
+			throw new WidgetVueIntegrationError(
+				'outside-widget-renderer',
+				'useWidget() must be called synchronously during setup() of a widget renderer component: there is no current component instance. In an async setup(), call useWidget() before the first await (<script setup> top-level await is fine).',
+			)
+		}
 		throw new WidgetVueIntegrationError(
 			'outside-widget-renderer',
 			'useWidget() was called outside a widget renderer component rendered by a WidgetRenderer produced by createWidgetVueRenderer().',
