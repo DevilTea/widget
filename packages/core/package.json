@@ -24,6 +24,7 @@
 		"runtime",
 		"signals"
 	],
+	"sideEffects": false,
 	"exports": {
 		".": {
 			"types": "./dist/index.d.mts",
@@ -45,7 +46,7 @@
 		"dist"
 	],
 	"engines": {
-		"node": "^22.14.0 || ^24.0.0"
+		"node": ">=22.14.0"
 	},
 	"scripts": {
 		"build": "tsdown",

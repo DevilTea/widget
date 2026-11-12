@@ -62,11 +62,18 @@ declare const widgetValueContractType: unique symbol
  *
  * The generic parameter exists only for Plugin-author type safety. Runtime/integration identity is the
  * stable string `id`; descriptor object identity has no semantic meaning.
+ *
+ * A contract for `Value` describes every value of that type, so it can be attached to a Property whose
+ * value type is the same or narrower (every value the Property produces satisfies the contract):
+ * `WidgetValueContract<string>` fits a `'small' | 'large'` Property, but not a `string | null` one.
  */
 export interface WidgetValueContract<Value> {
 	readonly id: string
-	/** Type-only invariant brand; the factory-created runtime descriptor contains only `id`. */
-	readonly [widgetValueContractType]: (value: Value) => Value
+	/**
+	 * Type-only contravariant brand (`WidgetValueContract<Wide>` is assignable to
+	 * `WidgetValueContract<Narrow>`); the factory-created runtime descriptor contains only `id`.
+	 */
+	readonly [widgetValueContractType]: (value: Value) => void
 }
 
 /**
@@ -167,15 +174,20 @@ export interface WidgetPluginCapabilities {
 	readonly events: boolean
 }
 
-/**
- * A completed plugin. Plugin-specific integration options are captured by the plugin factory's
- * closure; there is no `pluginConfig` / `globalConfig`.
- */
+/** Passive RawConfig authoring metadata of a plugin with a config capability. */
 export interface WidgetPluginConfigMetadata {
 	readonly description: string
 	readonly schema: WidgetConfigJsonSchema | null
 }
 
+/**
+ * A completed plugin. Plugin-specific integration options are captured by the plugin factory's
+ * closure; there is no `pluginConfig` / `globalConfig`.
+ *
+ * A completed plugin is immutable: `done()` freezes it, every section builder is sealed once its build
+ * callback returns, and every config, slot and member definition was captured by value when declared,
+ * so neither a retained builder section nor later mutation of the author's definition objects changes it.
+ */
 export interface WidgetPlugin<
 	Type extends string = string,
 	Interfaces extends WidgetInterfaces = WidgetInterfaces,
@@ -322,6 +334,51 @@ export type WidgetMethodExecuteContext<
 	& WidgetEventEmitterContext<Interfaces>
 
 // -------------------------------------------------------------------------------------------------
+// Synchronous results
+// -------------------------------------------------------------------------------------------------
+
+type IsAny<T> = 0 extends 1 & T ? true : false
+
+type IsExactlyVoid<T> = (<X>() => X extends T ? 1 : 2) extends (<X>() => X extends void ? 1 : 2) ? true : false
+
+/**
+ * An object result that is not a thenable. The `then` text is the compile-error message shown when a
+ * PromiseLike/thenable is returned; no callable `then` satisfies it.
+ */
+interface WidgetSynchronousObjectResult {
+	readonly then?: 'widget-core: semantic callbacks are synchronous; returning a PromiseLike/thenable is a contract violation'
+	readonly [key: string]: any
+}
+
+/**
+ * The result type of a semantic callback declared to return `void`: any synchronous value, but never a
+ * PromiseLike/thenable. A plain `void` return type would accept an `async` function (TypeScript lets a
+ * `void`-returning function type accept any return), whose synchronous prefix runs before Core rejects
+ * the returned thenable at runtime.
+ */
+export type WidgetSynchronousVoidResult
+	= | void
+		| string
+		| number
+		| boolean
+		| bigint
+		| symbol
+		| null
+		| undefined
+		| WidgetSynchronousObjectResult
+
+/**
+ * A declared callback result type, with exactly `void` replaced by `WidgetSynchronousVoidResult` so that
+ * a `void` declaration does not reopen the synchronous boundary. Other declared types already reject a
+ * PromiseLike (see `WidgetInterfacesViolationOf`); `any` stays unchecked.
+ */
+type WidgetSynchronousResult<Value> = IsAny<Value> extends true
+	? Value
+	: IsExactlyVoid<Value> extends true
+		? WidgetSynchronousVoidResult
+		: Value
+
+// -------------------------------------------------------------------------------------------------
 // Member declarations
 // -------------------------------------------------------------------------------------------------
 
@@ -338,7 +395,7 @@ export interface WidgetSlotDefinition<
 	SlotName extends WidgetMemberKey,
 > {
 	readonly description: string
-	readonly validateStructure?: (ctx: WidgetSlotValidateStructureContext<Interfaces, SlotName>) => void
+	readonly validateStructure?: (ctx: WidgetSlotValidateStructureContext<Interfaces, SlotName>) => WidgetSynchronousVoidResult
 }
 
 export type WidgetSlotDefinitions<Interfaces extends WidgetInterfaces> = {
@@ -355,7 +412,7 @@ export type ExactWidgetSlotDefinitions<Interfaces extends WidgetInterfaces, Defi
 			readonly [Name in keyof Definitions as Name extends WidgetSlotNameOf<Interfaces> ? never : Name]: never
 		}
 
-export type WidgetPluginValidateStructure<Interfaces extends WidgetInterfaces> = (ctx: WidgetPluginValidateStructureContext<Interfaces>) => void
+export type WidgetPluginValidateStructure<Interfaces extends WidgetInterfaces> = (ctx: WidgetPluginValidateStructureContext<Interfaces>) => WidgetSynchronousVoidResult
 
 export interface WidgetStateMemberDefinition<
 	Interfaces extends WidgetInterfaces,
@@ -385,7 +442,7 @@ export interface WidgetMethodDefinition<
 > {
 	readonly registerDeps?: (ctx: WidgetRegisterDepsContext<Interfaces, 'method'>) => Deps
 	readonly validateArgs: (args: readonly unknown[], ctx: WidgetMethodValidateArgsContext<Interfaces>) => args is WidgetMethodArgsOf<Interfaces, Name>
-	readonly execute: (ctx: WidgetMethodExecuteContext<Interfaces, Name, Deps>) => WidgetMethodReturnOf<Interfaces, Name>
+	readonly execute: (ctx: WidgetMethodExecuteContext<Interfaces, Name, Deps>) => WidgetSynchronousResult<WidgetMethodReturnOf<Interfaces, Name>>
 }
 
 export interface WidgetEventDefinition {
@@ -466,17 +523,23 @@ export interface WidgetPluginDonePhase<Type extends string, Interfaces extends W
 }
 
 /**
- * Outer capability phases in their fixed call order. Part of the type-level order diagnostics only;
- * the runtime builder is order-agnostic.
+ * Outer builder phases in their fixed call order: every capability phase plus the optional,
+ * capability-independent `structure` phase. Part of the type-level order diagnostics only; the runtime
+ * builder is order-agnostic.
  */
-type WidgetPluginPhaseOrder = readonly ['config', 'slots', 'state', 'properties', 'methods', 'events']
+type WidgetPluginPhaseOrder = readonly ['config', 'slots', 'structure', 'state', 'properties', 'methods', 'events']
 
 type WidgetPluginPhaseName = WidgetPluginPhaseOrder[number]
 
-/** The phases whose capability was declared in `Interfaces`. */
-type WidgetPluginDeclaredPhaseName<Interfaces extends WidgetInterfaces> = {
-	[Phase in WidgetPluginPhaseName]: HasWidgetCapability<Interfaces, Phase> extends true ? Phase : never
-}[WidgetPluginPhaseName]
+type WidgetPluginCapabilityPhaseName = Exclude<WidgetPluginPhaseName, 'structure'>
+
+/**
+ * The phases available for `Interfaces`: every phase whose capability was declared, plus `structure`,
+ * which every plugin may call (at most once) regardless of its capabilities.
+ */
+type WidgetPluginAvailablePhaseName<Interfaces extends WidgetInterfaces> = 'structure' | {
+	[Phase in WidgetPluginCapabilityPhaseName]: HasWidgetCapability<Interfaces, Phase> extends true ? Phase : never
+}[WidgetPluginCapabilityPhaseName]
 
 type WidgetPluginPhaseIsBefore<
 	A extends WidgetPluginPhaseName,
@@ -487,7 +550,7 @@ type WidgetPluginPhaseIsBefore<
 	: false
 
 /**
- * Type-only order marker: the message of the compile error raised when a declared phase is called at
+ * Type-only order marker: the message of the compile error raised when an available phase is called at
  * the wrong position. The marker name and reason text are diagnostics, not protocol.
  */
 export interface WidgetPluginPhaseOrderViolation<Reason extends string> {
@@ -502,96 +565,135 @@ export interface WidgetPluginPhaseOrderViolation<Reason extends string> {
  */
 type WidgetPluginMisplacedArguments<Interfaces extends WidgetInterfaces, Phase extends WidgetPluginPhaseName, Violation>
 	= Phase extends 'config' ? [definition: Violation & WidgetConfigDefinition<Interfaces>]
-		: Phase extends 'slots' ? [definitions: Violation & WidgetSlotDefinitions<Interfaces>, validateStructure?: WidgetPluginValidateStructure<Interfaces>]
-			: Phase extends 'state' ? [build: Violation & ((section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>) => unknown)]
-				: Phase extends 'properties' ? [build: Violation & ((section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>) => unknown)]
-					: Phase extends 'methods' ? [build: Violation & ((section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>) => unknown)]
-						: [build: Violation & ((section: WidgetEventsSection<Interfaces, WidgetEventKeyOf<Interfaces>>) => unknown)]
+		: Phase extends 'slots' ? [definitions: Violation & WidgetSlotDefinitions<Interfaces>]
+			: Phase extends 'structure' ? [validateStructure: Violation & WidgetPluginValidateStructure<Interfaces>]
+				: Phase extends 'state' ? [build: Violation & ((section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>) => unknown)]
+					: Phase extends 'properties' ? [build: Violation & ((section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>) => unknown)]
+						: Phase extends 'methods' ? [build: Violation & ((section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>) => unknown)]
+							: [build: Violation & ((section: WidgetEventsSection<Interfaces, WidgetEventKeyOf<Interfaces>>) => unknown)]
 
 type WidgetPluginPhaseOrderReason<
 	Phase extends WidgetPluginPhaseName,
 	Stage extends WidgetPluginPhaseName | 'done',
 > = Stage extends WidgetPluginPhaseName
 	? WidgetPluginPhaseIsBefore<Phase, Stage> extends true
-		? `'.${Phase}()' was already called or must be called earlier; the next phase is '.${Stage}()'. Order: description -> interfaces -> config? -> slots? -> state? -> properties? -> methods? -> events? -> done()`
-		: `'.${Phase}()' is called too early; call '.${Stage}()' first. Order: description -> interfaces -> config? -> slots? -> state? -> properties? -> methods? -> events? -> done()`
-	: `'.${Phase}()' cannot be called here; the declared phases are already complete, so only '.done()' remains. Order: description -> interfaces -> config? -> slots? -> state? -> properties? -> methods? -> events? -> done()`
+		? `'.${Phase}()' was already called or must be called earlier; the next phase is '.${Stage}()'. Order: description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
+		: `'.${Phase}()' is called too early; call '.${Stage}()' first. Order: description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
+	: `'.${Phase}()' cannot be called here; the declared phases are already complete, so only '.done()' remains. Order: description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
 
 /**
- * Adds type-only order markers for every declared phase that is not callable at `Stage`. A marker
- * takes the real phase's arguments with the first one intersected with
+ * Adds type-only order markers for every available phase that is not in `Callable` (by default just
+ * `Stage`, the next phase; the `structure` stage also keeps the optional `structure` phase callable).
+ * A marker takes the real phase's arguments with the first one intersected with
  * `WidgetPluginPhaseOrderViolation`, so no real value satisfies it and the call fails with an
- * order-specific diagnostic (the function constituent keeps a callback passed to it contextually typed,
- * so no implicit-`any` follow-on errors appear). It returns the same phase, so a misplaced call never
- * advances the chain.
+ * order-specific diagnostic relative to `Stage` (the function constituent keeps a callback passed to it
+ * contextually typed, so no implicit-`any` follow-on errors appear). It returns the same phase, so a
+ * misplaced call never advances the chain.
  */
 export type WidgetPluginOrderedPhase<
 	Phase,
 	Interfaces extends WidgetInterfaces,
 	Stage extends WidgetPluginPhaseName | 'done',
-> = [Exclude<WidgetPluginDeclaredPhaseName<Interfaces>, Stage>] extends [never]
+	Callable extends WidgetPluginPhaseName | 'done' = Stage,
+> = [Exclude<WidgetPluginAvailablePhaseName<Interfaces>, Callable>] extends [never]
 	? Phase
 	: Phase & {
-		[Misplaced in Exclude<WidgetPluginDeclaredPhaseName<Interfaces>, Stage>]: (
+		[Misplaced in Exclude<WidgetPluginAvailablePhaseName<Interfaces>, Callable>]: (
 			...args: WidgetPluginMisplacedArguments<Interfaces, Misplaced, WidgetPluginPhaseOrderViolation<WidgetPluginPhaseOrderReason<Misplaced, Stage>>>
-		) => WidgetPluginOrderedPhase<Phase, Interfaces, Stage>
+		) => WidgetPluginOrderedPhase<Phase, Interfaces, Stage, Callable>
 	}
 
+interface WidgetPluginEventsPhaseMembers<Type extends string, Interfaces extends WidgetInterfaces> {
+	events: (
+		build: (
+			section: WidgetEventsSection<Interfaces, WidgetEventKeyOf<Interfaces>>,
+		) => WidgetEventsSection<Interfaces, never>,
+	) => WidgetPluginOrderedPhase<WidgetPluginDonePhase<Type, Interfaces>, Interfaces, 'done'>
+}
+
+interface WidgetPluginMethodsPhaseMembers<Type extends string, Interfaces extends WidgetInterfaces> {
+	methods: (
+		build: (
+			section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>,
+		) => WidgetMethodsSection<Interfaces, never>,
+	) => WidgetPluginEventsPhase<Type, Interfaces>
+}
+
+interface WidgetPluginPropertiesPhaseMembers<Type extends string, Interfaces extends WidgetInterfaces> {
+	properties: (
+		build: (
+			section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>,
+		) => WidgetPropertiesSection<Interfaces, never>,
+	) => WidgetPluginMethodsPhase<Type, Interfaces>
+}
+
+interface WidgetPluginStatePhaseMembers<Type extends string, Interfaces extends WidgetInterfaces> {
+	state: (
+		build: (
+			section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>,
+		) => WidgetStateSection<Interfaces, never>,
+	) => WidgetPluginPropertiesPhase<Type, Interfaces>
+}
+
 export type WidgetPluginEventsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'events'> extends true
-	? WidgetPluginOrderedPhase<{
-		events: (
-			build: (
-				section: WidgetEventsSection<Interfaces, WidgetEventKeyOf<Interfaces>>,
-			) => WidgetEventsSection<Interfaces, never>,
-		) => WidgetPluginOrderedPhase<WidgetPluginDonePhase<Type, Interfaces>, Interfaces, 'done'>
-	}, Interfaces, 'events'>
+	? WidgetPluginOrderedPhase<WidgetPluginEventsPhaseMembers<Type, Interfaces>, Interfaces, 'events'>
 	: WidgetPluginOrderedPhase<WidgetPluginDonePhase<Type, Interfaces>, Interfaces, 'done'>
 
 export type WidgetPluginMethodsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
-	? WidgetPluginOrderedPhase<{
-		methods: (
-			build: (
-				section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>,
-			) => WidgetMethodsSection<Interfaces, never>,
-		) => WidgetPluginEventsPhase<Type, Interfaces>
-	}, Interfaces, 'methods'>
+	? WidgetPluginOrderedPhase<WidgetPluginMethodsPhaseMembers<Type, Interfaces>, Interfaces, 'methods'>
 	: WidgetPluginEventsPhase<Type, Interfaces>
 
 export type WidgetPluginPropertiesPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'properties'> extends true
-	? WidgetPluginOrderedPhase<{
-		properties: (
-			build: (
-				section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>,
-			) => WidgetPropertiesSection<Interfaces, never>,
-		) => WidgetPluginMethodsPhase<Type, Interfaces>
-	}, Interfaces, 'properties'>
+	? WidgetPluginOrderedPhase<WidgetPluginPropertiesPhaseMembers<Type, Interfaces>, Interfaces, 'properties'>
 	: WidgetPluginMethodsPhase<Type, Interfaces>
 
 export type WidgetPluginStatePhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
-	? WidgetPluginOrderedPhase<{
-		state: (
-			build: (
-				section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>,
-			) => WidgetStateSection<Interfaces, never>,
-		) => WidgetPluginPropertiesPhase<Type, Interfaces>
-	}, Interfaces, 'state'>
+	? WidgetPluginOrderedPhase<WidgetPluginStatePhaseMembers<Type, Interfaces>, Interfaces, 'state'>
 	: WidgetPluginPropertiesPhase<Type, Interfaces>
+
+/**
+ * The `structure` stage: the optional `.structure()` call and the first declared phase after it (or
+ * `.done()`) are both callable. Order markers report relative to that next phase, since `structure` may
+ * be skipped.
+ */
+type WidgetPluginStructureStage<
+	Type extends string,
+	Interfaces extends WidgetInterfaces,
+	Next extends WidgetPluginPhaseName | 'done',
+	NextMembers,
+> = WidgetPluginOrderedPhase<{
+	structure: (validateStructure: WidgetPluginValidateStructure<Interfaces>) => WidgetPluginStatePhase<Type, Interfaces>
+} & NextMembers, Interfaces, Next, 'structure' | Next>
+
+/**
+ * The optional plugin-level structure validator phase. It is not a capability: every plugin may call
+ * `.structure(validateStructure)` at most once, after `slots?` and before `state?`, and it changes
+ * neither `plugin.capabilities`, the catalog, nor inspection.
+ */
+export type WidgetPluginStructurePhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
+	? WidgetPluginStructureStage<Type, Interfaces, 'state', WidgetPluginStatePhaseMembers<Type, Interfaces>>
+	: HasWidgetCapability<Interfaces, 'properties'> extends true
+		? WidgetPluginStructureStage<Type, Interfaces, 'properties', WidgetPluginPropertiesPhaseMembers<Type, Interfaces>>
+		: HasWidgetCapability<Interfaces, 'methods'> extends true
+			? WidgetPluginStructureStage<Type, Interfaces, 'methods', WidgetPluginMethodsPhaseMembers<Type, Interfaces>>
+			: HasWidgetCapability<Interfaces, 'events'> extends true
+				? WidgetPluginStructureStage<Type, Interfaces, 'events', WidgetPluginEventsPhaseMembers<Type, Interfaces>>
+				: WidgetPluginStructureStage<Type, Interfaces, 'done', WidgetPluginDonePhase<Type, Interfaces>>
 
 /**
  * `slots: never` is the canonical explicit-empty slots declaration (diagnostic #10 amendment
  * "declaration-presence semantics and public `WidgetPlugin.capabilities`"): the phase still exists —
  * gated on `HasWidgetCapability`, never on whether `WidgetCapabilityOf<Interfaces, 'slots'>` happens to
  * be `never` — and completes as `.slots({})`, since `ExactWidgetSlotDefinitions` for zero slot names is
- * exactly `{}`.
+ * exactly `{}`. A plugin-level structure validator is declared with the following `.structure()` phase.
  */
 export type WidgetPluginSlotsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'slots'> extends true
 	? WidgetPluginOrderedPhase<{
 		slots: <const Definitions extends ExactWidgetSlotDefinitions<Interfaces, Definitions>>(
 			definitions: Definitions,
-			validateStructure?: WidgetPluginValidateStructure<Interfaces>,
-		) => WidgetPluginStatePhase<Type, Interfaces>
+		) => WidgetPluginStructurePhase<Type, Interfaces>
 	}, Interfaces, 'slots'>
-	: WidgetPluginStatePhase<Type, Interfaces>
+	: WidgetPluginStructurePhase<Type, Interfaces>
 
 export type WidgetPluginConfigPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
 	? WidgetPluginOrderedPhase<{
@@ -624,33 +726,136 @@ interface WidgetPluginDraft {
 	events: Map<WidgetMemberKey, ErasedWidgetEventDefinition> | null
 }
 
+type WidgetPluginSectionName = 'config' | 'slots' | 'state' | 'properties' | 'methods' | 'events'
+
+type WidgetPluginMemberSectionName = Exclude<WidgetPluginSectionName, 'config' | 'slots'>
+
+type WidgetPluginFieldKind = 'function' | 'string' | 'boolean' | 'schema' | 'value-contract'
+
+type WidgetPluginFieldRule = readonly [field: string, kind: WidgetPluginFieldKind, required: boolean]
+
 /**
- * Builds the section keyed-chain object.
+ * The callbacks and description fields each section's definition type requires, plus its optional
+ * fields. Untyped (JavaScript / dynamically loaded) plugins are checked against these at registration,
+ * so a malformed plugin fails before `done()` returns instead of at its first interaction.
+ */
+const definitionFieldRules: Readonly<Record<WidgetPluginSectionName, readonly WidgetPluginFieldRule[]>> = {
+	config: [['description', 'string', true], ['validate', 'function', true], ['resolve', 'function', true], ['schema', 'schema', false]],
+	slots: [['description', 'string', true], ['validateStructure', 'function', false]],
+	state: [['validate', 'function', true], ['default', 'function', false], ['authorWritable', 'boolean', false]],
+	properties: [['compute', 'function', true], ['registerDeps', 'function', false], ['valueContract', 'value-contract', false]],
+	methods: [['validateArgs', 'function', true], ['execute', 'function', true], ['registerDeps', 'function', false]],
+	events: [['description', 'string', true]],
+}
+
+const fieldKindExpectations: Readonly<Record<WidgetPluginFieldKind, string>> = {
+	'function': 'a function',
+	'string': 'a string',
+	'boolean': 'a boolean',
+	'schema': 'a JSON Schema (a boolean or an object)',
+	'value-contract': 'a value contract created by createWidgetValueContract()',
+}
+
+function matchesFieldKind(value: unknown, kind: WidgetPluginFieldKind): boolean {
+	switch (kind) {
+		case 'function':
+			return typeof value === 'function'
+		case 'string':
+			return typeof value === 'string'
+		case 'boolean':
+			return typeof value === 'boolean'
+		case 'schema':
+			// `null` is the erased "no schema" form.
+			return value === null || typeof value === 'boolean' || (typeof value === 'object' && !Array.isArray(value))
+		case 'value-contract':
+			return typeof value === 'object' && value !== null && typeof (value as { readonly id?: unknown }).id === 'string'
+	}
+}
+
+function describeValue(value: unknown): string {
+	return value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value
+}
+
+function memberSubject(section: WidgetPluginSectionName, key: WidgetMemberKey): string {
+	return `member "${key}" of section "${section}"`
+}
+
+/** Plugin contract violations throw uncoded `TypeError`s. */
+function pluginContractViolation(pluginType: string, subject: string, problem: string): TypeError {
+	return new TypeError(`Widget plugin "${pluginType}": ${subject} ${problem}. This is a plugin implementation bug.`)
+}
+
+/**
+ * Captures one definition by value (shallow copy, frozen), the same way for config, slots and members,
+ * after checking that it is an object carrying the fields its section requires. Optional fields are
+ * type-checked only when present (not `undefined`).
+ */
+function captureDefinition(pluginType: string, section: WidgetPluginSectionName, subject: string, definition: unknown): any {
+	if (typeof definition !== 'object' || definition === null)
+		throw pluginContractViolation(pluginType, subject, `must be declared with a definition object, got ${describeValue(definition)}`)
+
+	const captured: Readonly<Record<string, unknown>> = Object.freeze({ ...definition })
+	for (const [field, kind, required] of definitionFieldRules[section]) {
+		const value = captured[field]
+		if (value === undefined) {
+			if (required)
+				throw pluginContractViolation(pluginType, subject, `is missing the required "${field}" field (expected ${fieldKindExpectations[kind]})`)
+			continue
+		}
+		if (!matchesFieldKind(value, kind))
+			throw pluginContractViolation(pluginType, subject, `has an invalid "${field}" field (expected ${fieldKindExpectations[kind]}, got ${describeValue(value)})`)
+	}
+	return captured
+}
+
+/**
+ * Runs one section build callback against the section keyed-chain object, registering its members into
+ * `members` in declaration order.
  *
  * Declared member keys exist only at the type level, so every string member access resolves to a
- * consuming function; the returned chain object is the same object by identity.
+ * registrar; the returned chain object is the same object by identity. A registrar accepts only a
+ * definition object, which it validates and captures by value, so probing the section
+ * (`JSON.stringify`, string coercion, thenable detection) registers nothing. The section is sealed once
+ * the build callback returns or throws: a later registrar call (from a retained section) throws and
+ * changes nothing.
  */
-function createSection(sink: Map<WidgetMemberKey, any>): unknown {
+function buildSection(
+	pluginType: string,
+	sectionName: WidgetPluginMemberSectionName,
+	members: Map<WidgetMemberKey, any>,
+	build: (section: any) => unknown,
+): void {
+	let sealed = false
 	const section: unknown = new Proxy({}, {
 		get(_target, key) {
 			if (typeof key !== 'string')
 				return undefined
 
 			return (definition: unknown) => {
-				sink.set(key, definition)
+				const subject = memberSubject(sectionName, key)
+				if (sealed)
+					throw pluginContractViolation(pluginType, subject, 'was declared after the section\'s build callback returned')
+
+				members.set(key, captureDefinition(pluginType, sectionName, subject, definition))
 				return section
 			}
 		},
 	})
 
-	return section
+	try {
+		build(section)
+	}
+	finally {
+		sealed = true
+	}
 }
 
 /**
  * Starts the plugin builder for one plugin `type`.
  *
- * Phase order is `description -> interfaces -> config? -> slots? -> state? -> properties? -> methods? -> events? -> done()`;
- * a phase exists only when its capability is declared. Calling a declared phase out of order (or
+ * Phase order is `description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`;
+ * a capability phase exists only when its capability is declared, while the optional `structure` phase
+ * (the plugin-level structure validator) is available to every plugin. Calling a phase out of order (or
  * repeating it) fails type-checking with an order-specific diagnostic; the runtime builder itself is
  * order-agnostic.
  */
@@ -674,47 +879,62 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 		interfaces: () => builder,
 
 		config(definition: ErasedWidgetConfigDefinition) {
+			const captured: ErasedWidgetConfigDefinition = captureDefinition(type, 'config', 'section "config"', definition)
 			draft.config = Object.freeze({
-				...definition,
-				schema: definition.schema ?? null,
+				...captured,
+				schema: captured.schema ?? null,
 			})
 			return builder
 		},
 
 		slots(
 			definitions: Readonly<Record<WidgetMemberKey, ErasedWidgetSlotDefinition>>,
-			validateStructure?: (ctx: any) => void,
+			...removedArguments: readonly unknown[]
 		) {
-			draft.slots = new Map(Object.entries(definitions))
-			draft.validateStructure = validateStructure ?? null
+			if (typeof definitions !== 'object' || definitions === null)
+				throw pluginContractViolation(type, 'section "slots"', `must be declared with a slot definitions object, got ${describeValue(definitions)}`)
+			// The plugin-level validator moved to `.structure()`; silently dropping it would lose validation.
+			if (removedArguments.some(argument => argument !== undefined))
+				throw pluginContractViolation(type, 'section "slots"', 'takes only the slot definitions; declare a plugin-level validateStructure with ".structure()"')
+
+			draft.slots = new Map(Object.entries(definitions)
+				.map(([name, slot]) => [name, captureDefinition(type, 'slots', memberSubject('slots', name), slot)]))
+			return builder
+		},
+
+		structure(validateStructure: (ctx: any) => void) {
+			if (typeof validateStructure !== 'function')
+				throw pluginContractViolation(type, 'phase "structure"', `must be given a validateStructure function, got ${describeValue(validateStructure)}`)
+
+			draft.validateStructure = validateStructure
 			return builder
 		},
 
 		state(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetStateMemberDefinition>()
 			draft.state = members
-			build(createSection(members))
+			buildSection(type, 'state', members, build)
 			return builder
 		},
 
 		properties(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetPropertyDefinition>()
 			draft.properties = members
-			build(createSection(members))
+			buildSection(type, 'properties', members, build)
 			return builder
 		},
 
 		methods(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetMethodDefinition>()
 			draft.methods = members
-			build(createSection(members))
+			buildSection(type, 'methods', members, build)
 			return builder
 		},
 
 		events(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetEventDefinition>()
 			draft.events = members
-			build(createSection(members))
+			buildSection(type, 'events', members, build)
 			return builder
 		},
 

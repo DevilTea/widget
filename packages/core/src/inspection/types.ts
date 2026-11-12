@@ -13,7 +13,7 @@
 import type { BlueprintDependencyReference, RuntimePropertyDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { BlueprintSourcePath, BlueprintWidgetNode, ResolvedBlueprintWidgetNode, UnresolvedBlueprintWidgetNode } from '../internal/contract'
-import type { AnyWidgetPluginTuple, WidgetPluginConfigMetadata } from '../plugin'
+import type { AnyWidgetPluginTuple, WidgetPluginCapabilities, WidgetPluginConfigMetadata } from '../plugin'
 import type { WidgetMemberKey } from '../types'
 
 // -------------------------------------------------------------------------------------------------
@@ -53,7 +53,29 @@ export interface PluginInspectionEventMember {
 	readonly description: string
 }
 
+export interface PluginInspectionSlot {
+	readonly type: 'slot'
+	readonly name: WidgetMemberKey
+	readonly description: string
+}
+
+/**
+ * Everything passive one completed plugin declares, in one call: a superset of its `system.catalog`
+ * entry (`type`, `description`, config metadata, slot descriptions) plus capability presence and the
+ * State/Property/Event member facts.
+ */
 export interface PluginInspection {
+	readonly type: string
+	readonly description: string
+	/** Authoritative capability presence (absent vs explicitly declared empty); same facts as `plugin.capabilities`. */
+	readonly capabilities: WidgetPluginCapabilities
+	/** Passive config authoring metadata. Null means no config capability. */
+	readonly config: WidgetPluginConfigMetadata | null
+	/**
+	 * Slot descriptions in declaration order. Null means the Slots capability was not declared; an empty
+	 * map means explicitly declared empty.
+	 */
+	readonly slots: ReadonlyMap<WidgetMemberKey, PluginInspectionSlot> | null
 	/** Null means the State capability was not declared; an empty map means explicitly declared empty. */
 	readonly state: ReadonlyMap<WidgetMemberKey, PluginInspectionStateMember> | null
 	/** Null means the Properties capability was not declared; an empty map means explicitly declared empty. */

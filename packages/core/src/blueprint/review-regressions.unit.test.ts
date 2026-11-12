@@ -138,8 +138,9 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 			.slots({
 				items: {
 					description: 'Test slot',
-					// TypeScript's `void`-return contextual typing allows this async function through;
-					// the sync-boundary guard must still catch it at runtime.
+					// The type rejects this async function; the sync-boundary guard must still catch it at
+					// runtime for untyped callers.
+					// @ts-expect-error an async structure validator is a type error
 					validateStructure: async () => {},
 				},
 			})
@@ -165,10 +166,9 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 		const plugin = createWidgetPlugin('async-plugin-validate-structure')
 			.description('Test widget')
 			.interfaces<ListInterfaces>()
-			.slots(
-				{ items: { description: 'Test slot' } },
-				async () => {},
-			)
+			.slots({ items: { description: 'Test slot' } })
+			// @ts-expect-error an async structure validator is a type error; the runtime guard covers untyped callers
+			.structure(async () => {})
 			.done()
 
 		const system = createWidgetSystem({ plugins: [plugin] })
@@ -193,6 +193,7 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 
 		const system = createWidgetSystem({
 			plugins: [plugin],
+			// @ts-expect-error an async structure validator is a type error; the runtime guard covers untyped callers
 			validateStructure: async () => {},
 		})
 
@@ -756,29 +757,27 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 		const listPlugin = createWidgetPlugin('facade-list')
 			.description('Test widget')
 			.interfaces<ListInterfaces>()
-			.slots(
-				{
-					items: {
-						description: 'Test slot',
-						validateStructure: (ctx) => {
-							checks.slotWidgetHasNoGetDiagnostics = (ctx.widget as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
-							checks.slotChildrenHaveNoGetDiagnostics = ctx.children.every(child => (child as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined)
-						},
+			.slots({
+				items: {
+					description: 'Test slot',
+					validateStructure: (ctx) => {
+						checks.slotWidgetHasNoGetDiagnostics = (ctx.widget as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
+						checks.slotChildrenHaveNoGetDiagnostics = ctx.children.every(child => (child as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined)
 					},
 				},
-				(ctx) => {
-					checks.pluginWidgetHasNoGetDiagnostics = (ctx.widget as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
-					checks.rootHasNoGetDiagnostics = (ctx.blueprint.root as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
+			})
+			.structure((ctx) => {
+				checks.pluginWidgetHasNoGetDiagnostics = (ctx.widget as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
+				checks.rootHasNoGetDiagnostics = (ctx.blueprint.root as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
 
-					const firstChild = ctx.blueprint.getChildrenAt(ctx.widget, 'items')[0]
-					if (firstChild !== undefined) {
-						const location = ctx.blueprint.getLocation(firstChild)
-						checks.locationParentHasNoGetDiagnostics = location !== null
-							&& location.type !== 'root'
-							&& (location.parent as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
-					}
-				},
-			)
+				const firstChild = ctx.blueprint.getChildrenAt(ctx.widget, 'items')[0]
+				if (firstChild !== undefined) {
+					const location = ctx.blueprint.getLocation(firstChild)
+					checks.locationParentHasNoGetDiagnostics = location !== null
+						&& location.type !== 'root'
+						&& (location.parent as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
+				}
+			})
 			.done()
 
 		const system = createWidgetSystem({ plugins: [listPlugin, leafPlugin] })
@@ -811,18 +810,16 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 		const containerPlugin = createWidgetPlugin('facade-freeze-container')
 			.description('Test widget')
 			.interfaces<ContainerInterfaces>()
-			.slots(
-				{ child: { description: 'Test slot' } },
-				(ctx) => {
-					try {
-						// Only reachable through a JS/`any` contract escape: the type is `readonly`.
-						;(ctx.blueprint as unknown as { getWidget: unknown }).getWidget = () => null
-					}
-					catch (error) {
-						assignmentThrew = error instanceof TypeError
-					}
-				},
-			)
+			.slots({ child: { description: 'Test slot' } })
+			.structure((ctx) => {
+				try {
+					// Only reachable through a JS/`any` contract escape: the type is `readonly`.
+					;(ctx.blueprint as unknown as { getWidget: unknown }).getWidget = () => null
+				}
+				catch (error) {
+					assignmentThrew = error instanceof TypeError
+				}
+			})
 			.done()
 
 		interface LeafInterfaces {

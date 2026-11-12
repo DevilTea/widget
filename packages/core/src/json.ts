@@ -329,6 +329,13 @@ type OptionalKeys<T extends object> = {
 	[Key in keyof T]-?: Record<never, never> extends Pick<T, Key> ? Key : never
 }[keyof T]
 
+/**
+ * Well-known-symbol members that only class instances carry (`Date`, `Map`, `Set`, iterables, ...).
+ * Checked before the string-key rule, so such a value reports the non-plain-object reason instead of
+ * "may only have string keys".
+ */
+type ClassInstanceSymbolKey = typeof Symbol.iterator | typeof Symbol.asyncIterator | typeof Symbol.toPrimitive | typeof Symbol.toStringTag
+
 export type JsonDomainViolation<Value> = IsAny<Value> extends true
 	? 'authored JSON values cannot contain any'
 	: [Value] extends [never]
@@ -342,11 +349,13 @@ export type JsonDomainViolation<Value> = IsAny<Value> extends true
 							: Value extends readonly (infer Element)[]
 								? JsonDomainViolation<Element>
 								: Value extends object
-									? Exclude<keyof Value, string> extends never
-										? {
-												[Key in keyof Value]-?: Key extends OptionalKeys<Value>
-													? JsonDomainViolation<Exclude<Value[Key], undefined>>
-													: JsonDomainViolation<Value[Key]>
-											}[keyof Value]
-										: 'authored JSON objects may only have string keys'
+									? [Extract<keyof Value, ClassInstanceSymbolKey>] extends [never]
+											? Exclude<keyof Value, string> extends never
+												? {
+														[Key in keyof Value]-?: Key extends OptionalKeys<Value>
+															? JsonDomainViolation<Exclude<Value[Key], undefined>>
+															: JsonDomainViolation<Value[Key]>
+													}[keyof Value]
+												: 'authored JSON objects may only have string keys'
+											: 'authored JSON objects must be plain objects, not class instances such as Date, Map or Set'
 									: 'authored values must be JSON-compatible'

@@ -178,6 +178,87 @@ describe('plugin inspection', () => {
 			.toEqual(['__proto__', 'constructor'])
 	})
 
+	it('describes the whole plugin in one call: a superset of its catalog entry', () => {
+		interface CardInterfaces {
+			config: {
+				raw: { readonly label?: string } | null
+				resolved: { readonly label: string }
+			}
+			slots: 'header' | 'body'
+			state: { open: boolean }
+		}
+
+		const card = createWidgetPlugin('inspection-card')
+			.description('Card widget')
+			.interfaces<CardInterfaces>()
+			.config({
+				description: 'Card configuration',
+				schema: { type: 'object', properties: { label: { type: 'string' } } },
+				validate: (input): input is { readonly label?: string } | null => input === null || typeof input === 'object',
+				resolve: raw => ({ label: raw?.label ?? 'Card' }),
+			})
+			.slots({ header: { description: 'Card header' }, body: { description: 'Card body' } })
+			.state(state => state.open({ validate: (input): input is boolean => typeof input === 'boolean' }))
+			.done()
+		const inspection = inspectPlugin(card)
+		const entry = createWidgetSystem({ plugins: [card] }).catalog.widgets[0]!
+
+		expect(inspection.type)
+			.toBe('inspection-card')
+		expect(inspection.description)
+			.toBe('Card widget')
+		expect(inspection.capabilities)
+			.toEqual({ config: true, slots: true, state: true, properties: false, methods: false, events: false })
+		expect(inspection.config)
+			.toEqual({ description: 'Card configuration', schema: { type: 'object', properties: { label: { type: 'string' } } } })
+		expect([...inspection.slots!.values()])
+			.toEqual([
+				{ type: 'slot', name: 'header', description: 'Card header' },
+				{ type: 'slot', name: 'body', description: 'Card body' },
+			])
+
+		// Every catalog fact is available from the inspection.
+		expect(inspection.type)
+			.toBe(entry.type)
+		expect(inspection.description)
+			.toBe(entry.description)
+		expect(inspection.config)
+			.toEqual(entry.config)
+		expect(inspection.config?.description ?? null)
+			.toBe(entry.descriptions.config)
+		expect([...inspection.slots!].map(([name, slot]) => [name, slot.description]))
+			.toEqual([...entry.descriptions.slots!])
+		expect(Object.isFrozen(inspection.capabilities))
+			.toBe(true)
+		expect(Object.isFrozen(inspection.slots))
+			.toBe(true)
+		expect(Object.isFrozen(inspection.slots?.get('header')))
+			.toBe(true)
+	})
+
+	it('follows the catalog convention for absent and explicitly empty config and slots', () => {
+		const absent = createWidgetPlugin('inspection-absent-config-slots')
+			.description('Absent')
+			.interfaces<Record<never, never>>()
+			.done()
+		const emptySlots = createWidgetPlugin('inspection-empty-slots')
+			.description('Empty slots')
+			.interfaces<{ slots: never }>()
+			.slots({})
+			.done()
+
+		expect(inspectPlugin(absent).config)
+			.toBeNull()
+		expect(inspectPlugin(absent).slots)
+			.toBeNull()
+		expect(inspectPlugin(absent).capabilities)
+			.toEqual({ config: false, slots: false, state: false, properties: false, methods: false, events: false })
+		expect(inspectPlugin(emptySlots).slots?.size)
+			.toBe(0)
+		expect(inspectPlugin(emptySlots).capabilities.slots)
+			.toBe(true)
+	})
+
 	it('projects the same declaration facts through Blueprint inspection without evaluating Properties', () => {
 		computeCalls = 0
 		const system = createWidgetSystem({ plugins: [plugin] })
