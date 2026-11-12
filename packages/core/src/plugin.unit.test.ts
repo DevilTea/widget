@@ -200,3 +200,98 @@ describe('member definitions are captured by value at registration', () => {
 			.toBe(false)
 	})
 })
+
+describe('declared member shapes are validated before done() returns', () => {
+	/** The builder as an untyped (JavaScript / dynamically loaded) author sees it. */
+	function untyped(type: string): any {
+		return createWidgetPlugin(type)
+			.description('d')
+			.interfaces()
+	}
+	const fn = () => true
+
+	it('rejects a member missing a required callback or description, naming plugin, section, member and field', () => {
+		const cases: ReadonlyArray<readonly [run: () => unknown, names: readonly string[]]> = [
+			[() => untyped('u1')
+				.state((s: any) => s.count({})), ['u1', 'state', 'count', 'validate']],
+			[() => untyped('u2')
+				.properties((p: any) => p.label({})), ['u2', 'properties', 'label', 'compute']],
+			[() => untyped('u3')
+				.methods((m: any) => m.run({ execute: fn })), ['u3', 'methods', 'run', 'validateArgs']],
+			[() => untyped('u4')
+				.methods((m: any) => m.run({ validateArgs: fn })), ['u4', 'methods', 'run', 'execute']],
+			[() => untyped('u5')
+				.events((e: any) => e.changed({})), ['u5', 'events', 'changed', 'description']],
+			[() => untyped('u6')
+				.slots({ body: {} }), ['u6', 'slots', 'body', 'description']],
+			[() => untyped('u7')
+				.config({ validate: fn, resolve: fn }), ['u7', 'config', 'description']],
+			[() => untyped('u8')
+				.config({ description: 'c', resolve: fn }), ['u8', 'config', 'validate']],
+			[() => untyped('u9')
+				.config({ description: 'c', validate: fn }), ['u9', 'config', 'resolve']],
+		]
+
+		for (const [run, names] of cases)
+			expectContractViolation(capture(run), names)
+	})
+
+	it('type-checks optional fields only when they are present', () => {
+		const cases: ReadonlyArray<readonly [run: () => unknown, names: readonly string[]]> = [
+			[() => untyped('o1')
+				.state((s: any) => s.count({ validate: fn, default: 1 })), ['o1', 'state', 'count', 'default']],
+			[() => untyped('o2')
+				.state((s: any) => s.count({ validate: fn, authorWritable: 'yes' })), ['o2', 'state', 'count', 'authorWritable']],
+			[() => untyped('o3')
+				.properties((p: any) => p.label({ compute: fn, registerDeps: {} })), ['o3', 'properties', 'label', 'registerDeps']],
+			[() => untyped('o4')
+				.properties((p: any) => p.label({ compute: fn, valueContract: 'x' })), ['o4', 'properties', 'label', 'valueContract']],
+			[() => untyped('o5')
+				.properties((p: any) => p.label({ compute: fn, valueContract: {} })), ['o5', 'properties', 'label', 'valueContract']],
+			[() => untyped('o6')
+				.methods((m: any) => m.run({ validateArgs: fn, execute: fn, registerDeps: 1 })), ['o6', 'methods', 'run', 'registerDeps']],
+			[() => untyped('o7')
+				.slots({ body: { description: 'b', validateStructure: 1 } }), ['o7', 'slots', 'body', 'validateStructure']],
+			[() => untyped('o8')
+				.config({ description: 'c', validate: fn, resolve: fn, schema: 'x' }), ['o8', 'config', 'schema']],
+			[() => untyped('o9')
+				.events((e: any) => e.changed({ description: 1 })), ['o9', 'events', 'changed', 'description']],
+		]
+
+		for (const [run, names] of cases)
+			expectContractViolation(capture(run), names)
+
+		const plugin = untyped('optional-undefined')
+			.config({ description: 'c', validate: fn, resolve: () => ({}), schema: undefined })
+			.slots({ body: { description: 'b', validateStructure: undefined } })
+			.state((s: any) => s.count({ validate: fn, default: undefined, authorWritable: undefined }))
+			.properties((p: any) => p.label({ compute: fn, registerDeps: undefined, valueContract: undefined }))
+			.methods((m: any) => m.run({ validateArgs: fn, execute: fn, registerDeps: undefined }))
+			.done()
+		expect(plugin.capabilities)
+			.toEqual({ config: true, slots: true, state: true, properties: true, methods: true, events: false })
+	})
+
+	it('rejects non-object config, slots and slot definitions', () => {
+		expectContractViolation(capture(() => untyped('c1')
+			.config(undefined)), ['c1', 'config'])
+		expectContractViolation(capture(() => untyped('s1')
+			.slots(undefined)), ['s1', 'slots'])
+		expectContractViolation(capture(() => untyped('s2')
+			.slots({ body: 'Body' })), ['s2', 'slots', 'body'])
+	})
+
+	it('fails an untyped plugin with missing callbacks before done() returns instead of at first interaction', () => {
+		let reachedDone = false
+		const error = capture(() => {
+			untyped('untyped')
+				.state((s: any) => s.count({}))
+				.done()
+			reachedDone = true
+		})
+
+		expectContractViolation(error, ['untyped', 'state', 'count', 'validate'])
+		expect(reachedDone)
+			.toBe(false)
+	})
+})

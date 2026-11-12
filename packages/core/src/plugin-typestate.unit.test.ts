@@ -367,7 +367,7 @@ describe('builder capability-phase ordering', () => {
 	})
 
 	it('rejects a slots object literal (even via a variable) that declares an extra, undeclared slot', () => {
-		const slotsWithExtra = { header: {}, body: {}, extra: {} }
+		const slotsWithExtra = { header: { description: 'Test slot' }, body: { description: 'Test slot' }, extra: { description: 'Test slot' } }
 		const beforeSlots = createWidgetPlugin('extra-slot')
 			.description('Test widget')
 			.interfaces<FullInterfaces>()

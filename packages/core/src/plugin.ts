@@ -624,10 +624,86 @@ interface WidgetPluginDraft {
 	events: Map<WidgetMemberKey, ErasedWidgetEventDefinition> | null
 }
 
-type WidgetPluginSectionName = 'state' | 'properties' | 'methods' | 'events'
+type WidgetPluginSectionName = 'config' | 'slots' | 'state' | 'properties' | 'methods' | 'events'
+
+type WidgetPluginMemberSectionName = Exclude<WidgetPluginSectionName, 'config' | 'slots'>
+
+type WidgetPluginFieldKind = 'function' | 'string' | 'boolean' | 'schema' | 'value-contract'
+
+type WidgetPluginFieldRule = readonly [field: string, kind: WidgetPluginFieldKind, required: boolean]
+
+/**
+ * The callbacks and description fields each section's definition type requires, plus its optional
+ * fields. Untyped (JavaScript / dynamically loaded) plugins are checked against these at registration,
+ * so a malformed plugin fails before `done()` returns instead of at its first interaction.
+ */
+const definitionFieldRules: Readonly<Record<WidgetPluginSectionName, readonly WidgetPluginFieldRule[]>> = {
+	config: [['description', 'string', true], ['validate', 'function', true], ['resolve', 'function', true], ['schema', 'schema', false]],
+	slots: [['description', 'string', true], ['validateStructure', 'function', false]],
+	state: [['validate', 'function', true], ['default', 'function', false], ['authorWritable', 'boolean', false]],
+	properties: [['compute', 'function', true], ['registerDeps', 'function', false], ['valueContract', 'value-contract', false]],
+	methods: [['validateArgs', 'function', true], ['execute', 'function', true], ['registerDeps', 'function', false]],
+	events: [['description', 'string', true]],
+}
+
+const fieldKindExpectations: Readonly<Record<WidgetPluginFieldKind, string>> = {
+	'function': 'a function',
+	'string': 'a string',
+	'boolean': 'a boolean',
+	'schema': 'a JSON Schema (a boolean or an object)',
+	'value-contract': 'a value contract created by createWidgetValueContract()',
+}
+
+function matchesFieldKind(value: unknown, kind: WidgetPluginFieldKind): boolean {
+	switch (kind) {
+		case 'function':
+			return typeof value === 'function'
+		case 'string':
+			return typeof value === 'string'
+		case 'boolean':
+			return typeof value === 'boolean'
+		case 'schema':
+			// `null` is the erased "no schema" form.
+			return value === null || typeof value === 'boolean' || (typeof value === 'object' && !Array.isArray(value))
+		case 'value-contract':
+			return typeof value === 'object' && value !== null && typeof (value as { readonly id?: unknown }).id === 'string'
+	}
+}
 
 function describeValue(value: unknown): string {
 	return value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value
+}
+
+function memberSubject(section: WidgetPluginSectionName, key: WidgetMemberKey): string {
+	return `member "${key}" of section "${section}"`
+}
+
+/** Plugin contract violations throw uncoded `TypeError`s. */
+function pluginContractViolation(pluginType: string, subject: string, problem: string): TypeError {
+	return new TypeError(`Widget plugin "${pluginType}": ${subject} ${problem}. This is a plugin implementation bug.`)
+}
+
+/**
+ * Captures one definition by value (shallow copy, frozen), the same way for config, slots and members,
+ * after checking that it is an object carrying the fields its section requires. Optional fields are
+ * type-checked only when present (not `undefined`).
+ */
+function captureDefinition(pluginType: string, section: WidgetPluginSectionName, subject: string, definition: unknown): any {
+	if (typeof definition !== 'object' || definition === null)
+		throw pluginContractViolation(pluginType, subject, `must be declared with a definition object, got ${describeValue(definition)}`)
+
+	const captured: Readonly<Record<string, unknown>> = Object.freeze({ ...definition })
+	for (const [field, kind, required] of definitionFieldRules[section]) {
+		const value = captured[field]
+		if (value === undefined) {
+			if (required)
+				throw pluginContractViolation(pluginType, subject, `is missing the required "${field}" field (expected ${fieldKindExpectations[kind]})`)
+			continue
+		}
+		if (!matchesFieldKind(value, kind))
+			throw pluginContractViolation(pluginType, subject, `has an invalid "${field}" field (expected ${fieldKindExpectations[kind]}, got ${describeValue(value)})`)
+	}
+	return captured
 }
 
 /**
@@ -636,14 +712,14 @@ function describeValue(value: unknown): string {
  *
  * Declared member keys exist only at the type level, so every string member access resolves to a
  * registrar; the returned chain object is the same object by identity. A registrar accepts only a
- * definition object, which it captures by value (shallow copy, frozen), so probing the section
+ * definition object, which it validates and captures by value, so probing the section
  * (`JSON.stringify`, string coercion, thenable detection) registers nothing. The section is sealed once
  * the build callback returns or throws: a later registrar call (from a retained section) throws and
- * changes nothing. These are plugin contract violations, so they throw uncoded `TypeError`s.
+ * changes nothing.
  */
 function buildSection(
 	pluginType: string,
-	sectionName: WidgetPluginSectionName,
+	sectionName: WidgetPluginMemberSectionName,
 	members: Map<WidgetMemberKey, any>,
 	build: (section: any) => unknown,
 ): void {
@@ -654,12 +730,11 @@ function buildSection(
 				return undefined
 
 			return (definition: unknown) => {
+				const subject = memberSubject(sectionName, key)
 				if (sealed)
-					throw new TypeError(`Widget plugin "${pluginType}": member "${key}" of section "${sectionName}" was declared after the section's build callback returned. This is a plugin implementation bug.`)
-				if (typeof definition !== 'object' || definition === null)
-					throw new TypeError(`Widget plugin "${pluginType}": member "${key}" of section "${sectionName}" must be declared with a definition object, got ${describeValue(definition)}. This is a plugin implementation bug.`)
+					throw pluginContractViolation(pluginType, subject, 'was declared after the section\'s build callback returned')
 
-				members.set(key, Object.freeze({ ...definition }))
+				members.set(key, captureDefinition(pluginType, sectionName, subject, definition))
 				return section
 			}
 		},
@@ -701,9 +776,10 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 		interfaces: () => builder,
 
 		config(definition: ErasedWidgetConfigDefinition) {
+			const captured: ErasedWidgetConfigDefinition = captureDefinition(type, 'config', 'section "config"', definition)
 			draft.config = Object.freeze({
-				...definition,
-				schema: definition.schema ?? null,
+				...captured,
+				schema: captured.schema ?? null,
 			})
 			return builder
 		},
@@ -712,8 +788,11 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 			definitions: Readonly<Record<WidgetMemberKey, ErasedWidgetSlotDefinition>>,
 			validateStructure?: (ctx: any) => void,
 		) {
+			if (typeof definitions !== 'object' || definitions === null)
+				throw pluginContractViolation(type, 'section "slots"', `must be declared with a slot definitions object, got ${describeValue(definitions)}`)
+
 			draft.slots = new Map(Object.entries(definitions)
-				.map(([name, slot]) => [name, Object.freeze({ ...slot })]))
+				.map(([name, slot]) => [name, captureDefinition(type, 'slots', memberSubject('slots', name), slot)]))
 			draft.validateStructure = validateStructure ?? null
 			return builder
 		},
