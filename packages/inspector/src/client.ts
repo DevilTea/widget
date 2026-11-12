@@ -73,11 +73,14 @@ function invokeIsolated(listener: () => void): void {
 	}
 }
 
+/** How many timed-out subscribe requests a Client remembers in order to release a late subscription. */
+const MAX_TIMED_OUT_SUBSCRIBES = 256
+
 export interface CreateInspectorClientOptions {
 	/**
 	 * Rejects a request that has received no response after this many milliseconds with an
 	 * `InspectorClientError` coded `timeout`. There is no default: unlimited unless configured. Must be a
-	 * positive finite number. A late response to a timed-out request is ignored.
+	 * positive finite number. A late response to a timed-out request is ignored, except that a late successful `runtime.subscribeMember`/`runtime.subscribeEvent` response makes the client send the matching unsubscribe so no subscription outlives the failed request.
 	 */
 	readonly requestTimeoutMs?: number
 }
@@ -105,6 +108,9 @@ export function createInspectorClient(transport: InspectorTransport, options: Cr
 	let requestSequence = 0
 	let closed = false
 	const pending = new Map<string, PendingRequest>()
+	// Subscribe requests that timed out, by request id (oldest first, bounded): the Agent may still have
+	// registered the subscription, so a late success response is answered with the matching unsubscribe.
+	const timedOutSubscribes = new Map<string, 'runtime.subscribeMember' | 'runtime.subscribeEvent'>()
 	const eventListeners = new Map<InspectorEventName, Set<(payload: never) => void>>()
 	const messageListeners = new Set<(event: InspectorEventMessage) => void>()
 	let unsubscribeMessages: () => void = () => {}
@@ -134,10 +140,39 @@ export function createInspectorClient(transport: InspectorTransport, options: Cr
 			}))
 		}
 		pending.clear()
+		timedOutSubscribes.clear()
 		eventListeners.clear()
 		messageListeners.clear()
 		if (closeTransport && !transport.closed)
 			transport.close()
+	}
+
+	/**
+	 * A success response to a subscribe request the caller already gave up on: nobody knows the new
+	 * subscription id, so release it instead of leaving it live on the Agent. Best effort and silent.
+	 */
+	function releaseLateSubscription(response: { readonly requestId: string, readonly protocol: { readonly major: number, readonly minor: number }, readonly ok: boolean, readonly result?: unknown }): void {
+		const method = timedOutSubscribes.get(response.requestId)
+		if (method === undefined)
+			return
+		timedOutSubscribes.delete(response.requestId)
+		if (!response.ok || closed || transport.closed || !isCompatibleProtocolVersion(response.protocol))
+			return
+		try {
+			if (!isInspectorRequestResult(method, response.result, response.protocol.minor))
+				return
+			const subscriptionId = (response.result as { readonly subscriptionId: string }).subscriptionId
+			transport.send({
+				protocol: INSPECTOR_PROTOCOL_VERSION,
+				kind: 'request',
+				requestId: `request-${++requestSequence}`,
+				method: method === 'runtime.subscribeMember' ? 'runtime.unsubscribeMember' : 'runtime.unsubscribeEvent',
+				params: { subscriptionId },
+			})
+		}
+		catch {
+			// The transport is unusable or the payload was malformed; nothing more can be done from here.
+		}
 	}
 
 	function handleResponse(rawMessage: unknown): void {
@@ -171,8 +206,10 @@ export function createInspectorClient(transport: InspectorTransport, options: Cr
 			return
 		}
 		const entry = takePending(response.requestId)
-		if (entry === undefined)
+		if (entry === undefined) {
+			releaseLateSubscription(response)
 			return
+		}
 
 		if (!isCompatibleProtocolVersion(response.protocol)) {
 			entry.reject(new InspectorClientError({
@@ -257,6 +294,13 @@ export function createInspectorClient(transport: InspectorTransport, options: Cr
 					? null
 					: setTimeout(() => {
 							takePending(requestId)
+							if (method === 'runtime.subscribeMember' || method === 'runtime.subscribeEvent') {
+								timedOutSubscribes.set(requestId, method)
+								if (timedOutSubscribes.size > MAX_TIMED_OUT_SUBSCRIBES) {
+									timedOutSubscribes.delete(timedOutSubscribes.keys()
+										.next().value!)
+								}
+							}
 							reject(new InspectorClientError({
 								code: 'timeout',
 								message: `Inspector request ${method} timed out after ${requestTimeoutMs}ms.`,

@@ -136,7 +136,7 @@ Rules this pins:
 const client = createInspectorClient(transport, { requestTimeoutMs: 5000 })
 ```
 
-`createInspectorClient(transport, options?)` — `options.requestTimeoutMs` (positive finite number, no default) rejects a request that gets no response within that time with an `InspectorClientError` coded `timeout`; a late response is ignored.
+`createInspectorClient(transport, options?)` — `options.requestTimeoutMs` (positive finite number, no default) rejects a request that gets no response within that time with an `InspectorClientError` coded `timeout`; a late response is ignored, except that a late successful `runtime.subscribeMember` or `runtime.subscribeEvent` response makes the client send the matching unsubscribe (best effort, the last 256 timed-out subscribe requests are remembered), so the Agent does not keep a subscription whose id the caller never learned.
 
 | Member | Behavior |
 | --- | --- |
