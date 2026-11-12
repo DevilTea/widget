@@ -172,8 +172,10 @@ export function isInspectableValue(value: unknown): value is InspectableValue {
 			if (!entryResult.ok)
 				return false
 			const entry = entryResult.value
-			if (!isRecord(entry) || typeof entry.key !== 'string')
+			if (!isRecord(entry) || typeof entry.key !== 'string'
+				|| (entry.keyTruncated !== undefined && typeof entry.keyTruncated !== 'boolean')) {
 				return false
+			}
 			stack.push({ kind: 'value', value: entry.value })
 			continue
 		}

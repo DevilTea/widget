@@ -43,13 +43,14 @@ describe('encodeInspectableValue', () => {
 			throw new Error('Expected object encoding.')
 		expect(encoded.entries)
 			.toEqual([
-				{ key: 'alpha', value: { type: 'string', value: 'abc', truncated: true } },
+				{ key: 'alp', keyTruncated: true, value: { type: 'string', value: 'abc', truncated: true } },
 				{
-					key: 'beta',
+					key: 'bet',
+					keyTruncated: true,
 					value: {
 						type: 'object',
 						id: expect.any(Number),
-						entries: [{ key: 'nested', value: { type: 'truncated', reason: 'max-depth' } }],
+						entries: [{ key: 'nes', keyTruncated: true, value: { type: 'truncated', reason: 'max-depth' } }],
 						truncated: false,
 					},
 				},

@@ -25,7 +25,7 @@ import type {
 	InspectorRuntimeWidgetSnapshot,
 	InspectorSlot,
 } from './protocol'
-import type { InspectableValue } from './value'
+import type { InspectableValue, InspectableValueEncodingOptions } from './value'
 import { encodeInspectableValue } from './value'
 
 /** `authorWritable` and `valueContractId` are emitted from protocol 0.4 on. */
@@ -240,7 +240,7 @@ function projectRuntimeDiagnosticLocation(location: RuntimeDiagnostic['location'
 	}
 }
 
-function projectRuntimeDiagnostic(diagnostic: RuntimeDiagnostic): InspectorRuntimeDiagnostic {
+function projectRuntimeDiagnostic(diagnostic: RuntimeDiagnostic, encoding: InspectableValueEncodingOptions): InspectorRuntimeDiagnostic {
 	return {
 		code: diagnostic.code,
 		message: diagnostic.message,
@@ -250,16 +250,16 @@ function projectRuntimeDiagnostic(diagnostic: RuntimeDiagnostic): InspectorRunti
 			: {}),
 		...('reason' in diagnostic && typeof diagnostic.reason === 'string' ? { reason: diagnostic.reason } : {}),
 		...('dependency' in diagnostic ? { dependency: projectDependencyReference(diagnostic.dependency) } : {}),
-		...('candidate' in diagnostic ? { candidate: encodeInspectableValue(diagnostic.candidate) } : {}),
-		...('received' in diagnostic ? { received: encodeInspectableValue(diagnostic.received) } : {}),
-		...('result' in diagnostic ? { result: encodeInspectableValue(diagnostic.result) } : {}),
-		...('args' in diagnostic ? { args: diagnostic.args.map(value => encodeInspectableValue(value)) } : {}),
+		...('candidate' in diagnostic ? { candidate: encodeInspectableValue(diagnostic.candidate, encoding) } : {}),
+		...('received' in diagnostic ? { received: encodeInspectableValue(diagnostic.received, encoding) } : {}),
+		...('result' in diagnostic ? { result: encodeInspectableValue(diagnostic.result, encoding) } : {}),
+		...('args' in diagnostic ? { args: diagnostic.args.map(value => encodeInspectableValue(value, encoding)) } : {}),
 		...('related' in diagnostic ? { related: diagnostic.related.map(projectRuntimeDiagnosticLocation) } : {}),
-		...('cause' in diagnostic ? { cause: projectRuntimeDiagnostic(diagnostic.cause) } : {}),
+		...('cause' in diagnostic ? { cause: projectRuntimeDiagnostic(diagnostic.cause, encoding) } : {}),
 	}
 }
 
-function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspectionSnapshot<unknown>): InspectorRuntimePropertySnapshot {
+function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspectionSnapshot<unknown>, encoding: InspectableValueEncodingOptions): InspectorRuntimePropertySnapshot {
 	if (snapshot.status === 'never-evaluated')
 		return { type: 'property', name, snapshot: { status: 'never-evaluated' } }
 
@@ -269,8 +269,8 @@ function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspecti
 		snapshot: {
 			status: 'completed',
 			result: snapshot.result.ok
-				? { ok: true, value: encodeInspectableValue(snapshot.result.value) }
-				: { ok: false, diagnostics: snapshot.result.failure.diagnostics.map(projectRuntimeDiagnostic) },
+				? { ok: true, value: encodeInspectableValue(snapshot.result.value, encoding) }
+				: { ok: false, diagnostics: snapshot.result.failure.diagnostics.map(diagnostic => projectRuntimeDiagnostic(diagnostic, encoding)) },
 		},
 	}
 }
@@ -278,6 +278,7 @@ function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspecti
 export function projectRuntimeMemberSnapshot(
 	widget: RuntimeWidgetInspection,
 	member: { readonly type: 'state' | 'property', readonly name: string },
+	encoding: InspectableValueEncodingOptions,
 ): InspectorRuntimeMemberSnapshot | null {
 	if (member.type === 'state') {
 		const inspection = widget.getState(member.name)
@@ -286,18 +287,19 @@ export function projectRuntimeMemberSnapshot(
 		return {
 			type: 'state',
 			name: member.name,
-			value: encodeInspectableValue(inspection.getSnapshot().value),
+			value: encodeInspectableValue(inspection.getSnapshot().value, encoding),
 		}
 	}
 
 	const inspection = widget.getProperty(member.name)
-	return inspection === null ? null : projectPropertySnapshot(member.name, inspection.getSnapshot())
+	return inspection === null ? null : projectPropertySnapshot(member.name, inspection.getSnapshot(), encoding)
 }
 
 export function projectRuntimeWidgetSnapshot(
 	runtimeId: string,
 	runtimeInspection: RuntimeInspection,
 	nodeId: InspectionNodeId,
+	encoding: InspectableValueEncodingOptions,
 ): InspectorRuntimeWidgetSnapshot | null {
 	const widget = runtimeInspection.getWidget(nodeId)
 	if (widget === null || !widget.blueprintNode.resolved)
@@ -305,12 +307,12 @@ export function projectRuntimeWidgetSnapshot(
 
 	const members: InspectorRuntimeMemberSnapshot[] = []
 	for (const state of widget.blueprintNode.state) {
-		const projected = projectRuntimeMemberSnapshot(widget, state)
+		const projected = projectRuntimeMemberSnapshot(widget, state, encoding)
 		if (projected !== null)
 			members.push(projected)
 	}
 	for (const property of widget.blueprintNode.properties) {
-		const projected = projectRuntimeMemberSnapshot(widget, property)
+		const projected = projectRuntimeMemberSnapshot(widget, property, encoding)
 		if (projected !== null)
 			members.push(projected)
 	}
@@ -323,6 +325,6 @@ export function projectRuntimeWidgetSnapshot(
 	}
 }
 
-export function projectEventArgs(args: readonly unknown[]): readonly InspectableValue[] {
-	return args.map(value => encodeInspectableValue(value))
+export function projectEventArgs(args: readonly unknown[], encoding: InspectableValueEncodingOptions): readonly InspectableValue[] {
+	return args.map(value => encodeInspectableValue(value, encoding))
 }

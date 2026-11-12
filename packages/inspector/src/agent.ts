@@ -10,6 +10,7 @@ import type {
 	WidgetRef,
 } from './protocol'
 import type { InspectorTransport } from './transport'
+import type { InspectableValueEncodingOptions } from './value'
 import { inspectRuntime } from '@deviltea/widget-core/inspection'
 import { ANCHOR_SELECTOR, createSemanticGeometryController, readAnchorIdentity } from './geometry'
 import { createInspectorOverlay } from './overlay'
@@ -113,6 +114,12 @@ export interface CreateInspectorAgentOptions {
 	 * `internal-error` instead). Must be a positive safe integer.
 	 */
 	readonly maxSubscriptions?: number
+	/**
+	 * Overrides the limits applied when Runtime values and event arguments are encoded for the wire (see
+	 * `InspectableValueEncodingOptions`; omitted fields keep `DEFAULT_INSPECTABLE_VALUE_LIMITS`). Every
+	 * limit must be a positive safe integer; `maxDepth` may also be 0.
+	 */
+	readonly valueLimits?: Pick<InspectableValueEncodingOptions, 'maxDepth' | 'maxEntries' | 'maxStringLength' | 'maxNodes'>
 }
 
 export interface InspectorAgent {
@@ -131,6 +138,12 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const maxSubscriptions = options.maxSubscriptions
 	if (maxSubscriptions !== undefined && !(Number.isSafeInteger(maxSubscriptions) && maxSubscriptions >= 1))
 		throw new RangeError('maxSubscriptions must be a positive safe integer when configured.')
+	const valueLimits = { ...options.valueLimits }
+	for (const [name, limit] of Object.entries(valueLimits)) {
+		const minimum = name === 'maxDepth' ? 0 : 1
+		if (limit !== undefined && !(Number.isSafeInteger(limit) && limit >= minimum))
+			throw new RangeError(`valueLimits.${name} must be a safe integer of at least ${minimum} when configured.`)
+	}
 	const runtimeId = options.runtimeId ?? createRuntimeId()
 	const runtimeInspection = inspectRuntime(options.runtime)
 	const dom = options.dom
@@ -145,6 +158,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	let requestMinor: number | null = null
 	const currentMinor = () => requestMinor ?? negotiatedMinor
 	const envelopeVersion = () => ({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: currentMinor() })
+	// Peers negotiated below 0.4 predate the truncated-key marker, so they never receive it.
+	const valueEncoding = (): InspectableValueEncodingOptions => ({ ...valueLimits, markTruncatedKeys: currentMinor() >= 4 })
 	function capabilitiesForMinor(minor: number): { readonly methods: readonly InspectorRequestMethod[], readonly events: readonly InspectorEventName[] } {
 		if (minor < 2) {
 			return {
@@ -444,7 +459,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		}
 		const member = request.params.member
 		const observable = member.type === 'state' ? widget.getState(member.name) : widget.getProperty(member.name)
-		const projected = projectRuntimeMemberSnapshot(widget, member)
+		const projected = projectRuntimeMemberSnapshot(widget, member, valueEncoding())
 		if (observable === null || projected === null) {
 			sendError(request.requestId, protocolError('member-not-found', 'The requested Runtime member does not exist.'))
 			return
@@ -455,7 +470,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		let unsubscribe: () => void
 		try {
 			unsubscribe = observable.subscribe(() => {
-				const next = projectRuntimeMemberSnapshot(widget, member)
+				const next = projectRuntimeMemberSnapshot(widget, member, valueEncoding())
 				if (next !== null) {
 					emit('runtime.memberChanged', {
 						subscriptionId,
@@ -498,7 +513,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					subscriptionId,
 					ref: request.params.ref,
 					event: request.params.event,
-					args: projectEventArgs(args),
+					args: projectEventArgs(args, valueEncoding()),
 				})
 			})
 		}
@@ -590,7 +605,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					return
 				}
 				const nodeId = resolveNodeId(request.params.ref)
-				const snapshot = nodeId === null ? null : projectRuntimeWidgetSnapshot(runtimeId, runtimeInspection, nodeId)
+				const snapshot = nodeId === null ? null : projectRuntimeWidgetSnapshot(runtimeId, runtimeInspection, nodeId, valueEncoding())
 				if (snapshot === null) {
 					sendError(request.requestId, protocolError('widget-not-found', 'The requested widget does not exist in this Runtime snapshot.'))
 					return
