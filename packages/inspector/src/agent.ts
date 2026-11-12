@@ -1,5 +1,6 @@
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { InspectionNodeId, RuntimeWidgetInspection } from '@deviltea/widget-core/inspection'
+import type { SemanticGeometryController } from './geometry'
 import type {
 	InspectorEventMap,
 	InspectorEventName,
@@ -33,6 +34,10 @@ const PROTOCOL_0_1_METHODS = Object.freeze([
 	'runtime.getWidgetSnapshot',
 	'runtime.subscribeMember',
 	'runtime.unsubscribeMember',
+] satisfies InspectorRequestMethod[])
+
+/** Present only when the Agent has an inspected DOM root: without one they cannot do anything. */
+const PROTOCOL_0_1_DOM_METHODS = Object.freeze([
 	'inspect.enable',
 	'inspect.disable',
 	'highlight.show',
@@ -163,14 +168,14 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	function capabilitiesForMinor(minor: number): { readonly methods: readonly InspectorRequestMethod[], readonly events: readonly InspectorEventName[] } {
 		if (minor < 2) {
 			return {
-				methods: PROTOCOL_0_1_METHODS,
+				methods: dom === undefined ? PROTOCOL_0_1_METHODS : Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_1_DOM_METHODS]),
 				events: PROTOCOL_0_1_EVENTS,
 			}
 		}
 		return {
 			methods: dom === undefined
 				? Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_2_METHODS])
-				: Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_2_METHODS, ...PROTOCOL_0_2_GEOMETRY_METHODS]),
+				: Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_1_DOM_METHODS, ...PROTOCOL_0_2_METHODS, ...PROTOCOL_0_2_GEOMETRY_METHODS]),
 			events: Object.freeze([
 				...PROTOCOL_0_1_EVENTS,
 				...PROTOCOL_0_2_EVENTS,
@@ -308,18 +313,24 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		return ref === null ? null : { ref, ...identity }
 	}
 
-	const geometry = dom === undefined
-		? null
-		: createSemanticGeometryController({
-				root: dom.root,
-				resolveRef: semanticTargetForRef,
-				resolveAnchor: semanticTargetForAnchorElement,
-				onInvalidated: (revision) => {
-					// Layout, scroll, or a renderer re-render moved/replaced anchors: follow them.
-					drawHighlight()
-					emit('geometry.invalidated', { revision })
-				},
-			})
+	// Document-wide geometry observation (scroll/resize/mutation/resize observers) starts on first use:
+	// geometry, hit-test, inspect mode or highlight. An idle Agent observes and reports nothing.
+	let geometryController: SemanticGeometryController | null = null
+	function ensureGeometry(): SemanticGeometryController | null {
+		if (dom === undefined || disposed)
+			return geometryController
+		geometryController ??= createSemanticGeometryController({
+			root: dom.root,
+			resolveRef: semanticTargetForRef,
+			resolveAnchor: semanticTargetForAnchorElement,
+			onInvalidated: (revision) => {
+				// Layout, scroll, or a renderer re-render moved/replaced anchors: follow them.
+				drawHighlight()
+				emit('geometry.invalidated', { revision })
+			},
+		})
+		return geometryController
+	}
 
 	function clearHighlight(): void {
 		highlightedTarget = null
@@ -328,6 +339,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 
 	/** Draws every fragment of the highlighted Widget; returns whether any anchor element exists. */
 	function drawHighlight(): boolean {
+		const geometry = ensureGeometry()
 		if (overlay === null || geometry === null || highlightedTarget === null)
 			return false
 		const measurement = geometry.measure(highlightedTarget)
@@ -339,6 +351,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	function highlightTarget(target: InspectorSemanticTarget): boolean {
+		const geometry = ensureGeometry()
 		if (geometry === null || overlay === null || geometry.measure(target).anchorCount === 0)
 			return false
 		highlightedTarget = target
@@ -355,8 +368,21 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		inspectEnabled = false
 		clearHighlight()
-		emit('inspect.hovered', { ref: null })
+		setHovered(null)
 		emit('agent.status', { inspectEnabled: false })
+	}
+
+	// The Widget the peer was last told is hovered; `inspect.hovered` is only re-emitted when it changes.
+	let hoveredNodeId: number | null = null
+
+	function setHovered(target: InspectorSemanticTarget | null): void {
+		const nodeId = target === null ? null : target.ref.nodeId
+		if (nodeId === hoveredNodeId)
+			return
+		hoveredNodeId = nodeId
+		emit('inspect.hovered', target === null
+			? { ref: null }
+			: { ref: target.ref, widgetId: target.widgetId, widgetType: target.widgetType })
 	}
 
 	function onPointerOver(event: PointerEvent): void {
@@ -365,24 +391,25 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		const anchor = resolveAnchor(event.target)
 		if (anchor === null) {
 			clearHighlight()
-			emit('inspect.hovered', { ref: null })
+			setHovered(null)
 			return
 		}
 		const ref = nodeForAnchor(anchor)
 		if (ref === null) {
 			clearHighlight()
-			emit('inspect.hovered', { ref: null })
+			setHovered(null)
 			return
 		}
-		highlightTarget({ ref, widgetId: anchor.widgetId, widgetType: anchor.widgetType })
-		emit('inspect.hovered', { ref, widgetId: anchor.widgetId, widgetType: anchor.widgetType })
+		const target = { ref, widgetId: anchor.widgetId, widgetType: anchor.widgetType }
+		highlightTarget(target)
+		setHovered(target)
 	}
 
 	function onPointerLeave(): void {
 		if (!inspectEnabled)
 			return
 		clearHighlight()
-		emit('inspect.hovered', { ref: null })
+		setHovered(null)
 	}
 
 	function suppressPointerActivation(event: Event): void {
@@ -641,25 +668,30 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				sendSuccess(request, { removed: true })
 				return
 			}
-			case 'inspect.hitTest':
+			case 'inspect.hitTest': {
+				const geometry = ensureGeometry()
 				if (geometry === null) {
 					sendError(request.requestId, protocolError('internal-error', 'DOM geometry is unavailable for this Inspector Agent.'))
 					return
 				}
 				sendSuccess(request, geometry.hitTest(request.params))
 				return
-			case 'geometry.resolve':
+			}
+			case 'geometry.resolve': {
 				if (request.params.ref.runtimeId !== runtimeId) {
 					sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
 					return
 				}
+				const geometry = ensureGeometry()
 				if (geometry === null) {
 					sendError(request.requestId, protocolError('internal-error', 'DOM geometry is unavailable for this Inspector Agent.'))
 					return
 				}
 				sendSuccess(request, geometry.resolve(request.params.ref))
 				return
+			}
 			case 'inspect.enable':
+				ensureGeometry()
 				inspectEnabled = true
 				emit('agent.status', { inspectEnabled: true })
 				sendSuccess(request, { enabled: true })
@@ -738,7 +770,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		disposed = true
 		releaseSubscriptions()
 		removeDomListeners()
-		geometry?.dispose()
+		geometryController?.dispose()
 		clearHighlight()
 		unsubscribeTransport()
 		unsubscribeClose()
@@ -754,7 +786,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return inspectEnabled
 		},
 		invalidateGeometry() {
-			geometry?.invalidate()
+			geometryController?.invalidate()
 		},
 		dispose() {
 			cleanup(options.closeTransportOnDispose ?? true)

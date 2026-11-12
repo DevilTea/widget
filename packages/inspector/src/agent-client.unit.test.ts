@@ -286,8 +286,6 @@ describe('inspector client/agent protocol boundary', () => {
 			member: { type: 'state', name: 'count' },
 		}))
 			.rejects.toMatchObject({ code: 'runtime-not-found' })
-		await expect(client.request('highlight.show', { ref: wrongRuntimeRef }))
-			.rejects.toMatchObject({ code: 'runtime-not-found' })
 
 		client.dispose()
 		agent.dispose()

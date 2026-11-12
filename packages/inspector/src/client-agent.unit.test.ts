@@ -105,10 +105,6 @@ describe('inspectorClient + InspectorAgent', () => {
 					'runtime.getWidgetSnapshot',
 					'runtime.subscribeMember',
 					'runtime.unsubscribeMember',
-					'inspect.enable',
-					'inspect.disable',
-					'highlight.show',
-					'highlight.clear',
 				])
 			expect(handshake.capabilities.events)
 				.toEqual(['runtime.memberChanged', 'inspect.hovered', 'inspect.selected', 'agent.status'])
