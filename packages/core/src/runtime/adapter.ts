@@ -84,7 +84,7 @@ export function readUntracked<Value>(read: () => Value): Value {
  * SpiderMonkey an `InternalError` ("too much recursion"), QuickJS and XS a "stack overflow". The message is
  * the only signal, so an ordinary `RangeError` (an invalid date, array length, ...) never matches.
  */
-function isEngineStackOverflow(error: unknown): boolean {
+export function isEngineStackOverflow(error: unknown): boolean {
 	try {
 		return (error instanceof RangeError || (error instanceof Error && error.name === 'InternalError'))
 			&& /call stack|stack overflow|too much recursion/i.test(error.message)
