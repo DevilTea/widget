@@ -89,6 +89,8 @@ export type {
 	DocumentRevisionConflictFailure,
 	ReentrantApplyFailure,
 	WidgetDocument,
+	WidgetDocumentCommit,
+	WidgetDocumentListener,
 	WidgetDocumentSnapshot,
 } from './document'
 export { createWidgetDocument } from './document'
