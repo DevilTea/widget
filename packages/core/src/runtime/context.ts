@@ -52,9 +52,25 @@ export function createCallbackOwner(emitter: object | null): CallbackOwner {
  */
 export const callbackScope: { owner: CallbackOwner | null } = { owner: null }
 
+/**
+ * This Runtime's event-emit nesting, kept for the emit re-entrancy guard (see `createEventPrimitive`). A
+ * mutable holder updated with plain assignments, so the bookkeeping survives an exhausted stack.
+ */
+export interface EmitNesting {
+	/** How many of this Runtime's emits are on the stack. */
+	depth: number
+	/**
+	 * The error unwinding a runaway emit loop — the re-entrancy guard's error or an engine stack overflow —
+	 * while it is on its way out of this Runtime's nested emits; `null` otherwise. Cleared when the
+	 * outermost emit leaves.
+	 */
+	unwinding: unknown
+}
+
 export interface RuntimeContext {
 	isDisposed: () => boolean
 	assertActive: () => void
+	readonly emitNesting: EmitNesting
 	/**
 	 * Registers an alien-signals disposal handle created for a Runtime-owned public subscription.
 	 * Returns an idempotent unsubscribe function safe to call before or after Runtime disposal.
@@ -78,6 +94,7 @@ export function createRuntimeContext(): RuntimeContext {
 	return {
 		isDisposed: () => disposed,
 		assertActive,
+		emitNesting: { depth: 0, unwinding: null },
 
 		registerSubscription(rawDispose) {
 			let unsubscribed = false

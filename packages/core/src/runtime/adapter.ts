@@ -11,7 +11,8 @@
  *    primitives cannot silently extend the dependency graph;
  * 3. isolate listener exceptions — and exceptions a subscription's own tracked read throws, i.e. a
  *    Property `compute` throwing while its subscription re-evaluates it — outside the current
- *    alien-signals flush;
+ *    alien-signals flush (an event listener's runaway-emit-loop error is the one exception rethrown, see
+ *    {@link isEmitLoopError});
  * 4. hold an diagnostic-snapshot commit performed *during* an evaluation inside an alien batch until the call
  *    that drove that evaluation has returned, so its propagation can never re-enter alien-signals' flush
  *    while a computed is still mid-evaluation (see {@link writeDeferringFlush}).
@@ -23,6 +24,7 @@
 
 import type { RuntimeContext } from './context'
 import { effect, endBatch, getBatchDepth, setActiveSub, startBatch } from 'alien-signals'
+import { WidgetSystemRuntimeReentrancyError } from '../diagnostic'
 
 /**
  * `queueMicrotask` is a host global (browser + Node), not part of the ECMAScript lib this
@@ -71,9 +73,37 @@ export function readUntracked<Value>(read: () => Value): Value {
 }
 
 /**
+ * Whether `error` is an engine's call-stack exhaustion. Engines give it no dedicated type: V8,
+ * JavaScriptCore, Hermes and QuickJS-ng throw a `RangeError` ("Maximum call stack size exceeded"),
+ * SpiderMonkey an `InternalError` ("too much recursion"), QuickJS and XS a "stack overflow". The message is
+ * the only signal, so an ordinary `RangeError` (an invalid date, array length, ...) never matches.
+ */
+function isEngineStackOverflow(error: unknown): boolean {
+	try {
+		return (error instanceof RangeError || (error instanceof Error && error.name === 'InternalError'))
+			&& /call stack|stack overflow|too much recursion/i.test(error.message)
+	}
+	catch {
+		return false
+	}
+}
+
+/**
+ * Whether `error` is unwinding a runaway emit loop: the emit re-entrancy guard's
+ * {@link WidgetSystemRuntimeReentrancyError}, or an engine stack overflow. These are the exceptions event
+ * listener isolation does not swallow. Isolating one would make the emit retry its remaining listeners,
+ * each of which runs into the same failure again — at every nesting level, which is exponential work.
+ */
+export function isEmitLoopError(error: unknown): boolean {
+	return error instanceof WidgetSystemRuntimeReentrancyError || isEngineStackOverflow(error)
+}
+
+/**
  * {@link invokeListenerIsolated} for a synchronous semantic event listener and its argument tuple: no
  * reads leak into an enclosing Property/effect, and a throw is reported outside the emit instead of
- * aborting the emitting Method and the remaining listeners.
+ * aborting the emitting Method and the remaining listeners — unless it is unwinding a runaway emit loop
+ * ({@link isEmitLoopError}), which is rethrown. Event delivery never runs inside an alien-signals flush, so
+ * the rethrow cannot strand another subscriber's queued notification.
  */
 export function invokeEventListenerIsolated(listener: (...args: readonly unknown[]) => void, args: readonly unknown[]): void {
 	const previous = setActiveSub(undefined)
@@ -81,6 +111,8 @@ export function invokeEventListenerIsolated(listener: (...args: readonly unknown
 		listener(...args)
 	}
 	catch (error) {
+		if (isEmitLoopError(error))
+			throw error
 		reportIsolatedException(error)
 	}
 	finally {

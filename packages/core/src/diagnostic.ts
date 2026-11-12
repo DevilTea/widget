@@ -32,6 +32,21 @@ export class WidgetSystemRuntimeDisposedError extends Error {
 	}
 }
 
+/**
+ * Thrown when one Runtime's event emits nest deeper than its re-entrancy limit: an event listener keeps
+ * re-invoking a Method that emits again. A non-semantic safety guard against runaway re-entrancy (a
+ * `RangeError`, like any other runaway recursion), never a Diagnostic. Event-listener isolation does not
+ * swallow it, so it unwinds every nested emit to the operation that started the loop.
+ */
+export class WidgetSystemRuntimeReentrancyError extends RangeError {
+	override readonly name = 'WidgetSystemRuntimeReentrancyError'
+	readonly code = 'emit-depth-exceeded' as const
+
+	constructor(message = 'Event emits nested deeper than the Runtime\'s re-entrancy limit: an event listener keeps re-invoking a Method that emits.') {
+		super(message)
+	}
+}
+
 // Callback-authored relative inputs --------------------------------------------------------------
 
 export interface RelativeValueDiagnosticInput {
