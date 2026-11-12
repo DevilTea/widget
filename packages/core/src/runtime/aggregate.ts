@@ -6,10 +6,16 @@
  * (declaration) order, each primitive's own local diagnostic order). Reading either aggregate level never
  * activates Property evaluation because it only ever reads diagnostic signals.
  *
- * `runtime.getDiagnostics()` is defined as `runtime.getDiagnostics()` plus each `RuntimeWidget.getDiagnostics()`
+ * `runtime.getDiagnostics()` is defined as the Runtime-level diagnostics plus each `RuntimeWidget.getDiagnostics()`
  * in Blueprint semantic widget order (diagnostic #10 amendment "RuntimeWidget aggregate diagnostic surface");
- * {@link buildAggregateSnapshot} composes {@link buildWidgetDiagnosticSnapshot} per widget rather than
+ * {@link createRuntimeAggregate} composes {@link buildWidgetDiagnosticSnapshot} per widget rather than
  * re-scanning primitives itself, so the two levels cannot silently drift apart.
+ *
+ * The Runtime level is incremental: every primitive commit marks its widget and bumps one per-Runtime
+ * revision signal, so a read re-aggregates only the marked widgets and serves the cached snapshot when
+ * nothing was committed, and the root subscription tracks that one signal instead of every primitive's
+ * diagnostics signal. A change costs work proportional to the changed widgets and the diagnostics in the
+ * new snapshot, never to the number of widgets.
  *
  * Both aggregate levels are framework-owned snapshots: {@link toDiagnosticSnapshot} reuses the canonical
  * `EMPTY_DIAGNOSTICS` identity when empty and freezes the composed array itself otherwise (amendment
@@ -24,7 +30,9 @@ import type { RuntimeLevelDiagnostic, RuntimeWidgetDiagnostic, WidgetSystemRunti
 import type { CompiledBlueprint, InternalNodeId } from '../internal/contract'
 import type { RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
-import { createTrackedSubscription } from './adapter'
+import { signal } from 'alien-signals'
+import { EMPTY_DIAGNOSTICS } from '../diagnostic'
+import { createTrackedSubscription, readUntracked } from './adapter'
 import { toDiagnosticSnapshot } from './diagnostics'
 
 interface CachedWidgetSnapshot {
@@ -87,56 +95,121 @@ export function createRuntimeWidgetDiagnosticsAggregate(
 	}
 }
 
-export function buildAggregateSnapshot(
-	compiled: CompiledBlueprint,
-	registry: ReadonlyMap<InternalNodeId, PrimitiveRegistryEntry>,
-	runtimeLevelDiagnostics: readonly RuntimeLevelDiagnostic[],
-): readonly WidgetSystemRuntimeDiagnostic[] {
-	const result: WidgetSystemRuntimeDiagnostic[] = [...runtimeLevelDiagnostics]
-
-	for (const nodeId of compiled.semanticOrder) {
-		const entry = registry.get(nodeId)
-		if (entry === undefined)
-			continue
-
-		result.push(...buildWidgetDiagnosticSnapshot(entry))
-	}
-
-	return toDiagnosticSnapshot(result)
-}
-
 export interface RuntimeAggregate {
 	getDiagnostics: () => readonly WidgetSystemRuntimeDiagnostic[]
 	subscribeDiagnostics: (listener: (diagnostics: readonly WidgetSystemRuntimeDiagnostic[]) => void) => () => void
+	/**
+	 * The hook every primitive of widget `nodeId` calls right after committing a new diagnostic snapshot,
+	 * inside the same deferred write (so the revision signal is subject to the same flush deferral).
+	 */
+	commitHookFor: (nodeId: InternalNodeId) => () => void
 }
 
+/** Index of the first element of the ascending `positions` that is `>= position`. */
+function lowerBound(positions: readonly number[], position: number): number {
+	let low = 0
+	let high = positions.length
+	while (low < high) {
+		const middle = (low + high) >>> 1
+		if (positions[middle]! < position)
+			low = middle + 1
+		else
+			high = middle
+	}
+	return low
+}
+
+/**
+ * Builds the Runtime-level aggregate. Created before the primitives (they need {@link
+ * RuntimeAggregate.commitHookFor}); `registry` is only read once a snapshot is requested.
+ */
 export function createRuntimeAggregate(
 	context: RuntimeContext,
 	compiled: CompiledBlueprint,
 	registry: ReadonlyMap<InternalNodeId, PrimitiveRegistryEntry>,
 	runtimeLevelDiagnostics: readonly RuntimeLevelDiagnostic[],
 ): RuntimeAggregate {
-	let previousChildren: readonly (readonly RuntimeWidgetDiagnostic[])[] | undefined
-	let previousSnapshot: readonly WidgetSystemRuntimeDiagnostic[] | undefined
-	const snapshot = (): readonly WidgetSystemRuntimeDiagnostic[] => {
-		const children = compiled.semanticOrder
-			.map(nodeId => registry.get(nodeId))
-			.filter((entry): entry is PrimitiveRegistryEntry => entry !== undefined)
-			.map(entry => buildWidgetDiagnosticSnapshot(entry))
+	const { semanticOrder } = compiled
+	const positionByNodeId = new Map<InternalNodeId, number>()
+	for (let position = 0; position < semanticOrder.length; position++)
+		positionByNodeId.set(semanticOrder[position]!, position)
 
-		if (previousSnapshot !== undefined
-			&& previousChildren !== undefined
-			&& previousChildren.length === children.length
-			&& previousChildren.every((child, index) => child === children[index])) {
-			return previousSnapshot
+	// Each widget's last aggregated snapshot, by semantic-order position.
+	const widgetSnapshots: (readonly RuntimeWidgetDiagnostic[])[] = Array.from(semanticOrder, () => EMPTY_DIAGNOSTICS)
+	// Ascending positions whose last aggregated snapshot is non-empty: composition visits only these.
+	const nonEmptyPositions: number[] = []
+	// Positions committed to since the last aggregation, each listed once.
+	let dirtyPositions: number[] = []
+	const isDirty = new Uint8Array(semanticOrder.length)
+	let needsFullScan = true
+	let cached: readonly WidgetSystemRuntimeDiagnostic[] | null = null
+
+	let revision = 0
+	const revisionSignal = signal(revision)
+
+	function markDirty(position: number): void {
+		if (isDirty[position] === 1)
+			return
+		isDirty[position] = 1
+		dirtyPositions.push(position)
+	}
+
+	/** Re-aggregates one widget; returns whether its snapshot identity changed. */
+	function refreshWidget(position: number): boolean {
+		const entry = registry.get(semanticOrder[position]!)
+		const next = entry === undefined ? EMPTY_DIAGNOSTICS : buildWidgetDiagnosticSnapshot(entry)
+		const previous = widgetSnapshots[position]!
+		if (next === previous)
+			return false
+		widgetSnapshots[position] = next
+		if ((previous.length === 0) !== (next.length === 0)) {
+			const index = lowerBound(nonEmptyPositions, position)
+			if (next.length === 0)
+				nonEmptyPositions.splice(index, 1)
+			else
+				nonEmptyPositions.splice(index, 0, position)
 		}
+		return true
+	}
 
+	function refreshDirtyWidgets(): boolean {
+		let changed = false
+		if (needsFullScan) {
+			needsFullScan = false
+			for (let position = 0; position < semanticOrder.length; position++)
+				changed = refreshWidget(position) || changed
+		}
+		else {
+			for (const position of dirtyPositions)
+				changed = refreshWidget(position) || changed
+		}
+		for (const position of dirtyPositions)
+			isDirty[position] = 0
+		dirtyPositions = []
+		return changed
+	}
+
+	function compose(): readonly WidgetSystemRuntimeDiagnostic[] {
+		if (nonEmptyPositions.length === 0)
+			return runtimeLevelDiagnostics.length === 0 ? EMPTY_DIAGNOSTICS : runtimeLevelDiagnostics
 		const result: WidgetSystemRuntimeDiagnostic[] = [...runtimeLevelDiagnostics]
-		for (const child of children)
-			result.push(...child)
-		previousChildren = children
-		previousSnapshot = toDiagnosticSnapshot(result)
-		return previousSnapshot
+		for (const position of nonEmptyPositions) {
+			for (const diagnostic of widgetSnapshots[position]!)
+				result.push(diagnostic)
+		}
+		return toDiagnosticSnapshot(result)
+	}
+
+	const snapshot = (): readonly WidgetSystemRuntimeDiagnostic[] => {
+		// Tracked: a root subscription re-runs after any commit. The primitive signals behind the dirty
+		// widgets are read untracked, so the subscription never depends on every primitive.
+		revisionSignal()
+		if (cached !== null && !needsFullScan && dirtyPositions.length === 0)
+			return cached
+		const changed = readUntracked(refreshDirtyWidgets)
+		if (changed || cached === null)
+			cached = compose()
+		return cached
 	}
 
 	return {
@@ -146,7 +219,23 @@ export function createRuntimeAggregate(
 		},
 		subscribeDiagnostics(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, snapshot, listener)
+			// The revision signal changes on every commit, including commits a batch undoes before it
+			// flushes; notify only when the aggregate actually changed, as tracking each primitive did.
+			let delivered = readUntracked(snapshot)
+			return createTrackedSubscription(context, snapshot, (next) => {
+				if (next === delivered)
+					return
+				delivered = next
+				listener(next)
+			})
+		},
+		commitHookFor(nodeId) {
+			const position = positionByNodeId.get(nodeId)
+			return () => {
+				if (position !== undefined)
+					markDirty(position)
+				revisionSignal(++revision)
+			}
 		},
 	}
 }

@@ -61,6 +61,11 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		return () => fragment
 	}
 
+	// The override topology diagnostics (step 4) depend on no primitive, so they are resolved up front:
+	// the live diagnostic aggregate (step 8) has to exist before the primitives that report into it.
+	const overrideResolution = resolveStateOverrides(compiled, options?.overrideStateDefaults)
+	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelDiagnostics)
+
 	// 1. Runtime/widget indexes + 2. create all states (null + empty diagnostic snapshot).
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
@@ -82,6 +87,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		}
 
 		const buildConfigFragment = buildConfigFragmentFor(node)
+		const onDiagnosticsCommitted = aggregate.commitHookFor(nodeId)
 
 		for (const [key, member] of node.state) {
 			const primitive = createStatePrimitive(context, {
@@ -89,15 +95,14 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				key,
 				definition: member.definition,
 				buildConfigFragment,
+				onDiagnosticsCommitted,
 			})
 			entry.state.set(key, primitive)
 		}
 	}
 
-	// 3. Apply override/default precedence through authoritative validation +
-	// 4. collect override topology runtime-level diagnostics.
-	const overrideResolution = resolveStateOverrides(compiled, options?.overrideStateDefaults)
-
+	// 3. Apply override/default precedence through authoritative validation (4. the override topology
+	// runtime-level diagnostics were collected above).
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
 		if (node === undefined || !node.resolved)
@@ -146,6 +151,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			continue
 
 		const buildConfigFragment = buildConfigFragmentFor(node)
+		const onDiagnosticsCommitted = aggregate.commitHookFor(nodeId)
 		const definition = readWidgetPluginDefinition(node.plugin)
 		const emitter = definition.events === null ? null : buildCallbackEventEmitter(context, entry.events)
 		const emitFragment: Readonly<Record<string, unknown>> = emitter === null
@@ -173,6 +179,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				blueprintView,
 				deps,
 				owner,
+				onDiagnosticsCommitted,
 			})
 			entry.properties.set(name, primitive)
 		}
@@ -199,12 +206,13 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				deps,
 				emitFragment,
 				owner,
+				onDiagnosticsCommitted,
 			})
 			entry.methods.set(name, primitive)
 		}
 	}
 
-	// 8. Build the live diagnostic aggregate.
+	// 8. Build the RuntimeWidgets (the live Runtime-level diagnostic aggregate was created up front).
 	const runtimeWidgetsByNodeId = new Map<InternalNodeId, unknown>()
 	const nodeIdByRuntimeWidget = new Map<object, InternalNodeId>()
 	for (const [nodeId, entry] of registry) {
@@ -215,8 +223,6 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		runtimeWidgetsByNodeId.set(nodeId, runtimeWidget)
 		nodeIdByRuntimeWidget.set(runtimeWidget as object, nodeId)
 	}
-
-	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelDiagnostics)
 
 	function getWidget(id: WidgetId): unknown {
 		context.assertActive()

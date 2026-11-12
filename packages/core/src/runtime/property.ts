@@ -91,6 +91,8 @@ export interface CreatePropertyPrimitiveParams {
 	readonly deps: unknown
 	/** The owner `deps` was materialized for. */
 	readonly owner: CallbackOwner
+	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
+	readonly onDiagnosticsCommitted: () => void
 }
 
 export function createPropertyPrimitive(context: RuntimeContext, params: CreatePropertyPrimitiveParams): PropertyPrimitive {
@@ -172,7 +174,10 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			const snapshot = toDiagnosticSnapshot(diagnostics)
 			if (snapshot !== committedDiagnostics) {
 				committedDiagnostics = snapshot
-				writeDeferringFlush(() => diagnosticsSignal(snapshot))
+				writeDeferringFlush(() => {
+					diagnosticsSignal(snapshot)
+					params.onDiagnosticsCommitted()
+				})
 			}
 
 			// The alien computed caches this exact object as its reactive value and reuses it for every

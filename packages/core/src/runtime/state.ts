@@ -65,6 +65,8 @@ export interface CreateStatePrimitiveParams {
 	readonly definition: ErasedWidgetStateMemberDefinition
 	/** Returns `{ config }` when the owning widget has config capability, `{}` otherwise. */
 	readonly buildConfigFragment: () => Record<string, unknown>
+	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
+	readonly onDiagnosticsCommitted: () => void
 }
 
 export function createStatePrimitive(context: RuntimeContext, params: CreateStatePrimitiveParams): StatePrimitive {
@@ -106,7 +108,10 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		if (next === committedDiagnostics)
 			return
 		committedDiagnostics = next
-		writeDeferringFlush(() => diagnosticsSignal(next))
+		writeDeferringFlush(() => {
+			diagnosticsSignal(next)
+			params.onDiagnosticsCommitted()
+		})
 	}
 
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {

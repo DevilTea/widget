@@ -50,6 +50,8 @@ export interface CreateMethodPrimitiveParams {
 	readonly emitFragment: Readonly<Record<string, unknown>>
 	/** The owner `deps` was materialized for; its `emitter` is `emitFragment.emit` (or `null`). */
 	readonly owner: CallbackOwner
+	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
+	readonly onDiagnosticsCommitted: () => void
 }
 
 export function createMethodPrimitive(context: RuntimeContext, params: CreateMethodPrimitiveParams): MethodPrimitive {
@@ -61,7 +63,10 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 		if (next === committedDiagnostics)
 			return
 		committedDiagnostics = next
-		writeDeferringFlush(() => diagnosticsSignal(next))
+		writeDeferringFlush(() => {
+			diagnosticsSignal(next)
+			params.onDiagnosticsCommitted()
+		})
 	}
 
 	function invoke(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {

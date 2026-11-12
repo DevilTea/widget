@@ -59,6 +59,17 @@ export function invokeListenerIsolated<Value>(listener: (value: Value) => void, 
 	}
 }
 
+/** Runs `read` with no active alien subscriber, so whatever it reads is not tracked by the caller. */
+export function readUntracked<Value>(read: () => Value): Value {
+	const previous = setActiveSub(undefined)
+	try {
+		return read()
+	}
+	finally {
+		setActiveSub(previous)
+	}
+}
+
 /**
  * {@link invokeListenerIsolated} for a synchronous semantic event listener and its argument tuple: no
  * reads leak into an enclosing Property/effect, and a throw is reported outside the emit instead of
