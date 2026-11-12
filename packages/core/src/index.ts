@@ -51,7 +51,6 @@ export type {
 	BlueprintStructureDiagnostic,
 	BlueprintStructureDiagnosticLocation,
 	BlueprintWidgetDiagnosticLocation,
-	Diagnostic,
 	DiagnosticBase,
 	DiagnosticCollector,
 	DiagnosticPath,

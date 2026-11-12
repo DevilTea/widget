@@ -18,9 +18,6 @@ export interface DiagnosticBase<Code extends string = string, Location = unknown
 	readonly message: string
 }
 
-/** General structural diagnostic shape for code which does not need a narrower union. */
-export type Diagnostic<Code extends string = string, Location = unknown> = DiagnosticBase<Code, Location>
-
 export const EMPTY_DIAGNOSTICS: readonly never[] = Object.freeze([])
 
 export class WidgetSystemRuntimeDisposedError extends Error {

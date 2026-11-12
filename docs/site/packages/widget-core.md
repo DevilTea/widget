@@ -1783,7 +1783,7 @@ Events can additionally be observed passively through
 Every state write, property evaluation, and method invocation keeps only its
 **latest completed** operation's diagnostic snapshot — never a history. A
 callback throw discards the in-progress collector and preserves the previous
-completed snapshot; it is an implementation exception, not a `Diagnostic` and not
+completed snapshot; it is an implementation exception, not a diagnostic and not
 an `ExecutionResult.failure`.
 
 A primitive's diagnostics use these codes. The one a plugin callback produces
@@ -2702,7 +2702,7 @@ Release a library's own dependents after Core, never before.
   (`validate`, `resolve`, `default`, `validateStructure`, `registerDeps`,
   `compute`, `validateArgs`, `execute`) is synchronous. A returned
   Promise/thenable is a contract violation on the plugin author's side, not
-  a `Diagnostic` and not an `ExecutionResult.failure`. An `execute` or
+  a diagnostic and not an `ExecutionResult.failure`. An `execute` or
   structure validator (slot, plugin, system) written into the builder or the
   System options that returns a thenable is rejected by the type checker too,
   whatever the declared return type; a callback typed only by a standalone
