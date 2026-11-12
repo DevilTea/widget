@@ -29,8 +29,48 @@ describe('widgetDocument', () => {
 			.toEqual({ type: 'panel', config: { enabled: true } })
 		expect(listener)
 			.toHaveBeenCalledTimes(1)
-		expect(listener)
-			.toHaveBeenCalledWith(document.getSnapshot())
+		expect(listener.mock.calls[0]![0])
+			.toBe(document.getSnapshot())
+	})
+
+	it('passes each listener the committed snapshot plus the previous snapshot and the applied patch', () => {
+		const { system } = createFixture()
+		const document = createWidgetDocument({ system, source: { type: 'panel' } })
+		const initial = document.getSnapshot()
+		const calls: { snapshot: unknown, commit: unknown }[] = []
+		document.subscribe((snapshot, commit) => calls.push({ snapshot, commit }))
+		const patch = [{ op: 'add', path: '/enabled', value: true }] as const
+
+		document.applyPatch(patch)
+		const afterFirst = document.getSnapshot()
+		document.applyPatch([{ op: 'replace', path: '/enabled', value: false }])
+
+		expect(calls)
+			.toHaveLength(2)
+		expect(calls[0]!.snapshot)
+			.toBe(afterFirst)
+		expect(calls[0]!.commit)
+			.toEqual({ previous: initial, patch })
+		expect((calls[0]!.commit as { previous: unknown }).previous)
+			.toBe(initial)
+		expect((calls[0]!.commit as { patch: unknown }).patch)
+			.toBe(patch)
+		expect(calls[1]!.commit)
+			.toMatchObject({ previous: afterFirst, patch: [{ op: 'replace', path: '/enabled', value: false }] })
+		expect(Object.isFrozen(calls[1]!.commit))
+			.toBe(true)
+	})
+
+	it('does not call listeners for a patch that fails or changes nothing', () => {
+		const { system } = createFixture()
+		const document = createWidgetDocument({ system, source: { type: 'panel' } })
+		const listener = vi.fn()
+		document.subscribe(listener)
+
+		document.applyPatch([{ op: 'replace', path: '/missing', value: 1 }])
+		document.applyPatch([{ op: 'test', path: '/type', value: 'panel' }])
+
+		expect(listener).not.toHaveBeenCalled()
 	})
 
 	it('does not compile, revise, or notify for a no-op patch', () => {

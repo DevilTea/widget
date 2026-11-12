@@ -322,7 +322,7 @@ describe('slot dual diagnostics: not-declared and malformed coexist independentl
 			.toBe('invalid')
 
 		const legacyDiagnostics = blueprint.root.diagnostics
-			.filter(diagnostic => ['invalid-widget-definition', 'invalid-widget-id', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code))
+			.filter(diagnostic => ['invalid-widget-definition', 'invalid-widget-id', 'duplicate-widget-id', 'unexpected-widget-field', 'invalid-widget-type', 'unknown-widget-type', 'unexpected-widget-config', 'invalid-widget-slots', 'unexpected-widget-slots', 'undeclared-widget-slot', 'invalid-widget-slot'].includes(diagnostic.code))
 			.filter((diagnostic) => {
 				const path = (diagnostic as { path?: readonly PropertyKey[] }).path
 				return path?.[0] === 'slots' && path?.[1] === 'legacy'

@@ -89,6 +89,8 @@ export type {
 	DocumentRevisionConflictFailure,
 	ReentrantApplyFailure,
 	WidgetDocument,
+	WidgetDocumentCommit,
+	WidgetDocumentListener,
 	WidgetDocumentSnapshot,
 } from './document'
 export { createWidgetDocument } from './document'
@@ -100,6 +102,7 @@ export type {
 	BlueprintNodeConfigFields,
 	BlueprintSemanticSlots,
 	BlueprintSemanticSlotsView,
+	BlueprintSourcePath,
 	BlueprintWidgetNode,
 	BlueprintWidgetNodeBase,
 	BlueprintWidgetNodeView,
@@ -132,6 +135,8 @@ export type {
 	WidgetSystemBlueprintStatus,
 	WidgetSystemRuntime,
 } from './internal/contract'
+
+export { isJsonValue, MAX_JSON_DEPTH } from './json'
 
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from './json'
 
@@ -196,6 +201,7 @@ export type {
 	SeparatedWidgetSourceDiagnostic,
 	SeparatedWidgetSourceDiagnosticCode,
 	SeparatedWidgetSourceNormalization,
+	SeparatedWidgetSourceProjection,
 	SeparatedWidgetStructure,
 } from './separated-source'
 

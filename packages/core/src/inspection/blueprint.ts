@@ -224,7 +224,10 @@ function buildNode<Plugins extends AnyWidgetPluginTuple>(compiledNode: CompiledW
 			nodeId: nodeId as InspectionNodeId,
 			node: compiledNode.publicNode,
 			sourceSlots,
+			sourcePath: compiledNode.sourcePath,
 			resolved: false,
+			id: compiledNode.id,
+			type: compiledNode.type,
 		}) as BlueprintInspectionNode<Plugins>
 	}
 
@@ -232,6 +235,7 @@ function buildNode<Plugins extends AnyWidgetPluginTuple>(compiledNode: CompiledW
 		nodeId: nodeId as InspectionNodeId,
 		node: compiledNode.publicNode,
 		sourceSlots,
+		sourcePath: compiledNode.sourcePath,
 		resolved: true,
 		capabilities: buildCapabilities(compiledNode),
 		config: compiledNode.plugin.config,

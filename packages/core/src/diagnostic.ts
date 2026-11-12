@@ -149,7 +149,8 @@ type BlueprintDiagnosticRelated<Plugins extends AnyWidgetPluginTuple> = NonEmpty
 
 export type BlueprintDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
 	= | DiagnosticBase<'invalid-widget-definition', BlueprintWidgetDiagnosticLocation<Plugins>>
-		| (DiagnosticBase<'invalid-widget-id', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath, readonly related?: BlueprintDiagnosticRelated<Plugins> })
+		| (DiagnosticBase<'invalid-widget-id', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
+		| (DiagnosticBase<'duplicate-widget-id', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath, readonly related: BlueprintDiagnosticRelated<Plugins> })
 		| (DiagnosticBase<'invalid-widget-type', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 		| (DiagnosticBase<'unknown-widget-type', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 		| (DiagnosticBase<'unexpected-widget-config', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
@@ -157,6 +158,7 @@ export type BlueprintDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple =
 		| (DiagnosticBase<'unexpected-widget-slots', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 		| (DiagnosticBase<'undeclared-widget-slot', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 		| (DiagnosticBase<'invalid-widget-slot', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
+		| (DiagnosticBase<'unexpected-widget-field', BlueprintWidgetDiagnosticLocation<Plugins>> & { readonly path: DiagnosticPath })
 
 export type BlueprintConfigDiagnostic<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = DiagnosticBase<'invalid-widget-config', BlueprintWidgetDiagnosticLocation<Plugins>> & {
 	readonly path?: DiagnosticPath
@@ -198,6 +200,7 @@ export type JsonCompatibilityReason
 		| 'sparse-array'
 		| 'array-extra-property'
 		| 'cyclic-reference'
+		| 'max-depth-exceeded'
 
 export type JsonCompatibilityDiagnostic = DiagnosticBase<'json-incompatible-value', BlueprintSourceDiagnosticLocation> & {
 	readonly path: DiagnosticPath

@@ -14,6 +14,17 @@ export interface JsonObject {
 
 export type JsonValue = JsonPrimitive | JsonArray | JsonObject
 
+/**
+ * The maximum JSON nesting depth of authored source and SourcePatch operands: the number of containers
+ * (objects and arrays) a value may be nested inside, counting the value's own container. A value nested
+ * deeper is outside the JSON domain (`json-incompatible-value`, reason `max-depth-exceeded`) and is never
+ * descended into, so arbitrarily deep input yields a diagnostic or an operation failure instead of exhausting
+ * the call stack. A widget node nests three containers per tree level (node, `slots`, slot Array), so the
+ * limit allows widget trees about 85 levels deep. The value leaves a wide margin below the call-stack limit of
+ * Node 22/24 and of smaller-stack embedded engines, and is part of the public contract.
+ */
+export const MAX_JSON_DEPTH = 256
+
 type JsonInspectionDiagnostic = JsonCompatibilityDiagnostic | SourceAccessDiagnostic
 
 export interface JsonValueInspection {
@@ -48,6 +59,7 @@ function inspectJsonValueAt(
 	path: PropertyKey[],
 	active: Set<object>,
 	diagnostics: JsonInspectionDiagnostic[],
+	depth: number,
 ): void {
 	if (value === null || typeof value === 'string' || typeof value === 'boolean')
 		return
@@ -76,6 +88,12 @@ function inspectJsonValueAt(
 	}
 	if (typeof value !== 'object')
 		return
+
+	// `depth` counts the containers enclosing `value`; `value` itself is one more.
+	if (depth >= MAX_JSON_DEPTH) {
+		diagnostics.push(jsonDiagnostic(path, 'max-depth-exceeded'))
+		return
+	}
 
 	let isArray: boolean
 	try {
@@ -160,7 +178,7 @@ function inspectJsonValueAt(
 					continue
 				}
 				path.push(index)
-				inspectJsonValueAt(descriptor.value, path, active, diagnostics)
+				inspectJsonValueAt(descriptor.value, path, active, diagnostics, depth + 1)
 				path.pop()
 			}
 			return
@@ -189,7 +207,7 @@ function inspectJsonValueAt(
 				continue
 			}
 			path.push(key)
-			inspectJsonValueAt(descriptor.value, path, active, diagnostics)
+			inspectJsonValueAt(descriptor.value, path, active, diagnostics, depth + 1)
 			path.pop()
 		}
 	}
@@ -205,8 +223,42 @@ function inspectJsonValueAt(
  */
 export function inspectJsonValue(value: unknown): JsonValueInspection {
 	const diagnostics: JsonInspectionDiagnostic[] = []
-	inspectJsonValueAt(value, [], new Set(), diagnostics)
+	inspectJsonValueAt(value, [], new Set(), diagnostics, 0)
 	return { compatible: diagnostics.length === 0, diagnostics }
+}
+
+const JSON_PARSE_PROVEN: JsonValueInspection = Object.freeze({ compatible: true, diagnostics: Object.freeze([]) })
+
+/**
+ * {@link inspectJsonValue} for a value Core itself produced with `JSON.parse` (no reviver). Such a value
+ * is made only of plain objects, arrays, strings, booleans, `null` and numbers, so the only way it can be
+ * outside the JSON domain is a non-finite number (`JSON.parse('1e400')` is `Infinity`) or nesting deeper
+ * than {@link MAX_JSON_DEPTH}. A cheap iterative scan therefore stands in for the full descriptor-level
+ * inspection; as soon as it finds anything the scan cannot prove, the full inspection supplies the exact
+ * diagnostics.
+ */
+export function inspectParsedJsonValue(value: unknown): JsonValueInspection {
+	const pending: unknown[] = [value]
+	// `depths[i]` is the number of containers enclosing `pending[i]`.
+	const depths: number[] = [0]
+	while (pending.length > 0) {
+		const current = pending.pop()
+		const depth = depths.pop()!
+		if (typeof current === 'number') {
+			if (!Number.isFinite(current))
+				return inspectJsonValue(value)
+		}
+		else if (typeof current === 'object' && current !== null) {
+			if (depth >= MAX_JSON_DEPTH)
+				return inspectJsonValue(value)
+			// Not `push(...children)`: a very large array would exceed the engine's argument limit.
+			for (const child of Array.isArray(current) ? current : Object.values(current)) {
+				pending.push(child)
+				depths.push(depth + 1)
+			}
+		}
+	}
+	return JSON_PARSE_PROVEN
 }
 
 export function isJsonValue(value: unknown): value is JsonValue {

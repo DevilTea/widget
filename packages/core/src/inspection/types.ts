@@ -12,7 +12,7 @@
 
 import type { BlueprintDependencyReference, RuntimePropertyDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
-import type { BlueprintWidgetNode, ResolvedBlueprintWidgetNode, UnresolvedBlueprintWidgetNode } from '../internal/contract'
+import type { BlueprintSourcePath, BlueprintWidgetNode, ResolvedBlueprintWidgetNode, UnresolvedBlueprintWidgetNode } from '../internal/contract'
 import type { AnyWidgetPluginTuple, WidgetPluginConfigMetadata } from '../plugin'
 import type { WidgetMemberKey } from '../types'
 
@@ -165,11 +165,20 @@ export interface BlueprintInspectionNodeBase<Plugins extends AnyWidgetPluginTupl
 	readonly node: BlueprintWidgetNode<Plugins>
 	/** Best-effort recovered source topology (not a raw `slots` mirror). */
 	readonly sourceSlots: readonly BlueprintInspectionSourceSlot[]
+	/**
+	 * The structured `SourcePath` of this node's authored object within `blueprint.source`, computed by the
+	 * compiler; identical to `blueprint.getSourcePath(node)`.
+	 */
+	readonly sourcePath: BlueprintSourcePath
 }
 
 export interface UnresolvedBlueprintInspectionNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends BlueprintInspectionNodeBase<Plugins> {
 	readonly resolved: false
 	readonly node: UnresolvedBlueprintWidgetNode<Plugins>
+	/** Best-effort identity hint: the authored `id` when it is a string, else `null`. */
+	readonly id: string | null
+	/** Best-effort identity hint: the authored `type` when it is a string, else `null`. */
+	readonly type: string | null
 }
 
 export interface ResolvedBlueprintInspectionNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends BlueprintInspectionNodeBase<Plugins> {

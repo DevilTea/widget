@@ -61,6 +61,13 @@ import type {
 
 export type WidgetSystemBlueprintStatus = 'valid' | 'invalid'
 
+/**
+ * The structured (array form) `SourcePath` of one Blueprint node's authored object within `blueprint.source`,
+ * e.g. `[]` for the root and `['slots', 'children', 0]` for its first child. Used verbatim as a `SourcePatch`
+ * path against the same source it addresses exactly that node.
+ */
+export type BlueprintSourcePath = readonly (string | number)[]
+
 export interface BlueprintWidgetNodeBase<
 	Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple,
 	Source = unknown,
@@ -78,6 +85,10 @@ export interface BlueprintWidgetNodeBase<
  */
 export interface UnresolvedBlueprintWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple, Source = unknown> extends BlueprintWidgetNodeBase<Plugins, Source> {
 	readonly resolved: false
+	/** Best-effort identity hint: the authored `id` when it is a string, else `null`. */
+	readonly id: string | null
+	/** Best-effort identity hint: the authored `type` when it is a string (even an unknown one), else `null`. */
+	readonly type: string | null
 }
 
 /**
@@ -286,6 +297,11 @@ export type WidgetSourceFor<
 	= & {
 		readonly id: WidgetId
 		readonly type: WidgetPluginTypeOf<Plugin>
+		/**
+		 * The reserved extension key: any JSON value, preserved in `source` and never interpreted by
+		 * Core. Every other unrecognized own key is diagnosed as `unexpected-widget-field`.
+		 */
+		readonly meta?: JsonValue
 	}
 	& (HasWidgetCapability<WidgetInterfacesOf<Plugin>, 'config'> extends true
 		// An omitted config is validated as `null`, so it may be omitted only when the raw type admits `null`.
@@ -326,13 +342,14 @@ export interface WidgetSystemBlueprintBase<Plugins extends AnyWidgetPluginTuple,
 	recompile: (definition: unknown) => WidgetSystemBlueprint<Plugins>
 }
 
-export interface ValidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends WidgetSystemBlueprintBase<Plugins, JsonValue> {
+export interface ValidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends WidgetSystemBlueprintBase<Plugins, WidgetSource<Plugins>> {
 	readonly status: 'valid'
 	readonly sourceJsonCompatible: true
 	readonly root: ResolvedBlueprintWidgetNode<Plugins, JsonValue>
 	getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 	getParent: (node: BlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 	getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, JsonValue> | null
+	getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 	getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 	getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly ResolvedBlueprintWidgetNode<Plugins, JsonValue>[]
 	readonly diagnostics: readonly never[]
@@ -346,6 +363,7 @@ export interface InvalidWidgetSystemBlueprint<Plugins extends AnyWidgetPluginTup
 	getWidget: (id: WidgetId) => BlueprintWidgetNode<Plugins, Source> | null
 	getParent: (node: BlueprintWidgetNode<Plugins>) => BlueprintWidgetNode<Plugins, Source> | null
 	getLocation: (node: BlueprintWidgetNode<Plugins>) => WidgetLocation<Plugins, Source> | null
+	getSourcePath: (node: BlueprintWidgetNode<Plugins>) => BlueprintSourcePath | null
 	getChildren: (node: BlueprintWidgetNode<Plugins>) => readonly BlueprintWidgetNode<Plugins, Source>[]
 	getChildrenAt: (node: BlueprintWidgetNode<Plugins>, slot: WidgetMemberKey) => readonly BlueprintWidgetNode<Plugins, Source>[]
 	readonly diagnostics: readonly BlueprintDiagnostic<Plugins>[]
@@ -595,6 +613,7 @@ export interface CompiledWidgetNodeBase<Plugins extends AnyWidgetPluginTuple = A
 	readonly source: unknown
 	readonly parentNodeId: InternalNodeId | null
 	readonly location: WidgetLocation<Plugins>
+	readonly sourcePath: BlueprintSourcePath
 	readonly rawSlots: readonly CompiledRawSlot[]
 	readonly diagnostics: readonly BlueprintNodeDiagnostic<Plugins>[]
 }
@@ -605,6 +624,8 @@ export interface CompiledUnresolvedWidgetNode<Plugins extends AnyWidgetPluginTup
 	 * A valid string id participates in the id index even when the node itself is unresolved.
 	 */
 	readonly id: WidgetId | null
+	/** The authored `type` when it is a string, even though no plugin resolved from it. */
+	readonly type: string | null
 }
 
 export interface CompiledResolvedWidgetNode<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> extends CompiledWidgetNodeBase<Plugins> {

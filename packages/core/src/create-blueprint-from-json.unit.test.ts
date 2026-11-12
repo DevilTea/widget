@@ -1,6 +1,6 @@
 /**
  * Conformance coverage for `WidgetSystem.createBlueprintFromJson(text)`: observably equivalent to
- * `createBlueprint(JSON.parse(text))`, with the JSON-domain proof established by construction.
+ * `createBlueprint(JSON.parse(text))`, with a cheap scan standing in for the full JSON-domain proof.
  */
 
 import type { WidgetInterfaces } from './index'
@@ -58,6 +58,27 @@ describe('createBlueprintFromJson', () => {
 				.toBe(true)
 		})
 	}
+
+	it('reports an overflowing number literal exactly like createBlueprint(JSON.parse(text))', () => {
+		// `JSON.parse('1e400')` is `Infinity`: the only value JSON.parse can produce outside the JSON domain.
+		const text = '{"id":"root","type":"note","config":{"text":"x","big":1e400,"list":[1,-1e999]},"slots":{"children":[]}}'
+		const fromJson = system.createBlueprintFromJson(text)
+		const fromValue = system.createBlueprint(JSON.parse(text))
+
+		expect(fromJson.status)
+			.toBe('invalid')
+		expect(fromJson.sourceJsonCompatible)
+			.toBe(false)
+		expect(fromJson.diagnostics.map(d => ({ code: d.code, path: 'path' in d ? d.path : undefined, reason: 'reason' in d ? d.reason : undefined })))
+			.toEqual([
+				{ code: 'json-incompatible-value', path: ['config', 'big'], reason: 'non-finite-number' },
+				{ code: 'json-incompatible-value', path: ['config', 'list', 1], reason: 'non-finite-number' },
+			])
+		expect(fromJson.diagnostics.map(d => ({ code: d.code, path: 'path' in d ? d.path : undefined, reason: 'reason' in d ? d.reason : undefined })))
+			.toEqual(fromValue.diagnostics.map(d => ({ code: d.code, path: 'path' in d ? d.path : undefined, reason: 'reason' in d ? d.reason : undefined })))
+		expect('createRuntime' in fromJson)
+			.toBe(false)
+	})
 
 	it('creates a working Runtime from valid JSON text', () => {
 		const blueprint = system.createBlueprintFromJson(texts.valid)
