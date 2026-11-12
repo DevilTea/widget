@@ -9,7 +9,9 @@
  * 1. suppress the effect's bootstrap run so `subscribe`/`subscribeDiagnostics` have no immediate emission;
  * 2. invoke external listeners with no active alien subscriber, so listener code reading other Runtime
  *    primitives cannot silently extend the dependency graph;
- * 3. isolate listener exceptions outside the current alien-signals flush;
+ * 3. isolate listener exceptions — and exceptions a subscription's own tracked read throws, i.e. a
+ *    Property `compute` throwing while its subscription re-evaluates it — outside the current
+ *    alien-signals flush;
  * 4. hold an diagnostic-snapshot commit performed *during* an evaluation inside an alien batch until the call
  *    that drove that evaluation has returned, so its propagation can never re-enter alien-signals' flush
  *    while a computed is still mid-evaluation (see {@link writeDeferringFlush}).
@@ -30,9 +32,19 @@ import { effect, endBatch, setActiveSub, startBatch } from 'alien-signals'
 declare function queueMicrotask(callback: () => void): void
 
 /**
+ * Reports an exception isolated from the current operation through the host's error-reporting
+ * boundary, outside the current alien-signals flush. Baseline reporting is a queued microtask rethrow.
+ */
+function reportIsolatedException(error: unknown): void {
+	queueMicrotask(() => {
+		throw error
+	})
+}
+
+/**
  * Invokes `listener(value)` with no active alien subscriber (restoring the previous one afterward) and
- * isolates a synchronous throw so it cannot escape into the current alien-signals flush. Baseline
- * reporting for an isolated exception is a queued microtask rethrow.
+ * isolates a synchronous throw so it cannot escape into the current alien-signals flush (see
+ * {@link reportIsolatedException}).
  */
 export function invokeListenerIsolated<Value>(listener: (value: Value) => void, value: Value): void {
 	const previous = setActiveSub(undefined)
@@ -40,9 +52,7 @@ export function invokeListenerIsolated<Value>(listener: (value: Value) => void, 
 		listener(value)
 	}
 	catch (error) {
-		queueMicrotask(() => {
-			throw error
-		})
+		reportIsolatedException(error)
 	}
 	finally {
 		setActiveSub(previous)
@@ -80,8 +90,9 @@ let deferredFlushDepth = 0
  *
  * The loop condition is re-tested after every `endBatch()`: that flush can run an effect whose Property
  * recompute commits its own diagnostic snapshot, which opens a fresh level this same drain must then close.
- * A recompute that throws inside one of those flushes must not leave alien-signals permanently batched
- * (every later flush in the Runtime's life would be silently suspended), so the remaining levels are
+ * Runtime subscriptions never throw out of a flush (listener and tracked-read exceptions are isolated),
+ * but any other alien effect sharing the realm can; such a throw must not leave alien-signals permanently
+ * batched (every later flush in the realm would be silently suspended), so the remaining levels are
  * closed before the throw is rethrown.
  */
 function releaseDeferredFlushes(): void {
@@ -102,10 +113,9 @@ function releaseDeferredFlushes(): void {
  * {@link writeDeferringFlush} deferred inside it once the outermost level is leaving.
  *
  * The release runs while the depth is still `1`, so a listener that the release's own flush invokes and
- * that re-enters the Runtime cannot re-enter the drain loop. The decrement is unconditional: a Property
- * recompute that throws inside the release's flush (`createTrackedSubscription` isolates the external
- * listener, never the tracked read) must not leave the depth pinned above `0`, or every later call would
- * look nested and no release would ever run again.
+ * that re-enters the Runtime cannot re-enter the drain loop. The decrement is unconditional: a throw
+ * inside the release's flush must not leave the depth pinned above `0`, or every later call would look
+ * nested and no release would ever run again.
  */
 export function runRuntimeOperation<Result>(fn: () => Result): Result {
 	++operationDepth
@@ -181,6 +191,13 @@ export function writeDeferringFlush(write: () => void): void {
  * bootstrap run, and invokes `listener` through {@link invokeListenerIsolated} on every actual
  * subsequent run. Returns an idempotent unsubscribe function registered with the Runtime's disposal
  * bookkeeping.
+ *
+ * `read()` itself can throw: a Property's tracked result read rethrows its `compute`'s exception (the
+ * Property primitive caches that outcome instead of letting it escape the computed). Such a run is
+ * isolated like a listener exception — the write that triggered it and every other subscriber are
+ * unaffected — and only skips this subscription's notification. The tracked read had already linked the
+ * effect to the Property before rethrowing, so the subscription stays live and resumes on the next
+ * completed recompute. A bootstrap run that throws is isolated the same way.
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
@@ -190,7 +207,15 @@ export function createTrackedSubscription<Value>(
 	let isBootstrap = true
 
 	const rawDispose = effect(() => {
-		const value = read()
+		let value: Value
+		try {
+			value = read()
+		}
+		catch (error) {
+			isBootstrap = false
+			reportIsolatedException(error)
+			return
+		}
 
 		if (isBootstrap) {
 			isBootstrap = false
