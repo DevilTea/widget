@@ -75,13 +75,13 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	if (capabilities.state) {
 		const state = widget.state!
 		let surface: Readonly<Record<string, unknown>> | undefined
-		result.useState = () => surface ??= createLazyKeyedSurface((key) => {
+		result.useState = () => surface ??= createLazyKeyedSurface(state, (key) => {
 			const primitive = state[key]
 			return primitive === undefined ? undefined : createStateRef(primitive, registerCleanup)
 		})
 
 		let diagnosticsSurface: Readonly<Record<string, unknown>> | undefined
-		result.useStateDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface((key) => {
+		result.useStateDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface(state, (key) => {
 			const primitive = state[key]
 			return primitive === undefined ? undefined : createDiagnosticsRef(primitive.getDiagnostics, primitive.subscribeDiagnostics, registerCleanup)
 		})
@@ -90,13 +90,13 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	if (capabilities.properties) {
 		const properties = widget.properties!
 		let surface: Readonly<Record<string, unknown>> | undefined
-		result.useProperties = () => surface ??= createLazyKeyedSurface((key) => {
+		result.useProperties = () => surface ??= createLazyKeyedSurface(properties, (key) => {
 			const primitive = properties[key]
 			return primitive === undefined ? undefined : createPropertyRef(primitive, registerCleanup)
 		})
 
 		let diagnosticsSurface: Readonly<Record<string, unknown>> | undefined
-		result.usePropertyDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface((key) => {
+		result.usePropertyDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface(properties, (key) => {
 			const primitive = properties[key]
 			return primitive === undefined ? undefined : createDiagnosticsRef(primitive.getDiagnostics, primitive.subscribeDiagnostics, registerCleanup)
 		})
@@ -105,7 +105,7 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	if (capabilities.events) {
 		const events = widget.events!
 		let emitter: WidgetIntegrationEventEmitter | undefined
-		result.emit = createLazyKeyedSurface((key) => {
+		result.emit = createLazyKeyedSurface(events, (key) => {
 			// The Runtime Event surface is the authoritative declared member inventory. Looking up a key
 			// is passive and does not subscribe or acquire emit authority.
 			if (events[key] === undefined)
@@ -129,13 +129,13 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	if (capabilities.methods) {
 		const methods = widget.methods!
 		let surface: Readonly<Record<string, unknown>> | undefined
-		result.useMethods = () => surface ??= createLazyKeyedSurface((key) => {
+		result.useMethods = () => surface ??= createLazyKeyedSurface(methods, (key) => {
 			const primitive = methods[key]
 			return primitive === undefined ? undefined : createMethodWrapper(primitive)
 		})
 
 		let diagnosticsSurface: Readonly<Record<string, unknown>> | undefined
-		result.useMethodDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface((key) => {
+		result.useMethodDiagnostics = () => diagnosticsSurface ??= createLazyKeyedSurface(methods, (key) => {
 			const primitive = methods[key]
 			return primitive === undefined ? undefined : createDiagnosticsRef(primitive.getDiagnostics, primitive.subscribeDiagnostics, registerCleanup)
 		})
