@@ -62,11 +62,18 @@ declare const widgetValueContractType: unique symbol
  *
  * The generic parameter exists only for Plugin-author type safety. Runtime/integration identity is the
  * stable string `id`; descriptor object identity has no semantic meaning.
+ *
+ * A contract for `Value` describes every value of that type, so it can be attached to a Property whose
+ * value type is the same or narrower (every value the Property produces satisfies the contract):
+ * `WidgetValueContract<string>` fits a `'small' | 'large'` Property, but not a `string | null` one.
  */
 export interface WidgetValueContract<Value> {
 	readonly id: string
-	/** Type-only invariant brand; the factory-created runtime descriptor contains only `id`. */
-	readonly [widgetValueContractType]: (value: Value) => Value
+	/**
+	 * Type-only contravariant brand (`WidgetValueContract<Wide>` is assignable to
+	 * `WidgetValueContract<Narrow>`); the factory-created runtime descriptor contains only `id`.
+	 */
+	readonly [widgetValueContractType]: (value: Value) => void
 }
 
 /**
