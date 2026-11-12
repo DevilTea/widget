@@ -18,11 +18,11 @@ import type {
 	BlueprintDependencyReference,
 	BlueprintDiagnostic,
 	BlueprintNodeDiagnostic,
+	RuntimeDiagnostic,
 	RuntimeMethodDiagnostic,
 	RuntimePropertyDiagnostic,
 	RuntimeStateDiagnostic,
 	RuntimeWidgetDiagnostic,
-	WidgetSystemRuntimeDiagnostic,
 } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { JsonValue } from '../json'
@@ -273,7 +273,7 @@ export interface BlueprintCompileView<Plugins extends AnyWidgetPluginTuple = Any
 /**
  * Read-only valid-Blueprint view handed to runtime semantic callbacks (`compute`, `execute`).
  */
-export interface ValidBlueprintView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
+export interface BlueprintRuntimeView<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly root: ResolvedBlueprintWidgetNode<Plugins, JsonValue>
 	getWidget: (id: WidgetId) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
 	getParent: (node: ResolvedBlueprintWidgetNode<Plugins>) => ResolvedBlueprintWidgetNode<Plugins, JsonValue> | null
@@ -472,7 +472,7 @@ export type RuntimeWidgetFor<
 	= & {
 		readonly id: WidgetId
 		readonly type: WidgetPluginTypeOf<Plugin>
-		readonly blueprint: ResolvedBlueprintWidgetNodeFor<Plugin, Plugins>
+		readonly blueprintNode: ResolvedBlueprintWidgetNodeFor<Plugin, Plugins>
 		/**
 		 * This widget's own aggregate diagnostic snapshot: state members -> property members -> method
 		 * members, declaration order within each capability, each primitive's own local diagnostic order.
@@ -523,8 +523,8 @@ export interface WidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple = AnyW
 	 * Runtime-level diagnostics plus the current state/property/method diagnostic snapshots, in deterministic
 	 * order. Never history, and never activates property evaluation.
 	 */
-	getDiagnostics: () => readonly WidgetSystemRuntimeDiagnostic[]
-	subscribeDiagnostics: (listener: (diagnostics: readonly WidgetSystemRuntimeDiagnostic[]) => void) => () => void
+	getDiagnostics: () => readonly RuntimeDiagnostic[]
+	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeDiagnostic[]) => void) => () => void
 	dispose: () => void
 }
 

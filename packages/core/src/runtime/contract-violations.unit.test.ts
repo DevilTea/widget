@@ -110,7 +110,7 @@ function expectPlainException(caught: unknown): void {
 		.toBeUndefined()
 	expect(record.diagnostics)
 		.toBeUndefined()
-	// Not an `Diagnostic` shape.
+	// Not a diagnostic shape.
 	expect(record.source)
 		.toBeUndefined()
 }

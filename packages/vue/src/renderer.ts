@@ -272,7 +272,7 @@ export const SharedWidgetSlotComponent = defineComponent({
 		}
 
 		return () => {
-			const children = current.widget.blueprint.slots[props.name] ?? []
+			const children = current.widget.blueprintNode.slots[props.name] ?? []
 
 			const resolve = (childNode: { readonly id: string }): RuntimeWidgetLike => {
 				const childWidget = current.runtime.getWidget(childNode.id)

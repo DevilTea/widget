@@ -18,9 +18,6 @@ export interface DiagnosticBase<Code extends string = string, Location = unknown
 	readonly message: string
 }
 
-/** General structural diagnostic shape for code which does not need a narrower union. */
-export type Diagnostic<Code extends string = string, Location = unknown> = DiagnosticBase<Code, Location>
-
 export const EMPTY_DIAGNOSTICS: readonly never[] = Object.freeze([])
 
 export class WidgetSystemRuntimeDisposedError extends Error {
@@ -245,7 +242,7 @@ export type RuntimePrimitiveDiagnosticLocation
 		| { readonly type: 'method', readonly widgetId: WidgetId, readonly name: WidgetMemberKey }
 
 export interface RuntimeLevelDiagnosticLocation { readonly type: 'runtime' }
-export type RuntimeDiagnosticLocation = RuntimePrimitiveDiagnosticLocation
+export type RuntimeDiagnosticLocation = RuntimePrimitiveDiagnosticLocation | RuntimeLevelDiagnosticLocation
 
 export type RuntimeStateDiagnostic = DiagnosticBase<'invalid-state-value', Extract<RuntimePrimitiveDiagnosticLocation, { type: 'state' }>> & {
 	readonly candidate: unknown
@@ -274,7 +271,7 @@ export type RuntimeMethodResultDiagnostic = DiagnosticBase<'invalid-method-resul
 export type RuntimeDependencyTargetFailedDiagnostic = DiagnosticBase<'dependency-target-failed', RuntimePrimitiveDiagnosticLocation> & {
 	readonly dependency: BlueprintDependencyReference
 	readonly related: NonEmptyReadonlyArray<RuntimePrimitiveDiagnosticLocation>
-	readonly cause: RuntimeDiagnostic
+	readonly cause: RuntimeWidgetDiagnostic
 }
 
 export type RuntimeDependencyValueRejectedDiagnostic = DiagnosticBase<'dependency-value-rejected', RuntimePrimitiveDiagnosticLocation> & {
@@ -293,8 +290,6 @@ export type RuntimeMethodDependencyDiagnostic = (RuntimeDependencyTargetFailedDi
 
 export type RuntimePropertyDiagnostic = RuntimePropertyResultDiagnostic | RuntimePropertyDependencyDiagnostic
 export type RuntimeMethodDiagnostic = RuntimeMethodArgsDiagnostic | RuntimeMethodResultDiagnostic | RuntimeMethodDependencyDiagnostic
-export type RuntimeDiagnostic = RuntimeStateDiagnostic | RuntimePropertyDiagnostic | RuntimeMethodDiagnostic
-
 export type RuntimeLevelDiagnostic
 	= | (DiagnosticBase<'invalid-state-overrides', RuntimeLevelDiagnosticLocation> & { readonly path?: DiagnosticPath, readonly reason?: string })
 		| (DiagnosticBase<'unknown-state-override-widget', RuntimeLevelDiagnosticLocation> & { readonly path: DiagnosticPath, readonly reason?: string })
@@ -303,4 +298,4 @@ export type RuntimeLevelDiagnostic
 		| (DiagnosticBase<'unknown-state-override-member', RuntimeLevelDiagnosticLocation> & { readonly path: DiagnosticPath, readonly reason?: string })
 
 export type RuntimeWidgetDiagnostic = RuntimeStateDiagnostic | RuntimePropertyDiagnostic | RuntimeMethodDiagnostic
-export type WidgetSystemRuntimeDiagnostic = RuntimeLevelDiagnostic | RuntimeWidgetDiagnostic
+export type RuntimeDiagnostic = RuntimeLevelDiagnostic | RuntimeWidgetDiagnostic

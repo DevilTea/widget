@@ -44,7 +44,7 @@ export interface RuntimeEventLike {
 export interface RuntimeWidgetLike {
 	readonly id: string
 	readonly type: string
-	readonly blueprint: {
+	readonly blueprintNode: {
 		readonly plugin: unknown
 		readonly config?: unknown
 		readonly slots: Readonly<Record<string, readonly { readonly id: string }[]>>

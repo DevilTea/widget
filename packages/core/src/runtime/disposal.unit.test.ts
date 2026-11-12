@@ -171,7 +171,7 @@ describe('post-dispose readable metadata', () => {
 		const { runtime, widget } = createRuntime()
 		const idBeforeDispose = widget.id
 		const typeBeforeDispose = widget.type
-		const blueprintNodeBeforeDispose = widget.blueprint
+		const blueprintNodeBeforeDispose = widget.blueprintNode
 
 		runtime.dispose()
 
@@ -179,7 +179,7 @@ describe('post-dispose readable metadata', () => {
 			.toBe(idBeforeDispose)
 		expect(widget.type)
 			.toBe(typeBeforeDispose)
-		expect(widget.blueprint)
+		expect(widget.blueprintNode)
 			.toBe(blueprintNodeBeforeDispose)
 	})
 })

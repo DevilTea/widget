@@ -62,9 +62,9 @@ describe('useWidget() config', () => {
 		const widget = runtime.getWidget('root')!
 
 		expect(bridge.config)
-			.toBe(widget.blueprint.config)
+			.toBe(widget.blueprintNode.config)
 		expect(bridge.config.nested)
-			.toBe(widget.blueprint.config.nested)
+			.toBe(widget.blueprintNode.config.nested)
 		expect(isReactive(bridge.config))
 			.toBe(false)
 

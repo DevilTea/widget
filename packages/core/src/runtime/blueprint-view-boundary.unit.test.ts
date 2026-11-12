@@ -2,7 +2,7 @@
  * Regression coverage for PR #12 round-2 review finding 3773696034 (`runtime/index.ts` full Blueprint
  * object leaked as `ctx.blueprint`).
  *
- * `compute`/`execute` are typed against `ValidBlueprintView` (`root`/`getWidget`/`getParent`/
+ * `compute`/`execute` are typed against `BlueprintRuntimeView` (`root`/`getWidget`/`getParent`/
  * `getLocation`/`getChildren`/`getChildrenAt` — navigation only), but the implementation used to pass
  * the *full* `ValidWidgetSystemBlueprint` object through as `blueprintView`, relying entirely on that
  * static type to keep callbacks away from `system`, `source`, `recompile()`,
@@ -77,7 +77,7 @@ function createHarness() {
 	return { widget }
 }
 
-describe('ctx.blueprint is a real restricted ValidBlueprintView facade, not the full Blueprint object (round-2 finding 3773696034)', () => {
+describe('ctx.blueprint is a real restricted BlueprintRuntimeView facade, not the full Blueprint object (round-2 finding 3773696034)', () => {
 	it('a Property compute cannot reach createRuntime/recompile/getDiagnostics/system/source/status through JS/any', () => {
 		const { widget } = createHarness()
 

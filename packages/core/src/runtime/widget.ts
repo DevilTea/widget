@@ -3,7 +3,7 @@
  *
  * Distributed by plugin type; exposes `state`/`properties`/`methods`/`events` exactly when the plugin
  * declares that capability (declaration presence, so an explicitly empty capability still yields an
- * empty surface). Identity/static fields (`id`, `type`, `blueprint`)
+ * empty surface). Identity/static fields (`id`, `type`, `blueprintNode`)
  * stay readable after Runtime disposal because they are plain immutable references, not live
  * operations. `getDiagnostics`/`subscribeDiagnostics` are unconditional — every widget aggregates to its own
  * diagnostic surface regardless of declared capabilities, per diagnostic #10 amendment "RuntimeWidget aggregate
@@ -34,7 +34,7 @@ export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolv
 	const widget: Record<string, unknown> = {
 		id: node.id,
 		type: node.type,
-		blueprint: node.publicNode,
+		blueprintNode: node.publicNode,
 		getDiagnostics: diagnosticsAggregate.getDiagnostics,
 		subscribeDiagnostics: diagnosticsAggregate.subscribeDiagnostics,
 	}

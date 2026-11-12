@@ -51,7 +51,6 @@ export type {
 	BlueprintStructureDiagnostic,
 	BlueprintStructureDiagnosticLocation,
 	BlueprintWidgetDiagnosticLocation,
-	Diagnostic,
 	DiagnosticBase,
 	DiagnosticCollector,
 	DiagnosticPath,
@@ -72,13 +71,13 @@ export type {
 	RuntimeMethodDependencyDiagnostic,
 	RuntimeMethodDiagnostic,
 	RuntimeMethodResultDiagnostic,
+	RuntimePrimitiveDiagnosticLocation,
 	RuntimePropertyDependencyDiagnostic,
 	RuntimePropertyDiagnostic,
 	RuntimePropertyResultDiagnostic,
 	RuntimeStateDiagnostic,
 	RuntimeWidgetDiagnostic,
 	SourceAccessDiagnostic,
-	WidgetSystemRuntimeDiagnostic,
 } from './diagnostic'
 
 export type {
@@ -100,6 +99,7 @@ export type { ExecutionFailure, ExecutionResult } from './execution-result'
 export type {
 	BlueprintCompileView,
 	BlueprintNodeConfigFields,
+	BlueprintRuntimeView,
 	BlueprintSemanticSlots,
 	BlueprintSemanticSlotsView,
 	BlueprintSourcePath,
@@ -125,7 +125,6 @@ export type {
 	SelfBlueprintWidgetNode,
 	SelfBlueprintWidgetNodeView,
 	UnresolvedBlueprintWidgetNode,
-	ValidBlueprintView,
 	ValidWidgetSystemBlueprint,
 	WidgetLocation,
 	WidgetLocationView,

@@ -16,7 +16,7 @@ import { WidgetVueIntegrationError } from './errors'
 import { SharedWidgetSlotComponent } from './renderer'
 
 function assertWidgetMatchesPlugin(widget: RuntimeWidgetLike, plugin: AnyWidgetPlugin): void {
-	if (widget.blueprint.plugin !== plugin) {
+	if (widget.blueprintNode.plugin !== plugin) {
 		throw new WidgetVueIntegrationError(
 			'widget-plugin-mismatch',
 			`useWidget() was called with plugin type "${plugin.type}", but the currently rendered widget ("${widget.id}") is of type "${widget.type}" (a different plugin instance, even if the type string matched).`,
@@ -83,7 +83,7 @@ function buildUseWidgetResult(widget: RuntimeWidgetLike, runtime: CurrentWidgetC
 	// The widget's resolved config, by identity: within one Runtime it never changes, so it is neither
 	// reactive nor cloned. Typed read-only; renderers must not mutate it.
 	if (capabilities.config)
-		result.config = widget.blueprint.config
+		result.config = widget.blueprintNode.config
 
 	if (capabilities.state) {
 		const state = widget.state!

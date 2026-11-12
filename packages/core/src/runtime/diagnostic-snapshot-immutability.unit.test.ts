@@ -50,7 +50,7 @@ function createHarness() {
 			})
 			// Depends on `flaky`, so a wrapped target failure here carries a `property-dependency`
 			// source with both `dependency` (a `BlueprintDependencyReference`) and `related` (a
-			// `RuntimeDiagnosticLocation` array) — the two structural fields round-3 finding 3773890357
+			// `RuntimePrimitiveDiagnosticLocation` array) — the two structural fields round-3 finding 3773890357
 			// covers beyond the plain shallow `Object.freeze(diagnostic)`.
 			.viaFlaky({
 				registerDeps: ({ dep }) => ({ flaky: dep.self.properties.get('flaky') }),
@@ -91,7 +91,7 @@ function createHarness() {
 	}
 }
 
-/** A stand-in diagnostic shaped closely enough to pass structurally as a `RuntimeDiagnostic` under `any`. */
+/** A stand-in diagnostic shaped closely enough to pass structurally as a `RuntimeWidgetDiagnostic` under `any`. */
 const fakeDiagnostic = { source: { type: 'forged' }, message: 'forged' }
 
 describe('completed non-empty diagnostic snapshots are frozen (round-2 finding 3773696025)', () => {

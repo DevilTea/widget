@@ -22,7 +22,7 @@
  */
 
 import type { DependencyConsumer, DependencyRefinement } from '../dep'
-import type { BlueprintDependencyReference, RuntimeDiagnostic, RuntimeDiagnosticLocation, RuntimeMethodDependencyDiagnostic, RuntimePropertyDependencyDiagnostic } from '../diagnostic'
+import type { BlueprintDependencyReference, RuntimeMethodDependencyDiagnostic, RuntimePrimitiveDiagnosticLocation, RuntimePropertyDependencyDiagnostic, RuntimeWidgetDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
 import type { CompiledDependency, CompiledDependencyTree, CompiledWidgetNode } from '../internal/contract'
 import type { WidgetId, WidgetMemberKey } from '../types'
@@ -71,8 +71,8 @@ function consumerDependencyDiagnostic(
 	dependency: BlueprintDependencyReference,
 	message: string,
 	received: ReceivedBox | undefined,
-	related: RuntimeDiagnosticLocation,
-	cause?: RuntimeDiagnostic,
+	related: RuntimePrimitiveDiagnosticLocation,
+	cause?: RuntimeWidgetDiagnostic,
 ): RuntimePropertyDependencyDiagnostic | RuntimeMethodDependencyDiagnostic {
 	const base = {
 		widgetId: params.ownerWidgetId,
@@ -154,7 +154,7 @@ function applyRefinements(
 	}
 }
 
-function locationOf(operation: BlueprintDependencyReference['operation'], widgetId: WidgetId): RuntimeDiagnosticLocation {
+function locationOf(operation: BlueprintDependencyReference['operation'], widgetId: WidgetId): RuntimePrimitiveDiagnosticLocation {
 	switch (operation.type) {
 		case 'state-get':
 		case 'state-set':
@@ -328,8 +328,8 @@ function wrapTargetFailure(
 	// `RuntimeMethodDiagnostic`. Only `.message` (preserved 1:1) and the diagnostic's own identity (as a dedupe
 	// anchor) are needed here, so the parameter stays structurally minimal rather than importing every
 	// concrete target-diagnostic type.
-	targetDiagnostics: readonly RuntimeDiagnostic[],
-	related: RuntimeDiagnosticLocation,
+	targetDiagnostics: readonly RuntimeWidgetDiagnostic[],
+	related: RuntimePrimitiveDiagnosticLocation,
 	leafId: number,
 ): readonly [unknown, ...unknown[]] {
 	// Build + deep-freeze every wrapped diagnostic (and pair it with its dedupe anchor) before reporting any

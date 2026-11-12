@@ -4,15 +4,15 @@ import type {
 	BlueprintDependencyReference,
 	RelativeValueDiagnosticInput,
 	RuntimeDependencyTargetFailedDiagnostic,
-	RuntimeDiagnostic,
-	RuntimeDiagnosticLocation,
 	RuntimeLevelDiagnostic,
 	RuntimeMethodArgsDiagnostic,
 	RuntimeMethodDependencyDiagnostic,
 	RuntimeMethodResultDiagnostic,
+	RuntimePrimitiveDiagnosticLocation,
 	RuntimePropertyDependencyDiagnostic,
 	RuntimePropertyResultDiagnostic,
 	RuntimeStateDiagnostic,
+	RuntimeWidgetDiagnostic,
 } from '../diagnostic'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
@@ -142,8 +142,8 @@ export interface DependencyDiagnosticParams {
 	readonly dependency: BlueprintDependencyReference
 	readonly message: string
 	readonly received?: ReceivedBox
-	readonly cause?: RuntimeDiagnostic
-	readonly related: RuntimeDiagnosticLocation
+	readonly cause?: RuntimeWidgetDiagnostic
+	readonly related: RuntimePrimitiveDiagnosticLocation
 }
 
 export function buildPropertyDependencyDiagnostic(params: DependencyDiagnosticParams): RuntimePropertyDependencyDiagnostic {

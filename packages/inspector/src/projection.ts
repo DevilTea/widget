@@ -2,7 +2,7 @@ import type {
 	BlueprintDependencyReference,
 	BlueprintNodeDiagnostic,
 	BlueprintNodeDiagnosticLocation,
-	RuntimeDiagnostic,
+	RuntimeWidgetDiagnostic,
 } from '@deviltea/widget-core'
 import type {
 	BlueprintInspection,
@@ -232,7 +232,7 @@ export function projectBlueprintSnapshot(
 	}
 }
 
-function projectRuntimeDiagnosticLocation(location: RuntimeDiagnostic['location']): InspectorRuntimeDiagnostic['location'] {
+function projectRuntimeDiagnosticLocation(location: RuntimeWidgetDiagnostic['location']): InspectorRuntimeDiagnostic['location'] {
 	return {
 		type: location.type,
 		widgetId: location.widgetId,
@@ -240,7 +240,7 @@ function projectRuntimeDiagnosticLocation(location: RuntimeDiagnostic['location'
 	}
 }
 
-function projectRuntimeDiagnostic(diagnostic: RuntimeDiagnostic, encoding: InspectableValueEncodingOptions): InspectorRuntimeDiagnostic {
+function projectRuntimeDiagnostic(diagnostic: RuntimeWidgetDiagnostic, encoding: InspectableValueEncodingOptions): InspectorRuntimeDiagnostic {
 	return {
 		code: diagnostic.code,
 		message: diagnostic.message,

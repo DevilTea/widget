@@ -469,7 +469,7 @@ later occurrence is de-identified with its available subtree preserved.
 - `widget.state[key].get()` returns `T | null` directly — it is not an
   `ExecutionResult`.
 - `widget.properties[name].get()` / `.subscribe(listener)` and
-  `widget.methods[name](...)` all return an `ExecutionResult<T, Diagnostic>`
+  `widget.methods[name](...)` all return an `ExecutionResult<T, D>` (`D` is the member's diagnostic union)
   with `T` exactly as declared (never `T | null`):
   `{ ok: true, value }` or `{ ok: false, failure: { diagnostics: [...] } }`.
   A `void` Method returns `{ ok: true, value: undefined }`.
