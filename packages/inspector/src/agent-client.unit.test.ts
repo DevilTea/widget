@@ -228,7 +228,7 @@ describe('inspector client/agent protocol boundary', () => {
 
 		expect(responses)
 			.toEqual([
-				expect.objectContaining({ requestId: 'bad-params', ok: false, error: expect.objectContaining({ code: 'invalid-message' }) }),
+				expect.objectContaining({ requestId: 'bad-params', ok: false, error: expect.objectContaining({ code: 'invalid-params' }) }),
 				expect.objectContaining({ requestId: 'bad-version', ok: false, error: expect.objectContaining({ code: 'unsupported-version' }) }),
 			])
 		agent.dispose()
@@ -265,7 +265,7 @@ describe('inspector client/agent protocol boundary', () => {
 		await expect(client.request('runtime.subscribeMember', {
 			ref: { runtimeId: 'runtime-test', nodeId: runtimes[0]!.rootNodeId },
 			member: { type: 'property', name: 'doubled' },
-		})).rejects.toMatchObject({ code: 'internal-error' })
+		})).rejects.toMatchObject({ code: 'runtime-disposed' })
 
 		client.dispose()
 		agent.dispose()
@@ -285,8 +285,6 @@ describe('inspector client/agent protocol boundary', () => {
 			ref: wrongRuntimeRef,
 			member: { type: 'state', name: 'count' },
 		}))
-			.rejects.toMatchObject({ code: 'runtime-not-found' })
-		await expect(client.request('highlight.show', { ref: wrongRuntimeRef }))
 			.rejects.toMatchObject({ code: 'runtime-not-found' })
 
 		client.dispose()

@@ -14,6 +14,7 @@ import type {
 } from '@deviltea/widget-core/inspection'
 import type {
 	InspectorBlueprintSnapshot,
+	InspectorConfigSchema,
 	InspectorDependency,
 	InspectorDependencyReference,
 	InspectorDiagnostic,
@@ -24,17 +25,49 @@ import type {
 	InspectorRuntimeWidgetSnapshot,
 	InspectorSlot,
 } from './protocol'
-import type { InspectableValue } from './value'
+import type { InspectableValue, InspectableValueEncodingOptions } from './value'
 import { encodeInspectableValue } from './value'
+
+/** `authorWritable` and `valueContractId` are emitted from protocol 0.4 on. */
+const MEMBER_METADATA_PROTOCOL_MINOR: number = 4
 
 function wireNodeId(nodeId: InspectionNodeId): number {
 	return nodeId
 }
 
+// Every DTO below is built by naming its fields. Spreading a Core object would let any field Core adds
+// later reach the wire at whatever protocol minor is negotiated.
+
+function projectDependencyTarget(target: BlueprintDependencyReference['target']): InspectorDependencyReference['target'] {
+	switch (target.type) {
+		case 'self':
+			return { type: 'self' }
+		case 'root':
+			return { type: 'root' }
+		case 'parent':
+			return { type: 'parent', optional: target.optional }
+		case 'widget':
+			return { type: 'widget', widgetId: target.widgetId, optional: target.optional }
+	}
+}
+
+function projectDependencyOperation(operation: BlueprintDependencyReference['operation']): InspectorDependencyReference['operation'] {
+	switch (operation.type) {
+		case 'state-get':
+			return { type: 'state-get', key: operation.key }
+		case 'state-set':
+			return { type: 'state-set', key: operation.key }
+		case 'property-get':
+			return { type: 'property-get', name: operation.name }
+		case 'method-invoke':
+			return { type: 'method-invoke', name: operation.name }
+	}
+}
+
 function projectDependencyReference(reference: BlueprintDependencyReference): InspectorDependencyReference {
 	return {
-		target: { ...reference.target },
-		operation: { ...reference.operation },
+		target: projectDependencyTarget(reference.target),
+		operation: projectDependencyOperation(reference.operation),
 	}
 }
 
@@ -49,7 +82,7 @@ function projectDependency(dependency: BlueprintInspectionDependency): Inspector
 			status: 'resolved',
 			target: {
 				nodeId: wireNodeId(dependency.target.nodeId),
-				member: { ...dependency.target.member },
+				member: { type: dependency.target.member.type, name: dependency.target.member.name },
 			},
 		}
 	}
@@ -150,26 +183,42 @@ export function projectBlueprintSnapshot(
 							properties: node.capabilities.properties,
 							methods: node.capabilities.methods,
 						}
-					: { ...node.capabilities },
+					: {
+							config: node.capabilities.config,
+							slots: node.capabilities.slots,
+							state: node.capabilities.state,
+							properties: node.capabilities.properties,
+							methods: node.capabilities.methods,
+							events: node.capabilities.events,
+						},
 				...(protocolMinor < 2
 					? {}
 					: {
 							config: node.config === null
 								? null
-								: { description: node.config.description, schema: node.config.schema },
-							events: node.events.map(event => ({ ...event })),
+								// Core types the schema document precisely; on the wire it is plain JSON (see `InspectorConfigSchema`).
+								: { description: node.config.description, schema: node.config.schema as InspectorConfigSchema | null },
+							events: node.events.map(event => ({ type: 'event' as const, name: event.name, description: event.description })),
 						}),
 				semanticSlots: node.semanticSlots.map(slot => ({
 					name: slot.name,
 					children: slot.children.map(wireNodeId),
 				})),
-				state: node.state.map(member => ({ ...member })),
+				state: node.state.map(member => ({
+					type: 'state' as const,
+					name: member.name,
+					...(protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR ? {} : { authorWritable: member.authorWritable }),
+				})),
 				properties: node.properties.map(member => ({
-					...member,
+					type: 'property' as const,
+					name: member.name,
+					...(protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR ? {} : { valueContractId: member.valueContractId }),
 					dependencies: member.dependencies.map(projectDependency),
 				})),
 				methods: node.methods.map(member => ({
-					...member,
+					type: 'method' as const,
+					name: member.name,
+					transitivelyWrites: member.transitivelyWrites,
 					dependencies: member.dependencies.map(projectDependency),
 				})),
 			}
@@ -177,7 +226,7 @@ export function projectBlueprintSnapshot(
 		invalidCycles: inspection.invalidCycles.map(cycle => ({
 			members: cycle.members.map(member => ({
 				nodeId: wireNodeId(member.nodeId),
-				member: { ...member.member },
+				member: { type: member.member.type, name: member.member.name },
 			})),
 		})),
 	}
@@ -191,7 +240,7 @@ function projectRuntimeDiagnosticLocation(location: RuntimeDiagnostic['location'
 	}
 }
 
-function projectRuntimeDiagnostic(diagnostic: RuntimeDiagnostic): InspectorRuntimeDiagnostic {
+function projectRuntimeDiagnostic(diagnostic: RuntimeDiagnostic, encoding: InspectableValueEncodingOptions): InspectorRuntimeDiagnostic {
 	return {
 		code: diagnostic.code,
 		message: diagnostic.message,
@@ -201,16 +250,16 @@ function projectRuntimeDiagnostic(diagnostic: RuntimeDiagnostic): InspectorRunti
 			: {}),
 		...('reason' in diagnostic && typeof diagnostic.reason === 'string' ? { reason: diagnostic.reason } : {}),
 		...('dependency' in diagnostic ? { dependency: projectDependencyReference(diagnostic.dependency) } : {}),
-		...('candidate' in diagnostic ? { candidate: encodeInspectableValue(diagnostic.candidate) } : {}),
-		...('received' in diagnostic ? { received: encodeInspectableValue(diagnostic.received) } : {}),
-		...('result' in diagnostic ? { result: encodeInspectableValue(diagnostic.result) } : {}),
-		...('args' in diagnostic ? { args: diagnostic.args.map(value => encodeInspectableValue(value)) } : {}),
+		...('candidate' in diagnostic ? { candidate: encodeInspectableValue(diagnostic.candidate, encoding) } : {}),
+		...('received' in diagnostic ? { received: encodeInspectableValue(diagnostic.received, encoding) } : {}),
+		...('result' in diagnostic ? { result: encodeInspectableValue(diagnostic.result, encoding) } : {}),
+		...('args' in diagnostic ? { args: diagnostic.args.map(value => encodeInspectableValue(value, encoding)) } : {}),
 		...('related' in diagnostic ? { related: diagnostic.related.map(projectRuntimeDiagnosticLocation) } : {}),
-		...('cause' in diagnostic ? { cause: projectRuntimeDiagnostic(diagnostic.cause) } : {}),
+		...('cause' in diagnostic ? { cause: projectRuntimeDiagnostic(diagnostic.cause, encoding) } : {}),
 	}
 }
 
-function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspectionSnapshot<unknown>): InspectorRuntimePropertySnapshot {
+function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspectionSnapshot<unknown>, encoding: InspectableValueEncodingOptions): InspectorRuntimePropertySnapshot {
 	if (snapshot.status === 'never-evaluated')
 		return { type: 'property', name, snapshot: { status: 'never-evaluated' } }
 
@@ -220,8 +269,8 @@ function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspecti
 		snapshot: {
 			status: 'completed',
 			result: snapshot.result.ok
-				? { ok: true, value: encodeInspectableValue(snapshot.result.value) }
-				: { ok: false, diagnostics: snapshot.result.failure.diagnostics.map(projectRuntimeDiagnostic) },
+				? { ok: true, value: encodeInspectableValue(snapshot.result.value, encoding) }
+				: { ok: false, diagnostics: snapshot.result.failure.diagnostics.map(diagnostic => projectRuntimeDiagnostic(diagnostic, encoding)) },
 		},
 	}
 }
@@ -229,6 +278,7 @@ function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspecti
 export function projectRuntimeMemberSnapshot(
 	widget: RuntimeWidgetInspection,
 	member: { readonly type: 'state' | 'property', readonly name: string },
+	encoding: InspectableValueEncodingOptions,
 ): InspectorRuntimeMemberSnapshot | null {
 	if (member.type === 'state') {
 		const inspection = widget.getState(member.name)
@@ -237,18 +287,19 @@ export function projectRuntimeMemberSnapshot(
 		return {
 			type: 'state',
 			name: member.name,
-			value: encodeInspectableValue(inspection.getSnapshot().value),
+			value: encodeInspectableValue(inspection.getSnapshot().value, encoding),
 		}
 	}
 
 	const inspection = widget.getProperty(member.name)
-	return inspection === null ? null : projectPropertySnapshot(member.name, inspection.getSnapshot())
+	return inspection === null ? null : projectPropertySnapshot(member.name, inspection.getSnapshot(), encoding)
 }
 
 export function projectRuntimeWidgetSnapshot(
 	runtimeId: string,
 	runtimeInspection: RuntimeInspection,
 	nodeId: InspectionNodeId,
+	encoding: InspectableValueEncodingOptions,
 ): InspectorRuntimeWidgetSnapshot | null {
 	const widget = runtimeInspection.getWidget(nodeId)
 	if (widget === null || !widget.blueprintNode.resolved)
@@ -256,12 +307,12 @@ export function projectRuntimeWidgetSnapshot(
 
 	const members: InspectorRuntimeMemberSnapshot[] = []
 	for (const state of widget.blueprintNode.state) {
-		const projected = projectRuntimeMemberSnapshot(widget, state)
+		const projected = projectRuntimeMemberSnapshot(widget, state, encoding)
 		if (projected !== null)
 			members.push(projected)
 	}
 	for (const property of widget.blueprintNode.properties) {
-		const projected = projectRuntimeMemberSnapshot(widget, property)
+		const projected = projectRuntimeMemberSnapshot(widget, property, encoding)
 		if (projected !== null)
 			members.push(projected)
 	}
@@ -274,6 +325,6 @@ export function projectRuntimeWidgetSnapshot(
 	}
 }
 
-export function projectEventArgs(args: readonly unknown[]): readonly InspectableValue[] {
-	return args.map(value => encodeInspectableValue(value))
+export function projectEventArgs(args: readonly unknown[], encoding: InspectableValueEncodingOptions): readonly InspectableValue[] {
+	return args.map(value => encodeInspectableValue(value, encoding))
 }

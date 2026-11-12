@@ -18,6 +18,8 @@ interface PackageJson {
 	readonly peerDependencies?: Record<string, string>
 	readonly devDependencies?: Record<string, string>
 	readonly publishConfig?: { readonly access?: string }
+	readonly engines?: { readonly node?: string }
+	readonly sideEffects?: boolean | readonly string[]
 }
 
 function readText(relative: string): string {
@@ -91,6 +93,18 @@ describe('published package boundary', () => {
 
 	it('has no root index module', () => {
 		expect(readdirSync(new URL('.', import.meta.url))).not.toContain('index.ts')
+	})
+
+	it('declares a workspace-caret Core peer so the published range follows Core\'s minor policy', () => {
+		expect(pkg.peerDependencies?.['@deviltea/widget-core'])
+			.toBe('workspace:^')
+	})
+
+	it('allows any supported Node.js release and declares itself free of import side effects', () => {
+		expect(pkg.engines?.node)
+			.toBe('>=22.14.0')
+		expect(pkg.sideEffects)
+			.toBe(false)
 	})
 
 	it('treats Core as a peer so a second Core copy is never bundled or installed', () => {

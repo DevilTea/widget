@@ -84,6 +84,12 @@ function createGeometryFixture(options: { shadowRoot?: boolean } = {}) {
 	}
 }
 
+/** Geometry observation starts on first use; any geometry request starts it. */
+async function startObservation(fixture: Pick<ReturnType<typeof createGeometryFixture>, 'client'>): Promise<void> {
+	await fixture.client.handshake()
+	await fixture.client.request('inspect.hitTest', { coordinateSpace: 'preview-viewport', x: 0, y: 0 })
+}
+
 function nextAnimationFrame(): Promise<void> {
 	return new Promise(resolve => window.requestAnimationFrame(() => resolve()))
 }
@@ -145,6 +151,7 @@ describe('semantic geometry Inspector protocol', () => {
 			const upgraded = await fixture.client.handshake()
 			expect(upgraded.capabilities.events)
 				.toContain('geometry.invalidated')
+			await fixture.client.request('inspect.hitTest', { coordinateSpace: 'preview-viewport', x: 15, y: 25 })
 			document.dispatchEvent(new Event('scroll'))
 			await nextAnimationFrame()
 			expect(notifications)
@@ -651,11 +658,12 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
-	it('removes every ShadowRoot event listener with the exact registered callback on Inspector teardown', () => {
+	it('removes every ShadowRoot event listener with the exact registered callback on Inspector teardown', async () => {
 		const add = vi.spyOn(ShadowRoot.prototype, 'addEventListener')
 		const remove = vi.spyOn(ShadowRoot.prototype, 'removeEventListener')
 		const fixture = createGeometryFixture({ shadowRoot: true })
 		try {
+			await startObservation(fixture)
 			fixture.agent.dispose()
 			for (const event of ['scroll', 'load', 'error']) {
 				const registered = add.mock.calls.find(call => call[0] === event && call[2] === true)
@@ -672,7 +680,7 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
-	it('removes document and window event listeners with the exact registered callback on Inspector teardown', () => {
+	it('removes document and window event listeners with the exact registered callback on Inspector teardown', async () => {
 		const docAdd = vi.spyOn(document, 'addEventListener')
 		const docRemove = vi.spyOn(document, 'removeEventListener')
 		const winAdd = vi.spyOn(window, 'addEventListener')
@@ -680,6 +688,7 @@ describe('semantic geometry Inspector protocol', () => {
 		let fixture: ReturnType<typeof createGeometryFixture> | undefined
 		try {
 			fixture = createGeometryFixture()
+			await startObservation(fixture)
 			fixture.agent.dispose()
 			// Double disposal must not issue duplicate removeEventListener calls.
 			fixture.dispose()
@@ -874,6 +883,7 @@ describe('semantic geometry Inspector protocol', () => {
 		vi.stubGlobal('ResizeObserver', TestResizeObserver)
 		const fixture = createGeometryFixture()
 		try {
+			await startObservation(fixture)
 			const newAnchor = document.createElement('div')
 			fixture.root.append(newAnchor)
 			newAnchor.dataset.widgetId = 'counter'

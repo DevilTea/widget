@@ -1,5 +1,6 @@
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { InspectionNodeId, RuntimeWidgetInspection } from '@deviltea/widget-core/inspection'
+import type { SemanticGeometryController } from './geometry'
 import type {
 	InspectorEventMap,
 	InspectorEventName,
@@ -10,6 +11,7 @@ import type {
 	WidgetRef,
 } from './protocol'
 import type { InspectorTransport } from './transport'
+import type { InspectableValueEncodingOptions } from './value'
 import { inspectRuntime } from '@deviltea/widget-core/inspection'
 import { ANCHOR_SELECTOR, createSemanticGeometryController, readAnchorIdentity } from './geometry'
 import { createInspectorOverlay } from './overlay'
@@ -20,9 +22,9 @@ import {
 	projectRuntimeWidgetSnapshot,
 } from './projection'
 import {
+	classifyInspectorRequest,
 	INSPECTOR_PROTOCOL_VERSION,
 	isCompatibleProtocolVersion,
-	parseInspectorRequestMessage,
 } from './protocol'
 
 const PROTOCOL_0_1_METHODS = Object.freeze([
@@ -32,6 +34,10 @@ const PROTOCOL_0_1_METHODS = Object.freeze([
 	'runtime.getWidgetSnapshot',
 	'runtime.subscribeMember',
 	'runtime.unsubscribeMember',
+] satisfies InspectorRequestMethod[])
+
+/** Present only when the Agent has an inspected DOM root: without one they cannot do anything. */
+const PROTOCOL_0_1_DOM_METHODS = Object.freeze([
 	'inspect.enable',
 	'inspect.disable',
 	'highlight.show',
@@ -62,6 +68,13 @@ const PROTOCOL_0_2_EVENTS = Object.freeze([
 const PROTOCOL_0_2_GEOMETRY_EVENTS = Object.freeze([
 	'geometry.invalidated',
 ] satisfies InspectorEventName[])
+
+const PROTOCOL_0_4_EVENTS = Object.freeze([
+	'runtime.disposed',
+] satisfies InspectorEventName[])
+
+/** `runtime.disposed` and the `runtime-disposed` error code exist from this protocol minor on. */
+const RUNTIME_LIFECYCLE_PROTOCOL_MINOR = 4
 
 let runtimeSequence = 1
 let subscriptionSequence = 1
@@ -106,6 +119,12 @@ export interface CreateInspectorAgentOptions {
 	 * `internal-error` instead). Must be a positive safe integer.
 	 */
 	readonly maxSubscriptions?: number
+	/**
+	 * Overrides the limits applied when Runtime values and event arguments are encoded for the wire (see
+	 * `InspectableValueEncodingOptions`; omitted fields keep `DEFAULT_INSPECTABLE_VALUE_LIMITS`). Every
+	 * limit must be a positive safe integer; `maxDepth` may also be 0.
+	 */
+	readonly valueLimits?: Pick<InspectableValueEncodingOptions, 'maxDepth' | 'maxEntries' | 'maxStringLength' | 'maxNodes'>
 }
 
 export interface InspectorAgent {
@@ -124,29 +143,45 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const maxSubscriptions = options.maxSubscriptions
 	if (maxSubscriptions !== undefined && !(Number.isSafeInteger(maxSubscriptions) && maxSubscriptions >= 1))
 		throw new RangeError('maxSubscriptions must be a positive safe integer when configured.')
+	const valueLimits = { ...options.valueLimits }
+	for (const [name, limit] of Object.entries(valueLimits)) {
+		const minimum = name === 'maxDepth' ? 0 : 1
+		if (limit !== undefined && !(Number.isSafeInteger(limit) && limit >= minimum))
+			throw new RangeError(`valueLimits.${name} must be a safe integer of at least ${minimum} when configured.`)
+	}
 	const runtimeId = options.runtimeId ?? createRuntimeId()
 	const runtimeInspection = inspectRuntime(options.runtime)
 	const dom = options.dom
 	const memberSubscriptions = new Map<string, () => void>()
 	const eventSubscriptions = new Map<string, () => void>()
-	// One Inspector transport has one peer. Re-handshake may explicitly upgrade/downgrade it;
+	// One Inspector transport has one peer. Only a handshake sets (or re-sets) the negotiated minor;
 	// standalone requests remain valid before the first handshake.
 	let negotiatedMinor: number = INSPECTOR_PROTOCOL_VERSION.minor
-	const envelopeVersion = () => ({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: negotiatedMinor })
+	// While one request is handled, answers use the lower of the negotiated minor and the request's own
+	// envelope minor, so a peer that never handshakes still sees the shapes of the minor it speaks. This
+	// never changes `negotiatedMinor`, which event delivery uses.
+	let requestMinor: number | null = null
+	const currentMinor = () => requestMinor ?? negotiatedMinor
+	const envelopeVersion = () => ({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: currentMinor() })
+	// Peers negotiated below 0.4 predate the truncated-key marker, so they never receive it.
+	const valueEncoding = (): InspectableValueEncodingOptions => ({ ...valueLimits, markTruncatedKeys: currentMinor() >= 4 })
 	function capabilitiesForMinor(minor: number): { readonly methods: readonly InspectorRequestMethod[], readonly events: readonly InspectorEventName[] } {
 		if (minor < 2) {
 			return {
-				methods: PROTOCOL_0_1_METHODS,
+				methods: dom === undefined ? PROTOCOL_0_1_METHODS : Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_1_DOM_METHODS]),
 				events: PROTOCOL_0_1_EVENTS,
 			}
 		}
 		return {
 			methods: dom === undefined
 				? Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_2_METHODS])
-				: Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_2_METHODS, ...PROTOCOL_0_2_GEOMETRY_METHODS]),
-			events: dom === undefined
-				? Object.freeze([...PROTOCOL_0_1_EVENTS, ...PROTOCOL_0_2_EVENTS])
-				: Object.freeze([...PROTOCOL_0_1_EVENTS, ...PROTOCOL_0_2_EVENTS, ...PROTOCOL_0_2_GEOMETRY_EVENTS]),
+				: Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_1_DOM_METHODS, ...PROTOCOL_0_2_METHODS, ...PROTOCOL_0_2_GEOMETRY_METHODS]),
+			events: Object.freeze([
+				...PROTOCOL_0_1_EVENTS,
+				...PROTOCOL_0_2_EVENTS,
+				...(dom === undefined ? [] : PROTOCOL_0_2_GEOMETRY_EVENTS),
+				...(minor < RUNTIME_LIFECYCLE_PROTOCOL_MINOR ? [] : PROTOCOL_0_4_EVENTS),
+			]),
 		}
 	}
 	let inspectEnabled = false
@@ -154,15 +189,50 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const overlay = dom === undefined ? null : createInspectorOverlay(dom.root.ownerDocument)
 	let highlightedTarget: InspectorSemanticTarget | null = null
 
+	// Set once the peer has been told (or could not be told) that this Agent's Runtime is gone.
+	let runtimeDisposalAnnounced = false
+
 	function emit<Event extends InspectorEventName>(event: Event, payload: InspectorEventMap[Event]): void {
+		if (event !== 'runtime.disposed')
+			observeRuntimeDisposal()
 		if (disposed || options.transport.closed || !capabilitiesForMinor(negotiatedMinor).events.includes(event))
 			return
-		options.transport.send({
-			protocol: envelopeVersion(),
-			kind: 'event',
-			event,
-			payload,
-		})
+		try {
+			options.transport.send({
+				protocol: { major: INSPECTOR_PROTOCOL_VERSION.major, minor: negotiatedMinor },
+				kind: 'event',
+				event,
+				payload,
+			})
+		}
+		catch {
+			// An event that cannot be delivered must not break the Runtime/DOM callback that produced it.
+		}
+	}
+
+	/**
+	 * Core offers no disposal notification, so the Agent observes it where it can: when any request arrives,
+	 * before it emits any other event, and when the Agent itself is disposed.
+	 */
+	function observeRuntimeDisposal(): boolean {
+		if (!options.runtime.isDisposed)
+			return false
+		if (!runtimeDisposalAnnounced) {
+			runtimeDisposalAnnounced = true
+			// Core already tore down its side of every live subscription; release the Agent's bookkeeping.
+			releaseSubscriptions()
+			emit('runtime.disposed', { runtimeId, reason: 'runtime-disposed' })
+		}
+		return true
+	}
+
+	function releaseSubscriptions(): void {
+		for (const unsubscribe of memberSubscriptions.values())
+			unsubscribe()
+		memberSubscriptions.clear()
+		for (const unsubscribe of eventSubscriptions.values())
+			unsubscribe()
+		eventSubscriptions.clear()
 	}
 
 	function sendSuccess(request: InspectorRequestMessage, result: unknown): void {
@@ -243,18 +313,24 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		return ref === null ? null : { ref, ...identity }
 	}
 
-	const geometry = dom === undefined
-		? null
-		: createSemanticGeometryController({
-				root: dom.root,
-				resolveRef: semanticTargetForRef,
-				resolveAnchor: semanticTargetForAnchorElement,
-				onInvalidated: (revision) => {
-					// Layout, scroll, or a renderer re-render moved/replaced anchors: follow them.
-					drawHighlight()
-					emit('geometry.invalidated', { revision })
-				},
-			})
+	// Document-wide geometry observation (scroll/resize/mutation/resize observers) starts on first use:
+	// geometry, hit-test, inspect mode or highlight. An idle Agent observes and reports nothing.
+	let geometryController: SemanticGeometryController | null = null
+	function ensureGeometry(): SemanticGeometryController | null {
+		if (dom === undefined || disposed)
+			return geometryController
+		geometryController ??= createSemanticGeometryController({
+			root: dom.root,
+			resolveRef: semanticTargetForRef,
+			resolveAnchor: semanticTargetForAnchorElement,
+			onInvalidated: (revision) => {
+				// Layout, scroll, or a renderer re-render moved/replaced anchors: follow them.
+				drawHighlight()
+				emit('geometry.invalidated', { revision })
+			},
+		})
+		return geometryController
+	}
 
 	function clearHighlight(): void {
 		highlightedTarget = null
@@ -263,6 +339,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 
 	/** Draws every fragment of the highlighted Widget; returns whether any anchor element exists. */
 	function drawHighlight(): boolean {
+		const geometry = ensureGeometry()
 		if (overlay === null || geometry === null || highlightedTarget === null)
 			return false
 		const measurement = geometry.measure(highlightedTarget)
@@ -274,6 +351,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	function highlightTarget(target: InspectorSemanticTarget): boolean {
+		const geometry = ensureGeometry()
 		if (geometry === null || overlay === null || geometry.measure(target).anchorCount === 0)
 			return false
 		highlightedTarget = target
@@ -290,8 +368,21 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		inspectEnabled = false
 		clearHighlight()
-		emit('inspect.hovered', { ref: null })
+		setHovered(null)
 		emit('agent.status', { inspectEnabled: false })
+	}
+
+	// The Widget the peer was last told is hovered; `inspect.hovered` is only re-emitted when it changes.
+	let hoveredNodeId: number | null = null
+
+	function setHovered(target: InspectorSemanticTarget | null): void {
+		const nodeId = target === null ? null : target.ref.nodeId
+		if (nodeId === hoveredNodeId)
+			return
+		hoveredNodeId = nodeId
+		emit('inspect.hovered', target === null
+			? { ref: null }
+			: { ref: target.ref, widgetId: target.widgetId, widgetType: target.widgetType })
 	}
 
 	function onPointerOver(event: PointerEvent): void {
@@ -300,24 +391,25 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		const anchor = resolveAnchor(event.target)
 		if (anchor === null) {
 			clearHighlight()
-			emit('inspect.hovered', { ref: null })
+			setHovered(null)
 			return
 		}
 		const ref = nodeForAnchor(anchor)
 		if (ref === null) {
 			clearHighlight()
-			emit('inspect.hovered', { ref: null })
+			setHovered(null)
 			return
 		}
-		highlightTarget({ ref, widgetId: anchor.widgetId, widgetType: anchor.widgetType })
-		emit('inspect.hovered', { ref, widgetId: anchor.widgetId, widgetType: anchor.widgetType })
+		const target = { ref, widgetId: anchor.widgetId, widgetType: anchor.widgetType }
+		highlightTarget(target)
+		setHovered(target)
 	}
 
 	function onPointerLeave(): void {
 		if (!inspectEnabled)
 			return
 		clearHighlight()
-		emit('inspect.hovered', { ref: null })
+		setHovered(null)
 	}
 
 	function suppressPointerActivation(event: Event): void {
@@ -378,7 +470,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return false
 		const message = `This Inspector Agent allows at most ${maxSubscriptions} live subscriptions.`
 		// A peer negotiated below protocol 0.3 cannot parse the new code; keep it within its vocabulary.
-		sendError(request.requestId, protocolError(negotiatedMinor >= 3 ? 'subscription-limit' : 'internal-error', message))
+		sendError(request.requestId, protocolError(currentMinor() >= 3 ? 'subscription-limit' : 'internal-error', message))
 		return true
 	}
 
@@ -394,7 +486,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		}
 		const member = request.params.member
 		const observable = member.type === 'state' ? widget.getState(member.name) : widget.getProperty(member.name)
-		const projected = projectRuntimeMemberSnapshot(widget, member)
+		const projected = projectRuntimeMemberSnapshot(widget, member, valueEncoding())
 		if (observable === null || projected === null) {
 			sendError(request.requestId, protocolError('member-not-found', 'The requested Runtime member does not exist.'))
 			return
@@ -405,7 +497,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		let unsubscribe: () => void
 		try {
 			unsubscribe = observable.subscribe(() => {
-				const next = projectRuntimeMemberSnapshot(widget, member)
+				const next = projectRuntimeMemberSnapshot(widget, member, valueEncoding())
 				if (next !== null) {
 					emit('runtime.memberChanged', {
 						subscriptionId,
@@ -448,7 +540,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					subscriptionId,
 					ref: request.params.ref,
 					event: request.params.event,
-					args: projectEventArgs(args),
+					args: projectEventArgs(args, valueEncoding()),
 				})
 			})
 		}
@@ -460,16 +552,48 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		sendSuccess(request, { subscriptionId, event: request.params.event })
 	}
 
+	/** The Runtime id a request addresses (directly or through a WidgetRef), if it addresses one. */
+	function addressedRuntimeId(request: InspectorRequestMessage): string | null {
+		switch (request.method) {
+			case 'blueprint.getSnapshot':
+				return request.params.runtimeId
+			case 'runtime.getWidgetSnapshot':
+			case 'runtime.subscribeMember':
+			case 'runtime.subscribeEvent':
+			case 'geometry.resolve':
+			case 'highlight.show':
+				return request.params.ref.runtimeId
+			default:
+				return null
+		}
+	}
+
 	function handleRequest(request: InspectorRequestMessage): void {
+		try {
+			handleRequestAtMinor(request)
+		}
+		finally {
+			requestMinor = null
+		}
+	}
+
+	function handleRequestAtMinor(request: InspectorRequestMessage): void {
 		if (!isCompatibleProtocolVersion(request.protocol)) {
 			sendError(request.requestId, protocolError('unsupported-version', `Unsupported Inspector protocol major ${request.protocol.major}.`))
 			return
 		}
 
+		const runtimeDisposed = observeRuntimeDisposal()
+
 		if (request.method !== 'handshake') {
-			negotiatedMinor = Math.min(negotiatedMinor, request.protocol.minor)
-			if (!capabilitiesForMinor(negotiatedMinor).methods.includes(request.method)) {
+			requestMinor = Math.min(negotiatedMinor, request.protocol.minor)
+			if (!capabilitiesForMinor(requestMinor).methods.includes(request.method)) {
 				sendError(request.requestId, protocolError('unknown-method', 'Method unavailable in this Inspector protocol session.'))
+				return
+			}
+			// From 0.4 a disposed Runtime is no longer addressable; older peers keep the earlier behavior.
+			if (runtimeDisposed && requestMinor >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR && addressedRuntimeId(request) === runtimeId) {
+				sendError(request.requestId, protocolError('runtime-disposed', 'The requested Runtime has been disposed.'))
 				return
 			}
 		}
@@ -489,14 +613,18 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				return
 			}
 			case 'runtime.list':
-				sendSuccess(request, { runtimes: [{ runtimeId, rootNodeId: runtimeInspection.blueprint.rootNodeId }] })
+				sendSuccess(request, {
+					runtimes: runtimeDisposed && currentMinor() >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR
+						? []
+						: [{ runtimeId, rootNodeId: runtimeInspection.blueprint.rootNodeId }],
+				})
 				return
 			case 'blueprint.getSnapshot':
 				if (request.params.runtimeId !== runtimeId) {
 					sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
 					return
 				}
-				sendSuccess(request, projectBlueprintSnapshot(runtimeId, runtimeInspection.blueprint, negotiatedMinor))
+				sendSuccess(request, projectBlueprintSnapshot(runtimeId, runtimeInspection.blueprint, currentMinor()))
 				return
 			case 'runtime.getWidgetSnapshot': {
 				if (request.params.ref.runtimeId !== runtimeId) {
@@ -504,7 +632,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					return
 				}
 				const nodeId = resolveNodeId(request.params.ref)
-				const snapshot = nodeId === null ? null : projectRuntimeWidgetSnapshot(runtimeId, runtimeInspection, nodeId)
+				const snapshot = nodeId === null ? null : projectRuntimeWidgetSnapshot(runtimeId, runtimeInspection, nodeId, valueEncoding())
 				if (snapshot === null) {
 					sendError(request.requestId, protocolError('widget-not-found', 'The requested widget does not exist in this Runtime snapshot.'))
 					return
@@ -540,25 +668,30 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				sendSuccess(request, { removed: true })
 				return
 			}
-			case 'inspect.hitTest':
+			case 'inspect.hitTest': {
+				const geometry = ensureGeometry()
 				if (geometry === null) {
 					sendError(request.requestId, protocolError('internal-error', 'DOM geometry is unavailable for this Inspector Agent.'))
 					return
 				}
 				sendSuccess(request, geometry.hitTest(request.params))
 				return
-			case 'geometry.resolve':
+			}
+			case 'geometry.resolve': {
 				if (request.params.ref.runtimeId !== runtimeId) {
 					sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
 					return
 				}
+				const geometry = ensureGeometry()
 				if (geometry === null) {
 					sendError(request.requestId, protocolError('internal-error', 'DOM geometry is unavailable for this Inspector Agent.'))
 					return
 				}
 				sendSuccess(request, geometry.resolve(request.params.ref))
 				return
+			}
 			case 'inspect.enable':
+				ensureGeometry()
 				inspectEnabled = true
 				emit('agent.status', { inspectEnabled: true })
 				sendSuccess(request, { enabled: true })
@@ -582,15 +715,45 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 
 	const removeDomListeners = installDomListeners()
 	const unsubscribeTransport = options.transport.subscribe((raw) => {
-		const request = parseInspectorRequestMessage(raw)
-		if (request !== null) {
-			handleRequest(request)
-			return
+		let requestId: string | null = null
+		try {
+			const classified = classifyInspectorRequest(raw)
+			if (classified.ok) {
+				requestId = classified.request.requestId
+				handleRequest(classified.request)
+				return
+			}
+			// Without a request id there is nothing to correlate an answer with.
+			if (classified.requestId === null)
+				return
+			requestId = classified.requestId
+			if (classified.protocol !== null && !isCompatibleProtocolVersion(classified.protocol)) {
+				sendError(requestId, protocolError('unsupported-version', `Unsupported Inspector protocol major ${classified.protocol.major}.`))
+			}
+			else if (classified.code === 'unknown-method') {
+				sendError(requestId, protocolError('unknown-method', 'The requested method is not defined by this Inspector protocol.'))
+			}
+			else if (classified.code === 'invalid-params') {
+				sendError(requestId, protocolError('invalid-params', 'Invalid parameters for the requested Inspector method.'))
+			}
+			else {
+				sendError(requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
+			}
 		}
-		if (typeof raw === 'object' && raw !== null
-			&& 'kind' in raw && raw.kind === 'request'
-			&& 'requestId' in raw && typeof raw.requestId === 'string') {
-			sendError(raw.requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
+		catch {
+			// Catch-all: every request that carries an id gets exactly one answer, and the Agent keeps
+			// serving. The failure detail stays in this realm; the peer only learns it was internal.
+			try {
+				if (requestId === null && typeof raw === 'object' && raw !== null
+					&& 'requestId' in raw && typeof raw.requestId === 'string') {
+					requestId = raw.requestId
+				}
+				if (requestId !== null)
+					sendError(requestId, protocolError('internal-error', 'The Inspector Agent failed to handle the request.'))
+			}
+			catch {
+				// The transport itself is unusable; its close notification owns cleanup.
+			}
 		}
 	})
 	let unsubscribeClose: () => void = () => {}
@@ -598,15 +761,16 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	function cleanup(closeTransport: boolean): void {
 		if (disposed)
 			return
+		// A peer that keeps the transport open learns the binding is gone; one whose transport closes
+		// learns it from the disconnect.
+		if (!closeTransport && !runtimeDisposalAnnounced) {
+			runtimeDisposalAnnounced = true
+			emit('runtime.disposed', { runtimeId, reason: options.runtime.isDisposed ? 'runtime-disposed' : 'agent-disposed' })
+		}
 		disposed = true
-		for (const unsubscribe of memberSubscriptions.values())
-			unsubscribe()
-		memberSubscriptions.clear()
-		for (const unsubscribe of eventSubscriptions.values())
-			unsubscribe()
-		eventSubscriptions.clear()
+		releaseSubscriptions()
 		removeDomListeners()
-		geometry?.dispose()
+		geometryController?.dispose()
 		clearHighlight()
 		unsubscribeTransport()
 		unsubscribeClose()
@@ -622,7 +786,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return inspectEnabled
 		},
 		invalidateGeometry() {
-			geometry?.invalidate()
+			geometryController?.invalidate()
 		},
 		dispose() {
 			cleanup(options.closeTransportOnDispose ?? true)
