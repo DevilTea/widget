@@ -134,7 +134,7 @@ export type {
 	WidgetSystemRuntime,
 } from './internal/contract'
 
-export { isJsonValue } from './json'
+export { isJsonValue, MAX_JSON_DEPTH } from './json'
 
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from './json'
 

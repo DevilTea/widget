@@ -1,6 +1,6 @@
 import type { DiagnosticPath, JsonCompatibilityReason } from './diagnostic'
 import type { JsonValue } from './json'
-import { inspectJsonValue, jsonEqual, sameValueZero } from './json'
+import { inspectJsonValue, jsonEqual, MAX_JSON_DEPTH, sameValueZero } from './json'
 
 export type SourcePath = readonly (string | number)[] | string
 
@@ -23,8 +23,10 @@ export type SourcePatch = readonly SourcePatchOperation[]
  * Operation failure codes. `invalid-array-index` covers any non-canonical-index segment on an Array
  * parent (`'length'`, `'foo'`, `'01'`, structured `'-'`) in both path forms. `invalid-operation` is a
  * patch that is not an Array, or an operation that is not an object or has an unknown `op`.
- * `json-incompatible-value` is an `add`/`replace`/`test` operand outside Core's JSON domain;
- * `source-access-failed` concerns unsafe access to source material only.
+ * `json-incompatible-value` is an `add`/`replace`/`test` operand outside Core's JSON domain (including one
+ * nested deeper than `MAX_JSON_DEPTH`); `max-depth-exceeded` is a path with more than `MAX_JSON_DEPTH`
+ * segments or a `copy`/`move` source value nested deeper than that; `source-access-failed` concerns unsafe
+ * access to source material only.
  */
 export type SourcePatchOperationFailureCode
 	= | 'invalid-path'
@@ -33,6 +35,7 @@ export type SourcePatchOperationFailureCode
 		| 'path-not-traversable'
 		| 'invalid-array-index'
 		| 'invalid-move-target'
+		| 'max-depth-exceeded'
 		| 'test-failed'
 		| 'json-incompatible-value'
 		| 'source-access-failed'
@@ -72,6 +75,7 @@ const PATCH_ERROR_MESSAGES: Record<SourcePatchOperationFailureCode, string> = {
 	'path-not-traversable': 'The SourcePath passes through a non-traversable value.',
 	'invalid-array-index': 'The SourcePath contains an invalid Array index.',
 	'invalid-move-target': 'The move destination is invalid relative to its source.',
+	'max-depth-exceeded': 'The SourcePatch path or the addressed value is nested deeper than the maximum JSON depth.',
 	'test-failed': 'The test operation did not match the addressed value.',
 	'json-incompatible-value': 'The SourcePatch operand is outside the JSON value domain.',
 	'source-access-failed': 'The source could not be inspected safely.',
@@ -82,6 +86,15 @@ function failure(code: SourcePatchOperationFailureCode, message = PATCH_ERROR_ME
 }
 
 function parsePath(path: unknown): PatchResult<ParsedPath> {
+	const parsed = parsePathSegments(path)
+	// A path addresses a value nested inside that many containers; deeper cannot exist in admitted source, and
+	// the recursive rebuild below must stay bounded.
+	if (parsed.ok && parsed.value.segments.length > MAX_JSON_DEPTH)
+		return failure('max-depth-exceeded')
+	return parsed
+}
+
+function parsePathSegments(path: unknown): PatchResult<ParsedPath> {
 	if (typeof path === 'string') {
 		if (path === '')
 			return { ok: true, value: { segments: [], append: false, pointer: true } }
@@ -398,10 +411,13 @@ function copyValue(value: unknown, canonicalizeNegativeZero = false): PatchResul
 		return { ok: true, value }
 
 	const seen = new WeakMap<object, object>()
-	function clone(current: object): PatchResult<object> {
+	// `depth` is the nesting level of `current`'s own container; bounded so a deep source cannot exhaust the stack.
+	function clone(current: object, depth: number): PatchResult<object> {
 		const previous = seen.get(current)
 		if (previous !== undefined)
 			return { ok: true, value: previous }
+		if (depth > MAX_JSON_DEPTH)
+			return failure('max-depth-exceeded')
 		const result = createContainer(current)
 		if (!result.ok)
 			return result
@@ -424,7 +440,7 @@ function copyValue(value: unknown, canonicalizeNegativeZero = false): PatchResul
 				if (!childKind.ok)
 					return childKind
 				if (childKind.value !== 'opaque')
-					copied = clone(child)
+					copied = clone(child, depth + 1)
 			}
 			if (!copied.ok)
 				return copied
@@ -435,13 +451,13 @@ function copyValue(value: unknown, canonicalizeNegativeZero = false): PatchResul
 		return result
 	}
 
-	return clone(value)
+	return clone(value, 1)
 }
 
 function structurallyEqual(left: unknown, right: unknown): boolean {
 	const matched = new WeakMap<object, object>()
 
-	function equal(currentLeft: unknown, currentRight: unknown): boolean {
+	function equal(currentLeft: unknown, currentRight: unknown, depth: number): boolean {
 		if (sameValueZero(currentLeft, currentRight))
 			return true
 		if (typeof currentLeft !== 'object' || currentLeft === null || typeof currentRight !== 'object' || currentRight === null)
@@ -451,6 +467,9 @@ function structurallyEqual(left: unknown, right: unknown): boolean {
 		if (!leftKind.ok || !rightKind.ok)
 			return false
 		if (leftKind.value === 'opaque' || rightKind.value === 'opaque')
+			return false
+		// Only shared (identical) subtrees can legitimately be this deep; never recurse past the bound.
+		if (depth > MAX_JSON_DEPTH)
 			return false
 
 		const previous = matched.get(currentLeft)
@@ -482,7 +501,7 @@ function structurallyEqual(left: unknown, right: unknown): boolean {
 				if (leftData !== rightData)
 					return false
 				if (leftData) {
-					if (!equal(leftDescriptor.value, rightDescriptor.value))
+					if (!equal(leftDescriptor.value, rightDescriptor.value, depth + 1))
 						return false
 				}
 				else if (leftDescriptor.get !== rightDescriptor.get || leftDescriptor.set !== rightDescriptor.set) {
@@ -496,7 +515,7 @@ function structurallyEqual(left: unknown, right: unknown): boolean {
 		}
 	}
 
-	return equal(left, right)
+	return equal(left, right, 1)
 }
 
 function samePathSegment(left: string | number, right: string | number): boolean {

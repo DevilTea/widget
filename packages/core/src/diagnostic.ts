@@ -200,6 +200,7 @@ export type JsonCompatibilityReason
 		| 'sparse-array'
 		| 'array-extra-property'
 		| 'cyclic-reference'
+		| 'max-depth-exceeded'
 
 export type JsonCompatibilityDiagnostic = DiagnosticBase<'json-incompatible-value', BlueprintSourceDiagnosticLocation> & {
 	readonly path: DiagnosticPath

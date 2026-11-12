@@ -29,6 +29,7 @@ import type { AnyWidgetPlugin, AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetSystem } from '../system'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
+import { MAX_JSON_DEPTH } from '../json'
 import { readWidgetPluginDefinition } from '../plugin'
 import { assertSyncValue } from '../runtime/sync'
 import { configDiagnostic, createCollector, definitionDiagnostic, widgetLocation } from './diagnostics'
@@ -210,6 +211,16 @@ function buildNode(
 
 	if (raw === null) {
 		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-definition', 'Widget definition must be a plain object.'))
+		finalizeShell(shell, working)
+		flushDiagnostics(ctx, localDiagnostics)
+		return nodeId
+	}
+
+	// Recovery recurses once per tree level, so it must stop where the source leaves the JSON domain for depth
+	// (`MAX_JSON_DEPTH`; the source-level `json-incompatible-value` diagnostic reports the same boundary). This
+	// node's own container is nested inside `sourcePath.length` others.
+	if (sourcePath.length >= MAX_JSON_DEPTH) {
+		localDiagnostics.push(definitionDiagnostic(publicNode, 'invalid-widget-definition', `Widget definition is nested deeper than the maximum supported depth (${MAX_JSON_DEPTH}).`))
 		finalizeShell(shell, working)
 		flushDiagnostics(ctx, localDiagnostics)
 		return nodeId
