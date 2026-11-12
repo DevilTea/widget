@@ -23,6 +23,7 @@
 		"devtools",
 		"protocol"
 	],
+	"sideEffects": false,
 	"exports": {
 		"./agent": {
 			"types": "./dist/agent.d.mts",
@@ -61,7 +62,7 @@
 		"dist"
 	],
 	"engines": {
-		"node": "^22.14.0 || ^24.0.0"
+		"node": ">=22.14.0"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -73,7 +74,7 @@
 		"typecheck:test": "tsc --project ./tsconfig.tests.json --noEmit"
 	},
 	"peerDependencies": {
-		"@deviltea/widget-core": ">=0.0.3 <0.1.0"
+		"@deviltea/widget-core": "workspace:^"
 	},
 	"devDependencies": {
 		"@deviltea/tsconfig": "catalog:",
