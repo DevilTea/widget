@@ -2906,6 +2906,142 @@ console.log(carried?.type === 'counter' ? carried.state.count.get() : 'missing')
 console.log(next.getDiagnostics().length) // 0
 ```
 
+### Editing a document that is currently invalid
+
+An editor or live preview spends much of its time in a document that does not
+compile: a plugin type is half typed, a config value is mid-edit. Core's rule for
+this is fixed. Validity is all-or-nothing: a Blueprint with any diagnostic creates
+no Runtime, Core does not run part of an invalid document, and it does not
+quarantine or prune the invalid part. What to show while a document is invalid is
+the host's decision. The tools are the ones the
+[Persisted documents](#persisted-documents) guide already uses: the Blueprint's
+diagnostics, `blueprint.getSourcePath(node)`, and a `WidgetDocument`, which
+re-compiles after every committed patch.
+
+The usual pattern keeps the last valid state on screen and treats an invalid
+commit as information to display, not as a reason to tear anything down:
+
+1. Keep the last valid Blueprint's Runtime running and rendered.
+2. When a commit produces an invalid Blueprint, leave that Runtime alone and
+   present the new Blueprint's diagnostics next to it. For each diagnostic,
+   `blueprint.getSourcePath(node)` gives the path of the offending node in the
+   source, so the editor can point at it.
+3. When a later commit is valid again, create the next Runtime from it, carry
+   State over by passing the old Runtime's `snapshotState()` as
+   `overrideStateDefaults` (see
+   [Carrying State across versions](#persisted-documents)), and dispose the
+   previous Runtime.
+
+The session below implements exactly that on top of `createWidgetDocument`.
+`apply(patch)` commits a patch, and a document subscriber decides between
+"promote" and "keep what is showing", so every edit goes through the same rule.
+The script walks valid, invalid, valid again and prints what a UI would show at
+each step.
+
+<!-- sample: editing-invalid run -->
+```ts
+import type { SourcePatch, WidgetSystemRuntime } from '@deviltea/widget-core'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+const counterPlugin = createWidgetPlugin('counter')
+	.description('A counter')
+	.interfaces<{ state: { count: number } }>()
+	.state(state => state.count({
+		validate: (input): input is number => typeof input === 'number',
+		default: () => 0,
+	}))
+	.done()
+const panelPlugin = createWidgetPlugin('panel')
+	.description('A panel')
+	.interfaces<{ slots: 'content' }>()
+	.slots({ content: { description: 'Content' } })
+	.done()
+const plugins = [counterPlugin, panelPlugin] as const
+const system = createWidgetSystem({ plugins })
+
+function createEditingSession(source: unknown) {
+	const document = createWidgetDocument({ system, source })
+	let runtime: WidgetSystemRuntime<typeof plugins> | null = null // the last valid Runtime, if any
+	let problems: string[] = [] // the diagnostics of the newest revision, empty while it is valid
+
+	function show({ blueprint }: ReturnType<typeof document.getSnapshot>): void {
+		if (blueprint.status === 'invalid') {
+			// Keep the last valid Runtime running; only the problems change.
+			problems = blueprint.diagnostics.map((diagnostic) => {
+				const node = 'node' in diagnostic.location ? diagnostic.location.node : blueprint.root
+				return `${diagnostic.code} at /${(blueprint.getSourcePath(node) ?? []).join('/')}`
+			})
+			return
+		}
+		problems = []
+		// Valid again: carry State over to the next Runtime, then dispose the previous one.
+		const next = blueprint.createRuntime({ overrideStateDefaults: runtime?.snapshotState() })
+		runtime?.dispose()
+		runtime = next
+	}
+
+	show(document.getSnapshot())
+	document.subscribe(snapshot => show(snapshot))
+
+	return {
+		apply: (patch: SourcePatch) => document.applyPatch(patch),
+		get runtime() { return runtime },
+		get problems() { return problems },
+	}
+}
+
+const session = createEditingSession({
+	id: 'panel-1',
+	type: 'panel',
+	slots: { content: [{ id: 'counter-1', type: 'counter' }] },
+})
+
+// What a UI would show: the live Runtime's state, and the problems with the newest edit.
+function render(label: string): void {
+	const counter = session.runtime?.getWidget('counter-1')
+	const count = counter?.type === 'counter' ? counter.state.count.get() : 'none'
+	console.log(`${label}: showing count=${count}; problems: ${session.problems.length === 0 ? 'none' : session.problems.join(', ')}`)
+}
+
+const first = session.runtime
+const counter = first?.getWidget('counter-1')
+if (counter?.type !== 'counter')
+	throw new Error('missing')
+counter.state.count.set(3)
+render('valid') // valid: showing count=3; problems: none
+
+// A half-typed plugin type: the document is invalid, the last valid Runtime keeps running.
+session.apply([{ op: 'replace', path: '/slots/content/0/type', value: 'count' }])
+render('invalid') // invalid: showing count=3; problems: unknown-widget-type at /slots/content/0
+console.log(session.runtime === first) // true: nothing was torn down
+
+// The user keeps interacting with what is still showing.
+counter.state.count.set(4)
+
+// The edit is completed: a new Runtime carries the State over and the old one is disposed.
+session.apply([{ op: 'replace', path: '/slots/content/0/type', value: 'counter' }])
+render('valid again') // valid again: showing count=4; problems: none
+console.log(session.runtime === first, first?.isDisposed) // false true
+
+// A document that is invalid from the start has no Runtime to keep showing.
+const broken = createEditingSession({ id: 'panel-1', type: 'panel', slots: { content: [{ id: 'x', type: 'oops' }] } })
+console.log(broken.runtime, broken.problems) // null [ 'unknown-widget-type at /slots/content/0' ]
+```
+
+Three details of the session are choices rather than requirements. Creating the
+next Runtime before disposing the previous one means a failure while creating it
+leaves what is showing intact. Snapshot entries for widgets or members the edit
+removed come back as the Runtime diagnostics described under
+[Carrying State across versions](#persisted-documents), so filter them out of the
+snapshot if the preview should not report them. And the subscriber runs inside
+`applyPatch`, so a host that renders from the session should read `runtime` and
+`problems` after `apply` returns, not from inside the subscriber.
+
+**When there is no last valid state.** A stored document that is already invalid
+on first load has no Runtime to keep showing. Either run the repair loop from
+[Persisted documents](#persisted-documents) first, or show the diagnostics (as
+`broken` does above) until an edit makes the document valid.
+
 ### Generic plugin factories
 
 A plugin factory that is generic over a type (`createListPlugin<Item>()`) hits
@@ -2982,6 +3118,11 @@ Release a library's own dependents after Core, never before.
   definition type is caught by the runtime guard alone. Asynchronous work
   stays outside Core: the host awaits it and re-enters through ordinary
   synchronous State writes and Method calls (see [Async work](#async-work)).
+- **All-or-nothing validity.** A Blueprint with any diagnostic creates no
+  Runtime. Core does not run, quarantine or prune part of an invalid document;
+  tolerating one, for example by keeping the last valid Runtime on screen, is
+  the host's job (see
+  [Editing a document that is currently invalid](#editing-a-document-that-is-currently-invalid)).
 - **Callback-context lifetime.** A callback's `addDiagnostic` /
   `hasAnyDiagnostic`, its dependency callables and its `emit` callables belong
   to that synchronous call (see
