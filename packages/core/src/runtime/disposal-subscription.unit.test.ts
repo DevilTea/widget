@@ -332,7 +332,9 @@ describe('runtime.subscribeDisposal(): the Runtime is already disposed inside a 
 			.toHaveBeenCalled()
 	})
 
-	it('closes the dependency and emit callables of a Method that is still running', () => {
+	it('refuses retained dependency and emit callables of a Method inside a disposal listener', () => {
+		// The callables were handed to a Method that has returned; once the Runtime is disposed they throw the
+		// disposed error whatever the callback scope says, so this checks the post-dispose surface only.
 		const captured: { deps?: { setCount: (value: number) => unknown }, emit?: { done: () => void } } = {}
 		const plugin = createWidgetPlugin('host')
 			.description('Test widget')
@@ -639,6 +641,38 @@ describe('runtime.subscribeDisposal(): references', () => {
 
 		expect(weak.deref())
 			.toBeUndefined()
+	})
+
+	it.skipIf(gc === undefined)('releases a listener from a kept unsubscribe handle once it has run', async () => {
+		const { runtime } = createRuntime()
+		let listener: (() => void) | null = () => {}
+		const weak = new WeakRef(listener)
+		const unsubscribe = runtime.subscribeDisposal(listener)
+		runtime.dispose()
+		listener = null
+		await new Promise<void>(resolve => setTimeout(resolve, 0))
+		gc!()
+
+		expect(weak.deref())
+			.toBeUndefined()
+		expect(unsubscribe)
+			.toBeTypeOf('function')
+	})
+
+	it.skipIf(gc === undefined)('releases a listener from a kept unsubscribe handle once it was called', async () => {
+		const { runtime } = createRuntime()
+		let listener: (() => void) | null = () => {}
+		const weak = new WeakRef(listener)
+		const unsubscribe = runtime.subscribeDisposal(listener)
+		unsubscribe()
+		listener = null
+		await new Promise<void>(resolve => setTimeout(resolve, 0))
+		gc!()
+
+		expect(weak.deref())
+			.toBeUndefined()
+		expect(unsubscribe)
+			.toBeTypeOf('function')
 	})
 })
 

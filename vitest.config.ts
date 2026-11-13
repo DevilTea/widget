@@ -4,6 +4,8 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
 	plugins: [Vue()],
 	test: {
+		// The retention tests observe garbage collection, which needs the collector exposed to the workers.
+		execArgv: ['--expose-gc'],
 		include: [
 			'packages/**/src/**/*.unit.test.ts',
 			'apps/**/src/**/*.unit.test.ts',
