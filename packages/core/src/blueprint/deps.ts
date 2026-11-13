@@ -307,8 +307,6 @@ export function resolveDependencies(
 
 		const configFrag = configFragment(node)
 		for (const [name, propertyDefinition] of definition.properties) {
-			const dep = createDependencyBuilder<never, 'property'>()
-
 			// A present callback returning `undefined`/`null` (only reachable via a JS/`any` contract
 			// escape) is malformed callback output, not the same as the callback being omitted; only an
 			// *omitted* callback synthesizes empty deps. `walkDeps` already throws on any non-expression,
@@ -319,7 +317,7 @@ export function resolveDependencies(
 				rawDeps = propertyDefinition.registerDeps({
 					widget: compileFacade.facadeForNodeId(nodeId),
 					blueprint: compileFacade.view,
-					dep,
+					dep: createDependencyBuilder<never, 'property'>(),
 					...configFrag,
 				})
 				assertSyncValue(rawDeps, `Property "${name}"'s registerDeps`)
@@ -342,15 +340,13 @@ export function resolveDependencies(
 
 		const configFrag = configFragment(node)
 		for (const [name, methodDefinition] of definition.methods) {
-			const dep = createDependencyBuilder<never, 'method'>()
-
 			// Same "omitted vs malformed" distinction as the properties loop above.
 			let rawDeps: unknown = {}
 			if (methodDefinition.registerDeps !== undefined) {
 				rawDeps = methodDefinition.registerDeps({
 					widget: compileFacade.facadeForNodeId(nodeId),
 					blueprint: compileFacade.view,
-					dep,
+					dep: createDependencyBuilder<never, 'method'>(),
 					...configFrag,
 				})
 				assertSyncValue(rawDeps, `Method "${name}"'s registerDeps`)
