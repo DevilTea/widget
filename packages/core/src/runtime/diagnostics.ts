@@ -48,15 +48,6 @@ function freezeDependency(dependency: unknown): void {
 	Object.freeze(dependency)
 }
 
-/** Freezes one diagnostic record's framework-owned parts and then the record itself, not its `cause`. */
-function freezeOwnParts(record: Record<string, unknown>): void {
-	freezeObject(record.location)
-	freezeArray(record.path)
-	freezeRelated(record.related)
-	freezeDependency(record.dependency)
-	Object.freeze(record)
-}
-
 /**
  * Freeze the framework-owned diagnostic record without executing or freezing arbitrary payload objects.
  *
@@ -64,23 +55,20 @@ function freezeOwnParts(record: Record<string, unknown>): void {
  * is always a diagnostic of the dependency's own finalized snapshot (`wrapTargetFailure` in `./deps`), which
  * was deep-frozen when that snapshot was created: every State, Property and Method snapshot passes through
  * {@link freezeDiagnosticSnapshot}. Diagnostic records are only ever created and frozen here, and a record
- * is frozen after its parts and its cause, so a frozen cause is a deep-frozen cause. Re-walking it on every
- * wrap cost O(depth) per dependent and recursed once per level of a failing dependency chain (quadratic
- * work, and a stack overflow for a long chain). A cause that is not frozen yet, which no caller produces, is
- * still frozen, iteratively, down to the first frozen one.
+ * is frozen after its parts, so a frozen cause is a deep-frozen cause. Re-walking it on every wrap cost
+ * O(depth) per dependent and recursed once per level of a failing dependency chain (quadratic work, and a
+ * stack overflow for a long chain).
  */
 export function deepFreezeDiagnostic<T>(diagnostic: T): T {
 	if (typeof diagnostic !== 'object' || diagnostic === null)
 		return diagnostic
 
 	const record = diagnostic as Record<string, unknown>
-	let cause = record.cause
-	while (typeof cause === 'object' && cause !== null && !Object.isFrozen(cause)) {
-		const causeRecord = cause as Record<string, unknown>
-		cause = causeRecord.cause
-		freezeOwnParts(causeRecord)
-	}
-	freezeOwnParts(record)
+	freezeObject(record.location)
+	freezeArray(record.path)
+	freezeRelated(record.related)
+	freezeDependency(record.dependency)
+	Object.freeze(record)
 	return diagnostic
 }
 
