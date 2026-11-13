@@ -287,6 +287,38 @@ describe('runtime disposal is announced when it happens', () => {
 		}
 	})
 
+	it('unsubscribes its disposal listener exactly once when the Agent is disposed', () => {
+		const { runtime } = createInspectorTestFixture()
+		const subscribeDisposal = runtime.subscribeDisposal.bind(runtime)
+		const unsubscribes: ReturnType<typeof vi.fn>[] = []
+		vi.spyOn(runtime, 'subscribeDisposal')
+			.mockImplementation((listener) => {
+				const release = subscribeDisposal(listener)
+				const unsubscribe = vi.fn(release)
+				unsubscribes.push(unsubscribe)
+				return unsubscribe
+			})
+		const pair = createInProcessInspectorTransportPair()
+		const agent = createInspectorAgent({ runtime, transport: pair.agent, runtimeId: 'runtime-x', closeTransportOnDispose: false })
+		try {
+			expect(unsubscribes)
+				.toHaveLength(1)
+			expect(unsubscribes[0])
+				.not
+				.toHaveBeenCalled()
+
+			agent.dispose()
+			agent.dispose()
+
+			expect(unsubscribes[0])
+				.toHaveBeenCalledTimes(1)
+		}
+		finally {
+			agent.dispose()
+			pair.client.close()
+		}
+	})
+
 	it('announces to every Agent bound to the Runtime, each on its own transport', async () => {
 		const fixture = createInspectorTestFixture()
 		const first = createBinding(fixture.runtime)
