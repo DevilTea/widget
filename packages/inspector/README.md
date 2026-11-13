@@ -1,5 +1,7 @@
 # @deviltea/widget-inspector
 
+> **Upgrading from 0.0.x?** Follow the [migration guide to 0.1](https://deviltea.github.io/widget/migration/0.1).
+
 > ESM-only package. **0.x experimental, protocol-major guarantee only.**
 
 A read-only, versioned Inspector boundary for [`@deviltea/widget-core`](https://www.npmjs.com/package/@deviltea/widget-core) Runtimes: a JSON-safe protocol, a client for the inspecting side, an agent that projects Core inspection into serializable DTOs and owns inspected-document interaction, transports, and the inspect-anchor attribute contract renderers use to mark their DOM.
