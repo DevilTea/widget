@@ -44,7 +44,13 @@ For each shape and phase the largest length that works is found by doubling, the
   `visible`; counted in widgets (two Properties each). The cold-read probes use it as authored (`visible` is a boolean,
   so writing the last widget's State never changes the head). The teardown probes use a "live" variant with the same
   dependency edges but numeric `visible` (the next widget's `value`, 0 for the last) and `value = answer + visible + 1`,
-  so the head reads `W + answer of the last widget` and a write to the tail reaches it.
+  so the head reads `W + answer of the last widget` and a write to the tail reaches it. Both read `visible` before the
+  State.
+* State-first variants, used only by `rewrite-all`: every Property reads a State of its own first and its dependency
+  after it, so once every State is written every link is directly stale (each re-evaluation finds its own State changed
+  before it reaches the next link). The chain gets States `s0 .. s{L-1}` and `p{i} = s{i} + p{i+1} + 1` (head
+  `L + sum of the States`); the survey is the live variant with `value` reading `answer` before `visible` (head
+  `W + sum of the answers`).
 
 Phases, each with the step it measures and how it decides success. Every attempt needs a valid Blueprint first, builds a
 fresh Runtime, and fails (stage `process`) when the process crashes, times out or ends without a result line.
@@ -57,6 +63,7 @@ fresh Runtime, and fails (stage `process`) when the process crashes, times out o
 | `unsubscribe` | warm bottom-up as above; subscribe a listener to the head; unsubscribe it | nothing throws, nothing is reported (below) |
 | `reread-after-unsubscribe` | as `unsubscribe`, then write the tail State and read the head | as `warm-reread` for the write and the read, and the listener was not called |
 | `dispose` | warm bottom-up; subscribe a listener to the head; `runtime.dispose()` | nothing throws, nothing is reported |
+| `rewrite-all` | state-first variant; fresh Runtime; **cold** read of the head; then twice: write every State (to 1, then to 2), read the head | every read is `ok` with the expected value (a failure in either round fails the attempt, at stage `read-1` or `read-2`) |
 
 The warm state of the last four phases is built bottom-up on purpose, so none of them depends on a deep cold read and each
 measures only the step it is named for (a failure while warming is reported at stage `warm`, and means the bottom-up
@@ -73,7 +80,7 @@ a limit); one that already fails at the first length tried (100 / 50) as "< <sta
 reach the cap since Core analyses evaluation cycles without recursion.
 
 `--probes-only true` skips every timing workload (it implies `--stack-probe true`) and `--probe-phases a,b` restricts
-the phases (default: all six). The stack-size sweep of the CI driver
+the phases (default: all seven). The stack-size sweep of the CI driver
 ([`../ci/README.md`](../ci/README.md#stack-size-sweep)) runs exactly this, once per stack size. `info` runs also report
 the engine's plain recursion depth (nested calls of an empty function until the engine throws), a calibration without
 any Widget code that is printed at the top of a sweep table.

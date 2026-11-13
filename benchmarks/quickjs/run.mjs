@@ -11,7 +11,8 @@
  *
  * Stack probes: for each shape (a chain of dependent Properties; a survey whose question k's visibility reads
  * question k+1's value) and phase (see probe-defs.mjs: compile; cold read of the head Property; and the teardown
- * steps warm re-read, unsubscribe, re-read after unsubscribe, dispose with a subscriber) the largest length that
+ * steps warm re-read, unsubscribe, re-read after unsubscribe, dispose with a subscriber; and re-read after writing
+ * every State) the largest length that
  * works is found by doubling, then bisection. A probe that still works at the cap of the search reports "at least
  * <cap>" (`ceiling: true` in the JSON), never a number that looks like a limit. `--probes-only true` skips every
  * timing workload (the stack-size sweep of the CI driver uses it); `--probe-phases` restricts the phases.

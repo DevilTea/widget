@@ -11,7 +11,9 @@ export const PROBE_SHAPES = [
 
 /**
  * `warm`: the phase builds its state with a bottom-up read of every Property (tail first), never with a deep cold read,
- * and uses the "live" survey (see probes.mjs) in which a write to the tail reaches the head's value.
+ * and uses the "live" survey (see probes.mjs) in which a write to the tail reaches the head's value. `rewrite-all`
+ * starts from a cold read instead and uses the "state-first" variants of both shapes (see probes.mjs), in which every
+ * Property reads a State of its own before its dependency, so that writing every State makes every link stale.
  */
 export const PROBE_PHASES = [
 	{ phase: 'compile', label: 'compile', warm: false },
@@ -20,6 +22,7 @@ export const PROBE_PHASES = [
 	{ phase: 'unsubscribe', label: 'unsubscribe from the head', warm: true },
 	{ phase: 'reread-after-unsubscribe', label: 're-read after unsubscribe', warm: true },
 	{ phase: 'dispose', label: 'dispose with a subscriber', warm: true },
+	{ phase: 'rewrite-all', label: 're-read after writing every State (cold read, then two rounds)', warm: false },
 ]
 
 export const PROBE_PHASE_NAMES = PROBE_PHASES.map(item => item.phase)
