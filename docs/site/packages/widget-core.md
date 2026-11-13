@@ -1933,6 +1933,7 @@ not duplication.
 
 ```ts
 runtime.dispose() // idempotent
+runtime.subscribeDisposal(listener) // returns an idempotent unsubscribe function
 ```
 
 After disposal, `runtime.isDisposed` and `runtime.blueprint` remain readable,
@@ -1942,9 +1943,9 @@ reads and writes, method invocations, `runtime.snapshotState()`, `resetState()`,
 `RuntimeWidget.getDiagnostics()`) and every
 *new* subscription (including `RuntimeWidget.subscribeDiagnostics()`) throws
 `WidgetSystemRuntimeDisposedError`; previously returned unsubscribe functions
-remain safe, idempotent no-ops. Disposal itself emits no notification and
-creates no diagnostic. A dependency or `emit` callable used after disposal
-throws the same error.
+remain safe, idempotent no-ops. Disposal sends no State, Property, Event or
+diagnostic notification and creates no diagnostic. A dependency or `emit`
+callable used after disposal throws the same error.
 
 The error's `code` is `'runtime-disposed'`.
 
@@ -1973,6 +1974,80 @@ catch (error) {
 		console.log(error.code)
 	}
 }
+```
+
+`runtime.subscribeDisposal(listener)` is the one disposal signal. A host that
+owns asynchronous work (a request, a timer, a worker) uses it to cancel that
+work when the Runtime goes away:
+
+- Each listener runs exactly once, synchronously, inside the first `dispose()`
+  call, with no arguments. Later `dispose()` calls do nothing.
+- By then the Runtime is already fully disposed: `runtime.isDisposed` is
+  `true` and every Runtime-owned subscription is torn down. A live operation
+  attempted from the listener throws `WidgetSystemRuntimeDisposedError`,
+  `runtime.dispose()` does nothing, and the metadata listed above stays
+  readable. A listener cancels the host's own work; it cannot read or write the
+  Runtime.
+- Listeners run in subscription order. Delivery uses the list as it stood when
+  disposal began, as Event delivery does: a listener unsubscribed meanwhile
+  still runs, and none can be added meanwhile, because subscribing to a
+  disposed Runtime throws.
+- A throwing listener never reaches the `dispose()` caller and never stops the
+  remaining listeners; like every other listener exception it is reported
+  asynchronously (see [Host requirements](#host-requirements)).
+- `subscribeDisposal()` on an already disposed Runtime throws
+  `WidgetSystemRuntimeDisposedError`; the listener is never invoked
+  immediately, so check `runtime.isDisposed` first when the Runtime may already
+  be gone.
+- The returned unsubscribe function is idempotent and safe before or after
+  disposal; once the listener has run it does nothing. Registering the same
+  function twice makes two independent registrations.
+- The Runtime keeps no reference to a listener once it has run.
+
+<!-- sample: disposal-listener run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+const plugin = createWidgetPlugin('profile')
+	.description('A profile widget')
+	.interfaces<{ state: { title: string } }>()
+	.state(state => state
+		.title({ validate: (input): input is string => typeof input === 'string' }))
+	.done()
+const blueprint = createWidgetSystem({ plugins: [plugin] })
+	.createBlueprint({ id: 'profile-1', type: 'profile' })
+if (blueprint.status !== 'valid')
+	throw new Error('invalid')
+
+const runtime = blueprint.createRuntime()
+
+// The host owns the pending work; the Runtime only tells it when to stop.
+const controller = new AbortController()
+runtime.subscribeDisposal(() => controller.abort())
+
+function pause(milliseconds: number, signal: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(resolve, milliseconds)
+		signal.addEventListener('abort', () => {
+			clearTimeout(timer)
+			reject(signal.reason)
+		}, { once: true })
+	})
+}
+
+async function loadTitle(): Promise<void> {
+	try {
+		await pause(1000, controller.signal)
+		runtime.getWidget('profile-1')?.state.title.set('Ada')
+	}
+	catch {
+		console.log('loading cancelled')
+	}
+}
+
+const loading = loadTitle()
+runtime.dispose() // aborts the pending work synchronously
+await loading
 ```
 
 ## Renderer adapter integration

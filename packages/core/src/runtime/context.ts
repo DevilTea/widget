@@ -10,6 +10,7 @@
 
 import type { DedupeDescriptor } from './collector'
 import { WidgetSystemRuntimeDisposedError } from '../diagnostic'
+import { invokeListenerIsolated } from './adapter'
 
 /**
  * The narrow surface dependency-leaf wrapping needs from the operation-local collector of the running
@@ -101,7 +102,13 @@ export interface RuntimeContext {
 	 */
 	registerSubscription: (rawDispose: () => void) => () => void
 	/**
-	 * Marks the Runtime disposed and tears down every still-owned subscription. Idempotent.
+	 * Registers a listener to run once, when the Runtime is disposed. Throws if the Runtime already is.
+	 * Returns an idempotent unsubscribe function safe to call before or after Runtime disposal.
+	 */
+	subscribeDisposal: (listener: () => void) => () => void
+	/**
+	 * Marks the Runtime disposed, tears down every still-owned subscription, then delivers the disposal
+	 * listeners (see `subscribeDisposal`). Idempotent.
 	 */
 	dispose: () => void
 }
@@ -109,6 +116,9 @@ export interface RuntimeContext {
 export function createRuntimeContext(): RuntimeContext {
 	let disposed = false
 	const owned = new Set<() => void>()
+	// Disposal listeners in subscription order. One entry per registration, so registering the same function
+	// twice stays two independent registrations. Emptied when delivery starts.
+	let disposalListeners = new Set<{ readonly listener: () => void }>()
 
 	function assertActive(): void {
 		if (disposed)
@@ -133,6 +143,15 @@ export function createRuntimeContext(): RuntimeContext {
 			return handle
 		},
 
+		subscribeDisposal(listener) {
+			assertActive()
+			const entry = { listener }
+			disposalListeners.add(entry)
+			return () => {
+				disposalListeners.delete(entry)
+			}
+		},
+
 		dispose() {
 			if (disposed)
 				return
@@ -141,6 +160,12 @@ export function createRuntimeContext(): RuntimeContext {
 			for (const handle of [...owned])
 				handle()
 			owned.clear()
+			// Delivery runs on the list as it stood when disposal began, and the Runtime lets go of it first:
+			// a listener removed meanwhile still runs, and none is retained once it has.
+			const delivering = [...disposalListeners]
+			disposalListeners = new Set()
+			for (const { listener } of delivering)
+				invokeListenerIsolated(() => listener(), undefined)
 		},
 	}
 }
