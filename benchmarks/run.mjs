@@ -13,6 +13,10 @@
  * With --json the file is rewritten after every scenario, so an interrupted run keeps what it measured.
  * Before each child starts the machine is checked for idleness; CPU used by other processes while the child
  * ran is measured and reported next to the scenario, because a busy machine produces confident wrong numbers.
+ *
+ * BENCH_PACKAGES_ROOT=<absolute path of a checkout> measures the packages of that checkout instead of the
+ * repository that contains this harness (see lib/load.mjs); the children inherit it, and the git state, the
+ * dist fingerprints and the stale-dist check recorded in the result all describe that checkout.
  */
 
 import { execFileSync, spawn } from 'node:child_process'
@@ -22,12 +26,12 @@ import { cpus, loadavg, platform, totalmem } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { assertBuilt, harnessRoot, root as packagesRoot, rootOverridden } from './lib/load.mjs'
 import { allocTable, customTable, scalingSummary, timingTable } from './lib/report.mjs'
 import { listScenarios } from './scenarios/index.mjs'
 
 const RESULT_MARKER = '__BENCH_RESULT__'
 const worker = fileURLToPath(new URL('./worker.mjs', import.meta.url))
-const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const MODES = ['normal', 'jitless', 'alloc']
 const PACKAGES = ['core', 'vue', 'inspector']
 
@@ -136,6 +140,14 @@ function nodeFlags(mode) {
 	return ['--expose-gc']
 }
 
+/** The environment of every child: NODE_ENV=production, and the packages root (if any) exactly as this process resolved it. */
+function childEnv() {
+	const env = { ...process.env, NODE_ENV: 'production' }
+	if (rootOverridden)
+		env.BENCH_PACKAGES_ROOT = packagesRoot
+	return env
+}
+
 /** Runs one scenario in one mode. Never rejects: a failure resolves to { id, mode, failed, code, signal }. */
 function runChild(scenario, mode, args) {
 	return new Promise((resolve) => {
@@ -150,7 +162,7 @@ function runChild(scenario, mode, args) {
 		if (args.variant)
 			childArgs.push('--variant', args.variant)
 		const before = cpuTimes()
-		const child = spawn(process.execPath, childArgs, { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NODE_ENV: 'production' } })
+		const child = spawn(process.execPath, childArgs, { stdio: ['ignore', 'pipe', 'pipe'], env: childEnv() })
 		let stdout = ''
 		child.stdout.on('data', (chunk) => {
 			stdout += chunk
@@ -239,8 +251,8 @@ function printScenario(scenario, byMode) {
 	}
 }
 
-function git(...gitArgs) {
-	return execFileSync('git', gitArgs, { cwd: repoRoot, encoding: 'utf8' })
+function git(cwd, ...gitArgs) {
+	return execFileSync('git', gitArgs, { cwd, encoding: 'utf8' })
 }
 
 function listFiles(dir, keep, out = []) {
@@ -259,7 +271,7 @@ function listFiles(dir, keep, out = []) {
 
 /** First 12 hex digits of a SHA-256 over the sorted list of .mjs files under a dist directory and their contents. */
 function distFingerprint(pkg) {
-	const dir = join(repoRoot, 'packages', pkg, 'dist')
+	const dir = join(packagesRoot, 'packages', pkg, 'dist')
 	if (!existsSync(dir))
 		return null
 	const hash = createHash('sha256')
@@ -281,8 +293,8 @@ const newestMtime = files => files.reduce((newest, file) => Math.max(newest, sta
 function staleDistPackages() {
 	const stale = []
 	for (const pkg of PACKAGES) {
-		const dist = join(repoRoot, 'packages', pkg, 'dist')
-		const src = join(repoRoot, 'packages', pkg, 'src')
+		const dist = join(packagesRoot, 'packages', pkg, 'dist')
+		const src = join(packagesRoot, 'packages', pkg, 'src')
 		if (!existsSync(dist) || !existsSync(src))
 			continue
 		if (newestMtime(listFiles(src, name => !isTestFile(name))) > newestMtime(listFiles(dist, () => true)))
@@ -291,28 +303,43 @@ function staleDistPackages() {
 	return stale
 }
 
+/** Short hash and dirtiness of the repository at `cwd`; nulls when it is not a git checkout. */
+function gitState(cwd) {
+	try {
+		return {
+			hash: git(cwd, 'rev-parse', '--short', 'HEAD')
+				.trim(),
+			dirty: git(cwd, 'status', '--porcelain')
+				.trim() !== '',
+		}
+	}
+	catch {
+		return { hash: null, dirty: null }
+	}
+}
+
+/**
+ * `packagesRoot`, `git`, `dirty`, `dist` and `staleDist` describe the checkout the packages were measured from
+ * (`BENCH_PACKAGES_ROOT`, or the harness's repository); `harnessGit` is the harness's own commit.
+ */
 function runInfo() {
-	const info = {
+	const measured = gitState(packagesRoot)
+	const harness = packagesRoot === harnessRoot ? measured : gitState(harnessRoot)
+	return {
 		machine: { cpu: cpus()[0]?.model, cores: cpus().length, totalMemoryBytes: totalmem(), node: process.version, platform: `${platform()} ${process.arch}`, loadAtStart: loadavg() },
-		git: null,
-		dirty: null,
+		packagesRoot: packagesRoot.replace(/\/$/, ''),
+		git: measured.hash,
+		dirty: measured.dirty,
+		harnessGit: harness.hash,
+		harnessDirty: harness.dirty,
 		dist: Object.fromEntries(PACKAGES.map(pkg => [pkg, distFingerprint(pkg)])),
 		staleDist: staleDistPackages(),
 	}
-	try {
-		info.git = git('rev-parse', '--short', 'HEAD')
-			.trim()
-		info.dirty = git('status', '--porcelain')
-			.trim() !== ''
-	}
-	catch {
-		// not a git checkout: leave null
-	}
-	return info
 }
 
 async function main() {
 	const args = parseArgs(process.argv.slice(2))
+	assertBuilt()
 	const all = await listScenarios()
 	if (args.list) {
 		for (const s of all)

@@ -19,7 +19,7 @@ import process from 'node:process'
 // any scenario module can load Vue, so the harness and the scenarios are imported dynamically, after it.
 process.env.NODE_ENV = 'production'
 
-const { enableProfileMode, measureAllocation, measureCase } = await import('./lib/harness.mjs')
+const { enableProfileMode, measureAllocation, measureCase, runClockMarkers, takeProfileWindows } = await import('./lib/harness.mjs')
 const { findScenario } = await import('./scenarios/index.mjs')
 
 const RESULT_MARKER = '__BENCH_RESULT__'
@@ -69,6 +69,10 @@ function log(message) {
 /**
  * Runs `measure` under the V8 CPU profiler (the same sampler as `node --cpu-prof`, started through the
  * inspector so that only the measurement is profiled, not the fixture set-up) and writes a .cpuprofile.
+ *
+ * Next to it goes a `.windows.json` sidecar: the start and end instant of every clocked batch, and two sets of
+ * clock markers (taken right after the profiler starts and right before it stops) with which the summarizer maps
+ * those instants onto the profile's sample timestamps. All instants are `performance.now()` milliseconds.
  */
 async function profiled(args, scenario, variant, size, measure) {
 	enableProfileMode()
@@ -81,16 +85,22 @@ async function profiled(args, scenario, variant, size, measure) {
 	await post('Profiler.setSamplingInterval', { interval: 200 })
 	await post('Profiler.start')
 	let result
+	let head = []
+	let tail = []
 	try {
+		head = runClockMarkers()
 		result = await measure()
+		tail = runClockMarkers()
 	}
 	finally {
 		const { profile } = await post('Profiler.stop')
 		session.disconnect()
 		const file = `${args.profileDir}/${scenario.id}.${variant.name}.${size}.${args.mode}.cpuprofile`
 		writeFileSync(file, JSON.stringify(profile))
-		log(`  profile written to ${file}`)
-		result = { ...(result ?? {}), profileFile: file }
+		const windowsFile = file.replace(/\.cpuprofile$/, '.windows.json')
+		writeFileSync(windowsFile, JSON.stringify({ version: 1, clock: 'performance.now() milliseconds', markers: { head, tail }, windows: takeProfileWindows() }))
+		log(`  profile written to ${file} (windows: ${windowsFile})`)
+		result = { ...(result ?? {}), profileFile: file, windowsFile }
 	}
 	return result
 }

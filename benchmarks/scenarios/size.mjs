@@ -20,7 +20,7 @@ import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { brotliCompressSync, gzipSync } from 'node:zlib'
-import { root } from '../lib/load.mjs'
+import { assertBuilt, harnessRoot, root } from '../lib/load.mjs'
 import { formatBytes } from '../lib/report.mjs'
 import { percentile, summarize } from '../lib/stats.mjs'
 
@@ -54,20 +54,24 @@ function closureOf(file, seen = new Set()) {
 	return seen
 }
 
+/** The minifier comes from the harness's repository first, so every measured checkout is minified by the same one. */
 function findEsbuild() {
-	const store = join(root, 'node_modules', '.pnpm')
-	if (!existsSync(store))
-		return null
-	const dir = readdirSync(store)
-		.find(name => name.startsWith('esbuild@'))
-	if (dir === undefined)
-		return null
-	try {
-		return createRequire(join(store, dir, 'node_modules', 'esbuild', 'package.json'))('esbuild')
+	for (const base of new Set([harnessRoot, root])) {
+		const store = join(base, 'node_modules', '.pnpm')
+		if (!existsSync(store))
+			continue
+		const dir = readdirSync(store)
+			.find(name => name.startsWith('esbuild@'))
+		if (dir === undefined)
+			continue
+		try {
+			return createRequire(join(store, dir, 'node_modules', 'esbuild', 'package.json'))('esbuild')
+		}
+		catch {
+			// try the next candidate
+		}
 	}
-	catch {
-		return null
-	}
+	return null
 }
 
 function measureSizes() {
@@ -187,6 +191,7 @@ export const scenarios = [
 		summary: 'Bytes of every published entry point (raw, gzip, minified).',
 		note: 'each figure is the whole import closure of the entry inside its package: shared chunks are counted in every entry that imports them (entries are not additive) and no tree-shaking is applied (an upper bound); external dependencies (alien-signals for Core) are not included',
 		async execute() {
+			assertBuilt()
 			return { tables: [measureSizes()] }
 		},
 	},
@@ -197,6 +202,7 @@ export const scenarios = [
 		jitless: false,
 		summary: 'Cold import time of the entry points in a fresh Node process, normal and --jitless.',
 		async execute({ quick }) {
+			assertBuilt()
 			return { tables: [measureLoad({ quick })] }
 		},
 	},

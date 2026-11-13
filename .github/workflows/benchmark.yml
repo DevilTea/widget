@@ -1,0 +1,119 @@
+name: Benchmark
+
+# Compares several commits in ONE job on a hosted runner (see benchmarks/ci/README.md).
+#
+# - workflow_dispatch: the inputs override the fields of benchmarks/ci/request.json. GitHub only offers this trigger
+#   (the "Run workflow" button, `gh workflow run benchmark.yml`) once this file is on the default branch.
+# - push to a perf/** branch that changes benchmarks/ci/request.json: this is how a run is started before the workflow
+#   reaches the default branch. Commit a new request and push.
+#
+# It never runs for pull requests or on a schedule, is not a required check, and only reports: read-only permissions,
+# an artifact and the job summary. A regression in the comparison does not fail the job.
+on:
+  workflow_dispatch:
+    inputs:
+      refs:
+        description: Comma-separated git refs or SHAs, the base first (empty = benchmarks/ci/request.json)
+        required: false
+        default: ''
+      filters:
+        description: Comma-separated scenario ids or prefixes (empty = the request's)
+        required: false
+        default: ''
+      modes:
+        description: Comma-separated, from normal,jitless,alloc (empty = the request's)
+        required: false
+        default: ''
+      sizes:
+        description: Comma-separated widget counts (empty = the request's)
+        required: false
+        default: ''
+      rounds:
+        description: Rounds per ref, 1 to 20 (empty = the request's)
+        required: false
+        default: ''
+      quickjs:
+        description: Also run the QuickJS suite
+        type: choice
+        options: [request, 'true', 'false']
+        default: request
+      quick:
+        description: Quick mode (few samples; only for testing the workflow)
+        type: choice
+        options: [request, 'true', 'false']
+        default: request
+      note:
+        description: Free text shown at the top of the summary
+        required: false
+        default: ''
+  push:
+    branches: ['perf/**']
+    paths: [benchmarks/ci/request.json]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A benchmark that is running is never cancelled by a newer push; the newer one waits.
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Compare commits (one job, interleaved)
+    if: github.repository == 'DevilTea/widget'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 24
+          pnpm-version: 10.34.4
+      - name: Resolve the request
+        env:
+          BENCH_REQ_REFS: ${{ inputs.refs }}
+          BENCH_REQ_FILTERS: ${{ inputs.filters }}
+          BENCH_REQ_MODES: ${{ inputs.modes }}
+          BENCH_REQ_SIZES: ${{ inputs.sizes }}
+          BENCH_REQ_ROUNDS: ${{ inputs.rounds }}
+          BENCH_REQ_QUICKJS: ${{ inputs.quickjs }}
+          BENCH_REQ_QUICK: ${{ inputs.quick }}
+          BENCH_REQ_NOTE: ${{ inputs.note }}
+        run: |
+          node benchmarks/ci/run-ab.mjs resolve \
+            --request benchmarks/ci/request.json \
+            --out "$RUNNER_TEMP/request.resolved.json"
+      - name: Install workspace dependencies (harness checkout)
+        # The harness itself needs only Node; the workspace's esbuild is used by `size.bytes` and by the QuickJS bundle.
+        run: pnpm install --frozen-lockfile
+      - name: Check out, install and build every ref
+        run: |
+          node benchmarks/ci/run-ab.mjs prepare \
+            --request "$RUNNER_TEMP/request.resolved.json" \
+            --refs-dir "$RUNNER_TEMP/refs"
+      - name: Measure (interleaved rounds) and compare
+        run: |
+          node benchmarks/ci/run-ab.mjs run \
+            --request "$RUNNER_TEMP/request.resolved.json" \
+            --refs-dir "$RUNNER_TEMP/refs" \
+            --out results
+      - name: Publish the comparison to the job summary
+        if: always()
+        run: |
+          if [ -f results/summary.md ]; then
+            cat results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No benchmark summary was produced; see the step logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: benchmark-results
+          path: results
+          if-no-files-found: warn
+          retention-days: 30

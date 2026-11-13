@@ -1,6 +1,6 @@
 /**
  * `node benchmarks/profile.mjs <scenario> --variant <name> --size <n> [--mode normal|jitless] [--top 15] [--out dir]`
- * `node benchmarks/profile.mjs --summarize <file.cpuprofile> [--top 15]`
+ * `node benchmarks/profile.mjs --summarize <file.cpuprofile> [--top 15]`   (uses <file>.windows.json when it exists)
  *
  * Runs one scenario variant at one size under the V8 CPU profiler (in a child process, so the fixture
  * set-up is not profiled) and prints the top functions by self and by inclusive time, mapped back to
@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { formatProfileSummary, summarizeProfile } from './lib/cpuprofile.mjs'
+import { formatProfileSummary, loadWindows, summarizeProfile } from './lib/cpuprofile.mjs'
 
 const worker = fileURLToPath(new URL('./worker.mjs', import.meta.url))
 
@@ -45,7 +45,7 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2))
 if (args.summarize !== null) {
 	const profile = JSON.parse(readFileSync(args.summarize, 'utf8'))
-	console.log(formatProfileSummary(args.summarize, summarizeProfile(profile, { top: args.top })))
+	console.log(formatProfileSummary(args.summarize, summarizeProfile(profile, { top: args.top, windows: loadWindows(args.summarize) })))
 }
 else {
 	if (args.scenario === null || args.size === null)
@@ -67,7 +67,7 @@ else {
 			if (row.profileFile === undefined)
 				continue
 			const profile = JSON.parse(readFileSync(row.profileFile, 'utf8'))
-			console.log(formatProfileSummary(`${args.scenario} / ${variant.name} @ ${row.size} [${args.mode}] (median ${(row.median / 1e3).toFixed(1)} us per run, spread ${(row.spread * 100).toFixed(1)}%)`, summarizeProfile(profile, { top: args.top })))
+			console.log(formatProfileSummary(`${args.scenario} / ${variant.name} @ ${row.size} [${args.mode}] (median ${(row.median / 1e3).toFixed(1)} us per run, spread ${(row.spread * 100).toFixed(1)}%)`, summarizeProfile(profile, { top: args.top, windows: loadWindows(row.profileFile) })))
 			console.log(`\nprofile: ${row.profileFile}\n`)
 		}
 	}

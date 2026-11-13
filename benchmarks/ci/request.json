@@ -1,0 +1,10 @@
+{
+	"refs": ["38cff3c", "perf/benchmark-baseline"],
+	"filters": ["runtime.create", "embedded.loop", "blueprint.compile.valid"],
+	"modes": ["normal", "jitless"],
+	"sizes": [],
+	"rounds": 2,
+	"quickjs": true,
+	"quick": false,
+	"note": "Smoke request and noise floor: both refs have identical packages/, so every difference shown is noise."
+}

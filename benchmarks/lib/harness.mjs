@@ -35,21 +35,66 @@ import { flagsFor, summarize } from './stats.mjs'
 const collectGarbage = typeof globalThis.gc === 'function' ? globalThis.gc : null
 
 /**
- * Profile mode (see profile.mjs): no forced collection between samples, longer sampling, and the case's
- * un-timed callbacks are wrapped in functions with fixed names so the profile summary can drop the samples
- * that belong to set-up and clean-up.
+ * Profile mode (see profile.mjs): no forced collection between samples, longer sampling, and the start and
+ * end instant of the clocked region of every batch are recorded (`performance.now()`, milliseconds), so the
+ * profile summary can keep exactly the samples taken while the clock was running and call everything else
+ * set-up, clean-up or harness. Bounding the timed region by time instead of by a wrapper function name is
+ * what makes the attribution immune to inlining.
  */
 let profileMode = false
+let windows = []
 export function enableProfileMode() {
 	profileMode = true
+	windows = []
 }
-function instrumentForProfile(c) {
-	const wrapped = { ...c }
-	if (c.fresh)
-		wrapped.fresh = function benchUntimedFresh(i) { return c.fresh(i) }
-	if (c.after)
-		wrapped.after = function benchUntimedAfter(i, o) { return c.after(i, o) }
-	return wrapped
+
+/** The clocked regions recorded since the last call, as [start, end] pairs of `performance.now()` milliseconds. */
+export function takeProfileWindows() {
+	const taken = windows
+	windows = []
+	return taken
+}
+
+/**
+ * Busy-waits in a function with a fixed name, so that the samples taken inside it can be recognized in the
+ * profile. The loop is long-running and the function is called a handful of times, so it runs as its own frame.
+ */
+function benchClockMarker(ms) {
+	const end = now() + ms
+	let x = 0
+	while (now() < end)
+		x += Math.sqrt(x + 1)
+	return x
+}
+function benchClockGap(ms) {
+	const end = now() + ms
+	let x = 0
+	while (now() < end)
+		x += Math.sqrt(x + 3)
+	return x
+}
+
+const MARKER_COUNT = 24
+const MARKER_MS = 2
+const MARKER_GAP_MS = 1.2
+
+/**
+ * Calibration of the profile's clock: MARKER_COUNT busy-waits of MARKER_MS ms in benchClockMarker, separated by
+ * gaps in benchClockGap, and the instants at which each marker started and ended. Run right after the profiler
+ * starts and right before it stops; the summarizer finds the samples inside benchClockMarker and fits the
+ * offset between this clock and the profile's (see lib/cpuprofile.mjs). Returns [start, end] pairs of
+ * `performance.now()` milliseconds.
+ */
+export function runClockMarkers() {
+	const out = []
+	for (let i = 0; i < MARKER_COUNT; i++) {
+		benchClockGap(MARKER_GAP_MS)
+		const start = now()
+		benchClockMarker(MARKER_MS)
+		out.push([start, now()])
+	}
+	benchClockGap(MARKER_GAP_MS)
+	return out
 }
 
 /** Keeps the value of the last call reachable so the work that produced it cannot be optimized away. */
@@ -118,6 +163,8 @@ function timeBatch(c, batch, warm) {
 		for (let i = 0; i < batch; i++)
 			c.after(inputs === null ? undefined : inputs[i], outputs[i])
 	}
+	if (profileMode)
+		windows.push([start, end])
 	return ((end - start) * 1e6) / batch
 }
 
@@ -143,6 +190,8 @@ async function timeBatchAsync(c, batch, warm) {
 			outputs[i] = out
 	}
 	const end = now()
+	if (profileMode)
+		windows.push([start, end])
 	if (outputs !== null) {
 		for (let i = 0; i < batch; i++)
 			c.after(inputs === null ? undefined : inputs[i], outputs[i])
@@ -160,13 +209,12 @@ function pickBatch(singleNs, cap) {
 /**
  * Measures one case. Returns the summary of per-call nanoseconds plus how it was obtained.
  *
- * @param {object} original the case (see above)
+ * @param {object} c the case (see above)
  * @param {{ quick?: boolean }} [options]
  */
-export async function measureCase(original, options = {}) {
-	const c = profileMode ? instrumentForProfile(original) : original
+export async function measureCase(c, options = {}) {
 	try {
-		if (original.warmPass && original.fresh)
+		if (c.warmPass && c.fresh)
 			throw new Error('a case with warmPass: true must not define fresh(): the warm pass has no input to consume')
 		return await measureCaseBody(c, options)
 	}
