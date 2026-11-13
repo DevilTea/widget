@@ -143,10 +143,7 @@ function generateGraph(seed: number, size: number): Graph {
 			nodePotential += potential[input]!
 			kept.push(input)
 		}
-		// In the largest graphs only near the top: a wrapped diagnostic carries its whole cause chain, so a
-		// diagnostic deep in a long chain makes every dependent above it slow to build and to compare.
-		const diagnosable = size < 1000 || index >= size - 150
-		const diagnoseWhen = diagnosable && random() < 0.08 && nodePotential < MAX_POTENTIAL_DIAGNOSTICS ? Math.floor(random() * 7) : null
+		const diagnoseWhen = random() < 0.08 && nodePotential < MAX_POTENTIAL_DIAGNOSTICS ? Math.floor(random() * 7) : null
 		if (diagnoseWhen !== null)
 			nodePotential++
 		potential.push(nodePotential)
@@ -159,7 +156,8 @@ function generateGraph(seed: number, size: number): Graph {
 			index,
 			inputs: kept.map(input => `n${input}`),
 			diagnoseWhen,
-			throwWhen: random() < 0.04 ? Math.floor(random() * 11) : null,
+			// Rare in the largest graphs: a throw anywhere on a long chain would dominate every failure above it.
+			throwWhen: random() < (size >= 1000 ? 0.002 : 0.04) ? Math.floor(random() * 11) : null,
 			gate,
 			catchInputs: random() < 0.1,
 		})
@@ -173,17 +171,40 @@ function generateGraph(seed: number, size: number): Graph {
 
 type Outcome = { readonly value: unknown } | { readonly threw: string }
 
-function outcomeOf(read: () => ExecutionResult<unknown, unknown>): Outcome {
+type GraphRuntime = WidgetSystemRuntime<readonly [typeof nodePlugin, typeof graphPlugin]>
+
+interface DiagnosticRecord {
+	readonly location: { readonly widgetId?: string }
+	readonly cause?: DiagnosticRecord
+}
+
+/**
+ * Each diagnostic with its own fields, and its `cause` as the place of that diagnostic in its dependency's
+ * current snapshot. A cause chain is as long as the failing dependency chain, so comparing this one-level
+ * description node by node compares every chain completely, without a deep (recursive) equality over it.
+ */
+function describeDiagnostics(runtime: GraphRuntime, diagnostics: readonly unknown[]): unknown[] {
+	return (diagnostics as readonly DiagnosticRecord[]).map((diagnostic) => {
+		const cause = diagnostic.cause
+		if (cause === undefined)
+			return diagnostic
+		const owner = Number(cause.location.widgetId!.slice(1))
+		return { ...diagnostic, cause: { owner, index: nodeOf(runtime, owner).properties.out.getDiagnostics()
+			.indexOf(cause as never) } }
+	})
+}
+
+function outcomeOf(runtime: GraphRuntime, read: () => ExecutionResult<unknown, unknown>): Outcome {
 	try {
 		const result = read()
-		return { value: result.ok ? result.value : { diagnostics: result.failure.diagnostics } }
+		return { value: result.ok ? result.value : { diagnostics: describeDiagnostics(runtime, result.failure.diagnostics) } }
 	}
 	catch (error) {
 		return { threw: error instanceof Error ? error.message : String(error) }
 	}
 }
 
-function nodeOf(runtime: WidgetSystemRuntime<readonly [typeof nodePlugin, typeof graphPlugin]>, index: number) {
+function nodeOf(runtime: GraphRuntime, index: number) {
 	const widget = runtime.getWidget(`n${index}`)
 	if (widget?.type !== 'node')
 		throw new Error('expected a node widget')
@@ -213,6 +234,16 @@ afterEach(async () => {
 })
 
 const SIZES = [12, 30, 80, 250, 6000]
+
+/** The longest cause chain any head of any seed ended with, walked iteratively (see the last test). */
+let longestCauseChain = 0
+
+function causeChainLength(diagnostic: DiagnosticRecord | undefined): number {
+	let length = 0
+	for (let current = diagnostic; current !== undefined; current = current.cause)
+		length++
+	return length
+}
 const SEEDS = Array.from({ length: 15 }, (_, index) => index + 1)
 
 describe('deep dependency graphs read cold from their heads', () => {
@@ -251,15 +282,15 @@ describe('deep dependency graphs read cold from their heads', () => {
 		}
 
 		// A: a cold subscription to a third of the heads, then cold direct reads of every head.
-		const delivered = new Map<number, unknown>()
+		const delivered = new Map<number, ExecutionResult<unknown, unknown>>()
 		const subscribed = graph.heads.filter(() => random() < 0.33)
 		for (const head of subscribed) {
 			nodeOf(a, head).properties.out.subscribe((result) => {
-				delivered.set(head, result.ok ? result.value : { diagnostics: result.failure.diagnostics })
+				delivered.set(head, result)
 			})
 		}
-		const readHeadsOfA = () => new Map(graph.heads.map(head => [head, outcomeOf(() => nodeOf(a, head).properties.out.get())]))
-		const readAllOfB = () => graph.configs.map(config => outcomeOf(() => nodeOf(b, config.index).properties.out.get()))
+		const readHeadsOfA = () => new Map(graph.heads.map(head => [head, outcomeOf(a, () => nodeOf(a, head).properties.out.get())]))
+		const readAllOfB = () => graph.configs.map(config => outcomeOf(b, () => nodeOf(b, config.index).properties.out.get()))
 
 		const compareHeads = () => {
 			const ofA = readHeadsOfA()
@@ -268,8 +299,8 @@ describe('deep dependency graphs read cold from their heads', () => {
 				expect(ofA.get(head), `head n${head}`)
 					.toEqual(ofB[head])
 				if ('value' in ofB[head]!) {
-					expect(nodeOf(a, head).properties.out.getDiagnostics(), `diagnostics of head n${head}`)
-						.toEqual(nodeOf(b, head).properties.out.getDiagnostics())
+					expect(describeDiagnostics(a, nodeOf(a, head).properties.out.getDiagnostics()), `diagnostics of head n${head}`)
+						.toEqual(describeDiagnostics(b, nodeOf(b, head).properties.out.getDiagnostics()))
 				}
 			}
 			return ofB
@@ -287,8 +318,8 @@ describe('deep dependency graphs read cold from their heads', () => {
 			for (const head of subscribed) {
 				const outcome = ofB[head]!
 				if ('value' in outcome && delivered.has(head)) {
-					expect(delivered.get(head), `delivered to head n${head}`)
-						.toEqual(outcome.value)
+					expect(outcomeOf(a, () => delivered.get(head)!), `delivered to head n${head}`)
+						.toEqual(outcome)
 				}
 			}
 		}
@@ -297,17 +328,28 @@ describe('deep dependency graphs read cold from their heads', () => {
 		const ofB = readAllOfB()
 		const throwing = new Set<string>()
 		for (let index = size - 1; index >= 0; index--) {
-			expect(outcomeOf(() => nodeOf(a, index).properties.out.get()), `n${index}`)
+			expect(outcomeOf(a, () => nodeOf(a, index).properties.out.get()), `n${index}`)
 				.toEqual(ofB[index])
 			if ('threw' in ofB[index]!) {
 				throwing.add(`n${index}`)
 				continue
 			}
-			expect(nodeOf(a, index).properties.out.getDiagnostics(), `diagnostics of n${index}`)
-				.toEqual(nodeOf(b, index).properties.out.getDiagnostics())
+			expect(describeDiagnostics(a, nodeOf(a, index).properties.out.getDiagnostics()), `diagnostics of n${index}`)
+				.toEqual(describeDiagnostics(b, nodeOf(b, index).properties.out.getDiagnostics()))
 		}
-		const settled = (diagnostics: readonly unknown[]) => diagnostics.filter(diagnostic => !throwing.has((diagnostic as { location: { widgetId: string } }).location.widgetId))
-		expect(settled(a.getDiagnostics()))
-			.toEqual(settled(b.getDiagnostics()))
+		const settled = (runtime: GraphRuntime) => describeDiagnostics(runtime, runtime.getDiagnostics()
+			.filter(diagnostic => !throwing.has((diagnostic as { location: { widgetId: string } }).location.widgetId)))
+		expect(settled(a))
+			.toEqual(settled(b))
+		for (const head of graph.heads) {
+			for (const diagnostic of nodeOf(a, head).properties.out.getDiagnostics())
+				longestCauseChain = Math.max(longestCauseChain, causeChainLength(diagnostic as DiagnosticRecord))
+		}
+	})
+
+	// Runs after every seed above: the failing chains compared there include ones far longer than V8 nests.
+	it('include failing chains far longer than the engine could nest', () => {
+		expect(longestCauseChain)
+			.toBeGreaterThan(1_000)
 	})
 })
