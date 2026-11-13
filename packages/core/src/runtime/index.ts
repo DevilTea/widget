@@ -35,8 +35,16 @@ import { createStateLedger, createStatePrimitive, restoreInitialState } from './
 import { assertSyncValue } from './sync'
 import { buildRuntimeWidget } from './widget'
 
+/**
+ * Adds `key` to `record` as an own, enumerable, writable, configurable data property. Plain assignment
+ * does exactly that unless the key exists on `Object.prototype` (`__proto__` is a setter there), so only
+ * those keys pay for `defineProperty`.
+ */
 function defineOwnValue(record: Record<string, unknown>, key: string, value: unknown): void {
-	Object.defineProperty(record, key, { value, enumerable: true, writable: true, configurable: true })
+	if (key in Object.prototype)
+		Object.defineProperty(record, key, { value, enumerable: true, writable: true, configurable: true })
+	else
+		record[key] = value
 }
 
 export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
@@ -265,7 +273,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	function snapshotState(): Record<WidgetId, Record<WidgetMemberKey, unknown>> {
 		context.assertActive()
 		// Plain objects owned by the caller. Keys are arbitrary strings (`__proto__` included), so they are
-		// defined as own data properties instead of assigned.
+		// always own data properties (see `defineOwnValue`).
 		const snapshot: Record<WidgetId, Record<WidgetMemberKey, unknown>> = {}
 		for (const nodeId of compiled.semanticOrder) {
 			const node = compiled.nodes[nodeId]
