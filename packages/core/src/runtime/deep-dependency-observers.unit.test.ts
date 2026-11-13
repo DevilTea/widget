@@ -433,6 +433,122 @@ describe('foreign code reading a Property while a deep read of it is in progress
 		expect(Math.max(...env.computeCalls))
 			.toBeLessThanOrEqual(4)
 	})
+
+	it('gets its value once wherever the listener sits, also while the head itself is being evaluated again', () => {
+		// A listener near the head runs while the read in progress evaluates the head again after an abandonment,
+		// so the head it reads is still evaluating; one far down runs while the driver completes a deeper link.
+		for (const at of [99, 95, 90, 85, 60, 20]) {
+			const graph = createGraph(chain(100))
+			const inspection = inspectRuntime(graph.runtime)
+			const nodeId = inspection.blueprint.nodes.find(entry => entry.resolved && entry.node.id === `n${at}`)!.nodeId
+			const seen: unknown[] = []
+			inspection.getWidget(nodeId)!.getProperty('out')!.subscribe(() => {
+				seen.push(graph.node(99).properties.out.get())
+			})
+
+			expect(graph.node(99).properties.out.get(), `listener at n${at}`)
+				.toEqual({ ok: true, value: 100 })
+			expect(seen, `listener at n${at}`)
+				.toEqual([{ ok: true, value: 100 }])
+			expect(Math.max(...env.computeCalls), `listener at n${at}`)
+				.toBeLessThanOrEqual(4)
+		}
+		expect(reported)
+			.toEqual([])
+	})
+
+	it('leaves every Property following later writes when the chain is re-read with every link stale', () => {
+		// Every link reads its own State first: after every State is written, each re-evaluation nests the next
+		// one, and the read is abandoned and completed like a first read. A listener reads the head in the middle.
+		for (const at of [95, 70, 40]) {
+			const graph = createGraph(chain(100))
+			graph.node(99).properties.out.get()
+			const inspection = inspectRuntime(graph.runtime)
+			const nodeId = inspection.blueprint.nodes.find(entry => entry.resolved && entry.node.id === `n${at}`)!.nodeId
+			const seen: unknown[] = []
+			let armed = true
+			inspection.getWidget(nodeId)!.getProperty('out')!.subscribe(() => {
+				if (armed)
+					seen.push(graph.node(99).properties.out.get())
+			})
+			for (let index = 0; index < 100; index++)
+				graph.node(index).state.n.set(2)
+
+			expect(graph.node(99).properties.out.get(), `listener at n${at}`)
+				.toEqual({ ok: true, value: 200 })
+			expect(seen, `listener at n${at}`)
+				.toEqual([{ ok: true, value: 200 }])
+			armed = false
+			for (let index = 0; index < 100; index += 7)
+				graph.node(index).state.n.set(3)
+			const expected = Array.from({ length: 100 }, (_, index) => (index % 7 === 0 ? 3 : 2))
+			for (let index = 0, sum = 0; index < 100; index++) {
+				sum += expected[index]!
+				expect(graph.node(index).properties.out.get(), `listener at n${at}, n${index}`)
+					.toEqual({ ok: true, value: sum })
+			}
+		}
+		expect(reported)
+			.toEqual([])
+	})
+})
+
+describe('a listener reading, through another Property, a link whose re-evaluation is in progress', () => {
+	it('leaves the links above it following later writes', () => {
+		// Q (n100) reads n{target}. While a re-read of the stale chain completes a stretch of links, the listener
+		// of n30 reads Q, which reads a link whose evaluation is in progress further up the stack: that link is
+		// replaced by a fresh computed for the listener's read, and the link above it, which reads it, must follow
+		// the fresh one.
+		for (let target = 31; target <= 42; target++) {
+			const configs = chain(100)
+			configs.push({ index: 100, prev: `n${target}` })
+			const graph = createGraph(configs)
+			graph.node(99).properties.out.get()
+			graph.node(100).properties.out.get()
+			const inspection = inspectRuntime(graph.runtime)
+			const nodeId = inspection.blueprint.nodes.find(entry => entry.resolved && entry.node.id === 'n30')!.nodeId
+			let armed = true
+			inspection.getWidget(nodeId)!.getProperty('out')!.subscribe(() => {
+				if (armed) {
+					armed = false
+					graph.node(100).properties.out.get()
+				}
+			})
+			for (let index = 0; index < 100; index++)
+				graph.node(index).state.n.set(2)
+
+			expect(graph.node(99).properties.out.get(), `Q reads n${target}`)
+				.toEqual({ ok: true, value: 200 })
+			graph.node(target - 2).state.n.set(5)
+			expect(graph.node(99).properties.out.get(), `Q reads n${target}, after a write below it`)
+				.toEqual({ ok: true, value: 203 })
+			expect(graph.node(100).properties.out.get(), `Q reads n${target}, after a write below it`)
+				.toEqual({ ok: true, value: 1 + 2 * (target + 1) + 3 })
+		}
+		expect(reported)
+			.toEqual([])
+	})
+})
+
+describe('a compute that catches an abandonment and reads another Property while the read unwinds', () => {
+	it('leaves that Property following the State the read saw', () => {
+		// n59 reads its predecessor inside try/catch and, when that read throws, n60, which reads n50: the
+		// abandonment of the re-read reaches n59 while n50 is itself abandoned, and n59 then reads n60.
+		const configs = chain(60, index => (index === 59 ? { catchPrev: true, onCatch: 'n60' } : {}))
+		configs.push({ index: 60, prev: 'n50' })
+		const graph = createGraph(configs)
+		expect(graph.node(59).properties.out.get())
+			.toEqual({ ok: true, value: 60 })
+		expect(graph.node(60).properties.out.get())
+			.toEqual({ ok: true, value: 52 })
+		for (let index = 0; index < 60; index++)
+			graph.node(index).state.n.set(2)
+
+		expect(graph.node(59).properties.out.get())
+			.toEqual({ ok: true, value: 120 })
+		expect(graph.node(60).properties.out.get())
+			.toEqual({ ok: true, value: 103 })
+	})
 })
 
 describe('a read nested in an evaluation (a Method a compute invokes reads a Property)', () => {
