@@ -531,3 +531,52 @@ describe('definition diagnostic codes do not depend on message text', () => {
 			.toEqual(['invalid-widget-slot'])
 	})
 })
+
+describe('duplicate id with many colliders', () => {
+	it('relates each collider to every other one in source order, and freezes the aggregate, the per-node lists, the diagnostics and their locations', () => {
+		const count = 60
+		const blueprint = system.createBlueprint({
+			id: 'root',
+			type: 'container',
+			slots: { children: Array.from({ length: count }, () => ({ id: 'dup', type: 'leaf' })) },
+		})
+		const children = blueprint.getChildrenAt(blueprint.root, 'children')
+		expect(children)
+			.toHaveLength(count)
+
+		expect(Object.isFrozen(blueprint.diagnostics))
+			.toBe(true)
+		expect(blueprint.diagnostics)
+			.toHaveLength(count)
+		children.forEach((node, position) => {
+			expect(Object.isFrozen(node.diagnostics))
+				.toBe(true)
+			expect(node.diagnostics)
+				.toHaveLength(1)
+			// The per-node list and the aggregate list hold the very same diagnostic object.
+			const diagnostic = at(node.diagnostics.filter(isDefinitionDiagnostic), 0)
+			expect(blueprint.diagnostics)
+				.toContain(diagnostic)
+			expect(Object.isFrozen(diagnostic))
+				.toBe(true)
+			expect(Object.isFrozen(diagnostic.location))
+				.toBe(true)
+			expect(diagnostic.location)
+				.toEqual({ type: 'widget', node })
+			const related = (relatedOf(diagnostic) ?? []) as readonly { readonly type: string, readonly node: unknown }[]
+			expect(Object.isFrozen(related))
+				.toBe(true)
+			expect(related)
+				.toHaveLength(count - 1)
+			const expectedNodes = children.filter((_, other) => other !== position)
+			expect(related.every((location, index) => location.node === expectedNodes[index]))
+				.toBe(true)
+			for (const location of related) {
+				expect(Object.isFrozen(location))
+					.toBe(true)
+				expect(location.type)
+					.toBe('widget')
+			}
+		})
+	})
+})

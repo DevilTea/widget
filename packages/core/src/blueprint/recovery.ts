@@ -32,7 +32,7 @@ import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { MAX_JSON_DEPTH } from '../json'
 import { readWidgetPluginDefinition } from '../plugin'
 import { assertSyncValue } from '../runtime/sync'
-import { configDiagnostic, createCollector, definitionDiagnostic, widgetLocation } from './diagnostics'
+import { configDiagnostic, createCollector, definitionDiagnostic, sharedWidgetLocation } from './diagnostics'
 
 /**
  * Compiler-internal working record for one recovered node. Mutable during construction; every field
@@ -523,11 +523,10 @@ function emitDuplicateIdDiagnostics(ctx: BuildContext, index: ReadonlyMap<Widget
 		if (ids.length < 2)
 			continue
 
-		for (const nodeId of ids) {
+		const locations = ids.map(id => sharedWidgetLocation(ctx.nodes[id]!.publicNode))
+		for (const [position, nodeId] of ids.entries()) {
 			const node = ctx.nodes[nodeId]!
-			const related = ids
-				.filter(otherId => otherId !== nodeId)
-				.map(otherId => widgetLocation(ctx.nodes[otherId]!.publicNode))
+			const related = locations.filter((_, otherPosition) => otherPosition !== position)
 			ctx.finalDiagnostics.push(definitionDiagnostic(node.publicNode, 'duplicate-widget-id', `Duplicate widget id "${node.id}".`, ['id'], related))
 		}
 	}

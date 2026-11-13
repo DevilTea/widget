@@ -22,7 +22,7 @@ import { createDependencyBuilder, isDepExpression, readDepExpression } from '../
 import { compiledDependencyBrand } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
 import { assertSyncValue } from '../runtime/sync'
-import { dependencyDiagnostic, widgetLocation } from './diagnostics'
+import { dependencyDiagnostic, sharedWidgetLocation, widgetLocation } from './diagnostics'
 
 export interface GraphEdge {
 	readonly fromKind: 'property' | 'method'
@@ -207,7 +207,7 @@ function resolveLeaf(
 	}
 
 	if (candidateIds.length > 1) {
-		const related = candidateIds.map(id => widgetLocation(nodes[id]!.publicNode))
+		const related = candidateIds.map(id => sharedWidgetLocation(nodes[id]!.publicNode))
 		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'ambiguous-dependency-target', 'Dependency target is ambiguous: multiple widgets share that id.', reference, related))
 		return invalidDependency(reference, refinements)
 	}
