@@ -8,6 +8,7 @@ export default defineConfig({
 	themeConfig: {
 		nav: [
 			{ text: 'Packages', link: '/packages/' },
+			{ text: 'Migration', link: '/migration/0.1' },
 			{ text: 'Widget Lab', link: '/lab/', target: '_self' },
 		],
 		sidebar: {
@@ -18,6 +19,14 @@ export default defineConfig({
 						{ text: '@deviltea/widget-core', link: '/packages/widget-core' },
 						{ text: '@deviltea/widget-inspector', link: '/packages/widget-inspector' },
 						{ text: '@deviltea/widget-vue', link: '/packages/widget-vue' },
+					],
+				},
+			],
+			'/migration/': [
+				{
+					text: 'Migration',
+					items: [
+						{ text: 'From 0.0.x to 0.1', link: '/migration/0.1' },
 					],
 				},
 			],

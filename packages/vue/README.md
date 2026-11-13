@@ -3,6 +3,8 @@
 Cross-cutting Diagnostic/Result/Failure/Error conventions are maintained in
 [Widget API conventions](https://github.com/DevilTea/widget/blob/main/docs/architecture/widget-api-conventions.md).
 
+> **Upgrading from 0.0.x?** Follow the [migration guide to 0.1](https://deviltea.github.io/widget/migration/0.1).
+
 > ESM-only package.
 
 [![npm version][npm-version-src]][npm-version-href]
