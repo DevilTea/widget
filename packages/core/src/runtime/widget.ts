@@ -45,30 +45,30 @@ export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolv
 
 	if (definition.state !== null) {
 		const stateSurface: Record<string, unknown> = Object.create(null)
-		for (const [key, primitive] of entry.state)
-			stateSurface[key] = primitive.public
+		for (const key of entry.state.keys())
+			stateSurface[key] = entry.state.get(key)!.public
 		widget.state = Object.freeze(stateSurface)
 		widget.resetState = () => restoreInitialState(context, ledger, stateStart, stateEnd)
 	}
 
 	if (definition.properties !== null) {
 		const propertiesSurface: Record<string, unknown> = Object.create(null)
-		for (const [name, primitive] of entry.properties)
-			propertiesSurface[name] = primitive.public
+		for (const name of entry.properties.keys())
+			propertiesSurface[name] = entry.properties.get(name)!.public
 		widget.properties = Object.freeze(propertiesSurface)
 	}
 
 	if (definition.methods !== null) {
 		const methodsSurface: Record<string, unknown> = Object.create(null)
-		for (const [name, primitive] of entry.methods)
-			methodsSurface[name] = primitive.public
+		for (const name of entry.methods.keys())
+			methodsSurface[name] = entry.methods.get(name)!.public
 		widget.methods = Object.freeze(methodsSurface)
 	}
 
 	if (definition.events !== null) {
 		const eventsSurface: Record<string, unknown> = Object.create(null)
-		for (const [name, primitive] of entry.events)
-			eventsSurface[name] = primitive.public
+		for (const name of entry.events.keys())
+			eventsSurface[name] = entry.events.get(name)!.public
 		widget.events = Object.freeze(eventsSurface)
 	}
 

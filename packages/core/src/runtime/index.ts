@@ -109,7 +109,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		commitHooks[nodeId] = onDiagnosticsCommitted
 
 		stateStart[nodeId] = stateLedger.states.length
-		for (const [key, member] of node.state) {
+		for (const member of node.state.values()) {
+			const { key } = member
 			const primitive = createStatePrimitive(context, {
 				widgetId: node.id,
 				key,
@@ -137,7 +138,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		const buildConfigFragment = configFragments[nodeId]!
 		const overrides = overrideResolution.candidatesByNodeId.get(nodeId)
 
-		for (const [key, member] of node.state) {
+		for (const member of node.state.values()) {
+			const { key } = member
 			const primitive = entry.state.get(key)
 			if (primitive === undefined)
 				continue
@@ -183,7 +185,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			? Object.freeze({})
 			: Object.freeze({ emit: emitter })
 
-		for (const [name, member] of node.properties) {
+		for (const member of node.properties.values()) {
+			const { name } = member
 			const owner = createCallbackOwner(null)
 			const deps = materializeDependencyTree(member.deps, {
 				consumer: 'property',
@@ -209,7 +212,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			entry.properties.set(name, primitive)
 		}
 
-		for (const [name, member] of node.methods) {
+		for (const member of node.methods.values()) {
+			const { name } = member
 			const owner = createCallbackOwner(emitter)
 			const deps = materializeDependencyTree(member.deps, {
 				consumer: 'method',
@@ -240,9 +244,10 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	// 8. Build the RuntimeWidgets (the live Runtime-level diagnostic aggregate was created up front).
 	const runtimeWidgetsByNodeId = new Map<InternalNodeId, unknown>()
 	const nodeIdByRuntimeWidget = new Map<object, InternalNodeId>()
-	for (const [nodeId, entry] of registry) {
+	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
-		if (node === undefined || !node.resolved)
+		const entry = registry.get(nodeId)
+		if (node === undefined || !node.resolved || entry === undefined)
 			continue
 		const runtimeWidget = buildRuntimeWidget(context, node, entry, stateLedger, stateStart[nodeId]!, stateEnd[nodeId]!)
 		runtimeWidgetsByNodeId.set(nodeId, runtimeWidget)
@@ -278,8 +283,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				continue
 
 			let values: Record<WidgetMemberKey, unknown> | null = null
-			for (const [key, primitive] of entry.state) {
-				const value = primitive.internal.get()
+			for (const key of entry.state.keys()) {
+				const value = entry.state.get(key)!.internal.get()
 				if (value !== null)
 					defineOwnValue(values ??= {}, key, value)
 			}
