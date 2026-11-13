@@ -211,8 +211,9 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	/**
-	 * Core offers no disposal notification, so the Agent observes it where it can: when any request arrives,
-	 * before it emits any other event, and when the Agent itself is disposed.
+	 * The Agent observes disposal lazily instead of registering `runtime.subscribeDisposal()`: it checks
+	 * `isDisposed` when any request arrives, before it emits any other event, and when the Agent itself is
+	 * disposed.
 	 */
 	function observeRuntimeDisposal(): boolean {
 		if (!options.runtime.isDisposed)
