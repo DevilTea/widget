@@ -215,13 +215,16 @@ function releaseBatches(): void {
  * inside the release's flush must not leave the depth pinned above `0`, or every later call would look
  * nested and no release would ever run again. Both depth updates are plain expressions, never calls, so
  * they still run when the stack is exhausted.
+ *
+ * `fn` receives `argument`, so a hot path passes a function that already exists together with its
+ * argument instead of allocating a closure per call.
  */
-export function runRuntimeOperation<Result>(fn: () => Result): Result {
+export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument): Result {
 	if (operationDepth === 0)
 		entryBatchDepth = getBatchDepth()
 	++operationDepth
 	try {
-		return fn()
+		return fn(argument as Argument)
 	}
 	finally {
 		try {

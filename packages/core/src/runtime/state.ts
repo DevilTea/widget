@@ -156,7 +156,10 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	const valueSignal = signal<unknown>(null)
 	const diagnosticsSignal = signal<readonly RuntimeStateDiagnostic[]>(EMPTY_DIAGNOSTICS)
 
-	let inspectionSnapshot: Readonly<{ value: unknown }> = Object.freeze({ value: null })
+	// The frozen envelope of the last published value, built when first read (or published to a listener)
+	// and kept until the next change, so a write nobody inspects allocates nothing.
+	let inspectionValue: unknown = null
+	let inspectionSnapshot: Readonly<{ value: unknown }> | null = null
 	// Plain lazy-allocated registration list (diagnostic #10 inspection amendment "runtime inspection,
 	// materialization, disposal, conformance"): never a global registry, allocated only once something
 	// actually subscribes. Not a `Set` keyed by the listener function itself — two independent
@@ -165,16 +168,23 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	interface ListenerEntry { readonly listener: (snapshot: Readonly<{ value: unknown }>) => void }
 	let inspectionListeners: ListenerEntry[] | null = null
 
+	function readInspectionSnapshot(): Readonly<{ value: unknown }> {
+		return inspectionSnapshot ??= Object.freeze({ value: inspectionValue })
+	}
+
 	function publishInspectionSnapshot(value: unknown): void {
-		inspectionSnapshot = Object.freeze({ value })
+		inspectionValue = value
+		inspectionSnapshot = null
 		if (inspectionListeners === null)
 			return
 		// Iterate a stable snapshot taken at publication start: a listener that itself calls `subscribe()`
 		// during this loop must not have its new registration visited by *this* publication (future-changes
 		// -only / no-immediate-emission), which a live-array/live-Set iteration could otherwise do.
 		const listenersSnapshot = inspectionListeners.slice()
+		// Each listener is handed the envelope that is current when it is called: an earlier listener may
+		// have changed the State again.
 		for (const entry of listenersSnapshot)
-			invokeListenerIsolated(entry.listener, inspectionSnapshot)
+			invokeListenerIsolated(entry.listener, readInspectionSnapshot())
 	}
 
 	/**
@@ -198,7 +208,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	}
 
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
-		return runRuntimeOperation(() => attemptSetWithinOperation(candidate))
+		return runRuntimeOperation(attemptSetWithinOperation, candidate)
 	}
 
 	/**
@@ -232,7 +242,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		callbackScope.owner = null
 		try {
 			isValid = params.definition.validate(candidate, ctx)
-			assertSyncValue(isValid, `State "${params.key}"'s validate`)
+			assertSyncValue(isValid, 'State', params.key, 'validate')
 			hasDiagnostic = collector.hasAnyDiagnostic()
 		}
 		finally {
@@ -253,7 +263,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		// Top-level semantic execution values (state values included) must not be `PromiseLike`; a
 		// candidate that would otherwise be accepted must not become the live State value if it is
 		// thenable (diagnostic #10 amendment "synchronous core boundary and future async seams").
-		assertSyncValue(candidate, `State "${params.key}"'s value`)
+		assertSyncValue(candidate, 'State', params.key, 'value')
 
 		// Read the pre-write raw value before committing, using the exact strict-inequality comparison
 		// `alien-signals`' own signal uses to decide whether a write actually changes anything (see the
@@ -291,7 +301,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		getDiagnostics: () => diagnosticsSignal(),
 		attemptSet,
 		inspection: {
-			getSnapshot: () => inspectionSnapshot,
+			getSnapshot: readInspectionSnapshot,
 			subscribe: (listener) => {
 				const entry: ListenerEntry = { listener }
 				if (inspectionListeners === null)

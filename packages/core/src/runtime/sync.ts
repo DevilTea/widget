@@ -10,13 +10,20 @@
  * Checking `typeof value === 'object'` alone misses that callable case, so both representations are
  * treated as thenable candidates before inspecting `.then`.
  */
-export function assertSyncValue(value: unknown, description: string): void {
+export function assertSyncValue(value: unknown, description: string): void
+/**
+ * The same check for the description `${kind} "${name}"'s ${what}`, which is only built when the check
+ * throws: hot paths pass its parts instead of allocating the string on every call.
+ */
+export function assertSyncValue(value: unknown, kind: string, name: string, what: string): void
+export function assertSyncValue(value: unknown, description: string, name?: string, what?: string): void {
 	if (
 		((typeof value === 'object' && value !== null) || typeof value === 'function')
 		&& 'then' in value
 		&& typeof (value as { then?: unknown }).then === 'function'
 	) {
-		throw new TypeError(`${description} returned a thenable. The widget-core semantic boundary is synchronous only.`)
+		const subject = name === undefined ? description : `${description} "${name}"'s ${what}`
+		throw new TypeError(`${subject} returned a thenable. The widget-core semantic boundary is synchronous only.`)
 	}
 }
 

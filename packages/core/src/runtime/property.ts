@@ -179,7 +179,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 				owner.sink = previousSink
 				collector.close()
 			}
-			assertSyncValue(value, `Property "${params.name}"'s compute`)
+			assertSyncValue(value, 'Property', params.name, 'compute')
 
 			const diagnostics = collector.finalize(input => buildPropertyResultDiagnostic(params.widgetId, params.name, value, input))
 			// Commit the snapshot here — the fact-commit point every consumer's `getDiagnostics()` must already

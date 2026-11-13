@@ -69,12 +69,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 		})
 	}
 
-	function invoke(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
-		context.assertActive()
-		return runRuntimeOperation(() => invokeWithinOperation(...args))
-	}
-
-	function invokeWithinOperation(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
+	function invokeWithinOperation(args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
 		startBatch()
 		try {
 			const argsCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>()
@@ -92,7 +87,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 			callbackScope.owner = null
 			try {
 				validArgs = params.definition.validateArgs(args, argsCtx)
-				assertSyncValue(validArgs, `Method "${params.name}"'s validateArgs`)
+				assertSyncValue(validArgs, 'Method', params.name, 'validateArgs')
 				hasArgsDiagnostic = argsCollector.hasAnyDiagnostic()
 			}
 			finally {
@@ -146,7 +141,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				owner.sink = previousSink
 				execCollector.close()
 			}
-			assertSyncValue(value, `Method "${params.name}"'s execute`)
+			assertSyncValue(value, 'Method', params.name, 'execute')
 
 			const diagnostics = execCollector.finalize(input => buildMethodResultDiagnostic(params.widgetId, params.name, value, input))
 			commitDiagnostics(toDiagnosticSnapshot(diagnostics))
@@ -166,7 +161,11 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 		}
 	}
 
-	const callable = ((...args: readonly unknown[]) => invoke(...args)) as RuntimeMethod<(...args: readonly unknown[]) => unknown>
+	// The rest parameter is the one fresh `args` array of the invocation: it is handed on as is.
+	const callable = ((...args: readonly unknown[]) => {
+		context.assertActive()
+		return runRuntimeOperation(invokeWithinOperation, args)
+	}) as RuntimeMethod<(...args: readonly unknown[]) => unknown>
 
 	Object.assign(callable, {
 		getDiagnostics() {
