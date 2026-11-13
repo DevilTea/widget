@@ -281,14 +281,24 @@ describe('deep dependency graphs read cold from their heads', () => {
 				write(config.index, 2)
 		}
 
-		// A: a cold subscription to a third of the heads, then cold direct reads of every head.
-		const delivered = new Map<number, ExecutionResult<unknown, unknown>>()
-		const subscribed = graph.heads.filter(() => random() < 0.33)
-		for (const head of subscribed) {
-			nodeOf(a, head).properties.out.subscribe((result) => {
-				delivered.set(head, result)
+		// Each subscriber records every value delivered to it, and every diagnostics listener how often it was
+		// notified, so the two Runtimes can be compared sequence by sequence.
+		const delivered = { a: new Map<number, unknown[]>(), b: new Map<number, unknown[]>() }
+		const notified = { a: new Map<string, number>(), b: new Map<string, number>() }
+		const observe = (runtime: GraphRuntime, side: 'a' | 'b', head: number) => {
+			delivered[side].set(head, [])
+			nodeOf(runtime, head).properties.out.subscribe((result) => {
+				delivered[side].get(head)!.push(outcomeOf(runtime, () => result))
 			})
+			const count = (key: string) => () => notified[side].set(key, (notified[side].get(key) ?? 0) + 1)
+			nodeOf(runtime, head).properties.out.subscribeDiagnostics(count(`property n${head}`))
+			nodeOf(runtime, head)
+				.subscribeDiagnostics(count(`widget n${head}`))
 		}
+		// A: a cold subscription to a third of the heads, then cold direct reads of every head.
+		const subscribed = graph.heads.filter(() => random() < 0.33)
+		for (const head of subscribed)
+			observe(a, 'a', head)
 		const readHeadsOfA = () => new Map(graph.heads.map(head => [head, outcomeOf(a, () => nodeOf(a, head).properties.out.get())]))
 		const readAllOfB = () => graph.configs.map(config => outcomeOf(b, () => nodeOf(b, config.index).properties.out.get()))
 
@@ -307,6 +317,26 @@ describe('deep dependency graphs read cold from their heads', () => {
 		}
 
 		compareHeads()
+		// B: the same subscriptions, made once everything was read in dependency order.
+		for (const head of subscribed)
+			observe(b, 'b', head)
+		// Reading everything again, with no write, notifies nobody in either Runtime.
+		for (const side of ['a', 'b'] as const) {
+			for (const head of subscribed)
+				delivered[side].get(head)!.length = 0
+			notified[side].clear()
+		}
+		readAllOfB()
+		for (let index = size - 1; index >= 0; index--)
+			outcomeOf(a, () => nodeOf(a, index).properties.out.get())
+		for (const head of subscribed) {
+			expect(delivered.a.get(head), `delivered to head n${head} with no write`)
+				.toEqual([])
+		}
+		expect(notified.a)
+			.toEqual(new Map())
+		expect(notified.b)
+			.toEqual(new Map())
 
 		for (let round = 0; round < 3; round++) {
 			for (const config of graph.configs) {
@@ -314,14 +344,13 @@ describe('deep dependency graphs read cold from their heads', () => {
 				if (random() < (config.gate ? 0.5 : Math.min(0.08, 20 / size)))
 					write(config.index, 1 + Math.floor(random() * 20))
 			}
-			const ofB = compareHeads()
+			compareHeads()
 			for (const head of subscribed) {
-				const outcome = ofB[head]!
-				if ('value' in outcome && delivered.has(head)) {
-					expect(outcomeOf(a, () => delivered.get(head)!), `delivered to head n${head}`)
-						.toEqual(outcome)
-				}
+				expect(delivered.a.get(head), `values delivered to head n${head}`)
+					.toEqual(delivered.b.get(head))
 			}
+			expect(notified.a)
+				.toEqual(notified.b)
 		}
 
 		// Finally every Property of A, in reverse order, against B.

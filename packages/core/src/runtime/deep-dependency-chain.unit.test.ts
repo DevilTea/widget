@@ -362,6 +362,19 @@ describe('a cold subscription to the head of a long chain', () => {
 			.toEqual([])
 	})
 
+	it('reads cold again a chain far longer than the engine could nest once its last subscriber unsubscribed', () => {
+		// Unsubscribing makes alien-signals tear the whole chain down (its links are dropped): every link has
+		// completed before but has no dependency left, and must be read again as boundedly as a first read.
+		const length = 2_500
+		const { link } = createChain(length)
+		const unsubscribe = link(length - 1).properties.total.subscribe(() => {})
+		unsubscribe()
+		link(0).state.n.set(3)
+
+		expect(link(length - 1).properties.total.get())
+			.toEqual({ ok: true, value: length + 2 })
+	})
+
 	it('delivers a value that newly reads a cold, deep branch on the effect\'s own re-evaluation', () => {
 		// The head reads the rest of the chain only while its own `n` is odd: the first write below makes the
 		// subscription's dirty check (alien-signals' update path, without Core's read) reach the cold chain.
@@ -627,7 +640,9 @@ describe('inspection of a long chain read cold', () => {
 		}
 	})
 
-	it('keeps an unevaluated Property never-evaluated when only an abandoned run reached it', () => {
+	// That a Property only an abandoned run reached stays never-evaluated is pinned in
+	// deep-dependency-observers.unit.test.ts.
+	it('ends with every link completed when every compute catches its dependency read', () => {
 		const { runtime, link } = createChain(DIAGNOSTIC_CHAIN, () => ({ guarded: true }))
 		const inspect = propertyInspector(runtime)
 		const head = link(DIAGNOSTIC_CHAIN - 1)
