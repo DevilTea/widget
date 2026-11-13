@@ -23,7 +23,7 @@
  */
 
 import type { RuntimeContext } from './context'
-import { effect, endBatch, getBatchDepth, setActiveSub, startBatch } from 'alien-signals'
+import { effect, endBatch, getActiveSub, getBatchDepth, setActiveSub, startBatch } from 'alien-signals'
 import { WidgetSystemRuntimeReentrancyError } from '../diagnostic'
 import { callbackScope } from './context'
 
@@ -159,6 +159,15 @@ export function invokeEventListenerIsolated(listener: (...args: readonly unknown
  * computed. Purely local bookkeeping for {@link writeDeferringFlush}, not a semantic boundary of its own.
  */
 let operationDepth = 0
+
+/**
+ * Whether the caller is outside everything of the Runtime and of the reactive graph: no Runtime operation in
+ * progress, no open alien batch and no active subscriber. Only then does a read or a no-op write of a signal
+ * have no side effect anyone could observe.
+ */
+export function isRuntimeIdle(): boolean {
+	return operationDepth === 0 && getBatchDepth() === 0 && getActiveSub() === undefined
+}
 
 /**
  * alien-signals' batch depth when the outermost {@link runRuntimeOperation} frame was entered. Every batch

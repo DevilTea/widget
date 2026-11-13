@@ -24,11 +24,13 @@
 import type { CompiledResolvedWidgetNode } from '../internal/contract'
 import type { RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
+import type { StateLedger } from './state'
 import { readWidgetPluginDefinition } from '../plugin'
 import { createRuntimeWidgetDiagnosticsAggregate } from './aggregate'
 import { restoreInitialState } from './state'
 
-export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolvedWidgetNode, entry: PrimitiveRegistryEntry): unknown {
+/** `stateStart` and `stateEnd` bound the ledger ordinals of this widget's State members. */
+export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolvedWidgetNode, entry: PrimitiveRegistryEntry, ledger: StateLedger, stateStart: number, stateEnd: number): unknown {
 	const diagnosticsAggregate = createRuntimeWidgetDiagnosticsAggregate(context, entry)
 
 	const widget: Record<string, unknown> = {
@@ -46,7 +48,7 @@ export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolv
 		for (const [key, primitive] of entry.state)
 			stateSurface[key] = primitive.public
 		widget.state = Object.freeze(stateSurface)
-		widget.resetState = () => restoreInitialState(context, [entry])
+		widget.resetState = () => restoreInitialState(context, ledger, stateStart, stateEnd)
 	}
 
 	if (definition.properties !== null) {

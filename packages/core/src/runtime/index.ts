@@ -31,7 +31,7 @@ import { runtimeInternals } from './internals'
 import { createMethodPrimitive } from './method'
 import { resolveStateOverrides } from './override'
 import { createPropertyPrimitive } from './property'
-import { createStatePrimitive, restoreInitialState } from './state'
+import { createStateLedger, createStatePrimitive, restoreInitialState } from './state'
 import { assertSyncValue } from './sync'
 import { buildRuntimeWidget } from './widget'
 
@@ -70,6 +70,16 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	// One commit hook per widget, shared by all of its primitives.
 	const commitHooks: Array<() => void> = []
 
+	let stateCount = 0
+	for (const node of compiled.nodes) {
+		if (node !== undefined && node.resolved)
+			stateCount += node.state.size
+	}
+	const stateLedger = createStateLedger(stateCount)
+	// Each widget's States hold a contiguous range of ledger ordinals: [stateStart, stateEnd).
+	const stateStart: number[] = []
+	const stateEnd: number[] = []
+
 	// 1. Runtime/widget indexes + 2. create all states (null + empty diagnostic snapshot).
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
@@ -94,6 +104,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		const onDiagnosticsCommitted = aggregate.commitHookFor(nodeId)
 		commitHooks[nodeId] = onDiagnosticsCommitted
 
+		stateStart[nodeId] = stateLedger.states.length
 		for (const [key, member] of node.state) {
 			const primitive = createStatePrimitive(context, {
 				widgetId: node.id,
@@ -101,9 +112,11 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				definition: member.definition,
 				buildConfigFragment,
 				onDiagnosticsCommitted,
+				ledger: stateLedger,
 			})
 			entry.state.set(key, primitive)
 		}
+		stateEnd[nodeId] = stateLedger.states.length
 	}
 
 	// 3. Apply override/default precedence through authoritative validation (4. the override topology
@@ -227,7 +240,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		const node = compiled.nodes[nodeId]
 		if (node === undefined || !node.resolved)
 			continue
-		const runtimeWidget = buildRuntimeWidget(context, node, entry)
+		const runtimeWidget = buildRuntimeWidget(context, node, entry, stateLedger, stateStart[nodeId]!, stateEnd[nodeId]!)
 		runtimeWidgetsByNodeId.set(nodeId, runtimeWidget)
 		nodeIdByRuntimeWidget.set(runtimeWidget as object, nodeId)
 	}
@@ -246,7 +259,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	}
 
 	function resetState(): void {
-		restoreInitialState(context, registry.values())
+		restoreInitialState(context, stateLedger, 0, stateLedger.states.length)
 	}
 
 	function snapshotState(): Record<WidgetId, Record<WidgetMemberKey, unknown>> {
