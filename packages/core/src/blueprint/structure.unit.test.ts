@@ -474,3 +474,75 @@ describe('compile-view facades of unresolved nodes', () => {
 			.toEqual(expectedHints)
 	})
 })
+
+describe('compile-view facades seen by structure validators', () => {
+	interface NestInterfaces extends WidgetInterfaces {
+		slots: 'items'
+	}
+
+	it('are frozen and one shared instance per node for the whole compile, whichever validator receives them', () => {
+		const seenBySlot: { widget: unknown, children: readonly unknown[] }[] = []
+		const seenByPlugin: unknown[] = []
+		const seenBySystem: { root: unknown, deepest: unknown }[] = []
+		// Only the middle widget has validators; the root and the leaf have none.
+		const middlePlugin = createWidgetPlugin('middle')
+			.description('Test widget')
+			.interfaces<NestInterfaces>()
+			.slots({
+				items: {
+					description: 'Test slot',
+					validateStructure: ({ widget, children }) => {
+						seenBySlot.push({ widget, children })
+					},
+				},
+			})
+			.structure(({ widget }) => {
+				seenByPlugin.push(widget)
+			})
+			.done()
+		const outerPlugin = createWidgetPlugin('outer')
+			.description('Test widget')
+			.interfaces<NestInterfaces>()
+			.slots({ items: { description: 'Test slot' } })
+			.done()
+		const nestSystem = createWidgetSystem({
+			plugins: [outerPlugin, middlePlugin, itemPlugin],
+			validateStructure: ({ blueprint }) => {
+				const outer = blueprint.root
+				const middle = blueprint.getChildrenAt(outer, 'items')[0]!
+				seenBySystem.push({ root: outer, deepest: blueprint.getChildrenAt(middle, 'items')[0] })
+			},
+		})
+		const blueprint = nestSystem.createBlueprint({
+			id: 'root',
+			type: 'outer',
+			slots: { items: [{ id: 'middle', type: 'middle', slots: { items: [{ id: 'leaf', type: 'item' }] } }] },
+		})
+
+		expect(blueprint.status)
+			.toBe('valid')
+		expect(seenBySlot)
+			.toHaveLength(1)
+		expect(seenByPlugin)
+			.toHaveLength(1)
+		expect(seenBySystem)
+			.toHaveLength(1)
+		const middleFacade = seenByPlugin[0]
+		expect(seenBySlot[0]!.widget)
+			.toBe(middleFacade)
+		expect(Object.isFrozen(middleFacade))
+			.toBe(true)
+		expect(seenBySlot[0]!.children)
+			.toHaveLength(1)
+		expect(seenBySlot[0]!.children[0])
+			.toBe(seenBySystem[0]!.deepest)
+		expect(Object.isFrozen(seenBySystem[0]!.deepest))
+			.toBe(true)
+		expect(Object.isFrozen(seenBySystem[0]!.root))
+			.toBe(true)
+		expect((middleFacade as { id: string }).id)
+			.toBe('middle')
+		expect((seenBySystem[0]!.deepest as { id: string }).id)
+			.toBe('leaf')
+	})
+})
