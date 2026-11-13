@@ -270,7 +270,10 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	function resolveNodeId(ref: WidgetRef): InspectionNodeId | null {
 		if (ref.runtimeId !== runtimeId)
 			return null
-		return runtimeInspection.blueprint.nodes.find(node => node.nodeId === ref.nodeId)?.nodeId ?? null
+		// `getNode` is an array index; the identity check keeps a coerced key (a string, `-0` is fine since
+		// `-0 === 0`) from matching a node that the strict comparison of a linear scan would not.
+		const node = runtimeInspection.blueprint.getNode(ref.nodeId as unknown as InspectionNodeId)
+		return node !== null && node.nodeId === ref.nodeId ? node.nodeId : null
 	}
 
 	function resolveWidget(ref: WidgetRef): RuntimeWidgetInspection | null {
@@ -279,10 +282,17 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	function nodeForAnchor(anchor: Pick<DomAnchor, 'widgetId' | 'widgetType'>): WidgetRef | null {
-		const node = runtimeInspection.blueprint.nodes.find(candidate => candidate.resolved
-			&& candidate.node.id === anchor.widgetId
-			&& candidate.node.type === anchor.widgetType)
-		return node === undefined ? null : { runtimeId, nodeId: node.nodeId }
+		// A Runtime exists only for a valid Blueprint, whose widget ids are unique (Core reports a
+		// `duplicate-widget-id` diagnostic otherwise) and whose nodes are all resolved, so the one node carrying
+		// this id is the node a linear scan would find first.
+		const widget = options.runtime.blueprint.getWidget(anchor.widgetId)
+		if (widget === null)
+			return null
+		const nodeId = runtimeInspection.blueprint.getNodeId(widget)
+		const node = nodeId === null ? null : runtimeInspection.blueprint.getNode(nodeId)
+		if (node === null || !node.resolved || node.node.id !== anchor.widgetId || node.node.type !== anchor.widgetType)
+			return null
+		return { runtimeId, nodeId: node.nodeId }
 	}
 
 	function resolveAnchor(target: EventTarget | null): DomAnchor | null {
