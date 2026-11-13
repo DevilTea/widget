@@ -1,0 +1,111 @@
+b24d8 
+28: 0x1269ecbf0 
+29: 0x1269a66c8 
+30: 0x1269ff17c 
+31: 0x12699ef0c 
+32: 0x1269ecacc 
+33: 0x1269a66c8 
+34: 0x1269ff17c 
+35: 0x12699ef0c 
+36: 0x1269ecacc 
+37: 0x126a20a38 
+38: 0x126885508 
+39: 0x1269ecc60 
+40: 0x1269a66c8 
+41: 0x1269ff17c 
+42: 0x12699ef0c 
+43: 0x1269ecacc 
+44: 0x126a20a38 
+45: 0x1269ab65c 
+46: 0x1269b24d8 
+47: 0x1269ecbf0 
+48: 0x1269a66c8 
+49: 0x1269ff17c 
+50: 0x12699ef0c 
+51: 0x1269ecacc 
+52: 0x1269a66c8 
+53: 0x1269ff17c 
+54: 0x12699ef0c 
+55: 0x1269ecacc 
+56: 0x126a20a38 
+57: 0x126885508 
+58: 0x1269ecc60 
+59: 0x1269a66c8 
+60: 0x1269ff17c 
+61: 0x12699ef0c 
+62: 0x1269ecacc 
+63: 0x126a20a38 
+64: 0x1269ab65c 
+65: 0x1269b24d8 
+66: 0x1269ecbf0 
+67: 0x1269a66c8 
+68: 0x1269ff17c 
+69: 0x12699ef0c 
+70: 0x1269ecacc 
+71: 0x1269a66c8 
+72: 0x1269ff17c 
+73: 0x12699ef0c 
+74: 0x1269ecacc 
+75: 0x126a20a38 
+76: 0x126885508 
+77: 0x1269ecc60 
+78: 0x1269a66c8 
+79: 0x1269ff17c 
+80: 0x12699ef0c 
+81: 0x1269ecacc 
+82: 0x126a20a38 
+83: 0x1269ab65c 
+84: 0x1269b24d8 
+85: 0x1269ecbf0 
+86: 0x1269a66c8 
+87: 0x1269ff17c 
+88: 0x12699ef0c 
+89: 0x1269ecacc 
+90: 0x1269a66c8 
+91: 0x1269ff17c 
+92: 0x12699ef0c 
+93: 0x1269ecacc 
+94: 0x1269a66c8 
+95: 0x1269ff17c 
+96: 0x12699ef0c 
+97: 0x1269ecacc 
+98: 0x1269a66c8 
+99: 0x1269ff17c 
+100: 0x12699ef0c 
+101: 0x1269ecacc 
+102: 0x126a11fdc 
+103: 0x1269e47a8 
+104: 0x1268bba5c 
+105: 0x1268bbe50 
+106: 0x1268bc090 
+107: 0x126934e94 
+108: 0x1269d8d24 
+109: 0x1269d906c 
+110: 0x103a877e8 Builtins_AsyncFunctionAwaitResolveClosure [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+111: 0x103b5ce58 Builtins_PromiseFulfillReactionJob [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+112: 0x103a76bd0 Builtins_RunMicrotasks [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+113: 0x103a467b0 Builtins_JSRunMicrotasksEntry [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+114: 0x102f6f8a8 v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+115: 0x102f7011c v8::internal::(anonymous namespace)::InvokeWithTryCatch(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+116: 0x102f70258 v8::internal::Execution::TryRunMicrotasks(v8::internal::Isolate*, v8::internal::MicrotaskQueue*) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+117: 0x102f9f02c v8::internal::MicrotaskQueue::RunMicrotasks(v8::internal::Isolate*) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+118: 0x102f9f98c v8::internal::MicrotaskQueue::PerformCheckpoint(v8::Isolate*) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+119: 0x103a4a818 Builtins_CallApiCallbackGeneric [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+120: 0x103a48bec Builtins_InterpreterEntryTrampoline [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+121: 0x103a468cc Builtins_JSEntryTrampoline [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+122: 0x103a46570 Builtins_JSEntry [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+123: 0x102f6f8f0 v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+124: 0x102f6f254 v8::internal::Execution::Call(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>, v8::base::Vector<v8::internal::DirectHandle<v8::internal::Object> const>) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+125: 0x102de3cd4 v8::Function::Call(v8::Isolate*, v8::Local<v8::Context>, v8::Local<v8::Value>, int, v8::Local<v8::Value>*) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+126: 0x102a5b180 node::InternalCallbackScope::Close() [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+127: 0x102a5aa90 node::InternalCallbackScope::~InternalCallbackScope() [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+128: 0x102b22e34 node::StartExecution(node::Environment*, std::__1::function<v8::MaybeLocal<v8::Value> (node::StartExecutionCallbackInfoWithModule const&)>) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+129: 0x102a618c0 node::LoadEnvironment(node::Environment*, std::__1::function<v8::MaybeLocal<v8::Value> (node::StartExecutionCallbackInfoWithModule const&)>, std::__1::function<void (node::Environment*, v8::Local<v8::Value>, v8::Local<v8::Value>)>) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+130: 0x102bd2960 node::NodeMainInstance::Run() [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+131: 0x102b26bb4 node::Start(int, char**) [/Users/deviltea/Library/Application Support/fnm/node-versions/v24.15.0/installation/bin/node]
+132: 0x185fffe00 start [/usr/lib/dyld]
+Error: vue.unmount [normal] exited with code null
+    at ChildProcess.<anonymous> (file:///Users/deviltea/Documents/projects/widget/.claude/worktrees/agent-adcbb1ad3ba670ad0/benchmarks/run.mjs:116:19)
+    at ChildProcess.emit (node:events:509:28)
+    at maybeClose (node:internal/child_process:1124:16)
+    at ChildProcess._handle.onexit (node:internal/child_process:306:5)
