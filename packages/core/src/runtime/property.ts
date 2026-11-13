@@ -96,15 +96,26 @@ type ActiveSubscriber = ReturnType<typeof getActiveSub>
  * that would nest deeper is abandoned and completed later from a shallower stack. Internal: not API, not
  * configurable, and it may change.
  *
- * The figure that bounds it is the smallest stack Core has to run on: on quickjs-ng 0.18.0 with its default
- * 1 MiB stack, the head of a chain of trivial `compute`s read cold from a shallow host stack overflowed above
- * 129 nested evaluations. 32 is a quarter of that, which leaves room for what that measurement did not
- * include: real `compute` bodies (refinements, diagnostics, helper calls), the host's own stack below the
- * read, listener and flush frames, and further segments a read can open on top of this one (a Method a
- * `compute` depends on reads its own Properties on a new segment). A smaller limit only adds driver rounds,
- * not `compute` calls: a chain costs at most about two `compute` calls per Property whatever the limit.
+ * The figure that bounds it is the smallest stack Core has to run on. Older QuickJS builds default to a
+ * smaller stack than quickjs-ng's 1 MiB, so it is 256 KB: there quickjs-ng 0.18.0 reads the head of a chain
+ * of trivial `compute`s cold, without this limit, only up to 31 nested evaluations (63 at 512 KB, 128 at
+ * 1 MiB: about 8 KB of stack per evaluation). Core's read path nests a little more stack per evaluation than
+ * that measurement's: in V8 without its JIT (an interpreter like QuickJS) a chain read cold without the limit
+ * reached 942 evaluations against 1 072, so about 27 at 256 KB. 12 leaves more than twice that margin, for
+ * real `compute` bodies (refinements, diagnostics, helper calls), the host's own stack below the read,
+ * listener and flush frames, and further segments a read can open on top of this one (a Method a `compute`
+ * depends on reads its own Properties on a new segment), even if QuickJS's frames turn out an eighth larger
+ * than that estimate.
+ *
+ * A smaller limit only adds driver rounds, hardly `compute` calls: a chain costs about two `compute` calls
+ * per Property whatever the limit, and re-evaluations after a write are not limited at all (see
+ * {@link evaluate}). Measured on the differential test's graphs that the unmodified Core can read (cold
+ * reads, and State writes under subscriptions) against the unmodified Core's 446 and 447 calls: 8 cost 606
+ * and 461, 12 cost 542 and 447, 15 and 16 cost 491 to 494 and 447, 32 cost 446 and 447; on a Property reading
+ * 250 or 1 000 chains of 40 links, a cold read costs 2.0x (8), 1.9x (12), 1.75x (15) and 1.8x (16 and 32) the
+ * unmodified Core's calls, writes the same at every limit.
  */
-const EVALUATION_NESTING_LIMIT = 32
+const EVALUATION_NESTING_LIMIT = 12
 
 /**
  * Thrown by a Property's dependency read through `compute` to abandon the evaluation in progress (see
