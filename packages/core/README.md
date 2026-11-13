@@ -536,7 +536,13 @@ later occurrence is de-identified with its available subtree preserved.
   `RuntimeWidget.getDiagnostics()`) and every new subscription
   (including `RuntimeWidget.subscribeDiagnostics()`) throws
   `WidgetSystemRuntimeDisposedError`; unsubscribe functions obtained before
-  disposal remain safe idempotent no-ops.
+  disposal remain safe idempotent no-ops. `runtime.subscribeDisposal(listener)`
+  is the one disposal signal, for a host that cancels the asynchronous work it
+  owns: each listener runs exactly once, synchronously, inside the first
+  `dispose()` call with no arguments, after the Runtime is already fully
+  disposed (so it cannot read or write the Runtime), in subscription order. A
+  throwing listener is isolated like any other and reported asynchronously;
+  subscribing to a disposed Runtime throws `WidgetSystemRuntimeDisposedError`.
 
 ### Inspection
 
@@ -561,7 +567,7 @@ delivery guarantees.
 
 The current implementation needs an ES2022 engine and a global
 `queueMicrotask` whose jobs the host actually runs: a throwing State, Property,
-diagnostic, Event, inspection or `WidgetDocument` listener, and a Property
+diagnostic, Event, disposal, inspection or `WidgetDocument` listener, and a Property
 `compute` that throws during a subscription's re-evaluation, is isolated and
 rethrown in a microtask. Embedded engines such as QuickJS (`rquickjs`) must
 drain their pending jobs, or those errors never surface. See
