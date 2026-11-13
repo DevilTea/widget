@@ -6,7 +6,7 @@
  * invariants" (COMMENT 11) and "graph-analysis diagnostics" (COMMENT 12), consolidated handoff §8.
  */
 
-import type { AnyDepExpression } from '../dep'
+import type { AnyDepExpression, DepExpressionInternals } from '../dep'
 import type { BlueprintDependencyMember, BlueprintDependencyReference, BlueprintDiagnostic } from '../diagnostic'
 import type {
 	CompiledDependency,
@@ -14,7 +14,7 @@ import type {
 	InternalNodeId,
 	ResolvedBlueprintWidgetNode,
 } from '../internal/contract'
-import type { AnyWidgetPluginTuple } from '../plugin'
+import type { AnyWidgetPluginTuple, WidgetPluginDefinition } from '../plugin'
 import type { WidgetId } from '../types'
 import type { WorkingNode } from './recovery'
 import type { CompileFacade } from './view'
@@ -22,40 +22,82 @@ import { createDependencyBuilder, isDepExpression, readDepExpression } from '../
 import { compiledDependencyBrand } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
 import { assertSyncValue } from '../runtime/sync'
-import { dependencyDiagnostic, widgetLocation } from './diagnostics'
+import { dependencyDiagnostic, sharedWidgetLocation, widgetLocation } from './diagnostics'
 
 export interface GraphEdge {
 	readonly fromKind: 'property' | 'method'
 	readonly fromNodeId: InternalNodeId
 	readonly fromName: string
+	/** Dense member id of the owner (see {@link MemberIds}). */
+	readonly fromId: number
 	readonly toKind: 'property' | 'method'
 	readonly toNodeId: InternalNodeId
 	readonly toName: string
+	/** Dense member id of the target (see {@link MemberIds}). */
+	readonly toId: number
 	readonly reference: BlueprintDependencyReference
 }
 
 export interface DependencyResolutionResult {
-	readonly edges: ReadonlyMap<string, GraphEdge>
+	/** Distinct edges in first-reference order. */
+	readonly edges: readonly GraphEdge[]
+	/** Number of Property and Method members of resolved nodes, i.e. the exclusive upper bound of a member id. */
+	readonly memberCount: number
 	readonly directWriteSeeds: ReadonlySet<string>
+}
+
+/**
+ * Dense integer ids for the members of resolved nodes, in the evaluation-graph member order: semantic
+ * traversal order, a node's Properties before its Methods, each in declaration order. `baseByNodeId`
+ * holds a node's first id; `offsetsByNodeId` maps a member name to its id relative to that base (a
+ * Method's offset already includes the node's Property count). Nodes with the same plugin share one
+ * offsets table.
+ */
+interface MemberIds {
+	readonly baseByNodeId: number[]
+	readonly offsetsByNodeId: (MemberOffsets | undefined)[]
+	readonly count: number
+}
+
+interface MemberOffsets {
+	readonly properties: ReadonlyMap<string, number>
+	readonly methods: ReadonlyMap<string, number>
+	readonly size: number
+}
+
+function createMemberIds(nodes: readonly WorkingNode[], semanticOrder: readonly InternalNodeId[]): MemberIds {
+	const offsetsByDefinition = new Map<WidgetPluginDefinition, MemberOffsets>()
+	const baseByNodeId: number[] = []
+	const offsetsByNodeId: (MemberOffsets | undefined)[] = []
+	let count = 0
+	for (const nodeId of semanticOrder) {
+		const node = nodes[nodeId]!
+		if (!node.resolved || node.plugin === null)
+			continue
+		const definition = readWidgetPluginDefinition(node.plugin)
+		let offsets = offsetsByDefinition.get(definition)
+		if (offsets === undefined) {
+			const properties = new Map<string, number>()
+			const methods = new Map<string, number>()
+			let size = 0
+			for (const name of definition.properties?.keys() ?? [])
+				properties.set(name, size++)
+			for (const name of definition.methods?.keys() ?? [])
+				methods.set(name, size++)
+			offsets = { properties, methods, size }
+			offsetsByDefinition.set(definition, offsets)
+		}
+		baseByNodeId[nodeId] = count
+		offsetsByNodeId[nodeId] = offsets
+		count += offsets.size
+	}
+	return { baseByNodeId, offsetsByNodeId, count }
 }
 
 function configFragment(node: WorkingNode): Record<string, unknown> {
 	return node.plugin !== null && readWidgetPluginDefinition(node.plugin).config !== null
 		? { config: node.config }
 		: {}
-}
-
-/**
- * `WidgetMemberKey = string` is an arbitrary finite string domain (member names may themselves
- * contain `:` / `->`), so naive template-literal concatenation of the six identity components is not
- * injective: e.g. a from-name of `"a->method:0:b"` paired with a to-name of `"c"` serializes to the
- * same string as a from-name of `"a"` paired with a to-name of `"b->property:0:c"`. `JSON.stringify`
- * of the component tuple is injective over strings/numbers (it round-trips exactly through
- * `JSON.parse`), so two distinct tuples can never collide regardless of what characters member names
- * contain.
- */
-function edgeKey(fromKind: string, fromNodeId: InternalNodeId, fromName: string, toKind: string, toNodeId: InternalNodeId, toName: string): string {
-	return JSON.stringify([fromKind, fromNodeId, fromName, toKind, toNodeId, toName])
 }
 
 function walkDeps(value: unknown, resolveLeaf: (leaf: AnyDepExpression) => CompiledDependency): CompiledDependencyTree {
@@ -94,15 +136,34 @@ function describeMissingTarget(target: BlueprintDependencyReference['target']): 
 	}
 }
 
+// The computed brand key goes last in these literals: V8's interpreter builds a literal whose first key is
+// computed one property at a time, which is several times slower than a literal with constant leading keys.
+// `Reflect.ownKeys` order is unaffected (string keys always precede symbol keys).
+function absentDependency(reference: BlueprintDependencyReference, refinements: DepExpressionInternals['refinements']): CompiledDependency {
+	return { status: 'absent', reference, refinements, [compiledDependencyBrand]: true }
+}
+
+// Every other ordinary resolution failure is `invalid`, never `absent` (diagnostic #10 inspection
+// amendment "inspection exact API v1 part 1"): `targetNodeId` is included only when cardinality
+// resolved to exactly one recovered node before the later step failed.
+function invalidDependency(reference: BlueprintDependencyReference, refinements: DepExpressionInternals['refinements'], targetNodeId?: InternalNodeId): CompiledDependency {
+	return targetNodeId === undefined
+		? { status: 'invalid', reference, refinements, [compiledDependencyBrand]: true }
+		: { status: 'invalid', reference, refinements, targetNodeId, [compiledDependencyBrand]: true }
+}
+
 function resolveLeaf(
 	nodes: readonly WorkingNode[],
 	nodeIdsByWidgetId: ReadonlyMap<WidgetId, readonly InternalNodeId[]>,
 	rootNodeId: InternalNodeId,
 	ownerNodeId: InternalNodeId,
+	ownerMemberId: number,
 	member: BlueprintDependencyMember,
 	leaf: AnyDepExpression,
 	finalDiagnostics: BlueprintDiagnostic[],
-	edges: Map<string, GraphEdge>,
+	memberIds: MemberIds,
+	edges: GraphEdge[],
+	edgeKeys: Set<number>,
 	directWriteSeeds: Set<string>,
 ): CompiledDependency {
 	const { reference, refinements } = readDepExpression(leaf)
@@ -120,24 +181,6 @@ function resolveLeaf(
 			'registerDeps() produced a state-set dependency owned by a Property; Property members must remain side-effect free. This is a plugin implementation bug.',
 		)
 	}
-
-	const absent = (): CompiledDependency => ({
-		[compiledDependencyBrand]: true,
-		status: 'absent',
-		reference,
-		refinements,
-	})
-
-	// Every other ordinary resolution failure is `invalid`, never `absent` (diagnostic #10 inspection
-	// amendment "inspection exact API v1 part 1"): `targetNodeId` is included only when cardinality
-	// resolved to exactly one recovered node before the later step failed.
-	const invalid = (targetNodeId?: InternalNodeId): CompiledDependency => ({
-		[compiledDependencyBrand]: true,
-		status: 'invalid',
-		reference,
-		refinements,
-		...(targetNodeId === undefined ? {} : { targetNodeId }),
-	})
 
 	let candidateIds: readonly InternalNodeId[]
 	switch (target.type) {
@@ -157,16 +200,16 @@ function resolveLeaf(
 
 	if (candidateIds.length === 0) {
 		if ((target.type === 'parent' || target.type === 'widget') && target.optional)
-			return absent()
+			return absentDependency(reference, refinements)
 
 		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-target', describeMissingTarget(target), reference))
-		return invalid()
+		return invalidDependency(reference, refinements)
 	}
 
 	if (candidateIds.length > 1) {
-		const related = candidateIds.map(id => widgetLocation(nodes[id]!.publicNode))
+		const related = candidateIds.map(id => sharedWidgetLocation(nodes[id]!.publicNode))
 		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'ambiguous-dependency-target', 'Dependency target is ambiguous: multiple widgets share that id.', reference, related))
-		return invalid()
+		return invalidDependency(reference, refinements)
 	}
 
 	const targetNodeId = candidateIds[0]!
@@ -174,7 +217,7 @@ function resolveLeaf(
 
 	if (!targetWorking.resolved) {
 		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'unresolved-dependency-target', 'Dependency target could not be resolved to a widget.', reference, [widgetLocation(targetWorking.publicNode)]))
-		return invalid(targetNodeId)
+		return invalidDependency(reference, refinements, targetNodeId)
 	}
 
 	const targetDefinition = readWidgetPluginDefinition(targetWorking.plugin!)
@@ -183,11 +226,11 @@ function resolveLeaf(
 	if (operation.type === 'state-get' || operation.type === 'state-set') {
 		if (targetDefinition.state === null) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-capability', 'Dependency target has no state capability.', reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		if (!targetDefinition.state.has(operation.key)) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no state member "${operation.key}".`, reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		if (operation.type === 'state-set' && member.type === 'method')
 			directWriteSeeds.add(`${ownerNodeId}:${member.name}`)
@@ -195,36 +238,43 @@ function resolveLeaf(
 	else if (operation.type === 'property-get') {
 		if (targetDefinition.properties === null) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-capability', 'Dependency target has no properties capability.', reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		if (!targetDefinition.properties.has(operation.name)) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no property "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
-		const key = edgeKey(member.type, ownerNodeId, member.name, 'property', targetNodeId, operation.name)
-		if (!edges.has(key))
-			edges.set(key, { fromKind: member.type, fromNodeId: ownerNodeId, fromName: member.name, toKind: 'property', toNodeId: targetNodeId, toName: operation.name, reference })
+		const toId = memberIds.baseByNodeId[targetNodeId]! + memberIds.offsetsByNodeId[targetNodeId]!.properties.get(operation.name)!
+		// `ownerMemberId * count + toId` is injective because `toId < count`.
+		const key = ownerMemberId * memberIds.count + toId
+		if (!edgeKeys.has(key)) {
+			edgeKeys.add(key)
+			edges.push({ fromKind: member.type, fromNodeId: ownerNodeId, fromName: member.name, fromId: ownerMemberId, toKind: 'property', toNodeId: targetNodeId, toName: operation.name, toId, reference })
+		}
 	}
 	else {
 		if (targetDefinition.methods === null) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-capability', 'Dependency target has no methods capability.', reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		if (!targetDefinition.methods.has(operation.name)) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no method "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
-		const key = edgeKey(member.type, ownerNodeId, member.name, 'method', targetNodeId, operation.name)
-		if (!edges.has(key))
-			edges.set(key, { fromKind: member.type, fromNodeId: ownerNodeId, fromName: member.name, toKind: 'method', toNodeId: targetNodeId, toName: operation.name, reference })
+		const toId = memberIds.baseByNodeId[targetNodeId]! + memberIds.offsetsByNodeId[targetNodeId]!.methods.get(operation.name)!
+		const key = ownerMemberId * memberIds.count + toId
+		if (!edgeKeys.has(key)) {
+			edgeKeys.add(key)
+			edges.push({ fromKind: member.type, fromNodeId: ownerNodeId, fromName: member.name, fromId: ownerMemberId, toKind: 'method', toNodeId: targetNodeId, toName: operation.name, toId, reference })
+		}
 	}
 
 	return {
-		[compiledDependencyBrand]: true,
 		status: 'resolved',
 		targetNodeId,
 		reference,
 		refinements,
+		[compiledDependencyBrand]: true,
 	}
 }
 
@@ -236,11 +286,13 @@ export function resolveDependencies(
 	compileFacade: CompileFacade<AnyWidgetPluginTuple>,
 	finalDiagnostics: BlueprintDiagnostic[],
 ): DependencyResolutionResult {
-	const edges = new Map<string, GraphEdge>()
+	const memberIds = createMemberIds(nodes, semanticOrder)
+	const edges: GraphEdge[] = []
+	const edgeKeys = new Set<number>()
 	const directWriteSeeds = new Set<string>()
 
-	const resolve = (ownerNodeId: InternalNodeId, member: BlueprintDependencyMember, leaf: AnyDepExpression): CompiledDependency =>
-		resolveLeaf(nodes, nodeIdsByWidgetId, rootNodeId, ownerNodeId, member, leaf, finalDiagnostics, edges, directWriteSeeds)
+	const resolve = (ownerNodeId: InternalNodeId, ownerMemberId: number, member: BlueprintDependencyMember, leaf: AnyDepExpression): CompiledDependency =>
+		resolveLeaf(nodes, nodeIdsByWidgetId, rootNodeId, ownerNodeId, ownerMemberId, member, leaf, finalDiagnostics, memberIds, edges, edgeKeys, directWriteSeeds)
 
 	// Properties (step 7), then methods (step 8), each in semantic traversal + declaration order.
 	for (const nodeId of semanticOrder) {
@@ -253,8 +305,6 @@ export function resolveDependencies(
 
 		const configFrag = configFragment(node)
 		for (const [name, propertyDefinition] of definition.properties) {
-			const dep = createDependencyBuilder<never, 'property'>()
-
 			// A present callback returning `undefined`/`null` (only reachable via a JS/`any` contract
 			// escape) is malformed callback output, not the same as the callback being omitted; only an
 			// *omitted* callback synthesizes empty deps. `walkDeps` already throws on any non-expression,
@@ -265,14 +315,15 @@ export function resolveDependencies(
 				rawDeps = propertyDefinition.registerDeps({
 					widget: compileFacade.facadeForNodeId(nodeId),
 					blueprint: compileFacade.view,
-					dep,
+					dep: createDependencyBuilder<never, 'property'>(),
 					...configFrag,
 				})
 				assertSyncValue(rawDeps, `Property "${name}"'s registerDeps`)
 			}
 
 			const member: BlueprintDependencyMember = { type: 'property', name }
-			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, member, leaf))
+			const ownerMemberId = memberIds.baseByNodeId[nodeId]! + memberIds.offsetsByNodeId[nodeId]!.properties.get(name)!
+			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, ownerMemberId, member, leaf))
 			node.properties.set(name, { name, definition: propertyDefinition, deps })
 		}
 	}
@@ -287,25 +338,24 @@ export function resolveDependencies(
 
 		const configFrag = configFragment(node)
 		for (const [name, methodDefinition] of definition.methods) {
-			const dep = createDependencyBuilder<never, 'method'>()
-
 			// Same "omitted vs malformed" distinction as the properties loop above.
 			let rawDeps: unknown = {}
 			if (methodDefinition.registerDeps !== undefined) {
 				rawDeps = methodDefinition.registerDeps({
 					widget: compileFacade.facadeForNodeId(nodeId),
 					blueprint: compileFacade.view,
-					dep,
+					dep: createDependencyBuilder<never, 'method'>(),
 					...configFrag,
 				})
 				assertSyncValue(rawDeps, `Method "${name}"'s registerDeps`)
 			}
 
 			const member: BlueprintDependencyMember = { type: 'method', name }
-			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, member, leaf))
+			const ownerMemberId = memberIds.baseByNodeId[nodeId]! + memberIds.offsetsByNodeId[nodeId]!.methods.get(name)!
+			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, ownerMemberId, member, leaf))
 			node.methods.set(name, { name, definition: methodDefinition, deps, transitivelyWrites: false })
 		}
 	}
 
-	return { edges, directWriteSeeds }
+	return { edges, memberCount: memberIds.count, directWriteSeeds }
 }

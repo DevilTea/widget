@@ -203,7 +203,6 @@ export function runStructureValidation(
 
 		const definition = readWidgetPluginDefinition(node.plugin)
 		const publicNode = node.publicNode as ResolvedBlueprintWidgetNode
-		const widgetFacade = compileFacade.facadeForNodeId(nodeId)
 
 		if (definition.slots !== null) {
 			for (const [slotName, slotDefinition] of definition.slots) {
@@ -215,7 +214,7 @@ export function runStructureValidation(
 
 				try {
 					const result: unknown = slotDefinition.validateStructure({
-						widget: widgetFacade,
+						widget: compileFacade.facadeForNodeId(nodeId),
 						slot: slotName,
 						children,
 						blueprint: compileFacade.view,
@@ -241,7 +240,7 @@ export function runStructureValidation(
 
 			try {
 				const result: unknown = definition.validateStructure({
-					widget: widgetFacade,
+					widget: compileFacade.facadeForNodeId(nodeId),
 					blueprint: compileFacade.view,
 					...configFragment(node),
 					...collector,

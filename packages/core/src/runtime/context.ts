@@ -137,7 +137,10 @@ export function createRuntimeContext(): RuntimeContext {
 				if (unsubscribed)
 					return
 				unsubscribed = true
-				owned.delete(handle)
+				// `dispose()` tears the whole set down and clears it at once; removing entries one by one meanwhile
+				// would only be bookkeeping on a set that is about to be emptied.
+				if (!disposed)
+					owned.delete(handle)
 				rawDispose()
 			}
 			owned.add(handle)
@@ -162,7 +165,7 @@ export function createRuntimeContext(): RuntimeContext {
 				return
 			// Mark disposed before tearing down so synchronous teardown reentrancy already observes it.
 			disposed = true
-			for (const handle of [...owned])
+			for (const handle of owned)
 				handle()
 			owned.clear()
 			// Delivery runs on the list as it stood when disposal began, and the Runtime lets go of it first:

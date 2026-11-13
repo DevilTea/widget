@@ -53,6 +53,22 @@ export function widgetLocation(node: BlueprintWidgetNode): BlueprintWidgetDiagno
 	return { type: 'widget', node }
 }
 
+const sharedWidgetLocations = new WeakMap<BlueprintWidgetNode, BlueprintWidgetDiagnosticLocation>()
+
+/**
+ * The one frozen `widget` location of a node, for `related` lists that mention many nodes (duplicate ids and
+ * ambiguous dependency targets build K lists of K-1 locations each). Every list that names the node holds this
+ * same object, so a location is built and frozen once per node instead of once per list entry.
+ */
+export function sharedWidgetLocation(node: BlueprintWidgetNode): BlueprintWidgetDiagnosticLocation {
+	let location = sharedWidgetLocations.get(node)
+	if (location === undefined) {
+		location = Object.freeze(widgetLocation(node))
+		sharedWidgetLocations.set(node, location)
+	}
+	return location
+}
+
 export function slotLocation(node: ResolvedBlueprintWidgetNode, slot: WidgetMemberKey): BlueprintStructureDiagnosticLocation {
 	return { type: 'slot', node, slot }
 }

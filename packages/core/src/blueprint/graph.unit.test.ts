@@ -13,6 +13,7 @@
 import type { AnyWidgetPluginTuple, BlueprintDependencyDiagnostic, BlueprintDependencyReference, BlueprintDiagnostic, WidgetSystemBlueprint } from '../index'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { inspectBlueprint } from '../inspection'
 
 // -------------------------------------------------------------------------------------------------
 // Fixtures — every dependency below targets `self`, so cardinality/resolution concerns (covered by
@@ -552,5 +553,173 @@ describe('evaluation cycles', () => {
 				{ type: 'property', name: 'p1' },
 				{ type: 'method', name: 'm' },
 			])
+	})
+})
+
+// -------------------------------------------------------------------------------------------------
+// Write-effect propagation along a long Method chain
+// -------------------------------------------------------------------------------------------------
+
+interface ChainLinkInterfaces {
+	config: {
+		raw: { readonly next: string | null, readonly writes: boolean }
+		resolved: { readonly next: string | null, readonly writes: boolean }
+	}
+	state: {
+		value: number
+	}
+	methods: {
+		step: () => unknown
+	}
+}
+
+/**
+ * Method `step` invokes the next link's `step`; the link without a successor writes State only when its
+ * config says so, so one chain can end in a write while another one stays pure.
+ */
+const chainLinkPlugin = createWidgetPlugin('chain-link')
+	.description('Test widget')
+	.interfaces<ChainLinkInterfaces>()
+	.config({
+		description: 'Test config',
+		validate: (input): input is ChainLinkInterfaces['config']['raw'] => typeof input === 'object' && input !== null,
+		resolve: raw => raw ?? { next: null, writes: false },
+	})
+	.state(state => state.value({
+		validate: (input): input is number => typeof input === 'number',
+	}))
+	.methods(methods => methods.step({
+		registerDeps: ({ dep, config }) => ({
+			effect: config.next !== null
+				? dep.widget(config.next).methods.invoke('step')
+				: config.writes ? dep.self.state.set('value') : dep.self.state.get('value'),
+		}),
+		validateArgs: (args): args is [] => args.length === 0,
+		execute: () => null,
+	}))
+	.done()
+
+const chainHolderPlugin = createWidgetPlugin('chain-holder')
+	.description('Test widget')
+	.interfaces<{ slots: 'items' }>()
+	.slots({ items: { description: 'Test slot' } })
+	.done()
+
+describe('write-effect propagation along a long Method chain', () => {
+	it('marks every link transitivelyWrites when only the last Method writes State, and none of an independent pure chain', () => {
+		const chainSystem = createWidgetSystem({ plugins: [chainLinkPlugin, chainHolderPlugin] })
+		const writingLength = 300
+		const pureLength = 40
+		const link = (prefix: string, index: number, length: number, writes: boolean) => ({
+			id: `${prefix}${index}`,
+			type: 'chain-link',
+			config: { next: index + 1 < length ? `${prefix}${index + 1}` : null, writes },
+		})
+		const blueprint = chainSystem.createBlueprint({
+			id: 'root',
+			type: 'chain-holder',
+			slots: {
+				items: [
+					...Array.from({ length: writingLength }, (_, index) => link('w', index, writingLength, true)),
+					...Array.from({ length: pureLength }, (_, index) => link('p', index, pureLength, false)),
+				],
+			},
+		})
+		expectValid(blueprint)
+
+		const inspection = inspectBlueprint(blueprint)
+		const writesById = new Map<string, boolean>()
+		for (const entry of inspection.nodes) {
+			if (entry.resolved && entry.node.type === 'chain-link')
+				writesById.set(entry.node.id, entry.methods.find(method => method.name === 'step')!.transitivelyWrites)
+		}
+
+		expect(writesById.size)
+			.toBe(writingLength + pureLength)
+		for (let index = 0; index < writingLength; index++) {
+			expect(writesById.get(`w${index}`))
+				.toBe(true)
+		}
+		for (let index = 0; index < pureLength; index++) {
+			expect(writesById.get(`p${index}`))
+				.toBe(false)
+		}
+	})
+})
+
+// -------------------------------------------------------------------------------------------------
+// Evaluation cycles across Widgets
+// -------------------------------------------------------------------------------------------------
+
+interface RingInterfaces {
+	config: {
+		raw: { readonly next: string | null }
+		resolved: { readonly next: string | null }
+	}
+	state: {
+		value: number
+	}
+	properties: {
+		p: unknown
+	}
+}
+
+/** Property `p` reads the next ring member's `p`; the member without a successor reads its own State. */
+const ringPlugin = createWidgetPlugin('ring')
+	.description('Test widget')
+	.interfaces<RingInterfaces>()
+	.config({
+		description: 'Test config',
+		validate: (input): input is RingInterfaces['config']['raw'] => typeof input === 'object' && input !== null,
+		resolve: raw => raw ?? { next: null },
+	})
+	.state(state => state.value({
+		validate: (input): input is number => typeof input === 'number',
+	}))
+	.properties(properties => properties.p({
+		registerDeps: ({ dep, config }) => ({
+			read: config.next !== null
+				? dep.widget(config.next).properties.get('p')
+				: dep.self.state.get('value'),
+		}),
+		compute: () => null,
+	}))
+	.done()
+
+describe('evaluation cycles across Widgets', () => {
+	it('reports one diagnostic per ring member, each listing the other members in document order, and leaves acyclic readers of the ring alone', () => {
+		const ringSystem = createWidgetSystem({ plugins: [ringPlugin, chainHolderPlugin] })
+		const ring = (id: string, next: string | null) => ({ id, type: 'ring', config: { next } })
+		const blueprint = ringSystem.createBlueprint({
+			id: 'root',
+			type: 'chain-holder',
+			slots: {
+				items: [
+					ring('c', 'a'),
+					ring('a', 'b'),
+					ring('b', 'c'),
+					ring('reader', 'a'),
+					ring('tail', null),
+				],
+			},
+		})
+
+		const diagnostics = expectInvalid(blueprint)
+		const relatedIds = (source: BlueprintDependencyDiagnostic) => (source.related ?? []).map((location) => {
+			if (location.type !== 'property')
+				throw new Error('test fixture: expected a property location')
+			return location.node.id
+		})
+		const cycles = dependencyDiagnosticsOf(diagnostics)
+		const ownerOf = (source: BlueprintDependencyDiagnostic) => {
+			if (source.location.type !== 'property')
+				throw new Error('test fixture: expected a property location')
+			return source.location.node.id
+		}
+
+		expect(cycles.map(ownerOf))
+			.toEqual(['c', 'a', 'b'])
+		expect(cycles.map(relatedIds))
+			.toEqual([['a', 'b'], ['c', 'b'], ['c', 'a']])
 	})
 })

@@ -24,11 +24,13 @@
 import type { CompiledResolvedWidgetNode } from '../internal/contract'
 import type { RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
+import type { StateLedger } from './state'
 import { readWidgetPluginDefinition } from '../plugin'
 import { createRuntimeWidgetDiagnosticsAggregate } from './aggregate'
 import { restoreInitialState } from './state'
 
-export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolvedWidgetNode, entry: PrimitiveRegistryEntry): unknown {
+/** `stateStart` and `stateEnd` bound the ledger ordinals of this widget's State members. */
+export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolvedWidgetNode, entry: PrimitiveRegistryEntry, ledger: StateLedger, stateStart: number, stateEnd: number): unknown {
 	const diagnosticsAggregate = createRuntimeWidgetDiagnosticsAggregate(context, entry)
 
 	const widget: Record<string, unknown> = {
@@ -43,30 +45,30 @@ export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolv
 
 	if (definition.state !== null) {
 		const stateSurface: Record<string, unknown> = Object.create(null)
-		for (const [key, primitive] of entry.state)
-			stateSurface[key] = primitive.public
+		for (const key of entry.state.keys())
+			stateSurface[key] = entry.state.get(key)!.public
 		widget.state = Object.freeze(stateSurface)
-		widget.resetState = () => restoreInitialState(context, [entry])
+		widget.resetState = () => restoreInitialState(context, ledger, stateStart, stateEnd)
 	}
 
 	if (definition.properties !== null) {
 		const propertiesSurface: Record<string, unknown> = Object.create(null)
-		for (const [name, primitive] of entry.properties)
-			propertiesSurface[name] = primitive.public
+		for (const name of entry.properties.keys())
+			propertiesSurface[name] = entry.properties.get(name)!.public
 		widget.properties = Object.freeze(propertiesSurface)
 	}
 
 	if (definition.methods !== null) {
 		const methodsSurface: Record<string, unknown> = Object.create(null)
-		for (const [name, primitive] of entry.methods)
-			methodsSurface[name] = primitive.public
+		for (const name of entry.methods.keys())
+			methodsSurface[name] = entry.methods.get(name)!.public
 		widget.methods = Object.freeze(methodsSurface)
 	}
 
 	if (definition.events !== null) {
 		const eventsSurface: Record<string, unknown> = Object.create(null)
-		for (const [name, primitive] of entry.events)
-			eventsSurface[name] = primitive.public
+		for (const name of entry.events.keys())
+			eventsSurface[name] = entry.events.get(name)!.public
 		widget.events = Object.freeze(eventsSurface)
 	}
 

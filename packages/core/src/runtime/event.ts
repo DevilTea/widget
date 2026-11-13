@@ -120,8 +120,10 @@ export function createEventPrimitive(context: RuntimeContext): EventPrimitive {
 /** The renderer-integration emitter (`@deviltea/widget-core/integration`): valid until disposal. */
 export function buildEventEmitter(events: ReadonlyMap<WidgetMemberKey, EventPrimitive>): Readonly<Record<string, (...args: readonly unknown[]) => void>> {
 	const emitter: Record<string, (...args: readonly unknown[]) => void> = Object.create(null)
-	for (const [name, primitive] of events)
+	for (const name of events.keys()) {
+		const primitive = events.get(name)!
 		emitter[name] = (...args: readonly unknown[]) => primitive.emit(...args)
+	}
 	return Object.freeze(emitter)
 }
 
@@ -136,7 +138,8 @@ export function buildCallbackEventEmitter(
 	events: ReadonlyMap<WidgetMemberKey, EventPrimitive>,
 ): Readonly<Record<string, (...args: readonly unknown[]) => void>> {
 	const emitter: Record<string, (...args: readonly unknown[]) => void> = Object.create(null)
-	for (const [name, primitive] of events) {
+	for (const name of events.keys()) {
+		const primitive = events.get(name)!
 		emitter[name] = (...args: readonly unknown[]) => {
 			context.assertActive()
 			if (callbackScope.owner?.emitter !== emitter)

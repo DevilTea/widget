@@ -21,15 +21,17 @@
 
 import type { RelativeValueDiagnosticInput, RuntimeMethodDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
-import type { RuntimeMethod } from '../internal/contract'
+import type { CompiledDependencyTree, CompiledWidgetNode, RuntimeMethod } from '../internal/contract'
 import type { ErasedWidgetMethodDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './context'
+import type { PrimitiveRegistryEntry } from './deps'
 import { endBatch, signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { callbackScope } from './context'
+import { materializeDependencyTree } from './deps'
 import { buildDefaultMethodArgsDiagnostic, buildMethodArgsDiagnostic, buildMethodResultDiagnostic, freezeDiagnosticSnapshot, toDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
@@ -46,9 +48,12 @@ export interface CreateMethodPrimitiveParams {
 	readonly buildConfigFragment: () => Record<string, unknown>
 	readonly selfNode: unknown
 	readonly blueprintView: unknown
-	readonly deps: unknown
+	/** The compiled dependency tree; its callables are materialized on the first execution. */
+	readonly depsTree: CompiledDependencyTree
+	readonly registry: ReadonlyMap<number, PrimitiveRegistryEntry>
+	readonly nodes: readonly CompiledWidgetNode[]
 	readonly emitFragment: Readonly<Record<string, unknown>>
-	/** The owner `deps` was materialized for; its `emitter` is `emitFragment.emit` (or `null`). */
+	/** The owner the dependency callables are materialized for; its `emitter` is `emitFragment.emit` (or `null`). */
 	readonly owner: CallbackOwner
 	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
 	readonly onDiagnosticsCommitted: () => void
@@ -69,12 +74,10 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 		})
 	}
 
-	function invoke(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
-		context.assertActive()
-		return runRuntimeOperation(() => invokeWithinOperation(...args))
-	}
+	// The materialized `deps` of `execute`'s context: built by the first execution, the same object ever after.
+	let deps: unknown
 
-	function invokeWithinOperation(...args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
+	function invokeWithinOperation(args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
 		startBatch()
 		try {
 			const argsCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>()
@@ -92,7 +95,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 			callbackScope.owner = null
 			try {
 				validArgs = params.definition.validateArgs(args, argsCtx)
-				assertSyncValue(validArgs, `Method "${params.name}"'s validateArgs`)
+				assertSyncValue(validArgs, 'Method', params.name, 'validateArgs')
 				hasArgsDiagnostic = argsCollector.hasAnyDiagnostic()
 			}
 			finally {
@@ -113,6 +116,15 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				return Object.freeze({ ok: false, failure: { diagnostics: diagnostics as readonly [RuntimeMethodDiagnostic, ...RuntimeMethodDiagnostic[]] } })
 			}
 
+			deps ??= materializeDependencyTree(params.depsTree, {
+				consumer: 'method',
+				ownerWidgetId: params.widgetId,
+				ownerName: params.name,
+				registry: params.registry,
+				nodes: params.nodes,
+				context,
+				owner: params.owner,
+			})
 			const execCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>()
 			const sink: ActiveDiagnosticSink = {
 				addFinalizedDiagnostic: (diagnostic, dedupe) => execCollector.addFinalizedDiagnostic(diagnostic as RuntimeMethodDiagnostic, dedupe),
@@ -122,7 +134,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				args,
 				widget: params.selfNode,
 				blueprint: params.blueprintView,
-				deps: params.deps,
+				deps,
 				...params.emitFragment,
 				...params.buildConfigFragment(),
 				addDiagnostic: execCollector.addDiagnostic,
@@ -146,7 +158,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				owner.sink = previousSink
 				execCollector.close()
 			}
-			assertSyncValue(value, `Method "${params.name}"'s execute`)
+			assertSyncValue(value, 'Method', params.name, 'execute')
 
 			const diagnostics = execCollector.finalize(input => buildMethodResultDiagnostic(params.widgetId, params.name, value, input))
 			commitDiagnostics(toDiagnosticSnapshot(diagnostics))
@@ -166,7 +178,11 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 		}
 	}
 
-	const callable = ((...args: readonly unknown[]) => invoke(...args)) as RuntimeMethod<(...args: readonly unknown[]) => unknown>
+	// The rest parameter is the one fresh `args` array of the invocation: it is handed on as is.
+	const callable = ((...args: readonly unknown[]) => {
+		context.assertActive()
+		return runRuntimeOperation(invokeWithinOperation, args)
+	}) as RuntimeMethod<(...args: readonly unknown[]) => unknown>
 
 	Object.assign(callable, {
 		getDiagnostics() {

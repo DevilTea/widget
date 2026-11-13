@@ -134,19 +134,20 @@ function compileBlueprintOutsideCallbacks<Plugins extends AnyWidgetPluginTuple>(
 
 	runStructureValidation(system as unknown as WidgetSystem<AnyWidgetPluginTuple>, nodes, semanticOrder, compileFacade, finalDiagnostics)
 
-	const { edges, directWriteSeeds } = resolveDependencies(nodes, semanticOrder, rootNodeId, nodeIdsByWidgetId, compileFacade, finalDiagnostics)
+	const { edges, memberCount, directWriteSeeds } = resolveDependencies(nodes, semanticOrder, rootNodeId, nodeIdsByWidgetId, compileFacade, finalDiagnostics)
 
-	const analysis = runGraphAnalysis(nodes, semanticOrder, edges, directWriteSeeds, finalDiagnostics)
+	const analysis = runGraphAnalysis(nodes, semanticOrder, edges, memberCount, directWriteSeeds, finalDiagnostics)
 
 	finalizeDiagnosticsByNode(nodeIdByPublicNode, finalDiagnostics, diagnosticsByNode)
 
 	// Blueprint diagnostics are an immutable compiled snapshot: freeze every per-node diagnostic array (the
-	// same array `node.diagnostics` refers to) plus the aggregate array, deep-freezing each diagnostic and
-	// its framework-owned structural fields exactly once (idempotent — the same diagnostic object commonly
-	// appears in both places). Caller/plugin-owned Runtime payload values are left alone.
-	for (const list of diagnosticsByNode.values())
-		freezeDiagnosticSnapshot(list)
+	// same array `node.diagnostics` refers to) plus the aggregate array. Every per-node list only holds
+	// diagnostics taken from the aggregate (`finalizeDiagnosticsByNode`), so deep-freezing the aggregate
+	// freezes each diagnostic and its framework-owned structural fields exactly once and the per-node
+	// lists need only their own freeze. Caller/plugin-owned Runtime payload values are left alone.
 	freezeDiagnosticSnapshot(finalDiagnostics)
+	for (const list of diagnosticsByNode.values())
+		Object.freeze(list)
 	for (const node of nodes) {
 		const shell = node.publicNode as unknown as Record<string, unknown>
 		shell.diagnostics = diagnosticsByNode.get(node.nodeId) ?? EMPTY_DIAGNOSTICS

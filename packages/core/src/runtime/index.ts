@@ -11,7 +11,6 @@
 
 import type {
 	CompiledBlueprint,
-	CompiledResolvedWidgetNode,
 	CreateWidgetSystemRuntimeOptions,
 	InternalNodeId,
 	ValidWidgetSystemBlueprint,
@@ -24,19 +23,26 @@ import { readCompiledBlueprint } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
 import { createRuntimeAggregate } from './aggregate'
 import { buildBlueprintView } from './blueprint-view'
-import { createCallbackOwner, createRuntimeContext, runOutsideCallbacks } from './context'
-import { materializeDependencyTree } from './deps'
+import { callbackScope, createCallbackOwner, createRuntimeContext } from './context'
 import { buildCallbackEventEmitter, createEventPrimitive } from './event'
 import { runtimeInternals } from './internals'
 import { createMethodPrimitive } from './method'
 import { resolveStateOverrides } from './override'
 import { createPropertyPrimitive } from './property'
-import { createStatePrimitive, restoreInitialState } from './state'
+import { createStateLedger, createStatePrimitive, restoreInitialState } from './state'
 import { assertSyncValue } from './sync'
 import { buildRuntimeWidget } from './widget'
 
+/**
+ * Adds `key` to `record` as an own, enumerable, writable, configurable data property. Plain assignment
+ * does exactly that unless the key exists on `Object.prototype` (`__proto__` is a setter there), so only
+ * those keys pay for `defineProperty`.
+ */
 function defineOwnValue(record: Record<string, unknown>, key: string, value: unknown): void {
-	Object.defineProperty(record, key, { value, enumerable: true, writable: true, configurable: true })
+	if (key in Object.prototype)
+		Object.defineProperty(record, key, { value, enumerable: true, writable: true, configurable: true })
+	else
+		record[key] = value
 }
 
 export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
@@ -56,19 +62,23 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		events: Map<string, ReturnType<typeof createEventPrimitive>>
 	}>()
 
-	function buildConfigFragmentFor(node: CompiledResolvedWidgetNode<Plugins>): () => Record<string, unknown> {
-		const definition = readWidgetPluginDefinition(node.plugin)
-		// One frozen fragment per node: callers spread it into their own context objects.
-		const fragment: Record<string, unknown> = definition.config === null ? Object.freeze({}) : Object.freeze({ config: node.config })
-		return () => fragment
-	}
-
 	// The override topology diagnostics (step 4) depend on no primitive, so they are resolved up front:
 	// the live diagnostic aggregate (step 8) has to exist before the primitives that report into it.
 	const overrideResolution = resolveStateOverrides(compiled, options?.overrideStateDefaults)
 	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelDiagnostics)
-	// One commit hook per widget, shared by all of its primitives.
+	// One commit hook and one config fragment getter per widget, shared by all of its primitives.
 	const commitHooks: Array<() => void> = []
+	const configFragments: Array<() => Record<string, unknown>> = []
+
+	let stateCount = 0
+	for (const node of compiled.nodes) {
+		if (node !== undefined && node.resolved)
+			stateCount += node.state.size
+	}
+	const stateLedger = createStateLedger(stateCount)
+	// Each widget's States hold a contiguous range of ledger ordinals: [stateStart, stateEnd).
+	const stateStart: number[] = []
+	const stateEnd: number[] = []
 
 	// 1. Runtime/widget indexes + 2. create all states (null + empty diagnostic snapshot).
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
@@ -90,20 +100,27 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				entry.events.set(name, createEventPrimitive(context))
 		}
 
-		const buildConfigFragment = buildConfigFragmentFor(node)
+		// One frozen fragment per node: callers spread it into their own context objects.
+		const fragment: Record<string, unknown> = definition.config === null ? Object.freeze({}) : Object.freeze({ config: node.config })
+		const buildConfigFragment = () => fragment
+		configFragments[nodeId] = buildConfigFragment
 		const onDiagnosticsCommitted = aggregate.commitHookFor(nodeId)
 		commitHooks[nodeId] = onDiagnosticsCommitted
 
-		for (const [key, member] of node.state) {
+		stateStart[nodeId] = stateLedger.states.length
+		for (const member of node.state.values()) {
+			const { key } = member
 			const primitive = createStatePrimitive(context, {
 				widgetId: node.id,
 				key,
 				definition: member.definition,
 				buildConfigFragment,
 				onDiagnosticsCommitted,
+				ledger: stateLedger,
 			})
 			entry.state.set(key, primitive)
 		}
+		stateEnd[nodeId] = stateLedger.states.length
 	}
 
 	// 3. Apply override/default precedence through authoritative validation (4. the override topology
@@ -117,10 +134,11 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		if (entry === undefined)
 			continue
 
-		const buildConfigFragment = buildConfigFragmentFor(node)
+		const buildConfigFragment = configFragments[nodeId]!
 		const overrides = overrideResolution.candidatesByNodeId.get(nodeId)
 
-		for (const [key, member] of node.state) {
+		for (const member of node.state.values()) {
+			const { key } = member
 			const primitive = entry.state.get(key)
 			if (primitive === undefined)
 				continue
@@ -135,9 +153,16 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			else if (member.definition.default) {
 				// `default` owns no dependency or `emit` callables: a Runtime created while a Method runs must
 				// not let it use that Method's (see `callbackScope`).
-				const { definition } = member
-				candidate = runOutsideCallbacks(() => definition.default!({ ...buildConfigFragment() }))
-				assertSyncValue(candidate, `State "${key}"'s default`)
+				// (`runOutsideCallbacks` inlined: no closure per defaulted State.)
+				const previousOwner = callbackScope.owner
+				callbackScope.owner = null
+				try {
+					candidate = member.definition.default({ ...buildConfigFragment() })
+				}
+				finally {
+					callbackScope.owner = previousOwner
+				}
+				assertSyncValue(candidate, 'State', key, 'default')
 				hasCandidate = true
 			}
 
@@ -147,8 +172,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		}
 	}
 
-	// 5. Materialize compiled dependency callables + 6. create property computed/diagnostics +
-	// 7. create method wrappers.
+	// 5. Create the property computed/diagnostics + 6. method wrappers. Each member materializes its
+	// dependency callables from the compiled tree on its first evaluation or invocation.
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
 		if (node === undefined || !node.resolved)
@@ -158,7 +183,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		if (entry === undefined)
 			continue
 
-		const buildConfigFragment = buildConfigFragmentFor(node)
+		const buildConfigFragment = configFragments[nodeId]!
 		const onDiagnosticsCommitted = commitHooks[nodeId]!
 		const definition = readWidgetPluginDefinition(node.plugin)
 		const emitter = definition.events === null ? null : buildCallbackEventEmitter(context, entry.events)
@@ -166,17 +191,9 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			? Object.freeze({})
 			: Object.freeze({ emit: emitter })
 
-		for (const [name, member] of node.properties) {
+		for (const member of node.properties.values()) {
+			const { name } = member
 			const owner = createCallbackOwner(null)
-			const deps = materializeDependencyTree(member.deps, {
-				consumer: 'property',
-				ownerWidgetId: node.id,
-				ownerName: name,
-				registry,
-				nodes: compiled.nodes,
-				context,
-				owner,
-			})
 
 			const primitive = createPropertyPrimitive(context, {
 				widgetId: node.id,
@@ -185,24 +202,18 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				buildConfigFragment,
 				selfNode: node.publicNode,
 				blueprintView,
-				deps,
+				depsTree: member.deps,
+				registry,
+				nodes: compiled.nodes,
 				owner,
 				onDiagnosticsCommitted,
 			})
 			entry.properties.set(name, primitive)
 		}
 
-		for (const [name, member] of node.methods) {
+		for (const member of node.methods.values()) {
+			const { name } = member
 			const owner = createCallbackOwner(emitter)
-			const deps = materializeDependencyTree(member.deps, {
-				consumer: 'method',
-				ownerWidgetId: node.id,
-				ownerName: name,
-				registry,
-				nodes: compiled.nodes,
-				context,
-				owner,
-			})
 
 			const primitive = createMethodPrimitive(context, {
 				widgetId: node.id,
@@ -211,7 +222,9 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				buildConfigFragment,
 				selfNode: node.publicNode,
 				blueprintView,
-				deps,
+				depsTree: member.deps,
+				registry,
+				nodes: compiled.nodes,
 				emitFragment,
 				owner,
 				onDiagnosticsCommitted,
@@ -223,11 +236,12 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	// 8. Build the RuntimeWidgets (the live Runtime-level diagnostic aggregate was created up front).
 	const runtimeWidgetsByNodeId = new Map<InternalNodeId, unknown>()
 	const nodeIdByRuntimeWidget = new Map<object, InternalNodeId>()
-	for (const [nodeId, entry] of registry) {
+	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
-		if (node === undefined || !node.resolved)
+		const entry = registry.get(nodeId)
+		if (node === undefined || !node.resolved || entry === undefined)
 			continue
-		const runtimeWidget = buildRuntimeWidget(context, node, entry)
+		const runtimeWidget = buildRuntimeWidget(context, node, entry, stateLedger, stateStart[nodeId]!, stateEnd[nodeId]!)
 		runtimeWidgetsByNodeId.set(nodeId, runtimeWidget)
 		nodeIdByRuntimeWidget.set(runtimeWidget as object, nodeId)
 	}
@@ -246,13 +260,13 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 	}
 
 	function resetState(): void {
-		restoreInitialState(context, registry.values())
+		restoreInitialState(context, stateLedger, 0, stateLedger.states.length)
 	}
 
 	function snapshotState(): Record<WidgetId, Record<WidgetMemberKey, unknown>> {
 		context.assertActive()
 		// Plain objects owned by the caller. Keys are arbitrary strings (`__proto__` included), so they are
-		// defined as own data properties instead of assigned.
+		// always own data properties (see `defineOwnValue`).
 		const snapshot: Record<WidgetId, Record<WidgetMemberKey, unknown>> = {}
 		for (const nodeId of compiled.semanticOrder) {
 			const node = compiled.nodes[nodeId]
@@ -261,8 +275,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				continue
 
 			let values: Record<WidgetMemberKey, unknown> | null = null
-			for (const [key, primitive] of entry.state) {
-				const value = primitive.internal.get()
+			for (const key of entry.state.keys()) {
+				const value = entry.state.get(key)!.internal.get()
 				if (value !== null)
 					defineOwnValue(values ??= {}, key, value)
 			}

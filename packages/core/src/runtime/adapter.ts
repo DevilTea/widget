@@ -23,7 +23,7 @@
  */
 
 import type { RuntimeContext } from './context'
-import { effect, endBatch, getBatchDepth, setActiveSub, startBatch } from 'alien-signals'
+import { effect, endBatch, getActiveSub, getBatchDepth, setActiveSub, startBatch } from 'alien-signals'
 import { WidgetSystemRuntimeReentrancyError } from '../diagnostic'
 import { callbackScope } from './context'
 
@@ -161,6 +161,15 @@ export function invokeEventListenerIsolated(listener: (...args: readonly unknown
 let operationDepth = 0
 
 /**
+ * Whether the caller is outside everything of the Runtime and of the reactive graph: no Runtime operation in
+ * progress, no open alien batch and no active subscriber. Only then does a read or a no-op write of a signal
+ * have no side effect anyone could observe.
+ */
+export function isRuntimeIdle(): boolean {
+	return operationDepth === 0 && getBatchDepth() === 0 && getActiveSub() === undefined
+}
+
+/**
  * alien-signals' batch depth when the outermost {@link runRuntimeOperation} frame was entered. Every batch
  * level opened inside that operation — a `RuntimeMethod` invocation's own batch, `resetState`'s batch and
  * every level {@link writeDeferringFlush} opened — is above it.
@@ -206,13 +215,16 @@ function releaseBatches(): void {
  * inside the release's flush must not leave the depth pinned above `0`, or every later call would look
  * nested and no release would ever run again. Both depth updates are plain expressions, never calls, so
  * they still run when the stack is exhausted.
+ *
+ * `fn` receives `argument`, so a hot path passes a function that already exists together with its
+ * argument instead of allocating a closure per call.
  */
-export function runRuntimeOperation<Result>(fn: () => Result): Result {
+export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument): Result {
 	if (operationDepth === 0)
 		entryBatchDepth = getBatchDepth()
 	++operationDepth
 	try {
-		return fn()
+		return fn(argument as Argument)
 	}
 	finally {
 		try {

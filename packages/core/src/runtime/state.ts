@@ -14,7 +14,7 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
 import { endBatch, signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
-import { createTrackedSubscription, invokeListenerIsolated, runRuntimeOperation, writeDeferringFlush } from './adapter'
+import { createTrackedSubscription, invokeListenerIsolated, isRuntimeIdle, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { callbackScope } from './context'
 import { buildDefaultStateValidationDiagnostic, buildStateValidationDiagnostic, freezeDiagnosticSnapshot } from './diagnostics'
@@ -50,9 +50,11 @@ export interface StatePrimitiveInternal {
 	captureInitial: () => void
 	/**
 	 * Restores the captured initialization outcome without running `validate`. The caller owns the
-	 * surrounding Runtime operation and batch.
+	 * surrounding Runtime operation and batch. `clearMark` says whether this State is no longer a candidate
+	 * for the next `resetState()`: only a restore that flushed completely may say so (see
+	 * `restoreInitialState`).
 	 */
-	restoreInitial: () => void
+	restoreInitial: (clearMark: boolean) => void
 }
 
 export interface StatePrimitive {
@@ -68,25 +70,66 @@ export interface CreateStatePrimitiveParams {
 	readonly buildConfigFragment: () => Record<string, unknown>
 	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
 	readonly onDiagnosticsCommitted: () => void
+	/** The Runtime's State ledger; the new primitive takes the next ordinal. */
+	readonly ledger: StateLedger
 }
 
 /**
- * Restores the captured initialization outcome of every State member of `widgets` — the shared
- * implementation of `WidgetSystemRuntime.resetState()` (every widget) and `RuntimeWidget.resetState()`
- * (one widget). `validate` does not run again, all writes form one batch so dependents recompute and
- * subscribers are notified once, and Property/Method diagnostic snapshots are left untouched.
+ * The State members of one Runtime in creation order (widget by widget, member by member), numbered
+ * densely from `0`, and a bitset with one bit per ordinal marking the States that may differ from their
+ * captured initialization outcome: set by every write attempt, cleared when the initial outcome is
+ * captured or restored. `resetState()` only has to visit the set bits.
  */
-export function restoreInitialState(
-	context: RuntimeContext,
-	widgets: Iterable<{ readonly state: ReadonlyMap<WidgetMemberKey, StatePrimitive> }>,
-): void {
+export interface StateLedger {
+	readonly dirty: Uint32Array
+	readonly states: StatePrimitiveInternal[]
+}
+
+export function createStateLedger(stateCount: number): StateLedger {
+	return { dirty: new Uint32Array((stateCount + 31) >>> 5), states: [] }
+}
+
+/**
+ * Restores the captured initialization outcome of the State members whose ordinals lie in
+ * `[first, end)` and that may have changed since — the shared implementation of
+ * `WidgetSystemRuntime.resetState()` (every State) and `RuntimeWidget.resetState()` (one widget's
+ * contiguous range). `validate` does not run again, all writes form one batch so dependents recompute and
+ * subscribers are notified once, and Property/Method diagnostic snapshots are left untouched.
+ *
+ * Called from outside every Runtime operation, alien batch and reactive scope, the scan only visits the
+ * set bits: restoring a State nothing wrote is then a no-op nobody can observe. In ascending ordinal order,
+ * i.e. the order a scan over every State would restore them in, it re-reads the bitset word at every step,
+ * so a State a listener writes during the reset is restored exactly when the scan has not passed it yet.
+ * From anywhere else (a listener, a `compute`, a Method, an open batch) every State of the range is
+ * restored, in order, because a restore also reads the State's signal: that read is tracked by an active
+ * computed or effect and commits a value an enclosing write has not committed yet. Such a restore leaves
+ * the marks set, since its own write may still be uncommitted when it returns; the next top-level reset
+ * visits those States again, exactly as a full scan would, and clears the marks.
+ */
+export function restoreInitialState(context: RuntimeContext, ledger: StateLedger, first: number, end: number): void {
 	context.assertActive()
+	const writtenOnly = isRuntimeIdle()
 	runRuntimeOperation(() => {
 		startBatch()
 		try {
-			for (const widget of widgets) {
-				for (const primitive of widget.state.values())
-					primitive.internal.restoreInitial()
+			const { dirty, states } = ledger
+			let ordinal = first
+			if (!writtenOnly) {
+				for (; ordinal < end; ordinal++)
+					states[ordinal]!.restoreInitial(false)
+				return
+			}
+			while (ordinal < end) {
+				const remaining = dirty[ordinal >>> 5]! >>> (ordinal & 31)
+				if (remaining === 0) {
+					ordinal = (ordinal | 31) + 1
+					continue
+				}
+				ordinal += 31 - Math.clz32(remaining & -remaining)
+				if (ordinal >= end)
+					break
+				states[ordinal]!.restoreInitial(true)
+				++ordinal
 			}
 		}
 		finally {
@@ -95,11 +138,28 @@ export function restoreInitialState(
 	})
 }
 
+/**
+ * Clears the dirty bit of `ordinal`, now that its initial outcome was captured or is being restored. Writing NaN
+ * over NaN counts as a change, so restoring a NaN initial value notifies even an unwritten State: that bit
+ * stays set.
+ */
+function markCleanUnlessNaN(dirty: Uint32Array, ordinal: number, initialValue: unknown): void {
+	if (Number.isNaN(initialValue))
+		dirty[ordinal >>> 5]! |= 1 << (ordinal & 31)
+	else
+		dirty[ordinal >>> 5]! &= ~(1 << (ordinal & 31))
+}
+
 export function createStatePrimitive(context: RuntimeContext, params: CreateStatePrimitiveParams): StatePrimitive {
+	const { dirty, states } = params.ledger
+	const ordinal = states.length
 	const valueSignal = signal<unknown>(null)
 	const diagnosticsSignal = signal<readonly RuntimeStateDiagnostic[]>(EMPTY_DIAGNOSTICS)
 
-	let inspectionSnapshot: Readonly<{ value: unknown }> = Object.freeze({ value: null })
+	// The frozen envelope of the last published value, built when first read (or published to a listener)
+	// and kept until the next change, so a write nobody inspects allocates nothing.
+	let inspectionValue: unknown = null
+	let inspectionSnapshot: Readonly<{ value: unknown }> | null = null
 	// Plain lazy-allocated registration list (diagnostic #10 inspection amendment "runtime inspection,
 	// materialization, disposal, conformance"): never a global registry, allocated only once something
 	// actually subscribes. Not a `Set` keyed by the listener function itself — two independent
@@ -108,16 +168,23 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	interface ListenerEntry { readonly listener: (snapshot: Readonly<{ value: unknown }>) => void }
 	let inspectionListeners: ListenerEntry[] | null = null
 
+	function readInspectionSnapshot(): Readonly<{ value: unknown }> {
+		return inspectionSnapshot ??= Object.freeze({ value: inspectionValue })
+	}
+
 	function publishInspectionSnapshot(value: unknown): void {
-		inspectionSnapshot = Object.freeze({ value })
+		inspectionValue = value
+		inspectionSnapshot = null
 		if (inspectionListeners === null)
 			return
 		// Iterate a stable snapshot taken at publication start: a listener that itself calls `subscribe()`
 		// during this loop must not have its new registration visited by *this* publication (future-changes
 		// -only / no-immediate-emission), which a live-array/live-Set iteration could otherwise do.
 		const listenersSnapshot = inspectionListeners.slice()
+		// Each listener is handed the envelope that is current when it is called: an earlier listener may
+		// have changed the State again.
 		for (const entry of listenersSnapshot)
-			invokeListenerIsolated(entry.listener, inspectionSnapshot)
+			invokeListenerIsolated(entry.listener, readInspectionSnapshot())
 	}
 
 	/**
@@ -141,10 +208,25 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	}
 
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
-		return runRuntimeOperation(() => attemptSetWithinOperation(candidate))
+		return runRuntimeOperation(attemptSetWithinOperation, candidate)
 	}
 
+	/**
+	 * A rejected attempt changes the diagnostic snapshot, so every attempt marks the State: on entry, and once
+	 * more after its last mutation, because that mutation flushes listeners that may reset the State
+	 * (clearing its mark) before the attempt has finished writing.
+	 */
 	function attemptSetWithinOperation(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
+		dirty[ordinal >>> 5]! |= 1 << (ordinal & 31)
+		try {
+			return attemptSetUnmarked(candidate)
+		}
+		finally {
+			dirty[ordinal >>> 5]! |= 1 << (ordinal & 31)
+		}
+	}
+
+	function attemptSetUnmarked(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
 		const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeStateDiagnostic>()
 		const ctx = {
 			...params.buildConfigFragment(),
@@ -160,7 +242,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		callbackScope.owner = null
 		try {
 			isValid = params.definition.validate(candidate, ctx)
-			assertSyncValue(isValid, `State "${params.key}"'s validate`)
+			assertSyncValue(isValid, 'State', params.key, 'validate')
 			hasDiagnostic = collector.hasAnyDiagnostic()
 		}
 		finally {
@@ -181,7 +263,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		// Top-level semantic execution values (state values included) must not be `PromiseLike`; a
 		// candidate that would otherwise be accepted must not become the live State value if it is
 		// thenable (diagnostic #10 amendment "synchronous core boundary and future async seams").
-		assertSyncValue(candidate, `State "${params.key}"'s value`)
+		assertSyncValue(candidate, 'State', params.key, 'value')
 
 		// Read the pre-write raw value before committing, using the exact strict-inequality comparison
 		// `alien-signals`' own signal uses to decide whether a write actually changes anything (see the
@@ -203,8 +285,12 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		captureInitial() {
 			initialValue = valueSignal()
 			initialDiagnostics = committedDiagnostics
+			markCleanUnlessNaN(dirty, ordinal, initialValue)
 		},
-		restoreInitial() {
+		restoreInitial(clearMark) {
+			// Cleared first: a listener that writes this State while its restoration is published marks it again.
+			if (clearMark)
+				markCleanUnlessNaN(dirty, ordinal, initialValue)
 			const previous = valueSignal()
 			valueSignal(initialValue)
 			commitDiagnostics(initialDiagnostics)
@@ -215,7 +301,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		getDiagnostics: () => diagnosticsSignal(),
 		attemptSet,
 		inspection: {
-			getSnapshot: () => inspectionSnapshot,
+			getSnapshot: readInspectionSnapshot,
 			subscribe: (listener) => {
 				const entry: ListenerEntry = { listener }
 				if (inspectionListeners === null)
@@ -255,5 +341,6 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		},
 	}
 
+	states.push(internal)
 	return { internal, public: publicState }
 }
