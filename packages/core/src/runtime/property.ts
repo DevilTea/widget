@@ -22,15 +22,17 @@
 
 import type { RelativeValueDiagnosticInput, RuntimePropertyDiagnostic } from '../diagnostic'
 import type { ExecutionResult } from '../execution-result'
-import type { RuntimeProperty } from '../internal/contract'
+import type { CompiledDependencyTree, CompiledWidgetNode, RuntimeProperty } from '../internal/contract'
 import type { ErasedWidgetPropertyDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './context'
+import type { PrimitiveRegistryEntry } from './deps'
 import { computed, signal } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, invokeListenerIsolated, isEngineStackOverflow, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { callbackScope } from './context'
+import { materializeDependencyTree } from './deps'
 import { buildPropertyResultDiagnostic, toDiagnosticSnapshot } from './diagnostics'
 import { assertSyncValue } from './sync'
 
@@ -92,8 +94,11 @@ export interface CreatePropertyPrimitiveParams {
 	readonly buildConfigFragment: () => Record<string, unknown>
 	readonly selfNode: unknown
 	readonly blueprintView: unknown
-	readonly deps: unknown
-	/** The owner `deps` was materialized for. */
+	/** The compiled dependency tree; its callables are materialized on the first evaluation. */
+	readonly depsTree: CompiledDependencyTree
+	readonly registry: ReadonlyMap<number, PrimitiveRegistryEntry>
+	readonly nodes: readonly CompiledWidgetNode[]
+	/** The owner the dependency callables are materialized for. */
 	readonly owner: CallbackOwner
 	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
 	readonly onDiagnosticsCommitted: () => void
@@ -136,6 +141,8 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	// started, and the per-Property signal a read writes to make the computed evaluate again. The signal is
 	// created by the first evaluation, so a Property that is never read costs nothing.
 	let evaluations = 0
+	// The materialized `deps` of `compute`'s context: built by the first evaluation, the same object ever after.
+	let deps: unknown
 	let retries = 0
 	let retrySignal: { (): number, (value: number): void } | null = null
 
@@ -149,6 +156,15 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		// Everything below is caught: this getter can run inside any effect's dirty check during a flush, and
 		// an exception escaping it would escape that flush (see the module doc).
 		try {
+			deps ??= materializeDependencyTree(params.depsTree, {
+				consumer: 'property',
+				ownerWidgetId: params.widgetId,
+				ownerName: params.name,
+				registry: params.registry,
+				nodes: params.nodes,
+				context,
+				owner,
+			})
 			const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimePropertyDiagnostic>()
 			const sink: ActiveDiagnosticSink = {
 				addFinalizedDiagnostic: (diagnostic, dedupe) => collector.addFinalizedDiagnostic(diagnostic as RuntimePropertyDiagnostic, dedupe),
@@ -157,7 +173,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			const ctx = {
 				widget: params.selfNode,
 				blueprint: params.blueprintView,
-				deps: params.deps,
+				deps,
 				...params.buildConfigFragment(),
 				addDiagnostic: collector.addDiagnostic,
 				hasAnyDiagnostic: collector.hasAnyDiagnostic,

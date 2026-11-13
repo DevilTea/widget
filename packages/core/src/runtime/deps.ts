@@ -1,11 +1,10 @@
 /**
  * Materializes a `CompiledDependencyTree` into the callable shape `ToExecutedDep(s)` promises.
  *
- * Materialization happens once per Property/Method member at Runtime construction and produces
- * stable, reusable callables: each callable closes over the shared primitive registry (populated
+ * Materialization happens once per Property/Method member, on its first evaluation or invocation (most
+ * members of a large Runtime are never used), and produces stable, reusable callables: each callable closes over the shared primitive registry (populated
  * progressively while the Runtime is built) and looks the target primitive up lazily at invocation
- * time — inside the callable body, never while building the callable — so materialization may run
- * before every primitive exists. Runtime correctness must not depend on member/widget declaration
+ * time — inside the callable body, never while building the callable. Runtime correctness must not depend on member/widget declaration
  * order: a forward `Property -> later Property`, any `Property -> read-only Method`, a dependency on a
  * later widget, and a valid Method-only cycle (`A <-> B`) must all materialize and invoke correctly.
  *

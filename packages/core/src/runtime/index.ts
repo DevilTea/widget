@@ -24,7 +24,6 @@ import { readWidgetPluginDefinition } from '../plugin'
 import { createRuntimeAggregate } from './aggregate'
 import { buildBlueprintView } from './blueprint-view'
 import { callbackScope, createCallbackOwner, createRuntimeContext } from './context'
-import { materializeDependencyTree } from './deps'
 import { buildCallbackEventEmitter, createEventPrimitive } from './event'
 import { runtimeInternals } from './internals'
 import { createMethodPrimitive } from './method'
@@ -173,8 +172,8 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		}
 	}
 
-	// 5. Materialize compiled dependency callables + 6. create property computed/diagnostics +
-	// 7. create method wrappers.
+	// 5. Create the property computed/diagnostics + 6. method wrappers. Each member materializes its
+	// dependency callables from the compiled tree on its first evaluation or invocation.
 	for (let nodeId = 0; nodeId < compiled.nodes.length; nodeId++) {
 		const node = compiled.nodes[nodeId]
 		if (node === undefined || !node.resolved)
@@ -195,15 +194,6 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		for (const member of node.properties.values()) {
 			const { name } = member
 			const owner = createCallbackOwner(null)
-			const deps = materializeDependencyTree(member.deps, {
-				consumer: 'property',
-				ownerWidgetId: node.id,
-				ownerName: name,
-				registry,
-				nodes: compiled.nodes,
-				context,
-				owner,
-			})
 
 			const primitive = createPropertyPrimitive(context, {
 				widgetId: node.id,
@@ -212,7 +202,9 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				buildConfigFragment,
 				selfNode: node.publicNode,
 				blueprintView,
-				deps,
+				depsTree: member.deps,
+				registry,
+				nodes: compiled.nodes,
 				owner,
 				onDiagnosticsCommitted,
 			})
@@ -222,15 +214,6 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		for (const member of node.methods.values()) {
 			const { name } = member
 			const owner = createCallbackOwner(emitter)
-			const deps = materializeDependencyTree(member.deps, {
-				consumer: 'method',
-				ownerWidgetId: node.id,
-				ownerName: name,
-				registry,
-				nodes: compiled.nodes,
-				context,
-				owner,
-			})
 
 			const primitive = createMethodPrimitive(context, {
 				widgetId: node.id,
@@ -239,7 +222,9 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				buildConfigFragment,
 				selfNode: node.publicNode,
 				blueprintView,
-				deps,
+				depsTree: member.deps,
+				registry,
+				nodes: compiled.nodes,
 				emitFragment,
 				owner,
 				onDiagnosticsCommitted,
