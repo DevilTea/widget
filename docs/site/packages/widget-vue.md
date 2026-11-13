@@ -112,7 +112,10 @@ const WidgetRenderer = createWidgetVueRenderer(
 - If the `runtime` prop's identity changes, the entire internal host/renderer
   tree fully unmounts and a fresh tree mounts — even when the root `id`/`type`
   are identical — so every Vue bridge subscription from the previous Runtime
-  is guaranteed to be cleaned up.
+  is guaranteed to be cleaned up. An editor that swaps in a new Runtime after
+  each valid edit while keeping the last valid one during invalid edits is
+  described in
+  [Editing a document that is currently invalid](./widget-core#editing-a-document-that-is-currently-invalid).
 - `WidgetRenderer` never calls `runtime.dispose()`, on unmount or replacement.
   Runtime lifetime is owned by the caller.
 
