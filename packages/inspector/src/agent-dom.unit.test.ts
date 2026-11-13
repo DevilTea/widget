@@ -587,3 +587,79 @@ describe('inspectorAgent ShadowRoot overlay', () => {
 		}
 	})
 })
+
+describe('inspectorAgent DOM inspection after its Runtime is disposed', () => {
+	it('clears the highlight and stops emitting refs or suppressing the page once the Runtime is disposed', async () => {
+		const { root, inner, runtime, agent, client } = createDomFixture()
+		try {
+			const action = vi.fn()
+			inner.addEventListener('click', action)
+			const events: string[] = []
+			client.subscribe(event => events.push(event.event))
+			await client.request('inspect.enable', {})
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			await flushTransport()
+			expect(overlayHost())
+				.not
+				.toBeNull()
+			expect(events)
+				.toContain('inspect.hovered')
+			events.length = 0
+
+			runtime.dispose()
+			await flushTransport()
+
+			// The highlight is cleared when the disposal is announced; the announcement is the only event.
+			expect(overlayHost())
+				.toBeNull()
+			expect(events)
+				.toEqual(['runtime.disposed'])
+			events.length = 0
+
+			inner.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+			const pointerDown = new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+			inner.dispatchEvent(pointerDown)
+			const pointerUp = new PointerEvent('pointerup', { bubbles: true, cancelable: true })
+			inner.dispatchEvent(pointerUp)
+			const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+			inner.dispatchEvent(click)
+			await flushTransport()
+
+			expect(events)
+				.toEqual([])
+			expect(overlayHost())
+				.toBeNull()
+			expect(pointerDown.defaultPrevented)
+				.toBe(false)
+			expect(pointerUp.defaultPrevented)
+				.toBe(false)
+			expect(click.defaultPrevented)
+				.toBe(false)
+			expect(action)
+				.toHaveBeenCalledTimes(1)
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+
+	it('still answers inspect.disable after the Runtime is disposed, and releases inspect mode', async () => {
+		const { root, runtime, agent, client } = createDomFixture()
+		try {
+			await client.request('inspect.enable', {})
+			runtime.dispose()
+
+			expect(await client.request('inspect.disable', {}))
+				.toEqual({ enabled: false })
+			expect(agent.inspectEnabled)
+				.toBe(false)
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			root.remove()
+		}
+	})
+})

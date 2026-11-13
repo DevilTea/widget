@@ -227,6 +227,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			runtimeDisposalAnnounced = true
 			// Core already tore down its side of every live subscription; release the Agent's bookkeeping.
 			releaseSubscriptions()
+			// Nothing the overlay shows can be inspected any more.
+			clearHighlight()
 			emit('runtime.disposed', { runtimeId, reason: 'runtime-disposed' })
 		}
 		return true
@@ -391,8 +393,14 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			: { ref: target.ref, widgetId: target.widgetId, widgetType: target.widgetType })
 	}
 
+	// Once the Runtime is disposed every ref the Agent could hand out points at nothing, so inspect mode
+	// stays enabled (the peer still releases it) but stops emitting refs and stops suppressing the page.
+	function inspectingLiveRuntime(): boolean {
+		return inspectEnabled && !options.runtime.isDisposed
+	}
+
 	function onPointerOver(event: PointerEvent): void {
-		if (!inspectEnabled)
+		if (!inspectingLiveRuntime())
 			return
 		const anchor = resolveAnchor(event.target)
 		if (anchor === null) {
@@ -419,14 +427,14 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	function suppressPointerActivation(event: Event): void {
-		if (!inspectEnabled || resolveAnchor(event.target) === null)
+		if (!inspectingLiveRuntime() || resolveAnchor(event.target) === null)
 			return
 		event.preventDefault()
 		event.stopPropagation()
 	}
 
 	function onClick(event: MouseEvent): void {
-		if (!inspectEnabled)
+		if (!inspectingLiveRuntime())
 			return
 		const anchor = resolveAnchor(event.target)
 		if (anchor === null)
