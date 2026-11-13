@@ -283,6 +283,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		snapshotState,
 		getDiagnostics: aggregate.getDiagnostics,
 		subscribeDiagnostics: aggregate.subscribeDiagnostics,
+		subscribeDisposal: context.subscribeDisposal,
 		dispose: () => context.dispose(),
 	}
 

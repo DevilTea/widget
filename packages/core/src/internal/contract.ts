@@ -497,7 +497,8 @@ export type RuntimeWidget<Plugins extends AnyWidgetPluginTuple = AnyWidgetPlugin
  * Executable instance of a valid Blueprint.
  *
  * After `dispose()`, `isDisposed` and `blueprint` stay readable while every live query/operation and
- * every new subscription throws `WidgetSystemRuntimeDisposedError`.
+ * every new subscription throws `WidgetSystemRuntimeDisposedError`. Disposal notifies only the listeners
+ * registered with `subscribeDisposal()`; it emits no State, Property, Event or diagnostic notification.
  */
 export interface WidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	readonly blueprint: ValidWidgetSystemBlueprint<Plugins>
@@ -525,6 +526,21 @@ export interface WidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple = AnyW
 	 */
 	getDiagnostics: () => readonly RuntimeDiagnostic[]
 	subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeDiagnostic[]) => void) => () => void
+	/**
+	 * Registers a listener that runs exactly once, synchronously, inside the first `dispose()` call, with no
+	 * arguments — for a host to cancel the asynchronous work it owns. By then the Runtime is already fully
+	 * disposed: `isDisposed` is `true`, every Runtime-owned subscription is torn down, a live operation throws
+	 * `WidgetSystemRuntimeDisposedError`, `dispose()` is a no-op, and `blueprint` and a widget's `id`,
+	 * `type` and `blueprintNode` stay readable. Listeners run in subscription order, like Event listeners from
+	 * a list fixed when delivery starts: one removed meanwhile still runs, and none can be added meanwhile,
+	 * because subscribing to a disposed Runtime throws `WidgetSystemRuntimeDisposedError`, as it does after
+	 * disposal in general (the listener is never invoked immediately). A throwing listener never reaches the
+	 * `dispose()` caller or stops the remaining listeners; it is reported asynchronously like any other
+	 * isolated listener exception. Registering the same function twice makes two independent registrations.
+	 * The returned unsubscribe function is idempotent and safe to call before or after disposal; once the
+	 * listener has run it does nothing, and the Runtime keeps no reference to the listener.
+	 */
+	subscribeDisposal: (listener: () => void) => () => void
 	dispose: () => void
 }
 

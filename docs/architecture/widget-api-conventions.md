@@ -38,6 +38,12 @@ only the diagnostics of operations that have completed, so a Property that has
 never been evaluated contributes nothing. A widget aggregate never absorbs
 Runtime-boundary diagnostics merely because a widget id is mentioned.
 
+Disposal has its own channel, `runtime.subscribeDisposal(listener)`: each
+listener runs once, synchronously, inside the first `dispose()` call and after
+the Runtime is already fully disposed, so it can cancel work the host owns but
+cannot use the Runtime. Disposal sends no State, Property, Event or diagnostic
+notification and creates no diagnostic.
+
 The Blueprint aggregate has its own deterministic order (a post-order walk of
 the source tree, followed by the duplicate-id, JSON-domain, structure and
 dependency phases), which is different from the Runtime aggregate's semantic
@@ -45,9 +51,10 @@ pre-order.
 
 Diagnostic callbacks are an ordinary semantic result channel. Observer
 exceptions are isolated from the operation that caused a notification: a
-throwing State, Property, diagnostic, Event, inspection or `WidgetDocument`
-listener never reaches the writer and never stops the other listeners, and Core
-reports it asynchronously. The one exception is a runaway Event loop: the emit
+throwing State, Property, diagnostic, Event, disposal, inspection or
+`WidgetDocument` listener never reaches the writer (for a disposal listener,
+the `dispose()` caller) and never stops the other listeners, and Core reports
+it asynchronously. The one exception is a runaway Event loop: the emit
 re-entrancy guard's `WidgetSystemRuntimeReentrancyError`, and an engine stack
 overflow raised inside an Event listener, pass through Event listener isolation
 so they reach the operation that started the loop instead of being retried at

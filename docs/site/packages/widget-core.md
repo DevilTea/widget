@@ -1933,6 +1933,7 @@ not duplication.
 
 ```ts
 runtime.dispose() // idempotent
+runtime.subscribeDisposal(listener) // returns an idempotent unsubscribe function
 ```
 
 After disposal, `runtime.isDisposed` and `runtime.blueprint` remain readable,
@@ -1942,9 +1943,9 @@ reads and writes, method invocations, `runtime.snapshotState()`, `resetState()`,
 `RuntimeWidget.getDiagnostics()`) and every
 *new* subscription (including `RuntimeWidget.subscribeDiagnostics()`) throws
 `WidgetSystemRuntimeDisposedError`; previously returned unsubscribe functions
-remain safe, idempotent no-ops. Disposal itself emits no notification and
-creates no diagnostic. A dependency or `emit` callable used after disposal
-throws the same error.
+remain safe, idempotent no-ops. Disposal sends no State, Property, Event or
+diagnostic notification and creates no diagnostic. A dependency or `emit`
+callable used after disposal throws the same error.
 
 The error's `code` is `'runtime-disposed'`.
 
@@ -1973,6 +1974,80 @@ catch (error) {
 		console.log(error.code)
 	}
 }
+```
+
+`runtime.subscribeDisposal(listener)` is the one disposal signal. A host that
+owns asynchronous work (a request, a timer, a worker) uses it to cancel that
+work when the Runtime goes away:
+
+- Each listener runs exactly once, synchronously, inside the first `dispose()`
+  call, with no arguments. Later `dispose()` calls do nothing.
+- By then the Runtime is already fully disposed: `runtime.isDisposed` is
+  `true` and every Runtime-owned subscription is torn down. A live operation
+  attempted from the listener throws `WidgetSystemRuntimeDisposedError`,
+  `runtime.dispose()` does nothing, and the metadata listed above stays
+  readable. A listener cancels the host's own work; it cannot read or write the
+  Runtime.
+- Listeners run in subscription order. Delivery uses the list as it stood when
+  disposal began, as Event delivery does: a listener unsubscribed meanwhile
+  still runs, and none can be added meanwhile, because subscribing to a
+  disposed Runtime throws.
+- A throwing listener never reaches the `dispose()` caller and never stops the
+  remaining listeners; like every other listener exception it is reported
+  asynchronously (see [Host requirements](#host-requirements)).
+- `subscribeDisposal()` on an already disposed Runtime throws
+  `WidgetSystemRuntimeDisposedError`; the listener is never invoked
+  immediately, so check `runtime.isDisposed` first when the Runtime may already
+  be gone.
+- The returned unsubscribe function is idempotent and safe before or after
+  disposal; once the listener has run it does nothing. Registering the same
+  function twice makes two independent registrations.
+- The Runtime keeps no reference to a listener once it has run.
+
+<!-- sample: disposal-listener run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+const plugin = createWidgetPlugin('profile')
+	.description('A profile widget')
+	.interfaces<{ state: { title: string } }>()
+	.state(state => state
+		.title({ validate: (input): input is string => typeof input === 'string' }))
+	.done()
+const blueprint = createWidgetSystem({ plugins: [plugin] })
+	.createBlueprint({ id: 'profile-1', type: 'profile' })
+if (blueprint.status !== 'valid')
+	throw new Error('invalid')
+
+const runtime = blueprint.createRuntime()
+
+// The host owns the pending work; the Runtime only tells it when to stop.
+const controller = new AbortController()
+runtime.subscribeDisposal(() => controller.abort())
+
+function pause(milliseconds: number, signal: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(resolve, milliseconds)
+		signal.addEventListener('abort', () => {
+			clearTimeout(timer)
+			reject(signal.reason)
+		}, { once: true })
+	})
+}
+
+async function loadTitle(): Promise<void> {
+	try {
+		await pause(1000, controller.signal)
+		runtime.getWidget('profile-1')?.state.title.set('Ada')
+	}
+	catch {
+		console.log('loading cancelled')
+	}
+}
+
+const loading = loadTitle()
+runtime.dispose() // aborts the pending work synchronously
+await loading
 ```
 
 ## Renderer adapter integration
@@ -2098,12 +2173,12 @@ provides and which Core's own tests exercise:
   when you subscribe. `subscribeDiagnostics()` and Event subscriptions never
   evaluate anything. Subscribing to State, Properties or diagnostics does not
   emit an initial value either.
-- **No disposal signal.** Core does not notify subscribers when a Runtime is
-  disposed (listeners just stop being called). An adapter that can outlive its
-  Runtime must track disposal itself, for example by owning the call to
-  `runtime.dispose()` or by checking `runtime.isDisposed` before a live read,
-  because a live read on a disposed Runtime throws
-  `WidgetSystemRuntimeDisposedError`.
+- **Disposal.** Core does not notify State, Property, Event or diagnostic
+  subscribers when a Runtime is disposed (their listeners just stop being
+  called). An adapter that can outlive its Runtime learns of disposal through
+  `runtime.subscribeDisposal()` (see [Disposal](#disposal)), and checks
+  `runtime.isDisposed` before a live read, because a live read on a disposed
+  Runtime throws `WidgetSystemRuntimeDisposedError`.
 - **Listener exceptions are isolated.** A throwing listener never disturbs the
   writer or other listeners (see [Runtime diagnostics](#runtime-diagnostics)),
   so an adapter's listeners need not guard against each other. The one
@@ -2320,27 +2395,239 @@ an occurrence should defer the work, for example to a microtask.
 
 ### Async work
 
-Core is synchronous by design. Every semantic callback is synchronous, a
-returned Promise is a contract violation, and a callback's dependency and `emit`
-callables stop working when the callback returns (see
+Core is synchronous by design, and that is a deliberate boundary rather than a
+missing feature. Every semantic callback is synchronous, a returned Promise is a
+contract violation, and a callback's dependency and `emit` callables stop working
+when the callback returns (see
 [Callback context lifetime](#callback-context-lifetime)). Asynchronous work
-therefore lives in the **host**, and re-enters Core through one ordinary,
-synchronous Method call. The recipe:
+therefore lives in the **host**: the host awaits it, and the result re-enters
+Core through ordinary synchronous State writes and Method calls, made from the
+host's own code and never from inside a Core callback.
 
-1. Model the work's progress as State (a `status` member, plus whatever data the
-   result needs).
-2. Give the plugin a synchronous "start" Method that marks the work as started
-   and hands the host a ticket, and a synchronous "commit" Method that takes the
-   result together with that ticket.
-3. The host owns the effect: it calls the start Method, performs the fetch, and
-   then calls the commit Method once, from its own code (never from inside a
-   Core callback).
-4. Guard the two races in the host: a **stale response** (the commit Method
-   ignores a ticket that is no longer current, so only the newest request can
-   win) and **disposal** (check `runtime.isDisposed` before the commit, because
-   a Method call on a disposed Runtime throws).
+**The simplest form.** Model the work's progress as State (a `status` member plus
+whatever data the result needs), await the work in the host, and write the
+outcome through the public Runtime surface. Write the data before the status, so
+that anything observing `ready` finds the data already in place.
 
 <!-- sample: async run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+type Status = 'idle' | 'loading' | 'ready' | 'failed'
+
+const profilePlugin = createWidgetPlugin('profile')
+	.description('A profile loaded by the host')
+	.interfaces<{ state: { status: Status, title: string | null } }>()
+	.state(state => state
+		.status({
+			validate: (input): input is Status =>
+				input === 'idle' || input === 'loading' || input === 'ready' || input === 'failed',
+			default: () => 'idle',
+		})
+		.title({
+			validate: (input): input is string | null => input === null || typeof input === 'string',
+			default: () => null,
+		}))
+	.done()
+
+const blueprint = createWidgetSystem({ plugins: [profilePlugin] })
+	.createBlueprint({ id: 'profile-1', type: 'profile' })
+if (blueprint.status !== 'valid')
+	throw new Error('invalid')
+const runtime = blueprint.createRuntime()
+const profile = runtime.getWidget('profile-1')
+if (profile?.type !== 'profile')
+	throw new Error('not found')
+const { state } = profile
+
+// The host owns the effect: it awaits, then writes the outcome back into State.
+async function load(fetchTitle: () => Promise<string>): Promise<void> {
+	state.status.set('loading')
+	try {
+		const title = await fetchTitle()
+		state.title.set(title)
+		state.status.set('ready')
+	}
+	catch {
+		state.status.set('failed')
+	}
+}
+
+await load(() => Promise.resolve('Ada Lovelace'))
+console.log(state.status.get(), state.title.get()) // ready Ada Lovelace
+
+await load(() => Promise.reject(new Error('offline')))
+console.log(state.status.get(), state.title.get()) // failed Ada Lovelace
+```
+
+`status` is an ordinary State member, so a renderer, a Property or a host
+subscriber observes loading, ready and failed like any other change.
+
+**When several members change together.** Each `state.set()` is its own write and
+notifies its subscribers on its own, so a Property that reads two members is
+recomputed, and its subscribers are called, once per write, and the first call
+sees a half-updated result. One Method invocation is one batch: the writes inside
+it are applied together, dependents recompute once, and subscribers are notified
+once with the final values. When a result touches more than one member, commit it
+through a single Method.
+
+<!-- sample: async-batch run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+type Status = 'loading' | 'ready'
+
+interface ProfileInterfaces {
+	state: { status: Status, title: string | null }
+	properties: { headline: string }
+	methods: { commit: (title: string) => null }
+}
+
+const profilePlugin = createWidgetPlugin('profile')
+	.description('A profile loaded by the host')
+	.interfaces<ProfileInterfaces>()
+	.state(state => state
+		.status({
+			validate: (input): input is Status => input === 'loading' || input === 'ready',
+			default: () => 'loading',
+		})
+		.title({
+			validate: (input): input is string | null => input === null || typeof input === 'string',
+			default: () => null,
+		}))
+	.properties(properties => properties
+		.headline({
+			registerDeps: ({ dep }) => ({
+				status: dep.self.state.get('status'),
+				title: dep.self.state.get('title'),
+			}),
+			compute: ({ deps }) => {
+				const status = deps.status()
+				const title = deps.title()
+				return `${status.ok ? status.value : '?'}: ${title.ok ? title.value : '?'}`
+			},
+		}))
+	.methods(methods => methods
+		// One invocation is one batch: both writes land together.
+		.commit({
+			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
+			registerDeps: ({ dep }) => ({
+				setStatus: dep.self.state.set('status'),
+				setTitle: dep.self.state.set('title'),
+			}),
+			execute: ({ args: [title], deps }) => {
+				deps.setTitle(title)
+				deps.setStatus('ready')
+				return null
+			},
+		}))
+	.done()
+
+function createProfile() {
+	const blueprint = createWidgetSystem({ plugins: [profilePlugin] })
+		.createBlueprint({ id: 'profile-1', type: 'profile' })
+	if (blueprint.status !== 'valid')
+		throw new Error('invalid')
+	const widget = blueprint.createRuntime()
+		.getWidget('profile-1')
+	if (widget?.type !== 'profile')
+		throw new Error('not found')
+	return widget
+}
+
+// Two separate writes: the Property subscriber runs twice, and the first run sees a mix.
+const separate = createProfile()
+separate.properties.headline.subscribe((result) => {
+	console.log('separate:', result.ok ? result.value : 'failed')
+})
+separate.state.title.set('Ada Lovelace') // separate: loading: Ada Lovelace
+separate.state.status.set('ready') // separate: ready: Ada Lovelace
+
+// One Method invocation: one batch, one notification, final values only.
+const batched = createProfile()
+batched.properties.headline.subscribe((result) => {
+	console.log('batched:', result.ok ? result.value : 'failed')
+})
+batched.methods.commit('Ada Lovelace') // batched: ready: Ada Lovelace
+```
+
+**Cancelling on disposal.** `runtime.subscribeDisposal(listener)` runs a listener
+once, synchronously, when the Runtime is disposed (see [Disposal](#disposal)).
+Pair it with a host-side `AbortController` to stop pending work: pass the
+controller's `signal` to the work, abort it from the listener, and unsubscribe
+when the work settles so a long-lived Runtime does not accumulate listeners. The
+listener cancels the host's own work; it cannot touch the Runtime, which is
+already disposed by then.
+
+<!-- sample: async-cancel run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+const plugin = createWidgetPlugin('profile')
+	.description('A profile loaded by the host')
+	.interfaces<{ state: { title: string | null } }>()
+	.state(state => state
+		.title({
+			validate: (input): input is string | null => input === null || typeof input === 'string',
+			default: () => null,
+		}))
+	.done()
+const blueprint = createWidgetSystem({ plugins: [plugin] })
+	.createBlueprint({ id: 'profile-1', type: 'profile' })
+if (blueprint.status !== 'valid')
+	throw new Error('invalid')
+const runtime = blueprint.createRuntime()
+
+// Stands in for `fetch(url, { signal })`: settles later, rejects when aborted.
+function fetchTitle(title: string, milliseconds: number, signal: AbortSignal): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(resolve, milliseconds, title)
+		signal.addEventListener('abort', () => {
+			clearTimeout(timer)
+			reject(signal.reason)
+		}, { once: true })
+	})
+}
+
+async function load(title: string, milliseconds: number): Promise<void> {
+	const controller = new AbortController()
+	const stopOnDisposal = runtime.subscribeDisposal(() => controller.abort())
+	try {
+		const result = await fetchTitle(title, milliseconds, controller.signal)
+		runtime.getWidget('profile-1')?.state.title.set(result)
+		console.log('loaded', result)
+	}
+	catch {
+		console.log('cancelled')
+	}
+	finally {
+		stopOnDisposal() // the work has settled: stop listening
+	}
+}
+
+await load('Ada', 5) // loaded Ada
+const pending = load('Grace', 1000)
+runtime.dispose() // aborts the pending request synchronously
+await pending // cancelled
+```
+
+`runtime.isDisposed` still has a job. Work that cannot be cancelled (a promise
+that takes no `AbortSignal`, or a callback that is already queued) resumes after
+its `await` whether or not the Runtime is still alive, and a State write or a
+Method call on a disposed Runtime throws. Check `runtime.isDisposed` before the
+write for such work. `subscribeDisposal()` also throws on a Runtime that is
+already disposed, so check there first when the Runtime may already be gone.
+
+**When requests can overlap.** If the host can start a second request before the
+first one settles, a slow first response can arrive after a fast second one and
+overwrite it. Aborting the old request is the best fix when the work supports it.
+When it does not, make the commit Method ignore a response whose ticket is no
+longer the newest. This is the heaviest form and is only needed for overlapping,
+uncancellable work: a `begin` Method issues a ticket (the next number, kept in
+State), and `settle` takes the ticket together with the result and ignores it
+when it is stale.
+
+<!-- sample: async-ticket run -->
 ```ts
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 
@@ -2350,24 +2637,23 @@ interface ProfileInterfaces {
 	state: { status: Status, requestId: number, data: string | null }
 	methods: {
 		begin: () => number
-		commit: (requestId: number, data: string) => boolean
-		fail: (requestId: number) => boolean
+		settle: (requestId: number, data: string | null) => boolean
 	}
-}
-
-function isStatus(input: unknown): input is Status {
-	return input === 'idle' || input === 'loading' || input === 'ready' || input === 'failed'
 }
 
 const profilePlugin = createWidgetPlugin('profile')
 	.description('A profile loaded by the host')
 	.interfaces<ProfileInterfaces>()
 	.state(state => state
-		.status({ validate: isStatus, default: () => 'idle' })
+		.status({
+			validate: (input): input is Status =>
+				input === 'idle' || input === 'loading' || input === 'ready' || input === 'failed',
+			default: () => 'idle',
+		})
 		.requestId({ validate: (input): input is number => typeof input === 'number', default: () => 0 })
 		.data({ validate: (input): input is string | null => input === null || typeof input === 'string', default: () => null }))
 	.methods(methods => methods
-		// Synchronous: marks a load as started and hands the host a ticket.
+		// Marks a load as started and hands the host a ticket.
 		.begin({
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
@@ -2383,10 +2669,10 @@ const profilePlugin = createWidgetPlugin('profile')
 				return next
 			},
 		})
-		// Synchronous commit: a stale ticket is ignored, so only the newest request can win.
-		.commit({
-			validateArgs: (args): args is [number, string] =>
-				args.length === 2 && typeof args[0] === 'number' && typeof args[1] === 'string',
+		// Commits a result (`null` means the request failed); a stale ticket is ignored.
+		.settle({
+			validateArgs: (args): args is [number, string | null] =>
+				args.length === 2 && typeof args[0] === 'number' && (args[1] === null || typeof args[1] === 'string'),
 			registerDeps: ({ dep }) => ({
 				requestId: dep.self.state.get('requestId'),
 				setStatus: dep.self.state.set('status'),
@@ -2396,30 +2682,19 @@ const profilePlugin = createWidgetPlugin('profile')
 				const current = deps.requestId()
 				if (!current.ok || current.value !== requestId)
 					return false
+				if (data === null) {
+					deps.setStatus('failed')
+					return true
+				}
 				deps.setData(data)
 				deps.setStatus('ready')
 				return true
 			},
-		})
-		.fail({
-			validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
-			registerDeps: ({ dep }) => ({
-				requestId: dep.self.state.get('requestId'),
-				setStatus: dep.self.state.set('status'),
-			}),
-			execute: ({ args: [requestId], deps }) => {
-				const current = deps.requestId()
-				if (!current.ok || current.value !== requestId)
-					return false
-				deps.setStatus('failed')
-				return true
-			},
-		}),
-	)
+		}))
 	.done()
 
-const system = createWidgetSystem({ plugins: [profilePlugin] })
-const blueprint = system.createBlueprint({ id: 'profile-1', type: 'profile' })
+const blueprint = createWidgetSystem({ plugins: [profilePlugin] })
+	.createBlueprint({ id: 'profile-1', type: 'profile' })
 if (blueprint.status !== 'valid')
 	throw new Error('invalid')
 const runtime = blueprint.createRuntime()
@@ -2427,22 +2702,20 @@ const profile = runtime.getWidget('profile-1')
 if (profile?.type !== 'profile')
 	throw new Error('not found')
 
-// Host-owned effect: the asynchronous work lives outside Core and re-enters
-// through one synchronous Method call.
 async function load(fetchProfile: () => Promise<string>): Promise<void> {
 	const ticket = profile!.methods.begin()
 	if (!ticket.ok)
 		return
+	let data: string | null
 	try {
-		const data = await fetchProfile()
-		if (runtime.isDisposed) // the Runtime may be gone by now; a Method call would throw
-			return
-		profile!.methods.commit(ticket.value, data)
+		data = await fetchProfile()
 	}
 	catch {
-		if (!runtime.isDisposed)
-			profile!.methods.fail(ticket.value)
+		data = null
 	}
+	if (runtime.isDisposed) // uncancellable work resumes here, and a Method call would throw
+		return
+	profile!.methods.settle(ticket.value, data)
 }
 
 const slow = load(() => new Promise<string>(resolve => setTimeout(resolve, 20, 'old')))
@@ -2633,6 +2906,142 @@ console.log(carried?.type === 'counter' ? carried.state.count.get() : 'missing')
 console.log(next.getDiagnostics().length) // 0
 ```
 
+### Editing a document that is currently invalid
+
+An editor or live preview spends much of its time in a document that does not
+compile: a plugin type is half typed, a config value is mid-edit. Core's rule for
+this is fixed. Validity is all-or-nothing: a Blueprint with any diagnostic creates
+no Runtime, Core does not run part of an invalid document, and it does not
+quarantine or prune the invalid part. What to show while a document is invalid is
+the host's decision. The tools are the ones the
+[Persisted documents](#persisted-documents) guide already uses: the Blueprint's
+diagnostics, `blueprint.getSourcePath(node)`, and a `WidgetDocument`, which
+re-compiles after every committed patch.
+
+The usual pattern keeps the last valid state on screen and treats an invalid
+commit as information to display, not as a reason to tear anything down:
+
+1. Keep the last valid Blueprint's Runtime running and rendered.
+2. When a commit produces an invalid Blueprint, leave that Runtime alone and
+   present the new Blueprint's diagnostics next to it. For each diagnostic,
+   `blueprint.getSourcePath(node)` gives the path of the offending node in the
+   source, so the editor can point at it.
+3. When a later commit is valid again, create the next Runtime from it, carry
+   State over by passing the old Runtime's `snapshotState()` as
+   `overrideStateDefaults` (see
+   [Carrying State across versions](#persisted-documents)), and dispose the
+   previous Runtime.
+
+The session below implements exactly that on top of `createWidgetDocument`.
+`apply(patch)` commits a patch, and a document subscriber decides between
+"promote" and "keep what is showing", so every edit goes through the same rule.
+The script walks valid, invalid, valid again and prints what a UI would show at
+each step.
+
+<!-- sample: editing-invalid run -->
+```ts
+import type { SourcePatch, WidgetSystemRuntime } from '@deviltea/widget-core'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+const counterPlugin = createWidgetPlugin('counter')
+	.description('A counter')
+	.interfaces<{ state: { count: number } }>()
+	.state(state => state.count({
+		validate: (input): input is number => typeof input === 'number',
+		default: () => 0,
+	}))
+	.done()
+const panelPlugin = createWidgetPlugin('panel')
+	.description('A panel')
+	.interfaces<{ slots: 'content' }>()
+	.slots({ content: { description: 'Content' } })
+	.done()
+const plugins = [counterPlugin, panelPlugin] as const
+const system = createWidgetSystem({ plugins })
+
+function createEditingSession(source: unknown) {
+	const document = createWidgetDocument({ system, source })
+	let runtime: WidgetSystemRuntime<typeof plugins> | null = null // the last valid Runtime, if any
+	let problems: string[] = [] // the diagnostics of the newest revision, empty while it is valid
+
+	function show({ blueprint }: ReturnType<typeof document.getSnapshot>): void {
+		if (blueprint.status === 'invalid') {
+			// Keep the last valid Runtime running; only the problems change.
+			problems = blueprint.diagnostics.map((diagnostic) => {
+				const node = 'node' in diagnostic.location ? diagnostic.location.node : blueprint.root
+				return `${diagnostic.code} at /${(blueprint.getSourcePath(node) ?? []).join('/')}`
+			})
+			return
+		}
+		problems = []
+		// Valid again: carry State over to the next Runtime, then dispose the previous one.
+		const next = blueprint.createRuntime({ overrideStateDefaults: runtime?.snapshotState() })
+		runtime?.dispose()
+		runtime = next
+	}
+
+	show(document.getSnapshot())
+	document.subscribe(snapshot => show(snapshot))
+
+	return {
+		apply: (patch: SourcePatch) => document.applyPatch(patch),
+		get runtime() { return runtime },
+		get problems() { return problems },
+	}
+}
+
+const session = createEditingSession({
+	id: 'panel-1',
+	type: 'panel',
+	slots: { content: [{ id: 'counter-1', type: 'counter' }] },
+})
+
+// What a UI would show: the live Runtime's state, and the problems with the newest edit.
+function render(label: string): void {
+	const counter = session.runtime?.getWidget('counter-1')
+	const count = counter?.type === 'counter' ? counter.state.count.get() : 'none'
+	console.log(`${label}: showing count=${count}; problems: ${session.problems.length === 0 ? 'none' : session.problems.join(', ')}`)
+}
+
+const first = session.runtime
+const counter = first?.getWidget('counter-1')
+if (counter?.type !== 'counter')
+	throw new Error('missing')
+counter.state.count.set(3)
+render('valid') // valid: showing count=3; problems: none
+
+// A half-typed plugin type: the document is invalid, the last valid Runtime keeps running.
+session.apply([{ op: 'replace', path: '/slots/content/0/type', value: 'count' }])
+render('invalid') // invalid: showing count=3; problems: unknown-widget-type at /slots/content/0
+console.log(session.runtime === first) // true: nothing was torn down
+
+// The user keeps interacting with what is still showing.
+counter.state.count.set(4)
+
+// The edit is completed: a new Runtime carries the State over and the old one is disposed.
+session.apply([{ op: 'replace', path: '/slots/content/0/type', value: 'counter' }])
+render('valid again') // valid again: showing count=4; problems: none
+console.log(session.runtime === first, first?.isDisposed) // false true
+
+// A document that is invalid from the start has no Runtime to keep showing.
+const broken = createEditingSession({ id: 'panel-1', type: 'panel', slots: { content: [{ id: 'x', type: 'oops' }] } })
+console.log(broken.runtime, broken.problems) // null [ 'unknown-widget-type at /slots/content/0' ]
+```
+
+Three details of the session are choices rather than requirements. Creating the
+next Runtime before disposing the previous one means a failure while creating it
+leaves what is showing intact. Snapshot entries for widgets or members the edit
+removed come back as the Runtime diagnostics described under
+[Carrying State across versions](#persisted-documents), so filter them out of the
+snapshot if the preview should not report them. And the subscriber runs inside
+`applyPatch`, so a host that renders from the session should read `runtime` and
+`problems` after `apply` returns, not from inside the subscriber.
+
+**When there is no last valid state.** A stored document that is already invalid
+on first load has no Runtime to keep showing. Either run the repair loop from
+[Persisted documents](#persisted-documents) first, or show the diagnostics (as
+`broken` does above) until an edit makes the document valid.
+
 ### Generic plugin factories
 
 A plugin factory that is generic over a type (`createListPlugin<Item>()`) hits
@@ -2706,7 +3115,14 @@ Release a library's own dependents after Core, never before.
   structure validator (slot, plugin, system) written into the builder or the
   System options that returns a thenable is rejected by the type checker too,
   whatever the declared return type; a callback typed only by a standalone
-  definition type is caught by the runtime guard alone.
+  definition type is caught by the runtime guard alone. Asynchronous work
+  stays outside Core: the host awaits it and re-enters through ordinary
+  synchronous State writes and Method calls (see [Async work](#async-work)).
+- **All-or-nothing validity.** A Blueprint with any diagnostic creates no
+  Runtime. Core does not run, quarantine or prune part of an invalid document;
+  tolerating one, for example by keeping the last valid Runtime on screen, is
+  the host's job (see
+  [Editing a document that is currently invalid](#editing-a-document-that-is-currently-invalid)).
 - **Callback-context lifetime.** A callback's `addDiagnostic` /
   `hasAnyDiagnostic`, its dependency callables and its `emit` callables belong
   to that synchronous call (see
@@ -2762,7 +3178,8 @@ IIFE). The current implementation needs:
   exception it has isolated from the current operation by rethrowing it in a
   queued microtask. That covers a throwing State, Property or diagnostic
   listener (`subscribe` / `subscribeDiagnostics`), a throwing public Event
-  listener, a throwing inspection listener, a throwing `WidgetDocument`
+  listener, a throwing disposal listener (`subscribeDisposal`), a throwing
+  inspection listener, a throwing `WidgetDocument`
   subscriber, and a Property `compute` that throws while a subscription
   re-evaluates it (one report per exception and synchronous turn, however many
   subscriptions re-read it). An embedded host must run its pending jobs (for example

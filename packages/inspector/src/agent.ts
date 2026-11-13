@@ -191,6 +191,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 
 	// Set once the peer has been told (or could not be told) that this Agent's Runtime is gone.
 	let runtimeDisposalAnnounced = false
+	// Set once any message has arrived from the peer: only then is someone known to be listening.
+	let peerHeard = false
 
 	function emit<Event extends InspectorEventName>(event: Event, payload: InspectorEventMap[Event]): void {
 		if (event !== 'runtime.disposed')
@@ -211,8 +213,12 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	/**
-	 * Core offers no disposal notification, so the Agent observes it where it can: when any request arrives,
-	 * before it emits any other event, and when the Agent itself is disposed.
+	 * Announces disposal at most once. The Agent registers `runtime.subscribeDisposal()` so this runs inside
+	 * `runtime.dispose()`, but only once the peer has sent a request (before that nobody is known to be
+	 * listening). It also checks `isDisposed` when any request arrives, before it emits any other event, and
+	 * when the Agent itself is disposed: that is the path for a peer the Agent had not heard from at disposal
+	 * and for an Agent created on a Runtime that was already disposed (subscribing to one throws), and it keeps
+	 * everything consistent whenever the listener could not tell the peer.
 	 */
 	function observeRuntimeDisposal(): boolean {
 		if (!options.runtime.isDisposed)
@@ -221,6 +227,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			runtimeDisposalAnnounced = true
 			// Core already tore down its side of every live subscription; release the Agent's bookkeeping.
 			releaseSubscriptions()
+			// Nothing the overlay shows can be inspected any more.
+			clearHighlight()
 			emit('runtime.disposed', { runtimeId, reason: 'runtime-disposed' })
 		}
 		return true
@@ -385,8 +393,14 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			: { ref: target.ref, widgetId: target.widgetId, widgetType: target.widgetType })
 	}
 
+	// Once the Runtime is disposed every ref the Agent could hand out points at nothing, so inspect mode
+	// stays enabled (the peer still releases it) but stops emitting refs and stops suppressing the page.
+	function inspectingLiveRuntime(): boolean {
+		return inspectEnabled && !options.runtime.isDisposed
+	}
+
 	function onPointerOver(event: PointerEvent): void {
-		if (!inspectEnabled)
+		if (!inspectingLiveRuntime())
 			return
 		const anchor = resolveAnchor(event.target)
 		if (anchor === null) {
@@ -413,14 +427,14 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	function suppressPointerActivation(event: Event): void {
-		if (!inspectEnabled || resolveAnchor(event.target) === null)
+		if (!inspectingLiveRuntime() || resolveAnchor(event.target) === null)
 			return
 		event.preventDefault()
 		event.stopPropagation()
 	}
 
 	function onClick(event: MouseEvent): void {
-		if (!inspectEnabled)
+		if (!inspectingLiveRuntime())
 			return
 		const anchor = resolveAnchor(event.target)
 		if (anchor === null)
@@ -738,7 +752,17 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	const removeDomListeners = installDomListeners()
+	// Subscribing to an already disposed Runtime throws; the lazy checks cover that case.
+	const unsubscribeDisposal = options.runtime.isDisposed
+		? () => {}
+		: options.runtime.subscribeDisposal(() => {
+				// A transport can drop messages nobody is subscribed to, and a peer that attaches later would
+				// then never learn of the disposal; until the first request the lazy checks announce it instead.
+				if (peerHeard)
+					observeRuntimeDisposal()
+			})
 	const unsubscribeTransport = options.transport.subscribe((raw) => {
+		peerHeard = true
 		let requestId: string | null = null
 		try {
 			const classified = classifyInspectorRequest(raw)
@@ -796,6 +820,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			emit('runtime.disposed', { runtimeId, reason: options.runtime.isDisposed ? 'runtime-disposed' : 'agent-disposed' })
 		}
 		disposed = true
+		unsubscribeDisposal()
 		releaseSubscriptions()
 		removeDomListeners()
 		geometryController?.dispose()
