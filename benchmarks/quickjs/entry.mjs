@@ -6,7 +6,7 @@
  * config.kind:
  *   timing  { workload, size, samples, maxSeconds }  -> { rows: [...] }
  *   probe   { shape, phase, length }                 -> { outcome: { ok, stage, error? } }
- *   info                                            -> { engine facts }
+ *   info                                            -> { engine facts, including the plain recursion depth }
  */
 
 import { clockName, fineClock, measure } from './measure.mjs'
@@ -33,6 +33,24 @@ function printLine(text) {
 
 function emit(payload) {
 	printLine(MARKER + JSON.stringify(payload))
+}
+
+/**
+ * How many nested calls of a function that does nothing else fit before the engine reports stack exhaustion: a
+ * calibration of the engine's stack limit that depends on nothing of Core (the sweep of stack sizes prints it, so a
+ * `--stack-size` that the engine reads in another unit shows up as a depth that does not scale).
+ */
+function plainRecursionDepth() {
+	let depth = 0
+	function recurse() {
+		depth++
+		recurse()
+	}
+	try {
+		recurse()
+	}
+	catch {}
+	return depth
 }
 
 function engineFacts() {
@@ -73,7 +91,7 @@ function main() {
 		throw new Error('missing globalThis.__WIDGET_BENCH__ (run this bundle through benchmarks/quickjs/run.mjs)')
 	try {
 		if (config.kind === 'info')
-			emit({ ...engineFacts() })
+			emit({ ...engineFacts(), plainRecursionDepth: plainRecursionDepth() })
 		else if (config.kind === 'timing')
 			emit({ ...engineFacts(), ...runTiming(config) })
 		else if (config.kind === 'probe')

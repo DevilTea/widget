@@ -28,6 +28,10 @@ on:
         description: Comma-separated widget counts (empty = the request's)
         required: false
         default: ''
+      stackSizes:
+        description: Comma-separated QuickJS stack sizes in KB; non-empty runs only the stack-size sweep (empty = the request's)
+        required: false
+        default: ''
       rounds:
         description: Rounds per ref, 1 to 20 (empty = the request's)
         required: false
@@ -79,6 +83,7 @@ jobs:
           BENCH_REQ_FILTERS: ${{ inputs.filters }}
           BENCH_REQ_MODES: ${{ inputs.modes }}
           BENCH_REQ_SIZES: ${{ inputs.sizes }}
+          BENCH_REQ_STACKSIZES: ${{ inputs.stackSizes }}
           BENCH_REQ_ROUNDS: ${{ inputs.rounds }}
           BENCH_REQ_QUICKJS: ${{ inputs.quickjs }}
           BENCH_REQ_QUICK: ${{ inputs.quick }}

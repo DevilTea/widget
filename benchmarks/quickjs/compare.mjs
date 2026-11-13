@@ -10,6 +10,7 @@
 
 import { readFileSync } from 'node:fs'
 import process from 'node:process'
+import { findProbe, probeCellText, probeRows, SHAPE_NOTE } from './probe-table.mjs'
 
 const SIGNIFICANT_DIFFERENCE = 0.05
 
@@ -67,23 +68,14 @@ function combine(files) {
 }
 
 function probeCell(files, shape, phase) {
-	const found = files.flatMap(({ data }) => (data.probes ?? [])
-		.filter(probe => probe.shape === shape && probe.phase === phase))
-	if (found.length === 0)
-		return '-'
-	const values = found.map(probe => probe.maxOk)
-	const low = Math.min(...values)
-	const high = Math.max(...values)
-	const flags = `${found.some(probe => probe.ceiling) ? ' (ceiling, no failure)' : ''}${found.some(probe => probe.inconclusive) ? ' (process failure)' : ''}`
-	return `${low === high ? low : `${low}..${high}`}${flags}`
+	return probeCellText(files.flatMap(({ data }) => findProbe(data, shape, phase) ?? []))
 }
 
 function firstFailure(files, shape, phase) {
 	for (const { data } of files) {
-		const probe = (data.probes ?? [])
-			.find(item => item.shape === shape && item.phase === phase)
+		const probe = findProbe(data, shape, phase)
 		if (probe?.firstFail)
-			return `${probe.firstFail.error.name}: ${probe.firstFail.error.message}`
+			return `${probe.firstFail.error.name}: ${probe.firstFail.error.message}`.replace(/\|/g, '\\|')
 	}
 	return '-'
 }
@@ -121,13 +113,14 @@ function main() {
 	}
 	out.push('')
 	out.push('### Stack depth', '')
-	out.push('Largest length that still works (bisection resolution about 1 %). Chain: one widget, Properties each reading the next, head declared first (counted in Properties). Survey: `visible` reads the next widget\'s `value`, `value` reads its own State and `visible` (counted in widgets, two Properties each).', '')
+	out.push(`Largest length that still works (bisection resolution about 1 %). "at least N": the probe still worked at N, the cap of the search, so N is a lower bound, not a limit. "< N": it failed already at the first length tried. ${SHAPE_NOTE}`, '')
 	out.push('| shape | phase | A max | B max | first failure (A) | first failure (B) |')
 	out.push('| --- | --- | ---: | ---: | --- | --- |')
-	for (const [shape, unit] of [['chain', 'properties'], ['survey', 'widgets']]) {
-		for (const phase of ['compile', 'evaluate']) {
-			out.push(`| ${shape} (${unit}) | ${phase === 'compile' ? 'compile' : 'cold read of the head'} | ${probeCell(sideA, shape, phase)} | ${probeCell(sideB, shape, phase)} | ${firstFailure(sideA, shape, phase)} | ${firstFailure(sideB, shape, phase)} |`)
-		}
+	for (const { shape, unit, phase, label } of probeRows()) {
+		const here = [probeCell(sideA, shape, phase), probeCell(sideB, shape, phase)]
+		if (here.every(text => text === '-'))
+			continue
+		out.push(`| ${shape} (${unit}) | ${label} | ${here[0]} | ${here[1]} | ${firstFailure(sideA, shape, phase)} | ${firstFailure(sideB, shape, phase)} |`)
 	}
 	out.push('')
 	const failures = [...sideA.map(file => ['A', file]), ...sideB.map(file => ['B', file])]

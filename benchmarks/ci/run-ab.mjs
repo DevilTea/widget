@@ -7,6 +7,8 @@
  *       one detached `git worktree` per ref at <dir>/<index>, installed and built (the packages only)
  *   node benchmarks/ci/run-ab.mjs run --request <resolved.json> --refs-dir <dir> --out <results dir>
  *       `rounds` rounds; each round measures every ref once, in an order that rotates from round to round
+ *       With a non-empty `stackSizes` it runs the stack-size sweep instead: no harness and no timing workload, only
+ *       the QuickJS stack probes, once per ref and per stack size (plus the engine's default), see commandSweep
  *
  * Why interleaved: a hosted runner is a shared virtual machine, so absolute numbers differ between jobs and between
  * machines. The only valid comparison is between refs measured in the same job, alternating, with ONE copy of the
@@ -23,10 +25,14 @@ import { cpus, loadavg, release, totalmem } from 'node:os'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { renderSweepTable, SHAPE_NOTE } from '../quickjs/probe-table.mjs'
 
 const harnessRoot = fileURLToPath(new URL('../..', import.meta.url))
 const MODES = ['normal', 'jitless', 'alloc']
 const PACKAGES = ['core', 'vue', 'inspector']
+const MIN_STACK_SIZE_KB = 64
+const MAX_STACK_SIZE_KB = 1_048_576
+const MAX_STACK_SIZES = 12
 const IN_CI = process.env.GITHUB_ACTIONS === 'true'
 /** The step summary of GitHub is limited to 1 MiB; stay well below it. */
 const SUMMARY_BUDGET = 800_000
@@ -126,7 +132,7 @@ function override(env, name) {
 
 export function normalizeRequest(raw, env = process.env) {
 	const merged = { ...raw }
-	for (const name of ['refs', 'filters', 'modes', 'sizes', 'rounds', 'quickjs', 'quick']) {
+	for (const name of ['refs', 'filters', 'modes', 'sizes', 'stackSizes', 'rounds', 'quickjs', 'quick']) {
 		const value = override(env, name.toUpperCase())
 		if (value !== undefined)
 			merged[name] = value
@@ -144,13 +150,23 @@ export function normalizeRequest(raw, env = process.env) {
 	const rounds = Number(merged.rounds ?? 3)
 	if (!Number.isInteger(rounds) || rounds < 1 || rounds > 20)
 		fail('rounds must be an integer from 1 to 20')
+	const stackSizes = [...new Set(list(merged.stackSizes, 'stackSizes')
+		.map((item) => {
+			if (!/^\d+$/.test(item) || Number(item) < MIN_STACK_SIZE_KB || Number(item) > MAX_STACK_SIZE_KB)
+				fail(`stackSizes: "${item}" is not an integer number of KB from ${MIN_STACK_SIZE_KB} to ${MAX_STACK_SIZE_KB}`)
+			return Number(item)
+		}))]
+	if (stackSizes.length > MAX_STACK_SIZES)
+		fail(`stackSizes takes at most ${MAX_STACK_SIZES} sizes, got ${stackSizes.length}`)
 	return {
 		refs,
 		filters: list(merged.filters, 'filters'),
 		modes: [...new Set(modes)],
 		sizes: list(merged.sizes, 'sizes'),
+		stackSizes,
 		rounds,
-		quickjs: flag(merged.quickjs ?? false, 'quickjs'),
+		// A stack-size sweep runs on the real QuickJS: asking for one asks for QuickJS.
+		quickjs: stackSizes.length > 0 || flag(merged.quickjs ?? false, 'quickjs'),
 		quick: flag(merged.quick ?? false, 'quick'),
 		note: typeof merged.note === 'string' ? merged.note : '',
 	}
@@ -354,6 +370,11 @@ async function commandRun(args) {
 	writeFileSync(join(out, 'request.json'), `${JSON.stringify(request, null, '\t')}\n`)
 	console.log(`runner: ${machine.cpu}, ${machine.cores} cores, ${machine.memoryGiB} GiB, node ${machine.node}`)
 
+	if ((request.stackSizes ?? []).length > 0) {
+		await commandSweep({ request, refs, out, logs, machine })
+		return
+	}
+
 	// `--no-idle-check`: the idle check waits for the machine to be quiet and warns about other processes, which is
 	// meaningful on a desktop and meaningless on a dedicated runner (nothing else of ours runs; the neighbours on the
 	// host are invisible to it). The interleaving and the rounds are what protect the comparison here.
@@ -497,12 +518,144 @@ async function commandRun(args) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// The stack-size sweep
+
+/**
+ * `stackSizes` mode: no harness run, no timing workload and no comparison. For every ref and every stack size (and
+ * once without `--stack-size`, the engine's default) the QuickJS stack probes run alone (`run.mjs --probes-only
+ * true`) on the real binary; the summary has one table per ref with a column per stack size. The probes are
+ * deterministic bisections, so there are no rounds. A run that wrote no JSON fails the job (after the summary).
+ */
+async function commandSweep({ request, refs, out, logs, machine }) {
+	const problems = []
+	let fatal = false
+	let qjs = null
+	try {
+		qjs = await installQjs(out)
+		console.log(`qjs: ${qjs}`)
+	}
+	catch (error) {
+		problems.push(`QuickJS could not be prepared: ${error.message}`)
+		fatal = true
+	}
+
+	// `null` is the engine's own default stack limit.
+	const columns = [null, ...request.stackSizes]
+	const runs = []
+	const jobStarted = Date.now()
+	const results = refs.map(() => [])
+	if (qjs !== null) {
+		for (const entry of refs) {
+			for (const stackSize of columns) {
+				const tag = stackSize === null ? 'default' : `${stackSize}k`
+				const label = `ref ${entry.index} (${entry.ref} @ ${entry.sha.slice(0, 7)}), stack ${stackSize === null ? 'engine default' : `${stackSize} KB`}`
+				group(`${label}: probes`)
+				const jsonFile = join(out, `s${entry.index}-${tag}.json`)
+				const logFile = join(logs, `s${entry.index}-${tag}.log`)
+				const result = await runLogged('node', [
+					'benchmarks/quickjs/run.mjs',
+					'--packages-root',
+					entry.dir,
+					'--qjs',
+					qjs,
+					'--probes-only',
+					'true',
+					...stackSize === null ? [] : ['--stack-size', String(stackSize)],
+					'--json',
+					jsonFile,
+				], { env: { BENCH_PACKAGES_ROOT: entry.dir }, logFile })
+				endGroup()
+				const exit = result.code ?? result.signal ?? result.error
+				console.log(`${label}: finished in ${seconds(result.ms)} (exit ${exit}); job so far ${seconds(Date.now() - jobStarted)}`)
+				const hasJson = existsSync(jsonFile)
+				if (hasJson)
+					results[entry.index].push({ label: stackSize === null ? 'engine default' : `${stackSize} KB`, data: readJson(jsonFile) })
+				else
+					fatal = true
+				runs.push({ index: entry.index, stackSize, ms: result.ms, code: exit, hasJson })
+				if (!hasJson)
+					problems.push(`${label}: the probe runner wrote no JSON (exit ${exit}); see logs/s${entry.index}-${tag}.log`)
+				else if (result.code !== 0)
+					problems.push(`${label}: the probe runner exited with ${exit}; the JSON is kept; see logs/s${entry.index}-${tag}.log`)
+			}
+		}
+	}
+	const totalMs = Date.now() - jobStarted
+
+	const summary = renderSweepSummary({ request, refs, machine, runs, problems, results, totalMs })
+	writeFileSync(join(out, 'summary.md'), summary)
+	console.log(`\nsummary: ${join(out, 'summary.md')} (${summary.length} characters); swept in ${seconds(totalMs)}`)
+	for (const problem of problems)
+		warn(problem)
+	if (fatal)
+		fail('the sweep is incomplete (see the summary): a probe runner wrote no JSON, or QuickJS could not be prepared')
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // The summary
 
 function cell(text) {
 	return String(text)
 		.replace(/\|/g, '\\|')
 		.replace(/\r?\n/g, ' ')
+}
+
+function commitLines(refs) {
+	const lines = ['## Commits', '', '| # | ref | SHA | subject |', '| --- | --- | --- | --- |']
+	for (const entry of refs)
+		lines.push(`| ${entry.index}${entry.index === 0 ? ' (base)' : ''} | \`${cell(entry.ref)}\` | \`${entry.sha.slice(0, 12)}\` | ${cell(entry.subject)} |`)
+	lines.push('')
+	return lines
+}
+
+function runnerLines(machine, totalMs, what) {
+	return [
+		'## Runner',
+		'',
+		`- CPU: ${machine.cpu}, ${machine.cores} cores, ${machine.memoryGiB} GiB memory`,
+		`- ${machine.platform}, kernel ${machine.kernel}, Node ${machine.node}${machine.runner ? `, runner ${machine.runner}` : ''}`,
+		`- load average at start: ${machine.loadAtStart.join(' ')}; ${what} took ${seconds(totalMs)}`,
+		'',
+	]
+}
+
+function renderSweepSummary({ request, refs, machine, runs, problems, results, totalMs }) {
+	const lines = ['# QuickJS stack-size sweep', '']
+	if (request.note !== '') {
+		lines.push(request.note.replace(/\r?\n/g, '\n> ')
+			.replace(/^/, '> '), '')
+	}
+	lines.push(...commitLines(refs))
+	lines.push(`Stack sizes: engine default, ${request.stackSizes.map(size => `${size} KB`)
+		.join(', ')}. Only the stack probes ran: no timing workload, no comparison between refs.`, '')
+	lines.push(...runnerLines(machine, totalMs, 'the sweep'))
+
+	if (problems.length > 0) {
+		lines.push('## Problems', '')
+		for (const problem of problems)
+			lines.push(`- ${problem.replace(/\r?\n/g, ' ')}`)
+		lines.push('')
+	}
+
+	lines.push('## Largest working length per stack size', '')
+	lines.push('Each cell is the largest length at which the step still works (bisection, resolution about 1 %), found on the real QuickJS in fresh processes. "at least N": it still worked at N, the cap of the search, so N is a lower bound and not a limit. "< N": it failed already at the first length tried. The first row is a calibration without any Widget code: how many nested calls of an empty function the engine allows; it should grow in proportion to the stack size, and if it does not, the engine did not read `--stack-size` as KB.', '')
+	lines.push(SHAPE_NOTE, '')
+	for (const entry of refs) {
+		lines.push(`### ${entry.index} \`${cell(entry.ref)}\` (${entry.sha.slice(0, 7)})`, '')
+		if (results[entry.index].length === 0)
+			lines.push('_No result._', '')
+		else
+			lines.push(renderSweepTable(results[entry.index]), '')
+	}
+
+	lines.push('## Runs', '', '| ref | stack | time | exit | JSON |', '| --- | --- | --- | --- | --- |')
+	for (const run of runs)
+		lines.push(`| ${run.index} | ${run.stackSize === null ? 'engine default' : `${run.stackSize} KB`} | ${seconds(run.ms)} | ${run.code} | ${run.hasJson ? 'yes' : '**no**'} |`)
+	lines.push('')
+	lines.push('## Files in the artifact `benchmark-results`', '')
+	lines.push('- `s<ref>-<stack>.json`: the complete probe results (every attempt) of ref `<ref>` at `<stack>` (`default` or a size in KB with a `k`)')
+	lines.push('- `logs/`: the output of every run; `request.json`, `machine.json`', '')
+	return `${lines.join('\n')}\n`
 }
 
 function renderSummary({ request, refs, machine, runs, problems, comparisons, quickjsNote, engines, totalMs }) {
@@ -515,10 +668,7 @@ function renderSummary({ request, refs, machine, runs, problems, comparisons, qu
 			.replace(/^/, '> '), '')
 	}
 
-	lines.push('## Commits', '', '| # | ref | SHA | subject |', '| --- | --- | --- | --- |')
-	for (const entry of refs)
-		lines.push(`| ${entry.index}${entry.index === 0 ? ' (base)' : ''} | \`${cell(entry.ref)}\` | \`${entry.sha.slice(0, 12)}\` | ${cell(entry.subject)} |`)
-	lines.push('')
+	lines.push(...commitLines(refs))
 	const filters = request.filters.length > 0
 		? request.filters.map(filter => `\`${filter}\``)
 				.join(', ')
@@ -526,10 +676,7 @@ function renderSummary({ request, refs, machine, runs, problems, comparisons, qu
 	lines.push(`Scenarios: ${filters}. Modes: ${request.modes.join(', ')}. Sizes: ${request.sizes.length > 0 ? request.sizes.join(', ') : 'all'}. Rounds: ${request.rounds}${request.quick ? '. **Quick mode: few samples, not baseline quality.**' : '.'} QuickJS: ${qjsEnabled ? 'yes' : request.quickjs ? 'requested but not run' : 'no'}.`, '')
 	lines.push(`In each comparison A is the first ref of the pair and B the second; a B/A ratio above 1 means B is slower (or allocates more).`, '')
 
-	lines.push('## Runner', '')
-	lines.push(`- CPU: ${machine.cpu}, ${machine.cores} cores, ${machine.memoryGiB} GiB memory`)
-	lines.push(`- ${machine.platform}, kernel ${machine.kernel}, Node ${machine.node}${machine.runner ? `, runner ${machine.runner}` : ''}`)
-	lines.push(`- load average at start: ${machine.loadAtStart.join(' ')}; measuring took ${seconds(totalMs)}`, '')
+	lines.push(...runnerLines(machine, totalMs, 'measuring'))
 
 	if (problems.length > 0) {
 		lines.push('## Problems', '')

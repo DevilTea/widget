@@ -37,13 +37,46 @@ part of it.
 For each shape and phase the largest length that works is found by doubling, then bisection (resolution about 1 %):
 
 * `chain`: one widget, Properties `p0 .. p{L-1}` where `p{i}` reads `p{i+1}`; counted in Properties. The head `p0` is
-  declared first on purpose: the compiler's cycle search follows dependencies in declaration order, so this is the
-  order in which compile recursion is as deep as the chain (declared the other way round, the same chain still compiled at
-  65 536 links under Node).
+  declared first on purpose: the compiler's cycle search used to follow dependencies in declaration order, so this was
+  the order in which compile recursion was as deep as the chain (declared the other way round, the same chain still
+  compiled at 65 536 links under Node). The head reads `L + x`.
 * `survey`: W flat widgets; `visible` reads the next widget's `value`, `value` reads its own State and its own
-  `visible`; counted in widgets (two Properties each).
-* phases: `compile` (`createBlueprint` returns a valid Blueprint) and `evaluate` (`createRuntime`, then a cold read of
-  the head returns `ok` with the right value).
+  `visible`; counted in widgets (two Properties each). The cold-read probes use it as authored (`visible` is a boolean,
+  so writing the last widget's State never changes the head). The teardown probes use a "live" variant with the same
+  dependency edges but numeric `visible` (the next widget's `value`, 0 for the last) and `value = answer + visible + 1`,
+  so the head reads `W + answer of the last widget` and a write to the tail reaches it.
+
+Phases, each with the step it measures and how it decides success. Every attempt needs a valid Blueprint first, builds a
+fresh Runtime, and fails (stage `process`) when the process crashes, times out or ends without a result line.
+
+| phase | what the attempt does | success |
+| --- | --- | --- |
+| `compile` | `createBlueprint` | the Blueprint is `valid` |
+| `evaluate` | fresh Runtime, then a **cold** read of the head | the read is `ok` with the expected value |
+| `warm-reread` | fresh Runtime; read every Property from the tail to the head (each read is shallow because its dependency is already cached); write the tail State; read the head | every warm read is `ok` with its expected value; the write is accepted; the head reads the expected value after the write |
+| `unsubscribe` | warm bottom-up as above; subscribe a listener to the head; unsubscribe it | nothing throws, nothing is reported (below) |
+| `reread-after-unsubscribe` | as `unsubscribe`, then write the tail State and read the head | as `warm-reread` for the write and the read, and the listener was not called |
+| `dispose` | warm bottom-up; subscribe a listener to the head; `runtime.dispose()` | nothing throws, nothing is reported |
+
+The warm state of the last four phases is built bottom-up on purpose, so none of them depends on a deep cold read and each
+measures only the step it is named for (a failure while warming is reported at stage `warm`, and means the bottom-up
+read itself was not shallow). Core isolates the exceptions of subscriptions and listeners: they never reach the caller
+and are reported by rethrowing from `queueMicrotask`. During a teardown attempt the probe therefore replaces
+`globalThis.queueMicrotask` with a function that runs the callback at once and records what it throws; a recorded
+exception fails the attempt (stage `<stage> (reported)`). Without that a stack overflow inside a listener or a
+subscription's read would pass unseen. A wrong value read back fails with `WrongValue` (a nested read that overflowed
+turns into `0` in these computes, so this is also how an overflow inside a Property shows up).
+
+A probe that still works at the cap of the search (65 536 Properties for the chain, 32 768 widgets for the survey) is
+reported as **"at least <cap>"** (`ceiling: true` in the JSON, where `maxOk` then equals the cap and is a lower bound, not
+a limit); one that already fails at the first length tried (100 / 50) as "< <start>" (`maxOk: 0`). The compile probes
+reach the cap since Core analyses evaluation cycles without recursion.
+
+`--probes-only true` skips every timing workload (it implies `--stack-probe true`) and `--probe-phases a,b` restricts
+the phases (default: all six). The stack-size sweep of the CI driver
+([`../ci/README.md`](../ci/README.md#stack-size-sweep)) runs exactly this, once per stack size. `info` runs also report
+the engine's plain recursion depth (nested calls of an empty function until the engine throws), a calibration without
+any Widget code that is printed at the top of a sweep table.
 
 Every attempt is a **fresh process**. QuickJS recovers from a stack overflow (quickjs-ng 0.18 throws a catchable
 `RangeError: Maximum call stack size exceeded`; only `InternalError`, which is out of memory or an interrupt, is
@@ -67,14 +100,17 @@ node benchmarks/quickjs/compare.mjs out/a.json out/b.json      # several files p
 node benchmarks/quickjs/run.mjs --packages-root "$PWD" --qjs node-jitless --json /tmp/a.json   # or --qjs node
 ```
 
-Other options: `--stack-size <KB>` (passed to `qjs` or `node` as their stack limit), `--workloads a,b`,
+Other options: `--stack-size <KB>` (the engine's stack limit: `node --stack-size=<KB>`, and `qjs --stack-size <KB>k` with
+an explicit `k` suffix so that it is kibibytes whichever way `qjs` reads a bare number), `--probes-only true`,
+`--probe-phases a,b`, `--workloads a,b`,
 `--max-seconds 60` (timed-work bound per group), `--probe-timeout 120` (seconds per probe attempt), `--bundle-out <file>`.
 The benchmark code (`gen.mjs`, the workloads) always comes from the checkout that holds this script, so two checkouts
 are compared with identical measuring code; only Core and `alien-signals` come from `--packages-root`. The JSON
 records the engine version, the packages root, its git SHA, the Core and `alien-signals` versions and the bundle size.
 
 `compare.mjs` prints, per workload and size, the median of the medians of each side, the min..max range, the ratio
-B/A and `significant` (ranges do not overlap and the medians differ by more than 5 %), then the stack-probe numbers.
+B/A and `significant` (ranges do not overlap and the medians differ by more than 5 %), then the stack-probe numbers
+(a range when repeated files differ, "at least N" for a probe that reached its cap).
 
 ## Caveats
 
