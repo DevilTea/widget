@@ -173,7 +173,7 @@ A listener that throws does not affect other listeners or the transport: the fai
 
 ### Lifecycle
 
-Core offers no disposal notification, so the Agent observes `runtime.dispose()` when any request arrives, before it emits any other event, and when the Agent itself is disposed. From protocol 0.4 it then sends one `runtime.disposed` event (`reason: 'runtime-disposed'`), `runtime.list` stops listing the Runtime, and requests addressed to it, plus `inspect.hitTest`, `inspect.enable` and `highlight.clear`, answer `runtime-disposed` (releasing calls such as `runtime.unsubscribe*` and `inspect.disable` stay answerable). Disposing the Agent while the transport stays open (`closeTransportOnDispose: false`) sends the same event with `reason: 'agent-disposed'`. Dispose the Agent when you dispose the Runtime. Peers negotiated below 0.4 never see the event or code and keep the earlier behavior.
+The Agent does not subscribe to Runtime disposal; it observes `runtime.dispose()` when any request arrives, before it emits any other event, and when the Agent itself is disposed. From protocol 0.4 it then sends one `runtime.disposed` event (`reason: 'runtime-disposed'`), `runtime.list` stops listing the Runtime, and requests addressed to it, plus `inspect.hitTest`, `inspect.enable` and `highlight.clear`, answer `runtime-disposed` (releasing calls such as `runtime.unsubscribe*` and `inspect.disable` stay answerable). Disposing the Agent while the transport stays open (`closeTransportOnDispose: false`) sends the same event with `reason: 'agent-disposed'`. Dispose the Agent when you dispose the Runtime. Peers negotiated below 0.4 never see the event or code and keep the earlier behavior.
 
 ### Value encoding limits
 
