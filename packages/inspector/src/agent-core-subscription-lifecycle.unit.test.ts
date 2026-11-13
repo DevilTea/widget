@@ -177,4 +177,55 @@ describe('inspector Agent Core subscription lifecycle', () => {
 			runtime.dispose()
 		}
 	})
+
+	it('releases live member and event inspection subscriptions at the moment the Runtime is disposed', async () => {
+		const blueprint = SubscriptionFixtureSystem.createBlueprint({ id: 'root', type: 'SubscriptionFixture' })
+		if (blueprint.status !== 'valid')
+			throw new Error('Expected subscription lifecycle fixture to compile.')
+		const runtime = blueprint.createRuntime()
+
+		const pair = createInProcessInspectorTransportPair()
+		const agent = createInspectorAgent({
+			runtime,
+			transport: pair.agent,
+			runtimeId: 'runtime-subscription-lifecycle',
+			closeTransportOnDispose: false,
+		})
+		const client = createInspectorClient(pair.client)
+
+		try {
+			const { runtimes } = await client.request('runtime.list', {})
+			const ref = { runtimeId: agent.runtimeId, nodeId: runtimes[0]!.rootNodeId }
+			await client.request('runtime.subscribeMember', {
+				ref,
+				member: { type: 'state', name: 'count' },
+			})
+			await client.request('runtime.subscribeEvent', {
+				ref,
+				event: 'change',
+			})
+			expect(unsubscribeSpies.member).not.toHaveBeenCalled()
+			expect(unsubscribeSpies.event).not.toHaveBeenCalled()
+
+			// No request arrives after this call: the Agent releases its bookkeeping inside it.
+			runtime.dispose()
+
+			expect(unsubscribeSpies.member)
+				.toHaveBeenCalledTimes(1)
+			expect(unsubscribeSpies.event)
+				.toHaveBeenCalledTimes(1)
+
+			// Disposing the Agent afterwards releases nothing a second time.
+			agent.dispose()
+			expect(unsubscribeSpies.member)
+				.toHaveBeenCalledTimes(1)
+			expect(unsubscribeSpies.event)
+				.toHaveBeenCalledTimes(1)
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+			pair.agent.close()
+		}
+	})
 })

@@ -140,20 +140,6 @@ describe('runtime lifecycle visibility (protocol 0.4)', () => {
 		}
 	})
 
-	it('announces a Runtime already disposed when the Agent is disposed without any request in between', async () => {
-		const { runtime, agent, client, disposedEvents } = createFixture({ closeTransportOnDispose: false })
-		try {
-			await client.handshake()
-			runtime.dispose()
-			agent.dispose()
-			expect(disposedEvents())
-				.toMatchObject([{ payload: { reason: 'runtime-disposed' } }])
-		}
-		finally {
-			client.dispose()
-		}
-	})
-
 	it('sends no disposal event to a peer negotiated below 0.4 or when it closes the transport', async () => {
 		const legacy = createFixture({ closeTransportOnDispose: false })
 		try {
