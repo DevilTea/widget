@@ -2173,12 +2173,12 @@ provides and which Core's own tests exercise:
   when you subscribe. `subscribeDiagnostics()` and Event subscriptions never
   evaluate anything. Subscribing to State, Properties or diagnostics does not
   emit an initial value either.
-- **No disposal signal.** Core does not notify subscribers when a Runtime is
-  disposed (listeners just stop being called). An adapter that can outlive its
-  Runtime must track disposal itself, for example by owning the call to
-  `runtime.dispose()` or by checking `runtime.isDisposed` before a live read,
-  because a live read on a disposed Runtime throws
-  `WidgetSystemRuntimeDisposedError`.
+- **Disposal.** Core does not notify State, Property, Event or diagnostic
+  subscribers when a Runtime is disposed (their listeners just stop being
+  called). An adapter that can outlive its Runtime learns of disposal through
+  `runtime.subscribeDisposal()` (see [Disposal](#disposal)), and checks
+  `runtime.isDisposed` before a live read, because a live read on a disposed
+  Runtime throws `WidgetSystemRuntimeDisposedError`.
 - **Listener exceptions are isolated.** A throwing listener never disturbs the
   writer or other listeners (see [Runtime diagnostics](#runtime-diagnostics)),
   so an adapter's listeners need not guard against each other. The one
@@ -2395,27 +2395,239 @@ an occurrence should defer the work, for example to a microtask.
 
 ### Async work
 
-Core is synchronous by design. Every semantic callback is synchronous, a
-returned Promise is a contract violation, and a callback's dependency and `emit`
-callables stop working when the callback returns (see
+Core is synchronous by design, and that is a deliberate boundary rather than a
+missing feature. Every semantic callback is synchronous, a returned Promise is a
+contract violation, and a callback's dependency and `emit` callables stop working
+when the callback returns (see
 [Callback context lifetime](#callback-context-lifetime)). Asynchronous work
-therefore lives in the **host**, and re-enters Core through one ordinary,
-synchronous Method call. The recipe:
+therefore lives in the **host**: the host awaits it, and the result re-enters
+Core through ordinary synchronous State writes and Method calls, made from the
+host's own code and never from inside a Core callback.
 
-1. Model the work's progress as State (a `status` member, plus whatever data the
-   result needs).
-2. Give the plugin a synchronous "start" Method that marks the work as started
-   and hands the host a ticket, and a synchronous "commit" Method that takes the
-   result together with that ticket.
-3. The host owns the effect: it calls the start Method, performs the fetch, and
-   then calls the commit Method once, from its own code (never from inside a
-   Core callback).
-4. Guard the two races in the host: a **stale response** (the commit Method
-   ignores a ticket that is no longer current, so only the newest request can
-   win) and **disposal** (check `runtime.isDisposed` before the commit, because
-   a Method call on a disposed Runtime throws).
+**The simplest form.** Model the work's progress as State (a `status` member plus
+whatever data the result needs), await the work in the host, and write the
+outcome through the public Runtime surface. Write the data before the status, so
+that anything observing `ready` finds the data already in place.
 
 <!-- sample: async run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+type Status = 'idle' | 'loading' | 'ready' | 'failed'
+
+const profilePlugin = createWidgetPlugin('profile')
+	.description('A profile loaded by the host')
+	.interfaces<{ state: { status: Status, title: string | null } }>()
+	.state(state => state
+		.status({
+			validate: (input): input is Status =>
+				input === 'idle' || input === 'loading' || input === 'ready' || input === 'failed',
+			default: () => 'idle',
+		})
+		.title({
+			validate: (input): input is string | null => input === null || typeof input === 'string',
+			default: () => null,
+		}))
+	.done()
+
+const blueprint = createWidgetSystem({ plugins: [profilePlugin] })
+	.createBlueprint({ id: 'profile-1', type: 'profile' })
+if (blueprint.status !== 'valid')
+	throw new Error('invalid')
+const runtime = blueprint.createRuntime()
+const profile = runtime.getWidget('profile-1')
+if (profile?.type !== 'profile')
+	throw new Error('not found')
+const { state } = profile
+
+// The host owns the effect: it awaits, then writes the outcome back into State.
+async function load(fetchTitle: () => Promise<string>): Promise<void> {
+	state.status.set('loading')
+	try {
+		const title = await fetchTitle()
+		state.title.set(title)
+		state.status.set('ready')
+	}
+	catch {
+		state.status.set('failed')
+	}
+}
+
+await load(() => Promise.resolve('Ada Lovelace'))
+console.log(state.status.get(), state.title.get()) // ready Ada Lovelace
+
+await load(() => Promise.reject(new Error('offline')))
+console.log(state.status.get(), state.title.get()) // failed Ada Lovelace
+```
+
+`status` is an ordinary State member, so a renderer, a Property or a host
+subscriber observes loading, ready and failed like any other change.
+
+**When several members change together.** Each `state.set()` is its own write and
+notifies its subscribers on its own, so a Property that reads two members is
+recomputed, and its subscribers are called, once per write, and the first call
+sees a half-updated result. One Method invocation is one batch: the writes inside
+it are applied together, dependents recompute once, and subscribers are notified
+once with the final values. When a result touches more than one member, commit it
+through a single Method.
+
+<!-- sample: async-batch run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+type Status = 'loading' | 'ready'
+
+interface ProfileInterfaces {
+	state: { status: Status, title: string | null }
+	properties: { headline: string }
+	methods: { commit: (title: string) => null }
+}
+
+const profilePlugin = createWidgetPlugin('profile')
+	.description('A profile loaded by the host')
+	.interfaces<ProfileInterfaces>()
+	.state(state => state
+		.status({
+			validate: (input): input is Status => input === 'loading' || input === 'ready',
+			default: () => 'loading',
+		})
+		.title({
+			validate: (input): input is string | null => input === null || typeof input === 'string',
+			default: () => null,
+		}))
+	.properties(properties => properties
+		.headline({
+			registerDeps: ({ dep }) => ({
+				status: dep.self.state.get('status'),
+				title: dep.self.state.get('title'),
+			}),
+			compute: ({ deps }) => {
+				const status = deps.status()
+				const title = deps.title()
+				return `${status.ok ? status.value : '?'}: ${title.ok ? title.value : '?'}`
+			},
+		}))
+	.methods(methods => methods
+		// One invocation is one batch: both writes land together.
+		.commit({
+			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
+			registerDeps: ({ dep }) => ({
+				setStatus: dep.self.state.set('status'),
+				setTitle: dep.self.state.set('title'),
+			}),
+			execute: ({ args: [title], deps }) => {
+				deps.setTitle(title)
+				deps.setStatus('ready')
+				return null
+			},
+		}))
+	.done()
+
+function createProfile() {
+	const blueprint = createWidgetSystem({ plugins: [profilePlugin] })
+		.createBlueprint({ id: 'profile-1', type: 'profile' })
+	if (blueprint.status !== 'valid')
+		throw new Error('invalid')
+	const widget = blueprint.createRuntime()
+		.getWidget('profile-1')
+	if (widget?.type !== 'profile')
+		throw new Error('not found')
+	return widget
+}
+
+// Two separate writes: the Property subscriber runs twice, and the first run sees a mix.
+const separate = createProfile()
+separate.properties.headline.subscribe((result) => {
+	console.log('separate:', result.ok ? result.value : 'failed')
+})
+separate.state.title.set('Ada Lovelace') // separate: loading: Ada Lovelace
+separate.state.status.set('ready') // separate: ready: Ada Lovelace
+
+// One Method invocation: one batch, one notification, final values only.
+const batched = createProfile()
+batched.properties.headline.subscribe((result) => {
+	console.log('batched:', result.ok ? result.value : 'failed')
+})
+batched.methods.commit('Ada Lovelace') // batched: ready: Ada Lovelace
+```
+
+**Cancelling on disposal.** `runtime.subscribeDisposal(listener)` runs a listener
+once, synchronously, when the Runtime is disposed (see [Disposal](#disposal)).
+Pair it with a host-side `AbortController` to stop pending work: pass the
+controller's `signal` to the work, abort it from the listener, and unsubscribe
+when the work settles so a long-lived Runtime does not accumulate listeners. The
+listener cancels the host's own work; it cannot touch the Runtime, which is
+already disposed by then.
+
+<!-- sample: async-cancel run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+const plugin = createWidgetPlugin('profile')
+	.description('A profile loaded by the host')
+	.interfaces<{ state: { title: string | null } }>()
+	.state(state => state
+		.title({
+			validate: (input): input is string | null => input === null || typeof input === 'string',
+			default: () => null,
+		}))
+	.done()
+const blueprint = createWidgetSystem({ plugins: [plugin] })
+	.createBlueprint({ id: 'profile-1', type: 'profile' })
+if (blueprint.status !== 'valid')
+	throw new Error('invalid')
+const runtime = blueprint.createRuntime()
+
+// Stands in for `fetch(url, { signal })`: settles later, rejects when aborted.
+function fetchTitle(title: string, milliseconds: number, signal: AbortSignal): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(resolve, milliseconds, title)
+		signal.addEventListener('abort', () => {
+			clearTimeout(timer)
+			reject(signal.reason)
+		}, { once: true })
+	})
+}
+
+async function load(title: string, milliseconds: number): Promise<void> {
+	const controller = new AbortController()
+	const stopOnDisposal = runtime.subscribeDisposal(() => controller.abort())
+	try {
+		const result = await fetchTitle(title, milliseconds, controller.signal)
+		runtime.getWidget('profile-1')?.state.title.set(result)
+		console.log('loaded', result)
+	}
+	catch {
+		console.log('cancelled')
+	}
+	finally {
+		stopOnDisposal() // the work has settled: stop listening
+	}
+}
+
+await load('Ada', 5) // loaded Ada
+const pending = load('Grace', 1000)
+runtime.dispose() // aborts the pending request synchronously
+await pending // cancelled
+```
+
+`runtime.isDisposed` still has a job. Work that cannot be cancelled (a promise
+that takes no `AbortSignal`, or a callback that is already queued) resumes after
+its `await` whether or not the Runtime is still alive, and a State write or a
+Method call on a disposed Runtime throws. Check `runtime.isDisposed` before the
+write for such work. `subscribeDisposal()` also throws on a Runtime that is
+already disposed, so check there first when the Runtime may already be gone.
+
+**When requests can overlap.** If the host can start a second request before the
+first one settles, a slow first response can arrive after a fast second one and
+overwrite it. Aborting the old request is the best fix when the work supports it.
+When it does not, make the commit Method ignore a response whose ticket is no
+longer the newest. This is the heaviest form and is only needed for overlapping,
+uncancellable work: a `begin` Method issues a ticket (the next number, kept in
+State), and `settle` takes the ticket together with the result and ignores it
+when it is stale.
+
+<!-- sample: async-ticket run -->
 ```ts
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 
@@ -2425,24 +2637,23 @@ interface ProfileInterfaces {
 	state: { status: Status, requestId: number, data: string | null }
 	methods: {
 		begin: () => number
-		commit: (requestId: number, data: string) => boolean
-		fail: (requestId: number) => boolean
+		settle: (requestId: number, data: string | null) => boolean
 	}
-}
-
-function isStatus(input: unknown): input is Status {
-	return input === 'idle' || input === 'loading' || input === 'ready' || input === 'failed'
 }
 
 const profilePlugin = createWidgetPlugin('profile')
 	.description('A profile loaded by the host')
 	.interfaces<ProfileInterfaces>()
 	.state(state => state
-		.status({ validate: isStatus, default: () => 'idle' })
+		.status({
+			validate: (input): input is Status =>
+				input === 'idle' || input === 'loading' || input === 'ready' || input === 'failed',
+			default: () => 'idle',
+		})
 		.requestId({ validate: (input): input is number => typeof input === 'number', default: () => 0 })
 		.data({ validate: (input): input is string | null => input === null || typeof input === 'string', default: () => null }))
 	.methods(methods => methods
-		// Synchronous: marks a load as started and hands the host a ticket.
+		// Marks a load as started and hands the host a ticket.
 		.begin({
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
@@ -2458,10 +2669,10 @@ const profilePlugin = createWidgetPlugin('profile')
 				return next
 			},
 		})
-		// Synchronous commit: a stale ticket is ignored, so only the newest request can win.
-		.commit({
-			validateArgs: (args): args is [number, string] =>
-				args.length === 2 && typeof args[0] === 'number' && typeof args[1] === 'string',
+		// Commits a result (`null` means the request failed); a stale ticket is ignored.
+		.settle({
+			validateArgs: (args): args is [number, string | null] =>
+				args.length === 2 && typeof args[0] === 'number' && (args[1] === null || typeof args[1] === 'string'),
 			registerDeps: ({ dep }) => ({
 				requestId: dep.self.state.get('requestId'),
 				setStatus: dep.self.state.set('status'),
@@ -2471,30 +2682,19 @@ const profilePlugin = createWidgetPlugin('profile')
 				const current = deps.requestId()
 				if (!current.ok || current.value !== requestId)
 					return false
+				if (data === null) {
+					deps.setStatus('failed')
+					return true
+				}
 				deps.setData(data)
 				deps.setStatus('ready')
 				return true
 			},
-		})
-		.fail({
-			validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
-			registerDeps: ({ dep }) => ({
-				requestId: dep.self.state.get('requestId'),
-				setStatus: dep.self.state.set('status'),
-			}),
-			execute: ({ args: [requestId], deps }) => {
-				const current = deps.requestId()
-				if (!current.ok || current.value !== requestId)
-					return false
-				deps.setStatus('failed')
-				return true
-			},
-		}),
-	)
+		}))
 	.done()
 
-const system = createWidgetSystem({ plugins: [profilePlugin] })
-const blueprint = system.createBlueprint({ id: 'profile-1', type: 'profile' })
+const blueprint = createWidgetSystem({ plugins: [profilePlugin] })
+	.createBlueprint({ id: 'profile-1', type: 'profile' })
 if (blueprint.status !== 'valid')
 	throw new Error('invalid')
 const runtime = blueprint.createRuntime()
@@ -2502,22 +2702,20 @@ const profile = runtime.getWidget('profile-1')
 if (profile?.type !== 'profile')
 	throw new Error('not found')
 
-// Host-owned effect: the asynchronous work lives outside Core and re-enters
-// through one synchronous Method call.
 async function load(fetchProfile: () => Promise<string>): Promise<void> {
 	const ticket = profile!.methods.begin()
 	if (!ticket.ok)
 		return
+	let data: string | null
 	try {
-		const data = await fetchProfile()
-		if (runtime.isDisposed) // the Runtime may be gone by now; a Method call would throw
-			return
-		profile!.methods.commit(ticket.value, data)
+		data = await fetchProfile()
 	}
 	catch {
-		if (!runtime.isDisposed)
-			profile!.methods.fail(ticket.value)
+		data = null
 	}
+	if (runtime.isDisposed) // uncancellable work resumes here, and a Method call would throw
+		return
+	profile!.methods.settle(ticket.value, data)
 }
 
 const slow = load(() => new Promise<string>(resolve => setTimeout(resolve, 20, 'old')))
@@ -2781,7 +2979,9 @@ Release a library's own dependents after Core, never before.
   structure validator (slot, plugin, system) written into the builder or the
   System options that returns a thenable is rejected by the type checker too,
   whatever the declared return type; a callback typed only by a standalone
-  definition type is caught by the runtime guard alone.
+  definition type is caught by the runtime guard alone. Asynchronous work
+  stays outside Core: the host awaits it and re-enters through ordinary
+  synchronous State writes and Method calls (see [Async work](#async-work)).
 - **Callback-context lifetime.** A callback's `addDiagnostic` /
   `hasAnyDiagnostic`, its dependency callables and its `emit` callables belong
   to that synchronous call (see
@@ -2837,7 +3037,8 @@ IIFE). The current implementation needs:
   exception it has isolated from the current operation by rethrowing it in a
   queued microtask. That covers a throwing State, Property or diagnostic
   listener (`subscribe` / `subscribeDiagnostics`), a throwing public Event
-  listener, a throwing inspection listener, a throwing `WidgetDocument`
+  listener, a throwing disposal listener (`subscribeDisposal`), a throwing
+  inspection listener, a throwing `WidgetDocument`
   subscriber, and a Property `compute` that throws while a subscription
   re-evaluates it (one report per exception and synchronous turn, however many
   subscriptions re-read it). An embedded host must run its pending jobs (for example
