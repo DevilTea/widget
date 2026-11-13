@@ -117,8 +117,9 @@ export function createRuntimeContext(): RuntimeContext {
 	let disposed = false
 	const owned = new Set<() => void>()
 	// Disposal listeners in subscription order. One entry per registration, so registering the same function
-	// twice stays two independent registrations. Emptied when delivery starts.
-	let disposalListeners = new Set<{ readonly listener: () => void }>()
+	// twice stays two independent registrations. Emptied when delivery starts. An entry lets go of its listener once that ran or was
+	// unsubscribed, so a kept unsubscribe handle never keeps the listener alive.
+	let disposalListeners = new Set<{ listener: (() => void) | null }>()
 
 	function assertActive(): void {
 		if (disposed)
@@ -145,10 +146,14 @@ export function createRuntimeContext(): RuntimeContext {
 
 		subscribeDisposal(listener) {
 			assertActive()
-			const entry = { listener }
+			const entry: { listener: (() => void) | null } = { listener }
 			disposalListeners.add(entry)
 			return () => {
+				// Once disposal began the entry is in the delivery snapshot, which runs it and then clears it.
+				if (disposed)
+					return
 				disposalListeners.delete(entry)
+				entry.listener = null
 			}
 		},
 
@@ -164,8 +169,12 @@ export function createRuntimeContext(): RuntimeContext {
 			// a listener removed meanwhile still runs, and none is retained once it has.
 			const delivering = [...disposalListeners]
 			disposalListeners = new Set()
-			for (const { listener } of delivering)
-				invokeListenerIsolated(() => listener(), undefined)
+			for (const entry of delivering) {
+				const listener = entry.listener
+				entry.listener = null
+				if (listener !== null)
+					invokeListenerIsolated(() => listener(), undefined)
+			}
 		},
 	}
 }
