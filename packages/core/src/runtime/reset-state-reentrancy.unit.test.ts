@@ -5,6 +5,7 @@
  */
 
 import type { WidgetInterfaces } from '../index'
+import { effect, setActiveSub, signal } from 'alien-signals'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -183,5 +184,73 @@ describe('resetState after a reset ran inside the flush of a Method write', () =
 			.toEqual(['t={"o":1}', '--widget reset', 't="x"'])
 		expect(widget.state.t.get())
 			.toBe('x')
+	})
+})
+
+describe('resetState inside an effect created outside Core', () => {
+	interface PairInterfaces extends WidgetInterfaces {
+		state: { a: number, b: number }
+	}
+
+	const pair = createWidgetPlugin('pair')
+		.description('Test widget')
+		.interfaces<PairInterfaces>()
+		.state(state => state
+			.a({ validate: isNumber, default: () => 1 })
+			.b({ validate: isNumber, default: () => 2 }))
+		.done()
+	const pairBlueprint = createWidgetSystem({ plugins: [pair] })
+		.createBlueprint({ id: 'root', type: 'pair' })
+	if (pairBlueprint.status !== 'valid')
+		throw new Error('fixture setup error: expected a valid Blueprint')
+
+	it('makes the effect depend on every State when it resets inside its tracked body', () => {
+		const runtime = pairBlueprint.createRuntime()
+		const widget = runtime.getWidget('root')!
+		const trigger = signal(0)
+		let runs = 0
+		const stop = effect(() => {
+			trigger()
+			if (++runs === 1)
+				runtime.resetState()
+		})
+
+		widget.state.b.set(4)
+		const afterWrite = { runs, b: widget.state.b.get() }
+		trigger(1)
+		stop()
+
+		expect(afterWrite)
+			.toEqual({ runs: 2, b: 4 })
+		expect(runs)
+			.toBe(3)
+	})
+
+	it('leaves the effect independent of the States when it resets with no active subscriber', () => {
+		const runtime = pairBlueprint.createRuntime()
+		const widget = runtime.getWidget('root')!
+		const trigger = signal(0)
+		let runs = 0
+		const stop = effect(() => {
+			trigger()
+			if (++runs === 1) {
+				const previous = setActiveSub(undefined)
+				try {
+					runtime.resetState()
+				}
+				finally {
+					setActiveSub(previous)
+				}
+			}
+		})
+
+		widget.state.b.set(4)
+		trigger(1)
+		stop()
+
+		expect(runs)
+			.toBe(2)
+		expect(widget.state.b.get())
+			.toBe(4)
 	})
 })
