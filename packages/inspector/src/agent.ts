@@ -211,9 +211,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	/**
-	 * The Agent observes disposal lazily instead of registering `runtime.subscribeDisposal()`: it checks
-	 * `isDisposed` when any request arrives, before it emits any other event, and when the Agent itself is
-	 * disposed.
+	 * Announces disposal at most once. The Agent registers `runtime.subscribeDisposal()` so this runs inside
+	 * `runtime.dispose()`. It also checks `isDisposed` when any request arrives, before it emits any other
+	 * event, and when the Agent itself is disposed: that is the only path for an Agent created on a Runtime
+	 * that was already disposed (subscribing to one throws), and it keeps everything consistent whenever the
+	 * listener could not tell the peer.
 	 */
 	function observeRuntimeDisposal(): boolean {
 		if (!options.runtime.isDisposed)
@@ -739,6 +741,12 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	}
 
 	const removeDomListeners = installDomListeners()
+	// Subscribing to an already disposed Runtime throws; the lazy checks cover that case.
+	const unsubscribeDisposal = options.runtime.isDisposed
+		? () => {}
+		: options.runtime.subscribeDisposal(() => {
+				observeRuntimeDisposal()
+			})
 	const unsubscribeTransport = options.transport.subscribe((raw) => {
 		let requestId: string | null = null
 		try {
@@ -797,6 +805,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			emit('runtime.disposed', { runtimeId, reason: options.runtime.isDisposed ? 'runtime-disposed' : 'agent-disposed' })
 		}
 		disposed = true
+		unsubscribeDisposal()
 		releaseSubscriptions()
 		removeDomListeners()
 		geometryController?.dispose()

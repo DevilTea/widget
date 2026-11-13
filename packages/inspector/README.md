@@ -175,7 +175,7 @@ A listener that throws does not affect other listeners or the transport: the fai
 
 ### Lifecycle
 
-The Agent does not subscribe to Runtime disposal; it observes `runtime.dispose()` when any request arrives, before it emits any other event, and when the Agent itself is disposed. From protocol 0.4 it then sends one `runtime.disposed` event (`reason: 'runtime-disposed'`), `runtime.list` stops listing the Runtime, and requests addressed to it, plus `inspect.hitTest`, `inspect.enable` and `highlight.clear`, answer `runtime-disposed` (releasing calls such as `runtime.unsubscribe*` and `inspect.disable` stay answerable). Disposing the Agent while the transport stays open (`closeTransportOnDispose: false`) sends the same event with `reason: 'agent-disposed'`. Dispose the Agent when you dispose the Runtime. Peers negotiated below 0.4 never see the event or code and keep the earlier behavior.
+The Agent subscribes to Runtime disposal (`runtime.subscribeDisposal()`), so the peer is told inside the `runtime.dispose()` call, not at its next request. From protocol 0.4 the Agent sends one `runtime.disposed` event (`reason: 'runtime-disposed'`) at that moment, releases its subscription bookkeeping, `runtime.list` stops listing the Runtime, and requests addressed to it, plus `inspect.hitTest`, `inspect.enable` and `highlight.clear`, answer `runtime-disposed` (releasing calls such as `runtime.unsubscribe*` and `inspect.disable` stay answerable). A peer that has not performed the handshake yet is told too, at the Agent's highest minor, like any other event. An event that cannot be delivered (a closed or throwing transport) is dropped and never reaches the `runtime.dispose()` caller. An Agent created on a Runtime that is already disposed cannot subscribe, so it announces on the first request, before it emits any other event, or when it is disposed. Disposing the Agent while the transport stays open (`closeTransportOnDispose: false`) sends the same event with `reason: 'agent-disposed'`; a Runtime disposed after its Agent causes no send. Dispose the Agent when you dispose the Runtime: the Runtime's disposal does not release the Agent's transport subscription, DOM listeners or highlight overlay. Peers negotiated below 0.4 never see the event or code and keep the earlier behavior.
 
 ### Value encoding limits
 
@@ -235,7 +235,6 @@ The Inspector is a read-only debugging boundary, not an access-control system.
 - **`hidden` is ambiguous.** `visibility: 'hidden'` covers both "anchors exist but have no layout rect" and "no anchor element exists for the Widget".
 - **Opaque class instances.** Anything that is not a plain object or array (`Date`, `Map`, `Set`, `Error`, class instances) is encoded as `{ type: 'opaque', kind: 'class-instance' }` with no contents.
 - **Display-only value encoding.** Values are bounded and lossy by design (see the limits above); the encoding is not a serialization format.
-- **Disposal is observed lazily** (see Lifecycle); a peer that sends nothing may learn only when the Agent is disposed.
 - **Not provided:** State/Method diagnostics on the wire, a redaction hook, new value kinds for `Date`/`Map`/`Set`, multiple DOM roots, and any kind of mutation.
 
 ## Versioning
