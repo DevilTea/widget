@@ -295,19 +295,20 @@ export function readDepExpression(expression: AnyDepExpression): DepExpressionIn
 }
 
 function createDepExpression(internals: DepExpressionInternals, readable: boolean): AnyDepExpression {
-	const expression = {
-		[depExpressionBrand]: internals,
-	} as Record<PropertyKey, unknown>
-
-	if (readable) {
-		expression.validate = (refinement: DependencyRefinement) => createDepExpression(
-			{
-				reference: internals.reference,
-				refinements: [...internals.refinements, refinement],
-			},
-			true,
-		)
-	}
+	// The computed brand key goes after `validate`: V8's interpreter builds a literal whose first key is
+	// computed one property at a time. `Reflect.ownKeys` order is unaffected (string keys precede symbols).
+	const expression = readable
+		? {
+				validate: (refinement: DependencyRefinement) => createDepExpression(
+					{
+						reference: internals.reference,
+						refinements: [...internals.refinements, refinement],
+					},
+					true,
+				),
+				[depExpressionBrand]: internals,
+			}
+		: { [depExpressionBrand]: internals }
 
 	return expression as unknown as AnyDepExpression
 }

@@ -6,7 +6,7 @@
  * invariants" (COMMENT 11) and "graph-analysis diagnostics" (COMMENT 12), consolidated handoff §8.
  */
 
-import type { AnyDepExpression } from '../dep'
+import type { AnyDepExpression, DepExpressionInternals } from '../dep'
 import type { BlueprintDependencyMember, BlueprintDependencyReference, BlueprintDiagnostic } from '../diagnostic'
 import type {
 	CompiledDependency,
@@ -136,6 +136,22 @@ function describeMissingTarget(target: BlueprintDependencyReference['target']): 
 	}
 }
 
+// The computed brand key goes last in these literals: V8's interpreter builds a literal whose first key is
+// computed one property at a time, which is several times slower than a literal with constant leading keys.
+// `Reflect.ownKeys` order is unaffected (string keys always precede symbol keys).
+function absentDependency(reference: BlueprintDependencyReference, refinements: DepExpressionInternals['refinements']): CompiledDependency {
+	return { status: 'absent', reference, refinements, [compiledDependencyBrand]: true }
+}
+
+// Every other ordinary resolution failure is `invalid`, never `absent` (diagnostic #10 inspection
+// amendment "inspection exact API v1 part 1"): `targetNodeId` is included only when cardinality
+// resolved to exactly one recovered node before the later step failed.
+function invalidDependency(reference: BlueprintDependencyReference, refinements: DepExpressionInternals['refinements'], targetNodeId?: InternalNodeId): CompiledDependency {
+	return targetNodeId === undefined
+		? { status: 'invalid', reference, refinements, [compiledDependencyBrand]: true }
+		: { status: 'invalid', reference, refinements, targetNodeId, [compiledDependencyBrand]: true }
+}
+
 function resolveLeaf(
 	nodes: readonly WorkingNode[],
 	nodeIdsByWidgetId: ReadonlyMap<WidgetId, readonly InternalNodeId[]>,
@@ -166,24 +182,6 @@ function resolveLeaf(
 		)
 	}
 
-	const absent = (): CompiledDependency => ({
-		[compiledDependencyBrand]: true,
-		status: 'absent',
-		reference,
-		refinements,
-	})
-
-	// Every other ordinary resolution failure is `invalid`, never `absent` (diagnostic #10 inspection
-	// amendment "inspection exact API v1 part 1"): `targetNodeId` is included only when cardinality
-	// resolved to exactly one recovered node before the later step failed.
-	const invalid = (targetNodeId?: InternalNodeId): CompiledDependency => ({
-		[compiledDependencyBrand]: true,
-		status: 'invalid',
-		reference,
-		refinements,
-		...(targetNodeId === undefined ? {} : { targetNodeId }),
-	})
-
 	let candidateIds: readonly InternalNodeId[]
 	switch (target.type) {
 		case 'self':
@@ -202,16 +200,16 @@ function resolveLeaf(
 
 	if (candidateIds.length === 0) {
 		if ((target.type === 'parent' || target.type === 'widget') && target.optional)
-			return absent()
+			return absentDependency(reference, refinements)
 
 		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-target', describeMissingTarget(target), reference))
-		return invalid()
+		return invalidDependency(reference, refinements)
 	}
 
 	if (candidateIds.length > 1) {
 		const related = candidateIds.map(id => widgetLocation(nodes[id]!.publicNode))
 		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'ambiguous-dependency-target', 'Dependency target is ambiguous: multiple widgets share that id.', reference, related))
-		return invalid()
+		return invalidDependency(reference, refinements)
 	}
 
 	const targetNodeId = candidateIds[0]!
@@ -219,7 +217,7 @@ function resolveLeaf(
 
 	if (!targetWorking.resolved) {
 		finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'unresolved-dependency-target', 'Dependency target could not be resolved to a widget.', reference, [widgetLocation(targetWorking.publicNode)]))
-		return invalid(targetNodeId)
+		return invalidDependency(reference, refinements, targetNodeId)
 	}
 
 	const targetDefinition = readWidgetPluginDefinition(targetWorking.plugin!)
@@ -228,11 +226,11 @@ function resolveLeaf(
 	if (operation.type === 'state-get' || operation.type === 'state-set') {
 		if (targetDefinition.state === null) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-capability', 'Dependency target has no state capability.', reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		if (!targetDefinition.state.has(operation.key)) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no state member "${operation.key}".`, reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		if (operation.type === 'state-set' && member.type === 'method')
 			directWriteSeeds.add(`${ownerNodeId}:${member.name}`)
@@ -240,11 +238,11 @@ function resolveLeaf(
 	else if (operation.type === 'property-get') {
 		if (targetDefinition.properties === null) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-capability', 'Dependency target has no properties capability.', reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		if (!targetDefinition.properties.has(operation.name)) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no property "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		const toId = memberIds.baseByNodeId[targetNodeId]! + memberIds.offsetsByNodeId[targetNodeId]!.properties.get(operation.name)!
 		// `ownerMemberId * count + toId` is injective because `toId < count`.
@@ -257,11 +255,11 @@ function resolveLeaf(
 	else {
 		if (targetDefinition.methods === null) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-capability', 'Dependency target has no methods capability.', reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		if (!targetDefinition.methods.has(operation.name)) {
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no method "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
-			return invalid(targetNodeId)
+			return invalidDependency(reference, refinements, targetNodeId)
 		}
 		const toId = memberIds.baseByNodeId[targetNodeId]! + memberIds.offsetsByNodeId[targetNodeId]!.methods.get(operation.name)!
 		const key = ownerMemberId * memberIds.count + toId
@@ -272,11 +270,11 @@ function resolveLeaf(
 	}
 
 	return {
-		[compiledDependencyBrand]: true,
 		status: 'resolved',
 		targetNodeId,
 		reference,
 		refinements,
+		[compiledDependencyBrand]: true,
 	}
 }
 

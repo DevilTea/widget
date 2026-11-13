@@ -495,3 +495,65 @@ describe('dependency diagnostic codes do not depend on message text', () => {
 			.toEqual(['missing-dependency-member'])
 	})
 })
+
+describe('dependency expression shape', () => {
+	interface ShapeInterfaces {
+		state: {
+			count: number
+		}
+		properties: {
+			shape: unknown
+		}
+		methods: {
+			bump: () => unknown
+		}
+	}
+
+	it('exposes `validate` only on readable expressions, string keys before the brand, and chains refinements', () => {
+		const seen: { readable: object, refined: object, writable: object }[] = []
+		const shapePlugin = createWidgetPlugin('shape')
+			.description('Test widget')
+			.interfaces<ShapeInterfaces>()
+			.state(state => state.count({
+				validate: (input): input is number => typeof input === 'number',
+			}))
+			.properties(properties => properties.shape({
+				registerDeps: ({ dep }) => ({ read: dep.self.state.get('count') }),
+				compute: () => null,
+			}))
+			.methods(methods => methods.bump({
+				registerDeps: ({ dep }) => {
+					const readable = dep.self.state.get('count')
+					const refined = readable.validate((_value): _value is number => true)
+					const writable = dep.self.state.set('count')
+					seen.push({ readable, refined, writable })
+					return { writable }
+				},
+				validateArgs: (args): args is [] => args.length === 0,
+				execute: () => null,
+			}))
+			.done()
+		createWidgetSystem({ plugins: [shapePlugin] })
+			.createBlueprint({ id: 'root', type: 'shape' })
+
+		const { readable, refined, writable } = seen[0]!
+		for (const expression of [readable, refined]) {
+			const keys = Reflect.ownKeys(expression)
+			expect(keys)
+				.toHaveLength(2)
+			expect(keys[0])
+				.toBe('validate')
+			expect(typeof keys[1])
+				.toBe('symbol')
+			expect(typeof (expression as { validate: unknown }).validate)
+				.toBe('function')
+		}
+		expect(refined)
+			.not
+			.toBe(readable)
+		expect(Reflect.ownKeys(writable))
+			.toHaveLength(1)
+		expect(typeof Reflect.ownKeys(writable)[0])
+			.toBe('symbol')
+	})
+})
