@@ -14,7 +14,7 @@ import type {
 	InternalNodeId,
 	ResolvedBlueprintWidgetNode,
 } from '../internal/contract'
-import type { AnyWidgetPluginTuple } from '../plugin'
+import type { AnyWidgetPluginTuple, WidgetPluginDefinition } from '../plugin'
 import type { WidgetId } from '../types'
 import type { WorkingNode } from './recovery'
 import type { CompileFacade } from './view'
@@ -28,34 +28,76 @@ export interface GraphEdge {
 	readonly fromKind: 'property' | 'method'
 	readonly fromNodeId: InternalNodeId
 	readonly fromName: string
+	/** Dense member id of the owner (see {@link MemberIds}). */
+	readonly fromId: number
 	readonly toKind: 'property' | 'method'
 	readonly toNodeId: InternalNodeId
 	readonly toName: string
+	/** Dense member id of the target (see {@link MemberIds}). */
+	readonly toId: number
 	readonly reference: BlueprintDependencyReference
 }
 
 export interface DependencyResolutionResult {
-	readonly edges: ReadonlyMap<string, GraphEdge>
+	/** Distinct edges in first-reference order. */
+	readonly edges: readonly GraphEdge[]
+	/** Number of Property and Method members of resolved nodes, i.e. the exclusive upper bound of a member id. */
+	readonly memberCount: number
 	readonly directWriteSeeds: ReadonlySet<string>
+}
+
+/**
+ * Dense integer ids for the members of resolved nodes, in the evaluation-graph member order: semantic
+ * traversal order, a node's Properties before its Methods, each in declaration order. `baseByNodeId`
+ * holds a node's first id; `offsetsByNodeId` maps a member name to its id relative to that base (a
+ * Method's offset already includes the node's Property count). Nodes with the same plugin share one
+ * offsets table.
+ */
+interface MemberIds {
+	readonly baseByNodeId: number[]
+	readonly offsetsByNodeId: (MemberOffsets | undefined)[]
+	readonly count: number
+}
+
+interface MemberOffsets {
+	readonly properties: ReadonlyMap<string, number>
+	readonly methods: ReadonlyMap<string, number>
+	readonly size: number
+}
+
+function createMemberIds(nodes: readonly WorkingNode[], semanticOrder: readonly InternalNodeId[]): MemberIds {
+	const offsetsByDefinition = new Map<WidgetPluginDefinition, MemberOffsets>()
+	const baseByNodeId: number[] = []
+	const offsetsByNodeId: (MemberOffsets | undefined)[] = []
+	let count = 0
+	for (const nodeId of semanticOrder) {
+		const node = nodes[nodeId]!
+		if (!node.resolved || node.plugin === null)
+			continue
+		const definition = readWidgetPluginDefinition(node.plugin)
+		let offsets = offsetsByDefinition.get(definition)
+		if (offsets === undefined) {
+			const properties = new Map<string, number>()
+			const methods = new Map<string, number>()
+			let size = 0
+			for (const name of definition.properties?.keys() ?? [])
+				properties.set(name, size++)
+			for (const name of definition.methods?.keys() ?? [])
+				methods.set(name, size++)
+			offsets = { properties, methods, size }
+			offsetsByDefinition.set(definition, offsets)
+		}
+		baseByNodeId[nodeId] = count
+		offsetsByNodeId[nodeId] = offsets
+		count += offsets.size
+	}
+	return { baseByNodeId, offsetsByNodeId, count }
 }
 
 function configFragment(node: WorkingNode): Record<string, unknown> {
 	return node.plugin !== null && readWidgetPluginDefinition(node.plugin).config !== null
 		? { config: node.config }
 		: {}
-}
-
-/**
- * `WidgetMemberKey = string` is an arbitrary finite string domain (member names may themselves
- * contain `:` / `->`), so naive template-literal concatenation of the six identity components is not
- * injective: e.g. a from-name of `"a->method:0:b"` paired with a to-name of `"c"` serializes to the
- * same string as a from-name of `"a"` paired with a to-name of `"b->property:0:c"`. `JSON.stringify`
- * of the component tuple is injective over strings/numbers (it round-trips exactly through
- * `JSON.parse`), so two distinct tuples can never collide regardless of what characters member names
- * contain.
- */
-function edgeKey(fromKind: string, fromNodeId: InternalNodeId, fromName: string, toKind: string, toNodeId: InternalNodeId, toName: string): string {
-	return JSON.stringify([fromKind, fromNodeId, fromName, toKind, toNodeId, toName])
 }
 
 function walkDeps(value: unknown, resolveLeaf: (leaf: AnyDepExpression) => CompiledDependency): CompiledDependencyTree {
@@ -99,10 +141,13 @@ function resolveLeaf(
 	nodeIdsByWidgetId: ReadonlyMap<WidgetId, readonly InternalNodeId[]>,
 	rootNodeId: InternalNodeId,
 	ownerNodeId: InternalNodeId,
+	ownerMemberId: number,
 	member: BlueprintDependencyMember,
 	leaf: AnyDepExpression,
 	finalDiagnostics: BlueprintDiagnostic[],
-	edges: Map<string, GraphEdge>,
+	memberIds: MemberIds,
+	edges: GraphEdge[],
+	edgeKeys: Set<number>,
 	directWriteSeeds: Set<string>,
 ): CompiledDependency {
 	const { reference, refinements } = readDepExpression(leaf)
@@ -201,9 +246,13 @@ function resolveLeaf(
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no property "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
-		const key = edgeKey(member.type, ownerNodeId, member.name, 'property', targetNodeId, operation.name)
-		if (!edges.has(key))
-			edges.set(key, { fromKind: member.type, fromNodeId: ownerNodeId, fromName: member.name, toKind: 'property', toNodeId: targetNodeId, toName: operation.name, reference })
+		const toId = memberIds.baseByNodeId[targetNodeId]! + memberIds.offsetsByNodeId[targetNodeId]!.properties.get(operation.name)!
+		// `ownerMemberId * count + toId` is injective because `toId < count`.
+		const key = ownerMemberId * memberIds.count + toId
+		if (!edgeKeys.has(key)) {
+			edgeKeys.add(key)
+			edges.push({ fromKind: member.type, fromNodeId: ownerNodeId, fromName: member.name, fromId: ownerMemberId, toKind: 'property', toNodeId: targetNodeId, toName: operation.name, toId, reference })
+		}
 	}
 	else {
 		if (targetDefinition.methods === null) {
@@ -214,9 +263,12 @@ function resolveLeaf(
 			finalDiagnostics.push(dependencyDiagnostic(ownerPublicNode, member, 'missing-dependency-member', `Dependency target has no method "${operation.name}".`, reference, [widgetLocation(targetPublicNode)]))
 			return invalid(targetNodeId)
 		}
-		const key = edgeKey(member.type, ownerNodeId, member.name, 'method', targetNodeId, operation.name)
-		if (!edges.has(key))
-			edges.set(key, { fromKind: member.type, fromNodeId: ownerNodeId, fromName: member.name, toKind: 'method', toNodeId: targetNodeId, toName: operation.name, reference })
+		const toId = memberIds.baseByNodeId[targetNodeId]! + memberIds.offsetsByNodeId[targetNodeId]!.methods.get(operation.name)!
+		const key = ownerMemberId * memberIds.count + toId
+		if (!edgeKeys.has(key)) {
+			edgeKeys.add(key)
+			edges.push({ fromKind: member.type, fromNodeId: ownerNodeId, fromName: member.name, fromId: ownerMemberId, toKind: 'method', toNodeId: targetNodeId, toName: operation.name, toId, reference })
+		}
 	}
 
 	return {
@@ -236,11 +288,13 @@ export function resolveDependencies(
 	compileFacade: CompileFacade<AnyWidgetPluginTuple>,
 	finalDiagnostics: BlueprintDiagnostic[],
 ): DependencyResolutionResult {
-	const edges = new Map<string, GraphEdge>()
+	const memberIds = createMemberIds(nodes, semanticOrder)
+	const edges: GraphEdge[] = []
+	const edgeKeys = new Set<number>()
 	const directWriteSeeds = new Set<string>()
 
-	const resolve = (ownerNodeId: InternalNodeId, member: BlueprintDependencyMember, leaf: AnyDepExpression): CompiledDependency =>
-		resolveLeaf(nodes, nodeIdsByWidgetId, rootNodeId, ownerNodeId, member, leaf, finalDiagnostics, edges, directWriteSeeds)
+	const resolve = (ownerNodeId: InternalNodeId, ownerMemberId: number, member: BlueprintDependencyMember, leaf: AnyDepExpression): CompiledDependency =>
+		resolveLeaf(nodes, nodeIdsByWidgetId, rootNodeId, ownerNodeId, ownerMemberId, member, leaf, finalDiagnostics, memberIds, edges, edgeKeys, directWriteSeeds)
 
 	// Properties (step 7), then methods (step 8), each in semantic traversal + declaration order.
 	for (const nodeId of semanticOrder) {
@@ -272,7 +326,8 @@ export function resolveDependencies(
 			}
 
 			const member: BlueprintDependencyMember = { type: 'property', name }
-			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, member, leaf))
+			const ownerMemberId = memberIds.baseByNodeId[nodeId]! + memberIds.offsetsByNodeId[nodeId]!.properties.get(name)!
+			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, ownerMemberId, member, leaf))
 			node.properties.set(name, { name, definition: propertyDefinition, deps })
 		}
 	}
@@ -302,10 +357,11 @@ export function resolveDependencies(
 			}
 
 			const member: BlueprintDependencyMember = { type: 'method', name }
-			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, member, leaf))
+			const ownerMemberId = memberIds.baseByNodeId[nodeId]! + memberIds.offsetsByNodeId[nodeId]!.methods.get(name)!
+			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, ownerMemberId, member, leaf))
 			node.methods.set(name, { name, definition: methodDefinition, deps, transitivelyWrites: false })
 		}
 	}
 
-	return { edges, directWriteSeeds }
+	return { edges, memberCount: memberIds.count, directWriteSeeds }
 }

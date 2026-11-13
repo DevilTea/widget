@@ -22,10 +22,6 @@ interface MemberRef {
 	readonly name: string
 }
 
-function memberKey(kind: string, nodeId: InternalNodeId, name: string): string {
-	return `${kind}:${nodeId}:${name}`
-}
-
 function memberLocation(nodes: readonly WorkingNode[], ref: MemberRef): BlueprintDependencyDiagnosticLocation {
 	const node = nodes[ref.nodeId]!.publicNode as ResolvedBlueprintWidgetNode
 	return ref.kind === 'property' ? propertyLocation(node, ref.name) : methodLocation(node, ref.name)
@@ -37,10 +33,10 @@ function memberLocation(nodes: readonly WorkingNode[], ref: MemberRef): Blueprin
  * reverse of those edges, found by a work list over a callee->callers adjacency built once, then
  * marks the transitively-writeful methods on each node's already-built `CompiledMethodMember` map.
  */
-function computeWritefulMethods(nodes: readonly WorkingNode[], edges: ReadonlyMap<string, GraphEdge>, directWriteSeeds: ReadonlySet<string>): ReadonlySet<string> {
+function computeWritefulMethods(nodes: readonly WorkingNode[], edges: readonly GraphEdge[], directWriteSeeds: ReadonlySet<string>): ReadonlySet<string> {
 	const writeful = new Set(directWriteSeeds)
 	const callersOf = new Map<string, string[]>()
-	for (const edge of edges.values()) {
+	for (const edge of edges) {
 		if (edge.fromKind !== 'method' || edge.toKind !== 'method')
 			continue
 		const toKey = `${edge.toNodeId}:${edge.toName}`
@@ -74,8 +70,8 @@ function computeWritefulMethods(nodes: readonly WorkingNode[], edges: ReadonlyMa
 	return writeful
 }
 
-function emitPurityDiagnostics(nodes: readonly WorkingNode[], edges: ReadonlyMap<string, GraphEdge>, writefulMethods: ReadonlySet<string>, finalDiagnostics: BlueprintDiagnostic[]): void {
-	for (const edge of edges.values()) {
+function emitPurityDiagnostics(nodes: readonly WorkingNode[], edges: readonly GraphEdge[], writefulMethods: ReadonlySet<string>, finalDiagnostics: BlueprintDiagnostic[]): void {
+	for (const edge of edges) {
 		if (edge.fromKind !== 'property' || edge.toKind !== 'method')
 			continue
 		if (!writefulMethods.has(`${edge.toNodeId}:${edge.toName}`))
@@ -95,49 +91,81 @@ function emitPurityDiagnostics(nodes: readonly WorkingNode[], edges: ReadonlyMap
 }
 
 /**
- * Tarjan's strongly-connected-components algorithm over the evaluation graph, visiting adjacency in
- * `memberOrder` for determinism.
+ * Evaluation-graph adjacency in compressed form: the targets of member `id` are
+ * `targets[offsets[id]]` to `targets[offsets[id + 1] - 1]`, in edge-insertion order.
  */
-function findStronglyConnectedComponents(memberOrder: readonly string[], adjacency: ReadonlyMap<string, readonly string[]>): string[][] {
-	const indexOf = new Map<string, number>()
-	let indexCounter = 0
-	const lowlink = new Map<string, number>()
-	const onStack = new Set<string>()
-	const stack: string[] = []
-	const components: string[][] = []
+function buildAdjacency(edges: readonly GraphEdge[], memberCount: number): { offsets: Int32Array, targets: Int32Array } {
+	const offsets = new Int32Array(memberCount + 1)
+	for (const edge of edges)
+		offsets[edge.fromId + 1]!++
+	for (let id = 0; id < memberCount; id++)
+		offsets[id + 1]! += offsets[id]!
 
-	function strongConnect(key: string): void {
-		indexOf.set(key, indexCounter)
-		lowlink.set(key, indexCounter)
-		indexCounter++
-		stack.push(key)
-		onStack.add(key)
+	const targets = new Int32Array(edges.length)
+	const next = offsets.slice(0, memberCount)
+	for (const edge of edges)
+		targets[next[edge.fromId]!++] = edge.toId
+	return { offsets, targets }
+}
 
-		for (const next of adjacency.get(key) ?? []) {
-			if (!indexOf.has(next)) {
+/**
+ * Tarjan's strongly-connected-components algorithm over the evaluation graph, started from each member
+ * in member order and visiting adjacency in edge-insertion order for determinism. Returns only the
+ * cyclic components (more than one member, or one member with a self-loop), in the order Tarjan
+ * completes them. A member without outgoing edges is a trivial component of its own and can never
+ * take part in a cycle, so it is neither started from nor entered.
+ */
+function findCyclicComponents(memberCount: number, offsets: Int32Array, targets: Int32Array): number[][] {
+	// `visitOrder` is one-based so that 0 means "not visited yet".
+	const visitOrder = new Int32Array(memberCount)
+	const lowlink = new Int32Array(memberCount)
+	const onStack = new Uint8Array(memberCount)
+	const stack = new Int32Array(memberCount)
+	let stackSize = 0
+	let visited = 0
+	const components: number[][] = []
+
+	function strongConnect(id: number): void {
+		const order = ++visited
+		visitOrder[id] = order
+		let low = order
+		stack[stackSize++] = id
+		onStack[id] = 1
+
+		const end = offsets[id + 1]!
+		let hasSelfLoop = false
+		for (let edge = offsets[id]!; edge < end; edge++) {
+			const next = targets[edge]!
+			if (next === id)
+				hasSelfLoop = true
+			if (visitOrder[next] === 0) {
+				if (offsets[next + 1] === offsets[next])
+					continue
 				strongConnect(next)
-				lowlink.set(key, Math.min(lowlink.get(key)!, lowlink.get(next)!))
+				low = Math.min(low, lowlink[next]!)
 			}
-			else if (onStack.has(next)) {
-				lowlink.set(key, Math.min(lowlink.get(key)!, indexOf.get(next)!))
+			else if (onStack[next] === 1) {
+				low = Math.min(low, visitOrder[next]!)
 			}
 		}
+		lowlink[id] = low
 
-		if (lowlink.get(key) === indexOf.get(key)) {
-			const component: string[] = []
-			let member: string
+		if (low === order) {
+			const component: number[] = []
+			let member: number
 			do {
-				member = stack.pop()!
-				onStack.delete(member)
+				member = stack[--stackSize]!
+				onStack[member] = 0
 				component.push(member)
-			} while (member !== key)
-			components.push(component)
+			} while (member !== id)
+			if (component.length > 1 || hasSelfLoop)
+				components.push(component)
 		}
 	}
 
-	for (const key of memberOrder) {
-		if (!indexOf.has(key))
-			strongConnect(key)
+	for (let id = 0; id < memberCount; id++) {
+		if (visitOrder[id] === 0 && offsets[id + 1] !== offsets[id])
+			strongConnect(id)
 	}
 
 	return components
@@ -145,30 +173,34 @@ function findStronglyConnectedComponents(memberOrder: readonly string[], adjacen
 
 function emitCycleDiagnostics(
 	nodes: readonly WorkingNode[],
-	memberOrder: readonly MemberRef[],
-	memberOrderKeys: readonly string[],
-	adjacency: ReadonlyMap<string, readonly string[]>,
+	semanticOrder: readonly InternalNodeId[],
+	memberCount: number,
+	edges: readonly GraphEdge[],
 	finalDiagnostics: BlueprintDiagnostic[],
 ): readonly (readonly CompiledMemberRef[])[] {
-	const refByKey = new Map<string, MemberRef>()
-	for (const ref of memberOrder)
-		refByKey.set(memberKey(ref.kind, ref.nodeId, ref.name), ref)
+	const { offsets, targets } = buildAdjacency(edges, memberCount)
+	const components = findCyclicComponents(memberCount, offsets, targets)
+	if (components.length === 0)
+		return []
 
-	const orderIndex = new Map<string, number>()
-	memberOrderKeys.forEach((key, index) => orderIndex.set(key, index))
+	// Member id -> member, in the member order `resolveDependencies` numbered the members in.
+	const memberOrder: MemberRef[] = []
+	for (const nodeId of semanticOrder) {
+		const node = nodes[nodeId]!
+		if (!node.resolved)
+			continue
+		for (const name of node.properties.keys())
+			memberOrder.push({ nodeId, kind: 'property', name })
+		for (const name of node.methods.keys())
+			memberOrder.push({ nodeId, kind: 'method', name })
+	}
 
-	const components = findStronglyConnectedComponents(memberOrderKeys, adjacency)
 	const invalidCycles: (readonly CompiledMemberRef[])[] = []
 
 	for (const component of components) {
-		const hasSelfLoop = component.length === 1 && (adjacency.get(component[0]!) ?? []).includes(component[0]!)
-		const isCyclic = component.length > 1 || hasSelfLoop
-		if (!isCyclic)
-			continue
-
 		const refs = component
-			.map(key => refByKey.get(key)!)
-			.sort((a, b) => orderIndex.get(memberKey(a.kind, a.nodeId, a.name))! - orderIndex.get(memberKey(b.kind, b.nodeId, b.name))!)
+			.sort((a, b) => a - b)
+			.map(id => memberOrder[id]!)
 
 		const properties = refs.filter(ref => ref.kind === 'property')
 		if (properties.length === 0)
@@ -199,37 +231,15 @@ function emitCycleDiagnostics(
 export function runGraphAnalysis(
 	nodes: readonly WorkingNode[],
 	semanticOrder: readonly InternalNodeId[],
-	edges: ReadonlyMap<string, GraphEdge>,
+	edges: readonly GraphEdge[],
+	memberCount: number,
 	directWriteSeeds: ReadonlySet<string>,
 	finalDiagnostics: BlueprintDiagnostic[],
 ): CompiledGraphAnalysis {
 	const writefulMethods = computeWritefulMethods(nodes, edges, directWriteSeeds)
 	emitPurityDiagnostics(nodes, edges, writefulMethods, finalDiagnostics)
 
-	const memberOrder: MemberRef[] = []
-	for (const nodeId of semanticOrder) {
-		const node = nodes[nodeId]!
-		if (!node.resolved)
-			continue
-		for (const name of node.properties.keys())
-			memberOrder.push({ nodeId, kind: 'property', name })
-		for (const name of node.methods.keys())
-			memberOrder.push({ nodeId, kind: 'method', name })
-	}
-	const memberOrderKeys = memberOrder.map(ref => memberKey(ref.kind, ref.nodeId, ref.name))
-
-	const adjacency = new Map<string, string[]>()
-	for (const edge of edges.values()) {
-		const fromKey = memberKey(edge.fromKind, edge.fromNodeId, edge.fromName)
-		const toKey = memberKey(edge.toKind, edge.toNodeId, edge.toName)
-		const list = adjacency.get(fromKey)
-		if (list === undefined)
-			adjacency.set(fromKey, [toKey])
-		else
-			list.push(toKey)
-	}
-
-	const invalidCycles = emitCycleDiagnostics(nodes, memberOrder, memberOrderKeys, adjacency, finalDiagnostics)
+	const invalidCycles = emitCycleDiagnostics(nodes, semanticOrder, memberCount, edges, finalDiagnostics)
 
 	return {
 		writefulMethods,

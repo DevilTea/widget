@@ -134,9 +134,9 @@ function compileBlueprintOutsideCallbacks<Plugins extends AnyWidgetPluginTuple>(
 
 	runStructureValidation(system as unknown as WidgetSystem<AnyWidgetPluginTuple>, nodes, semanticOrder, compileFacade, finalDiagnostics)
 
-	const { edges, directWriteSeeds } = resolveDependencies(nodes, semanticOrder, rootNodeId, nodeIdsByWidgetId, compileFacade, finalDiagnostics)
+	const { edges, memberCount, directWriteSeeds } = resolveDependencies(nodes, semanticOrder, rootNodeId, nodeIdsByWidgetId, compileFacade, finalDiagnostics)
 
-	const analysis = runGraphAnalysis(nodes, semanticOrder, edges, directWriteSeeds, finalDiagnostics)
+	const analysis = runGraphAnalysis(nodes, semanticOrder, edges, memberCount, directWriteSeeds, finalDiagnostics)
 
 	finalizeDiagnosticsByNode(nodeIdByPublicNode, finalDiagnostics, diagnosticsByNode)
 

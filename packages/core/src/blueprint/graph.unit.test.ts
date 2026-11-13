@@ -646,3 +646,80 @@ describe('write-effect propagation along a long Method chain', () => {
 		}
 	})
 })
+
+// -------------------------------------------------------------------------------------------------
+// Evaluation cycles across Widgets
+// -------------------------------------------------------------------------------------------------
+
+interface RingInterfaces {
+	config: {
+		raw: { readonly next: string | null }
+		resolved: { readonly next: string | null }
+	}
+	state: {
+		value: number
+	}
+	properties: {
+		p: unknown
+	}
+}
+
+/** Property `p` reads the next ring member's `p`; the member without a successor reads its own State. */
+const ringPlugin = createWidgetPlugin('ring')
+	.description('Test widget')
+	.interfaces<RingInterfaces>()
+	.config({
+		description: 'Test config',
+		validate: (input): input is RingInterfaces['config']['raw'] => typeof input === 'object' && input !== null,
+		resolve: raw => raw ?? { next: null },
+	})
+	.state(state => state.value({
+		validate: (input): input is number => typeof input === 'number',
+	}))
+	.properties(properties => properties.p({
+		registerDeps: ({ dep, config }) => ({
+			read: config.next !== null
+				? dep.widget(config.next).properties.get('p')
+				: dep.self.state.get('value'),
+		}),
+		compute: () => null,
+	}))
+	.done()
+
+describe('evaluation cycles across Widgets', () => {
+	it('reports one diagnostic per ring member, each listing the other members in document order, and leaves acyclic readers of the ring alone', () => {
+		const ringSystem = createWidgetSystem({ plugins: [ringPlugin, chainHolderPlugin] })
+		const ring = (id: string, next: string | null) => ({ id, type: 'ring', config: { next } })
+		const blueprint = ringSystem.createBlueprint({
+			id: 'root',
+			type: 'chain-holder',
+			slots: {
+				items: [
+					ring('c', 'a'),
+					ring('a', 'b'),
+					ring('b', 'c'),
+					ring('reader', 'a'),
+					ring('tail', null),
+				],
+			},
+		})
+
+		const diagnostics = expectInvalid(blueprint)
+		const relatedIds = (source: BlueprintDependencyDiagnostic) => (source.related ?? []).map((location) => {
+			if (location.type !== 'property')
+				throw new Error('test fixture: expected a property location')
+			return location.node.id
+		})
+		const cycles = dependencyDiagnosticsOf(diagnostics)
+		const ownerOf = (source: BlueprintDependencyDiagnostic) => {
+			if (source.location.type !== 'property')
+				throw new Error('test fixture: expected a property location')
+			return source.location.node.id
+		}
+
+		expect(cycles.map(ownerOf))
+			.toEqual(['c', 'a', 'b'])
+		expect(cycles.map(relatedIds))
+			.toEqual([['a', 'b'], ['c', 'b'], ['c', 'a']])
+	})
+})
