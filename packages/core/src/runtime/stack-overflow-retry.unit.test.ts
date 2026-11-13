@@ -3,8 +3,13 @@
  *
  * A throwing `compute` is cached until a dependency changes, so every read in between rethrows it without
  * re-running `compute`. An engine stack overflow depends on how deep the stack was when the evaluation ran,
- * not on the compute's inputs, so it is the exception: the next read re-evaluates, which is what lets a long
- * chain whose first read was too deep be warmed bottom-up from a shallow stack.
+ * not on the compute's inputs, so it is the exception: the next read re-evaluates, so a read that ran out of
+ * stack (for example because the host called from an already deep stack) can succeed from a shallower one.
+ *
+ * A long dependency chain no longer needs that: Core bounds how deeply Property evaluations nest and
+ * completes deep chains iteratively (DevilTea/widget Discussion #12,
+ * https://github.com/DevilTea/widget/discussions/12#discussioncomment-19593596), so its first read succeeds;
+ * see `deep-dependency-chain.unit.test.ts`.
  */
 
 import type { ExecutionResult } from '../index'
@@ -175,7 +180,7 @@ describe('a semantic compute exception', () => {
 	})
 })
 
-describe('a chain of Properties too long for its first read', () => {
+describe('a chain of Properties far longer than the engine could nest', () => {
 	interface RowInterfaces {
 		config: {
 			raw: { prev: string | null }
@@ -215,7 +220,7 @@ describe('a chain of Properties too long for its first read', () => {
 		.done()
 	const chainSystem = createWidgetSystem({ plugins: [rowPlugin, tablePlugin] })
 
-	it('is warmed bottom-up from a shallow stack after the first read overflowed', () => {
+	it('is read cold from its head, and reading it bottom-up afterwards gives the same values', () => {
 		const length = 20_000
 		const rows = Array.from({ length }, (_, index) => ({ id: `r${index}`, type: 'row', config: { prev: index === 0 ? null : `r${index - 1}` } }))
 		const blueprint = chainSystem.createBlueprint({ id: 'table', type: 'table', slots: { rows } })
@@ -229,8 +234,8 @@ describe('a chain of Properties too long for its first read', () => {
 			return widget.properties.total.get()
 		}
 
-		expect(() => read(length - 1))
-			.toThrow(RangeError)
+		expect(read(length - 1))
+			.toEqual({ ok: true, value: length })
 
 		for (let index = 0; index < length; index += 100) {
 			expect(read(index))
