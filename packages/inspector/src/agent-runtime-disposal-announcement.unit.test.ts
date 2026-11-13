@@ -90,21 +90,80 @@ describe('runtime disposal is announced when it happens', () => {
 		}
 	})
 
-	it('announces to a peer that has not handshaken yet, at the Agent\'s own minor, and does not repeat it after a later handshake', async () => {
+	it('sends nothing at runtime.dispose() to a peer the Agent has never heard from', async () => {
+		const { runtime, agent, client, pair, disposedEvents } = createFixture()
+		try {
+			const send = vi.spyOn(pair.agent, 'send')
+
+			runtime.dispose()
+
+			expect(send)
+				.not
+				.toHaveBeenCalled()
+			expect(disposedEvents())
+				.toHaveLength(0)
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+		}
+	})
+
+	it('tells a peer that sends its first request after disposal, once, at the Agent\'s own minor', async () => {
 		const { runtime, agent, client, disposedEvents, events } = createFixture()
 		try {
 			runtime.dispose()
-			// Before any handshake the Agent serves events at its highest minor, so the peer is told at once.
+
+			// The first request (here the handshake) triggers the announcement, before it is processed, so
+			// the Agent still serves events at its highest minor.
+			const handshake = await client.request('handshake', { protocol: { major: 0, minor: 3 } })
 			expect(disposedEvents())
 				.toEqual([DISPOSED_EVENT])
-
-			const handshake = await client.request('handshake', { protocol: { major: 0, minor: 3 } })
 			expect(handshake.capabilities.events)
 				.not
 				.toContain('runtime.disposed')
 			await client.request('runtime.list', {})
 			expect(events.filter(event => event.event === 'runtime.disposed'))
 				.toHaveLength(1)
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+		}
+	})
+
+	it('tells a peer that attached late, after the Runtime was disposed, on its first request', async () => {
+		const fixture = createInspectorTestFixture()
+		const pair = createInProcessInspectorTransportPair()
+		const agent = createInspectorAgent({ runtime: fixture.runtime, transport: pair.agent, runtimeId: 'runtime-x', closeTransportOnDispose: false })
+		fixture.runtime.dispose()
+		const client = createInspectorClient(pair.client)
+		const events: InspectorEventMessage[] = []
+		client.subscribe(event => events.push(event))
+		try {
+			await client.handshake()
+			expect(await client.request('runtime.list', {}))
+				.toEqual({ runtimes: [] })
+
+			expect(events.filter(event => event.event === 'runtime.disposed'))
+				.toEqual([DISPOSED_EVENT])
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+		}
+	})
+
+	it('tells a peer that sent any request before disposal inside runtime.dispose()', async () => {
+		const { runtime, agent, client, disposedEvents } = createFixture()
+		try {
+			// A request other than the handshake also shows the Agent that a peer is listening.
+			await client.request('runtime.list', {})
+
+			runtime.dispose()
+
+			expect(disposedEvents())
+				.toEqual([DISPOSED_EVENT])
 		}
 		finally {
 			client.dispose()

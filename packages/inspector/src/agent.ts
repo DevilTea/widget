@@ -191,6 +191,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 
 	// Set once the peer has been told (or could not be told) that this Agent's Runtime is gone.
 	let runtimeDisposalAnnounced = false
+	// Set once any message has arrived from the peer: only then is someone known to be listening.
+	let peerHeard = false
 
 	function emit<Event extends InspectorEventName>(event: Event, payload: InspectorEventMap[Event]): void {
 		if (event !== 'runtime.disposed')
@@ -212,10 +214,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 
 	/**
 	 * Announces disposal at most once. The Agent registers `runtime.subscribeDisposal()` so this runs inside
-	 * `runtime.dispose()`. It also checks `isDisposed` when any request arrives, before it emits any other
-	 * event, and when the Agent itself is disposed: that is the only path for an Agent created on a Runtime
-	 * that was already disposed (subscribing to one throws), and it keeps everything consistent whenever the
-	 * listener could not tell the peer.
+	 * `runtime.dispose()`, but only once the peer has sent a request (before that nobody is known to be
+	 * listening). It also checks `isDisposed` when any request arrives, before it emits any other event, and
+	 * when the Agent itself is disposed: that is the path for a peer the Agent had not heard from at disposal
+	 * and for an Agent created on a Runtime that was already disposed (subscribing to one throws), and it keeps
+	 * everything consistent whenever the listener could not tell the peer.
 	 */
 	function observeRuntimeDisposal(): boolean {
 		if (!options.runtime.isDisposed)
@@ -745,9 +748,13 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const unsubscribeDisposal = options.runtime.isDisposed
 		? () => {}
 		: options.runtime.subscribeDisposal(() => {
-				observeRuntimeDisposal()
+				// A transport can drop messages nobody is subscribed to, and a peer that attaches later would
+				// then never learn of the disposal; until the first request the lazy checks announce it instead.
+				if (peerHeard)
+					observeRuntimeDisposal()
 			})
 	const unsubscribeTransport = options.transport.subscribe((raw) => {
+		peerHeard = true
 		let requestId: string | null = null
 		try {
 			const classified = classifyInspectorRequest(raw)
