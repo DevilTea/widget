@@ -10,6 +10,7 @@
 		"node": ">=24"
 	},
 	"scripts": {
+		"bench": "node benchmarks/run.mjs",
 		"build": "pnpm -r --if-present run build",
 		"check": "pnpm run build && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run publint",
 		"docs:build": "pnpm --filter docs run build",
