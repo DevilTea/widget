@@ -32,22 +32,32 @@ function memberLocation(nodes: readonly WorkingNode[], ref: MemberRef): Blueprin
 }
 
 /**
- * Runs the write-effect fixed point over Method->Method edges, marking transitively-writeful methods
- * on each node's already-built `CompiledMethodMember` map.
+ * Propagates write effects over Method->Method edges: a Method is writeful when it directly writes
+ * State or invokes a writeful Method. The set is the closure of the direct-write seeds under the
+ * reverse of those edges, found by a work list over a callee->callers adjacency built once, then
+ * marks the transitively-writeful methods on each node's already-built `CompiledMethodMember` map.
  */
 function computeWritefulMethods(nodes: readonly WorkingNode[], edges: ReadonlyMap<string, GraphEdge>, directWriteSeeds: ReadonlySet<string>): ReadonlySet<string> {
 	const writeful = new Set(directWriteSeeds)
-	const methodEdges = [...edges.values()].filter(edge => edge.fromKind === 'method' && edge.toKind === 'method')
+	const callersOf = new Map<string, string[]>()
+	for (const edge of edges.values()) {
+		if (edge.fromKind !== 'method' || edge.toKind !== 'method')
+			continue
+		const toKey = `${edge.toNodeId}:${edge.toName}`
+		const fromKey = `${edge.fromNodeId}:${edge.fromName}`
+		const callers = callersOf.get(toKey)
+		if (callers === undefined)
+			callersOf.set(toKey, [fromKey])
+		else
+			callers.push(fromKey)
+	}
 
-	let changed = true
-	while (changed) {
-		changed = false
-		for (const edge of methodEdges) {
-			const fromKey = `${edge.fromNodeId}:${edge.fromName}`
-			const toKey = `${edge.toNodeId}:${edge.toName}`
-			if (writeful.has(toKey) && !writeful.has(fromKey)) {
-				writeful.add(fromKey)
-				changed = true
+	const workList = [...writeful]
+	for (let index = 0; index < workList.length; index++) {
+		for (const caller of callersOf.get(workList[index]!) ?? []) {
+			if (!writeful.has(caller)) {
+				writeful.add(caller)
+				workList.push(caller)
 			}
 		}
 	}
