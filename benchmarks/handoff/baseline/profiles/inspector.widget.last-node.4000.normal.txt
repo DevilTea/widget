@@ -1,0 +1,68 @@
+#### inspector.widget / last-node @ 4000 [normal] (median 107.8 us per run, spread 0.9%)
+
+3917 samples, 1196 ms profiled. Timed-run share 97.6%; dropped from the percentages below: un-timed set-up/clean-up 0.0%, garbage collector 0.8% (not attributable to a function), idle 0.0%, other 1.5%. Percentages are of the timed-run share.
+
+Garbage collector: 10.1 ms, 0.8% of the 1196 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 76.5 | 97.2 | handleRequestAtMinor | packages/inspector/dist/agent.mjs:1070 | src: packages/inspector/src/agent.ts:615 |
+| 9.4 | 9.4 | (anonymous) | packages/inspector/dist/agent.mjs:773 |  |
+| 6.2 | 6.8 | resolveNodeId | packages/inspector/dist/agent.mjs:771 | src: packages/inspector/src/agent.ts:270 |
+| 3.7 | 3.7 | cloneJson | packages/inspector/dist/transport.mjs:8 | src: packages/inspector/src/channel.ts:59, packages/inspector/src/transport.ts:31 |
+| 2.3 | 98.4 | send | packages/inspector/dist/transport.mjs:21 | src: packages/inspector/src/channel.ts:251, packages/inspector/src/transport.ts:49, packages/inspector/src/transport.ts:149 |
+| 0.3 | 0.7 | projectRuntimeMemberSnapshot | packages/inspector/dist/agent.mjs:577 | src: packages/inspector/src/projection.ts:278 |
+| 0.3 | 0.3 | encode | packages/inspector/dist/value.mjs:61 | src: packages/inspector/src/value.ts:116 |
+| 0.2 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 0.1 | 98.5 | request | packages/inspector/dist/client.mjs:178 | src: packages/inspector/src/client.ts:276 |
+| 0.1 | 0.1 | getProperty | packages/core/dist/inspection/index.mjs:364 | src: packages/core/src/inspection/runtime.ts:111 |
+| 0.1 | 0.1 | capabilitiesForMinor | packages/inspector/dist/agent.mjs:683 | src: packages/inspector/src/agent.ts:168 |
+| 0.1 | 0.3 | handleResponse | packages/inspector/dist/client.mjs:95 | src: packages/inspector/src/client.ts:178 |
+| 0.1 | 97.3 | (anonymous) | packages/inspector/dist/agent.mjs:1204 |  |
+| 0.1 | 98.5 | (anonymous) | packages/inspector/dist/client.mjs:184 |  |
+| 0.1 | 0.4 | (anonymous) | packages/inspector/dist/client.mjs:154 |  |
+| 0.1 | 0.1 | isRuntimeMemberSnapshot | packages/inspector/dist/protocol-Dp6rtMj5.mjs:397 | src: packages/inspector/src/protocol.ts:612, packages/inspector/src/validation.ts:472 |
+| 0.1 | 0.3 | encodeInspectableValue | packages/inspector/dist/value.mjs:52 | src: packages/inspector/src/value.ts:102 |
+| 0.1 | 0.8 | projectRuntimeWidgetSnapshot | packages/inspector/dist/agent.mjs:590 | src: packages/inspector/src/projection.ts:298 |
+| 0.1 | 0.6 | sendSuccess | packages/inspector/dist/agent.mjs:751 | src: packages/inspector/src/agent.ts:246 |
+| 0.1 | 0.1 | classifyInspectorRequest | packages/inspector/dist/protocol-Dp6rtMj5.mjs:335 | src: packages/inspector/src/protocol.ts:530 |
+| 0.0 | 0.0 | isInspectableValue | packages/inspector/dist/protocol-Dp6rtMj5.mjs:90 | src: packages/inspector/src/validation.ts:144 |
+| 0.0 | 0.0 | parseInspectorResponseMessage | packages/inspector/dist/protocol-Dp6rtMj5.mjs:379 | src: packages/inspector/src/protocol.ts:566 |
+| 0.0 | 0.2 | isInspectorRequestResult | packages/inspector/dist/protocol-Dp6rtMj5.mjs:420 | src: packages/inspector/src/protocol.ts:666 |
+| 0.0 | 0.1 | isRuntimeMemberSnapshot | packages/inspector/dist/protocol-Dp6rtMj5.mjs:282 | src: packages/inspector/src/protocol.ts:612, packages/inspector/src/validation.ts:472 |
+| 0.0 | 0.0 | isInspectorRequestParams | packages/inspector/dist/protocol-Dp6rtMj5.mjs:312 | src: packages/inspector/src/protocol.ts:478 |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 0.1 | 98.5 | request | packages/inspector/dist/client.mjs:178 | src: packages/inspector/src/client.ts:276 |
+| 0.1 | 98.5 | (anonymous) | packages/inspector/dist/client.mjs:184 |  |
+| 2.3 | 98.4 | send | packages/inspector/dist/transport.mjs:21 | src: packages/inspector/src/channel.ts:251, packages/inspector/src/transport.ts:49, packages/inspector/src/transport.ts:149 |
+| 0.1 | 97.3 | (anonymous) | packages/inspector/dist/agent.mjs:1204 |  |
+| 76.5 | 97.2 | handleRequestAtMinor | packages/inspector/dist/agent.mjs:1070 | src: packages/inspector/src/agent.ts:615 |
+| 0.0 | 28.2 | handleRequest | packages/inspector/dist/agent.mjs:1063 | src: packages/inspector/src/agent.ts:606 |
+| 9.4 | 9.4 | (anonymous) | packages/inspector/dist/agent.mjs:773 |  |
+| 6.2 | 6.8 | resolveNodeId | packages/inspector/dist/agent.mjs:771 | src: packages/inspector/src/agent.ts:270 |
+| 3.7 | 3.7 | cloneJson | packages/inspector/dist/transport.mjs:8 | src: packages/inspector/src/channel.ts:59, packages/inspector/src/transport.ts:31 |
+| 0.1 | 0.8 | projectRuntimeWidgetSnapshot | packages/inspector/dist/agent.mjs:590 | src: packages/inspector/src/projection.ts:298 |
+| 0.3 | 0.7 | projectRuntimeMemberSnapshot | packages/inspector/dist/agent.mjs:577 | src: packages/inspector/src/projection.ts:278 |
+| 0.1 | 0.6 | sendSuccess | packages/inspector/dist/agent.mjs:751 | src: packages/inspector/src/agent.ts:246 |
+| 0.1 | 0.4 | (anonymous) | packages/inspector/dist/client.mjs:154 |  |
+| 0.1 | 0.3 | encodeInspectableValue | packages/inspector/dist/value.mjs:52 | src: packages/inspector/src/value.ts:102 |
+| 0.1 | 0.3 | handleResponse | packages/inspector/dist/client.mjs:95 | src: packages/inspector/src/client.ts:178 |
+| 0.3 | 0.3 | encode | packages/inspector/dist/value.mjs:61 | src: packages/inspector/src/value.ts:116 |
+| 0.0 | 0.2 | isInspectorRequestResult | packages/inspector/dist/protocol-Dp6rtMj5.mjs:420 | src: packages/inspector/src/protocol.ts:666 |
+| 0.1 | 0.1 | isRuntimeMemberSnapshot | packages/inspector/dist/protocol-Dp6rtMj5.mjs:397 | src: packages/inspector/src/protocol.ts:612, packages/inspector/src/validation.ts:472 |
+| 0.1 | 0.1 | getProperty | packages/core/dist/inspection/index.mjs:364 | src: packages/core/src/inspection/runtime.ts:111 |
+| 0.1 | 0.1 | capabilitiesForMinor | packages/inspector/dist/agent.mjs:683 | src: packages/inspector/src/agent.ts:168 |
+| 0.1 | 0.1 | classifyInspectorRequest | packages/inspector/dist/protocol-Dp6rtMj5.mjs:335 | src: packages/inspector/src/protocol.ts:530 |
+| 0.0 | 0.1 | isRuntimeMemberSnapshot | packages/inspector/dist/protocol-Dp6rtMj5.mjs:282 | src: packages/inspector/src/protocol.ts:612, packages/inspector/src/validation.ts:472 |
+| 0.0 | 0.0 | isInspectableValue | packages/inspector/dist/protocol-Dp6rtMj5.mjs:90 | src: packages/inspector/src/validation.ts:144 |
+| 0.0 | 0.0 | parseInspectorResponseMessage | packages/inspector/dist/protocol-Dp6rtMj5.mjs:379 | src: packages/inspector/src/protocol.ts:566 |
+| 0.0 | 0.0 | isInspectorRequestParams | packages/inspector/dist/protocol-Dp6rtMj5.mjs:312 | src: packages/inspector/src/protocol.ts:478 |
+
+profile: benchmarks/.results/profiles-raw/inspector.widget.last-node.4000.normal.cpuprofile
+

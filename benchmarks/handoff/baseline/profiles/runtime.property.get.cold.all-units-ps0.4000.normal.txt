@@ -1,0 +1,68 @@
+#### runtime.property.get / cold.all-units-ps0 @ 4000 [normal] (median 11896.7 us per run, spread 8.8%)
+
+66679 samples, 20508 ms profiled. Timed-run share 20.1%; dropped from the percentages below: un-timed set-up/clean-up 52.7%, garbage collector 25.5% (not attributable to a function), idle 0.0%, other 1.7%. Percentages are of the timed-run share.
+
+Garbage collector: 5238.7 ms, 54.0% of the 9699 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 35.0 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 23.2 | 60.6 | evaluate | packages/core/dist/index.mjs:2238 | src: packages/core/src/runtime/property.ts:142 |
+| 15.6 | 20.5 | (anonymous) | packages/core/dist/index.mjs:1892 |  |
+| 10.2 | 71.0 | computedOper | node_modules/alien-signals/esm/index.mjs:271 |  |
+| 6.4 | 6.7 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 4.6 | 6.4 | getWidget | packages/core/dist/index.mjs:2702 | src: packages/core/src/blueprint/view.ts:57, packages/core/src/blueprint/view.ts:220, packages/core/src/inspection/runtime.ts:144, packages/core/src/runtime/blueprint-view.ts:26, packages/core/src/runtime/index.ts:235 |
+| 1.8 | 1.8 | getWidget | packages/core/dist/index.mjs:3898 | src: packages/core/src/blueprint/view.ts:57, packages/core/src/blueprint/view.ts:220, packages/core/src/inspection/runtime.ts:144, packages/core/src/runtime/blueprint-view.ts:26, packages/core/src/runtime/index.ts:235 |
+| 0.5 | 71.8 | getResultWithInspectionPublish | packages/core/dist/index.mjs:2330 | src: packages/core/src/runtime/property.ts:263 |
+| 0.5 | 72.4 | get | packages/core/dist/index.mjs:2364 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 0.3 | 0.3 | materializeDependencyTree | packages/core/dist/index.mjs:2007 | src: packages/core/src/runtime/deps.ts:366 |
+| 0.3 | 0.3 | link | node_modules/alien-signals/esm/system.mjs:18 |  |
+| 0.3 | 0.3 | assertActive | packages/core/dist/event-D8XvgH0Q.mjs:73 | src: packages/core/src/runtime/context.ts:124 |
+| 0.2 | 71.2 | runRuntimeOperation | packages/core/dist/event-D8XvgH0Q.mjs:268 | src: packages/core/src/runtime/adapter.ts:210 |
+| 0.2 | 0.2 | close | packages/core/dist/index.mjs:2052 | src: packages/core/src/blueprint/diagnostics.ts:42, packages/core/src/runtime/collector.ts:113 |
+| 0.2 | 0.2 | signal | node_modules/alien-signals/esm/index.mjs:87 |  |
+| 0.1 | 4.7 | get | packages/core/dist/index.mjs:2483 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 0.1 | 0.1 | publishInspectionCompletion | packages/core/dist/index.mjs:2228 | src: packages/core/src/runtime/property.ts:122 |
+| 0.1 | 0.1 | finalize | packages/core/dist/index.mjs:2048 | src: no function of this name found in packages/core/src |
+| 0.1 | 0.1 | createOperationCollector | packages/core/dist/index.mjs:2016 | src: packages/core/src/runtime/collector.ts:68 |
+| 0.1 | 0.1 | createPropertyPrimitive | packages/core/dist/index.mjs:2215 | src: packages/core/src/runtime/property.ts:102 |
+| 0.1 | 0.1 | createStatePrimitive | packages/core/dist/index.mjs:2402 | src: packages/core/src/runtime/state.ts:98 |
+| 0.0 | 0.0 | attemptSetWithinOperation | packages/core/dist/index.mjs:2432 | src: packages/core/src/runtime/state.ts:147 |
+| 0.0 | 0.0 | buildCallbackEventEmitter | packages/core/dist/event-D8XvgH0Q.mjs:456 | src: packages/core/src/runtime/event.ts:134 |
+| 0.0 | 0.0 | now (builtin) | node:internal/perf/performance:137 |  |
+| 0.0 | 0.0 | createEventPrimitive | packages/core/dist/event-D8XvgH0Q.mjs:396 | src: packages/core/src/runtime/event.ts:43 |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 0.5 | 72.4 | get | packages/core/dist/index.mjs:2364 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 0.5 | 71.8 | getResultWithInspectionPublish | packages/core/dist/index.mjs:2330 | src: packages/core/src/runtime/property.ts:263 |
+| 0.2 | 71.2 | runRuntimeOperation | packages/core/dist/event-D8XvgH0Q.mjs:268 | src: packages/core/src/runtime/adapter.ts:210 |
+| 10.2 | 71.0 | computedOper | node_modules/alien-signals/esm/index.mjs:271 |  |
+| 23.2 | 60.6 | evaluate | packages/core/dist/index.mjs:2238 | src: packages/core/src/runtime/property.ts:142 |
+| 15.6 | 20.5 | (anonymous) | packages/core/dist/index.mjs:1892 |  |
+| 6.4 | 6.7 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 4.6 | 6.4 | getWidget | packages/core/dist/index.mjs:2702 | src: packages/core/src/blueprint/view.ts:57, packages/core/src/blueprint/view.ts:220, packages/core/src/inspection/runtime.ts:144, packages/core/src/runtime/blueprint-view.ts:26, packages/core/src/runtime/index.ts:235 |
+| 0.1 | 4.7 | get | packages/core/dist/index.mjs:2483 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 1.8 | 1.8 | getWidget | packages/core/dist/index.mjs:3898 | src: packages/core/src/blueprint/view.ts:57, packages/core/src/blueprint/view.ts:220, packages/core/src/inspection/runtime.ts:144, packages/core/src/runtime/blueprint-view.ts:26, packages/core/src/runtime/index.ts:235 |
+| 0.3 | 0.3 | materializeDependencyTree | packages/core/dist/index.mjs:2007 | src: packages/core/src/runtime/deps.ts:366 |
+| 0.3 | 0.3 | link | node_modules/alien-signals/esm/system.mjs:18 |  |
+| 0.3 | 0.3 | assertActive | packages/core/dist/event-D8XvgH0Q.mjs:73 | src: packages/core/src/runtime/context.ts:124 |
+| 0.2 | 0.2 | close | packages/core/dist/index.mjs:2052 | src: packages/core/src/blueprint/diagnostics.ts:42, packages/core/src/runtime/collector.ts:113 |
+| 0.2 | 0.2 | signal | node_modules/alien-signals/esm/index.mjs:87 |  |
+| 0.0 | 0.1 | assertCallableOpen | packages/core/dist/index.mjs:1742 | src: packages/core/src/runtime/deps.ts:63 |
+| 0.1 | 0.1 | publishInspectionCompletion | packages/core/dist/index.mjs:2228 | src: packages/core/src/runtime/property.ts:122 |
+| 0.1 | 0.1 | finalize | packages/core/dist/index.mjs:2048 | src: no function of this name found in packages/core/src |
+| 0.1 | 0.1 | createOperationCollector | packages/core/dist/index.mjs:2016 | src: packages/core/src/runtime/collector.ts:68 |
+| 0.1 | 0.1 | createPropertyPrimitive | packages/core/dist/index.mjs:2215 | src: packages/core/src/runtime/property.ts:102 |
+| 0.1 | 0.1 | createStatePrimitive | packages/core/dist/index.mjs:2402 | src: packages/core/src/runtime/state.ts:98 |
+| 0.0 | 0.0 | attemptSetWithinOperation | packages/core/dist/index.mjs:2432 | src: packages/core/src/runtime/state.ts:147 |
+| 0.0 | 0.0 | now (builtin) | node:internal/perf/performance:137 |  |
+| 0.0 | 0.0 | buildCallbackEventEmitter | packages/core/dist/event-D8XvgH0Q.mjs:456 | src: packages/core/src/runtime/event.ts:134 |
+| 0.0 | 0.0 | createEventPrimitive | packages/core/dist/event-D8XvgH0Q.mjs:396 | src: packages/core/src/runtime/event.ts:43 |
+
+profile: benchmarks/.results/profiles-raw/runtime.property.get.cold.all-units-ps0.4000.normal.cpuprofile
+

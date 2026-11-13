@@ -1,0 +1,850 @@
+
+## normal (median per run)
+
+| scenario                  | variant                    | size   | A        | B        | B/A   | spread A | spread B | flags                                   | > 5%          |
+| ------------------------- | -------------------------- | ------ | -------- | -------- | ----- | -------- | -------- | --------------------------------------- | ------------- |
+| system.create             | plugins                    | 2      | 482.9 ns | 501.1 ns | 1.038 | 5.3%     | 5.3%     |                                         |               |
+| system.create             | plugins                    | 10     | 1.98 us  | 1.89 us  | 0.954 | 9.3%     | 9.8%     | A:drift                                 |               |
+| system.create             | plugins                    | 50     | 7.86 us  | 7.56 us  | 0.962 | 4.3%     | 2.1%     | A:tail,drift                            |               |
+| system.create             | plugins                    | 200    | 31.8 us  | 30.4 us  | 0.958 | 2.2%     | 1.6%     |                                         |               |
+| system.create             | plugins                    | 1000   | 157.6 us | 156.6 us | 0.993 | 1.7%     | 1.1%     |                                         |               |
+| plugin.create             | members                    | 3      | 2.68 us  | 2.69 us  | 1.003 | 2.5%     | 2.6%     |                                         |               |
+| plugin.create             | members                    | 30     | 21.9 us  | 21.6 us  | 0.989 | 4.4%     | 4.4%     |                                         |               |
+| plugin.create             | members                    | 300    | 191.6 us | 186.8 us | 0.975 | 1.6%     | 0.8%     |                                         |               |
+| blueprint.compile.valid   | flat.bare                  | 100    | 241.5 us | 240.5 us | 0.996 | 2.6%     | 2.2%     |                                         |               |
+| blueprint.compile.valid   | flat.bare                  | 1000   | 2.33 ms  | 2.39 ms  | 1.026 | 1.6%     | 1.9%     |                                         |               |
+| blueprint.compile.valid   | flat.bare                  | 4000   | 9.75 ms  | 9.80 ms  | 1.005 | 1.6%     | 1.9%     |                                         |               |
+| blueprint.compile.valid   | flat.bare                  | 16000  | 51.9 ms  | 52.0 ms  | 1.000 | 2.6%     | 1.4%     |                                         |               |
+| blueprint.compile.valid   | flat.standard              | 100    | 2.83 ms  | 2.86 ms  | 1.011 | 2.1%     | 2.0%     |                                         |               |
+| blueprint.compile.valid   | flat.standard              | 1000   | 22.2 ms  | 24.2 ms  | 1.090 | 13.1%    | 12.6%    | A:spread B:spread                       | slower +9.0%  |
+| blueprint.compile.valid   | flat.standard              | 4000   | 84.3 ms  | 91.2 ms  | 1.081 | 4.3%     | 3.4%     |                                         | slower +8.1%  |
+| blueprint.compile.valid   | flat.standard              | 16000  | 367.8 ms | 376.3 ms | 1.023 | 2.1%     | 2.6%     |                                         |               |
+| blueprint.compile.valid   | tree.bare                  | 100    | 242.7 us | 243.6 us | 1.003 | 1.3%     | 1.2%     |                                         |               |
+| blueprint.compile.valid   | tree.bare                  | 1000   | 2.45 ms  | 2.46 ms  | 1.003 | 1.1%     | 0.8%     |                                         |               |
+| blueprint.compile.valid   | tree.bare                  | 4000   | 10.2 ms  | 10.2 ms  | 0.999 | 1.5%     | 1.6%     |                                         |               |
+| blueprint.compile.valid   | tree.bare                  | 16000  | 52.5 ms  | 52.2 ms  | 0.995 | 1.8%     | 1.3%     |                                         |               |
+| blueprint.compile.valid   | tree.selfDeps              | 100    | 1.40 ms  | 1.41 ms  | 1.007 | 5.0%     | 4.3%     |                                         |               |
+| blueprint.compile.valid   | tree.selfDeps              | 1000   | 12.5 ms  | 13.2 ms  | 1.056 | 5.5%     | 5.5%     |                                         | slower +5.6%  |
+| blueprint.compile.valid   | tree.selfDeps              | 4000   | 40.6 ms  | 42.2 ms  | 1.038 | 10.3%    | 10.0%    | A:spread,tail B:tail,drift              |               |
+| blueprint.compile.valid   | tree.selfDeps              | 16000  | 160.8 ms | 164.1 ms | 1.020 | 1.9%     | 2.4%     |                                         |               |
+| blueprint.compile.valid   | tree.standard              | 100    | 2.43 ms  | 2.41 ms  | 0.990 | 2.7%     | 4.6%     |                                         |               |
+| blueprint.compile.valid   | tree.standard              | 1000   | 19.0 ms  | 21.6 ms  | 1.136 | 13.3%    | 9.4%     | A:spread                                | slower +13.6% |
+| blueprint.compile.valid   | tree.standard              | 4000   | 73.0 ms  | 79.1 ms  | 1.084 | 1.8%     | 1.9%     |                                         | slower +8.4%  |
+| blueprint.compile.valid   | tree.standard              | 16000  | 322.3 ms | 329.0 ms | 1.021 | 1.3%     | 0.8%     |                                         |               |
+| blueprint.compile.valid   | tree.crossDeps             | 100    | 2.46 ms  | 2.46 ms  | 0.999 | 3.6%     | 3.6%     |                                         |               |
+| blueprint.compile.valid   | tree.crossDeps             | 1000   | 19.3 ms  | 21.6 ms  | 1.115 | 11.9%    | 12.0%    | A:spread B:spread                       | slower +11.5% |
+| blueprint.compile.valid   | tree.crossDeps             | 4000   | 73.2 ms  | 79.1 ms  | 1.081 | 2.8%     | 3.0%     |                                         | slower +8.1%  |
+| blueprint.compile.valid   | tree.crossDeps             | 16000  | 321.1 ms | 328.6 ms | 1.023 | 2.4%     | 1.4%     |                                         |               |
+| blueprint.compile.valid   | tree.validated             | 100    | 2.50 ms  | 2.50 ms  | 1.001 | 3.6%     | 3.3%     |                                         |               |
+| blueprint.compile.valid   | tree.validated             | 1000   | 19.5 ms  | 21.9 ms  | 1.123 | 12.5%    | 12.1%    | A:spread B:spread                       | slower +12.3% |
+| blueprint.compile.valid   | tree.validated             | 4000   | 74.8 ms  | 84.9 ms  | 1.135 | 2.5%     | 6.2%     |                                         | slower +13.5% |
+| blueprint.compile.valid   | tree.validated             | 16000  | 332.1 ms | 333.0 ms | 1.003 | 3.4%     | 1.4%     |                                         |               |
+| blueprint.compile.valid   | tree.aggregated            | 100    | 2.43 ms  | 2.38 ms  | 0.980 | 2.5%     | 4.8%     |                                         |               |
+| blueprint.compile.valid   | tree.aggregated            | 1000   | 19.5 ms  | 22.0 ms  | 1.132 | 12.2%    | 9.7%     | A:spread                                | slower +13.2% |
+| blueprint.compile.valid   | tree.aggregated            | 4000   | 73.2 ms  | 78.8 ms  | 1.076 | 1.8%     | 1.7%     | A:tail B:tail                           | slower +7.6%  |
+| blueprint.compile.valid   | tree.aggregated            | 16000  | 351.1 ms | 362.8 ms | 1.033 | 1.5%     | 1.2%     |                                         |               |
+| blueprint.compile.valid   | deep.standard              | 100    | 1.22 ms  | 1.23 ms  | 1.011 | 2.8%     | 3.3%     |                                         |               |
+| blueprint.compile.valid   | deep.standard              | 1000   | 20.3 ms  | 22.9 ms  | 1.127 | 9.7%     | 8.7%     |                                         | slower +12.7% |
+| blueprint.compile.valid   | deep.standard              | 4000   | 77.5 ms  | 84.8 ms  | 1.094 | 2.7%     | 2.7%     |                                         | slower +9.4%  |
+| blueprint.compile.valid   | deep.standard              | 16000  | 374.9 ms | 382.0 ms | 1.019 | 1.7%     | 1.3%     |                                         |               |
+| blueprint.compile.json    | fromJson                   | 100    | 2.62 ms  | 2.62 ms  | 1.001 | 2.2%     | 2.3%     |                                         |               |
+| blueprint.compile.json    | fromJson                   | 1000   | 20.8 ms  | 20.8 ms  | 1.000 | 8.5%     | 11.7%    | B:spread                                |               |
+| blueprint.compile.json    | fromJson                   | 4000   | 65.1 ms  | 72.0 ms  | 1.106 | 3.4%     | 6.2%     | A:tail B:tail                           | slower +10.6% |
+| blueprint.compile.json    | fromJson                   | 16000  | 333.6 ms | 349.1 ms | 1.046 | 4.2%     | 4.1%     |                                         |               |
+| blueprint.compile.json    | parse+create               | 100    | 2.47 ms  | 1.69 ms  | 0.682 | 4.9%     | 3.4%     | B:tail                                  | faster -31.8% |
+| blueprint.compile.json    | parse+create               | 1000   | 16.1 ms  | 16.3 ms  | 1.010 | 7.6%     | 9.0%     | A:tail,drift B:tail,drift               |               |
+| blueprint.compile.json    | parse+create               | 4000   | 67.1 ms  | 68.0 ms  | 1.013 | 1.6%     | 2.2%     | A:tail B:tail                           |               |
+| blueprint.compile.json    | parse+create               | 16000  | 339.8 ms | 349.0 ms | 1.027 | 2.7%     | 1.6%     |                                         |               |
+| blueprint.compile.json    | parse-only                 | 100    | 23.1 us  | 23.2 us  | 1.001 | 0.4%     | 0.8%     |                                         |               |
+| blueprint.compile.json    | parse-only                 | 1000   | 244.1 us | 246.8 us | 1.011 | 0.6%     | 0.7%     |                                         |               |
+| blueprint.compile.json    | parse-only                 | 4000   | 1.04 ms  | 1.04 ms  | 1.001 | 1.3%     | 1.0%     |                                         |               |
+| blueprint.compile.json    | parse-only                 | 16000  | 4.07 ms  | 4.13 ms  | 1.015 | 1.2%     | 2.0%     |                                         |               |
+| blueprint.compile.invalid | unknown-type               | 100    | 211.5 us | 209.8 us | 0.992 | 1.9%     | 1.8%     |                                         |               |
+| blueprint.compile.invalid | unknown-type               | 1000   | 2.09 ms  | 2.08 ms  | 0.997 | 1.3%     | 1.5%     |                                         |               |
+| blueprint.compile.invalid | unknown-type               | 4000   | 8.81 ms  | 9.07 ms  | 1.029 | 1.3%     | 1.8%     |                                         |               |
+| blueprint.compile.invalid | unknown-type               | 16000  | 40.1 ms  | 40.7 ms  | 1.016 | 2.7%     | 1.6%     |                                         |               |
+| blueprint.compile.invalid | bad-config                 | 100    | 273.3 us | 274.3 us | 1.003 | 1.4%     | 1.4%     |                                         |               |
+| blueprint.compile.invalid | bad-config                 | 1000   | 2.81 ms  | 2.80 ms  | 0.998 | 2.0%     | 2.8%     |                                         |               |
+| blueprint.compile.invalid | bad-config                 | 4000   | 11.8 ms  | 11.6 ms  | 0.987 | 2.1%     | 2.5%     |                                         |               |
+| blueprint.compile.invalid | bad-config                 | 16000  | 65.4 ms  | 63.2 ms  | 0.965 | 3.5%     | 5.9%     |                                         |               |
+| blueprint.compile.invalid | unexpected-field           | 100    | 277.2 us | 277.2 us | 1.000 | 1.3%     | 1.4%     |                                         |               |
+| blueprint.compile.invalid | unexpected-field           | 1000   | 2.87 ms  | 2.85 ms  | 0.992 | 2.0%     | 1.2%     |                                         |               |
+| blueprint.compile.invalid | unexpected-field           | 4000   | 12.2 ms  | 12.3 ms  | 1.002 | 3.7%     | 2.9%     |                                         |               |
+| blueprint.compile.invalid | unexpected-field           | 16000  | 57.2 ms  | 56.8 ms  | 0.993 | 1.1%     | 1.0%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-pairs         | 100    | 289.6 us | 288.9 us | 0.997 | 2.2%     | 1.9%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-pairs         | 1000   | 2.90 ms  | 2.91 ms  | 1.003 | 1.1%     | 1.3%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-pairs         | 4000   | 12.2 ms  | 12.2 ms  | 0.999 | 1.7%     | 2.0%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-pairs         | 16000  | 60.6 ms  | 60.6 ms  | 1.000 | 1.2%     | 1.4%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 100    | 840.6 us | 838.1 us | 0.997 | 0.7%     | 0.5%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 500    | 15.5 ms  | 15.6 ms  | 1.007 | 1.1%     | 1.9%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 1000   | 71.7 ms  | 71.4 ms  | 0.996 | 0.4%     | 0.5%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 2000   | 279.2 ms | 279.6 ms | 1.001 | 0.5%     | 0.2%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 4000   | 1.35 s   | 1.38 s   | 1.024 | 1.9%     | 1.6%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 2      | 10.0 ms  | 9.96 ms  | 0.992 | 1.7%     | 2.0%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 10     | 10.1 ms  | 10.0 ms  | 0.995 | 2.2%     | 1.4%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 100    | 10.8 ms  | 11.0 ms  | 1.015 | 2.2%     | 1.8%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 1000   | 81.4 ms  | 80.9 ms  | 0.993 | 0.7%     | 0.7%     |                                         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 4000   | 1.32 s   | 1.36 s   | 1.030 | 1.0%     | 1.4%     |                                         |               |
+| document.patch            | baseline.compile           | 100    | 2.67 ms  | 2.65 ms  | 0.995 | 1.7%     | 2.1%     |                                         |               |
+| document.patch            | baseline.compile           | 1000   | 20.9 ms  | 21.0 ms  | 1.003 | 10.7%    | 7.9%     | A:spread                                |               |
+| document.patch            | baseline.compile           | 4000   | 66.5 ms  | 71.2 ms  | 1.070 | 3.4%     | 5.2%     | A:tail B:tail                           | slower +7.0%  |
+| document.patch            | baseline.compile           | 16000  | 341.7 ms | 342.9 ms | 1.003 | 1.5%     | 1.0%     |                                         |               |
+| document.patch            | noop                       | 100    | 18.4 us  | 18.4 us  | 1.000 | 1.0%     | 1.0%     |                                         |               |
+| document.patch            | noop                       | 1000   | 26.0 us  | 25.8 us  | 0.992 | 1.0%     | 0.7%     |                                         |               |
+| document.patch            | noop                       | 4000   | 26.9 us  | 26.9 us  | 1.001 | 1.3%     | 0.8%     |                                         |               |
+| document.patch            | noop                       | 16000  | 35.2 us  | 35.2 us  | 0.999 | 0.9%     | 0.6%     |                                         |               |
+| document.patch            | replace-config             | 100    | 1.61 ms  | 1.51 ms  | 0.938 | 5.1%     | 7.8%     | A:tail,drift                            | faster -6.2%  |
+| document.patch            | replace-config             | 1000   | 20.1 ms  | 20.2 ms  | 1.006 | 12.5%    | 12.5%    | A:spread,tail,drift B:spread,tail       |               |
+| document.patch            | replace-config             | 4000   | 68.8 ms  | 70.2 ms  | 1.020 | 3.5%     | 2.8%     | A:tail B:tail                           |               |
+| document.patch            | replace-config             | 16000  | 354.7 ms | 358.2 ms | 1.010 | 1.6%     | 2.9%     |                                         |               |
+| document.patch            | replace-config.subscribed  | 100    | 1.62 ms  | 2.44 ms  | 1.510 | 7.4%     | 6.3%     | A:tail,drift B:drift                    | slower +51.0% |
+| document.patch            | replace-config.subscribed  | 1000   | 21.0 ms  | 20.2 ms  | 0.963 | 13.0%    | 13.3%    | A:spread B:spread,tail                  |               |
+| document.patch            | replace-config.subscribed  | 4000   | 69.7 ms  | 69.2 ms  | 0.993 | 3.0%     | 2.9%     | A:tail B:tail                           |               |
+| document.patch            | replace-config.subscribed  | 16000  | 364.3 ms | 360.0 ms | 0.988 | 2.4%     | 1.6%     |                                         |               |
+| document.patch            | add-widget                 | 100    | 2.53 ms  | 2.57 ms  | 1.014 | 2.7%     | 3.2%     |                                         |               |
+| document.patch            | add-widget                 | 1000   | 15.9 ms  | 15.6 ms  | 0.982 | 6.6%     | 4.8%     | A:tail B:tail                           |               |
+| document.patch            | add-widget                 | 4000   | 74.0 ms  | 74.6 ms  | 1.007 | 2.0%     | 2.8%     | A:tail B:tail                           |               |
+| document.patch            | add-widget                 | 16000  | 307.3 ms | 303.7 ms | 0.988 | 3.3%     | 1.1%     |                                         |               |
+| document.patch            | remove-widget              | 100    | 2.31 ms  | 2.34 ms  | 1.011 | 5.1%     | 4.2%     |                                         |               |
+| document.patch            | remove-widget              | 1000   | 15.6 ms  | 15.8 ms  | 1.012 | 7.6%     | 7.5%     | A:tail B:tail                           |               |
+| document.patch            | remove-widget              | 4000   | 73.5 ms  | 73.2 ms  | 0.996 | 5.7%     | 4.3%     | A:tail B:tail                           |               |
+| document.patch            | remove-widget              | 16000  | 309.3 ms | 305.5 ms | 0.988 | 3.1%     | 1.3%     |                                         |               |
+| separated.roundtrip       | separate                   | 100    | 147.8 us | 148.1 us | 1.002 | 3.3%     | 3.0%     | A:drift B:drift                         |               |
+| separated.roundtrip       | separate                   | 1000   | 1.46 ms  | 1.48 ms  | 1.014 | 1.6%     | 1.5%     |                                         |               |
+| separated.roundtrip       | separate                   | 4000   | 5.84 ms  | 5.94 ms  | 1.017 | 3.0%     | 2.9%     |                                         |               |
+| separated.roundtrip       | separate                   | 16000  | 17.9 ms  | 18.0 ms  | 1.005 | 11.5%    | 11.6%    | A:spread B:spread                       |               |
+| separated.roundtrip       | normalize                  | 100    | 142.0 us | 141.4 us | 0.996 | 1.3%     | 1.1%     |                                         |               |
+| separated.roundtrip       | normalize                  | 1000   | 1.46 ms  | 1.47 ms  | 1.006 | 1.3%     | 1.2%     |                                         |               |
+| separated.roundtrip       | normalize                  | 4000   | 6.04 ms  | 5.99 ms  | 0.991 | 1.9%     | 2.3%     |                                         |               |
+| separated.roundtrip       | normalize                  | 16000  | 25.0 ms  | 24.9 ms  | 0.996 | 5.6%     | 5.6%     |                                         |               |
+| separated.roundtrip       | roundtrip                  | 100    | 297.1 us | 297.5 us | 1.001 | 1.0%     | 0.9%     |                                         |               |
+| separated.roundtrip       | roundtrip                  | 1000   | 3.03 ms  | 3.04 ms  | 1.005 | 1.2%     | 1.3%     |                                         |               |
+| separated.roundtrip       | roundtrip                  | 4000   | 12.2 ms  | 12.2 ms  | 1.000 | 2.0%     | 2.1%     |                                         |               |
+| separated.roundtrip       | roundtrip                  | 16000  | 46.3 ms  | 46.2 ms  | 0.998 | 3.3%     | 3.7%     |                                         |               |
+| inspection.blueprint      | cold                       | 100    | 549.3 us | 550.1 us | 1.001 | 10.0%    | 5.5%     | A:spread,tail B:tail                    |               |
+| inspection.blueprint      | cold                       | 1000   | 5.05 ms  | 5.08 ms  | 1.007 | 6.0%     | 6.6%     | A:tail B:tail                           |               |
+| inspection.blueprint      | cold                       | 4000   | 19.9 ms  | 19.6 ms  | 0.982 | 3.8%     | 3.1%     |                                         |               |
+| inspection.blueprint      | cold                       | 16000  | 106.7 ms | 98.5 ms  | 0.923 | 1.2%     | 0.8%     |                                         | faster -7.7%  |
+| inspection.blueprint      | cached                     | 100    | 6.96 ns  | 6.99 ns  | 1.005 | 0.2%     | 0.3%     |                                         |               |
+| inspection.blueprint      | cached                     | 1000   | 8.72 ns  | 9.12 ns  | 1.045 | 0.1%     | 0.3%     | A:tail                                  |               |
+| inspection.blueprint      | cached                     | 4000   | 8.71 ns  | 8.73 ns  | 1.002 | 0.1%     | 0.1%     |                                         |               |
+| inspection.blueprint      | cached                     | 16000  | 8.76 ns  | 9.22 ns  | 1.052 | 0.2%     | 0.2%     |                                         | slower +5.2%  |
+| inspection.runtime        | facade                     | 100    | 1.03 us  | 1.02 us  | 0.987 | 8.8%     | 8.0%     | A:tail,drift B:tail,drift               |               |
+| inspection.runtime        | facade                     | 1000   | 13.8 us  | 13.7 us  | 0.989 | 5.4%     | 4.5%     |                                         |               |
+| inspection.runtime        | facade                     | 4000   | 26.8 us  | 13.3 us  | 0.498 | 4.4%     | 11.4%    | B:spread,tail,drift                     | faster -50.2% |
+| inspection.runtime        | facade                     | 16000  | 26.6 us  | 26.2 us  | 0.987 | 2.4%     | 3.5%     |                                         |               |
+| inspection.runtime        | walk                       | 100    | 4.07 us  | 4.26 us  | 1.049 | 0.7%     | 0.5%     |                                         |               |
+| inspection.runtime        | walk                       | 1000   | 51.3 us  | 51.5 us  | 1.005 | 0.7%     | 0.8%     |                                         |               |
+| inspection.runtime        | walk                       | 4000   | 460.7 us | 469.9 us | 1.020 | 1.0%     | 1.6%     |                                         |               |
+| inspection.runtime        | walk                       | 16000  | 4.16 ms  | 4.30 ms  | 1.033 | 1.0%     | 0.9%     |                                         |               |
+| runtime.create            | bare                       | 100    | 214.5 us | 250.7 us | 1.168 | 9.2%     | 6.6%     | A:tail,drift B:tail,drift               | slower +16.8% |
+| runtime.create            | bare                       | 1000   | 2.05 ms  | 2.48 ms  | 1.207 | 2.3%     | 1.2%     |                                         | slower +20.7% |
+| runtime.create            | bare                       | 4000   | 8.35 ms  | 8.67 ms  | 1.038 | 2.0%     | 3.9%     |                                         |               |
+| runtime.create            | bare                       | 16000  | 59.2 ms  | 59.0 ms  | 0.998 | 0.7%     | 1.1%     |                                         |               |
+| runtime.create            | standard                   | 100    | 980.8 us | 874.8 us | 0.892 | 4.5%     | 11.8%    | A:drift B:spread                        | faster -10.8% |
+| runtime.create            | standard                   | 1000   | 8.95 ms  | 9.13 ms  | 1.019 | 18.2%    | 16.5%    | A:spread,drift B:spread,drift           |               |
+| runtime.create            | standard                   | 4000   | 38.2 ms  | 37.9 ms  | 0.992 | 1.6%     | 1.2%     |                                         |               |
+| runtime.create            | standard                   | 16000  | 192.6 ms | 195.7 ms | 1.016 | 0.7%     | 0.8%     |                                         |               |
+| runtime.create            | crossDeps                  | 100    | 602.0 us | 594.4 us | 0.987 | 1.8%     | 1.4%     |                                         |               |
+| runtime.create            | crossDeps                  | 1000   | 6.61 ms  | 6.43 ms  | 0.972 | 2.9%     | 2.8%     |                                         |               |
+| runtime.create            | crossDeps                  | 4000   | 37.1 ms  | 37.7 ms  | 1.016 | 1.2%     | 1.2%     |                                         |               |
+| runtime.create            | crossDeps                  | 16000  | 193.1 ms | 192.8 ms | 0.998 | 0.8%     | 0.7%     |                                         |               |
+| runtime.create            | standard.overrides         | 100    | 1.00 ms  | 940.8 us | 0.936 | 1.9%     | 4.4%     |                                         | faster -6.4%  |
+| runtime.create            | standard.overrides         | 1000   | 9.30 ms  | 8.93 ms  | 0.960 | 14.2%    | 14.7%    | A:spread B:spread                       |               |
+| runtime.create            | standard.overrides         | 4000   | 38.3 ms  | 38.2 ms  | 0.997 | 1.8%     | 1.0%     |                                         |               |
+| runtime.create            | standard.overrides         | 16000  | 201.4 ms | 198.9 ms | 0.988 | 1.4%     | 1.7%     |                                         |               |
+| runtime.dispose           | plain                      | 100    | 1.39 us  | 1.38 us  | 0.996 | 4.9%     | 4.2%     |                                         |               |
+| runtime.dispose           | plain                      | 1000   | 5.44 us  | 5.58 us  | 1.027 | 7.7%     | 6.0%     | B:drift                                 |               |
+| runtime.dispose           | plain                      | 4000   | 9.58 us  | 10.5 us  | 1.098 | 5.9%     | 5.7%     |                                         | slower +9.8%  |
+| runtime.dispose           | plain                      | 16000  | 9.71 us  | 10.1 us  | 1.039 | 6.0%     | 3.7%     |                                         |               |
+| runtime.dispose           | subscribed                 | 100    | 36.3 us  | 35.4 us  | 0.975 | 3.3%     | 3.3%     |                                         |               |
+| runtime.dispose           | subscribed                 | 1000   | 425.5 us | 432.8 us | 1.017 | 4.3%     | 4.3%     | B:drift                                 |               |
+| runtime.dispose           | subscribed                 | 4000   | 1.53 ms  | 1.57 ms  | 1.030 | 3.6%     | 4.7%     |                                         |               |
+| runtime.dispose           | subscribed                 | 16000  | 6.18 ms  | 6.19 ms  | 1.000 | 3.8%     | 3.0%     |                                         |               |
+| runtime.state.set         | property-subscribed        | 0      | 124.9 ns | 111.5 ns | 0.893 | 17.1%    | 6.9%     | A:spread,tail B:tail,drift              | faster -10.7% |
+| runtime.state.set         | property-subscribed        | 10     | 3.46 us  | 4.79 us  | 1.384 | 3.8%     | 14.5%    | B:spread,drift                          | slower +38.4% |
+| runtime.state.set         | property-subscribed        | 100    | 34.1 us  | 38.7 us  | 1.136 | 3.9%     | 4.2%     | B:tail                                  | slower +13.6% |
+| runtime.state.set         | property-subscribed        | 1000   | 362.4 us | 423.6 us | 1.169 | 1.9%     | 10.3%    | B:spread,tail                           | slower +16.9% |
+| runtime.state.set         | property-subscribed        | 10000  | 6.11 ms  | 6.64 ms  | 1.087 | 1.2%     | 5.3%     | B:tail                                  | slower +8.7%  |
+| runtime.state.set         | nobody-subscribed          | 0      | 144.9 ns | 147.5 ns | 1.018 | 20.7%    | 13.9%    | A:spread,tail B:spread,tail             |               |
+| runtime.state.set         | nobody-subscribed          | 10     | 97.2 ns  | 131.7 ns | 1.356 | 0.4%     | 8.9%     | B:tail                                  | slower +35.6% |
+| runtime.state.set         | nobody-subscribed          | 100    | 147.4 ns | 190.0 ns | 1.289 | 21.6%    | 34.1%    | A:spread,tail B:spread,tail             | slower +28.9% |
+| runtime.state.set         | nobody-subscribed          | 1000   | 148.8 ns | 191.1 ns | 1.284 | 18.7%    | 29.4%    | A:spread,tail B:spread,tail             | slower +28.4% |
+| runtime.state.set         | nobody-subscribed          | 10000  | 250.0 ns | 145.6 ns | 0.582 | 21.0%    | 1.8%     | A:spread B:tail                         | faster -41.8% |
+| runtime.state.set         | write-then-read-all        | 0      | 142.9 ns | 113.1 ns | 0.791 | 2.1%     | 0.5%     | A:tail                                  | faster -20.9% |
+| runtime.state.set         | write-then-read-all        | 10     | 3.66 us  | 4.07 us  | 1.111 | 10.5%    | 18.2%    | A:spread,tail B:spread,tail             | slower +11.1% |
+| runtime.state.set         | write-then-read-all        | 100    | 36.0 us  | 34.6 us  | 0.960 | 2.8%     | 10.5%    | A:tail B:spread,tail                    |               |
+| runtime.state.set         | write-then-read-all        | 1000   | 390.3 us | 370.3 us | 0.949 | 11.8%    | 9.7%     | A:spread,tail B:tail                    | faster -5.1%  |
+| runtime.state.set         | write-then-read-all        | 10000  | 5.72 ms  | 5.29 ms  | 0.925 | 6.9%     | 7.0%     | A:tail B:tail                           | faster -7.5%  |
+| runtime.state.set         | state-listeners            | 0      | 145.5 ns | 122.7 ns | 0.843 | 16.1%    | 1.6%     | A:spread,tail                           | faster -15.7% |
+| runtime.state.set         | state-listeners            | 10     | 604.3 ns | 506.1 ns | 0.838 | 1.7%     | 0.4%     |                                         | faster -16.2% |
+| runtime.state.set         | state-listeners            | 100    | 3.16 us  | 3.60 us  | 1.138 | 0.6%     | 0.3%     |                                         | slower +13.8% |
+| runtime.state.set         | state-listeners            | 1000   | 44.7 us  | 47.1 us  | 1.053 | 0.9%     | 1.2%     |                                         | slower +5.3%  |
+| runtime.state.set         | state-listeners            | 10000  | 482.6 us | 518.3 us | 1.074 | 0.9%     | 1.0%     |                                         | slower +7.4%  |
+| runtime.state.set         | same-value                 | 10     | 83.7 ns  | 92.8 ns  | 1.108 | 1.2%     | 0.7%     |                                         | slower +10.8% |
+| runtime.state.set         | same-value                 | 1000   | 84.7 ns  | 89.6 ns  | 1.057 | 0.9%     | 0.9%     |                                         | slower +5.7%  |
+| runtime.property.get      | cold.all-units-ps0         | 100    | 182.5 us | 190.9 us | 1.046 | 3.5%     | 4.2%     |                                         |               |
+| runtime.property.get      | cold.all-units-ps0         | 1000   | 2.17 ms  | 2.30 ms  | 1.062 | 3.0%     | 4.2%     |                                         | slower +6.2%  |
+| runtime.property.get      | cold.all-units-ps0         | 4000   | 12.5 ms  | 12.6 ms  | 1.010 | 2.6%     | 2.2%     |                                         |               |
+| runtime.property.get      | cold.all-units-ps0         | 16000  | 55.4 ms  | 54.9 ms  | 0.992 | 1.9%     | 2.2%     |                                         |               |
+| runtime.property.get      | warm.all-units-ps0         | 100    | 1.98 us  | 2.10 us  | 1.061 | 0.7%     | 0.7%     |                                         | slower +6.1%  |
+| runtime.property.get      | warm.all-units-ps0         | 1000   | 35.7 us  | 35.6 us  | 0.998 | 0.8%     | 0.6%     |                                         |               |
+| runtime.property.get      | warm.all-units-ps0         | 4000   | 500.4 us | 462.7 us | 0.925 | 5.3%     | 3.7%     | B:tail                                  | faster -7.5%  |
+| runtime.property.get      | warm.all-units-ps0         | 16000  | 5.13 ms  | 5.12 ms  | 0.999 | 0.8%     | 0.7%     |                                         |               |
+| runtime.property.get      | invalidated.one            | 100    | 665.9 ns | 657.6 ns | 0.987 | 13.5%    | 13.2%    | A:spread,tail,drift B:spread,tail,drift |               |
+| runtime.property.get      | invalidated.one            | 1000   | 592.0 ns | 583.3 ns | 0.985 | 9.4%     | 6.6%     | A:tail B:tail,drift                     |               |
+| runtime.property.get      | invalidated.one            | 4000   | 754.7 ns | 583.2 ns | 0.773 | 13.3%    | 8.5%     | A:spread B:tail                         | faster -22.7% |
+| runtime.property.get      | invalidated.one            | 16000  | 702.3 ns | 559.1 ns | 0.796 | 18.7%    | 10.6%    | A:spread,tail B:spread,tail             | faster -20.4% |
+| runtime.property.get      | chain.recompute            | 10     | 3.15 us  | 2.89 us  | 0.917 | 2.2%     | 2.6%     |                                         | faster -8.3%  |
+| runtime.property.get      | chain.recompute            | 100    | 33.4 us  | 30.0 us  | 0.899 | 2.6%     | 1.9%     |                                         | faster -10.1% |
+| runtime.property.get      | chain.recompute            | 500    | 178.3 us | 163.4 us | 0.916 | 2.5%     | 1.9%     |                                         | faster -8.4%  |
+| runtime.property.get      | chain.recompute            | 1000   | 351.9 us | 355.4 us | 1.010 | 1.4%     | 1.9%     |                                         |               |
+| runtime.property.get      | chain.warm                 | 10     | 19.9 ns  | 20.0 ns  | 1.006 | 0.5%     | 0.5%     |                                         |               |
+| runtime.property.get      | chain.warm                 | 100    | 20.5 ns  | 19.2 ns  | 0.933 | 0.1%     | 0.2%     |                                         | faster -6.7%  |
+| runtime.property.get      | chain.warm                 | 500    | 19.1 ns  | 19.2 ns  | 1.003 | 0.1%     | 0.3%     |                                         |               |
+| runtime.property.get      | chain.warm                 | 1000   | 19.2 ns  | 21.4 ns  | 1.115 | 0.4%     | 0.6%     |                                         | slower +11.5% |
+| runtime.property.get      | chain.cold                 | 10     | 7.68 us  | 6.51 us  | 0.847 | 8.2%     | 3.8%     | B:tail                                  | faster -15.3% |
+| runtime.property.get      | chain.cold                 | 100    | 49.8 us  | 50.0 us  | 1.004 | 2.7%     | 2.2%     |                                         |               |
+| runtime.property.get      | chain.cold                 | 500    | 232.8 us | 232.0 us | 0.997 | 3.1%     | 2.6%     |                                         |               |
+| runtime.property.get      | chain.cold                 | 1000   | 450.9 us | 459.7 us | 1.020 | 2.1%     | 2.0%     |                                         |               |
+| runtime.method.invoke     | noop                       | 100    | 632.9 ns | 306.3 ns | 0.484 | 2.8%     | 3.2%     | B:tail,drift                            | faster -51.6% |
+| runtime.method.invoke     | noop                       | 1000   | 331.4 ns | 329.2 ns | 0.993 | 2.3%     | 1.7%     | A:tail B:tail,drift                     |               |
+| runtime.method.invoke     | noop                       | 4000   | 305.1 ns | 304.7 ns | 0.999 | 0.6%     | 0.5%     |                                         |               |
+| runtime.method.invoke     | rw                         | 100    | 645.6 ns | 901.4 ns | 1.396 | 24.1%    | 15.8%    | A:spread,tail,drift B:spread,tail       | slower +39.6% |
+| runtime.method.invoke     | rw                         | 1000   | 599.0 ns | 742.4 ns | 1.239 | 4.2%     | 16.8%    | A:tail,drift B:spread,tail,drift        | slower +23.9% |
+| runtime.method.invoke     | rw                         | 4000   | 589.2 ns | 923.2 ns | 1.567 | 2.8%     | 3.9%     |                                         | slower +56.7% |
+| runtime.method.invoke     | invokeSelf                 | 100    | 717.2 ns | 1.37 us  | 1.907 | 1.3%     | 6.0%     |                                         | slower +90.7% |
+| runtime.method.invoke     | invokeSelf                 | 1000   | 734.4 ns | 738.7 ns | 1.006 | 1.4%     | 1.4%     | B:tail                                  |               |
+| runtime.method.invoke     | invokeSelf                 | 4000   | 749.9 ns | 723.6 ns | 0.965 | 2.5%     | 1.8%     |                                         |               |
+| runtime.method.invoke     | emit.0-listeners           | 100    | 628.7 ns | 631.2 ns | 1.004 | 2.3%     | 1.6%     |                                         |               |
+| runtime.method.invoke     | emit.0-listeners           | 1000   | 647.1 ns | 653.2 ns | 1.009 | 2.4%     | 2.1%     |                                         |               |
+| runtime.method.invoke     | emit.0-listeners           | 4000   | 654.7 ns | 653.2 ns | 0.998 | 1.7%     | 2.3%     |                                         |               |
+| runtime.method.invoke     | emit.1-listener            | 100    | 637.4 ns | 625.1 ns | 0.981 | 1.5%     | 1.3%     |                                         |               |
+| runtime.method.invoke     | emit.1-listener            | 1000   | 670.2 ns | 675.1 ns | 1.007 | 2.0%     | 1.4%     |                                         |               |
+| runtime.method.invoke     | emit.1-listener            | 4000   | 679.0 ns | 680.3 ns | 1.002 | 1.9%     | 1.7%     |                                         |               |
+| runtime.method.invoke     | emit.10-listeners          | 100    | 753.5 ns | 758.1 ns | 1.006 | 1.2%     | 2.2%     |                                         |               |
+| runtime.method.invoke     | emit.10-listeners          | 1000   | 812.3 ns | 819.3 ns | 1.009 | 1.3%     | 1.1%     |                                         |               |
+| runtime.method.invoke     | emit.10-listeners          | 4000   | 781.5 ns | 789.4 ns | 1.010 | 1.7%     | 1.6%     |                                         |               |
+| runtime.method.invoke     | emit.dependents-subscribed | 100    | 1.40 us  | 1.44 us  | 1.032 | 1.5%     | 1.5%     |                                         |               |
+| runtime.method.invoke     | emit.dependents-subscribed | 1000   | 1.45 us  | 1.45 us  | 1.001 | 0.8%     | 1.1%     |                                         |               |
+| runtime.method.invoke     | emit.dependents-subscribed | 4000   | 1.47 us  | 1.46 us  | 0.997 | 1.3%     | 1.1%     |                                         |               |
+| runtime.method.invoke     | invalid-args               | 100    | 285.0 ns | 252.2 ns | 0.885 | 9.6%     | 2.7%     | A:tail B:tail                           | faster -11.5% |
+| runtime.method.invoke     | invalid-args               | 1000   | 245.0 ns | 288.6 ns | 1.178 | 1.1%     | 9.4%     | A:tail B:tail,drift                     | slower +17.8% |
+| runtime.method.invoke     | invalid-args               | 4000   | 472.8 ns | 454.7 ns | 0.962 | 2.6%     | 8.4%     |                                         |               |
+| runtime.subscribe.churn   | state                      | 100    | 117.0 ns | 100.0 ns | 0.855 | 6.8%     | 1.4%     | A:tail,drift B:tail,drift               | faster -14.5% |
+| runtime.subscribe.churn   | state                      | 1000   | 113.4 ns | 113.9 ns | 1.004 | 2.1%     | 4.7%     | B:tail,drift                            |               |
+| runtime.subscribe.churn   | state                      | 4000   | 161.0 ns | 130.5 ns | 0.811 | 1.8%     | 0.7%     |                                         | faster -18.9% |
+| runtime.subscribe.churn   | property                   | 100    | 704.1 ns | 697.1 ns | 0.990 | 6.4%     | 3.1%     |                                         |               |
+| runtime.subscribe.churn   | property                   | 1000   | 522.1 ns | 522.5 ns | 1.001 | 2.2%     | 2.9%     |                                         |               |
+| runtime.subscribe.churn   | property                   | 4000   | 517.6 ns | 516.6 ns | 0.998 | 1.1%     | 1.2%     |                                         |               |
+| runtime.subscribe.churn   | property.watched           | 100    | 112.7 ns | 113.9 ns | 1.011 | 0.9%     | 0.8%     |                                         |               |
+| runtime.subscribe.churn   | property.watched           | 1000   | 117.3 ns | 143.0 ns | 1.220 | 0.5%     | 1.0%     |                                         | slower +22.0% |
+| runtime.subscribe.churn   | property.watched           | 4000   | 189.5 ns | 121.3 ns | 0.640 | 2.0%     | 0.9%     |                                         | faster -36.0% |
+| runtime.subscribe.churn   | event                      | 100    | 125.7 ns | 119.5 ns | 0.950 | 4.3%     | 1.4%     |                                         |               |
+| runtime.subscribe.churn   | event                      | 1000   | 186.5 ns | 177.9 ns | 0.954 | 4.2%     | 1.5%     |                                         |               |
+| runtime.subscribe.churn   | event                      | 4000   | 156.4 ns | 171.5 ns | 1.097 | 3.2%     | 1.9%     |                                         | slower +9.7%  |
+| runtime.subscribe.churn   | state.diagnostics          | 100    | 109.4 ns | 107.2 ns | 0.980 | 1.1%     | 0.9%     |                                         |               |
+| runtime.subscribe.churn   | state.diagnostics          | 1000   | 137.4 ns | 230.4 ns | 1.677 | 4.6%     | 0.6%     | A:tail                                  | slower +67.7% |
+| runtime.subscribe.churn   | state.diagnostics          | 4000   | 106.6 ns | 105.1 ns | 0.986 | 0.6%     | 0.7%     |                                         |               |
+| runtime.subscribe.churn   | widget.diagnostics         | 100    | 1.44 us  | 1.43 us  | 0.995 | 1.2%     | 0.9%     |                                         |               |
+| runtime.subscribe.churn   | widget.diagnostics         | 1000   | 1.48 us  | 1.48 us  | 1.005 | 1.9%     | 2.1%     | A:tail B:tail                           |               |
+| runtime.subscribe.churn   | widget.diagnostics         | 4000   | 1.46 us  | 1.48 us  | 1.018 | 2.5%     | 2.6%     |                                         |               |
+| runtime.subscribe.churn   | runtime.diagnostics        | 100    | 119.1 ns | 118.5 ns | 0.995 | 0.6%     | 1.6%     |                                         |               |
+| runtime.subscribe.churn   | runtime.diagnostics        | 1000   | 167.3 ns | 164.4 ns | 0.983 | 9.3%     | 8.3%     | A:tail,drift B:tail,drift               |               |
+| runtime.subscribe.churn   | runtime.diagnostics        | 4000   | 170.7 ns | 186.8 ns | 1.094 | 5.7%     | 8.4%     | A:drift B:tail,drift                    | slower +9.4%  |
+| runtime.subscribe.churn   | disposal                   | 100    | 107.7 ns | 77.7 ns  | 0.721 | 0.8%     | 3.0%     | B:tail,drift                            | faster -27.9% |
+| runtime.subscribe.churn   | disposal                   | 1000   | 112.6 ns | 125.2 ns | 1.113 | 4.2%     | 14.0%    | B:spread,drift                          | slower +11.3% |
+| runtime.subscribe.churn   | disposal                   | 4000   | 79.7 ns  | 94.3 ns  | 1.184 | 2.3%     | 4.2%     | B:tail                                  | slower +18.4% |
+| runtime.diagnostics       | get.unchanged              | 100    | 8.16 ns  | 7.07 ns  | 0.867 | 0.2%     | 0.4%     |                                         | faster -13.3% |
+| runtime.diagnostics       | get.unchanged              | 1000   | 22.4 ns  | 20.3 ns  | 0.903 | 0.1%     | 0.4%     |                                         | faster -9.7%  |
+| runtime.diagnostics       | get.unchanged              | 4000   | 21.8 ns  | 20.3 ns  | 0.929 | 0.3%     | 0.3%     |                                         | faster -7.1%  |
+| runtime.diagnostics       | get.unchanged              | 16000  | 22.3 ns  | 20.6 ns  | 0.928 | 0.5%     | 0.4%     |                                         | faster -7.2%  |
+| runtime.diagnostics       | write-then-get             | 100    | 1.33 us  | 1.55 us  | 1.161 | 6.7%     | 3.3%     | A:tail,drift                            | slower +16.1% |
+| runtime.diagnostics       | write-then-get             | 1000   | 1.62 us  | 1.58 us  | 0.975 | 3.0%     | 4.6%     |                                         |               |
+| runtime.diagnostics       | write-then-get             | 4000   | 2.93 us  | 2.43 us  | 0.828 | 7.9%     | 5.7%     | A:tail,drift B:tail                     | faster -17.2% |
+| runtime.diagnostics       | write-then-get             | 16000  | 3.58 us  | 2.96 us  | 0.828 | 7.0%     | 6.1%     | B:drift                                 | faster -17.2% |
+| runtime.diagnostics       | subscribed.fail-recover    | 100    | 3.03 us  | 2.63 us  | 0.866 | 5.4%     | 7.1%     | A:drift                                 | faster -13.4% |
+| runtime.diagnostics       | subscribed.fail-recover    | 1000   | 2.84 us  | 2.69 us  | 0.948 | 5.2%     | 4.0%     | A:drift                                 | faster -5.2%  |
+| runtime.diagnostics       | subscribed.fail-recover    | 4000   | 2.90 us  | 2.82 us  | 0.974 | 7.8%     | 5.0%     | A:drift                                 |               |
+| runtime.diagnostics       | subscribed.fail-recover    | 16000  | 2.91 us  | 2.87 us  | 0.987 | 6.8%     | 6.8%     | A:drift                                 |               |
+| runtime.diagnostics       | subscribed.10pct-failing   | 100    | 2.75 us  | 2.78 us  | 1.010 | 1.8%     | 3.1%     |                                         |               |
+| runtime.diagnostics       | subscribed.10pct-failing   | 1000   | 6.33 us  | 6.34 us  | 1.003 | 1.9%     | 1.8%     |                                         |               |
+| runtime.diagnostics       | subscribed.10pct-failing   | 4000   | 20.4 us  | 20.6 us  | 1.011 | 1.1%     | 1.7%     |                                         |               |
+| runtime.diagnostics       | subscribed.10pct-failing   | 16000  | 74.8 us  | 75.1 us  | 1.004 | 1.3%     | 1.2%     |                                         |               |
+| runtime.diagnostics       | widget.getDiagnostics      | 100    | 412.7 ns | 415.4 ns | 1.006 | 0.5%     | 0.4%     |                                         |               |
+| runtime.diagnostics       | widget.getDiagnostics      | 1000   | 409.6 ns | 412.7 ns | 1.007 | 0.5%     | 0.6%     |                                         |               |
+| runtime.diagnostics       | widget.getDiagnostics      | 4000   | 428.2 ns | 422.5 ns | 0.987 | 0.4%     | 0.5%     |                                         |               |
+| runtime.reset             | dirty                      | 100    | 46.9 us  | 47.2 us  | 1.008 | 6.1%     | 6.8%     | A:drift B:tail                          |               |
+| runtime.reset             | dirty                      | 1000   | 473.6 us | 505.2 us | 1.067 | 3.3%     | 2.8%     |                                         | slower +6.7%  |
+| runtime.reset             | dirty                      | 4000   | 1.73 ms  | 1.72 ms  | 0.999 | 2.5%     | 2.0%     |                                         |               |
+| runtime.reset             | dirty                      | 16000  | 5.73 ms  | 3.76 ms  | 0.656 | 2.9%     | 4.1%     | B:tail                                  | faster -34.4% |
+| runtime.reset             | dirty.subscribed           | 100    | 153.9 us | 147.4 us | 0.958 | 3.9%     | 4.9%     |                                         |               |
+| runtime.reset             | dirty.subscribed           | 1000   | 1.74 ms  | 1.71 ms  | 0.984 | 3.8%     | 3.5%     |                                         |               |
+| runtime.reset             | dirty.subscribed           | 4000   | 8.48 ms  | 7.88 ms  | 0.930 | 4.4%     | 3.7%     |                                         | faster -7.0%  |
+| runtime.reset             | dirty.subscribed           | 16000  | 31.6 ms  | 35.6 ms  | 1.124 | 1.2%     | 1.7%     |                                         | slower +12.4% |
+| runtime.reset             | clean                      | 100    | 25.4 us  | 25.0 us  | 0.985 | 4.7%     | 2.4%     |                                         |               |
+| runtime.reset             | clean                      | 1000   | 367.5 us | 318.8 us | 0.867 | 2.4%     | 3.9%     | B:drift                                 | faster -13.3% |
+| runtime.reset             | clean                      | 4000   | 1.25 ms  | 1.28 ms  | 1.026 | 11.3%    | 19.6%    | A:spread B:spread                       |               |
+| runtime.reset             | clean                      | 16000  | 4.61 ms  | 4.63 ms  | 1.005 | 2.5%     | 2.9%     | A:tail B:tail                           |               |
+| runtime.snapshot          | default                    | 100    | 61.6 us  | 62.1 us  | 1.008 | 0.7%     | 0.4%     |                                         |               |
+| runtime.snapshot          | default                    | 1000   | 875.8 us | 868.5 us | 0.992 | 1.2%     | 1.4%     |                                         |               |
+| runtime.snapshot          | default                    | 4000   | 3.22 ms  | 3.27 ms  | 1.017 | 0.8%     | 1.0%     |                                         |               |
+| runtime.snapshot          | default                    | 16000  | 18.8 ms  | 19.9 ms  | 1.056 | 1.1%     | 0.8%     |                                         | slower +5.6%  |
+| embedded.loop             | create-per-input.overrides | 100    | 8.51 ms  | 8.75 ms  | 1.028 | 13.7%    | 9.4%     | A:spread                                |               |
+| embedded.loop             | create-per-input.overrides | 1000   | 107.6 ms | 107.4 ms | 0.998 | 7.5%     | 7.4%     |                                         |               |
+| embedded.loop             | create-per-input.overrides | 4000   | 448.6 ms | 450.7 ms | 1.005 | 1.0%     | 0.9%     |                                         |               |
+| embedded.loop             | create-per-input.writes    | 100    | 6.11 ms  | 6.13 ms  | 1.004 | 13.3%    | 13.0%    | A:spread,tail B:spread,tail             |               |
+| embedded.loop             | create-per-input.writes    | 1000   | 119.5 ms | 115.0 ms | 0.963 | 5.6%     | 3.7%     |                                         |               |
+| embedded.loop             | create-per-input.writes    | 4000   | 476.4 ms | 487.4 ms | 1.023 | 1.1%     | 0.6%     |                                         |               |
+| embedded.loop             | reuse.resetState           | 100    | 342.3 us | 352.6 us | 1.030 | 9.3%     | 6.5%     |                                         |               |
+| embedded.loop             | reuse.resetState           | 1000   | 3.21 ms  | 3.17 ms  | 0.987 | 6.0%     | 6.9%     |                                         |               |
+| embedded.loop             | reuse.resetState           | 4000   | 16.5 ms  | 16.6 ms  | 1.007 | 0.9%     | 1.2%     |                                         |               |
+| embedded.loop             | compile-per-input          | 100    | 5.82 ms  | 5.30 ms  | 0.912 | 10.4%    | 9.7%     | A:spread                                | faster -8.8%  |
+| embedded.loop             | compile-per-input          | 1000   | 55.7 ms  | 56.0 ms  | 1.005 | 5.4%     | 6.3%     |                                         |               |
+| embedded.loop             | compile-per-input          | 4000   | 270.6 ms | 266.3 ms | 0.984 | 6.5%     | 8.2%     |                                         |               |
+| vue.mount                 | standard                   | 100    | 3.43 ms  | 3.43 ms  | 1.001 | 2.3%     | 2.3%     |                                         |               |
+| vue.mount                 | standard                   | 1000   | 26.8 ms  | 27.3 ms  | 1.018 | 2.6%     | 2.2%     |                                         |               |
+| vue.mount                 | standard                   | 4000   | 99.2 ms  | 99.9 ms  | 1.007 | 4.1%     | 2.9%     |                                         |               |
+| vue.unmount               | standard                   | 100    | 322.9 us | 321.8 us | 0.997 | 6.4%     | 6.8%     |                                         |               |
+| vue.unmount               | standard                   | 1000   | 3.58 ms  | 3.42 ms  | 0.956 | 6.4%     | 6.2%     |                                         |               |
+| vue.unmount               | standard                   | 4000   | 18.1 ms  | 18.1 ms  | 0.997 | 3.4%     | 3.8%     |                                         |               |
+| vue.update                | star                       | 10     | 18.1 us  | 17.9 us  | 0.988 | 2.2%     | 2.8%     | A:tail,drift B:tail                     |               |
+| vue.update                | star                       | 100    | 187.2 us | 180.8 us | 0.966 | 2.0%     | 2.3%     |                                         |               |
+| vue.update                | star                       | 1000   | 3.17 ms  | 3.05 ms  | 0.962 | 4.6%     | 3.8%     | A:drift                                 |               |
+| vue.update                | star                       | 4000   | 19.3 ms  | 18.8 ms  | 0.975 | 1.4%     | 1.3%     |                                         |               |
+| vue.update                | one-of-N                   | 100    | 4.62 us  | 2.81 us  | 0.607 | 6.5%     | 4.1%     | A:tail,drift B:tail,drift               | faster -39.3% |
+| vue.update                | one-of-N                   | 1000   | 2.79 us  | 2.78 us  | 0.997 | 1.5%     | 1.5%     |                                         |               |
+| vue.update                | one-of-N                   | 4000   | 2.90 us  | 2.83 us  | 0.975 | 2.2%     | 2.8%     | B:drift                                 |               |
+| vue.swap                  | standard                   | 100    | 1.93 ms  | 1.95 ms  | 1.012 | 7.1%     | 6.9%     | A:drift B:drift                         |               |
+| vue.swap                  | standard                   | 1000   | 18.6 ms  | 19.1 ms  | 1.024 | 1.5%     | 2.2%     |                                         |               |
+| vue.swap                  | standard                   | 4000   | 104.8 ms | 105.6 ms | 1.008 | 0.7%     | 1.1%     |                                         |               |
+| inspector.snapshot        | standard                   | 100    | 2.53 ms  | 2.54 ms  | 1.004 | 1.5%     | 1.4%     |                                         |               |
+| inspector.snapshot        | standard                   | 1000   | 23.1 ms  | 23.0 ms  | 0.996 | 1.3%     | 1.1%     |                                         |               |
+| inspector.snapshot        | standard                   | 4000   | 91.6 ms  | 90.9 ms  | 0.993 | 1.4%     | 1.8%     |                                         |               |
+| inspector.snapshot        | standard                   | 16000  | 423.6 ms | 415.9 ms | 0.982 | 0.2%     | 0.7%     |                                         |               |
+| inspector.widget          | first-node                 | 100    | 4.10 us  | 4.17 us  | 1.017 | 3.5%     | 3.0%     | A:drift                                 |               |
+| inspector.widget          | first-node                 | 1000   | 4.06 us  | 4.09 us  | 1.008 | 4.2%     | 4.3%     |                                         |               |
+| inspector.widget          | first-node                 | 4000   | 4.08 us  | 4.02 us  | 0.985 | 4.1%     | 2.2%     |                                         |               |
+| inspector.widget          | first-node                 | 16000  | 4.08 us  | 4.10 us  | 1.005 | 4.1%     | 2.2%     |                                         |               |
+| inspector.widget          | first-unit                 | 100    | 7.96 us  | 7.91 us  | 0.994 | 3.2%     | 2.5%     |                                         |               |
+| inspector.widget          | first-unit                 | 1000   | 7.78 us  | 7.90 us  | 1.016 | 1.0%     | 1.3%     |                                         |               |
+| inspector.widget          | first-unit                 | 4000   | 7.87 us  | 7.88 us  | 1.001 | 1.7%     | 2.6%     |                                         |               |
+| inspector.widget          | first-unit                 | 16000  | 7.83 us  | 7.96 us  | 1.016 | 1.9%     | 2.0%     |                                         |               |
+| inspector.widget          | last-node                  | 100    | 10.2 us  | 10.3 us  | 1.005 | 0.9%     | 0.7%     |                                         |               |
+| inspector.widget          | last-node                  | 1000   | 41.4 us  | 41.0 us  | 0.990 | 0.6%     | 0.6%     |                                         |               |
+| inspector.widget          | last-node                  | 4000   | 143.8 us | 146.1 us | 1.016 | 9.2%     | 9.0%     |                                         |               |
+| inspector.widget          | last-node                  | 16000  | 1.41 ms  | 1.77 ms  | 1.255 | 11.3%    | 7.5%     | A:spread                                | slower +25.5% |
+| inspector.widget          | rotating                   | 100    | 10.7 us  | 10.7 us  | 1.001 | 2.9%     | 2.8%     | A:drift                                 |               |
+| inspector.widget          | rotating                   | 1000   | 27.1 us  | 27.0 us  | 0.993 | 6.9%     | 6.4%     |                                         |               |
+| inspector.widget          | rotating                   | 4000   | 82.4 us  | 80.3 us  | 0.975 | 10.8%    | 10.8%    | A:spread B:spread                       |               |
+| inspector.widget          | rotating                   | 16000  | 693.1 us | 744.8 us | 1.075 | 17.3%    | 19.8%    | A:spread,tail B:spread,tail             | slower +7.5%  |
+| inspector.subscribe       | one-write-per-subscription | 10     | 27.0 us  | 26.6 us  | 0.987 | 4.7%     | 5.7%     |                                         |               |
+| inspector.subscribe       | one-write-per-subscription | 100    | 279.3 us | 265.3 us | 0.950 | 4.7%     | 2.3%     |                                         |               |
+| inspector.subscribe       | one-write-per-subscription | 1000   | 3.02 ms  | 3.05 ms  | 1.011 | 3.3%     | 1.5%     |                                         |               |
+| inspector.subscribe       | burst-one-member           | 10     | 25.7 us  | 24.1 us  | 0.938 | 5.8%     | 3.4%     |                                         | faster -6.2%  |
+| inspector.subscribe       | burst-one-member           | 100    | 235.3 us | 230.7 us | 0.981 | 3.4%     | 1.0%     |                                         |               |
+| inspector.subscribe       | burst-one-member           | 1000   | 2.30 ms  | 2.31 ms  | 1.001 | 2.2%     | 0.9%     |                                         |               |
+| inspector.subscribe       | no-subscription            | 1000   | 109.9 us | 108.7 us | 0.989 | 1.1%     | 0.3%     |                                         |               |
+| inspector.value           | object.default-limits      | 100    | 18.2 us  | 18.4 us  | 1.006 | 1.1%     | 1.2%     |                                         |               |
+| inspector.value           | object.default-limits      | 1000   | 51.5 us  | 50.2 us  | 0.975 | 9.8%     | 8.2%     |                                         |               |
+| inspector.value           | object.default-limits      | 10000  | 780.9 us | 781.4 us | 1.001 | 0.7%     | 0.8%     |                                         |               |
+| inspector.value           | object.default-limits      | 100000 | 10.5 ms  | 10.5 ms  | 1.002 | 0.8%     | 0.8%     |                                         |               |
+| inspector.value           | array.default-limits       | 100    | 9.75 us  | 9.80 us  | 1.005 | 0.9%     | 1.1%     |                                         |               |
+| inspector.value           | array.default-limits       | 1000   | 9.75 us  | 9.78 us  | 1.003 | 0.9%     | 0.9%     |                                         |               |
+| inspector.value           | array.default-limits       | 10000  | 9.78 us  | 9.79 us  | 1.001 | 1.2%     | 0.7%     |                                         |               |
+| inspector.value           | array.default-limits       | 100000 | 9.75 us  | 9.78 us  | 1.003 | 0.7%     | 1.0%     |                                         |               |
+| inspector.value           | object.unlimited           | 100    | 33.9 us  | 34.1 us  | 1.003 | 0.5%     | 0.6%     |                                         |               |
+| inspector.value           | object.unlimited           | 1000   | 384.3 us | 381.5 us | 0.993 | 1.4%     | 1.5%     |                                         |               |
+| inspector.value           | object.unlimited           | 10000  | 4.41 ms  | 4.42 ms  | 1.003 | 0.7%     | 0.8%     |                                         |               |
+| inspector.value           | object.unlimited           | 100000 | 43.9 ms  | 43.1 ms  | 0.981 | 5.5%     | 6.8%     |                                         |               |
+| inspector.value           | array.unlimited            | 100    | 19.2 us  | 19.2 us  | 1.000 | 1.2%     | 0.8%     |                                         |               |
+| inspector.value           | array.unlimited            | 1000   | 188.5 us | 189.3 us | 1.004 | 0.7%     | 1.1%     |                                         |               |
+| inspector.value           | array.unlimited            | 10000  | 1.86 ms  | 1.84 ms  | 0.992 | 5.1%     | 4.5%     |                                         |               |
+| inspector.value           | array.unlimited            | 100000 | 13.9 ms  | 14.2 ms  | 1.021 | 8.4%     | 6.6%     |                                         |               |
+| inspector.value           | long-string                | 100    | 53.4 ns  | 53.9 ns  | 1.008 | 0.9%     | 0.7%     |                                         |               |
+| inspector.value           | long-string                | 1000   | 60.8 ns  | 60.6 ns  | 0.997 | 0.8%     | 0.8%     |                                         |               |
+| inspector.value           | long-string                | 10000  | 60.3 ns  | 60.4 ns  | 1.002 | 1.2%     | 0.9%     |                                         |               |
+| inspector.value           | long-string                | 100000 | 60.3 ns  | 60.6 ns  | 1.005 | 0.8%     | 1.2%     |                                         |               |
+| inspector.value           | object.default-limits.desc | 100    | 21.5 us  | 21.6 us  | 1.007 | 0.6%     | 0.5%     |                                         |               |
+| inspector.value           | object.default-limits.desc | 1000   | 114.8 us | 115.4 us | 1.006 | 3.9%     | 3.5%     |                                         |               |
+| inspector.value           | object.default-limits.desc | 10000  | 1.44 ms  | 1.44 ms  | 1.001 | 0.7%     | 0.8%     |                                         |               |
+| inspector.value           | object.default-limits.desc | 100000 | 17.0 ms  | 17.0 ms  | 0.997 | 1.2%     | 0.8%     |                                         |               |
+| inspector.value           | object.unlimited.desc      | 100    | 35.1 us  | 35.4 us  | 1.007 | 0.3%     | 0.6%     |                                         |               |
+| inspector.value           | object.unlimited.desc      | 1000   | 446.2 us | 446.1 us | 1.000 | 1.2%     | 1.1%     |                                         |               |
+| inspector.value           | object.unlimited.desc      | 10000  | 10.2 ms  | 10.1 ms  | 0.997 | 0.7%     | 0.6%     |                                         |               |
+| inspector.value           | object.unlimited.desc      | 100000 | 823.4 ms | 821.7 ms | 0.998 | 0.2%     | 0.5%     |                                         |               |
+| inspector.value           | nested.default-limits      | 2      | 12.0 us  | 12.1 us  | 1.008 | 1.0%     | 1.5%     |                                         |               |
+| inspector.value           | nested.default-limits      | 4      | 115.5 us | 115.8 us | 1.002 | 1.5%     | 1.5%     |                                         |               |
+| inspector.value           | nested.default-limits      | 8      | 316.7 us | 317.8 us | 1.003 | 1.0%     | 1.0%     |                                         |               |
+
+geometric mean of B/A over 373 rows: 1.001
+
+## jitless (median per run)
+
+| scenario                  | variant                    | size  | A        | B        | B/A   | spread A | spread B | flags   | > 5%          |
+| ------------------------- | -------------------------- | ----- | -------- | -------- | ----- | -------- | -------- | ------- | ------------- |
+| system.create             | plugins                    | 2     | 1.27 us  | 1.26 us  | 0.987 | 1.1%     | 0.5%     |         |               |
+| system.create             | plugins                    | 10    | 4.61 us  | 4.62 us  | 1.002 | 1.1%     | 0.6%     |         |               |
+| system.create             | plugins                    | 50    | 20.6 us  | 20.6 us  | 0.998 | 1.4%     | 1.3%     |         |               |
+| system.create             | plugins                    | 200   | 79.7 us  | 79.8 us  | 1.001 | 0.7%     | 0.8%     |         |               |
+| system.create             | plugins                    | 1000  | 400.4 us | 400.7 us | 1.001 | 0.8%     | 0.6%     |         |               |
+| plugin.create             | members                    | 3     | 9.54 us  | 9.61 us  | 1.007 | 0.8%     | 0.6%     |         |               |
+| plugin.create             | members                    | 30    | 85.7 us  | 86.1 us  | 1.004 | 1.4%     | 1.7%     |         |               |
+| plugin.create             | members                    | 300   | 846.0 us | 851.5 us | 1.006 | 0.9%     | 0.7%     |         |               |
+| blueprint.compile.valid   | flat.bare                  | 100   | 697.7 us | 700.9 us | 1.005 | 0.7%     | 0.8%     |         |               |
+| blueprint.compile.valid   | flat.bare                  | 1000  | 6.66 ms  | 6.65 ms  | 0.999 | 0.7%     | 0.7%     |         |               |
+| blueprint.compile.valid   | flat.bare                  | 4000  | 27.9 ms  | 27.7 ms  | 0.993 | 1.9%     | 1.4%     |         |               |
+| blueprint.compile.valid   | flat.bare                  | 16000 | 126.4 ms | 126.0 ms | 0.996 | 0.7%     | 0.4%     |         |               |
+| blueprint.compile.valid   | flat.standard              | 100   | 4.68 ms  | 4.66 ms  | 0.996 | 0.8%     | 0.6%     |         |               |
+| blueprint.compile.valid   | flat.standard              | 1000  | 48.4 ms  | 48.0 ms  | 0.993 | 2.3%     | 1.8%     | A:drift |               |
+| blueprint.compile.valid   | flat.standard              | 4000  | 222.5 ms | 225.1 ms | 1.011 | 0.2%     | 0.8%     |         |               |
+| blueprint.compile.valid   | flat.standard              | 16000 | 970.7 ms | 969.1 ms | 0.998 | 0.5%     | 0.7%     |         |               |
+| blueprint.compile.valid   | tree.bare                  | 100   | 709.3 us | 714.4 us | 1.007 | 0.5%     | 0.5%     |         |               |
+| blueprint.compile.valid   | tree.bare                  | 1000  | 6.79 ms  | 6.79 ms  | 1.000 | 0.5%     | 0.6%     |         |               |
+| blueprint.compile.valid   | tree.bare                  | 4000  | 28.0 ms  | 28.4 ms  | 1.013 | 0.9%     | 1.9%     |         |               |
+| blueprint.compile.valid   | tree.bare                  | 16000 | 126.1 ms | 126.0 ms | 0.999 | 0.4%     | 0.3%     |         |               |
+| blueprint.compile.valid   | tree.selfDeps              | 100   | 2.87 ms  | 2.79 ms  | 0.973 | 2.3%     | 0.7%     |         |               |
+| blueprint.compile.valid   | tree.selfDeps              | 1000  | 27.7 ms  | 27.8 ms  | 1.003 | 1.1%     | 1.7%     |         |               |
+| blueprint.compile.valid   | tree.selfDeps              | 4000  | 121.4 ms | 120.1 ms | 0.989 | 0.7%     | 0.6%     |         |               |
+| blueprint.compile.valid   | tree.selfDeps              | 16000 | 522.1 ms | 520.3 ms | 0.997 | 0.3%     | 0.4%     |         |               |
+| blueprint.compile.valid   | tree.standard              | 100   | 4.28 ms  | 4.24 ms  | 0.992 | 0.8%     | 0.9%     |         |               |
+| blueprint.compile.valid   | tree.standard              | 1000  | 42.7 ms  | 42.5 ms  | 0.994 | 1.1%     | 1.2%     |         |               |
+| blueprint.compile.valid   | tree.standard              | 4000  | 194.1 ms | 191.0 ms | 0.984 | 0.5%     | 0.8%     |         |               |
+| blueprint.compile.valid   | tree.standard              | 16000 | 870.3 ms | 869.4 ms | 0.999 | 0.9%     | 1.0%     |         |               |
+| blueprint.compile.valid   | tree.crossDeps             | 100   | 4.30 ms  | 4.27 ms  | 0.994 | 1.1%     | 0.9%     |         |               |
+| blueprint.compile.valid   | tree.crossDeps             | 1000  | 43.2 ms  | 43.5 ms  | 1.007 | 1.2%     | 2.5%     |         |               |
+| blueprint.compile.valid   | tree.crossDeps             | 4000  | 190.9 ms | 189.9 ms | 0.994 | 0.3%     | 0.5%     |         |               |
+| blueprint.compile.valid   | tree.crossDeps             | 16000 | 888.1 ms | 884.1 ms | 0.996 | 0.8%     | 0.6%     |         |               |
+| blueprint.compile.valid   | tree.validated             | 100   | 4.34 ms  | 4.34 ms  | 1.001 | 0.8%     | 0.7%     |         |               |
+| blueprint.compile.valid   | tree.validated             | 1000  | 44.6 ms  | 43.6 ms  | 0.978 | 3.0%     | 1.9%     |         |               |
+| blueprint.compile.valid   | tree.validated             | 4000  | 192.9 ms | 192.8 ms | 0.999 | 0.9%     | 0.8%     |         |               |
+| blueprint.compile.valid   | tree.validated             | 16000 | 903.0 ms | 894.4 ms | 0.990 | 0.9%     | 1.0%     |         |               |
+| blueprint.compile.valid   | tree.aggregated            | 100   | 4.51 ms  | 4.47 ms  | 0.993 | 0.6%     | 0.8%     |         |               |
+| blueprint.compile.valid   | tree.aggregated            | 1000  | 44.9 ms  | 45.0 ms  | 1.000 | 1.8%     | 2.3%     |         |               |
+| blueprint.compile.valid   | tree.aggregated            | 4000  | 200.5 ms | 200.1 ms | 0.998 | 0.2%     | 1.5%     |         |               |
+| blueprint.compile.valid   | tree.aggregated            | 16000 | 915.7 ms | 910.6 ms | 0.994 | 1.2%     | 1.0%     |         |               |
+| blueprint.compile.valid   | deep.standard              | 100   | 2.52 ms  | 2.48 ms  | 0.985 | 1.1%     | 1.0%     |         |               |
+| blueprint.compile.valid   | deep.standard              | 1000  | 46.0 ms  | 45.9 ms  | 0.998 | 0.8%     | 1.3%     |         |               |
+| blueprint.compile.valid   | deep.standard              | 4000  | 221.7 ms | 218.8 ms | 0.987 | 0.4%     | 0.7%     |         |               |
+| blueprint.compile.valid   | deep.standard              | 16000 | 995.6 ms | 990.0 ms | 0.994 | 1.2%     | 1.5%     |         |               |
+| blueprint.compile.json    | fromJson                   | 100   | 4.24 ms  | 4.25 ms  | 1.001 | 0.9%     | 1.2%     |         |               |
+| blueprint.compile.json    | fromJson                   | 1000  | 42.9 ms  | 44.9 ms  | 1.045 | 2.2%     | 2.5%     |         |               |
+| blueprint.compile.json    | fromJson                   | 4000  | 193.6 ms | 197.3 ms | 1.019 | 0.4%     | 0.2%     |         |               |
+| blueprint.compile.json    | fromJson                   | 16000 | 870.9 ms | 881.6 ms | 1.012 | 0.4%     | 0.5%     |         |               |
+| blueprint.compile.json    | parse+create               | 100   | 4.31 ms  | 4.38 ms  | 1.015 | 0.9%     | 1.8%     |         |               |
+| blueprint.compile.json    | parse+create               | 1000  | 43.4 ms  | 45.1 ms  | 1.038 | 1.5%     | 2.9%     |         |               |
+| blueprint.compile.json    | parse+create               | 4000  | 195.2 ms | 196.2 ms | 1.005 | 0.8%     | 0.7%     |         |               |
+| blueprint.compile.json    | parse+create               | 16000 | 878.3 ms | 900.3 ms | 1.025 | 0.5%     | 0.8%     |         |               |
+| blueprint.compile.json    | parse-only                 | 100   | 23.2 us  | 23.6 us  | 1.017 | 0.2%     | 0.7%     |         |               |
+| blueprint.compile.json    | parse-only                 | 1000  | 249.3 us | 250.1 us | 1.003 | 0.7%     | 1.3%     |         |               |
+| blueprint.compile.json    | parse-only                 | 4000  | 1.04 ms  | 1.03 ms  | 0.992 | 1.4%     | 1.5%     |         |               |
+| blueprint.compile.json    | parse-only                 | 16000 | 4.14 ms  | 4.11 ms  | 0.993 | 1.2%     | 1.2%     |         |               |
+| blueprint.compile.invalid | unknown-type               | 100   | 580.3 us | 581.0 us | 1.001 | 0.9%     | 1.1%     |         |               |
+| blueprint.compile.invalid | unknown-type               | 1000  | 5.55 ms  | 5.57 ms  | 1.003 | 0.6%     | 0.6%     |         |               |
+| blueprint.compile.invalid | unknown-type               | 4000  | 24.3 ms  | 24.3 ms  | 1.001 | 5.3%     | 4.9%     | B:drift |               |
+| blueprint.compile.invalid | unknown-type               | 16000 | 102.4 ms | 102.9 ms | 1.005 | 0.8%     | 0.7%     |         |               |
+| blueprint.compile.invalid | bad-config                 | 100   | 798.7 us | 802.9 us | 1.005 | 1.1%     | 1.0%     |         |               |
+| blueprint.compile.invalid | bad-config                 | 1000  | 7.76 ms  | 7.75 ms  | 0.998 | 0.6%     | 0.5%     |         |               |
+| blueprint.compile.invalid | bad-config                 | 4000  | 33.4 ms  | 33.9 ms  | 1.014 | 1.5%     | 2.1%     |         |               |
+| blueprint.compile.invalid | bad-config                 | 16000 | 142.2 ms | 143.1 ms | 1.006 | 0.2%     | 0.6%     |         |               |
+| blueprint.compile.invalid | unexpected-field           | 100   | 835.8 us | 839.2 us | 1.004 | 1.0%     | 0.7%     |         |               |
+| blueprint.compile.invalid | unexpected-field           | 1000  | 8.05 ms  | 8.06 ms  | 1.002 | 0.7%     | 0.6%     |         |               |
+| blueprint.compile.invalid | unexpected-field           | 4000  | 34.6 ms  | 34.8 ms  | 1.005 | 1.6%     | 1.8%     |         |               |
+| blueprint.compile.invalid | unexpected-field           | 16000 | 146.9 ms | 147.3 ms | 1.002 | 0.5%     | 0.8%     |         |               |
+| blueprint.compile.invalid | duplicate-id-pairs         | 100   | 860.5 us | 864.7 us | 1.005 | 0.4%     | 0.6%     |         |               |
+| blueprint.compile.invalid | duplicate-id-pairs         | 1000  | 8.30 ms  | 8.36 ms  | 1.008 | 0.6%     | 1.1%     |         |               |
+| blueprint.compile.invalid | duplicate-id-pairs         | 4000  | 35.1 ms  | 35.3 ms  | 1.006 | 1.7%     | 1.5%     |         |               |
+| blueprint.compile.invalid | duplicate-id-pairs         | 16000 | 156.8 ms | 156.7 ms | 0.999 | 0.3%     | 0.3%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 100   | 2.84 ms  | 2.84 ms  | 0.999 | 0.8%     | 0.6%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 500   | 53.9 ms  | 54.4 ms  | 1.009 | 0.8%     | 1.1%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 1000  | 221.9 ms | 221.2 ms | 0.997 | 0.6%     | 0.2%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 2000  | 898.5 ms | 899.0 ms | 1.001 | 0.6%     | 0.3%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one           | 4000  | 3.54 s   | 3.55 s   | 1.001 | 0.6%     | 0.3%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 2     | 28.4 ms  | 28.5 ms  | 1.004 | 1.7%     | 1.6%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 10    | 28.5 ms  | 28.7 ms  | 1.010 | 1.1%     | 1.5%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 100   | 31.3 ms  | 31.3 ms  | 0.999 | 1.6%     | 1.3%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 1000  | 245.6 ms | 247.1 ms | 1.006 | 0.3%     | 0.5%     |         |               |
+| blueprint.compile.invalid | duplicate-id-one.k         | 4000  | 3.56 s   | 3.54 s   | 0.994 | 1.4%     | 0.6%     |         |               |
+| document.patch            | baseline.compile           | 100   | 4.29 ms  | 4.26 ms  | 0.993 | 0.8%     | 0.7%     |         |               |
+| document.patch            | baseline.compile           | 1000  | 43.8 ms  | 44.7 ms  | 1.020 | 3.0%     | 2.3%     | A:drift |               |
+| document.patch            | baseline.compile           | 4000  | 192.2 ms | 193.5 ms | 1.007 | 1.0%     | 1.1%     |         |               |
+| document.patch            | baseline.compile           | 16000 | 877.2 ms | 875.6 ms | 0.998 | 0.7%     | 1.0%     |         |               |
+| document.patch            | noop                       | 100   | 40.9 us  | 41.2 us  | 1.006 | 0.4%     | 0.9%     |         |               |
+| document.patch            | noop                       | 1000  | 58.1 us  | 58.2 us  | 1.001 | 0.6%     | 0.4%     |         |               |
+| document.patch            | noop                       | 4000  | 60.2 us  | 60.6 us  | 1.006 | 0.6%     | 0.6%     |         |               |
+| document.patch            | noop                       | 16000 | 78.6 us  | 78.7 us  | 1.001 | 0.5%     | 0.4%     |         |               |
+| document.patch            | replace-config             | 100   | 4.33 ms  | 4.32 ms  | 0.997 | 0.7%     | 0.6%     |         |               |
+| document.patch            | replace-config             | 1000  | 45.4 ms  | 43.3 ms  | 0.954 | 2.5%     | 1.6%     |         |               |
+| document.patch            | replace-config             | 4000  | 194.2 ms | 194.2 ms | 1.000 | 0.7%     | 0.8%     |         |               |
+| document.patch            | replace-config             | 16000 | 878.0 ms | 880.9 ms | 1.003 | 0.8%     | 1.3%     |         |               |
+| document.patch            | replace-config.subscribed  | 100   | 4.35 ms  | 4.31 ms  | 0.991 | 0.9%     | 1.1%     |         |               |
+| document.patch            | replace-config.subscribed  | 1000  | 43.9 ms  | 44.5 ms  | 1.013 | 3.3%     | 3.2%     |         |               |
+| document.patch            | replace-config.subscribed  | 4000  | 195.4 ms | 194.1 ms | 0.993 | 0.4%     | 0.5%     |         |               |
+| document.patch            | replace-config.subscribed  | 16000 | 887.6 ms | 874.5 ms | 0.985 | 1.1%     | 1.0%     |         |               |
+| document.patch            | add-widget                 | 100   | 4.28 ms  | 4.26 ms  | 0.997 | 0.7%     | 0.7%     |         |               |
+| document.patch            | add-widget                 | 1000  | 43.2 ms  | 44.6 ms  | 1.034 | 1.6%     | 2.9%     |         |               |
+| document.patch            | add-widget                 | 4000  | 189.5 ms | 189.5 ms | 1.000 | 0.5%     | 0.8%     |         |               |
+| document.patch            | add-widget                 | 16000 | 850.3 ms | 846.7 ms | 0.996 | 1.0%     | 0.4%     |         |               |
+| document.patch            | remove-widget              | 100   | 4.25 ms  | 4.24 ms  | 0.998 | 0.5%     | 0.7%     |         |               |
+| document.patch            | remove-widget              | 1000  | 44.2 ms  | 43.6 ms  | 0.988 | 1.9%     | 1.4%     |         |               |
+| document.patch            | remove-widget              | 4000  | 191.7 ms | 192.7 ms | 1.005 | 1.1%     | 0.5%     |         |               |
+| document.patch            | remove-widget              | 16000 | 849.5 ms | 848.2 ms | 0.998 | 0.6%     | 0.7%     |         |               |
+| separated.roundtrip       | separate                   | 100   | 268.1 us | 267.3 us | 0.997 | 0.8%     | 0.8%     |         |               |
+| separated.roundtrip       | separate                   | 1000  | 2.72 ms  | 2.72 ms  | 1.002 | 0.9%     | 0.8%     |         |               |
+| separated.roundtrip       | separate                   | 4000  | 11.0 ms  | 10.9 ms  | 0.994 | 1.3%     | 1.0%     |         |               |
+| separated.roundtrip       | separate                   | 16000 | 45.5 ms  | 45.4 ms  | 0.999 | 0.7%     | 1.0%     |         |               |
+| separated.roundtrip       | normalize                  | 100   | 336.0 us | 321.1 us | 0.956 | 0.9%     | 0.6%     |         |               |
+| separated.roundtrip       | normalize                  | 1000  | 3.37 ms  | 3.36 ms  | 0.998 | 1.3%     | 1.4%     |         |               |
+| separated.roundtrip       | normalize                  | 4000  | 13.4 ms  | 13.4 ms  | 1.003 | 1.5%     | 1.1%     |         |               |
+| separated.roundtrip       | normalize                  | 16000 | 58.8 ms  | 58.7 ms  | 0.997 | 2.2%     | 1.3%     |         |               |
+| separated.roundtrip       | roundtrip                  | 100   | 615.3 us | 615.8 us | 1.001 | 0.7%     | 1.1%     |         |               |
+| separated.roundtrip       | roundtrip                  | 1000  | 5.93 ms  | 5.95 ms  | 1.004 | 0.9%     | 0.9%     |         |               |
+| separated.roundtrip       | roundtrip                  | 4000  | 25.1 ms  | 25.4 ms  | 1.012 | 1.6%     | 0.7%     |         |               |
+| separated.roundtrip       | roundtrip                  | 16000 | 104.6 ms | 105.2 ms | 1.006 | 1.2%     | 1.2%     |         |               |
+| inspection.blueprint      | cold                       | 100   | 1.31 ms  | 1.28 ms  | 0.972 | 1.3%     | 0.9%     |         |               |
+| inspection.blueprint      | cold                       | 1000  | 13.9 ms  | 13.6 ms  | 0.978 | 2.1%     | 1.3%     |         |               |
+| inspection.blueprint      | cold                       | 4000  | 55.1 ms  | 52.7 ms  | 0.956 | 3.3%     | 3.1%     |         |               |
+| inspection.blueprint      | cold                       | 16000 | 236.6 ms | 235.7 ms | 0.996 | 0.2%     | 0.3%     |         |               |
+| inspection.blueprint      | cached                     | 100   | 87.8 ns  | 87.4 ns  | 0.995 | 0.2%     | 0.2%     |         |               |
+| inspection.blueprint      | cached                     | 1000  | 88.6 ns  | 88.7 ns  | 1.000 | 0.3%     | 0.3%     |         |               |
+| inspection.blueprint      | cached                     | 4000  | 90.6 ns  | 90.7 ns  | 1.001 | 0.2%     | 0.3%     |         |               |
+| inspection.blueprint      | cached                     | 16000 | 90.6 ns  | 90.5 ns  | 0.999 | 0.3%     | 0.2%     |         |               |
+| inspection.runtime        | facade                     | 100   | 1.71 us  | 1.67 us  | 0.976 | 3.2%     | 3.1%     |         |               |
+| inspection.runtime        | facade                     | 1000  | 13.2 us  | 13.1 us  | 0.995 | 4.0%     | 4.2%     |         |               |
+| inspection.runtime        | facade                     | 4000  | 25.8 us  | 26.1 us  | 1.011 | 3.5%     | 3.6%     |         |               |
+| inspection.runtime        | facade                     | 16000 | 28.3 us  | 27.8 us  | 0.984 | 3.1%     | 2.4%     |         |               |
+| inspection.runtime        | walk                       | 100   | 19.2 us  | 18.8 us  | 0.979 | 0.8%     | 0.5%     |         |               |
+| inspection.runtime        | walk                       | 1000  | 201.1 us | 200.2 us | 0.995 | 0.4%     | 0.4%     |         |               |
+| inspection.runtime        | walk                       | 4000  | 1.70 ms  | 1.66 ms  | 0.980 | 1.1%     | 1.2%     |         |               |
+| inspection.runtime        | walk                       | 16000 | 6.81 ms  | 6.80 ms  | 0.999 | 1.3%     | 1.2%     |         |               |
+| runtime.create            | bare                       | 100   | 772.2 us | 780.4 us | 1.011 | 0.7%     | 0.9%     |         |               |
+| runtime.create            | bare                       | 1000  | 7.77 ms  | 7.76 ms  | 0.999 | 1.3%     | 0.9%     |         |               |
+| runtime.create            | bare                       | 4000  | 32.6 ms  | 32.5 ms  | 0.998 | 1.4%     | 0.8%     |         |               |
+| runtime.create            | bare                       | 16000 | 164.5 ms | 164.3 ms | 0.998 | 0.5%     | 0.7%     |         |               |
+| runtime.create            | standard                   | 100   | 2.09 ms  | 2.05 ms  | 0.983 | 1.1%     | 1.0%     |         |               |
+| runtime.create            | standard                   | 1000  | 21.6 ms  | 21.5 ms  | 0.995 | 1.1%     | 0.8%     |         |               |
+| runtime.create            | standard                   | 4000  | 106.5 ms | 106.5 ms | 1.001 | 0.5%     | 0.8%     |         |               |
+| runtime.create            | standard                   | 16000 | 457.8 ms | 456.3 ms | 0.997 | 0.1%     | 0.4%     |         |               |
+| runtime.create            | crossDeps                  | 100   | 2.08 ms  | 2.07 ms  | 0.995 | 0.8%     | 1.3%     |         |               |
+| runtime.create            | crossDeps                  | 1000  | 21.3 ms  | 22.1 ms  | 1.034 | 0.8%     | 0.7%     |         |               |
+| runtime.create            | crossDeps                  | 4000  | 106.0 ms | 105.8 ms | 0.998 | 0.9%     | 0.4%     |         |               |
+| runtime.create            | crossDeps                  | 16000 | 454.2 ms | 456.9 ms | 1.006 | 0.3%     | 0.3%     |         |               |
+| runtime.create            | standard.overrides         | 100   | 2.10 ms  | 2.12 ms  | 1.010 | 1.2%     | 1.7%     |         |               |
+| runtime.create            | standard.overrides         | 1000  | 21.8 ms  | 21.9 ms  | 1.004 | 1.0%     | 1.0%     |         |               |
+| runtime.create            | standard.overrides         | 4000  | 107.5 ms | 108.0 ms | 1.005 | 0.5%     | 1.0%     |         |               |
+| runtime.create            | standard.overrides         | 16000 | 464.8 ms | 465.3 ms | 1.001 | 0.5%     | 0.4%     |         |               |
+| runtime.dispose           | plain                      | 100   | 1.42 us  | 1.43 us  | 1.010 | 3.5%     | 3.9%     |         |               |
+| runtime.dispose           | plain                      | 1000  | 5.52 us  | 5.53 us  | 1.002 | 6.0%     | 5.1%     |         |               |
+| runtime.dispose           | plain                      | 4000  | 10.2 us  | 10.5 us  | 1.029 | 5.5%     | 5.6%     |         |               |
+| runtime.dispose           | plain                      | 16000 | 11.7 us  | 12.2 us  | 1.046 | 4.3%     | 4.4%     |         |               |
+| runtime.dispose           | subscribed                 | 100   | 102.1 us | 102.3 us | 1.002 | 1.1%     | 1.7%     |         |               |
+| runtime.dispose           | subscribed                 | 1000  | 1.06 ms  | 1.06 ms  | 0.999 | 2.3%     | 2.5%     |         |               |
+| runtime.dispose           | subscribed                 | 4000  | 4.23 ms  | 4.21 ms  | 0.995 | 1.8%     | 1.9%     |         |               |
+| runtime.dispose           | subscribed                 | 16000 | 19.4 ms  | 19.2 ms  | 0.993 | 1.9%     | 1.9%     |         |               |
+| runtime.state.set         | property-subscribed        | 0     | 900.3 ns | 901.0 ns | 1.001 | 0.3%     | 0.4%     |         |               |
+| runtime.state.set         | property-subscribed        | 10    | 21.9 us  | 22.0 us  | 1.005 | 0.4%     | 0.6%     |         |               |
+| runtime.state.set         | property-subscribed        | 100   | 211.7 us | 210.7 us | 0.995 | 0.9%     | 0.9%     |         |               |
+| runtime.state.set         | property-subscribed        | 1000  | 2.35 ms  | 2.36 ms  | 1.004 | 1.2%     | 1.0%     |         |               |
+| runtime.state.set         | property-subscribed        | 10000 | 23.4 ms  | 23.0 ms  | 0.984 | 0.8%     | 0.6%     |         |               |
+| runtime.state.set         | nobody-subscribed          | 0     | 899.0 ns | 900.0 ns | 1.001 | 0.5%     | 0.5%     |         |               |
+| runtime.state.set         | nobody-subscribed          | 10    | 901.7 ns | 900.1 ns | 0.998 | 0.7%     | 0.7%     |         |               |
+| runtime.state.set         | nobody-subscribed          | 100   | 899.0 ns | 896.9 ns | 0.998 | 0.4%     | 0.4%     |         |               |
+| runtime.state.set         | nobody-subscribed          | 1000  | 904.5 ns | 920.6 ns | 1.018 | 0.3%     | 1.1%     |         |               |
+| runtime.state.set         | nobody-subscribed          | 10000 | 949.1 ns | 951.2 ns | 1.002 | 0.7%     | 0.7%     |         |               |
+| runtime.state.set         | write-then-read-all        | 0     | 918.3 ns | 920.9 ns | 1.003 | 0.5%     | 0.8%     |         |               |
+| runtime.state.set         | write-then-read-all        | 10    | 17.2 us  | 17.2 us  | 1.002 | 0.4%     | 0.8%     |         |               |
+| runtime.state.set         | write-then-read-all        | 100   | 162.5 us | 164.0 us | 1.009 | 0.7%     | 0.8%     |         |               |
+| runtime.state.set         | write-then-read-all        | 1000  | 1.70 ms  | 1.68 ms  | 0.989 | 0.8%     | 1.0%     |         |               |
+| runtime.state.set         | write-then-read-all        | 10000 | 17.6 ms  | 17.5 ms  | 0.994 | 0.7%     | 0.6%     |         |               |
+| runtime.state.set         | state-listeners            | 0     | 901.0 ns | 908.0 ns | 1.008 | 0.7%     | 1.2%     |         |               |
+| runtime.state.set         | state-listeners            | 10    | 6.66 us  | 6.72 us  | 1.008 | 0.3%     | 0.8%     |         |               |
+| runtime.state.set         | state-listeners            | 100   | 55.2 us  | 55.2 us  | 1.001 | 0.3%     | 0.4%     |         |               |
+| runtime.state.set         | state-listeners            | 1000  | 544.9 us | 545.2 us | 1.000 | 0.5%     | 0.6%     |         |               |
+| runtime.state.set         | state-listeners            | 10000 | 5.47 ms  | 5.50 ms  | 1.005 | 0.4%     | 0.8%     |         |               |
+| runtime.state.set         | same-value                 | 10    | 759.7 ns | 772.8 ns | 1.017 | 0.6%     | 1.0%     |         |               |
+| runtime.state.set         | same-value                 | 1000  | 765.1 ns | 767.0 ns | 1.003 | 0.4%     | 0.5%     |         |               |
+| runtime.property.get      | cold.all-units-ps0         | 100   | 359.6 us | 353.1 us | 0.982 | 2.1%     | 2.1%     |         |               |
+| runtime.property.get      | cold.all-units-ps0         | 1000  | 3.95 ms  | 3.97 ms  | 1.006 | 2.5%     | 2.3%     |         |               |
+| runtime.property.get      | cold.all-units-ps0         | 4000  | 19.9 ms  | 19.7 ms  | 0.993 | 2.0%     | 2.0%     |         |               |
+| runtime.property.get      | cold.all-units-ps0         | 16000 | 83.2 ms  | 83.9 ms  | 1.007 | 1.0%     | 0.9%     |         |               |
+| runtime.property.get      | warm.all-units-ps0         | 100   | 23.1 us  | 23.2 us  | 1.009 | 0.3%     | 0.5%     |         |               |
+| runtime.property.get      | warm.all-units-ps0         | 1000  | 251.6 us | 254.8 us | 1.012 | 0.4%     | 0.6%     |         |               |
+| runtime.property.get      | warm.all-units-ps0         | 4000  | 2.25 ms  | 2.27 ms  | 1.009 | 1.5%     | 1.8%     |         |               |
+| runtime.property.get      | warm.all-units-ps0         | 16000 | 13.6 ms  | 14.0 ms  | 1.026 | 0.6%     | 0.7%     |         |               |
+| runtime.property.get      | invalidated.one            | 100   | 3.24 us  | 3.23 us  | 0.999 | 0.7%     | 0.8%     |         |               |
+| runtime.property.get      | invalidated.one            | 1000  | 3.34 us  | 3.33 us  | 0.997 | 0.5%     | 0.5%     |         |               |
+| runtime.property.get      | invalidated.one            | 4000  | 3.37 us  | 3.38 us  | 1.003 | 0.6%     | 0.5%     |         |               |
+| runtime.property.get      | invalidated.one            | 16000 | 3.40 us  | 3.38 us  | 0.993 | 0.5%     | 0.3%     |         |               |
+| runtime.property.get      | chain.recompute            | 10    | 16.6 us  | 16.7 us  | 1.002 | 0.8%     | 1.1%     |         |               |
+| runtime.property.get      | chain.recompute            | 100   | 156.3 us | 157.0 us | 1.004 | 1.2%     | 1.0%     |         |               |
+| runtime.property.get      | chain.recompute            | 500   | 808.5 us | 798.6 us | 0.988 | 0.8%     | 0.6%     |         |               |
+| runtime.property.get      | chain.recompute            | 1000  | 1.60 ms  | 1.63 ms  | 1.017 | 1.1%     | 0.9%     |         |               |
+| runtime.property.get      | chain.warm                 | 10    | 264.5 ns | 264.4 ns | 1.000 | 0.2%     | 0.2%     |         |               |
+| runtime.property.get      | chain.warm                 | 100   | 267.7 ns | 265.9 ns | 0.993 | 0.6%     | 0.6%     |         |               |
+| runtime.property.get      | chain.warm                 | 500   | 264.8 ns | 264.3 ns | 0.998 | 0.2%     | 0.4%     |         |               |
+| runtime.property.get      | chain.warm                 | 1000  | 265.2 ns | 266.0 ns | 1.003 | 0.2%     | 0.2%     |         |               |
+| runtime.property.get      | chain.cold                 | 10    | 21.6 us  | 23.8 us  | 1.101 | 2.8%     | 4.8%     |         | slower +10.1% |
+| runtime.property.get      | chain.cold                 | 100   | 169.0 us | 174.1 us | 1.030 | 1.3%     | 1.2%     |         |               |
+| runtime.property.get      | chain.cold                 | 500   | 822.6 us | 824.1 us | 1.002 | 0.9%     | 1.0%     |         |               |
+| runtime.property.get      | chain.cold                 | 1000  | 1.65 ms  | 1.64 ms  | 0.992 | 1.2%     | 1.2%     |         |               |
+| runtime.method.invoke     | noop                       | 100   | 1.46 us  | 1.47 us  | 1.009 | 0.7%     | 0.6%     |         |               |
+| runtime.method.invoke     | noop                       | 1000  | 1.49 us  | 1.50 us  | 1.009 | 0.4%     | 0.5%     |         |               |
+| runtime.method.invoke     | noop                       | 4000  | 1.52 us  | 1.51 us  | 0.996 | 0.4%     | 0.6%     |         |               |
+| runtime.method.invoke     | rw                         | 100   | 3.07 us  | 3.07 us  | 0.998 | 0.6%     | 0.6%     |         |               |
+| runtime.method.invoke     | rw                         | 1000  | 3.18 us  | 3.19 us  | 1.002 | 0.7%     | 0.5%     |         |               |
+| runtime.method.invoke     | rw                         | 4000  | 3.23 us  | 3.22 us  | 0.996 | 0.5%     | 0.5%     |         |               |
+| runtime.method.invoke     | invokeSelf                 | 100   | 3.64 us  | 3.67 us  | 1.006 | 0.6%     | 0.6%     |         |               |
+| runtime.method.invoke     | invokeSelf                 | 1000  | 3.77 us  | 3.79 us  | 1.005 | 0.4%     | 0.4%     |         |               |
+| runtime.method.invoke     | invokeSelf                 | 4000  | 3.84 us  | 3.84 us  | 0.999 | 0.4%     | 0.5%     |         |               |
+| runtime.method.invoke     | emit.0-listeners           | 100   | 2.93 us  | 2.93 us  | 0.998 | 0.7%     | 0.6%     |         |               |
+| runtime.method.invoke     | emit.0-listeners           | 1000  | 3.05 us  | 3.04 us  | 0.996 | 0.7%     | 0.5%     |         |               |
+| runtime.method.invoke     | emit.0-listeners           | 4000  | 3.08 us  | 3.06 us  | 0.994 | 0.7%     | 0.6%     |         |               |
+| runtime.method.invoke     | emit.1-listener            | 100   | 3.08 us  | 3.10 us  | 1.009 | 0.5%     | 1.0%     |         |               |
+| runtime.method.invoke     | emit.1-listener            | 1000  | 3.19 us  | 3.21 us  | 1.005 | 0.5%     | 0.7%     |         |               |
+| runtime.method.invoke     | emit.1-listener            | 4000  | 3.23 us  | 3.28 us  | 1.012 | 0.7%     | 0.7%     |         |               |
+| runtime.method.invoke     | emit.10-listeners          | 100   | 4.46 us  | 4.36 us  | 0.977 | 1.0%     | 0.5%     |         |               |
+| runtime.method.invoke     | emit.10-listeners          | 1000  | 4.54 us  | 4.53 us  | 0.997 | 0.7%     | 0.4%     |         |               |
+| runtime.method.invoke     | emit.10-listeners          | 4000  | 4.59 us  | 4.59 us  | 1.001 | 0.6%     | 0.6%     |         |               |
+| runtime.method.invoke     | emit.dependents-subscribed | 100   | 8.32 us  | 8.35 us  | 1.004 | 0.6%     | 0.7%     |         |               |
+| runtime.method.invoke     | emit.dependents-subscribed | 1000  | 8.62 us  | 8.62 us  | 0.999 | 0.7%     | 0.7%     |         |               |
+| runtime.method.invoke     | emit.dependents-subscribed | 4000  | 8.76 us  | 8.79 us  | 1.004 | 0.5%     | 0.7%     |         |               |
+| runtime.method.invoke     | invalid-args               | 100   | 1.77 us  | 1.71 us  | 0.965 | 0.8%     | 0.7%     |         |               |
+| runtime.method.invoke     | invalid-args               | 1000  | 1.76 us  | 1.74 us  | 0.992 | 0.5%     | 0.4%     |         |               |
+| runtime.method.invoke     | invalid-args               | 4000  | 1.77 us  | 1.77 us  | 1.001 | 0.7%     | 0.5%     |         |               |
+| runtime.subscribe.churn   | state                      | 100   | 798.0 ns | 792.4 ns | 0.993 | 1.0%     | 1.1%     |         |               |
+| runtime.subscribe.churn   | state                      | 1000  | 831.3 ns | 838.5 ns | 1.009 | 0.4%     | 0.9%     |         |               |
+| runtime.subscribe.churn   | state                      | 4000  | 840.9 ns | 851.1 ns | 1.012 | 0.7%     | 0.9%     |         |               |
+| runtime.subscribe.churn   | property                   | 100   | 3.28 us  | 3.41 us  | 1.038 | 0.3%     | 1.2%     |         |               |
+| runtime.subscribe.churn   | property                   | 1000  | 3.42 us  | 3.49 us  | 1.022 | 0.6%     | 0.6%     |         |               |
+| runtime.subscribe.churn   | property                   | 4000  | 3.48 us  | 3.50 us  | 1.005 | 0.5%     | 0.6%     |         |               |
+| runtime.subscribe.churn   | property.watched           | 100   | 941.4 ns | 949.2 ns | 1.008 | 0.6%     | 0.6%     |         |               |
+| runtime.subscribe.churn   | property.watched           | 1000  | 966.8 ns | 968.4 ns | 1.002 | 0.4%     | 0.5%     |         |               |
+| runtime.subscribe.churn   | property.watched           | 4000  | 976.9 ns | 982.3 ns | 1.006 | 0.4%     | 0.5%     |         |               |
+| runtime.subscribe.churn   | event                      | 100   | 394.4 ns | 343.6 ns | 0.871 | 1.9%     | 1.2%     |         | faster -12.9% |
+| runtime.subscribe.churn   | event                      | 1000  | 319.1 ns | 319.4 ns | 1.001 | 0.4%     | 0.6%     |         |               |
+| runtime.subscribe.churn   | event                      | 4000  | 324.0 ns | 326.2 ns | 1.007 | 0.3%     | 0.5%     |         |               |
+| runtime.subscribe.churn   | state.diagnostics          | 100   | 852.4 ns | 898.1 ns | 1.054 | 0.5%     | 1.1%     |         | slower +5.4%  |
+| runtime.subscribe.churn   | state.diagnostics          | 1000  | 860.0 ns | 839.8 ns | 0.976 | 0.4%     | 0.5%     |         |               |
+| runtime.subscribe.churn   | state.diagnostics          | 4000  | 882.5 ns | 878.9 ns | 0.996 | 0.4%     | 0.5%     |         |               |
+| runtime.subscribe.churn   | widget.diagnostics         | 100   | 6.24 us  | 6.06 us  | 0.971 | 0.6%     | 0.3%     |         |               |
+| runtime.subscribe.churn   | widget.diagnostics         | 1000  | 6.28 us  | 6.26 us  | 0.998 | 0.3%     | 0.5%     |         |               |
+| runtime.subscribe.churn   | widget.diagnostics         | 4000  | 6.40 us  | 6.36 us  | 0.994 | 0.4%     | 0.3%     |         |               |
+| runtime.subscribe.churn   | runtime.diagnostics        | 100   | 1.04 us  | 1.02 us  | 0.980 | 0.9%     | 0.8%     |         |               |
+| runtime.subscribe.churn   | runtime.diagnostics        | 1000  | 1.09 us  | 1.13 us  | 1.028 | 0.7%     | 1.5%     |         |               |
+| runtime.subscribe.churn   | runtime.diagnostics        | 4000  | 1.17 us  | 1.13 us  | 0.970 | 1.4%     | 1.0%     |         |               |
+| runtime.subscribe.churn   | disposal                   | 100   | 332.3 ns | 214.4 ns | 0.645 | 1.9%     | 0.6%     |         | faster -35.5% |
+| runtime.subscribe.churn   | disposal                   | 1000  | 218.9 ns | 218.8 ns | 1.000 | 0.4%     | 0.4%     |         |               |
+| runtime.subscribe.churn   | disposal                   | 4000  | 220.1 ns | 220.7 ns | 1.003 | 0.6%     | 0.5%     |         |               |
+| runtime.diagnostics       | get.unchanged              | 100   | 128.6 ns | 128.5 ns | 0.999 | 0.3%     | 0.2%     |         |               |
+| runtime.diagnostics       | get.unchanged              | 1000  | 130.6 ns | 130.5 ns | 0.999 | 0.6%     | 0.4%     |         |               |
+| runtime.diagnostics       | get.unchanged              | 4000  | 131.7 ns | 131.9 ns | 1.001 | 0.2%     | 0.4%     |         |               |
+| runtime.diagnostics       | get.unchanged              | 16000 | 134.5 ns | 134.4 ns | 1.000 | 0.2%     | 0.3%     |         |               |
+| runtime.diagnostics       | write-then-get             | 100   | 3.50 us  | 3.48 us  | 0.994 | 1.0%     | 1.5%     |         |               |
+| runtime.diagnostics       | write-then-get             | 1000  | 3.85 us  | 3.73 us  | 0.967 | 3.4%     | 1.0%     |         |               |
+| runtime.diagnostics       | write-then-get             | 4000  | 4.44 us  | 4.47 us  | 1.006 | 1.8%     | 2.4%     |         |               |
+| runtime.diagnostics       | write-then-get             | 16000 | 5.58 us  | 5.64 us  | 1.012 | 2.9%     | 3.5%     |         |               |
+| runtime.diagnostics       | subscribed.fail-recover    | 100   | 8.44 us  | 8.36 us  | 0.990 | 0.9%     | 1.4%     |         |               |
+| runtime.diagnostics       | subscribed.fail-recover    | 1000  | 8.28 us  | 8.20 us  | 0.990 | 0.8%     | 0.8%     |         |               |
+| runtime.diagnostics       | subscribed.fail-recover    | 4000  | 8.64 us  | 8.47 us  | 0.981 | 0.8%     | 0.8%     |         |               |
+| runtime.diagnostics       | subscribed.fail-recover    | 16000 | 8.87 us  | 8.81 us  | 0.994 | 0.8%     | 1.2%     |         |               |
+| runtime.diagnostics       | subscribed.10pct-failing   | 100   | 11.1 us  | 11.0 us  | 0.990 | 0.7%     | 1.0%     |         |               |
+| runtime.diagnostics       | subscribed.10pct-failing   | 1000  | 33.9 us  | 34.0 us  | 1.002 | 0.7%     | 1.0%     |         |               |
+| runtime.diagnostics       | subscribed.10pct-failing   | 4000  | 111.2 us | 111.8 us | 1.005 | 0.5%     | 0.8%     |         |               |
+| runtime.diagnostics       | subscribed.10pct-failing   | 16000 | 438.1 us | 447.3 us | 1.021 | 0.9%     | 1.1%     |         |               |
+| runtime.diagnostics       | widget.getDiagnostics      | 100   | 860.9 ns | 843.9 ns | 0.980 | 0.5%     | 0.4%     |         |               |
+| runtime.diagnostics       | widget.getDiagnostics      | 1000  | 856.7 ns | 846.5 ns | 0.988 | 0.4%     | 0.6%     |         |               |
+| runtime.diagnostics       | widget.getDiagnostics      | 4000  | 867.9 ns | 856.4 ns | 0.987 | 0.4%     | 0.3%     |         |               |
+| runtime.reset             | dirty                      | 100   | 83.4 us  | 85.4 us  | 1.024 | 1.4%     | 3.0%     |         |               |
+| runtime.reset             | dirty                      | 1000  | 881.0 us | 869.3 us | 0.987 | 1.3%     | 1.9%     |         |               |
+| runtime.reset             | dirty                      | 4000  | 3.76 ms  | 3.83 ms  | 1.020 | 1.1%     | 1.4%     |         |               |
+| runtime.reset             | dirty                      | 16000 | 16.6 ms  | 16.8 ms  | 1.008 | 0.9%     | 0.7%     |         |               |
+| runtime.reset             | dirty.subscribed           | 100   | 454.8 us | 447.1 us | 0.983 | 1.9%     | 1.8%     |         |               |
+| runtime.reset             | dirty.subscribed           | 1000  | 4.66 ms  | 4.90 ms  | 1.052 | 0.8%     | 2.2%     |         | slower +5.2%  |
+| runtime.reset             | dirty.subscribed           | 4000  | 22.2 ms  | 22.9 ms  | 1.029 | 0.6%     | 1.8%     |         |               |
+| runtime.reset             | dirty.subscribed           | 16000 | 94.2 ms  | 94.4 ms  | 1.001 | 0.4%     | 0.3%     |         |               |
+| runtime.reset             | clean                      | 100   | 59.2 us  | 58.6 us  | 0.990 | 0.7%     | 0.9%     |         |               |
+| runtime.reset             | clean                      | 1000  | 691.2 us | 692.5 us | 1.002 | 0.7%     | 1.1%     |         |               |
+| runtime.reset             | clean                      | 4000  | 3.57 ms  | 3.62 ms  | 1.014 | 0.7%     | 0.7%     |         |               |
+| runtime.reset             | clean                      | 16000 | 14.7 ms  | 14.7 ms  | 1.002 | 1.1%     | 0.8%     |         |               |
+| runtime.snapshot          | default                    | 100   | 135.6 us | 136.7 us | 1.008 | 0.5%     | 0.5%     |         |               |
+| runtime.snapshot          | default                    | 1000  | 1.65 ms  | 1.65 ms  | 0.995 | 1.2%     | 1.3%     |         |               |
+| runtime.snapshot          | default                    | 4000  | 7.21 ms  | 7.02 ms  | 0.974 | 6.5%     | 4.9%     | A:drift |               |
+| runtime.snapshot          | default                    | 16000 | 28.1 ms  | 28.4 ms  | 1.010 | 0.7%     | 0.7%     |         |               |
+| embedded.loop             | create-per-input.overrides | 100   | 20.9 ms  | 20.7 ms  | 0.992 | 0.8%     | 0.7%     |         |               |
+| embedded.loop             | create-per-input.overrides | 1000  | 268.0 ms | 269.8 ms | 1.007 | 0.5%     | 0.2%     |         |               |
+| embedded.loop             | create-per-input.overrides | 4000  | 1.11 s   | 1.12 s   | 1.009 | 0.3%     | 0.1%     |         |               |
+| embedded.loop             | create-per-input.writes    | 100   | 20.7 ms  | 21.0 ms  | 1.016 | 0.7%     | 0.9%     |         |               |
+| embedded.loop             | create-per-input.writes    | 1000  | 268.6 ms | 269.9 ms | 1.005 | 0.2%     | 0.4%     |         |               |
+| embedded.loop             | create-per-input.writes    | 4000  | 1.10 s   | 1.13 s   | 1.020 | 0.1%     | 0.1%     |         |               |
+| embedded.loop             | reuse.resetState           | 100   | 943.2 us | 944.1 us | 1.001 | 0.7%     | 0.5%     |         |               |
+| embedded.loop             | reuse.resetState           | 1000  | 6.48 ms  | 6.48 ms  | 1.000 | 0.8%     | 0.8%     |         |               |
+| embedded.loop             | reuse.resetState           | 4000  | 29.6 ms  | 30.0 ms  | 1.013 | 0.8%     | 1.0%     |         |               |
+| embedded.loop             | compile-per-input          | 100   | 12.4 ms  | 12.7 ms  | 1.022 | 0.6%     | 1.3%     |         |               |
+| embedded.loop             | compile-per-input          | 1000  | 141.9 ms | 142.9 ms | 1.007 | 0.6%     | 0.9%     |         |               |
+| embedded.loop             | compile-per-input          | 4000  | 598.1 ms | 595.9 ms | 0.996 | 0.3%     | 0.6%     |         |               |
+
+geometric mean of B/A over 299 rows: 0.999
+
+## alloc (bytes per run)
+
+| scenario                | variant                    | size  | A         | B         | B/A    | spread A | spread B | flags | > 5%          |
+| ----------------------- | -------------------------- | ----- | --------- | --------- | ------ | -------- | -------- | ----- | ------------- |
+| blueprint.compile.valid | flat.bare                  | 100   | 978.7 KB  | 978.7 KB  | 1.000  | 0.8%     | 0.8%     |       |               |
+| blueprint.compile.valid | flat.bare                  | 1000  | 8.55 MB   | 8.55 MB   | 1.000  | 0.5%     | 0.5%     |       |               |
+| blueprint.compile.valid | flat.bare                  | 4000  | 31.18 MB  | 31.18 MB  | 1.000  | 3.3%     | 3.3%     |       |               |
+| blueprint.compile.valid | flat.bare                  | 16000 | 121.18 MB | 121.18 MB | 1.000  | 0.0%     | 0.0%     |       |               |
+| blueprint.compile.valid | flat.standard              | 100   | 6.03 MB   | 6.03 MB   | 1.000  | 0.5%     | 0.5%     |       |               |
+| blueprint.compile.valid | flat.standard              | 1000  | 57.06 MB  | 57.04 MB  | 1.000  | 0.7%     | 0.7%     |       |               |
+| blueprint.compile.valid | tree.bare                  | 100   | 839.1 KB  | 835.6 KB  | 0.996  | 0.4%     | 0.0%     |       |               |
+| blueprint.compile.valid | tree.bare                  | 1000  | 8.09 MB   | 8.09 MB   | 1.000  | 0.0%     | 0.0%     |       |               |
+| blueprint.compile.valid | tree.bare                  | 4000  | 32.11 MB  | 32.11 MB  | 1.000  | 0.2%     | 0.2%     |       |               |
+| blueprint.compile.valid | tree.bare                  | 16000 | 125.84 MB | 125.83 MB | 1.000  | 0.0%     | 0.0%     |       |               |
+| blueprint.compile.valid | tree.selfDeps              | 100   | 3.21 MB   | 3.20 MB   | 0.996  | 2.6%     | 2.2%     |       |               |
+| blueprint.compile.valid | tree.selfDeps              | 1000  | 31.53 MB  | 30.82 MB  | 0.977  | 2.2%     | 3.0%     |       |               |
+| blueprint.compile.valid | tree.selfDeps              | 4000  | 122.93 MB | 121.48 MB | 0.988  | 0.9%     | 0.5%     |       |               |
+| blueprint.compile.valid | tree.standard              | 100   | 4.92 MB   | 4.94 MB   | 1.004  | 1.7%     | 1.8%     |       |               |
+| blueprint.compile.valid | tree.standard              | 1000  | 49.23 MB  | 48.97 MB  | 0.995  | 0.7%     | 0.6%     |       |               |
+| blueprint.compile.valid | tree.standard              | 4000  | 183.88 MB | 183.85 MB | 1.000  | 0.4%     | 0.4%     |       |               |
+| blueprint.compile.valid | tree.crossDeps             | 100   | 4.99 MB   | 4.99 MB   | 1.000  | 0.6%     | 0.6%     |       |               |
+| blueprint.compile.valid | tree.crossDeps             | 1000  | 50.55 MB  | 50.23 MB  | 0.994  | 1.5%     | 2.2%     |       |               |
+| blueprint.compile.valid | tree.crossDeps             | 4000  | 187.32 MB | 187.32 MB | 1.000  | 1.5%     | 1.5%     |       |               |
+| blueprint.compile.valid | tree.validated             | 100   | 5.07 MB   | 5.08 MB   | 1.001  | 2.3%     | 2.2%     |       |               |
+| blueprint.compile.valid | tree.validated             | 1000  | 50.42 MB  | 50.45 MB  | 1.001  | 0.3%     | 0.6%     |       |               |
+| blueprint.compile.valid | tree.validated             | 4000  | 187.59 MB | 187.60 MB | 1.000  | 1.6%     | 1.7%     |       |               |
+| blueprint.compile.valid | tree.aggregated            | 100   | 5.20 MB   | 5.20 MB   | 1.000  | 1.6%     | 1.6%     |       |               |
+| blueprint.compile.valid | tree.aggregated            | 1000  | 51.59 MB  | 51.60 MB  | 1.000  | 0.3%     | 0.4%     |       |               |
+| blueprint.compile.valid | tree.aggregated            | 4000  | 191.57 MB | 191.65 MB | 1.000  | 1.5%     | 1.6%     |       |               |
+| blueprint.compile.valid | deep.standard              | 100   | 3.03 MB   | 3.03 MB   | 1.000  | 0.6%     | 0.5%     |       |               |
+| blueprint.compile.valid | deep.standard              | 1000  | 55.22 MB  | 55.12 MB  | 0.998  | 0.5%     | 0.3%     |       |               |
+| runtime.create          | bare                       | 100   | 1.22 MB   | 1.22 MB   | 1.000  | 0.3%     | 0.3%     |       |               |
+| runtime.create          | bare                       | 1000  | 11.54 MB  | 11.44 MB  | 0.991  | 0.4%     | 0.9%     |       |               |
+| runtime.create          | bare                       | 4000  | 42.46 MB  | 43.91 MB  | 1.034  | 2.2%     | 1.3%     |       |               |
+| runtime.create          | bare                       | 16000 | 169.55 MB | 172.50 MB | 1.017  | 0.7%     | 1.4%     |       |               |
+| runtime.create          | standard                   | 100   | 3.35 MB   | 3.34 MB   | 0.997  | 1.6%     | 2.8%     |       |               |
+| runtime.create          | standard                   | 1000  | 31.50 MB  | 31.50 MB  | 1.000  | 0.4%     | 0.3%     |       |               |
+| runtime.create          | standard                   | 4000  | 124.44 MB | 124.62 MB | 1.001  | 0.9%     | 0.3%     |       |               |
+| runtime.create          | crossDeps                  | 100   | 3.16 MB   | 3.20 MB   | 1.012  | 2.4%     | 1.2%     |       |               |
+| runtime.create          | crossDeps                  | 1000  | 31.32 MB  | 31.32 MB  | 1.000  | 0.4%     | 0.4%     |       |               |
+| runtime.create          | crossDeps                  | 4000  | 124.76 MB | 124.69 MB | 0.999  | 0.2%     | 0.3%     |       |               |
+| runtime.create          | standard.overrides         | 100   | 3.23 MB   | 3.23 MB   | 1.002  | 3.0%     | 2.8%     |       |               |
+| runtime.create          | standard.overrides         | 1000  | 31.13 MB  | 31.16 MB  | 1.001  | 0.0%     | 1.0%     |       |               |
+| runtime.create          | standard.overrides         | 4000  | 120.94 MB | 121.22 MB | 1.002  | 0.2%     | 0.2%     |       |               |
+| runtime.state.set       | property-subscribed        | 0     | 923 B     | 923 B     | 1.000  | 4.3%     | 4.3%     |       |               |
+| runtime.state.set       | property-subscribed        | 10    | 10.0 KB   | 10.0 KB   | 1.000  | 2.6%     | 2.6%     |       |               |
+| runtime.state.set       | property-subscribed        | 100   | 89.3 KB   | 89.2 KB   | 0.999  | 0.7%     | 1.4%     |       |               |
+| runtime.state.set       | property-subscribed        | 1000  | 886.3 KB  | 886.3 KB  | 1.000  | 0.1%     | 0.1%     |       |               |
+| runtime.state.set       | property-subscribed        | 10000 | 8.35 MB   | 8.17 MB   | 0.978  | 3.3%     | 5.6%     |       |               |
+| runtime.state.set       | nobody-subscribed          | 0     | 834 B     | 834 B     | 1.000  | 0.3%     | 2.0%     |       |               |
+| runtime.state.set       | nobody-subscribed          | 10    | 817 B     | 817 B     | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.state.set       | nobody-subscribed          | 100   | 834 B     | 834 B     | 1.000  | 0.0%     | 0.1%     |       |               |
+| runtime.state.set       | nobody-subscribed          | 1000  | 834 B     | 834 B     | 1.000  | 0.0%     | 1.4%     |       |               |
+| runtime.state.set       | nobody-subscribed          | 10000 | 834 B     | 834 B     | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.state.set       | write-then-read-all        | 0     | 834 B     | 834 B     | 1.000  | 0.0%     | 0.1%     |       |               |
+| runtime.state.set       | write-then-read-all        | 10    | 9.7 KB    | 9.7 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.state.set       | write-then-read-all        | 100   | 89.3 KB   | 89.3 KB   | 1.000  | 0.0%     | 0.1%     |       |               |
+| runtime.state.set       | write-then-read-all        | 1000  | 887.1 KB  | 838.9 KB  | 0.946  | 0.5%     | 0.2%     |       | less -5.4%    |
+| runtime.state.set       | write-then-read-all        | 10000 | 8.17 MB   | 8.17 MB   | 1.000  | 3.5%     | 5.7%     |       |               |
+| runtime.state.set       | state-listeners            | 0     | 834 B     | 834 B     | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.state.set       | state-listeners            | 10    | 817 B     | 826 B     | 1.012  | 2.2%     | 1.0%     |       |               |
+| runtime.state.set       | state-listeners            | 100   | 834 B     | 834 B     | 0.999  | 0.2%     | 0.1%     |       |               |
+| runtime.state.set       | state-listeners            | 1000  | 829 B     | 834 B     | 1.005  | 0.7%     | 1.0%     |       |               |
+| runtime.state.set       | state-listeners            | 10000 | 839 B     | 839 B     | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.state.set       | same-value                 | 10    | 802 B     | 803 B     | 1.001  | 1.3%     | 0.6%     |       |               |
+| runtime.state.set       | same-value                 | 1000  | 802 B     | 802 B     | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | cold.all-units-ps0         | 100   | 132.1 KB  | 130.0 KB  | 0.984  | 1.6%     | 0.0%     |       |               |
+| runtime.property.get    | cold.all-units-ps0         | 1000  | 1.08 MB   | 1.08 MB   | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | cold.all-units-ps0         | 4000  | 4.33 MB   | 4.17 MB   | 0.963  | 1.0%     | 0.1%     |       |               |
+| runtime.property.get    | cold.all-units-ps0         | 16000 | 17.19 MB  | 17.18 MB  | 1.000  | 0.0%     | 1.3%     |       |               |
+| runtime.property.get    | warm.all-units-ps0         | 100   | 0 B       | 0 B       | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | warm.all-units-ps0         | 1000  | 0 B       | 3 B       | 16.771 | 0.0%     | 94.1%    |       | more +1577.1% |
+| runtime.property.get    | warm.all-units-ps0         | 4000  | 1 B       | 1 B       | 0.944  | 0.0%     | 0.0%     |       | less -5.6%    |
+| runtime.property.get    | warm.all-units-ps0         | 16000 | 16 B      | 14 B      | 0.893  | 0.0%     | 0.0%     |       | less -10.7%   |
+| runtime.property.get    | invalidated.one            | 100   | 2.0 KB    | 1.9 KB    | 0.999  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | invalidated.one            | 1000  | 1.8 KB    | 1.8 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | invalidated.one            | 4000  | 1.7 KB    | 1.7 KB    | 1.000  | 0.9%     | 0.0%     |       |               |
+| runtime.property.get    | invalidated.one            | 16000 | 1.7 KB    | 1.7 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.recompute            | 10    | 10.0 KB   | 10.0 KB   | 1.001  | 0.0%     | 0.1%     |       |               |
+| runtime.property.get    | chain.recompute            | 100   | 82.3 KB   | 82.3 KB   | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.recompute            | 500   | 409.7 KB  | 409.7 KB  | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.recompute            | 1000  | 815.6 KB  | 816.5 KB  | 1.001  | 0.0%     | 0.1%     |       |               |
+| runtime.property.get    | chain.warm                 | 10    | 0 B       | 0 B       | 1.000  | 4.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.warm                 | 100   | 0 B       | 0 B       | 1.041  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.warm                 | 500   | 0 B       | 0 B       | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.warm                 | 1000  | 0 B       | 0 B       | 0.960  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.cold                 | 10    | 10.4 KB   | 10.4 KB   | 1.001  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.cold                 | 100   | 104.1 KB  | 104.1 KB  | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.cold                 | 500   | 521.0 KB  | 521.0 KB  | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.property.get    | chain.cold                 | 1000  | 1.02 MB   | 1.02 MB   | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | noop                       | 100   | 1.6 KB    | 1.6 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | noop                       | 1000  | 1.6 KB    | 1.6 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | noop                       | 4000  | 1.6 KB    | 1.6 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | rw                         | 100   | 3.1 KB    | 3.1 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | rw                         | 1000  | 2.9 KB    | 2.9 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | rw                         | 4000  | 2.6 KB    | 2.6 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | invokeSelf                 | 100   | 3.5 KB    | 3.5 KB    | 0.999  | 0.1%     | 0.3%     |       |               |
+| runtime.method.invoke   | invokeSelf                 | 1000  | 3.5 KB    | 3.5 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | invokeSelf                 | 4000  | 3.5 KB    | 3.5 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.0-listeners           | 100   | 3.0 KB    | 3.0 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.0-listeners           | 1000  | 2.9 KB    | 2.9 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.0-listeners           | 4000  | 2.9 KB    | 2.9 KB    | 0.978  | 0.0%     | 0.5%     |       |               |
+| runtime.method.invoke   | emit.1-listener            | 100   | 3.0 KB    | 3.0 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.1-listener            | 1000  | 2.9 KB    | 2.9 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.1-listener            | 4000  | 2.9 KB    | 2.9 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.10-listeners          | 100   | 2.9 KB    | 2.9 KB    | 1.001  | 0.0%     | 0.1%     |       |               |
+| runtime.method.invoke   | emit.10-listeners          | 1000  | 2.9 KB    | 2.9 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.10-listeners          | 4000  | 2.9 KB    | 2.9 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.dependents-subscribed | 100   | 4.6 KB    | 4.6 KB    | 0.997  | 0.1%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.dependents-subscribed | 1000  | 4.5 KB    | 4.5 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | emit.dependents-subscribed | 4000  | 4.5 KB    | 4.3 KB    | 0.960  | 0.0%     | 1.1%     |       |               |
+| runtime.method.invoke   | invalid-args               | 100   | 1.6 KB    | 1.6 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| runtime.method.invoke   | invalid-args               | 1000  | 1.6 KB    | 1.6 KB    | 1.000  | 0.7%     | 0.0%     |       |               |
+| runtime.method.invoke   | invalid-args               | 4000  | 1.4 KB    | 1.4 KB    | 1.000  | 0.0%     | 0.0%     |       |               |
+| embedded.loop           | create-per-input.overrides | 100   | 6.54 MB   | 6.54 MB   | 1.000  | 0.2%     | 0.2%     |       |               |
+| embedded.loop           | create-per-input.overrides | 1000  | 63.57 MB  | 63.55 MB  | 1.000  | 1.3%     | 1.3%     |       |               |
+| embedded.loop           | create-per-input.writes    | 100   | 6.48 MB   | 6.48 MB   | 1.000  | 0.4%     | 0.4%     |       |               |
+| embedded.loop           | create-per-input.writes    | 1000  | 63.15 MB  | 63.11 MB  | 0.999  | 0.8%     | 0.2%     |       |               |
+| embedded.loop           | reuse.resetState           | 100   | 108.5 KB  | 108.5 KB  | 1.000  | 0.3%     | 0.3%     |       |               |
+| embedded.loop           | reuse.resetState           | 1000  | 713.1 KB  | 713.1 KB  | 1.000  | 0.0%     | 0.0%     |       |               |
+| embedded.loop           | reuse.resetState           | 4000  | 2.64 MB   | 2.64 MB   | 1.000  | 0.0%     | 0.0%     |       |               |
+| embedded.loop           | compile-per-input          | 100   | 16.79 MB  | 16.79 MB  | 1.000  | 0.4%     | 0.4%     |       |               |
+| embedded.loop           | compile-per-input          | 1000  | 157.97 MB | 161.53 MB | 1.022  | 1.3%     | 0.6%     |       |               |
+
+geometric mean of B/A over 119 rows: 1.021
+
+Present in both but not comparable (skipped or not measured) (15):
+  [alloc] blueprint.compile.valid / flat.standard / 4000: A -, B -
+  [alloc] blueprint.compile.valid / flat.standard / 16000: A -, B -
+  [alloc] blueprint.compile.valid / tree.selfDeps / 16000: A -, B -
+  [alloc] blueprint.compile.valid / tree.standard / 16000: A -, B -
+  [alloc] blueprint.compile.valid / tree.crossDeps / 16000: A -, B -
+  [alloc] blueprint.compile.valid / tree.validated / 16000: A -, B -
+  [alloc] blueprint.compile.valid / tree.aggregated / 16000: A -, B -
+  [alloc] blueprint.compile.valid / deep.standard / 4000: A -, B -
+  [alloc] blueprint.compile.valid / deep.standard / 16000: A -, B -
+  [alloc] runtime.create / standard / 16000: A -, B -
+  [alloc] runtime.create / crossDeps / 16000: A -, B -
+  [alloc] runtime.create / standard.overrides / 16000: A -, B -
+  [alloc] embedded.loop / create-per-input.overrides / 4000: A -, B -
+  [alloc] embedded.loop / create-per-input.writes / 4000: A -, B -
+  [alloc] embedded.loop / compile-per-input / 4000: A -, B -
+
+Not compared: 3 custom result(s) in A, 3 in B (memory, size and load tables are not row-wise comparable).
+
+## Summary
+
+rows compared: 791; over the 5% threshold: 103; flagged (spread, tail, drift or few) in either file: 106
+
+|                 | A                                                         | B                                                         |
+| --------------- | --------------------------------------------------------- | --------------------------------------------------------- |
+| git             | 6d43783                                                   | 6d43783                                                   |
+| dist            | core:43a418482c47 vue:6e6cb47a01fa inspector:044e22503871 | core:43a418482c47 vue:6e6cb47a01fa inspector:044e22503871 |
+| stale dist      | none                                                      | none                                                      |
+| machine         | Apple M1 Pro, 8 cores, 32 GiB                             | Apple M1 Pro, 8 cores, 32 GiB                             |
+| node / platform | v24.15.0 / darwin arm64                                   | v24.15.0 / darwin arm64                                   |
+| started         | 2026-11-13T07:13:00.357Z                                  | 2026-11-13T08:03:43.913Z                                  |
+| finished        | 2026-11-13T07:57:33.451Z                                  | 2026-11-13T08:47:51.893Z                                  |
+
+A = benchmarks/.results/baseline-1.json
+  options: {"filters":[],"modes":["normal","jitless","alloc"],"quick":false,"sizes":null,"variant":null,"idleCheck":true,"maxBusyCores":2.5}
+B = benchmarks/.results/baseline-2.json
+  options: {"filters":[],"modes":["normal","jitless","alloc"],"quick":false,"sizes":null,"variant":null,"idleCheck":true,"maxBusyCores":2.5}

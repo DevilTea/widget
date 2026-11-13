@@ -1,0 +1,68 @@
+#### runtime.dispose / subscribed @ 4000 [normal] (median 1267.0 us per run, spread 5.1%)
+
+75480 samples, 23187 ms profiled. Timed-run share 2.2%; dropped from the percentages below: un-timed set-up/clean-up 74.7%, garbage collector 21.6% (not attributable to a function), idle 0.0%, other 1.5%. Percentages are of the timed-run share.
+
+Garbage collector: 5015.9 ms, 85.4% of the 5873 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 51.6 | 53.1 | effectScopeOper | node_modules/alien-signals/esm/index.mjs:348 |  |
+| 23.1 | 78.7 | handle | packages/core/dist/event-D8XvgH0Q.mjs:85 | src: packages/core/src/runtime/context.ts:136 |
+| 4.3 | 4.3 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 3.1 | 55.7 | effectOper | node_modules/alien-signals/esm/index.mjs:342 |  |
+| 2.8 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 2.7 | 84.2 | dispose | packages/core/dist/index.mjs:2740 | src: packages/core/src/runtime/context.ts:160, packages/core/src/runtime/index.ts:287 |
+| 2.6 | 81.4 | dispose | packages/core/dist/event-D8XvgH0Q.mjs:104 | src: packages/core/src/runtime/context.ts:160, packages/core/src/runtime/index.ts:287 |
+| 2.5 | 2.5 | materializeDependencyTree | packages/core/dist/index.mjs:2007 | src: packages/core/src/runtime/deps.ts:366 |
+| 0.9 | 1.3 | disposeAllDepsInReverse | node_modules/alien-signals/esm/index.mjs:356 |  |
+| 0.8 | 0.8 | link | node_modules/alien-signals/esm/system.mjs:18 |  |
+| 0.5 | 0.8 | unlink | node_modules/alien-signals/esm/system.mjs:60 |  |
+| 0.4 | 0.4 | createStatePrimitive | packages/core/dist/index.mjs:2402 | src: packages/core/src/runtime/state.ts:98 |
+| 0.4 | 0.4 | updateSignal | node_modules/alien-signals/esm/index.mjs:208 |  |
+| 0.4 | 0.4 | assertActive | packages/core/dist/event-D8XvgH0Q.mjs:73 | src: packages/core/src/runtime/context.ts:124 |
+| 0.4 | 0.4 | (anonymous) | packages/core/dist/index.mjs:1602 |  |
+| 0.4 | 0.6 | unwatched | node_modules/alien-signals/esm/index.mjs:39 |  |
+| 0.4 | 0.4 | createPropertyPrimitive | packages/core/dist/index.mjs:2215 | src: packages/core/src/runtime/property.ts:102 |
+| 0.3 | 0.3 | createOperationCollector | packages/core/dist/index.mjs:2016 | src: packages/core/src/runtime/collector.ts:68 |
+| 0.3 | 0.3 | evaluate | packages/core/dist/index.mjs:2238 | src: packages/core/src/runtime/property.ts:142 |
+| 0.3 | 0.3 | (anonymous) | packages/core/dist/index.mjs:1603 |  |
+| 0.2 | 0.2 | buildConfigFragmentFor | packages/core/dist/index.mjs:2576 | src: packages/core/src/runtime/index.ts:59 |
+| 0.2 | 0.2 | attemptSetWithinOperation | packages/core/dist/index.mjs:2432 | src: packages/core/src/runtime/state.ts:147 |
+| 0.2 | 0.2 | get | packages/core/dist/index.mjs:2483 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 0.2 | 0.2 | now (builtin) |  |  |
+| 0.2 | 0.2 | close | packages/core/dist/index.mjs:2052 | src: packages/core/src/blueprint/diagnostics.ts:42, packages/core/src/runtime/collector.ts:113 |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 2.7 | 84.2 | dispose | packages/core/dist/index.mjs:2740 | src: packages/core/src/runtime/context.ts:160, packages/core/src/runtime/index.ts:287 |
+| 2.6 | 81.4 | dispose | packages/core/dist/event-D8XvgH0Q.mjs:104 | src: packages/core/src/runtime/context.ts:160, packages/core/src/runtime/index.ts:287 |
+| 23.1 | 78.7 | handle | packages/core/dist/event-D8XvgH0Q.mjs:85 | src: packages/core/src/runtime/context.ts:136 |
+| 3.1 | 55.7 | effectOper | node_modules/alien-signals/esm/index.mjs:342 |  |
+| 51.6 | 53.1 | effectScopeOper | node_modules/alien-signals/esm/index.mjs:348 |  |
+| 4.3 | 4.3 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 2.5 | 2.5 | materializeDependencyTree | packages/core/dist/index.mjs:2007 | src: packages/core/src/runtime/deps.ts:366 |
+| 0.9 | 1.3 | disposeAllDepsInReverse | node_modules/alien-signals/esm/index.mjs:356 |  |
+| 0.8 | 0.8 | link | node_modules/alien-signals/esm/system.mjs:18 |  |
+| 0.5 | 0.8 | unlink | node_modules/alien-signals/esm/system.mjs:60 |  |
+| 0.4 | 0.6 | unwatched | node_modules/alien-signals/esm/index.mjs:39 |  |
+| 0.4 | 0.4 | createStatePrimitive | packages/core/dist/index.mjs:2402 | src: packages/core/src/runtime/state.ts:98 |
+| 0.4 | 0.4 | updateSignal | node_modules/alien-signals/esm/index.mjs:208 |  |
+| 0.4 | 0.4 | assertActive | packages/core/dist/event-D8XvgH0Q.mjs:73 | src: packages/core/src/runtime/context.ts:124 |
+| 0.4 | 0.4 | (anonymous) | packages/core/dist/index.mjs:1602 |  |
+| 0.4 | 0.4 | createPropertyPrimitive | packages/core/dist/index.mjs:2215 | src: packages/core/src/runtime/property.ts:102 |
+| 0.1 | 0.4 | now (builtin) | node:internal/perf/performance:137 |  |
+| 0.3 | 0.3 | createOperationCollector | packages/core/dist/index.mjs:2016 | src: packages/core/src/runtime/collector.ts:68 |
+| 0.3 | 0.3 | evaluate | packages/core/dist/index.mjs:2238 | src: packages/core/src/runtime/property.ts:142 |
+| 0.3 | 0.3 | (anonymous) | packages/core/dist/index.mjs:1603 |  |
+| 0.2 | 0.2 | buildConfigFragmentFor | packages/core/dist/index.mjs:2576 | src: packages/core/src/runtime/index.ts:59 |
+| 0.2 | 0.2 | attemptSetWithinOperation | packages/core/dist/index.mjs:2432 | src: packages/core/src/runtime/state.ts:147 |
+| 0.2 | 0.2 | get | packages/core/dist/index.mjs:2483 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 0.2 | 0.2 | now (builtin) |  |  |
+| 0.2 | 0.2 | close | packages/core/dist/index.mjs:2052 | src: packages/core/src/blueprint/diagnostics.ts:42, packages/core/src/runtime/collector.ts:113 |
+
+profile: benchmarks/.results/profiles-raw/runtime.dispose.subscribed.4000.normal.cpuprofile
+

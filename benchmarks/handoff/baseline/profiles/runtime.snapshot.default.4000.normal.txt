@@ -1,0 +1,31 @@
+#### runtime.snapshot / default @ 4000 [normal] (median 3106.8 us per run, spread 1.6%)
+
+6457 samples, 1976 ms profiled. Timed-run share 97.9%; dropped from the percentages below: un-timed set-up/clean-up 0.0%, garbage collector 1.5% (not attributable to a function), idle 0.0%, other 0.5%. Percentages are of the timed-run share.
+
+Garbage collector: 30.4 ms, 1.5% of the 1976 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 82.4 | 82.4 | defineOwnValue | packages/core/dist/index.mjs:2563 | src: packages/core/src/runtime/index.ts:38 |
+| 10.8 | 94.5 | snapshotState | packages/core/dist/index.mjs:2713 | src: packages/core/src/runtime/index.ts:252 |
+| 4.8 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 1.9 | 1.9 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 0.0 | 1.2 | get | packages/core/dist/index.mjs:2483 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 0.0 | 0.0 | (anonymous) (builtin) | node:internal/validators:537 |  |
+| 0.0 | 0.0 | now (builtin) |  |  |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 10.8 | 94.5 | snapshotState | packages/core/dist/index.mjs:2713 | src: packages/core/src/runtime/index.ts:252 |
+| 82.4 | 82.4 | defineOwnValue | packages/core/dist/index.mjs:2563 | src: packages/core/src/runtime/index.ts:38 |
+| 1.9 | 1.9 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 0.0 | 1.2 | get | packages/core/dist/index.mjs:2483 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 0.0 | 0.0 | (anonymous) (builtin) | node:internal/validators:537 |  |
+| 0.0 | 0.0 | now (builtin) |  |  |
+
+profile: benchmarks/.results/profiles-raw/runtime.snapshot.default.4000.normal.cpuprofile
+

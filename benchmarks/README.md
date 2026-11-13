@@ -40,6 +40,8 @@ A child that fails (a thrown guard, a crash, an out-of-memory kill, no result li
 failure is recorded in the results, printed as `FAILED [mode] id: reason`, the next scenario runs, and the runner
 lists every failure at the end and exits with code 1. `compare.mjs` lists such runs separately and skips them.
 
+Result files are machine-specific. By convention they go to `benchmarks/.results/`, which git ignores.
+
 ### `--json`
 
 The file holds `{ info, args, results }`, and is rewritten after every scenario, so an interrupted run keeps what it
@@ -119,6 +121,9 @@ the same time as on a new one, so reusing a source or a Blueprint does not measu
     degrading heap, background load, a cache that fills);
   * `few`: fewer samples than the sampler wanted (the time or the one-minute limit ran out first).
   A row with any flag is a weaker result than its median suggests; `--json` keeps the raw samples for a closer look.
+  The converse does not hold: in `normal` mode the results of sub-microsecond operations can vary from one process to
+  the next by more than the flags inside one run can show (the JIT settles in a different state per process, and more
+  samples in one process do not help). Confirm such a result across several runs with `compare.mjs`.
 * Rows marked `CACHE HIT` measure the warm path on purpose (they exist to show it is cheap).
 * After each scenario the runner prints a warning when other processes used more than 1.5 cores while it ran.
   Numbers from such a run are suspect. Before each child starts the runner waits (up to 2 minutes) until the
@@ -166,6 +171,9 @@ milliseconds and as a share of the kept samples; forced collections are off in p
 collection work the measured code's own garbage triggers, and the spread of a profiled run is higher than in a normal run.
 `dist` frames are mapped to `src` of the **same package** **by function name only**: up to 8 candidates are listed when a name
 is not unique (with a count of the rest), a name with no match says so, and anonymous functions keep their dist location.
+When a scenario's `fresh()` is expensive, V8 can inline the wrapper that marks set-up, and the set-up samples are then
+counted as timed; the timing numbers, which come from the clock, are not affected. Read the summary of such a scenario
+with that in mind, or filter the raw profile by call stack.
 Inclusive times come from sampled stacks, and V8 may inline a callee into its caller, so a wrapper's inclusive time can come out
 lower than that of the function it calls.
 

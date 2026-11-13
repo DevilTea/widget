@@ -1,0 +1,68 @@
+#### vue.unmount / standard @ 1000 [normal] (median 2698.1 us per run, spread 3.5%)
+
+68663 samples, 21160 ms profiled. Timed-run share 12.2%; dropped from the percentages below: un-timed set-up/clean-up 60.2%, garbage collector 26.3% (not attributable to a function), idle 0.0%, other 1.3%. Percentages are of the timed-run share.
+
+Garbage collector: 5566.9 ms, 66.1% of the 8419 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 19.4 | 40.5 | stop | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:129 |  |
+| 8.7 | 8.7 | removeSub | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:423 |  |
+| 7.1 | 7.9 | (anonymous) | node_modules/happy-dom/lib/nodes/text/Text.js:97 |  |
+| 5.1 | 5.2 | effectScopeOper | node_modules/alien-signals/esm/index.mjs:348 |  |
+| 4.6 | 16.5 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:757 |  |
+| 4.4 | 10.1 | handle | packages/core/dist/event-D8XvgH0Q.mjs:85 | src: packages/core/src/runtime/context.ts:136 |
+| 4.1 | 4.1 | createLazyKeyedSurface | packages/vue/dist/index.mjs:231 | src: packages/vue/src/bridge.ts:29 |
+| 3.5 | 3.7 | flushPostFlushCbs | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:227 |  |
+| 3.2 | 9.4 | createWidgetSystemRuntime | packages/core/dist/index.mjs:2571 | src: packages/core/src/runtime/index.ts:42 |
+| 2.9 | 62.1 | unmount | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:5209 |  |
+| 2.1 | 12.2 | (anonymous) | packages/vue/dist/index.mjs:348 |  |
+| 1.9 | 62.1 | unmountComponent | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:5332 |  |
+| 1.9 | 1.9 | get localName | node_modules/happy-dom/lib/nodes/element/Element.js:277 |  |
+| 1.8 | 1.9 | materializeDependencyTree | packages/core/dist/index.mjs:2007 | src: packages/core/src/runtime/deps.ts:366 |
+| 1.7 | 1.7 | buildRuntimeWidget | packages/core/dist/index.mjs:2528 | src: packages/core/src/runtime/widget.ts:31 |
+| 1.6 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 1.5 | 1.6 | enqueueReaction | node_modules/happy-dom/lib/custom-element/CustomElementReactionStack.js:27 |  |
+| 1.3 | 4.7 | (anonymous) | node_modules/happy-dom/lib/nodes/html-element/HTMLElement.js:829 |  |
+| 1.3 | 1.4 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 0.9 | 1.0 | createReactiveObject | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:1331 |  |
+| 0.9 | 1.3 | Node | node_modules/happy-dom/lib/nodes/node/Node.js:34 |  |
+| 0.9 | 3.4 | (anonymous) | node_modules/happy-dom/lib/nodes/element/Element.js:1224 |  |
+| 0.8 | 0.8 | createStatePrimitive | packages/core/dist/index.mjs:2402 | src: packages/core/src/runtime/state.ts:98 |
+| 0.7 | 1.7 | evaluate | packages/core/dist/index.mjs:2238 | src: packages/core/src/runtime/property.ts:142 |
+| 0.6 | 5.8 | effectOper | node_modules/alien-signals/esm/index.mjs:342 |  |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 0.1 | 85.4 | render | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:5368 |  |
+| 0.1 | 66.1 | unmount | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:3328 |  |
+| 2.9 | 62.1 | unmount | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:5209 |  |
+| 1.9 | 62.1 | unmountComponent | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:5332 |  |
+| 0.2 | 45.8 | unmountChildren | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:5351 |  |
+| 19.4 | 40.5 | stop | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:129 |  |
+| 0.1 | 19.5 | setupRenderEffect | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4704 |  |
+| 0.3 | 19.5 | patch | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4128 |  |
+| 0.0 | 19.5 | app.mount | node_modules/@vue/runtime-dom/dist/runtime-dom.cjs.prod.js:1787 |  |
+| 0.2 | 19.5 | componentUpdateFn | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4705 |  |
+| 0.0 | 19.5 | mount | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:3305 |  |
+| 0.0 | 19.4 | processComponent | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4632 |  |
+| 0.0 | 19.4 | mountComponent | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4658 |  |
+| 0.1 | 19.4 | run | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:246 |  |
+| 0.0 | 19.4 | processElement | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4279 |  |
+| 0.1 | 19.4 | mountElement | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4318 |  |
+| 0.2 | 18.7 | mountChildren | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4401 |  |
+| 0.0 | 18.7 | processFragment | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4566 |  |
+| 4.6 | 16.5 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:757 |  |
+| 0.0 | 16.1 | remove | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:5293 |  |
+| 0.1 | 15.9 | removeChild | node_modules/happy-dom/lib/nodes/node/Node.js:322 |  |
+| 0.2 | 15.9 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:441 |  |
+| 0.1 | 15.6 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:815 |  |
+| 0.0 | 12.8 | performRemove | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:5305 |  |
+| 0.0 | 12.6 | remove | node_modules/@vue/runtime-dom/dist/runtime-dom.cjs.prod.js:32 |  |
+
+profile: benchmarks/.results/profiles-raw/vue.unmount.standard.1000.normal.cpuprofile
+

@@ -1,0 +1,68 @@
+#### embedded.loop / create-per-input.overrides @ 1000 [normal] (median 107659.4 us per run, spread 8.8%)
+
+14143 samples, 4461 ms profiled. Timed-run share 66.7%; dropped from the percentages below: un-timed set-up/clean-up 0.0%, garbage collector 31.3% (not attributable to a function), idle 0.0%, other 2.0%. Percentages are of the timed-run share.
+
+Garbage collector: 1398.2 ms, 31.3% of the 4461 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 30.3 | 95.3 | createWidgetSystemRuntime | packages/core/dist/index.mjs:2571 | src: packages/core/src/runtime/index.ts:42 |
+| 19.6 | 20.5 | materializeDependencyTree | packages/core/dist/index.mjs:2007 | src: packages/core/src/runtime/deps.ts:366 |
+| 18.8 | 18.8 | buildRuntimeWidget | packages/core/dist/index.mjs:2528 | src: packages/core/src/runtime/widget.ts:31 |
+| 6.7 | 6.8 | createStatePrimitive | packages/core/dist/index.mjs:2402 | src: packages/core/src/runtime/state.ts:98 |
+| 5.6 | 5.6 | createPropertyPrimitive | packages/core/dist/index.mjs:2215 | src: packages/core/src/runtime/property.ts:102 |
+| 3.5 | 3.5 | buildCallbackEventEmitter | packages/core/dist/event-D8XvgH0Q.mjs:456 | src: packages/core/src/runtime/event.ts:134 |
+| 3.1 | 98.6 | createRuntime | packages/core/dist/index.mjs:4146 | src: packages/core/src/blueprint/index.ts:199 |
+| 2.4 | 2.4 | createMethodPrimitive | packages/core/dist/index.mjs:2059 | src: packages/core/src/runtime/method.ts:57 |
+| 1.8 | 3.2 | attemptSetWithinOperation | packages/core/dist/index.mjs:2432 | src: packages/core/src/runtime/state.ts:147 |
+| 1.4 | 1.4 | buildConfigFragmentFor | packages/core/dist/index.mjs:2576 | src: packages/core/src/runtime/index.ts:59 |
+| 0.8 | 0.8 | publishInspectionSnapshot | packages/core/dist/index.mjs:2407 | src: packages/core/src/runtime/state.ts:111 |
+| 0.7 | 4.4 | attemptSet | packages/core/dist/index.mjs:2429 | src: packages/core/src/runtime/state.ts:143 |
+| 0.7 | 0.7 | createEventPrimitive | packages/core/dist/event-D8XvgH0Q.mjs:396 | src: packages/core/src/runtime/event.ts:43 |
+| 0.6 | 0.6 | createRuntimeAggregate | packages/core/dist/index.mjs:1647 | src: packages/core/src/runtime/aggregate.ts:126 |
+| 0.6 | 0.6 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 0.5 | 0.5 | isCompiledDependency | packages/core/dist/contract-CRpMqCY2.mjs:3 | src: packages/core/src/internal/contract.ts:608 |
+| 0.5 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 0.4 | 3.7 | (anonymous) | packages/core/dist/index.mjs:2430 |  |
+| 0.4 | 0.4 | createOperationCollector | packages/core/dist/index.mjs:2016 | src: packages/core/src/runtime/collector.ts:68 |
+| 0.3 | 0.3 | materializeResolvedLeaf | packages/core/dist/index.mjs:1884 | src: packages/core/src/runtime/deps.ts:211 |
+| 0.1 | 0.2 | (anonymous) | packages/core/dist/index.mjs:2626 |  |
+| 0.1 | 0.5 | invokeWithinOperation | packages/core/dist/index.mjs:2074 | src: packages/core/src/runtime/method.ts:77 |
+| 0.1 | 0.4 | materializeLeaf | packages/core/dist/index.mjs:2002 | src: packages/core/src/runtime/deps.ts:353 |
+| 0.1 | 0.3 | captureInitial | packages/core/dist/index.mjs:2473 | src: packages/core/src/runtime/state.ts:203 |
+| 0.1 | 0.6 | (anonymous) | packages/core/dist/index.mjs:2072 |  |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 3.1 | 98.6 | createRuntime | packages/core/dist/index.mjs:4146 | src: packages/core/src/blueprint/index.ts:199 |
+| 30.3 | 95.3 | createWidgetSystemRuntime | packages/core/dist/index.mjs:2571 | src: packages/core/src/runtime/index.ts:42 |
+| 19.6 | 20.5 | materializeDependencyTree | packages/core/dist/index.mjs:2007 | src: packages/core/src/runtime/deps.ts:366 |
+| 18.8 | 18.8 | buildRuntimeWidget | packages/core/dist/index.mjs:2528 | src: packages/core/src/runtime/widget.ts:31 |
+| 6.7 | 6.8 | createStatePrimitive | packages/core/dist/index.mjs:2402 | src: packages/core/src/runtime/state.ts:98 |
+| 5.6 | 5.6 | createPropertyPrimitive | packages/core/dist/index.mjs:2215 | src: packages/core/src/runtime/property.ts:102 |
+| 0.7 | 4.4 | attemptSet | packages/core/dist/index.mjs:2429 | src: packages/core/src/runtime/state.ts:143 |
+| 0.0 | 4.3 | runRuntimeOperation | packages/core/dist/event-D8XvgH0Q.mjs:268 | src: packages/core/src/runtime/adapter.ts:210 |
+| 0.4 | 3.7 | (anonymous) | packages/core/dist/index.mjs:2430 |  |
+| 3.5 | 3.5 | buildCallbackEventEmitter | packages/core/dist/event-D8XvgH0Q.mjs:456 | src: packages/core/src/runtime/event.ts:134 |
+| 1.8 | 3.2 | attemptSetWithinOperation | packages/core/dist/index.mjs:2432 | src: packages/core/src/runtime/state.ts:147 |
+| 2.4 | 2.4 | createMethodPrimitive | packages/core/dist/index.mjs:2059 | src: packages/core/src/runtime/method.ts:57 |
+| 1.4 | 1.4 | buildConfigFragmentFor | packages/core/dist/index.mjs:2576 | src: packages/core/src/runtime/index.ts:59 |
+| 0.8 | 0.8 | publishInspectionSnapshot | packages/core/dist/index.mjs:2407 | src: packages/core/src/runtime/state.ts:111 |
+| 0.7 | 0.7 | createEventPrimitive | packages/core/dist/event-D8XvgH0Q.mjs:396 | src: packages/core/src/runtime/event.ts:43 |
+| 0.6 | 0.6 | createRuntimeAggregate | packages/core/dist/index.mjs:1647 | src: packages/core/src/runtime/aggregate.ts:126 |
+| 0.0 | 0.6 | callable | packages/core/dist/index.mjs:2144 | src: packages/core/src/runtime/method.ts:169 |
+| 0.0 | 0.6 | invoke | packages/core/dist/index.mjs:2070 | src: packages/core/src/dep.ts:330, packages/core/src/runtime/method.ts:72 |
+| 0.1 | 0.6 | (anonymous) | packages/core/dist/index.mjs:2072 |  |
+| 0.6 | 0.6 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 0.1 | 0.5 | invokeWithinOperation | packages/core/dist/index.mjs:2074 | src: packages/core/src/runtime/method.ts:77 |
+| 0.5 | 0.5 | isCompiledDependency | packages/core/dist/contract-CRpMqCY2.mjs:3 | src: packages/core/src/internal/contract.ts:608 |
+| 0.1 | 0.4 | materializeLeaf | packages/core/dist/index.mjs:2002 | src: packages/core/src/runtime/deps.ts:353 |
+| 0.4 | 0.4 | createOperationCollector | packages/core/dist/index.mjs:2016 | src: packages/core/src/runtime/collector.ts:68 |
+| 0.3 | 0.3 | materializeResolvedLeaf | packages/core/dist/index.mjs:1884 | src: packages/core/src/runtime/deps.ts:211 |
+
+profile: benchmarks/.results/profiles-raw/embedded.loop.create-per-input.overrides.1000.normal.cpuprofile
+

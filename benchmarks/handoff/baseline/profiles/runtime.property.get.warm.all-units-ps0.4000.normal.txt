@@ -1,0 +1,31 @@
+#### runtime.property.get / warm.all-units-ps0 @ 4000 [normal] (median 183.7 us per run, spread 3.6%)
+
+4468 samples, 1378 ms profiled. Timed-run share 100.0%; dropped from the percentages below: un-timed set-up/clean-up 0.0%, garbage collector 0.0% (not attributable to a function), idle 0.0%, other 0.0%. Percentages are of the timed-run share.
+
+Garbage collector: 0.0 ms, 0.0% of the 1378 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 60.0 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 26.2 | 36.5 | get | packages/core/dist/index.mjs:2364 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 13.7 | 13.7 | computedOper | node_modules/alien-signals/esm/index.mjs:271 |  |
+| 0.1 | 10.4 | getResultWithInspectionPublish | packages/core/dist/index.mjs:2330 | src: packages/core/src/runtime/property.ts:263 |
+| 0.0 | 0.0 | now (builtin) |  |  |
+| 0.0 | 0.0 | (anonymous) (builtin) | node:internal/validators:537 |  |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 26.2 | 36.5 | get | packages/core/dist/index.mjs:2364 | src: packages/core/src/dep.ts:323, packages/core/src/dep.ts:327, packages/core/src/plugin.ts:851, packages/core/src/readonly-map.ts:8, packages/core/src/runtime/property.ts:309, packages/core/src/runtime/state.ts:214, packages/core/src/runtime/state.ts:236 |
+| 13.7 | 13.7 | computedOper | node_modules/alien-signals/esm/index.mjs:271 |  |
+| 0.1 | 10.4 | getResultWithInspectionPublish | packages/core/dist/index.mjs:2330 | src: packages/core/src/runtime/property.ts:263 |
+| 0.0 | 10.3 | runRuntimeOperation | packages/core/dist/event-D8XvgH0Q.mjs:268 | src: packages/core/src/runtime/adapter.ts:210 |
+| 0.0 | 0.0 | now (builtin) |  |  |
+| 0.0 | 0.0 | wrappedFn (builtin) | node:internal/errors:537 |  |
+| 0.0 | 0.0 | (anonymous) (builtin) | node:internal/validators:537 |  |
+
+profile: benchmarks/.results/profiles-raw/runtime.property.get.warm.all-units-ps0.4000.normal.cpuprofile
+

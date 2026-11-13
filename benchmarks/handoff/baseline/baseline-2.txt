@@ -1,0 +1,1666 @@
+
+> @deviltea/widget@0.0.0 bench .
+> node benchmarks/run.mjs --json benchmarks/.results/baseline-2.json
+
+# DevilTea Widget benchmarks
+
+{"machine":{"cpu":"Apple M1 Pro","cores":8,"totalMemoryBytes":34359738368,"node":"v24.15.0","platform":"darwin arm64","loadAtStart":[2.443359375,3.1376953125,3.65576171875]},"git":"6d43783","dirty":false,"dist":{"core":"43a418482c47","vue":"6e6cb47a01fa","inspector":"044e22503871"},"staleDist":[],"startedAt":"2026-11-13T08:03:43.913Z"}
+
+
+## system.create
+
+createWidgetSystem({ plugins }) with P registered plugins.
+
+Inside the timed region: the createWidgetSystem call (plugin registry validation, catalog).
+Outside: building the P plugins.
+
+### system.create / plugins
+
+| plugins | n   | median   | p95      | spread | /unit    | slope | | jitless: | n   | median   | p95      | spread | /unit    | slope |
+| ------- | --- | -------- | -------- | ------ | -------- | ----- | ---------- | --- | -------- | -------- | ------ | -------- | ----- |
+| 2       | 120 | 501.1 ns | 539.7 ns | 5.3%   | 250.5 ns | -     | |          | 120 | 1.26 us  | 1.30 us  | 0.5%   | 627.7 ns | -     |
+| 10      | 240 | 1.89 us  | 2.17 us  | 9.8%   | 189.3 ns | 0.83  | |          | 120 | 4.62 us  | 4.85 us  | 0.6%   | 461.8 ns | 0.81  |
+| 50      | 120 | 7.56 us  | 9.25 us  | 2.1%   | 151.3 ns | 0.86  | |          | 120 | 20.6 us  | 21.5 us  | 1.3%   | 411.7 ns | 0.93  |
+| 200     | 120 | 30.4 us  | 31.5 us  | 1.6%   | 152.0 ns | 1.00  | |          | 120 | 79.8 us  | 84.5 us  | 0.8%   | 399.0 ns | 0.98  |
+| 1000    | 120 | 156.6 us | 161.6 us | 1.1%   | 156.6 ns | 1.02  | |          | 120 | 400.7 us | 410.2 us | 0.6%   | 400.7 ns | 1.00  |
+
+log-log slope 2 -> 1000: 0.92 (last step 1.02)
+
+## plugin.create
+
+The plugin builder chain (state/properties/methods) to done(), with M members per section.
+
+Inside the timed region: the builder chain from createWidgetPlugin to done() (definition capture and validation).
+Outside: nothing; the member definitions are closures built once.
+
+### plugin.create / members
+
+| members per section | n   | median   | p95      | spread | /unit    | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------------------- | --- | -------- | -------- | ------ | -------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 3                   | 120 | 2.69 us  | 2.83 us  | 2.6%   | 896.2 ns | -     | |          | 120 | 9.61 us  | 9.98 us  | 0.6%   | 3.20 us | -     |
+| 30                  | 120 | 21.6 us  | 23.2 us  | 4.4%   | 721.1 ns | 0.91  | |          | 120 | 86.1 us  | 89.2 us  | 1.7%   | 2.87 us | 0.95  |
+| 300                 | 120 | 186.8 us | 195.3 us | 0.8%   | 622.6 ns | 0.94  | |          | 120 | 851.5 us | 887.7 us | 0.7%   | 2.84 us | 1.00  |
+
+log-log slope 3 -> 300: 0.92 (last step 0.94)
+
+## blueprint.compile.valid
+
+system.createBlueprint(source) for a valid N-widget document; shapes and dependency mixes vary.
+
+Inside the timed region: one system.createBlueprint(source) call (recovery, identity, config, structure, dependency resolution, graph analysis).
+Outside: document generation, System and plugin construction. The same source object is reused (the library keeps no cache keyed by source; checked in README).
+
+### blueprint.compile.valid / flat.bare  (flat = one root with N-1 children; tree = 8-ary; deep = 60-level spine with leaves hanging off it)
+
+| widgets | n   | median   | p95      | spread | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 240.5 us | 264.5 us | 2.2%   | 2.40 us | -      | |          | 120 | 700.9 us | 722.2 us | 0.8%   | 7.01 us | -     |
+| 1000    | 120 | 2.39 ms  | 2.53 ms  | 1.9%   | 2.39 us | 1.00   | |          | 120 | 6.65 ms  | 6.92 ms  | 0.7%   | 6.65 us | 0.98  |
+| 4000    | 120 | 9.80 ms  | 10.6 ms  | 1.9%   | 2.45 us | 1.02   | |          | 54  | 27.7 ms  | 29.8 ms  | 1.4%   | 6.93 us | 1.03  |
+| 16000   | 29  | 52.0 ms  | 53.6 ms  | 1.4%   | 3.25 us | 1.20 ! | |          | 12  | 126.0 ms | 129.5 ms | 0.4%   | 7.87 us | 1.09  |
+
+log-log slope 100 -> 16000: 1.06 (last step 1.20)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | bytes/unit | trials           |
+| ----- | --------- | ---------- | ---------------- |
+| 100   | 978.7 KB  | 9.8 KB     | 7 (+0 discarded) |
+| 1000  | 8.55 MB   | 8.8 KB     | 7 (+0 discarded) |
+| 4000  | 31.18 MB  | 8.0 KB     | 7 (+0 discarded) |
+| 16000 | 121.18 MB | 7.8 KB     | 7 (+0 discarded) |
+
+### blueprint.compile.valid / flat.standard  (flat = one root with N-1 children; tree = 8-ary; deep = 60-level spine with leaves hanging off it)
+
+| widgets | n   | median   | p95      | spread           | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ---------------- | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 2.86 ms  | 2.98 ms  | 2.0%             | 28.6 us | -     | |          | 120 | 4.66 ms  | 4.81 ms  | 0.6%   | 46.6 us | -     |
+| 1000    | 195 | 24.2 ms  | 28.3 ms  | 12.6% UNRELIABLE | 24.2 us | 0.93  | |          | 31  | 48.0 ms  | 50.7 ms  | 1.8%   | 48.0 us | 1.01  |
+| 4000    | 21  | 91.2 ms  | 109.0 ms | 3.4%             | 22.8 us | 0.96  | |          | 9   | 225.1 ms | 227.3 ms | 0.8%   | 56.3 us | 1.11  |
+| 16000   | 9   | 376.3 ms | 401.7 ms | 2.6%             | 23.5 us | 1.02  | |          | 9   | 969.1 ms | 992.0 ms | 0.7%   | 60.6 us | 1.05  |
+
+log-log slope 100 -> 16000: 0.96 (last step 1.02)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 6.03 MB                        | 61.8 KB    | 7 (+0 discarded) |
+| 1000  | 57.04 MB                       | 58.4 KB    | 7 (+0 discarded) |
+| 4000  | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+### blueprint.compile.valid / tree.bare  (flat = one root with N-1 children; tree = 8-ary; deep = 60-level spine with leaves hanging off it)
+
+| widgets | n   | median   | p95      | spread | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 243.6 us | 256.7 us | 1.2%   | 2.44 us | -      | |          | 120 | 714.4 us | 728.9 us | 0.5%   | 7.14 us | -     |
+| 1000    | 120 | 2.46 ms  | 2.54 ms  | 0.8%   | 2.46 us | 1.00   | |          | 120 | 6.79 ms  | 7.02 ms  | 0.6%   | 6.79 us | 0.98  |
+| 4000    | 120 | 10.2 ms  | 10.8 ms  | 1.6%   | 2.55 us | 1.03   | |          | 53  | 28.4 ms  | 30.2 ms  | 1.9%   | 7.09 us | 1.03  |
+| 16000   | 29  | 52.2 ms  | 53.8 ms  | 1.3%   | 3.27 us | 1.18 ! | |          | 12  | 126.0 ms | 128.4 ms | 0.3%   | 7.87 us | 1.08  |
+
+log-log slope 100 -> 16000: 1.06 (last step 1.18)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | bytes/unit | trials           |
+| ----- | --------- | ---------- | ---------------- |
+| 100   | 835.6 KB  | 8.4 KB     | 7 (+0 discarded) |
+| 1000  | 8.09 MB   | 8.3 KB     | 7 (+0 discarded) |
+| 4000  | 32.11 MB  | 8.2 KB     | 7 (+0 discarded) |
+| 16000 | 125.83 MB | 8.1 KB     | 7 (+0 discarded) |
+
+### blueprint.compile.valid / tree.selfDeps  (flat = one root with N-1 children; tree = 8-ary; deep = 60-level spine with leaves hanging off it)
+
+| widgets | n   | median   | p95      | spread           | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ---------------- | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 1.41 ms  | 1.52 ms  | 4.3%             | 14.1 us | -     | |          | 120 | 2.79 ms  | 2.84 ms  | 0.7%   | 27.9 us | -     |
+| 1000    | 113 | 13.2 ms  | 15.3 ms  | 5.5%             | 13.2 us | 0.97  | |          | 54  | 27.8 ms  | 28.6 ms  | 1.7%   | 27.8 us | 1.00  |
+| 4000    | 33  | 42.2 ms  | 59.1 ms  | 10.0% tail drift | 10.5 us | 0.84  | |          | 13  | 120.1 ms | 121.8 ms | 0.6%   | 30.0 us | 1.06  |
+| 16000   | 9   | 164.1 ms | 193.8 ms | 2.4%             | 10.3 us | 0.98  | |          | 9   | 520.3 ms | 523.4 ms | 0.4%   | 32.5 us | 1.06  |
+
+log-log slope 100 -> 16000: 0.94 (last step 0.98)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 3.20 MB                        | 32.8 KB    | 7 (+0 discarded) |
+| 1000  | 30.82 MB                       | 31.6 KB    | 7 (+0 discarded) |
+| 4000  | 121.48 MB                      | 31.1 KB    | 7 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+### blueprint.compile.valid / tree.standard  (flat = one root with N-1 children; tree = 8-ary; deep = 60-level spine with leaves hanging off it)
+
+| widgets | n   | median   | p95      | spread | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 2.41 ms  | 2.64 ms  | 4.6%   | 24.1 us | -     | |          | 120 | 4.24 ms  | 4.34 ms  | 0.9%   | 42.4 us | -     |
+| 1000    | 218 | 21.6 ms  | 24.9 ms  | 9.4%   | 21.6 us | 0.95  | |          | 35  | 42.5 ms  | 45.5 ms  | 1.2%   | 42.5 us | 1.00  |
+| 4000    | 21  | 79.1 ms  | 97.2 ms  | 1.9%   | 19.8 us | 0.94  | |          | 9   | 191.0 ms | 193.3 ms | 0.8%   | 47.7 us | 1.08  |
+| 16000   | 9   | 329.0 ms | 349.9 ms | 0.8%   | 20.6 us | 1.03  | |          | 9   | 869.4 ms | 884.4 ms | 1.0%   | 54.3 us | 1.09  |
+
+log-log slope 100 -> 16000: 0.97 (last step 1.03)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 4.94 MB                        | 50.6 KB    | 7 (+0 discarded) |
+| 1000  | 48.97 MB                       | 50.1 KB    | 7 (+0 discarded) |
+| 4000  | 183.85 MB                      | 47.1 KB    | 7 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+### blueprint.compile.valid / tree.crossDeps  (flat = one root with N-1 children; tree = 8-ary; deep = 60-level spine with leaves hanging off it)
+
+| widgets | n   | median   | p95      | spread           | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ---------------- | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 2.46 ms  | 2.67 ms  | 3.6%             | 24.6 us | -     | |          | 120 | 4.27 ms  | 4.39 ms  | 0.9%   | 42.7 us | -     |
+| 1000    | 218 | 21.6 ms  | 24.9 ms  | 12.0% UNRELIABLE | 21.6 us | 0.94  | |          | 35  | 43.5 ms  | 45.8 ms  | 2.5%   | 43.5 us | 1.01  |
+| 4000    | 21  | 79.1 ms  | 98.7 ms  | 3.0%             | 19.8 us | 0.94  | |          | 9   | 189.9 ms | 194.7 ms | 0.5%   | 47.5 us | 1.06  |
+| 16000   | 9   | 328.6 ms | 361.6 ms | 1.4%             | 20.5 us | 1.03  | |          | 9   | 884.1 ms | 894.9 ms | 0.6%   | 55.3 us | 1.11  |
+
+log-log slope 100 -> 16000: 0.96 (last step 1.03)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 4.99 MB                        | 51.1 KB    | 7 (+0 discarded) |
+| 1000  | 50.23 MB                       | 51.4 KB    | 7 (+0 discarded) |
+| 4000  | 187.32 MB                      | 48.0 KB    | 7 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+### blueprint.compile.valid / tree.validated  (flat = one root with N-1 children; tree = 8-ary; deep = 60-level spine with leaves hanging off it)
+
+| widgets | n   | median   | p95      | spread           | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ---------------- | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 2.50 ms  | 2.69 ms  | 3.3%             | 25.0 us | -     | |          | 120 | 4.34 ms  | 4.46 ms  | 0.7%   | 43.4 us | -     |
+| 1000    | 215 | 21.9 ms  | 25.2 ms  | 12.1% UNRELIABLE | 21.9 us | 0.94  | |          | 34  | 43.6 ms  | 46.3 ms  | 1.9%   | 43.6 us | 1.00  |
+| 4000    | 21  | 84.9 ms  | 104.0 ms | 6.2%             | 21.2 us | 0.98  | |          | 9   | 192.8 ms | 197.0 ms | 0.8%   | 48.2 us | 1.07  |
+| 16000   | 9   | 333.0 ms | 375.6 ms | 1.4%             | 20.8 us | 0.99  | |          | 9   | 894.4 ms | 908.3 ms | 1.0%   | 55.9 us | 1.11  |
+
+log-log slope 100 -> 16000: 0.96 (last step 0.99)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 5.08 MB                        | 52.0 KB    | 7 (+0 discarded) |
+| 1000  | 50.45 MB                       | 51.7 KB    | 7 (+0 discarded) |
+| 4000  | 187.60 MB                      | 48.0 KB    | 7 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+### blueprint.compile.valid / tree.aggregated  (flat = one root with N-1 children; tree = 8-ary; deep = 60-level spine with leaves hanging off it)
+
+| widgets | n   | median   | p95      | spread    | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | --------- | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 2.38 ms  | 2.62 ms  | 4.8%      | 23.8 us | -     | |          | 120 | 4.47 ms  | 4.60 ms  | 0.8%   | 44.7 us | -     |
+| 1000    | 216 | 22.0 ms  | 25.1 ms  | 9.7%      | 22.0 us | 0.97  | |          | 34  | 45.0 ms  | 46.8 ms  | 2.3%   | 45.0 us | 1.00  |
+| 4000    | 21  | 78.8 ms  | 99.3 ms  | 1.7% tail | 19.7 us | 0.92  | |          | 9   | 200.1 ms | 205.3 ms | 1.5%   | 50.0 us | 1.08  |
+| 16000   | 9   | 362.8 ms | 392.2 ms | 1.2%      | 22.7 us | 1.10  | |          | 9   | 910.6 ms | 929.0 ms | 1.0%   | 56.9 us | 1.09  |
+
+log-log slope 100 -> 16000: 0.99 (last step 1.10)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 5.20 MB                        | 53.2 KB    | 7 (+0 discarded) |
+| 1000  | 51.60 MB                       | 52.8 KB    | 7 (+0 discarded) |
+| 4000  | 191.65 MB                      | 49.1 KB    | 7 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+### blueprint.compile.valid / deep.standard  (flat = one root with N-1 children; tree = 8-ary; deep = 60-level spine with leaves hanging off it)
+
+| widgets | n   | median   | p95      | spread | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope  |
+| ------- | --- | -------- | -------- | ------ | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ------ |
+| 100     | 120 | 1.23 ms  | 1.33 ms  | 3.3%   | 12.3 us | -      | |          | 120 | 2.48 ms  | 2.56 ms  | 1.0%   | 24.8 us | -      |
+| 1000    | 70  | 22.9 ms  | 25.7 ms  | 8.7%   | 22.9 us | 1.27 ! | |          | 33  | 45.9 ms  | 49.3 ms  | 1.3%   | 45.9 us | 1.27 ! |
+| 4000    | 21  | 84.8 ms  | 105.4 ms | 2.7%   | 21.2 us | 0.95   | |          | 9   | 218.8 ms | 224.6 ms | 0.7%   | 54.7 us | 1.13   |
+| 16000   | 9   | 382.0 ms | 402.8 ms | 1.3%   | 23.9 us | 1.09   | |          | 9   | 990.0 ms | 1.02 s   | 1.5%   | 61.9 us | 1.09   |
+
+log-log slope 100 -> 16000: 1.13 (last step 1.09)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 3.03 MB                        | 31.1 KB    | 7 (+0 discarded) |
+| 1000  | 55.12 MB                       | 56.4 KB    | 7 (+0 discarded) |
+| 4000  | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+## blueprint.compile.json
+
+createBlueprintFromJson(text) against JSON.parse(text) + createBlueprint(value) (standard tree).
+
+Inside the timed region: the whole call chain named by the variant (for the parse variants this includes JSON.parse).
+Outside: JSON.stringify of the document.
+
+### blueprint.compile.json / fromJson
+
+| widgets | n   | median   | p95      | spread           | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ---------------- | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 2.62 ms  | 2.76 ms  | 2.3%             | 26.2 us | -     | |          | 120 | 4.25 ms  | 4.35 ms  | 1.2%   | 42.5 us | -     |
+| 1000    | 229 | 20.8 ms  | 24.0 ms  | 11.7% UNRELIABLE | 20.8 us | 0.90  | |          | 34  | 44.9 ms  | 46.8 ms  | 2.5%   | 44.9 us | 1.02  |
+| 4000    | 21  | 72.0 ms  | 93.6 ms  | 6.2% tail        | 18.0 us | 0.90  | |          | 9   | 197.3 ms | 199.9 ms | 0.2%   | 49.3 us | 1.07  |
+| 16000   | 9   | 349.1 ms | 373.4 ms | 4.1%             | 21.8 us | 1.14  | |          | 9   | 881.6 ms | 902.2 ms | 0.5%   | 55.1 us | 1.08  |
+
+log-log slope 100 -> 16000: 0.96 (last step 1.14)
+
+### blueprint.compile.json / parse+create
+
+| widgets | n   | median   | p95      | spread          | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | --------------- | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 1.69 ms  | 2.19 ms  | 3.4% tail       | 16.9 us | -      | |          | 120 | 4.38 ms  | 4.59 ms  | 1.8%   | 43.8 us | -     |
+| 1000    | 83  | 16.3 ms  | 23.5 ms  | 9.0% tail drift | 16.3 us | 0.99   | |          | 34  | 45.1 ms  | 47.4 ms  | 2.9%   | 45.1 us | 1.01  |
+| 4000    | 21  | 68.0 ms  | 90.1 ms  | 2.2% tail       | 17.0 us | 1.03   | |          | 9   | 196.2 ms | 199.0 ms | 0.7%   | 49.1 us | 1.06  |
+| 16000   | 9   | 349.0 ms | 367.3 ms | 1.6%            | 21.8 us | 1.18 ! | |          | 9   | 900.3 ms | 915.9 ms | 0.8%   | 56.3 us | 1.10  |
+
+log-log slope 100 -> 16000: 1.05 (last step 1.18)
+
+### blueprint.compile.json / parse-only  (reference: JSON.parse alone, the floor of both variants above)
+
+| widgets | n   | median   | p95      | spread | /unit    | slope | | jitless: | n   | median   | p95      | spread | /unit    | slope |
+| ------- | --- | -------- | -------- | ------ | -------- | ----- | ---------- | --- | -------- | -------- | ------ | -------- | ----- |
+| 100     | 120 | 23.2 us  | 23.8 us  | 0.8%   | 231.6 ns | -     | |          | 120 | 23.6 us  | 24.2 us  | 0.7%   | 235.6 ns | -     |
+| 1000    | 120 | 246.8 us | 253.5 us | 0.7%   | 246.8 ns | 1.03  | |          | 120 | 250.1 us | 258.3 us | 1.3%   | 250.1 ns | 1.03  |
+| 4000    | 120 | 1.04 ms  | 1.07 ms  | 1.0%   | 259.9 ns | 1.04  | |          | 120 | 1.03 ms  | 1.09 ms  | 1.5%   | 258.5 ns | 1.02  |
+| 16000   | 120 | 4.13 ms  | 4.37 ms  | 2.0%   | 258.0 ns | 0.99  | |          | 120 | 4.11 ms  | 4.29 ms  | 1.2%   | 257.0 ns | 1.00  |
+
+log-log slope 100 -> 16000: 1.02 (last step 0.99)
+
+WARNING: [normal] other processes used about 1.5 cores while this ran; treat its numbers with suspicion.
+
+WARNING: [jitless] other processes used about 1.6 cores while this ran; treat its numbers with suspicion.
+
+## blueprint.compile.invalid
+
+Compiling documents with many diagnostics (about one per node), flat bare documents.
+
+Inside the timed region: one system.createBlueprint(source) call that ends invalid.
+Outside: document generation.
+
+### blueprint.compile.invalid / unknown-type
+
+| widgets | n   | median   | p95      | spread | /unit   | slope | | jitless: | n   | median   | p95      | spread     | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ----- | ---------- | --- | -------- | -------- | ---------- | ------- | ----- |
+| 100     | 120 | 209.8 us | 231.0 us | 1.8%   | 2.10 us | -     | |          | 120 | 581.0 us | 599.7 us | 1.1%       | 5.81 us | -     |
+| 1000    | 120 | 2.08 ms  | 2.18 ms  | 1.5%   | 2.08 us | 1.00  | |          | 120 | 5.57 ms  | 5.79 ms  | 0.6%       | 5.57 us | 0.98  |
+| 4000    | 120 | 9.07 ms  | 9.69 ms  | 1.8%   | 2.27 us | 1.06  | |          | 62  | 24.3 ms  | 26.1 ms  | 4.9% drift | 6.07 us | 1.06  |
+| 16000   | 37  | 40.7 ms  | 44.0 ms  | 1.6%   | 2.54 us | 1.08  | |          | 15  | 102.9 ms | 107.3 ms | 0.7%       | 6.43 us | 1.04  |
+
+log-log slope 100 -> 16000: 1.04 (last step 1.08)
+
+### blueprint.compile.invalid / bad-config
+
+| widgets | n   | median   | p95      | spread | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 274.3 us | 303.9 us | 1.4%   | 2.74 us | -      | |          | 120 | 802.9 us | 827.7 us | 1.0%   | 8.03 us | -     |
+| 1000    | 120 | 2.80 ms  | 3.01 ms  | 2.8%   | 2.80 us | 1.01   | |          | 120 | 7.75 ms  | 8.13 ms  | 0.5%   | 7.75 us | 0.98  |
+| 4000    | 120 | 11.6 ms  | 12.4 ms  | 2.5%   | 2.91 us | 1.03   | |          | 45  | 33.9 ms  | 35.2 ms  | 2.1%   | 8.47 us | 1.06  |
+| 16000   | 25  | 63.2 ms  | 69.0 ms  | 5.9%   | 3.95 us | 1.22 ! | |          | 11  | 143.1 ms | 146.5 ms | 0.6%   | 8.94 us | 1.04  |
+
+log-log slope 100 -> 16000: 1.07 (last step 1.22)
+
+### blueprint.compile.invalid / unexpected-field
+
+| widgets | n   | median   | p95      | spread | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 277.2 us | 293.3 us | 1.4%   | 2.77 us | -     | |          | 120 | 839.2 us | 860.9 us | 0.7%   | 8.39 us | -     |
+| 1000    | 120 | 2.85 ms  | 2.97 ms  | 1.2%   | 2.85 us | 1.01  | |          | 120 | 8.06 ms  | 8.42 ms  | 0.6%   | 8.06 us | 0.98  |
+| 4000    | 120 | 12.3 ms  | 13.1 ms  | 2.9%   | 3.07 us | 1.05  | |          | 43  | 34.8 ms  | 36.8 ms  | 1.8%   | 8.69 us | 1.05  |
+| 16000   | 27  | 56.8 ms  | 58.7 ms  | 1.0%   | 3.55 us | 1.11  | |          | 11  | 147.3 ms | 154.2 ms | 0.8%   | 9.21 us | 1.04  |
+
+log-log slope 100 -> 16000: 1.05 (last step 1.11)
+
+### blueprint.compile.invalid / duplicate-id-pairs
+
+| widgets | n   | median   | p95      | spread | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 288.9 us | 312.5 us | 1.9%   | 2.89 us | -      | |          | 120 | 864.7 us | 886.6 us | 0.6%   | 8.65 us | -     |
+| 1000    | 120 | 2.91 ms  | 3.02 ms  | 1.3%   | 2.91 us | 1.00   | |          | 120 | 8.36 ms  | 8.80 ms  | 1.1%   | 8.36 us | 0.99  |
+| 4000    | 120 | 12.2 ms  | 12.8 ms  | 2.0%   | 3.05 us | 1.03   | |          | 43  | 35.3 ms  | 36.9 ms  | 1.5%   | 8.83 us | 1.04  |
+| 16000   | 25  | 60.6 ms  | 62.0 ms  | 1.4%   | 3.79 us | 1.16 ! | |          | 10  | 156.7 ms | 161.8 ms | 0.3%   | 9.79 us | 1.07  |
+
+log-log slope 100 -> 16000: 1.05 (last step 1.16)
+
+### blueprint.compile.invalid / duplicate-id-one  (ALL N nodes share ONE id (the known quadratic path; 16000 is left out on purpose: it exhausts the default 4 GB heap, see README))
+
+| widgets | n   | median   | p95      | spread | /unit    | slope  | | jitless: | n   | median   | p95      | spread | /unit    | slope  |
+| ------- | --- | -------- | -------- | ------ | -------- | ------ | ---------- | --- | -------- | -------- | ------ | -------- | ------ |
+| 100     | 120 | 838.1 us | 868.3 us | 0.5%   | 8.38 us  | -      | |          | 120 | 2.84 ms  | 2.92 ms  | 0.6%   | 28.4 us  | -      |
+| 500     | 97  | 15.6 ms  | 16.0 ms  | 1.9%   | 31.1 us  | 1.82 ! | |          | 28  | 54.4 ms  | 55.2 ms  | 1.1%   | 108.7 us | 1.83 ! |
+| 1000    | 21  | 71.4 ms  | 72.3 ms  | 0.5%   | 71.4 us  | 2.20 ! | |          | 9   | 221.2 ms | 223.7 ms | 0.2%   | 221.2 us | 2.02 ! |
+| 2000    | 9   | 279.6 ms | 284.0 ms | 0.2%   | 139.8 us | 1.97 ! | |          | 9   | 899.0 ms | 906.7 ms | 0.3%   | 449.5 us | 2.02 ! |
+| 4000    | 5   | 1.38 s   | 1.41 s   | 1.6%   | 344.6 us | 2.30 ! | |          | 5   | 3.55 s   | 3.63 s   | 0.3%   | 886.7 us | 1.98 ! |
+
+log-log slope 100 -> 4000: 2.01 (last step 2.30)
+
+### blueprint.compile.invalid / duplicate-id-one.k  (N = 4000 nodes total, K of them share one id; the size column is K)
+
+| nodes sharing the id | n   | median  | p95     | spread | slope  | | jitless: | n  | median   | p95      | spread | slope  |
+| -------------------- | --- | ------- | ------- | ------ | ------ | ---------- | -- | -------- | -------- | ------ | ------ |
+| 2                    | 120 | 9.96 ms | 10.4 ms | 2.0%   | -      | |          | 53 | 28.5 ms  | 30.3 ms  | 1.6%   | -      |
+| 10                   | 120 | 10.0 ms | 10.5 ms | 1.4%   | 0.00   | |          | 52 | 28.7 ms  | 30.6 ms  | 1.5%   | 0.01   |
+| 100                  | 120 | 11.0 ms | 11.6 ms | 1.8%   | 0.04   | |          | 48 | 31.3 ms  | 33.1 ms  | 1.3%   | 0.04   |
+| 1000                 | 21  | 80.9 ms | 81.8 ms | 0.7%   | 0.87   | |          | 9  | 247.1 ms | 251.4 ms | 0.5%   | 0.90   |
+| 4000                 | 5   | 1.36 s  | 1.41 s  | 1.4%   | 2.04 ! | |          | 5  | 3.54 s   | 3.65 s   | 0.6%   | 1.92 ! |
+
+log-log slope 2 -> 4000: 0.65 (last step 2.04)
+
+## document.patch
+
+The editor-keystroke path: WidgetDocument.applyPatch of one small edit on an N-widget standard tree.
+
+Inside the timed region: one document.applyPatch(patch) call: mechanical patch + (when it changes anything) a full recompile + commit.
+Outside: document creation (its initial compile); for add/remove the opposite edit that restores the document runs outside the clock.
+Note: `noop` (an equal-value patch: it applies the patch but stops before recompiling) is the proxy for the cost of applying a patch; the public API does not allow separating patch application from the recompile in the other variants
+
+### document.patch / baseline.compile  (system.createBlueprint(source) of the same document, for reference (the recompile that the changing patches below include))
+
+| widgets | n   | median   | p95      | spread    | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | --------- | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 2.65 ms  | 2.76 ms  | 2.1%      | 26.5 us | -     | |          | 120 | 4.26 ms  | 4.41 ms  | 0.7%   | 42.6 us | -     |
+| 1000    | 77  | 21.0 ms  | 23.6 ms  | 7.9%      | 21.0 us | 0.90  | |          | 34  | 44.7 ms  | 46.5 ms  | 2.3%   | 44.7 us | 1.02  |
+| 4000    | 21  | 71.2 ms  | 93.6 ms  | 5.2% tail | 17.8 us | 0.88  | |          | 9   | 193.5 ms | 197.3 ms | 1.1%   | 48.4 us | 1.06  |
+| 16000   | 9   | 342.9 ms | 355.1 ms | 1.0%      | 21.4 us | 1.13  | |          | 9   | 875.6 ms | 897.0 ms | 1.0%   | 54.7 us | 1.09  |
+
+log-log slope 100 -> 16000: 0.96 (last step 1.13)
+
+### document.patch / noop  (replace a config value with an equal value: changed:false, no recompile, no notification)
+
+| widgets | n   | median  | p95     | spread | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | ------- | ------- | ------ | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 18.4 us | 22.1 us | 1.0%   | -     | |          | 120 | 41.2 us | 43.2 us | 0.9%   | -     |
+| 1000    | 120 | 25.8 us | 26.6 us | 0.7%   | 0.15  | |          | 120 | 58.2 us | 59.4 us | 0.4%   | 0.15  |
+| 4000    | 120 | 26.9 us | 27.4 us | 0.8%   | 0.03  | |          | 120 | 60.6 us | 64.3 us | 0.6%   | 0.03  |
+| 16000   | 120 | 35.2 us | 35.9 us | 0.6%   | 0.19  | |          | 120 | 78.7 us | 83.4 us | 0.4%   | 0.19  |
+
+log-log slope 100 -> 16000: 0.13 (last step 0.19)
+
+### document.patch / replace-config
+
+| widgets | n   | median   | p95      | spread                | slope  | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | --------------------- | ------ | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 1.51 ms  | 1.72 ms  | 7.8%                  | -      | |          | 120 | 4.32 ms  | 4.41 ms  | 0.6%   | -     |
+| 1000    | 215 | 20.2 ms  | 25.9 ms  | 12.5% UNRELIABLE tail | 1.13   | |          | 35  | 43.3 ms  | 46.4 ms  | 1.6%   | 1.00  |
+| 4000    | 21  | 70.2 ms  | 91.4 ms  | 2.8% tail             | 0.90   | |          | 9   | 194.2 ms | 196.0 ms | 0.8%   | 1.08  |
+| 16000   | 9   | 358.2 ms | 371.0 ms | 2.9%                  | 1.18 ! | |          | 9   | 880.9 ms | 898.4 ms | 1.3%   | 1.09  |
+
+log-log slope 100 -> 16000: 1.08 (last step 1.18)
+
+### document.patch / replace-config.subscribed  (same, with 3 document subscribers)
+
+| widgets | n   | median   | p95      | spread                | slope  | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | --------------------- | ------ | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 2.44 ms  | 2.67 ms  | 6.3% drift            | -      | |          | 120 | 4.31 ms  | 4.46 ms  | 1.1%   | -     |
+| 1000    | 206 | 20.2 ms  | 26.9 ms  | 13.3% UNRELIABLE tail | 0.92   | |          | 34  | 44.5 ms  | 46.4 ms  | 3.2%   | 1.01  |
+| 4000    | 21  | 69.2 ms  | 90.3 ms  | 2.9% tail             | 0.89   | |          | 9   | 194.1 ms | 204.7 ms | 0.5%   | 1.06  |
+| 16000   | 9   | 360.0 ms | 378.2 ms | 1.6%                  | 1.19 ! | |          | 9   | 874.5 ms | 892.6 ms | 1.0%   | 1.09  |
+
+log-log slope 100 -> 16000: 0.98 (last step 1.19)
+
+### document.patch / add-widget  (append one empty group under the root (JSON Pointer /slots/children/-))
+
+| widgets | n   | median   | p95      | spread    | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | --------- | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 2.57 ms  | 2.74 ms  | 3.2%      | -     | |          | 120 | 4.26 ms  | 4.40 ms  | 0.7%   | -     |
+| 1000    | 84  | 15.6 ms  | 24.4 ms  | 4.8% tail | 0.78  | |          | 34  | 44.6 ms  | 46.2 ms  | 2.9%   | 1.02  |
+| 4000    | 21  | 74.6 ms  | 95.2 ms  | 2.8% tail | 1.13  | |          | 9   | 189.5 ms | 193.9 ms | 0.8%   | 1.04  |
+| 16000   | 9   | 303.7 ms | 334.9 ms | 1.1%      | 1.01  | |          | 9   | 846.7 ms | 852.3 ms | 0.4%   | 1.08  |
+
+log-log slope 100 -> 16000: 0.94 (last step 1.01)
+
+### document.patch / remove-widget
+
+| widgets | n   | median   | p95      | spread    | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | --------- | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 2.34 ms  | 2.53 ms  | 4.2%      | -     | |          | 120 | 4.24 ms  | 4.35 ms  | 0.7%   | -     |
+| 1000    | 84  | 15.8 ms  | 24.3 ms  | 7.5% tail | 0.83  | |          | 34  | 43.6 ms  | 46.7 ms  | 1.4%   | 1.01  |
+| 4000    | 21  | 73.2 ms  | 96.8 ms  | 4.3% tail | 1.10  | |          | 9   | 192.7 ms | 196.8 ms | 0.5%   | 1.07  |
+| 16000   | 9   | 305.5 ms | 337.3 ms | 1.3%      | 1.03  | |          | 9   | 848.2 ms | 858.0 ms | 0.7%   | 1.07  |
+
+log-log slope 100 -> 16000: 0.96 (last step 1.03)
+
+## separated.roundtrip
+
+separateWidgetSource / normalizeSeparatedWidgetSource on an N-widget standard tree.
+
+Inside the timed region: the named call(s).
+Outside: document generation; for `normalize` the separation that produces its input.
+
+### separated.roundtrip / separate
+
+| widgets | n   | median   | p95      | spread           | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ---------------- | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 148.1 us | 165.7 us | 3.0% drift       | 1.48 us | -     | |          | 120 | 267.3 us | 280.9 us | 0.8%   | 2.67 us | -     |
+| 1000    | 120 | 1.48 ms  | 1.53 ms  | 1.5%             | 1.48 us | 1.00  | |          | 120 | 2.72 ms  | 2.79 ms  | 0.8%   | 2.72 us | 1.01  |
+| 4000    | 120 | 5.94 ms  | 6.16 ms  | 2.9%             | 1.48 us | 1.00  | |          | 120 | 10.9 ms  | 11.1 ms  | 1.0%   | 2.74 us | 1.00  |
+| 16000   | 238 | 18.0 ms  | 22.3 ms  | 11.6% UNRELIABLE | 1.13 us | 0.80  | |          | 33  | 45.4 ms  | 46.6 ms  | 1.0%   | 2.84 us | 1.03  |
+
+log-log slope 100 -> 16000: 0.95 (last step 0.80)
+
+### separated.roundtrip / normalize
+
+| widgets | n   | median   | p95      | spread | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 141.4 us | 151.6 us | 1.1%   | 1.41 us | -     | |          | 120 | 321.1 us | 331.4 us | 0.6%   | 3.21 us | -     |
+| 1000    | 120 | 1.47 ms  | 1.51 ms  | 1.2%   | 1.47 us | 1.02  | |          | 120 | 3.36 ms  | 3.51 ms  | 1.4%   | 3.36 us | 1.02  |
+| 4000    | 120 | 5.99 ms  | 6.21 ms  | 2.3%   | 1.50 us | 1.02  | |          | 112 | 13.4 ms  | 13.7 ms  | 1.1%   | 3.36 us | 1.00  |
+| 16000   | 61  | 24.9 ms  | 27.0 ms  | 5.6%   | 1.56 us | 1.03  | |          | 26  | 58.7 ms  | 60.8 ms  | 1.3%   | 3.67 us | 1.06  |
+
+log-log slope 100 -> 16000: 1.02 (last step 1.03)
+
+### separated.roundtrip / roundtrip
+
+| widgets | n   | median   | p95      | spread | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 297.5 us | 304.7 us | 0.9%   | 2.98 us | -     | |          | 120 | 615.8 us | 642.0 us | 1.1%   | 6.16 us | -     |
+| 1000    | 120 | 3.04 ms  | 3.14 ms  | 1.3%   | 3.04 us | 1.01  | |          | 120 | 5.95 ms  | 6.10 ms  | 0.9%   | 5.95 us | 0.99  |
+| 4000    | 120 | 12.2 ms  | 12.8 ms  | 2.1%   | 3.06 us | 1.00  | |          | 60  | 25.4 ms  | 25.7 ms  | 0.7%   | 6.34 us | 1.05  |
+| 16000   | 33  | 46.2 ms  | 49.9 ms  | 3.7%   | 2.89 us | 0.96  | |          | 15  | 105.2 ms | 109.2 ms | 1.2%   | 6.57 us | 1.03  |
+
+log-log slope 100 -> 16000: 0.99 (last step 0.96)
+
+## inspection.blueprint
+
+inspectBlueprint(blueprint) over an N-widget standard tree (first call materializes the whole snapshot).
+
+Inside the timed region: one inspectBlueprint(blueprint) call on a Blueprint nobody has inspected.
+Outside: compiling that Blueprint (a fresh one per call, because the facade is cached per Blueprint).
+
+### inspection.blueprint / cold
+
+| widgets | n   | median   | p95      | spread    | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | --------- | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 550.1 us | 842.9 us | 5.5% tail | 5.50 us | -      | |          | 120 | 1.28 ms  | 1.32 ms  | 0.9%   | 12.8 us | -     |
+| 1000    | 120 | 5.08 ms  | 7.41 ms  | 6.6% tail | 5.08 us | 0.97   | |          | 111 | 13.6 ms  | 14.1 ms  | 1.3%   | 13.6 us | 1.03  |
+| 4000    | 75  | 19.6 ms  | 21.8 ms  | 3.1%      | 4.89 us | 0.97   | |          | 29  | 52.7 ms  | 56.5 ms  | 3.1%   | 13.2 us | 0.98  |
+| 16000   | 16  | 98.5 ms  | 104.1 ms | 0.8%      | 6.16 us | 1.17 ! | |          | 9   | 235.7 ms | 237.0 ms | 0.3%   | 14.7 us | 1.08  |
+
+log-log slope 100 -> 16000: 1.02 (last step 1.17)
+
+### inspection.blueprint / cached  (CACHE HIT: reference, the second call (WeakMap hit); constant time, so no per-widget column)
+
+| widgets | n   | median  | p95     | spread | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | ------- | ------- | ------ | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 6.99 ns | 7.93 ns | 0.3%   | -     | |          | 120 | 87.4 ns | 88.5 ns | 0.2%   | -     |
+| 1000    | 120 | 9.12 ns | 11.2 ns | 0.3%   | 0.12  | |          | 120 | 88.7 ns | 91.3 ns | 0.3%   | 0.01  |
+| 4000    | 120 | 8.73 ns | 8.92 ns | 0.1%   | -0.03 | |          | 120 | 90.7 ns | 92.5 ns | 0.3%   | 0.02  |
+| 16000   | 120 | 9.22 ns | 9.45 ns | 0.2%   | 0.04  | |          | 120 | 90.5 ns | 92.7 ns | 0.2%   | -0.00 |
+
+log-log slope 100 -> 16000: 0.05 (last step 0.04)
+
+## inspection.runtime
+
+inspectRuntime(runtime) (the facade) and a walk over it: the `s0` snapshot of every unit (groups are not visited) over N widgets.
+
+Inside the timed region: the named call(s).
+Outside: compiling and creating the Runtime; for `facade` the Blueprint inspection is already cached on the shared Blueprint.
+
+### inspection.runtime / facade  (the call wraps the already cached Blueprint inspection, so its work does not depend on N (no per-widget column); the Runtime is built outside the clock)
+
+| widgets | n   | median  | p95     | spread                      | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | ------- | ------- | --------------------------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 240 | 1.02 us | 1.89 us | 8.0% tail drift             | -     | |          | 120 | 1.67 us | 1.83 us | 3.1%   | -     |
+| 1000    | 120 | 13.7 us | 15.4 us | 4.5%                        | 1.13  | |          | 120 | 13.1 us | 14.8 us | 4.2%   | 0.90  |
+| 4000    | 240 | 13.3 us | 27.7 us | 11.4% UNRELIABLE tail drift | -0.02 | |          | 120 | 26.1 us | 28.4 us | 3.6%   | 0.50  |
+| 16000   | 60  | 26.2 us | 28.9 us | 3.5%                        | 0.49  | |          | 32  | 27.8 us | 30.7 us | 2.4%   | 0.04  |
+
+log-log slope 100 -> 16000: 0.64 (last step 0.49)
+
+### inspection.runtime / walk  (getWidget + getState(s0).getSnapshot() for every unit; the first (cold) call creates the State facades (cached in Maps afterwards), so the samples are a repeated walk over cached facades, memory-bound at large N; the /unit column divides by N widgets, of which about 87.5% are units)
+
+| widgets | n   | median   | p95      | spread | /unit    | slope  | | jitless: | n   | median   | p95      | spread | /unit    | slope  |
+| ------- | --- | -------- | -------- | ------ | -------- | ------ | ---------- | --- | -------- | -------- | ------ | -------- | ------ |
+| 100     | 120 | 4.26 us  | 4.47 us  | 0.5%   | 42.6 ns  | -      | |          | 120 | 18.8 us  | 19.4 us  | 0.5%   | 188.5 ns | -      |
+| 1000    | 120 | 51.5 us  | 53.6 us  | 0.8%   | 51.5 ns  | 1.08   | |          | 120 | 200.2 us | 207.3 us | 0.4%   | 200.2 ns | 1.03   |
+| 4000    | 120 | 469.9 us | 520.9 us | 1.6%   | 117.5 ns | 1.59 ! | |          | 120 | 1.66 ms  | 1.73 ms  | 1.2%   | 415.2 ns | 1.53 ! |
+| 16000   | 120 | 4.30 ms  | 4.46 ms  | 0.9%   | 268.8 ns | 1.60 ! | |          | 120 | 6.80 ms  | 6.99 ms  | 1.2%   | 425.3 ns | 1.02   |
+
+log-log slope 100 -> 16000: 1.36 (last step 1.60)
+
+## runtime.create
+
+blueprint.createRuntime() for an N-widget Blueprint.
+
+Inside the timed region: one blueprint.createRuntime(options) call.
+Outside: compiling the Blueprint (once per size); disposing each Runtime afterwards.
+
+### runtime.create / bare
+
+| widgets | n   | median   | p95      | spread          | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope  |
+| ------- | --- | -------- | -------- | --------------- | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ------ |
+| 100     | 120 | 250.7 us | 414.4 us | 6.6% tail drift | 2.51 us | -      | |          | 120 | 780.4 us | 806.4 us | 0.9%   | 7.80 us | -      |
+| 1000    | 120 | 2.48 ms  | 2.60 ms  | 1.2%            | 2.48 us | 1.00   | |          | 120 | 7.76 ms  | 8.13 ms  | 0.9%   | 7.76 us | 1.00   |
+| 4000    | 120 | 8.67 ms  | 9.97 ms  | 3.9%            | 2.17 us | 0.90   | |          | 46  | 32.5 ms  | 33.5 ms  | 0.8%   | 8.13 us | 1.03   |
+| 16000   | 26  | 59.0 ms  | 62.8 ms  | 1.1%            | 3.69 us | 1.38 ! | |          | 10  | 164.3 ms | 167.3 ms | 0.7%   | 10.3 us | 1.17 ! |
+
+log-log slope 100 -> 16000: 1.08 (last step 1.38)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | bytes/unit | trials           |
+| ----- | --------- | ---------- | ---------------- |
+| 100   | 1.22 MB   | 12.5 KB    | 7 (+0 discarded) |
+| 1000  | 11.44 MB  | 11.7 KB    | 7 (+0 discarded) |
+| 4000  | 43.91 MB  | 11.2 KB    | 7 (+0 discarded) |
+| 16000 | 172.50 MB | 11.0 KB    | 7 (+0 discarded) |
+
+### runtime.create / standard
+
+| widgets | n   | median   | p95      | spread                 | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope  |
+| ------- | --- | -------- | -------- | ---------------------- | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ------ |
+| 100     | 240 | 874.8 us | 1.02 ms  | 11.8% UNRELIABLE       | 8.75 us | -      | |          | 120 | 2.05 ms  | 2.11 ms  | 1.0%   | 20.5 us | -      |
+| 1000    | 240 | 9.13 ms  | 10.6 ms  | 16.5% UNRELIABLE drift | 9.13 us | 1.02   | |          | 70  | 21.5 ms  | 22.3 ms  | 0.8%   | 21.5 us | 1.02   |
+| 4000    | 40  | 37.9 ms  | 39.9 ms  | 1.2%                   | 9.46 us | 1.03   | |          | 15  | 106.5 ms | 109.0 ms | 0.8%   | 26.6 us | 1.15 ! |
+| 16000   | 9   | 195.7 ms | 201.1 ms | 0.8%                   | 12.2 us | 1.19 ! | |          | 9   | 456.3 ms | 460.4 ms | 0.4%   | 28.5 us | 1.05   |
+
+log-log slope 100 -> 16000: 1.07 (last step 1.19)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 3.34 MB                        | 34.2 KB    | 7 (+0 discarded) |
+| 1000  | 31.50 MB                       | 32.3 KB    | 7 (+0 discarded) |
+| 4000  | 124.62 MB                      | 31.9 KB    | 7 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+### runtime.create / crossDeps
+
+| widgets | n   | median   | p95      | spread | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 594.4 us | 617.2 us | 1.4%   | 5.94 us | -      | |          | 120 | 2.07 ms  | 2.15 ms  | 1.3%   | 20.7 us | -     |
+| 1000    | 120 | 6.43 ms  | 6.74 ms  | 2.8%   | 6.43 us | 1.03   | |          | 69  | 22.1 ms  | 22.6 ms  | 0.7%   | 22.1 us | 1.03  |
+| 4000    | 40  | 37.7 ms  | 38.9 ms  | 1.2%   | 9.42 us | 1.28 ! | |          | 15  | 105.8 ms | 107.6 ms | 0.4%   | 26.5 us | 1.13  |
+| 16000   | 9   | 192.8 ms | 198.8 ms | 0.7%   | 12.0 us | 1.18 ! | |          | 9   | 456.9 ms | 460.2 ms | 0.3%   | 28.6 us | 1.06  |
+
+log-log slope 100 -> 16000: 1.14 (last step 1.18)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 3.20 MB                        | 32.8 KB    | 7 (+0 discarded) |
+| 1000  | 31.32 MB                       | 32.1 KB    | 7 (+0 discarded) |
+| 4000  | 124.69 MB                      | 31.9 KB    | 7 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+### runtime.create / standard.overrides  (overrideStateDefaults sets s0 and s1 of every unit)
+
+| widgets | n   | median   | p95      | spread           | /unit   | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope  |
+| ------- | --- | -------- | -------- | ---------------- | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ------ |
+| 100     | 120 | 940.8 us | 1.01 ms  | 4.4%             | 9.41 us | -      | |          | 120 | 2.12 ms  | 2.20 ms  | 1.7%   | 21.2 us | -      |
+| 1000    | 240 | 8.93 ms  | 10.3 ms  | 14.7% UNRELIABLE | 8.93 us | 0.98   | |          | 69  | 21.9 ms  | 22.7 ms  | 1.0%   | 21.9 us | 1.01   |
+| 4000    | 40  | 38.2 ms  | 39.6 ms  | 1.0%             | 9.55 us | 1.05   | |          | 14  | 108.0 ms | 117.7 ms | 1.0%   | 27.0 us | 1.15 ! |
+| 16000   | 9   | 198.9 ms | 203.9 ms | 1.7%             | 12.4 us | 1.19 ! | |          | 9   | 465.3 ms | 467.8 ms | 0.4%   | 29.1 us | 1.05   |
+
+log-log slope 100 -> 16000: 1.05 (last step 1.19)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run                      | bytes/unit | trials           |
+| ----- | ------------------------------ | ---------- | ---------------- |
+| 100   | 3.23 MB                        | 33.1 KB    | 7 (+0 discarded) |
+| 1000  | 31.16 MB                       | 31.9 KB    | 7 (+0 discarded) |
+| 4000  | 121.22 MB                      | 31.0 KB    | 7 (+0 discarded) |
+| 16000 | not measured (window > 200 MB) | -          | 0 (+0 discarded) |
+
+## runtime.dispose
+
+runtime.dispose() on an N-widget Runtime.
+
+Inside the timed region: one runtime.dispose() call.
+Outside: compiling and creating the Runtime (a fresh Runtime per call).
+
+### runtime.dispose / plain  (a Runtime nobody subscribed to; the cost does not depend on N, so there is no per-widget column)
+
+| widgets | n   | median  | p95     | spread     | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | ------- | ------- | ---------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 1.38 us | 1.53 us | 4.2%       | -     | |          | 120 | 1.43 us | 1.59 us | 3.9%   | -     |
+| 1000    | 120 | 5.58 us | 6.62 us | 6.0% drift | 0.61  | |          | 120 | 5.53 us | 6.25 us | 5.1%   | 0.59  |
+| 4000    | 120 | 10.5 us | 11.8 us | 5.7%       | 0.46  | |          | 120 | 10.5 us | 12.5 us | 5.6%   | 0.46  |
+| 16000   | 63  | 10.1 us | 11.8 us | 3.7%       | -0.03 | |          | 32  | 12.2 us | 13.7 us | 4.4%   | 0.11  |
+
+log-log slope 100 -> 16000: 0.39 (last step -0.03)
+
+### runtime.dispose / subscribed  (every unit: s0 State listener and ps0 Property listener; plus runtime diagnostics and disposal listeners)
+
+| widgets | n   | median   | p95      | spread     | /unit    | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ---------- | -------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 35.4 us  | 39.8 us  | 3.3%       | 353.6 ns | -     | |          | 120 | 102.3 us | 107.3 us | 1.7%   | 1.02 us | -     |
+| 1000    | 120 | 432.8 us | 484.1 us | 4.3% drift | 432.8 ns | 1.09  | |          | 120 | 1.06 ms  | 1.12 ms  | 2.5%   | 1.06 us | 1.02  |
+| 4000    | 120 | 1.57 ms  | 1.75 ms  | 4.7%       | 393.7 ns | 0.93  | |          | 102 | 4.21 ms  | 4.52 ms  | 1.9%   | 1.05 us | 0.99  |
+| 16000   | 46  | 6.19 ms  | 7.33 ms  | 3.0%       | 386.7 ns | 0.99  | |          | 24  | 19.2 ms  | 20.0 ms  | 1.9%   | 1.20 us | 1.10  |
+
+log-log slope 100 -> 16000: 1.02 (last step 0.99)
+
+## runtime.state.set
+
+One State write with K dependents (a star: K follower widgets whose Property reads the written State).
+
+Inside the timed region: one `src.state.v.set(value)` (a different value each time) [+ the reads the variant names].
+Outside: compile, runtime creation, subscribing.
+
+### runtime.state.set / property-subscribed  (all K follower Properties subscribed: every write recomputes and notifies K)
+
+| K dependents | n   | median   | p95      | spread                 | /unit    | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------------ | --- | -------- | -------- | ---------------------- | -------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 0            | 120 | 111.5 ns | 344.5 ns | 6.9% tail drift        | -        | -      | |          | 120 | 901.0 ns | 929.4 ns | 0.4%   | -       | -     |
+| 10           | 240 | 4.79 us  | 5.62 us  | 14.5% UNRELIABLE drift | 479.4 ns | 0.00   | |          | 120 | 22.0 us  | 22.6 us  | 0.6%   | 2.20 us | 0.00  |
+| 100          | 120 | 38.7 us  | 54.9 us  | 4.2% tail              | 387.4 ns | 0.91   | |          | 120 | 210.7 us | 219.0 us | 0.9%   | 2.11 us | 0.98  |
+| 1000         | 240 | 423.6 us | 582.9 us | 10.3% UNRELIABLE tail  | 423.6 ns | 1.04   | |          | 120 | 2.36 ms  | 2.42 ms  | 1.0%   | 2.36 us | 1.05  |
+| 10000        | 120 | 6.64 ms  | 8.39 ms  | 5.3% tail              | 664.4 ns | 1.20 ! | |          | 66  | 23.0 ms  | 23.5 ms  | 0.6%   | 2.30 us | 0.99  |
+
+log-log slope 10 -> 10000: 1.05 (last step 1.20)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | bytes/unit | trials           |
+| ----- | --------- | ---------- | ---------------- |
+| 0     | 923 B     | 923 B      | 7 (+0 discarded) |
+| 10    | 10.0 KB   | 1020 B     | 7 (+0 discarded) |
+| 100   | 89.2 KB   | 914 B      | 7 (+0 discarded) |
+| 1000  | 886.3 KB  | 908 B      | 7 (+0 discarded) |
+| 10000 | 8.17 MB   | 857 B      | 7 (+0 discarded) |
+
+### runtime.state.set / nobody-subscribed  (K follower Properties exist, none read or subscribed)
+
+| K dependents | n   | median   | p95      | spread                | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------------ | --- | -------- | -------- | --------------------- | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 0            | 240 | 147.5 ns | 281.2 ns | 13.9% UNRELIABLE tail | -     | |          | 120 | 900.0 ns | 936.7 ns | 0.5%   | -     |
+| 10           | 120 | 131.7 ns | 359.6 ns | 8.9% tail             | 0.00  | |          | 120 | 900.1 ns | 936.6 ns | 0.7%   | 0.00  |
+| 100          | 240 | 190.0 ns | 367.1 ns | 34.1% UNRELIABLE tail | 0.16  | |          | 120 | 896.9 ns | 922.8 ns | 0.4%   | -0.00 |
+| 1000         | 240 | 191.1 ns | 371.6 ns | 29.4% UNRELIABLE tail | 0.00  | |          | 120 | 920.6 ns | 969.5 ns | 1.1%   | 0.01  |
+| 10000        | 120 | 145.6 ns | 383.2 ns | 1.8% tail             | -0.12 | |          | 120 | 951.2 ns | 1.01 us  | 0.7%   | 0.01  |
+
+log-log slope 10 -> 10000: 0.01 (last step -0.12)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | trials           |
+| ----- | --------- | ---------------- |
+| 0     | 834 B     | 7 (+0 discarded) |
+| 10    | 817 B     | 7 (+0 discarded) |
+| 100   | 834 B     | 7 (+0 discarded) |
+| 1000  | 834 B     | 7 (+0 discarded) |
+| 10000 | 834 B     | 7 (+0 discarded) |
+
+### runtime.state.set / write-then-read-all  (nobody subscribed; each run writes, then reads all K follower Properties (lazy recompute))
+
+| K dependents | n   | median   | p95      | spread                | /unit    | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------------ | --- | -------- | -------- | --------------------- | -------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 0            | 120 | 113.1 ns | 118.6 ns | 0.5%                  | -        | -      | |          | 120 | 920.9 ns | 945.7 ns | 0.8%   | -       | -     |
+| 10           | 240 | 4.07 us  | 5.19 us  | 18.2% UNRELIABLE tail | 406.8 ns | 0.00   | |          | 120 | 17.2 us  | 17.7 us  | 0.8%   | 1.72 us | 0.00  |
+| 100          | 240 | 34.6 us  | 49.5 us  | 10.5% UNRELIABLE tail | 345.6 ns | 0.93   | |          | 120 | 164.0 us | 169.1 us | 0.8%   | 1.64 us | 0.98  |
+| 1000         | 240 | 370.3 us | 541.4 us | 9.7% tail             | 370.3 ns | 1.03   | |          | 120 | 1.68 ms  | 1.74 ms  | 1.0%   | 1.68 us | 1.01  |
+| 10000        | 120 | 5.29 ms  | 7.51 ms  | 7.0% tail             | 528.9 ns | 1.15 ! | |          | 86  | 17.5 ms  | 17.7 ms  | 0.6%   | 1.75 us | 1.02  |
+
+log-log slope 10 -> 10000: 1.04 (last step 1.15)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | bytes/unit | trials           |
+| ----- | --------- | ---------- | ---------------- |
+| 0     | 834 B     | 834 B      | 7 (+0 discarded) |
+| 10    | 9.7 KB    | 990 B      | 7 (+0 discarded) |
+| 100   | 89.3 KB   | 915 B      | 7 (+0 discarded) |
+| 1000  | 838.9 KB  | 859 B      | 7 (+0 discarded) |
+| 10000 | 8.17 MB   | 856 B      | 7 (+0 discarded) |
+
+### runtime.state.set / state-listeners  (K State listeners on the written member)
+
+| K listeners | n   | median   | p95      | spread | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit    | slope |
+| ----------- | --- | -------- | -------- | ------ | ------- | ----- | ---------- | --- | -------- | -------- | ------ | -------- | ----- |
+| 0           | 120 | 122.7 ns | 138.1 ns | 1.6%   | -       | -     | |          | 120 | 908.0 ns | 943.3 ns | 1.2%   | -        | -     |
+| 10          | 120 | 506.1 ns | 548.9 ns | 0.4%   | 50.6 ns | 0.00  | |          | 120 | 6.72 us  | 6.92 us  | 0.8%   | 671.8 ns | 0.00  |
+| 100         | 120 | 3.60 us  | 3.67 us  | 0.3%   | 36.0 ns | 0.85  | |          | 120 | 55.2 us  | 56.4 us  | 0.4%   | 552.1 ns | 0.91  |
+| 1000        | 120 | 47.1 us  | 49.1 us  | 1.2%   | 47.1 ns | 1.12  | |          | 120 | 545.2 us | 556.4 us | 0.6%   | 545.2 ns | 0.99  |
+| 10000       | 120 | 518.3 us | 540.8 us | 1.0%   | 51.8 ns | 1.04  | |          | 120 | 5.50 ms  | 5.61 ms  | 0.8%   | 550.5 ns | 1.00  |
+
+log-log slope 10 -> 10000: 1.00 (last step 1.04)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | bytes/unit | trials           |
+| ----- | --------- | ---------- | ---------------- |
+| 0     | 834 B     | 834 B      | 7 (+0 discarded) |
+| 10    | 826 B     | 83 B       | 7 (+0 discarded) |
+| 100   | 834 B     | 8 B        | 7 (+0 discarded) |
+| 1000  | 834 B     | 1 B        | 7 (+0 discarded) |
+| 10000 | 839 B     | 0 B        | 7 (+0 discarded) |
+
+### runtime.state.set / same-value  (writing the value the State already holds, K Properties subscribed: no propagation expected)
+
+| K dependents | n   | median  | p95     | spread | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------------ | --- | ------- | ------- | ------ | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 10           | 120 | 92.8 ns | 98.4 ns | 0.7%   | -     | |          | 120 | 772.8 ns | 798.7 ns | 1.0%   | -     |
+| 1000         | 120 | 89.6 ns | 93.4 ns | 0.9%   | -0.01 | |          | 120 | 767.0 ns | 788.6 ns | 0.5%   | -0.00 |
+
+log-log slope 10 -> 1000: -0.01 (last step -0.01)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 10   | 803 B     | 7 (+0 discarded) |
+| 1000 | 802 B     | 7 (+0 discarded) |
+
+WARNING: [alloc] other processes used about 1.5 cores while this ran; treat its numbers with suspicion.
+
+## runtime.property.get
+
+Property reads: first (cold) read, cached read, recompute after a write, and a chain of L dependent Properties.
+
+Inside the timed region: the reads named by the variant (for `cold.all-units-ps0` that includes the runtime.getWidget(id) lookups: on a fresh Runtime they are part of the cold cost).
+Outside: compile, Runtime creation (a fresh Runtime per call for `cold`), the write that invalidates (`invalidated.one` and `chain.recompute` include it by design, see note).
+
+### runtime.property.get / cold.all-units-ps0  (first read of ps0 on every unit of a fresh Runtime; per-op = per Property)
+
+| widgets | n   | median   | p95      | spread | /op     | slope  | | jitless: | n   | median   | p95      | spread | /op     | slope  |
+| ------- | --- | -------- | -------- | ------ | ------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ------ |
+| 100     | 120 | 190.9 us | 224.6 us | 4.2%   | 2.19 us | -      | |          | 120 | 353.1 us | 371.5 us | 2.1%   | 4.06 us | -      |
+| 1000    | 120 | 2.30 ms  | 2.55 ms  | 4.2%   | 2.63 us | 1.08   | |          | 120 | 3.97 ms  | 4.20 ms  | 2.3%   | 4.54 us | 1.05   |
+| 4000    | 119 | 12.6 ms  | 13.4 ms  | 2.2%   | 3.59 us | 1.22 ! | |          | 76  | 19.7 ms  | 20.5 ms  | 2.0%   | 5.64 us | 1.16 ! |
+| 16000   | 28  | 54.9 ms  | 57.7 ms  | 2.2%   | 3.92 us | 1.06   | |          | 21  | 83.9 ms  | 85.4 ms  | 0.9%   | 5.99 us | 1.04   |
+
+log-log slope 100 -> 16000: 1.12 (last step 1.06)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | bytes/op | trials           |
+| ----- | --------- | -------- | ---------------- |
+| 100   | 130.0 KB  | 1.5 KB   | 7 (+0 discarded) |
+| 1000  | 1.08 MB   | 1.3 KB   | 7 (+0 discarded) |
+| 4000  | 4.17 MB   | 1.2 KB   | 7 (+0 discarded) |
+| 16000 | 17.18 MB  | 1.3 KB   | 7 (+0 discarded) |
+
+### runtime.property.get / warm.all-units-ps0  (CACHE HIT: reading an already evaluated Property again; per-op = per read)
+
+| widgets | n   | median   | p95      | spread    | /op      | slope  | | jitless: | n   | median   | p95      | spread | /op      | slope  |
+| ------- | --- | -------- | -------- | --------- | -------- | ------ | ---------- | --- | -------- | -------- | ------ | -------- | ------ |
+| 100     | 120 | 2.10 us  | 2.17 us  | 0.7%      | 24.2 ns  | -      | |          | 120 | 23.2 us  | 24.0 us  | 0.5%   | 267.2 ns | -      |
+| 1000    | 120 | 35.6 us  | 36.9 us  | 0.6%      | 40.7 ns  | 1.23 ! | |          | 120 | 254.8 us | 263.2 us | 0.6%   | 291.2 ns | 1.04   |
+| 4000    | 120 | 462.7 us | 578.8 us | 3.7% tail | 132.2 ns | 1.85 ! | |          | 120 | 2.27 ms  | 2.42 ms  | 1.8%   | 649.8 ns | 1.58 ! |
+| 16000   | 120 | 5.12 ms  | 5.29 ms  | 0.7%      | 365.8 ns | 1.73 ! | |          | 107 | 14.0 ms  | 14.5 ms  | 0.7%   | 998.8 ns | 1.31 ! |
+
+log-log slope 100 -> 16000: 1.54 (last step 1.73)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | bytes/op | trials           |
+| ----- | --------- | -------- | ---------------- |
+| 100   | 0 B       | 0 B      | 7 (+0 discarded) |
+| 1000  | 3 B       | 0 B      | 7 (+0 discarded) |
+| 4000  | 1 B       | 0 B      | 7 (+0 discarded) |
+| 16000 | 14 B      | 0 B      | 7 (+0 discarded) |
+
+### runtime.property.get / invalidated.one  (write one State, then read the one Property that depends on it (recompute); size = widgets in the Runtime)
+
+| widgets | n   | median   | p95      | spread                      | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | --------------------------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 240 | 657.6 ns | 915.5 ns | 13.2% UNRELIABLE tail drift | -     | |          | 120 | 3.23 us | 3.31 us | 0.8%   | -     |
+| 1000    | 120 | 583.3 ns | 752.1 ns | 6.6% tail drift             | -0.05 | |          | 120 | 3.33 us | 3.46 us | 0.5%   | 0.01  |
+| 4000    | 120 | 583.2 ns | 742.2 ns | 8.5% tail                   | -0.00 | |          | 120 | 3.38 us | 3.56 us | 0.5%   | 0.01  |
+| 16000   | 240 | 559.1 ns | 748.1 ns | 10.6% UNRELIABLE tail       | -0.03 | |          | 120 | 3.38 us | 3.59 us | 0.3%   | -0.00 |
+
+log-log slope 100 -> 16000: -0.03 (last step -0.03)
+
+Allocation (approximate, includes retained):
+
+| size  | bytes/run | trials           |
+| ----- | --------- | ---------------- |
+| 100   | 1.9 KB    | 7 (+0 discarded) |
+| 1000  | 1.8 KB    | 7 (+0 discarded) |
+| 4000  | 1.7 KB    | 7 (+0 discarded) |
+| 16000 | 1.7 KB    | 7 (+0 discarded) |
+
+### runtime.property.get / chain.recompute  (write x, then read the LAST of L chained Properties: L recomputations per run)
+
+| chain length L | n   | median   | p95      | spread | /unit    | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| -------------- | --- | -------- | -------- | ------ | -------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 10             | 120 | 2.89 us  | 3.07 us  | 2.6%   | 289.3 ns | -     | |          | 120 | 16.7 us  | 17.2 us  | 1.1%   | 1.67 us | -     |
+| 100            | 120 | 30.0 us  | 32.6 us  | 1.9%   | 299.9 ns | 1.02  | |          | 120 | 157.0 us | 162.0 us | 1.0%   | 1.57 us | 0.97  |
+| 500            | 120 | 163.4 us | 170.8 us | 1.9%   | 326.9 ns | 1.05  | |          | 120 | 798.6 us | 817.1 us | 0.6%   | 1.60 us | 1.01  |
+| 1000           | 120 | 355.4 us | 369.8 us | 1.9%   | 355.4 ns | 1.12  | |          | 120 | 1.63 ms  | 1.69 ms  | 0.9%   | 1.63 us | 1.03  |
+
+log-log slope 10 -> 1000: 1.04 (last step 1.12)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | bytes/unit | trials           |
+| ---- | --------- | ---------- | ---------------- |
+| 10   | 10.0 KB   | 1023 B     | 7 (+0 discarded) |
+| 100  | 82.3 KB   | 843 B      | 7 (+0 discarded) |
+| 500  | 409.7 KB  | 839 B      | 7 (+0 discarded) |
+| 1000 | 816.5 KB  | 836 B      | 7 (+0 discarded) |
+
+### runtime.property.get / chain.warm  (CACHE HIT: read the last Property of a warm chain)
+
+| chain length L | n   | median  | p95     | spread | slope | | jitless: | n   | median   | p95      | spread | slope |
+| -------------- | --- | ------- | ------- | ------ | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 10             | 120 | 20.0 ns | 20.5 ns | 0.5%   | -     | |          | 120 | 264.4 ns | 269.1 ns | 0.2%   | -     |
+| 100            | 120 | 19.2 ns | 19.5 ns | 0.2%   | -0.02 | |          | 120 | 265.9 ns | 275.0 ns | 0.6%   | 0.00  |
+| 500            | 120 | 19.2 ns | 19.7 ns | 0.3%   | 0.00  | |          | 120 | 264.3 ns | 268.7 ns | 0.4%   | -0.00 |
+| 1000           | 120 | 21.4 ns | 22.0 ns | 0.6%   | 0.16  | |          | 120 | 266.0 ns | 276.1 ns | 0.2%   | 0.01  |
+
+log-log slope 10 -> 1000: 0.01 (last step 0.16)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 10   | 0 B       | 7 (+0 discarded) |
+| 100  | 0 B       | 7 (+0 discarded) |
+| 500  | 0 B       | 7 (+0 discarded) |
+| 1000 | 0 B       | 7 (+0 discarded) |
+
+### runtime.property.get / chain.cold  (first read of the last Property of a chain on a fresh Runtime (L Properties materialized and evaluated))
+
+| chain length L | n   | median   | p95      | spread    | /unit    | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| -------------- | --- | -------- | -------- | --------- | -------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 10             | 120 | 6.51 us  | 8.49 us  | 3.8% tail | 650.5 ns | -     | |          | 120 | 23.8 us  | 27.4 us  | 4.8%   | 2.38 us | -     |
+| 100            | 120 | 50.0 us  | 56.9 us  | 2.2%      | 499.7 ns | 0.89  | |          | 120 | 174.1 us | 178.5 us | 1.2%   | 1.74 us | 0.86  |
+| 500            | 120 | 232.0 us | 243.7 us | 2.6%      | 464.1 ns | 0.95  | |          | 120 | 824.1 us | 857.1 us | 1.0%   | 1.65 us | 0.97  |
+| 1000           | 120 | 459.7 us | 478.2 us | 2.0%      | 459.7 ns | 0.99  | |          | 120 | 1.64 ms  | 1.70 ms  | 1.2%   | 1.64 us | 0.99  |
+
+log-log slope 10 -> 1000: 0.92 (last step 0.99)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | bytes/unit | trials           |
+| ---- | --------- | ---------- | ---------------- |
+| 10   | 10.4 KB   | 1.0 KB     | 7 (+0 discarded) |
+| 100  | 104.1 KB  | 1.0 KB     | 7 (+0 discarded) |
+| 500  | 521.0 KB  | 1.0 KB     | 7 (+0 discarded) |
+| 1000 | 1.02 MB   | 1.0 KB     | 7 (+0 discarded) |
+
+## runtime.method.invoke
+
+Method invocation on one unit of an N-widget Runtime (the size column is N; cost should not depend on it).
+
+Inside the timed region: one `widget.methods.<name>(...)` call.
+Outside: compile, Runtime creation, subscribing.
+
+### runtime.method.invoke / noop  (no dependencies)
+
+| widgets | n   | median   | p95      | spread          | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | --------------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 240 | 306.3 ns | 656.6 ns | 3.2% tail drift | -     | |          | 120 | 1.47 us | 1.52 us | 0.6%   | -     |
+| 1000    | 120 | 329.2 ns | 667.7 ns | 1.7% tail drift | 0.03  | |          | 120 | 1.50 us | 1.54 us | 0.5%   | 0.01  |
+| 4000    | 120 | 304.7 ns | 315.4 ns | 0.5%            | -0.06 | |          | 120 | 1.51 us | 1.56 us | 0.6%   | 0.00  |
+
+log-log slope 100 -> 4000: -0.00 (last step -0.06)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 100  | 1.6 KB    | 7 (+0 discarded) |
+| 1000 | 1.6 KB    | 7 (+0 discarded) |
+| 4000 | 1.6 KB    | 7 (+0 discarded) |
+
+### runtime.method.invoke / rw  (reads s0 and s1, writes s2 through registered dependencies; every call writes a DIFFERENT value (the argument is added to the written value))
+
+| widgets | n   | median   | p95      | spread                      | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | --------------------------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 240 | 901.4 ns | 1.13 us  | 15.8% UNRELIABLE tail       | -     | |          | 120 | 3.07 us | 3.15 us | 0.6%   | -     |
+| 1000    | 240 | 742.4 ns | 1.15 us  | 16.8% UNRELIABLE tail drift | -0.08 | |          | 120 | 3.19 us | 3.27 us | 0.5%   | 0.02  |
+| 4000    | 120 | 923.2 ns | 986.6 ns | 3.9%                        | 0.16  | |          | 120 | 3.22 us | 3.32 us | 0.5%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.01 (last step 0.16)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 100  | 3.1 KB    | 7 (+0 discarded) |
+| 1000 | 2.9 KB    | 7 (+0 discarded) |
+| 4000 | 2.6 KB    | 7 (+0 discarded) |
+
+### runtime.method.invoke / invokeSelf  (invokes another Method and reads a Property)
+
+| widgets | n   | median   | p95      | spread    | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | --------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 1.37 us  | 1.46 us  | 6.0%      | -     | |          | 120 | 3.67 us | 3.75 us | 0.6%   | -     |
+| 1000    | 120 | 738.7 ns | 941.8 ns | 1.4% tail | -0.27 | |          | 120 | 3.79 us | 3.91 us | 0.4%   | 0.01  |
+| 4000    | 120 | 723.6 ns | 761.8 ns | 1.8%      | -0.01 | |          | 120 | 3.84 us | 3.96 us | 0.5%   | 0.01  |
+
+log-log slope 100 -> 4000: -0.17 (last step -0.01)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 100  | 3.5 KB    | 7 (+0 discarded) |
+| 1000 | 3.5 KB    | 7 (+0 discarded) |
+| 4000 | 3.5 KB    | 7 (+0 discarded) |
+
+### runtime.method.invoke / emit.0-listeners  (writes s0 and emits an Event nobody listens to)
+
+| widgets | n   | median   | p95      | spread | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | ------ | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 631.2 ns | 705.4 ns | 1.6%   | -     | |          | 120 | 2.93 us | 3.01 us | 0.6%   | -     |
+| 1000    | 120 | 653.2 ns | 802.6 ns | 2.1%   | 0.01  | |          | 120 | 3.04 us | 3.13 us | 0.5%   | 0.02  |
+| 4000    | 120 | 653.2 ns | 677.3 ns | 2.3%   | 0.00  | |          | 120 | 3.06 us | 3.23 us | 0.6%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.01 (last step 0.00)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 100  | 3.0 KB    | 7 (+0 discarded) |
+| 1000 | 2.9 KB    | 7 (+0 discarded) |
+| 4000 | 2.9 KB    | 7 (+0 discarded) |
+
+### runtime.method.invoke / emit.1-listener  (same, one Event listener)
+
+| widgets | n   | median   | p95      | spread | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | ------ | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 625.1 ns | 644.5 ns | 1.3%   | -     | |          | 120 | 3.10 us | 3.21 us | 1.0%   | -     |
+| 1000    | 120 | 675.1 ns | 705.5 ns | 1.4%   | 0.03  | |          | 120 | 3.21 us | 3.31 us | 0.7%   | 0.01  |
+| 4000    | 120 | 680.3 ns | 710.0 ns | 1.7%   | 0.01  | |          | 120 | 3.28 us | 3.39 us | 0.7%   | 0.02  |
+
+log-log slope 100 -> 4000: 0.02 (last step 0.01)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 100  | 3.0 KB    | 7 (+0 discarded) |
+| 1000 | 2.9 KB    | 7 (+0 discarded) |
+| 4000 | 2.9 KB    | 7 (+0 discarded) |
+
+### runtime.method.invoke / emit.10-listeners  (same, ten Event listeners)
+
+| widgets | n   | median   | p95      | spread | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | ------ | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 758.1 ns | 795.0 ns | 2.2%   | -     | |          | 120 | 4.36 us | 4.47 us | 0.5%   | -     |
+| 1000    | 120 | 819.3 ns | 844.6 ns | 1.1%   | 0.03  | |          | 120 | 4.53 us | 4.60 us | 0.4%   | 0.02  |
+| 4000    | 120 | 789.4 ns | 816.8 ns | 1.6%   | -0.03 | |          | 120 | 4.59 us | 4.75 us | 0.6%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.01 (last step -0.03)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 100  | 2.9 KB    | 7 (+0 discarded) |
+| 1000 | 2.9 KB    | 7 (+0 discarded) |
+| 4000 | 2.9 KB    | 7 (+0 discarded) |
+
+### runtime.method.invoke / emit.dependents-subscribed  (emit writes s0 while ps0 of this unit and pw0 of the unit that depends on it are subscribed)
+
+| widgets | n   | median  | p95     | spread | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | ------- | ------- | ------ | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 1.44 us | 1.69 us | 1.5%   | -     | |          | 120 | 8.35 us | 8.82 us | 0.7%   | -     |
+| 1000    | 120 | 1.45 us | 1.55 us | 1.1%   | 0.00  | |          | 120 | 8.62 us | 9.01 us | 0.7%   | 0.01  |
+| 4000    | 120 | 1.46 us | 1.51 us | 1.1%   | 0.00  | |          | 120 | 8.79 us | 9.19 us | 0.7%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.00 (last step 0.00)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 100  | 4.6 KB    | 7 (+0 discarded) |
+| 1000 | 4.5 KB    | 7 (+0 discarded) |
+| 4000 | 4.3 KB    | 7 (+0 discarded) |
+
+### runtime.method.invoke / invalid-args  (validateArgs rejects: the failure path)
+
+| widgets | n   | median   | p95      | spread          | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | --------------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 252.2 ns | 399.5 ns | 2.7% tail       | -     | |          | 120 | 1.71 us | 1.79 us | 0.7%   | -     |
+| 1000    | 240 | 288.6 ns | 499.0 ns | 9.4% tail drift | 0.06  | |          | 120 | 1.74 us | 1.78 us | 0.4%   | 0.01  |
+| 4000    | 120 | 454.7 ns | 529.9 ns | 8.4%            | 0.33  | |          | 120 | 1.77 us | 1.85 us | 0.5%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.16 (last step 0.33)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | trials           |
+| ---- | --------- | ---------------- |
+| 100  | 1.6 KB    | 7 (+0 discarded) |
+| 1000 | 1.6 KB    | 7 (+0 discarded) |
+| 4000 | 1.4 KB    | 7 (+0 discarded) |
+
+## runtime.subscribe.churn
+
+subscribe + unsubscribe pairs on one widget of an N-widget Runtime (size column is N).
+
+Inside the timed region: one subscribe call plus its unsubscribe.
+Outside: compile, Runtime creation.
+
+### runtime.subscribe.churn / state
+
+| widgets | n   | median   | p95      | spread          | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | --------------- | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 240 | 100.0 ns | 125.6 ns | 1.4% tail drift | -     | |          | 120 | 792.4 ns | 845.1 ns | 1.1%   | -     |
+| 1000    | 120 | 113.9 ns | 156.0 ns | 4.7% tail drift | 0.06  | |          | 120 | 838.5 ns | 860.5 ns | 0.9%   | 0.02  |
+| 4000    | 120 | 130.5 ns | 136.4 ns | 0.7%            | 0.10  | |          | 120 | 851.1 ns | 875.8 ns | 0.9%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.07 (last step 0.10)
+
+### runtime.subscribe.churn / property  (Property already evaluated; when the LAST subscriber leaves, the Property is marked dirty, so every iteration includes one Property re-evaluation (verified in setup; compare property.watched))
+
+| widgets | n   | median   | p95      | spread | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | ------ | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 697.1 ns | 773.2 ns | 3.1%   | -     | |          | 120 | 3.41 us | 3.55 us | 1.2%   | -     |
+| 1000    | 120 | 522.5 ns | 598.1 ns | 2.9%   | -0.13 | |          | 120 | 3.49 us | 3.59 us | 0.6%   | 0.01  |
+| 4000    | 120 | 516.6 ns | 551.9 ns | 1.2%   | -0.01 | |          | 120 | 3.50 us | 3.64 us | 0.6%   | 0.00  |
+
+log-log slope 100 -> 4000: -0.08 (last step -0.01)
+
+### runtime.subscribe.churn / property.watched  (a second permanent subscriber keeps the Property watched: no re-evaluation per iteration (verified in setup), the subscription cost alone)
+
+| widgets | n   | median   | p95      | spread | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | ------ | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 113.9 ns | 117.3 ns | 0.8%   | -     | |          | 120 | 949.2 ns | 972.3 ns | 0.6%   | -     |
+| 1000    | 120 | 143.0 ns | 146.7 ns | 1.0%   | 0.10  | |          | 120 | 968.4 ns | 995.3 ns | 0.5%   | 0.01  |
+| 4000    | 120 | 121.3 ns | 126.9 ns | 0.9%   | -0.12 | |          | 120 | 982.3 ns | 1.01 us  | 0.5%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.02 (last step -0.12)
+
+### runtime.subscribe.churn / event
+
+| widgets | n   | median   | p95      | spread | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | ------ | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 119.5 ns | 132.7 ns | 1.4%   | -     | |          | 120 | 343.6 ns | 357.5 ns | 1.2%   | -     |
+| 1000    | 120 | 177.9 ns | 199.0 ns | 1.5%   | 0.17  | |          | 120 | 319.4 ns | 327.6 ns | 0.6%   | -0.03 |
+| 4000    | 120 | 171.5 ns | 196.9 ns | 1.9%   | -0.03 | |          | 120 | 326.2 ns | 336.5 ns | 0.5%   | 0.02  |
+
+log-log slope 100 -> 4000: 0.10 (last step -0.03)
+
+### runtime.subscribe.churn / state.diagnostics
+
+| widgets | n   | median   | p95      | spread | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | ------ | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 107.2 ns | 111.6 ns | 0.9%   | -     | |          | 120 | 898.1 ns | 934.8 ns | 1.1%   | -     |
+| 1000    | 120 | 230.4 ns | 241.9 ns | 0.6%   | 0.33  | |          | 120 | 839.8 ns | 858.8 ns | 0.5%   | -0.03 |
+| 4000    | 120 | 105.1 ns | 120.9 ns | 0.7%   | -0.57 | |          | 120 | 878.9 ns | 903.5 ns | 0.5%   | 0.03  |
+
+log-log slope 100 -> 4000: -0.01 (last step -0.57)
+
+### runtime.subscribe.churn / widget.diagnostics
+
+| widgets | n   | median  | p95     | spread    | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | ------- | ------- | --------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 1.43 us | 1.77 us | 0.9%      | -     | |          | 120 | 6.06 us | 6.22 us | 0.3%   | -     |
+| 1000    | 120 | 1.48 us | 2.25 us | 2.1% tail | 0.02  | |          | 120 | 6.26 us | 6.51 us | 0.5%   | 0.01  |
+| 4000    | 120 | 1.48 us | 1.59 us | 2.6%      | -0.00 | |          | 120 | 6.36 us | 6.51 us | 0.3%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.01 (last step -0.00)
+
+### runtime.subscribe.churn / runtime.diagnostics
+
+| widgets | n   | median   | p95      | spread          | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | -------- | -------- | --------------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 118.5 ns | 145.8 ns | 1.6%            | -     | |          | 120 | 1.02 us | 1.05 us | 0.8%   | -     |
+| 1000    | 240 | 164.4 ns | 338.4 ns | 8.3% tail drift | 0.14  | |          | 120 | 1.13 us | 1.17 us | 1.5%   | 0.04  |
+| 4000    | 120 | 186.8 ns | 241.4 ns | 8.4% tail drift | 0.09  | |          | 120 | 1.13 us | 1.16 us | 1.0%   | 0.00  |
+
+log-log slope 100 -> 4000: 0.12 (last step 0.09)
+
+### runtime.subscribe.churn / disposal
+
+| widgets | n   | median   | p95      | spread                 | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | ---------------------- | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 77.7 ns  | 108.7 ns | 3.0% tail drift        | -     | |          | 120 | 214.4 ns | 222.8 ns | 0.6%   | -     |
+| 1000    | 240 | 125.2 ns | 145.0 ns | 14.0% UNRELIABLE drift | 0.21  | |          | 120 | 218.8 ns | 224.1 ns | 0.4%   | 0.01  |
+| 4000    | 120 | 94.3 ns  | 122.8 ns | 4.2% tail              | -0.20 | |          | 120 | 220.7 ns | 226.1 ns | 0.5%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.05 (last step -0.20)
+
+## runtime.diagnostics
+
+Runtime diagnostic aggregate on N `checked` widgets while members fail and recover.
+
+Inside the timed region: the writes and reads named by the variant.
+Outside: compile, Runtime creation, priming (initial failing widgets).
+
+### runtime.diagnostics / get.unchanged  (CACHE HIT: getDiagnostics() when nothing changed)
+
+| widgets | n   | median  | p95     | spread | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | ------- | ------- | ------ | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 7.07 ns | 7.86 ns | 0.4%   | -     | |          | 120 | 128.5 ns | 130.8 ns | 0.2%   | -     |
+| 1000    | 120 | 20.3 ns | 22.5 ns | 0.4%   | 0.46  | |          | 120 | 130.5 ns | 132.7 ns | 0.4%   | 0.01  |
+| 4000    | 120 | 20.3 ns | 20.9 ns | 0.3%   | 0.00  | |          | 120 | 131.9 ns | 133.7 ns | 0.4%   | 0.01  |
+| 16000   | 120 | 20.6 ns | 21.2 ns | 0.4%   | 0.01  | |          | 120 | 134.4 ns | 136.7 ns | 0.3%   | 0.01  |
+
+log-log slope 100 -> 16000: 0.21 (last step 0.01)
+
+### runtime.diagnostics / write-then-get  (one widget alternates failing/recovering; each run writes, then reads getDiagnostics() (no subscriber))
+
+| widgets | n   | median  | p95     | spread     | slope | | jitless: | n   | median  | p95     | spread | slope |
+| ------- | --- | ------- | ------- | ---------- | ----- | ---------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 1.55 us | 1.75 us | 3.3%       | -     | |          | 120 | 3.48 us | 3.67 us | 1.5%   | -     |
+| 1000    | 120 | 1.58 us | 1.84 us | 4.6%       | 0.01  | |          | 120 | 3.73 us | 3.88 us | 1.0%   | 0.03  |
+| 4000    | 120 | 2.43 us | 3.08 us | 5.7% tail  | 0.31  | |          | 120 | 4.47 us | 5.02 us | 2.4%   | 0.13  |
+| 16000   | 120 | 2.96 us | 3.47 us | 6.1% drift | 0.14  | |          | 120 | 5.64 us | 6.07 us | 3.5%   | 0.17  |
+
+log-log slope 100 -> 16000: 0.13 (last step 0.14)
+
+### runtime.diagnostics / subscribed.fail-recover  (root subscribeDiagnostics listener; one run = one failing write + one recovering write (ops = 2))
+
+| widgets | n   | median  | p95     | spread | /op     | slope | | jitless: | n   | median  | p95     | spread | /op     | slope |
+| ------- | --- | ------- | ------- | ------ | ------- | ----- | ---------- | --- | ------- | ------- | ------ | ------- | ----- |
+| 100     | 120 | 2.63 us | 3.20 us | 7.1%   | 1.31 us | -     | |          | 120 | 8.36 us | 8.78 us | 1.4%   | 4.18 us | -     |
+| 1000    | 120 | 2.69 us | 2.96 us | 4.0%   | 1.35 us | 0.01  | |          | 120 | 8.20 us | 8.48 us | 0.8%   | 4.10 us | -0.01 |
+| 4000    | 120 | 2.82 us | 3.29 us | 5.0%   | 1.41 us | 0.03  | |          | 120 | 8.47 us | 8.77 us | 0.8%   | 4.24 us | 0.02  |
+| 16000   | 120 | 2.87 us | 3.37 us | 6.8%   | 1.43 us | 0.01  | |          | 120 | 8.81 us | 9.05 us | 1.2%   | 4.41 us | 0.03  |
+
+log-log slope 100 -> 16000: 0.02 (last step 0.01)
+
+### runtime.diagnostics / subscribed.10pct-failing  (as above, but 10% of the widgets are already failing, so every published snapshot carries N/10 diagnostics)
+
+| widgets | n   | median  | p95     | spread | /op     | slope | | jitless: | n   | median   | p95      | spread | /op      | slope |
+| ------- | --- | ------- | ------- | ------ | ------- | ----- | ---------- | --- | -------- | -------- | ------ | -------- | ----- |
+| 100     | 120 | 2.78 us | 3.04 us | 3.1%   | 1.39 us | -     | |          | 120 | 11.0 us  | 11.5 us  | 1.0%   | 5.52 us  | -     |
+| 1000    | 120 | 6.34 us | 6.77 us | 1.8%   | 3.17 us | 0.36  | |          | 120 | 34.0 us  | 35.3 us  | 1.0%   | 17.0 us  | 0.49  |
+| 4000    | 120 | 20.6 us | 21.5 us | 1.7%   | 10.3 us | 0.85  | |          | 120 | 111.8 us | 116.1 us | 0.8%   | 55.9 us  | 0.86  |
+| 16000   | 120 | 75.1 us | 79.9 us | 1.2%   | 37.5 us | 0.93  | |          | 120 | 447.3 us | 474.6 us | 1.1%   | 223.6 us | 1.00  |
+
+log-log slope 100 -> 16000: 0.65 (last step 0.93)
+
+### runtime.diagnostics / widget.getDiagnostics  (one widget, failing: the per-widget aggregate)
+
+| widgets | n   | median   | p95      | spread | slope | | jitless: | n   | median   | p95      | spread | slope |
+| ------- | --- | -------- | -------- | ------ | ----- | ---------- | --- | -------- | -------- | ------ | ----- |
+| 100     | 120 | 415.4 ns | 444.6 ns | 0.4%   | -     | |          | 120 | 843.9 ns | 858.3 ns | 0.4%   | -     |
+| 1000    | 120 | 412.7 ns | 423.2 ns | 0.6%   | -0.00 | |          | 120 | 846.5 ns | 869.5 ns | 0.6%   | 0.00  |
+| 4000    | 120 | 422.5 ns | 433.8 ns | 0.5%   | 0.02  | |          | 120 | 856.4 ns | 867.2 ns | 0.3%   | 0.01  |
+
+log-log slope 100 -> 4000: 0.00 (last step 0.02)
+
+## runtime.reset
+
+runtime.resetState() on an N-widget Runtime.
+
+Inside the timed region: one resetState() call.
+Outside: the writes that dirty the Runtime beforehand (one batch of 1 per sample, so every sample resets freshly dirtied State).
+
+### runtime.reset / dirty  (every unit s0 written before each call)
+
+| widgets | n   | median   | p95      | spread    | /unit    | slope | | jitless: | n   | median   | p95      | spread | /unit    | slope |
+| ------- | --- | -------- | -------- | --------- | -------- | ----- | ---------- | --- | -------- | -------- | ------ | -------- | ----- |
+| 100     | 120 | 47.2 us  | 65.2 us  | 6.8% tail | 472.1 ns | -     | |          | 120 | 85.4 us  | 104.3 us | 3.0%   | 854.0 ns | -     |
+| 1000    | 120 | 505.2 us | 550.9 us | 2.8%      | 505.2 ns | 1.03  | |          | 120 | 869.3 us | 926.6 us | 1.9%   | 869.3 ns | 1.01  |
+| 4000    | 120 | 1.72 ms  | 1.83 ms  | 2.0%      | 431.0 ns | 0.89  | |          | 120 | 3.83 ms  | 3.99 ms  | 1.4%   | 958.6 ns | 1.07  |
+| 16000   | 120 | 3.76 ms  | 5.21 ms  | 4.1% tail | 235.1 ns | 0.56  | |          | 90  | 16.8 ms  | 17.4 ms  | 0.7%   | 1.05 us  | 1.06  |
+
+log-log slope 100 -> 16000: 0.86 (last step 0.56)
+
+### runtime.reset / dirty.subscribed  (as dirty, with a State listener and a ps0 Property listener on every unit)
+
+| widgets | n   | median   | p95      | spread | /unit   | slope | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ----- | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 147.4 us | 165.8 us | 4.9%   | 1.47 us | -     | |          | 120 | 447.1 us | 477.7 us | 1.8%   | 4.47 us | -     |
+| 1000    | 120 | 1.71 ms  | 1.95 ms  | 3.5%   | 1.71 us | 1.06  | |          | 120 | 4.90 ms  | 5.20 ms  | 2.2%   | 4.90 us | 1.04  |
+| 4000    | 120 | 7.88 ms  | 8.60 ms  | 3.7%   | 1.97 us | 1.10  | |          | 66  | 22.9 ms  | 23.6 ms  | 1.8%   | 5.72 us | 1.11  |
+| 16000   | 42  | 35.6 ms  | 38.4 ms  | 1.7%   | 2.22 us | 1.09  | |          | 21  | 94.4 ms  | 96.8 ms  | 0.3%   | 5.90 us | 1.02  |
+
+log-log slope 100 -> 16000: 1.08 (last step 1.09)
+
+### runtime.reset / clean  (nothing was written since creation)
+
+| widgets | n   | median   | p95      | spread           | /unit    | slope | | jitless: | n   | median   | p95      | spread | /unit    | slope  |
+| ------- | --- | -------- | -------- | ---------------- | -------- | ----- | ---------- | --- | -------- | -------- | ------ | -------- | ------ |
+| 100     | 120 | 25.0 us  | 26.2 us  | 2.4%             | 249.9 ns | -     | |          | 120 | 58.6 us  | 61.0 us  | 0.9%   | 586.0 ns | -      |
+| 1000    | 120 | 318.8 us | 345.0 us | 3.9% drift       | 318.8 ns | 1.11  | |          | 120 | 692.5 us | 712.7 us | 1.1%   | 692.5 ns | 1.07   |
+| 4000    | 240 | 1.28 ms  | 1.39 ms  | 19.6% UNRELIABLE | 320.2 ns | 1.00  | |          | 120 | 3.62 ms  | 3.73 ms  | 0.7%   | 905.9 ns | 1.19 ! |
+| 16000   | 120 | 4.63 ms  | 6.10 ms  | 2.9% tail        | 289.4 ns | 0.93  | |          | 102 | 14.7 ms  | 15.2 ms  | 0.8%   | 919.1 ns | 1.01   |
+
+log-log slope 100 -> 16000: 1.03 (last step 0.93)
+
+## runtime.snapshot
+
+runtime.snapshotState() on an N-widget Runtime.
+
+Inside the timed region: one snapshotState() call.
+Outside: compile, Runtime creation.
+
+### runtime.snapshot / default
+
+| widgets | n   | median   | p95      | spread | /unit    | slope  | | jitless: | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | -------- | ------ | ---------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 62.1 us  | 64.2 us  | 0.4%   | 621.0 ns | -      | |          | 120 | 136.7 us | 140.6 us | 0.5%   | 1.37 us | -     |
+| 1000    | 120 | 868.5 us | 950.4 us | 1.4%   | 868.5 ns | 1.15   | |          | 120 | 1.65 ms  | 1.78 ms  | 1.3%   | 1.65 us | 1.08  |
+| 4000    | 120 | 3.27 ms  | 3.46 ms  | 1.0%   | 818.1 ns | 0.96   | |          | 120 | 7.02 ms  | 7.70 ms  | 4.9%   | 1.75 us | 1.05  |
+| 16000   | 76  | 19.9 ms  | 20.4 ms  | 0.8%   | 1.24 us  | 1.30 ! | |          | 53  | 28.4 ms  | 29.6 ms  | 0.7%   | 1.77 us | 1.01  |
+
+log-log slope 100 -> 16000: 1.14 (last step 1.30)
+
+## embedded.loop
+
+The embedded-host pattern: compile once; per input apply a few State values, invoke 3 Methods, read 4 Properties.
+
+Inside the timed region: M = 10 inputs per run (per-op = per input), each input as described by the variant.
+Outside: the one compile (except in compile-per-input, which is the no-reuse reference and uses M = 2).
+Note: the input values are a function of the input index alone; set-up checks that every variant gives the same 3 Method results and 4 Property values as the reference for the same inputs (it throws otherwise)
+
+### embedded.loop / create-per-input.overrides  (createRuntime({ overrideStateDefaults }) + actions + dispose, per input)
+
+| widgets | n   | median   | p95      | spread | /op      | slope | | jitless: | n  | median   | p95      | spread | /op      | slope |
+| ------- | --- | -------- | -------- | ------ | -------- | ----- | ---------- | -- | -------- | -------- | ------ | -------- | ----- |
+| 100     | 120 | 8.75 ms  | 9.83 ms  | 9.4%   | 875.0 us | -     | |          | 73 | 20.7 ms  | 21.3 ms  | 0.7%   | 2.07 ms  | -     |
+| 1000    | 14  | 107.4 ms | 117.9 ms | 7.4%   | 10.7 ms  | 1.09  | |          | 9  | 269.8 ms | 272.9 ms | 0.2%   | 27.0 ms  | 1.12  |
+| 4000    | 9   | 450.7 ms | 499.9 ms | 0.9%   | 45.1 ms  | 1.03  | |          | 5  | 1.12 s   | 1.13 s   | 0.1%   | 112.2 ms | 1.03  |
+
+log-log slope 100 -> 4000: 1.07 (last step 1.03)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run                      | bytes/op | trials           |
+| ---- | ------------------------------ | -------- | ---------------- |
+| 100  | 6.54 MB                        | 3.27 MB  | 7 (+0 discarded) |
+| 1000 | 63.55 MB                       | 31.77 MB | 7 (+0 discarded) |
+| 4000 | not measured (window > 200 MB) | -        | 0 (+0 discarded) |
+
+### embedded.loop / create-per-input.writes  (createRuntime() + State writes + actions + dispose, per input)
+
+| widgets | n   | median   | p95      | spread                | /op      | slope  | | jitless: | n  | median   | p95      | spread | /op      | slope |
+| ------- | --- | -------- | -------- | --------------------- | -------- | ------ | ---------- | -- | -------- | -------- | ------ | -------- | ----- |
+| 100     | 240 | 6.13 ms  | 8.15 ms  | 13.0% UNRELIABLE tail | 613.2 us | -      | |          | 71 | 21.0 ms  | 21.9 ms  | 0.9%   | 2.10 ms  | -     |
+| 1000    | 13  | 115.0 ms | 130.7 ms | 3.7%                  | 11.5 ms  | 1.27 ! | |          | 9  | 269.9 ms | 274.8 ms | 0.4%   | 27.0 ms  | 1.11  |
+| 4000    | 9   | 487.4 ms | 497.2 ms | 0.6%                  | 48.7 ms  | 1.04   | |          | 5  | 1.13 s   | 1.13 s   | 0.1%   | 112.6 ms | 1.03  |
+
+log-log slope 100 -> 4000: 1.19 (last step 1.04)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run                      | bytes/op | trials           |
+| ---- | ------------------------------ | -------- | ---------------- |
+| 100  | 6.48 MB                        | 3.24 MB  | 7 (+0 discarded) |
+| 1000 | 63.11 MB                       | 31.55 MB | 7 (+0 discarded) |
+| 4000 | not measured (window > 200 MB) | -        | 0 (+0 discarded) |
+
+### embedded.loop / reuse.resetState  (one Runtime kept: resetState() + State writes + actions, per input)
+
+| widgets | n   | median   | p95      | spread | /op      | slope  | | jitless: | n   | median   | p95      | spread | /op      | slope |
+| ------- | --- | -------- | -------- | ------ | -------- | ------ | ---------- | --- | -------- | -------- | ------ | -------- | ----- |
+| 100     | 120 | 352.6 us | 388.2 us | 6.5%   | 35.3 us  | -      | |          | 120 | 944.1 us | 971.9 us | 0.5%   | 94.4 us  | -     |
+| 1000    | 120 | 3.17 ms  | 3.52 ms  | 6.9%   | 317.1 us | 0.95   | |          | 120 | 6.48 ms  | 6.90 ms  | 0.8%   | 647.9 us | 0.84  |
+| 4000    | 90  | 16.6 ms  | 17.6 ms  | 1.2%   | 1.66 ms  | 1.20 ! | |          | 50  | 30.0 ms  | 31.8 ms  | 1.0%   | 3.00 ms  | 1.11  |
+
+log-log slope 100 -> 4000: 1.04 (last step 1.20)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run | bytes/op | trials           |
+| ---- | --------- | -------- | ---------------- |
+| 100  | 108.5 KB  | 54.3 KB  | 7 (+0 discarded) |
+| 1000 | 713.1 KB  | 356.5 KB | 7 (+0 discarded) |
+| 4000 | 2.64 MB   | 1.32 MB  | 7 (+0 discarded) |
+
+### embedded.loop / compile-per-input  (NO reuse: system.createBlueprint + createRuntime(overrides) + actions + dispose, per input (M = 2))
+
+| widgets | n   | median   | p95      | spread | /op      | slope | | jitless: | n   | median   | p95      | spread | /op      | slope |
+| ------- | --- | -------- | -------- | ------ | -------- | ----- | ---------- | --- | -------- | -------- | ------ | -------- | ----- |
+| 100     | 120 | 5.30 ms  | 6.58 ms  | 9.7%   | 2.65 ms  | -     | |          | 118 | 12.7 ms  | 13.2 ms  | 1.3%   | 6.33 ms  | -     |
+| 1000    | 27  | 56.0 ms  | 65.0 ms  | 6.3%   | 28.0 ms  | 1.02  | |          | 11  | 142.9 ms | 145.4 ms | 0.9%   | 71.5 ms  | 1.05  |
+| 4000    | 9   | 266.3 ms | 295.4 ms | 8.2%   | 133.1 ms | 1.12  | |          | 9   | 595.9 ms | 602.5 ms | 0.6%   | 297.9 ms | 1.03  |
+
+log-log slope 100 -> 4000: 1.06 (last step 1.12)
+
+Allocation (approximate, includes retained):
+
+| size | bytes/run                      | bytes/op | trials           |
+| ---- | ------------------------------ | -------- | ---------------- |
+| 100  | 16.79 MB                       | 8.39 MB  | 7 (+0 discarded) |
+| 1000 | 161.53 MB                      | 80.76 MB | 7 (+0 discarded) |
+| 4000 | not measured (window > 200 MB) | -        | 0 (+0 discarded) |
+
+## memory.retained
+
+Retained heap per widget for a Blueprint, a Runtime, and a Runtime with every Property evaluated; leak check after dispose.
+
+Inside the timed region: n/a (heap measurement).
+Outside: the shared source document.
+
+Retained heap per widget (bytes)
+
+| profile   | widgets | Blueprint B/w | range      | Runtime B/w | range        | + all Properties evaluated B/w | Blueprint+Runtime after dispose() B/w | after dropping refs B/w |
+| --------- | ------- | ------------- | ---------- | ----------- | ------------ | ------------------------------ | ------------------------------------- | ----------------------- |
+| bare      | 1000    | 2194          | 2163..2202 | 6098        | 6053..6105   | 7                              | 8252                                  | 7                       |
+| bare      | 4000    | 2211          | 2192..2217 | 6045        | 6035..6049   | 0                              | 8252                                  | -5                      |
+| bare      | 16000   | 2241          | 2241..2241 | 6047        | 6047..6047   | 1                              | 8289                                  | 0                       |
+| standard  | 1000    | 7413          | 7412..7437 | 21151       | 21146..21201 | 1442                           | 30010                                 | 19                      |
+| standard  | 4000    | 7414          | 7414..7419 | 21160       | 21159..21161 | 1443                           | 30015                                 | 0                       |
+| standard  | 16000   | 7439          | 7438..7441 | 21167       | 21167..21167 | 1437                           | 30043                                 | 0                       |
+| crossDeps | 1000    | 7427          | 7315..7440 | 21238       | 21216..21241 | 1465                           | 30109                                 | -10                     |
+| crossDeps | 4000    | 7442          | 7438..7444 | 21229       | 21228..21230 | 1441                           | 30113                                 | 1                       |
+| crossDeps | 16000   | 7467          | 7467..7468 | 21237       | 21237..21237 | 1436                           | 30141                                 | 0                       |
+
+## vue.mount
+
+Mount an N-widget standard tree through WidgetRenderer (simulated DOM).
+
+Inside the timed region: createApp + mount: renderer tree, every useWidget() bridge, first render of every widget.
+Outside: compiling, Runtime creation, creating and attaching the host element, unmounting and disposing afterwards.
+Note: simulated DOM (happy-dom), production build of Vue; only comparable to itself
+
+### vue.mount / standard
+
+| widgets | n   | median  | p95      | spread | /unit   | slope |
+| ------- | --- | ------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 3.43 ms | 3.66 ms  | 2.3%   | 34.3 us | -     |
+| 1000    | 55  | 27.3 ms | 28.9 ms  | 2.2%   | 27.3 us | 0.90  |
+| 4000    | 21  | 99.9 ms | 104.9 ms | 2.9%   | 25.0 us | 0.94  |
+
+log-log slope 100 -> 4000: 0.91 (last step 0.94)
+
+## vue.unmount
+
+Unmount an N-widget standard tree (simulated DOM).
+
+Inside the timed region: app.unmount().
+Outside: compiling, Runtime creation, mounting (a freshly mounted app per call), disposing.
+Note: simulated DOM (happy-dom), production build of Vue; only comparable to itself
+
+### vue.unmount / standard
+
+| widgets | n   | median   | p95      | spread | /unit   | slope  |
+| ------- | --- | -------- | -------- | ------ | ------- | ------ |
+| 100     | 120 | 321.8 us | 369.1 us | 6.8%   | 3.22 us | -      |
+| 1000    | 120 | 3.42 ms  | 3.87 ms  | 6.2%   | 3.42 us | 1.03   |
+| 4000    | 83  | 18.1 ms  | 19.8 ms  | 3.8%   | 4.52 us | 1.20 ! |
+
+log-log slope 100 -> 4000: 1.09 (last step 1.20)
+
+## vue.update
+
+One State write that changes what K rendered widgets display, measured until the DOM has flushed.
+
+Inside the timed region: src.state.v.set(value) followed by await nextTick() (Vue flush + DOM patch of the K changed widgets).
+Outside: compiling, Runtime creation, mounting.
+Note: simulated DOM (happy-dom), production build of Vue; only comparable to itself
+
+### vue.update / star  (production build of Vue; K follower widgets render a Property that depends on the written State)
+
+| K widgets changed | n   | median   | p95      | spread    | /unit   | slope  |
+| ----------------- | --- | -------- | -------- | --------- | ------- | ------ |
+| 10                | 120 | 17.9 us  | 28.7 us  | 2.8% tail | 1.79 us | -      |
+| 100               | 120 | 180.8 us | 201.2 us | 2.3%      | 1.81 us | 1.01   |
+| 1000              | 120 | 3.05 ms  | 3.64 ms  | 3.8%      | 3.05 us | 1.23 ! |
+| 4000              | 80  | 18.8 ms  | 19.7 ms  | 1.3%      | 4.70 us | 1.31 ! |
+
+log-log slope 10 -> 4000: 1.16 (last step 1.31)
+
+### vue.update / one-of-N  (production build of Vue; N-widget standard tree mounted; a write changes the display of exactly one unit; the size column is N)
+
+| widgets | n   | median  | p95     | spread          | slope |
+| ------- | --- | ------- | ------- | --------------- | ----- |
+| 100     | 240 | 2.81 us | 4.91 us | 4.1% tail drift | -     |
+| 1000    | 120 | 2.78 us | 3.09 us | 1.5%            | -0.00 |
+| 4000    | 120 | 2.83 us | 3.12 us | 2.8% drift      | 0.01  |
+
+log-log slope 100 -> 4000: 0.00 (last step 0.01)
+
+## vue.swap
+
+Replace the `runtime` prop of a mounted WidgetRenderer: a full unmount of the old tree and mount of the new one.
+
+Inside the timed region: assigning the prop and awaiting nextTick().
+Outside: compiling, creating the two Runtimes, the initial mount.
+Note: simulated DOM (happy-dom), production build of Vue; only comparable to itself
+
+### vue.swap / standard
+
+| widgets | n   | median   | p95      | spread     | /unit   | slope  |
+| ------- | --- | -------- | -------- | ---------- | ------- | ------ |
+| 100     | 120 | 1.95 ms  | 2.23 ms  | 6.9% drift | 19.5 us | -      |
+| 1000    | 79  | 19.1 ms  | 20.3 ms  | 2.2%       | 19.1 us | 0.99   |
+| 4000    | 15  | 105.6 ms | 107.5 ms | 1.1%       | 26.4 us | 1.24 ! |
+
+log-log slope 100 -> 4000: 1.08 (last step 1.24)
+
+## inspector.snapshot
+
+`blueprint.getSnapshot` request for an N-widget standard tree, end to end over the in-memory transport.
+
+Inside the timed region: client.request(...) until the response promise resolves: Agent projection, JSON clone both ways, client validation.
+Outside: compile, Runtime creation, Agent/Client setup and handshake.
+
+### inspector.snapshot / standard
+
+| widgets | n   | median   | p95      | spread | /unit   | slope |
+| ------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 100     | 120 | 2.54 ms  | 2.66 ms  | 1.4%   | 25.4 us | -     |
+| 1000    | 65  | 23.0 ms  | 24.2 ms  | 1.1%   | 23.0 us | 0.96  |
+| 4000    | 21  | 90.9 ms  | 93.2 ms  | 1.8%   | 22.7 us | 0.99  |
+| 16000   | 9   | 415.9 ms | 422.5 ms | 0.7%   | 26.0 us | 1.10  |
+
+log-log slope 100 -> 16000: 1.00 (last step 1.10)
+
+## inspector.widget
+
+One `runtime.getWidgetSnapshot` request for ONE widget of an N-widget standard tree, end to end over the in-memory transport. The Agent resolves the reference with a linear scan of the Blueprint nodes (stopping at the first match), so the variants show how that scan grows with N.
+
+Inside the timed region: client.request(...) until the response promise resolves: reference resolution in the Agent, projection of the one widget, JSON clone both ways, client validation.
+Outside: compile, Runtime creation, Agent/Client setup, handshake and the Blueprint snapshot that supplies the references.
+
+### inspector.widget / first-node  (the first node in the snapshot (pre-order): the root, necessarily a `group` in a tree, so its response is smaller than a unit's; the scan matches at once)
+
+| widgets | n   | median  | p95     | spread | slope |
+| ------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 4.17 us | 4.45 us | 3.0%   | -     |
+| 1000    | 120 | 4.09 us | 4.54 us | 4.3%   | -0.01 |
+| 4000    | 120 | 4.02 us | 4.43 us | 2.2%   | -0.01 |
+| 16000   | 120 | 4.10 us | 4.38 us | 2.2%   | 0.01  |
+
+log-log slope 100 -> 16000: -0.00 (last step 0.01)
+
+### inspector.widget / first-unit  (the first `unit` node in the snapshot: a unit response with a short scan (the first group-free leaf is a few nodes deep))
+
+| widgets | n   | median  | p95     | spread | slope |
+| ------- | --- | ------- | ------- | ------ | ----- |
+| 100     | 120 | 7.91 us | 8.40 us | 2.5%   | -     |
+| 1000    | 120 | 7.90 us | 8.46 us | 1.3%   | -0.00 |
+| 4000    | 120 | 7.88 us | 8.89 us | 2.6%   | -0.00 |
+| 16000   | 120 | 7.96 us | 8.57 us | 2.0%   | 0.01  |
+
+log-log slope 100 -> 16000: 0.00 (last step 0.01)
+
+### inspector.widget / last-node  (the last node in the snapshot (pre-order), a `unit`: a unit response, and the scan walks the whole node list)
+
+| widgets | n   | median   | p95      | spread | slope  |
+| ------- | --- | -------- | -------- | ------ | ------ |
+| 100     | 120 | 10.3 us  | 10.6 us  | 0.7%   | -      |
+| 1000    | 120 | 41.0 us  | 42.5 us  | 0.6%   | 0.60   |
+| 4000    | 240 | 146.1 us | 155.8 us | 9.0%   | 0.92   |
+| 16000   | 120 | 1.77 ms  | 1.99 ms  | 7.5%   | 1.80 ! |
+
+log-log slope 100 -> 16000: 1.01 (last step 1.80)
+
+### inspector.widget / rotating  (a different `unit` on every call, cycling through all units (a fixed stride, so every unit is visited once per cycle): the average scan length of a client that inspects many widgets)
+
+| widgets | n   | median   | p95     | spread                | slope  |
+| ------- | --- | -------- | ------- | --------------------- | ------ |
+| 100     | 120 | 10.7 us  | 11.6 us | 2.8%                  | -      |
+| 1000    | 120 | 27.0 us  | 28.8 us | 6.4%                  | 0.40   |
+| 4000    | 240 | 80.3 us  | 94.5 us | 10.8% UNRELIABLE      | 0.79   |
+| 16000   | 240 | 744.8 us | 1.10 ms | 19.8% UNRELIABLE tail | 1.61 ! |
+
+log-log slope 100 -> 16000: 0.84 (last step 1.61)
+
+## inspector.subscribe
+
+Member-change fan-out to a subscribed Client: writes to subscribed State members while the Agent projects, serializes and delivers each change.
+
+Inside the timed region: the State writes (events are delivered synchronously inside each write).
+Outside: compile, Runtime creation, Agent/Client setup, subscribing.
+
+### inspector.subscribe / one-write-per-subscription  (K State members (s0 of K units) each subscribed; one run writes each of them once (K events); size = K)
+
+| K subscriptions | n   | median   | p95      | spread | /unit   | slope |
+| --------------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 10              | 120 | 26.6 us  | 30.2 us  | 5.7%   | 2.66 us | -     |
+| 100             | 120 | 265.3 us | 291.4 us | 2.3%   | 2.65 us | 1.00  |
+| 1000            | 120 | 3.05 ms  | 3.15 ms  | 1.5%   | 3.05 us | 1.06  |
+
+log-log slope 10 -> 1000: 1.03 (last step 1.06)
+
+### inspector.subscribe / burst-one-member  (one State member subscribed; one run is a burst of B writes (B events); size = B)
+
+| B writes | n   | median   | p95      | spread | /unit   | slope |
+| -------- | --- | -------- | -------- | ------ | ------- | ----- |
+| 10       | 120 | 24.1 us  | 26.2 us  | 3.4%   | 2.41 us | -     |
+| 100      | 120 | 230.7 us | 249.1 us | 1.0%   | 2.31 us | 0.98  |
+| 1000     | 120 | 2.31 ms  | 2.40 ms  | 0.9%   | 2.31 us | 1.00  |
+
+log-log slope 10 -> 1000: 0.99 (last step 1.00)
+
+### inspector.subscribe / no-subscription  (reference: the same writes with the Agent present but nothing subscribed (B = 1000 writes of one State))
+
+| B writes | n   | median   | p95      | spread | /unit    | slope |
+| -------- | --- | -------- | -------- | ------ | -------- | ----- |
+| 1000     | 120 | 108.7 us | 112.1 us | 0.3%   | 108.7 ns | -     |
+
+## inspector.value
+
+encodeInspectableValue (the wire encoding of Runtime values and Event arguments) on large values.
+
+Inside the timed region: one encodeInspectableValue(value, limits) call.
+Outside: building the value.
+
+### inspector.value / object.default-limits  (object with M keys, default limits (50 entries kept: the bounded smallest-keys window))
+
+| value size M | n   | median   | p95      | spread | /unit    | slope  |
+| ------------ | --- | -------- | -------- | ------ | -------- | ------ |
+| 100          | 120 | 18.4 us  | 19.5 us  | 1.2%   | 183.6 ns | -      |
+| 1000         | 120 | 50.2 us  | 57.7 us  | 8.2%   | 50.2 ns  | 0.44   |
+| 10000        | 120 | 781.4 us | 803.7 us | 0.8%   | 78.1 ns  | 1.19 ! |
+| 100000       | 120 | 10.5 ms  | 11.1 ms  | 0.8%   | 105.3 ns | 1.13   |
+
+log-log slope 100 -> 100000: 0.92 (last step 1.13)
+
+### inspector.value / array.default-limits  (array of M numbers, default limits (output bounded: the first 50 entries))
+
+| value size M | n   | median  | p95     | spread | slope |
+| ------------ | --- | ------- | ------- | ------ | ----- |
+| 100          | 120 | 9.80 us | 10.1 us | 1.1%   | -     |
+| 1000         | 120 | 9.78 us | 10.0 us | 0.9%   | -0.00 |
+| 10000        | 120 | 9.79 us | 9.97 us | 0.7%   | 0.00  |
+| 100000       | 120 | 9.78 us | 10.0 us | 1.0%   | -0.00 |
+
+log-log slope 100 -> 100000: -0.00 (last step -0.00)
+
+### inspector.value / object.unlimited  (object with M keys, every limit lifted: the encoder's own per-entry cost)
+
+| value size M | n   | median   | p95      | spread | /unit    | slope |
+| ------------ | --- | -------- | -------- | ------ | -------- | ----- |
+| 100          | 120 | 34.1 us  | 35.1 us  | 0.6%   | 340.6 ns | -     |
+| 1000         | 120 | 381.5 us | 391.8 us | 1.5%   | 381.5 ns | 1.05  |
+| 10000        | 120 | 4.42 ms  | 4.53 ms  | 0.8%   | 442.1 ns | 1.06  |
+| 100000       | 36  | 43.1 ms  | 48.0 ms  | 6.8%   | 431.0 ns | 0.99  |
+
+log-log slope 100 -> 100000: 1.03 (last step 0.99)
+
+### inspector.value / array.unlimited  (array of M numbers, every limit lifted)
+
+| value size M | n   | median   | p95      | spread | /unit    | slope |
+| ------------ | --- | -------- | -------- | ------ | -------- | ----- |
+| 100          | 120 | 19.2 us  | 19.6 us  | 0.8%   | 192.0 ns | -     |
+| 1000         | 120 | 189.3 us | 194.9 us | 1.1%   | 189.3 ns | 0.99  |
+| 10000        | 120 | 1.84 ms  | 1.93 ms  | 4.5%   | 184.2 ns | 0.99  |
+| 100000       | 120 | 14.2 ms  | 15.2 ms  | 6.6%   | 141.5 ns | 0.89  |
+
+log-log slope 100 -> 100000: 0.96 (last step 0.89)
+
+### inspector.value / long-string  (a single string of M characters, default limits (truncated at 500; output bounded))
+
+| value size M | n   | median  | p95     | spread | slope |
+| ------------ | --- | ------- | ------- | ------ | ----- |
+| 100          | 120 | 53.9 ns | 56.8 ns | 0.7%   | -     |
+| 1000         | 120 | 60.6 ns | 62.8 ns | 0.8%   | 0.05  |
+| 10000        | 120 | 60.4 ns | 63.1 ns | 0.9%   | -0.00 |
+| 100000       | 120 | 60.6 ns | 63.6 ns | 1.2%   | 0.00  |
+
+log-log slope 100 -> 100000: 0.02 (last step 0.00)
+
+### inspector.value / object.default-limits.desc  (object with M keys created in DESCENDING key order, default limits (worst case of the bounded smallest-keys window; compare with object.default-limits, which is ascending))
+
+| value size M | n   | median   | p95      | spread | /unit    | slope |
+| ------------ | --- | -------- | -------- | ------ | -------- | ----- |
+| 100          | 120 | 21.6 us  | 22.1 us  | 0.5%   | 216.1 ns | -     |
+| 1000         | 120 | 115.4 us | 124.8 us | 3.5%   | 115.4 ns | 0.73  |
+| 10000        | 120 | 1.44 ms  | 1.46 ms  | 0.8%   | 143.8 ns | 1.10  |
+| 100000       | 88  | 17.0 ms  | 17.6 ms  | 0.8%   | 169.6 ns | 1.07  |
+
+log-log slope 100 -> 100000: 0.96 (last step 1.07)
+
+### inspector.value / object.unlimited.desc  (object with M keys created in DESCENDING key order, every limit lifted (compare with object.unlimited, which is ascending))
+
+| value size M | n   | median   | p95      | spread | /unit    | slope  |
+| ------------ | --- | -------- | -------- | ------ | -------- | ------ |
+| 100          | 120 | 35.4 us  | 36.3 us  | 0.6%   | 353.5 ns | -      |
+| 1000         | 120 | 446.1 us | 457.5 us | 1.1%   | 446.1 ns | 1.10   |
+| 10000        | 120 | 10.1 ms  | 10.3 ms  | 0.6%   | 1.01 us  | 1.36 ! |
+| 100000       | 9   | 821.7 ms | 849.7 ms | 0.5%   | 8.22 us  | 1.91 ! |
+
+log-log slope 100 -> 100000: 1.46 (last step 1.91)
+
+### inspector.value / nested.default-limits  (object tree of depth 6, fanout F (size column) = nodes available far beyond the budget; default limits)
+
+| fanout F | n   | median   | p95      | spread | slope  |
+| -------- | --- | -------- | -------- | ------ | ------ |
+| 2        | 120 | 12.1 us  | 12.7 us  | 1.5%   | -      |
+| 4        | 120 | 115.8 us | 119.2 us | 1.5%   | 3.26 ! |
+| 8        | 120 | 317.8 us | 323.9 us | 1.0%   | 1.46 ! |
+
+log-log slope 2 -> 8: 2.36 (last step 1.46)
+
+## size.bytes
+
+Bytes of every published entry point (raw, gzip, minified).
+Note: each figure is the whole import closure of the entry inside its package: shared chunks are counted in every entry that imports them (entries are not additive) and no tree-shaking is applied (an upper bound); external dependencies (alien-signals for Core) are not included
+
+Published entry points, dist closure (entry + the local chunks it imports; shared chunks are counted in every entry that imports them, so rows are not additive; no tree-shaking, so an upper bound; external dependencies such as alien-signals are not included). Minifier: esbuild 0.28.2 from the workspace's node_modules.
+
+| entry point                                | files | entry file raw | closure raw | closure gzip | closure min | min gzip | min brotli |
+| ------------------------------------------ | ----- | -------------- | ----------- | ------------ | ----------- | -------- | ---------- |
+| @deviltea/widget-core                      | 4     | 158.2 KB       | 192.2 KB    | 44.8 KB      | 77.6 KB     | 22.1 KB  | 19.5 KB    |
+| @deviltea/widget-core/inspection           | 3     | 14.9 KB        | 27.1 KB     | 7.0 KB       | 11.1 KB     | 3.4 KB   | 3.0 KB     |
+| @deviltea/widget-core/integration          | 3     | 1.9 KB         | 34.9 KB     | 10.9 KB      | 9.8 KB      | 3.5 KB   | 3.1 KB     |
+| @deviltea/widget-vue                       | 2     | 18.7 KB        | 23.9 KB     | 7.3 KB       | 7.8 KB      | 2.8 KB   | 2.5 KB     |
+| @deviltea/widget-vue/testing               | 2     | 2.0 KB         | 7.2 KB      | 2.7 KB       | 1.9 KB      | 897 B    | 748 B      |
+| @deviltea/widget-inspector/agent           | 4     | 44.5 KB        | 76.4 KB     | 16.4 KB      | 38.9 KB     | 10.9 KB  | 9.7 KB     |
+| @deviltea/widget-inspector/anchor          | 1     | 1.5 KB         | 1.5 KB      | 766 B        | 206 B       | 168 B    | 129 B      |
+| @deviltea/widget-inspector/channel         | 1     | 6.6 KB         | 6.6 KB      | 2.0 KB       | 3.0 KB      | 1.1 KB   | 1.0 KB     |
+| @deviltea/widget-inspector/client          | 2     | 8.1 KB         | 33.2 KB     | 6.9 KB       | 17.5 KB     | 4.7 KB   | 4.2 KB     |
+| @deviltea/widget-inspector/frame-bootstrap | 1     | 1.9 KB         | 1.9 KB      | 725 B        | 1.1 KB      | 539 B    | 466 B      |
+| @deviltea/widget-inspector/protocol        | 2     | 685 B          | 25.7 KB     | 5.0 KB       | 14.4 KB     | 3.7 KB   | 3.3 KB     |
+| @deviltea/widget-inspector/transport       | 1     | 4.0 KB         | 4.0 KB      | 1.3 KB       | 1.5 KB      | 617 B    | 542 B      |
+| @deviltea/widget-inspector/value           | 1     | 5.3 KB         | 5.3 KB      | 1.7 KB       | 2.6 KB      | 1.1 KB   | 1.0 KB     |
+
+## load.cold
+
+Cold import time of the entry points in a fresh Node process, normal and --jitless.
+
+Cold module load in a fresh Node process (21 runs each after one discarded). An empty Node process takes 28.2 ms wall (spread 2.7%) in this environment; process wall includes that.
+
+| entry point                                            | engine  | import median | import p95 | import spread | process wall median | wall spread |
+| ------------------------------------------------------ | ------- | ------------- | ---------- | ------------- | ------------------- | ----------- |
+| @deviltea/widget-core                                  | normal  | 4.34 ms       | 4.78 ms    | 1.1%          | 35.6 ms             | 2.0%        |
+| @deviltea/widget-core                                  | jitless | 3.76 ms       | 4.17 ms    | 0.4%          | 39.4 ms             | 2.4%        |
+| @deviltea/widget-core/inspection                       | normal  | 1.19 ms       | 1.49 ms    | 2.8%          | 32.3 ms             | 1.9%        |
+| @deviltea/widget-core/inspection                       | jitless | 1.00 ms       | 1.15 ms    | 0.8%          | 35.7 ms             | 1.7%        |
+| @deviltea/widget-core/integration                      | normal  | 2.31 ms       | 2.60 ms    | 1.6%          | 33.3 ms             | 2.4%        |
+| @deviltea/widget-core/integration                      | jitless | 2.12 ms       | 2.22 ms    | 1.0%          | 37.4 ms             | 1.5%        |
+| vue (reference: the peer dependency alone)             | normal  | 25.31 ms      | 26.91 ms   | 2.5%          | 58.4 ms             | 1.9%        |
+| vue (reference: the peer dependency alone)             | jitless | 26.02 ms      | 27.68 ms   | 1.0%          | 62.3 ms             | 1.3%        |
+| @deviltea/widget-vue (vue and core already loaded)     | normal  | 1.38 ms       | 1.61 ms    | 7.2%          | 62.0 ms             | 1.6%        |
+| @deviltea/widget-vue (vue and core already loaded)     | jitless | 1.59 ms       | 1.84 ms    | 5.0%          | 67.2 ms             | 1.7%        |
+| @deviltea/widget-inspector/agent (core already loaded) | normal  | 1.33 ms       | 1.48 ms    | 1.5%          | 38.3 ms             | 1.6%        |
+| @deviltea/widget-inspector/agent (core already loaded) | jitless | 1.48 ms       | 1.57 ms    | 1.7%          | 41.9 ms             | 2.1%        |
+| @deviltea/widget-inspector/client                      | normal  | 1.04 ms       | 1.17 ms    | 1.6%          | 31.7 ms             | 1.7%        |
+| @deviltea/widget-inspector/client                      | jitless | 0.86 ms       | 0.90 ms    | 1.6%          | 35.8 ms             | 1.5%        |
+
+WARNING: [normal] other processes used about 1.7 cores while this ran; treat its numbers with suspicion.
+
+Total wall time: 44.1 min
+Wrote benchmarks/.results/baseline-2.json

@@ -1,9 +1,7 @@
 # B1 — performance baseline: a benchmark harness, numbers, and profiles
 
-Read the shared brief first (where you are, rules, commit trailers, report format):
-`/private/tmp/claude-501/-Users-deviltea-Documents-projects-widget/ed03e9a2-cdc2-4d8b-a4c8-3d52f6a70d01/scratchpad/next/BRIEF.md`.
-Your scratch directory is
-`/private/tmp/claude-501/-Users-deviltea-Documents-projects-widget/ed03e9a2-cdc2-4d8b-a4c8-3d52f6a70d01/scratchpad/perf/B1/`.
+This specification was written for the session that built the harness; the shared brief and scratch directory it
+refers to belonged to that session and are not part of the repository.
 
 ## Purpose
 

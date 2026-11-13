@@ -1,0 +1,68 @@
+#### inspection.blueprint / cold @ 4000 [normal] (median 25516.8 us per run, spread 9.2%)
+
+158123 samples, 48623 ms profiled. Timed-run share 28.6%; dropped from the percentages below: un-timed set-up/clean-up 51.1%, garbage collector 18.7% (not attributable to a function), idle 0.0%, other 1.6%. Percentages are of the timed-run share.
+
+Garbage collector: 9097.9 ms, 38.3% of the 23781 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 22.8 | 49.2 | walk | packages/core/dist/inspection/index.mjs:82 | src: packages/core/src/inspection/blueprint.ts:115 |
+| 12.3 | 12.3 | freezeClonedReference | packages/core/dist/inspection/index.mjs:30 | src: packages/core/src/inspection/blueprint.ts:59 |
+| 7.4 | 26.1 | projectDependency | packages/core/dist/inspection/index.mjs:54 | src: packages/core/src/inspection/blueprint.ts:78 |
+| 6.7 | 73.4 | buildNode | packages/core/dist/inspection/index.mjs:163 | src: packages/core/src/blueprint/recovery.ts:156, packages/core/src/inspection/blueprint.ts:219 |
+| 6.5 | 6.5 | buildMemberRef | packages/core/dist/inspection/index.mjs:38 | src: packages/core/src/inspection/blueprint.ts:65 |
+| 4.9 | 30.0 | buildPropertyMembers | packages/core/dist/inspection/index.mjs:121 | src: packages/core/src/inspection/blueprint.ts:171, packages/core/src/inspection/plugin.ts:55 |
+| 4.0 | 30.7 | buildMethodMembers | packages/core/dist/inspection/index.mjs:142 | src: packages/core/src/inspection/blueprint.ts:194 |
+| 2.7 | 51.7 | flattenDependencies | packages/core/dist/inspection/index.mjs:80 | src: packages/core/src/inspection/blueprint.ts:112 |
+| 2.6 | 2.6 | strongConnect | packages/core/dist/index.mjs:3222 | src: packages/core/src/blueprint/graph.ts:99 |
+| 2.6 | 2.6 | buildStateMembers | packages/core/dist/inspection/index.mjs:112 | src: packages/core/src/inspection/blueprint.ts:159, packages/core/src/inspection/plugin.ts:39 |
+| 2.3 | 2.7 | resolveLeaf | packages/core/dist/index.mjs:2985 | src: packages/core/src/blueprint/deps.ts:97 |
+| 2.0 | 6.8 | emitCycleDiagnostics | packages/core/dist/index.mjs:3246 | src: packages/core/src/blueprint/graph.ts:136 |
+| 2.0 | 2.0 | visit | packages/core/dist/inspection/index.mjs:197 | src: packages/core/src/blueprint/recovery.ts:545, packages/core/src/inspection/blueprint.ts:263, packages/core/src/source-patch.ts:370 |
+| 1.7 | 9.6 | runGraphAnalysis | packages/core/dist/index.mjs:3277 | src: packages/core/src/blueprint/graph.ts:189 |
+| 1.6 | 8.4 | resolveDependencies | packages/core/dist/index.mjs:3092 | src: packages/core/src/blueprint/deps.ts:231 |
+| 1.4 | 1.9 | buildSourceSlots | packages/core/dist/inspection/index.mjs:96 | src: packages/core/src/inspection/blueprint.ts:138 |
+| 1.4 | 4.3 | walkDeps | packages/core/dist/index.mjs:2968 | src: packages/core/src/blueprint/deps.ts:61 |
+| 1.4 | 1.4 | (anonymous) | packages/core/dist/index.mjs:3250 |  |
+| 1.0 | 22.6 | compileBlueprintOutsideCallbacks | packages/core/dist/index.mjs:4096 | src: packages/core/src/blueprint/index.ts:113 |
+| 1.0 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 1.0 | 1.1 | createDependencyBuilder | packages/core/dist/index.mjs:2817 | src: packages/core/src/dep.ts:348 |
+| 0.9 | 0.9 | buildEventMembers | packages/core/dist/inspection/index.mjs:131 | src: packages/core/src/inspection/blueprint.ts:184, packages/core/src/inspection/plugin.ts:71 |
+| 0.9 | 0.9 | computeWritefulMethods | packages/core/dist/index.mjs:3175 | src: packages/core/src/blueprint/graph.ts:38 |
+| 0.9 | 0.9 | inspectJsonValueAt | packages/core/dist/index.mjs:38 | src: packages/core/src/json.ts:59 |
+| 0.8 | 3.4 | findStronglyConnectedComponents | packages/core/dist/index.mjs:3215 | src: packages/core/src/blueprint/graph.ts:91 |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 0.7 | 76.5 | buildBlueprintInspection | packages/core/dist/inspection/index.mjs:211 | src: packages/core/src/inspection/blueprint.ts:292 |
+| 0.2 | 73.7 | (anonymous) | packages/core/dist/inspection/index.mjs:213 |  |
+| 6.7 | 73.4 | buildNode | packages/core/dist/inspection/index.mjs:163 | src: packages/core/src/blueprint/recovery.ts:156, packages/core/src/inspection/blueprint.ts:219 |
+| 0.0 | 67.8 | inspectBlueprint | packages/core/dist/inspection/index.mjs:237 | src: packages/core/src/inspection/blueprint.ts:326 |
+| 2.7 | 51.7 | flattenDependencies | packages/core/dist/inspection/index.mjs:80 | src: packages/core/src/inspection/blueprint.ts:112 |
+| 22.8 | 49.2 | walk | packages/core/dist/inspection/index.mjs:82 | src: packages/core/src/inspection/blueprint.ts:115 |
+| 4.0 | 30.7 | buildMethodMembers | packages/core/dist/inspection/index.mjs:142 | src: packages/core/src/inspection/blueprint.ts:194 |
+| 4.9 | 30.0 | buildPropertyMembers | packages/core/dist/inspection/index.mjs:121 | src: packages/core/src/inspection/blueprint.ts:171, packages/core/src/inspection/plugin.ts:55 |
+| 7.4 | 26.1 | projectDependency | packages/core/dist/inspection/index.mjs:54 | src: packages/core/src/inspection/blueprint.ts:78 |
+| 0.0 | 22.6 | createBlueprint | packages/core/dist/index.mjs:4279 | src: packages/core/src/system.ts:219 |
+| 1.0 | 22.6 | compileBlueprintOutsideCallbacks | packages/core/dist/index.mjs:4096 | src: packages/core/src/blueprint/index.ts:113 |
+| 12.3 | 12.3 | freezeClonedReference | packages/core/dist/inspection/index.mjs:30 | src: packages/core/src/inspection/blueprint.ts:59 |
+| 1.7 | 9.6 | runGraphAnalysis | packages/core/dist/index.mjs:3277 | src: packages/core/src/blueprint/graph.ts:189 |
+| 1.6 | 8.4 | resolveDependencies | packages/core/dist/index.mjs:3092 | src: packages/core/src/blueprint/deps.ts:231 |
+| 2.0 | 6.8 | emitCycleDiagnostics | packages/core/dist/index.mjs:3246 | src: packages/core/src/blueprint/graph.ts:136 |
+| 6.5 | 6.5 | buildMemberRef | packages/core/dist/inspection/index.mjs:38 | src: packages/core/src/inspection/blueprint.ts:65 |
+| 1.4 | 4.3 | walkDeps | packages/core/dist/index.mjs:2968 | src: packages/core/src/blueprint/deps.ts:61 |
+| 0.8 | 3.4 | findStronglyConnectedComponents | packages/core/dist/index.mjs:3215 | src: packages/core/src/blueprint/graph.ts:91 |
+| 0.1 | 2.8 | resolve | packages/core/dist/index.mjs:3095 | src: packages/core/src/blueprint/deps.ts:242 |
+| 2.3 | 2.7 | resolveLeaf | packages/core/dist/index.mjs:2985 | src: packages/core/src/blueprint/deps.ts:97 |
+| 2.6 | 2.6 | strongConnect | packages/core/dist/index.mjs:3222 | src: packages/core/src/blueprint/graph.ts:99 |
+| 2.6 | 2.6 | buildStateMembers | packages/core/dist/inspection/index.mjs:112 | src: packages/core/src/inspection/blueprint.ts:159, packages/core/src/inspection/plugin.ts:39 |
+| 2.0 | 2.0 | visit | packages/core/dist/inspection/index.mjs:197 | src: packages/core/src/blueprint/recovery.ts:545, packages/core/src/inspection/blueprint.ts:263, packages/core/src/source-patch.ts:370 |
+| 0.0 | 2.0 | computePreOrder | packages/core/dist/inspection/index.mjs:195 | src: packages/core/src/inspection/blueprint.ts:260 |
+| 1.4 | 1.9 | buildSourceSlots | packages/core/dist/inspection/index.mjs:96 | src: packages/core/src/inspection/blueprint.ts:138 |
+
+profile: benchmarks/.results/profiles-raw/inspection.blueprint.cold.4000.normal.cpuprofile
+

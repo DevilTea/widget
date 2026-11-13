@@ -1,0 +1,45 @@
+#### runtime.reset / dirty @ 4000 [normal] (median 970.4 us per run, spread 3.1%)
+
+5147 samples, 1560 ms profiled. Timed-run share 56.6%; dropped from the percentages below: un-timed set-up/clean-up 37.5%, garbage collector 2.8% (not attributable to a function), idle 0.0%, other 3.1%. Percentages are of the timed-run share.
+
+Garbage collector: 43.1 ms, 4.4% of the 975 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 33.0 | 33.0 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 16.1 | 42.1 | (anonymous) | packages/core/dist/index.mjs:2393 |  |
+| 15.1 | 73.2 | runRuntimeOperation | packages/core/dist/event-D8XvgH0Q.mjs:268 | src: packages/core/src/runtime/adapter.ts:210 |
+| 12.6 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 10.8 | 10.8 | createOperationCollector | packages/core/dist/index.mjs:2016 | src: packages/core/src/runtime/collector.ts:68 |
+| 7.2 | 7.2 | publishInspectionSnapshot | packages/core/dist/index.mjs:2407 | src: packages/core/src/runtime/state.ts:111 |
+| 3.0 | 3.1 | assertSyncValue | packages/core/dist/event-D8XvgH0Q.mjs:376 | src: packages/core/src/runtime/sync.ts:13 |
+| 1.4 | 26.0 | restoreInitial | packages/core/dist/index.mjs:2477 | src: packages/core/src/runtime/state.ts:207 |
+| 0.6 | 14.8 | attemptSetWithinOperation | packages/core/dist/index.mjs:2432 | src: packages/core/src/runtime/state.ts:147 |
+| 0.1 | 0.1 | now (builtin) |  |  |
+| 0.0 | 0.0 | commitDiagnostics | packages/core/dist/index.mjs:2421 | src: packages/core/src/runtime/method.ts:62, packages/core/src/runtime/state.ts:133 |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 15.1 | 73.2 | runRuntimeOperation | packages/core/dist/event-D8XvgH0Q.mjs:268 | src: packages/core/src/runtime/adapter.ts:210 |
+| 0.0 | 58.4 | restoreInitialState | packages/core/dist/index.mjs:2391 | src: packages/core/src/runtime/state.ts:79 |
+| 16.1 | 42.1 | (anonymous) | packages/core/dist/index.mjs:2393 |  |
+| 0.0 | 41.6 | resetState | packages/core/dist/index.mjs:2710 | src: packages/core/src/runtime/index.ts:248 |
+| 33.0 | 33.0 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 1.4 | 26.0 | restoreInitial | packages/core/dist/index.mjs:2477 | src: packages/core/src/runtime/state.ts:207 |
+| 0.0 | 14.8 | set | packages/core/dist/index.mjs:2507 | src: packages/core/src/dep.ts:324, packages/core/src/runtime/state.ts:240 |
+| 0.0 | 14.8 | attemptSet | packages/core/dist/index.mjs:2429 | src: packages/core/src/runtime/state.ts:143 |
+| 0.0 | 14.8 | (anonymous) | packages/core/dist/index.mjs:2430 |  |
+| 0.6 | 14.8 | attemptSetWithinOperation | packages/core/dist/index.mjs:2432 | src: packages/core/src/runtime/state.ts:147 |
+| 10.8 | 10.8 | createOperationCollector | packages/core/dist/index.mjs:2016 | src: packages/core/src/runtime/collector.ts:68 |
+| 7.2 | 7.2 | publishInspectionSnapshot | packages/core/dist/index.mjs:2407 | src: packages/core/src/runtime/state.ts:111 |
+| 3.0 | 3.1 | assertSyncValue | packages/core/dist/event-D8XvgH0Q.mjs:376 | src: packages/core/src/runtime/sync.ts:13 |
+| 0.1 | 0.1 | now (builtin) |  |  |
+| 0.0 | 0.0 | commitDiagnostics | packages/core/dist/index.mjs:2421 | src: packages/core/src/runtime/method.ts:62, packages/core/src/runtime/state.ts:133 |
+| 0.0 | 0.0 | now (builtin) | node:internal/perf/performance:137 |  |
+
+profile: benchmarks/.results/profiles-raw/runtime.reset.dirty.4000.normal.cpuprofile
+

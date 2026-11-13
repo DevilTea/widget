@@ -1,0 +1,68 @@
+#### vue.update / star @ 1000 [normal] (median 2304.9 us per run, spread 3.6%)
+
+5923 samples, 1808 ms profiled. Timed-run share 84.7%; dropped from the percentages below: un-timed set-up/clean-up 0.0%, garbage collector 13.6% (not attributable to a function), idle 0.0%, other 1.6%. Percentages are of the timed-run share.
+
+Garbage collector: 246.7 ms, 13.6% of the 1808 ms of kept samples (every sample except the un-timed set-up/clean-up ones). Forced collections are off in profile mode: this is only the collection work the measured code's own garbage triggers.
+
+Top by self time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 9.3 | 0.0 | (harness loop) |  | self time in benchmarks/ code, builtins that V8 attributes to it included (e.g. JSON.parse called by a scenario closure) |
+| 9.1 | 10.8 | evaluate | packages/core/dist/index.mjs:2238 | src: packages/core/src/runtime/property.ts:142 |
+| 6.9 | 13.8 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:441 |  |
+| 6.8 | 9.6 | Node | node_modules/happy-dom/lib/nodes/node/Node.js:34 |  |
+| 5.3 | 5.3 | get nextSibling | node_modules/happy-dom/lib/nodes/node/Node.js:192 |  |
+| 4.4 | 4.8 | trigger | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:581 |  |
+| 3.7 | 43.3 | set textContent | node_modules/happy-dom/lib/nodes/element/Element.js:332 |  |
+| 3.3 | 22.8 | run | node_modules/alien-signals/esm/index.mjs:212 |  |
+| 3.1 | 16.5 | (anonymous) | node_modules/happy-dom/lib/nodes/element/Element.js:1109 |  |
+| 3.1 | 4.6 | getResultWithInspectionPublish | packages/core/dist/index.mjs:2330 | src: packages/core/src/runtime/property.ts:263 |
+| 2.9 | 71.2 | componentUpdateFn | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4705 |  |
+| 2.9 | 7.7 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:389 |  |
+| 2.8 | 2.8 | EventTarget | node_modules/happy-dom/lib/event/EventTarget.js:13 |  |
+| 2.7 | 3.8 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:640 |  |
+| 2.5 | 10.0 | (anonymous) | node_modules/happy-dom/lib/nodes/element/Element.js:1101 |  |
+| 2.5 | 4.1 | (anonymous) | node_modules/happy-dom/lib/nodes/text/Text.js:109 |  |
+| 2.2 | 2.2 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:680 |  |
+| 2.2 | 17.7 | renderComponentRoot | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:3523 |  |
+| 2.2 | 3.0 | _createVNode | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:6232 |  |
+| 1.7 | 1.8 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:815 |  |
+| 1.7 | 72.9 | runIfDirty | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:289 |  |
+| 1.6 | 1.6 | propagate | node_modules/alien-signals/esm/system.mjs:88 |  |
+| 1.6 | 1.6 | track | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:547 |  |
+| 1.6 | 24.8 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 1.4 | 11.0 | CharacterData | node_modules/happy-dom/lib/nodes/character-data/CharacterData.js:21 |  |
+
+Top by inclusive time
+
+| self % | incl % | function | location (dist) | source (by name) |
+| --- | --- | --- | --- | --- |
+| 0.5 | 73.4 | flushJobs | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:253 |  |
+| 1.7 | 72.9 | runIfDirty | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:289 |  |
+| 0.0 | 72.1 | callWithErrorHandling | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:84 |  |
+| 0.1 | 71.3 | run | node_modules/@vue/reactivity/dist/reactivity.cjs.prod.js:246 |  |
+| 2.9 | 71.2 | componentUpdateFn | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4705 |  |
+| 0.5 | 45.2 | patch | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4128 |  |
+| 0.2 | 44.7 | processElement | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4279 |  |
+| 1.0 | 44.5 | patchElement | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4417 |  |
+| 0.0 | 43.4 | patchChildren | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:4857 |  |
+| 3.7 | 43.3 | set textContent | node_modules/happy-dom/lib/nodes/element/Element.js:332 |  |
+| 0.1 | 42.0 | setElementText | node_modules/@vue/runtime-dom/dist/runtime-dom.cjs.prod.js:50 |  |
+| 0.8 | 26.0 | runRuntimeOperation | packages/core/dist/event-D8XvgH0Q.mjs:268 | src: packages/core/src/runtime/adapter.ts:210 |
+| 0.0 | 25.0 | set | packages/core/dist/index.mjs:2507 | src: packages/core/src/dep.ts:324, packages/core/src/runtime/state.ts:240 |
+| 0.0 | 25.0 | (anonymous) | packages/core/dist/index.mjs:2430 |  |
+| 0.1 | 25.0 | attemptSetWithinOperation | packages/core/dist/index.mjs:2432 | src: packages/core/src/runtime/state.ts:147 |
+| 1.6 | 24.8 | signalOper | node_modules/alien-signals/esm/index.mjs:301 |  |
+| 0.4 | 23.1 | flush | node_modules/alien-signals/esm/index.mjs:253 |  |
+| 3.3 | 22.8 | run | node_modules/alien-signals/esm/index.mjs:212 |  |
+| 0.0 | 20.9 | attemptSet | packages/core/dist/index.mjs:2429 | src: packages/core/src/runtime/state.ts:143 |
+| 2.2 | 17.7 | renderComponentRoot | node_modules/@vue/runtime-core/dist/runtime-core.cjs.prod.js:3523 |  |
+| 0.2 | 17.1 | removeChild | node_modules/happy-dom/lib/nodes/node/Node.js:322 |  |
+| 3.1 | 16.5 | (anonymous) | node_modules/happy-dom/lib/nodes/element/Element.js:1109 |  |
+| 6.9 | 13.8 | (anonymous) | node_modules/happy-dom/lib/nodes/node/Node.js:441 |  |
+| 0.0 | 12.5 | createTextNode | node_modules/happy-dom/lib/nodes/document/Document.js:1419 |  |
+| 0.3 | 12.5 | Text | node_modules/happy-dom/lib/window/WindowContextClassExtender.js:80 |  |
+
+profile: benchmarks/.results/profiles-raw/vue.update.star.1000.normal.cpuprofile
+
