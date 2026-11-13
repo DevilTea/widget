@@ -72,16 +72,14 @@ function isDomNode(value: object): boolean {
 	}
 }
 
-/**
- * The `limit` smallest keys in code-unit order, without sorting (or copying) the whole key list: one pass
- * with a bounded sorted window, so the work beyond listing the keys is proportional to the keys emitted.
- */
-function smallestKeys(keys: readonly string[], limit: number): string[] {
+/** At or below this limit a `splice`d sorted window moves so few elements per insertion that it beats a heap. */
+const SORTED_WINDOW_MAX_LIMIT = 256
+
+/** The `size` (at least 1, below `keys.length`) smallest keys kept as a sorted window with binary search. */
+function smallestKeysInSortedWindow(keys: readonly string[], size: number): string[] {
 	const selected: string[] = []
-	if (limit <= 0)
-		return selected
 	for (const key of keys) {
-		if (selected.length === limit && key >= selected[limit - 1]!)
+		if (selected.length === size && key >= selected[size - 1]!)
 			continue
 		let low = 0
 		let high = selected.length
@@ -93,10 +91,64 @@ function smallestKeys(keys: readonly string[], limit: number): string[] {
 				high = middle
 		}
 		selected.splice(low, 0, key)
-		if (selected.length > limit)
+		if (selected.length > size)
 			selected.pop()
 	}
 	return selected
+}
+
+/**
+ * The `limit` smallest keys in code-unit order, without sorting (or copying) more of the key list than it emits.
+ * When every key is wanted the list is simply sorted. Otherwise one pass keeps the smallest keys seen so far in a
+ * bounded structure, so the work never exceeds O(keys * log limit) plus the cost of ordering the `limit` survivors: a
+ * small sorted window, or above `SORTED_WINDOW_MAX_LIMIT` a max-heap (a window of any size kept with `splice` is
+ * quadratic in `limit` when the keys arrive in descending order); only the survivors are sorted at the end.
+ */
+function smallestKeys(keys: readonly string[], limit: number): string[] {
+	if (limit <= 0)
+		return []
+	// Also covers an unbounded or non-numeric limit, which can never be reached, so every key is wanted.
+	if (!(limit < keys.length))
+		return [...keys].sort()
+	// A fractional limit keeps as many keys as fit under it.
+	const size = Math.floor(limit)
+	if (size <= 0)
+		return []
+	if (size <= SORTED_WINDOW_MAX_LIMIT)
+		return smallestKeysInSortedWindow(keys, size)
+	const heap: string[] = []
+	for (const key of keys) {
+		if (heap.length < size) {
+			// Sift up: the largest selected key stays at the root.
+			let child = heap.length
+			heap.push(key)
+			while (child > 0) {
+				const parent = (child - 1) >>> 1
+				if (heap[parent]! >= key)
+					break
+				heap[child] = heap[parent]!
+				child = parent
+			}
+			heap[child] = key
+		}
+		else if (key < heap[0]!) {
+			// Replace the root and sift down.
+			let parent = 0
+			for (;;) {
+				let child = 2 * parent + 1
+				if (child >= size)
+					break
+				if (child + 1 < size && heap[child + 1]! > heap[child]!)
+					child++
+				if (heap[child]! <= key)
+					break
+				heap[parent] = heap[child]!
+				parent = child
+			}
+			heap[parent] = key
+		}
+	}
+	return heap.sort()
 }
 
 export function encodeInspectableValue(
