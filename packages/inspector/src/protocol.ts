@@ -410,7 +410,9 @@ export interface InspectorEventMap {
 	}
 	/**
 	 * Added in protocol 0.4. The Runtime this Agent inspects is gone: either the Agent observed it being
-	 * disposed, or the Agent itself was disposed while the transport stays open. Sent at most once per Agent.
+	 * disposed, or the Agent itself was disposed while the transport stays open. Sent at most once per Agent:
+	 * inside `runtime.dispose()` when the Agent has already received a request from its peer; otherwise on the
+	 * peer's first request, or when the Agent is disposed.
 	 */
 	readonly 'runtime.disposed': {
 		readonly runtimeId: string
