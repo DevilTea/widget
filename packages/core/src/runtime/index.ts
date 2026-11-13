@@ -11,7 +11,6 @@
 
 import type {
 	CompiledBlueprint,
-	CompiledResolvedWidgetNode,
 	CreateWidgetSystemRuntimeOptions,
 	InternalNodeId,
 	ValidWidgetSystemBlueprint,
@@ -64,19 +63,13 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		events: Map<string, ReturnType<typeof createEventPrimitive>>
 	}>()
 
-	function buildConfigFragmentFor(node: CompiledResolvedWidgetNode<Plugins>): () => Record<string, unknown> {
-		const definition = readWidgetPluginDefinition(node.plugin)
-		// One frozen fragment per node: callers spread it into their own context objects.
-		const fragment: Record<string, unknown> = definition.config === null ? Object.freeze({}) : Object.freeze({ config: node.config })
-		return () => fragment
-	}
-
 	// The override topology diagnostics (step 4) depend on no primitive, so they are resolved up front:
 	// the live diagnostic aggregate (step 8) has to exist before the primitives that report into it.
 	const overrideResolution = resolveStateOverrides(compiled, options?.overrideStateDefaults)
 	const aggregate = createRuntimeAggregate(context, compiled, registry, overrideResolution.runtimeLevelDiagnostics)
-	// One commit hook per widget, shared by all of its primitives.
+	// One commit hook and one config fragment getter per widget, shared by all of its primitives.
 	const commitHooks: Array<() => void> = []
+	const configFragments: Array<() => Record<string, unknown>> = []
 
 	let stateCount = 0
 	for (const node of compiled.nodes) {
@@ -108,7 +101,10 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				entry.events.set(name, createEventPrimitive(context))
 		}
 
-		const buildConfigFragment = buildConfigFragmentFor(node)
+		// One frozen fragment per node: callers spread it into their own context objects.
+		const fragment: Record<string, unknown> = definition.config === null ? Object.freeze({}) : Object.freeze({ config: node.config })
+		const buildConfigFragment = () => fragment
+		configFragments[nodeId] = buildConfigFragment
 		const onDiagnosticsCommitted = aggregate.commitHookFor(nodeId)
 		commitHooks[nodeId] = onDiagnosticsCommitted
 
@@ -138,7 +134,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		if (entry === undefined)
 			continue
 
-		const buildConfigFragment = buildConfigFragmentFor(node)
+		const buildConfigFragment = configFragments[nodeId]!
 		const overrides = overrideResolution.candidatesByNodeId.get(nodeId)
 
 		for (const [key, member] of node.state) {
@@ -179,7 +175,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		if (entry === undefined)
 			continue
 
-		const buildConfigFragment = buildConfigFragmentFor(node)
+		const buildConfigFragment = configFragments[nodeId]!
 		const onDiagnosticsCommitted = commitHooks[nodeId]!
 		const definition = readWidgetPluginDefinition(node.plugin)
 		const emitter = definition.events === null ? null : buildCallbackEventEmitter(context, entry.events)
