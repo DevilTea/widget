@@ -6,19 +6,31 @@
  *                 so that an operation which caches or mutates is never measured as a cache hit.
  *     run(input)  the TIMED region: exactly one call of the operation under test. Its return value
  *                 is kept alive in a sink so the engine cannot drop the work.
- *     after?(input, output)  untimed; releases what the call produced (dispose, ...).
+ *     after?(input, output)  untimed; releases what the call produced (dispose, ...). Called for every
+ *                 run() call, with `input` undefined when the case has no fresh().
  *     ops?        logical operations done by one run() call (default 1); the per-op figure divides by it.
- *     dispose?()  untimed; called once after the last sample.
+ *     maxBatch?   upper bound of the batch size.
+ *     maxRunMs?   (variant or scenario level) a size is skipped when the previous size predicts more.
+ *     async?      run() returns a promise, awaited inside the timed region.
+ *     warmPass?   true: with a forced collection before the sample, run() is called once more, untimed
+ *                 (and after() for it), right after the collection and immediately before the clock starts.
+ *                 For a pure read over a large live heap, the first pass after a full collection runs
+ *                 cache-cold (2 to 5 times the steady state), which reads as a superlinear slope. Only valid
+ *                 for a case without fresh(): a warm pass has no input of its own to consume. Not applied
+ *                 to the single cold call, in profile mode, without --expose-gc, or in allocation mode.
+ *     dispose?()  untimed; called once after the last sample (also when the measurement throws).
  *   }
  *
  * A sample is the time of one batch of `batch` run() calls divided by `batch`. Fast operations are batched
  * so a sample lasts at least a couple of milliseconds; inputs for a whole batch are built before the clock
  * starts. With --expose-gc a full collection runs before every sample (outside the timed region).
+ * The samples kept in a result are the per-call nanoseconds of the timed samples only, in collection
+ * order; the cold call and the warm-up samples never enter them.
  */
 
 import { performance } from 'node:perf_hooks'
 import v8 from 'node:v8'
-import { summarize } from './stats.mjs'
+import { flagsFor, summarize } from './stats.mjs'
 
 const collectGarbage = typeof globalThis.gc === 'function' ? globalThis.gc : null
 
@@ -40,12 +52,9 @@ function instrumentForProfile(c) {
 	return wrapped
 }
 
+/** Keeps the value of the last call reachable so the work that produced it cannot be optimized away. */
 let sink
-/** Keeps a value reachable so the work that produced it cannot be optimized away. */
-export function consume(value) {
-	sink = value
-	return value
-}
+/** The only reader of the sink: it makes the stores observable (and satisfies the unused-variable rule). */
 export function sinkValue() {
 	return sink
 }
@@ -53,25 +62,43 @@ export function sinkValue() {
 export const TARGET_SAMPLE_MS = 2
 export const MAX_SPREAD = 0.1
 const HARD_WALL_MS = 60000
+/** A large semi-space reports at least this much `new_space`; the default configuration reports at most 16 MiB. */
+const MIN_ALLOC_NEW_SPACE = 256 * 1024 * 1024
 
 function now() {
 	return performance.now()
 }
 
+/**
+ * Forced collection before a sample (outside the clock). Returns true when one ran. `warm` asks for the
+ * case's warm pass (see `warmPass` in the header), which is skipped when no collection was forced.
+ */
+function collectBefore(c, warm) {
+	if (!collectGarbage || profileMode)
+		return false
+	collectGarbage()
+	return warm && c.warmPass === true
+}
+
 /** Times one batch and returns nanoseconds per call. */
-function timeBatch(c, batch) {
+function timeBatch(c, batch, warm) {
 	const inputs = c.fresh ? Array.from({ length: batch }) : null
 	if (inputs) {
 		for (let i = 0; i < batch; i++)
 			inputs[i] = c.fresh(i)
 	}
 	const outputs = c.after ? Array.from({ length: batch }) : null
-	if (collectGarbage && !profileMode)
-		collectGarbage()
+	if (collectBefore(c, warm)) {
+		const out = c.run(undefined)
+		sink = out
+		if (c.after)
+			c.after(undefined, out)
+	}
 
 	let start
 	let end
-	if (inputs === null) {
+	if (inputs === null && outputs === null) {
+		// The bare loop: no input to fetch and no output to keep.
 		start = now()
 		for (let i = 0; i < batch; i++)
 			sink = c.run(undefined)
@@ -86,24 +113,28 @@ function timeBatch(c, batch) {
 	else {
 		start = now()
 		for (let i = 0; i < batch; i++)
-			outputs[i] = c.run(inputs[i])
+			outputs[i] = c.run(inputs === null ? undefined : inputs[i])
 		end = now()
 		for (let i = 0; i < batch; i++)
-			c.after(inputs[i], outputs[i])
+			c.after(inputs === null ? undefined : inputs[i], outputs[i])
 	}
 	return ((end - start) * 1e6) / batch
 }
 
 /** Same as timeBatch for a case whose run() returns a promise (awaited inside the timed region). */
-async function timeBatchAsync(c, batch) {
+async function timeBatchAsync(c, batch, warm) {
 	const inputs = c.fresh ? Array.from({ length: batch }) : null
 	if (inputs) {
 		for (let i = 0; i < batch; i++)
 			inputs[i] = c.fresh(i)
 	}
 	const outputs = c.after ? Array.from({ length: batch }) : null
-	if (collectGarbage && !profileMode)
-		collectGarbage()
+	if (collectBefore(c, warm)) {
+		const out = await c.run(undefined)
+		sink = out
+		if (c.after)
+			c.after(undefined, out)
+	}
 	const start = now()
 	for (let i = 0; i < batch; i++) {
 		const out = await c.run(inputs === null ? undefined : inputs[i])
@@ -114,7 +145,7 @@ async function timeBatchAsync(c, batch) {
 	const end = now()
 	if (outputs !== null) {
 		for (let i = 0; i < batch; i++)
-			c.after(inputs[i], outputs[i])
+			c.after(inputs === null ? undefined : inputs[i], outputs[i])
 	}
 	return ((end - start) * 1e6) / batch
 }
@@ -134,12 +165,25 @@ function pickBatch(singleNs, cap) {
  */
 export async function measureCase(original, options = {}) {
 	const c = profileMode ? instrumentForProfile(original) : original
+	try {
+		if (original.warmPass && original.fresh)
+			throw new Error('a case with warmPass: true must not define fresh(): the warm pass has no input to consume')
+		return await measureCaseBody(c, options)
+	}
+	finally {
+		if (c.dispose)
+			c.dispose()
+	}
+}
+
+async function measureCaseBody(c, options) {
 	const quick = options.quick === true
 	const batchCap = c.maxBatch ?? (c.fresh ? 40 : 100000)
-	const timeOne = n => (c.async ? timeBatchAsync(c, n) : timeBatch(c, n))
+	const timeOne = (n, warm = true) => (c.async ? timeBatchAsync(c, n, warm) : timeBatch(c, n, warm))
 
 	// 1. Single cold call: tells us roughly how slow the operation is. It is also the first warm-up call.
-	const first = await timeOne(1)
+	// It gets no warm pass: it is the cold measurement.
+	const first = await timeOne(1, false)
 	let batch = pickBatch(first, batchCap)
 
 	// 2. Warm-up until stable: the last four samples agree within 5%, bounded in count and time.
@@ -199,10 +243,11 @@ export async function measureCase(original, options = {}) {
 		await collect(2)
 		stats = summarize(samples)
 	}
-	if (c.dispose)
-		c.dispose()
 	return {
 		...stats,
+		samples,
+		minSamples,
+		flags: flagsFor(stats, minSamples),
 		batch,
 		warmups,
 		timedMs,
@@ -211,6 +256,11 @@ export async function measureCase(original, options = {}) {
 		unreliable: stats.spread > MAX_SPREAD,
 		firstNs: first,
 	}
+}
+
+function newSpaceBytes() {
+	return v8.getHeapSpaceStatistics()
+		.find(space => space.space_name === 'new_space')?.space_size ?? 0
 }
 
 /**
@@ -222,6 +272,30 @@ export async function measureCase(original, options = {}) {
 export async function measureAllocation(c) {
 	if (!collectGarbage)
 		throw new Error('measureAllocation needs --expose-gc')
+	try {
+		return await measureAllocationBody(c)
+	}
+	finally {
+		if (c.dispose)
+			c.dispose()
+	}
+}
+
+async function measureAllocationBody(c) {
+	const requireLargeSemiSpace = () => {
+		const bytes = newSpaceBytes()
+		if (bytes < MIN_ALLOC_NEW_SPACE)
+			throw new Error(`allocation mode needs the large semi-space, but new_space is ${(bytes / 1048576).toFixed(0)} MiB; start node with --expose-gc --min-semi-space-size=512 --max-semi-space-size=512 (pnpm bench --mode alloc does)`)
+	}
+	requireLargeSemiSpace()
+	// One untimed, uncounted call (with its fresh and after), so that the first trial is not a cold call.
+	{
+		const input = c.fresh ? c.fresh(0) : undefined
+		const out = c.async ? await c.run(input) : c.run(input)
+		sink = out
+		if (c.after)
+			c.after(input, out)
+	}
 	const trials = []
 	let discarded = 0
 	let batch = 1
@@ -234,6 +308,7 @@ export async function measureAllocation(c) {
 		const outputs = c.after ? Array.from({ length: batch }) : null
 		collectGarbage()
 		collectGarbage()
+		requireLargeSemiSpace()
 		const before = v8.getHeapStatistics().used_heap_size
 		const startedAt = now()
 		for (let i = 0; i < batch; i++) {
@@ -269,8 +344,6 @@ export async function measureAllocation(c) {
 		if (trials.length >= 7)
 			break
 	}
-	if (c.dispose)
-		c.dispose()
 	if (trials.length === 0)
 		return { bytes: Number.NaN, trials: 0, discarded, batch, exceeded }
 	const stats = summarize(trials)

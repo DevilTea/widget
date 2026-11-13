@@ -6,9 +6,13 @@
  *
  * Renderers are hand-written render functions (no SFC compiler involved). Vue and happy-dom are resolved
  * from `packages/vue/node_modules`, so the Vue instance is exactly the one the built package imports.
+ *
+ * Vue runs as its PRODUCTION build, as applications ship it (see `ensureEnvironment`): the development build
+ * is 1.5 to 3 times slower and retains every mounted tree in a devtools event buffer.
  */
 
 import { createRequire } from 'node:module'
+import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { createFixture, PROFILES } from '../lib/gen.mjs'
 import { loadVue, root } from '../lib/load.mjs'
@@ -20,6 +24,12 @@ let environment = null
 async function ensureEnvironment() {
 	if (environment !== null)
 		return environment
+	// Vue picks its build when it is first loaded: with NODE_ENV unset it is the development build, which is
+	// 1.5 to 3 times slower than the production build applications ship, and which pushes the devtools events
+	// of every component (each holding the component instance, so the vnode/DOM tree and the Runtime) into a
+	// module-level buffer that only a setTimeout(3000) clears. The measurement loop awaits nothing but
+	// microtasks, so that timer never runs and every mounted tree stays reachable until the process dies.
+	process.env.NODE_ENV = 'production'
 	const require = createRequire(`${root}packages/vue/package.json`)
 	const happyDom = await import(pathToFileURL(require.resolve('happy-dom')).href)
 	const window = new happyDom.Window({ url: 'http://localhost/' })
@@ -30,6 +40,14 @@ async function ensureEnvironment() {
 	// Vue captures `document` when it is first imported, so the globals above come first.
 	const vue = await import(pathToFileURL(require.resolve('vue')).href)
 	const widgetVue = await loadVue()
+	// Assert which build was loaded. Vue is CommonJS, so it sits in `require.cache` (the module cache of the whole process); both
+	// builds can have an entry there (Node pre-parses the unused branch to find the export names), so only a
+	// module that has actually been executed (`loaded`) counts.
+	const executed = pattern => Object.entries(require.cache)
+		.filter(([file, mod]) => mod.loaded && pattern.test(file))
+		.length
+	if (executed(/[\\/]vue[\\/]dist[\\/]vue\.cjs\.prod\.js$/) !== 1 || executed(/[\\/]vue[\\/]dist[\\/]vue\.cjs\.js$/) !== 0)
+		throw new Error('expected the production build of Vue (vue.cjs.prod.js) to be the one loaded')
 	environment = { window, vue, widgetVue }
 	return environment
 }
@@ -96,13 +114,17 @@ function starRenderer(env) {
 		.follower(Follower))
 }
 
-function mountApp(env, Renderer, runtime) {
+function mountApp(env, Renderer, runtime, el = container(env)) {
 	const { createApp, h } = env.vue
 	const app = createApp({ render: () => h(Renderer, { runtime }) })
-	const el = container(env)
 	app.mount(el)
 	app.hostElement = el
 	return app
+}
+
+/** happy-dom caches querySelectorAll() results behind a WeakRef, whose target V8 keeps alive until the current job ends. */
+function yieldMacrotask() {
+	return new Promise(resolve => setImmediate(resolve))
 }
 
 async function standardSetup(n) {
@@ -119,6 +141,9 @@ async function standardSetup(n) {
 	probe.dispose()
 	if (rendered !== fixture.unitIds().length)
 		throw new Error(`expected ${fixture.unitIds().length} rendered units, found ${rendered}`)
+	// The measurement loop is one job, so the WeakRef that happy-dom's query cache holds on the probe tree
+	// would keep it alive for the whole measurement. Let the job end once so the tree can be collected.
+	await yieldMacrotask()
 	return { env, fixture, blueprint, Renderer }
 }
 
@@ -130,8 +155,8 @@ export const scenarios = [
 		perWidget: true,
 		summary: 'Mount an N-widget standard tree through WidgetRenderer (simulated DOM).',
 		inside: 'createApp + mount: renderer tree, every useWidget() bridge, first render of every widget',
-		outside: 'compiling, Runtime creation, unmounting and disposing afterwards',
-		note: 'simulated DOM (happy-dom); only comparable to itself',
+		outside: 'compiling, Runtime creation, creating and attaching the host element, unmounting and disposing afterwards',
+		note: 'simulated DOM (happy-dom), production build of Vue; only comparable to itself',
 		variants: [{
 			name: 'standard',
 			sizes: [100, 1000, 4000],
@@ -139,9 +164,9 @@ export const scenarios = [
 				const { env, blueprint, Renderer } = await standardSetup(n)
 				return {
 					maxBatch: freshBatch(n),
-					fresh: () => blueprint.createRuntime(),
-					run: runtime => mountApp(env, Renderer, runtime),
-					after: (runtime, app) => {
+					fresh: () => ({ runtime: blueprint.createRuntime(), el: container(env) }),
+					run: ({ runtime, el }) => mountApp(env, Renderer, runtime, el),
+					after: ({ runtime }, app) => {
 						app.unmount()
 						// Detach the container too: happy-dom keeps everything reachable from the document alive.
 						app.hostElement.remove()
@@ -159,7 +184,7 @@ export const scenarios = [
 		summary: 'Unmount an N-widget standard tree (simulated DOM).',
 		inside: 'app.unmount()',
 		outside: 'compiling, Runtime creation, mounting (a freshly mounted app per call), disposing',
-		note: 'simulated DOM (happy-dom); only comparable to itself',
+		note: 'simulated DOM (happy-dom), production build of Vue; only comparable to itself',
 		variants: [{
 			name: 'standard',
 			sizes: [100, 1000, 4000],
@@ -187,11 +212,11 @@ export const scenarios = [
 		summary: 'One State write that changes what K rendered widgets display, measured until the DOM has flushed.',
 		inside: 'src.state.v.set(value) followed by await nextTick() (Vue flush + DOM patch of the K changed widgets)',
 		outside: 'compiling, Runtime creation, mounting',
-		note: 'simulated DOM (happy-dom); only comparable to itself',
+		note: 'simulated DOM (happy-dom), production build of Vue; only comparable to itself',
 		variants: [
 			{
 				name: 'star',
-				note: 'K follower widgets render a Property that depends on the written State',
+				note: 'production build of Vue; K follower widgets render a Property that depends on the written State',
 				sizeLabel: 'K widgets changed',
 				perWidget: true,
 				sizes: [10, 100, 1000, 4000],
@@ -210,8 +235,14 @@ export const scenarios = [
 						.every(node => node.textContent === '7000'))) {
 						throw new Error('vue.update star fixture did not update the DOM')
 					}
+					await yieldMacrotask()
 					return {
 						async: true,
+						dispose: () => {
+							app.unmount()
+							app.hostElement.remove()
+							runtime.dispose()
+						},
 						run: async () => {
 							src.state.v.set(next())
 							await env.vue.nextTick()
@@ -221,7 +252,7 @@ export const scenarios = [
 			},
 			{
 				name: 'one-of-N',
-				note: 'N-widget standard tree mounted; a write changes the display of exactly one unit; the size column is N',
+				note: 'production build of Vue; N-widget standard tree mounted; a write changes the display of exactly one unit; the size column is N',
 				sizes: [100, 1000, 4000],
 				async setup(n) {
 					const { env, blueprint, Renderer } = await standardSetup(n)
@@ -235,6 +266,11 @@ export const scenarios = [
 						throw new Error('vue.update one-of-N fixture did not update the DOM')
 					return {
 						async: true,
+						dispose: () => {
+							app.unmount()
+							app.hostElement.remove()
+							runtime.dispose()
+						},
 						run: async () => {
 							widget.state.s0.set(next())
 							await env.vue.nextTick()
@@ -252,7 +288,7 @@ export const scenarios = [
 		summary: 'Replace the `runtime` prop of a mounted WidgetRenderer: a full unmount of the old tree and mount of the new one.',
 		inside: 'assigning the prop and awaiting nextTick()',
 		outside: 'compiling, creating the two Runtimes, the initial mount',
-		note: 'simulated DOM (happy-dom); only comparable to itself',
+		note: 'simulated DOM (happy-dom), production build of Vue; only comparable to itself',
 		variants: [{
 			name: 'standard',
 			sizes: [100, 1000, 4000],
@@ -263,10 +299,17 @@ export const scenarios = [
 				const b = blueprint.createRuntime()
 				const current = shallowRef(a)
 				const app = createApp({ render: () => h(Renderer, { runtime: current.value }) })
-				app.mount(container(env))
+				const host = container(env)
+				app.mount(host)
 				let toggle = false
 				return {
 					async: true,
+					dispose: () => {
+						app.unmount()
+						host.remove()
+						a.dispose()
+						b.dispose()
+					},
 					run: async () => {
 						toggle = !toggle
 						current.value = toggle ? b : a

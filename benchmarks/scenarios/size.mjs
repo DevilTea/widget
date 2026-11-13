@@ -1,10 +1,12 @@
 /**
  * Size and load scenarios.
  *
- * size.bytes: for every published entry point, the entry file plus the local chunks it imports (what a
- * consumer downloads before tree-shaking; external imports such as alien-signals and vue are not counted):
- * raw, minified (with the esbuild that already sits in the workspace's node_modules, never added by us),
- * gzip and brotli.
+ * size.bytes: for every published entry point, the entry file plus the local chunks it (transitively)
+ * imports, i.e. its whole import closure inside the package: raw, minified (with the esbuild that already
+ * sits in the workspace's node_modules, never added by us), gzip and brotli. Shared chunks are counted in
+ * every entry that imports them, so the entries are NOT additive; no tree-shaking is applied, so each
+ * figure is an upper bound for a bundled application; external imports (alien-signals for Core, vue,
+ * @deviltea/widget-core for the dependents) are not included.
  *
  * load.cold: time to import an entry point in a fresh Node process, in-process (performance.now around the
  * dynamic import) and as whole-process wall time, medians of 21 runs after one discarded.
@@ -98,7 +100,7 @@ function measureSizes() {
 		])
 	}
 	return {
-		title: `Published entry points, dist closure (entry + local chunks). Minifier: ${esbuild === null ? 'none found in the workspace; minified columns omitted' : `esbuild ${esbuild.version} from the workspace's node_modules`}.`,
+		title: `Published entry points, dist closure (entry + the local chunks it imports; shared chunks are counted in every entry that imports them, so rows are not additive; no tree-shaking, so an upper bound; external dependencies such as alien-signals are not included). Minifier: ${esbuild === null ? 'none found in the workspace; minified columns omitted' : `esbuild ${esbuild.version} from the workspace's node_modules`}.`,
 		columns: ['entry point', 'files', 'entry file raw', 'closure raw', 'closure gzip', 'closure min', 'min gzip', 'min brotli'],
 		rows,
 	}
@@ -122,13 +124,17 @@ function measureLoad({ quick }) {
 	const require = createRequire(`${root}packages/vue/package.json`)
 	const vueUrl = pathToFileURL(require.resolve('vue')).href
 	const coreIndex = pathToFileURL(join(root, 'packages/core/dist/index.mjs')).href
+	// The dependents import further Core entries (the Vue adapter `integration`, the Inspector Agent
+	// `inspection`); "core already loaded" preloads those too, or their load would sit inside the timed import.
+	const coreIntegration = pathToFileURL(join(root, 'packages/core/dist/integration/index.mjs')).href
+	const coreInspection = pathToFileURL(join(root, 'packages/core/dist/inspection/index.mjs')).href
 	const targets = [
 		{ label: '@deviltea/widget-core', url: coreIndex, preload: [] },
-		{ label: '@deviltea/widget-core/inspection', url: pathToFileURL(join(root, 'packages/core/dist/inspection/index.mjs')).href, preload: [] },
-		{ label: '@deviltea/widget-core/integration', url: pathToFileURL(join(root, 'packages/core/dist/integration/index.mjs')).href, preload: [] },
+		{ label: '@deviltea/widget-core/inspection', url: coreInspection, preload: [] },
+		{ label: '@deviltea/widget-core/integration', url: coreIntegration, preload: [] },
 		{ label: 'vue (reference: the peer dependency alone)', url: vueUrl, preload: [] },
-		{ label: '@deviltea/widget-vue (vue and core already loaded)', url: pathToFileURL(join(root, 'packages/vue/dist/index.mjs')).href, preload: [vueUrl, coreIndex] },
-		{ label: '@deviltea/widget-inspector/agent (core already loaded)', url: pathToFileURL(join(root, 'packages/inspector/dist/agent.mjs')).href, preload: [coreIndex] },
+		{ label: '@deviltea/widget-vue (vue and core already loaded)', url: pathToFileURL(join(root, 'packages/vue/dist/index.mjs')).href, preload: [vueUrl, coreIndex, coreIntegration] },
+		{ label: '@deviltea/widget-inspector/agent (core already loaded)', url: pathToFileURL(join(root, 'packages/inspector/dist/agent.mjs')).href, preload: [coreIndex, coreInspection] },
 		{ label: '@deviltea/widget-inspector/client', url: pathToFileURL(join(root, 'packages/inspector/dist/client.mjs')).href, preload: [] },
 	]
 	const baseline = []
@@ -179,6 +185,7 @@ export const scenarios = [
 		kind: 'custom',
 		jitless: false,
 		summary: 'Bytes of every published entry point (raw, gzip, minified).',
+		note: 'each figure is the whole import closure of the entry inside its package: shared chunks are counted in every entry that imports them (entries are not additive) and no tree-shaking is applied (an upper bound); external dependencies (alien-signals for Core) are not included',
 		async execute() {
 			return { tables: [measureSizes()] }
 		},

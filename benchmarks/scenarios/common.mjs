@@ -1,7 +1,6 @@
 /** Shared constants and small helpers for scenario modules. */
 
 export const SIZES = [100, 1000, 4000, 16000]
-export const SIZES_NO_16K = [100, 1000, 4000]
 
 /**
  * Upper bound on how many fresh Blueprints/Runtimes of `n` widgets the harness may build ahead of one timed
@@ -20,13 +19,4 @@ export function treeOf(profile, extra = {}) {
 export function counter(start = 1) {
 	let n = start
 	return () => n++
-}
-
-export function unwrapValid(blueprint) {
-	if (blueprint.status !== 'valid') {
-		throw new Error(`expected a valid Blueprint: ${blueprint.diagnostics.slice(0, 3)
-			.map(d => d.code)
-			.join(', ')}`)
-	}
-	return blueprint
 }

@@ -27,6 +27,20 @@ export function formatBytes(bytes) {
 }
 
 const pct = value => `${(value * 100).toFixed(1)}%`
+
+/**
+ * Spread cell text: the percentage, the `UNRELIABLE` marker for the `spread` flag, then the other flags
+ * (tail, drift, few) in lower case. Rows from before the flags existed fall back to `unreliable`.
+ */
+export function spreadCell(row) {
+	const flags = row.flags ?? (row.unreliable ? ['spread'] : [])
+	const parts = [pct(row.spread)]
+	if (flags.includes('spread'))
+		parts.push('UNRELIABLE')
+	parts.push(...flags.filter(flag => flag !== 'spread'))
+	return parts.join(' ')
+}
+
 function slopeText(value) {
 	if (!Number.isFinite(value))
 		return '-'
@@ -75,9 +89,9 @@ function slopesFor(rows) {
 /** One variant, normal and (optionally) jitless side by side. */
 export function timingTable(variantName, sizeLabel, normal, jitless) {
 	const header = perUnitHeader(normal)
-	const columns = [sizeLabel, 'median', 'p95', 'spread', ...(header ? [header] : []), 'slope']
+	const columns = [sizeLabel, 'n', 'median', 'p95', 'spread', ...(header ? [header] : []), 'slope']
 	if (jitless)
-		columns.push('| jitless:', 'median', 'p95', 'spread', ...(header ? [header] : []), 'slope')
+		columns.push('| jitless:', 'n', 'median', 'p95', 'spread', ...(header ? [header] : []), 'slope')
 	const normalSlopes = slopesFor(normal.rows)
 	const jitlessSlopes = jitless ? slopesFor(jitless.rows) : null
 	const sizes = normal.rows.map(row => row.size)
@@ -85,13 +99,14 @@ export function timingTable(variantName, sizeLabel, normal, jitless) {
 		const a = normal.rows[index]
 		const cells = [size]
 		if (a.skipped) {
-			cells.push('skipped', '', '', ...(header ? [''] : []), '')
+			cells.push('', 'skipped', '', '', ...(header ? [''] : []), '')
 		}
 		else {
 			cells.push(
+				a.n,
 				formatNs(a.median),
 				formatNs(a.p95),
-				`${pct(a.spread)}${a.unreliable ? ' UNRELIABLE' : ''}`,
+				spreadCell(a),
 				...(header ? [perUnit(normal, a)] : []),
 				slopeText(normalSlopes.get(size)),
 			)
@@ -100,13 +115,14 @@ export function timingTable(variantName, sizeLabel, normal, jitless) {
 			const b = jitless.rows.find(row => row.size === size)
 			cells.push('|')
 			if (b === undefined || b.skipped) {
-				cells.push(b?.skipped ? 'skipped' : '-', '', '', ...(header ? [''] : []), '')
+				cells.push('', b?.skipped ? 'skipped' : '-', '', '', ...(header ? [''] : []), '')
 			}
 			else {
 				cells.push(
+					b.n,
 					formatNs(b.median),
 					formatNs(b.p95),
-					`${pct(b.spread)}${b.unreliable ? ' UNRELIABLE' : ''}`,
+					spreadCell(b),
 					...(header ? [perUnit(jitless, b)] : []),
 					slopeText(jitlessSlopes.get(size)),
 				)

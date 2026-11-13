@@ -138,6 +138,8 @@ export const scenarios = [
 		outside: 'compiling and creating the Runtime (a fresh Runtime per call)',
 		variants: [{
 			name: 'plain',
+			note: 'a Runtime nobody subscribed to; the cost does not depend on N, so there is no per-widget column',
+			perWidget: false,
 			sizes: SIZES,
 			setup(n) {
 				const { blueprint } = standard(n)
@@ -261,8 +263,8 @@ export const scenarios = [
 		jitless: true,
 		alloc: true,
 		summary: 'Property reads: first (cold) read, cached read, recompute after a write, and a chain of L dependent Properties.',
-		inside: 'the reads named by the variant',
-		outside: 'compile, Runtime creation (a fresh Runtime per call for `cold`), the write that invalidates (`invalidated` and `chain.recompute` include it by design, see note)',
+		inside: 'the reads named by the variant (for `cold.all-units-ps0` that includes the runtime.getWidget(id) lookups: on a fresh Runtime they are part of the cold cost)',
+		outside: 'compile, Runtime creation (a fresh Runtime per call for `cold`), the write that invalidates (`invalidated.one` and `chain.recompute` include it by design, see note)',
 		variants: [
 			{
 				name: 'cold.all-units-ps0',
@@ -270,15 +272,15 @@ export const scenarios = [
 				sizes: SIZES,
 				setup(n) {
 					const { f, blueprint } = standard(n)
-					const count = f.unitIds().length
+					const ids = f.unitIds()
 					return {
-						ops: count,
+						ops: ids.length,
 						maxBatch: freshBatch(n),
 						fresh: () => blueprint.createRuntime(),
 						run(runtime) {
 							let total = 0
-							for (const id of f.unitIds())
-								total += runtime.getWidget(id).properties.ps0.get().value
+							for (let i = 0; i < ids.length; i++)
+								total += runtime.getWidget(ids[i]).properties.ps0.get().value
 							return total
 						},
 						after: runtime => runtime.dispose(),
@@ -297,6 +299,7 @@ export const scenarios = [
 						p.get()
 					return {
 						ops: props.length,
+						warmPass: true,
 						run() {
 							let total = 0
 							for (let i = 0; i < props.length; i++)
@@ -330,7 +333,8 @@ export const scenarios = [
 					? 'write x, then read the LAST of L chained Properties: L recomputations per run'
 					: 'CACHE HIT: read the last Property of a warm chain',
 				sizeLabel: 'chain length L',
-				perWidget: true,
+				// A cached read of the last Property does not depend on L, so only the recompute variant has a per-link figure.
+				perWidget: recompute,
 				sizes: [10, 100, 500, 1000],
 				setup(length) {
 					const { blueprint, last } = createChain(length)
@@ -345,7 +349,7 @@ export const scenarios = [
 									return widget.properties[last].get()
 								},
 							}
-						: { run: () => widget.properties[last].get() }
+						: { warmPass: true, run: () => widget.properties[last].get() }
 				},
 			})),
 			{
@@ -391,7 +395,20 @@ export const scenarios = [
 			})
 			return [
 				make('noop', 'no dependencies', ({ widget }) => ({ run: () => widget.methods.noop() })),
-				make('rw', 'reads s0 and s1, writes s2 through registered dependencies', ({ widget }) => ({ run: () => widget.methods.rw() })),
+				make('rw', 'reads s0 and s1, writes s2 through registered dependencies; every call writes a DIFFERENT value (the argument is added to the written value)', ({ widget, next }) => {
+					// Guard against measuring the no-change write path: an s2 listener must fire on every call.
+					let fired = 0
+					const unsubscribe = widget.state.s2.subscribe(() => {
+						fired++
+					})
+					for (let i = 1; i <= 3; i++) {
+						widget.methods.rw(next())
+						if (fired !== i)
+							throw new Error(`rw did not change s2 on call ${i}: the s2 listener fired ${fired} times`)
+					}
+					unsubscribe()
+					return { run: () => widget.methods.rw(next()) }
+				}),
 				make('invokeSelf', 'invokes another Method and reads a Property', ({ widget }) => {
 					widget.properties.ps0.get()
 					return { run: () => widget.methods.invokeSelf() }
@@ -425,22 +442,50 @@ export const scenarios = [
 		outside: 'compile, Runtime creation',
 		variants: (() => {
 			const noop = () => {}
-			const make = (name, pick, note) => ({
+			// `evaluations` (the two Property variants): the number of ps0 evaluations one iteration must cause.
+			// It is checked on a separate 100-widget fixture whose ps0 counts its evaluations (the measured
+			// fixtures carry no counter).
+			function verifyEvaluations(name, pick, expected) {
+				let evaluations = 0
+				const { f, blueprint } = standard(100, PROFILES.standard, { onEvaluate: () => evaluations++ })
+				const runtime = blueprint.createRuntime()
+				const widget = runtime.getWidget(middleUnit(f))
+				widget.properties.ps0.get()
+				const subscribe = pick(runtime, widget)
+				const iterations = 5
+				// The first iteration finds the Property clean (it was just read); from the second on it is dirty.
+				subscribe(noop)()
+				evaluations = 0
+				for (let i = 0; i < iterations; i++)
+					subscribe(noop)()
+				runtime.dispose()
+				if (evaluations !== expected * iterations)
+					throw new Error(`runtime.subscribe.churn / ${name}: expected ${expected} Property evaluation(s) per iteration, saw ${evaluations / iterations}`)
+			}
+			const make = (name, pick, note, evaluations) => ({
 				name,
 				note,
 				sizes: [100, 1000, 4000],
 				setup(n) {
+					if (evaluations !== undefined)
+						verifyEvaluations(name, pick, evaluations)
 					const { f, blueprint } = standard(n)
 					const runtime = blueprint.createRuntime()
 					const widget = runtime.getWidget(middleUnit(f))
 					widget.properties.ps0.get()
 					const subscribe = pick(runtime, widget)
-					return { run: () => subscribe(noop)() }
+					return { dispose: () => runtime.dispose(), run: () => subscribe(noop)() }
 				},
 			})
 			return [
 				make('state', (_, w) => w.state.s0.subscribe),
-				make('property', (_, w) => w.properties.ps0.subscribe, 'Property already evaluated; subscription activates observation'),
+				make('property', (_, w) => w.properties.ps0.subscribe, 'Property already evaluated; when the LAST subscriber leaves, the Property is marked dirty, so every iteration includes one Property re-evaluation (verified in setup; compare property.watched)', 1),
+				make('property.watched', (_, w) => {
+					// A second, permanent subscriber keeps the Property watched, so the churning subscription never
+					// makes it dirty: the row is the subscription cost alone.
+					w.properties.ps0.subscribe(noop)
+					return w.properties.ps0.subscribe
+				}, 'a second permanent subscriber keeps the Property watched: no re-evaluation per iteration (verified in setup), the subscription cost alone', 0),
 				make('event', (_, w) => w.events.changed.subscribe),
 				make('state.diagnostics', (_, w) => w.state.s0.subscribeDiagnostics),
 				make('widget.diagnostics', (_, w) => w.subscribeDiagnostics),
@@ -464,7 +509,7 @@ export const scenarios = [
 				setup(n) {
 					const { runtime } = createChecked(n)
 					runtime.getDiagnostics()
-					return { run: () => runtime.getDiagnostics() }
+					return { warmPass: true, run: () => runtime.getDiagnostics() }
 				},
 			},
 			{
@@ -536,7 +581,7 @@ export const scenarios = [
 					const { runtime } = createChecked(n)
 					const widget = runtime.getWidget(`w${n >> 1}`)
 					widget.state.v.set(-1)
-					return { run: () => widget.getDiagnostics() }
+					return { warmPass: true, run: () => widget.getDiagnostics() }
 				},
 			},
 		],
@@ -622,7 +667,7 @@ export const scenarios = [
 			setup(n) {
 				const { blueprint } = standard(n)
 				const runtime = blueprint.createRuntime()
-				return { run: () => runtime.snapshotState() }
+				return { warmPass: true, run: () => runtime.snapshotState() }
 			},
 		}],
 	},
@@ -634,20 +679,33 @@ export const scenarios = [
 		summary: 'The embedded-host pattern: compile once; per input apply a few State values, invoke 3 Methods, read 4 Properties.',
 		inside: 'M = 10 inputs per run (per-op = per input), each input as described by the variant',
 		outside: 'the one compile (except in compile-per-input, which is the no-reuse reference and uses M = 2)',
+		note: 'the input values are a function of the input index alone; set-up checks that every variant gives the same 3 Method results and 4 Property values as the reference for the same inputs (it throws otherwise)',
 		variants: (() => {
 			// Allocation mode uses two inputs per run so one window stays far below the semi-space.
 			const inputsPerRun = mode => (mode === 'alloc' ? 2 : 10)
-			function actions(runtime, ids, i, next) {
+			// Every per-input value is a function of the input index alone (never of a shared counter), so all
+			// variants receive identical inputs and must produce identical results.
+			const CHECKED_INPUTS = 10
+			const emitValue = i => 1000 + i
+			/**
+			 * The Method calls and Property reads of one input. Returns the sum of the four Property values (the
+			 * timed regions keep only that); with a `trace` array it also records every Method result and every
+			 * Property value, which the set-up uses to compare the variants.
+			 */
+			function actions(runtime, ids, i, trace) {
 				const a = runtime.getWidget(ids[0])
 				const b = runtime.getWidget(ids[1])
 				const c = runtime.getWidget(ids[2])
-				a.methods.rw()
-				b.methods.emit(next())
-				c.methods.invokeSelf()
-				return a.properties.ps0.get().value
-					+ b.properties.ps0.get().value
-					+ a.properties.pw0.get().value
-					+ b.properties.pp0.get().value
+				const rw = a.methods.rw()
+				const emit = b.methods.emit(emitValue(i))
+				const invokeSelf = c.methods.invokeSelf()
+				const p0 = a.properties.ps0.get().value
+				const p1 = b.properties.ps0.get().value
+				const p2 = a.properties.pw0.get().value
+				const p3 = b.properties.pp0.get().value
+				if (trace !== undefined)
+					trace.push(JSON.stringify(rw), JSON.stringify(emit), JSON.stringify(invokeSelf), p0, p1, p2, p3)
+				return p0 + p1 + p2 + p3
 			}
 			function makeOverrides(ids, i) {
 				const overrideStateDefaults = {}
@@ -662,6 +720,58 @@ export const scenarios = [
 					w.state.s1.set(i)
 				}
 			}
+			// The per-input logic of each variant, shared by the timed region and the set-up check.
+			const logic = {
+				createOverrides(blueprint, ids, i, trace) {
+					const runtime = blueprint.createRuntime(makeOverrides(ids, i))
+					const total = actions(runtime, ids, i, trace)
+					runtime.dispose()
+					return total
+				},
+				createWrites(blueprint, ids, i, trace) {
+					const runtime = blueprint.createRuntime()
+					applyByWrite(runtime, ids, i)
+					const total = actions(runtime, ids, i, trace)
+					runtime.dispose()
+					return total
+				},
+				reuse(runtime, ids, i, trace) {
+					runtime.resetState()
+					applyByWrite(runtime, ids, i)
+					return actions(runtime, ids, i, trace)
+				},
+				compile(f, ids, i, trace) {
+					const blueprint = f.system.createBlueprint(f.source)
+					const runtime = blueprint.createRuntime(makeOverrides(ids, i))
+					const total = actions(runtime, ids, i, trace)
+					runtime.dispose()
+					return total
+				},
+			}
+			// The reference results for inputs 0..CHECKED_INPUTS-1 (made by the simplest path), per document size.
+			const references = new Map()
+			function reference(n, blueprint, ids) {
+				if (!references.has(n)) {
+					const traces = []
+					for (let i = 0; i < CHECKED_INPUTS; i++) {
+						const trace = []
+						logic.createOverrides(blueprint, ids, i, trace)
+						traces.push(trace)
+					}
+					references.set(n, traces)
+				}
+				return references.get(n)
+			}
+			/** Throws unless `step(i, trace)` gives the reference results for inputs 0..count-1. */
+			function assertSameWork(name, n, blueprint, ids, count, step) {
+				const expected = reference(n, blueprint, ids)
+				for (let i = 0; i < count; i++) {
+					const trace = []
+					step(i, trace)
+					if (trace.length !== expected[i].length || trace.some((value, k) => value !== expected[i][k]))
+						throw new Error(`embedded.loop / ${name} does not do the same work as the reference on input ${i}: [${trace}] vs [${expected[i]}]`)
+				}
+			}
 			return [
 				{
 					name: 'create-per-input.overrides',
@@ -671,16 +781,13 @@ export const scenarios = [
 						const M = inputsPerRun(mode)
 						const { f, blueprint } = standard(n)
 						const ids = f.unitIds()
-						const next = counter()
+						assertSameWork('create-per-input.overrides', n, blueprint, ids, CHECKED_INPUTS, (i, trace) => logic.createOverrides(blueprint, ids, i, trace))
 						return {
 							ops: M,
 							run() {
 								let total = 0
-								for (let i = 0; i < M; i++) {
-									const runtime = blueprint.createRuntime(makeOverrides(ids, i))
-									total += actions(runtime, ids, i, next)
-									runtime.dispose()
-								}
+								for (let i = 0; i < M; i++)
+									total += logic.createOverrides(blueprint, ids, i)
 								return total
 							},
 						}
@@ -694,17 +801,13 @@ export const scenarios = [
 						const M = inputsPerRun(mode)
 						const { f, blueprint } = standard(n)
 						const ids = f.unitIds()
-						const next = counter()
+						assertSameWork('create-per-input.writes', n, blueprint, ids, CHECKED_INPUTS, (i, trace) => logic.createWrites(blueprint, ids, i, trace))
 						return {
 							ops: M,
 							run() {
 								let total = 0
-								for (let i = 0; i < M; i++) {
-									const runtime = blueprint.createRuntime()
-									applyByWrite(runtime, ids, i)
-									total += actions(runtime, ids, i, next)
-									runtime.dispose()
-								}
+								for (let i = 0; i < M; i++)
+									total += logic.createWrites(blueprint, ids, i)
 								return total
 							},
 						}
@@ -719,16 +822,14 @@ export const scenarios = [
 						const { f, blueprint } = standard(n)
 						const ids = f.unitIds()
 						const runtime = blueprint.createRuntime()
-						const next = counter()
+						assertSameWork('reuse.resetState', n, blueprint, ids, CHECKED_INPUTS, (i, trace) => logic.reuse(runtime, ids, i, trace))
 						return {
 							ops: M,
+							dispose: () => runtime.dispose(),
 							run() {
 								let total = 0
-								for (let i = 0; i < M; i++) {
-									runtime.resetState()
-									applyByWrite(runtime, ids, i)
-									total += actions(runtime, ids, i, next)
-								}
+								for (let i = 0; i < M; i++)
+									total += logic.reuse(runtime, ids, i)
 								return total
 							},
 						}
@@ -739,19 +840,15 @@ export const scenarios = [
 					note: 'NO reuse: system.createBlueprint + createRuntime(overrides) + actions + dispose, per input (M = 2)',
 					sizes: [100, 1000, 4000],
 					setup(n) {
-						const { f } = standard(n)
+						const { f, blueprint } = standard(n)
 						const ids = f.unitIds()
-						const next = counter()
+						assertSameWork('compile-per-input', n, blueprint, ids, 2, (i, trace) => logic.compile(f, ids, i, trace))
 						return {
 							ops: 2,
 							run() {
 								let total = 0
-								for (let i = 0; i < 2; i++) {
-									const blueprint = f.system.createBlueprint(f.source)
-									const runtime = blueprint.createRuntime(makeOverrides(ids, i))
-									total += actions(runtime, ids, i, next)
-									runtime.dispose()
-								}
+								for (let i = 0; i < 2; i++)
+									total += logic.compile(f, ids, i)
 								return total
 							},
 						}

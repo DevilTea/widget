@@ -30,6 +30,26 @@ function makePlugins(count) {
 	return plugins
 }
 
+/** Number of widgets in a (nested, authored) source tree; iterative, so a deep document cannot overflow the stack. */
+function countWidgets(source) {
+	let count = 0
+	const stack = [source]
+	while (stack.length > 0) {
+		const node = stack.pop()
+		count++
+		for (const child of node.slots?.children ?? [])
+			stack.push(child)
+	}
+	return count
+}
+
+/** Asserts (once, in set-up) that a Blueprint is invalid with exactly `expected` `duplicate-widget-id` diagnostics. */
+function assertDuplicateIds(blueprint, expected, what) {
+	const duplicates = blueprint.diagnostics.filter(d => d.code === 'duplicate-widget-id').length
+	if (blueprint.status !== 'invalid' || duplicates !== expected)
+		throw new Error(`${what}: expected an invalid Blueprint with ${expected} duplicate-widget-id diagnostics, got ${blueprint.status} with ${duplicates}`)
+}
+
 function compileVariants(label, entries) {
 	return entries.map(([name, profile, shape]) => ({
 		name,
@@ -194,6 +214,7 @@ export const scenarios = [
 				sizes: [100, 500, 1000, 2000, 4000],
 				setup(n) {
 					const f = createInvalidFixture('duplicate-id-one', n)
+					assertDuplicateIds(f.system.createBlueprint(f.source), n, 'duplicate-id-one')
 					return { run: () => f.system.createBlueprint(f.source) }
 				},
 			},
@@ -205,6 +226,7 @@ export const scenarios = [
 				sizes: [2, 10, 100, 1000, 4000],
 				setup(k) {
 					const f = createInvalidFixture('duplicate-id-one', 4000, { sharing: k })
+					assertDuplicateIds(f.system.createBlueprint(f.source), k, 'duplicate-id-one.k')
 					return { run: () => f.system.createBlueprint(f.source) }
 				},
 			},
@@ -217,11 +239,11 @@ export const scenarios = [
 		summary: 'The editor-keystroke path: WidgetDocument.applyPatch of one small edit on an N-widget standard tree.',
 		inside: 'one document.applyPatch(patch) call: mechanical patch + (when it changes anything) a full recompile + commit',
 		outside: 'document creation (its initial compile); for add/remove the opposite edit that restores the document runs outside the clock',
-		note: 'the patch-only share is approximately (replace-config - baseline.compile); `noop` stops before recompiling',
+		note: '`noop` (an equal-value patch: it applies the patch but stops before recompiling) is the proxy for the cost of applying a patch; the public API does not allow separating patch application from the recompile in the other variants',
 		variants: [
 			{
 				name: 'baseline.compile',
-				note: 'system.createBlueprint(source) of the same document, for subtraction',
+				note: 'system.createBlueprint(source) of the same document, for reference (the recompile that the changing patches below include)',
 				perWidget: true,
 				sizes: SIZES,
 				setup(n) {
@@ -279,6 +301,14 @@ export const scenarios = [
 						maxBatch: 1,
 						run: () => doc.applyPatch([{ op: 'add', path: '/slots/children/-', value: { id: `x${next()}`, type: 'group', slots: { children: [] } } }]),
 						after: () => doc.applyPatch([{ op: 'remove', path: `/slots/children/${rootChildren}` }]),
+						// Every run() is undone by after(), so the document must end with exactly the N widgets it began with;
+						// a harness that skipped after() would make it grow (and every sample slower than the last).
+						dispose() {
+							const snapshot = doc.getSnapshot()
+							const widgets = countWidgets(snapshot.blueprint.source)
+							if (snapshot.blueprint.status !== 'valid' || widgets !== n)
+								throw new Error(`document.patch / add-widget ended with ${widgets} widgets (${snapshot.blueprint.status}), expected ${n}`)
+						},
 					}
 				},
 			},
@@ -357,7 +387,8 @@ export const scenarios = [
 			},
 		}, {
 			name: 'cached',
-			note: 'reference: the second call (WeakMap hit)',
+			note: 'CACHE HIT: reference, the second call (WeakMap hit); constant time, so no per-widget column',
+			perWidget: false,
 			sizes: SIZES,
 			setup: async (n) => {
 				const { inspectBlueprint } = await loadCoreInspection()
@@ -373,11 +404,13 @@ export const scenarios = [
 		perWidget: true,
 		area: 'core',
 		jitless: true,
-		summary: 'inspectRuntime(runtime) and walking it (every widget facade, every State snapshot) over N widgets.',
+		summary: 'inspectRuntime(runtime) (the facade) and a walk over it: the `s0` snapshot of every unit (groups are not visited) over N widgets.',
 		inside: 'the named call(s)',
 		outside: 'compiling and creating the Runtime; for `facade` the Blueprint inspection is already cached on the shared Blueprint',
 		variants: [{
 			name: 'facade',
+			note: 'the call wraps the already cached Blueprint inspection, so its work does not depend on N (no per-widget column); the Runtime is built outside the clock',
+			perWidget: false,
 			sizes: SIZES,
 			setup: async (n) => {
 				const { inspectBlueprint, inspectRuntime } = await loadCoreInspection()
@@ -393,7 +426,7 @@ export const scenarios = [
 			},
 		}, {
 			name: 'walk',
-			note: 'getWidget + getState(s0).getSnapshot() for every unit, on a warm facade',
+			note: 'getWidget + getState(s0).getSnapshot() for every unit; the first (cold) call creates the State facades (cached in Maps afterwards), so the samples are a repeated walk over cached facades, memory-bound at large N; the /unit column divides by N widgets, of which about 87.5% are units',
 			sizes: SIZES,
 			setup: async (n) => {
 				const { inspectRuntime } = await loadCoreInspection()
@@ -406,6 +439,7 @@ export const scenarios = [
 				for (const id of ids)
 					inspection.getWidget(id)
 				return {
+					warmPass: true,
 					run() {
 						let total = 0
 						for (const id of ids) {

@@ -7,7 +7,9 @@
  *   unit   a leaf with everything a real widget has, controlled by the spec: optional config, `state`
  *          State members (s0 ...), Properties of four kinds (none / self / parent / widget dependency),
  *          Methods (noop, rw = reads and writes State, invokeSelf = reads a Property and invokes a
- *          Method, emit = writes State and emits an Event), and one Event `changed`.
+ *          Method, emit = writes State and emits an Event), and one Event `changed`. `rw` takes an
+ *          optional numeric argument that is added to the value it writes, so a caller can make every
+ *          call write a different value (no argument: the value is a function of the State alone).
  *
  * Nothing here is random: the same spec always yields the same document, the same ids, and the same
  * dependency targets (unit u<j> depends on unit u<j+1 mod U>).
@@ -146,9 +148,17 @@ export function createPlugins(spec, units) {
 				})
 			}
 			for (let k = 0; k < spec.props.self; k++) {
+				const compute = ({ deps }) => sumResults(deps.a(), deps.b())
 				s = s[`ps${k}`]({
 					registerDeps: ({ dep }) => ({ a: dep.self.state.get(stateKey(k)), b: dep.self.state.get(stateKey(k + 1)) }),
-					compute: ({ deps }) => sumResults(deps.a(), deps.b()),
+					// `onEvaluate` (a spec field, unset in every measured fixture) lets a scenario verify, on a separate
+					// small fixture, how many times a Property is evaluated.
+					compute: spec.onEvaluate === undefined
+						? compute
+						: (context) => {
+								spec.onEvaluate(`ps${k}`)
+								return compute(context)
+							},
 				})
 			}
 			for (let k = 0; k < spec.props.parent; k++) {
@@ -181,14 +191,14 @@ export function createPlugins(spec, units) {
 			}
 			if (m.rw) {
 				s = s.rw({
-					validateArgs: args => args.length === 0,
+					validateArgs: args => args.length === 0 || (args.length === 1 && typeof args[0] === 'number'),
 					registerDeps: ({ dep }) => ({
 						a: dep.self.state.get('s0'),
 						b: dep.self.state.get(stateKey(1)),
 						set: dep.self.state.set(stateKey(stateCount - 1)),
 					}),
-					execute: ({ deps }) => {
-						const value = sumResults(deps.a(), deps.b()) + 1
+					execute: ({ args, deps }) => {
+						const value = sumResults(deps.a(), deps.b()) + 1 + (args[0] ?? 0)
 						deps.set(value)
 						return value
 					},
@@ -373,5 +383,5 @@ export function createInvalidFixture(kind, widgets, options = {}) {
 		default:
 			throw new Error(`unknown invalid kind ${kind}`)
 	}
-	return { ...fixture, source, expectedInvalid: true }
+	return { ...fixture, source }
 }

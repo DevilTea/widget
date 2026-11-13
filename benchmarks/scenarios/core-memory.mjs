@@ -47,7 +47,6 @@ function oneRun(profile, n) {
 		activated: (h3 - h2) / n,
 		afterDispose: (h4 - h0) / n,
 		afterDrop: (h5 - h0) / n,
-		members: n,
 	}
 }
 

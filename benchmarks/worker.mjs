@@ -11,10 +11,16 @@
 
 import { writeFileSync } from 'node:fs'
 import inspector from 'node:inspector'
-import { cpus } from 'node:os'
 import process from 'node:process'
-import { enableProfileMode, measureAllocation, measureCase } from './lib/harness.mjs'
-import { findScenario } from './scenarios/index.mjs'
+
+// The published packages are measured against the production build of their peers. Vue's development build is
+// 1.5 to 3 times slower and retains every mounted tree in a devtools buffer until a 3 s timer that the
+// measurement loop never lets run (this was the cause of the out-of-memory failure). This must be set before
+// any scenario module can load Vue, so the harness and the scenarios are imported dynamically, after it.
+process.env.NODE_ENV = 'production'
+
+const { enableProfileMode, measureAllocation, measureCase } = await import('./lib/harness.mjs')
+const { findScenario } = await import('./scenarios/index.mjs')
 
 const RESULT_MARKER = '__BENCH_RESULT__'
 
@@ -29,8 +35,12 @@ function parseArgs(argv) {
 			args.variant = argv[++i]
 		}
 		else if (arg === '--sizes') {
-			args.sizes = argv[++i].split(',')
-				.map(Number)
+			const text = argv[++i] ?? ''
+			args.sizes = text.split(',')
+				.map(part => (part.trim() === '' ? Number.NaN : Number(part)))
+			const bad = args.sizes.findIndex(size => !Number.isFinite(size) || size <= 0)
+			if (bad >= 0)
+				throw new Error(`--sizes must be a comma-separated list of positive numbers, got "${text}"`)
 		}
 		else if (arg === '--mode') {
 			args.mode = argv[++i]
@@ -47,6 +57,8 @@ function parseArgs(argv) {
 	}
 	if (args.scenario === null)
 		throw new Error('--scenario is required')
+	if (!['normal', 'jitless', 'alloc'].includes(args.mode))
+		throw new Error(`unknown mode ${args.mode} (normal, jitless or alloc)`)
 	return args
 }
 
@@ -110,7 +122,7 @@ async function runVariant(scenario, variant, args) {
 		if (args.mode === 'alloc')
 			log(`  ${variant.name} @${size}: ${Number.isNaN(row.bytes) ? 'n/a' : `${Math.round(row.bytes)} B/run`}`)
 		else
-			log(`  ${variant.name} @${size}: ${(row.median / 1e3).toFixed(1)} us  spread ${(row.spread * 100).toFixed(1)}%  n=${row.n} batch=${row.batch}${row.unreliable ? '  UNRELIABLE' : ''}`)
+			log(`  ${variant.name} @${size}: ${(row.median / 1e3).toFixed(1)} us  spread ${(row.spread * 100).toFixed(1)}%  n=${row.n} batch=${row.batch}${row.flags.length > 0 ? `  [${row.flags.join(' ')}]` : ''}`)
 	}
 	return { name: variant.name, sizeLabel: variant.sizeLabel ?? 'widgets', perWidget: variant.perWidget ?? scenario.perWidget ?? false, note: variant.note ?? null, rows }
 }
@@ -124,11 +136,14 @@ async function main() {
 		throw new Error(`scenario ${scenario.id} has no allocation mode`)
 	log(`${scenario.id} [${args.mode}]`)
 	const startedAt = process.hrtime.bigint()
-	const result = { id: scenario.id, mode: args.mode, node: process.version, variants: [], cpuCount: cpus().length }
+	const result = { id: scenario.id, mode: args.mode, node: process.version, nodeEnv: process.env.NODE_ENV, variants: [] }
 	if (scenario.kind === 'custom') {
 		result.custom = await scenario.execute({ mode: args.mode, quick: args.quick, log })
 	}
 	else {
+		const names = scenario.variants.map(variant => variant.name)
+		if (args.variant !== null && !names.includes(args.variant))
+			throw new Error(`scenario ${scenario.id} has no variant named ${args.variant} (variants: ${names.join(', ')})`)
 		for (const variant of scenario.variants) {
 			if (args.variant !== null && variant.name !== args.variant)
 				continue
