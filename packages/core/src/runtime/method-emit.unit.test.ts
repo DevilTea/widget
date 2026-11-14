@@ -370,6 +370,38 @@ describe('plugin build with `emits`', () => {
 		expectTypeErrorNaming(() => buildUntyped({ validateArgs: noArgs, emits: ['fired'], execute }, false), 'js', 'fire', 'fired')
 	})
 
+	it('checks only the Methods that declare `emits`, and names the first invalid one in declaration order', () => {
+		const events = (section: { fired: (definition: { description: string }) => { other: (definition: { description: string }) => unknown } }) => section.fired({ description: 'Fired' })
+			.other({ description: 'Other' })
+		const build = (first: Record<string, unknown>, second: Record<string, unknown>) => createWidgetPlugin('js')
+			.description('Untyped')
+			.interfaces<FireInterfaces>()
+			.methods(methods => methods
+				.fire(first as never)
+				.other(second as never))
+			.events(events as never)
+			.done()
+		// Methods without `emits` are never an error, wherever they sit.
+		expect(() => build({ validateArgs: noArgs, execute }, { validateArgs: noArgs, execute }))
+			.not.toThrow()
+		expectTypeErrorNaming(() => build({ validateArgs: noArgs, execute }, { validateArgs: noArgs, emits: ['nope'], execute }), 'js', 'other', 'nope')
+		expectTypeErrorNaming(() => build({ validateArgs: noArgs, emits: ['nope'], execute }, { validateArgs: noArgs, emits: ['nada'], execute }), 'js', 'fire', 'nope')
+		// A name declared again without `emits` (untyped code) leaves nothing to check.
+		const redeclared = createWidgetPlugin('js')
+			.description('Untyped')
+			.interfaces<FireInterfaces>()
+			.methods((methods) => {
+				const section = methods as unknown as Record<string, (definition: unknown) => unknown>
+				section.fire!({ validateArgs: noArgs, emits: ['nope'], execute })
+				section.fire!({ validateArgs: noArgs, execute })
+				section.other!({ validateArgs: noArgs, execute })
+				return methods as never
+			})
+			.events(events as never)
+		expect(() => redeclared.done())
+			.not.toThrow()
+	})
+
 	it('accepts an empty array, which means the Method emits nothing', () => {
 		const plugin = buildUntyped({ validateArgs: noArgs, emits: [], execute })
 		const blueprint = createWidgetSystem({ plugins: [plugin as never] })

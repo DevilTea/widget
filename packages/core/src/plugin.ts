@@ -773,6 +773,8 @@ interface WidgetPluginDraft {
 	state: Map<WidgetMemberKey, ErasedWidgetStateMemberDefinition> | null
 	properties: Map<WidgetMemberKey, ErasedWidgetPropertyDefinition> | null
 	methods: Map<WidgetMemberKey, ErasedWidgetMethodDefinition> | null
+	/** The Methods that declared `emits`, in declaration order; `null` when none did (the common case). */
+	emittingMethods: WidgetMemberKey[] | null
 	events: Map<WidgetMemberKey, ErasedWidgetEventDefinition> | null
 }
 
@@ -780,7 +782,7 @@ type WidgetPluginSectionName = 'config' | 'slots' | 'state' | 'properties' | 'me
 
 type WidgetPluginMemberSectionName = Exclude<WidgetPluginSectionName, 'config' | 'slots'>
 
-type WidgetPluginFieldKind = 'function' | 'string' | 'boolean' | 'schema' | 'value-contract' | 'event-names'
+type WidgetPluginFieldKind = 'function' | 'string' | 'boolean' | 'schema' | 'value-contract'
 
 type WidgetPluginFieldRule = readonly [field: string, kind: WidgetPluginFieldKind, required: boolean]
 
@@ -794,7 +796,7 @@ const definitionFieldRules: Readonly<Record<WidgetPluginSectionName, readonly Wi
 	slots: [['description', 'string', true], ['validateStructure', 'function', false]],
 	state: [['validate', 'function', true], ['default', 'function', false], ['authorWritable', 'boolean', false]],
 	properties: [['compute', 'function', true], ['registerDeps', 'function', false], ['valueContract', 'value-contract', false]],
-	methods: [['validateArgs', 'function', true], ['execute', 'function', true], ['registerDeps', 'function', false], ['emits', 'event-names', false]],
+	methods: [['validateArgs', 'function', true], ['execute', 'function', true], ['registerDeps', 'function', false]],
 	events: [['description', 'string', true]],
 }
 
@@ -804,7 +806,6 @@ const fieldKindExpectations: Readonly<Record<WidgetPluginFieldKind, string>> = {
 	'boolean': 'a boolean',
 	'schema': 'a JSON Schema (a boolean or an object)',
 	'value-contract': 'a value contract created by createWidgetValueContract()',
-	'event-names': 'an array of Event names',
 }
 
 /** A dense array of strings (a hole or a non-string entry is not a name). */
@@ -831,8 +832,6 @@ function matchesFieldKind(value: unknown, kind: WidgetPluginFieldKind): boolean 
 			return value === null || typeof value === 'boolean' || (typeof value === 'object' && !Array.isArray(value))
 		case 'value-contract':
 			return typeof value === 'object' && value !== null && typeof (value as { readonly id?: unknown }).id === 'string'
-		case 'event-names':
-			return isNameArray(value)
 	}
 }
 
@@ -858,7 +857,7 @@ function captureDefinition(pluginType: string, section: WidgetPluginSectionName,
 	if (typeof definition !== 'object' || definition === null)
 		throw pluginContractViolation(pluginType, subject, `must be declared with a definition object, got ${describeValue(definition)}`)
 
-	const captured: Record<string, unknown> = { ...definition }
+	const captured: Readonly<Record<string, unknown>> = Object.freeze({ ...definition })
 	for (const [field, kind, required] of definitionFieldRules[section]) {
 		const value = captured[field]
 		if (value === undefined) {
@@ -868,11 +867,20 @@ function captureDefinition(pluginType: string, section: WidgetPluginSectionName,
 		}
 		if (!matchesFieldKind(value, kind))
 			throw pluginContractViolation(pluginType, subject, `has an invalid "${field}" field (expected ${fieldKindExpectations[kind]}, got ${describeValue(value)})`)
-		// A declared name list is captured by value too.
-		if (kind === 'event-names')
-			captured[field] = Object.freeze([...(value as readonly string[])])
 	}
-	return Object.freeze(captured)
+
+	// A Method's declared Event names are checked and captured by value too. Only a Method that declares
+	// `emits` pays for it (a copy of the list and of the frozen definition): every other definition costs one
+	// comparison and one property read here, and is returned exactly as it was frozen above.
+	if (section === 'methods') {
+		const emits = captured.emits
+		if (emits !== undefined) {
+			if (!isNameArray(emits))
+				throw pluginContractViolation(pluginType, subject, `has an invalid "emits" field (expected an array of Event names, got ${describeValue(emits)})`)
+			return Object.freeze({ ...captured, emits: Object.freeze([...emits]) })
+		}
+	}
+	return captured
 }
 
 /**
@@ -891,8 +899,10 @@ function buildSection(
 	sectionName: WidgetPluginMemberSectionName,
 	members: Map<WidgetMemberKey, any>,
 	build: (section: any) => unknown,
-): void {
+): WidgetMemberKey[] | null {
 	let sealed = false
+	// The Methods that declared `emits`; allocated only if one does.
+	let emitting: WidgetMemberKey[] | null = null
 	const section: unknown = new Proxy({}, {
 		get(_target, key) {
 			if (typeof key !== 'string')
@@ -903,7 +913,10 @@ function buildSection(
 				if (sealed)
 					throw pluginContractViolation(pluginType, subject, 'was declared after the section\'s build callback returned')
 
-				members.set(key, captureDefinition(pluginType, sectionName, subject, definition))
+				const captured = captureDefinition(pluginType, sectionName, subject, definition)
+				members.set(key, captured)
+				if (sectionName === 'methods' && captured.emits !== undefined)
+					(emitting ??= []).push(key)
 				return section
 			}
 		},
@@ -915,6 +928,7 @@ function buildSection(
 	finally {
 		sealed = true
 	}
+	return emitting
 }
 
 /**
@@ -935,6 +949,7 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 		state: null,
 		properties: null,
 		methods: null,
+		emittingMethods: null,
 		events: null,
 	}
 
@@ -994,7 +1009,8 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 		methods(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetMethodDefinition>()
 			draft.methods = members
-			buildSection(type, 'methods', members, build)
+			draft.emittingMethods = null
+			draft.emittingMethods = buildSection(type, 'methods', members, build)
 			return builder
 		},
 
@@ -1006,15 +1022,20 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 		},
 
 		done(): WidgetPlugin<Type, WidgetInterfaces> {
-			// Events are declared after Methods, so a Method's `emits` is checked here.
-			for (const [name, method] of draft.methods ?? []) {
-				const seen = new Set<string>()
-				for (const event of method.emits ?? []) {
-					if (draft.events === null || !draft.events.has(event))
-						throw pluginContractViolation(type, memberSubject('methods', name), `has an invalid "emits" field (Event "${event}" is not declared in section "events")`)
-					if (seen.has(event))
-						throw pluginContractViolation(type, memberSubject('methods', name), `has an invalid "emits" field (Event "${event}" is listed more than once)`)
-					seen.add(event)
+			// Events are declared after Methods, so a declared `emits` is checked against them here. Only the
+			// Methods that declared one are visited, with no allocation (a duplicate is an earlier equal entry).
+			if (draft.emittingMethods !== null) {
+				for (const name of draft.emittingMethods) {
+					const emits = draft.methods?.get(name)?.emits
+					if (emits === undefined)
+						continue
+					for (let index = 0; index < emits.length; index++) {
+						const event = emits[index]!
+						if (draft.events === null || !draft.events.has(event))
+							throw pluginContractViolation(type, memberSubject('methods', name), `has an invalid "emits" field (Event "${event}" is not declared in section "events")`)
+						if (emits.indexOf(event) !== index)
+							throw pluginContractViolation(type, memberSubject('methods', name), `has an invalid "emits" field (Event "${event}" is listed more than once)`)
+					}
 				}
 			}
 
