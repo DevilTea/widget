@@ -269,12 +269,12 @@ export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument:
 				releaseBatches()
 		}
 		finally {
-			--operationDepth
-			// The flag first: while nothing is queued (always, when no inspection listener is registered) this is
-			// one load and one test. In this `finally`, so the queued deliveries also run when `fn` or the release
-			// threw (an effect that does not belong to a Runtime can throw out of the release's flush);
-			// `deliverQueued` itself never throws, so that exception still reaches the caller.
-			if (deliveriesQueued && operationDepth === 0 && !delivering)
+			// The decrement's own result first, so a nested frame (one per dependency read of an evaluation) adds a
+			// single comparison; the outermost frame then tests the flag, which is false while nothing is queued
+			// (always, when no inspection listener is registered). In this `finally`, so the queued deliveries also
+			// run when `fn` or the release threw (an effect that does not belong to a Runtime can throw out of the
+			// release's flush); `deliverQueued` itself never throws, so that exception still reaches the caller.
+			if (--operationDepth === 0 && deliveriesQueued && !delivering)
 				deliverQueued()
 		}
 	}
