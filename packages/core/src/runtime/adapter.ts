@@ -264,7 +264,7 @@ function describeSubscription(subject: SubscriptionSubject, widgetId: string | n
  *
  * In normal operation the only levels still open here are the ones {@link writeDeferringFlush} opened, the ones
  * nested Method invocations left open ({@link endBatchDeferringFlush}) and the ones nested writes opened
- * ({@link runRuntimeOperation}'s `write`): every other level is closed by its own `endBatch()` in a `finally`.
+ * ({@link runRuntimeWrite}): every other level is closed by its own `endBatch()` in a `finally`.
  * But that `finally` cannot be relied
  * on when runaway recursion (a valid Method <-> Method cycle) exhausts the engine's stack: the deepest
  * frames' `endBatch()` calls themselves overflow and never decrement. Draining to the depth recorded on
@@ -303,22 +303,14 @@ function releaseBatches(): void {
  * `fn` receives `argument`, so a hot path passes a function that already exists together with its
  * argument instead of allocating a closure per call.
  *
- * `write` marks an operation that writes State (`RuntimeState`'s `attemptSet`, `resetState`). Entered while
- * another operation is in progress (a listener the enclosing operation's flush invokes, say) with no batch
- * level open, it opens one, which the outermost frame's release closes: its writes never flush on their own,
- * like a nested Method invocation's (see {@link endBatchDeferringFlush}). Flushing them there would run the
- * effects they queue inside the flush that is running the listener's own effect, and alien-signals does not
- * queue an effect again for a write made while that effect runs, so a subscriber whose value the write changes
- * could miss it. The outermost operation is untouched: it executes the same statements as without `write`.
+ * Reads, Method invocations and subscriptions use this entry; State writes use {@link runRuntimeWrite}, which
+ * differs only on a nested entry, so that this one executes nothing for a feature only writes need.
  */
-export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument, write?: boolean): Result {
+export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument): Result {
 	if (operationDepth === 0) {
 		entryBatchDepth = getBatchDepth()
 		if (!delivering)
 			++hostCalls
-	}
-	else if (write === true && getBatchDepth() === 0) {
-		startBatch()
 	}
 	++operationDepth
 	try {
@@ -336,6 +328,52 @@ export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument:
 				// also run when `fn` or the release threw (an effect that does not belong to a Runtime can throw out
 				// of the release's flush); `deliverQueued` itself never throws, so that exception still reaches the
 				// caller.
+				if (deliveriesQueued && !delivering)
+					deliverQueued()
+			}
+		}
+		else {
+			--operationDepth
+		}
+	}
+}
+
+/**
+ * {@link runRuntimeOperation} for an operation that writes State (`RuntimeState`'s `attemptSet`, both
+ * `resetState()`s). It executes the same statements, except that when it is entered while another operation is
+ * in progress (a listener the enclosing operation's flush invokes, say) with no batch level open, it opens one,
+ * which the outermost frame's release closes: its writes never flush on their own, like a nested Method
+ * invocation's (see {@link endBatchDeferringFlush}). Flushing them there would run the effects they queue inside
+ * the flush that is running the listener's own effect, and alien-signals does not queue an effect again for a
+ * write made while that effect runs, so a subscriber whose value the write changes could miss it.
+ *
+ * A separate entry rather than a parameter of {@link runRuntimeOperation}, so that a read, outermost or nested,
+ * executes nothing for this; and a copy of its body rather than a call to it, so that an outermost write executes
+ * exactly what it did before. Keep the two bodies identical apart from the nested entry.
+ */
+export function runRuntimeWrite<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument): Result {
+	// The nested case first: then the outermost case executes the same bytecodes as `runRuntimeOperation`'s, with
+	// no jump over the other branch.
+	if (operationDepth !== 0) {
+		if (getBatchDepth() === 0)
+			startBatch()
+	}
+	else {
+		entryBatchDepth = getBatchDepth()
+		if (!delivering)
+			++hostCalls
+	}
+	++operationDepth
+	try {
+		return fn(argument as Argument)
+	}
+	finally {
+		if (operationDepth === 1) {
+			try {
+				releaseBatches()
+			}
+			finally {
+				--operationDepth
 				if (deliveriesQueued && !delivering)
 					deliverQueued()
 			}
