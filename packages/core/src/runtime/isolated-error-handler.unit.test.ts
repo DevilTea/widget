@@ -9,20 +9,23 @@
  *   has finished its work, before the host's call returns (also when that operation throws), in the order Core
  *   isolated it among the Property inspection deliveries; one isolated with no operation in progress is handed
  *   over at once.
- * - A handler that reads and writes the Runtime leaves every Property and subscriber correct (issue #198).
- * - A throwing handler, a replaced or removed handler, the re-read de-duplication of a cached `compute`
- *   exception and the inspection delivery bound.
+ * - A handler that reads and writes the Runtime leaves every Property and subscriber correct (issue #198), and is
+ *   never re-entered: what its own calls isolate is handed over after it returns.
+ * - A throwing handler, a replaced or removed handler (and the previous handler returned), the re-read
+ *   de-duplication of a cached `compute` exception, the bounds on what the handler's own handling causes, the
+ *   inspection delivery bound, and a host without `queueMicrotask`.
  *
  * `queueMicrotask` is stubbed in every test, so a report that still goes through it is counted and can be
  * replayed instead of reaching the test runner.
  */
 
 import type { ExecutionResult, IsolatedErrorHandler } from '../index'
-import { effect as alienEffect } from 'alien-signals'
+import { effect as alienEffect, endBatch, startBatch } from 'alien-signals'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, setIsolatedErrorHandler } from '../index'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, setIsolatedErrorHandler, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectRuntime } from '../inspection'
 import { getWidgetEventEmitter } from '../integration'
+import { MAX_HANDLER_CAUSED_DEPTH, MAX_HANDLER_CAUSED_REPORTS } from './adapter'
 
 interface LinkConfig { readonly me: string, readonly prev: string | null }
 
@@ -261,6 +264,53 @@ describe('with no handler set', () => {
 		chain.link(0).state.n.set(2)
 		expect(received)
 			.toEqual([error])
+	})
+})
+
+describe('the previous handler', () => {
+	it('is returned by every call: null for the default, then the handler that was set', () => {
+		const first: IsolatedErrorHandler = () => {}
+		const second: IsolatedErrorHandler = () => {}
+
+		expect(setIsolatedErrorHandler(first))
+			.toBeNull()
+		expect(setIsolatedErrorHandler(second))
+			.toBe(first)
+		expect(setIsolatedErrorHandler(null))
+			.toBe(second)
+		expect(setIsolatedErrorHandler(undefined))
+			.toBeNull()
+	})
+
+	it('can be put back by code that sets a handler for a while, so the application\'s handler keeps receiving reports', () => {
+		const chain = createChain(1)
+		const error = new Error('listener')
+		chain.link(0).state.n.subscribe(thrower(error))
+		const application = recordReports()
+		const captured: unknown[] = []
+		const previous = setIsolatedErrorHandler(error => captured.push(error))
+		try {
+			chain.link(0).state.n.set(2)
+		}
+		finally {
+			setIsolatedErrorHandler(previous)
+		}
+		chain.link(0).state.n.set(3)
+
+		expect(captured)
+			.toEqual([error])
+		expect(application)
+			.toEqual([error])
+	})
+
+	it('is not changed by a rejected value', () => {
+		const handler: IsolatedErrorHandler = () => {}
+		setIsolatedErrorHandler(handler)
+
+		expect(() => setIsolatedErrorHandler('x' as unknown as IsolatedErrorHandler))
+			.toThrow(TypeError)
+		expect(setIsolatedErrorHandler(null))
+			.toBe(handler)
 	})
 })
 
@@ -603,6 +653,140 @@ describe('when the handler runs', () => {
 		expect(log)
 			.toEqual(['first throws', 'handler: first', 'second notified', 'emit returned'])
 	})
+
+	it('after the Runtime call when applyPatch() is called inside one (from a State subscriber)', () => {
+		const chain = createChain(1)
+		const document = createWidgetDocument({ system, source: { id: 'root', type: 'list' } })
+		const log: string[] = []
+		document.subscribe(thrower(new Error('document subscriber'), log, 'document subscriber throws'))
+		document.subscribe(() => log.push('second document subscriber'))
+		chain.link(0).state.n.subscribe(() => {
+			document.applyPatch([{ op: 'add', path: '/meta', value: { note: 1 } }])
+			log.push('applyPatch returned')
+		})
+		recordReports(log)
+		chain.link(0).state.n.set(2)
+		log.push('set returned')
+
+		expect(log)
+			.toEqual(['document subscriber throws', 'second document subscriber', 'applyPatch returned', 'handler: document subscriber', 'set returned'])
+	})
+})
+
+describe('what a handler that runs at once can rely on', () => {
+	it('during applyPatch() notification, an applyPatch() on that document is refused as reentrant', () => {
+		const document = createWidgetDocument({ system, source: { id: 'root', type: 'list' } })
+		document.subscribe(thrower(new Error('document subscriber')))
+		let nested: unknown
+		setIsolatedErrorHandler(() => {
+			nested ??= document.applyPatch([{ op: 'add', path: '/meta', value: { other: 1 } }])
+		})
+
+		expect(document.applyPatch([{ op: 'add', path: '/meta', value: { note: 1 } }]))
+			.toEqual({ ok: true, changed: true })
+		expect(nested)
+			.toMatchObject({ ok: false, failure: { code: 'reentrant-apply' } })
+	})
+
+	it('during a top-level dispose(), the Runtime is already disposed', () => {
+		const chain = createChain(1)
+		chain.runtime.subscribeDisposal(thrower(new Error('disposal listener')))
+		let read: unknown
+		setIsolatedErrorHandler(() => {
+			try {
+				read = chain.link(0).state.n.get()
+			}
+			catch (error) {
+				read = error
+			}
+		})
+		chain.runtime.dispose()
+
+		expect(read)
+			.toBeInstanceOf(WidgetSystemRuntimeDisposedError)
+	})
+
+	it('between the listeners of a top-level emit, what it does is seen by the next listener; an exception that causes is handed over in turn', () => {
+		const chain = createChain(1)
+		const log: string[] = []
+		chain.link(0).events.change.subscribe(thrower(new Error('first')))
+		chain.link(0).events.change.subscribe(() => {
+			log.push('second listener')
+			chain.link(0).methods.bump(1)
+		})
+		const received: unknown[] = []
+		setIsolatedErrorHandler((error) => {
+			received.push(error)
+			chain.runtime.dispose()
+		})
+		chain.emit(0, 1)
+
+		expect(log)
+			.toEqual(['second listener'])
+		expect(received)
+			.toHaveLength(2)
+		expect(received[1])
+			.toBeInstanceOf(WidgetSystemRuntimeDisposedError)
+	})
+})
+
+describe('the handler is never re-entered', () => {
+	it('what its own call isolates while it runs at once is handed over after it returns, before the next listener runs', () => {
+		const chain = createChain(1)
+		const document = createWidgetDocument({ system, source: { id: 'root', type: 'list' } })
+		const log: string[] = []
+		document.subscribe(thrower(new Error('document subscriber')))
+		document.subscribe(() => log.push('second document subscriber'))
+		chain.link(0).state.n.subscribe(thrower(new Error('State subscriber')))
+		setIsolatedErrorHandler((error) => {
+			const name = (error as Error).message
+			log.push(`start ${name}`)
+			if (name === 'document subscriber')
+				chain.link(0).state.n.set(2)
+			log.push(`end ${name}`)
+		})
+		document.applyPatch([{ op: 'add', path: '/meta', value: { note: 1 } }])
+		log.push('applyPatch returned')
+
+		expect(log)
+			.toEqual([
+				'start document subscriber',
+				'end document subscriber',
+				'start State subscriber',
+				'end State subscriber',
+				'second document subscriber',
+				'applyPatch returned',
+			])
+	})
+
+	it('what its own call isolates is handed over behind the reports already waiting', () => {
+		const chain = createChain(1)
+		const first = new Error('first')
+		const second = new Error('second')
+		const caused = new Error('caused')
+		chain.link(0).state.n.subscribe((value) => {
+			if (value === 2)
+				throw first
+		})
+		chain.link(0).state.n.subscribe((value) => {
+			if (value === 2)
+				throw second
+		})
+		chain.link(0).properties.total.subscribe((result) => {
+			if (numberOf(result) === 100)
+				throw caused
+		})
+		const received: unknown[] = []
+		setIsolatedErrorHandler((error) => {
+			received.push(error)
+			if (error === first)
+				chain.link(0).state.n.set(100)
+		})
+		chain.link(0).state.n.set(2)
+
+		expect(received)
+			.toEqual([first, second, caused])
+	})
 })
 
 describe('a handler that reads and writes the Runtime', () => {
@@ -676,48 +860,123 @@ describe('a handler that reads and writes the Runtime', () => {
 		expect(received)
 			.toEqual([BOOM + 1])
 	})
+})
 
-	/** Every exception in `thrown` was handed to the handler or rethrown in a microtask, exactly once. */
-	function expectNothingLost(received: readonly unknown[], rethrown: readonly unknown[], thrown: readonly unknown[]): void {
-		const isolated = [...received.filter(error => !(error instanceof RangeError)), ...rethrown]
-		expect(new Set(isolated).size)
-			.toBe(isolated.length)
-		expect(new Set(isolated))
-			.toEqual(new Set(thrown))
-	}
+/** Every exception in `thrown` was handed to the handler or rethrown in a microtask, exactly once. */
+function expectNothingLost(received: readonly unknown[], rethrown: readonly unknown[], thrown: readonly unknown[]): void {
+	const isolated = [...received.filter(error => !(error instanceof RangeError)), ...rethrown]
+	expect(new Set(isolated).size)
+		.toBe(isolated.length)
+	expect(new Set(isolated))
+		.toEqual(new Set(thrown))
+}
 
-	for (const [label, subscribers] of [['one exception per write', 1], ['two exceptions per write', 2]] as const) {
-		it(`whose calls keep causing new isolated exceptions is stopped after a bounded number of them; nothing is lost (${label})`, () => {
-			const chain = createChain(1)
-			const thrown: Error[] = []
-			for (let i = 0; i < subscribers; i++) {
-				chain.link(0).state.n.subscribe((value) => {
-					const error = new Error(`subscriber ${i} saw ${value}`)
-					thrown.push(error)
-					throw error
-				})
-			}
-			const received: unknown[] = []
-			setIsolatedErrorHandler((error) => {
-				received.push(error)
-				chain.link(0).state.n.set((chain.link(0).state.n.get() ?? 0) + 1)
-			})
-
-			expect(() => chain.link(0).state.n.set(2))
-				.not
-				.toThrow()
-			const rangeErrors = received.filter(error => error instanceof RangeError)
-			expect(rangeErrors)
-				.toHaveLength(1)
-			// Bounded well below what an exponential feedback (two exceptions per write) would reach.
-			expect(received.length)
-				.toBeLessThan(500)
-			const rethrown = replayMicrotasks()
-			expect(rethrown.length)
-				.toBeGreaterThan(0)
-			expectNothingLost(received, rethrown, thrown)
+/** Subscribes `count` listeners to `n` of l0 that each throw a fresh, recorded `Error`. */
+function throwingSubscribers(chain: Chain, count: number): Error[] {
+	const thrown: Error[] = []
+	for (let i = 0; i < count; i++) {
+		chain.link(0).state.n.subscribe((value) => {
+			const error = new Error(`subscriber ${i} saw ${value}`)
+			thrown.push(error)
+			throw error
 		})
 	}
+	return thrown
+}
+
+describe('the bounds on what the handler\'s own handling causes', () => {
+	it('stop a chain in which each report is caused by handling the previous one, after a bounded depth; nothing is lost', () => {
+		const chain = createChain(1)
+		const thrown = throwingSubscribers(chain, 1)
+		const received: unknown[] = []
+		setIsolatedErrorHandler((error) => {
+			received.push(error)
+			chain.link(0).state.n.set((chain.link(0).state.n.get() ?? 0) + 1)
+		})
+
+		expect(() => chain.link(0).state.n.set(2))
+			.not
+			.toThrow()
+		expect(received.filter(error => error instanceof RangeError))
+			.toHaveLength(1)
+		// The first exception and the ones down to the depth limit were handed over.
+		expect(received.filter(error => !(error instanceof RangeError)))
+			.toEqual(thrown.slice(0, MAX_HANDLER_CAUSED_DEPTH + 1))
+		const rethrown = replayMicrotasks()
+		expect(rethrown.length)
+			.toBeGreaterThan(0)
+		expectNothingLost(received, rethrown, thrown)
+	})
+
+	it('hand over a chain exactly as deep as the limit, without a RangeError: handler-caused reports stay in the delivery round of the report being handled', () => {
+		const chain = createChain(1)
+		const thrown = throwingSubscribers(chain, 1)
+		const received: unknown[] = []
+		setIsolatedErrorHandler((error) => {
+			received.push(error)
+			// Causes one more report until the chain below the first one is `MAX_HANDLER_CAUSED_DEPTH` long, which
+			// is also the number of delivery rounds the inspection bound allows.
+			if (received.length <= MAX_HANDLER_CAUSED_DEPTH)
+				chain.link(0).state.n.set((chain.link(0).state.n.get() ?? 0) + 1)
+		})
+		chain.link(0).state.n.set(2)
+
+		expect(received)
+			.toEqual(thrown)
+		expect(received)
+			.toHaveLength(MAX_HANDLER_CAUSED_DEPTH + 1)
+		expect(microtasks)
+			.toHaveLength(0)
+	})
+
+	it('stop a handler whose handling of each report causes two new ones, after a bounded total; nothing is lost', () => {
+		const chain = createChain(1)
+		const thrown = throwingSubscribers(chain, 2)
+		const received: unknown[] = []
+		setIsolatedErrorHandler((error) => {
+			received.push(error)
+			chain.link(0).state.n.set((chain.link(0).state.n.get() ?? 0) + 1)
+		})
+
+		expect(() => chain.link(0).state.n.set(2))
+			.not
+			.toThrow()
+		expect(received.filter(error => error instanceof RangeError))
+			.toHaveLength(1)
+		// The two first exceptions plus the bounded number their handling caused.
+		expect(received.filter(error => !(error instanceof RangeError)))
+			.toHaveLength(2 + MAX_HANDLER_CAUSED_REPORTS)
+		expectNothingLost(received, replayMicrotasks(), thrown)
+	})
+
+	it('do not count independent reports: every listener that throws in one call, and what handling each causes once, is handed over', () => {
+		const chain = createChain(2)
+		const primaries = throwingSubscribers(chain, 150)
+		const secondaries: Error[] = []
+		chain.link(1).state.n.subscribe(() => {
+			const error = new Error('secondary')
+			secondaries.push(error)
+			throw error
+		})
+		const received: unknown[] = []
+		setIsolatedErrorHandler((error) => {
+			received.push(error)
+			if (primaries.includes(error as Error))
+				chain.link(1).state.n.set((chain.link(1).state.n.get() ?? 0) + 1)
+		})
+		chain.link(0).state.n.set(2)
+
+		expect(primaries)
+			.toHaveLength(150)
+		expect(secondaries)
+			.toHaveLength(150)
+		expect(new Set(received))
+			.toEqual(new Set([...primaries, ...secondaries]))
+		expect(received)
+			.toHaveLength(300)
+		expect(microtasks)
+			.toHaveLength(0)
+	})
 })
 
 describe('the inspection delivery bound with a handler set', () => {
@@ -900,4 +1159,193 @@ describe('a compute exception that several subscriptions re-read', () => {
 		expect(microtasks)
 			.toHaveLength(0)
 	})
+
+	for (const order of ['compute exception queued first', 'listener exception queued first'] as const) {
+		it(`is handed over once per hand-over pass, also when the handler re-reads it while handling a later report (${order})`, () => {
+			const chain = createChain(1)
+			const listenerError = new Error('listener')
+			const subscribeBoom = (): void => {
+				chain.link(0).properties.boom.subscribe(() => {})
+			}
+			const subscribeListener = (): void => {
+				chain.link(0).state.n.subscribe(thrower(listenerError))
+			}
+			if (order === 'compute exception queued first') {
+				subscribeBoom()
+				subscribeListener()
+			}
+			else {
+				subscribeListener()
+				subscribeBoom()
+			}
+			const received: unknown[] = []
+			setIsolatedErrorHandler((error) => {
+				received.push(error)
+				// A new subscription re-reads the cached compute exception.
+				if (error === listenerError)
+					subscribeBoom()
+			})
+			chain.link(0).state.n.set(BOOM)
+
+			expect(thrownByBoom)
+				.toHaveLength(1)
+			expect(received.filter(error => error === thrownByBoom[0]))
+				.toHaveLength(1)
+			expect(received)
+				.toContain(listenerError)
+		})
+	}
+})
+
+describe('the handler runs with no active alien-signals subscriber', () => {
+	it('so what it reads never becomes a dependency of the subscription whose read was isolated (reported while the host\'s own batch flushes)', () => {
+		const chain = createChain(1)
+		const other = createChain(1)
+		chain.link(0).properties.boom.subscribe(() => {})
+		const received: unknown[] = []
+		setIsolatedErrorHandler((error) => {
+			received.push(error)
+			other.link(0).state.n.get()
+		})
+		// Unsupported in general (see the guide), and the one place where a report is handed over while an
+		// alien-signals effect is running: the subscription's effect, flushed by the host's `endBatch()`.
+		startBatch()
+		chain.link(0).state.n.set(BOOM)
+		endBatch()
+
+		expect(received)
+			.toEqual([thrownByBoom[0]])
+		// Had the handler's read been tracked, this write would run the subscription again, which re-reads the
+		// cached exception and reports it again.
+		other.link(0).state.n.set(5)
+		expect(received)
+			.toHaveLength(1)
+	})
+})
+
+describe('a host without queueMicrotask', () => {
+	for (const [label, remove] of [
+		['the global is missing', (): (() => void) => {
+			vi.unstubAllGlobals()
+			const saved = globalThis.queueMicrotask
+			Reflect.deleteProperty(globalThis, 'queueMicrotask')
+			return () => {
+				globalThis.queueMicrotask = saved
+			}
+		}],
+		['the global is not a function', (): (() => void) => {
+			vi.stubGlobal('queueMicrotask', undefined)
+			return () => {}
+		}],
+	] as const) {
+		describe(label, () => {
+			it('loses only what a throwing handler threw: the call returns normally and every other report and inspection delivery is handed over', () => {
+				const chain = createChain(1)
+				const first = new Error('first')
+				const second = new Error('second')
+				chain.link(0).state.n.subscribe(thrower(first))
+				chain.link(0).state.n.subscribe(thrower(second))
+				chain.link(0).properties.total.subscribe(() => {})
+				const inspected: unknown[] = []
+				chain.inspectProperty(0)
+					.subscribe(snapshot => inspected.push(snapshot.status))
+				const received: unknown[] = []
+				setIsolatedErrorHandler((error) => {
+					received.push(error)
+					throw new Error('handler failed')
+				})
+				const restore = remove()
+				let result: unknown
+				try {
+					result = chain.link(0).state.n.set(2)
+				}
+				finally {
+					restore()
+				}
+
+				expect(result)
+					.toEqual({ ok: true, value: 2 })
+				expect(received)
+					.toEqual([first, second])
+				expect(inspected)
+					.toEqual(['completed'])
+			})
+
+			it('keeps the exception the outermost operation itself throws', () => {
+				const chain = createChain(1)
+				chain.link(0).state.n.subscribe(thrower(new Error('subscriber')))
+				setIsolatedErrorHandler(() => {
+					throw new Error('handler failed')
+				})
+				const restore = remove()
+				let caught: unknown
+				try {
+					chain.link(0).methods.writeThenThrow(5)
+				}
+				catch (error) {
+					caught = error
+				}
+				finally {
+					restore()
+				}
+
+				expect(caught)
+					.toBe(methodError)
+			})
+
+			it('leaves the de-duplication consistent: a cached compute exception is reported again by a later call', () => {
+				const chain = createChain(1)
+				chain.link(0).properties.boom.subscribe(() => {})
+				chain.link(0).state.n.subscribe(thrower(new Error('subscriber')))
+				const received: unknown[] = []
+				setIsolatedErrorHandler((error) => {
+					received.push(error)
+					throw new Error('handler failed')
+				})
+				const restore = remove()
+				try {
+					chain.link(0).state.n.set(BOOM)
+				}
+				finally {
+					restore()
+				}
+				expect(received)
+					.toContain(thrownByBoom[0])
+
+				// A working host again, with no handler: the next re-read is reported.
+				vi.stubGlobal('queueMicrotask', (callback: () => void) => {
+					microtasks.push(callback)
+				})
+				setIsolatedErrorHandler(null)
+				chain.link(0).properties.boom.subscribe(() => {})
+				expect(replayMicrotasks())
+					.toEqual([thrownByBoom[0]])
+			})
+
+			it('drops what a bound stops instead of throwing, and the call returns normally', () => {
+				const chain = createChain(1)
+				const thrown = throwingSubscribers(chain, 1)
+				const received: unknown[] = []
+				setIsolatedErrorHandler((error) => {
+					received.push(error)
+					chain.link(0).state.n.set((chain.link(0).state.n.get() ?? 0) + 1)
+				})
+				const restore = remove()
+				let result: unknown
+				try {
+					result = chain.link(0).state.n.set(2)
+				}
+				finally {
+					restore()
+				}
+
+				expect(result)
+					.toEqual({ ok: true, value: 2 })
+				expect(received.filter(error => error instanceof RangeError))
+					.toHaveLength(1)
+				expect(received.filter(error => !(error instanceof RangeError)))
+					.toEqual(thrown.slice(0, MAX_HANDLER_CAUSED_DEPTH + 1))
+			})
+		})
+	}
 })

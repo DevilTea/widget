@@ -39,6 +39,7 @@ declare function queueMicrotask(callback: () => void): void
 
 /**
  * Receives an exception Core isolated from the operation that raised it (see {@link setIsolatedErrorHandler}).
+ * It receives only the exception: nothing says which Runtime, member or call isolated it.
  */
 export type IsolatedErrorHandler = (error: unknown) => void
 
@@ -53,29 +54,35 @@ let isolatedErrorHandler: IsolatedErrorHandler | null = null
  * Sets the function that receives the exceptions Core isolates: those thrown by a State, Property,
  * diagnostics, Event, disposal, inspection or `WidgetDocument` listener, by a Property `compute` while a
  * subscription re-evaluates it, and the `RangeError` that reports a bounded runaway loop. `null` or
- * `undefined` restores the default report, a rethrow in a queued microtask. While a handler is set, Core queues
- * a microtask only for what the handler could not take: its own exception, a report still queued when it is
- * removed, and what its own calls isolate once they have caused too many reports in one call (see
- * {@link MAX_HANDLER_CAUSED_REPORTS}) or once the inspection delivery bound has stopped the call's deliveries.
+ * `undefined` restores the default report, a rethrow in a queued microtask. Returns the handler that was set
+ * before (`null` for the default), so a caller that sets one temporarily can put it back.
  *
- * The handler is called once per report. An exception isolated while a Runtime operation is in progress is
- * handed over once the outermost operation has finished its work, still before it returns to its caller (also
- * when it throws), in the order Core isolated it, among the Property inspection deliveries of that operation;
- * one isolated with no operation in progress is handed over at once. The handler therefore never runs while
- * Core is evaluating, checking or flushing, and it may read and write any Runtime. A `compute` exception that
- * several subscriptions re-read is handed over once per hand-over: re-reads before the handler has received
- * it are folded into that one report.
+ * Every report goes through one hand-over pass (see {@link deliverQueued}): an exception isolated while a
+ * Runtime operation is in progress is handed over once the outermost operation has finished its work, still
+ * before it returns to its caller (also when it throws); one isolated with no operation in progress starts the
+ * pass at once. Within a pass, reports and Property inspection deliveries are handed over one at a time, in the
+ * order Core produced them, and the handler is never re-entered: what its own calls isolate is handed over
+ * after it returns, behind what was already waiting. The handler therefore never runs while Core is evaluating,
+ * checking or flushing (unless the host holds its own alien-signals batch, which is unsupported), and it may
+ * read and write any Runtime. A `compute` exception that several subscriptions re-read is handed over once
+ * per pass.
  *
  * A handler that throws breaks nothing: its exception is rethrown in a queued microtask, and the remaining
  * reports are still handed over. A report still queued when the handler is replaced goes to the new handler;
- * one still queued when the handler is removed is rethrown in a microtask. One handler serves the whole loaded
- * Core module, every System, Runtime and `WidgetDocument` alike: it belongs to the host, and a plugin or
- * renderer library must not set it.
+ * one still queued when the handler is removed is rethrown in a microtask. A handler whose handling keeps
+ * causing new isolated exceptions is stopped by {@link MAX_HANDLER_CAUSED_DEPTH} and
+ * {@link MAX_HANDLER_CAUSED_REPORTS}, and what its handling causes after the inspection delivery bound stopped a
+ * pass is rethrown in a microtask too. These rethrows are the only microtasks Core queues while a handler is
+ * set; in a host without `queueMicrotask` such a report is dropped, and nothing else is affected. One handler serves the
+ * whole loaded Core module, every System, Runtime and `WidgetDocument` alike: it belongs to the host, and a
+ * plugin or renderer library must not set it.
  */
-export function setIsolatedErrorHandler(handler: IsolatedErrorHandler | null | undefined): void {
+export function setIsolatedErrorHandler(handler: IsolatedErrorHandler | null | undefined): IsolatedErrorHandler | null {
 	if (handler !== null && handler !== undefined && typeof handler !== 'function')
 		throw new TypeError(`setIsolatedErrorHandler() expects a function, null or undefined, got ${typeof handler}.`)
+	const previous = isolatedErrorHandler
 	isolatedErrorHandler = handler ?? null
+	return previous
 }
 
 /**
@@ -97,8 +104,8 @@ function reportIsolatedException(error: unknown): void {
  * Exception objects a subscription's tracked read threw that are queued for reporting and not reported yet.
  * One failing Property is re-read by each of its subscriptions and by every dependent's, and each read
  * rethrows the one cached exception object; it is reported once per synchronous turn, not once per read.
- * With a handler set the turn ends when the handler has received the exception (see
- * {@link handOverQueuedReport}).
+ * With a handler set the turn is the hand-over pass: an exception handed over stays here until the pass ends
+ * (see {@link readExceptionsHandedOver}).
  */
 const queuedReadExceptions = new Set<unknown>()
 
@@ -491,25 +498,46 @@ function finishHostCall(): void {
 	}
 }
 
-/** How many handler calls are on the stack (a handler that runs at once can be re-entered by its own calls). */
-let handlerDepth = 0
-/** How many reports the handler's own calls caused were handed over since the outermost handler call or delivery run began. */
+/**
+ * The causal depth of the report the handler is handling now, or `-1` while it is not running. Every hand-over
+ * happens inside {@link deliverQueued}, so the handler is never re-entered: one value is enough. A report
+ * isolated while the handler runs was caused by its handling of this report, one level deeper.
+ */
+let handlingDepth = -1
+/** Whether the running pass of {@link deliverQueued} handed a report over: its end then resets the state below. */
+let handOverPassDirty = false
+/** Read exceptions handed over in the running pass: they stay in {@link queuedReadExceptions} until it ends. */
+let readExceptionsHandedOver: unknown[] = []
+/** Reports caused by the handler's handling (depth above `0`) handed over in the running pass. */
 let handlerCausedReports = 0
+/** Whether the running pass already handed the handler the `RangeError` of each bound below. */
+let depthBoundReported = false
+let totalBoundReported = false
 
 /**
- * How many exceptions isolated while the handler was running (by the Runtime calls it made) are handed back to
- * it within one host call. A handler whose calls keep causing new isolated exceptions (it writes a State whose
- * subscriber throws, on every report) would otherwise make that call loop forever, and one whose every call
- * causes two of them would grow its work exponentially, which a bound on rounds does not stop. Beyond the
- * limit the handler is handed one `RangeError`, and what its calls cause later in that call is rethrown in a
- * microtask. Internal, not configurable.
+ * How long a chain of reports, each caused by the handler's handling of the previous one, is handed back to the
+ * handler within one pass. A handler that keeps causing what it handles (on every report it writes a State whose
+ * subscriber throws) would otherwise make the host's call loop forever. Independent reports are not counted: a
+ * call in which 150 listeners throw and the handler causes one new exception for each hands all 300 over.
+ * Beyond the limit the handler is handed one `RangeError`, and the exceptions further down that chain are
+ * rethrown in a microtask. Internal, not configurable; exported for the tests only.
  */
-const MAX_HANDLER_CAUSED_REPORTS = 100
+export const MAX_HANDLER_CAUSED_DEPTH = 100
+
+/**
+ * How many reports caused by the handler's handling are handed over within one pass, whatever their depth. The
+ * depth bound alone does not stop a handler whose handling of each report causes two new ones: the chains stay
+ * short of the limit while their number doubles at every level. Far above anything a converging handler
+ * causes. Beyond it the handler is handed one `RangeError`, and the reports its handling causes later in that
+ * pass are rethrown in a microtask. Internal, not configurable; exported for the tests only.
+ */
+export const MAX_HANDLER_CAUSED_REPORTS = 10_000
 
 /**
  * Runs every queued delivery in order, including those queued by the operations the delivered listeners start
  * (each of those operations is outermost while it runs, so it releases its own deferred propagations), up to
- * {@link MAX_DELIVERY_GENERATIONS} generations.
+ * {@link MAX_DELIVERY_GENERATIONS} generations. This is also the one hand-over pass of the isolated-error handler
+ * (see {@link handOverIsolatedException}).
  */
 function deliverQueued(): void {
 	delivering = true
@@ -528,18 +556,28 @@ function deliverQueued(): void {
 		queuedGenerations = []
 		deliveryGeneration = 0
 		delivering = false
-		if (handlerDepth === 0)
-			handlerCausedReports = 0
+		if (handOverPassDirty)
+			endHandOverPass()
 	}
+}
+
+function endHandOverPass(): void {
+	handOverPassDirty = false
+	for (const error of readExceptionsHandedOver)
+		queuedReadExceptions.delete(error)
+	readExceptionsHandedOver = []
+	handlerCausedReports = 0
+	depthBoundReported = false
+	totalBoundReported = false
 }
 
 /** An isolated exception waiting in the delivery queue for the handler. */
 interface QueuedReport {
 	readonly error: unknown
-	/** Whether it is in {@link queuedReadExceptions} until it is handed over. */
+	/** Whether it is in {@link queuedReadExceptions} until the pass that hands it over ends. */
 	readonly readException: boolean
-	/** Whether it was isolated while the handler was running (see {@link MAX_HANDLER_CAUSED_REPORTS}). */
-	readonly causedByHandler: boolean
+	/** `0`, or one more than the depth of the report whose handling caused it (see {@link MAX_HANDLER_CAUSED_DEPTH}). */
+	readonly depth: number
 }
 
 /** The queued delivery of each report, so the delivery bound can tell reports apart from inspection deliveries. */
@@ -562,82 +600,87 @@ function handOverAtDeliveryLimit(from: number): void {
 	const limitError = new RangeError(`Inspection listeners kept changing what they observe for more than ${MAX_DELIVERY_GENERATIONS} rounds within one Runtime call; the remaining inspection notifications of that call were dropped.`)
 	// Not `reportIsolatedException`: a delivery run is in progress, so it would queue the report behind the
 	// deliveries this run is dropping.
-	if (handler === null)
-		rethrowInMicrotask(limitError)
-	else
-		callIsolatedErrorHandler(handler, limitError)
+	if (handler === null) {
+		queueMicrotask(() => {
+			throw limitError
+		})
+	}
+	else {
+		callIsolatedErrorHandler(handler, limitError, 0)
+	}
 	for (let index = end; index < queuedDeliveries.length; index++) {
 		const report = queuedReports.get(queuedDeliveries[index]!)
-		if (report === undefined)
-			continue
-		if (report.readException)
-			queuedReadExceptions.delete(report.error)
-		rethrowInMicrotask(report.error)
+		if (report !== undefined)
+			fallBack(report)
 	}
 }
 
 /**
- * Hands `error` to the handler now when no Runtime operation is in progress, otherwise queues it behind the
- * deliveries already waiting, exactly like {@link deliverWhenIdle}: the outermost operation's existing exit
- * check runs it.
+ * Queues `error` for the handler behind the deliveries already waiting, exactly like {@link deliverWhenIdle},
+ * and starts the pass at once when no Runtime operation is in progress and none is running: otherwise the
+ * outermost operation's existing exit check, or the running pass, hands it over.
  */
 function handOverIsolatedException(error: unknown, readException: boolean): void {
-	const causedByHandler = handlerDepth > 0
-	if (operationDepth === 0 && !delivering) {
-		handToHandler(isolatedErrorHandler!, error, causedByHandler)
-		return
-	}
+	const depth = handlingDepth < 0 ? 0 : handlingDepth + 1
 	if (readException)
 		queuedReadExceptions.add(error)
-	const report: QueuedReport = { error, readException, causedByHandler }
+	const report: QueuedReport = { error, readException, depth }
 	const deliver = (): void => handOverQueuedReport(report)
 	queuedReports.set(deliver, report)
 	queuedDeliveries.push(deliver)
-	// A report the handler's own calls caused stays in the round being delivered: the handler's feedback is
-	// bounded by `MAX_HANDLER_CAUSED_REPORTS`, not by `MAX_DELIVERY_GENERATIONS`.
-	queuedGenerations.push(causedByHandler ? deliveryGeneration : deliveryGeneration + 1)
+	// A report the handler's handling caused stays in the round being delivered: the handler's feedback is
+	// bounded by `MAX_HANDLER_CAUSED_DEPTH` and `MAX_HANDLER_CAUSED_REPORTS`, not by `MAX_DELIVERY_GENERATIONS`.
+	queuedGenerations.push(depth === 0 ? deliveryGeneration + 1 : deliveryGeneration)
 	deliveriesQueued = true
+	if (operationDepth === 0 && !delivering)
+		deliverQueued()
 }
 
-/**
- * Hands a queued report to the handler that is set now, or rethrows it in a microtask when none is. A read
- * exception leaves {@link queuedReadExceptions} only once the handler has returned, so the re-reads the
- * handler's own calls make are folded into this report.
- */
+/** Hands a queued report to the handler that is set now, or rethrows it in a microtask when none is. */
 function handOverQueuedReport(report: QueuedReport): void {
 	const handler = isolatedErrorHandler
-	try {
-		if (handler === null)
-			rethrowInMicrotask(report.error)
-		else
-			handToHandler(handler, report.error, report.causedByHandler)
-	}
-	finally {
-		if (report.readException)
-			queuedReadExceptions.delete(report.error)
-	}
-}
-
-/** Calls the handler with `error`, unless its own calls have caused too many reports (see {@link MAX_HANDLER_CAUSED_REPORTS}). */
-function handToHandler(handler: IsolatedErrorHandler, error: unknown, causedByHandler: boolean): void {
-	if (causedByHandler && ++handlerCausedReports > MAX_HANDLER_CAUSED_REPORTS) {
-		if (handlerCausedReports === MAX_HANDLER_CAUSED_REPORTS + 1)
-			callIsolatedErrorHandler(handler, new RangeError(`The isolated-error handler kept causing new isolated exceptions: more than ${MAX_HANDLER_CAUSED_REPORTS} within one Runtime call. The ones its calls cause later in that call are rethrown in a microtask.`))
-		rethrowInMicrotask(error)
+	if (handler === null) {
+		fallBack(report)
 		return
 	}
-	callIsolatedErrorHandler(handler, error)
+	handOverPassDirty = true
+	if (report.readException)
+		readExceptionsHandedOver.push(report.error)
+	const depth = report.depth
+	if (depth > MAX_HANDLER_CAUSED_DEPTH) {
+		if (!depthBoundReported) {
+			depthBoundReported = true
+			callIsolatedErrorHandler(handler, new RangeError(`The isolated-error handler caused a new isolated exception while handling the previous one ${MAX_HANDLER_CAUSED_DEPTH} times in a row within one Runtime call; the exceptions further down that chain are rethrown in a microtask instead of being handed to it.`), depth)
+		}
+		fallBack(report)
+		return
+	}
+	if (depth > 0 && ++handlerCausedReports > MAX_HANDLER_CAUSED_REPORTS) {
+		if (!totalBoundReported) {
+			totalBoundReported = true
+			callIsolatedErrorHandler(handler, new RangeError(`The isolated-error handler caused more than ${MAX_HANDLER_CAUSED_REPORTS} new isolated exceptions while handling others within one Runtime call; the ones it causes later in that call are rethrown in a microtask instead of being handed to it.`), depth)
+		}
+		fallBack(report)
+		return
+	}
+	callIsolatedErrorHandler(handler, report.error, depth)
+}
+
+/** Rethrows a report the handler does not take in a microtask; it leaves the de-duplication set when the pass ends. */
+function fallBack(report: QueuedReport): void {
+	handOverPassDirty = true
+	if (report.readException)
+		readExceptionsHandedOver.push(report.error)
+	rethrowInMicrotask(report.error)
 }
 
 /**
- * Calls the handler like a listener (no active alien subscriber, no open callback, see
- * {@link invokeListenerIsolated}); its own exception goes to a microtask rethrow, never back to it.
+ * Calls the handler with no active alien subscriber (see {@link invokeListenerIsolated}), recording the depth of
+ * the report it handles; its own exception goes to a microtask rethrow, never back to it.
  */
-function callIsolatedErrorHandler(handler: IsolatedErrorHandler, error: unknown): void {
-	const previousOwner = callbackScope.owner
-	callbackScope.owner = null
+function callIsolatedErrorHandler(handler: IsolatedErrorHandler, error: unknown, depth: number): void {
 	const previous = setActiveSub(undefined)
-	++handlerDepth
+	handlingDepth = depth
 	try {
 		handler(error)
 	}
@@ -645,18 +688,24 @@ function callIsolatedErrorHandler(handler: IsolatedErrorHandler, error: unknown)
 		rethrowInMicrotask(handlerError)
 	}
 	finally {
-		// Plain updates first: they still run when the stack is exhausted.
-		callbackScope.owner = previousOwner
-		if (--handlerDepth === 0 && !delivering)
-			handlerCausedReports = 0
+		handlingDepth = -1
 		setActiveSub(previous)
 	}
 }
 
+/**
+ * The fallback channel while a handler is set. It never throws: in a host without `queueMicrotask` the report is
+ * dropped, and the pass, the host's call and every other report go on as if it had been queued.
+ */
 function rethrowInMicrotask(error: unknown): void {
-	queueMicrotask(() => {
-		throw error
-	})
+	try {
+		queueMicrotask(() => {
+			throw error
+		})
+	}
+	catch {
+		// No microtask channel: this one report is lost (documented under "Host requirements").
+	}
 }
 
 /**
