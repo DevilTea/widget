@@ -248,9 +248,9 @@ let hostCalls = 1
 export const MAX_NOTIFICATIONS_PER_CALL = 10_000
 
 /**
- * What a subscription observes, for the limit's report: `"State"`/`"Property"` with a member, `"the
- * diagnostics of State"`/`"of Property"`/`"of Method"` with a member, `"the diagnostics of widget"` with a widget
- * only, `"the diagnostics of the Runtime"` with neither. Static strings, so a subscription stores no message.
+ * What a subscription observes, for the limit's report: `"State"`/`"Property"` and `"the diagnostics of
+ * State"`/`"of Property"`/`"of Method"` with the member's own primitive parameters as the owner, `"the
+ * diagnostics of widget"` with the widget id as the owner. Static strings, so a subscription stores no message.
  */
 export type SubscriptionSubject
 	= | 'State'
@@ -259,12 +259,26 @@ export type SubscriptionSubject
 		| 'the diagnostics of Property'
 		| 'the diagnostics of Method'
 		| 'the diagnostics of widget'
-		| 'the diagnostics of the Runtime'
 
-function describeSubscription(subject: SubscriptionSubject, widgetId: string | null, member: string | null): string {
-	if (member !== null)
-		return `${subject} "${member}" of widget "${widgetId}"`
-	return widgetId === null ? subject : `${subject} "${widgetId}"`
+/**
+ * Who the observed member belongs to, for the limit's report: an object the caller already holds (a primitive's
+ * parameters, which name the widget and the member) or a widget id, so that a subscription keeps one reference
+ * and the report's text is built only when the limit is reached.
+ */
+export type SubscriptionOwner
+	= | { readonly widgetId: string, readonly key: string }
+		| { readonly widgetId: string, readonly name: string }
+		| string
+
+/** Reports that a subscription reached {@link MAX_NOTIFICATIONS_PER_CALL}; `observed` names what it observes. */
+function reportNotificationLimit(observed: string): void {
+	reportIsolatedException(new RangeError(`The subscription to ${observed} was notified ${MAX_NOTIFICATIONS_PER_CALL} times within one call into the Runtime, so its listener is not called again until that call returns. The usual cause is listeners that keep writing what one another observe.`))
+}
+
+function describeSubscription(subject: SubscriptionSubject, owner: SubscriptionOwner): string {
+	if (typeof owner === 'string')
+		return `${subject} "${owner}"`
+	return `${subject} "${'key' in owner ? owner.key : owner.name}" of widget "${owner.widgetId}"`
 }
 
 /**
@@ -540,24 +554,21 @@ export function endBatchDeferringFlush(): void {
  * listener makes (issue #198). The other subscriptions only read signals, and need no operation.
  *
  * Within one host call into the Runtime (see {@link hostCalls}) the listener is called at most
- * {@link MAX_NOTIFICATIONS_PER_CALL} times; `subject`, `widgetId` and `member` name what the subscription observes
- * in the report of the limit. A notification adds four comparisons and an increment (and three assignments in the
- * first notification of a call); the subscription stores two numbers besides the references it is given.
- * Nothing is allocated unless the limit is reached. `unchanged` (the Runtime diagnostics aggregate's filter)
- * skips a run without calling the listener or counting it.
+ * {@link MAX_NOTIFICATIONS_PER_CALL} times; `subject` and `owner` name what the subscription observes in the
+ * report of the limit, whose text is built only when the limit is reached. A notification adds three comparisons
+ * and an increment (and three assignments in the first notification of a call). The subscription stores the two
+ * references it is given and one number besides what it stored before: `countedIn` replaces the bootstrap flag
+ * (`-1` until the bootstrap run, then the host call the count belongs to; `0` matches no call, since
+ * {@link hostCalls} starts at `1`). Nothing is allocated unless the limit is reached.
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
 	read: () => Value,
 	listener: (value: Value) => void,
 	subject: SubscriptionSubject,
-	widgetId: string | null,
-	member: string | null,
-	unchanged?: (value: Value) => boolean,
+	owner: SubscriptionOwner,
 ): () => void {
-	let isBootstrap = true
-	// The host call `notifications` counts in (see `hostCalls`).
-	let countedIn = 0
+	let countedIn = -1
 	let notifications = 0
 
 	const rawDispose = effect(() => {
@@ -566,17 +577,16 @@ export function createTrackedSubscription<Value>(
 			value = read()
 		}
 		catch (error) {
-			isBootstrap = false
+			if (countedIn === -1)
+				countedIn = 0
 			reportTrackedReadException(error)
 			return
 		}
 
-		if (isBootstrap) {
-			isBootstrap = false
+		if (countedIn === -1) {
+			countedIn = 0
 			return
 		}
-		if (unchanged !== undefined && unchanged(value))
-			return
 		// Every flush Core starts runs inside a Runtime operation; outside one there is no call to bound.
 		if (operationDepth !== 0) {
 			if (countedIn !== hostCalls) {
@@ -586,11 +596,66 @@ export function createTrackedSubscription<Value>(
 			}
 			if (++notifications > MAX_NOTIFICATIONS_PER_CALL) {
 				if (notifications === MAX_NOTIFICATIONS_PER_CALL + 1)
-					reportIsolatedException(new RangeError(`The subscription to ${describeSubscription(subject, widgetId, member)} was notified ${MAX_NOTIFICATIONS_PER_CALL} times within one call into the Runtime, so its listener is not called again until that call returns. The usual cause is listeners that keep writing what one another observe.`))
+					reportNotificationLimit(describeSubscription(subject, owner))
 				return
 			}
 		}
 
+		invokeListenerIsolated(listener, value)
+	})
+
+	return context.registerSubscription(rawDispose)
+}
+
+/**
+ * {@link createTrackedSubscription} for the Runtime diagnostics aggregate, whose `read()` re-runs after any commit
+ * but whose value changes less often: a run whose value is the one last delivered (initially `initial`) neither
+ * calls the listener nor counts towards the limit. A separate function with the same body, so that the other
+ * subscriptions store and test nothing for this filter and the aggregate allocates no filter closure. Keep the two
+ * bodies identical apart from the filter.
+ */
+export function createDistinctTrackedSubscription<Value>(
+	context: RuntimeContext,
+	read: () => Value,
+	listener: (value: Value) => void,
+	initial: Value,
+): () => void {
+	let delivered = initial
+	let countedIn = -1
+	let notifications = 0
+
+	const rawDispose = effect(() => {
+		let value: Value
+		try {
+			value = read()
+		}
+		catch (error) {
+			if (countedIn === -1)
+				countedIn = 0
+			reportTrackedReadException(error)
+			return
+		}
+
+		if (countedIn === -1) {
+			countedIn = 0
+			return
+		}
+		if (value === delivered)
+			return
+		if (operationDepth !== 0) {
+			if (countedIn !== hostCalls) {
+				countedIn = hostCalls
+				notifications = 0
+				hostCallWork = true
+			}
+			if (++notifications > MAX_NOTIFICATIONS_PER_CALL) {
+				if (notifications === MAX_NOTIFICATIONS_PER_CALL + 1)
+					reportNotificationLimit('the diagnostics of the Runtime')
+				return
+			}
+		}
+
+		delivered = value
 		invokeListenerIsolated(listener, value)
 	})
 

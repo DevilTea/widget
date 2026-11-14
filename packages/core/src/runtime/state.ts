@@ -332,7 +332,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		},
 		subscribe(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, internal.get, listener, 'State', params.widgetId, params.key)
+			return createTrackedSubscription(context, internal.get, listener, 'State', params)
 		},
 		getDiagnostics() {
 			context.assertActive()
@@ -340,7 +340,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		},
 		subscribeDiagnostics(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, internal.getDiagnostics, listener, 'the diagnostics of State', params.widgetId, params.key)
+			return createTrackedSubscription(context, internal.getDiagnostics, listener, 'the diagnostics of State', params)
 		},
 	}
 

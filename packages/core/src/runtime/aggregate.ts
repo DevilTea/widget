@@ -32,7 +32,7 @@ import type { RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
 import { signal } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
-import { createTrackedSubscription, readUntracked } from './adapter'
+import { createDistinctTrackedSubscription, createTrackedSubscription, readUntracked } from './adapter'
 import { toDiagnosticSnapshot } from './diagnostics'
 
 interface CachedWidgetSnapshot {
@@ -91,7 +91,7 @@ export function createRuntimeWidgetDiagnosticsAggregate(
 		},
 		subscribeDiagnostics(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, snapshot, listener, 'the diagnostics of widget', widgetId, null)
+			return createTrackedSubscription(context, snapshot, listener, 'the diagnostics of widget', widgetId)
 		},
 	}
 }
@@ -227,11 +227,7 @@ export function createRuntimeAggregate(
 			// The revision signal changes on every commit, including commits a batch undoes before it
 			// flushes; notify only when the aggregate actually changed, as tracking each primitive did. A run
 			// that changes nothing is not a notification, so it does not count towards the subscription limit.
-			let delivered = readUntracked(snapshot)
-			return createTrackedSubscription(context, snapshot, (next) => {
-				delivered = next
-				listener(next)
-			}, 'the diagnostics of the Runtime', null, null, next => next === delivered)
+			return createDistinctTrackedSubscription(context, snapshot, listener, readUntracked(snapshot))
 		},
 		commitHookFor(nodeId) {
 			const position = positionByNodeId[nodeId] ?? -1
