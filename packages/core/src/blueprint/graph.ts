@@ -12,6 +12,7 @@
 
 import type { BlueprintDependencyDiagnosticLocation, BlueprintDiagnostic } from '../diagnostic'
 import type { CompiledGraphAnalysis, CompiledMemberRef, InternalNodeId, ResolvedBlueprintWidgetNode } from '../internal/contract'
+import type { NonEmptyReadonlyArray } from '../types'
 import type { GraphEdge } from './deps'
 import type { WorkingNode } from './recovery'
 import { dependencyDiagnostic, methodLocation, propertyLocation } from './diagnostics'
@@ -225,11 +226,13 @@ function emitCycleDiagnostics(
 
 		invalidCycles.push(refs.map(ref => ({ nodeId: ref.nodeId, member: { type: ref.kind, name: ref.name } })))
 
+		// One frozen list per cycle, shared by every diagnostic of the cycle: a cycle of N members would
+		// otherwise build N lists of N-1 fresh locations (quadratic memory and time). The list names every
+		// member, the diagnostic's own Property included, in member order.
+		const related = Object.freeze(refs.map(ref => Object.freeze(memberLocation(nodes, ref)))) as NonEmptyReadonlyArray<BlueprintDependencyDiagnosticLocation>
+
 		for (const property of properties) {
 			const ownerNode = nodes[property.nodeId]!.publicNode as ResolvedBlueprintWidgetNode
-			const related = refs
-				.filter(ref => ref !== property)
-				.map(ref => memberLocation(nodes, ref))
 
 			finalDiagnostics.push(dependencyDiagnostic(
 				ownerNode,

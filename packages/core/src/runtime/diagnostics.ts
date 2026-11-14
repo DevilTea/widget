@@ -31,12 +31,21 @@ function freezeObject(value: unknown): void {
 		Object.freeze(value)
 }
 
+/**
+ * `related` arrays this module has already frozen together with their entries. Diagnostics may share one
+ * `related` array (every diagnostic of one dependency cycle does), and walking a shared array once per
+ * diagnostic is quadratic in the cycle length. An array frozen by someone else is not enough to skip the
+ * walk: its entries may still be unfrozen.
+ */
+const deeplyFrozenRelated = new WeakSet<object>()
+
 function freezeRelated(related: unknown): void {
-	if (!Array.isArray(related))
+	if (!Array.isArray(related) || deeplyFrozenRelated.has(related))
 		return
 	for (const item of related)
 		freezeObject(item)
 	Object.freeze(related)
+	deeplyFrozenRelated.add(related)
 }
 
 function freezeDependency(dependency: unknown): void {
