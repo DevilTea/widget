@@ -450,8 +450,10 @@ describe('foreign code reading a Property while a deep read of it is in progress
 				.toEqual({ ok: true, value: 100 })
 			expect(seen, `listener at n${at}`)
 				.toEqual([{ ok: true, value: 100 }])
+			// No link evaluated more than three times: a link the listener reads while its own evaluation is in
+			// progress is evaluated afresh for the listener at once, instead of after an abandonment of its reader.
 			expect(Math.max(...env.computeCalls), `listener at n${at}`)
-				.toBeLessThanOrEqual(4)
+				.toBeLessThanOrEqual(3)
 		}
 		expect(reported)
 			.toEqual([])
@@ -637,6 +639,32 @@ describe('a deep read nested in a re-evaluation (a Method it invokes reads a col
 			.toBe(calls)
 		expect(observed.counts)
 			.toEqual(counts)
+	})
+})
+
+describe('subscribers of a Property that reads a deep chain through a Method, and of its reader', () => {
+	it('get only current values after a write', () => {
+		// n14 invokes the Method of n13, the last link of a chain deeper than the limit, which also invokes the
+		// Method of n0; n15 reads n14. Only what the notifications carry is checked, not which ones are sent.
+		const configs = chain(14, index => (index === 13 ? { viaMethod: 'n0' } : {}))
+		configs.push({ index: 14, prev: null, viaMethod: 'n13' }, { index: 15, prev: 'n14' })
+		const graph = createGraph(configs)
+		const notified: string[] = []
+		graph.node(15).properties.out.subscribe(result => notified.push(`n15: ${numberOf(result)}`))
+		graph.node(14).properties.out.subscribe(result => notified.push(`n14: ${numberOf(result)}`))
+		expect(graph.node(15).properties.out.get())
+			.toEqual({ ok: true, value: 17 })
+
+		graph.node(0).state.n.set(3)
+
+		expect(graph.node(14).properties.out.get())
+			.toEqual({ ok: true, value: 20 })
+		expect(graph.node(15).properties.out.get())
+			.toEqual({ ok: true, value: 21 })
+		expect(notified.filter(entry => entry !== 'n14: 20'))
+			.toEqual(['n15: 21'])
+		expect(reported)
+			.toEqual([])
 	})
 })
 

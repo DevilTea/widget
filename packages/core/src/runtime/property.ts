@@ -29,12 +29,10 @@
  *
  * An abandoned computed stays dirty and keeps every dependency link it had, also those its abandoned run did
  * not read again (see `keepAbandoned`): nothing below it is torn down, and every later read of it, also
- * alien-signals' own dirty check, evaluates it again. Its abandoned outcome is a fresh object each time, so
- * alien-signals treats every abandoned evaluation as a change and goes on updating its readers, which are
- * abandoned in turn, instead of concluding that a reader is unchanged and keeping a stale value. Nothing is
- * written to make an abandoned computed evaluate again, so no subscriber is notified because of it. Every
- * abandoned computed of a read is evaluated again before the read returns (each one's reader reads it again),
- * so completing a read leaves nothing to evaluate again or to notify without a State write.
+ * alien-signals' own dirty check, evaluates it again. Nothing is written to make an abandoned computed evaluate
+ * again, so no subscriber is notified because of it. Every abandoned computed of a read is evaluated again
+ * before the read returns (each one's reader reads it again), so completing a read leaves nothing to evaluate
+ * again or to notify without a State write.
  *
  * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §14, amendment "Implementation verification —
  * alien-signals@3.2.1 conformance" (#4).
@@ -99,11 +97,15 @@ type ActiveSubscriber = ReturnType<typeof getActiveSub>
  * 3. `flags`, with `Dirty` = 16: a computed whose getter leaves `Dirty` set stays dirty when the getter returns
  *    (alien-signals then only clears its running flag), so its next read, also from alien-signals' dirty
  *    check, evaluates it again (`keepAbandoned`, `abandonedWithoutReevaluation`).
- * 4. Tearing a computed down (its last subscriber unlinked) empties its `deps` (`hasCompletedLinks`), and an
- *    engine stack overflow when alien-signals calls the getter leaves it marked clean with its previous outcome
- *    (`isUnreachable`, `abandonedWithoutReevaluation`).
+ * 4. Tearing a computed down (its last subscriber unlinked) empties its `deps` (`hasCompletedLinks`).
  * 5. Reading a computed with no active subscriber links nothing, and a computed's reader is linked only when the
  *    read returns (`readFromProperty`, `readAtBoundary`).
+ *
+ * Observed hazard, not relied on: an engine stack overflow thrown inside alien-signals' own bookkeeping (when
+ * it calls the getter, or between a computed's update and the marking of its readers) can leave a computed
+ * marked clean with its previous outcome, which then stays a stale value until a write reaches it.
+ * `abandonedWithoutReevaluation`, `isUnreachable` and the claim in `evaluate` recover the states of this kind
+ * that Core can recognize.
  */
 
 /** One link of an alien-signals@3.2.1 node's dependency list (see ALIEN-SIGNALS COUPLING). */
@@ -175,30 +177,13 @@ const EVALUATION_NESTING_LIMIT = 12
  */
 const ABANDONMENT: Error = Object.freeze(new Error('widget-core: internal — this Property evaluation was abandoned to be completed from a shallower stack; do not catch it.'))
 
-/** Marks an abandoned outcome (see {@link abandonedOutcome}). */
-const abandonedKey: unique symbol = Symbol('@deviltea/widget-core:abandoned')
-
 /**
  * The cached outcome of an abandoned evaluation: like an engine stack overflow it is an outcome that is not
  * kept. The computed that caches it stays dirty (see `keepAbandoned`), so its next read evaluates it again.
+ * One shared object, recognized by identity: an ABANDONMENT that plugin code keeps and throws later is cached
+ * as an ordinary compute exception.
  */
-interface AbandonedOutcome extends ComputeException {
-	readonly [abandonedKey]: true
-}
-
-/**
- * A fresh abandoned outcome. Never the same object twice: alien-signals sees every abandoned evaluation as a
- * change, so its dirty check goes on updating the readers of an abandoned Property (each is abandoned in turn)
- * instead of concluding they are unchanged and keeping a stale value (see {@link evaluate}).
- */
-function abandonedOutcome(): AbandonedOutcome {
-	return { [computeExceptionKey]: ABANDONMENT, [abandonedKey]: true }
-}
-
-/** Whether `outcome` is an abandoned outcome (an ABANDONMENT thrown by plugin code later is an ordinary exception). */
-function isAbandoned(outcome: PropertyOutcome | undefined): outcome is AbandonedOutcome {
-	return outcome !== undefined && abandonedKey in outcome
-}
+const ABANDONED_OUTCOME: ComputeException = Object.freeze({ [computeExceptionKey]: ABANDONMENT })
 
 /**
  * The per-Property surface the driver loop ({@link driveAbandonedRead}) works with. One object per Property,
@@ -280,10 +265,10 @@ function driveAbandonedRead(root: EvaluationNode): PropertyOutcome {
 	const drive = ++drives
 	const pending: EvaluationNode[] = []
 	let current = root
-	let outcome: PropertyOutcome = abandonedOutcome()
+	let outcome: PropertyOutcome = ABANDONED_OUTCOME
 	let stalls = 0
 	for (;;) {
-		if (isAbandoned(outcome)) {
+		if (outcome === ABANDONED_OUTCOME) {
 			const target = segment.recordedTarget
 			// An attempt starts at nesting zero, so its abandonment always started below it and reached it.
 			if (target === null || target === current || target.pendingIn === drive)
@@ -296,7 +281,8 @@ function driveAbandonedRead(root: EvaluationNode): PropertyOutcome {
 		}
 		else {
 			// An engine stack overflow ends the read: the host called from a stack too deep for even a bounded
-			// segment, and attempting the waiting Properties again would only overflow again.
+			// segment, and attempting the waiting Properties again would only overflow again. (Only reachable after
+			// an engine stack overflow; not covered by a deterministic test.)
 			if (current === root || (computeExceptionKey in outcome && isEngineStackOverflow(outcome[computeExceptionKey])))
 				return outcome
 			current.completedBy = drive
@@ -439,7 +425,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 
 	/**
 	 * The computed's getter. Besides a completed result or a cached compute exception, an evaluation can yield
-	 * an abandoned outcome (see {@link abandonedOutcome}), which is never kept; it then leaves the computed dirty
+	 * the abandoned outcome (see {@link ABANDONED_OUTCOME}), which is never kept; it then leaves the computed dirty
 	 * with every dependency link it had (see `keepAbandoned`):
 	 *
 	 * - one that would start with {@link EVALUATION_NESTING_LIMIT} evaluations already in progress on the
@@ -454,13 +440,14 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 * outermost evaluation of the segment ends the unwinding and hands the target to the segment's driver.
 	 *
 	 * `this` is the alien-signals node of the computed this evaluation runs for (see `currentNode`). A computed
-	 * replaced while it ran drops every dependency link when it finishes, so nothing evaluates it again, and one
-	 * alien-signals would still evaluate reads nothing and yields an abandoned outcome without running `compute`.
+	 * replaced while it ran drops every dependency link when it finishes, so nothing evaluates it again; one
+	 * alien-signals would still evaluate (only reachable after an engine stack overflow; not covered by a
+	 * deterministic test) reads nothing and yields the abandoned outcome without running `compute`.
 	 * A plain function rather than a closure per computed: no extra call frame per nesting level.
 	 */
 	function evaluate(this: object): PropertyOutcome {
 		if (currentNode !== this && !claimCurrentNode(this))
-			return abandonedOutcome()
+			return ABANDONED_OUTCOME
 		++evaluations
 		// Decided before anything is read: only the links of the previous evaluation count.
 		if (!hasCompletedLinks(this))
@@ -524,7 +511,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			}
 			if (segment.abandonedAt !== null) {
 				abandoned = true
-				return abandonedOutcome()
+				return ABANDONED_OUTCOME
 			}
 			assertSyncValue(value, 'Property', params.name, 'compute')
 
@@ -557,8 +544,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		catch (error) {
 			if (segment.abandonedAt !== null) {
 				abandoned = true
-				// `abandonedOutcome()`, inline: a call could exhaust the stack here.
-				return { [computeExceptionKey]: ABANDONMENT, [abandonedKey]: true } as AbandonedOutcome
+				return ABANDONED_OUTCOME
 			}
 			// The in-progress collector is discarded and the previous diagnostic snapshot kept, exactly as when
 			// the exception used to propagate out of the computed.
@@ -606,7 +592,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	function abandonAtStart(target: object): PropertyOutcome {
 		cachedAbandoned = true
 		keepAbandoned(target as AlienComputedNode)
-		return abandonedOutcome()
+		return ABANDONED_OUTCOME
 	}
 
 	/**
@@ -644,7 +630,8 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 * depends on how deep the stack was when the evaluation ran, not on the compute's inputs. The write marks
 	 * this Property (and through it its dependents) stale; its propagation is held until the enclosing Runtime
 	 * operation leaves, like any write made while an evaluation may run. A computed no write reaches any more
-	 * is replaced instead (see {@link isUnreachable}).
+	 * is replaced instead (see {@link isUnreachable}; only reachable after an engine stack overflow; not covered
+	 * by a deterministic test).
 	 */
 	function reevaluate(): PropertyOutcome {
 		if (isUnreachable()) {
@@ -676,7 +663,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			return resultComputed()
 		}
 		if (computeExceptionKey in result && evaluations === evaluationsBefore) {
-			if (isAbandoned(result))
+			if (result === ABANDONED_OUTCOME)
 				return readAbandonedAgain()
 			if (isEngineStackOverflow(result[computeExceptionKey]))
 				return reevaluate()
@@ -701,10 +688,11 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	}
 
 	/**
-	 * Whether the current computed, whose cached outcome is abandoned, would not evaluate again when read: an
-	 * abandoned computed is left dirty (see `keepAbandoned`), so this is one whose evaluation is still in
-	 * progress further up the stack (alien-signals returns the cached outcome of a computed it is evaluating), or
-	 * one an engine stack overflow inside alien-signals' own bookkeeping left marked clean.
+	 * Whether the current computed, whose cached outcome is abandoned, would not evaluate again when read,
+	 * although an abandoned computed is left dirty (see `keepAbandoned`): its evaluation is still in progress
+	 * further up the stack (a listener reads this Property again; alien-signals returns the cached outcome of a
+	 * computed it is evaluating), or, only reachable after an engine stack overflow and not covered by a
+	 * deterministic test, an overflow inside alien-signals' own bookkeeping left it marked clean.
 	 */
 	function abandonedWithoutReevaluation(): boolean {
 		return inProgress > 0 || (((currentNode as AlienComputedNode | null)?.flags ?? 0) & ALIEN_DIRTY) === 0
@@ -731,14 +719,14 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			outcome = resultComputed()
 		}
 		else if (evaluations === evaluationsBefore) {
-			if (isAbandoned(outcome)) {
+			if (outcome === ABANDONED_OUTCOME) {
 				outcome = readAbandonedAgain()
 			}
 			else if (isEngineStackOverflow(outcome[computeExceptionKey as keyof PropertyOutcome])) {
 				outcome = reevaluate()
 			}
 		}
-		return isAbandoned(outcome) ? driveAbandonedRead(node) : outcome
+		return outcome === ABANDONED_OUTCOME ? driveAbandonedRead(node) : outcome
 	}
 
 	/**
@@ -757,16 +745,16 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			}
 			if (linked === outcome)
 				return outcome
-			if (linked !== undefined && !isAbandoned(linked))
+			if (linked !== undefined && linked !== ABANDONED_OUTCOME)
 				return linked
 			// A read that ended in an engine stack overflow (see `driveAbandonedRead`) leaves the subscriber linked
 			// to the computed whose evaluation it could not complete, which a later write evaluates again.
-			if (!isAbandoned(outcome) && computeExceptionKey in outcome)
+			if (outcome !== ABANDONED_OUTCOME && computeExceptionKey in outcome)
 				return outcome
 			if (rounds >= MAX_DRIVE_STALLS)
 				throw new Error('widget-core: internal error — a Property read made no progress.')
 			outcome = attempt()
-			if (isAbandoned(outcome))
+			if (outcome === ABANDONED_OUTCOME)
 				outcome = driveAbandonedRead(node)
 		}
 	}
@@ -849,25 +837,14 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	/**
 	 * {@link getResultWithInspectionPublish} for a Property's own dependency callable, nested in the reading
 	 * Property's evaluation on the same segment. An abandoned outcome is thrown as the internal
-	 * {@link ABANDONMENT}, through the reader's `compute`, to the reader's evaluation.
-	 *
-	 * A cached abandonment is evaluated again by the read itself (the computed is dirty, see `keepAbandoned`),
-	 * unless its computed is still evaluating further up the stack: it is then replaced (see
-	 * {@link replaceComputed}) rather than re-entered.
+	 * {@link ABANDONMENT}, through the reader's `compute`, to the reader's evaluation. A cached abandonment is
+	 * evaluated again by the read itself (the computed is dirty, see `keepAbandoned`), unless it would not be
+	 * (see {@link abandonedWithoutReevaluation}): it is then replaced first (see {@link replaceComputed}), rather
+	 * than abandoning the reader and being replaced only when the driver loop attempts it.
 	 */
 	function readFromProperty(): ExecutionResult<unknown, RuntimePropertyDiagnostic> {
-		if (cachedAbandoned) {
-			// Once the segment unwinds, or an abandonment has reached its root (alien-signals' dirty check goes on
-			// updating the readers of an abandoned Property during a flush, bottom-up), evaluating this Property
-			// again would only descend to the same limit once per reader: the reader is abandoned at once instead,
-			// and the driver loop, or the boundary read that follows the flush, completes the chain.
-			if (segment.abandonedAt !== null || segment.recordedTarget !== null) {
-				segment.abandonedAt ??= segment.recordedTarget
-				throw ABANDONMENT
-			}
-			if (abandonedWithoutReevaluation())
-				replaceComputed()
-		}
+		if (cachedAbandoned && abandonedWithoutReevaluation())
+			replaceComputed()
 		let result: PropertyOutcome | undefined
 		if (hasCompletedLinks(currentNode)) {
 			const evaluationsBefore = evaluations
@@ -906,14 +883,14 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		}
 		// Links the reader. Cached, unless foreign code changed this Property since: then it is evaluated again
 		// here, as any tracked read would.
-		if (!isAbandoned(result))
+		if (result !== ABANDONED_OUTCOME)
 			result = runRuntimeOperation(resultComputed) as PropertyOutcome
 		return finishReadFromProperty(result)
 	}
 
 	/** Throws an abandonment or a compute exception, or publishes a completed result unless already published. */
 	function finishReadFromProperty(result: PropertyOutcome): ExecutionResult<unknown, RuntimePropertyDiagnostic> {
-		if (isAbandoned(result)) {
+		if (result === ABANDONED_OUTCOME) {
 			segment.abandonedAt ??= segment.recordedTarget ?? node
 			throw ABANDONMENT
 		}
