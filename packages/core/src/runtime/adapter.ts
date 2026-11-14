@@ -255,10 +255,20 @@ function releaseBatches(): void {
  *
  * `fn` receives `argument`, so a hot path passes a function that already exists together with its
  * argument instead of allocating a closure per call.
+ *
+ * `write` marks an operation that writes State (`RuntimeState`'s `attemptSet`, `resetState`). Entered while
+ * another operation is in progress (a listener the enclosing operation's flush invokes, say) with no batch
+ * level open, it opens one, which the outermost frame's release closes: its writes never flush on their own,
+ * like a nested Method invocation's (see {@link endBatchDeferringFlush}). Flushing them there would run the
+ * effects they queue inside the flush that is running the listener's own effect, and alien-signals does not
+ * queue an effect again for a write made while that effect runs, so a subscriber whose value the write changes
+ * could miss it. The outermost operation is untouched: it executes the same statements as without `write`.
  */
-export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument): Result {
+export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument, write?: boolean): Result {
 	if (operationDepth === 0)
 		entryBatchDepth = getBatchDepth()
+	else if (write === true && getBatchDepth() === 0)
+		startBatch()
 	++operationDepth
 	try {
 		return fn(argument as Argument)

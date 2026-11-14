@@ -105,6 +105,9 @@ export function createStateLedger(stateCount: number): StateLedger {
  * computed or effect and commits a value an enclosing write has not committed yet. Such a restore leaves
  * the marks set, since its own write may still be uncommitted when it returns; the next top-level reset
  * visits those States again, exactly as a full scan would, and clears the marks.
+ *
+ * Like `set()`, a restore made while another Runtime operation is in progress does not flush on its own: the
+ * outermost operation notifies the subscribers (see `runRuntimeOperation`'s `write`).
  */
 export function restoreInitialState(context: RuntimeContext, ledger: StateLedger, first: number, end: number): void {
 	context.assertActive()
@@ -135,7 +138,7 @@ export function restoreInitialState(context: RuntimeContext, ledger: StateLedger
 		finally {
 			endBatch()
 		}
-	})
+	}, undefined, true)
 }
 
 /**
@@ -208,7 +211,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	}
 
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
-		return runRuntimeOperation(attemptSetWithinOperation, candidate)
+		return runRuntimeOperation(attemptSetWithinOperation, candidate, true)
 	}
 
 	/**
