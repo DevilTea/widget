@@ -249,7 +249,7 @@ Two independent axes:
 | 0.1 | Handshake, Runtime list, Blueprint/Widget snapshots, member subscriptions, inspect mode, highlight. |
 | 0.2 | Event subscriptions, Blueprint config/events metadata, geometry and hit-testing. |
 | 0.3 | `subscription-limit` error code. |
-| 0.4 | `authorWritable` and `valueContractId` on member DTOs, `runtime.disposed` event, `runtime-disposed` error code, `keyTruncated` marker. |
+| 0.4 | `authorWritable`, `valueContractId` and `transitivelyEmits` on member DTOs, `runtime.disposed` event, `runtime-disposed` error code, `keyTruncated` marker. |
 
 The protocol is currently `0.4`.
 
