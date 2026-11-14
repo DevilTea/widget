@@ -492,6 +492,43 @@ describe('the count belongs to the host\'s call', () => {
 		expect(reported)
 			.toHaveLength(1)
 	})
+
+	it('includes a Property subscription made during the call: its notifications count in that call', async () => {
+		const graph = createGraph()
+		const [a, b, c] = [graph.widget('a'), graph.widget('b'), graph.widget('c')]
+		const calls = { b: 0, c: 0 }
+		let looping = true
+		a.state.n.subscribe(() => {
+			// Subscribed from a listener, so inside the host's call; the loop it takes part in starts in that call.
+			b.properties.out.subscribe((result) => {
+				calls.b++
+				if (looping && result.ok)
+					c.state.n.set(result.value + 1)
+			})
+			b.state.n.set(2)
+		})
+		c.state.n.subscribe((value) => {
+			calls.c++
+			if (looping)
+				b.state.n.set(value! + 1)
+		})
+
+		a.state.n.set(7)
+		await settle()
+
+		expect(calls)
+			.toEqual({ b: LIMIT, c: LIMIT })
+		expectOneLimitReport('b', 'out')
+
+		looping = false
+		calls.b = 0
+		b.state.n.set(-1)
+		await settle()
+		expect(calls.b)
+			.toBe(1)
+		expect(reported)
+			.toHaveLength(1)
+	})
 })
 
 describe('a subscriber the limit stopped', () => {
