@@ -34,8 +34,8 @@ pnpm add @deviltea/widget-core
 ```
 
 Requires Node.js `>=22.14.0` (or any ES2022 runtime with a global
-`queueMicrotask`, which a host that sets an isolated-error handler does not
-need; see [Host requirements](#host-requirements)).
+`queueMicrotask`; a host with an isolated-error handler can do without it, see
+[Host requirements](#host-requirements)).
 
 While the package is `0.x`, a breaking change bumps the **minor** version
 (`0.N.0`), so use a `^0.N.0` range. Core recognizes its own plugins, Blueprints
@@ -587,9 +587,15 @@ setIsolatedErrorHandler(error => console.error('isolated:', error))
 
 The handler is called once per report, after the Runtime call that caused it has
 finished its work and before that call returns (at once when no Runtime call is
-in progress), so it may read and write the Runtime. While a handler stays set
-and does not throw, Core needs neither `queueMicrotask` nor a drained job queue.
-See
+in progress), and it is never re-entered, so it may read and write the Runtime.
+`setIsolatedErrorHandler` returns the handler it replaced, so code that sets one
+for a while can put the previous one back. With a handler set, Core queues a
+microtask only for an exception the handler throws, a report still waiting when
+the handler is removed, and what the handler's handling causes beyond its
+internal bounds; without `queueMicrotask` those reports are dropped and nothing
+else changes. A host whose handler stays set, catches its own exceptions and
+does not keep causing what it handles needs neither `queueMicrotask` nor a
+drained job queue. See
 [Receiving isolated errors](https://deviltea.github.io/widget/packages/widget-core#receiving-isolated-errors)
 and [Host requirements](https://deviltea.github.io/widget/packages/widget-core#host-requirements).
 

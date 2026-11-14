@@ -1493,8 +1493,12 @@ applied. Listeners run in subscription order, over the subscriber list as it
 stood when notification began. An exception thrown by a listener does not fail
 `applyPatch()` or stop the remaining listeners. It is reported separately: rethrown
 in a queued microtask after `applyPatch()` has returned, or, when the host has set
-an isolated-error handler, handed to it at once (see
-[Receiving isolated errors](#receiving-isolated-errors)).
+an isolated-error handler, handed to it. When `applyPatch()` is called outside any
+Runtime call, the handler receives it at once, before the next listener runs,
+while the document is still notifying (an `applyPatch()` on it then returns
+`reentrant-apply`); when `applyPatch()` is called inside one (for example from a
+State subscriber), it waits for the end of that Runtime call, after the
+remaining listeners (see [Receiving isolated errors](#receiving-isolated-errors)).
 
 ### Explicit separated-source tooling
 
@@ -1765,7 +1769,7 @@ never breaks the writer that invalidated it: `state.set`, a Method call and
 Core reports the exception separately (a queued microtask, or the host's
 isolated-error handler, see [Receiving isolated errors](#receiving-isolated-errors)),
 once even when several subscriptions (the Property's own and its dependents')
-re-read it: once per synchronous turn, or with a handler once per call; that
+re-read it: once per synchronous turn, or with a handler once per hand-over pass; that
 subscription is skipped for this recompute and resumes on the next completed
 recompute. A direct `get()` and a dependency read of the Property still rethrow
 synchronously, and `subscribe()` whose first evaluation throws still returns a
@@ -3464,40 +3468,99 @@ setIsolatedErrorHandler(null) // back to the default microtask rethrow
 runtime.dispose()
 ```
 
-- **One call per report**, with the exception exactly as it was thrown. A
-  `compute` exception that several subscriptions re-read is reported once per
-  call into the Runtime; a later call that reads it again reports it again.
-- **When it runs.** An exception isolated during a Runtime call (`set()`, a
-  Method call, `resetState()`, a Property's `get()` or `subscribe()`) is
-  handed over once the outermost call has finished its work, after every
-  subscriber was notified, and before that call returns, also when it throws. The reports and the Property inspection deliveries of one call run in
-  the order Core produced them. An exception isolated with no Runtime call in
-  progress (a `WidgetDocument` subscriber, a disposal listener of a top-level
-  `dispose()`, a listener of an emit made through
+- **One call per report**, with the exception exactly as it was thrown. The
+  handler receives only the exception: nothing says which Runtime, member or
+  call isolated it.
+- **One hand-over pass, in order.** An exception isolated during a Runtime call
+  (`set()`, a Method call, `resetState()`, a Property's `get()` or
+  `subscribe()`) is handed over once the outermost Runtime call in progress has
+  finished its work, after every subscriber was notified, and before that call
+  returns, also when it throws. That is the outermost call whichever Runtime
+  isolated the exception: when a listener of Runtime B writes Runtime A, A's
+  exception is handed over when the call into B ends. Within the pass, reports
+  and Property inspection deliveries are handed over one at a time, in the
+  order Core produced them. The handler is never re-entered: what its own calls
+  isolate while it runs is handed over after it returns, behind what was
+  already waiting, still before the host's call returns.
+- **At once when no Runtime call is in progress.** A `WidgetDocument`
+  subscriber of an `applyPatch()` made outside any Runtime call, a disposal
+  listener of a top-level `dispose()`, and a listener of an emit made through
   [`@deviltea/widget-core/integration`](#renderer-adapter-integration) outside
-  any Runtime call) is handed over at once, before the next listener runs.
-- **What it may do.** The handler never runs while Core is evaluating Properties
-  or notifying subscribers, so it may read Properties, write State and call
-  Methods on any Runtime, like top-level host code. What its own calls isolate is
-  handed to it too, before the host's call returns. A handler whose calls keep
-  causing new isolated errors (it writes a State whose subscriber throws, on
-  every report) is stopped: once its own calls have caused an internal number
-  of them within one call, Core hands it a `RangeError` and rethrows in a
-  microtask what its calls cause later in that call. When the inspection
-  delivery bound stops a call, the reports still waiting are handed over, not
-  dropped, and what the handler's calls cause after that is rethrown in a
-  microtask.
+  any Runtime call start the pass where they throw, before the next listener
+  runs. The same listeners inside a Runtime call (for example an `applyPatch()`
+  made by a State subscriber) wait for the end of that call like every other
+  report.
+- **A cached `compute` exception** that several subscriptions re-read is
+  handed over once per pass, whatever else is handed over around it, even when
+  the handler's own calls re-read it. A later Runtime call that reads it again
+  hands it over again.
+- **What the handler can rely on.** It never runs while a Runtime is
+  evaluating Properties or notifying its subscribers, so it may read
+  Properties, write State and call Methods on any Runtime. The one exception is a host that holds its
+  own `alien-signals` batch around Runtime calls, which is not supported (see
+  [When Property inspection listeners run](#when-property-inspection-listeners-run)):
+  the notifications then run when the host ends its batch, and the handler can
+  run between two subscribers there. Otherwise it depends on where the pass
+  runs:
+  - after an outermost Runtime call (most reports): nothing of Core is in
+    progress, and the handler can do anything top-level host code can;
+  - during the notification of an `applyPatch()`: that document is still
+    notifying, so an `applyPatch()` on it returns the `reentrant-apply`
+    failure, and its remaining subscribers run after the handler;
+  - during a top-level `dispose()`: the Runtime is already disposed, so a live
+    operation on it throws `WidgetSystemRuntimeDisposedError`;
+  - between the listeners of a top-level emit through `/integration`: the emit
+    goes on after the handler and its later listeners see what the handler
+    did. A handler that disposes the Runtime there makes a later listener's
+    Method call throw `WidgetSystemRuntimeDisposedError`, which is isolated and
+    handed to the handler in turn.
+- **Bounds on what its handling causes.** A handler that keeps causing what it
+  handles (on every report it writes a State whose subscriber throws) is
+  stopped. A chain of reports in which each was caused by the handler's
+  handling of the previous one is handed over to a depth of 100. Beyond that
+  the handler receives one `RangeError` saying so, and the exceptions further
+  down the chain are rethrown in a microtask. Independent reports are not
+  counted: when 150 listeners throw in one call and the handler causes one new
+  exception for each, all 300 are handed over. A handler whose handling of
+  each report causes two new ones keeps every chain short, so a second limit
+  stops it after 10,000 exceptions caused by its handling in one pass, with its
+  own `RangeError`. Both limits are internal and may change. When the
+  inspection delivery bound stops a pass, the reports still waiting are handed
+  over, not dropped, followed by that bound's `RangeError`; what the handler's
+  handling causes after that is rethrown in a microtask.
 - **A handler that throws** breaks nothing: its exception is rethrown in a
-  queued microtask, and the remaining reports are still handed over.
+  queued microtask, and the remaining reports are still handed over. Catch
+  inside the handler when the host has no `queueMicrotask` (see
+  [Host requirements](#host-requirements)).
 - **Replacing or removing it.** `setIsolatedErrorHandler(null)` (or
   `undefined`) restores the default. A report still waiting when the handler is
   replaced goes to the new handler; one still waiting when it is removed is
   rethrown in a microtask. Any other value that is not a function throws a
-  `TypeError`.
+  `TypeError` and leaves the handler as it was. Every call returns the handler
+  it replaced (`null` for the default), so code that sets one for a while (a
+  test, a story, a hot-reloaded module) can put back what the application set:
+
+  <!-- sample: isolated-error-handler-restore run -->
+  ```ts
+  import { setIsolatedErrorHandler } from '@deviltea/widget-core'
+
+  export function captureIsolatedErrors(run: () => void): unknown[] {
+  	const captured: unknown[] = []
+  	const previous = setIsolatedErrorHandler(error => captured.push(error))
+  	try {
+  		run()
+  	}
+  	finally {
+  		setIsolatedErrorHandler(previous)
+  	}
+  	return captured
+  }
+  ```
 - **One handler per loaded Core.** It applies to every System, Blueprint,
   Runtime and `WidgetDocument` of that copy of Core (an application loads
   exactly one). It belongs to the host: a plugin library or renderer library
-  must not set it.
+  must not set it, and code that sets one for a while restores the previous
+  one.
 
 ### Host requirements
 
@@ -3519,16 +3582,23 @@ IIFE). The current implementation needs:
   runaway loop. An embedded host must then run its pending jobs (for example
   `rquickjs`'s pending-job execution, or `JS_ExecutePendingJob` in QuickJS);
   otherwise these errors never surface. Without a global `queueMicrotask`, the
-  rethrow itself fails with a `ReferenceError` at the point of the failure. A
-  host that sets a handler with `setIsolatedErrorHandler` receives these
+  rethrow itself fails with a `ReferenceError` at the point of the failure.
+
+  A host that sets a handler with `setIsolatedErrorHandler` receives these
   exceptions synchronously instead (see
-  [Receiving isolated errors](#receiving-isolated-errors)), and Core then
-  queues a microtask only for what the handler could not take: an exception
-  the handler itself throws, a report still waiting when the handler is
-  removed, and what the handler's own calls isolate once one of those bounds
-  has stopped them. A host whose handler stays set, does not throw and
-  does not keep causing new isolated errors therefore needs neither
-  `queueMicrotask` nor a drained job queue.
+  [Receiving isolated errors](#receiving-isolated-errors)). Core then queues a
+  microtask only for what the handler does not take: an exception the handler
+  itself throws, a report still waiting when the handler is removed, and an
+  exception the handler's handling causes beyond one of its bounds (a chain
+  deeper than its limit, more than its total in one pass, or after the
+  inspection delivery bound stopped the pass). Without `queueMicrotask`, Core
+  drops exactly those reports, one by one, and nothing else: the host's call
+  returns or throws what it would have, and every other report and inspection
+  delivery is still handed over. So an embedded host needs neither
+  `queueMicrotask` nor a drained job queue as long as its handler stays set
+  while Runtime calls run, catches its own exceptions, and does not keep
+  causing what it handles. Catch inside the handler, so that its own
+  exceptions are not lost.
 - **Enough call stack for what you subscribe to.** Compiling and reading do not
   depend on the stack size, but tearing down a long subscribed chain does. See
   [Call-stack depth](#call-stack-depth).
