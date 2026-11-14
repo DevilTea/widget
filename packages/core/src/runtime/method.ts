@@ -27,6 +27,7 @@ import type { ErasedWidgetMethodDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
+import type { EventPrimitive } from './event'
 import { signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { createTrackedSubscription, endBatchDeferringFlush, runRuntimeOperation, writeDeferringFlush } from './adapter'
@@ -34,6 +35,7 @@ import { createOperationCollector } from './collector'
 import { callbackScope } from './context'
 import { materializeDependencyTree } from './deps'
 import { buildDefaultMethodArgsDiagnostic, buildMethodArgsDiagnostic, buildMethodResultDiagnostic, freezeDiagnosticSnapshot, toDiagnosticSnapshot } from './diagnostics'
+import { createMethodEmitFragment } from './event'
 import { assertSyncValue } from './sync'
 
 export interface MethodPrimitive {
@@ -53,8 +55,11 @@ export interface CreateMethodPrimitiveParams {
 	readonly depsTree: CompiledDependencyTree
 	readonly registry: ReadonlyMap<number, PrimitiveRegistryEntry>
 	readonly nodes: readonly CompiledWidgetNode[]
-	readonly emitFragment: Readonly<Record<string, unknown>>
-	/** The owner the dependency callables are materialized for; its `emitter` is `emitFragment.emit` (or `null`). */
+	/** The plugin's type, its Event declarations and this widget's Event primitives (the last two are `null` for a plugin without Events). */
+	readonly pluginType: string
+	readonly eventDefinitions: ReadonlyMap<WidgetMemberKey, unknown> | null
+	readonly events: ReadonlyMap<WidgetMemberKey, EventPrimitive> | null
+	/** The owner the dependency callables and the `emit` callables are materialized for. */
 	readonly owner: CallbackOwner
 	/** Called with every committed diagnostic-snapshot change (the Runtime aggregate's commit hook). */
 	readonly onDiagnosticsCommitted: () => void
@@ -77,6 +82,8 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 
 	// The materialized `deps` of `execute`'s context: built by the first execution, the same object ever after.
 	let deps: unknown
+	// The `emit`-related members of `execute`'s context: built by the first execution, the same object ever after.
+	let emitFragment: Readonly<Record<string, unknown>> | undefined
 
 	function invokeWithinOperation(args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
 		startBatch()
@@ -126,6 +133,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				context,
 				owner: params.owner,
 			})
+			emitFragment ??= createMethodEmitFragment(context, params.owner, params.pluginType, params.eventDefinitions, params.events, params.definition.emits)
 			const execCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>()
 			const sink: ActiveDiagnosticSink = {
 				addFinalizedDiagnostic: (diagnostic, dedupe) => execCollector.addFinalizedDiagnostic(diagnostic as RuntimeMethodDiagnostic, dedupe),
@@ -136,14 +144,14 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				widget: params.selfNode,
 				blueprint: params.blueprintView,
 				deps,
-				...params.emitFragment,
+				...emitFragment,
 				...params.buildConfigFragment(),
 				addDiagnostic: execCollector.addDiagnostic,
 				hasAnyDiagnostic: execCollector.hasAnyDiagnostic,
 			}
 
 			// This Method becomes the innermost running callback for the duration of `execute` (see
-			// `callbackScope`): only its own dependency callables and its widget's `emit` are usable, and
+			// `callbackScope`): only its own dependency callables and its own `emit` are usable, and
 			// they report into `sink`. Plain-assignment save/restore, so it survives an exhausted stack.
 			const { owner } = params
 			const previousOwner = callbackScope.owner

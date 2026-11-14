@@ -157,6 +157,8 @@ export interface InspectorMethodMember {
 	readonly type: 'method'
 	readonly name: string
 	readonly transitivelyWrites: boolean
+	/** Added in protocol 0.4: the Method emits an Event, itself or through the Methods it invokes. Absent below 0.4. */
+	readonly transitivelyEmits?: boolean
 	readonly dependencies: readonly InspectorDependency[]
 }
 

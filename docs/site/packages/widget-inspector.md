@@ -45,7 +45,7 @@ An Agent created without `dom` serves the Runtime-level methods only. The DOM-de
 - **npm semver** governs the TypeScript API.
 - **Protocol `major.minor`** governs cross-realm compatibility. Minors only add negotiated capabilities, and every params validator ignores unknown extra fields, so a newer peer's additions never break an older one; a peer negotiated at an older minor sees exactly the wire shapes of that minor. A breaking DTO change bumps the major. Only the handshake sets the negotiated minor. A peer that never performs the handshake is served at the Agent's highest minor for events, and its responses use the lower of that and the request envelope's minor.
 
-The protocol is currently `0.4`: 0.2 added event subscriptions and geometry, 0.3 the `subscription-limit` error code, and 0.4 the `authorWritable` / `valueContractId` member fields, the `runtime.disposed` event, the `runtime-disposed` error code and the `keyTruncated` marker.
+The protocol is currently `0.4`: 0.2 added event subscriptions and geometry, 0.3 the `subscription-limit` error code, and 0.4 the `authorWritable` / `valueContractId` / `transitivelyEmits` member fields, the `runtime.disposed` event, the `runtime-disposed` error code and the `keyTruncated` marker.
 
 The Core peer is published as `^0.N.0` (`workspace:^` in the workspace): a breaking change in Core's inspection surface bumps Core's minor, so an Inspector release works with the Core minor it was released against. Once Core is `0.1.0` or newer that range also admits that minor's later patches; while Core is still `0.0.x`, `^0.0.N` pins exactly one Core patch, so the release scripts refuse to release the Inspector until Core is `0.1.0`.
 

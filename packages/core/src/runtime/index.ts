@@ -24,7 +24,7 @@ import { readWidgetPluginDefinition } from '../plugin'
 import { createRuntimeAggregate } from './aggregate'
 import { buildBlueprintView } from './blueprint-view'
 import { callbackScope, createCallbackOwner, createRuntimeContext } from './context'
-import { buildCallbackEventEmitter, createEventPrimitive } from './event'
+import { createEventPrimitive } from './event'
 import { runtimeInternals } from './internals'
 import { createMethodPrimitive } from './method'
 import { resolveStateOverrides } from './override'
@@ -186,14 +186,10 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 		const buildConfigFragment = configFragments[nodeId]!
 		const onDiagnosticsCommitted = commitHooks[nodeId]!
 		const definition = readWidgetPluginDefinition(node.plugin)
-		const emitter = definition.events === null ? null : buildCallbackEventEmitter(context, entry.events)
-		const emitFragment: Readonly<Record<string, unknown>> = emitter === null
-			? Object.freeze({})
-			: Object.freeze({ emit: emitter })
 
 		for (const member of node.properties.values()) {
 			const { name } = member
-			const owner = createCallbackOwner(null)
+			const owner = createCallbackOwner(null, null)
 
 			const primitive = createPropertyPrimitive(context, {
 				widgetId: node.id,
@@ -213,7 +209,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 
 		for (const member of node.methods.values()) {
 			const { name } = member
-			const owner = createCallbackOwner(emitter)
+			const owner = createCallbackOwner(node.id, name, member.definition.emits)
 
 			const primitive = createMethodPrimitive(context, {
 				widgetId: node.id,
@@ -225,7 +221,9 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 				depsTree: member.deps,
 				registry,
 				nodes: compiled.nodes,
-				emitFragment,
+				pluginType: node.type,
+				eventDefinitions: definition.events,
+				events: definition.events === null ? null : entry.events,
 				owner,
 				onDiagnosticsCommitted,
 			})

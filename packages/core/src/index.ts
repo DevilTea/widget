@@ -154,6 +154,7 @@ export type {
 	WidgetInterfacesOf,
 	WidgetInterfacesViolation,
 	WidgetMethodDefinition,
+	WidgetMethodEventEmitter,
 	WidgetMethodExecuteContext,
 	WidgetMethodsSection,
 	WidgetMethodValidateArgsContext,

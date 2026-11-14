@@ -198,6 +198,7 @@ function buildMethodMembers(compiledNode: CompiledResolvedWidgetNode): readonly 
 			type: 'method' as const,
 			name,
 			transitivelyWrites: member.transitivelyWrites,
+			transitivelyEmits: member.transitivelyEmits,
 			dependencies: flattenDependencies(member.deps),
 		}))
 	}

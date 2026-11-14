@@ -613,7 +613,7 @@ describe('edge identity collision across delimiter-rich member names (finding 37
 					related?: readonly { type: string, name?: string }[]
 				} | undefined
 
-		if (purityDiagnostic === undefined || purityDiagnostic.code !== 'property-dependency-has-write-effects')
+		if (purityDiagnostic === undefined || purityDiagnostic.code !== 'property-dependency-has-side-effects')
 			throw new Error('test fixture: expected a Property "a" dependency diagnostic naming the method-invoke edge')
 
 		const related = purityDiagnostic.related

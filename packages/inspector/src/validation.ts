@@ -16,7 +16,7 @@ import type {
 import type { InspectableValue } from './value'
 
 const BLUEPRINT_METADATA_PROTOCOL_MINOR: number = 2
-/** `authorWritable` and `valueContractId` were added to the member DTOs in protocol 0.4. */
+/** `authorWritable`, `valueContractId` and `transitivelyEmits` were added to the member DTOs in protocol 0.4. */
 const MEMBER_METADATA_PROTOCOL_MINOR: number = 4
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -392,9 +392,12 @@ function isEventMember(value: unknown): value is InspectorEventMember {
 	return isRecord(value) && value.type === 'event' && typeof value.name === 'string' && typeof value.description === 'string'
 }
 
-function isMethodMember(value: unknown): boolean {
+function isMethodMember(value: unknown, protocolMinor: number): boolean {
 	return isRecord(value) && value.type === 'method' && typeof value.name === 'string'
 		&& typeof value.transitivelyWrites === 'boolean'
+		&& (protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR
+			? (value.transitivelyEmits === undefined || typeof value.transitivelyEmits === 'boolean')
+			: typeof value.transitivelyEmits === 'boolean')
 		&& Array.isArray(value.dependencies) && value.dependencies.every(isDependency)
 }
 
@@ -417,7 +420,7 @@ export function isBlueprintNode(
 		&& Array.isArray(value.semanticSlots) && value.semanticSlots.every(isSlot)
 		&& Array.isArray(value.state) && value.state.every(member => isStateMember(member, protocolMinor))
 		&& Array.isArray(value.properties) && value.properties.every(member => isPropertyMember(member, protocolMinor))
-		&& Array.isArray(value.methods) && value.methods.every(isMethodMember)
+		&& Array.isArray(value.methods) && value.methods.every(member => isMethodMember(member, protocolMinor))
 		&& (protocolMinor < BLUEPRINT_METADATA_PROTOCOL_MINOR
 			? (value.events === undefined || (Array.isArray(value.events) && value.events.every(isEventMember)))
 			: (Array.isArray(value.events) && value.events.every(isEventMember)))

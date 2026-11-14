@@ -218,6 +218,7 @@ export function createPlugins(spec, units) {
 				s = s.emit({
 					validateArgs: args => args.length === 1 && typeof args[0] === 'number',
 					registerDeps: ({ dep }) => ({ set: dep.self.state.set('s0') }),
+					emits: ['changed'],
 					execute: ({ args: [value], deps, emit }) => {
 						deps.set(value)
 						emit.changed(value)

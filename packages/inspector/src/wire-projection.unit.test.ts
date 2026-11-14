@@ -9,6 +9,7 @@ import { createInspectorClient } from './client'
 import { projectBlueprintSnapshot } from './projection'
 import { INSPECTOR_PROTOCOL_VERSION } from './protocol'
 import { createInProcessInspectorTransportPair } from './transport'
+import { isBlueprintNode } from './validation'
 
 const LEAK = 'undeclared-core-field'
 
@@ -17,7 +18,7 @@ const contract = createWidgetValueContract<string>('example/label@1')
 interface WireInterfaces {
 	state: { count: number }
 	properties: { label: string, doubled: number }
-	methods: { bump: () => number }
+	methods: { bump: () => number, ping: () => void }
 	events: { pinged: [] }
 }
 
@@ -35,11 +36,17 @@ const WirePlugin = createWidgetPlugin('WireFixture')
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 			compute: ({ deps }) => (deps.count().ok ? 2 : 0),
 		}))
-	.methods(methods => methods.bump({
-		registerDeps: ({ dep }) => ({ set: dep.self.state.set('count'), absent: dep.parent.optional().state.get('count') }),
-		validateArgs: (args): args is [] => args.length === 0,
-		execute: () => 1,
-	}))
+	.methods(methods => methods
+		.bump({
+			registerDeps: ({ dep }) => ({ set: dep.self.state.set('count'), absent: dep.parent.optional().state.get('count') }),
+			validateArgs: (args): args is [] => args.length === 0,
+			execute: () => 1,
+		})
+		.ping({
+			validateArgs: (args): args is [] => args.length === 0,
+			emits: ['pinged'],
+			execute: ({ emit }) => emit.pinged(),
+		}))
 	.events(events => events.pinged({ description: 'ping' }))
 	.done()
 
@@ -146,6 +153,53 @@ describe('wire projection builds every DTO field by field', () => {
 			client.dispose()
 			agent.dispose()
 		}
+	})
+
+	it('carries transitivelyEmits on Method members only at protocol 0.4 and newer', async () => {
+		const runtime = createBlueprint()
+			.createRuntime()
+		const pair = createInProcessInspectorTransportPair()
+		const agent = createInspectorAgent({ runtime, transport: pair.agent, runtimeId: 'runtime-x' })
+		const client = createInspectorClient(pair.client)
+		const nodeAt = async (minor: number): Promise<InspectorBlueprintNode> => {
+			await client.request('handshake', { protocol: { major: 0, minor } })
+			const snapshot = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-x' })
+			return snapshot.nodes[0]!
+		}
+		try {
+			const previous = await nodeAt(3)
+			for (const method of previous.methods!) {
+				expect(nodeKeys(method as unknown as Record<string, unknown>))
+					.toEqual(['dependencies', 'name', 'transitivelyWrites', 'type'])
+			}
+
+			const current = await nodeAt(4)
+			expect(Object.fromEntries(current.methods!.map(method => [method.name, [method.transitivelyWrites, method.transitivelyEmits]])))
+				.toEqual({ bump: [true, false], ping: [false, true] })
+		}
+		finally {
+			client.dispose()
+			agent.dispose()
+		}
+	})
+
+	it('accepts a Method member without transitivelyEmits below protocol 0.4 and requires a boolean from 0.4 on', () => {
+		const node = projectBlueprintSnapshot('runtime-x', inspectBlueprint(createBlueprint()), 4).nodes[0]!
+		const withoutEmits = (value: unknown): unknown => JSON.parse(JSON.stringify(value, (key, item: unknown) => key === 'transitivelyEmits' ? undefined : item))
+		const withEmits = (value: unknown, emits: unknown): unknown => JSON.parse(JSON.stringify(value, (key, item: unknown) => key === 'transitivelyEmits' ? emits : item))
+
+		expect(isBlueprintNode(node, 4))
+			.toBe(true)
+		expect(isBlueprintNode(withoutEmits(node), 4))
+			.toBe(false)
+		expect(isBlueprintNode(withEmits(node, 'yes'), 4))
+			.toBe(false)
+		expect(isBlueprintNode(withoutEmits(node), 3))
+			.toBe(true)
+		expect(isBlueprintNode(node, 3))
+			.toBe(true)
+		expect(isBlueprintNode(withEmits(node, 'yes'), 3))
+			.toBe(false)
 	})
 
 	it('declares the new minor and reports it in the handshake', async () => {

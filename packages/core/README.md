@@ -466,7 +466,8 @@ later occurrence is de-identified with its available subtree preserved.
   than 128 deep: `WidgetSystemRuntimeReentrancyError` (a `RangeError`, code
   `emit-depth-exceeded`) unwinds to the call that started the loop. Events are
   host-facing and cannot be dependency targets. Emit authority belongs
-  to Method `execute` (`emit`) and, for renderers, `@deviltea/widget-core/integration`.
+  to Method `execute` (`emit`, limited to the Events the Method lists in `emits`; a Method that
+  emits is not read-only, so no Property may depend on it) and, for renderers, `@deviltea/widget-core/integration`.
   See [Events](https://deviltea.github.io/widget/packages/widget-core#events).
 - `widget.state[key].get()` returns `T | null` directly — it is not an
   `ExecutionResult`.
@@ -490,10 +491,11 @@ later occurrence is de-identified with its available subtree preserved.
   widget. See
   [Reusing a Runtime](https://deviltea.github.io/widget/packages/widget-core#reusing-a-runtime-resetstate).
 - `deps.*` and `emit` callables are valid only while their own callback is the
-  innermost running callback. A retained callable, a timer or promise
+  innermost running callback (a Method's `emit` belongs to that Method, not to its widget). A retained callable, a timer or promise
   continuation, a nested callback, or a listener or `validate`-style callback
   running inside the Method gets a `TypeError` (and
-  `WidgetSystemRuntimeDisposedError` after dispose). A Property can never write
+  `WidgetSystemRuntimeDisposedError` after dispose, except an `emit` callable for an Event its
+  Method did not declare, which is always a `TypeError`). A Property can never write
   State. Core is synchronous by design; see
   [Async work](https://deviltea.github.io/widget/packages/widget-core#async-work)
   for the host recipe.

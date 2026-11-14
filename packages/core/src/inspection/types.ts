@@ -175,6 +175,8 @@ export interface BlueprintInspectionMethodMember {
 	readonly name: WidgetMemberKey
 	/** Compiler-authoritative transitive write-effect fact. */
 	readonly transitivelyWrites: boolean
+	/** Compiler-authoritative transitive emit-effect fact: the Method declares an Event in `emits`, or invokes a Method that does. */
+	readonly transitivelyEmits: boolean
 	readonly dependencies: readonly BlueprintInspectionDependency[]
 }
 

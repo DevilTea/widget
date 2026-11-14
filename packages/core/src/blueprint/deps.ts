@@ -44,6 +44,8 @@ export interface DependencyResolutionResult {
 	/** Number of Property and Method members of resolved nodes, i.e. the exclusive upper bound of a member id. */
 	readonly memberCount: number
 	readonly directWriteSeeds: ReadonlySet<string>
+	/** Methods that declare at least one Event in `emits`, as `${nodeId}:${name}` keys. */
+	readonly directEmitSeeds: ReadonlySet<string>
 }
 
 /**
@@ -290,6 +292,7 @@ export function resolveDependencies(
 	const edges: GraphEdge[] = []
 	const edgeKeys = new Set<number>()
 	const directWriteSeeds = new Set<string>()
+	const directEmitSeeds = new Set<string>()
 
 	const resolve = (ownerNodeId: InternalNodeId, ownerMemberId: number, member: BlueprintDependencyMember, leaf: AnyDepExpression): CompiledDependency =>
 		resolveLeaf(nodes, nodeIdsByWidgetId, rootNodeId, ownerNodeId, ownerMemberId, member, leaf, finalDiagnostics, memberIds, edges, edgeKeys, directWriteSeeds)
@@ -353,9 +356,11 @@ export function resolveDependencies(
 			const member: BlueprintDependencyMember = { type: 'method', name }
 			const ownerMemberId = memberIds.baseByNodeId[nodeId]! + memberIds.offsetsByNodeId[nodeId]!.methods.get(name)!
 			const deps = walkDeps(rawDeps, leaf => resolve(nodeId, ownerMemberId, member, leaf))
-			node.methods.set(name, { name, definition: methodDefinition, deps, transitivelyWrites: false })
+			node.methods.set(name, { name, definition: methodDefinition, deps, transitivelyWrites: false, transitivelyEmits: false })
+			if (methodDefinition.emits !== undefined && methodDefinition.emits.length > 0)
+				directEmitSeeds.add(`${nodeId}:${name}`)
 		}
 	}
 
-	return { edges, memberCount: memberIds.count, directWriteSeeds }
+	return { edges, memberCount: memberIds.count, directWriteSeeds, directEmitSeeds }
 }

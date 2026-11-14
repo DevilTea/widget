@@ -22,19 +22,23 @@ export interface ActiveDiagnosticSink {
 
 /**
  * One Property's `compute` or one Method's `execute`, shared by every invocation of that primitive. Its
- * dependency callables — and, for a Method, its widget's `emit` callables — are materialized once and
- * closed over this owner, so the lifetime check costs one comparison instead of re-wrapping `deps` on
- * every operation.
+ * dependency callables — and, for a Method that declares `emits`, its own `emit` callables — are
+ * materialized once and closed over this owner, so the lifetime check costs one comparison instead of
+ * re-wrapping `deps` on every operation.
  */
 export interface CallbackOwner {
 	/** The diagnostic sink of this owner's innermost running invocation; `null` while none runs. */
 	sink: ActiveDiagnosticSink | null
-	/** The `emit` surface this owner's callback receives, or `null` (Property `compute`, no events). */
-	readonly emitter: object | null
+	/** The widget a Method owner belongs to, or `null` (Property `compute`); only names the owner in an error. */
+	readonly widgetId: string | null
+	/** The Method a Method owner runs, or `null` (Property `compute`); only names the owner in an error. */
+	readonly method: string | null
+	/** The Events a Method owner declared in `emits` (the definition's own frozen list), or `undefined`. */
+	readonly emits: readonly string[] | undefined
 }
 
-export function createCallbackOwner(emitter: object | null): CallbackOwner {
-	return { sink: null, emitter }
+export function createCallbackOwner(widgetId: string | null, method: string | null, emits?: readonly string[]): CallbackOwner {
+	return { sink: null, widgetId, method, emits }
 }
 
 /**

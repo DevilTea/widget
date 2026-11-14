@@ -192,7 +192,7 @@ export type BlueprintDependencyDiagnostic<Plugins extends AnyWidgetPluginTuple =
 		readonly dependency: BlueprintDependencyReference
 		readonly related: NonEmptyReadonlyArray<BlueprintDependencyDiagnosticLocation<Plugins>>
 	})
-	| (DiagnosticBase<'property-dependency-has-write-effects', BlueprintDependencyDiagnosticLocation<Plugins>> & {
+	| (DiagnosticBase<'property-dependency-has-side-effects', BlueprintDependencyDiagnosticLocation<Plugins>> & {
 		readonly dependency: BlueprintDependencyReference
 		readonly related: NonEmptyReadonlyArray<BlueprintDependencyDiagnosticLocation<Plugins>>
 	})

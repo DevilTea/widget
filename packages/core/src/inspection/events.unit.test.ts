@@ -17,6 +17,7 @@ const plugin = createWidgetPlugin('inspection-events')
 	.interfaces<EventInspectionInterfaces>()
 	.methods(methods => methods.fire({
 		validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
+		emits: ['change'],
 		execute: ({ args, emit }) => emit.change(args[0]),
 	}))
 	.events(events => events

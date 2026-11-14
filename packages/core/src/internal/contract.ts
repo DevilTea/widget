@@ -629,6 +629,8 @@ export interface CompiledMethodMember {
 	 * only a Property depending on one is not.
 	 */
 	readonly transitivelyWrites: boolean
+	/** The Method declares an Event in `emits`, or invokes a Method that does, transitively. */
+	readonly transitivelyEmits: boolean
 }
 
 export interface CompiledRawSlot {
@@ -691,9 +693,10 @@ export interface CompiledMemberRef {
  */
 export interface CompiledGraphAnalysis {
 	/**
-	 * Methods with a transitive write effect, as `${nodeId}:${methodName}` keys.
+	 * The transitive effects of the Methods that have any, as flags (1 writes State, 2 emits an Event), by
+	 * `${nodeId}:${methodName}` key.
 	 */
-	readonly writefulMethods: ReadonlySet<string>
+	readonly methodEffects: ReadonlyMap<string, number>
 	/**
 	 * Cyclic SCCs containing at least one Property. Each one invalidates the Blueprint.
 	 */
