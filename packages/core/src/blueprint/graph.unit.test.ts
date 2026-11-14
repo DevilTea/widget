@@ -368,6 +368,10 @@ function dependencyDiagnosticsOf<Plugins extends AnyWidgetPluginTuple>(
 	return result
 }
 
+function memberOf(location: { readonly type: string, readonly name?: string }): { type: string, name?: string } {
+	return location.type === 'property' || location.type === 'method' ? { type: location.type, name: location.name } : { type: location.type }
+}
+
 function dependencyOf(diagnostic: BlueprintDependencyDiagnostic): BlueprintDependencyReference | undefined {
 	return 'dependency' in diagnostic ? diagnostic.dependency : undefined
 }
@@ -478,7 +482,7 @@ describe('write-effect analysis', () => {
 // -------------------------------------------------------------------------------------------------
 
 describe('evaluation cycles', () => {
-	it('a Property that reads its own value forms an invalid self-cycle with no related member', () => {
+	it('a Property that reads its own value forms an invalid self-cycle whose related list holds only itself', () => {
 		const blueprint = system.createBlueprint({ id: 'root', type: 'self-loop-prop' })
 
 		const diagnostics = expectInvalid(blueprint)
@@ -493,8 +497,10 @@ describe('evaluation cycles', () => {
 			.toBe('loop')
 		expect(dependencyOf(source))
 			.toBeUndefined()
-		expect(source.related)
-			.toBeUndefined()
+		expect(source.related?.map(memberOf))
+			.toEqual([{ type: 'property', name: 'loop' }])
+		expect(source.related?.[0]?.node)
+			.toBe(source.location.node)
 	})
 
 	it('property -> Method -> same Property is an invalid cycle owned only by the Property', () => {
@@ -512,8 +518,8 @@ describe('evaluation cycles', () => {
 			.toBe('p')
 		expect(dependencyOf(source))
 			.toBeUndefined()
-		expect(source.related?.map(location => location.type === 'method' ? { type: location.type, name: location.name } : { type: location.type }))
-			.toEqual([{ type: 'method', name: 'm' }])
+		expect(source.related?.map(memberOf))
+			.toEqual([{ type: 'property', name: 'p' }, { type: 'method', name: 'm' }])
 	})
 
 	it('a Method<->Method cycle with no Property participant is valid (COMMENT 18 regression)', () => {
@@ -543,16 +549,17 @@ describe('evaluation cycles', () => {
 
 		const p1Diagnostic = sources.find(source => source.location.type === 'property' && source.location.name === 'p1')
 		const p2Diagnostic = sources.find(source => source.location.type === 'property' && source.location.name === 'p2')
-		expect(p1Diagnostic?.related?.map(location => location.type === 'property' || location.type === 'method' ? { type: location.type, name: location.name } : { type: location.type }))
-			.toEqual([
-				{ type: 'property', name: 'p2' },
-				{ type: 'method', name: 'm' },
-			])
-		expect(p2Diagnostic?.related?.map(location => location.type === 'property' || location.type === 'method' ? { type: location.type, name: location.name } : { type: location.type }))
-			.toEqual([
-				{ type: 'property', name: 'p1' },
-				{ type: 'method', name: 'm' },
-			])
+		const everyMember = [
+			{ type: 'property', name: 'p1' },
+			{ type: 'property', name: 'p2' },
+			{ type: 'method', name: 'm' },
+		]
+		expect(p1Diagnostic?.related?.map(memberOf))
+			.toEqual(everyMember)
+		expect(p2Diagnostic?.related?.map(memberOf))
+			.toEqual(everyMember)
+		expect(p2Diagnostic?.related)
+			.toBe(p1Diagnostic?.related)
 	})
 })
 
@@ -687,7 +694,7 @@ const ringPlugin = createWidgetPlugin('ring')
 	.done()
 
 describe('evaluation cycles across Widgets', () => {
-	it('reports one diagnostic per ring member, each listing the other members in document order, and leaves acyclic readers of the ring alone', () => {
+	it('reports one diagnostic per ring member, each listing every member in document order, and leaves acyclic readers of the ring alone', () => {
 		const ringSystem = createWidgetSystem({ plugins: [ringPlugin, chainHolderPlugin] })
 		const ring = (id: string, next: string | null) => ({ id, type: 'ring', config: { next } })
 		const blueprint = ringSystem.createBlueprint({
@@ -720,7 +727,98 @@ describe('evaluation cycles across Widgets', () => {
 		expect(cycles.map(ownerOf))
 			.toEqual(['c', 'a', 'b'])
 		expect(cycles.map(relatedIds))
-			.toEqual([['a', 'b'], ['c', 'b'], ['c', 'a']])
+			.toEqual([['c', 'a', 'b'], ['c', 'a', 'b'], ['c', 'a', 'b']])
+	})
+
+	describe('the related list of a cycle', () => {
+		const ringSystem = createWidgetSystem({ plugins: [ringPlugin, chainHolderPlugin] })
+		const ring = (id: string, next: string | null) => ({ id, type: 'ring', config: { next } })
+		const cyclesOf = (items: readonly object[]) => dependencyDiagnosticsOf(expectInvalid(ringSystem.createBlueprint({ id: 'root', type: 'chain-holder', slots: { items } })))
+
+		it('is one frozen array shared by every diagnostic of the cycle, holding one frozen location per member, the subject included', () => {
+			const cycles = cyclesOf([ring('a', 'b'), ring('b', 'c'), ring('c', 'a')])
+
+			expect(cycles)
+				.toHaveLength(3)
+			const related = cycles[0]!.related
+			expect(related)
+				.toHaveLength(3)
+			for (const diagnostic of cycles) {
+				expect(diagnostic.related)
+					.toBe(related)
+				expect(diagnostic.related)
+					.toContain(related![cycles.indexOf(diagnostic)])
+				expect(Object.isFrozen(diagnostic))
+					.toBe(true)
+				expect(Object.isFrozen(diagnostic.location))
+					.toBe(true)
+			}
+			expect(related!.map(location => location.type === 'property' ? [location.node.id, location.name] : null))
+				.toEqual([['a', 'p'], ['b', 'p'], ['c', 'p']])
+			expect(Object.isFrozen(related))
+				.toBe(true)
+			expect(related!.every(location => Object.isFrozen(location)))
+				.toBe(true)
+			expect(new Set(related).size)
+				.toBe(3)
+		})
+
+		it('is not shared between two separate cycles of one document', () => {
+			const cycles = cyclesOf([ring('a', 'b'), ring('b', 'a'), ring('c', 'd'), ring('d', 'c')])
+
+			expect(cycles)
+				.toHaveLength(4)
+			expect(cycles[1]!.related)
+				.toBe(cycles[0]!.related)
+			expect(cycles[3]!.related)
+				.toBe(cycles[2]!.related)
+			expect(cycles[2]!.related)
+				.not
+				.toBe(cycles[0]!.related)
+			const ids = (diagnostic: BlueprintDependencyDiagnostic) => diagnostic.related!.map(location => location.type === 'property' ? location.node.id : null)
+			expect(ids(cycles[0]!))
+				.toEqual(['a', 'b'])
+			expect(ids(cycles[2]!))
+				.toEqual(['c', 'd'])
+			for (const diagnostic of cycles) {
+				expect(Object.isFrozen(diagnostic.related))
+					.toBe(true)
+				expect(diagnostic.related!.every(location => Object.isFrozen(location)))
+					.toBe(true)
+			}
+		})
+
+		it('stays one shared array for a ring of 5 000 Properties (a per-diagnostic copy took seconds and a gigabyte)', () => {
+			const size = 5_000
+			const cycles = cyclesOf(Array.from({ length: size }, (_, index) => ring(`n${index}`, `n${(index + 1) % size}`)))
+
+			expect(cycles)
+				.toHaveLength(size)
+			const related = cycles[0]!.related
+			expect(related)
+				.toHaveLength(size)
+			expect(cycles.every(diagnostic => diagnostic.related === related))
+				.toBe(true)
+			expect(Object.isFrozen(related))
+				.toBe(true)
+			expect(related!.every(location => Object.isFrozen(location)))
+				.toBe(true)
+		})
+
+		it('is the same frozen array on the diagnostics the aggregate and the per-widget lists expose', () => {
+			const blueprint = ringSystem.createBlueprint({ id: 'root', type: 'chain-holder', slots: { items: [ring('a', 'b'), ring('b', 'a')] } })
+			const aggregate = dependencyDiagnosticsOf(expectInvalid(blueprint))
+			const perWidget = blueprint.getChildrenAt(blueprint.root, 'items')
+				.flatMap(node => node.diagnostics)
+				.filter(diagnostic => diagnostic.code === 'property-evaluation-cycle')
+
+			expect(perWidget)
+				.toHaveLength(2)
+			for (const diagnostic of perWidget) {
+				expect((diagnostic as BlueprintDependencyDiagnostic).related)
+					.toBe(aggregate[0]!.related)
+			}
+		})
 	})
 })
 

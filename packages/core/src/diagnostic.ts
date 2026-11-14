@@ -197,7 +197,8 @@ export type BlueprintDependencyDiagnostic<Plugins extends AnyWidgetPluginTuple =
 		readonly related: NonEmptyReadonlyArray<BlueprintDependencyDiagnosticLocation<Plugins>>
 	})
 	| (DiagnosticBase<'property-evaluation-cycle', BlueprintDependencyDiagnosticLocation<Plugins>> & {
-		readonly related?: NonEmptyReadonlyArray<BlueprintDependencyDiagnosticLocation<Plugins>>
+		/** Every member of the cycle, the subject included, in member order; one array shared by all diagnostics of the cycle. */
+		readonly related: NonEmptyReadonlyArray<BlueprintDependencyDiagnosticLocation<Plugins>>
 	})
 
 export type JsonCompatibilityReason
