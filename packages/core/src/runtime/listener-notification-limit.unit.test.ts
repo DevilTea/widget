@@ -24,7 +24,7 @@ import { MAX_NOTIFICATIONS_PER_CALL as LIMIT } from './adapter'
 interface NodeInterfaces {
 	state: { n: number, o: unknown }
 	properties: { out: number, obj: unknown }
-	methods: { setN: (value: number) => number, setO: (value: unknown) => unknown }
+	methods: { setN: (value: number) => number, setO: (value: unknown) => unknown, setNThenThrow: (value: number) => number }
 }
 
 const isNumber = (input: unknown): input is number => typeof input === 'number'
@@ -66,6 +66,14 @@ const nodePlugin = createWidgetPlugin('node')
 			execute: ({ args, deps }) => {
 				deps.o(args[0])
 				return args[0]
+			},
+		})
+		.setNThenThrow({
+			registerDeps: ({ dep }) => ({ n: dep.self.state.set('n') }),
+			validateArgs: (args): args is [number] => isNumber(args[0]),
+			execute: ({ args, deps }) => {
+				deps.n(args[0])
+				throw new Error('execute failed after writing')
 			},
 		}))
 	.done()
@@ -386,6 +394,45 @@ describe('listeners that never converge', () => {
 })
 
 describe('the count belongs to the host\'s call', () => {
+	it('does not carry over into the next call, also after a call that threw and into a call made from a microtask', async () => {
+		const graph = createGraph()
+		const [a, b] = [graph.widget('a'), graph.widget('b')]
+		const calls = { a: 0, b: 0 }
+		// A ping-pong that ends after `LIMIT - 1` notifications of `a` in each call: below the limit in every
+		// call, above it over two.
+		a.state.n.subscribe((value) => {
+			calls.a++
+			if (calls.a % (LIMIT - 1) !== 0)
+				b.state.n.set(value! + 1)
+		})
+		b.state.n.subscribe((value) => {
+			calls.b++
+			a.state.n.set(value! + 1)
+		})
+
+		// The Method writes `a` and then throws: the loop runs when the operation leaves, before the exception
+		// reaches the host.
+		expect(() => a.methods.setNThenThrow(5))
+			.toThrow('execute failed after writing')
+		expect(calls.a)
+			.toBe(LIMIT - 1)
+		await new Promise<void>((resolve) => {
+			queueMicrotask(() => {
+				a.state.n.set(-5)
+				resolve()
+			})
+		})
+		expect(calls.a)
+			.toBe(2 * (LIMIT - 1))
+		a.state.n.set(-1000)
+		await settle()
+
+		expect(calls.a)
+			.toBe(3 * (LIMIT - 1))
+		expect(reported)
+			.toEqual([])
+	})
+
 	it('includes the Property inspection deliveries the call queues: a loop restarted by every delivery is stopped once', async () => {
 		const graph = createGraph(['a', 'c', 'd'])
 		const [a, c, d] = [graph.widget('a'), graph.widget('c'), graph.widget('d')]
