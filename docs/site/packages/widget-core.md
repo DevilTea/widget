@@ -1690,9 +1690,11 @@ notification:
   call: another subscriber of it, a subscribed Property that depends on it, or a
   plain `get()` from any listener. When the read comes after that call has
   returned (a `get()` by the host), the listener is called during a later call,
-  on this Runtime or another: today a Method call, a `resetState()` or a write
-  that notifies a subscriber delivers it, while a `get()` or a write that changes
-  nothing or that nothing observes does not. Read the current value with `get()`
+  on this Runtime or another: today a Method call, a `resetState()`, a write
+  that notifies a subscriber, or a write that changes that member's diagnostics
+  (a rejected `set()`, or a valid `set()` that clears earlier diagnostics, even
+  when nothing observes the member) delivers it, while a `get()`, a write that
+  changes nothing, or a plain write that nothing observes does not. Read the current value with `get()`
   when it matters, or defer the write (for example to a microtask) so the write
   is an ordinary top-level operation.
 - If a listener writes and then disposes the Runtime in the same call, the
@@ -1720,7 +1722,17 @@ but the stopped subscriber's last delivered value may not be the current one,
 and a later call delivers the current one only when what the subscription
 observes changes again. The limit applies to every subscription Core creates
 (State, Property and diagnostics subscriptions), whether the loop writes through
-`set()`, `resetState()` or Methods.
+`set()`, `resetState()` or Methods. Each subscription has its own count, including
+one created during the call, so a listener that creates new looping subscriptions
+on every notification is bounded per subscription, not in total. Because the
+count belongs to the host's call, including the inspection deliveries it causes,
+a single call that completes more than 10 000 Properties whose Property
+inspection listeners each write the same State stops that State's subscriber at
+10 000 notifications (measured: 10 100 subscribed Properties, one
+`resetState()`, each inspection listener writing one `log` State: the `log`
+subscriber last saw 10 000 while the value was 10 100, with one report). An
+inspection listener that records every completion should collect in its own
+memory and write State once, or not at all.
 
 - Write from a listener only when the contents actually differ: compare objects
   and arrays by their contents, not by identity.
