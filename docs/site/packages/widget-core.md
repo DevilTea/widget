@@ -1673,18 +1673,53 @@ notification:
 - Once the outermost write or Method call has returned, every subscriber whose
   value changed has been scheduled; the order **between different subscribers**
   is not part of the contract (today it follows subscription order). This
-  includes a subscriber whose listener was still running when another listener
-  wrote back what it observes.
-- Listeners that keep writing each other's members keep running until the
-  values stop changing. If they never stop, the host's call never returns; make
-  such listeners converge (write only when the value actually differs).
+  includes a subscriber whose listener was still running when another
+  subscription's listener (State, Property or diagnostics) wrote back what it
+  observes. It does not include a write-back made while the first listener is
+  still running further up the stack, and in these cases that subscriber is not
+  told:
+  - an Event listener writes it back during an emit that the first listener
+    caused through a Method;
+  - a State inspection listener writes it back during a write the first
+    listener made;
+  - the host holds its own `alien-signals` batch around the write, so the
+    notifications run when the host ends that batch, outside any Runtime call.
 - A listener that writes the member it observes is not guaranteed to be called
-  again for its own write, so its argument can be stale after it writes. Read
-  the current value with `get()` when it matters, or defer the write (for
-  example to a microtask) so the write is an ordinary top-level operation.
+  again for its own write, so its argument can be stale after it writes. It is
+  called again when anything reads that member later in the same outermost
+  call: another subscriber of it, a subscribed Property that depends on it, or a
+  plain `get()` from any listener. Read the current value with `get()` when it
+  matters, or defer the write (for example to a microtask) so the write is an
+  ordinary top-level operation.
+- If a listener writes and then disposes the Runtime in the same call, the
+  subscribers of that write are not notified: they are detached before the
+  notifications of the call are delivered.
 - A listener that throws never affects the write that triggered it or any other
   listener (see [Runtime diagnostics](#runtime-diagnostics) for where the error
   is reported).
+
+Listeners that keep changing what they observe never settle. A listener that
+writes a fresh object or array every time (a sorted copy, `{ ...value }`) always
+writes a value that differs, even when its contents are the same, so with
+anything else reading that member, or with a second listener mirroring it back,
+the writes go on. Within one outermost call, a subscription's listener is called
+at most 100 times (an internal limit that may change). Beyond that it is not
+called again until that call returns, and a `RangeError` naming the widget and
+member the subscription observes is reported the way an exception thrown by a
+listener is (see [Host requirements](#host-requirements)). The host's call
+returns normally, State and Property values stay consistent, and the next call
+counts from zero, but the stopped subscriber's last delivered value may not be
+the current one. The limit applies to every subscription Core creates (State,
+Property and diagnostics subscriptions), whether the loop writes through
+`set()`, `resetState()` or Methods.
+
+- Write from a listener only when the contents actually differ: compare objects
+  and arrays by their contents, not by identity.
+- When a value must be derived or normalised, declare a Property that computes
+  it instead of writing it back from a listener. A Property cannot loop, and a
+  mutual dependency between Properties is reported when the Blueprint is
+  compiled (`property-evaluation-cycle`). Listeners are host code the compiler
+  never sees: only the runtime limit protects them.
 
 ### Runtime Properties
 
