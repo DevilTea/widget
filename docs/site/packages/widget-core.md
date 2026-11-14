@@ -1664,7 +1664,12 @@ value: undefined }`). Only Method and Property results are frozen.
 
 Every `RuntimeMethod` invocation opens a batch boundary around its
 dependency/state writes (including dependency-invoked methods, which nest);
-only the outermost invocation flushes propagation. Batching means
+only the outermost invocation flushes propagation. A Method invoked while
+another Runtime operation is in progress (from a Property evaluation through a
+declared dependency, or from a listener) does not notify subscribers on its own:
+the notifications happen when the outermost operation finishes, still before the
+host's own call (`get()`, `set()`, a Method invocation or `resetState()`)
+returns. Batching means
 propagation atomicity, not a transaction: writes performed before a later
 failure or a thrown callback remain committed, and the batch still ends via
 `finally`.
