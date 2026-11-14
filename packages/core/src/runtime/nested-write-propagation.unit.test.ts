@@ -194,6 +194,10 @@ describe('when the subscribers of a write made by a listener are notified', () =
 				const order: string[] = []
 				subscribe('c', (value) => {
 					order.push(`c listener (${value})`)
+					// Writes only for the host's value, so a further call (the runtime reset also restores `c`, and
+					// whether `c`'s listener is called again for that is not guaranteed) adds one entry and nothing else.
+					if (value !== 7)
+						return
 					if (write === 'set') {
 						widget('b').state.s.set(50)
 					}
@@ -212,8 +216,7 @@ describe('when the subscribers of a write made by a listener are notified', () =
 				order.push('c.set returned')
 
 				const written = write === 'set' ? 50 : 1
-				// A runtime reset also restores `c`, which `c`'s own listener wrote; see the test above.
-				expect(order.filter(entry => !entry.startsWith('c listener (1)')))
+				expect(order.filter(entry => entry !== 'c listener (1)'))
 					.toEqual(['c listener (7)', `${write} returned`, `b listener (${written})`, 'c.set returned'])
 			})
 		}
