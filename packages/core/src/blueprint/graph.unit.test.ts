@@ -362,7 +362,7 @@ function dependencyDiagnosticsOf<Plugins extends AnyWidgetPluginTuple>(
 ): BlueprintDependencyDiagnostic<Plugins>[] {
 	const result: BlueprintDependencyDiagnostic<Plugins>[] = []
 	for (const diagnostic of diagnostics) {
-		if (diagnostic.code === 'property-dependency-has-write-effects' || diagnostic.code === 'property-evaluation-cycle')
+		if (diagnostic.code === 'property-dependency-has-side-effects' || diagnostic.code === 'property-evaluation-cycle')
 			result.push(diagnostic as BlueprintDependencyDiagnostic<Plugins>)
 	}
 	return result
@@ -467,7 +467,7 @@ describe('write-effect analysis', () => {
 			.toHaveLength(1)
 		const source = dependencyDiagnosticsOf(diagnostics)[0]!
 		expect(source.code)
-			.toBe('property-dependency-has-write-effects')
+			.toBe('property-dependency-has-side-effects')
 		expect(source.location)
 			.toMatchObject({ type: 'property', name: 'reader' })
 		expect(dependencyOf(source))

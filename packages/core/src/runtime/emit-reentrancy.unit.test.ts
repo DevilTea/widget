@@ -30,6 +30,7 @@ const loopPlugin = createWidgetPlugin('loop')
 	.interfaces<LoopInterfaces>()
 	.methods(methods => methods.fire({
 		validateArgs: (args): args is [] => args.length === 0,
+		emits: ['ev'],
 		execute: ({ emit }) => {
 			emit.ev()
 			return null

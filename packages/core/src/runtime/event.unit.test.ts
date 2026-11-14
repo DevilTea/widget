@@ -35,22 +35,27 @@ const eventPlugin = createWidgetPlugin('event-widget')
 	.methods(methods => methods
 		.emitPing({
 			validateArgs: (args): args is [] => args.length === 0,
+			emits: ['ping'],
 			execute: ({ emit }) => emit.ping(),
 		})
 		.emitChange({
 			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
+			emits: ['change'],
 			execute: ({ args, emit }) => emit.change(args[0]),
 		})
 		.emitChain({
 			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
+			emits: ['chain'],
 			execute: ({ args, emit }) => emit.chain(args[0]),
 		})
 		.emitProto({
 			validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
+			emits: [PROTO_KEY],
 			execute: ({ args, emit }) => emit[PROTO_KEY](args[0]),
 		})
 		.captureEmitter({
 			validateArgs: (args): args is [] => args.length === 0,
+			emits: ['ping', 'change', 'chain', PROTO_KEY],
 			execute: ({ emit }) => {
 				capturedEmitter = emit
 			},

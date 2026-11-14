@@ -28,14 +28,23 @@ function memberLocation(nodes: readonly WorkingNode[], ref: MemberRef): Blueprin
 	return ref.kind === 'property' ? propertyLocation(node, ref.name) : methodLocation(node, ref.name)
 }
 
+/** The effects a Method can have, as flags: it writes State, it emits an Event. */
+const WRITES = 1
+const EMITS = 2
+
 /**
- * Propagates write effects over Method->Method edges: a Method is writeful when it directly writes
- * State or invokes a writeful Method. The set is the closure of the direct-write seeds under the
- * reverse of those edges, found by a work list over a callee->callers adjacency built once, then
- * marks the transitively-writeful methods on each node's already-built `CompiledMethodMember` map.
+ * Propagates effects over Method->Method edges: a Method writes when it directly writes State or invokes a
+ * Method that writes, and emits when it declares an Event in `emits` or invokes a Method that emits.
+ * One work list over a callee->callers adjacency built once; a caller is revisited only when it gains a
+ * flag, so each Method is queued at most twice. Marks `transitivelyWrites` / `transitivelyEmits` on each
+ * node's already-built `CompiledMethodMember` map and returns the flags by `${nodeId}:${name}` key.
  */
-function computeWritefulMethods(nodes: readonly WorkingNode[], edges: readonly GraphEdge[], directWriteSeeds: ReadonlySet<string>): ReadonlySet<string> {
-	const writeful = new Set(directWriteSeeds)
+function computeMethodEffects(nodes: readonly WorkingNode[], edges: readonly GraphEdge[], directWriteSeeds: ReadonlySet<string>, directEmitSeeds: ReadonlySet<string>): ReadonlyMap<string, number> {
+	const effects = new Map<string, number>()
+	for (const key of directWriteSeeds)
+		effects.set(key, WRITES)
+	for (const key of directEmitSeeds)
+		effects.set(key, (effects.get(key) ?? 0) | EMITS)
 	const callersOf = new Map<string, string[]>()
 	for (const edge of edges) {
 		if (edge.fromKind !== 'method' || edge.toKind !== 'method')
@@ -49,11 +58,14 @@ function computeWritefulMethods(nodes: readonly WorkingNode[], edges: readonly G
 			callers.push(fromKey)
 	}
 
-	const workList = [...writeful]
+	const workList = [...effects.keys()]
 	for (let index = 0; index < workList.length; index++) {
-		for (const caller of callersOf.get(workList[index]!) ?? []) {
-			if (!writeful.has(caller)) {
-				writeful.add(caller)
+		const callee = workList[index]!
+		const calleeEffects = effects.get(callee)!
+		for (const caller of callersOf.get(callee) ?? []) {
+			const callerEffects = effects.get(caller) ?? 0
+			if ((callerEffects | calleeEffects) !== callerEffects) {
+				effects.set(caller, callerEffects | calleeEffects)
 				workList.push(caller)
 			}
 		}
@@ -63,19 +75,24 @@ function computeWritefulMethods(nodes: readonly WorkingNode[], edges: readonly G
 		if (!node.resolved)
 			continue
 		for (const [name, member] of node.methods) {
-			if (writeful.has(`${node.nodeId}:${name}`) && !member.transitivelyWrites)
-				node.methods.set(name, { ...member, transitivelyWrites: true })
+			const flags = effects.get(`${node.nodeId}:${name}`) ?? 0
+			if (flags !== 0)
+				node.methods.set(name, { ...member, transitivelyWrites: (flags & WRITES) !== 0, transitivelyEmits: (flags & EMITS) !== 0 })
 		}
 	}
 
-	return writeful
+	return effects
 }
 
-function emitPurityDiagnostics(nodes: readonly WorkingNode[], edges: readonly GraphEdge[], writefulMethods: ReadonlySet<string>, finalDiagnostics: BlueprintDiagnostic[]): void {
+/** What the diagnostic message says about the invoked Method, by effect flags. */
+const effectWording = ['', 'writes State', 'emits an Event', 'writes State and emits an Event'] as const
+
+function emitPurityDiagnostics(nodes: readonly WorkingNode[], edges: readonly GraphEdge[], methodEffects: ReadonlyMap<string, number>, finalDiagnostics: BlueprintDiagnostic[]): void {
 	for (const edge of edges) {
 		if (edge.fromKind !== 'property' || edge.toKind !== 'method')
 			continue
-		if (!writefulMethods.has(`${edge.toNodeId}:${edge.toName}`))
+		const flags = methodEffects.get(`${edge.toNodeId}:${edge.toName}`) ?? 0
+		if (flags === 0)
 			continue
 
 		const ownerNode = nodes[edge.fromNodeId]!.publicNode as ResolvedBlueprintWidgetNode
@@ -83,8 +100,8 @@ function emitPurityDiagnostics(nodes: readonly WorkingNode[], edges: readonly Gr
 		finalDiagnostics.push(dependencyDiagnostic(
 			ownerNode,
 			{ type: 'property', name: edge.fromName },
-			'property-dependency-has-write-effects',
-			`Property "${edge.fromName}" invokes writeful method "${edge.toName}".`,
+			'property-dependency-has-side-effects',
+			`Property "${edge.fromName}" invokes method "${edge.toName}", which ${effectWording[flags]} (itself or through the Methods it invokes).`,
 			edge.reference,
 			[methodLocation(targetNode, edge.toName)],
 		))
@@ -254,15 +271,16 @@ export function runGraphAnalysis(
 	edges: readonly GraphEdge[],
 	memberCount: number,
 	directWriteSeeds: ReadonlySet<string>,
+	directEmitSeeds: ReadonlySet<string>,
 	finalDiagnostics: BlueprintDiagnostic[],
 ): CompiledGraphAnalysis {
-	const writefulMethods = computeWritefulMethods(nodes, edges, directWriteSeeds)
-	emitPurityDiagnostics(nodes, edges, writefulMethods, finalDiagnostics)
+	const methodEffects = computeMethodEffects(nodes, edges, directWriteSeeds, directEmitSeeds)
+	emitPurityDiagnostics(nodes, edges, methodEffects, finalDiagnostics)
 
 	const invalidCycles = emitCycleDiagnostics(nodes, semanticOrder, memberCount, edges, finalDiagnostics)
 
 	return {
-		writefulMethods,
+		methodEffects,
 		invalidCycles,
 	}
 }

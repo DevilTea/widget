@@ -133,6 +133,7 @@ const plugin = createWidgetPlugin('host')
 					.optional().state.get('x'),
 			}),
 			validateArgs: (args): args is [] => args.length === 0,
+			emits: ['changed'],
 			execute: (ctx) => {
 				retained.execute = ctx as unknown as Retained['execute']
 				return null
@@ -164,6 +165,7 @@ const plugin = createWidgetPlugin('host')
 		.writeThenReadLeaky({
 			registerDeps: ({ dep }) => ({ setOther: dep.self.state.set('other'), leaky: dep.self.properties.get('leaky') }),
 			validateArgs: (args): args is [] => args.length === 0,
+			emits: ['changed'],
 			execute: ({ deps, emit }) => {
 				escapedSetter = deps.setOther
 				escapedEmit = emit.changed
@@ -198,6 +200,7 @@ const plugin = createWidgetPlugin('host')
 		})
 		.emitChanged({
 			validateArgs: (args): args is [number] => typeof args[0] === 'number',
+			emits: ['changed'],
 			execute: ({ args: [value], emit }) => {
 				emit.changed(value)
 				return null

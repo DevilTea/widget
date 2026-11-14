@@ -65,6 +65,7 @@ function createCounterPlugin() {
 			.bump({
 				registerDeps: ({ dep }) => ({ setCount: dep.self.state.set('count') }),
 				validateArgs: (args): args is [] => args.length === 0,
+				emits: ['bumped'],
 				execute: ({ deps, emit }) => {
 					deps.setCount(1)
 					emit.bumped()
@@ -348,6 +349,7 @@ describe('runtime.subscribeDisposal(): the Runtime is already disposed inside a 
 				.run({
 					registerDeps: ({ dep }) => ({ setCount: dep.self.state.set('count') }),
 					validateArgs: (args): args is [] => args.length === 0,
+					emits: ['done'],
 					execute: ({ deps, emit }) => {
 						captured.deps = deps
 						captured.emit = emit

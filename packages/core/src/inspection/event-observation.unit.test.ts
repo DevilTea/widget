@@ -26,10 +26,12 @@ const plugin = createWidgetPlugin('observed')
 	.methods(methods => methods
 		.fire({
 			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
+			emits: ['change'],
 			execute: ({ args, emit }) => emit.change(args[0]),
 		})
 		.fireObject({
 			validateArgs: (args): args is [Payload] => args.length === 1 && typeof args[0] === 'object' && args[0] !== null,
+			emits: ['object'],
 			execute: ({ args, emit }) => emit.object(args[0]),
 		}))
 	.events(events => events

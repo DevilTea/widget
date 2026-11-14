@@ -27,7 +27,7 @@ const ordered = createWidgetPlugin('ordered')
 		.pz({ compute: () => 1 })
 		.pa({ compute: () => 2 }))
 	.methods(methods => methods
-		.mz({ validateArgs: (args): args is [] => args.length === 0, execute: ({ emit }) => {
+		.mz({ validateArgs: (args): args is [] => args.length === 0, emits: ['ez', 'ea'], execute: ({ emit }) => {
 			emit.ez()
 			emit.ea()
 			return null

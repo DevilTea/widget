@@ -21,6 +21,7 @@ const AtomicPlugin = createWidgetPlugin('AtomicFixture')
 	}))
 	.methods(methods => methods.fire({
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
+		emits: ['changed'],
 		execute: ({ args: [value], emit }) => {
 			emit.changed(value)
 		},

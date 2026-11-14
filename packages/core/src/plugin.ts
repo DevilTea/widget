@@ -125,6 +125,8 @@ export interface ErasedWidgetPropertyDefinition {
 export interface ErasedWidgetMethodDefinition {
 	readonly registerDeps?: (ctx: any) => RegisteredDeps
 	readonly validateArgs: (args: readonly unknown[], ctx: any) => boolean
+	/** The declared Events, a frozen copy; checked against the events section by `done()`. */
+	readonly emits?: readonly WidgetMemberKey[]
 	readonly execute: (ctx: any) => unknown
 }
 
@@ -314,14 +316,20 @@ export type WidgetEventEmitter<Interfaces extends WidgetInterfaces> = {
 	readonly [Name in WidgetEventKeyOf<Interfaces>]: (...args: WidgetEventArgsOf<Interfaces, Name>) => void
 }
 
-export type WidgetEventEmitterContext<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'events'> extends true
-	? { readonly emit: WidgetEventEmitter<Interfaces> }
+/** The `emit` one Method receives carries exactly the Events it declares in `emits`. */
+export type WidgetMethodEventEmitter<Interfaces extends WidgetInterfaces, Emits extends WidgetEventKeyOf<Interfaces>> = {
+	readonly [Name in Emits]: (...args: WidgetEventArgsOf<Interfaces, Name>) => void
+}
+
+export type WidgetEventEmitterContext<Interfaces extends WidgetInterfaces, Emits extends WidgetEventKeyOf<Interfaces> = never> = HasWidgetCapability<Interfaces, 'events'> extends true
+	? { readonly emit: WidgetMethodEventEmitter<Interfaces, Emits> }
 	: unknown
 
 export type WidgetMethodExecuteContext<
 	Interfaces extends WidgetInterfaces,
 	Name extends WidgetMemberKey,
 	Deps extends RegisteredDeps,
+	Emits extends WidgetEventKeyOf<Interfaces> = never,
 >
 	= & {
 		readonly args: WidgetMethodArgsOf<Interfaces, Name>
@@ -331,7 +339,7 @@ export type WidgetMethodExecuteContext<
 	}
 	& DiagnosticCollector<RelativeValueDiagnosticInput>
 	& WidgetResolvedConfigContext<Interfaces>
-	& WidgetEventEmitterContext<Interfaces>
+	& WidgetEventEmitterContext<Interfaces, Emits>
 
 // -------------------------------------------------------------------------------------------------
 // Synchronous results
@@ -460,10 +468,16 @@ export interface WidgetMethodDefinition<
 	Name extends WidgetMemberKey,
 	Deps extends RegisteredDeps,
 	Result = unknown,
+	Emits extends WidgetEventKeyOf<Interfaces> = never,
 > {
 	readonly registerDeps?: (ctx: WidgetRegisterDepsContext<Interfaces, 'method'>) => Deps
 	readonly validateArgs: (args: readonly unknown[], ctx: WidgetMethodValidateArgsContext<Interfaces>) => args is WidgetMethodArgsOf<Interfaces, Name>
-	readonly execute: (ctx: WidgetMethodExecuteContext<Interfaces, Name, Deps>) => WidgetMethodExecuteResult<WidgetMethodReturnOf<Interfaces, Name>, Result>
+	/**
+	 * The Events this Method may emit. Omitted or empty means none. A Method that emits an Event, itself or
+	 * through the Methods it invokes, is not read-only, so no Property may depend on it.
+	 */
+	readonly emits?: readonly Emits[]
+	readonly execute: (ctx: WidgetMethodExecuteContext<Interfaces, Name, Deps, Emits>) => WidgetMethodExecuteResult<WidgetMethodReturnOf<Interfaces, Name>, Result>
 }
 
 export interface WidgetEventDefinition {
@@ -511,8 +525,8 @@ export type WidgetMethodsSection<
 >
 	= & WidgetSectionMarker<'methods', Remaining>
 		& {
-			[Name in Remaining]: <const Deps extends RegisteredDeps = EmptyRegisteredDeps, Result = unknown>(
-				definition: WidgetMethodDefinition<Interfaces, Name, Deps, Result>,
+			[Name in Remaining]: <const Deps extends RegisteredDeps = EmptyRegisteredDeps, Result = unknown, const Emits extends WidgetEventKeyOf<Interfaces> = never>(
+				definition: WidgetMethodDefinition<Interfaces, Name, Deps, Result, Emits>,
 			) => WidgetMethodsSection<Interfaces, Exclude<Remaining, Name>>
 		}
 
@@ -751,7 +765,7 @@ type WidgetPluginSectionName = 'config' | 'slots' | 'state' | 'properties' | 'me
 
 type WidgetPluginMemberSectionName = Exclude<WidgetPluginSectionName, 'config' | 'slots'>
 
-type WidgetPluginFieldKind = 'function' | 'string' | 'boolean' | 'schema' | 'value-contract'
+type WidgetPluginFieldKind = 'function' | 'string' | 'boolean' | 'schema' | 'value-contract' | 'event-names'
 
 type WidgetPluginFieldRule = readonly [field: string, kind: WidgetPluginFieldKind, required: boolean]
 
@@ -765,7 +779,7 @@ const definitionFieldRules: Readonly<Record<WidgetPluginSectionName, readonly Wi
 	slots: [['description', 'string', true], ['validateStructure', 'function', false]],
 	state: [['validate', 'function', true], ['default', 'function', false], ['authorWritable', 'boolean', false]],
 	properties: [['compute', 'function', true], ['registerDeps', 'function', false], ['valueContract', 'value-contract', false]],
-	methods: [['validateArgs', 'function', true], ['execute', 'function', true], ['registerDeps', 'function', false]],
+	methods: [['validateArgs', 'function', true], ['execute', 'function', true], ['registerDeps', 'function', false], ['emits', 'event-names', false]],
 	events: [['description', 'string', true]],
 }
 
@@ -775,6 +789,18 @@ const fieldKindExpectations: Readonly<Record<WidgetPluginFieldKind, string>> = {
 	'boolean': 'a boolean',
 	'schema': 'a JSON Schema (a boolean or an object)',
 	'value-contract': 'a value contract created by createWidgetValueContract()',
+	'event-names': 'an array of Event names',
+}
+
+/** A dense array of strings (a hole or a non-string entry is not a name). */
+function isNameArray(value: unknown): value is readonly string[] {
+	if (!Array.isArray(value))
+		return false
+	for (let index = 0; index < value.length; index++) {
+		if (!(index in value) || typeof value[index] !== 'string')
+			return false
+	}
+	return true
 }
 
 function matchesFieldKind(value: unknown, kind: WidgetPluginFieldKind): boolean {
@@ -790,6 +816,8 @@ function matchesFieldKind(value: unknown, kind: WidgetPluginFieldKind): boolean 
 			return value === null || typeof value === 'boolean' || (typeof value === 'object' && !Array.isArray(value))
 		case 'value-contract':
 			return typeof value === 'object' && value !== null && typeof (value as { readonly id?: unknown }).id === 'string'
+		case 'event-names':
+			return isNameArray(value)
 	}
 }
 
@@ -815,7 +843,7 @@ function captureDefinition(pluginType: string, section: WidgetPluginSectionName,
 	if (typeof definition !== 'object' || definition === null)
 		throw pluginContractViolation(pluginType, subject, `must be declared with a definition object, got ${describeValue(definition)}`)
 
-	const captured: Readonly<Record<string, unknown>> = Object.freeze({ ...definition })
+	const captured: Record<string, unknown> = { ...definition }
 	for (const [field, kind, required] of definitionFieldRules[section]) {
 		const value = captured[field]
 		if (value === undefined) {
@@ -825,8 +853,11 @@ function captureDefinition(pluginType: string, section: WidgetPluginSectionName,
 		}
 		if (!matchesFieldKind(value, kind))
 			throw pluginContractViolation(pluginType, subject, `has an invalid "${field}" field (expected ${fieldKindExpectations[kind]}, got ${describeValue(value)})`)
+		// A declared name list is captured by value too.
+		if (kind === 'event-names')
+			captured[field] = Object.freeze([...(value as readonly string[])])
 	}
-	return captured
+	return Object.freeze(captured)
 }
 
 /**
@@ -960,6 +991,18 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 		},
 
 		done(): WidgetPlugin<Type, WidgetInterfaces> {
+			// Events are declared after Methods, so a Method's `emits` is checked here.
+			for (const [name, method] of draft.methods ?? []) {
+				const seen = new Set<string>()
+				for (const event of method.emits ?? []) {
+					if (draft.events === null || !draft.events.has(event))
+						throw pluginContractViolation(type, memberSubject('methods', name), `has an invalid "emits" field (Event "${event}" is not declared in section "events")`)
+					if (seen.has(event))
+						throw pluginContractViolation(type, memberSubject('methods', name), `has an invalid "emits" field (Event "${event}" is listed more than once)`)
+					seen.add(event)
+				}
+			}
+
 			const definition: WidgetPluginDefinition = Object.freeze({
 				type,
 				description: draft.description,

@@ -16,7 +16,7 @@
 
 import type { RuntimeEvent } from '../internal/contract'
 import type { WidgetMemberKey } from '../types'
-import type { RuntimeContext } from './context'
+import type { CallbackOwner, RuntimeContext } from './context'
 import { WidgetSystemRuntimeReentrancyError } from '../diagnostic'
 import { invokeEventListenerIsolated, invokeListenerIsolated } from './adapter'
 import { callbackScope } from './context'
@@ -127,25 +127,82 @@ export function buildEventEmitter(events: ReadonlyMap<WidgetMemberKey, EventPrim
 	return Object.freeze(emitter)
 }
 
+type EmitCallable = (...args: readonly unknown[]) => void
+
 /**
- * The `emit` surface one widget's Method `execute` callbacks receive (shared by that widget's Methods).
- * Besides the disposal guard, each call requires the innermost running callback to be one of those
- * Methods — its `CallbackOwner.emitter` is this very object — so an emitter retained past its callback,
- * or reached from a Property `compute`, throws without delivering.
+ * What every widget of one plugin shares for the `emit` of its Methods: the prototype of every Method
+ * `emit` object, whose non-enumerable members are one throwing stand-in per Event of the plugin (an own
+ * member, declared in `emits`, shadows its stand-in), and the `emit` object of a Method that declares
+ * nothing. Built when the first Method of the plugin first runs, so creating a Runtime allocates none of it.
  */
-export function buildCallbackEventEmitter(
-	context: RuntimeContext,
-	events: ReadonlyMap<WidgetMemberKey, EventPrimitive>,
-): Readonly<Record<string, (...args: readonly unknown[]) => void>> {
-	const emitter: Record<string, (...args: readonly unknown[]) => void> = Object.create(null)
-	for (const name of events.keys()) {
-		const primitive = events.get(name)!
-		emitter[name] = (...args: readonly unknown[]) => {
-			context.assertActive()
-			if (callbackScope.owner?.emitter !== emitter)
-				throwClosedCallbackMember('emit')
-			primitive.emit(...args)
+interface MethodEmitTemplate {
+	readonly prototype: object
+	readonly fragment: Readonly<Record<string, unknown>>
+}
+
+const methodEmitTemplates = new WeakMap<object, MethodEmitTemplate>()
+
+/** The context members of a Method of a plugin that declares no Events: there is no `emit`. */
+const NO_EMIT_FRAGMENT: Readonly<Record<string, unknown>> = Object.freeze({})
+
+function methodEmitTemplate(pluginType: string, eventDefinitions: ReadonlyMap<WidgetMemberKey, unknown>): MethodEmitTemplate {
+	let template = methodEmitTemplates.get(eventDefinitions)
+	if (template === undefined) {
+		const prototype: object = Object.create(null)
+		for (const name of eventDefinitions.keys()) {
+			Object.defineProperty(prototype, name, {
+				value: function undeclaredEmit(): never {
+					const owner = callbackScope.owner
+					// Only a running Method can have declared anything: from anywhere else this is a retained callable.
+					if (owner === null || owner.method === null)
+						throwClosedCallbackMember('emit')
+					throw new TypeError(`Widget plugin "${pluginType}": Method "${owner.method}" (widget "${owner.widgetId}") emitted Event "${name}" without declaring it. Add "${name}" to the Method's "emits". This is a plugin implementation bug.`)
+				},
+				writable: true,
+				configurable: true,
+			})
 		}
+		template = { prototype, fragment: Object.freeze({ emit: Object.freeze(Object.create(prototype)) }) }
+		methodEmitTemplates.set(eventDefinitions, template)
 	}
-	return Object.freeze(emitter)
+	return template
+}
+
+/**
+ * The `emit`-related members of one Method's `execute` context. A Method of a plugin without Events has
+ * none; a Method that declares no `emits` receives the plugin's shared empty `emit`; a Method that declares
+ * some receives its own `emit`, holding only the declared Events. Each of its callables requires the owner
+ * of this very Method to be the innermost running callback (like a dependency callable), so an `emit`
+ * retained past its callback, reached from a Property `compute`, or used while a different Method of the
+ * same widget runs, throws without delivering. An Event the Method did not declare is not an own member:
+ * calling it throws a `TypeError` naming the Method before anything is delivered.
+ */
+export function createMethodEmitFragment(
+	context: RuntimeContext,
+	owner: CallbackOwner,
+	pluginType: string,
+	eventDefinitions: ReadonlyMap<WidgetMemberKey, unknown> | null,
+	events: ReadonlyMap<WidgetMemberKey, EventPrimitive> | null,
+	emits: readonly WidgetMemberKey[] | undefined,
+): Readonly<Record<string, unknown>> {
+	if (eventDefinitions === null || events === null)
+		return NO_EMIT_FRAGMENT
+	const template = methodEmitTemplate(pluginType, eventDefinitions)
+	if (emits === undefined || emits.length === 0)
+		return template.fragment
+
+	const emitter: Record<string, EmitCallable> = Object.create(template.prototype)
+	for (const name of emits) {
+		const primitive = events.get(name)!
+		Object.defineProperty(emitter, name, {
+			value: (...args: readonly unknown[]) => {
+				context.assertActive()
+				if (callbackScope.owner !== owner)
+					throwClosedCallbackMember('emit')
+				primitive.emit(...args)
+			},
+			enumerable: true,
+		})
+	}
+	return Object.freeze({ emit: Object.freeze(emitter) })
 }

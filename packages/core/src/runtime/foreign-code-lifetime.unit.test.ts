@@ -104,6 +104,7 @@ const plugin = createWidgetPlugin('host')
 					}),
 			}),
 			validateArgs: (args): args is [] => args.length === 0,
+			emits: ['changed'],
 			execute: (ctx) => {
 				retained = ctx as unknown as ExecuteContext
 				hooks.execute?.(retained)
