@@ -257,8 +257,10 @@ function describeSubscription(subject: SubscriptionSubject, widgetId: string | n
  * Closes every batch level opened inside the outermost Runtime operation, letting alien-signals flush the
  * notifications it already queued.
  *
- * In normal operation the only levels still open here are the ones {@link writeDeferringFlush} opened:
- * every other level is closed by its own `endBatch()` in a `finally`. But that `finally` cannot be relied
+ * In normal operation the only levels still open here are the ones {@link writeDeferringFlush} opened, the ones
+ * nested Method invocations left open ({@link endBatchDeferringFlush}) and the ones nested writes opened
+ * ({@link runRuntimeOperation}'s `write`): every other level is closed by its own `endBatch()` in a `finally`.
+ * But that `finally` cannot be relied
  * on when runaway recursion (a valid Method <-> Method cycle) exhausts the engine's stack: the deepest
  * frames' `endBatch()` calls themselves overflow and never decrement. Draining to the depth recorded on
  * entry, rather than counting the levels this module opened, closes those leaked levels too, so a
