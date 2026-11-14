@@ -45,6 +45,9 @@ function numberOf(result: ExecutionResult<unknown, unknown> | null): number {
 	return result !== null && result.ok && typeof result.value === 'number' ? result.value : 0
 }
 
+/** How often a Property that depends on a Method (`config.method`) has run its `compute`. */
+const readerComputes = { count: 0 }
+
 const nodePlugin = createWidgetPlugin('node')
 	.description('Test widget')
 	.interfaces<NodeInterfaces>()
@@ -67,6 +70,8 @@ const nodePlugin = createWidgetPlugin('node')
 				.invoke(config.viaState ? 'peekState' : 'peek'),
 		}),
 		compute: ({ deps, config }) => {
+			if (config.method !== undefined)
+				readerComputes.count++
 			let sum = numberOf(deps.s()) + numberOf(deps.prev())
 			if (config.method !== undefined) {
 				try {
@@ -254,5 +259,45 @@ describe('a Property depending on a write-free Method', () => {
 			.toEqual(['m=2', 't0=3', 't1=4'])
 		expect(values())
 			.toEqual({ m: 2, t0: 3, t1: 4 })
+	})
+})
+
+describe('a Method invoked from a listener during another operation', () => {
+	it('has its subscribers notified after it returns, within the same outer operation', () => {
+		const { widget } = createChain({ method: 'a' }, {}, [{ id: 'y', config: {} }])
+		const order: string[] = []
+		widget('a').state.s.subscribe(() => {
+			order.push('x subscriber')
+			widget('y').methods.setBoth(50)
+			order.push('y.setBoth returned')
+		})
+		widget('y').state.s.subscribe(() => order.push('y subscriber'))
+
+		widget('a').state.s.set(5)
+		order.push('x.set returned')
+
+		expect(order)
+			.toEqual(['x subscriber', 'y.setBoth returned', 'y subscriber', 'x.set returned'])
+	})
+
+	it('notifies a Property reader of the Method before and after the write of a listener, computing it twice', () => {
+		const { widget, notified, subscribe } = createChain({ method: 'a', prev: 'b' }, {}, [{ id: 'b', config: {} }])
+		subscribe(['m'])
+		widget('a').properties.out.subscribe((result) => {
+			notified.push(`a=${numberOf(result)}`)
+			widget('b').methods.setBoth(10)
+		})
+		expect(notified)
+			.toEqual([])
+		readerComputes.count = 0
+		widget('m').properties.out.get()
+		readerComputes.count = 0
+
+		widget('a').state.s.set(5)
+
+		expect(notified)
+			.toEqual(['m=7', 'a=5', 'm=16'])
+		expect(readerComputes.count)
+			.toBe(2)
 	})
 })
