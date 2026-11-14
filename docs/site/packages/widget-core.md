@@ -1688,9 +1688,11 @@ notification:
   again for its own write, so its argument can be stale after it writes. It is
   called again when anything reads that member later in the same outermost
   call: another subscriber of it, a subscribed Property that depends on it, or a
-  plain `get()` from any listener. Read the current value with `get()` when it
-  matters, or defer the write (for example to a microtask) so the write is an
-  ordinary top-level operation.
+  plain `get()` from any listener. When the read comes after that call has
+  returned (a `get()` by the host), the listener is called during the next
+  Runtime call that notifies anyone, on this Runtime or another. Read the
+  current value with `get()` when it matters, or defer the write (for example to
+  a microtask) so the write is an ordinary top-level operation.
 - If a listener writes and then disposes the Runtime in the same call, the
   subscribers of that write are not notified: they are detached before the
   notifications of the call are delivered.
@@ -1709,7 +1711,10 @@ member the subscription observes is reported the way an exception thrown by a
 listener is (see [Host requirements](#host-requirements)). The host's call
 returns normally, State and Property values stay consistent, and the next call
 counts from zero, but the stopped subscriber's last delivered value may not be
-the current one. The limit applies to every subscription Core creates (State,
+the current one. A loop that involves a listener writing what it observes can
+resume during a later call once something reads that member after the call has
+returned (see above), and is then stopped in that call again.
+The limit applies to every subscription Core creates (State,
 Property and diagnostics subscriptions), whether the loop writes through
 `set()`, `resetState()` or Methods.
 
