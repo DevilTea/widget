@@ -8,12 +8,13 @@
  * cycle) exhausts the stack, the deepest frames' `endBatch()` calls can themselves overflow; the
  * outermost `runRuntimeOperation` frame closes those leaked levels (see `releaseBatches` in the adapter).
  *
- * The diagnostic-snapshot commits go through `writeDeferringFlush`, which keeps that rule true one level
- * further out: a Property may declare a dependency on a write-free Method, so `invoke` can run inside a
- * Property evaluator, and there the invocation's own `endBatch()` must not be the frame that flushes —
- * doing so re-enters alien-signals' propagation while the evaluating computed is uncommitted (the helper
- * documents the mechanism). The still-open deferral level keeps this `endBatch()` from reaching depth `0`,
- * and the flush happens once the outermost enclosing read/write call is leaving instead.
+ * That rule is kept true one level further out: a Property may declare a dependency on a write-free
+ * Method, so `invoke` can run inside a Property evaluator — also one alien-signals' own flush started, at
+ * batch depth `0` — and there the invocation's own batch must not be the one that flushes: doing so
+ * re-enters alien-signals' propagation while the evaluating computed is uncommitted (`writeDeferringFlush`
+ * documents the mechanism). An invocation enclosed by another Runtime operation therefore leaves its level
+ * open (`endBatchDeferringFlush`), and the flush happens once the outermost enclosing read/write call is
+ * leaving instead, whether or not the invocation committed a changed diagnostic snapshot.
  *
  * Normative contract: DevilTea/widget Discussion #12, Core composition architecture topic. Historical source (migrated): diagnostic #10 consolidated handoff §15, amendment "RuntimeMethod invocation as
  * alien-signals batch boundary".
@@ -26,9 +27,9 @@ import type { ErasedWidgetMethodDefinition } from '../plugin'
 import type { WidgetId, WidgetMemberKey } from '../types'
 import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './context'
 import type { PrimitiveRegistryEntry } from './deps'
-import { endBatch, signal, startBatch } from 'alien-signals'
+import { signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
-import { createTrackedSubscription, runRuntimeOperation, writeDeferringFlush } from './adapter'
+import { createTrackedSubscription, endBatchDeferringFlush, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { callbackScope } from './context'
 import { materializeDependencyTree } from './deps'
@@ -174,7 +175,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 			return Object.freeze(result)
 		}
 		finally {
-			endBatch()
+			endBatchDeferringFlush()
 		}
 	}
 

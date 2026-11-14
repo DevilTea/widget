@@ -290,6 +290,29 @@ export function writeDeferringFlush(write: () => void): void {
 }
 
 /**
+ * Closes a batch level its caller opened inside its own {@link runRuntimeOperation} frame (a
+ * `RuntimeMethod` invocation's batch), unless another Runtime operation encloses that frame: the level is
+ * then left open, and the outermost frame's release closes it (see {@link releaseBatches}), exactly as it
+ * closes the levels {@link writeDeferringFlush} opens.
+ *
+ * An enclosing operation may be a Property read whose computed is mid-evaluation: a Property may invoke a
+ * write-free Method, and when alien-signals' own flush evaluates that Property (an effect's dirty check),
+ * the flush runs at batch depth `0`, so the invocation's own batch is the outermost one. A plain `endBatch()`
+ * would then reach depth `0` and call `flush()` while the computed is mid-`updateComputed`, with the effects
+ * the write queued still waiting — the nested flush {@link writeDeferringFlush} documents, which leaves the
+ * Property's other dependents marked clean with stale values and their subscribers unnotified.
+ *
+ * Leaving the level open does not depend on whether the invocation also committed a changed diagnostic
+ * snapshot (whose {@link writeDeferringFlush} level used to be the only thing keeping depth above `0`), so
+ * the flush timing of a nested invocation no longer depends on its diagnostics either.
+ */
+export function endBatchDeferringFlush(): void {
+	if (operationDepth > 1)
+		return
+	endBatch()
+}
+
+/**
  * Creates a Runtime-owned public subscription: an alien `effect()` that tracks `read()`, skips the
  * bootstrap run, and invokes `listener` through {@link invokeListenerIsolated} on every actual
  * subsequent run. Returns an idempotent unsubscribe function registered with the Runtime's disposal
