@@ -862,9 +862,12 @@ describe('a handler that reads and writes the Runtime', () => {
 	})
 })
 
-/** Every exception in `thrown` was handed to the handler or rethrown in a microtask, exactly once. */
+/**
+ * Every exception in `thrown` was handed to the handler or rethrown in a microtask, exactly once. The `RangeError`s
+ * of Core's own bounds are left out, wherever they went.
+ */
 function expectNothingLost(received: readonly unknown[], rethrown: readonly unknown[], thrown: readonly unknown[]): void {
-	const isolated = [...received.filter(error => !(error instanceof RangeError)), ...rethrown]
+	const isolated = [...received, ...rethrown].filter(error => !(error instanceof RangeError))
 	expect(new Set(isolated).size)
 		.toBe(isolated.length)
 	expect(new Set(isolated))

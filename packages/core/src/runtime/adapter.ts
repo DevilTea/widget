@@ -275,7 +275,8 @@ let deliveryGeneration = 0
  * reports a listener bug, like any exception an isolated listener throws). The reports queued for the handler
  * are not dropped with the deliveries (see {@link handOverAtDeliveryLimit}); a report that the handler's own
  * calls cause stays in the generation of the report the handler was handling, because the handler's feedback
- * has its own bound ({@link MAX_HANDLER_CAUSED_REPORTS}). Internal, not configurable.
+ * has its own bounds ({@link MAX_HANDLER_CAUSED_DEPTH}, {@link MAX_HANDLER_CAUSED_REPORTS}). Internal, not
+ * configurable.
  */
 const MAX_DELIVERY_GENERATIONS = 100
 
