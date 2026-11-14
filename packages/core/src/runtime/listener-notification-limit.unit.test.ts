@@ -290,6 +290,34 @@ describe('listeners that never converge', () => {
 			.toEqual({ a: LIMIT, b: LIMIT })
 		expectOneLimitReport('a', 'n')
 	})
+
+	it('counts the Runtime diagnostics subscription too, and names it in the report', async () => {
+		const graph = createGraph()
+		const calls = { runtime: 0, state: 0 }
+		let candidate = 0
+		const invalid = (id: string) => (graph.widget(id).state.n as RuntimeState<unknown>).set(`invalid ${++candidate}`)
+		graph.runtime.subscribeDiagnostics(() => {
+			calls.runtime++
+			invalid('a')
+		})
+		graph.widget('a').state.n.subscribeDiagnostics(() => {
+			calls.state++
+			invalid('b')
+		})
+
+		// Starts on `b`: only the Runtime's listener is notified first, so it is the one that reaches the limit.
+		invalid('b')
+		await settle()
+
+		expect(calls)
+			.toEqual({ runtime: LIMIT, state: LIMIT })
+		expect(reported)
+			.toHaveLength(1)
+		expect(reported[0])
+			.toBeInstanceOf(RangeError)
+		expect((reported[0] as RangeError).message)
+			.toContain('the Runtime')
+	})
 })
 
 describe('listeners that converge', () => {
