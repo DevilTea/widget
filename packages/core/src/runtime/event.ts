@@ -153,15 +153,22 @@ function methodEmitTemplate(pluginType: string, eventDefinitions: ReadonlyMap<Wi
 			Object.defineProperty(prototype, name, {
 				value: function undeclaredEmit(): never {
 					const owner = callbackScope.owner
-					// Only a running Method can have declared anything: from anywhere else this is a retained callable.
+					// Only a running Method can have declared anything: from anywhere else (after its callback, from
+					// a Property, after disposal) this is a retained callable.
 					if (owner === null || owner.method === null)
+						throwClosedCallbackMember('emit')
+					// A running Method that did declare the Event has its own callable for it, so this one is retained
+					// from another Method (typically one that declared nothing): it is not the running Method's fault.
+					if (owner.emits?.includes(name))
 						throwClosedCallbackMember('emit')
 					throw new TypeError(`Widget plugin "${pluginType}": Method "${owner.method}" (widget "${owner.widgetId}") emitted Event "${name}" without declaring it. Add "${name}" to the Method's "emits". This is a plugin implementation bug.`)
 				},
-				writable: true,
-				configurable: true,
+				writable: false,
+				configurable: false,
 			})
 		}
+		// Shared by every Runtime and System that loads this plugin: nothing may replace a stand-in.
+		Object.freeze(prototype)
 		template = { prototype, fragment: Object.freeze({ emit: Object.freeze(Object.create(prototype)) }) }
 		methodEmitTemplates.set(eventDefinitions, template)
 	}

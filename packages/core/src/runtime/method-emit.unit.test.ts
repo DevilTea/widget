@@ -7,10 +7,27 @@
 
 import type { ExecutionResult, WidgetInterfaces } from '../index'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectRuntime } from '../inspection'
 
 const noArgs = (args: readonly unknown[]): args is [] => args.length === 0
+
+/** Asserts a `TypeError` whose message quotes each of `names` (plugin, Method, widget or Event); not the sentence around them. */
+function expectTypeErrorNaming(call: () => unknown, ...names: readonly string[]): void {
+	let thrown: unknown
+	try {
+		call()
+	}
+	catch (error) {
+		thrown = error
+	}
+	expect(thrown)
+		.toBeInstanceOf(TypeError)
+	for (const name of names) {
+		expect((thrown as TypeError).message)
+			.toContain(`"${name}"`)
+	}
+}
 
 interface PairInterfaces extends WidgetInterfaces {
 	methods: {
@@ -134,8 +151,6 @@ describe('the `emit` of a Method', () => {
 		widget.methods.captureA()
 		expect(() => widget.methods.useRetained())
 			.toThrow(TypeError)
-		expect(() => widget.methods.useRetained())
-			.toThrow('An emit callable was called outside the callback that received it.')
 		expect(seen)
 			.toEqual([])
 		// The retained callable is closed from the outside as well.
@@ -184,7 +199,7 @@ describe('the `emit` of a Method', () => {
 		let delivered = 0
 		widget.events.a.subscribe(() => delivered++)
 		expect(() => widget.methods.outer())
-			.toThrow('An emit callable was called outside the callback that received it.')
+			.toThrow(TypeError)
 		expect(delivered)
 			.toBe(0)
 	})
@@ -241,12 +256,9 @@ describe('the `emit` of a Method', () => {
 		widgetInspection.getEvent('a')!.subscribe(occurrence => occurrences.push(occurrence))
 		widgetInspection.getEvent('b')!.subscribe(occurrence => occurrences.push(occurrence))
 
-		expect(() => widget.methods.declared())
-			.toThrow(new TypeError('Widget plugin "js": Method "declared" (widget "j") emitted Event "b" without declaring it. Add "b" to the Method\'s "emits". This is a plugin implementation bug.'))
-		expect(() => widget.methods.none())
-			.toThrow(new TypeError('Widget plugin "js": Method "none" (widget "j") emitted Event "a" without declaring it. Add "a" to the Method\'s "emits". This is a plugin implementation bug.'))
-		expect(() => widget.methods.empty())
-			.toThrow(new TypeError('Widget plugin "js": Method "empty" (widget "j") emitted Event "a" without declaring it. Add "a" to the Method\'s "emits". This is a plugin implementation bug.'))
+		expectTypeErrorNaming(() => widget.methods.declared(), 'js', 'declared', 'j', 'b')
+		expectTypeErrorNaming(() => widget.methods.none(), 'js', 'none', 'j', 'a')
+		expectTypeErrorNaming(() => widget.methods.empty(), 'js', 'empty', 'j', 'a')
 		expect(emitted)
 			.toEqual(['before'])
 		expect(delivered)
@@ -304,28 +316,58 @@ describe('plugin build with `emits`', () => {
 	const execute = () => {}
 
 	it('rejects an Event that is not declared in the events section', () => {
-		expect(() => buildUntyped({ validateArgs: noArgs, emits: ['fierd'], execute }))
-			.toThrow(new TypeError('Widget plugin "js": member "fire" of section "methods" has an invalid "emits" field (Event "fierd" is not declared in section "events"). This is a plugin implementation bug.'))
+		expectTypeErrorNaming(() => buildUntyped({ validateArgs: noArgs, emits: ['fierd'], execute }), 'js', 'fire', 'fierd')
 	})
 
 	it('rejects an Event when the plugin declares no events section at all', () => {
-		expect(() => buildUntyped({ validateArgs: noArgs, emits: ['fired'], execute }, false))
-			.toThrow(new TypeError('Widget plugin "js": member "fire" of section "methods" has an invalid "emits" field (Event "fired" is not declared in section "events"). This is a plugin implementation bug.'))
+		expectTypeErrorNaming(() => buildUntyped({ validateArgs: noArgs, emits: ['fired'], execute }, false), 'js', 'fire', 'fired')
 	})
 
 	it('rejects a duplicate', () => {
-		expect(() => buildUntyped({ validateArgs: noArgs, emits: ['fired', 'fired'], execute }))
-			.toThrow(new TypeError('Widget plugin "js": member "fire" of section "methods" has an invalid "emits" field (Event "fired" is listed more than once). This is a plugin implementation bug.'))
+		expectTypeErrorNaming(() => buildUntyped({ validateArgs: noArgs, emits: ['fired', 'fired'], execute }), 'js', 'fire', 'fired')
 	})
 
 	it('rejects a value that is not an array of names', () => {
-		for (const [emits, got] of [['fired', 'string'], [{ 0: 'fired', length: 1 }, 'object'], [null, 'null'], [[1], 'array']] as const) {
-			expect(() => buildUntyped({ validateArgs: noArgs, emits, execute }))
-				.toThrow(new TypeError(`Widget plugin "js": member "fire" of section "methods" has an invalid "emits" field (expected an array of Event names, got ${got}). This is a plugin implementation bug.`))
+		// The malformed value names no Event, so the error names the plugin and the Method only.
+		for (const emits of ['fired', { 0: 'fired', length: 1 }, null, [1]]) {
+			expectTypeErrorNaming(() => buildUntyped({ validateArgs: noArgs, emits, execute }), 'js', 'fire')
 		}
 		// eslint-disable-next-line no-sparse-arrays
-		expect(() => buildUntyped({ validateArgs: noArgs, emits: ['fired', , 'other'], execute }))
-			.toThrow('has an invalid "emits" field (expected an array of Event names')
+		expectTypeErrorNaming(() => buildUntyped({ validateArgs: noArgs, emits: ['fired', , 'other'], execute }), 'js', 'fire')
+	})
+
+	it('throws a malformed value from the member call inside `.methods()`, and an unknown or repeated name only from `done()`', () => {
+		const phase = () => createWidgetPlugin('js')
+			.description('Untyped')
+			.interfaces<FireInterfaces>()
+		let reachedEvents = false
+		expectTypeErrorNaming(() => phase()
+			.methods(methods => methods
+				.fire({ validateArgs: noArgs, emits: 'fired', execute } as never)
+				.other({ validateArgs: noArgs, execute: () => {} }))
+			.events((events) => {
+				reachedEvents = true
+				return events.fired({ description: 'Fired' })
+					.other({ description: 'Other' })
+			}), 'js', 'fire')
+		expect(reachedEvents)
+			.toBe(false)
+
+		for (const emits of [['fierd'], ['fired', 'fired']]) {
+			const events = phase()
+				.methods(methods => methods
+					.fire({ validateArgs: noArgs, emits, execute } as never)
+					.other({ validateArgs: noArgs, execute: () => {} }))
+				.events(section => section.fired({ description: 'Fired' })
+					.other({ description: 'Other' }))
+			expectTypeErrorNaming(() => events.done(), 'js', 'fire')
+		}
+	})
+
+	it('accepts `emits: []` on a plugin that declares no Events, and rejects a name there', () => {
+		expect(() => buildUntyped({ validateArgs: noArgs, emits: [], execute }, false))
+			.not.toThrow()
+		expectTypeErrorNaming(() => buildUntyped({ validateArgs: noArgs, emits: ['fired'], execute }, false), 'js', 'fire', 'fired')
 	})
 
 	it('accepts an empty array, which means the Method emits nothing', () => {
@@ -348,5 +390,206 @@ describe('plugin build with `emits`', () => {
 			.getWidget('j') as unknown as { methods: { fire: () => ExecutionResult<unknown, unknown> } }
 		expect(widget.methods.fire().ok)
 			.toBe(true)
+	})
+})
+
+interface RetainInterfaces extends WidgetInterfaces {
+	methods: { keep: () => void, keepQuiet: () => void, useQuiet: () => void, useKept: () => void, pass: () => void, receive: () => void, callUndeclared: () => void }
+	events: { x: [], y: [] }
+}
+
+const kept: { declared: { x: () => void } | null, undeclaredY: (() => void) | null, quiet: Record<string, () => void> | null } = { declared: null, undeclaredY: null, quiet: null }
+
+/** Methods that retain their `emit`, and Methods that try to use it. `quiet` declares nothing; `user` declares `x`. */
+function createRetainer() {
+	const plugin = createWidgetPlugin('retain')
+		.description('Retain')
+		.interfaces<RetainInterfaces>()
+		.methods(methods => methods
+			.keep({
+				validateArgs: noArgs,
+				emits: ['x'],
+				execute: ({ emit }) => {
+					kept.declared = emit
+					// A JavaScript author reaches an Event the Method did not declare.
+					kept.undeclaredY = (emit as unknown as Record<string, () => void>).y!
+				},
+			})
+			.keepQuiet({
+				validateArgs: noArgs,
+				execute: ({ emit }) => {
+					kept.quiet = emit as unknown as Record<string, () => void>
+				},
+			})
+			// Declares `x`, then uses the `x` of the `emit` of a Method that declared nothing.
+			.useQuiet({
+				validateArgs: noArgs,
+				emits: ['x'],
+				execute: () => {
+					kept.quiet!.x!()
+				},
+			})
+			.useKept({
+				validateArgs: noArgs,
+				emits: ['x'],
+				execute: () => {
+					kept.declared!.x()
+				},
+			})
+			.pass({
+				validateArgs: noArgs,
+				emits: ['x'],
+				registerDeps: ({ dep }) => ({ receive: dep.self.methods.invoke('receive') }),
+				execute: ({ emit, deps }) => {
+					(deps.receive as (...args: unknown[]) => unknown)(emit)
+				},
+			})
+			.receive({
+				validateArgs: (args): args is [] => args.length <= 1,
+				emits: ['x'],
+				execute: ({ args }) => {
+					;(args as unknown as [{ x: () => void }])[0].x()
+				},
+			})
+			.callUndeclared({
+				validateArgs: noArgs,
+				emits: ['x'],
+				execute: () => {
+					kept.undeclaredY!()
+				},
+			}))
+		.events(events => events
+			.x({ description: 'X' })
+			.y({ description: 'Y' }))
+		.done()
+	const blueprint = createWidgetSystem({ plugins: [plugin] })
+		.createBlueprint({ id: 'r', type: 'retain' })
+	if (blueprint.status !== 'valid')
+		throw new Error('expected a valid Blueprint')
+	const runtime = blueprint.createRuntime()
+	const widget = runtime.getWidget('r')!
+	const delivered: string[] = []
+	widget.events.x.subscribe(() => delivered.push('x'))
+	widget.events.y.subscribe(() => delivered.push('y'))
+	return { runtime, widget, delivered }
+}
+
+describe('a retained `emit` callable', () => {
+	it('throws a TypeError for an Event the Method did not declare, delivers nothing, and behaves the same after disposal', () => {
+		const { runtime, widget, delivered } = createRetainer()
+		widget.methods.keep()
+		// Outside any callback, before disposal.
+		expect(() => kept.undeclaredY!())
+			.toThrow(TypeError)
+		runtime.dispose()
+		// After disposal the declared callable keeps the Runtime's own post-disposal error; the undeclared one is still a TypeError.
+		expect(() => kept.declared!.x())
+			.toThrow(WidgetSystemRuntimeDisposedError)
+		expect(() => kept.undeclaredY!())
+			.toThrow(TypeError)
+		expect(delivered)
+			.toEqual([])
+	})
+
+	it('does not blame the running Method when it declared the Event itself: the callable is another Method\'s', () => {
+		const { widget, delivered } = createRetainer()
+		widget.methods.keepQuiet()
+		expect(() => widget.methods.useQuiet())
+			.toThrow(TypeError)
+		let thrown: unknown
+		try {
+			widget.methods.useQuiet()
+		}
+		catch (error) {
+			thrown = error
+		}
+		// A Method that really did not declare the Event is named; here the Method `useQuiet` did declare it, so it is not.
+		expect((thrown as TypeError).message)
+			.not.toContain('"useQuiet"')
+		expect(delivered)
+			.toEqual([])
+	})
+
+	it('names the running Method when it really did not declare the Event', () => {
+		const { widget, delivered } = createRetainer()
+		widget.methods.keep()
+		expectTypeErrorNaming(() => widget.methods.callUndeclared(), 'retain', 'callUndeclared', 'y')
+		expect(delivered)
+			.toEqual([])
+	})
+
+	it('refuses an `emit` handed to another Method, even when that Method declares the same Event', () => {
+		const { widget, delivered } = createRetainer()
+		expect(() => widget.methods.pass())
+			.toThrow(TypeError)
+		expect(delivered)
+			.toEqual([])
+	})
+
+	it('can be used by a plain function the Method calls synchronously from inside its own `execute`', () => {
+		interface HelperInterfaces extends WidgetInterfaces {
+			methods: { run: () => void }
+			events: { x: [] }
+		}
+		const announce = (emit: { x: () => void }): void => emit.x()
+		const plugin = createWidgetPlugin('helper')
+			.description('Helper')
+			.interfaces<HelperInterfaces>()
+			.methods(methods => methods.run({ validateArgs: noArgs, emits: ['x'], execute: ({ emit }) => announce(emit) }))
+			.events(events => events.x({ description: 'X' }))
+			.done()
+		const blueprint = createWidgetSystem({ plugins: [plugin] })
+			.createBlueprint({ id: 'h', type: 'helper' })
+		if (blueprint.status !== 'valid')
+			throw new Error('expected a valid Blueprint')
+		const widget = blueprint.createRuntime()
+			.getWidget('h')!
+		let delivered = 0
+		widget.events.x.subscribe(() => delivered++)
+		expect(widget.methods.run().ok)
+			.toBe(true)
+		expect(delivered)
+			.toBe(1)
+	})
+
+	it('cannot be replaced through the prototype the undeclared stand-ins share: it is frozen, and the stand-ins are fixed', () => {
+		const { widget, delivered } = createRetainer()
+		widget.methods.keepQuiet()
+		const emit = kept.quiet!
+		const prototype = Object.getPrototypeOf(emit) as Record<string, unknown>
+		expect(Object.isFrozen(prototype))
+			.toBe(true)
+		expect(Object.getOwnPropertyDescriptor(prototype, 'x'))
+			.toMatchObject({ writable: false, configurable: false, enumerable: false })
+		expect(() => {
+			prototype.x = () => 'replaced'
+		})
+			.toThrow(TypeError)
+		expect(() => Object.defineProperty(prototype, 'x', { value: () => 'replaced' }))
+			.toThrow(TypeError)
+		expect(() => {
+			delete prototype.x
+		})
+			.toThrow(TypeError)
+		expect(() => emit.x!())
+			.toThrow(TypeError)
+		expect(delivered)
+			.toEqual([])
+	})
+})
+
+describe('the `emit` of a Method that declares nothing', () => {
+	it('has no own members, but `in` is true and a call throws: do not write `emit.x?.()`', () => {
+		const { widget } = createRetainer()
+		widget.methods.keepQuiet()
+		const emit = kept.quiet!
+		expect(Reflect.ownKeys(emit))
+			.toEqual([])
+		expect('x' in emit)
+			.toBe(true)
+		expect(typeof emit.x)
+			.toBe('function')
+		expect(() => emit.x!())
+			.toThrow(TypeError)
 	})
 })

@@ -33,10 +33,12 @@ export interface CallbackOwner {
 	readonly widgetId: string | null
 	/** The Method a Method owner runs, or `null` (Property `compute`); only names the owner in an error. */
 	readonly method: string | null
+	/** The Events a Method owner declared in `emits` (the definition's own frozen list), or `undefined`. */
+	readonly emits: readonly string[] | undefined
 }
 
-export function createCallbackOwner(widgetId: string | null, method: string | null): CallbackOwner {
-	return { sink: null, widgetId, method }
+export function createCallbackOwner(widgetId: string | null, method: string | null, emits?: readonly string[]): CallbackOwner {
+	return { sink: null, widgetId, method, emits }
 }
 
 /**

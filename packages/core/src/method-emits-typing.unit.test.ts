@@ -11,7 +11,7 @@
  * test says so; a stray or missing error fails `pnpm typecheck`.
  */
 
-import type { ExecutionResult, WidgetInterfaces, WidgetMethodDefinition, WidgetMethodEventEmitter, WidgetPluginConfigPhase } from './index'
+import type { ExecutionResult, WidgetInterfaces, WidgetMethodDefinition, WidgetMethodEventEmitter, WidgetMethodExecuteContext, WidgetPluginConfigPhase } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from './index'
 
@@ -265,6 +265,61 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 		}
 		expect([definition, withoutFifth])
 			.toHaveLength(2)
+	})
+
+	it('requires `emits` whenever the definition types an `emit`: a standalone definition and an annotated `execute`', () => {
+		// A definition whose `execute` receives an `emit` with `change` but declares nothing would throw at its first emit.
+		// @ts-expect-error the fifth type argument types an `emit` with `change`, so `emits` is required
+		const forgotten: WidgetMethodDefinition<NotifierInterfaces, 'fire', Record<never, never>, unknown, 'change'> = {
+			validateArgs: oneString,
+			execute: ({ args, emit }) => emit.change(args[0]),
+		}
+		function annotated() {
+			return createWidgetPlugin('notifier')
+				.description('Notifier')
+				.interfaces<NotifierInterfaces>()
+				// @ts-expect-error an `execute` annotated with an `emit` that has `change` needs `emits: ['change']`
+				.methods(methods => methods.fire({
+					validateArgs: oneString,
+					execute: (context: WidgetMethodExecuteContext<NotifierInterfaces, 'fire', Record<never, never>, 'change'>) => context.emit.change('x'),
+				}))
+		}
+		function passed() {
+			return createWidgetPlugin('notifier')
+				.description('Notifier')
+				.interfaces<NotifierInterfaces>()
+				.methods(methods => methods.fire(forgotten))
+		}
+		expectTypeOf(annotated)
+			.toBeFunction()
+		expectTypeOf(passed)
+			.toBeFunction()
+		expect(forgotten.validateArgs)
+			.toBe(oneString)
+	})
+
+	it('still accepts the normal literal forms: `emits` before or after `execute`, a constant, `emits: []`, no `emits`', () => {
+		const plugin = createWidgetPlugin('counter')
+			.description('Counter')
+			.interfaces<CounterInterfaces>()
+			.state(state => state.count({ validate: isNumber, default: () => 0 }))
+			.methods(methods => methods
+				.increment({
+					validateArgs: noArgs,
+					execute: ({ emit }) => {
+						emit.changed(1)
+						return 1
+					},
+					emits: ['changed'],
+				})
+				.reset({ validateArgs: noArgs, emits: [], execute: () => {} })
+				.peek({ validateArgs: noArgs, execute: () => 1 }))
+			.events(events => events
+				.changed({ description: 'The count changed' })
+				.cleared({ description: 'Cleared' }))
+			.done()
+		expect(plugin.type)
+			.toBe('counter')
 	})
 })
 

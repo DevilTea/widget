@@ -209,7 +209,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 
 		for (const member of node.methods.values()) {
 			const { name } = member
-			const owner = createCallbackOwner(node.id, name)
+			const owner = createCallbackOwner(node.id, name, member.definition.emits)
 
 			const primitive = createMethodPrimitive(context, {
 				widgetId: node.id,

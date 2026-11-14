@@ -462,13 +462,12 @@ export interface WidgetPropertyDefinition<
 	readonly compute: (ctx: WidgetPropertyComputeContext<Interfaces, Deps>) => WidgetPropertyValueOf<Interfaces, Name>
 }
 
-/** `Result` is `execute`'s own return type (see {@link WidgetMethodExecuteResult}). */
-export interface WidgetMethodDefinition<
+interface WidgetMethodDefinitionFields<
 	Interfaces extends WidgetInterfaces,
 	Name extends WidgetMemberKey,
 	Deps extends RegisteredDeps,
-	Result = unknown,
-	Emits extends WidgetEventKeyOf<Interfaces> = never,
+	Result,
+	Emits extends WidgetEventKeyOf<Interfaces>,
 > {
 	readonly registerDeps?: (ctx: WidgetRegisterDepsContext<Interfaces, 'method'>) => Deps
 	readonly validateArgs: (args: readonly unknown[], ctx: WidgetMethodValidateArgsContext<Interfaces>) => args is WidgetMethodArgsOf<Interfaces, Name>
@@ -479,6 +478,22 @@ export interface WidgetMethodDefinition<
 	readonly emits?: readonly Emits[]
 	readonly execute: (ctx: WidgetMethodExecuteContext<Interfaces, Name, Deps, Emits>) => WidgetMethodExecuteResult<WidgetMethodReturnOf<Interfaces, Name>, Result>
 }
+
+/**
+ * `Result` is `execute`'s own return type (see {@link WidgetMethodExecuteResult}). `Emits` is the union of
+ * the Events the Method declares: whenever it is not `never`, `execute` receives an `emit` with those
+ * Events, so `emits` is required (a definition that types `emit` without declaring it would throw at its
+ * first emit).
+ */
+export type WidgetMethodDefinition<
+	Interfaces extends WidgetInterfaces,
+	Name extends WidgetMemberKey,
+	Deps extends RegisteredDeps,
+	Result = unknown,
+	Emits extends WidgetEventKeyOf<Interfaces> = never,
+>
+	= & WidgetMethodDefinitionFields<Interfaces, Name, Deps, Result, Emits>
+		& ([Emits] extends [never] ? unknown : { readonly emits: readonly Emits[] })
 
 export interface WidgetEventDefinition {
 	readonly description: string

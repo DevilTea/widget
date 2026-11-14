@@ -2,8 +2,8 @@
  * A Property may depend only on a read-only Method: one that neither writes State nor emits an Event,
  * itself or through the Methods it invokes. A Property that depends on any other Method is rejected when
  * the Blueprint is compiled, with one `property-dependency-has-side-effects` diagnostic per
- * Property-to-Method edge, whose message says which effect the Method has and whose `related` is the
- * directly invoked Method.
+ * Property-to-Method dependency (per unique Property and Method pair), whose message says which effect the
+ * Method has and whose `related` is the directly invoked Method.
  */
 
 import type { ExecutionResult, WidgetInterfaces } from '../index'
@@ -148,10 +148,17 @@ function compileChain(target: Target, length: number) {
 		.createBlueprint(chainSource(length))
 }
 
+function effectOf(message: string): 'writes' | 'emits' | 'both' | 'none' {
+	const writes = message.includes('writes State')
+	const emits = message.includes('emits an Event')
+	return writes && emits ? 'both' : writes ? 'writes' : emits ? 'emits' : 'none'
+}
+
 function summarize(blueprint: ReturnType<typeof compileChain>) {
 	return blueprint.diagnostics.map(diagnostic => ({
 		code: diagnostic.code,
-		message: diagnostic.message,
+		// The message says which effect the Method has; the tests pin that, not the sentence around it.
+		effect: effectOf(diagnostic.message),
 		owner: diagnostic.location.type === 'property' ? diagnostic.location.name : diagnostic.location.type,
 		related: 'related' in diagnostic ? diagnostic.related?.map(location => location.type === 'method' ? location.name : location.type) : undefined,
 	}))
@@ -165,20 +172,20 @@ describe('a Property that depends on a Method with side effects', () => {
 		expect(summarize(blueprint))
 			.toEqual([0, 1, 2].map(() => ({
 				code: 'property-dependency-has-side-effects',
-				message: 'Property "out" invokes method "ping", which emits an Event (itself or through the Methods it invokes).',
+				effect: 'emits',
 				owner: 'out',
 				related: ['ping'],
 			})))
 	})
 
-	it('is rejected when the Method writes State, with a message that says so', () => {
+	it('is rejected when the Method writes State, and says so', () => {
 		const blueprint = compileChain('bump', 1)
 		expect(blueprint.status)
 			.toBe('invalid')
 		expect(summarize(blueprint))
 			.toEqual([{
 				code: 'property-dependency-has-side-effects',
-				message: 'Property "out" invokes method "bump", which writes State (itself or through the Methods it invokes).',
+				effect: 'writes',
 				owner: 'out',
 				related: ['bump'],
 			}])
@@ -191,7 +198,7 @@ describe('a Property that depends on a Method with side effects', () => {
 		expect(summarize(blueprint))
 			.toEqual([{
 				code: 'property-dependency-has-side-effects',
-				message: 'Property "out" invokes method "bumpAndPing", which writes State and emits an Event (itself or through the Methods it invokes).',
+				effect: 'both',
 				owner: 'out',
 				related: ['bumpAndPing'],
 			}])
@@ -205,7 +212,7 @@ describe('a Property that depends on a Method with side effects', () => {
 			expect(summarize(blueprint))
 				.toEqual([{
 					code: 'property-dependency-has-side-effects',
-					message: `Property "out" invokes method "${direct}", which emits an Event (itself or through the Methods it invokes).`,
+					effect: 'emits',
 					owner: 'out',
 					related: [direct],
 				}])
@@ -217,7 +224,7 @@ describe('a Property that depends on a Method with side effects', () => {
 		expect(summarize(blueprint))
 			.toEqual([{
 				code: 'property-dependency-has-side-effects',
-				message: 'Property "out" invokes method "bumpThroughRelay", which writes State and emits an Event (itself or through the Methods it invokes).',
+				effect: 'both',
 				owner: 'out',
 				related: ['bumpThroughRelay'],
 			}])
@@ -259,8 +266,8 @@ describe('a Property that depends on a Method with side effects', () => {
 			.createBlueprint({ id: 'root', type: 'reader', slots: { children: [{ id: 'emitter', type: 'emitter' }] } })
 		expect(blueprint.status)
 			.toBe('invalid')
-		expect(blueprint.diagnostics.map(diagnostic => [diagnostic.code, diagnostic.message, 'related' in diagnostic ? diagnostic.related?.map(location => location.type === 'method' ? `${location.node.id}.${location.name}` : location.type) : undefined]))
-			.toEqual([['property-dependency-has-side-effects', 'Property "reader" invokes method "outer", which emits an Event (itself or through the Methods it invokes).', ['root.outer']]])
+		expect(blueprint.diagnostics.map(diagnostic => [diagnostic.code, effectOf(diagnostic.message), 'related' in diagnostic ? diagnostic.related?.map(location => location.type === 'method' ? `${location.node.id}.${location.name}` : location.type) : undefined]))
+			.toEqual([['property-dependency-has-side-effects', 'emits', ['root.outer']]])
 	})
 })
 
@@ -399,5 +406,159 @@ describe('blueprint inspection of the effects of a Method', () => {
 		expect(node.methods.map(method => Object.keys(method)
 			.sort()))
 			.toEqual(node.methods.map(() => ['dependencies', 'name', 'transitivelyEmits', 'transitivelyWrites', 'type']))
+	})
+})
+
+describe('the effects of Methods in the compiler', () => {
+	it('propagates emits and writes through a Method-to-Method cycle, and a Property that depends on a Method of the cycle is rejected', () => {
+		interface CycleInterfaces extends WidgetInterfaces {
+			properties: { out: number }
+			methods: { a: () => void, b: () => void, c: () => void }
+			events: { fired: [] }
+		}
+		const cycle = createWidgetPlugin('cycle')
+			.description('A cycle of Methods')
+			.interfaces<CycleInterfaces>()
+			.properties(properties => properties.out({
+				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('a') }),
+				compute: ({ deps }) => numberOf(deps.call()),
+			}))
+			.methods(methods => methods
+				.a({
+					validateArgs: noArgs,
+					registerDeps: ({ dep }) => ({ b: dep.self.methods.invoke('b') }),
+					execute: () => {},
+				})
+				.b({
+					validateArgs: noArgs,
+					registerDeps: ({ dep }) => ({ a: dep.self.methods.invoke('a'), c: dep.self.methods.invoke('c') }),
+					execute: () => {},
+				})
+				.c({ validateArgs: noArgs, emits: ['fired'], execute: ({ emit }) => emit.fired() }))
+			.events(events => events.fired({ description: 'Fired' }))
+			.done()
+		const blueprint = createWidgetSystem({ plugins: [cycle] })
+			.createBlueprint({ id: 'c', type: 'cycle' })
+		const codes = blueprint.diagnostics.map(diagnostic => diagnostic.code)
+		// The cycle among Methods is not itself a problem (a Method-only cycle never returns to a Property).
+		expect(codes)
+			.toEqual(['property-dependency-has-side-effects'])
+		const node = inspectBlueprint(blueprint).nodes[0]
+		if (node === undefined || !node.resolved)
+			throw new Error('expected a resolved node')
+		expect(Object.fromEntries(node.methods.map(method => [method.name, method.transitivelyEmits])))
+			.toEqual({ a: true, b: true, c: true })
+	})
+
+	it('rejects a Property that depends, through `dep.parent`, on a Method of its parent that emits', () => {
+		interface ParentInterfaces extends WidgetInterfaces {
+			slots: 'children'
+			methods: { ping: () => void }
+			events: { pinged: [] }
+		}
+		interface ChildInterfaces extends WidgetInterfaces {
+			properties: { out: number }
+		}
+		const parent = createWidgetPlugin('parent')
+			.description('Parent')
+			.interfaces<ParentInterfaces>()
+			.slots({ children: { description: 'Children' } })
+			.methods(methods => methods.ping({ validateArgs: noArgs, emits: ['pinged'], execute: ({ emit }) => emit.pinged() }))
+			.events(events => events.pinged({ description: 'Pinged' }))
+			.done()
+		const child = createWidgetPlugin('child')
+			.description('Child')
+			.interfaces<ChildInterfaces>()
+			.properties(properties => properties.out({
+				registerDeps: ({ dep }) => ({ ping: dep.parent.methods.invoke('ping') }),
+				compute: ({ deps }) => numberOf(deps.ping()),
+			}))
+			.done()
+		const blueprint = createWidgetSystem({ plugins: [parent, child] })
+			.createBlueprint({ id: 'p', type: 'parent', slots: { children: [{ id: 'k', type: 'child' }] } })
+		expect(blueprint.status)
+			.toBe('invalid')
+		expect(blueprint.diagnostics.map(diagnostic => [diagnostic.code, diagnostic.location.type === 'property' ? `${diagnostic.location.node.id}.${diagnostic.location.name}` : diagnostic.location.type, 'related' in diagnostic ? diagnostic.related?.map(location => location.type === 'method' ? `${location.node.id}.${location.name}` : location.type) : undefined]))
+			.toEqual([['property-dependency-has-side-effects', 'k.out', ['p.ping']]])
+	})
+
+	it('keeps the Blueprint valid when the Method an optional dependency names is absent', () => {
+		interface ReaderInterfaces extends WidgetInterfaces {
+			properties: { out: number }
+		}
+		const reader = createWidgetPlugin('reader')
+			.description('Reader')
+			.interfaces<ReaderInterfaces>()
+			.properties(properties => properties.out({
+				registerDeps: ({ dep }) => ({ ping: dep.widget('nobody')
+					.optional().methods.invoke('ping') }),
+				compute: () => 1,
+			}))
+			.done()
+		const blueprint = createWidgetSystem({ plugins: [reader] })
+			.createBlueprint({ id: 'r', type: 'reader' })
+		expect(blueprint.status)
+			.toBe('valid')
+		expect(blueprint.diagnostics)
+			.toEqual([])
+	})
+
+	it('reports one diagnostic per Property and Method pair, however many dependencies name the pair', () => {
+		interface TwiceInterfaces extends WidgetInterfaces {
+			properties: { out: number }
+			methods: { ping: () => void }
+			events: { pinged: [] }
+		}
+		const twice = createWidgetPlugin('twice')
+			.description('Twice')
+			.interfaces<TwiceInterfaces>()
+			.properties(properties => properties.out({
+				registerDeps: ({ dep }) => ({ first: dep.self.methods.invoke('ping'), second: dep.self.methods.invoke('ping') }),
+				compute: () => 1,
+			}))
+			.methods(methods => methods.ping({ validateArgs: noArgs, emits: ['pinged'], execute: ({ emit }) => emit.pinged() }))
+			.events(events => events.pinged({ description: 'Pinged' }))
+			.done()
+		const blueprint = createWidgetSystem({ plugins: [twice] })
+			.createBlueprint({ id: 't', type: 'twice' })
+		expect(blueprint.diagnostics.map(diagnostic => diagnostic.code))
+			.toEqual(['property-dependency-has-side-effects'])
+	})
+
+	it('does not know that a Method emits when it does not declare it: the Blueprint is valid and reading the Property throws', () => {
+		interface QuietInterfaces extends WidgetInterfaces {
+			properties: { out: number }
+			methods: { ping: () => void }
+			events: { pinged: [] }
+		}
+		const quiet = createWidgetPlugin('quiet')
+			.description('Quiet')
+			.interfaces<QuietInterfaces>()
+			.properties(properties => properties.out({
+				registerDeps: ({ dep }) => ({ ping: dep.self.methods.invoke('ping') }),
+				compute: ({ deps }) => {
+					const result = deps.ping()
+					return result.ok ? 1 : 0
+				},
+			}))
+			.methods(methods => methods.ping({
+				validateArgs: noArgs,
+				// No `emits`: the type of `emit` has no member, so a cast reaches the Event the way untyped code would.
+				execute: ({ emit }) => (emit as unknown as Record<string, () => void>).pinged!(),
+			}))
+			.events(events => events.pinged({ description: 'Pinged' }))
+			.done()
+		const blueprint = createWidgetSystem({ plugins: [quiet] })
+			.createBlueprint({ id: 'q', type: 'quiet' })
+		if (blueprint.status !== 'valid')
+			throw new Error('expected a valid Blueprint')
+		const widget = blueprint.createRuntime()
+			.getWidget('q')!
+		let delivered = 0
+		widget.events.pinged.subscribe(() => delivered++)
+		expect(() => widget.properties.out.get())
+			.toThrow(TypeError)
+		expect(delivered)
+			.toBe(0)
 	})
 })
