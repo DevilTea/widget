@@ -2485,10 +2485,16 @@ already exists when those listeners run, so it is notified of what they write.
 
 **Not supported.** Some code runs while a Property is being evaluated, and Core
 cannot postpone it: a `compute`, a dependency `.validate()` refinement, the
-`validateArgs` of a Method a Property depends on, and the Event listeners and
-Event inspection listeners of an emit made by such a Method. When this code
-uses a Runtime it holds by closure instead of its declared dependencies, the
-outcome is not guaranteed if it:
+`validateArgs` of a Method a Property depends on. Through its declared
+dependencies a Property can reach only read-only Methods, which emit nothing
+(see [Methods](#methods)), so no Event listener runs there. Event listeners and
+Event inspection listeners do run during an evaluation when a `compute` (or
+other plugin code) invokes a Method through a Runtime it holds by closure, or
+emits through a renderer emitter from
+[`@deviltea/widget-core/integration`](#renderer-adapter-integration): neither
+route is covered by the read-only rule. When this code uses a Runtime it holds
+by closure instead of its declared dependencies, the outcome is not guaranteed
+if it:
 
 - reads, with `get()` or `subscribe()`, a Property whose evaluation is in
   progress or that depends on one (a cycle the Blueprint cannot see). The read
