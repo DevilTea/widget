@@ -871,7 +871,9 @@ createWidgetPlugin('counter')
   is rejected there (`emits: []` is accepted). `emits` is required in the type
   of a definition whenever its `emit` has members: a standalone
   `WidgetMethodDefinition` with a fifth type argument, or an `execute` whose
-  context parameter is annotated with the Events, must also write `emits`.
+  context parameter is annotated with the Events, must also write `emits`; an annotated context takes the Events as its trailing
+  type argument (`WidgetMethodExecuteContext<Interfaces, Name, Deps, 'changed'>`),
+  and without it `emit` has no members.
   Write `emits` as a literal array: a variable typed as an array of every Event
   name gives `emit` every Event, while the list the runtime checks may be
   narrower. Each Method declares its own Events: a
