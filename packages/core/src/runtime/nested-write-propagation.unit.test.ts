@@ -69,7 +69,12 @@ function createPair(kind: Kind) {
 			throw new Error(`missing node ${id}`)
 		return found
 	}
-	const read = (id: string): number | null => (kind === 'state' ? widget(id).state.s.get() : widget(id).properties.out.get().value ?? null)
+	const read = (id: string): number | null => {
+		if (kind === 'state')
+			return widget(id).state.s.get()
+		const result = widget(id).properties.out.get()
+		return result.ok ? result.value : null
+	}
 	const subscribe = (id: string, listener: (value: number | null) => void) => kind === 'state'
 		? widget(id).state.s.subscribe(listener)
 		: widget(id).properties.out.subscribe(result => listener(result.ok ? result.value : null))
