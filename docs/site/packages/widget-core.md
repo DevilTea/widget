@@ -2416,14 +2416,15 @@ outcome is not guaranteed if it:
   out of date until a later write reaches them, and subscribers can miss a
   notification;
 - calls `dispose()`. When the evaluation is one that a write's flush started
-  for a subscription, the write in progress then throws an internal
+  for a subscription, the write in progress can throw an internal
   `TypeError` instead of `WidgetSystemRuntimeDisposedError`.
 
 A `compute` that reads, the same way, a Property that does not depend on the
 one being evaluated (for example in another Runtime) gets that Property's
 current value, but the read becomes a dependency the Blueprint does not show:
-whenever that Property changes, the reading Property is evaluated again and its
-subscribers are notified, even with an equal value; and once that other Runtime
+whenever that Property changes, a subscribed reading Property is evaluated again
+and its subscribers are notified, even with an equal value (an unsubscribed one is
+evaluated on its next read); and once that other Runtime
 is disposed, the `compute` throws `WidgetSystemRuntimeDisposedError`, which the
 reading Property's `get()` rethrows (its subscriptions skip that recompute, see
 [Runtime Properties](#runtime-properties)). Declare the dependency instead when
