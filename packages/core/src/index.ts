@@ -190,6 +190,10 @@ export type {
 	WidgetValueContract,
 } from './plugin'
 
+export { setIsolatedErrorHandler } from './runtime/adapter'
+
+export type { IsolatedErrorHandler } from './runtime/adapter'
+
 export {
 	normalizeSeparatedWidgetSource,
 	separateWidgetSource,
