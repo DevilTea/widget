@@ -811,7 +811,8 @@ createWidgetPlugin('counter')
 - A Property may declare a dependency on a Method only if that Method is
   read-only: it neither writes State nor emits an Event, itself or through the
   Methods it invokes. Otherwise the Blueprint is `invalid` (see
-  [Methods](#methods)), so evaluating a Property never emits an Event.
+  [Methods](#methods)), so evaluating a Property through its declared
+  dependencies never emits an Event.
 - `valueContract` may be attached to a Property; see
   [Member declaration facts](#member-declaration-facts-and-value-contracts).
 - A Property's completed result is typed exactly as declared (`T`, not
@@ -863,8 +864,17 @@ createWidgetPlugin('counter')
   other Event is a type error (`emit.cleared()` when `cleared` is not listed),
   and a name that is not an Event of the plugin is a type error in `emits`
   itself. A Method without `emits`, or with `emits: []`, emits nothing, and
-  its `emit` has no members. A plugin without an events capability has no
-  `emit` and cannot declare `emits`. Each Method declares its own Events: a
+  its `emit` has no own members. At run time the name of an Event of the
+  plugin is still present on it (`'changed' in emit` is `true`) and calling it
+  throws a `TypeError`, so do not write `emit.changed?.()` expecting a no-op.
+  A plugin without an events capability has no `emit`, and a non-empty `emits`
+  is rejected there (`emits: []` is accepted). `emits` is required in the type
+  of a definition whenever its `emit` has members: a standalone
+  `WidgetMethodDefinition` with a fifth type argument, or an `execute` whose
+  context parameter is annotated with the Events, must also write `emits`.
+  Write `emits` as a literal array: a variable typed as an array of every Event
+  name gives `emit` every Event, while the list the runtime checks may be
+  narrower. Each Method declares its own Events: a
   Method that emits only through another Method it invokes declares nothing,
   because the emit belongs to the invoked Method. The Events are those of the
   Method's own widget; a Method cannot emit an Event of another widget.
@@ -873,14 +883,26 @@ createWidgetPlugin('counter')
   dependency on such a Method is rejected when the Blueprint is compiled: the
   Blueprint is `invalid` and carries a `property-dependency-has-side-effects`
   diagnostic on the Property (see [Diagnostics](#diagnostics)).
-  A Method may still invoke an emitting Method, and so may the host.
-- The `emits` list is validated when the plugin is built: it must be an array of
-  strings, each naming an Event of the plugin's `events` section (declared after
-  the Methods), with no name repeated; otherwise `done()` throws a `TypeError`
-  that names the plugin, the Method and the Event. The list is captured by value.
+  A Method may still invoke an emitting Method, and so may the host. The rule
+  covers a Property's declared dependencies only: a `compute` that closes over a
+  host widget handle and calls one of its Methods, or over an emitter from
+  [`@deviltea/widget-core/integration`](#renderer-adapter-integration), is not
+  stopped and does emit during the evaluation.
+- The `emits` list is validated when the plugin is built. A value that is not an
+  array of strings (including an array with a hole) throws a `TypeError` from the
+  member call inside `.methods(...)`, naming the plugin and the Method but no
+  Event. An entry that is not an Event of the plugin's `events` section
+  (declared after the Methods), or a name listed twice, throws a `TypeError` from
+  `done()` that names the plugin, the Method and the Event. The list is captured
+  by value.
 - Untyped code (JavaScript, a cast) that emits an Event the running Method did
   not declare gets a `TypeError` naming the Method and the Event, and nothing is
-  delivered: no listener runs and no inspection occurrence is published.
+  delivered: no listener runs and no inspection occurrence is published. A
+  callable for an Event the Method did not declare always throws a `TypeError`
+  and never delivers, before and after disposal; it does not throw
+  `WidgetSystemRuntimeDisposedError`. When the running Method did declare that
+  Event, the callable cannot be its own, so the error is the closed-callable
+  `TypeError` and does not name the running Method.
 - A Method's success value is typed exactly as declared (`T`, never
   `T | null`); a `void` Method returns `{ ok: true, value: undefined }`, typed
   `ExecutionResult<void, …>`, so there is nothing meaningful to read from it.
@@ -961,7 +983,9 @@ is valid only for that call:
   Called any other time — after the callback returned or threw, from a
   `setTimeout` or promise continuation, or from a different callback running
   inside it — they throw a `TypeError` and do nothing. After the Runtime is
-  disposed they throw `WidgetSystemRuntimeDisposedError` instead.
+  disposed they throw `WidgetSystemRuntimeDisposedError` instead, except an
+  `emit` callable for an Event the Method did not declare, which is always a
+  `TypeError` (see [Methods](#methods)).
 - Code that is not such a callback never counts as one, even while it runs
   inside one. While an external listener (State, Property, diagnostics, Event,
   `WidgetDocument` or inspection) or a plugin callback that receives no
@@ -1220,7 +1244,7 @@ node-owned ones):
 | `missing-dependency-capability` | the target has no such capability (state, properties, methods) | `dependency`, `related?` |
 | `missing-dependency-member` | the target has the capability but no such member | `dependency`, `related?` |
 | `ambiguous-dependency-target` | several nodes share the target id | `dependency`, `related` |
-| `property-dependency-has-side-effects` | a Property depends on a Method that writes State or emits an Event, itself or through the Methods it invokes; one diagnostic per Property-to-Method dependency, and the message says which effect the Method has (it writes State, it emits an Event, or both); `related` is the Method the Property invokes | `dependency`, `related` |
+| `property-dependency-has-side-effects` | a Property depends on a Method that writes State or emits an Event, itself or through the Methods it invokes; one diagnostic per unique Property and Method pair (two dependencies of a Property on the same Method give one), and the message says which effect the Method has (it writes State, it emits an Event, or both); `related` is the Method the Property invokes | `dependency`, `related` |
 | `property-evaluation-cycle` | a cycle of dependencies that contains a Property (reported on every Property of the cycle; `related` lists every member of the cycle, the diagnostic's own Property and any Method included, in member order, and is one frozen array shared by the diagnostics of that cycle) | `related` |
 | `json-incompatible-value` | the whole-source JSON-domain check found a value outside the domain; aggregate-only | `path` (source-rooted), `reason` |
 | `source-access-failed` | the whole-source check could not safely read a value (an accessor or a throwing reflection); aggregate-only | `path` |
@@ -1793,7 +1817,8 @@ runtime.dispose()
   [`@deviltea/widget-core/integration`](#renderer-adapter-integration).
 - A Method that declares an Event in `emits`, and a Method that invokes one, is
   not read-only, so no Property may depend on it: reading a Property never emits
-  an Event. Compared with `0.0.6`, where the compiler treated a Method that only
+  an Event through its declared dependencies (see [Methods](#methods) for what
+  the rule does not cover). Compared with `0.0.6`, where the compiler treated a Method that only
   emits as read-only, a Property could depend on it, and a read that evaluated
   the Property emitted the Event (the first `get()` did, a second `get()` with
   nothing changed did not), so whether a read emitted depended on caching and

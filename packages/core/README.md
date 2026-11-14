@@ -494,7 +494,8 @@ later occurrence is de-identified with its available subtree preserved.
   innermost running callback (a Method's `emit` belongs to that Method, not to its widget). A retained callable, a timer or promise
   continuation, a nested callback, or a listener or `validate`-style callback
   running inside the Method gets a `TypeError` (and
-  `WidgetSystemRuntimeDisposedError` after dispose). A Property can never write
+  `WidgetSystemRuntimeDisposedError` after dispose, except an `emit` callable for an Event its
+  Method did not declare, which is always a `TypeError`). A Property can never write
   State. Core is synchronous by design; see
   [Async work](https://deviltea.github.io/widget/packages/widget-core#async-work)
   for the host recipe.
