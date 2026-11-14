@@ -15,7 +15,9 @@
  *    {@link isEmitLoopError});
  * 4. hold an diagnostic-snapshot commit performed *during* an evaluation inside an alien batch until the call
  *    that drove that evaluation has returned, so its propagation can never re-enter alien-signals' flush
- *    while a computed is still mid-evaluation (see {@link writeDeferringFlush}).
+ *    while a computed is still mid-evaluation (see {@link writeDeferringFlush});
+ * 5. deliver Property inspection completions once the outermost Runtime operation has left, so an inspection
+ *    listener never runs while alien-signals is evaluating, checking or flushing (see {@link deliverWhenIdle}).
  *
  * None of this is a parallel reactive engine: it is a pure call-order wrapper around `effect()`,
  * `startBatch()`/`endBatch()` and the exported active-subscriber seam. alien-signals still owns every
@@ -177,6 +179,36 @@ export function isRuntimeIdle(): boolean {
 let entryBatchDepth = 0
 
 /**
+ * Listener deliveries requested while a Runtime operation was in progress (Property inspection completions),
+ * in request order, each with its generation (see {@link MAX_DELIVERY_GENERATIONS}).
+ *
+ * A listener that runs while a Property evaluation, an alien-signals dirty check or a flush is in progress and
+ * reads or writes the Runtime re-enters alien-signals@3.2.1 there, which it does not support: `checkDirty` has
+ * no branch for a computed whose getter is running (`RecursedCheck`), treats it as clean and clears the
+ * `Pending` flag of every reader between it and the read, which then stay clean with a stale value; a write
+ * flushes a second time inside the first and can re-enter the running getter, whose older result then
+ * overwrites the newer one; and an effect that is running is not queued again by a write its own run caused
+ * (issue #198). Queued deliveries run once the outermost operation has left, after its deferred propagations
+ * were released: nothing is evaluating, checking or flushing then.
+ */
+let queuedDeliveries: (() => void)[] = []
+let queuedGenerations: number[] = []
+/** Whether {@link deliverQueued} is running: operations its listeners start queue their deliveries behind. */
+let delivering = false
+/** The generation of the delivery running now; `0` outside {@link deliverQueued}. */
+let deliveryGeneration = 0
+
+/**
+ * How many generations of deliveries one outermost operation runs. A delivery queued by an operation that a
+ * delivered listener started is one generation later than that listener's. A listener that keeps changing what
+ * it observes (it writes, on every completion, a State its own Property depends on) would otherwise make the
+ * outermost call loop until the values stop changing, or forever. Beyond the limit the remaining deliveries
+ * are dropped and a `RangeError` is reported through the isolated-exception channel (not a coded error: it
+ * reports a listener bug, like any exception an isolated listener throws). Internal, not configurable.
+ */
+const MAX_DELIVERY_GENERATIONS = 100
+
+/**
  * Closes every batch level opened inside the outermost Runtime operation, letting alien-signals flush the
  * notifications it already queued.
  *
@@ -234,6 +266,48 @@ export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument:
 		finally {
 			--operationDepth
 		}
+		// Plain comparisons first, so a frame that is not the outermost one costs nothing here.
+		if (operationDepth === 0 && queuedDeliveries.length > 0 && !delivering)
+			deliverQueued()
+	}
+}
+
+/**
+ * Runs `deliver` now when no Runtime operation is in progress, otherwise once the outermost one has left
+ * (still synchronously, before it returns to its caller), after the deliveries requested before it. `deliver`
+ * must not throw: it invokes listeners through {@link invokeListenerIsolated}.
+ */
+export function deliverWhenIdle(deliver: () => void): void {
+	if (operationDepth === 0 && !delivering) {
+		deliver()
+		return
+	}
+	queuedDeliveries.push(deliver)
+	queuedGenerations.push(deliveryGeneration + 1)
+}
+
+/**
+ * Runs every queued delivery in order, including those queued by the operations the delivered listeners start
+ * (each of those operations is outermost while it runs, so it releases its own deferred propagations), up to
+ * {@link MAX_DELIVERY_GENERATIONS} generations.
+ */
+function deliverQueued(): void {
+	delivering = true
+	try {
+		for (let index = 0; index < queuedDeliveries.length; index++) {
+			deliveryGeneration = queuedGenerations[index]!
+			if (deliveryGeneration > MAX_DELIVERY_GENERATIONS) {
+				reportIsolatedException(new RangeError(`Inspection listeners kept changing what they observe for more than ${MAX_DELIVERY_GENERATIONS} rounds within one Runtime call; the remaining inspection notifications of that call were dropped.`))
+				break
+			}
+			queuedDeliveries[index]!()
+		}
+	}
+	finally {
+		queuedDeliveries = []
+		queuedGenerations = []
+		deliveryGeneration = 0
+		delivering = false
 	}
 }
 

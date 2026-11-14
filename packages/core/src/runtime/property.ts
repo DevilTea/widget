@@ -47,7 +47,7 @@ import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './cont
 import type { PrimitiveRegistryEntry } from './deps'
 import { computed, getActiveSub, setActiveSub, signal } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
-import { createTrackedSubscription, invokeListenerIsolated, isEngineStackOverflow, runRuntimeOperation, writeDeferringFlush } from './adapter'
+import { createTrackedSubscription, deliverWhenIdle, invokeListenerIsolated, isEngineStackOverflow, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { callbackScope } from './context'
 import { materializeDependencyTree } from './deps'
@@ -298,10 +298,11 @@ function driveAbandonedRead(root: EvaluationNode): PropertyOutcome {
 }
 
 /**
- * One retained-fact channel for the readonly `@deviltea/widget-core/inspection` subpath. Published only
+ * One retained-fact channel for the readonly `@deviltea/widget-core/inspection` subpath. Committed only
  * after `resultComputed()` has returned — see `getResultWithInspectionPublish` below for why publishing
  * from inside the computed getter body is wrong — and never by wrapping `getResult()` in a second
- * alien-signals effect.
+ * alien-signals effect. Listeners are notified once the outermost Runtime operation has left (see
+ * `publishInspectionCompletion`).
  */
 export interface PropertyInspectionChannel {
 	getSnapshot: () => PropertyInspectionSnapshot
@@ -360,7 +361,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	// Plain lazy-allocated registration list (not a `Set` keyed by the listener function itself — two
 	// independent `subscribe(sameFn)` calls must stay two independent registrations, exactly like the
 	// alien-signals-effect-backed `createTrackedSubscription` never dedupes by listener identity either).
-	interface ListenerEntry { readonly listener: (snapshot: PropertyInspectionSnapshot) => void }
+	interface ListenerEntry { readonly listener: (snapshot: PropertyInspectionSnapshot) => void, active: boolean }
 	let inspectionListeners: ListenerEntry[] | null = null
 	let lastPublishedResult: ExecutionResult<unknown, RuntimePropertyDiagnostic> | null = null
 
@@ -368,17 +369,30 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		return inspectionSnapshot ??= Object.freeze({ status: 'completed', result: lastPublishedResult! })
 	}
 
+	/**
+	 * Commits the completion as the retained fact at once (`getSnapshot()` returns it from now on) and delivers
+	 * it to the listeners registered now once no Runtime operation is in progress (see `deliverWhenIdle`), so
+	 * that a listener never runs while alien-signals is evaluating, checking or flushing (issue #198). Each
+	 * completion is delivered with its own snapshot, in completion order. A listener unsubscribed before the
+	 * delivery is skipped, one subscribed after the completion does not receive it, and nothing is delivered
+	 * once the Runtime is disposed (its subscriptions are detached without a final call).
+	 */
 	function publishInspectionCompletion(): void {
 		inspectionSnapshot = null
 		if (inspectionListeners === null || inspectionListeners.length === 0)
 			return
 		const snapshot = readInspectionSnapshot()
-		// Iterate a stable snapshot taken at publication start: a listener that itself calls `subscribe()`
-		// during this loop must not have its new registration visited by *this* publication (future-changes
-		// -only / no-immediate-emission), which a live-array/live-Set iteration could otherwise do.
+		// The audience is fixed at completion: a listener that itself calls `subscribe()` must not have its new
+		// registration visited by *this* completion (future-changes-only / no-immediate-emission).
 		const listenersSnapshot = inspectionListeners.slice()
-		for (const entry of listenersSnapshot)
-			invokeListenerIsolated(entry.listener, snapshot)
+		deliverWhenIdle(() => {
+			if (context.isDisposed())
+				return
+			for (const entry of listenersSnapshot) {
+				if (entry.active)
+					invokeListenerIsolated(entry.listener, snapshot)
+			}
+		})
 	}
 
 	// Recovery bookkeeping for the outcomes that are not kept (see `getResultWithInspectionPublish`): how many
@@ -763,7 +777,8 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 * The boundary read (see {@link segment}): starts a new segment, reads the computed result through the
 	 * exact same call every existing consumer already makes — completing it in the driver loop when its
 	 * evaluation was abandoned (see {@link driveAbandonedRead}) — then publishes the inspection fact only after
-	 * that call has returned.
+	 * that call has returned. Publishing commits the fact; its listeners are notified once the outermost
+	 * Runtime operation has left (see `publishInspectionCompletion`), which for a top-level read is at once.
 	 *
 	 * In pinned alien-signals@3.2.1 a computed's cache assignment happens as `c.value = c.getter(...)`:
 	 * the getter runs to completion *before* the assignment to `c.value` takes effect. Publishing from
@@ -910,11 +925,12 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		inspection: {
 			getSnapshot: readInspectionSnapshot,
 			subscribe: (listener) => {
-				const entry: ListenerEntry = { listener }
+				const entry: ListenerEntry = { listener, active: true }
 				if (inspectionListeners === null)
 					inspectionListeners = []
 				inspectionListeners.push(entry)
 				return () => {
+					entry.active = false
 					if (inspectionListeners === null)
 						return
 					const index = inspectionListeners.indexOf(entry)
