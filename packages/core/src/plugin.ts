@@ -899,10 +899,10 @@ function buildSection(
 	sectionName: WidgetPluginMemberSectionName,
 	members: Map<WidgetMemberKey, any>,
 	build: (section: any) => unknown,
-): WidgetMemberKey[] | null {
+	/** Called with the name of each member whose definition declares `emits` (only the Methods section passes it). */
+	onDeclaresEmits?: (key: WidgetMemberKey) => void,
+): void {
 	let sealed = false
-	// The Methods that declared `emits`; allocated only if one does.
-	let emitting: WidgetMemberKey[] | null = null
 	const section: unknown = new Proxy({}, {
 		get(_target, key) {
 			if (typeof key !== 'string')
@@ -915,8 +915,10 @@ function buildSection(
 
 				const captured = captureDefinition(pluginType, sectionName, subject, definition)
 				members.set(key, captured)
-				if (sectionName === 'methods' && captured.emits !== undefined)
-					(emitting ??= []).push(key)
+				// Recorded as soon as the member is captured, so the draft's list matches `members` even when
+				// the build callback later throws and the caller carries on.
+				if (onDeclaresEmits !== undefined && captured.emits !== undefined)
+					onDeclaresEmits(key)
 				return section
 			}
 		},
@@ -928,7 +930,6 @@ function buildSection(
 	finally {
 		sealed = true
 	}
-	return emitting
 }
 
 /**
@@ -1010,7 +1011,9 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 			const members = new Map<WidgetMemberKey, ErasedWidgetMethodDefinition>()
 			draft.methods = members
 			draft.emittingMethods = null
-			draft.emittingMethods = buildSection(type, 'methods', members, build)
+			buildSection(type, 'methods', members, build, (key) => {
+				(draft.emittingMethods ??= []).push(key)
+			})
 			return builder
 		},
 

@@ -402,6 +402,34 @@ describe('plugin build with `emits`', () => {
 			.not.toThrow()
 	})
 
+	it('still checks a captured `emits` at done() when the `.methods()` callback threw and the caller carried on', () => {
+		const attempts: Array<(section: Record<string, (definition: unknown) => unknown>) => void> = [
+			// A later member is malformed.
+			(section) => {
+				section.a!({ validateArgs: noArgs, emits: ['zz', 'zz'], execute })
+				section.b!({ validateArgs: 1, execute })
+			},
+			// The callback itself throws after capturing the Method.
+			(section) => {
+				section.a!({ validateArgs: noArgs, emits: ['zz', 'zz'], execute })
+				throw new Error('the callback failed')
+			},
+		]
+		for (const attempt of attempts) {
+			const builder = createWidgetPlugin('js')
+				.description('Untyped')
+				.interfaces<FireInterfaces>()
+			expect(() => builder.methods(methods => attempt(methods as unknown as Record<string, (definition: unknown) => unknown>) as never))
+				.toThrow()
+			const resumed = builder as unknown as { events: (build: (section: Record<string, (definition: unknown) => unknown>) => unknown) => { done: () => unknown } }
+			const events = resumed.events((section) => {
+				section.fired!({ description: 'Fired' })
+				section.other!({ description: 'Other' })
+			})
+			expectTypeErrorNaming(() => events.done(), 'js', 'a', 'zz')
+		}
+	})
+
 	it('accepts an empty array, which means the Method emits nothing', () => {
 		const plugin = buildUntyped({ validateArgs: noArgs, emits: [], execute })
 		const blueprint = createWidgetSystem({ plugins: [plugin as never] })
