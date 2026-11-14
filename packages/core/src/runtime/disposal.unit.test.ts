@@ -427,7 +427,7 @@ describe('dispose() emits no final value/diagnostic notification', () => {
 			methods: new Map(),
 			events: new Map(),
 		}
-		const aggregate = createRuntimeWidgetDiagnosticsAggregate(context, entry)
+		const aggregate = createRuntimeWidgetDiagnosticsAggregate(context, entry, 'w')
 		aggregate.subscribeDiagnostics(() => {})
 
 		context.dispose()

@@ -200,7 +200,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 		},
 		subscribeDiagnostics(listener: (diagnostics: readonly RuntimeMethodDiagnostic[]) => void) {
 			context.assertActive()
-			return createTrackedSubscription(context, () => diagnosticsSignal(), listener)
+			return createTrackedSubscription(context, () => diagnosticsSignal(), listener, 'the diagnostics of Method', params.widgetId, params.name)
 		},
 	})
 

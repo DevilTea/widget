@@ -214,6 +214,46 @@ let deliveryGeneration = 0
 const MAX_DELIVERY_GENERATIONS = 100
 
 /**
+ * Numbers the outermost Runtime operations: incremented each time {@link runRuntimeOperation} is entered with
+ * no operation in progress. A subscription compares it with the number it last counted in to restart its count
+ * of notifications (see {@link MAX_NOTIFICATIONS_PER_CALL}). Realm-wide, like {@link operationDepth}.
+ */
+let outermostCalls = 0
+
+/**
+ * How many times one subscription's listener is notified within one outermost Runtime operation. Listeners that
+ * keep changing what they observe (a self-normaliser that writes a fresh copy while something else reads the
+ * member, two listeners mirroring each other's objects, a diverging pair) would otherwise make that operation
+ * loop forever: the loop runs inside alien-signals' flush, iteratively, so nothing else bounds it. Beyond the
+ * limit the listener is not called again until the operation returns, and one `RangeError` naming what the
+ * subscription observes is reported through the isolated-exception channel (not a coded error: it reports a
+ * listener bug, like any exception an isolated listener throws). The same number as
+ * {@link MAX_DELIVERY_GENERATIONS}, counted separately: an inspection delivery round is not a subscriber
+ * notification. Internal, not configurable.
+ */
+const MAX_NOTIFICATIONS_PER_CALL = 100
+
+/**
+ * What a subscription observes, for the limit's report: `"State"`/`"Property"` with a member, `"the
+ * diagnostics of State"`/`"of Property"`/`"of Method"` with a member, `"the diagnostics of widget"` with a widget
+ * only, `"the diagnostics of the Runtime"` with neither. Static strings, so a subscription stores no message.
+ */
+export type SubscriptionSubject
+	= | 'State'
+		| 'Property'
+		| 'the diagnostics of State'
+		| 'the diagnostics of Property'
+		| 'the diagnostics of Method'
+		| 'the diagnostics of widget'
+		| 'the diagnostics of the Runtime'
+
+function describeSubscription(subject: SubscriptionSubject, widgetId: string | null, member: string | null): string {
+	if (member !== null)
+		return `${subject} "${member}" of widget "${widgetId}"`
+	return widgetId === null ? subject : `${subject} "${widgetId}"`
+}
+
+/**
  * Closes every batch level opened inside the outermost Runtime operation, letting alien-signals flush the
  * notifications it already queued.
  *
@@ -265,10 +305,13 @@ function releaseBatches(): void {
  * could miss it. The outermost operation is untouched: it executes the same statements as without `write`.
  */
 export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument, write?: boolean): Result {
-	if (operationDepth === 0)
+	if (operationDepth === 0) {
 		entryBatchDepth = getBatchDepth()
-	else if (write === true && getBatchDepth() === 0)
+		++outermostCalls
+	}
+	else if (write === true && getBatchDepth() === 0) {
 		startBatch()
+	}
 	++operationDepth
 	try {
 		return fn(argument as Argument)
@@ -429,13 +472,27 @@ export function endBatchDeferringFlush(): void {
  * operation, so that the inspection completions the bootstrap run produces are delivered after the effect's
  * first run has finished, not inside it, where alien-signals would not run the effect again for a write a
  * listener makes (issue #198). The other subscriptions only read signals, and need no operation.
+ *
+ * Within one outermost Runtime operation the listener is called at most {@link MAX_NOTIFICATIONS_PER_CALL}
+ * times; `subject`, `widgetId` and `member` name what the subscription observes in the report of the limit. A
+ * notification adds four comparisons and an increment (and two assignments in the first notification of an
+ * operation); the subscription stores two numbers besides the references it is given. Nothing is allocated
+ * unless the limit is reached. `unchanged` (the Runtime diagnostics aggregate's filter) skips a run without
+ * calling the listener or counting it.
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
 	read: () => Value,
 	listener: (value: Value) => void,
+	subject: SubscriptionSubject,
+	widgetId: string | null,
+	member: string | null,
+	unchanged?: (value: Value) => boolean,
 ): () => void {
 	let isBootstrap = true
+	// The outermost operation `notifications` counts in (see `outermostCalls`).
+	let countedIn = 0
+	let notifications = 0
 
 	const rawDispose = effect(() => {
 		let value: Value
@@ -451,6 +508,20 @@ export function createTrackedSubscription<Value>(
 		if (isBootstrap) {
 			isBootstrap = false
 			return
+		}
+		if (unchanged !== undefined && unchanged(value))
+			return
+		// Every flush Core starts runs inside a Runtime operation; outside one there is no call to bound.
+		if (operationDepth !== 0) {
+			if (countedIn !== outermostCalls) {
+				countedIn = outermostCalls
+				notifications = 0
+			}
+			if (++notifications > MAX_NOTIFICATIONS_PER_CALL) {
+				if (notifications === MAX_NOTIFICATIONS_PER_CALL + 1)
+					reportIsolatedException(new RangeError(`The listener of a subscription to ${describeSubscription(subject, widgetId, member)} was notified ${MAX_NOTIFICATIONS_PER_CALL} times within one Runtime call and was not called again until that call returned. Listeners that keep writing what they observe never settle: compare contents before writing, or derive the value with a Property.`))
+				return
+			}
 		}
 
 		invokeListenerIsolated(listener, value)
