@@ -417,8 +417,10 @@ describe('a compute reading by closure a Property while a deep read of it is in 
 			.toEqual([{ ok: true, value: 100 }])
 		expect(reported)
 			.toEqual([])
-		// Linear work: each link evaluated a bounded number of times (the stretch above the reading link, which its
-		// own nested read walks once more, five times).
+		// Linear work: each link is evaluated a bounded number of times. Most of the chain runs about twice as often
+		// as in a plain cold read (about 2 per link), because the compute makes a nested boundary read; the maximum
+		// is 5 (measured: 4 links 2 times, 83 links 4 times, 13 links 5 times), and the work stays linear in the
+		// chain length.
 		expect(Math.max(...env.computeCalls))
 			.toBeLessThanOrEqual(5)
 	})
@@ -461,7 +463,7 @@ describe('a compute reading by closure a Property while a deep read of it is in 
 			expect(seen, `read from n${at}`)
 				.toEqual([{ ok: true, value: 100 }])
 			expect(Math.max(...env.computeCalls), `read from n${at}`)
-				.toBeLessThanOrEqual(5)
+				.toBeLessThanOrEqual(at === 99 ? 3 : 5)
 		}
 		expect(reported)
 			.toEqual([])
@@ -488,7 +490,7 @@ describe('a compute reading by closure a Property while a deep read of it is in 
 			expect(graph.node(99).properties.out.get(), `read from n${at}`)
 				.toEqual({ ok: true, value: 200 })
 			expect(seen, `read from n${at}`)
-				.toHaveLength(1)
+				.toEqual([{ ok: true, value: 200 }])
 			armed = false
 			for (let index = 0; index < 100; index += 7)
 				graph.node(index).state.n.set(3)
