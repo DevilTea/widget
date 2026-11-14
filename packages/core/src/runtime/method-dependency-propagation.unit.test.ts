@@ -125,7 +125,7 @@ const system = createWidgetSystem({ plugins: [nodePlugin, graphPlugin] })
  * `out` is the widget's own State (1) plus what it reads: initially `a = 1, m = 2, t0 = 3, t1 = 4`.
  */
 function createChain(m: NodeConfig = { method: 'a' }, a: NodeConfig = {}, extra: Array<{ id: string, config: NodeConfig }> = []) {
-	const runtime = system.createBlueprint({
+	const blueprint = system.createBlueprint({
 		id: 'g',
 		type: 'graph',
 		slots: {
@@ -138,7 +138,9 @@ function createChain(m: NodeConfig = { method: 'a' }, a: NodeConfig = {}, extra:
 			],
 		},
 	})
-		.createRuntime()
+	if (blueprint.status !== 'valid')
+		throw new Error('fixture setup error: the Blueprint is invalid')
+	const runtime = blueprint.createRuntime()
 	const widget = (id: string) => {
 		const found = runtime.getWidget(id)
 		if (found?.type !== 'node')
