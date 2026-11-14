@@ -1689,10 +1689,12 @@ notification:
   called again when anything reads that member later in the same outermost
   call: another subscriber of it, a subscribed Property that depends on it, or a
   plain `get()` from any listener. When the read comes after that call has
-  returned (a `get()` by the host), the listener is called during the next
-  Runtime call that notifies anyone, on this Runtime or another. Read the
-  current value with `get()` when it matters, or defer the write (for example to
-  a microtask) so the write is an ordinary top-level operation.
+  returned (a `get()` by the host), the listener is called during a later call,
+  on this Runtime or another: today a Method call, a `resetState()` or a write
+  that notifies a subscriber delivers it, while a `get()` or a write that changes
+  nothing or that nothing observes does not. Read the current value with `get()`
+  when it matters, or defer the write (for example to a microtask) so the write
+  is an ordinary top-level operation.
 - If a listener writes and then disposes the Runtime in the same call, the
   subscribers of that write are not notified: they are detached before the
   notifications of the call are delivered.
@@ -1704,18 +1706,20 @@ Listeners that keep changing what they observe never settle. A listener that
 writes a fresh object or array every time (a sorted copy, `{ ...value }`) always
 writes a value that differs, even when its contents are the same, so with
 anything else reading that member, or with a second listener mirroring it back,
-the writes go on. Within one outermost call, a subscription's listener is called
-at most 100 times (an internal limit that may change). Beyond that it is not
-called again until that call returns, and a `RangeError` naming the widget and
-member the subscription observes is reported the way an exception thrown by a
-listener is (see [Host requirements](#host-requirements)). The host's call
-returns normally, State and Property values stay consistent, and the next call
-counts from zero, but the stopped subscriber's last delivered value may not be
-the current one. A loop that involves a listener writing what it observes can
-resume during a later call once something reads that member after the call has
-returned (see above), and is then stopped in that call again.
-The limit applies to every subscription Core creates (State,
-Property and diagnostics subscriptions), whether the loop writes through
+the writes go on. Within one call the host makes into the Runtime, including
+the Property inspection deliveries that call causes before it returns, a
+subscription's listener is called at most 10 000 times (an internal limit that
+may change; a converging cascade of listeners would need thousands of steps in
+one call to reach it, a loop reaches it within milliseconds). Beyond that it is
+not called again until that call returns, and a `RangeError` saying which
+widget and member the subscription observes and how often it was notified is
+reported the way an exception thrown by a listener is (see
+[Host requirements](#host-requirements)). The host's call returns normally,
+State and Property values stay consistent, and the next call counts from zero,
+but the stopped subscriber's last delivered value may not be the current one,
+and a later call delivers the current one only when what the subscription
+observes changes again. The limit applies to every subscription Core creates
+(State, Property and diagnostics subscriptions), whether the loop writes through
 `set()`, `resetState()` or Methods.
 
 - Write from a listener only when the contents actually differ: compare objects
