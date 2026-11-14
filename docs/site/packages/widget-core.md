@@ -1616,8 +1616,10 @@ Method diagnostic snapshots are not reset; Properties re-evaluate through
 ordinary invalidation, so every value read after a reset equals the value a
 freshly created Runtime would return for the same subsequent writes. The
 restored value is the *same reference* the member initialized with (see
-[State](#state)). After `dispose()`, `resetState()` throws
-`WidgetSystemRuntimeDisposedError`.
+[State](#state)). Called from a listener, or anywhere else while another Runtime
+call is in progress, a reset notifies its subscribers like any other nested
+write (see [Writing from a listener](#writing-from-a-listener)). After
+`dispose()`, `resetState()` throws `WidgetSystemRuntimeDisposedError`.
 
 #### Snapshotting state: `snapshotState()`
 
@@ -1658,13 +1660,24 @@ A listener may call `set()` or a Method. The write takes effect immediately
 (a following `get()` returns it), and Core guarantees only this much about
 notification:
 
-- Every subscriber is notified at most once per flush, with the value that is
-  current when it runs; notifications are not a log of every intermediate
-  write. A subscriber can observe `2` without ever being called with the `1`
-  that a listener wrote and then replaced.
+- A subscriber is notified with the value that is current when it runs;
+  notifications are not a log of every intermediate write. A subscriber can
+  observe `2` without ever being called with the `1` that a listener wrote and
+  then replaced. Within one outermost call it is notified again when another
+  listener changes what it observes after it has run.
+- A write made while another Runtime call is in progress (a listener's `set()`,
+  Method call or `resetState()`) does not notify anyone on its own: its
+  subscribers are notified later in that same outermost call, after the write
+  has returned and before the host's own call into the Runtime returns. A
+  write with no Runtime call in progress notifies before it returns.
 - Once the outermost write or Method call has returned, every subscriber whose
   value changed has been scheduled; the order **between different subscribers**
-  is not part of the contract (today it follows subscription order).
+  is not part of the contract (today it follows subscription order). This
+  includes a subscriber whose listener was still running when another listener
+  wrote back what it observes.
+- Listeners that keep writing each other's members keep running until the
+  values stop changing. If they never stop, the host's call never returns; make
+  such listeners converge (write only when the value actually differs).
 - A listener that writes the member it observes is not guaranteed to be called
   again for its own write, so its argument can be stale after it writes. Read
   the current value with `get()` when it matters, or defer the write (for
