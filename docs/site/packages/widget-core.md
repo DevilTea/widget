@@ -2367,12 +2367,13 @@ widgetInspection.getEvent('change')
 
 A completed evaluation becomes the Property's inspection fact at once: from
 then on `getSnapshot()` returns it. Its listeners are notified later, when the
-outermost Runtime call in progress (the `get()`, `set()`, Method call or
-`resetState()` that caused the evaluation) has finished its work, and before
-that call returns. A listener therefore never runs while Core is still
+outermost Runtime call in progress (the `get()`, `subscribe()`, `set()`, Method
+call or `resetState()` that caused the evaluation) has finished its work, and
+before that call returns. A listener therefore never runs while Core is still
 evaluating Properties or notifying subscribers. It may read Properties, write
 State or call Methods: what it reads is current, and what it writes is
-propagated like any other write.
+propagated like any other write. A subscription created by `subscribe()`
+already exists when those listeners run, so it is notified of what they write.
 
 - The completions of one call are delivered in the order they happened, each
   with its own snapshot. When a Property completes twice in one call (a Method
@@ -2392,10 +2393,12 @@ propagated like any other write.
 - What a listener does can complete more Properties. Those completions are
   delivered in the same call, after the ones already waiting. A listener that
   keeps changing what it observes (on every completion it writes a State its
-  own Property depends on) is stopped after an internal number of rounds: the
-  remaining notifications of that call are dropped, and a `RangeError` is
-  reported the way an exception thrown by a listener is (see
-  [Host requirements](#host-requirements)).
+  own Property depends on) is stopped after an internal number of rounds: every
+  notification of that call not delivered yet is dropped, including those of
+  other listeners and other Properties, and a `RangeError` is reported the way
+  an exception thrown by a listener is (see
+  [Host requirements](#host-requirements)). Facts (`getSnapshot()`), State
+  values and subscribers stay consistent, and later calls deliver as usual.
 
 **Not supported.** Some code runs while a Property is being evaluated, and Core
 cannot postpone it: a `compute`, a dependency `.validate()` refinement, the
@@ -2412,12 +2415,26 @@ outcome is not guaranteed if it:
 - writes State, calls a Method or calls `resetState()`. Other values can stay
   out of date until a later write reaches them, and subscribers can miss a
   notification;
-- calls `dispose()`. The Runtime call in progress can then throw an internal
+- calls `dispose()`. When the evaluation is one that a write's flush started
+  for a subscription, the write in progress then throws an internal
   `TypeError` instead of `WidgetSystemRuntimeDisposedError`.
 
-Reading Properties that do not depend on the one being evaluated, for example
-in another Runtime, is fine. Do the rest from a subscriber, from an inspection
-listener or later, for example in a microtask.
+A `compute` that reads, the same way, a Property that does not depend on the
+one being evaluated (for example in another Runtime) gets that Property's
+current value, but the read becomes a dependency the Blueprint does not show:
+whenever that Property changes, the reading Property is evaluated again and its
+subscribers are notified, even with an equal value; and once that other Runtime
+is disposed, the `compute` throws `WidgetSystemRuntimeDisposedError`, which the
+reading Property's `get()` rethrows (its subscriptions skip that recompute, see
+[Runtime Properties](#runtime-properties)). Declare the dependency instead when
+you can, and do the rest from a subscriber, from an inspection listener or
+later, for example in a microtask.
+
+Also not supported: wrapping Runtime calls in your own `alien-signals` batch
+(`startBatch()` and `endBatch()` of the same `alien-signals` copy Core imports).
+The flush then happens after every Runtime call has returned, so subscribers and
+inspection listeners can again run while Core is notifying, and a listener that
+writes can make another subscriber miss its last value.
 
 #### Event inspection: `getEvent(name)`
 
