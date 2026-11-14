@@ -10,6 +10,7 @@
  */
 
 import type { ExecutionResult } from '../index'
+import { effect as alienEffect } from 'alien-signals'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectRuntime } from '../inspection'
@@ -342,5 +343,141 @@ describe('a feedback loop', () => {
 			.toHaveLength(1)
 		expect(reported[0])
 			.toBeInstanceOf(RangeError)
+	})
+
+	it('drops the other listeners\' notifications of that call too, keeps facts, State and subscribers consistent, and later calls deliver as usual', async () => {
+		const chain = createChain(3)
+		const subscriber: number[] = []
+		chain.link(2).properties.total.subscribe(result => subscriber.push(numberOf(result)))
+		const other: unknown[] = []
+		chain.inspect(2)
+			.subscribe(snapshot => other.push(valueOf(snapshot)))
+		let stop = false
+		chain.inspect(1)
+			.subscribe(() => {
+				if (!stop)
+					chain.link(0).state.n.set((chain.link(0).state.n.get() ?? 0) + 1)
+			})
+		chain.link(0).state.n.set(2)
+		stop = true
+		await new Promise<void>(resolve => setTimeout(resolve, 0))
+
+		expect(reported)
+			.toHaveLength(1)
+		const n = chain.link(0).state.n.get()!
+		// The fact and the subscriber follow the last write; the other listener's last notification of that call
+		// was dropped.
+		expect(valueOf(chain.inspect(2)
+			.getSnapshot()))
+			.toBe(n + 2)
+		expect(subscriber.at(-1))
+			.toBe(n + 2)
+		expect(other.at(-1))
+			.not
+			.toBe(n + 2)
+		chain.link(0).state.n.set(1)
+		expect(other.at(-1))
+			.toBe(3)
+		expect(subscriber.at(-1))
+			.toBe(3)
+	})
+
+	it('of a listener that writes and reads with top-level calls is bounded the same way', async () => {
+		const chain = createChain(1)
+		let calls = 0
+		chain.inspect(0)
+			.subscribe(() => {
+				calls++
+				chain.link(0).state.n.set(calls + 1)
+				chain.link(0).properties.total.get()
+			})
+
+		expect(chain.link(0).properties.total.get())
+			.toEqual({ ok: true, value: 1 })
+		await new Promise<void>(resolve => setTimeout(resolve, 0))
+		expect(calls)
+			.toBeGreaterThan(1)
+		expect(calls)
+			.toBeLessThan(1_000)
+		expect(reported)
+			.toHaveLength(1)
+		expect(reported[0])
+			.toBeInstanceOf(RangeError)
+	})
+})
+
+describe('a top-level read', () => {
+	it('delivers its own completion through the queue: a completion a listener causes reaches every listener after it', () => {
+		const chain = createChain(1)
+		let fired = false
+		chain.inspect(0)
+			.subscribe(() => {
+				if (fired)
+					return
+				fired = true
+				chain.link(0).state.n.set(7)
+				chain.link(0).properties.total.get()
+			})
+		const received: unknown[] = []
+		chain.inspect(0)
+			.subscribe(snapshot => received.push(valueOf(snapshot)))
+		chain.link(0).properties.total.get()
+
+		expect(received)
+			.toEqual([1, 7])
+	})
+})
+
+describe('subscribe()', () => {
+	for (const [label, listenerOf, written, expected] of [
+		['the completion of the subscribed Property itself', 9, 6, 15],
+		['a completion produced inside its first read', 5, 5, 14],
+	] as const) {
+		it(`delivers what its first read produced after the subscription exists, so a listener's write notifies it (${label})`, () => {
+			const chain = createChain()
+			let fired = false
+			chain.inspect(listenerOf)
+				.subscribe(() => {
+					if (fired)
+						return
+					fired = true
+					chain.link(0).state.n.set(written)
+				})
+			const received: number[] = []
+			chain.link(9).properties.total.subscribe(result => received.push(numberOf(result)))
+
+			expect(received)
+				.toEqual([expected])
+			expect(chain.link(9).properties.total.get())
+				.toEqual({ ok: true, value: expected })
+		})
+	}
+})
+
+describe('an exception thrown out of the outermost operation\'s release', () => {
+	it('does not strand the queued deliveries: they run before the exception reaches the caller', () => {
+		const chain = createChain()
+		const delivered: string[] = []
+		for (const i of [5, 9]) {
+			chain.inspect(i)
+				.subscribe(snapshot => delivered.push(`l${i}=${valueOf(snapshot)}`))
+		}
+		// An effect that does not belong to a Runtime, on the alien-signals instance Core uses, throws when l0's
+		// diagnostics change, which happens in the release of the read below.
+		const stop = alienEffect(() => {
+			if (chain.link(0).properties.total.getDiagnostics().length > 0)
+				throw new Error('foreign effect')
+		})
+		try {
+			chain.link(0).state.n.set(0)
+
+			expect(() => chain.link(9).properties.total.get())
+				.toThrow('foreign effect')
+			expect(delivered)
+				.toEqual(['l5=failed', 'l9=failed'])
+		}
+		finally {
+			stop()
+		}
 	})
 })

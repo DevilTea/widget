@@ -265,10 +265,13 @@ export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument:
 		}
 		finally {
 			--operationDepth
+			// Plain comparisons first, so a frame that is not the outermost one costs nothing here. In this
+			// `finally`, so the queued deliveries also run when `fn` or the release threw (an effect that does not
+			// belong to a Runtime can throw out of the release's flush); `deliverQueued` itself never throws, so
+			// that exception still reaches the caller.
+			if (operationDepth === 0 && queuedDeliveries.length > 0 && !delivering)
+				deliverQueued()
 		}
-		// Plain comparisons first, so a frame that is not the outermost one costs nothing here.
-		if (operationDepth === 0 && queuedDeliveries.length > 0 && !delivering)
-			deliverQueued()
 	}
 }
 
@@ -399,6 +402,10 @@ export function endBatchDeferringFlush(): void {
  * effect to the Property before rethrowing, so the subscription stays live and resumes on the next
  * completed recompute. A bootstrap run that throws is isolated the same way. The exception is reported once
  * per synchronous turn however many subscriptions re-read it (see {@link reportTrackedReadException}).
+ *
+ * The effect is created inside a Runtime operation: its bootstrap read can evaluate Properties, and the
+ * inspection completions it produces must be delivered after the effect's first run has finished, not inside
+ * it, where alien-signals would not run the effect again for a write a listener makes (issue #198).
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
@@ -407,7 +414,7 @@ export function createTrackedSubscription<Value>(
 ): () => void {
 	let isBootstrap = true
 
-	const rawDispose = effect(() => {
+	const rawDispose = runRuntimeOperation(effect, () => {
 		let value: Value
 		try {
 			value = read()
