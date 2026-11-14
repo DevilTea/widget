@@ -954,6 +954,15 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		},
 	}
 
+	/**
+	 * Creates a subscription to this Property's result. Called inside a Runtime operation (see `subscribe`): the
+	 * subscription's first read can evaluate Properties, and the inspection completions it produces must reach
+	 * their listeners after the subscription exists (see `createTrackedSubscription`).
+	 */
+	function subscribeWithinOperation(listener: (result: ExecutionResult<unknown, RuntimePropertyDiagnostic>) => void): () => void {
+		return createTrackedSubscription(context, internal.getResult, listener)
+	}
+
 	const publicProperty: RuntimeProperty<unknown> = {
 		get() {
 			context.assertActive()
@@ -961,7 +970,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		},
 		subscribe(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, internal.getResult, listener)
+			return runRuntimeOperation(subscribeWithinOperation, listener)
 		},
 		getDiagnostics() {
 			context.assertActive()

@@ -193,6 +193,11 @@ let entryBatchDepth = 0
  */
 let queuedDeliveries: (() => void)[] = []
 let queuedGenerations: number[] = []
+/**
+ * Whether `queuedDeliveries` holds anything. Kept apart from the array so that the check every Runtime operation
+ * makes when it leaves is one load and one test while nothing is queued, the common case.
+ */
+let deliveriesQueued = false
 /** Whether {@link deliverQueued} is running: operations its listeners start queue their deliveries behind. */
 let delivering = false
 /** The generation of the delivery running now; `0` outside {@link deliverQueued}. */
@@ -265,11 +270,11 @@ export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument:
 		}
 		finally {
 			--operationDepth
-			// Plain comparisons first, so a frame that is not the outermost one costs nothing here. In this
-			// `finally`, so the queued deliveries also run when `fn` or the release threw (an effect that does not
-			// belong to a Runtime can throw out of the release's flush); `deliverQueued` itself never throws, so
-			// that exception still reaches the caller.
-			if (operationDepth === 0 && queuedDeliveries.length > 0 && !delivering)
+			// The flag first: while nothing is queued (always, when no inspection listener is registered) this is
+			// one load and one test. In this `finally`, so the queued deliveries also run when `fn` or the release
+			// threw (an effect that does not belong to a Runtime can throw out of the release's flush);
+			// `deliverQueued` itself never throws, so that exception still reaches the caller.
+			if (deliveriesQueued && operationDepth === 0 && !delivering)
 				deliverQueued()
 		}
 	}
@@ -287,6 +292,7 @@ export function deliverWhenIdle(deliver: () => void): void {
 	}
 	queuedDeliveries.push(deliver)
 	queuedGenerations.push(deliveryGeneration + 1)
+	deliveriesQueued = true
 }
 
 /**
@@ -309,6 +315,7 @@ function deliverQueued(): void {
 	finally {
 		queuedDeliveries = []
 		queuedGenerations = []
+		deliveriesQueued = false
 		deliveryGeneration = 0
 		delivering = false
 	}
@@ -403,9 +410,10 @@ export function endBatchDeferringFlush(): void {
  * completed recompute. A bootstrap run that throws is isolated the same way. The exception is reported once
  * per synchronous turn however many subscriptions re-read it (see {@link reportTrackedReadException}).
  *
- * The effect is created inside a Runtime operation: its bootstrap read can evaluate Properties, and the
- * inspection completions it produces must be delivered after the effect's first run has finished, not inside
- * it, where alien-signals would not run the effect again for a write a listener makes (issue #198).
+ * A caller whose `read()` can evaluate Properties (a Property's `subscribe()`) calls this inside a Runtime
+ * operation, so that the inspection completions the bootstrap run produces are delivered after the effect's
+ * first run has finished, not inside it, where alien-signals would not run the effect again for a write a
+ * listener makes (issue #198). The other subscriptions only read signals, and need no operation.
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
@@ -414,7 +422,7 @@ export function createTrackedSubscription<Value>(
 ): () => void {
 	let isBootstrap = true
 
-	const rawDispose = runRuntimeOperation(effect, () => {
+	const rawDispose = effect(() => {
 		let value: Value
 		try {
 			value = read()
