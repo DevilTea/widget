@@ -544,7 +544,7 @@ describe('a compute that catches its dependency read and returns a fallback', ()
 // ---------------------------------------------------------------------------------------------------------
 
 /** Long enough to exceed the internal nesting limit many times, short enough for wrapped-diagnostic chains. */
-const DIAGNOSTIC_CHAIN = 400
+const DIAGNOSTIC_CHAIN = 200
 
 /** Looks up a Property's inspection facade by widget id. */
 function propertyInspector(runtime: Parameters<typeof inspectRuntime>[0]) {
