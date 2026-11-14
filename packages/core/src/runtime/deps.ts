@@ -261,13 +261,17 @@ function materializeResolvedLeaf(leaf: CompiledDependency & { status: 'resolved'
 		case 'property-get': {
 			// Resolved on the first call (see `resolveEntry`), then reused.
 			let target: ReturnType<PrimitiveRegistryEntry['properties']['get']>
+			// A Property's dependency read is nested in that Property's evaluation; a Method's starts a new
+			// evaluation segment (see `segment` in `./property`), so the abandonment of a deep evaluation never
+			// travels through a Method.
+			const fromProperty = params.consumer === 'property'
 			return () => {
 				assertCallableOpen(params)
 				target ??= resolveEntry(params, leaf.targetNodeId).properties.get(operation.name)
 				if (target === undefined)
 					throw new Error(`widget-core: internal error — resolved property-get target "${operation.name}" is missing.`)
 
-				const targetResult = target.internal.getResult()
+				const targetResult = fromProperty ? target.internal.readFromProperty() : target.internal.getResult()
 				if (!targetResult.ok) {
 					const wrapped = wrapTargetFailure(params, reference, targetResult.failure.diagnostics, related, leafId)
 					return { ok: false, failure: { diagnostics: wrapped } }

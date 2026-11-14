@@ -14,6 +14,7 @@ Edit [`request.json`](./request.json):
 | `filters` | scenario ids or prefixes (see `pnpm bench --list`); empty = everything |
 | `modes` | `normal`, `jitless`, `alloc`; default `["normal", "jitless"]` |
 | `sizes` | widget counts; empty = the scenarios' own sizes |
+| `stackSizes` | QuickJS stack sizes in KB (integers from 64 to 1 048 576, at most 12); empty (the default) = a normal run. A non-empty list switches the whole run to the [stack-size sweep](#stack-size-sweep) |
 | `rounds` | measurements per ref, 1 to 20; default 3 |
 | `quickjs` | also run the QuickJS suite (`benchmarks/quickjs`, Linux x86_64 binary) and, next to it, the same bundle under `node --jitless` as a calibration |
 | `quick` | few samples, only to test the workflow itself |
@@ -42,6 +43,28 @@ raw sample (`r<round>-<ref>.json`) and every log are in the artifact `benchmark-
 
 `--jitless` rows are the most reproducible and matter most for the interpreter-only embedding. Normal-mode rows of
 sub-microsecond operations can differ between processes by more than the spread shows; use more rounds.
+
+## Stack-size sweep
+
+With a non-empty `stackSizes` (a request field, or the `stackSizes` input of `gh workflow run benchmark.yml -f
+refs=... -f stackSizes=256,512,1024,2048,4096`; it implies `quickjs`) the job does **not** measure time. It runs only
+the QuickJS stack probes (`benchmarks/quickjs/run.mjs --probes-only true`; see
+[`../quickjs/README.md`](../quickjs/README.md#stack-probes)) on the real binary, once per ref and per stack size, plus
+once without `--stack-size` (the engine's default). `filters`, `modes`, `sizes`, `rounds` and `quick` are ignored, there
+is no harness run, no calibration under Node and no comparison between refs: the probes are deterministic bisections, so
+the sweep has no rounds, and the refs only serve as separate tables.
+
+The job summary has one table per ref: rows are the engine's plain recursion depth (a calibration without any Widget
+code) followed by shape and phase, columns are the engine default and each stack size. A cell is the largest length
+that still works, "at least N" when the probe still worked at the cap of its search (N is then a lower bound, not a
+limit) and "< N" when it failed already at the first length tried. If the calibration row does not grow in proportion
+to the stack size, the engine did not read `--stack-size` as KB and the other rows mean nothing. The artifact has the
+complete results of each cell (`s<ref>-<stack>.json`, every attempt included).
+
+Cost: each cell is a bisection of up to about 17 fresh processes per shape and phase (12 combinations), so a cell is
+a few hundred engine starts. This has only been timed under Node (about 17 s for the default stack; larger stacks take
+longer because more attempts reach the cap); the real interpreter will be slower. Keep `refs` and `stackSizes` short.
+The default request has no `stackSizes`, so it behaves as before.
 
 ## Why numbers from different jobs must not be compared
 

@@ -723,3 +723,44 @@ describe('evaluation cycles across Widgets', () => {
 			.toEqual([['a', 'b'], ['c', 'b'], ['c', 'a']])
 	})
 })
+
+// -------------------------------------------------------------------------------------------------
+// Dependency chains far longer than the engine's call stack
+// -------------------------------------------------------------------------------------------------
+
+describe('compiling very long dependency chains', () => {
+	// Well above the depth at which a recursive analysis overflows the stack in Node (a few thousand)
+	// and on QuickJS's default stack (under a thousand). These tests only compile, they never read.
+	const chainLength = 20_000
+	const ring = (id: string, next: string | null) => ({ id, type: 'ring', config: { next } })
+
+	it('compiles a valid Blueprint whose Properties form one dependency chain of 20 000 links without throwing', () => {
+		const ringSystem = createWidgetSystem({ plugins: [ringPlugin, chainHolderPlugin] })
+		const items = Array.from({ length: chainLength }, (_, index) => ring(`n${index}`, index + 1 < chainLength ? `n${index + 1}` : null))
+
+		const blueprint = ringSystem.createBlueprint({ id: 'root', type: 'chain-holder', slots: { items } })
+
+		expectValid(blueprint)
+	})
+
+	it('reports the evaluation cycle at the end of a 20 000-link chain without throwing, and only for the cycle members', () => {
+		const ringSystem = createWidgetSystem({ plugins: [ringPlugin, chainHolderPlugin] })
+		const items = [
+			...Array.from({ length: chainLength }, (_, index) => ring(`n${index}`, index + 1 < chainLength ? `n${index + 1}` : 'x')),
+			ring('x', 'y'),
+			ring('y', 'x'),
+		]
+
+		const blueprint = ringSystem.createBlueprint({ id: 'root', type: 'chain-holder', slots: { items } })
+
+		const cycles = dependencyDiagnosticsOf(expectInvalid(blueprint))
+		expect(cycles.map(diagnostic => diagnostic.code))
+			.toEqual(['property-evaluation-cycle', 'property-evaluation-cycle'])
+		expect(cycles.map((diagnostic) => {
+			if (diagnostic.location.type !== 'property')
+				throw new Error('test fixture: expected a property location')
+			return diagnostic.location.node.id
+		}))
+			.toEqual(['x', 'y'])
+	})
+})

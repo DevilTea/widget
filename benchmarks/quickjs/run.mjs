@@ -2,6 +2,7 @@
  * node benchmarks/quickjs/run.mjs --packages-root <checkout> --qjs <qjs binary | node | node-jitless> --json <out.json>
  *                                 [--sizes 100,1000] [--samples 15] [--stack-probe true|false]
  *                                 [--stack-size <KB>] [--workloads a,b] [--max-seconds 60] [--bundle-out file]
+ *                                 [--probes-only true|false] [--probe-phases a,b]
  *
  * Bundles ONE self-contained script (ES module, no imports at run time) from `<checkout>/packages/core/dist/index.mjs`
  * (+ its `alien-signals`, resolved from that checkout), `benchmarks/lib/gen.mjs` and the in-engine code in this
@@ -9,14 +10,20 @@
  * one group's heap never affects the next, and parses the one `@@QJSBENCH@@ {json}` line each prints.
  *
  * Stack probes: for each shape (a chain of dependent Properties; a survey whose question k's visibility reads
- * question k+1's value) and phase (compile; cold read of the head Property) the largest length that works is
- * found by doubling, then bisection. Every attempt is a fresh process: after a stack overflow QuickJS itself keeps
+ * question k+1's value) and phase (see probe-defs.mjs: compile; cold read of the head Property; and the teardown
+ * steps warm re-read, unsubscribe, re-read after unsubscribe, dispose with a subscriber; and re-read after writing
+ * every State) the largest length that
+ * works is found by doubling, then bisection. A probe that still works at the cap of the search reports "at least
+ * <cap>" (`ceiling: true` in the JSON), never a number that looks like a limit. `--probes-only true` skips every
+ * timing workload (the stack-size sweep of the CI driver uses it); `--probe-phases` restricts the phases.
+ * Every attempt is a fresh process: after a stack overflow QuickJS itself keeps
  * running, but an attempt that crashes or runs away must not take the next one with it, and a fresh process also
  * starts every attempt from the same shallow stack and an empty heap. A crash or a timeout counts as a failure
  * of that length and is recorded as such.
  *
  * `--qjs node` / `--qjs node-jitless` run the very same bundle under Node (calibration, and how this is tested
- * without a QuickJS binary). `--stack-size` passes the engine's own stack limit (KB) to `qjs` / `node`.
+ * without a QuickJS binary). `--stack-size` passes the engine's own stack limit (KB) to `qjs` / `node`; `qjs` gets
+ * it as `<KB>k`, which is kibibytes whether the option reads bytes with unit suffixes or a plain number of KB.
  */
 
 import { Buffer } from 'node:buffer'
@@ -27,17 +34,12 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { PROBE_PHASE_NAMES, PROBE_PHASES, PROBE_SHAPES } from './probe-defs.mjs'
 
 const MARKER = '@@QJSBENCH@@ '
 const here = fileURLToPath(new URL('./', import.meta.url))
 const harnessRoot = resolve(here, '../../')
 const WORKLOAD_NAMES = ['compile', 'createRuntime', 'embedded.create-per-input', 'embedded.reuse-resetState', 'resetState', 'snapshotState']
-
-const PROBE_SHAPES = [
-	{ shape: 'chain', unit: 'properties', start: 100, ceiling: 65536 },
-	{ shape: 'survey', unit: 'widgets', start: 50, ceiling: 32768 },
-]
-const PROBE_PHASES = ['compile', 'evaluate']
 
 function parseArgs(argv) {
 	const args = {
@@ -48,6 +50,8 @@ function parseArgs(argv) {
 		samples: 15,
 		stackProbe: true,
 		stackSize: null,
+		probesOnly: false,
+		probePhases: PROBE_PHASE_NAMES,
 		workloads: WORKLOAD_NAMES,
 		maxSeconds: 60,
 		probeTimeoutSeconds: 120,
@@ -86,6 +90,16 @@ function parseArgs(argv) {
 		else if (arg === '--stack-size') {
 			args.stackSize = Number(value(++i, arg))
 		}
+		else if (arg === '--probes-only') {
+			const flag = value(++i, arg)
+			if (flag !== 'true' && flag !== 'false')
+				throw new Error('--probes-only takes true or false')
+			args.probesOnly = flag === 'true'
+		}
+		else if (arg === '--probe-phases') {
+			args.probePhases = value(++i, arg)
+				.split(',')
+		}
 		else if (arg === '--workloads') {
 			args.workloads = value(++i, arg)
 				.split(',')
@@ -111,6 +125,13 @@ function parseArgs(argv) {
 		throw new Error('--sizes takes integers of at least 10')
 	if (!Number.isInteger(args.samples) || args.samples < 5)
 		throw new Error('--samples takes an integer of at least 5')
+	if (args.stackSize !== null && (!Number.isInteger(args.stackSize) || args.stackSize < 1))
+		throw new Error('--stack-size takes a positive integer (KB)')
+	const unknownPhases = args.probePhases.filter(name => !PROBE_PHASE_NAMES.includes(name))
+	if (unknownPhases.length > 0 || args.probePhases.length === 0)
+		throw new Error(`unknown probe phase ${unknownPhases.join(', ') || '(none given)'} (known: ${PROBE_PHASE_NAMES.join(', ')})`)
+	if (args.probesOnly)
+		args.stackProbe = true
 	const unknown = args.workloads.filter(name => !WORKLOAD_NAMES.includes(name))
 	if (unknown.length > 0)
 		throw new Error(`unknown workload ${unknown.join(', ')} (known: ${WORKLOAD_NAMES.join(', ')})`)
@@ -219,7 +240,7 @@ function engineCommand(args, file) {
 			flags.push(`--stack-size=${args.stackSize}`)
 		return { command: process.execPath, argv: [...flags, file] }
 	}
-	const flags = args.stackSize === null ? [] : ['--stack-size', String(args.stackSize)]
+	const flags = args.stackSize === null ? [] : ['--stack-size', `${args.stackSize}k`]
 	return { command: resolve(args.qjs), argv: [...flags, '-m', file] }
 }
 
@@ -290,7 +311,7 @@ function processError(failure) {
 function runProbes(args, workdir, code, results) {
 	const probes = []
 	for (const { shape, unit, start, ceiling } of PROBE_SHAPES) {
-		for (const phase of PROBE_PHASES) {
+		for (const { phase } of PROBE_PHASES.filter(item => args.probePhases.includes(item.phase))) {
 			const attempts = []
 			const tryLength = (length) => {
 				const run = runBundle(args, workdir, code, { kind: 'probe', shape, phase, length }, `probe-${shape}-${phase}-${length}`, args.probeTimeoutSeconds)
@@ -327,10 +348,14 @@ function runProbes(args, workdir, code, results) {
 					high = mid
 			}
 			const firstFail = high === null ? undefined : attempts.find(a => a.length === high && !a.ok)
+			process.stderr.write(`  => ${shape}/${phase}: ${high === null ? `at least ${low} ${unit} (still works at the cap of the search)` : low === 0 ? `fails already at ${start} ${unit}` : `largest ${low} ${unit}`}\n`)
 			probes.push({
 				shape,
 				phase,
 				unit,
+				start,
+				cap: ceiling,
+				// `maxOk` is a limit only when `ceiling` is false; when it is true the probe still worked at `maxOk` (= the cap): "at least".
 				maxOk: low,
 				firstFail: firstFail === undefined ? null : { length: firstFail.length, stage: firstFail.stage, error: firstFail.error },
 				ceiling: high === null,
@@ -363,7 +388,7 @@ async function main() {
 		git: gitInfo(args.packagesRoot),
 		harnessGit: gitInfo(harnessRoot),
 		bundle: { bytes: Buffer.byteLength(code), esbuild: esbuildVersion, ...dependencies },
-		args: { sizes: args.sizes, samples: args.samples, stackProbe: args.stackProbe, stackSize: args.stackSize, workloads: args.workloads },
+		args: { sizes: args.sizes, samples: args.samples, stackProbe: args.stackProbe, stackSize: args.stackSize, probesOnly: args.probesOnly, probePhases: args.probePhases, workloads: args.workloads },
 		startedAt,
 		finishedAt: null,
 		rows: [],
@@ -382,9 +407,10 @@ async function main() {
 			throw new Error(`the engine cannot run the bundle: ${info.failure.kind}: ${info.failure.message}`)
 		results.engine.clock = info.payload.clock
 		results.engine.fineClock = info.payload.fineClock
+		results.engine.plainRecursionDepth = info.payload.plainRecursionDepth
 		if (info.payload.userAgent !== undefined)
 			results.engine.userAgent = info.payload.userAgent
-		for (const size of args.sizes) {
+		for (const size of args.probesOnly ? [] : args.sizes) {
 			for (const workload of args.workloads) {
 				process.stderr.write(`${workload} @ ${size}\n`)
 				const run = runBundle(args, workdir, code, { kind: 'timing', workload, size, samples: args.samples, maxSeconds: args.maxSeconds }, `${workload}-${size}`, 900)

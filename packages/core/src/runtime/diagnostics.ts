@@ -48,7 +48,17 @@ function freezeDependency(dependency: unknown): void {
 	Object.freeze(dependency)
 }
 
-/** Freeze the framework-owned diagnostic record without executing or freezing arbitrary payload objects. */
+/**
+ * Freeze the framework-owned diagnostic record without executing or freezing arbitrary payload objects.
+ *
+ * A diagnostic's `cause` is not walked again. Only a wrapped dependency failure carries one, and its cause
+ * is always a diagnostic of the dependency's own finalized snapshot (`wrapTargetFailure` in `./deps`), which
+ * was deep-frozen when that snapshot was created: every State, Property and Method snapshot passes through
+ * {@link freezeDiagnosticSnapshot}. Diagnostic records are only ever created and frozen here, and a record
+ * is frozen after its parts, so a frozen cause is a deep-frozen cause. Re-walking it on every wrap cost
+ * O(depth) per dependent and recursed once per level of a failing dependency chain (quadratic work, and a
+ * stack overflow for a long chain).
+ */
 export function deepFreezeDiagnostic<T>(diagnostic: T): T {
 	if (typeof diagnostic !== 'object' || diagnostic === null)
 		return diagnostic
@@ -58,9 +68,7 @@ export function deepFreezeDiagnostic<T>(diagnostic: T): T {
 	freezeArray(record.path)
 	freezeRelated(record.related)
 	freezeDependency(record.dependency)
-	if (record.cause !== undefined)
-		deepFreezeDiagnostic(record.cause)
-	Object.freeze(diagnostic)
+	Object.freeze(record)
 	return diagnostic
 }
 

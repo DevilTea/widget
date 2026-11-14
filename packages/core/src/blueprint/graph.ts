@@ -120,52 +120,69 @@ function findCyclicComponents(memberCount: number, offsets: Int32Array, targets:
 	const visitOrder = new Int32Array(memberCount)
 	const lowlink = new Int32Array(memberCount)
 	const onStack = new Uint8Array(memberCount)
+	const hasSelfLoop = new Uint8Array(memberCount)
+	// Tarjan's component stack, and the explicit replacement for the call stack of the textbook
+	// recursion: a dependency chain as long as the Blueprint is large must not exhaust the engine's
+	// stack. A member is on `callStack` while it is being expanded; `cursor[id]` is the next edge of
+	// `id` to examine.
 	const stack = new Int32Array(memberCount)
+	const callStack = new Int32Array(memberCount)
+	const cursor = new Int32Array(memberCount)
 	let stackSize = 0
 	let visited = 0
 	const components: number[][] = []
 
-	function strongConnect(id: number): void {
-		const order = ++visited
-		visitOrder[id] = order
-		let low = order
-		stack[stackSize++] = id
-		onStack[id] = 1
+	for (let root = 0; root < memberCount; root++) {
+		if (visitOrder[root] !== 0 || offsets[root + 1] === offsets[root])
+			continue
 
-		const end = offsets[id + 1]!
-		let hasSelfLoop = false
-		for (let edge = offsets[id]!; edge < end; edge++) {
-			const next = targets[edge]!
-			if (next === id)
-				hasSelfLoop = true
-			if (visitOrder[next] === 0) {
-				if (offsets[next + 1] === offsets[next])
-					continue
-				strongConnect(next)
-				low = Math.min(low, lowlink[next]!)
+		let depth = 0
+		callStack[depth++] = root
+		visitOrder[root] = lowlink[root] = ++visited
+		cursor[root] = offsets[root]!
+		stack[stackSize++] = root
+		onStack[root] = 1
+
+		while (depth > 0) {
+			const id = callStack[depth - 1]!
+			if (cursor[id]! < offsets[id + 1]!) {
+				const next = targets[cursor[id]!++]!
+				if (next === id)
+					hasSelfLoop[id] = 1
+				if (visitOrder[next] === 0) {
+					if (offsets[next + 1] === offsets[next])
+						continue
+					// Enter `next`; `id` resumes at its following edge once `next` completes.
+					callStack[depth++] = next
+					visitOrder[next] = lowlink[next] = ++visited
+					cursor[next] = offsets[next]!
+					stack[stackSize++] = next
+					onStack[next] = 1
+				}
+				else if (onStack[next] === 1) {
+					lowlink[id] = Math.min(lowlink[id]!, visitOrder[next]!)
+				}
+				continue
 			}
-			else if (onStack[next] === 1) {
-				low = Math.min(low, visitOrder[next]!)
+
+			// All edges of `id` examined: complete it.
+			depth--
+			if (lowlink[id] === visitOrder[id]) {
+				const component: number[] = []
+				let member: number
+				do {
+					member = stack[--stackSize]!
+					onStack[member] = 0
+					component.push(member)
+				} while (member !== id)
+				if (component.length > 1 || hasSelfLoop[id] === 1)
+					components.push(component)
+			}
+			if (depth > 0) {
+				const parent = callStack[depth - 1]!
+				lowlink[parent] = Math.min(lowlink[parent]!, lowlink[id]!)
 			}
 		}
-		lowlink[id] = low
-
-		if (low === order) {
-			const component: number[] = []
-			let member: number
-			do {
-				member = stack[--stackSize]!
-				onStack[member] = 0
-				component.push(member)
-			} while (member !== id)
-			if (component.length > 1 || hasSelfLoop)
-				components.push(component)
-		}
-	}
-
-	for (let id = 0; id < memberCount; id++) {
-		if (visitOrder[id] === 0 && offsets[id + 1] !== offsets[id])
-			strongConnect(id)
 	}
 
 	return components

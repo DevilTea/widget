@@ -1636,16 +1636,15 @@ live handle. The exception stays the Property's cached outcome until a
 dependency changes, so reads in between rethrow it without running `compute`
 again.
 
-A first read of a long chain of Properties that each depend on the previous one
-is evaluated recursively. On the order of a thousand chained Properties
-exhaust the default stack (about 1,250 to 1,400 in measured Node 24 runs; the
-figure depends on the engine's stack size and on how much stack each `compute`
-uses), surfacing as a `RangeError`. A stack overflow is the one exception that
-is not kept as a cached outcome: it reflects how deep the read was, not the
-Property's inputs, so a later read evaluates again. A chain that is too long for
-one read can therefore be warmed bottom-up, reading every few hundred
-Properties from the start of the chain before the end. Keep dependency chains
-well below the limit where you can.
+A long chain of Properties that each depend on the previous one is not bounded
+by the engine stack when it is read: Core limits how deeply Property
+evaluations nest and completes the rest of the chain in a loop, so within one
+read a `compute` may run more than once. See
+[Call-stack depth](#call-stack-depth) for the cost and for the limits that
+remain. An engine stack overflow can still happen, for example when the host
+itself calls from a deep stack. It is the one exception that is not kept as a
+cached outcome: it reflects how deep the read was, not the Property's inputs, so
+a later read evaluates again.
 
 ### Runtime Methods
 
@@ -3187,6 +3186,9 @@ IIFE). The current implementation needs:
   QuickJS); otherwise these errors never surface. Without a global
   `queueMicrotask`, the rethrow itself fails with a `ReferenceError` at the
   point of the failure.
+- **Enough call stack for what you subscribe to.** Compiling and reading do not
+  depend on the stack size, but tearing down a long subscribed chain does. See
+  [Call-stack depth](#call-stack-depth).
 
 Core does not use timers, `console`, `process`, DOM globals, or Promises at
 runtime. These are requirements of the current implementation, not
@@ -3198,3 +3200,82 @@ The current canonical architecture authority is
 Its Core composition architecture topic contains the migrated historical
 `diagnostic #10` decisions plus current accepted amendments; those current
 Discussion #12 decisions are authoritative over this guide.
+
+#### Call-stack depth
+
+Compiling a Blueprint and reading Properties do not depend on the engine's
+call-stack size, however long a chain of Properties that read each other is.
+The cycle analysis in `createBlueprint` is iterative. A read of a Property
+(`get()` or a subscription) bounds how deeply Property evaluations nest with an
+internal limit and completes the rest of a long chain in a loop. This holds when
+the chain was never evaluated, when writes invalidated it, and after
+`resetState()`. Earlier versions recursed once per link: with QuickJS's default
+1 MiB stack, compiling failed above about 850 chained Properties and a first
+read above about 128. The limit is internal: it is not API, not configurable and
+may change, and Core stays synchronous.
+
+On QuickJS (quickjs-ng 0.18.0), compiling, the first read of the head of a
+chain, a read after writing the tail and a read after writing every State all
+worked at every length tried, up to 65,536 chained Properties and 32,768 survey
+questions (the shape is described under the table below), at stack sizes of
+256 KB, 512 KB, 1 MiB (the engine default) and 4 MiB. 256 KB is the smallest
+size verified, not a minimum; smaller sizes were not measured.
+
+The one effect a plugin author can see is cost: within one read, a Property's
+`compute` may run more than once, roughly twice per Property on a long chain. A
+Property that directly reads K dependencies that are each long chains may run up
+to about K times. `compute` must already be free of side effects, so this only
+matters for how much work it does.
+
+The stack still limits these cases:
+
+1. **Tearing down a long chain.** When the last subscriber of the head of a
+   long chain unsubscribes, when a Runtime with such a subscriber is disposed,
+   or when a Property stops reading a long chain it used to read (a conditional
+   dependency), `alien-signals` unlinks the chain recursively, one level per
+   link. This can throw the engine's `RangeError`, and Core cannot remove it
+   because it happens inside `alien-signals`. Largest lengths that worked on
+   QuickJS:
+
+   | QuickJS stack | Chain: unsubscribe from the head | Chain: dispose with a subscriber | Survey: unsubscribe | Survey: dispose with a subscriber |
+   | --- | ---: | ---: | ---: | ---: |
+   | 256 KB | 75 Properties | 74 | 37 questions | 37 |
+   | 512 KB | 154 | 153 | 77 | 76 |
+   | 1 MiB (default) | 312 | 309 | 156 | 154 |
+   | 4 MiB | 1,262 | 1,250 | 631 | 625 |
+
+   "Survey" is a document where each question's visibility reads the next
+   question's value. A host that only reads and never subscribes (create or
+   reuse a Runtime, write State, read Properties) is not affected.
+2. **Method recursion.** A Method that invokes Methods is ordinary recursion and
+   uses the engine stack, by design.
+3. **Chains that alternate between Properties and Methods.** The bound applies
+   to Properties reading Properties through declared dependencies. A chain
+   Property, Method, Property and so on, or a `compute` that calls another
+   Property's public `get()` instead of a declared dependency, starts a new
+   bounded segment at every hop, so it is still limited by the stack.
+4. **A host that is nearly out of stack.** If the host calls Core with almost no
+   stack left, the engine can still overflow, and Core lets its `RangeError`
+   through. Afterwards the Runtime's cached Property values may be out of date
+   until the next write reaches them.
+5. **Very long dependency cycles in an invalid document.** Compilation reports
+   every member of a cycle with a `property-evaluation-cycle` diagnostic whose
+   `related` list names the other members, so memory grows with the square of
+   the cycle length. In Node, a cycle of 4,000 members took about 1 s and 950 MB,
+   8,000 members about 5 s and 3.6 GB, and 30,000 exhausted the heap.
+
+The Inspector's projection of a very long chain of failing Properties (each
+failure wraps its dependency's failure as its `cause`) is also still bounded by
+the stack.
+
+Advice for hosts:
+
+- If you subscribe to long chains, size the engine stack for teardown using the
+  table. In `rquickjs` the stack size is set with `Runtime::set_max_stack_size`.
+  V8 allows longer chains, but its limit moves with JIT state, so do not rely on
+  a number there.
+- Treat a `RangeError` thrown by a Runtime call as fatal for that Runtime:
+  dispose it and create a new one from the Blueprint. A fresh Runtime is always
+  correct.
+- A host that compiles untrusted documents should bound the document size
+  (number of widgets) before compiling.
