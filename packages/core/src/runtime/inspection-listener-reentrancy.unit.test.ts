@@ -335,10 +335,11 @@ describe('a feedback loop', () => {
 		chain.link(0).state.n.set(100)
 		await new Promise<void>(resolve => setTimeout(resolve, 0))
 
+		// Bounded well below the depth at which an unbounded loop of nested calls overflows the engine stack.
 		expect(calls)
 			.toBeGreaterThan(1)
 		expect(calls)
-			.toBeLessThan(1_000)
+			.toBeLessThan(500)
 		expect(reported)
 			.toHaveLength(1)
 		expect(reported[0])
@@ -395,10 +396,11 @@ describe('a feedback loop', () => {
 		expect(chain.link(0).properties.total.get())
 			.toEqual({ ok: true, value: 1 })
 		await new Promise<void>(resolve => setTimeout(resolve, 0))
+		// Without the bound this loop recursed until the engine stack overflowed (about a thousand calls in Node).
 		expect(calls)
 			.toBeGreaterThan(1)
 		expect(calls)
-			.toBeLessThan(1_000)
+			.toBeLessThan(500)
 		expect(reported)
 			.toHaveLength(1)
 		expect(reported[0])
