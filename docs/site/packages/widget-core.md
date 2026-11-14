@@ -800,7 +800,9 @@ createWidgetPlugin('counter')
   properties cannot write state, directly or transitively. At runtime a
   Property can never write State either: a setter retained from a Method does
   not work while a Property is evaluating (see
-  [Callback context lifetime](#callback-context-lifetime)).
+  [Callback context lifetime](#callback-context-lifetime)). A `compute` that
+  writes through a Runtime it holds by closure is not supported (see
+  [When Property inspection listeners run](#when-property-inspection-listeners-run)).
 - `valueContract` may be attached to a Property; see
   [Member declaration facts](#member-declaration-facts-and-value-contracts).
 - A Property's completed result is typed exactly as declared (`T`, not
@@ -2344,7 +2346,9 @@ widgetInspection.getEvent('change')
   `{ status: 'completed', result }` on every naturally completed evaluation
   attempt (ok or semantic failure) — two equal completions still notify
   twice, and a callback throw or thenable violation never replaces the latest
-  snapshot.
+  snapshot. The snapshot is current as soon as the evaluation completes; its
+  listeners are notified once the Runtime call in progress has finished (see
+  [When Property inspection listeners run](#when-property-inspection-listeners-run)).
 - Reading or subscribing through inspection never activates a Property, never
   executes a Method, and never creates a tracked `alien-signals` dependency —
   even a `getSnapshot()` call made from inside an external `effect`/`computed`
@@ -2358,6 +2362,80 @@ widgetInspection.getEvent('change')
   emission) and their unsubscribe functions stay safe/idempotent. Inspection
   retains no history, method calls, timestamps, or profiling data beyond the
   already-documented current/last facts.
+
+#### When Property inspection listeners run
+
+A completed evaluation becomes the Property's inspection fact at once: from
+then on `getSnapshot()` returns it. Its listeners are notified later, when the
+outermost Runtime call in progress (the `get()`, `subscribe()`, `set()`, Method
+call or `resetState()` that caused the evaluation) has finished its work, and
+before that call returns. A listener therefore never runs while Core is still
+evaluating Properties or notifying subscribers. It may read Properties, write
+State or call Methods: what it reads is current, and what it writes is
+propagated like any other write. A subscription created by `subscribe()`
+already exists when those listeners run, so it is notified of what they write.
+
+- The completions of one call are delivered in the order they happened, each
+  with its own snapshot. When a Property completes twice in one call (a Method
+  reads it, writes a State it depends on and reads it again), its listeners are
+  called twice, and during the first call `getSnapshot()` already returns the
+  second completion.
+- Within one call, Property inspection listeners run after that call's State
+  and Property subscribers, diagnostics listeners and State inspection
+  listeners. A State inspection listener still runs when the write happens.
+- A listener unsubscribed before its turn is not called. A listener subscribed
+  after a completion is not called for it, even when that completion has not
+  been delivered yet.
+- If the Runtime is disposed later in the same call (for example by a
+  subscriber), the completions not delivered yet are dropped, because
+  subscriptions are detached without a final call. `getSnapshot()` still
+  returns them.
+- What a listener does can complete more Properties. Those completions are
+  delivered in the same call, after the ones already waiting. A listener that
+  keeps changing what it observes (on every completion it writes a State its
+  own Property depends on) is stopped after an internal number of rounds: every
+  notification of that call not delivered yet is dropped, including those of
+  other listeners and other Properties, and a `RangeError` is reported the way
+  an exception thrown by a listener is (see
+  [Host requirements](#host-requirements)). Facts (`getSnapshot()`), State
+  values and subscribers stay consistent, and later calls deliver as usual.
+
+**Not supported.** Some code runs while a Property is being evaluated, and Core
+cannot postpone it: a `compute`, a dependency `.validate()` refinement, the
+`validateArgs` of a Method a Property depends on, and the Event listeners and
+Event inspection listeners of an emit made by such a Method. When this code
+uses a Runtime it holds by closure instead of its declared dependencies, the
+outcome is not guaranteed if it:
+
+- reads, with `get()` or `subscribe()`, a Property whose evaluation is in
+  progress or that depends on one (a cycle the Blueprint cannot see). The read
+  can return the previous value, which can then stay cached until a write
+  reaches it. On a first evaluation the read can recurse until the engine's
+  stack overflows;
+- writes State, calls a Method or calls `resetState()`. Other values can stay
+  out of date until a later write reaches them, and subscribers can miss a
+  notification;
+- calls `dispose()`. When the evaluation is one that a write's flush started
+  for a subscription, the write in progress can throw an internal
+  `TypeError` instead of `WidgetSystemRuntimeDisposedError`.
+
+A `compute` that reads, the same way, a Property that does not depend on the
+one being evaluated (for example in another Runtime) gets that Property's
+current value, but the read becomes a dependency the Blueprint does not show:
+whenever that Property changes, a subscribed reading Property is evaluated again
+and its subscribers are notified, even with an equal value (an unsubscribed one is
+evaluated on its next read); and once that other Runtime
+is disposed, the `compute` throws `WidgetSystemRuntimeDisposedError`, which the
+reading Property's `get()` rethrows (its subscriptions skip that recompute, see
+[Runtime Properties](#runtime-properties)). Declare the dependency instead when
+you can, and do the rest from a subscriber, from an inspection listener or
+later, for example in a microtask.
+
+Also not supported: wrapping Runtime calls in your own `alien-signals` batch
+(`startBatch()` and `endBatch()` of the same `alien-signals` copy Core imports).
+The flush then happens after every Runtime call has returned, so subscribers and
+inspection listeners can again run while Core is notifying, and a listener that
+writes can make another subscriber miss its last value.
 
 #### Event inspection: `getEvent(name)`
 

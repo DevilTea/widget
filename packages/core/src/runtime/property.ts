@@ -47,7 +47,7 @@ import type { ActiveDiagnosticSink, CallbackOwner, RuntimeContext } from './cont
 import type { PrimitiveRegistryEntry } from './deps'
 import { computed, getActiveSub, setActiveSub, signal } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
-import { createTrackedSubscription, invokeListenerIsolated, isEngineStackOverflow, runRuntimeOperation, writeDeferringFlush } from './adapter'
+import { createTrackedSubscription, deliverWhenIdle, invokeListenerIsolated, isEngineStackOverflow, runRuntimeOperation, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { callbackScope } from './context'
 import { materializeDependencyTree } from './deps'
@@ -240,7 +240,8 @@ let drives = 0
 /**
  * How many times one drive may find a Property it already completed abandoned again. Without a write
  * during the drive this never happens (completed outcomes stay cached and the dependency graph is acyclic);
- * a listener that keeps invalidating what the drive completes would otherwise make it spin.
+ * code that keeps invalidating what the drive completes (a `compute` writing by closure, say) would otherwise
+ * make it spin.
  */
 const MAX_DRIVE_STALLS = 256
 
@@ -298,10 +299,11 @@ function driveAbandonedRead(root: EvaluationNode): PropertyOutcome {
 }
 
 /**
- * One retained-fact channel for the readonly `@deviltea/widget-core/inspection` subpath. Published only
+ * One retained-fact channel for the readonly `@deviltea/widget-core/inspection` subpath. Committed only
  * after `resultComputed()` has returned — see `getResultWithInspectionPublish` below for why publishing
  * from inside the computed getter body is wrong — and never by wrapping `getResult()` in a second
- * alien-signals effect.
+ * alien-signals effect. Listeners are notified once the outermost Runtime operation has left (see
+ * `publishInspectionCompletion`).
  */
 export interface PropertyInspectionChannel {
 	getSnapshot: () => PropertyInspectionSnapshot
@@ -360,7 +362,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	// Plain lazy-allocated registration list (not a `Set` keyed by the listener function itself — two
 	// independent `subscribe(sameFn)` calls must stay two independent registrations, exactly like the
 	// alien-signals-effect-backed `createTrackedSubscription` never dedupes by listener identity either).
-	interface ListenerEntry { readonly listener: (snapshot: PropertyInspectionSnapshot) => void }
+	interface ListenerEntry { readonly listener: (snapshot: PropertyInspectionSnapshot) => void, active: boolean }
 	let inspectionListeners: ListenerEntry[] | null = null
 	let lastPublishedResult: ExecutionResult<unknown, RuntimePropertyDiagnostic> | null = null
 
@@ -368,17 +370,30 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		return inspectionSnapshot ??= Object.freeze({ status: 'completed', result: lastPublishedResult! })
 	}
 
+	/**
+	 * Commits the completion as the retained fact at once (`getSnapshot()` returns it from now on) and delivers
+	 * it to the listeners registered now once no Runtime operation is in progress (see `deliverWhenIdle`), so
+	 * that a listener never runs while alien-signals is evaluating, checking or flushing (issue #198). Each
+	 * completion is delivered with its own snapshot, in completion order. A listener unsubscribed before the
+	 * delivery is skipped, one subscribed after the completion does not receive it, and nothing is delivered
+	 * once the Runtime is disposed (its subscriptions are detached without a final call).
+	 */
 	function publishInspectionCompletion(): void {
 		inspectionSnapshot = null
 		if (inspectionListeners === null || inspectionListeners.length === 0)
 			return
 		const snapshot = readInspectionSnapshot()
-		// Iterate a stable snapshot taken at publication start: a listener that itself calls `subscribe()`
-		// during this loop must not have its new registration visited by *this* publication (future-changes
-		// -only / no-immediate-emission), which a live-array/live-Set iteration could otherwise do.
+		// The audience is fixed at completion: a listener that itself calls `subscribe()` must not have its new
+		// registration visited by *this* completion (future-changes-only / no-immediate-emission).
 		const listenersSnapshot = inspectionListeners.slice()
-		for (const entry of listenersSnapshot)
-			invokeListenerIsolated(entry.listener, snapshot)
+		deliverWhenIdle(() => {
+			if (context.isDisposed())
+				return
+			for (const entry of listenersSnapshot) {
+				if (entry.active)
+					invokeListenerIsolated(entry.listener, snapshot)
+			}
+		})
 	}
 
 	// Recovery bookkeeping for the outcomes that are not kept (see `getResultWithInspectionPublish`): how many
@@ -611,11 +626,13 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	/**
 	 * Replaces the result computed by a fresh one that has not evaluated yet. Used for a computed that has no
 	 * outcome at all (see `getResultWithInspectionPublish`), and for one whose cached outcome is abandoned while
-	 * an evaluation of it is still in progress further up the stack: something run during that evaluation (a
-	 * listener) reads this Property again. Making that computed evaluate again would re-enter an evaluation
-	 * alien-signals has not finished; the fresh one evaluates on its own instead, exactly as a re-entrant read
-	 * of a Property whose first evaluation is in progress always did. The replaced computed finishes its
-	 * evaluation in progress for its own readers and never evaluates again (see {@link evaluate}).
+	 * an evaluation of it is still in progress further up the stack: code run during that evaluation reads this
+	 * Property again through the public surface (a `compute`, refinement or `validateArgs` reading by closure, or
+	 * an Event listener of an emit made by a Method a Property depends on; not supported, but recovered here.
+	 * Inspection listeners no longer run there). Making that computed evaluate again would re-enter an
+	 * evaluation alien-signals has not finished; the fresh one evaluates on its own instead, exactly as a
+	 * re-entrant read of a Property whose first evaluation is in progress always did. The replaced computed
+	 * finishes its evaluation in progress for its own readers and never evaluates again (see {@link evaluate}).
 	 */
 	function replaceComputed(): void {
 		inProgress = 0
@@ -677,6 +694,10 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 * running subscriber is linked to the outcome the read completed, never to an abandoned one. The link read
 	 * evaluates nothing unless foreign code changed this Property after it completed; that evaluation is driven
 	 * like the first.
+	 *
+	 * A completed result not published yet is published here, still inside the boundary's Runtime operation, so
+	 * that its delivery is queued behind the completions this read produced and runs when the outermost
+	 * operation leaves (see `publishInspectionCompletion`), never from the caller's frame after it returned.
 	 */
 	function readAtBoundary(subscriber: ActiveSubscriber): PropertyOutcome {
 		// {@link attempt}, with its rare branches out of line: every warm read takes this path.
@@ -684,13 +705,21 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		let outcome = resultComputed() as PropertyOutcome | undefined
 		if (outcome === undefined || computeExceptionKey in outcome)
 			outcome = completeBoundaryOutcome(outcome, evaluationsBefore)
-		return subscriber === undefined ? outcome : linkSubscriber(subscriber, outcome)
+		if (subscriber !== undefined)
+			outcome = linkSubscriber(subscriber, outcome)
+		// A warm read returns the result already published: one identity comparison.
+		if (outcome !== lastPublishedResult && !(computeExceptionKey in outcome)) {
+			lastPublishedResult = outcome
+			publishInspectionCompletion()
+		}
+		return outcome
 	}
 
 	/**
 	 * Whether the current computed, whose cached outcome is abandoned, would not evaluate again when read,
 	 * although an abandoned computed is left dirty (see `keepAbandoned`): its evaluation is still in progress
-	 * further up the stack (a listener reads this Property again; alien-signals returns the cached outcome of a
+	 * further up the stack (code run by that evaluation reads this Property again, see {@link replaceComputed};
+	 * alien-signals returns the cached outcome of a
 	 * computed it is evaluating), or, only reachable after an engine stack overflow and not covered by a
 	 * deterministic test, an overflow inside alien-signals' own bookkeeping left it marked clean.
 	 */
@@ -763,7 +792,9 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 * The boundary read (see {@link segment}): starts a new segment, reads the computed result through the
 	 * exact same call every existing consumer already makes — completing it in the driver loop when its
 	 * evaluation was abandoned (see {@link driveAbandonedRead}) — then publishes the inspection fact only after
-	 * that call has returned.
+	 * that call has returned (in {@link readAtBoundary}, still inside this read's Runtime operation). Publishing
+	 * commits the fact; its listeners are notified once the outermost Runtime operation has left (see
+	 * `publishInspectionCompletion`): for a top-level read, when this read's own operation leaves.
 	 *
 	 * In pinned alien-signals@3.2.1 a computed's cache assignment happens as `c.value = c.getter(...)`:
 	 * the getter runs to completion *before* the assignment to `c.value` takes effect. Publishing from
@@ -812,10 +843,11 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		try {
 			// `runRuntimeOperation` only records that an evaluation may start here: when this read is the
 			// outermost such call, the diagnostic-snapshot propagations deferred during the evaluation (and
-			// during every attempt of the driver loop) are released as soon as the computed has committed —
-			// before the inspection publication below, exactly the order a direct in-evaluator write produced.
-			// A nested read (a dependent Property's evaluator, or an effect run inside a state write's flush)
-			// leaves the release to the outermost call instead.
+			// during every attempt of the driver loop) are released as soon as the computed has committed, and
+			// then the inspection completions the read produced, its own included (see `readAtBoundary`), are
+			// delivered — exactly the order a direct in-evaluator write produced. A nested read (a dependent
+			// Property's evaluator, or an effect run inside a state write's flush) leaves both to the outermost
+			// call instead.
 			result = runRuntimeOperation(readAtBoundary, subscriber)
 		}
 		finally {
@@ -827,11 +859,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		}
 		if (computeExceptionKey in result)
 			throw result[computeExceptionKey]
-		if (result !== lastPublishedResult) {
-			lastPublishedResult = result
-			publishInspectionCompletion()
-		}
-		return result
+		return result as ExecutionResult<unknown, RuntimePropertyDiagnostic>
 	}
 
 	/**
@@ -853,7 +881,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 			if (result !== undefined) {
 				if (computeExceptionKey in result && evaluations === evaluationsBefore && isEngineStackOverflow(result[computeExceptionKey]))
 					result = runRuntimeOperation(reevaluate)
-				// Replaced while it evaluated (a listener read this Property again, see `replaceComputed`): the
+				// Replaced while it evaluated (code it ran read this Property again, see `replaceComputed`): the
 				// reader links the fresh computed too, since the replaced one drops its dependency links.
 				else if (resultComputed !== read)
 					result = runRuntimeOperation(resultComputed) as PropertyOutcome
@@ -910,11 +938,12 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		inspection: {
 			getSnapshot: readInspectionSnapshot,
 			subscribe: (listener) => {
-				const entry: ListenerEntry = { listener }
+				const entry: ListenerEntry = { listener, active: true }
 				if (inspectionListeners === null)
 					inspectionListeners = []
 				inspectionListeners.push(entry)
 				return () => {
+					entry.active = false
 					if (inspectionListeners === null)
 						return
 					const index = inspectionListeners.indexOf(entry)
@@ -925,6 +954,15 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		},
 	}
 
+	/**
+	 * Creates a subscription to this Property's result. Called inside a Runtime operation (see `subscribe`): the
+	 * subscription's first read can evaluate Properties, and the inspection completions it produces must reach
+	 * their listeners after the subscription exists (see `createTrackedSubscription`).
+	 */
+	function subscribeWithinOperation(listener: (result: ExecutionResult<unknown, RuntimePropertyDiagnostic>) => void): () => void {
+		return createTrackedSubscription(context, internal.getResult, listener)
+	}
+
 	const publicProperty: RuntimeProperty<unknown> = {
 		get() {
 			context.assertActive()
@@ -932,7 +970,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		},
 		subscribe(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, internal.getResult, listener)
+			return runRuntimeOperation(subscribeWithinOperation, listener)
 		},
 		getDiagnostics() {
 			context.assertActive()

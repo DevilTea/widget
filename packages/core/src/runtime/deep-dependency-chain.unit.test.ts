@@ -781,13 +781,17 @@ describe('a compute exception deep in a long chain', () => {
 })
 
 describe('disposal while a long chain is being completed', () => {
-	it('by an inspection listener ends the read with the post-dispose error', () => {
+	// Inspection listeners are notified once the read has finished (issue #198), so an inspection listener can no
+	// longer dispose the Runtime in the middle of the read: the read completes and every later read throws.
+	it('by an inspection listener: the read completes first, every later read throws the post-dispose error', () => {
 		const { runtime, link } = createChain(LONG)
 		const deep = propertyInspector(runtime)('l100', 'total')
 		deep.subscribe(() => runtime.dispose())
 
-		expect(() => link(LONG - 1).properties.total.get())
-			.toThrow(WidgetSystemRuntimeDisposedError)
+		expect(link(LONG - 1).properties.total.get())
+			.toEqual({ ok: true, value: LONG })
+		expect(runtime.isDisposed)
+			.toBe(true)
 		expect(() => link(LONG - 1).properties.total.get())
 			.toThrow(WidgetSystemRuntimeDisposedError)
 	})

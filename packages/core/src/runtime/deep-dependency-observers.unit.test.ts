@@ -5,8 +5,8 @@
  * After a read whose evaluations were abandoned and completed again, nothing is left stale: reading any
  * Property afterwards, with no State write, runs no `compute`, notifies no Property, diagnostics or widget
  * subscriber, and publishes no further inspection completion; each Property publishes one completion per
- * result. Foreign code that reads a Property while such a read is in progress (a listener) gets its value
- * once, without re-entering the read in progress.
+ * result. A `compute` that reads, by closure, a Property while such a read is in progress (not a supported
+ * pattern, but Core recovers from it) gets its value once, without re-entering the read in progress.
  */
 
 import type { ExecutionResult } from '../index'
@@ -54,6 +54,8 @@ const env = {
 	computeCalls: [] as number[],
 	runtime: null as null | { getWidget: (id: string) => unknown },
 	onCompute: null as null | ((index: number) => void),
+	/** Called by `compute` right after it has read `prev` (not when that read threw). */
+	afterPrev: null as null | ((index: number) => void),
 }
 
 const nodePlugin = createWidgetPlugin('node')
@@ -115,6 +117,7 @@ const nodePlugin = createWidgetPlugin('node')
 			}
 			else {
 				sum += numberOf(deps.prev())
+				env.afterPrev?.(config.index)
 			}
 			for (const read of deps.extra)
 				sum += numberOf(read())
@@ -148,6 +151,7 @@ const system = createWidgetSystem({ plugins: [nodePlugin, listPlugin] })
 function createGraph(configs: readonly NodeConfig[]) {
 	env.computeCalls = []
 	env.onCompute = null
+	env.afterPrev = null
 	const blueprint = system.createBlueprint({ id: 'list', type: 'list', slots: { items: configs.map(config => ({ id: `n${config.index}`, type: 'node', config })) } })
 	if (blueprint.status !== 'valid')
 		throw new Error('expected a valid Blueprint')
@@ -391,69 +395,75 @@ describe('a deep read of a chain alien-signals tore down (its last subscriber un
 	})
 })
 
-describe('foreign code reading a Property while a deep read of it is in progress', () => {
+// A `compute` that reads, through a Runtime it holds by closure, a Property whose evaluation is in progress (or
+// that depends on one) is not a supported pattern (see the Core guide). Core still recovers from it in the cases
+// below, which used to be reached by inspection listeners; since those run once the outermost operation has
+// finished (issue #198), a `compute` drives the recovery code instead, and these tests pin it.
+describe('a compute reading by closure a Property while a deep read of it is in progress', () => {
 	it('gets its value once and the read in progress completes normally', () => {
 		const graph = createGraph(chain(100))
-		const inspection = inspectRuntime(graph.runtime)
-		const nodeId = inspection.blueprint.nodes.find(entry => entry.resolved && entry.node.id === 'n50')!.nodeId
 		const seen: unknown[] = []
-		let listenerCalls = 0
-		inspection.getWidget(nodeId)!.getProperty('out')!.subscribe(() => {
-			listenerCalls++
-			seen.push(graph.node(99).properties.out.get())
-		})
+		let armed = true
+		env.afterPrev = (index) => {
+			if (index === 51 && armed) {
+				armed = false
+				seen.push(graph.node(99).properties.out.get())
+			}
+		}
 
 		expect(graph.node(99).properties.out.get())
 			.toEqual({ ok: true, value: 100 })
-		expect(listenerCalls)
-			.toBe(1)
 		expect(seen)
 			.toEqual([{ ok: true, value: 100 }])
 		expect(reported)
 			.toEqual([])
-		// Linear work: each link evaluated a bounded number of times.
+		// Linear work: each link is evaluated a bounded number of times. Most of the chain runs about twice as often
+		// as in a plain cold read (about 2 per link), because the compute makes a nested boundary read; the maximum
+		// is 5 (measured: 4 links 2 times, 83 links 4 times, 13 links 5 times), and the work stays linear in the
+		// chain length.
 		expect(Math.max(...env.computeCalls))
-			.toBeLessThanOrEqual(4)
+			.toBeLessThanOrEqual(5)
 	})
 
 	it('gets its value once from a long chain too', () => {
 		const graph = createGraph(chain(5_000))
-		const inspection = inspectRuntime(graph.runtime)
-		const nodeId = inspection.blueprint.nodes.find(entry => entry.resolved && entry.node.id === 'n2500')!.nodeId
-		let listenerCalls = 0
-		inspection.getWidget(nodeId)!.getProperty('out')!.subscribe(() => {
-			listenerCalls++
-			graph.node(4_999).properties.out.get()
-		})
+		const seen: unknown[] = []
+		let armed = true
+		env.afterPrev = (index) => {
+			if (index === 2_501 && armed) {
+				armed = false
+				seen.push(graph.node(4_999).properties.out.get())
+			}
+		}
 
 		expect(graph.node(4_999).properties.out.get())
 			.toEqual({ ok: true, value: 5_000 })
-		expect(listenerCalls)
-			.toBe(1)
+		expect(seen)
+			.toEqual([{ ok: true, value: 5_000 }])
 		expect(Math.max(...env.computeCalls))
-			.toBeLessThanOrEqual(4)
+			.toBeLessThanOrEqual(5)
 	})
 
-	it('gets its value once wherever the listener sits, also while the head itself is being evaluated again', () => {
-		// A listener near the head runs while the read in progress evaluates the head again after an abandonment,
-		// so the head it reads is still evaluating; one far down runs while the driver completes a deeper link.
+	it('gets its value once wherever the reading link sits, also when it reads the head while the head is evaluating', () => {
+		// The link that reads sits near the head (at 99 it is the head reading itself) or far down, while the
+		// driver completes a deeper link.
 		for (const at of [99, 95, 90, 85, 60, 20]) {
 			const graph = createGraph(chain(100))
-			const inspection = inspectRuntime(graph.runtime)
-			const nodeId = inspection.blueprint.nodes.find(entry => entry.resolved && entry.node.id === `n${at}`)!.nodeId
 			const seen: unknown[] = []
-			inspection.getWidget(nodeId)!.getProperty('out')!.subscribe(() => {
-				seen.push(graph.node(99).properties.out.get())
-			})
+			let armed = true
+			env.afterPrev = (index) => {
+				if (index === at && armed) {
+					armed = false
+					seen.push(graph.node(99).properties.out.get())
+				}
+			}
 
-			expect(graph.node(99).properties.out.get(), `listener at n${at}`)
+			expect(graph.node(99).properties.out.get(), `read from n${at}`)
 				.toEqual({ ok: true, value: 100 })
-			expect(seen, `listener at n${at}`)
+			expect(seen, `read from n${at}`)
 				.toEqual([{ ok: true, value: 100 }])
-			// No link evaluated more than three times: a link the listener reads while its own evaluation is in
-			// progress is evaluated afresh for the listener at once, instead of after an abandonment of its reader.
-			expect(Math.max(...env.computeCalls), `listener at n${at}`)
-				.toBeLessThanOrEqual(3)
+			expect(Math.max(...env.computeCalls), `read from n${at}`)
+				.toBeLessThanOrEqual(at === 99 ? 3 : 5)
 		}
 		expect(reported)
 			.toEqual([])
@@ -461,24 +471,25 @@ describe('foreign code reading a Property while a deep read of it is in progress
 
 	it('leaves every Property following later writes when the chain is re-read with every link stale', () => {
 		// Every link reads its own State first: after every State is written, each re-evaluation nests the next
-		// one, and the read is abandoned and completed like a first read. A listener reads the head in the middle.
+		// one, and the read is abandoned and completed like a first read. One link reads the head in the middle.
 		for (const at of [95, 70, 40]) {
 			const graph = createGraph(chain(100))
 			graph.node(99).properties.out.get()
-			const inspection = inspectRuntime(graph.runtime)
-			const nodeId = inspection.blueprint.nodes.find(entry => entry.resolved && entry.node.id === `n${at}`)!.nodeId
 			const seen: unknown[] = []
-			let armed = true
-			inspection.getWidget(nodeId)!.getProperty('out')!.subscribe(() => {
-				if (armed)
+			let armed = false
+			env.afterPrev = (index) => {
+				if (index === at && armed) {
+					armed = false
 					seen.push(graph.node(99).properties.out.get())
-			})
+				}
+			}
 			for (let index = 0; index < 100; index++)
 				graph.node(index).state.n.set(2)
+			armed = true
 
-			expect(graph.node(99).properties.out.get(), `listener at n${at}`)
+			expect(graph.node(99).properties.out.get(), `read from n${at}`)
 				.toEqual({ ok: true, value: 200 })
-			expect(seen, `listener at n${at}`)
+			expect(seen, `read from n${at}`)
 				.toEqual([{ ok: true, value: 200 }])
 			armed = false
 			for (let index = 0; index < 100; index += 7)
@@ -486,7 +497,7 @@ describe('foreign code reading a Property while a deep read of it is in progress
 			const expected = Array.from({ length: 100 }, (_, index) => (index % 7 === 0 ? 3 : 2))
 			for (let index = 0, sum = 0; index < 100; index++) {
 				sum += expected[index]!
-				expect(graph.node(index).properties.out.get(), `listener at n${at}, n${index}`)
+				expect(graph.node(index).properties.out.get(), `read from n${at}, n${index}`)
 					.toEqual({ ok: true, value: sum })
 			}
 		}
@@ -495,32 +506,31 @@ describe('foreign code reading a Property while a deep read of it is in progress
 	})
 })
 
-describe('a listener reading, through another Property, a link whose re-evaluation is in progress', () => {
+describe('a compute reading by closure, through another Property, a link whose re-evaluation is in progress', () => {
 	it('leaves the links above it following later writes', () => {
-		// Q (n100) reads n{target}. While a re-read of the stale chain completes a stretch of links, the listener
-		// of n30 reads Q, which reads a link whose evaluation is in progress further up the stack: that link is
-		// replaced by a fresh computed for the listener's read, and the link above it, which reads it, must follow
-		// the fresh one.
+		// Q (n100) reads n{target}. While a re-read of the stale chain completes a stretch of links, n31's compute
+		// reads Q, which reads a link whose evaluation is in progress further up the stack: that link is replaced
+		// by a fresh computed for this read, and the link above it, which reads it, must follow the fresh one.
 		for (let target = 31; target <= 42; target++) {
 			const configs = chain(100)
 			configs.push({ index: 100, prev: `n${target}` })
 			const graph = createGraph(configs)
 			graph.node(99).properties.out.get()
 			graph.node(100).properties.out.get()
-			const inspection = inspectRuntime(graph.runtime)
-			const nodeId = inspection.blueprint.nodes.find(entry => entry.resolved && entry.node.id === 'n30')!.nodeId
-			let armed = true
-			inspection.getWidget(nodeId)!.getProperty('out')!.subscribe(() => {
-				if (armed) {
+			let armed = false
+			env.afterPrev = (index) => {
+				if (index === 31 && armed) {
 					armed = false
 					graph.node(100).properties.out.get()
 				}
-			})
+			}
 			for (let index = 0; index < 100; index++)
 				graph.node(index).state.n.set(2)
+			armed = true
 
 			expect(graph.node(99).properties.out.get(), `Q reads n${target}`)
 				.toEqual({ ok: true, value: 200 })
+			armed = false
 			graph.node(target - 2).state.n.set(5)
 			expect(graph.node(99).properties.out.get(), `Q reads n${target}, after a write below it`)
 				.toEqual({ ok: true, value: 203 })
