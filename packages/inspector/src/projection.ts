@@ -28,7 +28,7 @@ import type {
 import type { InspectableValue, InspectableValueEncodingOptions } from './value'
 import { encodeInspectableValue } from './value'
 
-/** `authorWritable` and `valueContractId` are emitted from protocol 0.4 on. */
+/** `authorWritable`, `valueContractId` and `transitivelyEmits` are emitted from protocol 0.4 on. */
 const MEMBER_METADATA_PROTOCOL_MINOR: number = 4
 
 function wireNodeId(nodeId: InspectionNodeId): number {
@@ -219,6 +219,7 @@ export function projectBlueprintSnapshot(
 					type: 'method' as const,
 					name: member.name,
 					transitivelyWrites: member.transitivelyWrites,
+					...(protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR ? {} : { transitivelyEmits: member.transitivelyEmits }),
 					dependencies: member.dependencies.map(projectDependency),
 				})),
 			}
