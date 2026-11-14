@@ -194,10 +194,12 @@ let entryBatchDepth = 0
 let queuedDeliveries: (() => void)[] = []
 let queuedGenerations: number[] = []
 /**
- * Whether `queuedDeliveries` holds anything. Kept apart from the array so that the check every Runtime operation
- * makes when it leaves is one load and one test while nothing is queued, the common case.
+ * Whether the host call in progress has anything to finish when its outermost operation leaves (see
+ * {@link finishHostCall}): deliveries in `queuedDeliveries`, or a subscription that counted a notification in it
+ * (see {@link hostCalls}). One flag for both, so that the check every outermost operation makes when it leaves is
+ * one load and one test while there is neither, the common case.
  */
-let deliveriesQueued = false
+let hostCallWork = false
 /** Whether {@link deliverQueued} is running: operations its listeners start queue their deliveries behind. */
 let delivering = false
 /** The generation of the delivery running now; `0` outside {@link deliverQueued}. */
@@ -214,13 +216,20 @@ let deliveryGeneration = 0
 const MAX_DELIVERY_GENERATIONS = 100
 
 /**
- * Numbers the host's calls into the Runtime: incremented each time {@link runRuntimeOperation} is entered with
- * no operation in progress and no queued delivery running ({@link deliverQueued}). The operations that the
- * listeners of a queued delivery start are outermost too, but they run before the host's call returns, on its
- * behalf, so they keep its number. A subscription compares it with the number it last counted in to restart its
- * count of notifications (see {@link MAX_NOTIFICATIONS_PER_CALL}). Realm-wide, like {@link operationDepth}.
+ * Numbers the host's calls into the Runtime in which a subscription was notified. A subscription compares it with
+ * the number it last counted in to restart its count of notifications (see {@link MAX_NOTIFICATIONS_PER_CALL}).
+ * Realm-wide, like {@link operationDepth}.
+ *
+ * It is advanced when such a call ends, not when a call starts, so that an operation in which nothing is
+ * notified (a cached read, a write nobody observes) executes nothing for it: the first notification a
+ * subscription counts in a call sets {@link hostCallWork}, and the outermost operation's exit, which tests that
+ * flag already, advances the number in {@link finishHostCall}. A call ends when its outermost operation leaves
+ * outside the queued-delivery drain, after the drain: the operations that the listeners of a queued delivery
+ * start are outermost too, but they run before the host's call returns, on its behalf, so they keep its number.
+ * It starts at `1`, above every value a subscription stores before its first count (see
+ * {@link createTrackedSubscription}).
  */
-let hostCalls = 0
+let hostCalls = 1
 
 /**
  * How many times one subscription's listener is notified within one host call into the Runtime, the deliveries
@@ -307,11 +316,8 @@ function releaseBatches(): void {
  * differs only on a nested entry, so that this one executes nothing for a feature only writes need.
  */
 export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument): Result {
-	if (operationDepth === 0) {
+	if (operationDepth === 0)
 		entryBatchDepth = getBatchDepth()
-		if (!delivering)
-			++hostCalls
-	}
 	++operationDepth
 	try {
 		return fn(argument as Argument)
@@ -323,13 +329,13 @@ export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument:
 			}
 			finally {
 				--operationDepth
-				// Only the outermost frame looks at the queue, through a flag that is false while nothing is queued
-				// (always, when no inspection listener is registered). In this `finally`, so the queued deliveries
-				// also run when `fn` or the release threw (an effect that does not belong to a Runtime can throw out
-				// of the release's flush); `deliverQueued` itself never throws, so that exception still reaches the
-				// caller.
-				if (deliveriesQueued && !delivering)
-					deliverQueued()
+				// Only the outermost frame looks at what the host call has to finish, through a flag that is false
+				// while there is nothing (always, when no inspection listener is registered and nobody was notified).
+				// In this `finally`, so the queued deliveries also run when `fn` or the release threw (an effect that
+				// does not belong to a Runtime can throw out of the release's flush); `finishHostCall` itself never
+				// throws, so that exception still reaches the caller.
+				if (hostCallWork && !delivering)
+					finishHostCall()
 			}
 		}
 		else {
@@ -360,8 +366,6 @@ export function runRuntimeWrite<Result, Argument = undefined>(fn: (argument: Arg
 	}
 	else {
 		entryBatchDepth = getBatchDepth()
-		if (!delivering)
-			++hostCalls
 	}
 	++operationDepth
 	try {
@@ -374,8 +378,8 @@ export function runRuntimeWrite<Result, Argument = undefined>(fn: (argument: Arg
 			}
 			finally {
 				--operationDepth
-				if (deliveriesQueued && !delivering)
-					deliverQueued()
+				if (hostCallWork && !delivering)
+					finishHostCall()
 			}
 		}
 		else {
@@ -396,7 +400,24 @@ export function deliverWhenIdle(deliver: () => void): void {
 	}
 	queuedDeliveries.push(deliver)
 	queuedGenerations.push(deliveryGeneration + 1)
-	deliveriesQueued = true
+	hostCallWork = true
+}
+
+/**
+ * Finishes the host call whose outermost operation is leaving: runs the deliveries it queued (see
+ * {@link deliverQueued}), then advances {@link hostCalls}, so the notifications of those deliveries count in this
+ * call and the next call starts every count from zero. The advance is in a `finally` of plain statements, so it
+ * happens even when the drain throws (only an exhausted engine stack can make it throw).
+ */
+function finishHostCall(): void {
+	try {
+		if (queuedDeliveries.length > 0)
+			deliverQueued()
+	}
+	finally {
+		hostCallWork = false
+		++hostCalls
+	}
 }
 
 /**
@@ -419,7 +440,6 @@ function deliverQueued(): void {
 	finally {
 		queuedDeliveries = []
 		queuedGenerations = []
-		deliveriesQueued = false
 		deliveryGeneration = 0
 		delivering = false
 	}
@@ -521,7 +541,7 @@ export function endBatchDeferringFlush(): void {
  *
  * Within one host call into the Runtime (see {@link hostCalls}) the listener is called at most
  * {@link MAX_NOTIFICATIONS_PER_CALL} times; `subject`, `widgetId` and `member` name what the subscription observes
- * in the report of the limit. A notification adds four comparisons and an increment (and two assignments in the
+ * in the report of the limit. A notification adds four comparisons and an increment (and three assignments in the
  * first notification of a call); the subscription stores two numbers besides the references it is given.
  * Nothing is allocated unless the limit is reached. `unchanged` (the Runtime diagnostics aggregate's filter)
  * skips a run without calling the listener or counting it.
@@ -562,6 +582,7 @@ export function createTrackedSubscription<Value>(
 			if (countedIn !== hostCalls) {
 				countedIn = hostCalls
 				notifications = 0
+				hostCallWork = true
 			}
 			if (++notifications > MAX_NOTIFICATIONS_PER_CALL) {
 				if (notifications === MAX_NOTIFICATIONS_PER_CALL + 1)
