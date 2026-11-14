@@ -214,24 +214,29 @@ let deliveryGeneration = 0
 const MAX_DELIVERY_GENERATIONS = 100
 
 /**
- * Numbers the outermost Runtime operations: incremented each time {@link runRuntimeOperation} is entered with
- * no operation in progress. A subscription compares it with the number it last counted in to restart its count
- * of notifications (see {@link MAX_NOTIFICATIONS_PER_CALL}). Realm-wide, like {@link operationDepth}.
+ * Numbers the host's calls into the Runtime: incremented each time {@link runRuntimeOperation} is entered with
+ * no operation in progress and no queued delivery running ({@link deliverQueued}). The operations that the
+ * listeners of a queued delivery start are outermost too, but they run before the host's call returns, on its
+ * behalf, so they keep its number. A subscription compares it with the number it last counted in to restart its
+ * count of notifications (see {@link MAX_NOTIFICATIONS_PER_CALL}). Realm-wide, like {@link operationDepth}.
  */
-let outermostCalls = 0
+let hostCalls = 0
 
 /**
- * How many times one subscription's listener is notified within one outermost Runtime operation. Listeners that
- * keep changing what they observe (a self-normaliser that writes a fresh copy while something else reads the
- * member, two listeners mirroring each other's objects, a diverging pair) would otherwise make that operation
- * loop forever: the loop runs inside alien-signals' flush, iteratively, so nothing else bounds it. Beyond the
- * limit the listener is not called again until the operation returns, and one `RangeError` naming what the
- * subscription observes is reported through the isolated-exception channel (not a coded error: it reports a
- * listener bug, like any exception an isolated listener throws). The same number as
- * {@link MAX_DELIVERY_GENERATIONS}, counted separately: an inspection delivery round is not a subscriber
- * notification. Internal, not configurable.
+ * How many times one subscription's listener is notified within one host call into the Runtime, the deliveries
+ * that call queues included (see {@link hostCalls}). Listeners that keep changing what they observe (a
+ * self-normaliser that writes a fresh copy while something else reads the member, two listeners mirroring each
+ * other's objects, a diverging pair) would otherwise make that call loop forever: the loop runs inside
+ * alien-signals' flush, iteratively, so nothing else bounds it. Beyond the limit the listener is not called again
+ * until the call returns, and one `RangeError` naming what the subscription observes is reported through the
+ * isolated-exception channel (not a coded error: it reports a listener bug, like any exception an isolated
+ * listener throws). High enough that a converging cascade of listeners does not reach it (it takes thousands of
+ * listener steps in one call), low enough that a loop reaches it within milliseconds. Counted separately from
+ * {@link MAX_DELIVERY_GENERATIONS}: an inspection delivery round is not a subscriber notification. It must stay
+ * well above it, because a loop that runs through delivery rounds notifies a subscriber once per round, and
+ * stopping and reporting that loop is the delivery bound's job. Internal, not configurable; exported for the tests only.
  */
-const MAX_NOTIFICATIONS_PER_CALL = 100
+export const MAX_NOTIFICATIONS_PER_CALL = 10_000
 
 /**
  * What a subscription observes, for the limit's report: `"State"`/`"Property"` with a member, `"the
@@ -309,7 +314,8 @@ function releaseBatches(): void {
 export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument, write?: boolean): Result {
 	if (operationDepth === 0) {
 		entryBatchDepth = getBatchDepth()
-		++outermostCalls
+		if (!delivering)
+			++hostCalls
 	}
 	else if (write === true && getBatchDepth() === 0) {
 		startBatch()
@@ -475,12 +481,12 @@ export function endBatchDeferringFlush(): void {
  * first run has finished, not inside it, where alien-signals would not run the effect again for a write a
  * listener makes (issue #198). The other subscriptions only read signals, and need no operation.
  *
- * Within one outermost Runtime operation the listener is called at most {@link MAX_NOTIFICATIONS_PER_CALL}
- * times; `subject`, `widgetId` and `member` name what the subscription observes in the report of the limit. A
- * notification adds four comparisons and an increment (and two assignments in the first notification of an
- * operation); the subscription stores two numbers besides the references it is given. Nothing is allocated
- * unless the limit is reached. `unchanged` (the Runtime diagnostics aggregate's filter) skips a run without
- * calling the listener or counting it.
+ * Within one host call into the Runtime (see {@link hostCalls}) the listener is called at most
+ * {@link MAX_NOTIFICATIONS_PER_CALL} times; `subject`, `widgetId` and `member` name what the subscription observes
+ * in the report of the limit. A notification adds four comparisons and an increment (and two assignments in the
+ * first notification of a call); the subscription stores two numbers besides the references it is given.
+ * Nothing is allocated unless the limit is reached. `unchanged` (the Runtime diagnostics aggregate's filter)
+ * skips a run without calling the listener or counting it.
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
@@ -492,7 +498,7 @@ export function createTrackedSubscription<Value>(
 	unchanged?: (value: Value) => boolean,
 ): () => void {
 	let isBootstrap = true
-	// The outermost operation `notifications` counts in (see `outermostCalls`).
+	// The host call `notifications` counts in (see `hostCalls`).
 	let countedIn = 0
 	let notifications = 0
 
@@ -515,13 +521,13 @@ export function createTrackedSubscription<Value>(
 			return
 		// Every flush Core starts runs inside a Runtime operation; outside one there is no call to bound.
 		if (operationDepth !== 0) {
-			if (countedIn !== outermostCalls) {
-				countedIn = outermostCalls
+			if (countedIn !== hostCalls) {
+				countedIn = hostCalls
 				notifications = 0
 			}
 			if (++notifications > MAX_NOTIFICATIONS_PER_CALL) {
 				if (notifications === MAX_NOTIFICATIONS_PER_CALL + 1)
-					reportIsolatedException(new RangeError(`The listener of a subscription to ${describeSubscription(subject, widgetId, member)} was notified ${MAX_NOTIFICATIONS_PER_CALL} times within one Runtime call and was not called again until that call returned. Listeners that keep writing what they observe never settle: compare contents before writing, or derive the value with a Property.`))
+					reportIsolatedException(new RangeError(`The subscription to ${describeSubscription(subject, widgetId, member)} was notified ${MAX_NOTIFICATIONS_PER_CALL} times within one call into the Runtime, so its listener is not called again until that call returns. The usual cause is listeners that keep writing what one another observe.`))
 				return
 			}
 		}

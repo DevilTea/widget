@@ -1,5 +1,6 @@
 /**
- * Conformance: a subscription's listener is notified at most 100 times within one outermost Runtime call.
+ * Conformance: a subscription's listener is notified at most `MAX_NOTIFICATIONS_PER_CALL` times within one host
+ * call into the Runtime, the Property inspection deliveries that call queues included.
  *
  * A write made by a listener while another Runtime call is in progress is delivered later in that call (issue
  * #204), so listeners that keep changing what they observe (a self-normaliser that writes a fresh copy while
@@ -7,16 +8,18 @@
  * pair) would make the host's call loop forever. Beyond the limit the listener is not called again for the rest
  * of that call, one `RangeError` naming what the subscription observes is reported asynchronously, the host's
  * call returns normally, values stay consistent, and the next call counts from zero. Converging listeners are
- * not affected. Also pinned here: several nested writes to one member are delivered once, with the last value; a
- * listener that writes what it observes is called again when anything reads that member later in the same call;
- * and no batch level is left behind by an exception, a disposal or a Runtime created inside a nested write.
+ * not affected, including cascades that notify one subscription many times. Also pinned here: several nested
+ * writes to one member are delivered once, with the last value; a listener that writes what it observes is called
+ * again when anything reads that member later in the same call, or during a later call when the host reads it
+ * after the call; and no batch level is left behind by an exception, a disposal or a Runtime created inside a
+ * nested write.
  */
 
 import type { RuntimeState } from '../index'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
-
-const LIMIT = 100
+import { inspectRuntime } from '../inspection'
+import { MAX_NOTIFICATIONS_PER_CALL as LIMIT } from './adapter'
 
 interface NodeInterfaces {
 	state: { n: number, o: unknown }
@@ -121,16 +124,26 @@ async function settle(): Promise<void> {
 	await new Promise<void>(resolve => setTimeout(resolve, 0))
 }
 
-function expectOneLimitReport(widgetId: string, member: string): void {
-	expect(reported)
-		.toHaveLength(1)
-	expect(reported[0])
+function expectLimitReport(error: unknown, widgetId: string, member: string): void {
+	expect(error)
 		.toBeInstanceOf(RangeError)
-	const message = (reported[0] as RangeError).message
+	const message = (error as RangeError).message
 	expect(message)
 		.toContain(`"${widgetId}"`)
 	expect(message)
 		.toContain(`"${member}"`)
+}
+
+function expectOneLimitReport(widgetId: string, member: string): void {
+	expect(reported)
+		.toHaveLength(1)
+	expectLimitReport(reported[0], widgetId, member)
+}
+
+function inspectedProperty(graph: Graph, widgetId: string, name: string) {
+	const inspection = inspectRuntime(graph.runtime)
+	const entry = inspection.blueprint.nodes.find(node => node.resolved && node.node.id === widgetId)!
+	return inspection.getWidget(entry.nodeId)!.getProperty(name)!
 }
 
 describe('listeners that never converge', () => {
@@ -318,6 +331,228 @@ describe('listeners that never converge', () => {
 		expect((reported[0] as RangeError).message)
 			.toContain('the Runtime')
 	})
+
+	it('counts a widget\'s diagnostics subscription, and names the widget in the report', async () => {
+		const graph = createGraph()
+		const calls = { a: 0, b: 0 }
+		let candidate = 0
+		const invalid = (id: string) => (graph.widget(id).state.n as RuntimeState<unknown>).set(`invalid ${++candidate}`)
+		graph.widget('a')
+			.subscribeDiagnostics(() => {
+				calls.a++
+				invalid('b')
+			})
+		graph.widget('b')
+			.subscribeDiagnostics(() => {
+				calls.b++
+				invalid('a')
+			})
+
+		invalid('a')
+		await settle()
+
+		expect(calls)
+			.toEqual({ a: LIMIT, b: LIMIT })
+		expect(reported)
+			.toHaveLength(1)
+		expect(reported[0])
+			.toBeInstanceOf(RangeError)
+		expect((reported[0] as RangeError).message)
+			.toContain('"a"')
+	})
+
+	it('counts a Method\'s diagnostics subscription, and names the widget and Method in the report', async () => {
+		const graph = createGraph()
+		const calls = { a: 0, b: 0 }
+		let candidate = 0
+		// Rejected arguments commit a fresh diagnostic snapshot on every invocation.
+		const invalid = (id: string) => (graph.widget(id).methods.setN as unknown as (value: unknown) => unknown)(`invalid ${++candidate}`)
+		graph.widget('a').methods.setN.subscribeDiagnostics(() => {
+			calls.a++
+			invalid('b')
+		})
+		graph.widget('b').methods.setN.subscribeDiagnostics(() => {
+			calls.b++
+			invalid('a')
+		})
+
+		invalid('a')
+		await settle()
+
+		expect(calls)
+			.toEqual({ a: LIMIT, b: LIMIT })
+		expectOneLimitReport('a', 'setN')
+	})
+})
+
+describe('the count belongs to the host\'s call', () => {
+	it('includes the Property inspection deliveries the call queues: a loop restarted by every delivery is stopped once', async () => {
+		const graph = createGraph(['a', 'c', 'd'])
+		const [a, c, d] = [graph.widget('a'), graph.widget('c'), graph.widget('d')]
+		const calls = { inspection: 0, c: 0, d: 0 }
+		let looping = true
+		// Subscribed first: its first evaluation completes before the inspection listener exists.
+		let aCalls = 0
+		a.properties.out.subscribe(() => aCalls++)
+		// Every completion of `a.out` is delivered after the operation that produced it, and the listener's write
+		// starts the `c`/`d` loop again; each of `d`'s writes to `a` queues another completion.
+		inspectedProperty(graph, 'a', 'out')
+			.subscribe((snapshot) => {
+				calls.inspection++
+				if (looping && snapshot.status === 'completed' && snapshot.result.ok)
+					c.state.n.set((snapshot.result.value as number) * 1000)
+			})
+		c.state.n.subscribe((value) => {
+			calls.c++
+			if (looping)
+				d.state.n.set(value! + 1)
+		})
+		d.state.n.subscribe((value) => {
+			calls.d++
+			if (looping) {
+				c.state.n.set(value! + 1)
+				a.state.n.set(value!)
+			}
+		})
+
+		a.state.n.set(2)
+		await settle()
+
+		expect(calls.c)
+			.toBe(LIMIT)
+		expect(calls.d)
+			.toBe(LIMIT)
+		expect(aCalls)
+			.toBe(LIMIT)
+		// One delivery per completion of `a.out`: the first one and one per write `d` made.
+		expect(calls.inspection)
+			.toBe(LIMIT + 1)
+		expect(reported)
+			.toHaveLength(2)
+		expectLimitReport(reported.find(error => (error as Error).message.includes('"c"')), 'c', 'n')
+		expectLimitReport(reported.find(error => (error as Error).message.includes('"a"')), 'a', 'out')
+		expect(a.properties.out.get())
+			.toEqual({ ok: true, value: a.state.n.get() })
+		expect(c.properties.out.get())
+			.toEqual({ ok: true, value: c.state.n.get() })
+		expect(inspectedProperty(graph, 'a', 'out')
+			.getSnapshot())
+			.toEqual({ status: 'completed', result: a.properties.out.get() })
+
+		// The next call counts from zero and notifies normally.
+		looping = false
+		calls.c = 0
+		c.state.n.set(-1)
+		await settle()
+		expect(calls.c)
+			.toBe(1)
+		expect(reported)
+			.toHaveLength(2)
+	})
+
+	it('includes the Property inspection deliveries the call queues: a loop alternating between a subscriber and an inspection listener is stopped by the bound on delivery rounds', async () => {
+		const graph = createGraph()
+		const [a, b] = [graph.widget('a'), graph.widget('b')]
+		const calls = { inspection: 0, b: 0 }
+		let looping = true
+		a.properties.out.subscribe(() => {})
+		inspectedProperty(graph, 'a', 'out')
+			.subscribe((snapshot) => {
+				calls.inspection++
+				if (looping && snapshot.status === 'completed' && snapshot.result.ok)
+					b.state.n.set((snapshot.result.value as number) + 1)
+			})
+		b.state.n.subscribe((value) => {
+			calls.b++
+			if (looping)
+				a.state.n.set(value! + 1)
+		})
+
+		a.state.n.set(2)
+		await settle()
+
+		// One subscriber notification per delivery round: the rounds are bounded first, with their own report.
+		expect(calls.b)
+			.toBe(calls.inspection)
+		expect(calls.b)
+			.toBeLessThan(LIMIT)
+		expect(reported)
+			.toHaveLength(1)
+		expect(reported[0])
+			.toBeInstanceOf(RangeError)
+		expect(a.properties.out.get())
+			.toEqual({ ok: true, value: a.state.n.get() })
+
+		looping = false
+		calls.b = 0
+		b.state.n.set(-1)
+		await settle()
+		expect(calls.b)
+			.toBe(1)
+		expect(reported)
+			.toHaveLength(1)
+	})
+})
+
+describe('a subscriber the limit stopped', () => {
+	function divergingPair() {
+		const graph = createGraph()
+		const calls = { a: 0, b: 0, c: 0 }
+		const last: { a: number | null, b: number | null } = { a: null, b: null }
+		graph.widget('a').state.n.subscribe((value) => {
+			calls.a++
+			last.a = value
+			graph.widget('b').state.n.set(value! + 1)
+		})
+		graph.widget('b').state.n.subscribe((value) => {
+			calls.b++
+			last.b = value
+			graph.widget('a').state.n.set(value! + 1)
+		})
+		graph.widget('c').state.n.subscribe(() => calls.c++)
+		return { graph, calls, last }
+	}
+
+	it('keeps the last value delivered to it, and a later unrelated call does not deliver the current one', async () => {
+		const { graph, calls, last } = divergingPair()
+
+		graph.widget('a').state.n.set(7)
+		await settle()
+
+		expect(calls.a)
+			.toBe(LIMIT)
+		expect(last.a)
+			.not
+			.toBe(graph.widget('a').state.n.get())
+		expect(last.b)
+			.toBe(graph.widget('b').state.n.get())
+		const stale = last.a
+
+		graph.widget('c').state.n.set(5)
+		await settle()
+
+		expect(calls)
+			.toEqual({ a: LIMIT, b: LIMIT, c: 1 })
+		expect(last.a)
+			.toBe(stale)
+		expectOneLimitReport('a', 'n')
+	})
+
+	it('is stopped again, with a second report, when a later call loops again', async () => {
+		const { graph, calls } = divergingPair()
+
+		graph.widget('a').state.n.set(7)
+		await settle()
+		graph.widget('a').state.n.set(1000)
+		await settle()
+
+		expect([calls.a, calls.b])
+			.toEqual([2 * LIMIT, 2 * LIMIT])
+		expect(reported)
+			.toHaveLength(2)
+		expectLimitReport(reported[0], 'a', 'n')
+		expectLimitReport(reported[1], 'a', 'n')
+	})
 })
 
 describe('listeners that converge', () => {
@@ -387,6 +622,63 @@ describe('listeners that converge', () => {
 				.toEqual([])
 		})
 	}
+
+	it('are not affected when a cascade notifies one subscriber far more than a hundred times', async () => {
+		const steps = 250
+		const ids = Array.from({ length: steps + 1 }, (_, index) => `w${index}`)
+		const graph = createGraph([...ids, 'counter'])
+		const counter = graph.widget('counter').state.n
+		counter.set(0)
+		for (let index = 0; index < steps; index++) {
+			graph.widget(`w${index}`).state.n.subscribe((value) => {
+				graph.widget(`w${index + 1}`).state.n.set(value!)
+				counter.set(counter.get()! + 1)
+			})
+		}
+		const delivered: number[] = []
+		counter.subscribe(value => delivered.push(value!))
+
+		graph.widget('w0').state.n.set(42)
+		await settle()
+
+		expect(graph.widget(`w${steps}`).state.n.get())
+			.toBe(42)
+		expect(counter.get())
+			.toBe(steps)
+		expect(delivered.at(-1))
+			.toBe(steps)
+		expect(delivered.length)
+			.toBeGreaterThan(100)
+		expect(reported)
+			.toEqual([])
+	})
+
+	it('are not affected when a listener drains a queue it observes one item per notification', async () => {
+		const graph = createGraph()
+		const queue = graph.widget('a').state.o
+		let processed = 0
+		let renders = 0
+		queue.subscribe((value) => {
+			const items = value as number[]
+			if (items.length > 0) {
+				processed++
+				queue.set(items.slice(1))
+			}
+		})
+		queue.subscribe(() => renders++)
+
+		queue.set(Array.from({ length: 150 }, (_, index) => index))
+		await settle()
+
+		expect(processed)
+			.toBe(150)
+		expect(renders)
+			.toBeGreaterThan(100)
+		expect(queue.get())
+			.toEqual([])
+		expect(reported)
+			.toEqual([])
+	})
 })
 
 describe('nested writes', () => {
@@ -427,6 +719,61 @@ describe('nested writes', () => {
 
 		expect(log)
 			.toEqual(['a=50', 'b=50 reads a=10', 'a=10', 'b=10 reads a=10'])
+	})
+
+	it('made by a listener to the member it observes, read by the host after the call, are delivered to it during a later call that notifies or invokes', () => {
+		const graph = createGraph()
+		const other = createGraph()
+		const log: string[] = []
+		graph.widget('a').state.n.subscribe((value) => {
+			log.push(`a=${value}`)
+			if (value! > 10)
+				graph.widget('a').state.n.set(10)
+		})
+		graph.widget('b').state.n.subscribe(value => log.push(`b=${value}`))
+		other.widget('a').state.n.subscribe(value => log.push(`other a=${value}`))
+		const clampTo10 = () => {
+			graph.widget('a').state.n.set(50)
+			log.push(`host get a=${graph.widget('a').state.n.get()}`)
+		}
+
+		// Neither a get() nor a write that nothing observes delivers it.
+		clampTo10()
+		graph.widget('b').state.n.get()
+		graph.widget('c').state.n.set(3)
+		log.push('get and unobserved write returned')
+		// A write that notifies a subscriber does, on the same Runtime ...
+		graph.widget('b').state.n.set(4)
+		log.push('set returned')
+		// ... or on another one.
+		graph.widget('a').state.n.set(1)
+		clampTo10()
+		other.widget('a').state.n.set(5)
+		log.push('other set returned')
+		// So does a Method call, even one that changes nothing.
+		clampTo10()
+		graph.widget('c').methods.setN(3)
+		log.push('method returned')
+
+		expect(log)
+			.toEqual([
+				'a=50',
+				'host get a=10',
+				'get and unobserved write returned',
+				'a=10',
+				'b=4',
+				'set returned',
+				'a=1',
+				'a=50',
+				'host get a=10',
+				'a=10',
+				'other a=5',
+				'other set returned',
+				'a=50',
+				'host get a=10',
+				'a=10',
+				'method returned',
+			])
 	})
 
 	it('across two Runtimes are delivered after the write returns, within the same outer call', () => {
