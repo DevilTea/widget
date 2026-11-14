@@ -75,11 +75,12 @@ export interface RuntimeWidgetDiagnosticsAggregate {
 /**
  * Builds the live-gated `getDiagnostics`/`subscribeDiagnostics` pair one `RuntimeWidget` exposes, composing
  * {@link buildWidgetDiagnosticSnapshot} the same way {@link createRuntimeAggregate} composes it for every
- * widget at the Runtime level.
+ * widget at the Runtime level. `widgetId` names the widget in the report of the subscription limit.
  */
 export function createRuntimeWidgetDiagnosticsAggregate(
 	context: RuntimeContext,
 	entry: PrimitiveRegistryEntry,
+	widgetId: string,
 ): RuntimeWidgetDiagnosticsAggregate {
 	const snapshot = () => buildWidgetDiagnosticSnapshot(entry)
 
@@ -90,7 +91,7 @@ export function createRuntimeWidgetDiagnosticsAggregate(
 		},
 		subscribeDiagnostics(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, snapshot, listener)
+			return createTrackedSubscription(context, snapshot, listener, 'the diagnostics of widget', widgetId, null)
 		},
 	}
 }
@@ -224,14 +225,13 @@ export function createRuntimeAggregate(
 		subscribeDiagnostics(listener) {
 			context.assertActive()
 			// The revision signal changes on every commit, including commits a batch undoes before it
-			// flushes; notify only when the aggregate actually changed, as tracking each primitive did.
+			// flushes; notify only when the aggregate actually changed, as tracking each primitive did. A run
+			// that changes nothing is not a notification, so it does not count towards the subscription limit.
 			let delivered = readUntracked(snapshot)
 			return createTrackedSubscription(context, snapshot, (next) => {
-				if (next === delivered)
-					return
 				delivered = next
 				listener(next)
-			})
+			}, 'the diagnostics of the Runtime', null, null, next => next === delivered)
 		},
 		commitHookFor(nodeId) {
 			const position = positionByNodeId[nodeId] ?? -1

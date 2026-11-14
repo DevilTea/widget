@@ -214,11 +214,58 @@ let deliveryGeneration = 0
 const MAX_DELIVERY_GENERATIONS = 100
 
 /**
+ * Numbers the host's calls into the Runtime: incremented each time {@link runRuntimeOperation} is entered with
+ * no operation in progress and no queued delivery running ({@link deliverQueued}). The operations that the
+ * listeners of a queued delivery start are outermost too, but they run before the host's call returns, on its
+ * behalf, so they keep its number. A subscription compares it with the number it last counted in to restart its
+ * count of notifications (see {@link MAX_NOTIFICATIONS_PER_CALL}). Realm-wide, like {@link operationDepth}.
+ */
+let hostCalls = 0
+
+/**
+ * How many times one subscription's listener is notified within one host call into the Runtime, the deliveries
+ * that call queues included (see {@link hostCalls}). Listeners that keep changing what they observe (a
+ * self-normaliser that writes a fresh copy while something else reads the member, two listeners mirroring each
+ * other's objects, a diverging pair) would otherwise make that call loop forever: the loop runs inside
+ * alien-signals' flush, iteratively, so nothing else bounds it. Beyond the limit the listener is not called again
+ * until the call returns, and one `RangeError` naming what the subscription observes is reported through the
+ * isolated-exception channel (not a coded error: it reports a listener bug, like any exception an isolated
+ * listener throws). High enough that a converging cascade of listeners does not reach it (it takes thousands of
+ * listener steps in one call), low enough that a loop reaches it within milliseconds. Counted separately from
+ * {@link MAX_DELIVERY_GENERATIONS}: an inspection delivery round is not a subscriber notification. It must stay
+ * well above it, because a loop that runs through delivery rounds notifies a subscriber once per round, and
+ * stopping and reporting that loop is the delivery bound's job. Internal, not configurable; exported for the tests only.
+ */
+export const MAX_NOTIFICATIONS_PER_CALL = 10_000
+
+/**
+ * What a subscription observes, for the limit's report: `"State"`/`"Property"` with a member, `"the
+ * diagnostics of State"`/`"of Property"`/`"of Method"` with a member, `"the diagnostics of widget"` with a widget
+ * only, `"the diagnostics of the Runtime"` with neither. Static strings, so a subscription stores no message.
+ */
+export type SubscriptionSubject
+	= | 'State'
+		| 'Property'
+		| 'the diagnostics of State'
+		| 'the diagnostics of Property'
+		| 'the diagnostics of Method'
+		| 'the diagnostics of widget'
+		| 'the diagnostics of the Runtime'
+
+function describeSubscription(subject: SubscriptionSubject, widgetId: string | null, member: string | null): string {
+	if (member !== null)
+		return `${subject} "${member}" of widget "${widgetId}"`
+	return widgetId === null ? subject : `${subject} "${widgetId}"`
+}
+
+/**
  * Closes every batch level opened inside the outermost Runtime operation, letting alien-signals flush the
  * notifications it already queued.
  *
- * In normal operation the only levels still open here are the ones {@link writeDeferringFlush} opened:
- * every other level is closed by its own `endBatch()` in a `finally`. But that `finally` cannot be relied
+ * In normal operation the only levels still open here are the ones {@link writeDeferringFlush} opened, the ones
+ * nested Method invocations left open ({@link endBatchDeferringFlush}) and the ones nested writes opened
+ * ({@link runRuntimeOperation}'s `write`): every other level is closed by its own `endBatch()` in a `finally`.
+ * But that `finally` cannot be relied
  * on when runaway recursion (a valid Method <-> Method cycle) exhausts the engine's stack: the deepest
  * frames' `endBatch()` calls themselves overflow and never decrement. Draining to the depth recorded on
  * entry, rather than counting the levels this module opened, closes those leaked levels too, so a
@@ -255,10 +302,24 @@ function releaseBatches(): void {
  *
  * `fn` receives `argument`, so a hot path passes a function that already exists together with its
  * argument instead of allocating a closure per call.
+ *
+ * `write` marks an operation that writes State (`RuntimeState`'s `attemptSet`, `resetState`). Entered while
+ * another operation is in progress (a listener the enclosing operation's flush invokes, say) with no batch
+ * level open, it opens one, which the outermost frame's release closes: its writes never flush on their own,
+ * like a nested Method invocation's (see {@link endBatchDeferringFlush}). Flushing them there would run the
+ * effects they queue inside the flush that is running the listener's own effect, and alien-signals does not
+ * queue an effect again for a write made while that effect runs, so a subscriber whose value the write changes
+ * could miss it. The outermost operation is untouched: it executes the same statements as without `write`.
  */
-export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument): Result {
-	if (operationDepth === 0)
+export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument, write?: boolean): Result {
+	if (operationDepth === 0) {
 		entryBatchDepth = getBatchDepth()
+		if (!delivering)
+			++hostCalls
+	}
+	else if (write === true && getBatchDepth() === 0) {
+		startBatch()
+	}
 	++operationDepth
 	try {
 		return fn(argument as Argument)
@@ -419,13 +480,27 @@ export function endBatchDeferringFlush(): void {
  * operation, so that the inspection completions the bootstrap run produces are delivered after the effect's
  * first run has finished, not inside it, where alien-signals would not run the effect again for a write a
  * listener makes (issue #198). The other subscriptions only read signals, and need no operation.
+ *
+ * Within one host call into the Runtime (see {@link hostCalls}) the listener is called at most
+ * {@link MAX_NOTIFICATIONS_PER_CALL} times; `subject`, `widgetId` and `member` name what the subscription observes
+ * in the report of the limit. A notification adds four comparisons and an increment (and two assignments in the
+ * first notification of a call); the subscription stores two numbers besides the references it is given.
+ * Nothing is allocated unless the limit is reached. `unchanged` (the Runtime diagnostics aggregate's filter)
+ * skips a run without calling the listener or counting it.
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
 	read: () => Value,
 	listener: (value: Value) => void,
+	subject: SubscriptionSubject,
+	widgetId: string | null,
+	member: string | null,
+	unchanged?: (value: Value) => boolean,
 ): () => void {
 	let isBootstrap = true
+	// The host call `notifications` counts in (see `hostCalls`).
+	let countedIn = 0
+	let notifications = 0
 
 	const rawDispose = effect(() => {
 		let value: Value
@@ -441,6 +516,20 @@ export function createTrackedSubscription<Value>(
 		if (isBootstrap) {
 			isBootstrap = false
 			return
+		}
+		if (unchanged !== undefined && unchanged(value))
+			return
+		// Every flush Core starts runs inside a Runtime operation; outside one there is no call to bound.
+		if (operationDepth !== 0) {
+			if (countedIn !== hostCalls) {
+				countedIn = hostCalls
+				notifications = 0
+			}
+			if (++notifications > MAX_NOTIFICATIONS_PER_CALL) {
+				if (notifications === MAX_NOTIFICATIONS_PER_CALL + 1)
+					reportIsolatedException(new RangeError(`The subscription to ${describeSubscription(subject, widgetId, member)} was notified ${MAX_NOTIFICATIONS_PER_CALL} times within one call into the Runtime, so its listener is not called again until that call returns. The usual cause is listeners that keep writing what one another observe.`))
+				return
+			}
 		}
 
 		invokeListenerIsolated(listener, value)

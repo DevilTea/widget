@@ -960,7 +960,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 	 * their listeners after the subscription exists (see `createTrackedSubscription`).
 	 */
 	function subscribeWithinOperation(listener: (result: ExecutionResult<unknown, RuntimePropertyDiagnostic>) => void): () => void {
-		return createTrackedSubscription(context, internal.getResult, listener)
+		return createTrackedSubscription(context, internal.getResult, listener, 'Property', params.widgetId, params.name)
 	}
 
 	const publicProperty: RuntimeProperty<unknown> = {
@@ -978,7 +978,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 		},
 		subscribeDiagnostics(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, internal.getDiagnostics, listener)
+			return createTrackedSubscription(context, internal.getDiagnostics, listener, 'the diagnostics of Property', params.widgetId, params.name)
 		},
 	}
 
