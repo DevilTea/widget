@@ -1182,7 +1182,7 @@ node-owned ones):
 | `missing-dependency-member` | the target has the capability but no such member | `dependency`, `related?` |
 | `ambiguous-dependency-target` | several nodes share the target id | `dependency`, `related` |
 | `property-dependency-has-write-effects` | a Property depends on a Method that writes State | `dependency`, `related` |
-| `property-evaluation-cycle` | a cycle of dependencies that contains a Property | `related?` |
+| `property-evaluation-cycle` | a cycle of dependencies that contains a Property (reported on every Property of the cycle; `related` lists every member of the cycle, the diagnostic's own Property and any Method included, in member order, and is one frozen array shared by the diagnostics of that cycle) | `related` |
 | `json-incompatible-value` | the whole-source JSON-domain check found a value outside the domain; aggregate-only | `path` (source-rooted), `reason` |
 | `source-access-failed` | the whole-source check could not safely read a value (an accessor or a throwing reflection); aggregate-only | `path` |
 
@@ -3259,10 +3259,18 @@ The stack still limits these cases:
    through. Afterwards the Runtime's cached Property values may be out of date
    until the next write reaches them.
 5. **Very long dependency cycles in an invalid document.** Compilation reports
-   every member of a cycle with a `property-evaluation-cycle` diagnostic whose
-   `related` list names the other members, so memory grows with the square of
-   the cycle length. In Node, a cycle of 4,000 members took about 1 s and 950 MB,
-   8,000 members about 5 s and 3.6 GB, and 30,000 exhausted the heap.
+   every Property of a cycle with a `property-evaluation-cycle` diagnostic. All
+   the diagnostics of one cycle share one frozen `related` list that names every
+   member of the cycle, so time and memory grow with the cycle length, not with
+   its square. Compiling a ring of Properties, one per widget, took in Node 24
+   about 40 ms and 100 MB of resident memory for 4,000 members, about 240 ms and
+   290 MB for 30,000, and about 2.3 s and 1.5 GB for 300,000. Each member still
+   costs one diagnostic, one `related` entry and its own Blueprint node, so the
+   document size still sets the cost, and a host that compiles untrusted
+   documents should still bound it (see the advice below). Code that copies or
+   serializes each diagnostic's `related` list, for example to send it to
+   another process, repeats the whole list once per diagnostic and is still
+   quadratic.
 
 The Inspector's projection of a very long chain of failing Properties (each
 failure wraps its dependency's failure as its `cause`) is also still bounded by
