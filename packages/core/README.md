@@ -592,9 +592,13 @@ in progress), and it is never re-entered, so it may read and write the Runtime.
 for a while can put the previous one back. With a handler set, Core queues a
 microtask only for an exception the handler throws, a report still waiting when
 the handler is removed, and what the handler's handling causes beyond its
-internal bounds; without `queueMicrotask` those reports are dropped and nothing
-else changes. A host whose handler stays set, catches its own exceptions and
-does not keep causing what it handles needs neither `queueMicrotask` nor a
+internal bounds; without `queueMicrotask` those reports are dropped and the rest
+of the pass is unaffected, as long as the handler stays set until the Runtime
+call that is running ends: removing it in the middle of a Runtime call returns
+the rest of that call to the default mode, whose `queueMicrotask` call is not
+guarded, so on a host without it that call throws a `TypeError`. A host whose
+handler stays set, catches its own exceptions and does not keep causing what it
+handles needs neither `queueMicrotask` nor a
 drained job queue. See
 [Receiving isolated errors](https://deviltea.github.io/widget/packages/widget-core#receiving-isolated-errors)
 and [Host requirements](https://deviltea.github.io/widget/packages/widget-core#host-requirements).

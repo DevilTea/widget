@@ -3519,12 +3519,16 @@ runtime.dispose()
   stopped. A chain of reports in which each was caused by the handler's
   handling of the previous one is handed over to a depth of 100. Beyond that
   the handler receives one `RangeError` saying so, and the exceptions further
-  down the chain are rethrown in a microtask. Independent reports are not
-  counted: when 150 listeners throw in one call and the handler causes one new
-  exception for each, all 300 are handed over. A handler whose handling of
-  each report causes two new ones keeps every chain short, so a second limit
-  stops it after 10,000 exceptions caused by its handling in one pass, with its
-  own `RangeError`. Both limits are internal and may change. When the
+  down the chain are rethrown in a microtask. Independent reports do not
+  count toward the depth: when 150 listeners throw in one call and the handler
+  causes one new exception for each, all 300 are handed over. They do count
+  toward the total below, through the exceptions their handling causes. A
+  handler whose handling of each report causes two new ones keeps every chain
+  short, so a second limit stops it after 10,000 exceptions caused by its
+  handling in one pass, with its own `RangeError`. Once that limit is reached,
+  the reports caused by the handler's handling that are still queued (up to
+  about 10,000) are all rethrown in microtasks, and in Node the first one ends
+  the process when no `uncaughtException` handler is installed. Both limits are internal and may change. When the
   inspection delivery bound stops a pass, the reports still waiting are handed
   over, not dropped, followed by that bound's `RangeError`; what the handler's
   handling causes after that is rethrown in a microtask.
@@ -3532,6 +3536,12 @@ runtime.dispose()
   queued microtask, and the remaining reports are still handed over. Catch
   inside the handler when the host has no `queueMicrotask` (see
   [Host requirements](#host-requirements)).
+- **An exhausted engine stack inside the pass.** The handler's own exceptions
+  are caught, but if the engine stack is exhausted in Core's own hand-over
+  machinery, the exception surfaces in the host's call, and the pass's cleanup
+  discards what was still queued: the reports and Property inspection
+  deliveries not handed over yet are lost. Call Core with enough stack left
+  (see [Call-stack depth](#call-stack-depth)).
 - **Replacing or removing it.** `setIsolatedErrorHandler(null)` (or
   `undefined`) restores the default. A report still waiting when the handler is
   replaced goes to the new handler; one still waiting when it is removed is
@@ -3556,6 +3566,12 @@ runtime.dispose()
   	return captured
   }
   ```
+
+  Used inside a Runtime call (for example in a subscriber), it captures
+  nothing: reports are handed over when the outermost Runtime call ends, by
+  which time `finally` has already restored the previous handler, so the
+  previous handler receives them. Use it from the top level, around calls
+  that are not nested in another Runtime call.
 - **One handler per loaded Core.** It applies to every System, Blueprint,
   Runtime and `WidgetDocument` of that copy of Core (an application loads
   exactly one). It belongs to the host: a plugin library or renderer library
@@ -3592,9 +3608,13 @@ IIFE). The current implementation needs:
   exception the handler's handling causes beyond one of its bounds (a chain
   deeper than its limit, more than its total in one pass, or after the
   inspection delivery bound stopped the pass). Without `queueMicrotask`, Core
-  drops exactly those reports, one by one, and nothing else: the host's call
-  returns or throws what it would have, and every other report and inspection
-  delivery is still handed over. So an embedded host needs neither
+  drops exactly those reports, one by one: the host's call returns or throws
+  what it would have, and every other report and inspection delivery is still
+  handed over. That holds only while the handler stays set until the Runtime
+  call that is running ends: when the handler is removed during a Runtime
+  call, the rest of that call is back in the default mode, whose
+  `queueMicrotask` call is not guarded, so on a host without it that call
+  throws a `TypeError`. So an embedded host needs neither
   `queueMicrotask` nor a drained job queue as long as its handler stays set
   while Runtime calls run, catches its own exceptions, and does not keep
   causing what it handles. Catch inside the handler, so that its own
