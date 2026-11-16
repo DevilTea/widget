@@ -506,9 +506,10 @@ lists every member of the cycle, itself included); every other entry stays, in C
 names its widget with the header's vocabulary and separator (`id : type · property "name"`, a bare widget
 location is just `id : type`; an unresolved node uses Core's `?` hints and `(unresolved)`); a related
 location on the diagnostic's own widget (same `node`) stays short (`property "name"`, `widget`) because the
-header names that widget. When two widgets in one diagnostic read the same `id : type` (`duplicate-widget-id`),
-the chip appends the node's inspection `sourcePath` (`same : Text @ slots.items[1]`). Chips are single-line
-(ellipsis, `title` = the full label) so long ids never widen the row. These labels are identifiers, like the
+header names that widget. When two different widgets in one diagnostic (its own and its related ones) read the same `id : type`
+(`duplicate-widget-id`; one widget listed twice in `related` does not count), the chip appends the node's
+inspection `sourcePath` (`same : Text @ slots.items[1]`). Chips wrap onto several lines
+(`overflow-wrap: anywhere`) and `title` is the full label; they are not truncated. These labels are identifiers, like the
 header's, and add no i18n strings.
 Source-level locations intentionally return no inspection node and remain non-navigable. Node-level
 diagnostic navigation writes Document-scoped shared focus; it never consumes Preview-scoped IDs or maps

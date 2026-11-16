@@ -112,8 +112,9 @@ function relatedLocationLabel(location: BlueprintDiagnosticLocation, diagnostic:
 	if (own.type !== 'source' && own.node === location.node)
 		return member ?? 'widget'
 	const widgetLabel = widgetLabelOf(location, inspection)
-	const labels = [own, ...relatedOf(diagnostic)].map(other => other.type === 'source' ? null : widgetLabelOf(other, inspection))
-	const path = labels.filter(label => label === widgetLabel).length > 1 ? sourcePathOf(location, inspection) : null
+	// Distinct widgets (nodes) reading the same `id : type`; one widget listed twice in `related` is not a duplicate.
+	const sameLabelNodes = new Set([own, ...relatedOf(diagnostic)].flatMap(other => other.type !== 'source' && widgetLabelOf(other, inspection) === widgetLabel ? [other.node] : []))
+	const path = sameLabelNodes.size > 1 ? sourcePathOf(location, inspection) : null
 	const widget = path === null ? widgetLabel : `${widgetLabel} @ ${path}`
 	return member === null ? widget : `${widget} · ${member}`
 }
@@ -194,7 +195,7 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 					type="button"
 					:disabled="nodeIdOfLocation(location, inspection) === null"
 					:title="relatedLocationLabel(location, diagnostic, inspection)"
-					:class="pika({ 'fontSize': '11px', 'color': 'var(--lab-color-accent)', 'background': 'var(--lab-color-surface-alt)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': '999px', 'cursor': 'pointer', 'padding': '1px 7px', 'maxWidth': '100%', 'minWidth': '0', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'whiteSpace': 'nowrap', '$:disabled': { color: 'var(--lab-color-text-muted)', cursor: 'default' } })"
+					:class="pika({ 'fontSize': '11px', 'color': 'var(--lab-color-accent)', 'background': 'var(--lab-color-surface-alt)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': '999px', 'cursor': 'pointer', 'padding': '1px 7px', 'minWidth': '0', 'maxWidth': '100%', 'textAlign': 'left', 'whiteSpace': 'normal', 'overflowWrap': 'anywhere', '$:disabled': { color: 'var(--lab-color-text-muted)', cursor: 'default' } })"
 					@click="onNavigateToLocation(location, inspection)"
 				>
 					{{ relatedLocationLabel(location, diagnostic, inspection) }}

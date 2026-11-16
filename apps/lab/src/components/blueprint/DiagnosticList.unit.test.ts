@@ -158,7 +158,32 @@ describe('diagnostic list related locations', () => {
 		.properties(properties => properties.value({ registerDeps: ({ dep }) => ({ next: dep.widget(peer).properties.get('value') }), compute: () => null }))
 		.done()
 
-	const system = createWidgetSystem({ plugins: [cyclePlugin, selfPlugin, sideEffectPlugin, hostPlugin, sidePlugin('left-side', 'right'), sidePlugin('right-side', 'left'), ringPlugin('ring-a', 'b'), ringPlugin('ring-b', 'c'), ringPlugin('ring-c', 'a')] })
+	interface GuestsInterfaces {
+		properties: { visible: unknown, value: unknown }
+	}
+
+	interface SessionsInterfaces {
+		properties: { options: unknown, value: unknown }
+	}
+
+	/** guests.visible -> sessions.options -> sessions.value -> guests.value -> guests.visible: four Properties on two widgets. */
+	const guestsPlugin = createWidgetPlugin('guests-q')
+		.description('guests fixture')
+		.interfaces<GuestsInterfaces>()
+		.properties(properties => properties
+			.visible({ registerDeps: ({ dep }) => ({ next: dep.widget('sessions').properties.get('options') }), compute: () => null })
+			.value({ registerDeps: ({ dep }) => ({ next: dep.self.properties.get('visible') }), compute: () => null }))
+		.done()
+
+	const sessionsPlugin = createWidgetPlugin('sessions-q')
+		.description('sessions fixture')
+		.interfaces<SessionsInterfaces>()
+		.properties(properties => properties
+			.options({ registerDeps: ({ dep }) => ({ next: dep.self.properties.get('value') }), compute: () => null })
+			.value({ registerDeps: ({ dep }) => ({ next: dep.widget('guests').properties.get('value') }), compute: () => null }))
+		.done()
+
+	const system = createWidgetSystem({ plugins: [cyclePlugin, selfPlugin, sideEffectPlugin, hostPlugin, sidePlugin('left-side', 'right'), sidePlugin('right-side', 'left'), ringPlugin('ring-a', 'b'), ringPlugin('ring-b', 'c'), ringPlugin('ring-c', 'a'), guestsPlugin, sessionsPlugin] })
 
 	function rowsOf(type: string | object, code: string) {
 		const blueprint = system.createBlueprint(typeof type === 'string' ? { id: 'root', type } : type)
@@ -263,6 +288,31 @@ describe('diagnostic list related locations', () => {
 		expect(rows.flatMap(row => row.chips)
 			.sort())
 			.toEqual([...all, ...all].sort())
+	})
+
+	it('names each member of a four-Property cycle across two widgets without a source path', () => {
+		const rows = rowsOf({
+			id: 'root',
+			type: 'host',
+			slots: { children: [{ id: 'guests', type: 'guests-q' }, { id: 'sessions', type: 'sessions-q' }] },
+		}, 'property-evaluation-cycle')
+		expect(rows)
+			.toHaveLength(4)
+		for (const row of rows) {
+			expect(row.related)
+				.toBe(4)
+			expect(row.chips.some(chip => chip.includes('@')))
+				.toBe(false)
+		}
+		const chipsOfOwn = (own: string, chips: string[]) => rows.filter(row => row.own === own && JSON.stringify([...row.chips].sort()) === JSON.stringify([...chips].sort()))
+		// guests.visible and guests.value: the other guests member is short, sessions members carry the widget.
+		expect(chipsOfOwn('visible', ['property "value"', 'sessions : sessions-q · property "options"', 'sessions : sessions-q · property "value"']))
+			.toHaveLength(1)
+		expect(chipsOfOwn('options', ['property "value"', 'guests : guests-q · property "visible"', 'guests : guests-q · property "value"']))
+			.toHaveLength(1)
+		expect(rows.flatMap(row => row.chips)
+			.filter(chip => chip.startsWith('sessions : sessions-q')))
+			.toHaveLength(4)
 	})
 
 	it('keeps a related member of the diagnostic\'s own widget short and does not repeat the widget', () => {
