@@ -194,10 +194,12 @@ let entryBatchDepth = 0
 let queuedDeliveries: (() => void)[] = []
 let queuedGenerations: number[] = []
 /**
- * Whether `queuedDeliveries` holds anything. Kept apart from the array so that the check every Runtime operation
- * makes when it leaves is one load and one test while nothing is queued, the common case.
+ * Whether the host call in progress has anything to finish when its outermost operation leaves (see
+ * {@link finishHostCall}): deliveries in `queuedDeliveries`, or a subscription that counted a notification in it
+ * (see {@link hostCalls}). One flag for both, so that the check every outermost operation makes when it leaves is
+ * one load and one test while there is neither, the common case.
  */
-let deliveriesQueued = false
+let hostCallWork = false
 /** Whether {@link deliverQueued} is running: operations its listeners start queue their deliveries behind. */
 let delivering = false
 /** The generation of the delivery running now; `0` outside {@link deliverQueued}. */
@@ -214,11 +216,79 @@ let deliveryGeneration = 0
 const MAX_DELIVERY_GENERATIONS = 100
 
 /**
+ * Numbers the host's calls into the Runtime in which a subscription was notified. A subscription compares it with
+ * the number it last counted in to restart its count of notifications (see {@link MAX_NOTIFICATIONS_PER_CALL}).
+ * Realm-wide, like {@link operationDepth}.
+ *
+ * It is advanced when such a call ends, not when a call starts, so that an operation in which nothing is
+ * notified (a cached read, a write nobody observes) executes nothing for it: the first notification a
+ * subscription counts in a call sets {@link hostCallWork}, and the outermost operation's exit, which tests that
+ * flag already, advances the number in {@link finishHostCall}. A call ends when its outermost operation leaves
+ * outside the queued-delivery drain, after the drain: the operations that the listeners of a queued delivery
+ * start are outermost too, but they run before the host's call returns, on its behalf, so they keep its number.
+ * It starts at `1`, above every value a subscription stores before its first count (see
+ * {@link createTrackedSubscription}).
+ */
+let hostCalls = 1
+
+/**
+ * How many times one subscription's listener is notified within one host call into the Runtime, the deliveries
+ * that call queues included (see {@link hostCalls}). Listeners that keep changing what they observe (a
+ * self-normaliser that writes a fresh copy while something else reads the member, two listeners mirroring each
+ * other's objects, a diverging pair) would otherwise make that call loop forever: the loop runs inside
+ * alien-signals' flush, iteratively, so nothing else bounds it. Beyond the limit the listener is not called again
+ * until the call returns, and one `RangeError` naming what the subscription observes is reported through the
+ * isolated-exception channel (not a coded error: it reports a listener bug, like any exception an isolated
+ * listener throws). High enough that a converging cascade of listeners does not reach it (it takes thousands of
+ * listener steps in one call), low enough that a loop reaches it within milliseconds. Counted separately from
+ * {@link MAX_DELIVERY_GENERATIONS}: an inspection delivery round is not a subscriber notification. It must stay
+ * well above it, because a loop that runs through delivery rounds notifies a subscriber once per round, and
+ * stopping and reporting that loop is the delivery bound's job. Internal, not configurable; exported for the tests only.
+ */
+export const MAX_NOTIFICATIONS_PER_CALL = 10_000
+
+/**
+ * What a subscription observes, for the limit's report: `"State"`/`"Property"` and `"the diagnostics of
+ * State"`/`"of Property"`/`"of Method"` with the member's own primitive parameters as the owner, `"the
+ * diagnostics of widget"` with the widget id as the owner. Static strings, so a subscription stores no message.
+ */
+export type SubscriptionSubject
+	= | 'State'
+		| 'Property'
+		| 'the diagnostics of State'
+		| 'the diagnostics of Property'
+		| 'the diagnostics of Method'
+		| 'the diagnostics of widget'
+
+/**
+ * Who the observed member belongs to, for the limit's report: an object the caller already holds (a primitive's
+ * parameters, which name the widget and the member) or a widget id, so that a subscription keeps one reference
+ * and the report's text is built only when the limit is reached.
+ */
+export type SubscriptionOwner
+	= | { readonly widgetId: string, readonly key: string }
+		| { readonly widgetId: string, readonly name: string }
+		| string
+
+/** Reports that a subscription reached {@link MAX_NOTIFICATIONS_PER_CALL}; `observed` names what it observes. */
+function reportNotificationLimit(observed: string): void {
+	reportIsolatedException(new RangeError(`The subscription to ${observed} was notified ${MAX_NOTIFICATIONS_PER_CALL} times within one call into the Runtime, so its listener is not called again until that call returns. The usual cause is listeners that keep writing what one another observe.`))
+}
+
+function describeSubscription(subject: SubscriptionSubject, owner: SubscriptionOwner): string {
+	if (typeof owner === 'string')
+		return `${subject} "${owner}"`
+	return `${subject} "${'key' in owner ? owner.key : owner.name}" of widget "${owner.widgetId}"`
+}
+
+/**
  * Closes every batch level opened inside the outermost Runtime operation, letting alien-signals flush the
  * notifications it already queued.
  *
- * In normal operation the only levels still open here are the ones {@link writeDeferringFlush} opened:
- * every other level is closed by its own `endBatch()` in a `finally`. But that `finally` cannot be relied
+ * In normal operation the only levels still open here are the ones {@link writeDeferringFlush} opened, the ones
+ * nested Method invocations left open ({@link endBatchDeferringFlush}) and the ones nested writes opened
+ * ({@link runRuntimeWrite}): every other level is closed by its own `endBatch()` in a `finally`.
+ * But that `finally` cannot be relied
  * on when runaway recursion (a valid Method <-> Method cycle) exhausts the engine's stack: the deepest
  * frames' `endBatch()` calls themselves overflow and never decrement. Draining to the depth recorded on
  * entry, rather than counting the levels this module opened, closes those leaked levels too, so a
@@ -255,6 +325,9 @@ function releaseBatches(): void {
  *
  * `fn` receives `argument`, so a hot path passes a function that already exists together with its
  * argument instead of allocating a closure per call.
+ *
+ * Reads, Method invocations and subscriptions use this entry; State writes use {@link runRuntimeWrite}, which
+ * differs only on a nested entry, so that this one executes nothing for a feature only writes need.
  */
 export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument): Result {
 	if (operationDepth === 0)
@@ -270,13 +343,57 @@ export function runRuntimeOperation<Result, Argument = undefined>(fn: (argument:
 			}
 			finally {
 				--operationDepth
-				// Only the outermost frame looks at the queue, through a flag that is false while nothing is queued
-				// (always, when no inspection listener is registered). In this `finally`, so the queued deliveries
-				// also run when `fn` or the release threw (an effect that does not belong to a Runtime can throw out
-				// of the release's flush); `deliverQueued` itself never throws, so that exception still reaches the
-				// caller.
-				if (deliveriesQueued && !delivering)
-					deliverQueued()
+				// Only the outermost frame looks at what the host call has to finish, through a flag that is false
+				// while there is nothing (always, when no inspection listener is registered and nobody was notified).
+				// In this `finally`, so the queued deliveries also run when `fn` or the release threw (an effect that
+				// does not belong to a Runtime can throw out of the release's flush); `finishHostCall` itself never
+				// throws, so that exception still reaches the caller.
+				if (hostCallWork && !delivering)
+					finishHostCall()
+			}
+		}
+		else {
+			--operationDepth
+		}
+	}
+}
+
+/**
+ * {@link runRuntimeOperation} for an operation that writes State (`RuntimeState`'s `attemptSet`, both
+ * `resetState()`s). It executes the same statements, except that when it is entered while another operation is
+ * in progress (a listener the enclosing operation's flush invokes, say) with no batch level open, it opens one,
+ * which the outermost frame's release closes: its writes never flush on their own, like a nested Method
+ * invocation's (see {@link endBatchDeferringFlush}). Flushing them there would run the effects they queue inside
+ * the flush that is running the listener's own effect, and alien-signals does not queue an effect again for a
+ * write made while that effect runs, so a subscriber whose value the write changes could miss it.
+ *
+ * A separate entry rather than a parameter of {@link runRuntimeOperation}, so that a read, outermost or nested,
+ * executes nothing for this; and a copy of its body rather than a call to it, so that an outermost write executes
+ * exactly what it did before. Keep the two bodies identical apart from the nested entry.
+ */
+export function runRuntimeWrite<Result, Argument = undefined>(fn: (argument: Argument) => Result, argument?: Argument): Result {
+	// The nested case first: then the outermost case executes the same bytecodes as `runRuntimeOperation`'s, with
+	// no jump over the other branch.
+	if (operationDepth !== 0) {
+		if (getBatchDepth() === 0)
+			startBatch()
+	}
+	else {
+		entryBatchDepth = getBatchDepth()
+	}
+	++operationDepth
+	try {
+		return fn(argument as Argument)
+	}
+	finally {
+		if (operationDepth === 1) {
+			try {
+				releaseBatches()
+			}
+			finally {
+				--operationDepth
+				if (hostCallWork && !delivering)
+					finishHostCall()
 			}
 		}
 		else {
@@ -297,7 +414,24 @@ export function deliverWhenIdle(deliver: () => void): void {
 	}
 	queuedDeliveries.push(deliver)
 	queuedGenerations.push(deliveryGeneration + 1)
-	deliveriesQueued = true
+	hostCallWork = true
+}
+
+/**
+ * Finishes the host call whose outermost operation is leaving: runs the deliveries it queued (see
+ * {@link deliverQueued}), then advances {@link hostCalls}, so the notifications of those deliveries count in this
+ * call and the next call starts every count from zero. The advance is in a `finally` of plain statements, so it
+ * happens even when the drain throws (only an exhausted engine stack can make it throw).
+ */
+function finishHostCall(): void {
+	try {
+		if (queuedDeliveries.length > 0)
+			deliverQueued()
+	}
+	finally {
+		hostCallWork = false
+		++hostCalls
+	}
 }
 
 /**
@@ -320,7 +454,6 @@ function deliverQueued(): void {
 	finally {
 		queuedDeliveries = []
 		queuedGenerations = []
-		deliveriesQueued = false
 		deliveryGeneration = 0
 		delivering = false
 	}
@@ -419,13 +552,24 @@ export function endBatchDeferringFlush(): void {
  * operation, so that the inspection completions the bootstrap run produces are delivered after the effect's
  * first run has finished, not inside it, where alien-signals would not run the effect again for a write a
  * listener makes (issue #198). The other subscriptions only read signals, and need no operation.
+ *
+ * Within one host call into the Runtime (see {@link hostCalls}) the listener is called at most
+ * {@link MAX_NOTIFICATIONS_PER_CALL} times; `subject` and `owner` name what the subscription observes in the
+ * report of the limit, whose text is built only when the limit is reached. A notification adds three comparisons
+ * and an increment (and three assignments in the first notification of a call). The subscription stores the two
+ * references it is given and one number besides what it stored before: `countedIn` replaces the bootstrap flag
+ * (`-1` until the bootstrap run, then the host call the count belongs to; `0` matches no call, since
+ * {@link hostCalls} starts at `1`). Nothing is allocated unless the limit is reached.
  */
 export function createTrackedSubscription<Value>(
 	context: RuntimeContext,
 	read: () => Value,
 	listener: (value: Value) => void,
+	subject: SubscriptionSubject,
+	owner: SubscriptionOwner,
 ): () => void {
-	let isBootstrap = true
+	let countedIn = -1
+	let notifications = 0
 
 	const rawDispose = effect(() => {
 		let value: Value
@@ -433,16 +577,85 @@ export function createTrackedSubscription<Value>(
 			value = read()
 		}
 		catch (error) {
-			isBootstrap = false
+			if (countedIn === -1)
+				countedIn = 0
 			reportTrackedReadException(error)
 			return
 		}
 
-		if (isBootstrap) {
-			isBootstrap = false
+		if (countedIn === -1) {
+			countedIn = 0
+			return
+		}
+		// Every flush Core starts runs inside a Runtime operation; outside one there is no call to bound.
+		if (operationDepth !== 0) {
+			if (countedIn !== hostCalls) {
+				countedIn = hostCalls
+				notifications = 0
+				hostCallWork = true
+			}
+			if (++notifications > MAX_NOTIFICATIONS_PER_CALL) {
+				if (notifications === MAX_NOTIFICATIONS_PER_CALL + 1)
+					reportNotificationLimit(describeSubscription(subject, owner))
+				return
+			}
+		}
+
+		invokeListenerIsolated(listener, value)
+	})
+
+	return context.registerSubscription(rawDispose)
+}
+
+/**
+ * {@link createTrackedSubscription} for the Runtime diagnostics aggregate, whose `read()` re-runs after any commit
+ * but whose value changes less often: a run whose value is the one last delivered (initially `initial`) neither
+ * calls the listener nor counts towards the limit. A separate function with the same body, so that the other
+ * subscriptions store and test nothing for this filter and the aggregate allocates no filter closure. Keep the two
+ * bodies identical apart from the filter.
+ */
+export function createDistinctTrackedSubscription<Value>(
+	context: RuntimeContext,
+	read: () => Value,
+	listener: (value: Value) => void,
+	initial: Value,
+): () => void {
+	let delivered = initial
+	let countedIn = -1
+	let notifications = 0
+
+	const rawDispose = effect(() => {
+		let value: Value
+		try {
+			value = read()
+		}
+		catch (error) {
+			if (countedIn === -1)
+				countedIn = 0
+			reportTrackedReadException(error)
 			return
 		}
 
+		if (countedIn === -1) {
+			countedIn = 0
+			return
+		}
+		if (value === delivered)
+			return
+		if (operationDepth !== 0) {
+			if (countedIn !== hostCalls) {
+				countedIn = hostCalls
+				notifications = 0
+				hostCallWork = true
+			}
+			if (++notifications > MAX_NOTIFICATIONS_PER_CALL) {
+				if (notifications === MAX_NOTIFICATIONS_PER_CALL + 1)
+					reportNotificationLimit('the diagnostics of the Runtime')
+				return
+			}
+		}
+
+		delivered = value
 		invokeListenerIsolated(listener, value)
 	})
 

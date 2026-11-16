@@ -14,7 +14,7 @@ import type { WidgetId, WidgetMemberKey } from '../types'
 import type { RuntimeContext } from './context'
 import { endBatch, signal, startBatch } from 'alien-signals'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
-import { createTrackedSubscription, invokeListenerIsolated, isRuntimeIdle, runRuntimeOperation, writeDeferringFlush } from './adapter'
+import { createTrackedSubscription, invokeListenerIsolated, isRuntimeIdle, runRuntimeWrite, writeDeferringFlush } from './adapter'
 import { createOperationCollector } from './collector'
 import { callbackScope } from './context'
 import { buildDefaultStateValidationDiagnostic, buildStateValidationDiagnostic, freezeDiagnosticSnapshot } from './diagnostics'
@@ -105,11 +105,14 @@ export function createStateLedger(stateCount: number): StateLedger {
  * computed or effect and commits a value an enclosing write has not committed yet. Such a restore leaves
  * the marks set, since its own write may still be uncommitted when it returns; the next top-level reset
  * visits those States again, exactly as a full scan would, and clears the marks.
+ *
+ * Like `set()`, a restore made while another Runtime operation is in progress does not flush on its own: the
+ * outermost operation notifies the subscribers (see `runRuntimeWrite`).
  */
 export function restoreInitialState(context: RuntimeContext, ledger: StateLedger, first: number, end: number): void {
 	context.assertActive()
 	const writtenOnly = isRuntimeIdle()
-	runRuntimeOperation(() => {
+	runRuntimeWrite(() => {
 		startBatch()
 		try {
 			const { dirty, states } = ledger
@@ -190,7 +193,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	/**
 	 * The value write below is what makes the whole dependent Property graph recompute, and those
 	 * recomputes commit their own diagnostic snapshots from inside their evaluators. Wrapping the pipeline in
-	 * `runRuntimeOperation` is only what tells `writeDeferringFlush` when those evaluators are all back
+	 * `runRuntimeWrite` is only what tells `writeDeferringFlush` when those evaluators are all back
 	 * out of the graph, so the propagations they deferred are released here: still inside the very `set()`
 	 * call that caused them, before its `ExecutionResult` reaches the caller.
 	 */
@@ -208,7 +211,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	}
 
 	function attemptSet(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
-		return runRuntimeOperation(attemptSetWithinOperation, candidate)
+		return runRuntimeWrite(attemptSetWithinOperation, candidate)
 	}
 
 	/**
@@ -329,7 +332,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		},
 		subscribe(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, internal.get, listener)
+			return createTrackedSubscription(context, internal.get, listener, 'State', params)
 		},
 		getDiagnostics() {
 			context.assertActive()
@@ -337,7 +340,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 		},
 		subscribeDiagnostics(listener) {
 			context.assertActive()
-			return createTrackedSubscription(context, internal.getDiagnostics, listener)
+			return createTrackedSubscription(context, internal.getDiagnostics, listener, 'the diagnostics of State', params)
 		},
 	}
 

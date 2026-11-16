@@ -31,7 +31,7 @@ import { restoreInitialState } from './state'
 
 /** `stateStart` and `stateEnd` bound the ledger ordinals of this widget's State members. */
 export function buildRuntimeWidget(context: RuntimeContext, node: CompiledResolvedWidgetNode, entry: PrimitiveRegistryEntry, ledger: StateLedger, stateStart: number, stateEnd: number): unknown {
-	const diagnosticsAggregate = createRuntimeWidgetDiagnosticsAggregate(context, entry)
+	const diagnosticsAggregate = createRuntimeWidgetDiagnosticsAggregate(context, entry, node.id)
 
 	const widget: Record<string, unknown> = {
 		id: node.id,
