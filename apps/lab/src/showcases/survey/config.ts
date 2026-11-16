@@ -230,19 +230,41 @@ function checkLeaf(input: Record<string, unknown>, path: ConfigPath, add: AddCon
 	}
 }
 
-/** A condition: a leaf, or exactly one of `all`, `any`, `not`. */
-function checkCondition(input: unknown, path: ConfigPath, add: AddConfigDiagnostic): void {
+/**
+ * How many levels deep a condition may nest. Core bounds the authored JSON depth (256) but still calls
+ * `validate`, so the checker bounds its own recursion: a deeper condition is reported, not descended into,
+ * and the checker never throws. `evaluateCondition`, `conditionTargets` and `conditionLeaves` recurse
+ * without a bound because they only ever see configs this checker accepted.
+ */
+export const MAX_CONDITION_DEPTH = 64
+
+const CONDITION_KEYS = ['question', 'op', 'value', 'all', 'any', 'not']
+
+/** A condition: a leaf, or exactly one of `all`, `any`, `not`. `depth` is 1 for the outermost condition. */
+function checkCondition(input: unknown, path: ConfigPath, add: AddConfigDiagnostic, depth = 1): void {
+	if (depth > MAX_CONDITION_DEPTH) {
+		report(add, path, 'invalid-condition', `conditions may nest at most ${MAX_CONDITION_DEPTH} levels deep; simplify this condition.`)
+		return
+	}
 	if (!isPlainObject(input)) {
 		report(add, path, 'invalid-condition', 'must be an object: { "question", "op", "value"? } or one of { "all": [...] }, { "any": [...] }, { "not": {...} }.')
 		return
 	}
 	const kinds = ['question', 'all', 'any', 'not'].filter(key => Object.hasOwn(input, key))
-	if (kinds.length !== 1) {
-		report(add, path, 'invalid-condition', `must have exactly one of "question", "all", "any" or "not" (found ${kinds.length === 0
-			? 'none'
-			: kinds.map(kind => `"${kind}"`)
-					.join(', ')}).`)
-		checkKnownKeys(input, ['question', 'op', 'value', 'all', 'any', 'not'], path, add)
+	if (kinds.length === 0) {
+		// One diagnostic: a misspelled "question" is the usual cause, so name the unknown keys here.
+		const unknown = Object.keys(input)
+			.filter(key => !CONDITION_KEYS.includes(key))
+		report(add, path, 'invalid-condition', `must have exactly one of "question", "all", "any" or "not" (found none${unknown.length === 0
+			? ''
+			: `; unknown key ${unknown.map(key => `"${key}"`)
+				.join(', ')}`}).`)
+		return
+	}
+	if (kinds.length > 1) {
+		report(add, path, 'invalid-condition', `must have exactly one of "question", "all", "any" or "not" (found ${kinds.map(kind => `"${kind}"`)
+			.join(', ')}).`)
+		checkKnownKeys(input, CONDITION_KEYS, path, add)
 		return
 	}
 	const kind = kinds[0]!
@@ -252,7 +274,7 @@ function checkCondition(input: unknown, path: ConfigPath, add: AddConfigDiagnost
 	}
 	checkKnownKeys(input, [kind], path, add)
 	if (kind === 'not') {
-		checkCondition(input.not, [...path, 'not'], add)
+		checkCondition(input.not, [...path, 'not'], add, depth + 1)
 		return
 	}
 	const list = input[kind]
@@ -262,7 +284,7 @@ function checkCondition(input: unknown, path: ConfigPath, add: AddConfigDiagnost
 	}
 	if (list.length === 0)
 		report(add, [...path, kind], 'empty-condition-list', 'must contain at least one condition.')
-	list.forEach((item, index) => checkCondition(item, [...path, kind, index], add))
+	list.forEach((item, index) => checkCondition(item, [...path, kind, index], add, depth + 1))
 }
 
 function checkOptionalCondition(input: Record<string, unknown>, key: string, path: ConfigPath, add: AddConfigDiagnostic): void {
@@ -295,8 +317,12 @@ function checkQuestionBase(input: Record<string, unknown>, add: AddConfigDiagnos
 		checkI18nText(input.label, ['label'], add)
 	if (Object.hasOwn(input, 'help') && input.help !== undefined)
 		checkI18nText(input.help, ['help'], add)
-	if (Object.hasOwn(input, 'required') && input.required !== undefined && typeof input.required !== 'boolean')
-		checkCondition(input.required, ['required'], add)
+	if (Object.hasOwn(input, 'required') && input.required !== undefined && typeof input.required !== 'boolean') {
+		if (isPlainObject(input.required))
+			checkCondition(input.required, ['required'], add)
+		else
+			report(add, ['required'], 'invalid-condition', 'must be true, false, or a condition object { "question", "op", "value"? } that makes the question required while it holds.')
+	}
 	checkOptionalCondition(input, 'visibleWhen', [], add)
 	if (Object.hasOwn(input, 'rules') && input.rules !== undefined)
 		checkRules(input.rules, ['rules'], add)

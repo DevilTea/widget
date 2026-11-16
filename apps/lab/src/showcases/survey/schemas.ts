@@ -24,7 +24,7 @@ const HIDDEN_NOTE = 'A hidden question has no value: every condition reads it as
 const questionId = {
 	type: 'string',
 	minLength: 1,
-	description: 'The id of another question in the same survey (its widget id). The condition reads that question\'s effective answer. The id must exist; a question must not (directly or through others) depend on itself or form a loop with another question\'s conditions.',
+	description: 'The id of another question in the same survey (its widget id). The condition reads that question\'s effective answer. The id must exist. Conditions must not form a loop: if question A\'s "visibleWhen" or an option\'s "visibleWhen"/"enabledWhen" reads question B, then B\'s own "visibleWhen" and options must not read A back, directly or through other questions (the compiler reports a property-evaluation-cycle). A question\'s "visibleWhen" and option conditions must not read the question itself, but its "required" and "rules" may.',
 } as const
 
 const I18nTextSchema = {

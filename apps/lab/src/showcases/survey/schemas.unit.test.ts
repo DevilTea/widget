@@ -192,6 +192,14 @@ describe('condition definition', () => {
 		}
 	})
 
+	it('all and any need at least one condition', () => {
+		const [all, any] = branches.slice(4)
+		expect(((all!.properties as Json).all as Json).minItems)
+			.toBe(1)
+		expect(((any!.properties as Json).any as Json).minItems)
+			.toBe(1)
+	})
+
 	it('combinators recurse through $ref Condition', () => {
 		const [all, any, not] = branches.slice(4)
 		expect(((all!.properties as Json).all as Json).items)

@@ -206,7 +206,11 @@ export function conditionTargets(condition: Condition | null, into = new Set<str
  * Evaluates a condition against the effective answers (`read(questionId)`). A hidden or unanswered
  * question reads as `null`: `answered`, `equals`, `greaterThan`, `lessThan` and `includes` are false for
  * it; `unanswered`, `notEquals` and `excludes` are true. An operator applied to an answer of another
- * shape (`greaterThan` on a string, `includes` on a number) is false, except `excludes`, which is true.
+ * shape (`greaterThan` on a string, `includes` on a number, `equals` on an array) is false, except the
+ * negative operators `notEquals` and `excludes`, which are true.
+ *
+ * Like `conditionTargets` and `conditionLeaves`, this recurses without a depth bound: it only ever sees
+ * conditions that `./config.ts` accepted, and the checker bounds nesting (`MAX_CONDITION_DEPTH`).
  */
 export function evaluateCondition(condition: Condition, read: (questionId: string) => AnswerValue): boolean {
 	if ('all' in condition)

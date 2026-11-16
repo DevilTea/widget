@@ -123,6 +123,7 @@ describe('evaluateCondition truth table', () => {
 		[leaf('answered'), 0, true],
 		[leaf('answered'), [], true],
 		[leaf('unanswered'), null, true],
+		[leaf('unanswered'), '', false],
 		[leaf('unanswered'), 'a', false],
 		[leaf('unanswered'), 0, false],
 		[leaf('equals', 'a'), 'a', true],

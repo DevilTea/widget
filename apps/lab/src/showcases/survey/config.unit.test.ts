@@ -8,6 +8,7 @@ import {
 	checkSingleChoiceConfig,
 	checkSurveyConfig,
 	isRecovered,
+	MAX_CONDITION_DEPTH,
 	MULTIPLE_CHOICE_CONFIG_KEYS,
 	NUMERIC_CONFIG_KEYS,
 	resolveMultipleChoiceConfig,
@@ -254,6 +255,106 @@ describe('conditions', () => {
 				{ path: ['options', 1, 'enabledWhen', 'value'], reason: 'invalid-condition-value' },
 				{ path: ['options', 2, 'visibleWhen', 'all'], reason: 'empty-condition-list' },
 			])
+	})
+})
+
+describe('required', () => {
+	it('gives a non-condition required its own message', () => {
+		const diagnostics = run(checkNumericConfig, { label, required: 'yes' })
+		expect(diagnostics.map(({ path, reason }) => ({ path, reason })))
+			.toEqual([{ path: ['required'], reason: 'invalid-condition' }])
+		expect(diagnostics[0]!.message)
+			.toContain('true, false, or a condition')
+		expect(locations(checkNumericConfig, { label, required: null }))
+			.toEqual([{ path: ['required'], reason: 'invalid-condition' }])
+		expect(locations(checkNumericConfig, { label, required: [] }))
+			.toEqual([{ path: ['required'], reason: 'invalid-condition' }])
+	})
+})
+
+describe('a misspelled condition key', () => {
+	it('is one invalid-condition diagnostic that names the unknown key', () => {
+		const diagnostics = run(checkNumericConfig, { label, visibleWhen: { quesiton: 'a', op: 'answered' } })
+		expect(diagnostics.map(({ path, reason }) => ({ path, reason })))
+			.toEqual([{ path: ['visibleWhen'], reason: 'invalid-condition' }])
+		expect(diagnostics[0]!.message)
+			.toContain('unknown key "quesiton"')
+	})
+
+	it('still reports unknown keys next to a valid discriminator', () => {
+		expect(locations(checkNumericConfig, { label, visibleWhen: { question: 'a', op: 'answered', oops: 1 } }))
+			.toEqual([{ path: ['visibleWhen', 'oops'], reason: 'unknown-key' }])
+		expect(locations(checkNumericConfig, { label, visibleWhen: { all: [{ question: 'a', op: 'answered' }], oops: 1 } }))
+			.toEqual([{ path: ['visibleWhen', 'oops'], reason: 'unknown-key' }])
+	})
+})
+
+describe('prototype-like keys', () => {
+	it('reports __proto__ and constructor as unknown keys at their own path', () => {
+		const withProto = JSON.parse('{"label":{"en":"a"},"__proto__":{"x":1}}') as unknown
+		expect(locations(checkNumericConfig, withProto))
+			.toEqual([{ path: ['__proto__'], reason: 'unknown-key' }])
+		expect(locations(checkNumericConfig, { label, constructor: 1 }))
+			.toEqual([{ path: ['constructor'], reason: 'unknown-key' }])
+		const inCondition = JSON.parse('{"label":{"en":"a"},"visibleWhen":{"question":"a","op":"answered","__proto__":1}}') as unknown
+		expect(locations(checkNumericConfig, inCondition))
+			.toEqual([{ path: ['visibleWhen', '__proto__'], reason: 'unknown-key' }])
+	})
+
+	it('accepts a question id that is a prototype key without reading inherited members', () => {
+		expect(run(checkNumericConfig, { label, visibleWhen: { question: '__proto__', op: 'answered' } }))
+			.toEqual([])
+		expect(run(checkNumericConfig, { label, visibleWhen: { question: 'constructor', op: 'answered' } }))
+			.toEqual([])
+	})
+})
+
+describe('condition nesting depth', () => {
+	function nested(levels: number): unknown {
+		let condition: unknown = { question: 'a', op: 'answered' }
+		for (let level = 1; level < levels; level++)
+			condition = { not: condition }
+		return condition
+	}
+
+	it('accepts exactly MAX_CONDITION_DEPTH levels', () => {
+		expect(MAX_CONDITION_DEPTH)
+			.toBe(64)
+		expect(run(checkNumericConfig, { label, visibleWhen: nested(MAX_CONDITION_DEPTH) }))
+			.toEqual([])
+	})
+
+	it('reports one level more at the path where the limit is reached and stops descending', () => {
+		const diagnostics = run(checkNumericConfig, { label, visibleWhen: nested(MAX_CONDITION_DEPTH + 1) })
+		expect(diagnostics)
+			.toHaveLength(1)
+		expect(diagnostics[0]!.reason)
+			.toBe('invalid-condition')
+		expect(diagnostics[0]!.path)
+			.toEqual(['visibleWhen', ...Array.from({ length: MAX_CONDITION_DEPTH })
+				.fill('not')])
+		expect(diagnostics[0]!.message)
+			.toContain('conditions may nest at most 64 levels deep')
+	})
+
+	it('bounds all, any, rules, required and option conditions the same way', () => {
+		const deep = nested(MAX_CONDITION_DEPTH + 1)
+		expect(locations(checkNumericConfig, { label, visibleWhen: { all: [deep] } }))
+			.toHaveLength(1)
+		expect(locations(checkNumericConfig, { label, required: { any: [deep] } }))
+			.toHaveLength(1)
+		expect(locations(checkNumericConfig, { label, rules: [{ when: deep, message: label }] }))
+			.toHaveLength(1)
+		expect(locations(checkSingleChoiceConfig, { label, options: [option('a', { enabledWhen: deep })] }))
+			.toHaveLength(1)
+	})
+
+	it('does not throw for a 20000-deep condition', () => {
+		const diagnostics = run(checkNumericConfig, { label, visibleWhen: nested(20_000) })
+		expect(diagnostics)
+			.toHaveLength(1)
+		expect(diagnostics[0]!.reason)
+			.toBe('invalid-condition')
 	})
 })
 
@@ -615,5 +716,88 @@ describe('integration with Core', () => {
 			.toBe('invalid')
 		expect(isRecovered(blueprint.root))
 			.toBe(true)
+	})
+
+	it('returns diagnostics, not a RangeError, for a 20000-deep condition through createBlueprintFromJson', () => {
+		const depth = 20_000
+		const text = `{"id":"root","type":"Numeric","config":{"label":{"en":"a"},"visibleWhen":${'{"not":'.repeat(depth)}{"question":"a","op":"answered"}${'}'.repeat(depth)}}}`
+		const blueprint = system.createBlueprintFromJson(text)
+		expect(blueprint.status)
+			.toBe('invalid')
+		expect(blueprint.diagnostics.some(diagnostic => diagnostic.code === 'invalid-widget-config' && diagnostic.reason === 'invalid-condition'))
+			.toBe(true)
+	})
+})
+
+describe('compile-view nodes', () => {
+	const seen: { id: string, languages: readonly string[] | null, self: boolean, other: boolean | null }[] = []
+
+	const Survey = createWidgetPlugin('Survey')
+		.description('Survey fixture')
+		.interfaces<{ config: { raw: SurveyRawConfig, resolved: SurveyConfig }, slots: 'questions' }>()
+		.config({
+			description: 'Survey config',
+			validate: (input, ctx): input is SurveyRawConfig => {
+				checkSurveyConfig(input, ctx.addDiagnostic)
+				return !ctx.hasAnyDiagnostic()
+			},
+			resolve: resolveSurveyConfig,
+		})
+		.slots({ questions: { description: 'Questions' } })
+		.done()
+	const Question = createWidgetPlugin('Question')
+		.description('Question fixture reading the compile view')
+		.interfaces<{ config: { raw: NumericRawConfig, resolved: NumericConfig } }>()
+		.config({
+			description: 'Question config',
+			validate: (input, ctx): input is NumericRawConfig => {
+				checkNumericConfig(input, ctx.addDiagnostic)
+				return !ctx.hasAnyDiagnostic()
+			},
+			resolve: resolveNumericConfig,
+		})
+		.structure(({ widget, blueprint }) => {
+			const other = blueprint.getWidget('other')
+			seen.push({
+				id: widget.id,
+				languages: surveyLanguagesOf(blueprint.root),
+				self: isRecovered(widget),
+				other: other === null ? null : isRecovered(other),
+			})
+		})
+		.done()
+	const system = createWidgetSystem({ plugins: [Survey, Question] as const })
+
+	function compile(surveyConfig: unknown, questions: readonly unknown[]) {
+		seen.length = 0
+		const root: Record<string, unknown> = { id: 'survey', type: 'Survey', slots: { questions } }
+		if (surveyConfig !== undefined)
+			root.config = surveyConfig
+		system.createBlueprint(root)
+		return seen.find(entry => entry.id === 'x')
+	}
+	const x = { id: 'x', type: 'Question', config: { label } }
+	const goodOther = { id: 'other', type: 'Question', config: { label } }
+	const badOther = { id: 'other', type: 'Question', config: { label: 1 } }
+
+	it('surveyLanguagesOf returns the languages of a valid Survey root', () => {
+		expect(compile({ title: label, languages: ['zh-TW', 'en'] }, [x]))
+			.toMatchObject({ languages: ['zh-TW', 'en'] })
+	})
+
+	it('surveyLanguagesOf returns null when the root config is invalid or omitted', () => {
+		expect(compile({ title: label, languages: ['fr'] }, [x]))
+			.toMatchObject({ languages: null })
+		expect(compile(undefined, [x]))
+			.toMatchObject({ languages: null })
+	})
+
+	it('isRecovered is true for a target whose config failed validation, false otherwise, null when absent', () => {
+		expect(compile({ title: label, languages: ['en'] }, [x, badOther]))
+			.toMatchObject({ self: false, other: true })
+		expect(compile({ title: label, languages: ['en'] }, [x, goodOther]))
+			.toMatchObject({ self: false, other: false })
+		expect(compile({ title: label, languages: ['en'] }, [x]))
+			.toMatchObject({ self: false, other: null })
 	})
 })
