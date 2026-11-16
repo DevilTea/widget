@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url'
 
 export const workspaceRoot = fileURLToPath(new URL('..', import.meta.url))
 
+/**
+ * The published packages, in publish order: Core first, because the other two declare it as a peer
+ * dependency, then the Inspector and the Vue adapter. They always carry one and the same version.
+ */
 const packages = {
 	'widget-core': {
 		directory: 'packages/core',
@@ -44,71 +48,154 @@ export function packageVersion(id: string) {
 	return packageJson.version
 }
 
-/**
- * `widget-vue` and `widget-inspector` declare `@deviltea/widget-core` as a `workspace:^` peer, which packs
- * as `^<core version>`. While Core is `0.0.x` that caret is an exact pin (`^0.0.6` is `0.0.6`), contradicting
- * the documented `^0.N.0` policy, so a dependent must not be released until Core is at least `0.1.0`.
- * Returns the reason to refuse, or `null` when the release may proceed. Pure: takes Core's version.
- */
-export function corePeerRangeProblem(id: string, coreVersion: string): string | null {
-	if (id !== 'widget-vue' && id !== 'widget-inspector')
-		return null
-	const match = /^(\d+)\.(\d+)\.(\d+)/.exec(coreVersion)
+/** The workspace version of every published package, keyed by package id. */
+export function packageVersions(): Record<string, string> {
+	return Object.fromEntries(packageIds.map(id => [id, packageVersion(id)]))
+}
+
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-z-][0-9a-z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-z-][0-9a-z-]*))*))?$/i
+
+/** Parses `major.minor.patch[-prerelease]`; build metadata is not used by this repository and is rejected. */
+export function parseVersion(version: string) {
+	const match = SEMVER.exec(version)
 	if (match === null)
-		return `Cannot read the workspace @deviltea/widget-core version "${coreVersion}", so the published peer range of ${id} cannot be checked.`
-	if (Number(match[1]) === 0 && Number(match[2]) === 0) {
-		return `The workspace @deviltea/widget-core is ${coreVersion}, so the \`workspace:^\` peer would publish as \`^${coreVersion}\`, which pins that exact patch instead of admitting later patches. Release \`widget-core\` as 0.1.0 first (Core is released before its dependents), then release ${id}.`
+		return null
+	return {
+		major: Number(match[1]),
+		minor: Number(match[2]),
+		patch: Number(match[3]),
+		prerelease: match[4] ?? null,
 	}
+}
+
+/** The version the published packages share: Core's, which `unifiedVersionProblem` has checked the others against. */
+export function sharedVersion(versions: Readonly<Record<string, string>>) {
+	return versions['widget-core'] ?? ''
+}
+
+/**
+ * What stops the published packages from being released together at `versions` (package id to version), or
+ * `null` when they can. Pure: takes the versions.
+ *
+ * The packages share one version. `widget-vue` and `widget-inspector` declare Core as a `workspace:^` peer,
+ * which packs as `^<version>`; on `0.0.x` that caret is an exact pin (`^0.0.6` is `0.0.6`), so a `0.0.x`
+ * release is refused as well.
+ */
+export function unifiedVersionProblem(versions: Readonly<Record<string, string>>): string | null {
+	const missing = packageIds.filter(id => typeof versions[id] !== 'string')
+	if (missing.length > 0)
+		return `No version for ${missing.join(', ')}.`
+
+	const listed = packageIds.map(id => `${id} ${versions[id]}`)
+		.join(', ')
+	const distinct = new Set(packageIds.map(id => versions[id]))
+	if (distinct.size > 1)
+		return `The published packages must share one version, but they differ: ${listed}. Set them all to the same version.`
+
+	const version = sharedVersion(versions)
+	const parsed = parseVersion(version)
+	if (parsed === null)
+		return `"${version}" is not a plain \`major.minor.patch[-prerelease]\` version.`
+	if (parsed.major === 0 && parsed.minor === 0)
+		return `Version ${version} is \`0.0.x\`, where the \`^${version}\` Core peer range of \`widget-vue\` and \`widget-inspector\` would pin exactly that patch. Release \`0.1.0\` or later.`
 	return null
 }
 
-/** Refuses (throws) when the packed Core peer range of a dependent would be an exact pin. */
-export function assertCorePeerRange(id: string) {
-	const problem = corePeerRangeProblem(id, packageVersion('widget-core'))
+/** Throws when the workspace packages do not share one releasable version; returns that version otherwise. */
+export function assertUnifiedVersion() {
+	const versions = packageVersions()
+	const problem = unifiedVersionProblem(versions)
 	if (problem !== null)
 		fail(problem)
+	return sharedVersion(versions)
 }
 
-export function packageTag(id: string) {
-	return `${id}@${packageVersion(id)}`
+/** The one annotated tag of a release: `v<version>`. */
+export function releaseTag(version: string) {
+	return `v${version}`
 }
 
-export function verifyTag(tag: string) {
-	const separator = tag.lastIndexOf('@')
-	if (separator <= 0)
-		fail(`Invalid release tag: ${tag}`)
-	const id = tag.slice(0, separator)
-	const version = tag.slice(separator + 1)
-	const currentVersion = packageVersion(id)
-	if (version !== currentVersion)
-		fail(`Tag ${tag} does not match ${id}@${currentVersion}`)
-	return id
+/** The version a release tag names, or `null` when `tag` is not `v<version>`. */
+export function releaseVersionFromTag(tag: string) {
+	if (!tag.startsWith('v'))
+		return null
+	const version = tag.slice(1)
+	return parseVersion(version) === null ? null : version
+}
+
+export function releaseBranch(version: string) {
+	return `release/${releaseTag(version)}`
+}
+
+export function releaseCommitMessage(version: string) {
+	return `chore: release ${releaseTag(version)}`
+}
+
+/** The per-package tags (`widget-core@0.1.0`) of the releases made before the versions were unified. */
+export function legacyPackageTags(version: string) {
+	return packageIds.map(id => `${id}@${version}`)
+}
+
+/**
+ * Every tag that would mean `version` is already released: the unified tag and the old per-package tags.
+ * Pure: the caller asks the remote which of them exist.
+ */
+export function releaseTagNames(version: string) {
+	return [releaseTag(version), ...legacyPackageTags(version)]
+}
+
+/**
+ * What is wrong with releasing `tag` while the workspace packages are at `versions`, or `null` when the tag
+ * is `v<version>` and every published package is at exactly that version. Pure.
+ */
+export function releaseTagProblem(tag: string, versions: Readonly<Record<string, string>>): string | null {
+	const tagVersion = releaseVersionFromTag(tag)
+	if (tagVersion === null)
+		return `Invalid release tag "${tag}": expected \`v<major>.<minor>.<patch>[-prerelease]\`.`
+	const problem = unifiedVersionProblem(versions)
+	if (problem !== null)
+		return problem
+	const version = sharedVersion(versions)
+	if (version !== tagVersion)
+		return `Tag ${tag} does not match the package version ${version} (expected tag ${releaseTag(version)}).`
+	return null
+}
+
+/** The npm dist-tag of a release: prereleases go to `next` and never take the default `latest`. */
+export function distTagFor(version: string): 'latest' | 'next' {
+	const parsed = parseVersion(version)
+	if (parsed === null)
+		fail(`"${version}" is not a plain \`major.minor.patch[-prerelease]\` version.`)
+	return parsed.prerelease === null ? 'latest' : 'next'
 }
 
 function runCli() {
 	const [command, value] = process.argv.slice(2)
-	if (!command || !value)
-		fail('Usage: release-package.ts <package-path|package-name|version|tag|verify-tag> <value>')
 	switch (command) {
-		case 'package-path':
-			console.log(packageEntry(value).directory)
+		case 'check':
+			console.log(assertUnifiedVersion())
 			break
-		case 'package-name':
-			console.log(packageEntry(value).name)
+		case 'verify-tag': {
+			if (!value)
+				fail('Usage: release-package.ts verify-tag <tag>')
+			const problem = releaseTagProblem(value, packageVersions())
+			if (problem !== null)
+				fail(problem)
+			console.log(assertUnifiedVersion())
 			break
-		case 'version':
-			console.log(packageVersion(value))
-			break
-		case 'tag':
-			console.log(packageTag(value))
-			break
-		case 'verify-tag':
-			console.log(verifyTag(value))
-			break
-		default: fail(`Unknown command: ${command}`)
+		}
+		default:
+			fail('Usage: release-package.ts <check|verify-tag <tag>>')
 	}
 }
 
 const entrypoint = process.argv[1]
-if (entrypoint != null && resolve(entrypoint) === fileURLToPath(import.meta.url))
-	runCli()
+if (entrypoint != null && resolve(entrypoint) === fileURLToPath(import.meta.url)) {
+	try {
+		runCli()
+	}
+	catch (error) {
+		console.error(error instanceof Error ? error.message : String(error))
+		process.exit(1)
+	}
+}

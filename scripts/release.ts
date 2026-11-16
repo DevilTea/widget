@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import process from 'node:process'
 import { cancel, confirm, intro, isCancel, log, outro } from '@clack/prompts'
 import { $ } from 'zx'
-import { assertCorePeerRange, fail, packageEntry, packageIds, packageVersion, workspaceRoot } from './release-package'
+import { assertUnifiedVersion, fail, packageEntry, packageIds, releaseBranch, releaseCommitMessage, releaseTag, releaseTagNames, sharedVersion, unifiedVersionProblem, workspaceRoot } from './release-package'
 
 const REPOSITORY = 'DevilTea/widget'
 const PUBLISH_WORKFLOW_URL = `https://github.com/${REPOSITORY}/actions/workflows/publish.yml`
@@ -10,6 +12,9 @@ $.cwd = workspaceRoot
 $.verbose = false
 
 const $$ = $({ nothrow: true })
+
+const packageFiles = packageIds.map(id => `${packageEntry(id).directory}/package.json`)
+const packageNames = packageIds.map(id => packageEntry(id).name)
 
 async function git(...args: string[]) {
 	return (await $`git ${args}`).stdout.trim()
@@ -46,8 +51,14 @@ async function remoteBranchExists(branch: string) {
 	return (await git('ls-remote', '--heads', 'origin', branch)) !== ''
 }
 
-async function remoteTagExists(tag: string) {
-	return (await git('ls-remote', '--tags', 'origin', tag)) !== ''
+/** Which of the tags that would mean `version` is released (`v<version>` and the old per-package tags) exist on origin. */
+async function remoteReleaseTags(version: string) {
+	const found: string[] = []
+	for (const tag of releaseTagNames(version)) {
+		if ((await git('ls-remote', '--tags', 'origin', `refs/tags/${tag}`)) !== '')
+			found.push(tag)
+	}
+	return found
 }
 
 async function localTagExists(tag: string) {
@@ -66,36 +77,43 @@ async function askToProceed(message: string, autoConfirm: boolean, onCancel?: ()
 	}
 }
 
-async function openReleasePullRequest(id: string, release: string, autoConfirm: boolean) {
-	const entry = packageEntry(id)
-	const previousVersion = packageVersion(id)
+function readVersion(id: string) {
+	const manifest = JSON.parse(readFileSync(resolve(workspaceRoot, packageEntry(id).directory, 'package.json'), 'utf8')) as { version?: string }
+	return manifest.version ?? ''
+}
 
-	intro(`Release ${entry.name}`)
+async function openReleasePullRequest(release: string, autoConfirm: boolean) {
+	intro('Release the Widget packages')
 
-	assertCorePeerRange(id)
+	const previousVersion = assertUnifiedVersion()
 	await assertGitHubCliReady()
 	await assertCleanWorktree()
 	await assertSyncedMain()
 
-	await $`pnpm exec bumpp ${`${entry.directory}/package.json`} --release ${release} --no-commit --no-tag --no-push --yes`
+	await $`pnpm exec bumpp ${packageFiles} --release ${release} --no-commit --no-tag --no-push --yes`
 
 	const restoreBump = async () => {
-		await git('restore', '--', `${entry.directory}/package.json`, 'pnpm-lock.yaml')
+		await git('restore', '--', ...packageFiles, 'pnpm-lock.yaml')
 	}
 
 	let version: string
 	let tag: string
 	let branch: string
 	try {
-		version = packageVersion(id)
+		const versions = Object.fromEntries(packageIds.map(id => [id, readVersion(id)]))
+		const problem = unifiedVersionProblem(versions)
+		if (problem !== null)
+			fail(`Bumpp did not leave one releasable version: ${problem}`)
+		version = sharedVersion(versions)
 		if (version === previousVersion)
-			fail(`Bumpp left ${entry.name} at ${previousVersion}.`)
+			fail(`Bumpp left the packages at ${previousVersion}.`)
 
-		tag = `${id}@${version}`
-		branch = `release/${id}/v${version}`
+		tag = releaseTag(version)
+		branch = releaseBranch(version)
 
-		if (await remoteTagExists(tag))
-			fail(`Tag ${tag} already exists on origin; that version is already released.`)
+		const released = await remoteReleaseTags(version)
+		if (released.length > 0)
+			fail(`Tag ${released.join(', ')} already exists on origin; that version is already released.`)
 		if (await remoteBranchExists(branch))
 			fail(`Release branch already exists on origin: ${branch}`)
 	}
@@ -104,61 +122,61 @@ async function openReleasePullRequest(id: string, release: string, autoConfirm: 
 		throw error
 	}
 
-	log.step(`${entry.name}: ${previousVersion} → ${version}`)
+	log.step(`${packageNames.join(', ')}: ${previousVersion} → ${version}`)
 	log.info(`Branch \`${branch}\`, release tag \`${tag}\`.`)
 
 	await askToProceed('Open the release pull request?', autoConfirm, restoreBump)
 
 	await git('switch', '--create', branch)
-	await git('add', '--', `${entry.directory}/package.json`, 'pnpm-lock.yaml')
+	await git('add', '--', ...packageFiles, 'pnpm-lock.yaml')
 
 	if (await succeeds($$`git diff --cached --quiet`))
 		fail('Bumpp did not change the release version.')
 
-	await git('commit', '-m', `chore(${id}): release v${version}`)
+	const title = releaseCommitMessage(version)
+	await git('commit', '-m', title)
 	await git('push', '--set-upstream', 'origin', branch)
 
 	const body = [
-		`Release candidate for \`${tag}\`.`,
+		`Release candidate for \`${tag}\`: ${packageNames.map(name => `\`${name}\``)
+			.join(', ')} all move from \`${previousVersion}\` to \`${version}\`.`,
 		'',
-		`After this pull request is merged, run \`pnpm release:tag ${id}\` to push the annotated tag and trigger the publish workflow.`,
+		`After this pull request is merged, run \`pnpm release:tag\` to push the annotated tag \`${tag}\` and trigger the publish workflow, which publishes all three packages (Core first).`,
 	].join('\n')
 
-	const url = (await $`gh pr create --base main --head ${branch} --title ${`chore(${id}): release v${version}`} --body ${body}`).stdout.trim()
+	const url = (await $`gh pr create --base main --head ${branch} --title ${title} --body ${body}`).stdout.trim()
 
 	await git('switch', 'main')
 
 	outro(`Pull request opened: ${url}`)
-	log.info(`Merge it after the required checks pass; then run \`pnpm release:tag ${id}\`.`)
+	log.info('Merge it after the required checks pass; then run `pnpm release:tag`.')
 }
 
-async function pushReleaseTag(id: string, autoConfirm: boolean) {
-	const entry = packageEntry(id)
+async function pushReleaseTag(autoConfirm: boolean) {
+	intro('Tag the Widget release')
 
-	intro(`Tag ${entry.name}`)
-
-	assertCorePeerRange(id)
 	await assertCleanWorktree()
 	await git('fetch', 'origin', 'main', '--tags')
 	await git('switch', 'main')
 	await git('merge', '--ff-only', 'origin/main')
 
-	const version = packageVersion(id)
-	const tag = `${id}@${version}`
+	const version = assertUnifiedVersion()
+	const tag = releaseTag(version)
 
 	if (await localTagExists(tag))
 		fail(`Tag ${tag} already exists locally.`)
-	if (await remoteTagExists(tag))
-		fail(`Tag ${tag} already exists on origin; that version is already released.`)
+	const released = await remoteReleaseTags(version)
+	if (released.length > 0)
+		fail(`Tag ${released.join(', ')} already exists on origin; that version is already released.`)
 
 	const head = await git('rev-parse', '--short', 'HEAD')
 	const subject = await git('log', '-1', '--pretty=%s')
 
-	log.step(`${entry.name}@${version} → tag \`${tag}\``)
+	log.step(`${packageNames.join(', ')} ${version} → tag \`${tag}\``)
 	log.info(`main is at ${head} (${subject}).`)
-	log.warn('Pushing this tag publishes the package to npm.')
+	log.warn('Pushing this tag publishes all three packages to npm.')
 
-	await askToProceed(`Push \`${tag}\` and publish ${entry.name}@${version}?`, autoConfirm)
+	await askToProceed(`Push \`${tag}\` and publish ${version}?`, autoConfirm)
 
 	await git('tag', '--annotate', tag, '--message', tag)
 	await git('push', 'origin', tag)
@@ -173,29 +191,25 @@ const operands = rest.filter(operand => operand.startsWith('-') === false)
 function usage(): never {
 	fail([
 		'Usage:',
-		'  pnpm release <package> <release>   Bump a package on a release branch and open its pull request',
-		'  pnpm release:tag <package>         Tag merged main and trigger the publish workflow',
+		'  pnpm release <release>   Bump all Widget packages to one version on a release branch and open one pull request',
+		'                           (<release> is patch, minor, major, prerelease or an explicit version)',
+		'  pnpm release:tag         Tag merged main as v<version> and trigger the publish workflow',
 		'',
-		`Packages: ${packageIds.join(', ')}`,
+		`The packages are released together: ${packageNames.join(', ')}.`,
 	].join('\n'))
 }
 
 try {
-	const [id, release] = operands
-
-	if (id != null)
-		packageEntry(id)
-
 	switch (command) {
 		case 'open':
-			if (id == null || release == null)
+			if (operands.length !== 1)
 				usage()
-			await openReleasePullRequest(id, release, autoConfirm)
+			await openReleasePullRequest(operands[0] ?? '', autoConfirm)
 			break
 		case 'tag':
-			if (id == null)
+			if (operands.length !== 0)
 				usage()
-			await pushReleaseTag(id, autoConfirm)
+			await pushReleaseTag(autoConfirm)
 			break
 		default:
 			usage()

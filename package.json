@@ -12,7 +12,8 @@
 	"scripts": {
 		"bench": "node benchmarks/run.mjs",
 		"build": "pnpm -r --if-present run build",
-		"check": "pnpm run build && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run publint",
+		"check": "pnpm run check:versions && pnpm run build && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run publint",
+		"check:versions": "tsx scripts/release-package.ts check",
 		"docs:build": "pnpm --filter docs run build",
 		"docs:build:pages": "tsx scripts/build-pages.ts",
 		"docs:dev": "pnpm --filter docs run dev",
