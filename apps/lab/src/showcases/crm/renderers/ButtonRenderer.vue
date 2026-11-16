@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * `press()` invokes the configured no-argument Method dependency directly — this component never
- * re-validates or duplicates that decision (mirroring Showcase A's `TripSurveyRenderer` "Vue must call
- * semantic Methods directly" rule). `label`/`kind` are exposed via `properties` as a deliberate, narrow
+ * re-validates or duplicates that decision (mirroring the Survey showcase's `SurveyRootRenderer`, which
+ * calls `submit()` and checks nothing itself). `label`/`kind` are exposed via `properties` as a deliberate, narrow
  * deviation from the checkpoint's literal capability list — see `../plugins/actions.ts`'s file header.
  *
  * `data-tutorial-target` (diagnostic #25 P4): `Button` is reused four times in this preset ("Reset data",

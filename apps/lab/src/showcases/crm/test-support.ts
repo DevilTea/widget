@@ -1,7 +1,7 @@
 /**
  * Shared test-only fixtures for the Product Prototype showcase's colocated `*.unit.test.ts` files. Not
  * itself a test file, and never imported by application code — mirrors
- * `../trip-survey/test-support.ts`'s role for its own colocated tests. Every test builds a real
+ * `../survey/test-support.ts`'s role for its own colocated tests. Every test builds a real
  * `@deviltea/widget-core` Blueprint/Runtime against `crmSystem`; nothing here mocks core.
  */
 
@@ -31,7 +31,7 @@ export function createCrmRuntime(sourceText: string = defaultCrmPreset.sourceTex
 /**
  * `runtime.getWidget(id)` is typed as the union of every registered plugin's `RuntimeWidget` shape
  * (there is no id-to-type static link) — this narrows it the same way
- * `../trip-survey/test-support.ts`'s `widgetOfType` does, via the discriminated `.type` literal, so callers
+ * `../survey/test-support.ts`'s `widgetOfType` does, via the discriminated `.type` literal, so callers
  * get the exact `state`/`properties`/`methods` surface for `type`.
  */
 export function widgetOfType<Type extends CrmRuntimeWidget['type']>(runtime: CrmRuntime, id: string, type: Type): Extract<CrmRuntimeWidget, { readonly type: Type }> {
@@ -93,11 +93,10 @@ export interface CrmHarnessOverrides {
 }
 
 /**
- * Full-coverage `@deviltea/widget-vue` renderer harness for CRM colocated renderer tests. Mirrors the
- * per-file harness pattern `../trip-survey/renderers/TripMetricsRenderer.unit.test.ts` defines locally, but
- * centralized here: `crmSystem` has fourteen plugin types (`createWidgetVueRenderer` requires
- * exactly-once coverage of every one), so duplicating the full registration list per test file would be
- * pure boilerplate. Pass the real renderer under test as the matching override; everything else stays a
+ * Full-coverage `@deviltea/widget-vue` renderer harness for CRM colocated renderer tests. The Survey
+ * showcase has its own (`../survey/renderers/test-harness.ts`). `crmSystem` has fourteen plugin types
+ * (`createWidgetVueRenderer` requires exactly-once coverage of every one), so duplicating the full
+ * registration list per test file would be pure boilerplate. Pass the real renderer under test as the matching override; everything else stays a
  * harmless stand-in.
  */
 export function createCrmHarness(overrides: CrmHarnessOverrides = {}) {
