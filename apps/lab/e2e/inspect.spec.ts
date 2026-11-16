@@ -10,8 +10,9 @@ import { expect, previewFrame, test } from './fixtures'
  *    `crm-toolbar` (`Toolbar`) nested inside `crm-app` (`AppShell`) — the nested-anchor case; and
  *    `change-stage` (`Button`, "Change stage") inside the Deal details panel — its press opens the
  *    "Change deal stage" modal, a clearly observable underlying action to prove suppressed/not-suppressed.
- *  - Survey showcase (`survey-default` preset): `adults` (`SurveyNumberQuestion`, label "Adults") — a
- *    plain hover/badge target.
+ *  - Survey showcase (`survey-default` preset): `phone` (`ShortAnswer`, label "Phone number") — visible on
+ *    load, so a plain hover/badge target and a native text input; `mode` (`SingleChoice`) whose "On site"
+ *    answer makes `guests` appear (the Property-driven proof that a write reached State).
  */
 
 const INSPECT_TOGGLE = { name: 'Inspect' }
@@ -82,21 +83,21 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'true')
 
-		const adultsLabel = previewFrame(page)
-			.getByText('Adults', { exact: true })
-		const adultsAnchor = adultsLabel.locator('..')
+		const phoneLabel = previewFrame(page)
+			.getByText('Phone number', { exact: true })
+		const phoneAnchor = phoneLabel.locator('..')
 
-		await adultsLabel.hover()
+		await phoneLabel.hover()
 
 		// The highlight is an Agent-owned ShadowRoot overlay drawn over the anchor, not a class on it.
 		const overlayRect = previewFrame(page)
 			.locator('[data-widget-inspector-overlay="true"] .rect')
 		await expect(overlayRect)
 			.toHaveCount(1)
-		await expect(adultsAnchor)
+		await expect(phoneAnchor)
 			.not
 			.toHaveClass(/highlight/)
-		const [anchorBox, overlayBox] = await Promise.all([adultsAnchor.boundingBox(), overlayRect.boundingBox()])
+		const [anchorBox, overlayBox] = await Promise.all([phoneAnchor.boundingBox(), overlayRect.boundingBox()])
 		expect(anchorBox)
 			.not
 			.toBeNull()
@@ -109,7 +110,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		expect(overlayBox?.height)
 			.toBeCloseTo(anchorBox!.height, 0)
 		await expect(previewFrame(page)
-			.getByText('SurveyNumberQuestion#adults'))
+			.getByText('ShortAnswer#phone'))
 			.toBeVisible()
 	})
 
@@ -180,11 +181,11 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 
 		await inspectToggle(page)
 			.click()
-		const adultsLabel = previewFrame(page)
-			.getByText('Adults', { exact: true })
-		await adultsLabel.hover()
+		const phoneLabel = previewFrame(page)
+			.getByText('Phone number', { exact: true })
+		await phoneLabel.hover()
 		await expect(previewFrame(page)
-			.getByText('SurveyNumberQuestion#adults'))
+			.getByText('ShortAnswer#phone'))
 			.toBeVisible()
 		await expect(inspectToggle(page))
 			.toBeEnabled()
@@ -196,26 +197,24 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'false')
 		await expect(previewFrame(page)
-			.getByText('SurveyNumberQuestion#adults'))
+			.getByText('ShortAnswer#phone'))
 			.toHaveCount(0)
 
-		// A subsequent click now behaves normally again: writing `Adults` actually reaches the widget's
-		// State (as it would with Inspect never having been turned on). The downstream Travelers Property
-		// is the browser-visible proof that this was a semantic State write, not just an input DOM update
-		// (#11 false-green guard).
-		const adultsInput = previewFrame(page)
-			.getByLabel('Adults', { exact: true })
-		const travelersValue = previewFrame(page)
-			.locator('dt', { hasText: 'Travelers' })
-			.locator('xpath=following-sibling::dd[1]')
-		await expect(travelersValue)
-			.toHaveText('2')
-		await adultsInput.fill('5')
-		await adultsInput.press('Tab')
-		await expect(adultsInput)
-			.toHaveValue('5')
-		await expect(travelersValue)
-			.toHaveText('5')
+		// A subsequent click now behaves normally again: choosing "On site" actually reaches the widget's
+		// State (as it would with Inspect never having been turned on). Guests appearing is the
+		// browser-visible proof that this was a semantic State write that its dependent Property
+		// recomputed from, not just a radio button's DOM update (#11 false-green guard).
+		const guestsQuestion = previewFrame(page)
+			.getByText('Guests coming with you')
+		await expect(guestsQuestion)
+			.toHaveCount(0)
+		const onSite = previewFrame(page)
+			.getByLabel('On site', { exact: true })
+		await onSite.click()
+		await expect(onSite)
+			.toBeChecked()
+		await expect(guestsQuestion)
+			.toBeVisible()
 	})
 
 	test('toggling off restores normal Preview behavior immediately', async ({ page }) => {
@@ -247,37 +246,37 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 	 * activation runs `pointerdown` (and the browser's default focus-on-mousedown action) strictly
 	 * before `click`, so a click-only suppression cannot stop a native `<input>` from already being
 	 * focused. This pins the stronger "inspector selection ONLY — the underlying control is not also
-	 * activated" contract against a NATIVE FOCUSABLE control (not a Button): the Survey "Adults" number
+	 * activated" contract against a NATIVE FOCUSABLE control (not a Button): the Survey "Phone number" text
 	 * input. Written to fail against the pre-fix (`click`-only) implementation and pass once
 	 * `pointerdown`/`pointerup` are also suppressed at the capture boundary.
 	 */
-	test('inspect-click on a native focusable control (Survey "Adults" input) selects the widget without focusing/activating it or mutating its State', async ({ page }) => {
+	test('inspect-click on a native focusable control (Survey "Phone number" input) selects the widget without focusing/activating it or mutating its State', async ({ page }) => {
 		await page.getByLabel('Switch showcase')
 			.selectOption('survey')
 
-		const adultsInput = previewFrame(page)
-			.getByLabel('Adults', { exact: true })
-		await expect(adultsInput)
-			.toHaveValue('2')
+		const phoneInput = previewFrame(page)
+			.getByLabel('Phone number')
+		await expect(phoneInput)
+			.toHaveValue('')
 
 		await inspectToggle(page)
 			.click()
 
-		await adultsInput.click()
+		await phoneInput.click()
 
 		// (a) the correct semantic widget is selected/focused in the inspector.
 		await expect(page.getByRole('tab', { name: 'Blueprint' }))
 			.toHaveAttribute('aria-selected', 'true')
-		await expect(page.getByRole('heading', { name: 'adults : SurveyNumberQuestion' }))
+		await expect(page.getByRole('heading', { name: 'phone : ShortAnswer' }))
 			.toBeVisible()
 
 		// (b) the underlying native control did NOT receive focus / native activation.
-		await expect(adultsInput)
+		await expect(phoneInput)
 			.not.toBeFocused()
 
 		// (c) no semantic State change occurred as a side effect (the value is unchanged).
-		await expect(adultsInput)
-			.toHaveValue('2')
+		await expect(phoneInput)
+			.toHaveValue('')
 	})
 
 	/**

@@ -48,13 +48,13 @@ test.describe('implementation registered-plugin catalog (issue #42)', () => {
 			.selectOption('survey')
 
 		catalog = page.getByRole('navigation', { name: 'Registered plugins' })
-		await expect(catalog.getByRole('button', { name: 'TripSurvey', exact: true }))
+		await expect(catalog.getByRole('button', { name: 'Survey', exact: true }))
 			.toBeVisible()
-		await expect(catalog.getByRole('button', { name: 'TripRecommendation', exact: true }))
+		await expect(catalog.getByRole('button', { name: 'Numeric', exact: true }))
 			.toBeVisible()
 		await expect(catalog.getByRole('button', { name: 'Text', exact: true }))
 			.toHaveCount(0)
-		await expect(catalog.getByRole('button', { name: 'TripSurvey', exact: true }))
+		await expect(catalog.getByRole('button', { name: 'Survey', exact: true }))
 			.toHaveAttribute('aria-current', 'true')
 	})
 

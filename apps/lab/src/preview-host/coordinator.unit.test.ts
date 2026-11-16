@@ -147,11 +147,11 @@ describe('preview host coordinator', () => {
 		const mount = vi.fn(async (descriptor: { revision: number }) => connection(descriptor.revision)) as unknown as PreviewFrameDriver['mount']
 		coordinator.attachDriver({ ...driverOf(mount), setTutorialSpotlight: spotlight })
 
-		coordinator.setTutorialSpotlight('survey-adults')
+		coordinator.setTutorialSpotlight('survey-mode')
 		await coordinator.replace({ showcaseId: 'survey', revision: 1, sourceText: '{}' })
 
 		expect(spotlight)
-			.toHaveBeenLastCalledWith('survey-adults')
+			.toHaveBeenLastCalledWith('survey-mode')
 		coordinator.dispose()
 	})
 
