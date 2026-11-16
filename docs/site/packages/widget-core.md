@@ -585,7 +585,8 @@ console.log(badgePlugin.descriptions.config) // 'Badge configuration'
 - `resolve` is required and has no Blueprint/topology access — it is pure
   normalization from raw to resolved config.
 - `validate` is an authoritative predicate (`input is RawConfig`), not a
-  coercion step.
+  coercion step. To derive it, and `schema`, from a Zod, Valibot or ArkType
+  schema, see [Using a schema library](#using-a-schema-library-zod-valibot-arktype).
 - `schema` is optional, passive authoring metadata: a JSON Schema document
   (type `WidgetConfigJsonSchema`, Draft 2020-12; the dialect URI is exported as
   `WIDGET_CONFIG_JSON_SCHEMA_DIALECT`). Core never validates against it or
@@ -757,6 +758,8 @@ createWidgetPlugin('counter')
   produced value is still run through `validate`.
 - `validate` receives a diagnostic collector (and the resolved `config` when the
   plugin has config); `default` receives only the resolved `config`.
+- A schema library can supply the predicate through a small wrapper; see
+  [Using a schema library](#using-a-schema-library-zod-valibot-arktype).
 - `authorWritable` is passive authoring metadata that Core does not enforce
   (see [Member declaration facts](#member-declaration-facts-and-value-contracts)).
 
@@ -857,7 +860,9 @@ createWidgetPlugin('counter')
   methods (`args is []`), and is the authoritative boundary for the
   invocation's arguments. A method declared as `add: (step: number) => number`
   would use `validateArgs: (args): args is [number] => args.length === 1 &&
-  typeof args[0] === 'number'` and read `args: [step]` in `execute`.
+  typeof args[0] === 'number'` and read `args: [step]` in `execute`. A tuple
+  schema from a schema library can supply it; see
+  [Using a schema library](#using-a-schema-library-zod-valibot-arktype).
 - `execute` receives `args`, `widget`, `blueprint` (as for `compute`), `deps`,
   the diagnostic collector, the resolved `config` when the plugin has config,
   and `emit` when the plugin declares events. `validateArgs` receives a
@@ -3355,6 +3360,263 @@ it is used with. A Method's `emits` is still inferred inside the factory: its
 `emit` carries only the declared Events, and an Event whose argument tuple
 mentions the type parameter keeps that tuple (`emit.added(item)` takes an
 `Item`).
+
+### Using a schema library (Zod, Valibot, ArkType)
+
+Core accepts plain functions for validation and, for config, a passive JSON
+Schema document. It does not accept a Zod, Valibot or ArkType object in those
+places. This is by design: Core adds no support for schema libraries and ships
+no adapter package, and this section documents the pattern instead.
+
+- **No coupling.** Core depends on no schema library and does not follow their
+  releases. `config.schema` stays a passive Draft 2020-12 document that Core
+  never validates, interprets or rewrites; a schema library is an external
+  authoring source whose output you hand to Core.
+- **Synchronous semantics.** Every semantic callback is synchronous (see
+  [Design constraints](#design-constraints)), while schema libraries may
+  validate asynchronously.
+- **Small embedded hosts.** Plugins have to run in minimal engines such as
+  QuickJS (see [Host requirements](#host-requirements)); how a library behaves
+  there is not something Core can promise.
+
+You can still keep one schema object as the source of the runtime validator,
+the TypeScript type and the JSON Schema, with a small function in your own
+project. Libraries that implement [Standard Schema](https://standardschema.dev)
+v1 (Zod 3.24+, Valibot 1.0+, ArkType 2.0+ and others) expose the same
+`~standard.validate`. Those that also implement Standard JSON Schema v1 expose
+`~standard.jsonSchema` (natively Zod 4.2+ classic and ArkType 2.1.28+; Valibot
+through `toStandardJsonSchema()` from `@valibot/to-json-schema`).
+
+| Slot | Core expects | The wrapper |
+|---|---|---|
+| `config.validate` | `(input, ctx) => input is Raw` | reports each issue with `ctx.addDiagnostic({ message, path })`, then returns `false` |
+| State `validate` | `(input, ctx) => input is T` | the same; the previous value is kept |
+| Method `validateArgs` | `(args, ctx) => args is Args` | the same, from a tuple schema (`z.tuple([...])`, `v.tuple([...])`); `execute` does not run |
+| `config.schema` | a Draft 2020-12 JSON Schema document | not a validator: pass `~standard.jsonSchema.input({ target: 'draft-2020-12' })`, or the library's own converter, evaluated by you before Core sees it |
+
+A dependency `.validate()` refinement is a plain predicate without a
+collector; the same wrapper works there if you drop the reporting.
+
+The sample defines a tiny Standard Schema object by hand, which stands in for
+what Zod or Valibot would give you, so that the pattern compiles and runs
+against Core without either library as a dependency.
+
+<!-- sample: standard-schema run -->
+```ts
+import type { DiagnosticCollector, RelativeValueDiagnosticInput, WidgetConfigJsonSchema } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+
+// The Standard Schema interface, trimmed. The spec recommends copying it
+// instead of depending on `@standard-schema/spec`.
+interface Issue { readonly message: string, readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }> }
+type Result<Value> = { readonly value: Value, readonly issues?: undefined } | { readonly issues: readonly Issue[] }
+interface StandardSchema<Input = unknown, Output = Input> {
+	readonly '~standard': {
+		readonly version: 1
+		readonly vendor: string
+		readonly validate: (value: unknown) => Result<Output> | PromiseLike<Result<Output>>
+		readonly types?: { readonly input: Input, readonly output: Output } | undefined
+		readonly jsonSchema?: { readonly input: (options: { readonly target: string }) => Record<string, unknown> } | undefined
+	}
+}
+type InferInput<Schema extends StandardSchema> = NonNullable<Schema['~standard']['types']>['input']
+type InferOutput<Schema extends StandardSchema> = NonNullable<Schema['~standard']['types']>['output']
+// Core keeps the validated input, so a schema that changes it (transform, default, coercion) is refused.
+type KeepsInput<Schema extends StandardSchema> = [InferInput<Schema>] extends [InferOutput<Schema>]
+	? ([InferOutput<Schema>] extends [InferInput<Schema>] ? unknown : never)
+	: never
+
+// The wrapper: a Standard Schema in, a predicate that Core accepts out.
+function guard<Schema extends StandardSchema>(schema: Schema & KeepsInput<Schema>) {
+	return (input: unknown, ctx: DiagnosticCollector<RelativeValueDiagnosticInput>): input is InferInput<Schema> => {
+		const result = schema['~standard'].validate(input)
+		// Core is synchronous. A Promise is truthy and carries no `issues`, so ignoring it would accept every input.
+		if (typeof (result as { then?: unknown }).then === 'function')
+			throw new TypeError(`The ${schema['~standard'].vendor} schema validated asynchronously; Core accepts only synchronous validation.`)
+		const { issues } = result as Exclude<typeof result, PromiseLike<unknown>>
+		if (issues === undefined)
+			return true
+		for (const issue of issues) {
+			// A Standard Schema path segment is a key or a `{ key }` object; a Core path holds keys.
+			const path = issue.path?.map(segment => typeof segment === 'object' ? segment.key : segment)
+			ctx.addDiagnostic(path === undefined || path.length === 0 ? { message: issue.message } : { message: issue.message, path })
+		}
+		return false
+	}
+}
+
+// Authoring guidance for tools, taken from the schema when it offers one; Core never runs it.
+function jsonSchemaOf(schema: StandardSchema) {
+	return schema['~standard'].jsonSchema?.input({ target: 'draft-2020-12' }) as WidgetConfigJsonSchema | undefined
+}
+
+// Stands in for `z.strictObject({ step: z.number(), label: z.string().optional() })`.
+function defineSchema<Input>(check: (value: unknown) => Issue[], jsonSchema: Record<string, unknown>): StandardSchema<Input> {
+	return {
+		'~standard': {
+			version: 1,
+			vendor: 'hand-written',
+			validate: value => (issues => issues.length === 0 ? { value: value as Input } : { issues })(check(value)),
+			jsonSchema: { input: () => jsonSchema },
+		},
+	}
+}
+interface CounterConfig { step: number, label?: string }
+const counterConfig = defineSchema<CounterConfig>((value) => {
+	if (typeof value !== 'object' || value === null || Array.isArray(value))
+		return [{ message: 'Expected an object.' }]
+	const { step, label, ...extra } = value as Record<string, unknown>
+	return [
+		...typeof step === 'number' ? [] : [{ message: 'Expected a number.', path: [{ key: 'step' }] }],
+		...label === undefined || typeof label === 'string' ? [] : [{ message: 'Expected a string.', path: ['label'] }],
+		...Object.keys(extra)
+			.map(key => ({ message: 'Unknown key.', path: [{ key }] })),
+	]
+}, {
+	$schema: 'https://json-schema.org/draft/2020-12/schema',
+	type: 'object',
+	properties: { step: { type: 'number' }, label: { type: 'string' } },
+	required: ['step'],
+	additionalProperties: false,
+})
+const countSchema = defineSchema<number>(value => typeof value === 'number' ? [] : [{ message: 'Expected a number.' }], { type: 'number' })
+const addArgsSchema = defineSchema<[number]>(value => Array.isArray(value) && value.length === 1 && typeof value[0] === 'number' ? [] : [{ message: 'Expected [number].' }], {})
+
+interface CounterInterfaces {
+	config: { raw: InferInput<typeof counterConfig>, resolved: { step: number } }
+	state: { count: InferInput<typeof countSchema> }
+	methods: { add: (amount: number) => number }
+}
+const counterPlugin = createWidgetPlugin('counter')
+	.description('A counter whose validators come from Standard Schema objects')
+	.interfaces<CounterInterfaces>()
+	.config({
+		description: 'Counter configuration',
+		schema: jsonSchemaOf(counterConfig),
+		validate: guard(counterConfig),
+		resolve: rawConfig => ({ step: rawConfig?.step ?? 1 }),
+	})
+	.state(state => state.count({ validate: guard(countSchema), default: () => 0 }))
+	.methods(methods => methods.add({
+		validateArgs: guard(addArgsSchema),
+		registerDeps: ({ dep }) => ({ count: dep.self.state.get('count'), setCount: dep.self.state.set('count') }),
+		execute: ({ args: [amount], deps }) => {
+			const current = deps.count()
+			const next = (current.ok ? current.value ?? 0 : 0) + amount
+			deps.setCount(next)
+			return next
+		},
+	}))
+	.done()
+
+const system = createWidgetSystem({ plugins: [counterPlugin] })
+console.log(JSON.stringify(system.catalog.widgets[0]?.config?.schema)
+	.includes('"additionalProperties":false')) // true: the JSON Schema came from the schema object
+
+const invalid = system.createBlueprint({ id: 'c', type: 'counter', config: { step: 'two', extra: true } })
+console.log(invalid.status) // invalid
+
+// One diagnostic per issue, with its `{ key }` path segments turned into keys (relative to `config`).
+for (const diagnostic of invalid.diagnostics)
+	console.log(diagnostic.code, 'path' in diagnostic ? diagnostic.path : undefined, diagnostic.message)
+// invalid-widget-config [ 'step' ] Expected a number.
+// invalid-widget-config [ 'extra' ] Unknown key.
+
+const blueprint = system.createBlueprint({ id: 'c', type: 'counter', config: { step: 2 } })
+if (blueprint.status !== 'valid')
+	throw new Error('invalid')
+const counter = blueprint.createRuntime()
+	.getWidget('c')
+if (counter === null || !('state' in counter) || !('methods' in counter))
+	throw new Error('missing capability')
+console.log(counter.state.count.set('three' as unknown as number).ok) // false: the State validator rejected it
+console.log(counter.methods.add(5).ok) // true
+console.log(counter.methods.add('5' as unknown as number).ok) // false: validateArgs rejected the arguments
+console.log(counter.state.count.get()) // 5
+```
+
+The same plugin with Zod looks like this. It is not compiled here, because Zod
+is not a dependency of this repository:
+
+<!-- sample: standard-schema-zod skip -->
+```ts
+import { z } from 'zod'
+
+const CounterConfig = z.strictObject({ step: z.number(), label: z.string()
+	.optional() })
+
+createWidgetPlugin('counter')
+	.interfaces<{ config: { raw: z.input<typeof CounterConfig>, resolved: { step: number } } }>()
+	.config({
+		description: 'Counter configuration',
+		schema: jsonSchemaOf(CounterConfig), // CounterConfig['~standard'].jsonSchema.input(...) in Zod 4.2+
+		validate: guard(CounterConfig),
+		resolve: rawConfig => ({ step: rawConfig?.step ?? 1 }),
+	})
+```
+
+Keeping the type in sync:
+
+- Core infers the type from the validator you pass, and `.interfaces<...>()`
+  declares the raw type, so the two must agree. The wrapper's return type
+  `input is InferInput<Schema>` (the spec's `StandardSchemaV1.InferInput`)
+  makes the schema the single source: derive the declared raw type from
+  the same schema, as the sample does, and a mismatch is an ordinary
+  type-predicate error at the slot.
+- Only the validated **input** is kept. Core stores the raw config, the State
+  candidate and the Method arguments as they were validated, never a schema's
+  output. Transforms, `.default()`, coercion and morphs change the output and
+  do not belong in these slots: normalise and default in `resolve`, and give
+  State its `default`. The `KeepsInput` check in the sample turns a schema whose
+  input and output types differ into a type error; untyped code that passes one
+  anyway gets the unchanged input, with no transform applied.
+- Use the strict object form (`z.strictObject`, `v.strictObject`, ArkType's
+  `'+': 'reject'`). The plain object forms of Zod and Valibot silently strip
+  unknown keys, so a misspelt key would validate.
+
+Caveats:
+
+- An exported JSON Schema is looser than the validator: refinements and
+  cross-field checks are dropped (Zod, ArkType) or make the converter throw
+  (Valibot, unless you ask it to ignore them). It is authoring guidance only;
+  `validate` stays the authority and JSON-Schema-valid does not imply
+  Widget-valid.
+- Any async part (an async refinement, `parseAsync`-only checks) makes
+  `~standard.validate` return a Promise. Throwing is the right answer: Core
+  cannot await it, and a Promise carries no `issues`, so treating it as success
+  would accept invalid input.
+- Zod's `~standard.validate` turns a synchronous exception, such as a
+  refinement that throws or a stack overflow, into a rejected Promise. Your
+  `TypeError` then hides the real cause behind an unhandled rejection; call the
+  library's own synchronous parse to see it.
+- Library messages are not Core's English diagnostic messages, depend on the
+  library's global locale, and have no stable codes. Tooling that matches
+  `reason` needs its own mapping from the issue to a `reason` string. Zod also
+  reports an unknown key once at the object's path, where Valibot and ArkType
+  report it at the key, and unions collapse to one message.
+- QuickJS gaps (measured with QuickJS-ng 0.18.0): there is no `URL`, so
+  `z.url()` and `v.url()` reject valid input; ArkType fails to load without web
+  globals such as `Blob` and `Request` defined by the host; recursive schemas
+  overflow the default 1 MiB stack at about 220 levels, below the 256 levels of
+  JSON depth Core accepts, so a deeply nested but valid document can throw
+  instead of producing a diagnostic.
+- Size and cost, measured in QuickJS on one machine (one run on a loaded
+  Apple-silicon laptop; compare the ratios, not the absolute numbers). The
+  wrapper adds about 0.6 KB gzip. A bundle of Core plus one small plugin grows
+  by about 30 KB gzip with Zod 4 classic, 9 KB with Zod Mini, 3.5 KB with
+  Valibot (about 7 KB with its JSON Schema converter) and about 49 KB with
+  ArkType. A guard that takes tens of nanoseconds by hand takes about 0.5 to 1
+  microsecond through a library, so a `state.set` through Core costs about 25%
+  more and a Method call about 30% more. A nested config is roughly 4 to 9 times
+  slower than a hand-written checker (microseconds to hundreds of
+  microseconds). Prefer a hand-written guard for large State values written at
+  high frequency.
+
+Copying the Standard Schema interface types into your project, as the sample
+does, is the spec's recommended approach when you do not want the
+`@standard-schema/spec` dependency. If you use the package instead, make it a
+regular dependency, not a dev dependency, because its types become part of your
+public API.
 
 ### Writing plugin libraries
 
