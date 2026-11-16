@@ -10,7 +10,8 @@ import { join } from 'node:path'
  *
  * `kind` is `before` (written against the published 0.0.6, never compiled), `after` (type-checked against the
  * workspace packages), `run` (type-checked, executed, and its printed output compared with its comments) or
- * `skip` (a fragment that is deliberately not compiled; it only has to be well-formed).
+ * `skip` (a fragment that is deliberately not compiled). `before` and `skip` samples are only checked to exist:
+ * a marker with a valid name and kind directly above a `ts` fence.
  * The colon after `sample` is optional, and the marker and the fence may be indented (a sample inside a list item).
  */
 
@@ -53,8 +54,9 @@ export interface ExtractionResult {
 const scriptLanguages = new Set(['ts', 'typescript', 'mts', 'tsx', 'js', 'javascript', 'mjs'])
 const sampleLanguages = new Set(['ts', 'typescript', 'mts'])
 
-const markerPattern = /^(\s*)<!--\s*sample(:?)\s+(\S+)\s+(\S+)\s*-->\s*$/
-const looseMarkerPattern = /<!--\s*sample\b/
+const markerPattern = /^(\s*)<!--\s*sample(:?)\s+([\w.-]+)\s+(\S+)\s*-->\s*$/
+// A marker is a line of its own; a sentence that mentions the marker is prose.
+const looseMarkerPattern = /^\s*<!--\s*sample\b/
 const fencePattern = /^(\s*)(`{3,}|~{3,})(?![`~])(.*)$/
 const languagePattern = /^\s*([\w+-]*)/
 

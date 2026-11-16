@@ -1,5 +1,5 @@
 import type { DocSample } from './docs-samples'
-import type { RecordedOutput, UncomparedClaim } from './docs-samples-output'
+import type { OutputClaim, RecordedOutput } from './docs-samples-output'
 import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { availableParallelism, tmpdir } from 'node:os'
@@ -9,14 +9,11 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { extractSamples } from './docs-samples'
 import { compareOutput } from './docs-samples-output'
+import { packageEntry, packageIds, workspaceRoot } from './release-package'
 
-export const workspaceRoot = fileURLToPath(new URL('..', import.meta.url))
+export { workspaceRoot }
 
-const workspacePackages = [
-	{ name: 'widget-core', directory: 'packages/core' },
-	{ name: 'widget-vue', directory: 'packages/vue' },
-	{ name: 'widget-inspector', directory: 'packages/inspector' },
-] as const
+const workspacePackages = packageIds.map(id => packageEntry(id))
 
 export interface DocumentInput {
 	/** Repository-relative path, used in messages. */
@@ -33,32 +30,48 @@ export interface DocumentReport {
 	unmarkedLines: number[]
 }
 
+/** A comment that was compared with printed output. */
+export interface ComparedComment extends OutputClaim {
+	document: string
+	sample: string
+	/** The lines of the document that called `console` for the output the comment was matched with. */
+	sources: number[]
+}
+
 export interface CheckResult {
 	/** One message per problem; each names the document, the sample's marker name and a line of the document. */
 	failures: string[]
 	documents: DocumentReport[]
-	/** Comments next to printing statements that could not be compared mechanically. */
-	uncompared: Array<UncomparedClaim & { document: string, sample: string, documentLine: number }>
-	/** How many comments were compared with printed output. */
-	comparedClaims: number
+	/** Every comment that was compared with printed output. */
+	compared: ComparedComment[]
+	/** Exempt comments that did not match the output (see `DocumentCheckOptions.isExempt`). */
+	exempted: Array<OutputClaim & { document: string, sample: string }>
+}
+
+export interface DocumentCheckOptions {
+	root?: string
+	/** Comments on a printing statement that are not expected output (existing remarks), by document, sample and text. */
+	isExempt?: (document: string, sample: string, comment: string) => boolean
 }
 
 /** What a document is known to contain; see `documentGuardProblems`. */
 export interface DocumentExpectation {
 	/** At least this many `before` samples (never compiled, so only their presence guards them). */
 	before: number
-	/** At least this many `after` and `run` samples. */
-	compiled: number
-	/** At most this many TypeScript fences without a marker. */
+	/** At least this many `after` samples. */
+	after: number
+	/** At least this many `run` samples. */
+	run: number
+	/** Exactly this many TypeScript fences without a marker (a ratchet: lower it when you mark one). */
 	unmarked: number
 }
 
 /**
- * Guards against vacuous success. A document listed in `expectations` must still hold its samples, and may hold
- * no more unmarked TypeScript fences than the ceiling recorded for it, which makes a renamed or broken marker
- * (its fence is then unmarked and its sample gone) fail. A document that is not listed may not hold any unmarked
- * TypeScript fence: every fence is either a marked sample or `skip`, so a new document starts under the strictest
- * rule. A document found with a marked sample is never exempt from this.
+ * Guards against vacuous success. A document listed in `expectations` must still hold its samples of each kind,
+ * and must hold exactly the recorded number of unmarked TypeScript fences: more means a fence was added or a
+ * marker was renamed, fewer means one was marked and the number has to come down, so it can only ever shrink. A
+ * document that is not listed may not hold any unmarked TypeScript fence: every fence is either a marked sample or
+ * `skip`, so a new document starts under the strictest rule.
  */
 export function documentGuardProblems(reports: DocumentReport[], expectations: Record<string, DocumentExpectation>): string[] {
 	const problems: string[] = []
@@ -69,17 +82,19 @@ export function documentGuardProblems(reports: DocumentReport[], expectations: R
 			problems.push(`${path}: expected document is missing; update the expectations in scripts/docs-samples.unit.test.ts if it moved.`)
 			continue
 		}
-		if (report.counts.before < expected.before)
-			problems.push(`${path}: found ${report.counts.before} "before" samples, expected at least ${expected.before}; a marker was renamed, malformed or removed.`)
-		const compiled = report.counts.after + report.counts.run
-		if (compiled < expected.compiled)
-			problems.push(`${path}: found ${compiled} "after"/"run" samples, expected at least ${expected.compiled}; a marker was renamed, malformed or removed.`)
+		for (const kind of ['before', 'after', 'run'] as const) {
+			if (report.counts[kind] < expected[kind])
+				problems.push(`${path}: found ${report.counts[kind]} "${kind}" samples, expected at least ${expected[kind]}; a marker was renamed, malformed, changed to another kind or removed.`)
+		}
 	}
 	for (const report of reports) {
-		const ceiling = expectations[report.path]?.unmarked ?? 0
-		if (report.unmarked > ceiling) {
+		const recorded = expectations[report.path]?.unmarked ?? 0
+		if (report.unmarked > recorded) {
 			const where = report.unmarked <= 12 ? ` (at lines ${report.unmarkedLines.join(', ')})` : ''
-			problems.push(`${report.path}: ${report.unmarked} TypeScript code fences have no \`<!-- sample: <name> <before|after|run|skip> -->\` marker, at most ${ceiling} are allowed${where}. Mark the fence, mark it \`skip\` if it is deliberately not compiled, or fix the marker if one was renamed.`)
+			problems.push(`${report.path}: ${report.unmarked} TypeScript code fences have no \`<!-- sample: <name> <before|after|run|skip> -->\` marker, ${recorded} are recorded${where}. Mark the fence, mark it \`skip\` if it is deliberately not compiled, or fix the marker if one was renamed.`)
+		}
+		else if (report.unmarked < recorded) {
+			problems.push(`${report.path}: only ${report.unmarked} TypeScript code fences have no marker, but ${recorded} are recorded; lower \`unmarked\` for this document in scripts/docs-samples.unit.test.ts to ${report.unmarked}.`)
 		}
 	}
 	return problems
@@ -113,7 +128,7 @@ function createConsumerDirectory(root: string): string {
 	mkdirSync(join(modules, '@deviltea'), { recursive: true })
 	mkdirSync(join(modules, '@types'), { recursive: true })
 	for (const { name, directory: packageDirectory } of workspacePackages)
-		symlinkSync(join(root, packageDirectory), join(modules, '@deviltea', name), 'dir')
+		symlinkSync(join(root, packageDirectory), join(modules, name), 'dir')
 	symlinkSync(join(root, 'packages/vue/node_modules/vue'), join(modules, 'vue'), 'dir')
 	symlinkSync(join(root, 'node_modules/@types/node'), join(modules, '@types/node'), 'dir')
 	mkdirSync(join(directory, 'samples'))
@@ -209,7 +224,8 @@ async function mapLimit<T, R>(items: T[], limit: number, work: (item: T, index: 
  * Extracts every marked sample of the documents, type-checks the `after` and `run` samples against the built
  * workspace packages, runs the `run` samples and compares their output with their comments.
  */
-export async function checkDocuments(documents: DocumentInput[], root = workspaceRoot): Promise<CheckResult> {
+export async function checkDocuments(documents: DocumentInput[], options: DocumentCheckOptions = {}): Promise<CheckResult> {
+	const { root = workspaceRoot, isExempt } = options
 	const failures: string[] = []
 	const reports: DocumentReport[] = []
 	const compiled: DocSample[] = []
@@ -224,7 +240,7 @@ export async function checkDocuments(documents: DocumentInput[], root = workspac
 		}
 		reports.push({ path: document.path, counts, unmarked: extraction.unmarkedScriptFences.length, unmarkedLines: extraction.unmarkedScriptFences.map(entry => entry.line) })
 	}
-	const result: CheckResult = { failures, documents: reports, uncompared: [], comparedClaims: 0 }
+	const result: CheckResult = { failures, documents: reports, compared: [], exempted: [] }
 	if (compiled.length === 0)
 		return result
 
@@ -265,14 +281,15 @@ export async function checkDocuments(documents: DocumentInput[], root = workspac
 				failures.push(`${sample.document}:${sample.markerLine}: ${label(sample)} ${reason}:\n    ${detail}`)
 				return
 			}
-			const comparison = compareOutput(sample.code, outcome.outputs)
-			result.comparedClaims += comparison.compared
+			const comparison = compareOutput(sample.code, outcome.outputs, isExempt === undefined ? undefined : claim => isExempt(sample.document, sample.name, claim))
+			for (const claim of comparison.compared)
+				result.compared.push({ line: docLine(sample, claim.line), text: claim.text, document: sample.document, sample: sample.name, sources: claim.sources.map(line => docLine(sample, line)) })
 			for (const failure of comparison.failures) {
 				const claimLine = sample.code.split('\n')[failure.line - 1]!.trim()
 				failures.push(`${sample.document}:${docLine(sample, failure.line)}: ${label(sample)} printed something other than its comment says: ${failure.message}\n    ${claimLine}`)
 			}
-			for (const claim of comparison.uncompared)
-				result.uncompared.push({ ...claim, document: sample.document, sample: sample.name, documentLine: docLine(sample, claim.line) })
+			for (const claim of comparison.exempted)
+				result.exempted.push({ line: docLine(sample, claim.line), text: claim.text, document: sample.document, sample: sample.name })
 		})
 	}
 	finally {

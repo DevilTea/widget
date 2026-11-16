@@ -1,17 +1,15 @@
 /**
  * Comparison of what a runnable documentation sample prints with what its comments claim.
  *
- * The samples state expected output in two forms, and both are compared here:
+ * A comment is an expected-output claim when it trails a statement that prints (`console.log(x) // true`) or sits
+ * on the comment lines directly below one, one line per printed line. "Prints" includes what the statement
+ * triggers: a call whose subscriber calls `console.log` is a printing statement too. A claim must then match the
+ * output; there is no first-word or prose escape. A comment on or under a statement that printed nothing is not
+ * output (a returned value, a remark) and is not looked at.
  *
- * 1. A trailing comment on the statement that prints: `console.log(x) // true: the Method completed`.
- * 2. Comment lines directly below the statement (or the loop) that prints:
- *    `console.log(a, b)` followed by `// a b`, one comment line per printed line.
- *
- * A claim matches an output when it is that output, or begins with it and continues after a delimiter
- * (`true: the Method completed` claims `true`). `...` in a claim matches any text. A claim on a statement that
- * prints only indirectly (a call that makes a subscriber print) is compared only when it quotes the output.
- * Everything else a comment says (return values, prose) cannot be compared mechanically and is reported as
- * `uncompared`.
+ * A claim matches an output when it is that output, or that output followed by `: `, `, <word>` or ` (` and a
+ * remark (`true: the Method completed`), or the value printed after a `label ->` or `label:` (`{ ok: true }` for
+ * `total -> { ok: true }`). `...` inside a claim matches any text; a claim made only of `...` matches nothing.
  */
 
 export interface RecordedOutput {
@@ -33,17 +31,17 @@ export interface OutputFailure {
 	message: string
 }
 
-export interface UncomparedClaim {
-	line: number
-	text: string
-	reason: string
+export interface ComparedClaim extends OutputClaim {
+	/** The lines that called `console` for the outputs the claim was matched with. */
+	sources: number[]
 }
 
 export interface OutputComparison {
 	failures: OutputFailure[]
-	/** The number of claims that were matched against printed output. */
-	compared: number
-	uncompared: UncomparedClaim[]
+	/** The claims that were matched against printed output (an exempt claim that did not match is not one). */
+	compared: ComparedClaim[]
+	/** Claims that did not match but are exempt (see `compareOutput`). */
+	exempted: OutputClaim[]
 }
 
 interface ScannedLine {
@@ -114,71 +112,87 @@ function escapeRegExp(text: string): string {
 	return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-const boundary = /^(?:$|[\s:,;(.\-])/
+// What may follow the output in a claim: a colon, a comma and a lower-case word (not a value), or a parenthesis.
+const remark = /^(?:$|: |, (?!(?:true|false|null|undefined)\b)[a-z]| \()/
 
-/** Whether a claim is the output, or the output followed by a delimiter and a remark. */
+function valueMatches(wanted: string, printed: string): boolean {
+	for (const candidate of [printed, `'${printed}'`, `"${printed}"`]) {
+		if (wanted.startsWith(candidate) && remark.test(wanted.slice(candidate.length)))
+			return true
+	}
+	if (wanted.includes('...')) {
+		const pattern = wanted.split('...')
+			.map(escapeRegExp)
+			.join('.*?')
+		return new RegExp(`^${pattern}$`, 's')
+			.test(printed)
+	}
+	return false
+}
+
+/** Whether a claim is the output, the output and a remark, or the value an output prints after a label. */
 export function claimMatches(claim: string, output: string): boolean {
 	const wanted = normalize(claim)
 	const printed = normalize(output)
 	if (wanted === '' || printed === '')
 		return wanted === printed
-	for (const candidate of [printed, `'${printed}'`, `"${printed}"`]) {
-		if (wanted === candidate)
-			return true
-		if (wanted.startsWith(candidate) && boundary.test(wanted.slice(candidate.length)))
-			return true
-	}
-	// A comment may describe only the last value of `console.log('label', value)`.
-	if (printed.endsWith(` ${wanted}`))
+	if (/^(?:\.\.\.\s*)+$/.test(wanted))
+		return false
+	if (valueMatches(wanted, printed))
 		return true
-	if (wanted.includes('...')) {
-		const pattern = wanted.split('...')
-			.map(escapeRegExp)
-			.join('.*?')
-		if (new RegExp(`(?:^|\\s)${pattern}$`, 's')
-			.test(printed)) {
+	for (const label of printed.matchAll(/(?:->|:) /g)) {
+		if (valueMatches(wanted, printed.slice(label.index + label[0].length)))
 			return true
-		}
 	}
 	return false
 }
 
-const literalStart = /^(?:[-+]?\d|true\b|false\b|null\b|undefined\b|['"`[{])/
-function firstWord(text: string) {
-	return normalize(text)
-		.split(' ')[0] ?? ''
-}
-const isScalar = (text: string) => !/\s/.test(normalize(text)) && !/^[[{]/.test(normalize(text))
-
 interface Group { start: number, end: number }
 
-export function compareOutput(code: string, outputs: RecordedOutput[]): OutputComparison {
+const assumption = 'a comment on, or directly below, a statement that prints is read as its expected output; put a remark on its own line above the statement'
+
+/**
+ * Compares the claims of a sample with what it printed. `isExempt(text)` names comments that sit on a printing
+ * statement without being output (existing remarks and return values); an exempt claim that does not match is
+ * reported in `exempted` instead of failing.
+ */
+export function compareOutput(code: string, outputs: RecordedOutput[], isExempt: (claim: string) => boolean = () => false): OutputComparison {
 	const lines = code.split('\n')
 	const scanned = lines.map(scanLine)
-	const result: OutputComparison = { failures: [], compared: 0, uncompared: [] }
-	const innermost = (output: RecordedOutput) => output.lines[0]
+	const result: OutputComparison = { failures: [], compared: [], exempted: [] }
 	const outputsIn = (group: Group, directOnly: boolean) => outputs.filter((output) => {
 		if (directOnly) {
-			const line = innermost(output)
+			const line = output.lines[0]
 			return line !== undefined && line >= group.start && line <= group.end
 		}
 		return output.lines.some(line => line >= group.start && line <= group.end)
 	})
 	const isDirect = (group: Group) => scanned.slice(group.start - 1, group.end)
 		.some(entry => consoleCall.test(entry.code))
+	const isCommentOnly = (i: number) => isBlank(scanned[i]!.code) && scanned[i]!.comment !== null
 
 	// The first line of the statement that line `line` (1-based) belongs to or ends.
 	const groupStartFor = (line: number, indent: number): number => {
-		let index = line
-		while (index > 1) {
-			const entry = scanned[index - 1]!
-			const text = lines[index - 1]!
-			const code = entry.code
-			if (!isBlank(code) && !isContinuation(code) && indentOf(text) <= indent)
+		for (let index = line; index > 1; index--) {
+			if (!isBlank(scanned[index - 1]!.code) && !isContinuation(scanned[index - 1]!.code) && indentOf(lines[index - 1]!) <= indent)
 				return index
-			index--
 		}
 		return 1
+	}
+
+	const sourcesOf = (matched: RecordedOutput[]) => matched.map(output => output.lines[0]!)
+	const judge = (claim: OutputClaim, candidates: RecordedOutput[], matched: RecordedOutput[], detail: string) => {
+		if (matched.length > 0) {
+			result.compared.push({ ...claim, sources: sourcesOf(matched) })
+		}
+		else if (isExempt(claim.text)) {
+			result.exempted.push(claim)
+		}
+		else {
+			const printed = candidates.map(output => JSON.stringify(normalize(output.text)))
+				.join(', ')
+			result.failures.push({ line: claim.line, message: `the comment claims ${JSON.stringify(normalize(claim.text))} but ${detail}${printed}; ${assumption}` })
+		}
 	}
 
 	let index = 0
@@ -186,109 +200,39 @@ export function compareOutput(code: string, outputs: RecordedOutput[]): OutputCo
 		const entry = scanned[index]!
 		const lineNo = index + 1
 		if (entry.comment !== null && !isBlank(entry.code)) {
-			// Form 1: a trailing comment.
+			// A trailing comment.
+			const claim = { line: lineNo, text: entry.comment }
 			const group: Group = { start: groupStartFor(lineNo, indentOf(lines[index]!)), end: lineNo }
-			judgeTrailing(group, { line: lineNo, text: entry.comment })
+			const direct = isDirect(group)
+			const attributed = outputsIn(group, direct)
+			if (attributed.length > 0)
+				judge(claim, attributed, attributed.filter(output => claimMatches(claim.text, output.text)), 'the statement printed ')
+			else if (direct)
+				judge(claim, [], [], 'this statement printed nothing')
 			index++
 			continue
 		}
-		if (isBlank(entry.code) && entry.comment !== null && index > 0 && !isBlank(lines[index - 1]!) && !isCommentOnly(index - 1)) {
-			// Form 2: a block of comment lines directly below a statement.
-			const blockStart = index
+		if (isCommentOnly(index) && index > 0 && !isBlank(lines[index - 1]!) && !isCommentOnly(index - 1)) {
+			// Comment lines directly below a statement.
 			let blockEnd = index
 			while (blockEnd + 1 < lines.length && isCommentOnly(blockEnd + 1))
 				blockEnd++
+			const group: Group = { start: groupStartFor(index, indentOf(lines[index]!)), end: index }
+			const attributed = isDirect(group) ? outputsIn(group, true) : []
 			const claims: OutputClaim[] = []
-			for (let i = blockStart; i <= blockEnd; i++)
+			for (let i = index; i <= blockEnd; i++)
 				claims.push({ line: i + 1, text: scanned[i]!.comment! })
-			const blockIndent = indentOf(lines[blockStart]!)
-			const group: Group = { start: groupStartFor(blockStart, blockIndent), end: blockStart }
-			judgeBlock(group, claims)
+			if (attributed.length === claims.length) {
+				claims.forEach((claim, i) => judge(claim, [attributed[i]!], claimMatches(claim.text, attributed[i]!.text) ? [attributed[i]!] : [], 'the statement printed '))
+			}
+			else if (attributed.length > 0) {
+				for (const claim of claims)
+					judge(claim, attributed, attributed.filter(output => claimMatches(claim.text, output.text)), `${claims.length} comment lines follow a statement that printed ${attributed.length} lines: `)
+			}
 			index = blockEnd + 1
 			continue
 		}
 		index++
 	}
 	return result
-
-	function isCommentOnly(i: number): boolean {
-		return isBlank(scanned[i]!.code) && scanned[i]!.comment !== null
-	}
-
-	function judgeTrailing(group: Group, claim: OutputClaim) {
-		const direct = isDirect(group)
-		const attributed = outputsIn(group, direct)
-		if (direct) {
-			if (attributed.length === 0) {
-				if (literalStart.test(claim.text) || isScalar(claim.text))
-					result.failures.push({ line: claim.line, message: `the comment claims "${claim.text}" but this statement printed nothing` })
-				else
-					result.uncompared.push({ ...claim, reason: 'prose; the statement printed nothing' })
-				return
-			}
-			if (attributed.some(output => claimMatches(claim.text, output.text))) {
-				result.compared++
-				return
-			}
-			const prose = !literalStart.test(claim.text)
-				&& !attributed.every(output => isScalar(output.text))
-				&& !attributed.some(output => firstWord(output.text) === firstWord(claim.text))
-			if (prose) {
-				result.uncompared.push({ ...claim, reason: 'prose next to a printed value' })
-				return
-			}
-			result.compared++
-			result.failures.push({ line: claim.line, message: describeMismatch(claim.text, attributed) })
-			return
-		}
-		if (attributed.length === 0) {
-			result.uncompared.push({ ...claim, reason: 'not printed output (a returned value or a remark)' })
-			return
-		}
-		if (attributed.some(output => claimMatches(claim.text, output.text))) {
-			result.compared++
-			return
-		}
-		if (attributed.some(output => firstWord(output.text) === firstWord(claim.text)) && !literalStart.test(claim.text)) {
-			result.compared++
-			result.failures.push({ line: claim.line, message: describeMismatch(claim.text, attributed) })
-			return
-		}
-		result.uncompared.push({ ...claim, reason: 'not printed output (a returned value or a remark)' })
-	}
-
-	function judgeBlock(group: Group, claims: OutputClaim[]) {
-		const attributed = outputsIn(group, true)
-		if (attributed.length === 0 || !isDirect(group)) {
-			for (const claim of claims)
-				result.uncompared.push({ ...claim, reason: 'a remark; the statement above prints nothing' })
-			return
-		}
-		if (attributed.length === claims.length) {
-			claims.forEach((claim, i) => {
-				result.compared++
-				if (!claimMatches(claim.text, attributed[i]!.text))
-					result.failures.push({ line: claim.line, message: describeMismatch(claim.text, [attributed[i]!]) })
-			})
-			return
-		}
-		for (const claim of claims) {
-			if (attributed.some(output => claimMatches(claim.text, output.text))) {
-				result.compared++
-			}
-			else if (literalStart.test(claim.text) || attributed.some(output => firstWord(output.text) === firstWord(claim.text))) {
-				result.compared++
-				result.failures.push({ line: claim.line, message: `${describeMismatch(claim.text, attributed)} (${claims.length} comment lines for ${attributed.length} printed lines)` })
-			}
-			else {
-				result.uncompared.push({ ...claim, reason: 'a remark below a printing statement' })
-			}
-		}
-	}
-}
-
-function describeMismatch(claim: string, attributed: RecordedOutput[]): string {
-	const printed = attributed.map(output => JSON.stringify(normalize(output.text)))
-		.join(', ')
-	return `the comment claims ${JSON.stringify(normalize(claim))} but the statement printed ${printed}`
 }
