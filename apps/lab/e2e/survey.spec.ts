@@ -2,7 +2,7 @@ import { expect, previewFrame, test } from './fixtures'
 
 /**
  * Issue #28 Interactive Survey contract, against the default preset (`survey-default` —
- * `showcases/survey/presets.ts`: every answer has a default, so `TripReadiness.ready`/Submit/Generate
+ * `showcases/trip-survey/presets.ts`: every answer has a default, so `TripReadiness.ready`/Submit/Generate
  * result all succeed).
  *
  * `<input type="number">`/`<input type="date">` question renderers write `answer` on the native
@@ -63,7 +63,7 @@ test('invalid date flow surfaces the issue and correcting it recovers live metri
 	await expect(preview.getByText(diagnosticMessage))
 		.toHaveCount(0)
 
-	// Default Departure date is 2027-04-10 (showcases/survey/presets.ts) — this is strictly before it.
+	// Default Departure date is 2027-04-10 (showcases/trip-survey/presets.ts) — this is strictly before it.
 	const returnDate = preview.getByLabel('Return date')
 	await returnDate.fill('2027-04-01')
 	await returnDate.press('Tab')
@@ -92,7 +92,7 @@ test('invalid date flow surfaces the issue and correcting it recovers live metri
 	await expect(preview.getByText(diagnosticMessage))
 		.toHaveCount(0)
 
-	// Live metrics recover: computeTripDays('2027-04-10', '2027-04-20') === 11 (survey/domain.ts).
+	// Live metrics recover: computeTripDays('2027-04-10', '2027-04-20') === 11 (trip-survey/domain.ts).
 	const tripDaysValue = preview.locator('dt', { hasText: 'Trip days' })
 		.locator('xpath=following-sibling::dd[1]')
 	await expect(tripDaysValue)
@@ -172,7 +172,7 @@ test('mutating an answer after Generate result shows an explicit stale-result st
 		.toHaveCount(0)
 	await expect(preview.getByText('Generated from previous answers'))
 		.toHaveCount(0)
-	// computeTripDays('2027-04-10', '2027-04-24') === 15 (survey/domain.ts).
+	// computeTripDays('2027-04-10', '2027-04-24') === 15 (trip-survey/domain.ts).
 	await expect(preview.getByText('Trip days: 15 · travelers:'))
 		.toBeVisible()
 })

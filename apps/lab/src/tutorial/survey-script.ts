@@ -5,7 +5,7 @@
  * paraphrased only where the rail's shorter card format needs it, never the do -> observe -> name
  * pairing, the failure+recovery-in-one-step shape (step 4), the direct-State-write-vs-Method contrast
  * (step 6), staleness-as-an-interaction (step 7), or the six-view map (step 8). Every widget id/member
- * name below is `survey-default`'s (`showcases/survey/presets.ts`) — the OWNER-locked deterministic
+ * name below is `survey-default`'s (`showcases/trip-survey/presets.ts`) — the OWNER-locked deterministic
  * starting state this tour is authored against, not an adaptive script over arbitrary Runtime state.
  */
 

@@ -5,8 +5,8 @@ import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
-import { surveyPresets } from '../showcases/survey/presets'
-import { surveySystem } from '../showcases/survey/system'
+import { surveyPresets } from '../showcases/trip-survey/presets'
+import { surveySystem } from '../showcases/trip-survey/system'
 import { createAuthorPatch, getAuthorConfigScalars, replaceConfigScalar } from './author'
 
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText

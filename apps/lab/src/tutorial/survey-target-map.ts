@@ -6,7 +6,7 @@
  * own `<label>` text — rather than by widget id: `useWidget()` never exposes widget instance identity to
  * renderer code (a locked `@deviltea/widget-vue` boundary; see diagnostic #25's gate review point 9 on the
  * `useWidget()` identity gap, which is explicitly P2's concern, not P1's), so this stays within what a
- * renderer can already see. Authored against `survey-default`'s known labels (`showcases/survey/presets.ts`)
+ * renderer can already see. Authored against `survey-default`'s known labels (`showcases/trip-survey/presets.ts`)
  * — the tutorial's OWNER-locked deterministic starting state — not a generic every-preset mapping.
  *
  * Only questions the Survey tour actually spotlights get an entry; every other question (Budget,

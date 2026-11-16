@@ -500,7 +500,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toHaveCount(0)
 	const returnDate = previewFrame(page)
 		.getByLabel('Return date')
-	// Default Departure is 2027-04-10 (showcases/survey/presets.ts) — this is strictly before it.
+	// Default Departure is 2027-04-10 (showcases/trip-survey/presets.ts) — this is strictly before it.
 	await returnDate.fill('2027-04-01')
 	await returnDate.press('Tab')
 

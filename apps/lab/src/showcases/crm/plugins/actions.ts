@@ -10,7 +10,7 @@
  * additionally declares `properties: { label, kind }`, a pure presentation-only projection of its own
  * resolved config (`compute: ({ config }) => config.label`/`config.kind`, no new dependency edges, no
  * behavior change) — the same pattern checkpoint A already used for `SurveySection`/`SurveyDateQuestion`
- * (`../survey/plugins/sections.ts`, `survey-questions.ts`). This is required because
+ * (`../trip-survey/plugins/sections.ts`, `survey-questions.ts`). This is required because
  * `@deviltea/widget-vue`'s public `useWidget()` contract never exposes resolved `config` (diagnostic #13
  * checkpoints C/D) and a registered renderer component receives no per-instance props at all (verified
  * against `packages/vue/src/renderer.ts`'s `h(ActualRenderer)` call) — `Button` is reused four

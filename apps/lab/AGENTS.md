@@ -70,7 +70,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   *applied* Document Blueprint, through Core's inspection node — never by searching the source text or by
   widget id), `focused-widget.ts` (shared focus -> plain `{ id, type }`), and `shiki-highlighter.ts` (the
   lazy, self-contained Shiki fine-grained highlighter — see "Loading policy" below for its chunk and
-  engine-choice rationale). Each showcase's `sources.ts` (`src/showcases/survey/sources.ts`,
+  engine-choice rationale). Each showcase's `sources.ts` (`src/showcases/trip-survey/sources.ts`,
   `src/showcases/crm/sources.ts`, `src/sandbox/sources.ts`) is the actual curated registry, wired into
   `ShowcaseEntry.sources` (`src/showcases/registry.ts`) alongside `presets`. `src/components/panels/
   ImplementationPanel.vue` (registered lazily — see below) and `src/components/implementation/*`
@@ -123,10 +123,10 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     (no routing, no persistence) consumed by `use-lab-store.ts`'s `switchShowcase`. Plugin-tuple
     types are erased to `WidgetSystem<AnyWidgetPluginTuple>` on purpose — consumers only need object
     identity.
-  - `survey/` — Showcase A: Interactive Survey (trip-planning domain). `domain.ts` (pure domain
+  - `trip-survey/` — Showcase A: Interactive Survey (trip-planning domain). `domain.ts` (pure domain
     helpers), `plugins/` (semantic plugins, unit-tested), `renderers/` (Vue renderer components),
     `system.ts`, `presets.ts`, `test-support.ts`.
-  - `crm/` — Showcase B: Sales Pipeline CRM. Same internal organization as `survey/` (`domain.ts`,
+  - `crm/` — Showcase B: Sales Pipeline CRM. Same internal organization as `trip-survey/` (`domain.ts`,
     `plugins/`, `renderers/`, `system.ts`, `presets.ts`, `test-support.ts`), with a deliberately
     richer widget vocabulary (store/query/form/table/modal/metric plugins and renderers).
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
