@@ -25,7 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, setIsolatedErrorHandler, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectRuntime } from '../inspection'
 import { getWidgetEventEmitter } from '../integration'
-import { MAX_HANDLER_CAUSED_DEPTH, MAX_HANDLER_CAUSED_REPORTS } from './adapter'
+import { MAX_NOTIFICATIONS_PER_CALL as LIMIT, MAX_HANDLER_CAUSED_DEPTH, MAX_HANDLER_CAUSED_REPORTS } from './adapter'
 
 interface LinkConfig { readonly me: string, readonly prev: string | null }
 
@@ -504,6 +504,120 @@ describe('the notification limit (#207)', () => {
 		document.applyPatch([{ op: 'add', path: '/meta', value: { note: 1 } }])
 
 		// The next host call counts from zero: the observer is notified again.
+		seen.length = 0
+		chain.link(0).state.n.set(-1)
+		expect(seen)
+			.toEqual([-1])
+	})
+
+	it('counts a pass that runs at the end of a host call in that call', () => {
+		const chain = createChain(2)
+		const near = LIMIT - 10
+		let seen = 0
+		// The host's call notifies the observer `near` times in a ping-pong; the first notification also throws.
+		chain.link(0).state.n.subscribe((value) => {
+			++seen
+			if (seen < near)
+				chain.link(1).state.n.set((value ?? 0) + 1)
+			if (seen === 1)
+				throw new Error('first notification')
+		})
+		chain.link(1).state.n.subscribe(value => chain.link(0).state.n.set((value ?? 0) + 1))
+		const received: unknown[] = []
+		let handled = false
+		setIsolatedErrorHandler((error) => {
+			received.push(error)
+			if (handled || error instanceof RangeError)
+				return
+			handled = true
+			// 20 more notifications of the observer, made by the handler in the end-of-call pass.
+			for (let i = 0; i < 20; i++)
+				chain.link(0).state.n.set(1_000_000 + i)
+		})
+
+		expect(() => chain.link(0).state.n.set(5))
+			.not
+			.toThrow()
+
+		// The pass belongs to the host's call, so the observer's count goes on from `near` and is stopped at the limit.
+		expect(seen)
+			.toBe(LIMIT)
+		expect(received.filter(error => error instanceof RangeError))
+			.toHaveLength(1)
+		expect(microtasks)
+			.toHaveLength(0)
+	})
+
+	it('hands the handler one RangeError for each of two subscriptions stopped in one call', () => {
+		const chain = createChain(4)
+		// Two diverging pairs, the second started by the first notification of the first.
+		chain.link(0).state.n.subscribe((value) => {
+			if (value === 5)
+				chain.link(2).state.n.set(5)
+			chain.link(1).state.n.set((value ?? 0) + 1)
+		})
+		chain.link(1).state.n.subscribe(value => chain.link(0).state.n.set((value ?? 0) + 1))
+		chain.link(2).state.n.subscribe(value => chain.link(3).state.n.set((value ?? 0) + 1))
+		chain.link(3).state.n.subscribe(value => chain.link(2).state.n.set((value ?? 0) + 1))
+		const received = recordReports()
+
+		expect(() => chain.link(0).state.n.set(5))
+			.not
+			.toThrow()
+
+		expect(received.filter(error => error instanceof RangeError))
+			.toHaveLength(2)
+		expect(received)
+			.toHaveLength(2)
+		expect(microtasks)
+			.toHaveLength(0)
+	})
+
+	it('stops a loop the handler starts in the end-of-call pass, returns the host call normally, and counts the next call from zero', () => {
+		const chain = createChain(2)
+		let looping = false
+		let thrown = false
+		chain.link(0).state.n.subscribe((value) => {
+			if (looping)
+				chain.link(1).state.n.set((value ?? 0) + 1)
+		})
+		chain.link(1).state.n.subscribe((value) => {
+			if (looping)
+				chain.link(0).state.n.set((value ?? 0) + 1)
+		})
+		const seen: Array<number | null> = []
+		chain.link(0).state.n.subscribe(value => seen.push(value))
+		// A listener of a third State throws once, so the host's call ends with a pass.
+		const other = createChain(1)
+		other.link(0).state.n.subscribe(() => {
+			if (!thrown) {
+				thrown = true
+				throw new Error('once')
+			}
+		})
+		const received: unknown[] = []
+		setIsolatedErrorHandler((error) => {
+			received.push(error)
+			if (error instanceof RangeError)
+				return
+			looping = true
+			chain.link(0).state.n.set(7)
+			looping = false
+		})
+
+		let result: { readonly ok: boolean } | undefined
+		expect(() => {
+			result = other.link(0).state.n.set(5)
+		})
+			.not
+			.toThrow()
+		expect(result?.ok)
+			.toBe(true)
+		expect(received.filter(error => error instanceof RangeError))
+			.toHaveLength(2) // both subscriptions to the looping State are stopped
+		expect(microtasks)
+			.toHaveLength(0)
+
 		seen.length = 0
 		chain.link(0).state.n.set(-1)
 		expect(seen)
