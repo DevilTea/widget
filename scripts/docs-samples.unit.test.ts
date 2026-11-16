@@ -27,7 +27,7 @@ function fence(code: string, indent = '') {
 const expectations: Record<string, DocumentExpectation> = {
 	// 17 samples written against the published 0.0.6 and 19 against the workspace packages.
 	'docs/site/migration/0.1.md': { before: 17, after: 11, run: 8, unmarked: 0 },
-	'docs/site/packages/widget-core.md': { before: 0, after: 0, run: 25, unmarked: 28 },
+	'docs/site/packages/widget-core.md': { before: 0, after: 0, run: 26, unmarked: 28 },
 	'packages/core/README.md': { before: 0, after: 0, run: 3, unmarked: 3 },
 	// No marked sample yet: these pages hold unmarked fragments only.
 	'docs/site/packages/widget-vue.md': { before: 0, after: 0, run: 0, unmarked: 11 },
@@ -334,7 +334,7 @@ describe.skipIf(missingBuild !== null)('documentation samples', () => {
 		// The samples state their output in comments; they were compared, not skipped. Raise this when comments are
 		// added; a drop means output stopped being compared.
 		expect(result.compared.length)
-			.toBeGreaterThanOrEqual(82)
+			.toBeGreaterThanOrEqual(90)
 		// An exemption that is no longer needed has to be removed.
 		const used = new Set(result.exempted.map(claim => `${claim.document}\n${claim.sample}\n${claim.text}`))
 		expect(exemptComments.filter(entry => !used.has(`${entry.document}\n${entry.sample}\n${entry.comment}`)))
