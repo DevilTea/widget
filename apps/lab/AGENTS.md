@@ -501,6 +501,8 @@ therefore remain distinct from Core source-compatibility and Blueprint semantic 
 BlueprintTree continues to traverse BlueprintInspection.nodes and sourceSlots, so unresolved nodes and
 raw-slot placements remain visible and selectable. DiagnosticList displays Core's location/path fields
 and uses src/lab/diagnostics.ts only to resolve a node location through the current Document inspection.
+Its `related` chips omit the entry that is the diagnostic's own location (Core's `property-evaluation-cycle`
+lists every member of the cycle, itself included); every other entry stays, in Core's order.
 Source-level locations intentionally return no inspection node and remain non-navigable. Node-level
 diagnostic navigation writes Document-scoped shared focus; it never consumes Preview-scoped IDs or maps
 across diverged revisions. Structure and Blueprint read that same Document focus, while Runtime and
