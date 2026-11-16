@@ -14,10 +14,13 @@ import {
 	isPlainObject,
 	isQuestionType,
 	isSurveyResponse,
+	leafTypeMismatch,
 	MEMBERSHIP_OPS,
+	OPERATOR_QUESTION_TYPES,
 	ORDER_OPS,
 	pickText,
 	QUESTION_TYPES,
+	questionText,
 	ruleErrors,
 	sameAnswerValue,
 	sameAnswerValues,
@@ -494,5 +497,67 @@ describe('sameAnswerValues', () => {
 			.toBe(false)
 		expect(sameAnswerValues({ language: 'en', answers: { a: outcome(null) } }, { language: 'en', answers: { b: outcome(null) } }))
 			.toBe(false)
+	})
+})
+
+describe('leafTypeMismatch', () => {
+	const mismatch = (condition: object, type: (typeof QUESTION_TYPES)[number]) => leafTypeMismatch({ question: 'q', ...condition } as LeafCondition, type)
+
+	it('lets answered and unanswered apply to every question type', () => {
+		for (const type of QUESTION_TYPES) {
+			expect(mismatch({ op: 'answered' }, type))
+				.toBeNull()
+			expect(mismatch({ op: 'unanswered' }, type))
+				.toBeNull()
+		}
+	})
+
+	it('limits each operator group to the types it can read', () => {
+		const accepts = (op: string, value: string | number) => QUESTION_TYPES.filter(type => mismatch({ op, value }, type) === null)
+		expect(accepts('equals', 1))
+			.toEqual(['Numeric'])
+		expect(accepts('notEquals', 'x'))
+			.toEqual(['ShortAnswer', 'SingleChoice'])
+		expect(accepts('greaterThan', 1))
+			.toEqual(['Numeric'])
+		expect(accepts('lessThan', 1))
+			.toEqual(['Numeric'])
+		expect(accepts('includes', 'x'))
+			.toEqual(['MultipleChoice'])
+		expect(accepts('excludes', 'x'))
+			.toEqual(['MultipleChoice'])
+	})
+
+	it('names the operator, the target and its type', () => {
+		expect(mismatch({ op: 'greaterThan', value: 1 }, 'SingleChoice'))
+			.toBe('"greaterThan" does not apply to "q", a SingleChoice question; it applies to Numeric questions.')
+		expect(mismatch({ op: 'equals', value: 'x' }, 'Numeric'))
+			.toBe('"equals" on "q", a Numeric question, needs a number "value", not a string.')
+	})
+
+	it('has an operator table that covers every operator', () => {
+		expect(Object.keys(OPERATOR_QUESTION_TYPES)
+			.sort())
+			.toEqual([...ANSWER_OPS, ...EQUALITY_OPS, ...ORDER_OPS, ...MEMBERSHIP_OPS].sort())
+	})
+})
+
+describe('questionText', () => {
+	const config = {
+		label: { 'en': 'Name', 'zh-TW': '姓名' },
+		help: { en: 'Help' },
+		options: [{ value: 'a', label: { 'en': 'A', 'zh-TW': '甲' } }],
+	}
+
+	it('picks label, help and option labels in the language, with empty text for a language that is missing', () => {
+		expect(questionText(config, 'zh-TW'))
+			.toEqual({ label: '姓名', help: '', options: [{ value: 'a', label: '甲' }] })
+		expect(questionText(config, 'en'))
+			.toEqual({ label: 'Name', help: 'Help', options: [{ value: 'a', label: 'A' }] })
+	})
+
+	it('has null help when there is none and always an options array', () => {
+		expect(questionText({ label: config.label, help: null }, 'en'))
+			.toEqual({ label: 'Name', help: null, options: [] })
 	})
 })

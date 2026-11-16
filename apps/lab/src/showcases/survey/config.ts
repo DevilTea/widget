@@ -16,9 +16,10 @@
  * That marker is unambiguous because a question's raw config never admits `null`.
  */
 
-import type { Condition, ConfigPath, I18nText, OptionConfig, Rule } from './domain'
+import type { Condition, ConditionLeaf, ConfigPath, I18nText, OptionConfig, Rule } from './domain'
 import {
 	ANSWER_OPS,
+	conditionLeaves,
 	EQUALITY_OPS,
 	formatConfigPath,
 	isPlainObject,
@@ -588,4 +589,43 @@ export function surveyLanguagesOf(root: object): readonly string[] | null {
 	if (config === null || config.recovered === true || !Array.isArray(config.languages))
 		return null
 	return config.languages as readonly string[]
+}
+
+// -------------------------------------------------------------------------------------------------
+// Enumerating a resolved question config (structure checks)
+// -------------------------------------------------------------------------------------------------
+
+/** A resolved question config, with `options` when the type has them. */
+export type QuestionConfig = QuestionConfigBase & { readonly options?: readonly ResolvedOption[] }
+
+export interface ConfigText { readonly path: ConfigPath, readonly text: I18nText }
+
+/**
+ * Every text of a resolved question config with its config path, in document order: `label`, `help`,
+ * each `options[i].label`, each `rules[j].message`. Used for `missing-translation`.
+ */
+export function questionTexts(config: QuestionConfig): ConfigText[] {
+	return [
+		{ path: ['label'], text: config.label },
+		...(config.help === null ? [] : [{ path: ['help'], text: config.help }]),
+		...(config.options ?? []).map((option, index) => ({ path: ['options', index, 'label'], text: option.label })),
+		...config.rules.map((rule, index) => ({ path: ['rules', index, 'message'], text: rule.message })),
+	]
+}
+
+/**
+ * Every leaf condition of a resolved question config with its config path, in document order:
+ * `required` (when it is a condition), `visibleWhen`, each option's `visibleWhen` and `enabledWhen`, and
+ * each rule's `when`.
+ */
+export function questionConditionLeaves(config: QuestionConfig): ConditionLeaf[] {
+	return [
+		...(typeof config.required === 'boolean' ? [] : conditionLeaves(config.required, ['required'])),
+		...(config.visibleWhen === null ? [] : conditionLeaves(config.visibleWhen, ['visibleWhen'])),
+		...(config.options ?? []).flatMap((option, index) => [
+			...(option.visibleWhen === null ? [] : conditionLeaves(option.visibleWhen, ['options', index, 'visibleWhen'])),
+			...(option.enabledWhen === null ? [] : conditionLeaves(option.enabledWhen, ['options', index, 'enabledWhen'])),
+		]),
+		...config.rules.flatMap((rule, index) => conditionLeaves(rule.when, ['rules', index, 'when'])),
+	]
 }
