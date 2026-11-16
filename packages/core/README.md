@@ -34,7 +34,8 @@ pnpm add @deviltea/widget-core
 ```
 
 Requires Node.js `>=22.14.0` (or any ES2022 runtime with a global
-`queueMicrotask`).
+`queueMicrotask`; a host with an isolated-error handler can do without it, see
+[Host requirements](#host-requirements)).
 
 While the package is `0.x`, a breaking change bumps the **minor** version
 (`0.N.0`), so use a `^0.N.0` range. Core recognizes its own plugins, Blueprints
@@ -416,8 +417,9 @@ committed (`changed: true`) patch it receives `(snapshot, { previous, patch })`,
 in subscription order, over the subscriber list as it stood when notification
 began. No-op detection is JSON-domain equality. An
 exception thrown by a listener does not fail `applyPatch()` or stop the
-remaining listeners, and it is reported outside `applyPatch()`; the reporting
-mechanism is not part of the contract.
+remaining listeners, and it is reported separately from the `applyPatch()` result
+(see [Host requirements](#host-requirements)); the reporting mechanism is not
+part of the contract.
 
 ### SeparatedWidgetSource tooling
 
@@ -461,7 +463,7 @@ later occurrence is de-identified with its available subtree preserved.
   `widget.events[name].subscribe(listener)`. Delivery is synchronous and
   depth-first for nested emits; a throwing public listener is isolated like every
   other listener (the remaining listeners and the emitting Method still run, and
-  the error is reported asynchronously). A runaway loop (a listener that keeps
+  the error is reported separately, see [Host requirements](#host-requirements)). A runaway loop (a listener that keeps
   re-invoking the emitting Method) is cut off once one Runtime's emits nest more
   than 128 deep: `WidgetSystemRuntimeReentrancyError` (a `RangeError`, code
   `emit-depth-exceeded`) unwinds to the call that started the loop. Events are
@@ -481,7 +483,7 @@ later occurrence is de-identified with its available subtree preserved.
   Always `set()` a new value.
 - A throwing Property `compute` never makes a writer (`state.set`, a Method call,
   `resetState()`) throw and never suppresses other subscribers; it is reported
-  asynchronously, while `get()` and dependency reads still rethrow. The exception
+  separately, while `get()` and dependency reads still rethrow. The exception
   stays cached until a dependency changes — except a stack overflow (a first
   read of a chain of on the order of a thousand Properties), which the next read
   evaluates again, so a long chain can be warmed bottom-up.
@@ -545,7 +547,7 @@ later occurrence is de-identified with its available subtree preserved.
   owns: each listener runs exactly once, synchronously, inside the first
   `dispose()` call with no arguments, after the Runtime is already fully
   disposed (so it cannot read or write the Runtime), in subscription order. A
-  throwing listener is isolated like any other and reported asynchronously;
+  throwing listener is isolated and reported like any other;
   subscribing to a disposed Runtime throws `WidgetSystemRuntimeDisposedError`.
 
 ### Inspection
@@ -569,13 +571,38 @@ delivery guarantees.
 
 ### Host requirements
 
-The current implementation needs an ES2022 engine and a global
-`queueMicrotask` whose jobs the host actually runs: a throwing State, Property,
+The current implementation needs an ES2022 engine. A throwing State, Property,
 diagnostic, Event, disposal, inspection or `WidgetDocument` listener, and a Property
-`compute` that throws during a subscription's re-evaluation, is isolated and
-rethrown in a microtask. Embedded engines such as QuickJS (`rquickjs`) must
-drain their pending jobs, or those errors never surface. See
-[Host requirements](https://deviltea.github.io/widget/packages/widget-core#host-requirements).
+`compute` that throws during a subscription's re-evaluation, is isolated: it
+never reaches the call that caused it. By default Core rethrows it in a queued
+microtask, which needs a global `queueMicrotask` whose jobs the host actually
+runs; embedded engines such as QuickJS (`rquickjs`) must drain their pending
+jobs, or those errors never surface. A host can receive them instead:
+
+```typescript
+import { setIsolatedErrorHandler } from '@deviltea/widget-core'
+
+setIsolatedErrorHandler(error => console.error('isolated:', error))
+```
+
+The handler is called once per report, after the Runtime call that caused it has
+finished its work and before that call returns (at once when no Runtime call is
+in progress), and it is never re-entered, so it may read and write the Runtime.
+`setIsolatedErrorHandler` returns the handler it replaced, so code that sets one
+for a while can put the previous one back. With a handler set, Core queues a
+microtask only for an exception the handler throws, a report still waiting when
+the handler is removed, and what the handler's handling causes beyond its
+internal bounds; without `queueMicrotask` those reports are dropped and the rest
+of the pass is unaffected, as long as the handler stays set until the Runtime
+call that is running ends: removing it in the middle of a Runtime call returns
+the rest of that call to the default mode, whose `queueMicrotask` call is not
+guarded, so an exception isolated in the rest of that call throws at the point
+of the failure (a `ReferenceError` when the global is missing). A host whose
+handler stays set, catches its own exceptions and does not keep causing what it
+handles needs neither `queueMicrotask` nor a
+drained job queue. See
+[Receiving isolated errors](https://deviltea.github.io/widget/packages/widget-core#receiving-isolated-errors)
+and [Host requirements](https://deviltea.github.io/widget/packages/widget-core#host-requirements).
 
 The full guide at
 [docs/site/packages/widget-core.md](https://deviltea.github.io/widget/packages/widget-core)

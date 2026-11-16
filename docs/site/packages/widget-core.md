@@ -1491,8 +1491,14 @@ committed (`changed: true`) patch it receives `(snapshot, { previous, patch })`:
 the new snapshot, the snapshot it replaced, and the exact patch array that was
 applied. Listeners run in subscription order, over the subscriber list as it
 stood when notification began. An exception thrown by a listener does not fail
-`applyPatch()` or stop the remaining listeners, and it is reported outside
-`applyPatch()` in a queued microtask (see [Host requirements](#host-requirements)).
+`applyPatch()` or stop the remaining listeners. It is reported separately: rethrown
+in a queued microtask after `applyPatch()` has returned, or, when the host has set
+an isolated-error handler, handed to it. When `applyPatch()` is called outside any
+Runtime call, the handler receives it at once, before the next listener runs,
+while the document is still notifying (an `applyPatch()` on it then returns
+`reentrant-apply`); when `applyPatch()` is called inside one (for example from a
+State subscriber), it waits for the end of that Runtime call, after the
+remaining listeners (see [Receiving isolated errors](#receiving-isolated-errors)).
 
 ### Explicit separated-source tooling
 
@@ -1716,9 +1722,17 @@ one call to reach it, a loop reaches it within milliseconds). Beyond that it is
 not called again until that call returns, and a `RangeError` saying which
 widget and member the subscription observes and how often it was notified is
 reported the way an exception thrown by a listener is (see
-[Host requirements](#host-requirements)). The host's call returns normally,
-State and Property values stay consistent, and the next call counts from zero,
-but the stopped subscriber's last delivered value may not be the current one,
+[Host requirements](#host-requirements)); when an isolated-error handler is
+set, that `RangeError` is one of the reports it receives (see
+[Receiving isolated errors](#receiving-isolated-errors)). The host's call
+returns normally, State and Property values stay consistent, and the next call
+counts from zero. A hand-over pass of the isolated-error handler that starts
+while no Runtime call is in progress is a call of its own for this count, so
+what the handler's own calls notify is counted apart from the host's other
+calls. A pass that runs at the end of a Runtime call counts in that call: when
+the call notified a subscription 9 990 times and the handler's writes in that
+pass notify it 10 more times, the subscription is stopped at 10 000 and the
+`RangeError` is handed to the handler. The stopped subscriber's last delivered value may not be the current one,
 and a later call delivers the current one only when what the subscription
 observes changes again. The limit applies to every subscription Core creates
 (State, Property and diagnostics subscriptions), whether the loop writes through
@@ -1760,9 +1774,10 @@ separate diagnostic channel and never triggers a property evaluation.
 A `compute` that **throws** (an implementation exception, not a Diagnostic)
 never breaks the writer that invalidated it: `state.set`, a Method call and
 `resetState()` return normally, and the other subscribers are still notified.
-Core reports the exception asynchronously (a queued microtask, see
-[Host requirements](#host-requirements)), once per synchronous turn even when
-several subscriptions (the Property's own and its dependents') re-read it; that
+Core reports the exception separately (a queued microtask, or the host's
+isolated-error handler, see [Receiving isolated errors](#receiving-isolated-errors)),
+once even when several subscriptions (the Property's own and its dependents')
+re-read it: once per synchronous turn, or with a handler once per hand-over pass; that
 subscription is skipped for this recompute and resumes on the next completed
 recompute. A direct `get()` and a dependency read of the Property still rethrow
 synchronously, and `subscribe()` whose first evaluation throws still returns a
@@ -1864,7 +1879,7 @@ if (widget?.type !== 'notifier') // narrow the union before using `events` / `me
 	throw new Error('notifier-1 is not a notifier')
 
 const received: string[] = []
-// Isolated listener errors are rethrown in a microtask; in Node they arrive as uncaught exceptions.
+// By default isolated listener errors are rethrown in a microtask; in Node they arrive as uncaught exceptions.
 process.on('uncaughtException', error => console.log('reported:', (error as Error).message))
 widget.events.change.subscribe(() => {
 	throw new Error('a faulty listener') // isolated: reported asynchronously, never reaches `fire`
@@ -1904,8 +1919,8 @@ runtime.dispose()
   public listener list is snapshotted when `emit` starts.
 - A public listener that throws is isolated like every other listener: the
   remaining listeners captured at emit start still run, the emitting Method
-  completes normally, and the error is reported asynchronously (see
-  [Host requirements](#host-requirements)).
+  completes normally, and the error is reported separately (see
+  [Receiving isolated errors](#receiving-isolated-errors)).
 - A listener may call a Method that emits again, a few levels deep. A loop that
   never ends — a listener that keeps re-invoking the Method that emitted — is
   cut off by a safety guard: when one Runtime's emits nest more than 128 levels
@@ -1935,7 +1950,9 @@ Every state write, property evaluation, and method invocation keeps only its
 **latest completed** operation's diagnostic snapshot — never a history. A
 callback throw discards the in-progress collector and preserves the previous
 completed snapshot; it is an implementation exception, not a diagnostic and not
-an `ExecutionResult.failure`.
+an `ExecutionResult.failure`. An exception thrown by a listener is not a
+diagnostic either: Core isolates it and reports it separately (see
+[Receiving isolated errors](#receiving-isolated-errors)).
 
 A primitive's diagnostics use these codes. The one a plugin callback produces
 is decided by the callback, not by the plugin: a `reason` string a plugin
@@ -2144,8 +2161,8 @@ work when the Runtime goes away:
   still runs, and none can be added meanwhile, because subscribing to a
   disposed Runtime throws.
 - A throwing listener never reaches the `dispose()` caller and never stops the
-  remaining listeners; like every other listener exception it is reported
-  asynchronously (see [Host requirements](#host-requirements)).
+  remaining listeners; it is reported like every other listener exception
+  (see [Receiving isolated errors](#receiving-isolated-errors)).
 - `subscribeDisposal()` on an already disposed Runtime throws
   `WidgetSystemRuntimeDisposedError`; the listener is never invoked
   immediately, so check `runtime.isDisposed` first when the Runtime may already
@@ -2549,7 +2566,7 @@ already exists when those listeners run, so it is notified of what they write.
   notification of that call not delivered yet is dropped, including those of
   other listeners and other Properties, and a `RangeError` is reported the way
   an exception thrown by a listener is (see
-  [Host requirements](#host-requirements)). Facts (`getSnapshot()`), State
+  [Receiving isolated errors](#receiving-isolated-errors)). Facts (`getSnapshot()`), State
   values and subscribers stay consistent, and later calls deliver as usual.
 
 **Not supported.** Some code runs while a Property is being evaluated, and Core
@@ -2612,7 +2629,11 @@ Events (see [Events](#events)). Unlike State and Property inspection it has no
    unsubscribing during delivery affects only later emits.
 5. A throwing inspection listener is isolated. The error does not reach the
    emitter, other inspection listeners, or public listeners, and it is
-   reported outside the emit call. The reporting mechanism is not normative.
+   reported outside the emit call, except that an isolated-error handler
+   receives it at once when no Runtime call is in progress (an emit made
+   through `/integration` outside one; see
+   [Receiving isolated errors](#receiving-isolated-errors)). The reporting
+   mechanism is not normative.
 6. Each occurrence passes one **shallow-frozen** args array, shared by that
    occurrence's inspection listeners. The elements are the emitted references;
    Core does not clone or deep-freeze them. Core retains nothing after `emit`
@@ -3398,7 +3419,7 @@ and for `get()`), and `createBlueprintFromJson` throws the `SyntaxError` from
 `JSON.parse` unchanged. Runaway recursion surfaces as a `RangeError`; a runaway
 Event loop surfaces as `WidgetSystemRuntimeReentrancyError` (see
 [Events](#events)). Listener exceptions are the exception to propagation: they
-are isolated (see [Host requirements](#host-requirements)), except that Event
+are isolated (see [Receiving isolated errors](#receiving-isolated-errors)), except that Event
 listener isolation lets that guard error and an engine stack overflow through.
 
 There are two different `reason` fields. On a diagnostic a plugin authored
@@ -3408,6 +3429,163 @@ plugin author**, carried verbatim and never interpreted. On
 `json-incompatible-value` (and on the separated-source diagnostics) `reason` is
 a **closed enum** defined by Core.
 
+### Receiving isolated errors
+
+Some exceptions must not break the call that caused them, so Core isolates
+them: an exception thrown by a State, Property or diagnostics listener
+(`subscribe`, `subscribeDiagnostics`), a public Event listener, a disposal
+listener, an inspection listener or a `WidgetDocument` subscriber; a Property
+`compute` that throws while a subscription re-evaluates it; and the
+`RangeError` that reports a runaway loop Core has stopped (see
+[When Property inspection listeners run](#when-property-inspection-listeners-run)).
+By default Core rethrows each one in a queued microtask, so the host sees it as
+an uncaught error (`uncaughtException` in Node, an `error` event on `window` in
+a browser) after its own call has returned, with nothing that says which call
+caused it. `setIsolatedErrorHandler(handler)` hands them to a function instead:
+
+<!-- sample: isolated-error-handler run -->
+```ts
+import { createWidgetPlugin, createWidgetSystem, setIsolatedErrorHandler } from '@deviltea/widget-core'
+
+const counterPlugin = createWidgetPlugin('counter')
+	.description('A counter')
+	.interfaces<{ state: { count: number } }>()
+	.state(state => state.count({
+		validate: (input): input is number => typeof input === 'number',
+		default: () => 0,
+	}))
+	.done()
+
+const blueprint = createWidgetSystem({ plugins: [counterPlugin] })
+	.createBlueprint({ id: 'counter-1', type: 'counter' })
+if (blueprint.status !== 'valid')
+	throw new Error('invalid')
+const runtime = blueprint.createRuntime()
+const widget = runtime.getWidget('counter-1')!
+
+const reported: unknown[] = []
+setIsolatedErrorHandler(error => reported.push(error))
+
+widget.state.count.subscribe(() => {
+	throw new Error('a faulty listener')
+})
+console.log(widget.state.count.set(1).ok) // true: the write is not affected
+console.log(reported.length) // 1: handed over before set() returned
+
+setIsolatedErrorHandler(null) // back to the default microtask rethrow
+runtime.dispose()
+```
+
+- **One call per report**, with the exception exactly as it was thrown. The
+  handler receives only the exception: nothing says which Runtime, member or
+  call isolated it.
+- **One hand-over pass, in order.** An exception isolated during a Runtime call
+  (`set()`, a Method call, `resetState()`, a Property's `get()` or
+  `subscribe()`) is handed over once the outermost Runtime call in progress has
+  finished its work, after every subscriber was notified, and before that call
+  returns, also when it throws. That is the outermost call whichever Runtime
+  isolated the exception: when a listener of Runtime B writes Runtime A, A's
+  exception is handed over when the call into B ends. Within the pass, reports
+  and Property inspection deliveries are handed over one at a time, in the
+  order Core produced them. The handler is never re-entered: what its own calls
+  isolate while it runs is handed over after it returns, behind what was
+  already waiting, still before the host's call returns.
+- **At once when no Runtime call is in progress.** A `WidgetDocument`
+  subscriber of an `applyPatch()` made outside any Runtime call, a disposal
+  listener of a top-level `dispose()`, and a listener of an emit made through
+  [`@deviltea/widget-core/integration`](#renderer-adapter-integration) outside
+  any Runtime call start the pass where they throw, before the next listener
+  runs. The same listeners inside a Runtime call (for example an `applyPatch()`
+  made by a State subscriber) wait for the end of that call like every other
+  report.
+- **A cached `compute` exception** that several subscriptions re-read is
+  handed over once per pass, whatever else is handed over around it, even when
+  the handler's own calls re-read it. A later Runtime call that reads it again
+  hands it over again.
+- **What the handler can rely on.** It never runs while a Runtime is
+  evaluating Properties or notifying its subscribers, so it may read
+  Properties, write State and call Methods on any Runtime. The one exception is a host that holds its
+  own `alien-signals` batch around Runtime calls, which is not supported (see
+  [When Property inspection listeners run](#when-property-inspection-listeners-run)):
+  the notifications then run when the host ends its batch, and the handler can
+  run between two subscribers there. Otherwise it depends on where the pass
+  runs:
+  - after an outermost Runtime call (most reports): nothing of Core is in
+    progress, and the handler can do anything top-level host code can;
+  - during the notification of an `applyPatch()`: that document is still
+    notifying, so an `applyPatch()` on it returns the `reentrant-apply`
+    failure, and its remaining subscribers run after the handler;
+  - during a top-level `dispose()`: the Runtime is already disposed, so a live
+    operation on it throws `WidgetSystemRuntimeDisposedError`;
+  - between the listeners of a top-level emit through `/integration`: the emit
+    goes on after the handler and its later listeners see what the handler
+    did. A handler that disposes the Runtime there makes a later listener's
+    Method call throw `WidgetSystemRuntimeDisposedError`, which is isolated and
+    handed to the handler in turn.
+- **Bounds on what its handling causes.** A handler that keeps causing what it
+  handles (on every report it writes a State whose subscriber throws) is
+  stopped. A chain of reports in which each was caused by the handler's
+  handling of the previous one is handed over to a depth of 100. Beyond that
+  the handler receives one `RangeError` saying so, and the exceptions further
+  down the chain are rethrown in a microtask. Independent reports do not
+  count toward the depth: when 150 listeners throw in one call and the handler
+  causes one new exception for each, all 300 are handed over. They do count
+  toward the total below, through the exceptions their handling causes. A
+  handler whose handling of each report causes two new ones keeps every chain
+  short, so a second limit stops it after 10,000 exceptions caused by its
+  handling in one pass, with its own `RangeError`. Once that limit is reached,
+  the reports caused by the handler's handling that are still queued (up to
+  about 10,000) are all rethrown in microtasks, and in Node the first one ends
+  the process when no `uncaughtException` handler is installed. Both limits are internal and may change. When the
+  inspection delivery bound stops a pass, the reports still waiting are handed
+  over, not dropped, followed by that bound's `RangeError`; what the handler's
+  handling causes after that is rethrown in a microtask.
+- **A handler that throws** breaks nothing: its exception is rethrown in a
+  queued microtask, and the remaining reports are still handed over. Catch
+  inside the handler when the host has no `queueMicrotask` (see
+  [Host requirements](#host-requirements)).
+- **An exhausted engine stack inside the pass.** The handler's own exceptions
+  are caught, but if the engine stack is exhausted in Core's own hand-over
+  machinery, the exception surfaces in the host's call, and the pass's cleanup
+  discards what was still queued: the reports and Property inspection
+  deliveries not handed over yet are lost. Call Core with enough stack left
+  (see [Call-stack depth](#call-stack-depth)).
+- **Replacing or removing it.** `setIsolatedErrorHandler(null)` (or
+  `undefined`) restores the default. A report still waiting when the handler is
+  replaced goes to the new handler; one still waiting when it is removed is
+  rethrown in a microtask. Any other value that is not a function throws a
+  `TypeError` and leaves the handler as it was. Every call returns the handler
+  it replaced (`null` for the default), so code that sets one for a while (a
+  test, a story, a hot-reloaded module) can put back what the application set:
+
+  <!-- sample: isolated-error-handler-restore run -->
+  ```ts
+  import { setIsolatedErrorHandler } from '@deviltea/widget-core'
+
+  export function captureIsolatedErrors(run: () => void): unknown[] {
+  	const captured: unknown[] = []
+  	const previous = setIsolatedErrorHandler(error => captured.push(error))
+  	try {
+  		run()
+  	}
+  	finally {
+  		setIsolatedErrorHandler(previous)
+  	}
+  	return captured
+  }
+  ```
+
+  Used inside a Runtime call (for example in a subscriber), it captures
+  nothing: reports are handed over when the outermost Runtime call ends, by
+  which time `finally` has already restored the previous handler, so the
+  previous handler receives them. Use it from the top level, around calls
+  that are not nested in another Runtime call.
+- **One handler per loaded Core.** It applies to every System, Blueprint,
+  Runtime and `WidgetDocument` of that copy of Core (an application loads
+  exactly one). It belongs to the host: a plugin library or renderer library
+  must not set it, and code that sets one for a while restores the previous
+  one.
+
 ### Host requirements
 
 Core is platform-neutral and runs in browsers, Node.js, and embedded engines
@@ -3416,27 +3594,48 @@ IIFE). The current implementation needs:
 
 - **ES2022.** The published build targets `es2022`. The packages declare
   `engines.node` `>=22.14.0` and `sideEffects: false`.
-- **A global `queueMicrotask` and a drained job queue.** Core reports an
-  exception it has isolated from the current operation by rethrowing it in a
-  queued microtask. That covers a throwing State, Property or diagnostic
-  listener (`subscribe` / `subscribeDiagnostics`), a throwing public Event
-  listener, a throwing disposal listener (`subscribeDisposal`), a throwing
-  inspection listener, a throwing `WidgetDocument`
-  subscriber, and a Property `compute` that throws while a subscription
-  re-evaluates it (one report per exception and synchronous turn, however many
-  subscriptions re-read it). An embedded host must run its pending jobs (for example
-  `rquickjs`'s pending-job execution, or `JS_ExecutePendingJob` in
-  QuickJS); otherwise these errors never surface. Without a global
-  `queueMicrotask`, the rethrow itself fails with a `ReferenceError` at the
-  point of the failure.
+- **A global `queueMicrotask` and a drained job queue, while no isolated-error
+  handler is set.** By default Core reports an exception it has isolated from
+  the current operation by rethrowing it in a queued microtask. That covers a
+  throwing State, Property or diagnostic listener (`subscribe` /
+  `subscribeDiagnostics`), a throwing public Event listener, a throwing disposal
+  listener (`subscribeDisposal`), a throwing inspection listener, a throwing
+  `WidgetDocument` subscriber, a Property `compute` that throws while a
+  subscription re-evaluates it (one report per exception and synchronous turn,
+  however many subscriptions re-read it), and the `RangeError` of a stopped
+  runaway loop. An embedded host must then run its pending jobs (for example
+  `rquickjs`'s pending-job execution, or `JS_ExecutePendingJob` in QuickJS);
+  otherwise these errors never surface. Without a global `queueMicrotask`, the
+  rethrow itself fails with a `ReferenceError` at the point of the failure.
+
+  A host that sets a handler with `setIsolatedErrorHandler` receives these
+  exceptions synchronously instead (see
+  [Receiving isolated errors](#receiving-isolated-errors)). Core then queues a
+  microtask only for what the handler does not take: an exception the handler
+  itself throws, a report still waiting when the handler is removed, and an
+  exception the handler's handling causes beyond one of its bounds (a chain
+  deeper than its limit, more than its total in one pass, or after the
+  inspection delivery bound stopped the pass). Without `queueMicrotask`, Core
+  drops exactly those reports, one by one: the host's call returns or throws
+  what it would have, and every other report and inspection delivery is still
+  handed over. That holds only while the handler stays set until the Runtime
+  call that is running ends: when the handler is removed during a Runtime
+  call, the rest of that call is back in the default mode, whose
+  `queueMicrotask` call is not guarded, so an exception isolated in the rest
+  of that call throws at the point of the failure (a `ReferenceError` when
+  the global is missing). So an embedded host needs neither
+  `queueMicrotask` nor a drained job queue as long as its handler stays set
+  while Runtime calls run, catches its own exceptions, and does not keep
+  causing what it handles. Catch inside the handler, so that its own
+  exceptions are not lost.
 - **Enough call stack for what you subscribe to.** Compiling and reading do not
   depend on the stack size, but tearing down a long subscribed chain does. See
   [Call-stack depth](#call-stack-depth).
 
 Core does not use timers, `console`, `process`, DOM globals, or Promises at
 runtime. These are requirements of the current implementation, not
-architecture rules: `queueMicrotask` is how isolated errors are
-reported today, and the mechanism may change.
+architecture rules: a `queueMicrotask` rethrow is how isolated errors are
+reported when no handler is set, and that default may change.
 
 The current canonical architecture authority is
 [DevilTea/widget Discussion #12](https://github.com/DevilTea/widget/discussions/12).
