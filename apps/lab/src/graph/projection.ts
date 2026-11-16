@@ -117,6 +117,7 @@ function projectClustersAndVertices(inspection: BlueprintInspection): { clusters
 				kind: 'method',
 				name: method.name,
 				transitivelyWrites: method.transitivelyWrites,
+				transitivelyEmits: method.transitivelyEmits,
 			})
 		}
 	}

@@ -10,6 +10,9 @@
  *   color alone.
  * - The small "W" badge on a Method node is `transitivelyWrites` (the compiler-authoritative fact,
  *   `node.methods[].transitivelyWrites` — never recomputed by this app).
+ * - The small "E" badge beside it is `transitivelyEmits` (`node.methods[].transitivelyEmits`): a Method that
+ *   emits an Event, itself or through the Methods it invokes, is not read-only, so a Property may not depend
+ *   on it. A Method with neither badge neither writes nor emits.
  * - Widget clusters are cards: collapsed cards lead with type, then `#id` and S/P/M inventory; expanded
  *   cards are compound inspector shells containing member nodes.
  * - Edges (`vue-flow.ts`'s `toVueFlow()`) distinguish `reads`/`writes`/`invokes` primarily through
@@ -86,6 +89,13 @@ function toggle(): void {
 							:style="{ border: '1.5px solid var(--lab-color-accent)' }"
 						/>
 						{{ i18n.t('Method — a "W" badge means it transitively writes State') }}
+					</li>
+					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+						<span
+							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '2px' })"
+							:style="{ border: '1.5px solid var(--lab-color-accent)' }"
+						/>
+						{{ i18n.t('Method — an "E" badge means it transitively emits an Event') }}
 					</li>
 					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
 						<span

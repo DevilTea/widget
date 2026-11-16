@@ -17,6 +17,15 @@ describe('presentation localization boundary', () => {
 			.toBe('已註冊 plugins')
 	})
 
+	it('translates the Method emits marker copy in zh-TW and leaves English verbatim', () => {
+		expect(translatePresentationMessage('zh-TW', 'Emits an Event directly or through the Methods it invokes'))
+			.toBe('直接或透過它所呼叫的 Methods 發出 Event')
+		expect(translatePresentationMessage('zh-TW', 'Method — an "E" badge means it transitively emits an Event'))
+			.toBe('Method——「E」標記表示它會 transitively 發出 Event')
+		expect(translatePresentationMessage('en', 'Emits an Event directly or through the Methods it invokes'))
+			.toBe('Emits an Event directly or through the Methods it invokes')
+	})
+
 	it('leaves representative semantic/source/core strings verbatim when they are not audited presentation copy', () => {
 		for (const value of [
 			'Text',

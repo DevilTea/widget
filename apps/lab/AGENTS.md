@@ -331,7 +331,8 @@ State members render the remote member snapshot only — nothing in the inspecto
 `property.get()`. Property members render `Never evaluated` until the member snapshot reports
 `status: 'completed'` — the latest result some *real* Runtime consumer (Preview) naturally produced — and
 never `fresh`/`dirty`/`active`/`stale` labels. Methods are inventory only (name + the compiler's
-`transitivelyWrites` fact); there is no invocation affordance. The Runtime Inspector always follows the
+`transitivelyWrites` and `transitivelyEmits` facts; the Runtime panel reads them from the Inspector snapshot, where
+`transitivelyEmits` exists only from protocol 0.4 and can be absent); there is no invocation affordance. The Runtime Inspector always follows the
 Preview connection and shows its Preview revision (`runtime-inspector/source.ts`); an invalid current
 Document may leave an older valid Preview running, so it is not an unavailable Runtime state by itself.
 Only a session with no valid Preview has an unavailable Runtime panel. The only Lab code that calls
@@ -357,8 +358,8 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   dependencies become `GraphEdge`s; `absent`/`invalid` become presentation-only `GraphStub`s, never a
   fabricated resolved edge. `absent` stubs (and any member with no other visible relation) are hidden
   unless the panel's `showAbsent`/`showIsolatedMembers` filters are on; `invalid` stubs are always
-  visible. `transitivelyWrites` and `invalidCycles` are projected verbatim from core inspection facts —
-  this module never recomputes either.
+  visible. `transitivelyWrites`, `transitivelyEmits` and `invalidCycles` are projected verbatim from core inspection
+  facts — this module never recomputes any of them.
 - `elk-adapter.ts` — pure `toElkGraph()`/`fromElkResult()`, the JSON-shape boundary to ELK's graph schema.
   Accepts optional `LayoutGraphOptions` (`expandedClusterIds`). Collapsed clusters are treated as leaf
   nodes with compact dimensions (`COLLAPSED_CLUSTER_WIDTH`, `COLLAPSED_CLUSTER_HEIGHT`), and cross-cluster

@@ -123,6 +123,39 @@ describe('toVueFlow', () => {
 			.toHaveLength(2)
 	})
 
+	it('projects transitivelyEmits and transitivelyWrites independently onto Method node data', () => {
+		const base = fixtureGraph()
+		const methodVertex = (name: string, flags: { transitivelyWrites?: boolean, transitivelyEmits?: boolean }) =>
+			({ id: `1:method:${name}`, clusterId: 'cluster:1', nodeId: 1 as InspectionNodeId, kind: 'method' as const, name, ...flags })
+		const graph: SemanticGraph = {
+			...base,
+			vertices: [
+				...base.vertices,
+				methodVertex('ping', { transitivelyWrites: false, transitivelyEmits: true }),
+				methodVertex('bump', { transitivelyWrites: true, transitivelyEmits: true }),
+				methodVertex('save', { transitivelyWrites: true, transitivelyEmits: false }),
+			],
+		}
+		const baseLayout = fixtureLayout()
+		const layout: LayoutedGraph = {
+			...baseLayout,
+			vertices: new Map([
+				...baseLayout.vertices,
+				...['1:method:ping', '1:method:bump', '1:method:save'].map(id => [id, { x: 5, y: 5, width: 150, height: 32 }] as const),
+			]),
+		}
+
+		const { nodes } = toVueFlow(graph, layout, { expandedClusterIds: new Set(['cluster:1']) })
+		const flags = (id: string) => ({ writes: nodes.find(n => n.id === id)?.data?.transitivelyWrites, emits: nodes.find(n => n.id === id)?.data?.transitivelyEmits })
+
+		expect(flags('1:method:ping'))
+			.toEqual({ writes: false, emits: true })
+		expect(flags('1:method:bump'))
+			.toEqual({ writes: true, emits: true })
+		expect(flags('1:method:save'))
+			.toEqual({ writes: true, emits: false })
+	})
+
 	it('projects expanded clusters as compound containers with child vertex nodes', () => {
 		const graph = fixtureGraph()
 		const layout = fixtureLayout()

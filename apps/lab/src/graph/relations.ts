@@ -20,6 +20,7 @@ export interface RelationsMemberIdentity {
 	readonly kind: GraphVertexKind
 	readonly name: string
 	readonly transitivelyWrites?: boolean
+	readonly transitivelyEmits?: boolean
 	readonly invalidCycle?: boolean
 }
 
@@ -163,6 +164,7 @@ function buildMemberIdentity(
 		kind: vertex.kind,
 		name: vertex.name,
 		transitivelyWrites: vertex.transitivelyWrites,
+		transitivelyEmits: vertex.transitivelyEmits,
 		invalidCycle: invalidCycleVertexIds.has(vertex.id),
 	}
 }

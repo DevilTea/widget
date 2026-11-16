@@ -310,6 +310,12 @@ function memberKindShort(kind: string): string {
 						title="transitivelyWrites"
 					>W</span>
 					<span
+						v-if="data.transitivelyEmits"
+						class="graph-member-flag"
+						:aria-label="i18n.t('Emits an Event directly or through the Methods it invokes')"
+						:title="i18n.t('Emits an Event directly or through the Methods it invokes')"
+					>E</span>
+					<span
 						v-if="data.invalidCycle"
 						class="graph-member-flag graph-member-flag--danger"
 						aria-label="invalid cycle"

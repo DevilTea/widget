@@ -116,6 +116,39 @@ const writeChainPlugin = createWidgetPlugin('graph-write-chain')
 		}))
 	.done()
 
+interface EmitterInterfaces {
+	state: { value: number }
+	methods: {
+		ping: () => void
+		relay: () => void
+		bump: () => void
+		quiet: () => void
+	}
+	events: { pinged: [] }
+}
+
+/** `ping` emits, `relay` only invokes `ping`, `bump` writes and emits, `quiet` does neither. */
+const emitterPlugin = createWidgetPlugin('graph-emitter')
+	.description('Graph emitter fixture')
+	.interfaces<EmitterInterfaces>()
+	.state(state => state.value({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
+	.methods(methods => methods
+		.ping({ registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }), validateArgs: (args): args is [] => args.length === 0, emits: ['pinged'], execute: ({ emit }) => { emit.pinged() } })
+		.relay({
+			registerDeps: ({ dep }) => ({ ping: dep.self.methods.invoke('ping') }),
+			validateArgs: (args): args is [] => args.length === 0,
+			execute: () => null,
+		})
+		.bump({
+			registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
+			validateArgs: (args): args is [] => args.length === 0,
+			emits: ['pinged'],
+			execute: ({ emit }) => { emit.pinged() },
+		})
+		.quiet({ registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }), validateArgs: (args): args is [] => args.length === 0, execute: () => null }))
+	.events(events => events.pinged({ description: 'The Method ran' }))
+	.done()
+
 interface CycleInterfaces {
 	properties: {
 		p1: unknown
@@ -133,7 +166,7 @@ const cyclePlugin = createWidgetPlugin('graph-cycle')
 	.done()
 
 const system = createWidgetSystem({
-	plugins: [containerPlugin, targetPlugin, consumerPlugin, writeChainPlugin, cyclePlugin],
+	plugins: [containerPlugin, targetPlugin, consumerPlugin, writeChainPlugin, cyclePlugin, emitterPlugin],
 })
 
 function createMainBlueprint() {
@@ -307,6 +340,31 @@ describe('projectSemanticGraph', () => {
 			expect(vertex?.transitivelyWrites)
 				.toBe(true)
 		}
+	})
+
+	it('projects transitivelyEmits verbatim from the compiler fact, beside transitivelyWrites', () => {
+		const inspection = inspectBlueprint(system.createBlueprint({ id: 'root', type: 'graph-emitter' }))
+		const rootNode = inspection.getNode(inspection.rootNodeId) as ResolvedBlueprintInspectionNode
+		const graph = projectSemanticGraph(inspection)
+		const flags = (name: string) => {
+			const fact = rootNode.methods.find(method => method.name === name)
+			const vertex = graph.vertices.find(v => v.id === vertexIdOf(rootNode, 'method', name))
+			expect(vertex?.transitivelyEmits)
+				.toBe(fact?.transitivelyEmits)
+			expect(vertex?.transitivelyWrites)
+				.toBe(fact?.transitivelyWrites)
+			return { writes: vertex?.transitivelyWrites, emits: vertex?.transitivelyEmits }
+		}
+
+		expect(flags('ping'))
+			.toEqual({ writes: false, emits: true })
+		// Emits only through the Method it invokes.
+		expect(flags('relay'))
+			.toEqual({ writes: false, emits: true })
+		expect(flags('bump'))
+			.toEqual({ writes: true, emits: true })
+		expect(flags('quiet'))
+			.toEqual({ writes: false, emits: false })
 	})
 
 	it('overlays invalidCycles onto participating vertices and their connecting edges', () => {

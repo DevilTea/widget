@@ -267,6 +267,44 @@ describe('projectRelations', () => {
 		})
 	})
 
+	describe('method effect facts', () => {
+		const effectGraph: SemanticGraph = {
+			...graph,
+			vertices: [
+				...graph.vertices,
+				{ id: '1:method:ping', clusterId: 'cluster:1', nodeId: 1 as InspectionNodeId, kind: 'method', name: 'ping', transitivelyWrites: false, transitivelyEmits: true },
+				{ id: '1:method:bump', clusterId: 'cluster:1', nodeId: 1 as InspectionNodeId, kind: 'method', name: 'bump', transitivelyWrites: true, transitivelyEmits: true },
+			],
+		}
+
+		it('carries transitivelyEmits beside transitivelyWrites on a focused Method member', () => {
+			for (const [name, writes, emits] of [['ping', false, true], ['bump', true, true], ['reset', true, undefined]] as const) {
+				const model = projectRelations(effectGraph, { nodeId: 1 as InspectionNodeId, member: { type: 'method', name } }, rootNodeId)
+				expect(model.mode)
+					.toBe('member')
+				if (model.mode !== 'member')
+					return
+				expect(model.selectedMember.transitivelyWrites)
+					.toBe(writes)
+				expect(model.selectedMember.transitivelyEmits)
+					.toBe(emits)
+			}
+		})
+
+		it('carries transitivelyEmits on the member chips of a focused widget', () => {
+			const model = projectRelations(effectGraph, { nodeId: 1 as InspectionNodeId }, rootNodeId)
+			if (model.mode !== 'widget')
+				throw new Error('expected widget mode')
+			const emitsOf = (name: string) => model.selectedWidget.members.find(member => member.name === name)?.transitivelyEmits
+			expect(emitsOf('ping'))
+				.toBe(true)
+			expect(emitsOf('bump'))
+				.toBe(true)
+			expect(emitsOf('reset'))
+				.toBeUndefined()
+		})
+	})
+
 	describe('widget focus mode', () => {
 		it('separates cross-widget incoming/outgoing from same-widget internal dependencies', () => {
 			// Focus on producer widget (nodeId: 1)
