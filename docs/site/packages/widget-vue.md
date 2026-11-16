@@ -54,7 +54,9 @@ with one copy and hand it to an adapter importing the other. `WidgetRenderer`
 detects that the first time it is given the Runtime and throws
 `WidgetVueIntegrationError` with code `foreign-runtime`, rather than rendering
 and failing at the first `emit`. Make your package manager resolve a single
-copy of `@deviltea/widget-core`.
+copy of `@deviltea/widget-core`. The adapter is released together with Core
+under one version and declares Core as `^<version>`, so a `0.1.1` adapter
+accepts Core `>=0.1.1 <0.2.0`; install the two at the same version.
 
 ## Renderer registry
 

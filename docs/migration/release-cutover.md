@@ -1,6 +1,6 @@
 # Release cutover
 
-`@deviltea/widget-core`, `@deviltea/widget-inspector`, and `@deviltea/widget-vue` are released from `DevilTea/widget`.
+`@deviltea/widget-core`, `@deviltea/widget-inspector`, and `@deviltea/widget-vue` are released from `DevilTea/widget`, all three together under one version.
 
 ## Required external cutover
 
@@ -8,23 +8,28 @@ Each npm package's Trusted Publisher must name repository `DevilTea/widget`, wor
 
 ### `@deviltea/widget-inspector` placeholder
 
-npm can only attach a Trusted Publisher to a package that already exists. Publish a `0.0.0` placeholder of `@deviltea/widget-inspector` manually once, solely to create the package, then configure its Trusted Publisher (repository `DevilTea/widget`, workflow `publish.yml`). The placeholder is not a release: it was published manually before the first real release. The first real releases were `0.0.3` and `0.0.4` (tags `widget-inspector@0.0.3` and `widget-inspector@0.0.4`), and npm also holds `0.0.0-stage` and `0.0.0`. The first release of `@deviltea/widget-inspector` after `0.0.4` is `0.1.0` (`pnpm release widget-inspector <release>`), published after `@deviltea/widget-core` `0.1.0`. Every real release goes through `publish.yml` only.
+npm can only attach a Trusted Publisher to a package that already exists. Publish a `0.0.0` placeholder of `@deviltea/widget-inspector` manually once, solely to create the package, then configure its Trusted Publisher (repository `DevilTea/widget`, workflow `publish.yml`). The placeholder is not a release: it was published manually before the first real release. The first real releases were `0.0.3` and `0.0.4` (tags `widget-inspector@0.0.3` and `widget-inspector@0.0.4`), the next one was `0.1.0` (tag `widget-inspector@0.1.0`), and npm also holds `0.0.0-stage` and `0.0.0`. Every real release goes through `publish.yml` only.
 
 ## Version policy and release order
 
-- While the packages are `0.x`, a breaking change bumps the **minor** (`0.N.0`). The Core changes since `0.0.6` are breaking, so the first `@deviltea/widget-core` release after `0.0.6` must be `0.1.0` (choose `minor`, or the explicit version, when running `pnpm release widget-core <release>`). The first release of `@deviltea/widget-vue` after `0.0.6` and of `@deviltea/widget-inspector` after `0.0.4` is `0.1.0` as well, published after Core.
-- `@deviltea/widget-vue` and `@deviltea/widget-inspector` declare `@deviltea/widget-core` as `peerDependencies` with `workspace:^`, which publishes as `^0.N.0`. A `^0.N.0` range accepts only that minor line, so a dependent can only be installed next to the Core line it was released against.
-- A caret on a `0.0.x` Core is an exact pin (`^0.0.6` is `0.0.6`), so `pnpm release` and `pnpm release:tag` refuse `widget-vue` and `widget-inspector` while the workspace Core version is below `0.1.0`.
-- Release **Core first**, then the dependents. A dependent's published peer range must never point at a Core version that is not on npm yet.
+- The three packages always carry the same version. `@deviltea/widget-core`, `@deviltea/widget-inspector`, and `@deviltea/widget-vue` were released one package at a time up to `0.1.0` (three release pull requests, three tags, three publish runs); from the release after `0.1.0` they are released together. A package without changes is still published at the new version. `pnpm check` fails when the three `version` fields differ, and the private Lab (`apps/lab`) is not part of the release.
+- While the packages are `0.x`, a breaking change in any package bumps the **minor** (`0.N.0`) of all of them, and a patch release must not contain a breaking change in any package. `@deviltea/widget-inspector` is additionally experimental with a protocol-major guarantee only (see its `AGENTS.md`).
+- `@deviltea/widget-vue` and `@deviltea/widget-inspector` declare `@deviltea/widget-core` as `peerDependencies` with `workspace:^`, which publishes as `^<version>`. Under one version that means a dependent at `0.1.1` accepts Core `>=0.1.1 <0.2.0`: it works with Core's later patches, not with Core `0.1.0`, so the three packages are upgraded together.
+- A caret on a `0.0.x` Core is an exact pin (`^0.0.6` is `0.0.6`), so the release scripts and `pnpm check` refuse a `0.0.x` version.
+- Core is published **first**, then the Inspector and the Vue adapter, so a dependent's published peer range never points at a Core version that is not on npm yet. The publish workflow enforces the order, so there is no manual wait between packages.
 - Consumers and plugin or renderer libraries must depend on Core as a peer dependency too, so that exactly one Core instance exists in an application (Core identifies its own objects by module-private brands, and an object from a second copy is rejected as foreign).
 - All three packages declare `engines.node` `>=22.14.0` and `sideEffects: false`.
 
 ## Release flow
 
 1. Start from a clean, up-to-date `main`.
-2. Run `pnpm release <widget-core|widget-inspector|widget-vue> <release>` to create the release branch, commit the version bump, push it, and open a pull request. For a multi-package release, finish Core (steps 2 to 5) before starting its dependents.
+2. Run `pnpm release <patch|minor|major|prerelease|version>`. It checks that the three packages share one version, bumps all of them to the same new version on `release/v<version>`, commits `chore: release v<version>`, pushes the branch, and opens one pull request.
 3. Merge the pull request only after its required checks pass.
-4. After the pull request merges, run `pnpm release:tag <widget-core|widget-inspector|widget-vue>`.
-5. Pushing the annotated tag (`widget-core@*`, `widget-inspector@*`, or `widget-vue@*`) triggers `.github/workflows/publish.yml`, which verifies the tag, runs `pnpm check`, packs the target package, and publishes through npm Trusted Publishing with provenance.
+4. After the pull request merges, run `pnpm release:tag`. It pushes the annotated tag `v<version>` on merged `main`, and refuses when `v<version>` or the old per-package tags of that version already exist on `origin`.
+5. Pushing the tag triggers `.github/workflows/publish.yml`. It verifies that the tag commit is on `main` and that the tag equals the version of all three packages, runs `pnpm check`, packs the three packages (checking each packed manifest), and publishes them through npm Trusted Publishing with provenance in the order Core, Inspector, Vue (`scripts/release-publish.ts`). Prerelease versions go to the `next` dist-tag, never `latest`.
+
+If a publish run fails part-way, fix the cause and re-run the workflow (or the failed job) from the Actions page. A package whose exact version is already on the registry is skipped with a log line, so the re-run publishes only what is missing; a dependent is never published before Core. If the registry gives an unclear answer, the run fails before publishing anything.
+
+Tags of the earlier per-package releases (`widget-core@0.1.0` and before, and the same for `widget-inspector` and `widget-vue`) stay as history; the unified releases are tagged `v<version>` only.
 
 The preserved `0.0.1` tags predate this repository cutover and correspond to releases originally published from `DevilTea/deviltea-labs`.

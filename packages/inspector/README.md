@@ -253,4 +253,4 @@ Two independent axes:
 
 The protocol is currently `0.4`.
 
-**Core peer range.** `@deviltea/widget-core` is a peer dependency published as `^0.N.0` (the workspace uses `workspace:^`). A breaking change in Core's inspection surface bumps Core's minor, so a given Inspector release works with the Core minor it was released against. From Core `0.1.0` on that range also admits that minor's later patches; a `^0.0.N` range would pin exactly one Core patch, so the release scripts refuse to release the Inspector while the workspace Core version is below `0.1.0`.
+**Core peer range.** `@deviltea/widget-core` is a peer dependency published as `^<version>` (the workspace uses `workspace:^`). The Inspector is released together with Core and `@deviltea/widget-vue` under one version, and a breaking change in Core's inspection surface bumps the minor of all of them, so a given Inspector release works with the Core minor it was released with. An Inspector at `0.1.1` accepts Core `>=0.1.1 <0.2.0`; install the packages at the same version. A `^0.0.N` range would pin exactly one Core patch, so the release scripts refuse a `0.0.x` version.
