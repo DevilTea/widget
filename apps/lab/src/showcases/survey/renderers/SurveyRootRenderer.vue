@@ -5,9 +5,10 @@
  *
  * Reads: Property `text` (title and chrome in the survey language, with the languages' endonyms),
  * Property `changedSinceSubmit` and Property `response` (always: the tutorial's observed members and the
- * backend's view), State `language` and State `submitted`. Writes State `language` and calls Method
- * `submit()`. Whether a submit is allowed, what is stored and what counts as changed are the plugin's:
- * the Method's diagnostics (the "blocked" message) are shown verbatim and nothing is checked here.
+ * backend's view), Property `canSubmit`, State `language` and State `submitted`. Writes State `language`
+ * and calls Method `submit()`. Whether a submit is allowed, what is stored and what counts as changed are
+ * the plugin's: the Method's diagnostics (the "blocked" message) are shown verbatim, only while
+ * `canSubmit` is not `true`, and nothing is checked here.
  */
 import type { AnswerValue } from '../domain'
 import { useWidget } from '@deviltea/widget-vue'
@@ -15,16 +16,22 @@ import { computed, useId } from 'vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { useLabI18n } from '../../../composables/use-lab-i18n'
 import { SurveyPlugin } from '../plugins/survey'
+import { FIELD_STYLE, PRIMARY_BUTTON_STYLE } from './control-style'
 
 const { useState, useProperties, useMethods, useMethodDiagnostics, WidgetSlot, widgetId, widgetType } = useWidget(SurveyPlugin)
 const { language, submitted } = useState()
-const { text, changedSinceSubmit, response } = useProperties()
+const { text, canSubmit, changedSinceSubmit, response } = useProperties()
 const { submit } = useMethods()
 const { submit: submitDiagnostics } = useMethodDiagnostics()
 const i18n = useLabI18n()
 
 const languageId = useId()
 const anchor = useInspectAnchor(widgetId, widgetType)
+/**
+ * The Method's diagnostics from the last Submit, verbatim, but only while the survey still cannot be
+ * submitted: once every error is fixed the "blocked" message is out of date and would sit next to a clean form.
+ */
+const blockedDiagnostics = computed(() => canSubmit.value === true ? [] : submitDiagnostics.value)
 const responseJson = computed(() => JSON.stringify(response.value, null, 2))
 /** The submitted snapshot's visible answers, as `[question id, display text]`. */
 const submittedRows = computed(() => Object.entries(submitted.value?.answers ?? {})
@@ -64,7 +71,8 @@ function onSubmit(): void {
 				<select
 					:id="languageId"
 					:value="language ?? ''"
-					:class="pika({ minHeight: '40px', padding: '6px 10px', fontSize: '16px', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)' })"
+					:class="pika({ minHeight: '40px', padding: '6px 10px', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface-alt)' })"
+					:style="FIELD_STYLE"
 					@change="onLanguageChange"
 				>
 					<option
@@ -89,13 +97,14 @@ function onSubmit(): void {
 			<button
 				type="button"
 				data-testid="survey-submit"
-				:class="pika({ minHeight: '44px', padding: '8px 28px', fontSize: '17px', fontWeight: '600', border: '1px solid var(--lab-color-accent)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-accent)', color: 'var(--lab-color-accent-contrast)', cursor: 'pointer' })"
+				:class="pika({ minHeight: '44px', padding: '8px 28px', border: '1px solid var(--lab-color-accent)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-accent)', cursor: 'pointer' })"
+				:style="PRIMARY_BUTTON_STYLE"
 				@click="onSubmit"
 			>
 				{{ text?.submit ?? 'Submit' }}
 			</button>
 			<p
-				v-for="(diagnostic, index) in submitDiagnostics"
+				v-for="(diagnostic, index) in blockedDiagnostics"
 				:key="`${index}:${diagnostic.message}`"
 				role="alert"
 				data-testid="survey-submit-diagnostic"

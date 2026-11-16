@@ -8,6 +8,7 @@ import { useWidget } from '@deviltea/widget-vue'
 import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
 import { surveyQuestionTarget } from '../../../tutorial/survey-target-map'
 import { ShortAnswerPlugin } from '../plugins/short-answer'
+import { FIELD_STYLE } from './control-style'
 import QuestionFrame from './QuestionFrame.vue'
 
 const { useState, useProperties, widgetId, widgetType } = useWidget(ShortAnswerPlugin)
@@ -42,7 +43,8 @@ function onInput(event: Event): void {
 				:aria-describedby="describedBy"
 				:aria-invalid="invalid ? 'true' : undefined"
 				:aria-required="isRequired ? 'true' : undefined"
-				:class="pika({ boxSizing: 'border-box', width: '100%', maxWidth: '420px', minHeight: '40px', padding: '6px 10px', fontSize: '17px', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)' })"
+				:class="pika({ boxSizing: 'border-box', width: '100%', maxWidth: '420px', minHeight: '40px', padding: '6px 10px', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface-alt)' })"
+				:style="FIELD_STYLE"
 				@input="onInput"
 			>
 		</template>

@@ -14,9 +14,11 @@ import { SurveyRenderer } from './index'
 
 export type SurveyTestRuntime = ReturnType<typeof createSurveyRuntime>['runtime']
 
-export async function mountSurvey(runtime: SurveyTestRuntime): Promise<VueWrapper> {
+/** `attachTo` is for tests that need real focus; such a test must unmount the wrapper. */
+export async function mountSurvey(runtime: SurveyTestRuntime, options: { readonly attachTo?: HTMLElement } = {}): Promise<VueWrapper> {
 	const wrapper = mount(SurveyRenderer, {
 		props: { runtime },
+		attachTo: options.attachTo,
 		global: {
 			config: { globalProperties: testGlobalProperties },
 			provide: {
