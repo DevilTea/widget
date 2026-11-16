@@ -149,7 +149,7 @@ export function claimMatches(claim: string, output: string): boolean {
 
 interface Group { start: number, end: number }
 
-const assumption = 'a comment on, or directly below, a statement that prints is read as its expected output; put a remark on its own line above the statement'
+const assumption = 'a comment on, or directly below, a statement that prints is read as its expected output: the printed text, optionally followed by ": ", by ", " and a lowercase word, or by " (" and a remark (a label ending in ":" or "->" may be left out); put a remark on its own line above the statement, or after a blank line'
 
 /**
  * Compares the claims of a sample with what it printed. `isExempt(text)` names comments that sit on a printing
