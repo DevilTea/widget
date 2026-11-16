@@ -404,7 +404,7 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	const guests = preview.getByLabel('Guests coming with you')
 	await clickBesideRail(page, guests)
 	await guests.fill('5')
-	await expect(rail.getByText('Guests reports an error, yet 5 is still stored', { exact: false }))
+	await expect(rail.getByText('Guests reports an error, yet your number is still stored', { exact: false }))
 		.toBeVisible()
 	await guests.fill('2')
 	await expect(rail.getByText('The error is gone.', { exact: false }))
@@ -483,14 +483,14 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await nextButton.click()
 
 	// Step 3 — Property: no new action, reveals immediately on entry.
-	await expect(rail.getByText('The required message disappeared, and Phone now says it is required.', { exact: false }))
+	await expect(rail.getByText('The required message under "How will you join?" disappeared, and Phone now says it is required.', { exact: false }))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
 	await nextButton.click()
 
 	// Step 4 — an answer error, then recovery, inside the same step.
-	const errorObservation = rail.getByText('Guests reports an error, yet 5 is still stored', { exact: false })
+	const errorObservation = rail.getByText('Guests reports an error, yet your number is still stored', { exact: false })
 	await expect(errorObservation)
 		.toHaveCount(0)
 	await expect(preview.locator('[data-tutorial-target="survey-guests"]'))
@@ -542,7 +542,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeVisible()
 	await expect(guests)
 		.toHaveValue('2')
-	await expect(rail.getByText('Guests is back, still holding 2', { exact: false }))
+	await expect(rail.getByText('Guests is back, still holding your answer', { exact: false }))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
@@ -576,7 +576,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	// Step 7 — snapshot vs. live: mutating an answer after Submit is the real interaction. The rail's own
 	// reveal text mentions the marker too (in a longer sentence), so the Preview check is scoped to its
 	// test id.
-	const staleObservation = rail.getByText('gained the "changed since submit" marker', { exact: false })
+	const staleObservation = rail.getByText('gained the "Answers changed since you submitted" marker', { exact: false })
 	await expect(staleObservation)
 		.toHaveCount(0)
 	await expect(preview.getByTestId('survey-changed-since-submit'))

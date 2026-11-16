@@ -168,7 +168,8 @@ pnpm test        # vitest run for this app's colocated *.unit.test.ts
 `vite.config.ts`/`vitest.config.ts`/`pika.config.ts` and Playwright config files themselves are not
 part of `pnpm typecheck`'s program, matching every other package in this repo (none type-check their
 own bundler config files). Browser/Page specs under `e2e/` and `e2e-pages/` are typechecked through
-`tsconfig.browser-tests.json`, including their imported sandbox preset fixture, while the two
+`tsconfig.browser-tests.json`, including the preset fixtures they import (`src/sandbox/presets.ts` and
+`src/showcases/survey/presets.ts`), while the two
 Playwright suites remain separate runtime jobs.
 `pnpm typecheck` first runs `pika:codegen` (`scripts/pika-codegen.mjs`), which generates
 `src/pika.gen.ts` directly through `@pikacss/integration` — the same file `@pikacss/unplugin-pikacss`'s

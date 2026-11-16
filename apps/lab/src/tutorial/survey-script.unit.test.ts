@@ -166,6 +166,36 @@ describe('step "error-and-recovery"', () => {
 			.toBe(true)
 	})
 
+	it('accepts any number above max and any recovery, but not other answer errors', () => {
+		const { mode, guests, reader, observe } = setup()
+		mode.state.answer.set('onsite')
+		const errorShown = stage('error-and-recovery', 0)
+		const recovered = stage('error-and-recovery', 1)
+
+		// `integer` and `min` errors are answer errors too, but not the scripted `max` one.
+		for (const [answer, code] of [[2.5, 'integer'], [-1, 'min']] as const) {
+			guests.state.answer.set(answer)
+			observe()
+			expect(guests.properties.errors.get())
+				.toMatchObject({ ok: true, value: [{ code }] })
+			expect(errorShown(reader), `${code} error`)
+				.toBe(false)
+			expect(recovered(reader), `${code} error`)
+				.toBe(false)
+		}
+
+		// Any number above max completes the first phase (the copy does not name a number), and any valid
+		// number, including 0, completes the second.
+		guests.state.answer.set(4)
+		observe()
+		expect(errorShown(reader))
+			.toBe(true)
+		guests.state.answer.set(0)
+		observe()
+		expect(recovered(reader))
+			.toBe(true)
+	})
+
 	it('does not read a Property nothing evaluated yet', () => {
 		const { mode, guests, reader } = setup()
 		mode.state.answer.set('onsite')
@@ -206,6 +236,26 @@ describe('step "dependency"', () => {
 		// Hiding never erased the stored answer.
 		expect(guests.state.answer.get())
 			.toBe(2)
+	})
+})
+
+describe('step "dependency" without an evaluated Property', () => {
+	it('is not complete while guests.visible has not been evaluated or is not false', () => {
+		const { mode, reader, observe } = setup()
+		const hidden = stage('dependency', 0)
+
+		// Nothing has evaluated `visible` yet: the predicate must fail closed, not read it as "not true".
+		expect(reader.readProperty('guests', 'visible'))
+			.toEqual({ status: 'never-evaluated' })
+		expect(hidden(reader))
+			.toBe(false)
+
+		mode.state.answer.set('onsite')
+		observe()
+		expect(reader.readProperty('guests', 'visible'))
+			.toEqual({ status: 'completed', result: { ok: true, value: true } })
+		expect(hidden(reader))
+			.toBe(false)
 	})
 })
 
