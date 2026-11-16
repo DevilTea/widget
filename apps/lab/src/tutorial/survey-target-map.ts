@@ -21,3 +21,20 @@ export const SURVEY_NUMBER_QUESTION_TARGETS: Readonly<Record<string, string>> = 
 export const SURVEY_DATE_QUESTION_TARGETS: Readonly<Record<string, string>> = {
 	'Return date': 'survey-return-date',
 }
+
+/**
+ * The survey-form showcase's `data-tutorial-target` lookup, keyed by widget id: its renderers read
+ * `widgetId` from `useWidget()`, so unlike the label-keyed maps above the key is the stable id. Authored
+ * against the default preset's questions (`showcases/survey/presets.ts`); only the two questions the
+ * tour spotlights get an entry. The root's `survey-actions` and `survey-submitted` targets are fixed
+ * attributes of `showcases/survey/renderers/SurveyRootRenderer.vue`. PS2 removes the label-keyed maps above.
+ */
+export const SURVEY_QUESTION_TARGETS: Readonly<Record<string, string>> = {
+	mode: 'survey-mode',
+	guests: 'survey-guests',
+}
+
+/** The tutorial target of a survey-form question, or `undefined` (own keys only: never `constructor`). */
+export function surveyQuestionTarget(widgetId: string): string | undefined {
+	return Object.hasOwn(SURVEY_QUESTION_TARGETS, widgetId) ? SURVEY_QUESTION_TARGETS[widgetId] : undefined
+}
