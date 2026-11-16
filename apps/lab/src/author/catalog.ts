@@ -5,6 +5,8 @@ import type { AnyWidgetPluginTuple, WidgetCatalog, WidgetCatalogEntry, WidgetPlu
 export interface AuthorCatalogWidget {
 	readonly entry: WidgetCatalogEntry
 	readonly capabilities: WidgetPluginCapabilities
+	/** Pretty JSON of `entry.config?.schema`; null when the plugin has no config or publishes no schema. */
+	readonly configSchemaText: string | null
 }
 
 export interface AuthorCatalogViewModel {
@@ -20,6 +22,28 @@ export function createAuthorCatalogViewModel(system: WidgetSystem<AnyWidgetPlugi
 		widgets: system.catalog.widgets.map(entry => ({
 			entry,
 			capabilities: capabilitiesByType.get(entry.type) ?? { config: false, slots: false, state: false, properties: false, methods: false, events: false },
+			configSchemaText: entry.config?.schema == null ? null : JSON.stringify(entry.config.schema, null, 2),
+		})),
+	}
+}
+
+export interface AuthorCatalogJson {
+	readonly widgets: readonly {
+		readonly type: string
+		readonly description: string
+		readonly config: { readonly description: string, readonly schema: unknown } | null
+		readonly slots: Readonly<Record<string, string>> | null
+	}[]
+}
+
+/** Plain JSON projection of the public catalog ("AI context"): Core's slot Map becomes an object. */
+export function catalogToJson(catalog: WidgetCatalog): AuthorCatalogJson {
+	return {
+		widgets: catalog.widgets.map(entry => ({
+			type: entry.type,
+			description: entry.description,
+			config: entry.config === null ? null : { description: entry.config.description, schema: entry.config.schema },
+			slots: entry.descriptions.slots === null ? null : Object.fromEntries(entry.descriptions.slots),
 		})),
 	}
 }
