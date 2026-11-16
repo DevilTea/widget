@@ -334,7 +334,7 @@ describe.skipIf(missingBuild !== null)('documentation samples', () => {
 		// The samples state their output in comments; they were compared, not skipped. Raise this when comments are
 		// added; a drop means output stopped being compared.
 		expect(result.compared.length)
-			.toBeGreaterThanOrEqual(82)
+			.toBeGreaterThanOrEqual(90)
 		// An exemption that is no longer needed has to be removed.
 		const used = new Set(result.exempted.map(claim => `${claim.document}\n${claim.sample}\n${claim.text}`))
 		expect(exemptComments.filter(entry => !used.has(`${entry.document}\n${entry.sample}\n${entry.comment}`)))
