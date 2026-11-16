@@ -73,10 +73,23 @@ describe('survey-default', () => {
 				'guests.visible -> mode.value',
 				'phone.required -> mode.value',
 				'sessions.errors -> guests.value',
-				'sessions.errors -> sessions.value',
 				'sessions.options -> guests.value',
 				'sessions.options -> mode.value',
 			])
+	})
+
+	it('declares sessions.value once for sessions.errors, although a rule names sessions itself', () => {
+		const inspection = inspectBlueprint(compile(defaultSurveyPreset.sourceText))
+		const nodeById = (id: string) => inspection.nodes.find(node => node.resolved && node.node.id === id)!
+		const sessions = nodeById('sessions')
+		if (!sessions.resolved)
+			throw new Error('no sessions')
+		const errors = sessions.properties.find(property => property.name === 'errors')!
+		const reads = errors.dependencies.flatMap(dependency => dependency.status === 'resolved' && dependency.target.nodeId === sessions.nodeId && dependency.target.member.name === 'value'
+			? [dependency.path]
+			: [])
+		expect(reads)
+			.toEqual([['value']])
 	})
 
 	it('has the root read the four fixed members of every question and nothing else of a question', () => {

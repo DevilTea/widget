@@ -9,7 +9,7 @@
  * when the Blueprint is compiled.
  */
 
-import type { DependencyBuilder, ExecutionResult, PropertyGetDepExpression, RuntimePropertyDependencyDiagnostic, WidgetInterfaces } from '@deviltea/widget-core'
+import type { BlueprintCompileView, DependencyBuilder, ExecutionResult, PropertyGetDepExpression, RuntimePropertyDependencyDiagnostic, WidgetInterfaces } from '@deviltea/widget-core'
 import type { AnswerValue } from '../domain'
 import { isAnswerValue } from '../domain'
 
@@ -55,6 +55,16 @@ export function languageRead(dep: PropertyDeps) {
 		.validate(isString)
 }
 
+/**
+ * The survey language read of a question: `{ language }` when the root is a `Survey`, `{}` otherwise. A
+ * question placed at the root is already `question-outside-survey`; reading `language` from it would add
+ * a `missing-dependency-member` on top of that one diagnostic.
+ */
+export function languageReads(dep: PropertyDeps, blueprint: BlueprintCompileView): { readonly language?: ReturnType<typeof languageRead> } {
+	const root = blueprint.root
+	return root.resolved && root.type === 'Survey' ? { language: languageRead(dep) } : {}
+}
+
 const FALLBACK_LANGUAGE = 'en'
 
 /**
@@ -63,4 +73,13 @@ const FALLBACK_LANGUAGE = 'en'
  */
 export function languageOf(result: ExecutionResult<string | null, unknown>): string {
 	return result.ok && result.value !== null ? result.value : FALLBACK_LANGUAGE
+}
+
+/** The executed form of `languageReads`; the language is the fallback when there is no read. */
+export interface LanguageReaders {
+	readonly language?: () => ExecutionResult<string | null, unknown>
+}
+
+export function languageFrom(readers: LanguageReaders): string {
+	return readers.language === undefined ? FALLBACK_LANGUAGE : languageOf(readers.language())
 }

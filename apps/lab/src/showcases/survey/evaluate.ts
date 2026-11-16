@@ -9,6 +9,10 @@
  * type, unsupported language) is listed in `rejected`. A survey that does not compile has no Runtime, so
  * the result is `ok: false` with the located diagnostics.
  *
+ * This module compiles the survey and creates a Runtime on every call (about 0.3 ms for the default
+ * preset), which keeps it stateless. A real backend should cache the Blueprint per survey revision and
+ * reuse one Runtime with `resetState()` between submissions (guide, "Reusing a Runtime").
+ *
  * This module sets no isolated-error handler: that belongs to the host bundle (guide, "Host
  * requirements"), not to a plugin library.
  */
@@ -63,10 +67,17 @@ function describeDiagnostic(blueprint: SurveyBlueprint, diagnostic: SurveyBluepr
 	if (location.type === 'source')
 		return { code, message, widgetId: null, member: null, sourcePath: path === undefined ? null : jsonPath(path) }
 	const nodePath = blueprint.getSourcePath(location.node)
-	// A config diagnostic's `path` is relative to the widget's `config`.
-	const sourcePath = nodePath !== null && code === 'invalid-widget-config' && path !== undefined
-		? [...nodePath, 'config', ...jsonPath(path)]
-		: nodePath
+	// A config diagnostic's `path` is relative to the widget's `config`; a slot or slot-child location is
+	// the slot (and child index) inside the widget the location names.
+	const sourcePath = nodePath === null
+		? null
+		: code === 'invalid-widget-config' && path !== undefined
+			? [...nodePath, 'config', ...jsonPath(path)]
+			: location.type === 'slot'
+				? [...nodePath, 'slots', location.slot]
+				: location.type === 'slot-child'
+					? [...nodePath, 'slots', location.slot, location.index]
+					: nodePath
 	return {
 		code,
 		message,

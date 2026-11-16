@@ -87,29 +87,26 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 		.response({
 			registerDeps: ({ widget, blueprint, dep }) => ({
 				language: dep.self.state.get('language'),
-				// A child that is not a question type is reported by the slot validator; reading it would
-				// only add dependency diagnostics on top.
+				// Only a child that is a question and whose id names exactly that child. A child that is not a
+				// question type is reported by the slot validator, and a duplicate id by Core
+				// (`duplicate-widget-id`; the compile view's `getWidget` is `null` for it); reading either
+				// would only add dependency diagnostics on top.
 				questions: Object.fromEntries(blueprint.getChildrenAt(widget, 'questions')
-					.flatMap(child => child.resolved && isQuestionType(child.type)
-						? [[child.id, {
-								visible: dep.widget(child.id)
-									.properties
-									.get('visible')
-									.validate(isBoolean),
-								required: dep.widget(child.id)
-									.properties
-									.get('required')
-									.validate(isBoolean),
-								value: dep.widget(child.id)
-									.properties
-									.get('value')
-									.validate(isAnswerValue),
-								errors: dep.widget(child.id)
-									.properties
-									.get('errors')
-									.validate(isAnswerErrors),
-							}] as const]
-						: [])),
+					.flatMap((child) => {
+						if (!child.resolved || !isQuestionType(child.type) || blueprint.getWidget(child.id) === null)
+							return []
+						const target = dep.widget(child.id)
+						return [[child.id, {
+							visible: target.properties.get('visible')
+								.validate(isBoolean),
+							required: target.properties.get('required')
+								.validate(isBoolean),
+							value: target.properties.get('value')
+								.validate(isAnswerValue),
+							errors: target.properties.get('errors')
+								.validate(isAnswerErrors),
+						}] as const]
+					})),
 			}),
 			compute: ({ deps }) => ({
 				language: languageOf(deps.language()),

@@ -15,7 +15,7 @@ import { builtinError, questionText } from '../domain'
 import { numericConfigSchema } from '../schemas'
 import { checkQuestion } from './check-question'
 import { computeRequired, computeVisible, questionErrors, requiredReads, ruleReads, visibleReads } from './question-members'
-import { languageOf, languageRead } from './reads'
+import { languageFrom, languageReads } from './reads'
 
 export interface NumericInterfaces extends WidgetInterfaces {
 	config: { raw: NumericRawConfig, resolved: NumericConfig }
@@ -49,8 +49,8 @@ export const NumericPlugin = createWidgetPlugin('Numeric')
 	}))
 	.properties(properties => properties
 		.text({
-			registerDeps: ({ dep }) => languageRead(dep),
-			compute: ({ deps, config }) => questionText(config, languageOf(deps())),
+			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
+			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
@@ -72,14 +72,14 @@ export const NumericPlugin = createWidgetPlugin('Numeric')
 			},
 		})
 		.errors({
-			registerDeps: ({ dep, config }) => ({
+			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
 				value: dep.self.properties.get('value'),
-				language: languageRead(dep),
-				rules: ruleReads(dep, config),
+				...languageReads(dep, blueprint),
+				rules: ruleReads(dep, config, widget.id),
 			}),
-			compute: ({ deps, config }) => questionErrors(config, deps, (value, language) => {
+			compute: ({ deps, config, widget }) => questionErrors(config, deps, (value, language) => {
 				if (value === null)
 					return []
 				const errors: AnswerError[] = []
@@ -90,7 +90,7 @@ export const NumericPlugin = createWidgetPlugin('Numeric')
 				if (config.max !== null && value > config.max)
 					errors.push(builtinError('max', language, { max: config.max }))
 				return errors
-			}),
+			}, { selfId: widget.id }),
 		}))
 	.methods(methods => methods.clear({
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),

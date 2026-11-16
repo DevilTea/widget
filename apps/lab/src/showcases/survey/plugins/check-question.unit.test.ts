@@ -193,6 +193,27 @@ describe('condition option checks', () => {
 	})
 })
 
+describe('no cascades on top of the one real problem', () => {
+	it('a question at the root has only question-outside-survey, no missing language member', () => {
+		expect(diagnosticsOf(question('age', 'Numeric'))
+			.map(diagnostic => [diagnostic.code, diagnostic.widget, diagnostic.reason]))
+			.toEqual([['invalid-widget-structure', 'age', 'question-outside-survey']])
+	})
+
+	it('a duplicate question id has only Core\'s duplicate-widget-id, not ambiguous dependencies from the root', () => {
+		const found = diagnosticsOf(surveyOf([question('a', 'Numeric'), question('a', 'Numeric'), question('b', 'ShortAnswer')]))
+		expect(found.map(diagnostic => [diagnostic.code, diagnostic.widget]))
+			.toEqual([['duplicate-widget-id', 'a'], ['duplicate-widget-id', 'a']])
+	})
+
+	it('a condition that names a duplicated id is still Core\'s ambiguous-dependency-target', () => {
+		const found = diagnosticsOf(surveyOf([question('a', 'Numeric'), question('a', 'Numeric'), question('b', 'Numeric', { visibleWhen: { question: 'a', op: 'answered' } })]))
+		expect(found.map(diagnostic => diagnostic.code)
+			.sort())
+			.toEqual(['ambiguous-dependency-target', 'duplicate-widget-id', 'duplicate-widget-id'])
+	})
+})
+
 describe('what is left to Core', () => {
 	it('a target that does not exist is only a missing-dependency-target', () => {
 		const found = diagnosticsOf(surveyOf([question('subject', 'Numeric', { visibleWhen: { question: 'ghost', op: 'answered' } })]))

@@ -41,7 +41,7 @@ describe('singleChoice on the default preset', () => {
 			.toBe(false)
 	})
 
-	it('reports required while unanswered, and invalid-option for an unknown option', () => {
+	it('reports required while unanswered, and only invalid-option for an unknown option', () => {
 		const { runtime } = createSurveyRuntime()
 		const mode = widgetOfType(runtime, 'mode', 'SingleChoice')
 		expect(valueOf(mode.properties.errors.get())
@@ -52,7 +52,18 @@ describe('singleChoice on the default preset', () => {
 			.toBeNull()
 		expect(valueOf(mode.properties.errors.get())
 			.map(error => error.code))
-			.toEqual(['required', 'invalid-option'])
+			.toEqual(['invalid-option'])
+	})
+
+	it.each(['', ' ', '\t'])('treats the empty answer %j as no selection, not as an unknown option', (answer) => {
+		const { runtime } = createSurveyRuntime()
+		const mode = widgetOfType(runtime, 'mode', 'SingleChoice')
+		mode.state.answer.set(answer)
+		expect(valueOf(mode.properties.value.get()))
+			.toBeNull()
+		expect(valueOf(mode.properties.errors.get())
+			.map(error => error.code))
+			.toEqual(['required'])
 	})
 
 	it('has the labels of every option in the survey language', () => {
@@ -116,7 +127,7 @@ describe('singleChoice option conditions (Q2)', () => {
 			.toBeNull()
 		expect(valueOf(seat.properties.errors.get())
 			.map(error => error.code))
-			.toEqual(['required', 'invalid-option'])
+			.toEqual(['invalid-option'])
 
 		where.state.answer.set('onsite')
 		expect(valueOf(seat.properties.value.get()))

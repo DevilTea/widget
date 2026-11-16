@@ -197,6 +197,23 @@ describe('survey changedSinceSubmit', () => {
 			.toBe(true)
 	})
 
+	it('returns to false after a second submit takes the changed answers as the new snapshot', () => {
+		const s = setup()
+		fillOnsite(s)
+		s.root.methods.submit()
+		s.guests.state.answer.set(3)
+		expect(valueOf(s.root.properties.changedSinceSubmit.get()))
+			.toBe(true)
+		expect(s.root.methods.submit().ok)
+			.toBe(true)
+		expect(valueOf(s.root.properties.changedSinceSubmit.get()))
+			.toBe(false)
+		expect(s.root.state.submitted.get()!.answers.guests!.value)
+			.toBe(3)
+		expect(s.submitted)
+			.toHaveLength(2)
+	})
+
 	it('a blocked submit leaves it false', () => {
 		const s = setup()
 		s.root.methods.submit()

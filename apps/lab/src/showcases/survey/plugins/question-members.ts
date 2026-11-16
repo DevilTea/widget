@@ -14,9 +14,9 @@
 import type { ExecutionResult, RuntimePropertyDependencyDiagnostic } from '@deviltea/widget-core'
 import type { QuestionConfigBase, ResolvedOption } from '../config'
 import type { AnswerError, AnswerValue, Condition, OptionState } from '../domain'
-import type { AnswerReaders, PropertyDeps } from './reads'
+import type { AnswerReaders, LanguageReaders, PropertyDeps } from './reads'
 import { builtinError, conditionTargets, evaluateCondition, ruleErrors } from '../domain'
-import { answerReads, languageOf, readerOf } from './reads'
+import { answerReads, languageFrom, readerOf } from './reads'
 
 // -------------------------------------------------------------------------------------------------
 // visible and required
@@ -71,40 +71,62 @@ export function availableOptionValues(options: readonly OptionState[]): Readonly
 // -------------------------------------------------------------------------------------------------
 
 /** The executed dependencies of an `errors` Property; a plugin adds its own (such as `answer`). */
-export interface ErrorDeps<Value extends AnswerValue> {
+export interface ErrorDeps<Value extends AnswerValue> extends LanguageReaders {
 	readonly visible: () => ExecutionResult<boolean, RuntimePropertyDependencyDiagnostic>
 	readonly required: () => ExecutionResult<boolean, RuntimePropertyDependencyDiagnostic>
 	readonly value: () => ExecutionResult<Value | null, RuntimePropertyDependencyDiagnostic>
-	readonly language: () => ExecutionResult<string, RuntimePropertyDependencyDiagnostic>
 	readonly rules: AnswerReaders
 }
 
-/** Every question id that a rule of `config` reads. */
-export function ruleReads(dep: PropertyDeps, config: QuestionConfigBase) {
-	return answerReads(dep, config.rules.flatMap(rule => [...conditionTargets(rule.when)]))
+/**
+ * The question ids that a rule of `config` reads, except the question itself: a rule about its own
+ * question reads the `value` the `errors` Property already depends on (`questionErrors` passes it), so
+ * the same edge is not declared twice.
+ */
+export function ruleReads(dep: PropertyDeps, config: QuestionConfigBase, selfId: string) {
+	return answerReads(dep, config.rules.flatMap(rule => [...conditionTargets(rule.when)])
+		.filter(id => id !== selfId))
+}
+
+/** A choice answer that is empty or whitespace is no selection, not an unknown option. */
+export function selectionOf(answer: string | readonly string[] | null): readonly string[] {
+	return (answer === null ? [] : typeof answer === 'string' ? [answer] : answer)
+		.filter(item => item.trim() !== '')
+}
+
+export interface ErrorContext {
+	/** The widget id of the question, so rules that name the question itself read its own `value`. */
+	readonly selfId: string
+	/**
+	 * The raw answer holds a selection (a choice question). With no effective `value` that means every
+	 * selected option was dropped: the error is `invalid-option` (owner decision Q2), not `required`.
+	 */
+	readonly hasSelection?: boolean
 }
 
 /**
- * Assembles `errors`: `[]` while hidden, else `required` (when there is no effective answer and the
- * question is required), the plugin's own `check` of the effective answer, then the custom rules.
- * `check` runs for a missing answer too (`null`), because a choice question reports `invalid-option`
- * for a raw answer that was dropped from `value`.
+ * Assembles `errors`: `[]` while hidden, else `required` (when there is no effective answer, no dropped
+ * selection and the question is required), the plugin's own `check` of the effective answer, then the
+ * custom rules. `check` runs for a missing answer too (`null`), because a choice question reports
+ * `invalid-option` for a raw answer that was dropped from `value`.
  */
 export function questionErrors<Value extends AnswerValue>(
 	config: QuestionConfigBase,
 	deps: ErrorDeps<Value>,
 	check: (value: Value | null, language: string) => readonly AnswerError[],
+	{ selfId, hasSelection = false }: ErrorContext,
 ): AnswerError[] {
 	const visible = deps.visible()
 	if (!visible.ok || !visible.value)
 		return []
-	const language = languageOf(deps.language())
+	const language = languageFrom(deps)
 	const result = deps.value()
 	const value = result.ok ? result.value : null
 	const required = deps.required()
+	const readRule = readerOf(deps.rules)
 	return [
-		...(value === null && required.ok && required.value ? [builtinError('required', language)] : []),
+		...(value === null && !hasSelection && required.ok && required.value ? [builtinError('required', language)] : []),
 		...check(value, language),
-		...ruleErrors(config.rules, readerOf(deps.rules), language),
+		...ruleErrors(config.rules, id => id === selfId ? value : readRule(id), language),
 	]
 }

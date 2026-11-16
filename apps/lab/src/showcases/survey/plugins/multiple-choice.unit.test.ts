@@ -13,6 +13,7 @@ function setup() {
 		mode: widgetOfType(runtime, 'mode', 'SingleChoice'),
 		guests: widgetOfType(runtime, 'guests', 'Numeric'),
 		sessions: widgetOfType(runtime, 'sessions', 'MultipleChoice'),
+		phone: widgetOfType(runtime, 'phone', 'ShortAnswer'),
 	}
 }
 
@@ -41,12 +42,12 @@ describe('multipleChoice option conditions and the effective value (Q2)', () => 
 			])
 	})
 
-	it('keeps only visible and enabled selections, in answer order and without duplicates; an empty result is null', () => {
+	it('keeps only visible and enabled selections, in option order and without duplicates; an empty result is null', () => {
 		const { mode, sessions } = setup()
 		mode.state.answer.set('onsite')
 		sessions.state.answer.set(['laser', 'printing', 'laser'])
 		expect(valueOf(sessions.properties.value.get()))
-			.toEqual(['laser', 'printing'])
+			.toEqual(['printing', 'laser'])
 
 		sessions.state.answer.set([])
 		expect(valueOf(sessions.properties.value.get()))
@@ -54,6 +55,24 @@ describe('multipleChoice option conditions and the effective value (Q2)', () => 
 		sessions.state.answer.set(['kids'])
 		expect(valueOf(sessions.properties.value.get()))
 			.toBeNull()
+	})
+
+	it('does not depend on the order of the ticks, so reordering is not a change since submit', () => {
+		const { root, mode, guests, sessions, phone } = setup()
+		mode.state.answer.set('onsite')
+		guests.state.answer.set(2)
+		phone.state.answer.set('0912')
+		sessions.state.answer.set(['printing', 'laser'])
+		root.methods.submit()
+		expect(root.state.submitted.get()!.answers.sessions!.value)
+			.toEqual(['printing', 'laser'])
+
+		// Untick and tick again: the raw answer is reordered, the effective answer is not.
+		sessions.state.answer.set(['laser', 'printing'])
+		expect(valueOf(sessions.properties.value.get()))
+			.toEqual(['printing', 'laser'])
+		expect(valueOf(root.properties.changedSinceSubmit.get()))
+			.toBe(false)
 	})
 
 	it('drops a selection that becomes disabled, keeps the raw answer and reports invalid-option', () => {
@@ -76,15 +95,42 @@ describe('multipleChoice option conditions and the effective value (Q2)', () => 
 			.toEqual(['printing', 'laser'])
 	})
 
-	it('reports required as well when nothing is left, and invalid-option for an unknown option', () => {
+	it('reports only invalid-option when every selected option was dropped, and required when the answer is empty', () => {
 		const { mode, sessions } = setup()
 		mode.state.answer.set('online')
 		sessions.state.answer.set(['laser'])
+		expect(valueOf(sessions.properties.value.get()))
+			.toBeNull()
 		expect(codes(sessions))
-			.toEqual(['required', 'invalid-option'])
+			.toEqual(['invalid-option'])
 		sessions.state.answer.set(['printing', 'moon'])
 		expect(codes(sessions))
 			.toEqual(['invalid-option'])
+		sessions.state.answer.set(['moon'])
+		expect(codes(sessions))
+			.toEqual(['invalid-option'])
+
+		sessions.state.answer.set([])
+		expect(codes(sessions))
+			.toEqual(['required'])
+		sessions.state.answer.set(null)
+		expect(codes(sessions))
+			.toEqual(['required'])
+	})
+
+	it('treats an empty entry as no selection, not as an unknown option', () => {
+		const { mode, sessions } = setup()
+		mode.state.answer.set('online')
+		sessions.state.answer.set([''])
+		expect(valueOf(sessions.properties.value.get()))
+			.toBeNull()
+		expect(codes(sessions))
+			.toEqual(['required'])
+		sessions.state.answer.set(['  ', 'printing'])
+		expect(valueOf(sessions.properties.value.get()))
+			.toEqual(['printing'])
+		expect(codes(sessions))
+			.toEqual([])
 	})
 
 	it('rejects an answer that is not an array of strings', () => {
@@ -137,8 +183,8 @@ describe('multipleChoice custom rule and language', () => {
 
 		// Online: laser is disabled, so it is not an effective selection and the rule goes (the raw answer stays).
 		mode.state.answer.set('online')
-		expect(codes(sessions))
-			.toEqual(['required', 'invalid-option'])
+		expect(valueOf(sessions.properties.errors.get()))
+			.toEqual([{ code: 'invalid-option', message: 'The selected option is not available.' }])
 
 		mode.state.answer.set('onsite')
 		guests.state.answer.set(2)

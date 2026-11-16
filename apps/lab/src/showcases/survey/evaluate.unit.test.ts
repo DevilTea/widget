@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { evaluateResponse, evaluateResponseJson } from './evaluate'
 import { defaultSurveyPreset, surveyPresets } from './presets'
-import { createSurveyRuntime, valueOf, widgetOfType } from './test-support'
+import { createSurveyRuntime, question, surveyOf, t, valueOf, widgetOfType } from './test-support'
 
 const survey = JSON.parse(defaultSurveyPreset.sourceText) as unknown
 const aiDraft = JSON.parse(surveyPresets.find(preset => preset.id === 'survey-ai-draft')!.sourceText) as unknown
@@ -41,9 +41,17 @@ describe('evaluateResponse', () => {
 			.toEqual({
 				mode: { visible: true, required: true, value: 'online', errors: [] },
 				guests: { visible: false, required: true, value: null, errors: [] },
-				sessions: { visible: true, required: true, value: null, errors: [{ code: 'required', message: 'This question is required.' }, { code: 'invalid-option', message: 'The selected option is not available.' }] },
+				sessions: { visible: true, required: true, value: null, errors: [{ code: 'invalid-option', message: 'The selected option is not available.' }] },
 				phone: { visible: true, required: false, value: null, errors: [] },
 			})
+	})
+
+	it('treats an empty choice answer as no selection, so only required is reported', () => {
+		const result = evaluateResponse({ survey, answers: { mode: '', sessions: [''] } })
+		expect(result.ok ? result.response.answers.mode!.errors.map(error => error.code) : null)
+			.toEqual(['required'])
+		expect(result.ok ? result.response.answers.sessions!.errors.map(error => error.code) : null)
+			.toEqual(['required'])
 	})
 
 	it('answers in the requested language', () => {
@@ -124,6 +132,13 @@ describe('evaluateResponse for a survey that does not compile', () => {
 				['unknown-widget-type', 'rating', null, ['slots', 'questions', 4]],
 			].map(fact => JSON.stringify(fact))
 				.sort())
+	})
+
+	it('locates a slot-child diagnostic at the child inside the slot', () => {
+		const inner = { id: 'inner', type: 'Survey', config: { title: t('Inner'), languages: ['en'] } }
+		const result = evaluateResponse({ survey: surveyOf([question('age', 'Numeric'), inner]), answers: {} })
+		expect(result.ok ? null : result.diagnostics.map(diagnostic => [diagnostic.code, diagnostic.widgetId, diagnostic.sourcePath]))
+			.toEqual(expect.arrayContaining([['invalid-widget-structure', 'survey', ['slots', 'questions', 1]]]))
 	})
 
 	it('reports the cycle on the members of the loop', () => {

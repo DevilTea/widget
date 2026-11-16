@@ -13,8 +13,8 @@ import { checkSingleChoiceConfig, resolveSingleChoiceConfig } from '../config'
 import { builtinError, questionText } from '../domain'
 import { singleChoiceConfigSchema } from '../schemas'
 import { checkQuestion } from './check-question'
-import { availableOptionValues, computeOptions, computeRequired, computeVisible, optionReads, questionErrors, requiredReads, ruleReads, visibleReads } from './question-members'
-import { languageOf, languageRead } from './reads'
+import { availableOptionValues, computeOptions, computeRequired, computeVisible, optionReads, questionErrors, requiredReads, ruleReads, selectionOf, visibleReads } from './question-members'
+import { languageFrom, languageReads } from './reads'
 
 export interface SingleChoiceInterfaces extends WidgetInterfaces {
 	config: { raw: SingleChoiceRawConfig, resolved: SingleChoiceConfig }
@@ -49,8 +49,8 @@ export const SingleChoicePlugin = createWidgetPlugin('SingleChoice')
 	}))
 	.properties(properties => properties
 		.text({
-			registerDeps: ({ dep }) => languageRead(dep),
-			compute: ({ deps, config }) => questionText(config, languageOf(deps())),
+			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
+			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
@@ -83,20 +83,21 @@ export const SingleChoicePlugin = createWidgetPlugin('SingleChoice')
 			},
 		})
 		.errors({
-			registerDeps: ({ dep, config }) => ({
+			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
 				value: dep.self.properties.get('value'),
 				answer: dep.self.state.get('answer'),
-				language: languageRead(dep),
-				rules: ruleReads(dep, config),
+				...languageReads(dep, blueprint),
+				rules: ruleReads(dep, config, widget.id),
 			}),
-			compute: ({ deps, config }) => questionErrors(config, deps, (value, language) => {
+			compute: ({ deps, config, widget }) => {
 				const answer = deps.answer()
-				return answer.ok && answer.value !== null && value === null
+				const hasSelection = answer.ok && selectionOf(answer.value).length > 0
+				return questionErrors(config, deps, (value, language) => hasSelection && value === null
 					? [builtinError('invalid-option', language)]
-					: []
-			}),
+					: [], { selfId: widget.id, hasSelection })
+			},
 		}))
 	.methods(methods => methods.clear({
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),

@@ -13,7 +13,7 @@ import { builtinError, questionText } from '../domain'
 import { shortAnswerConfigSchema } from '../schemas'
 import { checkQuestion } from './check-question'
 import { computeRequired, computeVisible, questionErrors, requiredReads, ruleReads, visibleReads } from './question-members'
-import { languageOf, languageRead } from './reads'
+import { languageFrom, languageReads } from './reads'
 
 export interface ShortAnswerInterfaces extends WidgetInterfaces {
 	config: { raw: ShortAnswerRawConfig, resolved: ShortAnswerConfig }
@@ -47,8 +47,8 @@ export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
 	}))
 	.properties(properties => properties
 		.text({
-			registerDeps: ({ dep }) => languageRead(dep),
-			compute: ({ deps, config }) => questionText(config, languageOf(deps())),
+			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
+			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
@@ -73,17 +73,17 @@ export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
 			},
 		})
 		.errors({
-			registerDeps: ({ dep, config }) => ({
+			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
 				value: dep.self.properties.get('value'),
-				language: languageRead(dep),
-				rules: ruleReads(dep, config),
+				...languageReads(dep, blueprint),
+				rules: ruleReads(dep, config, widget.id),
 			}),
-			compute: ({ deps, config }) => questionErrors(config, deps, (value, language) =>
+			compute: ({ deps, config, widget }) => questionErrors(config, deps, (value, language) =>
 				value !== null && config.maxLength !== null && Array.from(value).length > config.maxLength
 					? [builtinError('max-length', language, { max: config.maxLength })]
-					: []),
+					: [], { selfId: widget.id }),
 		}))
 	.methods(methods => methods.clear({
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),

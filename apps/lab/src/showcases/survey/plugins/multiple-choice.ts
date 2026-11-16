@@ -1,10 +1,11 @@
 /**
  * `MultipleChoice`: pick several options. State `answer` stores the raw option values (any strings).
  * `options` evaluates each option's `visibleWhen` and `enabledWhen`; `value` is the effective answer:
- * the selected options that are currently visible and enabled, without duplicates, `null` while hidden
- * or when none remains (`[]` is `null`, owner decision Q1/Q2). `errors` reports a raw selection that
- * holds an unknown, hidden or disabled option as `invalid-option`, and counts the *effective* selection
- * against `minSelected` and `maxSelected` once the question has an effective answer.
+ * the selected options that are currently visible and enabled, in option order and so without duplicates,
+ * `null` while hidden or when none remains (`[]` is `null`, owner decision Q1/Q2). `errors` reports a raw
+ * selection that holds an unknown, hidden or disabled option as `invalid-option` (and, when that leaves
+ * nothing, not `required`), counts the *effective* selection against `minSelected` and `maxSelected` once
+ * the question has an effective answer, and treats an empty entry as no selection.
  */
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
@@ -15,8 +16,8 @@ import { checkMultipleChoiceConfig, resolveMultipleChoiceConfig } from '../confi
 import { builtinError, questionText } from '../domain'
 import { multipleChoiceConfigSchema } from '../schemas'
 import { checkQuestion } from './check-question'
-import { availableOptionValues, computeOptions, computeRequired, computeVisible, optionReads, questionErrors, requiredReads, ruleReads, visibleReads } from './question-members'
-import { languageOf, languageRead } from './reads'
+import { computeOptions, computeRequired, computeVisible, optionReads, questionErrors, requiredReads, ruleReads, selectionOf, visibleReads } from './question-members'
+import { languageFrom, languageReads } from './reads'
 
 export interface MultipleChoiceInterfaces extends WidgetInterfaces {
 	config: { raw: MultipleChoiceRawConfig, resolved: MultipleChoiceConfig }
@@ -51,8 +52,8 @@ export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
 	}))
 	.properties(properties => properties
 		.text({
-			registerDeps: ({ dep }) => languageRead(dep),
-			compute: ({ deps, config }) => questionText(config, languageOf(deps())),
+			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
+			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
@@ -78,34 +79,39 @@ export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
 				const options = deps.options()
 				if (!visible.ok || !visible.value || !answer.ok || answer.value === null || !options.ok)
 					return null
-				const available = availableOptionValues(options.value)
-				const kept = [...new Set(answer.value)].filter(value => available.has(value))
+				// In option order, so the effective answer does not depend on the order of the ticks.
+				const selected = new Set(answer.value)
+				const kept = options.value.filter(option => option.visible && option.enabled && selected.has(option.value))
+					.map(option => option.value)
 				return kept.length === 0 ? null : kept
 			},
 		})
 		.errors({
-			registerDeps: ({ dep, config }) => ({
+			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
 				value: dep.self.properties.get('value'),
 				answer: dep.self.state.get('answer'),
-				language: languageRead(dep),
-				rules: ruleReads(dep, config),
+				...languageReads(dep, blueprint),
+				rules: ruleReads(dep, config, widget.id),
 			}),
-			compute: ({ deps, config }) => questionErrors(config, deps, (value, language) => {
+			compute: ({ deps, config, widget }) => {
 				const answer = deps.answer()
-				const kept = value ?? []
-				const errors: AnswerError[] = []
-				if (answer.ok && answer.value !== null && answer.value.some(item => !kept.includes(item)))
-					errors.push(builtinError('invalid-option', language))
-				if (value !== null) {
-					if (config.minSelected !== null && value.length < config.minSelected)
-						errors.push(builtinError('min-selected', language, { min: config.minSelected }))
-					if (config.maxSelected !== null && value.length > config.maxSelected)
-						errors.push(builtinError('max-selected', language, { max: config.maxSelected }))
-				}
-				return errors
-			}),
+				const selection = answer.ok ? selectionOf(answer.value) : []
+				return questionErrors(config, deps, (value, language) => {
+					const kept = value ?? []
+					const errors: AnswerError[] = []
+					if (selection.some(item => !kept.includes(item)))
+						errors.push(builtinError('invalid-option', language))
+					if (value !== null) {
+						if (config.minSelected !== null && value.length < config.minSelected)
+							errors.push(builtinError('min-selected', language, { min: config.minSelected }))
+						if (config.maxSelected !== null && value.length > config.maxSelected)
+							errors.push(builtinError('max-selected', language, { max: config.maxSelected }))
+					}
+					return errors
+				}, { selfId: widget.id, hasSelection: selection.length > 0 })
+			},
 		}))
 	.methods(methods => methods.clear({
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),
