@@ -126,15 +126,39 @@ describe('diagnostic list related locations', () => {
 		.methods(methods => methods.write({ registerDeps: ({ dep }) => ({ set: dep.self.state.set('value') }), validateArgs: noArgs, execute: () => {} }))
 		.done()
 
-	const system = createWidgetSystem({ plugins: [cyclePlugin, selfPlugin, sideEffectPlugin] })
+	interface HostInterfaces {
+		slots: 'children'
+	}
 
-	function rowsOf(type: string, code: string) {
-		const blueprint = system.createBlueprint({ id: 'root', type })
+	interface SideInterfaces {
+		properties: { a: unknown }
+	}
+
+	const hostPlugin = createWidgetPlugin('host')
+		.description('host fixture')
+		.interfaces<HostInterfaces>()
+		.slots({ children: { description: 'Children' } })
+		.done()
+
+	/** Two widgets that each have a Property named `a`, depending on each other. */
+	const sidePlugin = (type: string, peer: string) => createWidgetPlugin(type)
+		.description(`${type} fixture`)
+		.interfaces<SideInterfaces>()
+		.properties(properties => properties.a({ registerDeps: ({ dep }) => ({ other: dep.widget(peer).properties.get('a') }), compute: () => null }))
+		.done()
+
+	const system = createWidgetSystem({ plugins: [cyclePlugin, selfPlugin, sideEffectPlugin, hostPlugin, sidePlugin('left-side', 'right'), sidePlugin('right-side', 'left')] })
+
+	function rowsOf(type: string | object, code: string) {
+		const blueprint = system.createBlueprint(typeof type === 'string' ? { id: 'root', type } : type)
 		const inspection = inspectBlueprint(blueprint)
 		const wrapper = mount(DiagnosticList, { props: { diagnostics: blueprint.diagnostics, inspection }, global })
 		return blueprint.diagnostics
 			.map((diagnostic, index) => ({
 				diagnostic,
+				hasRelatedLabel: wrapper.get(`[data-testid="blueprint-diagnostic-${index}"]`)
+					.text()
+					.includes('related:'),
 				chips: wrapper.get(`[data-testid="blueprint-diagnostic-${index}"]`)
 					.findAll('button')
 					.map(button => button.text())
@@ -145,6 +169,7 @@ describe('diagnostic list related locations', () => {
 				own: row.diagnostic.location.type === 'property' ? row.diagnostic.location.name : null,
 				related: 'related' in row.diagnostic ? row.diagnostic.related?.length : undefined,
 				chips: row.chips,
+				hasRelatedLabel: row.hasRelatedLabel,
 			}))
 	}
 
@@ -161,6 +186,25 @@ describe('diagnostic list related locations', () => {
 			.toEqual(['property "p1"'])
 	})
 
+	it('shows the other widget\'s same-named Property in a cross-widget cycle', () => {
+		const rows = rowsOf({
+			id: 'root',
+			type: 'host',
+			slots: { children: [{ id: 'left', type: 'left-side' }, { id: 'right', type: 'right-side' }] },
+		}, 'property-evaluation-cycle')
+		expect(rows)
+			.toHaveLength(2)
+		// Both members are named `a`; only the widget tells the diagnostic's own entry from the other one.
+		for (const row of rows) {
+			expect(row.related)
+				.toBe(2)
+			expect(row.chips)
+				.toEqual(['property "a"'])
+			expect(row.hasRelatedLabel)
+				.toBe(true)
+		}
+	})
+
 	it('shows no related chip for a Property that depends on itself', () => {
 		const rows = rowsOf('self-dependent', 'property-evaluation-cycle')
 		expect(rows)
@@ -169,6 +213,8 @@ describe('diagnostic list related locations', () => {
 			.toBe(1)
 		expect(rows[0]?.chips)
 			.toEqual([])
+		expect(rows[0]?.hasRelatedLabel)
+			.toBe(false)
 	})
 
 	it('leaves a diagnostic whose related locations are all other members unchanged', () => {
