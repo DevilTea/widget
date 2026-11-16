@@ -1722,9 +1722,14 @@ one call to reach it, a loop reaches it within milliseconds). Beyond that it is
 not called again until that call returns, and a `RangeError` saying which
 widget and member the subscription observes and how often it was notified is
 reported the way an exception thrown by a listener is (see
-[Host requirements](#host-requirements)). The host's call returns normally,
-State and Property values stay consistent, and the next call counts from zero,
-but the stopped subscriber's last delivered value may not be the current one,
+[Host requirements](#host-requirements)); when an isolated-error handler is
+set, that `RangeError` is one of the reports it receives (see
+[Receiving isolated errors](#receiving-isolated-errors)). The host's call
+returns normally, State and Property values stay consistent, and the next call
+counts from zero. A hand-over pass of the isolated-error handler that starts
+while no Runtime call is in progress is a call of its own for this count, so
+what the handler's own calls notify is counted apart from the host's other
+calls. The stopped subscriber's last delivered value may not be the current one,
 and a later call delivers the current one only when what the subscription
 observes changes again. The limit applies to every subscription Core creates
 (State, Property and diagnostics subscriptions), whether the loop writes through
