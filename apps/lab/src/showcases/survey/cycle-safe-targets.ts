@@ -58,7 +58,10 @@ export function classifyConditionTargets(source: unknown, questionId: string, sl
 		const candidate: Condition = { question: id, op: 'answered' }
 		const value = located.current === null ? candidate : { all: [located.current, candidate] }
 		const document = createWidgetDocument({ system: surveySystem, source })
-		document.applyPatch([{ op: 'add', path, value: value as unknown as JsonValue }])
+		const patched = document.applyPatch([{ op: 'add', path, value: value as unknown as JsonValue }])
+		// A rejected patch leaves the acyclic original in place and would read as "safe": a bug in the path, never an answer.
+		if (!patched.ok)
+			throw new Error(`classifyConditionTargets: patch for question "${questionId}", slot ${JSON.stringify(slot)} rejected (${patched.failure.code}) at ${JSON.stringify(path)}.`)
 		const hasCycle = inspectBlueprint(document.getSnapshot().blueprint).invalidCycles.length > 0
 		;(hasCycle ? cycle : safe).push(id)
 	}

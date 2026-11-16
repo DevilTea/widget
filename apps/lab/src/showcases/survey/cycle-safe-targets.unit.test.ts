@@ -5,9 +5,24 @@
  */
 
 import type { ConditionSlot } from './cycle-safe-targets'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { classifyConditionTargets } from './cycle-safe-targets'
 import { defaultSurveyPreset, surveyPresets } from './presets'
+
+// The real createWidgetDocument, except that a test can make every applyPatch fail the way Core reports a bad path.
+const patches = vi.hoisted(() => ({ reject: false }))
+vi.mock('@deviltea/widget-core', async (importOriginal) => {
+	const core = await importOriginal<typeof import('@deviltea/widget-core')>()
+	return {
+		...core,
+		createWidgetDocument: ((options: Parameters<typeof core.createWidgetDocument>[0]) => {
+			const document = core.createWidgetDocument(options)
+			return patches.reject
+				? { ...document, applyPatch: () => ({ ok: false, failure: { code: 'path-not-found', message: 'rejected for the test' } }) }
+				: document
+		}) as typeof core.createWidgetDocument,
+	}
+})
 
 const source = () => JSON.parse(defaultSurveyPreset.sourceText) as any
 const ALL = ['mode', 'guests', 'sessions', 'phone']
@@ -57,5 +72,16 @@ describe('classifyConditionTargets', () => {
 			.toEqual({ ok: false, reason: 'unknown-slot' })
 		expect(classifyConditionTargets(source(), 'sessions', { kind: 'rule', index: 1 }))
 			.toEqual({ ok: false, reason: 'unknown-slot' })
+	})
+
+	it('throws instead of classifying a candidate whose patch was rejected', () => {
+		patches.reject = true
+		try {
+			expect(() => classifyConditionTargets(source(), 'guests', { kind: 'visibleWhen' }))
+				.toThrow(/question "guests".*"visibleWhen".*\(path-not-found\)/)
+		}
+		finally {
+			patches.reject = false
+		}
 	})
 })
