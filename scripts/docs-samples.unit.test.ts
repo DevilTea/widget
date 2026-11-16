@@ -41,14 +41,9 @@ const expectations: Record<string, DocumentExpectation> = {
  * Comments that sit on, or directly below, a statement that prints, without being the expected output: a returned
  * value, or a remark. They are the only comments that need not match what the statement printed. Each should be
  * moved above its statement (or reworded) in the document; the check fails when one stops being needed, so the list
- * can only shrink.
+ * can only shrink. It is empty today: every comment on a printing statement is its printed output.
  */
-const exemptComments = [
-	{ document: 'docs/site/migration/0.1.md', sample: 'stored-migrate-meta', comment: 'unchanged' },
-	{ document: 'docs/site/packages/widget-core.md', sample: 'core-quick-start', comment: '{ ok: true, value: 1 } (default step)' },
-	{ document: 'docs/site/packages/widget-core.md', sample: 'config', comment: 'the schema above (null when none was given)' },
-	{ document: 'packages/core/README.md', sample: 'usage', comment: '-> { ok: true, value: 5 }' },
-]
+const exemptComments: Array<{ document: string, sample: string, comment: string }> = []
 const isExempt = (document: string, sample: string, comment: string) => exemptComments.some(entry => entry.document === document && entry.sample === sample && entry.comment === comment)
 
 describe('extractSamples', () => {
@@ -339,7 +334,7 @@ describe.skipIf(missingBuild !== null)('documentation samples', () => {
 		// The samples state their output in comments; they were compared, not skipped. Raise this when comments are
 		// added; a drop means output stopped being compared.
 		expect(result.compared.length)
-			.toBeGreaterThanOrEqual(75)
+			.toBeGreaterThanOrEqual(82)
 		// An exemption that is no longer needed has to be removed.
 		const used = new Set(result.exempted.map(claim => `${claim.document}\n${claim.sample}\n${claim.text}`))
 		expect(exemptComments.filter(entry => !used.has(`${entry.document}\n${entry.sample}\n${entry.comment}`)))

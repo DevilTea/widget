@@ -215,7 +215,7 @@ const unsubscribe = widget.properties.doubled.subscribe((result) => {
 	console.log('doubled changed ->', result) // { ok: true, value: ... }
 })
 
-widget.methods.increment(5) // -> { ok: true, value: 5 }
+console.log(widget.methods.increment(5)) // { ok: true, value: 5 }
 widget.state.count.get() // -> 5
 widget.properties.doubled.get() // -> { ok: true, value: 10 }
 

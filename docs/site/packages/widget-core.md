@@ -171,8 +171,8 @@ const stopChanged = counter1.events.changed.subscribe((count) => {
 	console.log('counter-1 changed ->', count)
 })
 
-counter1.methods.increment() // { ok: true, value: 2 } (step 2 from config)
-counter2.methods.increment() // { ok: true, value: 1 } (default step)
+console.log(counter1.methods.increment()) // { ok: true, value: 2 }: step 2 from config
+console.log(counter2.methods.increment()) // { ok: true, value: 1 }: the default step
 counter1.state.count.get() // 2
 counter1.properties.doubled.get() // { ok: true, value: 4 }
 panel.properties.total.get() // { ok: true, value: 3 }
@@ -547,7 +547,9 @@ const badgePlugin = createWidgetPlugin('badge')
 const system = createWidgetSystem({ plugins: [badgePlugin] })
 const catalogEntry = system.catalog.widgets[0]
 console.log(catalogEntry?.config?.description) // 'Badge configuration'
-console.log(catalogEntry?.config?.schema) // the schema above (null when none was given)
+
+// The schema above, or null when none was given.
+console.log(catalogEntry?.config?.schema)
 console.log(badgePlugin.config?.schema === catalogEntry?.config?.schema) // true
 console.log(badgePlugin.descriptions.config) // 'Badge configuration'
 ```
