@@ -8,7 +8,7 @@ Each npm package's Trusted Publisher must name repository `DevilTea/widget`, wor
 
 ### `@deviltea/widget-inspector` placeholder
 
-npm can only attach a Trusted Publisher to a package that already exists. Publish a `0.0.0` placeholder of `@deviltea/widget-inspector` manually once, solely to create the package, then configure its Trusted Publisher (repository `DevilTea/widget`, workflow `publish.yml`). The placeholder is not a release: it was published manually before the first real release. The first real releases were `0.0.3` and `0.0.4` (tags `widget-inspector@0.0.3` and `widget-inspector@0.0.4`; the workspace version is `0.0.4`), and npm also holds `0.0.0-stage` and `0.0.0`. The first release of `@deviltea/widget-inspector` after `0.0.4` is `0.1.0` (`pnpm release widget-inspector <release>`), published after `@deviltea/widget-core` `0.1.0`. Every real release goes through `publish.yml` only.
+npm can only attach a Trusted Publisher to a package that already exists. Publish a `0.0.0` placeholder of `@deviltea/widget-inspector` manually once, solely to create the package, then configure its Trusted Publisher (repository `DevilTea/widget`, workflow `publish.yml`). The placeholder is not a release: it was published manually before the first real release. The first real releases were `0.0.3` and `0.0.4` (tags `widget-inspector@0.0.3` and `widget-inspector@0.0.4`), and npm also holds `0.0.0-stage` and `0.0.0`. The first release of `@deviltea/widget-inspector` after `0.0.4` is `0.1.0` (`pnpm release widget-inspector <release>`), published after `@deviltea/widget-core` `0.1.0`. Every real release goes through `publish.yml` only.
 
 ## Version policy and release order
 
