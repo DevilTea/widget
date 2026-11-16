@@ -12,6 +12,8 @@ import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
 import { crmSources } from '../showcases/crm/sources'
 import { crmSystem } from '../showcases/crm/system'
+import { surveySources as surveyFormSources } from '../showcases/survey/sources'
+import { surveySystem as surveyFormSystem } from '../showcases/survey/system'
 import { surveySources } from '../showcases/trip-survey/sources'
 import { surveySystem } from '../showcases/trip-survey/system'
 import { vuetifyTaskSources } from '../showcases/vuetify-tasks/sources'
@@ -21,6 +23,7 @@ import { findDanglingRegistryTypes, findUncuratedPluginTypes } from './registry-
 const showcases: readonly { readonly label: string, readonly system: WidgetSystem<AnyWidgetPluginTuple>, readonly sources: SourcesRegistry }[] = [
 	{ label: 'sandbox', system: sandboxSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: sandboxSources },
 	{ label: 'survey', system: surveySystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: surveySources },
+	{ label: 'survey-form', system: surveyFormSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: surveyFormSources },
 	{ label: 'crm', system: crmSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: crmSources },
 	{ label: 'vuetify-tasks', system: vuetifyTaskSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: vuetifyTaskSources },
 ]

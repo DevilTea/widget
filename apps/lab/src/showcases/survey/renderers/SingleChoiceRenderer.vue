@@ -1,0 +1,65 @@
+<script setup lang="ts">
+/**
+ * Presentation only: a radio group in a `fieldset`. Everything it shows is a Property of the widget:
+ * `visible` (nothing renders unless it is `true`), `text` (label, help and option labels in the survey
+ * language), `required`, `options` (which options are visible and enabled) and `errors`. Choosing an
+ * option writes State `answer`; the plugin owns what the answer means.
+ *
+ * Only `visible` is read while the question is hidden; the other Properties are read once it shows.
+ */
+import { useWidget } from '@deviltea/widget-vue'
+import { computed, useId } from 'vue'
+import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
+import { surveyQuestionTarget } from '../../../tutorial/survey-target-map'
+import { SingleChoicePlugin } from '../plugins/single-choice'
+import { choiceRows } from './choice-rows'
+import QuestionFrame from './QuestionFrame.vue'
+
+const { useState, useProperties, widgetId, widgetType } = useWidget(SingleChoicePlugin)
+const { answer } = useState()
+const { text, visible, required, options, errors } = useProperties()
+
+const groupName = useId()
+const anchor = useInspectAnchor(widgetId, widgetType)
+const tutorialTarget = surveyQuestionTarget(widgetId)
+const rows = computed(() => choiceRows(text.value, options.value))
+
+function select(value: string): void {
+	answer.value = value
+}
+</script>
+
+<template>
+	<QuestionFrame
+		v-if="visible === true"
+		group
+		groupRole="radiogroup"
+		:label="text?.label ?? widgetId"
+		:help="text?.help ?? null"
+		:required="required === true"
+		:errors="errors ?? []"
+		:anchor="anchor"
+		:tutorialTarget="tutorialTarget"
+	>
+		<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '2px' })">
+			<label
+				v-for="row in rows"
+				:key="row.value"
+				:data-option-value="row.value"
+				:class="pika({ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '32px', padding: '4px 0', fontSize: '17px', cursor: 'pointer' })"
+				:style="row.enabled ? undefined : { color: 'var(--lab-color-text-muted)', cursor: 'not-allowed' }"
+			>
+				<input
+					type="radio"
+					:name="groupName"
+					:value="row.value"
+					:checked="answer === row.value"
+					:disabled="!row.enabled"
+					:class="pika({ flex: 'none', width: '24px', height: '24px', margin: '0', accentColor: 'var(--lab-color-accent)' })"
+					@change="select(row.value)"
+				>
+				<span>{{ row.label }}</span>
+			</label>
+		</div>
+	</QuestionFrame>
+</template>
