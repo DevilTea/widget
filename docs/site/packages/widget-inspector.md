@@ -4,6 +4,8 @@ title: '@deviltea/widget-inspector'
 
 # @deviltea/widget-inspector
 
+> **Upgrading from 0.0.x?** Follow the [migration guide to 0.1](../migration/0.1).
+
 `@deviltea/widget-inspector` is the single published Inspector boundary for Widget: a read-only, versioned protocol, a client, a DOM agent, transports, and the inspect-anchor attribute contract. It is `0.x` experimental with a **protocol-major guarantee only**: while on `0.x` an npm minor release may break the TypeScript API, and cross-realm compatibility is governed by the protocol version.
 
 For installation and a minimal example, see the
@@ -43,11 +45,11 @@ An Agent created without `dom` serves the Runtime-level methods only. The DOM-de
 ## Two version axes
 
 - **npm semver** governs the TypeScript API.
-- **Protocol `major.minor`** governs cross-realm compatibility. Minors only add negotiated capabilities, and every params validator ignores unknown extra fields, so a newer peer's additions never break an older one; a peer negotiated at an older minor sees exactly the wire shapes of that minor. A breaking DTO change bumps the major. Only the handshake sets the negotiated minor. A peer that never performs the handshake is served at the Agent's highest minor for events, and its responses use the lower of that and the request envelope's minor.
+- **Protocol `major.minor`** governs cross-realm compatibility. Minors only add negotiated capabilities, and every params validator ignores unknown extra fields, so a newer peer's additions never break an older one; a peer negotiated at an older minor sees exactly the wire shapes of that minor, except for the behavior changes of the `0.1` release that no minor gates (error answers, the DOM methods of an Agent without the `dom` option, the total value budget, and the way the negotiated minor is set). They are listed in the [migration guide](../migration/0.1#inspector-protocol-negotiation). A breaking DTO change bumps the major. Only the handshake sets the negotiated minor. A peer that never performs the handshake is served at the Agent's highest minor for events, and its responses use the lower of that and the request envelope's minor.
 
 The protocol is currently `0.4`: 0.2 added event subscriptions and geometry, 0.3 the `subscription-limit` error code, and 0.4 the `authorWritable` / `valueContractId` / `transitivelyEmits` member fields, the `runtime.disposed` event, the `runtime-disposed` error code and the `keyTruncated` marker.
 
-The Core peer is published as `^0.N.0` (`workspace:^` in the workspace): a breaking change in Core's inspection surface bumps Core's minor, so an Inspector release works with the Core minor it was released against. Once Core is `0.1.0` or newer that range also admits that minor's later patches; while Core is still `0.0.x`, `^0.0.N` pins exactly one Core patch, so the release scripts refuse to release the Inspector until Core is `0.1.0`.
+The Core peer is published as `^0.N.0` (`workspace:^` in the workspace): a breaking change in Core's inspection surface bumps Core's minor, so an Inspector release works with the Core minor it was released against. From Core `0.1.0` on that range also admits that minor's later patches; a `^0.0.N` range would pin exactly one Core patch, so the release scripts refuse to release the Inspector while the workspace Core version is below `0.1.0`.
 
 ## Cross-frame setup
 

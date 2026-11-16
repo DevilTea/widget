@@ -242,7 +242,7 @@ The Inspector is a read-only debugging boundary, not an access-control system.
 Two independent axes:
 
 - **npm semver** governs the TypeScript API. While on `0.x`, a minor release may break it.
-- **Protocol `major.minor`** (`INSPECTOR_PROTOCOL_VERSION`) governs cross-realm compatibility. Minors only add negotiated capabilities, and every params validator ignores unknown extra fields, so a newer peer's additions never break an older one; a breaking DTO change bumps the major. An Agent and a Client on different package versions interoperate whenever the protocol major matches. A peer negotiated at an older minor sees exactly the wire shapes of that minor.
+- **Protocol `major.minor`** (`INSPECTOR_PROTOCOL_VERSION`) governs cross-realm compatibility. Minors only add negotiated capabilities, and every params validator ignores unknown extra fields, so a newer peer's additions never break an older one; a breaking DTO change bumps the major. An Agent and a Client on different package versions interoperate whenever the protocol major matches. A peer negotiated at an older minor sees exactly the wire shapes of that minor, except for the behavior changes of the `0.1` release that no minor gates (error answers, the DOM methods of an Agent without the `dom` option, the total value budget, and the way the negotiated minor is set). They are listed in the [migration guide](https://deviltea.github.io/widget/migration/0.1#inspector-protocol-negotiation).
 
 | Protocol minor | Added |
 | --- | --- |
@@ -253,4 +253,4 @@ Two independent axes:
 
 The protocol is currently `0.4`.
 
-**Core peer range.** `@deviltea/widget-core` is a peer dependency published as `^0.N.0` (the workspace uses `workspace:^`). A breaking change in Core's inspection surface bumps Core's minor, so a given Inspector release works with the Core minor it was released against. Once Core is `0.1.0` or newer that range also admits that minor's later patches; while Core is still `0.0.x`, `^0.0.N` pins exactly one Core patch, so the release scripts refuse to release the Inspector until Core is `0.1.0`.
+**Core peer range.** `@deviltea/widget-core` is a peer dependency published as `^0.N.0` (the workspace uses `workspace:^`). A breaking change in Core's inspection surface bumps Core's minor, so a given Inspector release works with the Core minor it was released against. From Core `0.1.0` on that range also admits that minor's later patches; a `^0.0.N` range would pin exactly one Core patch, so the release scripts refuse to release the Inspector while the workspace Core version is below `0.1.0`.

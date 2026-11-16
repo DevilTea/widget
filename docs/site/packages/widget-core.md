@@ -4,6 +4,8 @@ title: '@deviltea/widget-core'
 
 # @deviltea/widget-core
 
+> **Upgrading from 0.0.x?** Follow the [migration guide to 0.1](../migration/0.1).
+
 `@deviltea/widget-core` is a renderer-agnostic widget composition core. It
 defines the cooperating `WidgetPlugin`, `WidgetSystem`,
 `WidgetSystemBlueprint`, `WidgetDocument`, and `WidgetSystemRuntime` layers.

@@ -135,7 +135,7 @@ intentional.
 | `WidgetSystemRuntimeReentrancyError` (a `RangeError`) | an `emit` nested more than 128 levels deep in one Runtime (a runaway Event loop) | `emit-depth-exceeded` |
 | `WidgetInspectionError` (`@deviltea/widget-core/inspection`) | `inspectPlugin`, `inspectBlueprint`, `inspectRuntime` | `foreign-plugin`, `foreign-blueprint`, `foreign-runtime` |
 | `WidgetIntegrationError` (`@deviltea/widget-core/integration`) | `getWidgetEventEmitter`, `assertCoreRuntime` | `foreign-runtime`, `runtime-widget-mismatch` |
-| `WidgetVueIntegrationError` (`@deviltea/widget-vue`) | the Vue integration | `invalid-renderer-registry`, `runtime-system-mismatch`, `outside-widget-renderer`, `widget-plugin-mismatch`, `readonly-projection-write` |
+| `WidgetVueIntegrationError` (`@deviltea/widget-vue`) | the Vue integration | `invalid-renderer-registry`, `invalid-runtime`, `foreign-runtime`, `unknown-widget`, `runtime-system-mismatch`, `outside-widget-renderer`, `widget-plugin-mismatch`, `readonly-projection-write` |
 
 The Inspector reports a failed request over the wire as an `ok: false` response
 carrying an `InspectorProtocolError` whose `code` is part of the versioned

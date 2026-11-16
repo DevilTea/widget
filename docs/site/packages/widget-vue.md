@@ -4,6 +4,8 @@ title: '@deviltea/widget-vue'
 
 # @deviltea/widget-vue
 
+> **Upgrading from 0.0.x?** Follow the [migration guide to 0.1](../migration/0.1).
+
 `@deviltea/widget-vue` is a thin Vue 3 integration over
 [`@deviltea/widget-core`](./widget-core) Runtime semantics. It owns exactly
 three things — a keyed renderer registry, a recursive root renderer, and the
