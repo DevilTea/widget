@@ -84,8 +84,8 @@ export const surveyTourScript: TutorialScript = {
 			target: 'survey-mode',
 			onEnter: actions => actions.setFocus('mode', { type: 'property', name: 'errors' }),
 			stages: [{
-				prompt: 'The required message under that question went away by itself — no action needed here.',
-				reveal: 'The required message disappeared, and Phone now says it is required. errors and required are Properties: values derived from State by rules in the definition. The Runtime owns the rule — no Vue code computed them.',
+				prompt: 'The required message under "How will you join?" went away by itself — no action needed here.',
+				reveal: 'The required message under "How will you join?" disappeared, and Phone now says it is required. errors and required are Properties: values derived from State by rules in the definition. The Runtime owns the rule — no Vue code computed them.',
 			}],
 		},
 		{
@@ -98,7 +98,7 @@ export const surveyTourScript: TutorialScript = {
 					prompt: 'Try it: set Guests to 5.',
 					isComplete: reader => guestsErrors(reader)
 						?.some(error => error.code === 'max') === true,
-					reveal: 'Guests reports an error, yet 5 is still stored: answer errors are data — the form, the submit button and a backend all read the same errors Property.',
+					reveal: 'Guests reports an error, yet your number is still stored: answer errors are data — the form, the submit button and a backend all read the same errors Property.',
 				},
 				{
 					prompt: 'Now set Guests to 2.',
@@ -124,7 +124,7 @@ export const surveyTourScript: TutorialScript = {
 				{
 					prompt: 'Now switch back to "On site".',
 					isComplete: reader => guestsVisible(reader) === true,
-					reveal: 'Guests is back, still holding 2: hiding never erased the stored answer. The same declared dependency, read live, both ways.',
+					reveal: 'Guests is back, still holding your answer: hiding never erased the stored answer. The same declared dependency, read live, both ways.',
 				},
 			],
 		},
@@ -150,7 +150,7 @@ export const surveyTourScript: TutorialScript = {
 					const changed = reader.readProperty('open-day', 'changedSinceSubmit')
 					return changed?.status === 'completed' && changed.result.ok && changed.result.value === true
 				},
-				reveal: 'The live Response moved, while the submitted copy kept its values and gained the "changed since submit" marker. The submission is a stored State snapshot; the response is a live Property.',
+				reveal: 'The submitted copy kept its values and gained the "Answers changed since you submitted" marker. The submission is a stored State snapshot; the response is a live Property — open "Response — what a backend reads" below the form to see its current values.',
 			}],
 		},
 		{
