@@ -370,3 +370,65 @@ export function sameAnswerValues(a: SurveyResponse, b: SurveyResponse): boolean 
 	return idsA.length === idsB.length
 		&& idsA.every(id => Object.hasOwn(b.answers, id) && sameAnswerValue(a.answers[id]!.value, b.answers[id]!.value))
 }
+
+// -------------------------------------------------------------------------------------------------
+// Which operators fit which question type (the plugins' `condition-type-mismatch` check)
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * The question types an operator can apply to. Core cannot know this (it only resolves the dependency on
+ * the target's `value` Property), so each question's structure validator checks it against the target.
+ * `equals` and `notEquals` compare with one scalar, so they do not fit a `MultipleChoice` (an array);
+ * `includes` and `excludes` are the `MultipleChoice` operators.
+ */
+export const OPERATOR_QUESTION_TYPES: Readonly<Record<ConditionOp, readonly QuestionType[]>> = {
+	answered: QUESTION_TYPES,
+	unanswered: QUESTION_TYPES,
+	equals: ['ShortAnswer', 'SingleChoice', 'Numeric'],
+	notEquals: ['ShortAnswer', 'SingleChoice', 'Numeric'],
+	greaterThan: ['Numeric'],
+	lessThan: ['Numeric'],
+	includes: ['MultipleChoice'],
+	excludes: ['MultipleChoice'],
+}
+
+/** The JSON type of the `value` that `equals` / `notEquals` compare a question of that type with. */
+export const EQUALITY_VALUE_TYPE: Readonly<Partial<Record<QuestionType, 'string' | 'number'>>> = {
+	ShortAnswer: 'string',
+	SingleChoice: 'string',
+	Numeric: 'number',
+}
+
+/**
+ * Why `leaf` cannot be evaluated against a question of `targetType`, or `null` when it can: the operator
+ * does not apply to that type, or an equality `value` has the wrong JSON type. The message names the
+ * operator, the target id and its type; the caller prefixes the config path.
+ */
+export function leafTypeMismatch(leaf: LeafCondition, targetType: QuestionType): string | null {
+	const allowed = OPERATOR_QUESTION_TYPES[leaf.op]
+	if (!allowed.includes(targetType))
+		return `"${leaf.op}" does not apply to "${leaf.question}", a ${targetType} question; it applies to ${allowed.join(' or ')} questions.`
+	if (leaf.op === 'equals' || leaf.op === 'notEquals') {
+		const expected = EQUALITY_VALUE_TYPE[targetType]
+		const actual = typeof leaf.value
+		if (expected !== undefined && actual !== expected)
+			return `"${leaf.op}" on "${leaf.question}", a ${targetType} question, needs a ${expected} "value", not a ${actual}.`
+	}
+	return null
+}
+
+/** The label, help and (for choices) option labels of a question in `language`. */
+export function questionText(
+	config: {
+		readonly label: I18nText
+		readonly help: I18nText | null
+		readonly options?: readonly { readonly value: string, readonly label: I18nText }[]
+	},
+	language: string,
+): QuestionText {
+	return {
+		label: pickText(config.label, language),
+		help: config.help === null ? null : pickText(config.help, language),
+		options: (config.options ?? []).map(option => ({ value: option.value, label: pickText(option.label, language) })),
+	}
+}

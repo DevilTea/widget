@@ -11,6 +11,8 @@ import {
 	MAX_CONDITION_DEPTH,
 	MULTIPLE_CHOICE_CONFIG_KEYS,
 	NUMERIC_CONFIG_KEYS,
+	questionConditionLeaves,
+	questionTexts,
 	resolveMultipleChoiceConfig,
 	resolveNumericConfig,
 	resolveShortAnswerConfig,
@@ -799,5 +801,49 @@ describe('compile-view nodes', () => {
 			.toMatchObject({ self: false, other: false })
 		expect(compile({ title: label, languages: ['en'] }, [x]))
 			.toMatchObject({ self: false, other: null })
+	})
+})
+
+describe('questionTexts and questionConditionLeaves', () => {
+	const config = resolveMultipleChoiceConfig({
+		label,
+		help: label,
+		required: { question: 'a', op: 'answered' },
+		visibleWhen: { all: [{ question: 'b', op: 'answered' }, { not: { question: 'c', op: 'unanswered' } }] },
+		options: [
+			option('x', { enabledWhen: { question: 'd', op: 'equals', value: 'v' } }),
+			option('y', { visibleWhen: { question: 'e', op: 'answered' } }),
+		],
+		rules: [{ when: { any: [{ question: 'f', op: 'answered' }] }, message: label }],
+	})
+
+	it('lists every text with its config path, in document order', () => {
+		expect(questionTexts(config)
+			.map(entry => entry.path))
+			.toEqual([['label'], ['help'], ['options', 0, 'label'], ['options', 1, 'label'], ['rules', 0, 'message']])
+	})
+
+	it('omits help when absent', () => {
+		expect(questionTexts(resolveNumericConfig({ label }))
+			.map(entry => entry.path))
+			.toEqual([['label']])
+	})
+
+	it('lists every leaf condition with its config path, in document order', () => {
+		expect(questionConditionLeaves(config)
+			.map(({ path, leaf }) => [path, leaf.question]))
+			.toEqual([
+				[['required'], 'a'],
+				[['visibleWhen', 'all', 0], 'b'],
+				[['visibleWhen', 'all', 1, 'not'], 'c'],
+				[['options', 0, 'enabledWhen'], 'd'],
+				[['options', 1, 'visibleWhen'], 'e'],
+				[['rules', 0, 'when', 'any', 0], 'f'],
+			])
+	})
+
+	it('has no leaf for a boolean required and no conditions', () => {
+		expect(questionConditionLeaves(resolveNumericConfig({ label, required: true })))
+			.toEqual([])
 	})
 })
