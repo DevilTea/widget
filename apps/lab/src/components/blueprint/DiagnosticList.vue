@@ -32,8 +32,24 @@ function dependencyOf(diagnostic: BlueprintDiagnostic): BlueprintDependencyRefer
 	return 'dependency' in diagnostic ? diagnostic.dependency : undefined
 }
 
+/** Two locations are the same when every field matches (the `node` by identity, the rest by value). */
+function isSameLocation(a: BlueprintDiagnosticLocation, b: BlueprintDiagnosticLocation): boolean {
+	const left = a as unknown as Record<string, unknown>
+	const right = b as unknown as Record<string, unknown>
+	const keys = Object.keys(left)
+	return keys.length === Object.keys(right).length && keys.every(key => left[key] === right[key])
+}
+
+/**
+ * The diagnostic's related locations other than its own location. Core may list the diagnostic's own
+ * member among `related` (a `property-evaluation-cycle` lists every member of the cycle, itself included,
+ * in one list its diagnostics share), and the header row already shows that location. Returns a new
+ * array; the frozen list is never mutated and the other entries keep their order.
+ */
 function relatedOf(diagnostic: BlueprintDiagnostic): readonly BlueprintDiagnosticLocation[] {
-	return 'related' in diagnostic && diagnostic.related !== undefined ? diagnostic.related : []
+	if (!('related' in diagnostic) || diagnostic.related === undefined)
+		return []
+	return diagnostic.related.filter(location => !isSameLocation(location, diagnostic.location))
 }
 
 function nodeIdOfLocation(location: BlueprintDiagnosticLocation, inspection: BlueprintInspection): InspectionNodeId | null {
