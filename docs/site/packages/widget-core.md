@@ -1729,7 +1729,10 @@ returns normally, State and Property values stay consistent, and the next call
 counts from zero. A hand-over pass of the isolated-error handler that starts
 while no Runtime call is in progress is a call of its own for this count, so
 what the handler's own calls notify is counted apart from the host's other
-calls. The stopped subscriber's last delivered value may not be the current one,
+calls. A pass that runs at the end of a Runtime call counts in that call: when
+the call notified a subscription 9 990 times and the handler's writes in that
+pass notify it 10 more times, the subscription is stopped at 10 000 and the
+`RangeError` is handed to the handler. The stopped subscriber's last delivered value may not be the current one,
 and a later call delivers the current one only when what the subscription
 observes changes again. The limit applies to every subscription Core creates
 (State, Property and diagnostics subscriptions), whether the loop writes through
@@ -3618,8 +3621,9 @@ IIFE). The current implementation needs:
   handed over. That holds only while the handler stays set until the Runtime
   call that is running ends: when the handler is removed during a Runtime
   call, the rest of that call is back in the default mode, whose
-  `queueMicrotask` call is not guarded, so on a host without it that call
-  throws a `TypeError`. So an embedded host needs neither
+  `queueMicrotask` call is not guarded, so an exception isolated in the rest
+  of that call throws at the point of the failure (a `ReferenceError` when
+  the global is missing). So an embedded host needs neither
   `queueMicrotask` nor a drained job queue as long as its handler stays set
   while Runtime calls run, catches its own exceptions, and does not keep
   causing what it handles. Catch inside the handler, so that its own

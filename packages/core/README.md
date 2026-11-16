@@ -596,7 +596,8 @@ internal bounds; without `queueMicrotask` those reports are dropped and the rest
 of the pass is unaffected, as long as the handler stays set until the Runtime
 call that is running ends: removing it in the middle of a Runtime call returns
 the rest of that call to the default mode, whose `queueMicrotask` call is not
-guarded, so on a host without it that call throws a `TypeError`. A host whose
+guarded, so an exception isolated in the rest of that call throws at the point
+of the failure (a `ReferenceError` when the global is missing). A host whose
 handler stays set, catches its own exceptions and does not keep causing what it
 handles needs neither `queueMicrotask` nor a
 drained job queue. See

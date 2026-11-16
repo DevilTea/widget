@@ -291,6 +291,9 @@ const MAX_DELIVERY_GENERATIONS = 100
  * flag already, advances the number in {@link finishHostCall}. A call ends when its outermost operation leaves
  * outside the queued-delivery drain, after the drain: the operations that the listeners of a queued delivery
  * start are outermost too, but they run before the host's call returns, on its behalf, so they keep its number.
+ * A hand-over pass of the isolated-error handler that starts while no operation is in progress is a call of its
+ * own and advances it too (see {@link handOverIsolatedException}); one that runs at the end of an operation
+ * belongs to that call.
  * It starts at `1`, above every value a subscription stores before its first count (see
  * {@link createTrackedSubscription}).
  */
