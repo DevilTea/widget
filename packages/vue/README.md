@@ -34,7 +34,10 @@ pnpm add @deviltea/widget-vue @deviltea/widget-core vue
 ```
 
 `vue` (^3.5) and `@deviltea/widget-core` are both peer dependencies, so install
-them next to this package as shown above. Core must be a peer rather than a
+them next to this package as shown above. This package is released together
+with Core and `@deviltea/widget-inspector` under one version, and its Core peer
+range is `^<version>`: version `0.1.1` accepts Core `>=0.1.1 <0.2.0`, so install
+the two at the same version. Core must be a peer rather than a
 nested dependency: it recognizes its own Runtimes by module-local identity, so
 an application that ends up with two copies of `@deviltea/widget-core` (for
 example through version skew) would build a Runtime with one copy and hand it to

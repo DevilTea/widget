@@ -25,7 +25,7 @@ and this package never reimplements or reinterprets it. These bare `#N` numbers 
 - `src/**/*.unit.test.ts` — colocated Vitest unit tests (run by the root config too).
 
 The published entries are exactly `.` (`src/index.ts`) and `./testing` (`src/testing.ts`); `tsdown.config.ts` keeps `@deviltea/widget-core` and `vue` external.
-`@deviltea/widget-core` is a peer dependency (`workspace:^`, with a `workspace:*` devDependency), never a regular dependency and never bundled: core recognizes its own Runtimes by module-local identity, so a second copy would make `emit` fail. The root renderer therefore checks Runtime provenance with core's `assertCoreRuntime` (from `@deviltea/widget-core/integration`) the first time it is given a Runtime.
+`@deviltea/widget-core` is a peer dependency (`workspace:^`, published as `^<version>`; this package is released together with Core and the Inspector under one version, see the root `AGENTS.md` "Releasing"; with a `workspace:*` devDependency), never a regular dependency and never bundled: core recognizes its own Runtimes by module-local identity, so a second copy would make `emit` fail. The root renderer therefore checks Runtime provenance with core's `assertCoreRuntime` (from `@deviltea/widget-core/integration`) the first time it is given a Runtime.
 
 ## Commands
 

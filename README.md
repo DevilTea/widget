@@ -25,12 +25,14 @@ This repository was split from [`DevilTea/deviltea-labs`](https://github.com/Dev
 
 ## Releasing
 
+The three published packages are released together under one version.
+
 ```sh
-pnpm release <widget-core|widget-inspector|widget-vue> <patch|minor|major|prerelease|version>
+pnpm release <patch|minor|major|prerelease|version>
 # after the release PR merges:
-pnpm release:tag <widget-core|widget-inspector|widget-vue>
+pnpm release:tag
 ```
 
-Publishing uses npm Trusted Publishing from GitHub Actions. Each package's npm Trusted Publisher must name repository `DevilTea/widget` and workflow `publish.yml`.
+`pnpm release` bumps `@deviltea/widget-core`, `@deviltea/widget-inspector` and `@deviltea/widget-vue` to the same version on `release/v<version>` and opens one pull request; `pnpm release:tag` pushes the annotated tag `v<version>` on merged `main`. That tag triggers `publish.yml`, which publishes Core first, then the Inspector and the Vue adapter, through npm Trusted Publishing. A package whose version is already on npm is skipped, so a failed run can simply be re-run. Each package's npm Trusted Publisher must name repository `DevilTea/widget` and workflow `publish.yml`.
 
-While the packages are `0.x`, a breaking change bumps the minor version (`0.N.0`), and the changes to Core since `0.0.6` are breaking, so the first `@deviltea/widget-core` release after `0.0.6` is `0.1.0`; the first release of `@deviltea/widget-vue` after `0.0.6` and of `@deviltea/widget-inspector` after `0.0.4` is `0.1.0` as well. Release Core first, then `@deviltea/widget-vue` and `@deviltea/widget-inspector`, which declare Core as a peer dependency (`workspace:^`, published as `^0.N.0`). The release scripts refuse to release `@deviltea/widget-vue` or `@deviltea/widget-inspector` while Core is below `0.1.0`, because a `^0.0.N` peer range pins one exact Core patch. Applications and plugin or renderer libraries must also depend on Core as a peer so exactly one Core instance exists at runtime.
+While the packages are `0.x`, a breaking change in any package bumps the minor version (`0.N.0`) of all of them, and a patch release contains no breaking change. `@deviltea/widget-vue` and `@deviltea/widget-inspector` declare Core as a peer dependency (`workspace:^`, published as `^<version>`), so a dependent at `0.1.1` accepts Core `>=0.1.1 <0.2.0`: install the three packages at the same version. Applications and plugin or renderer libraries must also depend on Core as a peer so exactly one Core instance exists at runtime.
