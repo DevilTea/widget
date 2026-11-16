@@ -70,7 +70,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   *applied* Document Blueprint, through Core's inspection node — never by searching the source text or by
   widget id), `focused-widget.ts` (shared focus -> plain `{ id, type }`), and `shiki-highlighter.ts` (the
   lazy, self-contained Shiki fine-grained highlighter — see "Loading policy" below for its chunk and
-  engine-choice rationale). Each showcase's `sources.ts` (`src/showcases/trip-survey/sources.ts`,
+  engine-choice rationale). Each showcase's `sources.ts` (`src/showcases/survey/sources.ts`,
   `src/showcases/crm/sources.ts`, `src/sandbox/sources.ts`) is the actual curated registry, wired into
   `ShowcaseEntry.sources` (`src/showcases/registry.ts`) alongside `presets`. `src/components/panels/
   ImplementationPanel.vue` (registered lazily — see below) and `src/components/implementation/*`
@@ -123,10 +123,20 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     (no routing, no persistence) consumed by `use-lab-store.ts`'s `switchShowcase`. Plugin-tuple
     types are erased to `WidgetSystem<AnyWidgetPluginTuple>` on purpose — consumers only need object
     identity.
-  - `trip-survey/` — Showcase A: Interactive Survey (trip-planning domain). `domain.ts` (pure domain
-    helpers), `plugins/` (semantic plugins, unit-tested), `renderers/` (Vue renderer components),
-    `system.ts`, `presets.ts`, `test-support.ts`.
-  - `crm/` — Showcase B: Sales Pipeline CRM. Same internal organization as `trip-survey/` (`domain.ts`,
+  - `survey/` — Showcase A: Interactive Survey, the Maker Space open-day sign-up form (a survey rendered
+    from one JSON definition; five plugin types `Survey`, `SingleChoice`, `MultipleChoice`, `Numeric`,
+    `ShortAnswer`; root widget `open-day`; languages `en` and `zh-TW`). `domain.ts` (pure types,
+    condition evaluation, built-in messages), `config.ts` (config checkers reporting located diagnostics),
+    `schemas.ts` (Draft 2020-12 config schemas the Author Catalog shows and copies), `plugins/` (semantic
+    plugins, unit-tested; a condition in the JSON becomes a declared dependency, so Core reports an
+    evaluation cycle instead of the plugin guessing), `presets.ts` (`survey-default`, `survey-ai-draft`
+    with one located diagnostic per widget, `survey-cycle`), `evaluate.ts` (the JSON-in/JSON-out
+    function a backend runs), `cycle-safe-targets.ts` (test-only classification of which condition targets
+    would create a cycle; the Lab has no editor operations), `renderers/` (Vue renderer components),
+    `sources.ts`, `system.ts`, `test-support.ts`. The Survey tour (`tutorial/survey-script.ts`) is
+    authored against `survey-default`; its `data-tutorial-target` lookup is keyed by widget id
+    (`tutorial/survey-target-map.ts`).
+  - `crm/` — Showcase B: Sales Pipeline CRM. Same internal organization as `survey/` (`domain.ts`,
     `plugins/`, `renderers/`, `system.ts`, `presets.ts`, `test-support.ts`), with a deliberately
     richer widget vocabulary (store/query/form/table/modal/metric plugins and renderers).
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
@@ -373,7 +383,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
 - `vue-flow.ts` — `toVueFlow()`: the laid-out `SemanticGraph` -> plain Vue Flow `nodes`/`edges`.
   Supports hierarchical progressive disclosure:
   - Widget clusters are the top-level view by default (collapsed), preventing visual overload on
-    dense topologies (e.g. Survey ~43 nodes / 77 edges).
+    dense topologies (the Survey is 5 clusters / 37 members; the CRM is denser).
   - Expanding a cluster reveals its internal member vertices and stubs as child nodes.
   - Inter-cluster edges between collapsed clusters aggregate into single presentation edges. The
     canvas deliberately labels these with only a compact dependency count (`1 dep` / `N deps`);

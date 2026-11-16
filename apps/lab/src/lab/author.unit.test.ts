@@ -5,8 +5,8 @@ import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
-import { surveyPresets } from '../showcases/trip-survey/presets'
-import { surveySystem } from '../showcases/trip-survey/system'
+import { surveyPresets } from '../showcases/survey/presets'
+import { surveySystem } from '../showcases/survey/system'
 import { createAuthorPatch, getAuthorConfigScalars, replaceConfigScalar } from './author'
 
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText
@@ -64,7 +64,7 @@ describe('author command lowering', () => {
 		const blueprint = surveySystem.createBlueprint(JSON.parse(source))
 		const rootNodeId = inspectBlueprint(blueprint).rootNodeId
 
-		expect(createAuthorPatch(blueprint, replaceConfigScalar(0, rootNodeId, 'resetQuestionIds', 'edited'), 0))
+		expect(createAuthorPatch(blueprint, replaceConfigScalar(0, rootNodeId, 'languages', 'edited'), 0))
 			.toEqual({ ok: false, reason: 'config-value-not-scalar' })
 	})
 
@@ -101,12 +101,23 @@ describe('author command lowering', () => {
 	})
 
 	it('excludes null-valued config fields so they remain editable through JSON', () => {
-		const source = surveyPresets.find(preset => preset.id === 'survey-default')!.sourceText
-		const blueprint = surveySystem.createBlueprint(JSON.parse(source))
-		const inspection = inspectBlueprint(blueprint)
-		const familyPriority = inspection.nodes.find(node => node.resolved && node.node.id === 'family-priority')!
+		interface NullableInterfaces extends WidgetInterfaces {
+			config: { raw: { readonly label: string, readonly note: string | null }, resolved: { readonly label: string, readonly note: string | null } }
+		}
+		const plugin = createWidgetPlugin('Nullable')
+			.description('Nullable')
+			.interfaces<NullableInterfaces>()
+			.config({
+				description: 'Nullable config',
+				validate: (input): input is { readonly label: string, readonly note: string | null } => typeof input === 'object' && input !== null && typeof (input as Record<string, unknown>).label === 'string',
+				resolve: raw => ({ label: raw?.label ?? '', note: raw?.note ?? null }),
+			})
+			.done()
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const blueprint = system.createBlueprint({ id: 'root', type: 'Nullable', config: { label: 'Question', note: null } })
+		const root = inspectBlueprint(blueprint).nodes.find(node => node.resolved && node.node.id === 'root')!
 
-		expect(getAuthorConfigScalars(familyPriority))
-			.toEqual([{ key: 'label', value: 'What matters most while traveling with children?' }])
+		expect(getAuthorConfigScalars(root))
+			.toEqual([{ key: 'label', value: 'Question' }])
 	})
 })

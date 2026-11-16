@@ -121,35 +121,32 @@ test.describe('CRM tour entry', () => {
 		// walkthrough (every observation asserted) is `tutorial.spec.ts`'s job; this only needs to get
 		// there via genuine interactions to prove the NEW "Take the CRM tour" link (issue #25 P4).
 		await nextButton.click() // step 1 -> 2
-		const adults = previewFrame(page)
-			.getByLabel('Adults', { exact: true })
-		await adults.fill('5')
-		await adults.press('Tab')
+		const preview = previewFrame(page)
+		await preview.getByLabel('On site', { exact: true })
+			.check()
 		await nextButton.click() // -> 3
 		await nextButton.click() // -> 4
-		const returnDate = previewFrame(page)
-			.getByLabel('Return date')
-		await returnDate.fill('2027-04-01')
-		await returnDate.press('Tab')
-		await returnDate.fill('2027-04-20')
-		await returnDate.press('Tab')
+		const guests = preview.getByLabel('Guests coming with you')
+		await guests.fill('5')
+		await expect(rail.getByText('Guests reports an error', { exact: false }))
+			.toBeVisible()
+		await guests.fill('2')
 		await nextButton.click() // -> 5
-		const children = previewFrame(page)
-			.getByLabel('Children', { exact: true })
-		await children.fill('2')
-		await children.press('Tab')
-		await children.fill('0')
-		await children.press('Tab')
+		await preview.getByLabel('Online', { exact: true })
+			.check()
+		await expect(rail.getByText('Guests disappeared.', { exact: false }))
+			.toBeVisible()
+		await preview.getByLabel('On site', { exact: true })
+			.check()
 		await nextButton.click() // -> 6
-		await previewFrame(page)
-			.getByRole('button', { name: 'Submit', exact: true })
-			.click()
-		await previewFrame(page)
-			.getByRole('button', { name: 'Generate result', exact: true })
+		await preview.getByLabel('3D printing basics')
+			.check()
+		await preview.getByLabel('Phone number')
+			.fill('0912 345 678')
+		await preview.getByRole('button', { name: 'Submit', exact: true })
 			.click()
 		await nextButton.click() // -> 7
-		await adults.fill('6')
-		await adults.press('Tab')
+		await guests.fill('1')
 		await nextButton.click() // -> 8
 		await nextButton.click() // -> 9 (hand-back)
 

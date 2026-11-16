@@ -1,5 +1,5 @@
 /**
- * Registry-shape sanity (diagnostic #25 P3 Scope F) for all three curated `sources.ts` modules: every
+ * Registry-shape sanity (diagnostic #25 P3 Scope F) for every curated `sources.ts` module: every
  * type each registry curates must be a real plugin type on its showcase's `WidgetSystem` — a
  * typo'd/renamed/removed plugin type would otherwise silently curate a dead entry the Implementation
  * panel can never reach.
@@ -12,10 +12,8 @@ import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
 import { crmSources } from '../showcases/crm/sources'
 import { crmSystem } from '../showcases/crm/system'
-import { surveySources as surveyFormSources } from '../showcases/survey/sources'
-import { surveySystem as surveyFormSystem } from '../showcases/survey/system'
-import { surveySources } from '../showcases/trip-survey/sources'
-import { surveySystem } from '../showcases/trip-survey/system'
+import { surveySources } from '../showcases/survey/sources'
+import { surveySystem } from '../showcases/survey/system'
 import { vuetifyTaskSources } from '../showcases/vuetify-tasks/sources'
 import { vuetifyTaskSystem } from '../showcases/vuetify-tasks/system'
 import { findDanglingRegistryTypes, findUncuratedPluginTypes } from './registry-coverage'
@@ -23,7 +21,6 @@ import { findDanglingRegistryTypes, findUncuratedPluginTypes } from './registry-
 const showcases: readonly { readonly label: string, readonly system: WidgetSystem<AnyWidgetPluginTuple>, readonly sources: SourcesRegistry }[] = [
 	{ label: 'sandbox', system: sandboxSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: sandboxSources },
 	{ label: 'survey', system: surveySystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: surveySources },
-	{ label: 'survey-form', system: surveyFormSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: surveyFormSources },
 	{ label: 'crm', system: crmSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: crmSources },
 	{ label: 'vuetify-tasks', system: vuetifyTaskSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: vuetifyTaskSources },
 ]
@@ -44,7 +41,7 @@ describe('curated sources registries', () => {
 	})
 
 	// Full coverage is a deliberate curation choice (diagnostic #25 Scope C: "Domain helper entries only
-	// where directly relevant"), not a structural requirement — but for these three showcases every
+	// where directly relevant"), not a structural requirement — but for these showcases every
 	// registered plugin type IS curated, so this pins that intentional choice rather than letting a
 	// newly-added plugin silently go uncurated without anyone noticing.
 	it.each(showcases)('$label: every registered plugin type is curated', ({ system, sources }) => {

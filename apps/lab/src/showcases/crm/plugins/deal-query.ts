@@ -58,8 +58,8 @@ function isString(value: unknown): value is string {
 
 /**
  * Consumer refinement of the generic `stage-filter` `SelectInput.value` (checkpoint §2's stage filter
- * domain is explicitly `'all' | DealStage`) — analogous to Showcase A's `trip-metrics.ts`/
- * `trip-readiness.ts` `value === null || isDestination(value)`-style refinements. A valid edited Source
+ * domain is explicitly `'all' | DealStage`) — analogous to how the Survey showcase's
+ * question Properties re-check their loosely typed `answer` State (`../survey/plugins/`). A valid edited Source
  * may configure an out-of-domain `stage-filter` option (e.g. `"archived"`), which the generic
  * `SelectInput` State validation legitimately accepts; refining here means selecting that option fails
  * this dependency (and therefore `filteredDeals`/every downstream Property) instead of silently

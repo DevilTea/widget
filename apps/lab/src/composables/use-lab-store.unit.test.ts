@@ -356,7 +356,7 @@ describe('createLabStore() switchShowcase()', () => {
 		expect(store.draftSourceText.value)
 			.toBe(store.documentState.value.sourceText)
 		expect(store.documentState.value.definition)
-			.toMatchObject({ type: 'TripSurvey' })
+			.toMatchObject({ type: 'Survey' })
 	})
 
 	it('is a no-op for the current or an unknown showcase', async () => {
@@ -376,12 +376,12 @@ describe('createLabStore() switchShowcase()', () => {
 		const store = createLabStore()
 		await store.switchShowcase('survey')
 
-		const outcome = await store.applyPreset('survey-not-ready')
+		const outcome = await store.applyPreset('survey-cycle')
 
 		expect(outcome?.status)
 			.toBe('applied')
 		expect(store.documentState.value.definition)
-			.toMatchObject({ type: 'TripSurvey' })
+			.toMatchObject({ type: 'Survey' })
 	})
 
 	it('adopts the target authoritative revision-0 snapshot without a synthetic same-source Apply', async () => {

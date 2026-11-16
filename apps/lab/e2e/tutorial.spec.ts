@@ -380,8 +380,8 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	 * The geometry claims above are necessary but not sufficient (merge-gate review blocker 2): the rail
 	 * is a `position: fixed` 320px overlay directly over the persistent Preview, which at 900px leaves
 	 * only ~220px of Preview's own ~540px width actually unclipped. Rather than assert around that
-	 * occlusion, this runs the real, representative action-bearing tour path — Adults, Return date
-	 * break+fix, Children, Submit, Generate result — with the rail open the entire time, using the exact
+	 * occlusion, this runs the real, representative action-bearing tour path — "On site", Guests error and
+	 * recovery, Online and back, a session, Phone number, Submit — with the rail open the entire time, using the exact
 	 * same real `getByLabel()`/`getByRole()` locators the full walkthrough test uses. Each control is
 	 * pointer-targeted through `clickBesideRail()`, which requires a minimum-size slice of it to remain
 	 * uncovered by the rail and clicks inside that slice with Playwright's actionability checks (visible,
@@ -392,53 +392,43 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	const nextButton = page.getByRole('button', { name: 'Next', exact: true })
 	await nextButton.click() // step 1 -> 2
 
-	const adults = previewFrame(page)
-		.getByLabel('Adults', { exact: true })
-	await clickBesideRail(page, adults)
-	await adults.fill('5')
-	await adults.press('Tab')
-	await expect(rail.getByText('The Live estimate just updated.', { exact: false }))
+	const preview = previewFrame(page)
+	await clickBesideRail(page, preview.getByLabel('On site', { exact: true }))
+	await expect(rail.getByText('Guests and Phone reacted.', { exact: false }))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
 	await nextButton.click() // step 2 -> 3
 	await nextButton.click() // step 3 -> 4
 
-	const returnDate = previewFrame(page)
-		.getByLabel('Return date')
-	await clickBesideRail(page, returnDate)
-	await returnDate.fill('2027-04-01')
-	await returnDate.press('Tab')
-	await expect(rail.getByText('Trip days fails with a reason', { exact: false }))
+	const guests = preview.getByLabel('Guests coming with you')
+	await clickBesideRail(page, guests)
+	await guests.fill('5')
+	await expect(rail.getByText('Guests reports an error, yet 5 is still stored', { exact: false }))
 		.toBeVisible()
-	await returnDate.fill('2027-04-20')
-	await returnDate.press('Tab')
-	await expect(rail.getByText('The same Properties recovered.', { exact: false }))
+	await guests.fill('2')
+	await expect(rail.getByText('The error is gone.', { exact: false }))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
 	await nextButton.click() // step 4 -> 5
 
-	const children = previewFrame(page)
-		.getByLabel('Children', { exact: true })
-	await clickBesideRail(page, children)
-	await children.fill('2')
-	await children.press('Tab')
-	await expect(previewFrame(page)
-		.getByText('What matters most while traveling with children?'))
+	await clickBesideRail(page, preview.getByLabel('Online', { exact: true }))
+	await expect(preview.getByText('Guests coming with you'))
+		.toHaveCount(0)
+	await clickBesideRail(page, preview.getByLabel('On site', { exact: true }))
+	await expect(preview.getByText('Guests coming with you'))
 		.toBeVisible()
-	await children.fill('0')
-	await children.press('Tab')
 	await expect(nextButton)
 		.toBeEnabled()
 	await nextButton.click() // step 5 -> 6
 
-	await clickBesideRail(page, previewFrame(page)
-		.getByRole('button', { name: 'Submit', exact: true }))
-	await clickBesideRail(page, previewFrame(page)
-		.getByRole('button', { name: 'Generate result', exact: true }))
-	await expect(previewFrame(page)
-		.getByRole('heading', { name: 'Recommendation' }))
+	await clickBesideRail(page, preview.getByLabel('3D printing basics'))
+	const phone = preview.getByLabel('Phone number')
+	await clickBesideRail(page, phone)
+	await phone.fill('0912 345 678')
+	await clickBesideRail(page, preview.getByRole('button', { name: 'Submit', exact: true }))
+	await expect(preview.getByTestId('survey-submitted'))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
@@ -451,9 +441,10 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	const rail = page.getByRole('complementary', { name: RAIL_LABEL })
 	const nextButton = page.getByRole('button', { name: 'Next', exact: true })
 	const finishButton = page.getByRole('button', { name: 'Finish', exact: true })
+	const preview = previewFrame(page)
 
 	// Step 1 — orient: no action needed, reveals immediately.
-	await expect(rail.getByText('This is the Interactive Survey — a trip-planning form.'))
+	await expect(rail.getByText('This is the Interactive Survey — a sign-up form rendered from one JSON definition.'))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
@@ -462,19 +453,23 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	// Step 2 — State: observation must NOT be visible before the real action. Also confirms the spotlight
 	// mechanism (CSS class toggling onto the step's `data-tutorial-target` element, never a
 	// position-cloned overlay) actually reaches the real Preview DOM, not just the rail's own copy.
-	const stateObservation = rail.getByText('The Live estimate just updated.', { exact: false })
+	const stateObservation = rail.getByText('Guests and Phone reacted.', { exact: false })
 	await expect(stateObservation)
 		.toHaveCount(0)
 	await expect(nextButton)
 		.toBeDisabled()
-	await expect(previewFrame(page)
-		.locator('[data-tutorial-target="survey-adults"]'))
+	await expect(preview.locator('[data-tutorial-target="survey-mode"]'))
 		.toHaveClass(/tutorial-spotlight/)
 
-	const adults = previewFrame(page)
-		.getByLabel('Adults', { exact: true })
-	await adults.fill('5')
-	await adults.press('Tab')
+	// "Online" is not the scripted answer: the observation must wait for "On site".
+	await preview.getByLabel('Online', { exact: true })
+		.check()
+	await expect(preview.getByLabel('Online', { exact: true }))
+		.toBeChecked()
+	await expect(stateObservation)
+		.toHaveCount(0)
+	await preview.getByLabel('On site', { exact: true })
+		.check()
 
 	await expect(stateObservation)
 		.toBeVisible()
@@ -488,32 +483,33 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await nextButton.click()
 
 	// Step 3 — Property: no new action, reveals immediately on entry.
-	await expect(rail.getByText('Trip days and costs recomputed by themselves.', { exact: false }))
+	await expect(rail.getByText('The required message disappeared, and Phone now says it is required.', { exact: false }))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 4 — failure, then recovery, inside the same step.
-	const failureObservation = rail.getByText('Trip days fails with a reason', { exact: false })
-	await expect(failureObservation)
+	// Step 4 — an answer error, then recovery, inside the same step.
+	const errorObservation = rail.getByText('Guests reports an error, yet 5 is still stored', { exact: false })
+	await expect(errorObservation)
 		.toHaveCount(0)
-	const returnDate = previewFrame(page)
-		.getByLabel('Return date')
-	// Default Departure is 2027-04-10 (showcases/trip-survey/presets.ts) — this is strictly before it.
-	await returnDate.fill('2027-04-01')
-	await returnDate.press('Tab')
+	await expect(preview.locator('[data-tutorial-target="survey-guests"]'))
+		.toHaveClass(/tutorial-spotlight/)
+	const guests = preview.getByLabel('Guests coming with you')
+	await guests.fill('5')
 
-	await expect(failureObservation)
+	await expect(errorObservation)
+		.toBeVisible()
+	await expect(preview.getByTestId('survey-question-error')
+		.filter({ hasText: 'at most 3' }))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeDisabled()
-	const recoveryObservation = rail.getByText('The same Properties recovered.', { exact: false })
+	const recoveryObservation = rail.getByText('The error is gone.', { exact: false })
 	await expect(recoveryObservation)
 		.toHaveCount(0)
 
-	await returnDate.fill('2027-04-20')
-	await returnDate.press('Tab')
+	await guests.fill('2')
 
 	await expect(recoveryObservation)
 		.toBeVisible()
@@ -521,58 +517,55 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 5 — dependency: appear, then disappear again (keeps the script submittable at step 6).
-	const familyQuestion = previewFrame(page)
-		.getByText('What matters most while traveling with children?')
-	await expect(familyQuestion)
-		.toHaveCount(0)
-	const appearObservation = rail.getByText('A new "Family preferences" section appeared.', { exact: false })
-	await expect(appearObservation)
-		.toHaveCount(0)
-
-	const children = previewFrame(page)
-		.getByLabel('Children', { exact: true })
-	await children.fill('2')
-	await children.press('Tab')
-
-	await expect(familyQuestion)
+	// Step 5 — dependency: disappear, then come back still holding 2 (keeps the script submittable at step 6).
+	const guestsQuestion = preview.getByText('Guests coming with you')
+	await expect(guestsQuestion)
 		.toBeVisible()
-	await expect(appearObservation)
+	const hiddenObservation = rail.getByText('Guests disappeared.', { exact: false })
+	await expect(hiddenObservation)
+		.toHaveCount(0)
+
+	await preview.getByLabel('Online', { exact: true })
+		.check()
+
+	await expect(guestsQuestion)
+		.toHaveCount(0)
+	await expect(hiddenObservation)
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeDisabled()
 
-	await children.fill('0')
-	await children.press('Tab')
+	await preview.getByLabel('On site', { exact: true })
+		.check()
 
-	await expect(familyQuestion)
-		.toHaveCount(0)
-	await expect(rail.getByText('The section disappeared again', { exact: false }))
+	await expect(guestsQuestion)
+		.toBeVisible()
+	await expect(guests)
+		.toHaveValue('2')
+	await expect(rail.getByText('Guests is back, still holding 2', { exact: false }))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 6 — a direct State write vs. a Method: Submit, then Generate result.
-	const methodObservation = rail.getByText('invoke named Methods', { exact: false })
+	// Step 6 — a direct State write vs. a Method: the answers, then Submit.
+	const methodObservation = rail.getByText('Submit invokes a named Method', { exact: false })
 	await expect(methodObservation)
 		.toHaveCount(0)
-	await expect(previewFrame(page)
-		.getByRole('heading', { name: 'Recommendation' }))
+	await expect(preview.getByTestId('survey-submitted'))
 		.toHaveCount(0)
 
+	await preview.getByLabel('3D printing basics')
+		.check()
+	await preview.getByLabel('Phone number')
+		.fill('0912 345 678')
 	// `exact: true` on purpose: the Runtime tab (activated via step 2's "See it in Runtime" link, and
 	// still mounted though inactive) has its own "submit() writes ..." Method-row text, which a
 	// non-exact substring match on "Submit" would ambiguously also match.
-	await previewFrame(page)
-		.getByRole('button', { name: 'Submit', exact: true })
-		.click()
-	await previewFrame(page)
-		.getByRole('button', { name: 'Generate result', exact: true })
+	await preview.getByRole('button', { name: 'Submit', exact: true })
 		.click()
 
-	await expect(previewFrame(page)
-		.getByRole('heading', { name: 'Recommendation' }))
+	await expect(preview.getByTestId('survey-submitted'))
 		.toBeVisible()
 	await expect(methodObservation)
 		.toBeVisible()
@@ -580,22 +573,18 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 7 — snapshot vs. live: mutating an answer after Generate result is the real interaction.
-	// `{ exact: true }` on the Preview badge check on purpose: the rail's own reveal text for this step
-	// mentions "Stale" too (in a longer sentence), and both are visible together once the action lands —
-	// a non-exact substring match would ambiguously resolve to both elements.
-	const staleObservation = rail.getByText('gained the Stale marker', { exact: false })
+	// Step 7 — snapshot vs. live: mutating an answer after Submit is the real interaction. The rail's own
+	// reveal text mentions the marker too (in a longer sentence), so the Preview check is scoped to its
+	// test id.
+	const staleObservation = rail.getByText('gained the "changed since submit" marker', { exact: false })
 	await expect(staleObservation)
 		.toHaveCount(0)
-	await expect(previewFrame(page)
-		.getByText('Stale', { exact: true }))
+	await expect(preview.getByTestId('survey-changed-since-submit'))
 		.toHaveCount(0)
 
-	await adults.fill('6')
-	await adults.press('Tab')
+	await guests.fill('1')
 
-	await expect(previewFrame(page)
-		.getByText('Stale', { exact: true }))
+	await expect(preview.getByTestId('survey-changed-since-submit'))
 		.toBeVisible()
 	await expect(staleObservation)
 		.toBeVisible()
@@ -615,12 +604,17 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await expect(page.getByRole('tab', { name: 'Author' }))
 		.toHaveAttribute('aria-selected', 'true')
 	// "Implementation" is a real affordance now (issue #25 P3): opens the closable Implementation panel
-	// for whichever widget is currently held in shared focus — `trip-survey`, from step 7's `onEnter`.
+	// for whichever widget is currently held in shared focus — `open-day` (a `Survey`), from step 7's
+	// `onEnter`. The locator is scoped to the Implementation panel on purpose: the plain word "Survey"
+	// also appears elsewhere on the page.
 	await rail.getByRole('button', { name: 'Implementation', exact: true })
 		.click()
 	await expect(page.getByRole('tab', { name: 'Implementation' }))
 		.toHaveAttribute('aria-selected', 'true')
-	await expect(page.getByText('TripSurvey', { exact: true }))
+	const implementationPanel = page.getByRole('tabpanel', { name: 'Implementation' })
+	await expect(implementationPanel.getByText('Survey', { exact: true }))
+		.toBeVisible()
+	await expect(implementationPanel.getByRole('button', { name: 'SurveyRootRenderer.vue', exact: true }))
 		.toBeVisible()
 	await nextButton.click()
 
@@ -641,7 +635,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await tutorialButton.click()
 	await expect(rail)
 		.toBeVisible()
-	await expect(rail.getByText('This is the Interactive Survey — a trip-planning form.'))
+	await expect(rail.getByText('This is the Interactive Survey — a sign-up form rendered from one JSON definition.'))
 		.toBeVisible()
 	await expect(rail.getByText('Step 1 of 9'))
 		.toBeVisible()

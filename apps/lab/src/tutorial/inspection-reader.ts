@@ -13,7 +13,7 @@ import type { TutorialObservationTarget, TutorialPropertySnapshot, TutorialRunti
 import { inspectRuntime } from '@deviltea/widget-core/inspection'
 
 /**
- * Resolves a Lab-known widget id (e.g. `"adults"`, `"trip-metrics"`) to its `InspectionNodeId` within one
+ * Resolves a Lab-known widget id (e.g. `"mode"`, `"guests"`) to its `InspectionNodeId` within one
  * Blueprint inspection snapshot. Widget ids are stable, author-declared Source identifiers (`node.id`)
  * — not the snapshot-local `InspectionNodeId` itself — so this is a linear scan over recovered nodes,
  * same as `BlueprintTree.vue`'s own node listing; the survey Blueprint is small enough that this is not a

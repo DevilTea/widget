@@ -85,18 +85,10 @@ for (const showcaseId of ['sandbox', 'survey', 'crm'] as const) {
 test('"Fit graph" contains every expected Survey node (issues #27, #104)', async ({ page }) => {
 	const expectedSurveyNodeIds = [
 		'cluster:0',
+		'cluster:1',
 		'cluster:2',
 		'cluster:3',
 		'cluster:4',
-		'cluster:5',
-		'cluster:7',
-		'cluster:8',
-		'cluster:9',
-		'cluster:10',
-		'cluster:11',
-		'cluster:13',
-		'cluster:14',
-		'cluster:15',
 	] as const
 	// Playwright reports fractional CSS pixels; 2 px allows subpixel/edge rounding only.
 	const fitTolerancePx = 2
@@ -221,37 +213,46 @@ test('progressive disclosure collapses clusters initially, expands on click, and
 	const members = canvas.locator('.graph-node--member')
 	await expect(members.first())
 		.toBeVisible({ timeout: 15_000 })
+	// Widget order in the default preset: 0 open-day (Survey), 1 mode (SingleChoice), 2 guests (Numeric),
+	// 3 sessions (MultipleChoice), 4 phone (ShortAnswer). Every member has a relation, so all 37 show.
 	const expectedMemberIds = [
-		'0:method:generateResult',
-		'0:method:reset',
 		'0:method:submit',
-		'0:property:resultFresh',
-		'0:state:phase',
-		'0:state:result',
-		'0:state:resultInputs',
-		'10:property:visible',
-		'11:method:reset',
-		'11:state:answer',
-		'13:property:budgetPerPersonPerDay',
-		'13:property:estimatedBaselineCost',
-		'13:property:travelerCount',
-		'13:property:tripDays',
-		'14:property:ready',
-		'15:property:result',
-		'2:method:reset',
+		'0:property:canSubmit',
+		'0:property:changedSinceSubmit',
+		'0:property:response',
+		'0:property:text',
+		'0:state:language',
+		'0:state:submitted',
+		'1:method:clear',
+		'1:property:errors',
+		'1:property:options',
+		'1:property:required',
+		'1:property:text',
+		'1:property:value',
+		'1:property:visible',
+		'1:state:answer',
+		'2:method:clear',
+		'2:property:errors',
+		'2:property:required',
+		'2:property:text',
+		'2:property:value',
+		'2:property:visible',
 		'2:state:answer',
-		'3:method:reset',
+		'3:method:clear',
+		'3:property:errors',
+		'3:property:options',
+		'3:property:required',
+		'3:property:text',
+		'3:property:value',
+		'3:property:visible',
 		'3:state:answer',
-		'4:method:reset',
+		'4:method:clear',
+		'4:property:errors',
+		'4:property:required',
+		'4:property:text',
+		'4:property:value',
+		'4:property:visible',
 		'4:state:answer',
-		'5:method:reset',
-		'5:state:answer',
-		'7:method:reset',
-		'7:state:answer',
-		'8:method:reset',
-		'8:state:answer',
-		'9:method:reset',
-		'9:state:answer',
 	]
 	await expect(members)
 		.toHaveCount(expectedMemberIds.length)
@@ -328,23 +329,21 @@ test('focusing a member highlights subgraph and dims unrelated nodes', async ({ 
 	await page.getByRole('button', { name: 'Expand all' })
 		.click()
 
-	const member = page.locator('.graph-node--member')
-		.filter({ hasText: 'budgetPerPersonPerDay' })
-		.first()
+	// `phone.required` reads `mode.value`: a member with a known cross-widget dependency.
+	const member = page.locator('.vue-flow__node[data-id="4:property:required"] .graph-node--member')
 	await expect(member)
 		.toBeVisible({ timeout: 15_000 })
 
-	// Click a member with known cross-widget dependencies to focus it.
 	await member.click()
 
 	// Focused member has focused class.
 	await expect(page.locator('.graph-node--focused'))
-		.toContainText('budgetPerPersonPerDay')
+		.toContainText('required')
 
-	// The connected TripRecommendation member lives inside an expanded cluster. Its owning
+	// The connected `mode` question's member lives inside an expanded cluster. Its owning
 	// cluster must remain fully visible rather than inheriting unrelated-node deemphasis.
 	const relatedCluster = page.locator('.graph-node--cluster')
-		.filter({ hasText: 'TripRecommendation' })
+		.filter({ hasText: 'SingleChoice' })
 		.first()
 	await expect(relatedCluster)
 		.not.toHaveClass(/graph-node--dimmed/)
@@ -364,9 +363,7 @@ test('expanded member nodes can be focused from the keyboard', async ({ page }) 
 	await page.getByRole('button', { name: 'Expand all' })
 		.click()
 
-	const member = page.locator('.graph-node--member')
-		.filter({ hasText: 'budgetPerPersonPerDay' })
-		.first()
+	const member = page.locator('.vue-flow__node[data-id="4:property:required"] .graph-node--member')
 	await expect(member)
 		.toBeVisible({ timeout: 15_000 })
 	await member.focus()
