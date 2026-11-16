@@ -147,7 +147,18 @@ describe('diagnostic list related locations', () => {
 		.properties(properties => properties.a({ registerDeps: ({ dep }) => ({ other: dep.widget(peer).properties.get('a') }), compute: () => null }))
 		.done()
 
-	const system = createWidgetSystem({ plugins: [cyclePlugin, selfPlugin, sideEffectPlugin, hostPlugin, sidePlugin('left-side', 'right'), sidePlugin('right-side', 'left')] })
+	interface RingInterfaces {
+		properties: { value: unknown }
+	}
+
+	/** One member of a three-widget ring: its `value` depends on the `value` of widget `peer`. */
+	const ringPlugin = (type: string, peer: string) => createWidgetPlugin(type)
+		.description(`${type} fixture`)
+		.interfaces<RingInterfaces>()
+		.properties(properties => properties.value({ registerDeps: ({ dep }) => ({ next: dep.widget(peer).properties.get('value') }), compute: () => null }))
+		.done()
+
+	const system = createWidgetSystem({ plugins: [cyclePlugin, selfPlugin, sideEffectPlugin, hostPlugin, sidePlugin('left-side', 'right'), sidePlugin('right-side', 'left'), ringPlugin('ring-a', 'b'), ringPlugin('ring-b', 'c'), ringPlugin('ring-c', 'a')] })
 
 	function rowsOf(type: string | object, code: string) {
 		const blueprint = system.createBlueprint(typeof type === 'string' ? { id: 'root', type } : type)
@@ -199,10 +210,14 @@ describe('diagnostic list related locations', () => {
 			expect(row.related)
 				.toBe(2)
 			expect(row.chips)
-				.toEqual(['property "a"'])
+				.toHaveLength(1)
 			expect(row.hasRelatedLabel)
 				.toBe(true)
 		}
+		// Each row names the *other* widget (id : type), then the member; its own widget is in the header.
+		expect(rows.map(row => row.chips[0])
+			.sort())
+			.toEqual(['left : left-side · property "a"', 'right : right-side · property "a"'])
 	})
 
 	it('shows no related chip for a Property that depends on itself', () => {
@@ -225,5 +240,104 @@ describe('diagnostic list related locations', () => {
 			.toBe('viaMethod')
 		expect(rows[0]?.chips)
 			.toEqual(['method "write"'])
+	})
+
+	it('tells the two other widgets of a three-widget cycle apart on each row', () => {
+		const rows = rowsOf({
+			id: 'root',
+			type: 'host',
+			slots: { children: [{ id: 'a', type: 'ring-a' }, { id: 'b', type: 'ring-b' }, { id: 'c', type: 'ring-c' }] },
+		}, 'property-evaluation-cycle')
+		expect(rows)
+			.toHaveLength(3)
+		const all = ['a : ring-a · property "value"', 'b : ring-b · property "value"', 'c : ring-c · property "value"']
+		for (const row of rows) {
+			expect(row.chips)
+				.toHaveLength(2)
+			expect(new Set(row.chips).size)
+				.toBe(2)
+			expect(row.chips.every(chip => all.includes(chip)))
+				.toBe(true)
+		}
+		// Every widget is the "other" one on exactly two of the three rows.
+		expect(rows.flatMap(row => row.chips)
+			.sort())
+			.toEqual([...all, ...all].sort())
+	})
+
+	it('keeps a related member of the diagnostic\'s own widget short and does not repeat the widget', () => {
+		const rows = rowsOf('cycle', 'property-evaluation-cycle')
+		for (const row of rows) {
+			for (const chip of row.chips) {
+				expect(chip)
+					.not
+					.toContain('root : cycle')
+			}
+		}
+		const side = rowsOf('side-effect', 'property-dependency-has-side-effects')
+		expect(side[0]?.chips)
+			.toEqual(['method "write"'])
+	})
+})
+
+describe('diagnostic list related widgets that share an id or are unresolved', () => {
+	function chipsByRow(source: unknown, code: string) {
+		const blueprint = sandboxSystem.createBlueprint(source)
+		const inspection = inspectBlueprint(blueprint)
+		const wrapper = mount(DiagnosticList, { props: { diagnostics: blueprint.diagnostics, inspection }, global })
+		return blueprint.diagnostics
+			.map((diagnostic, index) => ({
+				code: diagnostic.code,
+				chips: wrapper.get(`[data-testid="blueprint-diagnostic-${index}"]`)
+					.findAll('button')
+					.map(button => button.text())
+					.filter(text => text !== 'jump to node'),
+			}))
+			.filter(row => row.code === code)
+	}
+
+	it('adds the source path to widgets that share an id so duplicate-widget-id chips differ', () => {
+		const rows = chipsByRow({
+			id: 'root',
+			type: 'Stack',
+			slots: { items: [
+				{ id: 'same', type: 'Text', config: { text: 'a' } },
+				{ id: 'same', type: 'Text', config: { text: 'b' } },
+				{ id: 'same', type: 'Text', config: { text: 'c' } },
+			] },
+		}, 'duplicate-widget-id')
+		expect(rows.length)
+			.toBeGreaterThan(0)
+		const chips = rows.flatMap(row => row.chips)
+		expect(chips)
+			.toContain('same : Text @ slots.items[1]')
+		expect(chips)
+			.toContain('same : Text @ slots.items[2]')
+		for (const row of rows) {
+			expect(new Set(row.chips).size)
+				.toBe(row.chips.length)
+		}
+	})
+
+	it('renders an unresolved related widget without null or undefined', () => {
+		const rows = chipsByRow({
+			id: 'root',
+			type: 'Stack',
+			slots: { items: [
+				{ id: 'same', type: 'NoSuchType' },
+				{ id: 'same', type: 7 },
+				{ id: 'same', type: 'Text', config: { text: 'a' } },
+			] },
+		}, 'duplicate-widget-id')
+		const chips = rows.flatMap(row => row.chips)
+		expect(chips.length)
+			.toBeGreaterThan(0)
+		for (const chip of chips) {
+			expect(chip)
+				.not
+				.toMatch(/null|undefined/)
+		}
+		expect(chips.some(chip => chip.includes('(unresolved)')))
+			.toBe(true)
 	})
 })

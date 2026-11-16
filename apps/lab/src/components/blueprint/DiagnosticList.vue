@@ -18,6 +18,8 @@ const emit = defineEmits<{
 	navigate: [nodeId: InspectionNodeId]
 }>()
 
+type BlueprintNodeLocation = Exclude<BlueprintDiagnosticLocation, { type: 'source' }>
+
 const i18n = useLabI18n()
 
 function nodeIdOf(node: BlueprintWidgetNode, inspection: BlueprintInspection): InspectionNodeId | null {
@@ -56,42 +58,64 @@ function nodeIdOfLocation(location: BlueprintDiagnosticLocation, inspection: Blu
 	return inspectionNodeIdOfLocation(location, inspection)
 }
 
-function locationLabel(diagnostic: BlueprintDiagnostic, inspection: BlueprintInspection): string {
-	const location = diagnostic.location
-	if (location.type === 'source')
-		return 'source'
+/** The widget part of a node location: `id : type`, with Core's `?` hints and `(unresolved)` for an unresolved node. */
+function widgetLabelOf(location: BlueprintNodeLocation, inspection: BlueprintInspection): string {
 	const nodeId = nodeIdOf(location.node, inspection)
 	const node = nodeId === null ? null : inspection.getNode(nodeId)
 	// Unresolved nodes carry Core's best-effort `id`/`type` hints (`null` when the authored value is not a string).
-	const nodeLabel = node === null
+	return node === null
 		? 'unresolved node'
 		: node.resolved
 			? `${node.node.id} : ${node.node.type}`
 			: `${node.id ?? '?'} : ${node.type ?? '?'} (unresolved)`
+}
+
+/** The member part of a node location (`property "name"`, `slot "name"[i]`, ...); a bare widget has none. */
+function memberLabelOf(location: BlueprintNodeLocation): string | null {
 	switch (location.type) {
-		case 'widget': return `widget "${nodeLabel}"`
-		case 'slot': return `widget "${nodeLabel}" · slot "${location.slot}"`
-		case 'slot-child': return `widget "${nodeLabel}" · slot "${location.slot}"[${location.index}]`
-		case 'property': return `widget "${nodeLabel}" · property "${location.name}"`
-		case 'method': return `widget "${nodeLabel}" · method "${location.name}"`
+		case 'widget': return null
+		case 'slot': return `slot "${location.slot}"`
+		case 'slot-child': return `slot "${location.slot}"[${location.index}]`
+		case 'property': return `property "${location.name}"`
+		case 'method': return `method "${location.name}"`
 	}
 }
 
-function relatedLocationLabel(location: BlueprintDiagnosticLocation): string {
-	switch (location.type) {
-		case 'source':
-			return 'source'
-		case 'widget':
-			return 'widget'
-		case 'slot':
-			return `slot "${location.slot}"`
-		case 'slot-child':
-			return `slot "${location.slot}"[${location.index}]`
-		case 'property':
-			return `property "${location.name}"`
-		case 'method':
-			return `method "${location.name}"`
-	}
+function locationLabel(diagnostic: BlueprintDiagnostic, inspection: BlueprintInspection): string {
+	const location = diagnostic.location
+	if (location.type === 'source')
+		return 'source'
+	const widget = `widget "${widgetLabelOf(location, inspection)}"`
+	const member = memberLabelOf(location)
+	return member === null ? widget : `${widget} · ${member}`
+}
+
+function sourcePathOf(location: BlueprintNodeLocation, inspection: BlueprintInspection): string | null {
+	const nodeId = nodeIdOf(location.node, inspection)
+	const node = nodeId === null ? null : inspection.getNode(nodeId)
+	return node === null ? null : formatDiagnosticPath(node.sourcePath)
+}
+
+/**
+ * A related chip names its widget with the header's `id : type` vocabulary and the same ` · ` separator, then
+ * the member: `guests : Question · property "value"`. One rule everywhere: a related location on the
+ * diagnostic's own widget (same `node`) stays short (member only, `widget` for the bare widget) because the
+ * header already names that widget; every other location carries its widget. When two widgets in the
+ * diagnostic (its own and its related ones) read the same `id : type` (`duplicate-widget-id`), the widget
+ * also carries its source path (`@ slots.items[1]`) so the chips can be told apart.
+ */
+function relatedLocationLabel(location: BlueprintDiagnosticLocation, diagnostic: BlueprintDiagnostic, inspection: BlueprintInspection): string {
+	if (location.type === 'source')
+		return 'source'
+	const member = memberLabelOf(location)
+	const own = diagnostic.location
+	if (own.type !== 'source' && own.node === location.node)
+		return member ?? 'widget'
+	const widgetLabel = widgetLabelOf(location, inspection)
+	const labels = [own, ...relatedOf(diagnostic)].map(other => other.type === 'source' ? null : widgetLabelOf(other, inspection))
+	const path = labels.filter(label => label === widgetLabel).length > 1 ? sourcePathOf(location, inspection) : null
+	const widget = path === null ? widgetLabel : `${widgetLabel} @ ${path}`
+	return member === null ? widget : `${widget} · ${member}`
 }
 
 function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection: BlueprintInspection): void {
@@ -169,10 +193,11 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 					:key="relatedIndex"
 					type="button"
 					:disabled="nodeIdOfLocation(location, inspection) === null"
-					:class="pika({ 'fontSize': '11px', 'color': 'var(--lab-color-accent)', 'background': 'var(--lab-color-surface-alt)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': '999px', 'cursor': 'pointer', 'padding': '1px 7px', '$:disabled': { color: 'var(--lab-color-text-muted)', cursor: 'default' } })"
+					:title="relatedLocationLabel(location, diagnostic, inspection)"
+					:class="pika({ 'fontSize': '11px', 'color': 'var(--lab-color-accent)', 'background': 'var(--lab-color-surface-alt)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': '999px', 'cursor': 'pointer', 'padding': '1px 7px', 'maxWidth': '100%', 'minWidth': '0', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'whiteSpace': 'nowrap', '$:disabled': { color: 'var(--lab-color-text-muted)', cursor: 'default' } })"
 					@click="onNavigateToLocation(location, inspection)"
 				>
-					{{ relatedLocationLabel(location) }}
+					{{ relatedLocationLabel(location, diagnostic, inspection) }}
 				</button>
 			</div>
 		</li>
