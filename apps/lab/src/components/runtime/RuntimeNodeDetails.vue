@@ -125,6 +125,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 				:key="member.name"
 				:name="member.name"
 				:transitivelyWrites="member.transitivelyWrites"
+				:transitivelyEmits="member.transitivelyEmits"
 				:selected="isSelected('method', member.name)"
 				@select="selectMember('method', member.name)"
 			/>

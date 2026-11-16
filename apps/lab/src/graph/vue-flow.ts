@@ -27,6 +27,7 @@ export interface GraphNodeData {
 	readonly kind: GraphNodeKind
 	readonly label: string
 	readonly transitivelyWrites?: boolean
+	readonly transitivelyEmits?: boolean
 	readonly invalidCycle?: boolean
 	readonly stubStatus?: GraphStubStatus
 	readonly isExpanded?: boolean
@@ -281,6 +282,7 @@ export function toVueFlow(
 				kind: vertex.kind,
 				label: vertex.name,
 				transitivelyWrites: vertex.transitivelyWrites,
+				transitivelyEmits: vertex.transitivelyEmits,
 				invalidCycle: graph.invalidCycleVertexIds.has(vertex.id),
 				isFocused,
 				isDimmed,

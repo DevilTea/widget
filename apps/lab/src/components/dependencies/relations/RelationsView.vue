@@ -256,6 +256,21 @@ function memberKindShort(kind: GraphVertexKind): string {
 								W writes
 							</span>
 							<span
+								v-if="model.selectedMember.transitivelyEmits"
+								:class="pika({
+									fontSize: '9px',
+									fontWeight: 'bold',
+									padding: '1px 5px',
+									borderRadius: '2px',
+									background: 'color-mix(in srgb, var(--lab-color-warning) 20%, transparent)',
+									color: 'var(--lab-color-warning)',
+									border: '1px solid color-mix(in srgb, var(--lab-color-warning) 40%, transparent)',
+								})"
+								:title="i18n.t('Emits an Event directly or through the Methods it invokes')"
+							>
+								E emits
+							</span>
+							<span
 								v-if="model.selectedMember.invalidCycle"
 								:class="pika({
 									fontSize: '9px',
@@ -373,6 +388,11 @@ function memberKindShort(kind: GraphVertexKind): string {
 										v-if="member.transitivelyWrites"
 										:class="pika({ color: 'var(--lab-color-warning)', fontWeight: 'bold' })"
 									>W</span>
+									<span
+										v-if="member.transitivelyEmits"
+										:class="pika({ color: 'var(--lab-color-warning)', fontWeight: 'bold' })"
+										:title="i18n.t('Emits an Event directly or through the Methods it invokes')"
+									>E</span>
 									<span
 										v-if="member.invalidCycle"
 										:class="pika({ color: 'var(--lab-color-danger)', fontWeight: 'bold' })"

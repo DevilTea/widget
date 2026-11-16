@@ -165,6 +165,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Widgets and members': 'Widgets 與 members',
 	'Widget cluster — labeled': 'Widget cluster——標示為',
 	'Method — a "W" badge means it transitively writes State': 'Method——「W」標記表示它會 transitively 寫入 State',
+	'Method — an "E" badge means it transitively emits an Event': 'Method——「E」標記表示它會 transitively 發出 Event',
+	'Emits an Event directly or through the Methods it invokes': '直接或透過它所呼叫的 Methods 發出 Event',
 	'Any member in an invalid evaluation cycle (overrides its own kind color)': '任何位於無效 evaluation cycle 的 member（會覆蓋自身 kind 顏色）',
 	'Edges (owner → what it depends on)': 'Edges（owner → 它所依賴的項目）',
 	'a State or Property read': '一次 State 或 Property 讀取',

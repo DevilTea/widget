@@ -5,7 +5,7 @@
  * — accepted". Widgets are visual clusters/namespaces; State/Property/Method members are the semantic
  * vertices. Edge direction is owner -> declared dependency target. This module owns only the Lab-local
  * projection shape; it is a pure readonly view over `@deviltea/widget-core/inspection` facts and never
- * recomputes anything core already decided (`transitivelyWrites`, `invalidCycles`, dependency status).
+ * recomputes anything core already decided (`transitivelyWrites`, `transitivelyEmits`, `invalidCycles`, dependency status).
  */
 
 import type { BlueprintDependencyReference } from '@deviltea/widget-core'
@@ -36,6 +36,7 @@ export interface GraphVertex {
 	readonly name: string
 	/** Compiler-authoritative fact, present only for `kind === 'method'`. Never recomputed by the Lab. */
 	readonly transitivelyWrites?: boolean
+	readonly transitivelyEmits?: boolean
 }
 
 /** A `resolved` dependency: owner -> declared semantic member target. */
