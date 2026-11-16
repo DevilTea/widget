@@ -36,6 +36,7 @@ export interface GraphVertex {
 	readonly name: string
 	/** Compiler-authoritative fact, present only for `kind === 'method'`. Never recomputed by the Lab. */
 	readonly transitivelyWrites?: boolean
+	/** Compiler-authoritative fact (emits an Event, itself or through the Methods it invokes), present only for `kind === 'method'`. Never recomputed by the Lab. */
 	readonly transitivelyEmits?: boolean
 }
 

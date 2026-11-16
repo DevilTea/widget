@@ -4,9 +4,11 @@ import { useLabI18n } from '../../composables/use-lab-i18n'
 /**
  * One Method member row — inventory only (diagnostic #13 Phase 5 "Runtime Inspector becomes strictly
  * passive"): name and the compiler-authoritative `transitivelyWrites` and `transitivelyEmits` facts.
- * `transitivelyEmits` arrives through the Inspector snapshot, where it exists only from protocol 0.4; an
- * absent field is unknown, so it shows no marker (it is never read as `false` = read-only). No invocation affordance, no
- * runtime execution facts (Methods do not retain any).
+ * `transitivelyEmits` arrives through the Inspector snapshot, where it exists only from protocol 0.4. As an
+ * optional Vue Boolean prop, an omitted value is cast to `false`, so an absent field and `false` both show no
+ * marker: the Lab cannot tell them apart and does not show "unknown", so for a peer below protocol 0.4 a
+ * Method that emits shows no marker. No invocation affordance, no runtime execution facts (Methods do not
+ * retain any).
  */
 defineProps<{
 	name: string
