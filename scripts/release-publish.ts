@@ -78,7 +78,7 @@ export function interpretRegistryResponse(name: string, version: string, status:
 export function integrityNote(registry: string | null, local: string | null) {
 	if (registry === null || local === null)
 		return 'integrity not compared'
-	return registry === local ? 'same integrity as the local tarball' : 'its integrity differs from the local tarball (a rebuild is not guaranteed to be byte-identical)'
+	return registry === local ? 'same integrity as the local tarball' : 'registry integrity differs from the local tarball; a rebuild is not guaranteed to be byte-identical, so this does not stop the skip'
 }
 
 /**
