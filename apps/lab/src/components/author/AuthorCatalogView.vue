@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { createAuthorCatalogViewModel } from '../../author/catalog'
+import { computed, onUnmounted, ref } from 'vue'
+import { catalogToJson, createAuthorCatalogViewModel } from '../../author/catalog'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 
@@ -11,6 +11,48 @@ const viewModel = computed(() => {
 	return createAuthorCatalogViewModel(store.session.system)
 })
 
+const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
+let copyResetTimer: ReturnType<typeof setTimeout> | undefined
+let isUnmounted = false
+
+async function copyCatalog(): Promise<void> {
+	try {
+		const writeText = navigator.clipboard?.writeText
+		if (writeText === undefined)
+			throw new Error('Clipboard API unavailable')
+		await writeText.call(navigator.clipboard, JSON.stringify(catalogToJson(viewModel.value.catalog), null, 2))
+		copyState.value = 'copied'
+	}
+	catch {
+		copyState.value = 'failed'
+	}
+	finally {
+		if (!isUnmounted) {
+			if (copyResetTimer !== undefined)
+				clearTimeout(copyResetTimer)
+			copyResetTimer = setTimeout(() => {
+				copyState.value = 'idle'
+				copyResetTimer = undefined
+			}, 1500)
+		}
+	}
+}
+
+onUnmounted(() => {
+	isUnmounted = true
+	if (copyResetTimer !== undefined)
+		clearTimeout(copyResetTimer)
+	copyResetTimer = undefined
+})
+
+function copyLabel(): string {
+	switch (copyState.value) {
+		case 'copied': return i18n.t('Copied')
+		case 'failed': return i18n.t('Copy failed')
+		default: return i18n.t('Copy catalog JSON')
+	}
+}
+
 function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel>['widgets'][number]): readonly [string, string][] {
 	return widget.entry.descriptions.slots === null ? [] : [...widget.entry.descriptions.slots.entries()]
 }
@@ -18,8 +60,18 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 
 <template>
 	<div :class="pika({ height: '100%', overflow: 'auto', padding: '10px' })">
-		<div :class="pika({ marginBottom: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })">
-			{{ i18n.t('Widget types and authoring metadata from the current WidgetSystem catalog.') }}
+		<div :class="pika({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px' })">
+			<div :class="pika({ color: 'var(--lab-color-text-muted)', fontSize: '12px' })">
+				{{ i18n.t('Widget types and authoring metadata from the current WidgetSystem catalog.') }}
+			</div>
+			<button
+				type="button"
+				data-testid="author-catalog-copy"
+				:class="pika({ flexShrink: '0', padding: '3px 8px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				@click="copyCatalog"
+			>
+				{{ copyLabel() }}
+			</button>
 		</div>
 		<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '8px' })">
 			<article
@@ -50,6 +102,16 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 				>
 					<strong>{{ i18n.t('Config description') }}:</strong> {{ widget.entry.descriptions.config }}
 				</div>
+				<details
+					v-if="widget.configSchemaText !== null"
+					:data-testid="`author-catalog-schema-${widget.entry.type}`"
+					:class="pika({ fontSize: '11px', marginBottom: '5px' })"
+				>
+					<summary :class="pika({ cursor: 'pointer' })">
+						<strong>{{ i18n.t('Config JSON Schema') }}</strong>
+					</summary>
+					<pre :class="pika({ margin: '4px 0 0', padding: '6px', maxHeight: '240px', overflow: 'auto', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)' })">{{ widget.configSchemaText }}</pre>
+				</details>
 				<div
 					v-if="slotDescriptions(widget).length > 0"
 					:class="pika({ fontSize: '11px' })"

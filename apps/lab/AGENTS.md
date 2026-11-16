@@ -469,8 +469,12 @@ The canonical authored surface is the outer `Author` panel with three Lab-owned 
 `Structure`, and `JSON`. `AuthorJsonView.vue` contains the existing Monaco draft workflow; header
 `Apply`/`Format`/`Revert` controls continue to operate on that same draft. `Catalog` reads the immutable
 public `session.system.catalog` and public `WidgetPlugin.capabilities`; it never reads or derives from the
-curated `ShowcaseEntry.sources` Implementation Explorer registry. Core publishes config/slot/event
-descriptions, capability-presence facts, and optional passive Draft 2020-12 config JSON Schema metadata.
+curated `ShowcaseEntry.sources` Implementation Explorer registry. Catalog entries carry the plugin and config
+descriptions, slot descriptions, and optional passive Draft 2020-12 config JSON Schema metadata (Event descriptions
+are not in the catalog; they come from `inspectPlugin`); capability-presence facts come from
+`WidgetPlugin.capabilities`. An entry with a schema shows it in a collapsed `<details>`, and "Copy catalog JSON"
+copies the whole public catalog as plain JSON (`{ widgets: [{ type, description, config: { description, schema } | null,
+slots: { name: description } | null }] }`) so the plugin definitions can be handed to an AI as authoring context.
 The view must not invent state/property/method schemas or member definitions that Core does not publish
 through the catalog contracts; config schema metadata is authoring guidance, not Runtime validation truth.
 

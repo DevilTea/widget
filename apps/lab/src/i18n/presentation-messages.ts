@@ -28,6 +28,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Editable scalar config': '可編輯的 scalar config',
 	'Null and nested config fields are available in JSON.': 'Null 與巢狀 config 欄位請在 JSON 中編輯。',
 	'Config description': 'Config 說明',
+	'Config JSON Schema': 'Config JSON Schema',
+	'Copy catalog JSON': '複製 catalog JSON',
 	'Slot descriptions': 'Slot 說明',
 	'State': 'State',
 	'Properties': 'Properties',
