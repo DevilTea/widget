@@ -195,7 +195,7 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 					type="button"
 					:disabled="nodeIdOfLocation(location, inspection) === null"
 					:title="relatedLocationLabel(location, diagnostic, inspection)"
-					:class="pika({ 'fontSize': '11px', 'color': 'var(--lab-color-accent)', 'background': 'var(--lab-color-surface-alt)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': '999px', 'cursor': 'pointer', 'padding': '1px 7px', 'minWidth': '0', 'maxWidth': '100%', 'textAlign': 'left', 'whiteSpace': 'normal', 'overflowWrap': 'anywhere', '$:disabled': { color: 'var(--lab-color-text-muted)', cursor: 'default' } })"
+					:class="pika({ 'fontSize': '11px', 'color': 'var(--lab-color-accent)', 'background': 'var(--lab-color-surface-alt)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': 'var(--lab-radius)', 'cursor': 'pointer', 'padding': '1px 7px', 'minWidth': '0', 'maxWidth': '100%', 'textAlign': 'left', 'whiteSpace': 'normal', 'overflowWrap': 'anywhere', '$:disabled': { color: 'var(--lab-color-text-muted)', cursor: 'default' } })"
 					@click="onNavigateToLocation(location, inspection)"
 				>
 					{{ relatedLocationLabel(location, diagnostic, inspection) }}
