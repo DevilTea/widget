@@ -455,6 +455,62 @@ describe('each kind of isolated exception reaches the handler exactly once, with
 	})
 })
 
+describe('the notification limit (#207)', () => {
+	it('the RangeError of the per-subscription notification limit', () => {
+		const chain = createChain(2)
+		// A diverging pair: each listener writes what the other observes.
+		chain.link(0).state.n.subscribe(value => chain.link(1).state.n.set((value ?? 0) + 1))
+		chain.link(1).state.n.subscribe(value => chain.link(0).state.n.set((value ?? 0) + 1))
+		const log: string[] = []
+		const received = recordReports(log)
+
+		expect(() => chain.link(0).state.n.set(2))
+			.not
+			.toThrow()
+		log.push('set returned')
+		expect(received)
+			.toHaveLength(1)
+		expect(received[0])
+			.toBeInstanceOf(RangeError)
+		expect(log.at(-1))
+			.toBe('set returned')
+		expect(microtasks)
+			.toHaveLength(0)
+	})
+
+	it('counts a hand-over pass started with no operation in progress as a host call of its own', () => {
+		const chain = createChain(2)
+		const document = createWidgetDocument({ system, source: { id: 'root', type: 'list' } })
+		document.subscribe(thrower(new Error('document subscriber')))
+		let looping = false
+		chain.link(0).state.n.subscribe((value) => {
+			if (looping)
+				chain.link(1).state.n.set((value ?? 0) + 1)
+		})
+		chain.link(1).state.n.subscribe((value) => {
+			if (looping)
+				chain.link(0).state.n.set((value ?? 0) + 1)
+		})
+		const seen: Array<number | null> = []
+		chain.link(0).state.n.subscribe(value => seen.push(value))
+		setIsolatedErrorHandler((error) => {
+			if (error instanceof RangeError)
+				return
+			// The handler's own write starts a loop that reaches the notification limit within the pass.
+			looping = true
+			chain.link(0).state.n.set(2)
+			looping = false
+		})
+		document.applyPatch([{ op: 'add', path: '/meta', value: { note: 1 } }])
+
+		// The next host call counts from zero: the observer is notified again.
+		seen.length = 0
+		chain.link(0).state.n.set(-1)
+		expect(seen)
+			.toEqual([-1])
+	})
+})
+
 describe('when the handler runs', () => {
 	it('after the outermost operation has finished its work (every subscriber notified), before the call returns', () => {
 		const chain = createChain(2)

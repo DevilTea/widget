@@ -632,9 +632,11 @@ function handOverIsolatedException(error: unknown, readException: boolean): void
 	// A report the handler's handling caused stays in the round being delivered: the handler's feedback is
 	// bounded by `MAX_HANDLER_CAUSED_DEPTH` and `MAX_HANDLER_CAUSED_REPORTS`, not by `MAX_DELIVERY_GENERATIONS`.
 	queuedGenerations.push(depth === 0 ? deliveryGeneration + 1 : deliveryGeneration)
-	deliveriesQueued = true
+	hostCallWork = true
+	// With no operation in progress the pass is a host call of its own: `finishHostCall` runs it and then
+	// advances `hostCalls`, so what the handler's own calls notify is counted apart from the host's other calls.
 	if (operationDepth === 0 && !delivering)
-		deliverQueued()
+		finishHostCall()
 }
 
 /** Hands a queued report to the handler that is set now, or rethrows it in a microtask when none is. */
