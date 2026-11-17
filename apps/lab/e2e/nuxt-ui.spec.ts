@@ -87,7 +87,7 @@ test.describe('theme bridge (Lab theme store -> Nuxt UI .dark class)', () => {
 })
 
 test.describe('cascade layers', () => {
-	test('Tailwind layers sit below the PikaCSS layers, which sit below utilities, and unlayered CSS beats all', async ({ page }) => {
+	test('Tailwind properties/theme/base sit below the PikaCSS layers, which sit below utilities, and unlayered CSS beats all', async ({ page }) => {
 		await page.goto('/?showcase=sandbox')
 		// Probe the real layer order the browser resolved: each pair declares `color` on the same element in
 		// two layers (red in the lower, blue in the higher), so the winner shows which layer ranks higher.
@@ -97,6 +97,7 @@ test.describe('cascade layers', () => {
 			document.body.append(probe)
 			const style = document.createElement('style')
 			const pairs: Array<[string, string]> = [
+				['properties', 'theme'],
 				['theme', 'base'],
 				['base', 'preflights'],
 				['preflights', 'components'],
@@ -116,6 +117,7 @@ test.describe('cascade layers', () => {
 		})
 		expect(winners)
 			.toEqual({
+				'properties<theme': 'higher wins',
 				'theme<base': 'higher wins',
 				'base<preflights': 'higher wins',
 				'preflights<components': 'higher wins',
@@ -133,6 +135,85 @@ test.describe('cascade layers', () => {
 			}))
 		expect(metrics)
 			.toEqual({ lineHeight: 'normal', tabSize: '8' })
+	})
+})
+
+test.describe('[data-slot]-scoped preflight', () => {
+	test('Nuxt UI-style title/description/list/controls lose UA margins, sizes and markers; the same elements without data-slot keep them', async ({ page }) => {
+		await page.goto('/?showcase=sandbox')
+		const report = await page.evaluate(() => {
+			const host = document.createElement('div')
+			host.style.cssText = 'font-size: 13px; font-weight: 400'
+			host.innerHTML = `
+				<section data-slot="root">
+					<h2 data-slot="title">Title</h2>
+					<p data-slot="description">Description</p>
+					<ul data-slot="list"><li data-slot="item">One</li></ul>
+					<hr data-slot="separator">
+					<a data-slot="link" href="#x">Link</a>
+					<button data-slot="control" type="button">Button</button>
+					<input data-slot="input" placeholder="p">
+					<textarea data-slot="area"></textarea>
+					<span data-slot="hidden-one" hidden>Hidden</span>
+					<svg data-slot="icon" width="8" height="8"></svg>
+				</section>
+				<h2 id="plain-title">Plain title</h2>
+				<p id="plain-description">Plain description</p>
+				<ul id="plain-list"><li>One</li></ul>`
+			document.body.append(host)
+			const style = (selector: string) => getComputedStyle(host.querySelector(selector)!)
+			const rootFont = style('[data-slot="root"]')
+			const result = {
+				titleMargin: style('[data-slot="title"]').margin,
+				titleFontSize: style('[data-slot="title"]').fontSize === rootFont.fontSize,
+				titleFontWeight: style('[data-slot="title"]').fontWeight,
+				descriptionMargin: style('[data-slot="description"]').margin,
+				listMargin: style('[data-slot="list"]').margin,
+				listPaddingLeft: style('[data-slot="list"]').paddingLeft,
+				listMarker: style('[data-slot="list"]').listStyleType,
+				separatorHeight: style('[data-slot="separator"]').height,
+				linkColorInherited: style('[data-slot="link"]').color === rootFont.color,
+				linkDecoration: style('[data-slot="link"]').textDecorationLine,
+				controlBorderWidth: style('[data-slot="control"]').borderTopWidth,
+				controlBackground: style('[data-slot="control"]').backgroundColor,
+				controlFontSize: style('[data-slot="control"]').fontSize === rootFont.fontSize,
+				inputPlaceholderOpacity: getComputedStyle(host.querySelector('[data-slot="input"]')!, '::placeholder').opacity,
+				areaResize: style('[data-slot="area"]').resize,
+				hiddenDisplay: style('[data-slot="hidden-one"]').display,
+				iconDisplay: style('[data-slot="icon"]').display,
+				plainTitleHasMargin: style('#plain-title').marginTop !== '0px',
+				plainTitleFontSizeDiffers: style('#plain-title').fontSize !== rootFont.fontSize,
+				plainDescriptionHasMargin: style('#plain-description').marginBottom !== '0px',
+				plainListMarker: style('#plain-list').listStyleType,
+			}
+			host.remove()
+			return result
+		})
+		expect(report)
+			.toEqual({
+				titleMargin: '0px',
+				titleFontSize: true,
+				titleFontWeight: '400',
+				descriptionMargin: '0px',
+				listMargin: '0px',
+				listPaddingLeft: '0px',
+				listMarker: 'none',
+				separatorHeight: '1px',
+				linkColorInherited: true,
+				linkDecoration: 'none',
+				controlBorderWidth: '0px',
+				controlBackground: 'rgba(0, 0, 0, 0)',
+				controlFontSize: true,
+				inputPlaceholderOpacity: '1',
+				areaResize: 'vertical',
+				hiddenDisplay: 'none',
+				iconDisplay: 'block',
+				// Control: without `data-slot` the Lab chrome keeps the UA defaults.
+				plainTitleHasMargin: true,
+				plainTitleFontSizeDiffers: true,
+				plainDescriptionHasMargin: true,
+				plainListMarker: 'disc',
+			})
 	})
 })
 
@@ -200,8 +281,22 @@ test.describe('migrated surface: panel description bar dismiss button', () => {
 		await page.keyboard.press('Tab')
 		await expect(dismiss)
 			.toBeFocused()
-		expect(await dismiss.evaluate(element => getComputedStyle(element).outlineStyle))
-			.not.toBe('none')
+		// A solid 2px ring in the Lab accent colour (not Nuxt UI's default 25%-opacity outline).
+		const accent = await page.evaluate(() => {
+			const probe = document.createElement('span')
+			probe.style.color = 'var(--lab-color-accent)'
+			document.body.append(probe)
+			const resolved = getComputedStyle(probe).color
+			probe.remove()
+			return resolved
+		})
+		const ring = await dismiss.evaluate(element => ({
+			style: getComputedStyle(element).outlineStyle,
+			width: getComputedStyle(element).outlineWidth,
+			color: getComputedStyle(element).outlineColor,
+		}))
+		expect(ring)
+			.toEqual({ style: 'solid', width: '2px', color: accent })
 
 		const barsBefore = await page.getByRole('button', { name: 'Dismiss' })
 			.count()

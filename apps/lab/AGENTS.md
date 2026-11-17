@@ -166,7 +166,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   is the single token `--lab-color-ok` in both themes (dark here, light in `global.css`); do not add a second
   name for it (audit U17: `--lab-color-success` existed only in dark, `--lab-color-ok` only in light).
 - `nuxt-ui.ts`, `src/styles/lab-ui.css`, `src/composables/use-nuxt-ui-theme-bridge.ts`, `src/ui/offline-icons.ts`,
-  `src/test-support-ui.ts`, `scripts/nuxt-ui-codegen.mjs` — the Nuxt UI + Tailwind v4 foundation, see "Nuxt UI
+  `src/test-support-ui.ts`, `src/test-setup.ts`, `scripts/nuxt-ui-codegen.mjs` — the Nuxt UI + Tailwind v4 foundation, see "Nuxt UI
   and Tailwind" below. The Lab shell (`index.html` -> `main.ts`) uses it; the Preview frame never does.
 - `src/styles/preview-frame.css` — base rules for the Preview frame only (imported by
   `preview-frame-main.ts`, never by the shell): line-height 1.5, controls inheriting the surrounding font,
@@ -328,9 +328,10 @@ surfaces below. PikaCSS stays for everything not yet migrated and is removed in 
 - **Scope: Lab shell only.** `main.ts` imports `src/styles/lab-ui.css` (Tailwind theme + utilities, Nuxt UI),
   installs Nuxt UI's Vue plugin and wraps `App` in `UApp` (`toaster: null` until a surface needs toasts;
   `UApp` renders no element). `preview-frame-main.ts` / `preview-frame.html` never import any of it, so the showcase
-  renderers are untouched; `e2e/nuxt-ui.spec.ts` pins that the frame document has no Tailwind/Nuxt UI CSS, no
-  `.dark` class and no `--ui-*` tokens. This also holds when the frame runs on a distinct origin
-  (`playwright.preview-origin.config.ts`).
+  renderers are untouched; `e2e/nuxt-ui.spec.ts` pins, on the same-origin build, that the frame document has no
+  Tailwind/Nuxt UI CSS, no `.dark` class and no `--ui-*` tokens. The frame's CSS does not depend on its origin
+  (the entry never imports it), but `playwright.preview-origin.config.ts` only runs `preview-origin.spec.ts`
+  (the frame boots and connects cross-origin); it does not repeat these assertions.
 - **Plugin set-up** (`nuxt-ui.ts`, shared by `vite.config.ts`, `vitest.config.ts` and the repository root
   `vitest.config.ts`). `@nuxt/ui/vite` works with `unplugin-vue/vite` as is (the Lab does not use
   `@vitejs/plugin-vue`): it adds its own plugins (templates, icons, Tailwind) around whichever Vue plugin is
@@ -346,20 +347,34 @@ surfaces below. PikaCSS stays for everything not yet migrated and is removed in 
   its `config` hook; `pnpm typecheck` writes them first through `nuxt-ui:codegen`
   (`scripts/nuxt-ui-codegen.mjs`, which resolves `vite.config.ts` and does nothing else), the same pattern as
   `pika:codegen`. Do not enable auto-import to save an import line.
-- **Cascade layers.** Order, lowest to highest: `theme`, `base`, `preflights` (PikaCSS tokens), `components`,
+- **Cascade layers.** Order, lowest to highest: `properties` (Tailwind's `@property` fallback, which must rank
+  below everything that sets a `--tw-*` variable), `theme`, `base`, `preflights` (PikaCSS tokens), `components`,
   `utilities` (Tailwind utilities, Nuxt UI component classes, and PikaCSS's `utilities`, whose layer name is
   fixed by its generated CSS, so the two share it; their classes never meet on one element). The statement lives
   inline in `index.html` because the first `@layer` statement the browser sees fixes the order and Vite emits the
   shared PikaCSS stylesheet link before the Tailwind one; `lab-ui.css` repeats it. Unlayered CSS (`global.css`,
   `dockview-theme.css`, scoped SFC styles) beats every layer, so Dockview, Vue Flow, Monaco and Shiki styling is
   untouched. `e2e/nuxt-ui.spec.ts` probes the resolved order in a real browser.
-- **No global Tailwind preflight (yet).** `lab-ui.css` imports `tailwindcss/theme.css` and
-  `tailwindcss/utilities.css` only. The preflight would change the existing chrome (measured on the survey Lab at
-  1440x900: header 77px -> 83px, every button/select 27px -> 30px, `border-*-style` none -> solid on ~120 elements,
-  line-height, tab-size), so the few resets Nuxt UI components need are scoped to `[data-slot]` (every Nuxt UI
-  element has it) in the `base` layer. Adopt the full preflight when the chrome itself moves to Tailwind, and
-  remove that scoped block then. Tailwind source detection is `source(none)` plus explicit `@source`s
-  (`index.html`, `App.vue`, `src/components`); a Tailwind class in any other directory needs one more `@source`.
+- **No global Tailwind preflight (yet); a `[data-slot]`-scoped preflight instead.** `lab-ui.css` imports
+  `tailwindcss/theme.css` and `tailwindcss/utilities.css` only. The full preflight would change the existing
+  chrome (measured on the survey Lab at 1440x900: header 77px -> 83px, every button/select 27px -> 30px,
+  `border-*-style` none -> solid on ~120 elements, line-height, tab-size). Nuxt UI/Reka elements all carry
+  `data-slot`, so the `base` layer restates the preflight rules Nuxt UI needs for exactly those elements (and
+  stays below Nuxt UI's own utilities): zero margin/padding, `border: 0 solid` and `border-box` on every
+  `[data-slot]` element and its pseudo-elements; headings inherit size and weight; links inherit colour and
+  decoration; `b`/`strong`, `code`/`kbd`/`samp`/`pre`, `hr`, `table`, `summary`, `progress`; lists without
+  markers; media elements block and middle-aligned (`img`/`video` fit the width); form controls with inherited
+  font, colour and letter-spacing, no radius, transparent background, opacity 1, `appearance: button` on buttons;
+  placeholder opacity and colour; vertical-only `textarea` resize; the `hidden` attribute.
+  **Not covered**, so the Lab chrome keeps its UA defaults: the `html` rules (`line-height: 1.5`, `tab-size`, font
+  stack, text-size-adjust, tap highlight; text in Nuxt UI components without a `text-*` size therefore inherits
+  the Lab's `line-height: normal`), the universal reset on elements without `data-slot` (e.g. Lab content placed
+  inside a Nuxt UI slot), `abbr`, `small`/`sub`/`sup`, `:-moz-focusring`, the date/time, search and spin-button
+  pseudo-element fixes and `::file-selector-button`. Add a scoped rule when a migrated component needs one;
+  adopt the full preflight and delete the scoped block when the chrome itself moves to Tailwind.
+  `e2e/nuxt-ui.spec.ts` injects a title/description/list/control structure with and without `data-slot` and pins
+  both outcomes. Tailwind source detection is `source(none)` plus explicit `@source`s (`index.html`, `App.vue`,
+  `src/components`); a Tailwind class in any other directory needs one more `@source`.
 - **Theme bridge, one source of truth.** The Lab theme store (`use-lab-theme.ts`, `theme/theme.ts`,
   `data-lab-theme` on `<html>`) stays authoritative. `useNuxtUiThemeBridge()` (called by `App.vue`) mirrors it onto
   the `.dark` class Nuxt UI's `dark:` variants read, synchronously with `data-lab-theme`. Nuxt UI's own colour mode
@@ -375,13 +390,20 @@ surfaces below. PikaCSS stays for everything not yet migrated and is removed in 
   and no remote icons: `i-lucide-*` names are inlined at build time from `@iconify-json/lucide` (`icon.clientBundle.scan`
   over `src/**/*.{vue,ts}`; names built at runtime or from another collection must be listed in
   `clientBundle.icons` / installed), and `disableRemoteIcons()` (`src/ui/offline-icons.ts`, called by `main.ts` and
-  `test-support-ui.ts`) removes Iconify's `fetch`, so an unbundled name is a missing icon, never a request to
+  `src/test-setup.ts`, the Vitest `setupFiles` entry of both Vitest configs, so it holds for every unit test) removes
+  Iconify's `fetch`, so an unbundled name is a missing icon, never a request to
   `api.iconify.design`. Everything is same-origin, so the offline e2e fixture and the `/widget/lab/` Pages base work
   (`pnpm docs:build:pages` + `test:pages`).
 - **Unit tests.** Mount a Nuxt UI component with `global: { config: { globalProperties: testGlobalProperties },
   plugins: testGlobalPlugins }` (`src/test-support.ts` for the `pika` mocks, `src/test-support-ui.ts` for the real
   Nuxt UI plugin). A component that renders a Nuxt UI icon without the plugin has no bundled icons, which is why
   `InspectorPanelPrimitives.unit.test.ts` passes it. Overlays/tooltips/toasts also need `UApp` as an ancestor.
+- **Overlays inside Lab dialogs.** The Lab's own dialogs are native `<dialog>.showModal()` (top layer), while `UApp`
+  portals Nuxt UI overlays (`UPopover`, `UTooltip`, `USelectMenu`, `UDropdownMenu`...) to `body`. An overlay opened
+  from inside such a dialog would render beneath the top layer and be inert. Point it into the dialog instead:
+  `UApp`'s `portal` prop (or the component's own `portal`) can take the dialog element or a selector, or pass
+  `:portal="false"` so it renders in place. Check this the first time a migrated component opens an overlay
+  inside `WelcomeCard`/`TutorialConfirmDialog`.
 - **Migrated so far.** `PanelDescriptionBar.vue`'s dismiss button is a `UButton` (ghost, neutral, `xs`, square,
   `i-lucide-x`, 24px target, solid accent focus ring), keeping its `aria-label` and the `button[aria-label="Dismiss"]`
   selector. Native `<select>`s are deliberately not migrated (many specs use `selectOption`); that belongs to the

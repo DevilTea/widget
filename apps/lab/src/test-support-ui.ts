@@ -3,6 +3,8 @@
  * purpose: importing Nuxt UI's Vue plugin evaluates its runtime (icons, head, ...), which tests that mount
  * only PikaCSS-styled components should not pay for or be exposed to.
  *
+ * Icons stay offline for every Lab unit test through `test-setup.ts` (Vitest `setupFiles`).
+ *
  * Usage:
  *
  *   mount(Component, { global: { config: { globalProperties: testGlobalProperties }, plugins: testGlobalPlugins } })
@@ -13,9 +15,5 @@
  * `UApp` (`@nuxt/ui/components/App.vue`) as an ancestor, exactly as `main.ts` provides it.
  */
 import ui from '@nuxt/ui/vue-plugin'
-import { disableRemoteIcons } from './ui/offline-icons'
-
-// Same offline guarantee as `main.ts`: a mounted component can never reach the Iconify API.
-disableRemoteIcons()
 
 export const testGlobalPlugins = [ui]

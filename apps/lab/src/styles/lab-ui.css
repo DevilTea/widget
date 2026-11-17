@@ -6,8 +6,10 @@
  *
  * Cascade layers, lowest to highest priority:
  *
+ *   properties   Tailwind's `@property` fallback (`--tw-*: initial` under `@supports`); it must rank BELOW
+ *                everything that sets a `--tw-*` variable, or it would reset them in browsers that use it
  *   theme        Tailwind design tokens and Nuxt UI's `--ui-*` defaults
- *   base         the scoped Nuxt UI reset below (no Tailwind preflight, see "No global preflight")
+ *   base         the `[data-slot]`-scoped preflight below (no global Tailwind preflight, see "No global preflight")
  *   preflights   PikaCSS `:root` tokens (`--lab-*`)            -- name is PikaCSS's, see `pika.config.ts`
  *   components   (Tailwind/Nuxt UI component layer, normally empty)
  *   utilities    Tailwind utilities, the classes Nuxt UI components are made of, AND PikaCSS's `utilities`
@@ -21,7 +23,7 @@
  * styles) beats every layer, so Dockview, Vue Flow, Monaco, Shiki and the hand-written chrome rules keep
  * winning over Tailwind.
  */
-@layer theme, base, preflights, components, utilities;
+@layer properties, theme, base, preflights, components, utilities;
 
 /*
  * No global preflight. `@import "tailwindcss"` would include `tailwindcss/preflight.css`, which sets
@@ -29,8 +31,8 @@
  * buttons and form controls... Measured against the current chrome (header 77px -> 83px, every button and
  * select 27px -> 30px, `border-*-style` none -> solid on ~120 elements), that changes the PikaCSS- and
  * UA-styled chrome, which this PR must not do. So only the theme and the utilities are imported, and the
- * few resets Nuxt UI components need are scoped to the elements Nuxt UI renders (`[data-slot]`, set by every
- * Nuxt UI component) in the `base` layer below. Adopt the full preflight when the chrome itself moves to
+ * preflight rules Nuxt UI components depend on are restated below, scoped to the elements Nuxt UI renders
+ * (`[data-slot]`, set by every Nuxt UI component), in the `base` layer. Adopt the full preflight when the chrome itself moves to
  * Tailwind (later PRs of the redesign), not before.
  *
  * `source(none)` turns off Tailwind's automatic source detection (the whole project, including showcase
@@ -46,27 +48,45 @@
 @source "../components";
 
 /*
- * The slice of Tailwind's preflight Nuxt UI components rely on, limited to Nuxt UI's own elements.
- * Buttons and form controls otherwise keep the UA background, border, padding and font.
+ * Scoped preflight: the rules of Tailwind's preflight that Nuxt UI components depend on, restricted to the
+ * elements Nuxt UI/Reka render (every one carries `data-slot`) and kept in `base`, so Nuxt UI's own utilities
+ * (which rank above) still win. Covered, as in `tailwindcss/preflight.css`:
+ *   - every `[data-slot]` element and its pseudo-elements: `margin: 0`, `padding: 0`, `border: 0 solid`,
+ *     `box-sizing: border-box` (so `<h2>`, `<p>`, `<ul>`... lose their UA margins and padding);
+ *   - headings (inherit size/weight), `a` (inherit colour/decoration), `b`/`strong`, `code`/`kbd`/`samp`/`pre`
+ *     (Lab mono font, `1em`), `hr`, `table`, `summary`, `progress`;
+ *   - lists (`ol`/`ul`/`menu`: no marker);
+ *   - `img`/`svg`/`video`/`canvas`/`audio`/`iframe`/`embed`/`object` (block, middle-aligned; `img`/`video` fit the width);
+ *   - form controls (`button`, `input`, `select`, `optgroup`, `textarea`: inherited font, colour and letter-spacing, no
+ *     radius, transparent background, opacity 1, `appearance: button` on buttons), placeholder opacity and
+ *     colour, vertical-only `textarea` resize;
+ *   - the `hidden` attribute.
+ * NOT covered (the Lab chrome keeps its UA defaults): `html` rules (`line-height: 1.5`, `tab-size`, font stack,
+ * text-size-adjust, tap highlight), the universal border/margin reset on elements WITHOUT `data-slot` (for
+ * example Lab content placed inside a Nuxt UI slot), `abbr`, `small`/`sub`/`sup`, `:-moz-focusring`, the
+ * date/time, search and spin-button pseudo-element fixes and `::file-selector-button`. Add a rule here when a
+ * migrated component needs one. Lines in Nuxt UI components without a `text-*` size inherit the Lab's
+ * `line-height: normal`, not Tailwind's 1.5.
  */
 @layer base {
-	[data-slot] {
+	[data-slot],
+	[data-slot]::before,
+	[data-slot]::after {
+		box-sizing: border-box;
+		margin: 0;
+		padding: 0;
 		border: 0 solid;
 	}
 
-	button[data-slot],
-	input[data-slot],
-	select[data-slot],
-	textarea[data-slot] {
-		font: inherit;
-		font-feature-settings: inherit;
-		letter-spacing: inherit;
+	hr[data-slot] {
+		height: 0;
 		color: inherit;
-		background-color: transparent;
-		border-radius: 0;
-		margin: 0;
-		padding: 0;
-		opacity: 1;
+		border-top-width: 1px;
+	}
+
+	:is(h1, h2, h3, h4, h5, h6)[data-slot] {
+		font-size: inherit;
+		font-weight: inherit;
 	}
 
 	a[data-slot] {
@@ -74,10 +94,74 @@
 		text-decoration: inherit;
 	}
 
-	svg[data-slot],
-	img[data-slot] {
+	:is(b, strong)[data-slot] {
+		font-weight: bolder;
+	}
+
+	:is(code, kbd, samp, pre)[data-slot] {
+		font-family: var(--lab-font-mono);
+		font-size: 1em;
+	}
+
+	table[data-slot] {
+		text-indent: 0;
+		border-color: inherit;
+		border-collapse: collapse;
+	}
+
+	summary[data-slot] {
+		display: list-item;
+	}
+
+	progress[data-slot] {
+		vertical-align: baseline;
+	}
+
+	:is(ol, ul, menu)[data-slot] {
+		list-style: none;
+	}
+
+	:is(img, svg, video, canvas, audio, iframe, embed, object)[data-slot] {
 		display: block;
 		vertical-align: middle;
+	}
+
+	:is(img, video)[data-slot] {
+		max-width: 100%;
+		height: auto;
+	}
+
+	:is(button, input, select, optgroup, textarea)[data-slot] {
+		font: inherit;
+		font-feature-settings: inherit;
+		font-variation-settings: inherit;
+		letter-spacing: inherit;
+		color: inherit;
+		border-radius: 0;
+		background-color: transparent;
+		opacity: 1;
+	}
+
+	button[data-slot],
+	input:where([type='button'], [type='reset'], [type='submit'])[data-slot] {
+		appearance: button;
+	}
+
+	:where(select:is([multiple], [size]))[data-slot] optgroup {
+		font-weight: bolder;
+	}
+
+	:is(input, textarea)[data-slot]::placeholder {
+		opacity: 1;
+		color: color-mix(in oklab, currentcolor 50%, transparent);
+	}
+
+	textarea[data-slot] {
+		resize: vertical;
+	}
+
+	[data-slot][hidden]:where(:not([hidden='until-found'])) {
+		display: none !important;
 	}
 }
 

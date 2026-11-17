@@ -7,6 +7,8 @@ export default defineConfig({
 	test: {
 		// The retention tests observe garbage collection, which needs the collector exposed to the workers.
 		execArgv: ['--expose-gc'],
+		// Lab unit tests: icons stay offline even where a test does not import `test-support-ui.ts`.
+		setupFiles: ['./apps/lab/src/test-setup.ts'],
 		include: [
 			'packages/**/src/**/*.unit.test.ts',
 			'apps/**/src/**/*.unit.test.ts',

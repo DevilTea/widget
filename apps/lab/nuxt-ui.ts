@@ -12,7 +12,7 @@ export function labNuxtUi() {
 		// Templates (`node_modules/.nuxt-ui`) always land in this app, whichever Vite root loads the plugin.
 		root: fileURLToPath(new URL('.', import.meta.url)),
 		// The Lab theme store (`use-lab-theme.ts`) is the single source of truth for light/dark and drives
-		// the `.dark` class itself (`src/theme/nuxt-ui-bridge.ts`). Nuxt UI's own `useDark()` plugin, with its
+		// the `.dark` class itself (`src/composables/use-nuxt-ui-theme-bridge.ts`). Nuxt UI's own `useDark()` plugin, with its
 		// `vueuse-color-scheme` localStorage entry, would be a second authority, so it is not installed.
 		colorMode: false,
 		// No generated `auto-imports.d.ts`/`components.d.ts`: components and composables are imported
