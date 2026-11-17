@@ -31,13 +31,15 @@ describe('preview host protocol', () => {
 	})
 
 	it('validates tutorial evaluation/spotlight without exposing arbitrary values', () => {
-		const evaluate = { protocol: 1, kind: 'tutorial.evaluate', requestId: 'r2', tourId: 'crm', stepIndex: 2, progress: 1 }
+		const evaluate = { protocol: 1, kind: 'tutorial.evaluate', requestId: 'r2', tourId: 'survey', stepIndex: 2, progress: 1 }
 		expect(parsePreviewHostRequest(evaluate))
 			.toEqual(evaluate)
+		expect(parsePreviewHostRequest({ ...evaluate, tourId: 'crm' }))
+			.toBeNull()
 		expect(parsePreviewHostRequest({ ...evaluate, tourId: 'arbitrary' }))
 			.toBeNull()
-		expect(parsePreviewHostCommand({ protocol: 1, kind: 'tutorial.spotlight', target: 'crm-table' }))
-			.toEqual({ protocol: 1, kind: 'tutorial.spotlight', target: 'crm-table' })
+		expect(parsePreviewHostCommand({ protocol: 1, kind: 'tutorial.spotlight', target: 'survey-mode' }))
+			.toEqual({ protocol: 1, kind: 'tutorial.spotlight', target: 'survey-mode' })
 		expect(parsePreviewHostCommand({ protocol: 1, kind: 'tutorial.spotlight', target: { value: 1 } }))
 			.toBeNull()
 		expect(parsePreviewHostCommand({ protocol: 1, kind: 'presentation.update', locale: 'zh-TW', theme: 'dark' }))

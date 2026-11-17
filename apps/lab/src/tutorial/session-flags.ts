@@ -8,12 +8,8 @@
  * the global, so this stays unit-testable without leaking state across test files that all run in the
  * same happy-dom/jsdom global.
  *
- * diagnostic #25 P4: "tour completed" is now per-tour (`widget-lab:tutorial:completed:<tourId>`) — CRM's
- * availability gate (`use-tutorial.ts`'s `crmTourUnlocked`) needs to ask specifically "has the Survey
- * tour been completed this session?" independent of whether the CRM tour itself has ever been completed,
- * so one shared flag from P1 would conflate the two. `tourId` is a plain string (not a closed union)
- * to keep this module decoupled from which tour scripts exist, mirroring `TutorialActions.startTour()`'s
- * own plain-string parameter (`types.ts`).
+ * "Tour completed" is per-tour (`widget-lab:tutorial:completed:<tourId>`). `tourId` is a plain string
+ * (not a closed union) to keep this module decoupled from which tour scripts exist.
  */
 
 const WELCOME_DISMISSED_KEY = 'widget-lab:tutorial:welcome-dismissed'

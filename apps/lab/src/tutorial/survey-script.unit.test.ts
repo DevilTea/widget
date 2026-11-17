@@ -315,7 +315,6 @@ describe('the whole script on a real Runtime', () => {
 			setFocus: vi.fn(),
 			activateTab: vi.fn(),
 			openImplementation: vi.fn(),
-			startTour: vi.fn(),
 		}
 		const settle = (): void => {
 			observe()

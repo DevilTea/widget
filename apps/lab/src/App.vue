@@ -14,6 +14,7 @@ import { useSupportedWorkbenchViewport } from './composables/use-supported-workb
 import { createTutorialStore, TutorialStoreKey } from './composables/use-tutorial'
 import { disposeLayoutWorker } from './graph/layout-client'
 import { installLabTestSeam } from './lab-test-seam'
+import { resolveInitialShowcase } from './showcases/registry'
 import 'dockview-vue/dist/styles/dockview.css'
 import './styles/dockview-theme.css'
 import './styles/tutorial-theme.css'
@@ -25,7 +26,9 @@ provide(LabI18nKey, i18n)
 const theme = createLabThemeStore()
 provide(LabThemeKey, theme)
 
-const store = createLabStore()
+// `?showcase=<id>` picks the starting showcase (also hidden test fixtures such as `sandbox`); unknown ids
+// fall back to the default. See `showcases/registry.ts`'s `resolveInitialShowcase`.
+const store = createLabStore(resolveInitialShowcase(location.search))
 provide(LabStoreKey, store)
 // Diagnostic #28 browser-contract seam (`?lab-test` only; inert otherwise) — see `lab-test-seam.ts`.
 installLabTestSeam(store)

@@ -2,7 +2,7 @@
  * `data-tutorial-target` lookup for the Survey renderers that are reused across several widget instances
  * (`SingleChoiceRenderer.vue`, `NumericRenderer.vue`, ... render every question of their type alike).
  * Keyed by widget id: the renderers read `widgetId` from `useWidget()`, so the key is the stable authored
- * id, as in `crm-target-map.ts`. Authored against `survey-default`'s questions
+ * id. Authored against `survey-default`'s questions
  * (`showcases/survey/presets.ts`) — the tutorial's OWNER-locked deterministic starting state — not a
  * generic every-preset mapping.
  *

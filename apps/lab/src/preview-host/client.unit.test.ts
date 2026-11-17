@@ -50,11 +50,11 @@ describe('preview host client', () => {
 		const client = createPreviewHostClient(pair.client)
 		let observations = 0
 		client.onEvent(() => observations++)
-		pair.agent.send({ protocol: 1, kind: 'tutorial.observation-changed', tourId: 'crm' })
+		pair.agent.send({ protocol: 1, kind: 'tutorial.observation-changed', tourId: 'survey' })
 		expect(observations)
 			.toBe(1)
 
-		const pending = client.mount('session-a', 1, { showcaseId: 'crm', revision: 0, sourceText: '{}' })
+		const pending = client.mount('session-a', 1, { showcaseId: 'survey', revision: 0, sourceText: '{}' })
 		pair.agent.close()
 		await expect(pending).rejects.toBeInstanceOf(PreviewHostClientError)
 	})

@@ -11,6 +11,6 @@ test('built PreviewPanel uses the configured cross-origin Preview host', async (
 	await expect(frame)
 		.toHaveAttribute('src', /^http:\/\/127\.0\.0\.1:4175\/preview-frame\.html\?/)
 	await expect(previewFrame(page)
-		.getByText('Widget Lab sandbox', { exact: true }))
+		.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 		.toBeVisible()
 })

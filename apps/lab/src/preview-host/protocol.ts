@@ -4,6 +4,9 @@ export const PREVIEW_HOST_PROTOCOL_VERSION = 1
 export const PREVIEW_HOST_CHANNEL = 'preview-host'
 export const PREVIEW_INSPECTOR_CHANNEL = 'inspector'
 
+/** Tutorial tour ids the Preview frame can evaluate. A tour id is the id of the showcase it teaches. */
+export type PreviewTourId = 'survey'
+
 export interface PreviewHostDescriptor {
 	readonly showcaseId: string
 	readonly revision: number
@@ -23,7 +26,7 @@ export interface PreviewHostTutorialEvaluateRequest {
 	readonly protocol: typeof PREVIEW_HOST_PROTOCOL_VERSION
 	readonly kind: 'tutorial.evaluate'
 	readonly requestId: string
-	readonly tourId: 'survey' | 'crm'
+	readonly tourId: PreviewTourId
 	readonly stepIndex: number
 	readonly progress: number
 }
@@ -57,7 +60,7 @@ export interface PreviewHostTutorialEvaluatedResponse {
 	readonly protocol: typeof PREVIEW_HOST_PROTOCOL_VERSION
 	readonly kind: 'tutorial.evaluated'
 	readonly requestId: string
-	readonly tourId: 'survey' | 'crm'
+	readonly tourId: PreviewTourId
 	readonly stepIndex: number
 	readonly progress: number
 }
@@ -74,7 +77,7 @@ export type PreviewHostResponse = PreviewHostMountedResponse | PreviewHostTutori
 export interface PreviewHostObservationChangedEvent {
 	readonly protocol: typeof PREVIEW_HOST_PROTOCOL_VERSION
 	readonly kind: 'tutorial.observation-changed'
-	readonly tourId: 'survey' | 'crm'
+	readonly tourId: PreviewTourId
 }
 
 export type PreviewHostEvent = PreviewHostObservationChangedEvent
@@ -92,8 +95,8 @@ function hasProtocol(value: Record<string, unknown>): boolean {
 	return value.protocol === PREVIEW_HOST_PROTOCOL_VERSION
 }
 
-function isTourId(value: unknown): value is 'survey' | 'crm' {
-	return value === 'survey' || value === 'crm'
+function isTourId(value: unknown): value is PreviewTourId {
+	return value === 'survey'
 }
 
 export function isPreviewHostDescriptor(value: unknown): value is PreviewHostDescriptor {

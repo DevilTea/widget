@@ -1,11 +1,10 @@
 /**
  * Widget Lab sandbox plugins.
  *
- * These are dev fixtures for exercising the Lab shell (workbench, Apply lifecycle, Blueprint
- * Inspector, Preview) — deliberately small and private to `widget-lab`. They are NOT the "Interactive
- * Survey" / "Product Prototype" showcases named in diagnostic #13's Checkpoint A (those are a later phase);
- * see this app's `AGENTS.md` for the boundary. Every plugin is built exclusively through
- * `@deviltea/widget-core`'s public `createWidgetPlugin` contract.
+ * These are test-only fixtures (hidden from the showcase selector, opened with `?showcase=sandbox`) for
+ * exercising the Lab shell (workbench, Apply lifecycle, Blueprint Inspector, Preview) — deliberately
+ * small and private to `widget-lab`, not a showcase; see this app's `AGENTS.md` for the boundary. Every
+ * plugin is built exclusively through `@deviltea/widget-core`'s public `createWidgetPlugin` contract.
  */
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'

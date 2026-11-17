@@ -6,7 +6,7 @@ import { expect, previewFrame, test } from './fixtures'
  * Issue #28 Source/Apply lifecycle contract, deliberately not involving Monaco at all — it uses the
  * `?lab-test` interaction seam (`src/lab-test-seam.ts`) instead, which routes through the exact same
  * `LabStore.setDraftSourceText()` call Monaco's `update:modelValue` handler already makes. Runs against
- * the default Sandbox showcase (the app's default on load) and its `valid-interactive` preset text
+ * the hidden Sandbox test fixture (selected with `?showcase=sandbox`) and its `valid-interactive` preset text
  * (`src/sandbox/presets.ts`), which renders a `Text` widget reading `"Widget Lab sandbox"`.
  */
 
@@ -23,7 +23,7 @@ async function setDraftSourceText(page: Page, text: string): Promise<void> {
 }
 
 test.beforeEach(async ({ page }) => {
-	await page.goto('/?lab-test')
+	await page.goto('/?lab-test&showcase=sandbox')
 	await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
 })
 
@@ -89,5 +89,24 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 	// Visible status: the Author JSON view's parse-error banner (`AuthorJsonView.vue`'s
 	// `store.parseError.value`) — LabHeader's own status pills never reflect a Lab-only parse error.
 	await expect(page.getByText('SyntaxError:'))
+		.toBeVisible()
+})
+
+test('an invalid Document retains the prior Preview and explains the divergence', async ({ page }) => {
+	await setDraftSourceText(page, '{ "id": "root", "type": "NoSuchWidgetType" }')
+	await page.getByRole('button', { name: 'Apply' })
+		.click()
+	await expect(page.getByText('Blueprint: invalid', { exact: false }))
+		.toBeVisible()
+
+	await page.getByRole('tab', { name: 'Runtime' })
+		.click()
+	await expect(page.getByText('Running previous valid Preview revision r0; current Document is r1.', { exact: false }))
+		.toBeVisible()
+	await expect(page.getByRole('tabpanel', { name: 'Runtime' })
+		.getByText('Preview r0', { exact: true }))
+		.toBeVisible()
+	await expect(page.getByRole('tabpanel', { name: 'Runtime' })
+		.getByText('Diverged / Unlinked', { exact: true }))
 		.toBeVisible()
 })

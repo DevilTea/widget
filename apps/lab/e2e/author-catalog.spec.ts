@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures'
 
 test('Author Catalog copies the catalog JSON and shows no schema block for schema-less entries', async ({ page }) => {
-	await page.goto('/')
+	await page.goto('/?showcase=sandbox')
 	await page.getByRole('tab', { name: 'Author' })
 		.click()
 	await page.getByRole('tab', { name: 'Catalog' })

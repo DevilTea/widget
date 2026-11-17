@@ -3,7 +3,7 @@ import type { InspectorBlueprintSnapshot } from '@deviltea/widget-inspector/prot
 import type { LabLocale } from '../i18n/locale'
 import type { LabTheme } from '../theme/theme'
 import type { PreviewHostClient } from './client'
-import type { PreviewHostDescriptor } from './protocol'
+import type { PreviewHostDescriptor, PreviewTourId } from './protocol'
 import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
 import { createInspectorClient } from '@deviltea/widget-inspector/client'
 import { createInspectorFrameBootstrapRequest } from '@deviltea/widget-inspector/frame-bootstrap'
@@ -23,8 +23,8 @@ export interface PreviewFrameDriver {
 	mount: (descriptor: PreviewHostDescriptor) => Promise<PreviewFrameConnection>
 	updatePresentation: (locale: LabLocale, theme: LabTheme) => void
 	setTutorialSpotlight: (target: string | null) => void
-	evaluateTutorial: (tourId: 'survey' | 'crm', stepIndex: number, progress: number) => Promise<number>
-	onTutorialObservation: (listener: (tourId: 'survey' | 'crm') => void) => () => void
+	evaluateTutorial: (tourId: PreviewTourId, stepIndex: number, progress: number) => Promise<number>
+	onTutorialObservation: (listener: (tourId: PreviewTourId) => void) => () => void
 	dispose: () => void
 }
 
@@ -84,7 +84,7 @@ export function createPreviewFrameDriver(
 	const targetOrigin = new URL(options.frameOrigin ?? parentOrigin).origin
 	if (targetOrigin === 'null')
 		throw new TypeError('Preview frame origin must be a non-opaque origin.')
-	const observationListeners = new Set<(tourId: 'survey' | 'crm') => void>()
+	const observationListeners = new Set<(tourId: PreviewTourId) => void>()
 	let generation = 0
 	let physical: PhysicalConnection | null = null
 	let connecting: Promise<PhysicalConnection> | null = null

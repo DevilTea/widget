@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test'
 import { expect, test } from './fixtures'
 
 /**
@@ -12,8 +13,6 @@ import { expect, test } from './fixtures'
 
 test('Survey Dependency Graph lays out and renders nodes', async ({ page }) => {
 	await page.goto('/')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
@@ -42,45 +41,57 @@ function intersects(a: { x: number, y: number, width: number, height: number }, 
 		&& a.y + a.height > b.y
 }
 
-// issue #27's acceptance criterion names all showcases explicitly ("Opening Graph on Survey and CRM
-// reliably displays the graph without requiring a filter toggle or manual browser resize") — this is
-// exactly the async layout/render behavior #27 asks to pin at the browser level per showcase rather than
-// infer from one case. Includes sandbox default on direct first-open without switching.
-for (const showcaseId of ['sandbox', 'survey', 'crm'] as const) {
-	test(`${showcaseId} graph nodes intersect the visible viewport on first open (issue #27)`, async ({ page }) => {
-		await page.goto('/')
-		if (showcaseId !== 'sandbox') {
-			await page.getByLabel('Switch showcase')
-				.selectOption(showcaseId)
+/** Opens Dependencies and asserts the Graph renders nodes and that some intersect the visible canvas. */
+async function expectGraphNodesIntersectViewportOnFirstOpen(page: Page): Promise<void> {
+	await page.getByRole('tab', { name: 'Dependencies' })
+		.click()
+
+	const canvas = page.locator('.vue-flow')
+	const nodes = page.locator('.vue-flow__node')
+	await expect(nodes.first())
+		.toBeVisible({ timeout: 15_000 })
+
+	// `GraphCanvas.vue`'s fit runs off `onNodesInitialized`, an async step after nodes first render —
+	// poll rather than asserting immediately after the node locator resolves.
+	await expect(async () => {
+		const canvasBox = await canvas.boundingBox()
+		expect(canvasBox)
+			.not.toBeNull()
+		const count = await nodes.count()
+		let intersecting = 0
+		for (let i = 0; i < count; i++) {
+			const box = await nodes.nth(i)
+				.boundingBox()
+			if (box !== null && intersects(box, canvasBox!))
+				intersecting++
 		}
-		await page.getByRole('tab', { name: 'Dependencies' })
-			.click()
+		expect(intersecting)
+			.toBeGreaterThan(0)
+	})
+		.toPass({ timeout: 10_000 })
+}
 
-		const canvas = page.locator('.vue-flow')
-		const nodes = page.locator('.vue-flow__node')
-		await expect(nodes.first())
-			.toBeVisible({ timeout: 15_000 })
-
-		// `GraphCanvas.vue`'s fit runs off `onNodesInitialized`, an async step after nodes first render —
-		// poll rather than asserting immediately after the node locator resolves.
-		await expect(async () => {
-			const canvasBox = await canvas.boundingBox()
-			expect(canvasBox)
-				.not.toBeNull()
-			const count = await nodes.count()
-			let intersecting = 0
-			for (let i = 0; i < count; i++) {
-				const box = await nodes.nth(i)
-					.boundingBox()
-				if (box !== null && intersects(box, canvasBox!))
-					intersecting++
-			}
-			expect(intersecting)
-				.toBeGreaterThan(0)
-		})
-			.toPass({ timeout: 10_000 })
+// issue #27's acceptance criterion names the showcases explicitly ("Opening Graph ... reliably displays the
+// graph without requiring a filter toggle or manual browser resize") — this is exactly the async
+// layout/render behavior #27 asks to pin at the browser level per showcase rather than infer from one
+// case. Opens each showcase directly through `?showcase=<id>` (the hidden Sandbox fixture has no UI entry).
+for (const showcaseId of ['sandbox', 'survey'] as const) {
+	test(`${showcaseId} graph nodes intersect the visible viewport on first open (issue #27)`, async ({ page }) => {
+		await page.goto(`/?showcase=${showcaseId}`)
+		await expectGraphNodesIntersectViewportOnFirstOpen(page)
 	})
 }
+
+// The same contract after a runtime showcase switch (the original #27 loop did this for every showcase
+// but the default): start on the hidden Sandbox, switch to Survey with the selector, then open Graph.
+test('survey graph nodes intersect the visible viewport on first open after switching showcase from the Sandbox (issue #27)', async ({ page }) => {
+	await page.goto('/?showcase=sandbox')
+	await page.getByLabel('Switch showcase')
+		.selectOption('survey')
+	await expect(page.getByLabel('Switch showcase'))
+		.toHaveValue('survey')
+	await expectGraphNodesIntersectViewportOnFirstOpen(page)
+})
 
 test('"Fit graph" contains every expected Survey node (issues #27, #104)', async ({ page }) => {
 	const expectedSurveyNodeIds = [
@@ -94,8 +105,6 @@ test('"Fit graph" contains every expected Survey node (issues #27, #104)', async
 	const fitTolerancePx = 2
 
 	await page.goto('/')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
@@ -192,8 +201,6 @@ test('"Fit graph" contains every expected Survey node (issues #27, #104)', async
 
 test('progressive disclosure collapses clusters initially, expands on click, and supports Expand/Collapse all', async ({ page }) => {
 	await page.goto('/')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
@@ -320,8 +327,6 @@ test('progressive disclosure collapses clusters initially, expands on click, and
 
 test('focusing a member highlights subgraph and dims unrelated nodes', async ({ page }) => {
 	await page.goto('/')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 
@@ -356,8 +361,6 @@ test('focusing a member highlights subgraph and dims unrelated nodes', async ({ 
 
 test('expanded member nodes can be focused from the keyboard', async ({ page }) => {
 	await page.goto('/')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 	await page.getByRole('button', { name: 'Expand all' })
@@ -372,4 +375,55 @@ test('expanded member nodes can be focused from the keyboard', async ({ page }) 
 	await member.press('Enter')
 	await expect(member)
 		.toHaveClass(/graph-node--focused/)
+})
+
+test('Graph legend is a plain disclosure (not a menu popup), opens/closes via keyboard, and names the three edge kinds', async ({ page }) => {
+	await page.goto('/')
+	await page.getByRole('tab', { name: 'Dependencies' })
+		.click()
+
+	const legendButton = page.getByRole('button', { name: 'Legend' })
+	await expect(legendButton)
+		.toHaveAttribute('aria-expanded', 'false')
+	// Merge-gate review round 2, finding 3: a plain disclosure/group, never a menu-style popup.
+	await expect(legendButton)
+		.not.toHaveAttribute('aria-haspopup')
+	const controlledId = await legendButton.getAttribute('aria-controls')
+	expect(controlledId)
+		.toBeTruthy()
+
+	const legendPanel = page.getByRole('group', { name: 'Graph legend' })
+	await expect(legendPanel)
+		.toHaveCount(0)
+
+	// Opens via keyboard (focus + Enter) — the native button gives this for free, no custom key handling.
+	await legendButton.focus()
+	await page.keyboard.press('Enter')
+	await expect(legendButton)
+		.toHaveAttribute('aria-expanded', 'true')
+	await expect(legendPanel)
+		.toBeVisible()
+	await expect(legendPanel)
+		.toHaveAttribute('id', controlledId!)
+	await expect(legendPanel.getByText('reads', { exact: true }))
+		.toBeVisible()
+	await expect(legendPanel.getByText('writes', { exact: true }))
+		.toBeVisible()
+	await expect(legendPanel.getByText('invokes', { exact: true }))
+		.toBeVisible()
+
+	// Closes via keyboard too (focus stays on the button after Enter activation) — Space this time.
+	await page.keyboard.press('Space')
+	await expect(legendButton)
+		.toHaveAttribute('aria-expanded', 'false')
+	await expect(legendPanel)
+		.toHaveCount(0)
+
+	// Mouse click still works (not keyboard-only).
+	await legendButton.click()
+	await expect(legendPanel)
+		.toBeVisible()
+	await legendButton.click()
+	await expect(legendPanel)
+		.toHaveCount(0)
 })

@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures'
 
 test('Author workspace exposes Core catalog, Structure commands, and synchronized JSON', async ({ page }) => {
-	await page.goto('/')
+	await page.goto('/?showcase=sandbox')
 
 	await page.getByRole('tab', { name: 'Author' })
 		.click()
@@ -31,7 +31,7 @@ test('Author workspace exposes Core catalog, Structure commands, and synchronize
 })
 
 test('recovery keeps unresolved/raw-slot nodes visible and navigates node diagnostics through Document focus', async ({ page }) => {
-	await page.goto('/')
+	await page.goto('/?showcase=sandbox')
 	await page.locator('select[aria-label="Load a preset"]')
 		.selectOption('raw-slot-recovery')
 	await expect(page.getByTestId('author-recovery-status'))
@@ -82,7 +82,7 @@ test('recovery keeps unresolved/raw-slot nodes visible and navigates node diagno
 })
 
 test('semantic diagnostics navigate to current Document focus while source-only diagnostics remain non-navigable', async ({ page }) => {
-	await page.goto('/')
+	await page.goto('/?showcase=sandbox')
 	await page.locator('select[aria-label="Load a preset"]')
 		.selectOption('invalid-semantic')
 	await page.getByRole('tab', { name: 'Blueprint' })
@@ -125,8 +125,6 @@ test('semantic diagnostics navigate to current Document focus while source-only 
 
 test('rejects blank numeric Structure values while preserving scalar editing behavior', async ({ page }) => {
 	await page.goto('/')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
 	await page.getByRole('tab', { name: 'Author' })
 		.click()
 	await page.getByRole('tab', { name: 'Structure' })

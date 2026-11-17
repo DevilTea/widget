@@ -6,13 +6,13 @@ import { expect, previewFrame, test } from './fixtures'
  * file EXCEPT the "welcome card" describe block below, which opts back in via `welcomeDismissed: false`
  * to exercise the real first-load card — see `fixtures.ts`'s header comment for the mechanism.
  *
- * Starting the tour always begins on the Sandbox showcase (the app's default) and switches to Survey
- * through the deterministic-start pipeline (`use-tutorial.ts`), so every test below waits for the rail
- * to actually appear before interacting with Survey's own controls.
+ * Starting the tour from the default Survey showcase only reloads its `survey-default` preset; starting it from
+ * the hidden Sandbox fixture (`?showcase=sandbox`, dirty-draft tests) switches to Survey through the deterministic-start
+ * pipeline (`use-tutorial.ts`). Either way every test below waits for the rail to actually appear before
+ * interacting with Survey's own controls.
  *
- * Merge-gate review (round 1) additions: dialog focus/Escape contracts (blocker 1, mirroring
- * `crm.spec.ts`'s "Change stage dialog" test), a real-interaction 900px geometry contract (blocker 2),
- * and a rapid-double-click re-entrancy contract (blocker 3).
+ * Merge-gate review (round 1) additions: dialog focus/Escape contracts (blocker 1), a real-interaction
+ * 900px geometry contract (blocker 2), and a rapid-double-click re-entrancy contract (blocker 3).
  */
 
 const RAIL_LABEL = 'Tutorial'
@@ -27,8 +27,7 @@ async function startTourFromHeader(page: Page): Promise<void> {
 }
 
 /**
- * Same real, meaningful containment contract `crm.spec.ts`'s "Change stage dialog" test already pins for
- * `ModalRenderer.vue`: a native `<dialog>` shown via `showModal()` makes the rest of the page `inert`, but
+ * Real, meaningful containment contract for a native `<dialog>`: `showModal()` makes the rest of the page `inert`, but
  * Tab past the dialog's last focusable control briefly rests focus on `document.body` before the next Tab
  * cycles back to the dialog's first control — so "focus is either inside the (one, currently open) dialog
  * or on `document.body`, never an outside interactive element" is what is actually sampled, across a few
@@ -171,7 +170,10 @@ test.describe('welcome card', () => {
 	})
 
 	test('"Start the tour" dismisses the welcome card and begins the Survey tour', async ({ page }) => {
-		await page.goto('/')
+		// Start from the hidden Sandbox fixture so the selector's final `survey` value proves the switch.
+		await page.goto('/?showcase=sandbox')
+		await expect(page.getByLabel('Switch showcase'))
+			.toHaveValue('sandbox')
 		await page.getByRole('button', { name: 'Start the tour' })
 			.click()
 
@@ -209,9 +211,9 @@ test.describe('dirty-draft confirmation dialog', () => {
 	interface LabTestWindow { __WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void } }
 
 	async function dirtyTheDraft(page: Page): Promise<void> {
-		await page.goto('/?lab-test')
+		await page.goto('/?lab-test&showcase=sandbox')
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
-		// Dirty the (default Sandbox) draft via the issue #28 interaction seam — never touches Monaco.
+		// Dirty the (hidden Sandbox fixture) draft via the issue #28 interaction seam — never touches Monaco.
 		await page.evaluate((source) => {
 			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)
 		}, '{ "id": "root", "type": "Text", "config": { "text": "dirtied by test" } }')
@@ -619,7 +621,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await nextButton.click()
 
 	// Step 9 — hand-back: "Finish" replaces "Next" on the last step.
-	await expect(rail.getByText('Try the CRM tour, open any inspector, or edit the Author JSON and press Apply.'))
+	await expect(rail.getByText('Open any inspector, or edit the Author JSON and press Apply.'))
 		.toBeVisible()
 	await expect(finishButton)
 		.toBeEnabled()

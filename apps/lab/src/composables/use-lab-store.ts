@@ -79,7 +79,7 @@ import { createInspectorFocusStore } from '../lab/focus'
 import { getLabRevisionStatus } from '../lab/revisions'
 import { LabSession } from '../lab/session'
 import { createPreviewHostCoordinator } from '../preview-host/coordinator'
-import { defaultShowcase, showcases } from '../showcases/registry'
+import { defaultShowcase, listedShowcases, showcases } from '../showcases/registry'
 
 /**
  * `'preview'` is included (diagnostic #25 P1) even though Preview lives in its own always-visible Dockview
@@ -115,6 +115,7 @@ export interface LabStore {
 	readonly isDirty: Readonly<Ref<boolean>>
 	/** @deprecated Use `documentFocus` or `previewFocus` according to the surface's scope. */
 	readonly focus: Readonly<Ref<InspectorFocus | null>>
+	/** The showcases the header lists (hidden test-only fixtures excluded; `switchShowcase()` still accepts them). */
 	readonly showcases: readonly ShowcaseEntry[]
 	readonly showcaseId: Readonly<Ref<string>>
 	readonly presets: Readonly<Ref<readonly ShowcasePreset[]>>
@@ -153,16 +154,16 @@ export interface LabStore {
 
 export const LabStoreKey: InjectionKey<LabStore> = Symbol('widget-lab:store')
 
-export function createLabStore(): LabStore {
+export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase): LabStore {
 	const previewHost = createPreviewHostCoordinator()
-	const showcaseId = shallowRef(defaultShowcase.id)
-	const presets = shallowRef<readonly ShowcasePreset[]>(defaultShowcase.presets)
+	const showcaseId = shallowRef(initialShowcase.id)
+	const presets = shallowRef<readonly ShowcasePreset[]>(initialShowcase.presets)
 
 	const sessionTick = shallowRef(0)
 	const documentTick = shallowRef(0)
 	const focusTick = shallowRef(0)
 
-	let currentShowcase: ShowcaseEntry = defaultShowcase
+	let currentShowcase: ShowcaseEntry = initialShowcase
 	// Mutable by design: `switchShowcase` reassigns both on a showcase change. Every closure below reads
 	// these at call time (never destructures them up front), so a reassignment is visible everywhere
 	// without re-wiring `computed()`/returned functions. The serialized `enqueue()` transaction queue
@@ -257,7 +258,7 @@ export function createLabStore(): LabStore {
 		})
 	}
 
-	attachInitial(defaultShowcase)
+	attachInitial(initialShowcase)
 
 	const stopPreviewConnection = watch(
 		previewHost.connection,
@@ -445,7 +446,7 @@ export function createLabStore(): LabStore {
 		isApplying,
 		isDirty,
 		focus,
-		showcases,
+		showcases: listedShowcases,
 		showcaseId,
 		presets,
 		activeTab,

@@ -42,7 +42,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 	})
 
 	test('shows latest Structure/JSON patches, copies the patch, and reports a non-mutating Core conflict', async ({ page }) => {
-		await page.goto('/?lab-test')
+		await page.goto('/?lab-test&showcase=sandbox')
 		await page.getByTestId('open-document-tools')
 			.click()
 
@@ -114,7 +114,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 	})
 
 	test('clears the conflict result when a new Document revision is committed', async ({ page }) => {
-		await page.goto('/?lab-test')
+		await page.goto('/?lab-test&showcase=sandbox')
 		await page.getByTestId('open-document-tools')
 			.click()
 		await page.getByTestId('document-tools-run-conflict')
@@ -131,7 +131,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 	})
 
 	test('clears the conflict result when a showcase replaces the session at the same revision', async ({ page }) => {
-		await page.goto('/?lab-test')
+		await page.goto('/?lab-test&showcase=sandbox')
 		await page.getByTestId('open-document-tools')
 			.click()
 		await page.getByTestId('document-tools-run-conflict')

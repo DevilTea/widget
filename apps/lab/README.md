@@ -36,14 +36,16 @@ pnpm --filter widget-lab test:browser
 pnpm --filter widget-lab test:pages
 ```
 
-## Sandbox
+## Showcases and the Sandbox fixtures
 
 `src/sandbox/` hosts a small, Lab-private `WidgetSystem` (Text/Counter/Section/Stack/Summary plugins,
 the last demonstrating a cross-widget `registerDeps` dependency) with three preset source texts: a
 fully valid interactive one, one that is intentionally semantically invalid (to demo diagnostics), and
-one that exercises Blueprint recovery (an unresolved node and a raw-slot placement). These are dev
-fixtures for this shell, separate from the "Interactive Survey", "Product Prototype", and "Vuetify Task
-Workspace" showcases registered in `src/showcases/registry.ts`.
+one that exercises Blueprint recovery (an unresolved node and a raw-slot placement). These are
+test-only fixtures for this shell, hidden from the showcase selector. "Interactive Survey" is the default
+and only listed showcase (registered in `src/showcases/registry.ts`, which also registers the hidden
+`sandbox`). Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
+missing or unknown id falls back to the default.
 
 ## Dependency Graph
 

@@ -18,10 +18,24 @@ Private, never-published workspace application with two roles:
 1. **Lab shell** — the two-column workbench's `Author` workspace (Catalog/Structure/JSON), Preview,
    and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
    `@deviltea/widget-vue`.
-2. **Released showcases** — switchable via the header's showcase selector, all served by the same
-   shell and Document-backed authoring model: `Sandbox` (minimal fixtures), `Interactive Survey` (`survey`),
-   `Product Prototype` (`crm`), and `Vuetify Task Workspace` (`vuetify-tasks`), as registered in
-   `src/showcases/registry.ts`.
+2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
+   `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default and the only showcase
+   listed in the header's showcase selector; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
+   test-only fixture (see "Showcase selection" below). The former `Product Prototype` (`crm`) and
+   `Vuetify Task Workspace` (`vuetify-tasks`) showcases, and the CRM tour, were removed (tracking issue
+   `DevilTea/widget#230`); new showcases are added after the Lab redesign.
+
+### Showcase selection (`?showcase=<id>`)
+
+`src/showcases/registry.ts` registers every showcase; an entry with `hidden: true` is registered but not
+listed. `listedShowcases` (what the header selector and `LabStore.showcases` expose) and the default
+(`defaultShowcase`, the first listed entry: `survey`) exclude hidden entries. `resolveInitialShowcase()`
+reads the `?showcase=<id>` URL parameter once at startup (`App.vue` -> `createLabStore(initialShowcase)`),
+accepting any registered id, listed or hidden; a missing, empty or unknown id falls back to the default.
+The selector does not write the URL, and `?lang=` switching keeps `?showcase=` like any other unrelated
+parameter. When a hidden fixture is open, the selector lists it as an extra option so its value is never
+blank. This is how e2e opens the Sandbox (`?showcase=sandbox`, combinable with `?lab-test`); do not add a
+user-facing affordance for hidden showcases.
 
 The app deploys to GitHub Pages together with `docs/site` (see "Deployment" below).
 
@@ -71,7 +85,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   widget id), `focused-widget.ts` (shared focus -> plain `{ id, type }`), and `shiki-highlighter.ts` (the
   lazy, self-contained Shiki fine-grained highlighter — see "Loading policy" below for its chunk and
   engine-choice rationale). Each showcase's `sources.ts` (`src/showcases/survey/sources.ts`,
-  `src/showcases/crm/sources.ts`, `src/sandbox/sources.ts`) is the actual curated registry, wired into
+  `src/sandbox/sources.ts`) is the actual curated registry, wired into
   `ShowcaseEntry.sources` (`src/showcases/registry.ts`) alongside `presets`. `src/components/panels/
   ImplementationPanel.vue` (registered lazily — see below) and `src/components/implementation/*`
   (`ImplementationFile.vue`, `ImplementationSourceView.vue`) are the Vue layer; `src/composables/
@@ -114,16 +128,17 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   overlay ("Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.") covering
   the whole viewport below 900px width, and hides it again above that width; `Workbench`/Dockview stay
   mounted underneath rather than being torn down.
-- `src/sandbox/` — the `Sandbox` showcase: small, Lab-private fixtures (plugins, a `WidgetSystem`, a
-  `createWidgetVueRenderer` registry, preset source texts) whose only job is to exercise the shell
-  with minimal semantic surface. Product-shaped showcases live in `src/showcases/`, never here;
-  sandbox fixtures must stay small.
-- `src/showcases/` — the released product showcases and their registry:
-  - `registry.ts` — the deliberately minimal `{ id, label, system, renderer, presets }` lookup table
-    (no routing, no persistence) consumed by `use-lab-store.ts`'s `switchShowcase`. Plugin-tuple
+- `src/sandbox/` — the hidden `Sandbox` test fixtures: small, Lab-private fixtures (plugins, a
+  `WidgetSystem`, a `createWidgetVueRenderer` registry, preset source texts including the invalid and
+  raw-slot recovery presets) whose only job is to exercise the shell with minimal semantic surface. Unit
+  tests import them directly and e2e opens them with `?showcase=sandbox`. Product-shaped showcases live
+  in `src/showcases/`, never here; sandbox fixtures must stay small.
+- `src/showcases/` — the showcases and their registry:
+  - `registry.ts` — the deliberately minimal `{ id, label, hidden?, system, renderer, presets }` lookup
+    table (no routing, no persistence) consumed by `use-lab-store.ts`'s `switchShowcase`. Plugin-tuple
     types are erased to `WidgetSystem<AnyWidgetPluginTuple>` on purpose — consumers only need object
     identity.
-  - `survey/` — Showcase A: Interactive Survey, the Maker Space open-day sign-up form (a survey rendered
+  - `survey/` — Interactive Survey (the default showcase), the Maker Space open-day sign-up form (a survey rendered
     from one JSON definition; five plugin types `Survey`, `SingleChoice`, `MultipleChoice`, `Numeric`,
     `ShortAnswer`; root widget `open-day`; languages `en` and `zh-TW`). `domain.ts` (pure types,
     condition evaluation, built-in messages), `config.ts` (config checkers reporting located diagnostics),
@@ -136,9 +151,6 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     `sources.ts`, `system.ts`, `test-support.ts`. The Survey tour (`tutorial/survey-script.ts`) is
     authored against `survey-default`; its `data-tutorial-target` lookup is keyed by widget id
     (`tutorial/survey-target-map.ts`).
-  - `crm/` — Showcase B: Sales Pipeline CRM. Same internal organization as `survey/` (`domain.ts`,
-    `plugins/`, `renderers/`, `system.ts`, `presets.ts`, `test-support.ts`), with a deliberately
-    richer widget vocabulary (store/query/form/table/modal/metric plugins and renderers).
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.
@@ -151,6 +163,12 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     the Blueprint invalid (`unexpected-widget-field`). `src/showcases/registry.unit.test.ts` pins this.
 - `pika.config.ts` — the Lab's small PikaCSS token set (`variables.definitions`, safe-listed so the
   hand-authored `src/styles/dockview-theme.css` can reference them via plain `var()`).
+- `src/styles/preview-frame.css` — base rules for the Preview frame only (imported by
+  `preview-frame-main.ts`, never by the shell): line-height 1.5, controls inheriting the surrounding font,
+  square text inputs and pointer cursors, i.e. the subset of the removed Vuetify reset the survey renderers
+  were styled against. It sits in a layer declared after PikaCSS's `utilities`, so it wins over PikaCSS
+  utilities on those properties (see `showcases/survey/renderers/control-style.ts`). Do not move these rules
+  into `global.css`: the Lab chrome keeps the UA defaults.
 - `src/**/*.unit.test.ts` — colocated Vitest unit tests for `src/lab/`, `src/graph/`,
   `src/runtime-inspector/`, `src/sandbox/`, `src/composables/` and `src/showcases/**` (plugins,
   presets, and selected renderer contracts via `@vue/test-utils` + `happy-dom`), run by both this
@@ -217,22 +235,22 @@ Intentional, not incidental (`DevilTea/deviltea-labs#30` Scope B) — the produc
 building this app in isolation:
 
 ```text
-main app JS (index-*.js)                ~778 KB raw / ~214 KB gzip  — eager
+main app JS (lab-*.js + shared global-*.js) ~678 KB + ~287 KB raw / ~177 KB + ~93 KB gzip — eager
 modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
 Implementation panel + Shiki (ImplementationPanel-*.js)
-                                         ~373 KB raw / ~74 KB gzip  — loaded on first Implementation open
-curated raw-source chunks (per curated file, e.g. TableRenderer-*.js)
-                                         ~0.6-14 KB raw / ~0.4-4.3 KB gzip each — loaded on first
+                                         ~375 KB raw / ~75 KB gzip  — loaded on first Implementation open
+curated raw-source chunks (per curated file, e.g. ShortAnswerRenderer-*.js)
+                                         ~2-21 KB raw / ~1-6.2 KB gzip each — loaded on first
                                          selection of that file's tab
-CSS (index-*.css)                       ~120 KB raw / ~11 KB gzip   — eager
+CSS (lab-*.css + global-*.css)            ~128 KB + ~9 KB raw / ~12 KB + ~3 KB gzip — eager
 ```
 
 - **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
-  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Sandbox/Survey/
-  CRM showcases, `dockview-vue`. This is unavoidable critical-path weight for a workbench app whose
+  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey showcase and the hidden Sandbox fixture,
+  `dockview-vue`. This is unavoidable critical-path weight for a workbench app whose
   shell has to exist before any panel can render.
 - **`modern-monaco/core` (package JS + vendored `editor-core.mjs`)**: not in the eager chunk —
   `import('modern-monaco/core')` in `use-monaco-editor.ts`'s `ensureMonaco()` is Vite's own code-split
@@ -384,7 +402,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
 - `vue-flow.ts` — `toVueFlow()`: the laid-out `SemanticGraph` -> plain Vue Flow `nodes`/`edges`.
   Supports hierarchical progressive disclosure:
   - Widget clusters are the top-level view by default (collapsed), preventing visual overload on
-    dense topologies (the Survey is 5 clusters / 37 members; the CRM is denser).
+    dense topologies (the Survey is 5 clusters / 37 members).
   - Expanding a cluster reveals its internal member vertices and stubs as child nodes.
   - Inter-cluster edges between collapsed clusters aggregate into single presentation edges. The
     canvas deliberately labels these with only a compact dependency count (`1 dep` / `N deps`);

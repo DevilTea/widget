@@ -1,5 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { showcases } from './registry'
+import { defaultShowcase, getShowcase, listedShowcases, resolveInitialShowcase, showcases } from './registry'
+
+describe('showcase registry listing and ?showcase= selection', () => {
+	it('lists only Interactive Survey, which is the default; sandbox is a registered hidden fixture', () => {
+		expect(listedShowcases.map(showcase => showcase.id))
+			.toEqual(['survey'])
+		expect(defaultShowcase.id)
+			.toBe('survey')
+		expect(getShowcase('sandbox')?.hidden)
+			.toBe(true)
+		expect(showcases.map(showcase => showcase.id))
+			.toEqual(['survey', 'sandbox'])
+	})
+
+	it('selects any registered showcase, listed or hidden, from the query string', () => {
+		expect(resolveInitialShowcase('?showcase=sandbox').id)
+			.toBe('sandbox')
+		expect(resolveInitialShowcase('?lab-test&showcase=survey').id)
+			.toBe('survey')
+	})
+
+	it('falls back to the default for a missing, empty or unknown id', () => {
+		for (const search of ['', '?lang=zh-TW', '?showcase=', '?showcase=crm', '?showcase=vuetify-tasks', '?showcase=SANDBOX']) {
+			expect(resolveInitialShowcase(search).id, search)
+				.toBe('survey')
+		}
+	})
+})
 
 describe('showcase registry presets', () => {
 	const presets = showcases.flatMap(showcase => showcase.presets.map(preset => ({ showcase, preset })))
