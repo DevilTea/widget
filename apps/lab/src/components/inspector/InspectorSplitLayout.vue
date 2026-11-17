@@ -8,13 +8,13 @@
 <template>
 	<div
 		data-testid="inspector-split-layout"
-		:class="pika({ display: 'grid', gridTemplateColumns: '220px 1px 1fr', flex: '1 1 auto', minHeight: '0' })"
+		class="grid grid-cols-[220px_1px_1fr] flex-auto min-h-0"
 	>
 		<div>
 			<slot name="tree" />
 		</div>
-		<div :class="pika({ background: 'var(--lab-color-border)' })" />
-		<div :class="pika({ display: 'flex', flexDirection: 'column', minHeight: '0' })">
+		<div class="bg-lab-border" />
+		<div class="flex flex-col min-h-0">
 			<slot name="details" />
 		</div>
 	</div>

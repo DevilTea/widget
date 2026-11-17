@@ -20,12 +20,12 @@ persistence/editor-domain state, sandbox fixtures vs. showcases).
   Vue Flow is viewer-only (pan/zoom/fit/readonly selection, no editing), ELK Layered runs the automatic
   compound layout inside a persistent Vite module Worker (`src/graph/layout.worker.ts`). See "Dependency
   Graph" below and AGENTS.md's worker-boundary section.
-- **PikaCSS** (`@pikacss/unplugin-pikacss`) for the Lab's own visual language; Dockview's structural
-  stylesheet is themed through a small custom theme (`src/styles/dockview-theme.css`) whose CSS
-  variables derive from PikaCSS tokens (`pika.config.ts`); Vue Flow's own default theme CSS is not
-  imported — only its structural `dist/style.css` is, so canvas visuals stay PikaCSS-token-driven.
-- **Nuxt UI 4 + Tailwind v4** (through Nuxt UI's Vite plugin, not Nuxt) for the Lab shell only, adopted
-  incrementally alongside PikaCSS: the Preview frame never loads it. The Lab theme store stays the single source
+- **Nuxt UI 4 + Tailwind v4** (through Nuxt UI's Vite plugin, not Nuxt) for the Lab shell only; the Preview
+  frame never loads it (the showcase renderers are styled with plain scoped CSS). Dockview's structural
+  stylesheet is themed through a small custom theme (`src/styles/dockview-theme.css`) whose CSS variables
+  derive from the Lab palette tokens (`src/styles/global.css`); Vue Flow's own default theme CSS is not
+  imported — only its structural `dist/style.css` is, so canvas visuals stay palette-token-driven. The Lab
+  theme store stays the single source
   of truth (`data-lab-theme`, mirrored onto Nuxt UI's `.dark` class, with `--ui-*` tokens mapped to the Lab
   palette), icons are bundled locally from `@iconify-json/lucide`, and components are imported explicitly (no
   generated `components.d.ts`). See AGENTS.md "Nuxt UI and Tailwind".

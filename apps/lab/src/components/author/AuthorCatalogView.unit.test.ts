@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest'
 import { shallowRef } from 'vue'
 import { LabStoreKey } from '../../composables/use-lab-store'
 import { NotifierPlugin, PlainPlugin } from '../../events/test-support'
-import { testGlobalProperties } from '../../test-support'
 import { labI18nProvide } from '../../test-support-i18n'
 import AuthorCatalogView from './AuthorCatalogView.vue'
 
@@ -15,7 +14,6 @@ function mountCatalog(locale: 'en' | 'zh-TW' = 'en') {
 	const system = createWidgetSystem({ plugins: [NotifierPlugin, PlainPlugin] })
 	return mount(AuthorCatalogView, {
 		global: {
-			config: { globalProperties: testGlobalProperties },
 			provide: {
 				...labI18nProvide(locale),
 				[LabStoreKey as symbol]: { showcaseId: shallowRef('survey'), session: { system } },

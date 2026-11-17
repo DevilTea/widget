@@ -22,27 +22,19 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 	<aside
 		:aria-label="i18n.t('Tutorial')"
 		data-testid="tutorial-rail"
-		:class="pika({
-			flex: '0 0 320px',
-			width: '320px',
-			minHeight: '0',
-			display: 'flex',
-			flexDirection: 'column',
-			borderLeft: '1px solid var(--lab-color-border)',
-			background: 'var(--lab-color-surface)',
-		})"
+		class="flex-[0_0_320px] w-[320px] min-h-0 flex flex-col border-l border-l-lab-border bg-lab-surface"
 	>
 		<header
-			:class="pika({ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })"
+			class="flex items-center gap-[8px] p-[10px_12px] border-b border-b-lab-border flex-[0_0_auto]"
 		>
-			<strong :class="pika({ fontSize: '12px' })">{{ i18n.t('Tutorial') }}</strong>
-			<span :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
+			<strong class="text-[12px]">{{ i18n.t('Tutorial') }}</strong>
+			<span class="text-[11px] text-lab-text-muted">
 				{{ i18n.t('Step {current} of {total}', { current: snapshot.stepIndex + 1, total: snapshot.stepCount }) }}
 			</span>
 			<button
 				type="button"
 				:aria-label="i18n.t('Close tutorial')"
-				:class="pika({ marginLeft: 'auto', padding: '0 4px', fontSize: '14px', lineHeight: '1', border: 'none', background: 'transparent', color: 'var(--lab-color-text-muted)', cursor: 'pointer' })"
+				class="ml-[auto] p-[0_4px] text-[14px] leading-[1] [border:none] bg-transparent text-lab-text-muted cursor-pointer"
 				@click="tutorial.pause()"
 			>
 				×
@@ -51,29 +43,29 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 
 		<div
 			v-if="step"
-			:class="pika({ flex: '1 1 auto', minHeight: '0', overflow: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' })"
+			class="flex-auto min-h-0 overflow-auto p-[12px] flex flex-col gap-[8px]"
 		>
-			<h3 :class="pika({ margin: '0', fontSize: '13px' })">
+			<h3 class="m-0 text-[13px]">
 				{{ i18n.t(step.title) }}
 			</h3>
 
 			<p
 				v-for="(text, index) in snapshot.revealed"
 				:key="index"
-				:class="pika({ margin: '0', fontSize: '12px', lineHeight: '1.5' })"
+				class="m-0 text-[12px] leading-[1.5]"
 			>
 				{{ i18n.t(text) }}
 			</p>
 			<p
 				v-if="snapshot.pendingPrompt"
-				:class="pika({ margin: '0', fontSize: '12px', lineHeight: '1.5', fontStyle: 'italic', color: 'var(--lab-color-text-muted)' })"
+				class="m-0 text-[12px] leading-[1.5] italic text-lab-text-muted"
 			>
 				{{ i18n.t(snapshot.pendingPrompt) }}
 			</p>
 
 			<ul
 				v-if="step.links"
-				:class="pika({ display: 'flex', flexDirection: 'column', gap: '4px', margin: '4px 0 0', padding: '0', listStyle: 'none' })"
+				class="flex flex-col gap-[4px] m-[4px_0_0] p-0 list-none"
 			>
 				<li
 					v-for="link in step.links"
@@ -82,7 +74,7 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 					<button
 						type="button"
 						:disabled="link.disabled"
-						:class="pika({ 'width': '100%', 'textAlign': 'left', 'padding': '5px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+						class="w-full text-left p-[5px_8px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 						@click="tutorial.runLink(link.id)"
 					>
 						{{ i18n.t(link.label) }}<span v-if="link.note"> ({{ i18n.t(link.note) }})</span>
@@ -92,12 +84,12 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 		</div>
 
 		<footer
-			:class="pika({ 'display': 'flex', 'gap': '8px', 'padding': '10px 12px', 'borderTop': '1px solid var(--lab-color-border)', 'flex': '0 0 auto', '$ button': { padding: '6px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' } })"
+			class="flex gap-[8px] p-[10px_12px] border-t border-t-lab-border flex-[0_0_auto] [&_button]:p-[6px_10px] [&_button]:text-[12px] [&_button]:rounded-lab [&_button]:border [&_button]:border-lab-border [&_button]:bg-lab-surface-alt [&_button]:text-lab-text [&_button]:cursor-pointer"
 		>
 			<button
 				type="button"
 				:disabled="snapshot.isFirstStep"
-				:class="pika({ '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				class="disabled:opacity-50 disabled:cursor-not-allowed"
 				@click="tutorial.back()"
 			>
 				{{ i18n.t('Back') }}
@@ -111,7 +103,7 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 			<button
 				type="button"
 				:disabled="!snapshot.canAdvance"
-				:class="pika({ 'marginLeft': 'auto', 'fontWeight': '600', 'borderColor': 'var(--lab-color-accent)', 'background': 'var(--lab-color-accent)', 'color': 'var(--lab-color-accent-contrast)', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				class="ml-[auto] font-semibold border-lab-accent bg-lab-accent text-lab-accent-contrast disabled:opacity-50 disabled:cursor-not-allowed"
 				@click="tutorial.next()"
 			>
 				{{ nextLabel }}

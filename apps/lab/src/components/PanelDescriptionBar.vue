@@ -19,9 +19,9 @@ const i18n = useLabI18n()
 <template>
 	<div
 		v-if="!dismissed"
-		:class="pika({ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 10px', fontSize: '11px', color: 'var(--lab-color-text-muted)', background: 'var(--lab-color-surface-alt)', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })"
+		class="flex items-center gap-[8px] p-[5px_10px] text-[11px] text-lab-text-muted bg-lab-surface-alt border-b border-b-lab-border flex-[0_0_auto]"
 	>
-		<span :class="pika({ flex: '1 1 auto' })">{{ i18n.t(text) }}</span>
+		<span class="flex-auto">{{ i18n.t(text) }}</span>
 		<!--
 			First surface moved to Nuxt UI (issue #230 PR 2). `-my-1.5` lets the 24px target overlap the bar's
 			padding so the bar keeps its height; `hover:bg-accented` because the bar itself is `surface-alt`,

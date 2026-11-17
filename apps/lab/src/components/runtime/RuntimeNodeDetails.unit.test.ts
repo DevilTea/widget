@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest'
 import { shallowRef } from 'vue'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
 import { LabStoreKey } from '../../composables/use-lab-store'
-import { testGlobalProperties } from '../../test-support'
 import RuntimeNodeDetails from './RuntimeNodeDetails.vue'
 
 function method(name: string, transitivelyWrites: boolean, transitivelyEmits?: boolean) {
@@ -38,7 +37,6 @@ describe('runtimeNodeDetails Method rows', () => {
 				client: {} as never,
 			},
 			global: {
-				config: { globalProperties: testGlobalProperties },
 				provide: {
 					[LabI18nKey as symbol]: { locale: { value: 'en' }, locales: ['en'], setLocale: () => {}, t: (source: string) => source },
 					[LabStoreKey as symbol]: { previewFocus: shallowRef(null), setFocus: () => {} },

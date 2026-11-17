@@ -43,7 +43,7 @@ export function labNuxtUi() {
 			clientBundle: {
 				scan: {
 					globInclude: ['src/**/*.{vue,ts}'],
-					globExclude: ['src/**/*.unit.test.ts', 'src/pika.gen.ts'],
+					globExclude: ['src/**/*.unit.test.ts'],
 				},
 			},
 		},

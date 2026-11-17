@@ -6,8 +6,6 @@ import { disableRemoteIcons } from './ui/offline-icons'
 // Lab shell only: Tailwind v4 + Nuxt UI; the Preview frame entry never imports it. Import order between the
 // stylesheets does not matter: the cascade layer order is fixed by the inline `<style>` in `index.html`.
 import './styles/lab-ui.css'
-// PikaCSS's build-time-generated CSS (see `pika.config.ts`; resolved by `@pikacss/unplugin-pikacss`).
-import 'pika.css'
 import './styles/global.css'
 
 // `UApp` is Nuxt UI's global provider (tooltips, programmatic overlays, locale; toasts once a surface needs

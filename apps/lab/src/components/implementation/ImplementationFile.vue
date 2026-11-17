@@ -62,13 +62,13 @@ watch(
 <template>
 	<p
 		v-if="status === 'loading'"
-		:class="pika({ padding: '10px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
+		class="p-[10px] text-[12px] text-lab-text-muted"
 	>
 		{{ i18n.t('Loading {title}…', { title: file.title }) }}
 	</p>
 	<p
 		v-else-if="status === 'error'"
-		:class="pika({ padding: '10px', fontSize: '12px', color: 'var(--lab-color-danger)' })"
+		class="p-[10px] text-[12px] text-lab-danger"
 	>
 		{{ i18n.t('Failed to load {title}.', { title: file.title }) }}
 	</p>

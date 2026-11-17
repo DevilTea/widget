@@ -60,38 +60,38 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 </script>
 
 <template>
-	<div :class="pika({ height: '100%', overflow: 'auto', padding: '10px' })">
-		<div :class="pika({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px' })">
-			<div :class="pika({ color: 'var(--lab-color-text-muted)', fontSize: '12px' })">
+	<div class="h-full overflow-auto p-[10px]">
+		<div class="flex items-center justify-between gap-[8px] mb-[10px]">
+			<div class="text-lab-text-muted text-[12px]">
 				{{ i18n.t('Widget types and authoring metadata from the current WidgetSystem catalog.') }}
 			</div>
 			<button
 				type="button"
 				data-testid="author-catalog-copy"
-				:class="pika({ flexShrink: '0', padding: '3px 8px', minHeight: '24px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				class="shrink-0 p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
 				@click="copyCatalog"
 			>
 				{{ copyLabel() }}
 			</button>
 		</div>
-		<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '8px' })">
+		<div class="flex flex-col gap-[8px]">
 			<article
 				v-for="widget in viewModel.widgets"
 				:key="widget.entry.type"
 				:data-testid="`author-catalog-${widget.entry.type}`"
-				:class="pika({ padding: '9px', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface-alt)' })"
+				class="p-[9px] border border-lab-border rounded-lab bg-lab-surface-alt"
 			>
-				<h3 :class="pika({ margin: '0 0 3px', fontSize: '13px', fontFamily: 'var(--lab-font-mono)' })">
+				<h3 class="m-[0_0_3px] text-[13px] font-lab-mono">
 					{{ widget.entry.type }}
 				</h3>
-				<p :class="pika({ margin: '0 0 8px', fontSize: '12px' })">
+				<p class="m-[0_0_8px] text-[12px]">
 					{{ widget.entry.description }}
 				</p>
-				<div :class="pika({ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '7px' })">
+				<div class="flex flex-wrap gap-[4px] mb-[7px]">
 					<span
 						v-for="capability in ['config', 'slots', 'state', 'properties', 'methods', 'events'] as const"
 						:key="capability"
-						:class="pika({ padding: '2px 5px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
+						class="p-[2px_5px] rounded-[999px] text-[11px] border border-lab-border"
 						:style="{ opacity: widget.capabilities[capability] ? '1' : '0.4' }"
 					>
 						{{ i18n.t(capability === 'config' ? 'Config' : capability === 'slots' ? 'Slots' : capability === 'state' ? 'State' : capability === 'properties' ? 'Properties' : capability === 'methods' ? 'Methods' : 'Events') }}
@@ -99,26 +99,26 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 				</div>
 				<div
 					v-if="widget.entry.descriptions.config !== null"
-					:class="pika({ fontSize: '11px', marginBottom: '5px' })"
+					class="text-[11px] mb-[5px]"
 				>
 					<strong>{{ i18n.t('Config description') }}:</strong> {{ widget.entry.descriptions.config }}
 				</div>
 				<details
 					v-if="widget.configSchemaText !== null"
 					:data-testid="`author-catalog-schema-${widget.entry.type}`"
-					:class="pika({ fontSize: '11px', marginBottom: '5px' })"
+					class="text-[11px] mb-[5px]"
 				>
-					<summary :class="pika({ cursor: 'pointer', minHeight: '24px', display: 'list-item', lineHeight: '24px' })">
+					<summary class="cursor-pointer min-h-[24px] list-item leading-[24px]">
 						<strong>{{ i18n.t('Config JSON Schema') }}</strong>
 					</summary>
-					<pre :class="pika({ margin: '4px 0 0', padding: '6px', maxHeight: '240px', overflow: 'auto', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)' })">{{ widget.configSchemaText }}</pre>
+					<pre class="m-[4px_0_0] p-[6px] max-h-[240px] overflow-auto text-[11px] font-lab-mono border border-lab-border rounded-lab">{{ widget.configSchemaText }}</pre>
 				</details>
 				<div
 					v-if="slotDescriptions(widget).length > 0"
-					:class="pika({ fontSize: '11px' })"
+					class="text-[11px]"
 				>
 					<strong>{{ i18n.t('Slot descriptions') }}:</strong>
-					<ul :class="pika({ margin: '4px 0 0', paddingLeft: '18px' })">
+					<ul class="m-[4px_0_0] pl-[18px]">
 						<li
 							v-for="([name, description]) in slotDescriptions(widget)"
 							:key="name"
@@ -130,10 +130,10 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 				<div
 					v-if="widget.capabilities.events"
 					:data-testid="`author-catalog-events-${widget.entry.type}`"
-					:class="pika({ fontSize: '11px', marginTop: '5px' })"
+					class="text-[11px] mt-[5px]"
 				>
 					<strong>{{ i18n.t('Events') }}:</strong>
-					<div :class="pika({ marginTop: '4px' })">
+					<div class="mt-[4px]">
 						<DeclaredEvents
 							:events="widget.events"
 							:declared="widget.capabilities.events"

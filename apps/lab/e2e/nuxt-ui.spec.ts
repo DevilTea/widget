@@ -84,7 +84,7 @@ test.describe('theme bridge (Lab theme store -> Nuxt UI .dark class)', () => {
 })
 
 test.describe('cascade layers', () => {
-	test('Tailwind properties/theme/base sit below the PikaCSS layers, which sit below utilities, and unlayered CSS beats all', async ({ page }) => {
+	test('Tailwind properties, theme, base, components and utilities rank in that order, and unlayered CSS beats all', async ({ page }) => {
 		await page.goto('/?showcase=sandbox')
 		// Probe the real layer order the browser resolved: each pair declares `color` on the same element in
 		// two layers (red in the lower, blue in the higher), so the winner shows which layer ranks higher.
@@ -96,8 +96,7 @@ test.describe('cascade layers', () => {
 			const pairs: Array<[string, string]> = [
 				['properties', 'theme'],
 				['theme', 'base'],
-				['base', 'preflights'],
-				['preflights', 'components'],
+				['base', 'components'],
 				['components', 'utilities'],
 			]
 			document.head.append(style)
@@ -116,8 +115,7 @@ test.describe('cascade layers', () => {
 			.toEqual({
 				'properties<theme': 'higher wins',
 				'theme<base': 'higher wins',
-				'base<preflights': 'higher wins',
-				'preflights<components': 'higher wins',
+				'base<components': 'higher wins',
 				'components<utilities': 'higher wins',
 				'unlayered': 'unlayered wins',
 			})
@@ -228,7 +226,7 @@ test.describe('Preview frame isolation', () => {
 			const root = document.documentElement
 			const style = getComputedStyle(root)
 			const cssText = [...document.styleSheets]
-				.flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText.slice(0, 200)))
+				.flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText))
 				.join('\n')
 			return {
 				htmlClass: root.className,

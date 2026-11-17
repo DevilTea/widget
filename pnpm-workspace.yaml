@@ -17,9 +17,6 @@ catalog:
   '@iconify-json/lucide': ^1.2.0
   '@iconify/vue': ^5.0.0
   '@nuxt/ui': ^4.12.0
-  '@pikacss/core': ^0.0.61
-  '@pikacss/integration': ^0.0.61
-  '@pikacss/unplugin-pikacss': ^0.0.61
   '@playwright/test': 1.62.1
   '@shikijs/core': ^4.4.3
   '@shikijs/engine-javascript': ^4.4.3

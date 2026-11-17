@@ -26,30 +26,30 @@ const { onCancel, onNativeClose } = useModalDialog('dialog', {
 		ref="dialog"
 		role="alertdialog"
 		aria-labelledby="tutorial-confirm-dialog-title"
-		:class="pika({ 'padding': '0', 'border': 'none', 'background': 'transparent', '$::backdrop': { background: 'color-mix(in srgb, black 55%, transparent)' } })"
+		class="p-0 [border:none] bg-transparent backdrop:[background:color-mix(in_srgb,black_55%,transparent)]"
 		@cancel="onCancel"
 		@close="onNativeClose"
 	>
 		<div
-			:class="pika({ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '400px', padding: '20px 22px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)' })"
+			class="flex flex-col gap-[12px] max-w-[400px] p-[20px_22px] rounded-lab border border-lab-border bg-lab-surface"
 		>
 			<p
 				id="tutorial-confirm-dialog-title"
-				:class="pika({ margin: '0', fontSize: '13px' })"
+				class="m-0 text-[13px]"
 			>
 				{{ i18n.t('Starting the tutorial will load the Survey teaching example and replace your unapplied changes.') }}
 			</p>
-			<div :class="pika({ display: 'flex', gap: '8px', marginTop: '4px' })">
+			<div class="flex gap-[8px] mt-[4px]">
 				<button
 					type="button"
-					:class="pika({ padding: '6px 14px', fontSize: '12px', fontWeight: '600', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-accent)', background: 'var(--lab-color-accent)', color: 'var(--lab-color-accent-contrast)', cursor: 'pointer' })"
+					class="p-[6px_14px] text-[12px] font-semibold rounded-lab border border-lab-accent bg-lab-accent text-lab-accent-contrast cursor-pointer"
 					@click="tutorial.confirmStart()"
 				>
 					{{ i18n.t('Start tour') }}
 				</button>
 				<button
 					type="button"
-					:class="pika({ padding: '6px 14px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+					class="p-[6px_14px] text-[12px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
 					@click="tutorial.cancelStart()"
 				>
 					{{ i18n.t('Cancel') }}

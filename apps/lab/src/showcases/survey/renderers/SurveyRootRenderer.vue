@@ -57,21 +57,21 @@ function onSubmit(): void {
 	<div
 		v-bind="anchor"
 		:data-changed-since-submit="changedSinceSubmit === true"
-		:class="pika({ display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box', maxWidth: '760px', padding: '20px', color: 'var(--lab-color-text)', fontSize: '16px' })"
+		class="survey"
 	>
-		<header :class="pika({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' })">
-			<h1 :class="pika({ margin: '0', fontSize: '26px', lineHeight: '1.25' })">
+		<header class="survey-header">
+			<h1 class="survey-title">
 				{{ text?.title ?? widgetId }}
 			</h1>
-			<div :class="pika({ display: 'flex', alignItems: 'center', gap: '8px' })">
+			<div class="survey-language">
 				<label
 					:for="languageId"
-					:class="pika({ fontSize: '15px', color: 'var(--lab-color-text-muted)' })"
+					class="survey-language-label"
 				>{{ i18n.t('Language') }}</label>
 				<select
 					:id="languageId"
 					:value="language ?? ''"
-					:class="pika({ minHeight: '40px', padding: '6px 10px', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface-alt)' })"
+					class="survey-language-select"
 					:style="FIELD_STYLE"
 					@change="onLanguageChange"
 				>
@@ -86,18 +86,18 @@ function onSubmit(): void {
 			</div>
 		</header>
 
-		<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '12px' })">
+		<div class="survey-questions">
 			<WidgetSlot name="questions" />
 		</div>
 
 		<div
 			data-tutorial-target="survey-actions"
-			:class="pika({ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' })"
+			class="survey-actions"
 		>
 			<button
 				type="button"
 				data-testid="survey-submit"
-				:class="pika({ minHeight: '44px', padding: '8px 28px', border: '1px solid var(--lab-color-accent)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-accent)', cursor: 'pointer' })"
+				class="survey-submit"
 				:style="PRIMARY_BUTTON_STYLE"
 				@click="onSubmit"
 			>
@@ -108,7 +108,7 @@ function onSubmit(): void {
 				:key="`${index}:${diagnostic.message}`"
 				role="alert"
 				data-testid="survey-submit-diagnostic"
-				:class="pika({ margin: '0', padding: '2px 0 2px 10px', borderLeft: '4px solid var(--lab-color-danger)', fontSize: '16px', fontWeight: '600', color: 'var(--lab-color-danger)' })"
+				class="survey-diagnostic"
 			>
 				{{ diagnostic.message }}
 			</p>
@@ -118,27 +118,27 @@ function onSubmit(): void {
 			v-if="submitted !== null"
 			data-tutorial-target="survey-submitted"
 			data-testid="survey-submitted"
-			:class="pika({ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', border: '2px solid var(--lab-color-accent)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface)' })"
+			class="survey-submitted"
 		>
-			<h2 :class="pika({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', margin: '0', fontSize: '20px' })">
+			<h2 class="survey-submitted-title">
 				{{ text?.submitted ?? 'Submitted' }}
 				<span
 					v-if="changedSinceSubmit === true"
 					data-testid="survey-changed-since-submit"
-					:class="pika({ padding: '2px 10px', border: '1px solid var(--lab-color-warning)', borderRadius: '999px', fontSize: '15px', fontWeight: '600', color: 'var(--lab-color-warning)' })"
+					class="survey-changed"
 				>
 					{{ text?.changedSinceSubmit }}
 				</span>
 			</h2>
-			<dl :class="pika({ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 16px', margin: '0', fontSize: '16px' })">
+			<dl class="survey-answers">
 				<template
 					v-for="[id, display] in submittedRows"
 					:key="id"
 				>
-					<dt :class="pika({ fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)' })">
+					<dt class="survey-answer-id">
 						{{ id }}
 					</dt>
-					<dd :class="pika({ margin: '0' })">
+					<dd class="survey-answer-value">
 						{{ display }}
 					</dd>
 				</template>
@@ -147,15 +147,162 @@ function onSubmit(): void {
 
 		<details
 			data-testid="survey-response"
-			:class="pika({ border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface)' })"
+			class="survey-response"
 		>
-			<summary :class="pika({ padding: '10px 16px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' })">
+			<summary class="survey-response-summary">
 				{{ i18n.t('Response — what a backend reads') }}
 			</summary>
 			<pre
 				data-testid="survey-response-json"
-				:class="pika({ margin: '0', padding: '12px 16px', maxHeight: '360px', overflow: 'auto', fontFamily: 'var(--lab-font-mono)', fontSize: '14px', lineHeight: '1.45', borderTop: '1px solid var(--lab-color-border)' })"
+				class="survey-response-json"
 			>{{ responseJson }}</pre>
 		</details>
 	</div>
 </template>
+
+<style scoped>
+.survey {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	box-sizing: border-box;
+	max-width: 760px;
+	padding: 20px;
+	color: var(--lab-color-text);
+	font-size: 16px;
+}
+
+.survey-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.survey-title {
+	margin: 0;
+	font-size: 26px;
+	line-height: 1.25;
+}
+
+.survey-language {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.survey-language-label {
+	font-size: 15px;
+	color: var(--lab-color-text-muted);
+}
+
+/* The select's text colour, size, weight and border are set inline (`control-style.ts`). */
+.survey-language-select {
+	min-height: 40px;
+	padding: 6px 10px;
+	border-radius: var(--lab-radius);
+	background: var(--lab-color-surface-alt);
+}
+
+.survey-questions {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.survey-actions {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+}
+
+/* The Submit label's colour, size and weight are set inline (`control-style.ts`). */
+.survey-submit {
+	min-height: 44px;
+	padding: 8px 28px;
+	border: 1px solid var(--lab-color-accent);
+	border-radius: var(--lab-radius);
+	background: var(--lab-color-accent);
+	cursor: pointer;
+}
+
+.survey-diagnostic {
+	margin: 0;
+	padding: 2px 0 2px 10px;
+	border-left: 4px solid var(--lab-color-danger);
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--lab-color-danger);
+}
+
+.survey-submitted {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 14px 16px;
+	border: 2px solid var(--lab-color-accent);
+	border-radius: var(--lab-radius);
+	background: var(--lab-color-surface);
+}
+
+.survey-submitted-title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	font-size: 20px;
+}
+
+.survey-changed {
+	padding: 2px 10px;
+	border: 1px solid var(--lab-color-warning);
+	border-radius: 999px;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--lab-color-warning);
+}
+
+.survey-answers {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 4px 16px;
+	margin: 0;
+	font-size: 16px;
+}
+
+.survey-answer-id {
+	font-family: var(--lab-font-mono);
+	color: var(--lab-color-text-muted);
+}
+
+.survey-answer-value {
+	margin: 0;
+}
+
+.survey-response {
+	border: 1px solid var(--lab-color-border);
+	border-radius: var(--lab-radius);
+	background: var(--lab-color-surface);
+}
+
+.survey-response-summary {
+	padding: 10px 16px;
+	font-size: 16px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.survey-response-json {
+	margin: 0;
+	padding: 12px 16px;
+	max-height: 360px;
+	overflow: auto;
+	font-family: var(--lab-font-mono);
+	font-size: 14px;
+	line-height: 1.45;
+	border-top: 1px solid var(--lab-color-border);
+}
+</style>

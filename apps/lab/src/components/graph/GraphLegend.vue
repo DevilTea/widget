@@ -39,12 +39,12 @@ function toggle(): void {
 </script>
 
 <template>
-	<div :class="pika({ position: 'relative' })">
+	<div class="relative">
 		<button
 			type="button"
 			:aria-expanded="open"
 			:aria-controls="panelId"
-			:class="pika({ 'padding': '3px 8px', 'minHeight': '24px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+			class="p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 			@click="toggle"
 		>
 			{{ i18n.t('Legend') }}
@@ -55,51 +55,51 @@ function toggle(): void {
 			:id="panelId"
 			role="group"
 			:aria-label="i18n.t('Graph legend')"
-			:class="pika({ position: 'absolute', top: 'calc(100% + 4px)', left: '0', zIndex: '10', width: '300px', padding: '10px 12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)', boxShadow: '0 8px 24px color-mix(in srgb, black 40%, transparent)', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11px' })"
+			class="absolute top-[calc(100%_+_4px)] left-0 z-[10] w-[300px] p-[10px_12px] rounded-lab border border-lab-border bg-lab-surface [box-shadow:0_8px_24px_color-mix(in_srgb,black_40%,transparent)] flex flex-col gap-[10px] text-[11px]"
 		>
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted">
 					{{ i18n.t('Widgets and members') }}
 				</h5>
-				<ul :class="pika({ margin: '0', padding: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '4px' })">
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+				<ul class="m-0 p-0 list-none flex flex-col gap-[4px]">
+					<li class="flex items-center gap-[6px]">
 						<span
-							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '2px' })"
+							class="inline-block w-[14px] h-[10px] rounded-[2px]"
 							:style="{ border: '1px solid var(--lab-color-border)', boxShadow: '0 1px 3px color-mix(in srgb, var(--lab-color-text) 8%, transparent)' }"
 						/>
 						{{ i18n.t('Widget cluster — labeled') }} <code>type · #id</code>
 					</li>
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+					<li class="flex items-center gap-[6px]">
 						<span
-							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '2px' })"
+							class="inline-block w-[14px] h-[10px] rounded-[2px]"
 							:style="{ border: '1.5px solid var(--lab-color-ok)' }"
 						/>
 						State
 					</li>
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+					<li class="flex items-center gap-[6px]">
 						<span
-							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '2px' })"
+							class="inline-block w-[14px] h-[10px] rounded-[2px]"
 							:style="{ border: '1.5px solid var(--lab-color-warning)' }"
 						/>
 						Property
 					</li>
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+					<li class="flex items-center gap-[6px]">
 						<span
-							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '2px' })"
+							class="inline-block w-[14px] h-[10px] rounded-[2px]"
 							:style="{ border: '1.5px solid var(--lab-color-accent)' }"
 						/>
 						{{ i18n.t('Method — a "W" badge means it transitively writes State') }}
 					</li>
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+					<li class="flex items-center gap-[6px]">
 						<span
-							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '2px' })"
+							class="inline-block w-[14px] h-[10px] rounded-[2px]"
 							:style="{ border: '1.5px solid var(--lab-color-accent)' }"
 						/>
 						{{ i18n.t('Method — an "E" badge means it transitively emits an Event') }}
 					</li>
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+					<li class="flex items-center gap-[6px]">
 						<span
-							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '2px' })"
+							class="inline-block w-[14px] h-[10px] rounded-[2px]"
 							:style="{ border: '1.5px solid var(--lab-color-danger)' }"
 						/>
 						{{ i18n.t('Any member in an invalid evaluation cycle (overrides its own kind color)') }}
@@ -108,40 +108,40 @@ function toggle(): void {
 			</section>
 
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted">
 					{{ i18n.t('Edges (owner → what it depends on)') }}
 				</h5>
-				<ul :class="pika({ margin: '0', padding: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '4px' })">
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+				<ul class="m-0 p-0 list-none flex flex-col gap-[4px]">
+					<li class="flex items-center gap-[6px]">
 						<span class="graph-legend-edge graph-legend-edge--reads" /><code>reads</code> — {{ i18n.t('a State or Property read') }}
 					</li>
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+					<li class="flex items-center gap-[6px]">
 						<span class="graph-legend-edge graph-legend-edge--writes" /><code>writes</code> — {{ i18n.t('a State write (Method-only)') }}
 					</li>
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+					<li class="flex items-center gap-[6px]">
 						<span class="graph-legend-edge graph-legend-edge--invokes" /><code>invokes</code> — {{ i18n.t('a Method invocation') }}
 					</li>
 				</ul>
-				<p :class="pika({ margin: '4px 0 0', color: 'var(--lab-color-text-muted)', fontStyle: 'italic' })">
+				<p class="m-[4px_0_0] text-lab-text-muted italic">
 					{{ i18n.t('Line style distinguishes edge kinds; aggregate labels show dependency counts, while details preserve exact operations.') }}
 				</p>
 			</section>
 
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted">
 					{{ i18n.t('Stubs (a dependency with no resolved target)') }}
 				</h5>
-				<ul :class="pika({ margin: '0', padding: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '4px' })">
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+				<ul class="m-0 p-0 list-none flex flex-col gap-[4px]">
+					<li class="flex items-center gap-[6px]">
 						<span
-							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '999px' })"
+							class="inline-block w-[14px] h-[10px] rounded-[999px]"
 							:style="{ border: '1px dashed var(--lab-color-text-muted)' }"
 						/>
 						{{ i18n.t('Absent — hidden unless "Show absent references" is on') }}
 					</li>
-					<li :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+					<li class="flex items-center gap-[6px]">
 						<span
-							:class="pika({ display: 'inline-block', width: '14px', height: '10px', borderRadius: '999px' })"
+							class="inline-block w-[14px] h-[10px] rounded-[999px]"
 							:style="{ border: '1px dashed var(--lab-color-danger)' }"
 						/>
 						{{ i18n.t('Invalid — always shown') }}

@@ -9,7 +9,6 @@ import type { VueWrapper } from '@vue/test-utils'
 import type { createSurveyRuntime } from '../test-support'
 import { flushPromises, mount } from '@vue/test-utils'
 import { LabI18nKey } from '../../../composables/use-lab-i18n'
-import { testGlobalProperties } from '../../../test-support'
 import { SurveyRenderer } from './index'
 
 export type SurveyTestRuntime = ReturnType<typeof createSurveyRuntime>['runtime']
@@ -20,7 +19,6 @@ export async function mountSurvey(runtime: SurveyTestRuntime, options: { readonl
 		props: { runtime },
 		attachTo: options.attachTo,
 		global: {
-			config: { globalProperties: testGlobalProperties },
 			provide: {
 				[LabI18nKey as symbol]: {
 					locale: { value: 'en' },

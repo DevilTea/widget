@@ -144,7 +144,7 @@ const statusLabel = computed(() => {
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
+	<div class="flex flex-col h-full min-h-0">
 		<PanelDescriptionBar
 			storageKey="widget-lab:panel-desc:dependencies"
 			text="The declared semantic dependencies between widget members"
@@ -152,30 +152,13 @@ const statusLabel = computed(() => {
 
 		<!-- Toolbar -->
 		<div
-			class="dependencies-toolbar"
-			:class="pika({
-				display: 'flex',
-				alignItems: 'center',
-				gap: '10px',
-				padding: '4px 8px',
-				borderBottom: '1px solid var(--lab-color-border)',
-				fontSize: '11px',
-				color: 'var(--lab-color-text-muted)',
-				flex: '0 0 auto',
-				flexWrap: 'wrap',
-			})"
+			class="dependencies-toolbar flex items-center gap-[10px] p-[4px_8px] border-b border-b-lab-border text-[11px] text-lab-text-muted flex-[0_0_auto] flex-wrap"
 		>
 			<!-- View Switcher (Relations | Graph) -->
 			<div
 				role="tablist"
 				:aria-label="i18n.t('Dependencies views')"
-				:class="pika({
-					display: 'inline-flex',
-					borderRadius: 'var(--lab-radius)',
-					border: '1px solid var(--lab-color-border)',
-					overflow: 'hidden',
-					background: 'var(--lab-color-surface-alt)',
-				})"
+				class="inline-flex rounded-lab border border-lab-border overflow-hidden bg-lab-surface-alt"
 			>
 				<button
 					id="dependencies-view-tab-relations"
@@ -185,18 +168,11 @@ const statusLabel = computed(() => {
 					aria-controls="dependencies-view-panel-relations"
 					:aria-selected="activeView === 'relations'"
 					:tabindex="activeView === 'relations' ? 0 : -1"
+					class="p-[3px_10px] min-h-[24px] text-[11px] [border:none] cursor-pointer font-lab-sans"
 					:class="[
-						pika({
-							padding: '3px 10px',
-							minHeight: '24px',
-							fontSize: '11px',
-							border: 'none',
-							cursor: 'pointer',
-							fontFamily: 'var(--lab-font-sans)',
-						}),
 						activeView === 'relations'
-							? pika({ background: 'var(--lab-color-accent)', color: '#fff', fontWeight: 'bold' })
-							: pika({ background: 'transparent', color: 'var(--lab-color-text)' }),
+							? 'bg-lab-accent [color:#fff] font-bold'
+							: 'bg-transparent text-lab-text',
 					]"
 					@click="activateView('relations')"
 					@keydown="onViewTabKeydown($event, 'relations')"
@@ -211,19 +187,11 @@ const statusLabel = computed(() => {
 					aria-controls="dependencies-view-panel-graph"
 					:aria-selected="activeView === 'graph'"
 					:tabindex="activeView === 'graph' ? 0 : -1"
+					class="p-[3px_10px] min-h-[24px] text-[11px] border-0 cursor-pointer border-l border-l-lab-border font-lab-sans"
 					:class="[
-						pika({
-							padding: '3px 10px',
-							minHeight: '24px',
-							fontSize: '11px',
-							border: 'none',
-							cursor: 'pointer',
-							borderLeft: '1px solid var(--lab-color-border)',
-							fontFamily: 'var(--lab-font-sans)',
-						}),
 						activeView === 'graph'
-							? pika({ background: 'var(--lab-color-accent)', color: '#fff', fontWeight: 'bold' })
-							: pika({ background: 'transparent', color: 'var(--lab-color-text)' }),
+							? 'bg-lab-accent [color:#fff] font-bold'
+							: 'bg-transparent text-lab-text',
 					]"
 					@click="activateView('graph')"
 					@keydown="onViewTabKeydown($event, 'graph')"
@@ -233,22 +201,22 @@ const statusLabel = computed(() => {
 			</div>
 
 			<!-- Shared filter: Show absent references -->
-			<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', minHeight: '24px' })">
+			<label class="flex items-center gap-[4px] cursor-pointer min-h-[24px]">
 				<input
 					v-model="store.graphShowAbsent.value"
 					type="checkbox"
-					:class="pika({ width: '16px', height: '16px', margin: '0' })"
+					class="w-[16px] h-[16px] m-0"
 				>
 				{{ i18n.t('Show absent references') }}
 			</label>
 
 			<!-- Graph-only controls -->
 			<template v-if="activeView === 'graph'">
-				<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', minHeight: '24px' })">
+				<label class="flex items-center gap-[4px] cursor-pointer min-h-[24px]">
 					<input
 						v-model="store.graphShowIsolatedMembers.value"
 						type="checkbox"
-						:class="pika({ width: '16px', height: '16px', margin: '0' })"
+						class="w-[16px] h-[16px] m-0"
 					>
 					{{ i18n.t('Show isolated members') }}
 				</label>
@@ -256,17 +224,7 @@ const statusLabel = computed(() => {
 					type="button"
 					:disabled="flow === null"
 					:aria-label="i18n.t('Fit graph')"
-					:class="pika({
-						'padding': '3px 8px',
-						'minHeight': '24px',
-						'fontSize': '11px',
-						'borderRadius': 'var(--lab-radius)',
-						'border': '1px solid var(--lab-color-border)',
-						'background': 'var(--lab-color-surface-alt)',
-						'color': 'var(--lab-color-text)',
-						'cursor': 'pointer',
-						'$:disabled': { opacity: '0.5', cursor: 'not-allowed' },
-					})"
+					class="p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 					@click="onFitGraphClick"
 				>
 					{{ i18n.t('Fit graph') }}
@@ -279,18 +237,7 @@ const statusLabel = computed(() => {
 					:disabled="flow === null"
 					:aria-label="i18n.t(direction === 'in' ? 'Zoom in' : 'Zoom out')"
 					:title="i18n.t(direction === 'in' ? 'Zoom in' : 'Zoom out')"
-					:class="pika({
-						'minWidth': '24px',
-						'minHeight': '24px',
-						'fontSize': '14px',
-						'lineHeight': '1',
-						'borderRadius': 'var(--lab-radius)',
-						'border': '1px solid var(--lab-color-border)',
-						'background': 'var(--lab-color-surface-alt)',
-						'color': 'var(--lab-color-text)',
-						'cursor': 'pointer',
-						'$:disabled': { opacity: '0.5', cursor: 'not-allowed' },
-					})"
+					class="min-w-[24px] min-h-[24px] text-[14px] leading-[1] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 					@click="onZoomClick(direction)"
 				>
 					<span aria-hidden="true">{{ direction === 'in' ? '+' : '−' }}</span>
@@ -299,17 +246,7 @@ const statusLabel = computed(() => {
 					type="button"
 					:disabled="flow === null"
 					:aria-label="i18n.t('Expand all')"
-					:class="pika({
-						'padding': '3px 8px',
-						'minHeight': '24px',
-						'fontSize': '11px',
-						'borderRadius': 'var(--lab-radius)',
-						'border': '1px solid var(--lab-color-border)',
-						'background': 'var(--lab-color-surface-alt)',
-						'color': 'var(--lab-color-text)',
-						'cursor': 'pointer',
-						'$:disabled': { opacity: '0.5', cursor: 'not-allowed' },
-					})"
+					class="p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 					@click="store.expandAllGraphClusters()"
 				>
 					{{ i18n.t('Expand all') }}
@@ -318,17 +255,7 @@ const statusLabel = computed(() => {
 					type="button"
 					:disabled="flow === null"
 					:aria-label="i18n.t('Collapse all')"
-					:class="pika({
-						'padding': '3px 8px',
-						'minHeight': '24px',
-						'fontSize': '11px',
-						'borderRadius': 'var(--lab-radius)',
-						'border': '1px solid var(--lab-color-border)',
-						'background': 'var(--lab-color-surface-alt)',
-						'color': 'var(--lab-color-text)',
-						'cursor': 'pointer',
-						'$:disabled': { opacity: '0.5', cursor: 'not-allowed' },
-					})"
+					class="p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 					@click="store.collapseAllGraphClusters()"
 				>
 					{{ i18n.t('Collapse all') }}
@@ -336,13 +263,13 @@ const statusLabel = computed(() => {
 				<GraphLegend />
 				<span
 					v-if="statusLabel"
-					:class="pika({ marginLeft: 'auto' })"
+					class="ml-[auto]"
 				>{{ statusLabel }}</span>
 			</template>
 		</div>
 
 		<!-- Main view area (v-show preserves Graph DOM state & zoom/pan across view switching) -->
-		<div :class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative', display: 'flex', flexDirection: 'column' })">
+		<div class="flex-auto min-h-0 relative flex flex-col">
 			<!-- Graph View -->
 			<div
 				v-show="activeView === 'graph'"
@@ -350,11 +277,10 @@ const statusLabel = computed(() => {
 				role="tabpanel"
 				aria-labelledby="dependencies-view-tab-graph"
 				tabindex="0"
-				class="dependencies-graph-view"
-				:class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative', display: 'flex', flexDirection: 'column' })"
+				class="dependencies-graph-view flex-auto min-h-0 relative flex flex-col"
 			>
 				<GraphKey />
-				<div :class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative' })">
+				<div class="flex-auto min-h-0 relative">
 					<GraphCanvas
 						v-if="flow !== null"
 						ref="graphCanvas"
@@ -368,7 +294,7 @@ const statusLabel = computed(() => {
 					/>
 					<div
 						v-else
-						:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
+						class="p-[16px] text-[12px] text-lab-text-muted"
 					>
 						{{ statusLabel ?? i18n.t('No graph yet — this Blueprint has no widgets to lay out.') }}
 					</div>
@@ -387,8 +313,7 @@ const statusLabel = computed(() => {
 				role="tabpanel"
 				aria-labelledby="dependencies-view-tab-relations"
 				tabindex="0"
-				class="dependencies-relations-view"
-				:class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative', display: 'flex', flexDirection: 'column' })"
+				class="dependencies-relations-view flex-auto min-h-0 relative flex flex-col"
 			>
 				<RelationsView
 					:model="relationsModel"

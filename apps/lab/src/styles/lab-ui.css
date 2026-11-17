@@ -8,29 +8,25 @@
  *
  *   properties   Tailwind's `@property` fallback (`--tw-*: initial` under `@supports`); it must rank BELOW
  *                everything that sets a `--tw-*` variable, or it would reset them in browsers that use it
- *   theme        Tailwind design tokens and Nuxt UI's `--ui-*` defaults
+ *   theme        Tailwind design tokens (the Lab palette bridge below included) and Nuxt UI's `--ui-*` defaults
  *   base         the `[data-slot]`-scoped preflight below (no global Tailwind preflight, see "No global preflight")
- *   preflights   PikaCSS `:root` tokens (`--lab-*`)            -- name is PikaCSS's, see `pika.config.ts`
  *   components   (Tailwind/Nuxt UI component layer, normally empty)
- *   utilities    Tailwind utilities, the classes Nuxt UI components are made of, AND PikaCSS's `utilities`
- *                (`pk-*` atomic classes). PikaCSS's layer name is fixed by its generated CSS, so the two
- *                share this layer; their classes never target the same element, and inside the layer the
- *                later source wins.
+ *   utilities    Tailwind utilities, including the classes Nuxt UI components are made of and the `lab-*` colour,
+ *                font and radius utilities the chrome is written in
  *
  * The order is declared inline in `index.html` (the first `@layer` statement the browser sees fixes the
- * order, and Vite emits the shared PikaCSS stylesheet before this one), and repeated here for readers and
- * for any tool that loads this file alone. Unlayered CSS (`global.css`, `dockview-theme.css`, scoped SFC
- * styles) beats every layer, so Dockview, Vue Flow, Monaco, Shiki and the hand-written chrome rules keep
- * winning over Tailwind.
+ * order) and repeated here for readers and for any tool that loads this file alone. Unlayered CSS
+ * (`global.css`, `dockview-theme.css`, scoped SFC styles) beats every layer, so Dockview, Vue Flow, Monaco,
+ * Shiki and the hand-written chrome rules keep winning over Tailwind.
  */
-@layer properties, theme, base, preflights, components, utilities;
+@layer properties, theme, base, components, utilities;
 
 /*
  * No global preflight. `@import "tailwindcss"` would include `tailwindcss/preflight.css`, which sets
  * `html { line-height: 1.5; tab-size: 4 }`, `border: 0 solid` on every element, resets headings, lists,
  * buttons and form controls... Measured against the current chrome (header 77px -> 83px, every button and
- * select 27px -> 30px, `border-*-style` none -> solid on ~120 elements), that changes the PikaCSS- and
- * UA-styled chrome, which this PR must not do. So only the theme and the utilities are imported, and the
+ * select 27px -> 30px, `border-*-style` none -> solid on ~120 elements), that changes the
+ * UA-styled chrome, which must not change. So only the theme and the utilities are imported, and the
  * preflight rules Nuxt UI components depend on are restated below, scoped to the elements Nuxt UI renders
  * (`[data-slot]`, set by every Nuxt UI component), in the `base` layer. Adopt the full preflight when the chrome itself moves to
  * Tailwind (later PRs of the redesign), not before.
@@ -166,8 +162,8 @@
 }
 
 /*
- * Theme bridge, tokens. The Lab palette (`--lab-color-*`, defined by PikaCSS for dark and by
- * `global.css` under `html[data-lab-theme='light']`) is authoritative; Nuxt UI's semantic tokens are
+ * Theme bridge, tokens. The Lab palette (`--lab-color-*`, defined by `global.css`: dark on
+ * `:root`, light under `html[data-lab-theme='light']`) is authoritative; Nuxt UI's semantic tokens are
  * pointed at it. They are plain `var()` references, so they follow `data-lab-theme` by themselves; no
  * `.dark` variant of the mapping is needed. The `.dark` class (`composables/use-nuxt-ui-theme-bridge.ts`)
  * only exists so Nuxt UI's `dark:` variants agree with the Lab theme.
@@ -202,4 +198,27 @@
 	--ui-success: var(--lab-color-ok);
 	--ui-warning: var(--lab-color-warning);
 	--ui-error: var(--lab-color-danger);
+}
+
+/*
+ * Lab palette as Tailwind utilities (`text-lab-text-muted`, `bg-lab-surface-alt`, `border-lab-border`, `accent-lab-accent`,
+ * `rounded-lab`, `font-lab-mono`...). `inline` makes each utility use the `var(--lab-*)` reference itself instead of an
+ * intermediate `--color-lab-*` variable, so the utilities follow `data-lab-theme` exactly as the plain-CSS consumers
+ * (Dockview, Monaco, scoped styles) do, with no second copy of the palette to keep in step.
+ */
+@theme inline {
+	--color-lab-bg: var(--lab-color-bg);
+	--color-lab-surface: var(--lab-color-surface);
+	--color-lab-surface-alt: var(--lab-color-surface-alt);
+	--color-lab-border: var(--lab-color-border);
+	--color-lab-text: var(--lab-color-text);
+	--color-lab-text-muted: var(--lab-color-text-muted);
+	--color-lab-accent: var(--lab-color-accent);
+	--color-lab-accent-contrast: var(--lab-color-accent-contrast);
+	--color-lab-danger: var(--lab-color-danger);
+	--color-lab-warning: var(--lab-color-warning);
+	--color-lab-ok: var(--lab-color-ok);
+	--radius-lab: var(--lab-radius);
+	--font-lab-mono: var(--lab-font-mono);
+	--font-lab-sans: var(--lab-font-sans);
 }

@@ -51,10 +51,10 @@ function selectNode(nodeId: InspectionNodeId): void {
 				/>
 			</template>
 			<template #details>
-				<div :class="pika({ display: 'flex', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
+				<div class="flex border-b border-b-lab-border flex-[0_0_auto]">
 					<button
 						type="button"
-						:class="pika({ flex: '1 1 auto', padding: '6px', fontSize: '11px', border: 'none', background: 'transparent', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+						class="flex-auto p-[6px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer"
 						:style="{ fontWeight: showAllDiagnostics ? 'normal' : '600', borderBottom: showAllDiagnostics ? 'none' : '2px solid var(--lab-color-accent)' }"
 						@click="showAllDiagnostics = false"
 					>
@@ -62,14 +62,14 @@ function selectNode(nodeId: InspectionNodeId): void {
 					</button>
 					<button
 						type="button"
-						:class="pika({ flex: '1 1 auto', padding: '6px', fontSize: '11px', border: 'none', background: 'transparent', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+						class="flex-auto p-[6px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer"
 						:style="{ fontWeight: showAllDiagnostics ? '600' : 'normal', borderBottom: showAllDiagnostics ? '2px solid var(--lab-color-accent)' : 'none' }"
 						@click="showAllDiagnostics = true"
 					>
 						{{ i18n.t('All diagnostics') }} ({{ collectedDiagnostics.length }})
 					</button>
 				</div>
-				<div :class="pika({ flex: '1 1 auto', minHeight: '0', overflow: 'auto' })">
+				<div class="flex-auto min-h-0 overflow-auto">
 					<BlueprintNodeDetails
 						v-if="!showAllDiagnostics"
 						:node="selectedNode"
@@ -79,7 +79,7 @@ function selectNode(nodeId: InspectionNodeId): void {
 					/>
 					<div
 						v-else
-						:class="pika({ padding: '10px' })"
+						class="p-[10px]"
 					>
 						<DiagnosticList
 							:diagnostics="collectedDiagnostics"

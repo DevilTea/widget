@@ -32,140 +32,74 @@ function memberKindShort(kind: GraphVertexKind): string {
 
 <template>
 	<div
-		class="relations-group-card"
+		class="relations-group-card rounded-lab border border-lab-border bg-lab-surface flex flex-col overflow-hidden"
 		:class="[
-			pika({
-				borderRadius: 'var(--lab-radius)',
-				border: '1px solid var(--lab-color-border)',
-				background: 'var(--lab-color-surface)',
-				display: 'flex',
-				flexDirection: 'column',
-				overflow: 'hidden',
-			}),
 			!group.isResolved && 'relations-group-card--unresolved',
 		]"
 	>
 		<!-- Group Header (Remote Widget) -->
 		<div
-			class="relations-group-header"
-			:class="pika({
-				padding: '5px 8px',
-				background: 'var(--lab-color-surface-alt)',
-				borderBottom: '1px solid var(--lab-color-border)',
-				display: 'flex',
-				alignItems: 'center',
-				justifyContent: 'space-between',
-				gap: '6px',
-				fontSize: '11px',
-			})"
+			class="relations-group-header p-[5px_8px] bg-lab-surface-alt border-b border-b-lab-border flex items-center justify-between gap-[6px] text-[11px]"
 		>
-			<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '0' })">
+			<div class="flex items-center gap-[6px] min-w-0">
 				<button
 					v-if="group.isResolved && group.nodeId !== undefined"
 					type="button"
-					:class="pika({
-						'background': 'transparent',
-						'border': 'none',
-						'padding': '0',
-						'cursor': 'pointer',
-						'display': 'flex',
-						'alignItems': 'center',
-						'gap': '5px',
-						'fontFamily': 'var(--lab-font-mono)',
-						'fontSize': '11px',
-						'color': 'var(--lab-color-text)',
-						'textDecoration': 'none',
-						'$:hover': { textDecoration: 'underline' },
-					})"
+					class="bg-transparent [border:none] p-0 cursor-pointer flex items-center gap-[5px] font-lab-mono text-[11px] text-lab-text no-underline hover:underline"
 					:title="`${group.widgetType ?? ''} #${group.widgetId}`"
 					@click="emit('selectWidget', group.nodeId)"
 				>
 					<span
 						v-if="group.widgetType"
-						:class="pika({ fontWeight: 'bold' })"
+						class="font-bold"
 					>{{ group.widgetType }}</span>
-					<span :class="pika({ color: 'var(--lab-color-text-muted)' })">#{{ group.widgetId }}</span>
+					<span class="text-lab-text-muted">#{{ group.widgetId }}</span>
 				</button>
 				<div
 					v-else
-					:class="pika({
-						display: 'flex',
-						alignItems: 'center',
-						gap: '5px',
-						fontFamily: 'var(--lab-font-mono)',
-						fontSize: '11px',
-						color: 'var(--lab-color-text)',
-					})"
+					class="flex items-center gap-[5px] font-lab-mono text-[11px] text-lab-text"
 				>
 					<span
 						v-if="group.widgetType"
-						:class="pika({ fontWeight: 'bold' })"
+						class="font-bold"
 					>{{ group.widgetType }}</span>
-					<span :class="pika({ color: 'var(--lab-color-text-muted)' })">#{{ group.widgetId }}</span>
+					<span class="text-lab-text-muted">#{{ group.widgetId }}</span>
 				</div>
 
 				<span
 					v-if="group.isSameWidget"
-					:class="pika({
-						fontSize: '11px',
-						padding: '1px 4px',
-						borderRadius: '2px',
-						background: 'var(--lab-color-surface)',
-						border: '1px solid var(--lab-color-border)',
-						color: 'var(--lab-color-text-muted)',
-					})"
+					class="text-[11px] p-[1px_4px] rounded-[2px] bg-lab-surface border border-lab-border text-lab-text-muted"
 				>
 					{{ i18n.t('this widget') }}
 				</span>
 				<span
 					v-if="!group.isResolved"
-					:class="pika({
-						fontSize: '11px',
-						padding: '1px 4px',
-						borderRadius: '2px',
-						background: 'color-mix(in srgb, var(--lab-color-danger) 15%, transparent)',
-						color: 'var(--lab-color-danger)',
-						fontWeight: '600',
-					})"
+					class="text-[11px] p-[1px_4px] rounded-[2px] [background:color-mix(in_srgb,var(--lab-color-danger)_15%,transparent)] text-lab-danger font-semibold"
 				>
 					{{ i18n.t('unresolved') }}
 				</span>
 			</div>
-			<span :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
+			<span class="text-[11px] text-lab-text-muted">
 				{{ group.rows.length }}
 			</span>
 		</div>
 
 		<!-- Rows -->
-		<div :class="pika({ display: 'flex', flexDirection: 'column' })">
+		<div class="flex flex-col">
 			<div
 				v-for="(row, index) in group.rows"
 				:key="row.id"
-				class="relations-row"
+				class="relations-row p-[6px_8px] flex flex-col gap-[3px] text-[11px]"
 				:class="[
-					pika({
-						padding: '6px 8px',
-						display: 'flex',
-						flexDirection: 'column',
-						gap: '3px',
-						fontSize: '11px',
-					}),
-					index > 0 && pika({ borderTop: '1px dashed var(--lab-color-border)' }),
+					index > 0 && 'border-t border-t-lab-border [border-top-style:dashed]',
 				]"
 			>
 				<!-- Operation and Members -->
-				<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' })">
+				<div class="flex items-center gap-[6px] flex-wrap">
 					<!-- In Widget Mode: show local member name -->
 					<span
 						v-if="isWidgetMode"
-						:class="pika({
-							fontFamily: 'var(--lab-font-mono)',
-							fontSize: '11px',
-							color: 'var(--lab-color-text)',
-							background: 'var(--lab-color-surface-alt)',
-							padding: '1px 5px',
-							borderRadius: '3px',
-						})"
+						class="font-lab-mono text-[11px] text-lab-text bg-lab-surface-alt p-[1px_5px] rounded-[3px]"
 						:title="`${row.localMember.kind}: ${row.localMember.name}`"
 					>
 						{{ row.localMember.name }}
@@ -173,10 +107,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 
 					<!-- Arrow indicating direction -->
 					<span
-						:class="pika({
-							fontSize: '11px',
-							color: 'var(--lab-color-text-muted)',
-						})"
+						class="text-[11px] text-lab-text-muted"
 						aria-hidden="true"
 					>
 						{{ direction === 'incoming' ? '←' : '→' }}
@@ -184,16 +115,9 @@ function memberKindShort(kind: GraphVertexKind): string {
 
 					<!-- Operation pill -->
 					<span
-						class="relations-operation-pill"
+						class="relations-operation-pill text-[11px] p-[1px_5px] rounded-[999px] font-lab-mono uppercase"
 						:class="[
 							`relations-operation-pill--${row.operation}`,
-							pika({
-								fontSize: '11px',
-								padding: '1px 5px',
-								borderRadius: '999px',
-								fontFamily: 'var(--lab-font-mono)',
-								textTransform: 'uppercase',
-							}),
 						]"
 					>
 						{{ row.operation }}
@@ -203,25 +127,9 @@ function memberKindShort(kind: GraphVertexKind): string {
 					<button
 						v-if="row.resolved && row.remoteMember"
 						type="button"
-						class="relations-member-button"
+						class="relations-member-button inline-flex items-center gap-[4px] p-[1px_6px] rounded-[3px] border border-lab-border bg-lab-surface-alt text-lab-text font-lab-mono text-[11px] cursor-pointer hover:border-lab-accent"
 						:class="[
 							`relations-member-button--${row.remoteMember.kind}`,
-							pika({
-								'display': 'inline-flex',
-								'alignItems': 'center',
-								'gap': '4px',
-								'padding': '1px 6px',
-								'borderRadius': '3px',
-								'border': '1px solid var(--lab-color-border)',
-								'background': 'var(--lab-color-surface-alt)',
-								'color': 'var(--lab-color-text)',
-								'fontFamily': 'var(--lab-font-mono)',
-								'fontSize': '11px',
-								'cursor': 'pointer',
-								'$:hover': {
-									borderColor: 'var(--lab-color-accent)',
-								},
-							}),
 						]"
 						:title="i18n.t('Focus {kind} {name} in {widget}', { kind: row.remoteMember.kind, name: row.remoteMember.name, widget: `${row.remoteMember.widgetType} #${row.remoteMember.widgetId}` })"
 						@click="emit('selectMember', { nodeId: row.remoteMember.nodeId, member: { type: row.remoteMember.kind, name: row.remoteMember.name } })"
@@ -238,21 +146,9 @@ function memberKindShort(kind: GraphVertexKind): string {
 					<!-- Unresolved stub target -->
 					<span
 						v-else-if="row.stubTarget"
-						class="relations-stub-target"
+						class="relations-stub-target inline-flex items-center gap-[4px] p-[1px_6px] rounded-[3px] border border-lab-danger border-dashed [background:color-mix(in_srgb,var(--lab-color-danger)_8%,transparent)] text-lab-text font-lab-mono text-[11px]"
 						:class="[
 							`relations-stub-target--${row.stubStatus}`,
-							pika({
-								display: 'inline-flex',
-								alignItems: 'center',
-								gap: '4px',
-								padding: '1px 6px',
-								borderRadius: '3px',
-								border: '1px dashed var(--lab-color-danger)',
-								background: 'color-mix(in srgb, var(--lab-color-danger) 8%, transparent)',
-								color: 'var(--lab-color-text)',
-								fontFamily: 'var(--lab-font-mono)',
-								fontSize: '11px',
-							}),
 						]"
 						:title="`${row.stubStatus}: ${row.stubTarget.targetDescription}`"
 					>
@@ -264,7 +160,8 @@ function memberKindShort(kind: GraphVertexKind): string {
 						</span>
 						<span>{{ row.stubTarget.memberName }}</span>
 						<span
-							:class="[pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)', fontStyle: 'italic' }), row.stubStatus === 'invalid' && 'relations-stub-status--invalid']"
+							class="text-[11px] text-lab-text-muted italic"
+							:class="[row.stubStatus === 'invalid' && 'relations-stub-status--invalid']"
 						>
 							({{ row.stubStatus }})
 						</span>
@@ -273,14 +170,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 					<!-- Invalid cycle flag -->
 					<span
 						v-if="row.invalidCycle"
-						:class="pika({
-							fontSize: '11px',
-							fontWeight: 'bold',
-							color: 'var(--lab-color-danger)',
-							padding: '0 4px',
-							borderRadius: '2px',
-							background: 'color-mix(in srgb, var(--lab-color-danger) 15%, transparent)',
-						})"
+						class="text-[11px] font-bold text-lab-danger p-[0_4px] rounded-[2px] [background:color-mix(in_srgb,var(--lab-color-danger)_15%,transparent)]"
 						:title="i18n.t('invalid evaluation cycle')"
 					>
 						! {{ i18n.t('cycle') }}
@@ -290,9 +180,8 @@ function memberKindShort(kind: GraphVertexKind): string {
 				<!-- Path context -->
 				<div
 					v-if="formatDiagnosticPath(row.path)"
-					class="relations-row-path"
+					class="relations-row-path font-lab-mono text-[11px] text-lab-text-muted"
 					:class="[
-						pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '11px', color: 'var(--lab-color-text-muted)' }),
 						isWidgetMode && 'relations-row-path--widget-mode',
 					]"
 				>

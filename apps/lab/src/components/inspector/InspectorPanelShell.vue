@@ -14,7 +14,7 @@ defineProps<{
 <template>
 	<div
 		data-testid="inspector-panel-shell"
-		:class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })"
+		class="flex flex-col h-full min-h-0"
 	>
 		<PanelDescriptionBar
 			:storageKey="storageKey"

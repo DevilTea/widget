@@ -93,17 +93,17 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0', minWidth: '0' })">
+	<div class="flex flex-col h-full min-h-0 min-w-0">
 		<PanelDescriptionBar
 			storageKey="widget-lab:panel-desc:implementation"
 			text="Inspect the focused widget instance or browse the current showcase's registered plugin implementations — readonly and curated"
 		/>
 
-		<div :class="pika({ display: 'flex', gap: '6px', padding: '6px 10px', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
+		<div class="flex gap-[6px] p-[6px_10px] border-b border-b-lab-border flex-[0_0_auto]">
 			<button
 				type="button"
 				:aria-pressed="mode === 'focused'"
-				:class="pika({ padding: '4px 8px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				class="p-[4px_8px] text-[11px] rounded-lab border border-lab-border text-lab-text cursor-pointer"
 				:style="{ background: mode === 'focused' ? 'var(--lab-color-surface-alt)' : 'transparent' }"
 				@click="mode = 'focused'"
 			>
@@ -112,7 +112,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 			<button
 				type="button"
 				:aria-pressed="mode === 'catalog'"
-				:class="pika({ padding: '4px 8px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				class="p-[4px_8px] text-[11px] rounded-lab border border-lab-border text-lab-text cursor-pointer"
 				:style="{ background: mode === 'catalog' ? 'var(--lab-color-surface-alt)' : 'transparent' }"
 				@click="mode = 'catalog'"
 			>
@@ -122,38 +122,38 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 
 		<div
 			v-if="mode === 'focused' && focusedWidget === null"
-			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
+			class="p-[16px] text-[12px] text-lab-text-muted"
 		>
 			{{ i18n.t('No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Dependencies, or browse Registered plugins without selecting an instance.') }}
 		</div>
 		<div
 			v-else-if="mode === 'focused' && entry === null"
-			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
+			class="p-[16px] text-[12px] text-lab-text-muted"
 		>
-			<code :class="pika({ fontFamily: 'var(--lab-font-mono)' })">{{ focusedWidget?.type }}</code>
+			<code class="font-lab-mono">{{ focusedWidget?.type }}</code>
 			{{ i18n.t('has no curated Implementation entry yet.') }}
 		</div>
 		<div
 			v-else-if="mode === 'catalog' && catalogTypes.length === 0"
-			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
+			class="p-[16px] text-[12px] text-lab-text-muted"
 		>
 			{{ i18n.t('This showcase has no curated registered-plugin Implementation entries.') }}
 		</div>
 		<div
 			v-else-if="entry !== null"
-			:class="pika({ display: 'flex', flex: '1 1 auto', minHeight: '0', minWidth: '0' })"
+			class="flex flex-auto min-h-0 min-w-0"
 		>
 			<nav
 				v-if="mode === 'catalog'"
 				:aria-label="i18n.t('Registered plugins')"
-				:class="pika({ display: 'flex', flexDirection: 'column', flex: '0 0 180px', minWidth: '0', overflow: 'auto', borderRight: '1px solid var(--lab-color-border)', padding: '6px' })"
+				class="flex flex-col flex-[0_0_180px] min-w-0 overflow-auto border-r border-r-lab-border p-[6px]"
 			>
 				<button
 					v-for="type in catalogTypes"
 					:key="type"
 					type="button"
 					:aria-current="selectedCatalogType === type ? 'true' : undefined"
-					:class="pika({ padding: '5px 7px', textAlign: 'left', fontSize: '11px', border: 'none', borderRadius: 'var(--lab-radius)', color: 'var(--lab-color-text)', cursor: 'pointer', fontFamily: 'var(--lab-font-mono)' })"
+					class="p-[5px_7px] text-left text-[11px] [border:none] rounded-lab text-lab-text cursor-pointer font-lab-mono"
 					:style="{ background: selectedCatalogType === type ? 'var(--lab-color-surface-alt)' : 'transparent' }"
 					@click="selectedCatalogType = type"
 				>
@@ -161,17 +161,17 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 				</button>
 			</nav>
 
-			<div :class="pika({ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: '0', minWidth: '0' })">
-				<div :class="pika({ padding: '6px 10px', fontSize: '11px', color: 'var(--lab-color-text-muted)', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
-					<strong :class="pika({ color: 'var(--lab-color-text)' })">{{ displayedType }}</strong>
+			<div class="flex flex-col flex-auto min-h-0 min-w-0">
+				<div class="p-[6px_10px] text-[11px] text-lab-text-muted border-b border-b-lab-border flex-[0_0_auto]">
+					<strong class="text-lab-text">{{ displayedType }}</strong>
 					— {{ showcase === undefined ? '' : i18n.t(showcase.label) }}
 				</div>
-				<div :class="pika({ display: 'flex', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto', overflowX: 'auto' })">
+				<div class="flex border-b border-b-lab-border flex-[0_0_auto] overflow-x-auto">
 					<button
 						v-for="file in entry.files"
 						:key="file.path"
 						type="button"
-						:class="pika({ flex: '0 0 auto', padding: '6px 10px', fontSize: '11px', border: 'none', background: 'transparent', color: 'var(--lab-color-text)', cursor: 'pointer', whiteSpace: 'nowrap' })"
+						class="flex-[0_0_auto] p-[6px_10px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer whitespace-nowrap"
 						:style="{ fontWeight: selectedTabId === file.path ? '600' : 'normal', borderBottom: selectedTabId === file.path ? '2px solid var(--lab-color-accent)' : '2px solid transparent' }"
 						@click="selectedTabId = file.path"
 					>
@@ -180,7 +180,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 					<button
 						v-if="mode === 'focused'"
 						type="button"
-						:class="pika({ flex: '0 0 auto', padding: '6px 10px', fontSize: '11px', border: 'none', background: 'transparent', color: 'var(--lab-color-text)', cursor: 'pointer', whiteSpace: 'nowrap' })"
+						class="flex-[0_0_auto] p-[6px_10px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer whitespace-nowrap"
 						:style="{ fontWeight: selectedTabId === APPLIED_INSTANCE_TAB ? '600' : 'normal', borderBottom: selectedTabId === APPLIED_INSTANCE_TAB ? '2px solid var(--lab-color-accent)' : '2px solid transparent' }"
 						@click="selectedTabId = APPLIED_INSTANCE_TAB"
 					>
@@ -189,22 +189,22 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 				</div>
 				<div
 					v-if="selectedFile !== null"
-					:class="pika({ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: '0', minWidth: '0' })"
+					class="flex flex-col flex-auto min-h-0 min-w-0"
 				>
-					<div :class="pika({ padding: '4px 10px', fontSize: '11px', color: 'var(--lab-color-text-muted)', fontFamily: 'var(--lab-font-mono)', overflowX: 'auto', flex: '0 0 auto' })">
+					<div class="p-[4px_10px] text-[11px] text-lab-text-muted font-lab-mono overflow-x-auto flex-[0_0_auto]">
 						{{ selectedFile.path }}
 					</div>
-					<div :class="pika({ flex: '1 1 auto', minHeight: '0', minWidth: '0' })">
+					<div class="flex-auto min-h-0 min-w-0">
 						<ImplementationFile :file="selectedFile" />
 					</div>
 				</div>
 				<div
 					v-else-if="mode === 'focused'"
-					:class="pika({ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: '0', minWidth: '0' })"
+					class="flex flex-col flex-auto min-h-0 min-w-0"
 				>
 					<p
 						v-if="appliedInstance === null || appliedInstance.status === 'not-found'"
-						:class="pika({ padding: '10px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
+						class="p-[10px] text-[12px] text-lab-text-muted"
 					>
 						{{ i18n.t("This widget's declaration was not found in the applied Source — it may only exist in the unapplied draft, or the applied Blueprint changed since this focus was set.") }}
 					</p>

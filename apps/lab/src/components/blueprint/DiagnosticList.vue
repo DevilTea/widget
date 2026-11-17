@@ -127,10 +127,10 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 </script>
 
 <template>
-	<ul :class="pika({ listStyle: 'none', margin: '0', padding: '0', display: 'flex', flexDirection: 'column', gap: '6px' })">
+	<ul class="list-none m-0 p-0 flex flex-col gap-[6px]">
 		<li
 			v-if="diagnostics.length === 0"
-			:class="pika({ color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
+			class="text-lab-text-muted text-[12px]"
 		>
 			{{ i18n.t('No diagnostics.') }}
 		</li>
@@ -138,17 +138,17 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 			v-for="(diagnostic, index) in diagnostics"
 			:key="index"
 			:data-testid="`blueprint-diagnostic-${index}`"
-			:class="pika({ border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '6px 8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' })"
+			class="border border-lab-border rounded-lab p-[6px_8px] text-[12px] flex flex-col gap-[4px]"
 		>
-			<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
-				<span :class="pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '11px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text-muted)' })">
+			<div class="flex items-center gap-[6px]">
+				<span class="font-lab-mono text-[11px] p-[1px_5px] rounded-[999px] bg-lab-surface-alt text-lab-text-muted">
 					{{ diagnostic.code }}
 				</span>
 				<button
 					v-if="nodeIdOfLocation(diagnostic.location, inspection) !== null"
 					type="button"
 					:data-testid="`blueprint-diagnostic-navigate-${index}`"
-					:class="pika({ marginLeft: 'auto', fontSize: '11px', color: 'var(--lab-color-accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0' })"
+					class="ml-[auto] text-[11px] text-lab-accent bg-transparent [border:none] cursor-pointer p-0"
 					@click="emit('navigate', nodeIdOfLocation(diagnostic.location, inspection)!)"
 				>
 					{{ i18n.t('jump to node') }}
@@ -158,20 +158,20 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 			<div>{{ diagnostic.message }}</div>
 			<dl
 				:data-testid="`blueprint-diagnostic-location-${index}`"
-				:class="pika({ margin: '0', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)' })"
+				class="m-0 text-[11px] font-lab-mono text-lab-text-muted"
 			>
 				{{ i18n.t('location') }}: {{ locationLabel(diagnostic, inspection) }}
 			</dl>
 
 			<dl
 				v-if="pathOf(diagnostic) !== undefined"
-				:class="pika({ margin: '0', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)' })"
+				class="m-0 text-[11px] font-lab-mono text-lab-text-muted"
 			>
 				path: {{ formatDiagnosticPath(pathOf(diagnostic)) }}
 			</dl>
 			<dl
 				v-if="diagnostic.location.type === 'slot' || diagnostic.location.type === 'slot-child'"
-				:class="pika({ margin: '0', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)' })"
+				class="m-0 text-[11px] font-lab-mono text-lab-text-muted"
 			>
 				slot: "{{ diagnostic.location.slot }}"<template v-if="diagnostic.location.type === 'slot-child'">
 					[{{ diagnostic.location.index }}]
@@ -179,23 +179,23 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 			</dl>
 			<dl
 				v-if="dependencyOf(diagnostic) !== undefined"
-				:class="pika({ margin: '0', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)' })"
+				class="m-0 text-[11px] font-lab-mono text-lab-text-muted"
 			>
 				dependency: {{ formatDependencyReference(dependencyOf(diagnostic)!) }}
 			</dl>
 
 			<div
 				v-if="relatedOf(diagnostic).length > 0"
-				:class="pika({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', fontSize: '11px' })"
+				class="flex flex-wrap items-center gap-[4px] text-[11px]"
 			>
-				<span :class="pika({ color: 'var(--lab-color-text-muted)' })">related:</span>
+				<span class="text-lab-text-muted">related:</span>
 				<button
 					v-for="(location, relatedIndex) in relatedOf(diagnostic)"
 					:key="relatedIndex"
 					type="button"
 					:disabled="nodeIdOfLocation(location, inspection) === null"
 					:title="relatedLocationLabel(location, diagnostic, inspection)"
-					:class="pika({ 'fontSize': '11px', 'color': 'var(--lab-color-accent)', 'background': 'var(--lab-color-surface-alt)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': 'var(--lab-radius)', 'cursor': 'pointer', 'padding': '1px 7px', 'minWidth': '0', 'maxWidth': '100%', 'textAlign': 'left', 'whiteSpace': 'normal', 'overflowWrap': 'anywhere', '$:disabled': { color: 'var(--lab-color-text-muted)', cursor: 'default' } })"
+					class="text-[11px] text-lab-accent bg-lab-surface-alt border border-lab-border rounded-lab cursor-pointer p-[1px_7px] min-w-0 max-w-[100%] text-left whitespace-normal [overflow-wrap:anywhere] disabled:text-lab-text-muted disabled:cursor-default"
 					@click="onNavigateToLocation(location, inspection)"
 				>
 					{{ relatedLocationLabel(location, diagnostic, inspection) }}

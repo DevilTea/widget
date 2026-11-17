@@ -32,7 +32,7 @@ function selectNode(nodeId: number): void {
 		storageKey="widget-lab:panel-desc:runtime"
 		text="Live State, Properties, Methods, and Diagnostics of the running widgets"
 	>
-		<div :class="pika({ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', borderBottom: '1px solid var(--lab-color-border)', fontSize: '11px', flex: '0 0 auto' })">
+		<div class="flex items-center gap-[8px] p-[4px_8px] border-b border-b-lab-border text-[11px] flex-[0_0_auto]">
 			<strong>{{ i18n.t(source.previewRevision === null ? 'Preview unavailable' : 'Preview r{revision}', { revision: source.previewRevision ?? '' }) }}</strong>
 			<span :style="{ color: source.isDiverged ? 'var(--lab-color-warning)' : 'var(--lab-color-text-muted)' }">
 				{{ i18n.t(source.previewRevision === null ? 'Unlinked' : source.isDiverged ? 'Diverged / Unlinked' : 'Linked / Synced') }}
@@ -40,7 +40,7 @@ function selectNode(nodeId: number): void {
 		</div>
 		<div
 			v-if="blueprint === null"
-			:class="pika({ padding: '16px', fontSize: '12px', color: 'var(--lab-color-text-muted)' })"
+			class="p-[16px] text-[12px] text-lab-text-muted"
 		>
 			<p>{{ i18n.t('Runtime unavailable — there is no valid Preview revision to inspect. Open Blueprint to see current diagnostics, fix Source, then Apply again.') }}</p>
 		</div>

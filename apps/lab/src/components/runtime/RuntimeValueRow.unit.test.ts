@@ -3,7 +3,6 @@
 import type { InspectableValue } from '@deviltea/widget-inspector/value'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { testGlobalProperties } from '../../test-support'
 import { labI18nProvide } from '../../test-support-i18n'
 import { testGlobalPlugins } from '../../test-support-ui'
 import RuntimeValueRow from './RuntimeValueRow.vue'
@@ -21,7 +20,7 @@ function obj(entries: Record<string, InspectableValue>): InspectableValue {
 function mountRow(props: { summary: string, value: InspectableValue | null, selected?: boolean, danger?: boolean }) {
 	return mount(RuntimeValueRow, {
 		props: { name: 'response', selected: false, ...props },
-		global: { config: { globalProperties: testGlobalProperties }, plugins: testGlobalPlugins, provide: labI18nProvide() },
+		global: { plugins: testGlobalPlugins, provide: labI18nProvide() },
 	})
 }
 

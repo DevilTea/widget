@@ -61,19 +61,19 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 <template>
 	<div
 		v-if="node === null || widgetSnapshot === null || client === null"
-		:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
+		class="p-[10px] text-lab-text-muted text-[12px]"
 	>
 		{{ i18n.t('No node selected — click a node in the tree on the left to see its live State, Properties, and Methods.') }}
 	</div>
 	<div
 		v-else
-		:class="pika({ display: 'flex', flexDirection: 'column', gap: '14px', padding: '10px', overflow: 'auto', height: '100%' })"
+		class="flex flex-col gap-[14px] p-[10px] overflow-auto h-full"
 		:style="embedded ? { overflow: 'visible', height: 'auto' } : undefined"
 	>
 		<section>
 			<component
 				:is="memberHeading"
-				:class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })"
+				class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted"
 			>
 				State ({{ stateMembers.length }})
 			</component>
@@ -93,7 +93,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 			</template>
 			<p
 				v-if="stateMembers.length === 0"
-				:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+				class="m-0 text-[11px] text-lab-text-muted"
 			>
 				{{ i18n.t('No State members.') }}
 			</p>
@@ -102,7 +102,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 		<section>
 			<component
 				:is="memberHeading"
-				:class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })"
+				class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted"
 			>
 				Properties ({{ propertyMembers.length }})
 			</component>
@@ -122,7 +122,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 			</template>
 			<p
 				v-if="propertyMembers.length === 0"
-				:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+				class="m-0 text-[11px] text-lab-text-muted"
 			>
 				{{ i18n.t('No Property members.') }}
 			</p>
@@ -131,7 +131,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 		<section>
 			<component
 				:is="memberHeading"
-				:class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })"
+				class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted"
 			>
 				Methods ({{ methodMembers.length }}) — {{ i18n.t('inventory only') }}
 			</component>
@@ -146,7 +146,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 			/>
 			<p
 				v-if="methodMembers.length === 0"
-				:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+				class="m-0 text-[11px] text-lab-text-muted"
 			>
 				{{ i18n.t('No Method members.') }}
 			</p>

@@ -1,6 +1,5 @@
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import pikacss from '@pikacss/unplugin-pikacss/vite'
 import Vue from 'unplugin-vue/vite'
 import { defineConfig } from 'vite'
 import { labNuxtUi } from './nuxt-ui'
@@ -14,12 +13,6 @@ export default defineConfig({
 	// that subpath. Left unset, `pnpm dev`/`pnpm build` behavior is unchanged.
 	base: process.env.WIDGET_LAB_BASE ?? '/',
 	plugins: [
-		// `enforce: 'pre'` inside pikacss() already guarantees it runs before Vue regardless of
-		// array order; listed first here for readability only.
-		pikacss({
-			tsCodegen: './src/pika.gen.ts',
-			cssCodegen: './src/pika.gen.css',
-		}),
 		Vue(),
 		// Nuxt UI + Tailwind v4. Only the Lab entry imports their CSS (`src/styles/lab-ui.css` from `main.ts`); the
 		// Preview frame entry never does. See `nuxt-ui.ts`.

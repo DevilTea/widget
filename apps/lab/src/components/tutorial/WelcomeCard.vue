@@ -24,33 +24,33 @@ const { onCancel, onNativeClose } = useModalDialog('dialog', {
 	<dialog
 		ref="dialog"
 		aria-labelledby="welcome-card-title"
-		:class="pika({ 'padding': '0', 'border': 'none', 'background': 'transparent', '$::backdrop': { background: 'color-mix(in srgb, black 55%, transparent)' } })"
+		class="p-0 [border:none] bg-transparent backdrop:[background:color-mix(in_srgb,black_55%,transparent)]"
 		@cancel="onCancel"
 		@close="onNativeClose"
 	>
 		<div
-			:class="pika({ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '420px', padding: '20px 22px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)' })"
+			class="flex flex-col gap-[12px] max-w-[420px] p-[20px_22px] rounded-lab border border-lab-border bg-lab-surface"
 		>
 			<h2
 				id="welcome-card-title"
-				:class="pika({ margin: '0', fontSize: '16px', lineHeight: '1.35' })"
+				class="m-0 text-[16px] leading-[1.35]"
 			>
 				{{ i18n.t('Widget Lab lets you change a real app, then see where that behavior comes from.') }}
 			</h2>
-			<p :class="pika({ margin: '0', fontSize: '13px', color: 'var(--lab-color-text-muted)' })">
+			<p class="m-0 text-[13px] text-lab-text-muted">
 				{{ i18n.t("Start with one small interaction; we'll show what changed and why.") }}
 			</p>
-			<div :class="pika({ display: 'flex', gap: '8px', marginTop: '4px' })">
+			<div class="flex gap-[8px] mt-[4px]">
 				<button
 					type="button"
-					:class="pika({ padding: '6px 14px', fontSize: '12px', fontWeight: '600', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-accent)', background: 'var(--lab-color-accent)', color: 'var(--lab-color-accent-contrast)', cursor: 'pointer' })"
+					class="p-[6px_14px] text-[12px] font-semibold rounded-lab border border-lab-accent bg-lab-accent text-lab-accent-contrast cursor-pointer"
 					@click="tutorial.requestStart()"
 				>
 					{{ i18n.t('Start the tour') }}
 				</button>
 				<button
 					type="button"
-					:class="pika({ padding: '6px 14px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+					class="p-[6px_14px] text-[12px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
 					@click="tutorial.dismissWelcome()"
 				>
 					{{ i18n.t('Explore on my own') }}

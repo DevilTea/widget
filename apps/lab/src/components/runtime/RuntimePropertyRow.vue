@@ -61,11 +61,11 @@ const failedDiagnostics = computed(() => {
 		/>
 		<div
 			v-if="failedDiagnostics.length > 0"
-			:class="pika({ paddingLeft: '30px', marginTop: '4px' })"
+			class="pl-[30px] mt-[4px]"
 		>
 			<button
 				type="button"
-				:class="pika({ fontSize: '11px', color: 'var(--lab-color-accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 0 4px' })"
+				class="text-[11px] text-lab-accent bg-transparent [border:none] cursor-pointer p-[0_0_4px]"
 				@click="showDiagnostics = !showDiagnostics"
 			>
 				{{ i18n.t(showDiagnostics ? 'hide diagnostics' : 'show diagnostics') }}

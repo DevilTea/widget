@@ -5,7 +5,7 @@
  *
  * `@nuxt/ui`'s Vite plugin writes those files from its `config` hook, i.e. as a side effect of any
  * `vite dev`/`vite build`/Vitest run. `vue-tsc` never runs through Vite, so `pnpm typecheck` runs this script
- * first, exactly like `pika-codegen.mjs` does for `src/pika.gen.ts`: it resolves the Lab's own
+ * first: it resolves the Lab's own
  * `vite.config.ts` (so the options in `nuxt-ui.ts` stay the single source), which runs every plugin's
  * `config` hook, and does nothing else. The output lives under `node_modules`, so there is nothing to
  * commit or ignore, and a clean checkout type-checks deterministically.

@@ -7,7 +7,6 @@ import { defineComponent, h, nextTick, ref, shallowRef } from 'vue'
 import { useEventLog } from '../composables/use-event-log'
 import { LabStoreKey } from '../composables/use-lab-store'
 import { createPreview } from '../events/test-support'
-import { testGlobalProperties } from '../test-support'
 import { labI18nProvide } from '../test-support-i18n'
 import NonClosableTab from './NonClosableTab.vue'
 
@@ -25,7 +24,7 @@ describe('nonClosableTab unseen Events', () => {
 			showcaseId: shallowRef('survey'),
 		} as unknown as LabStore
 		const provide = { ...labI18nProvide(), [LabStoreKey as symbol]: store }
-		const global = { config: { globalProperties: testGlobalProperties }, provide }
+		const global = { provide }
 
 		const visible = ref(false)
 		const Panel = defineComponent({

@@ -199,27 +199,27 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
+	<div class="flex flex-col h-full min-h-0">
 		<PanelDescriptionBar
 			storageKey="widget-lab:panel-desc:preview"
 			text="The Vue presentation of the running widgets — interact here"
 		/>
-		<div :class="pika({ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
+		<div class="flex items-center gap-[8px] p-[4px_8px] border-b border-b-lab-border flex-[0_0_auto]">
 			<button
 				type="button"
 				:aria-label="i18n.t('Inspect')"
 				:aria-pressed="inspectActive"
 				:disabled="!inspectorReady || inspectCommandPending"
 				:class="inspectActive
-					? pika({ 'padding': '3px 10px', 'minHeight': '24px', 'fontSize': '11px', 'fontWeight': '600', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-accent)', 'background': 'var(--lab-color-accent)', 'color': 'var(--lab-color-accent-contrast)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })
-					: pika({ 'padding': '3px 10px', 'minHeight': '24px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+					? 'p-[3px_10px] min-h-[24px] text-[11px] font-semibold rounded-lab border border-lab-accent bg-lab-accent text-lab-accent-contrast cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+					: 'p-[3px_10px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'"
 				@click="toggleInspect"
 			>
 				{{ i18n.t('Inspect') }}
 			</button>
 			<span
 				v-if="inspectActive"
-				:class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+				class="text-[11px] text-lab-text-muted"
 			>
 				{{ i18n.t('Click a widget to focus it in {surface} — Esc to exit', { surface: i18n.t(store.revisionStatus.value.isLinked ? 'Blueprint' : 'Runtime') }) }}
 			</span>
@@ -227,7 +227,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 				type="button"
 				data-testid="preview-view-implementation"
 				:disabled="!curatedEntryAvailable"
-				:class="pika({ 'marginLeft': 'auto', 'padding': '3px 10px', 'minHeight': '24px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				class="ml-[auto] p-[3px_10px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 				@click="implementationExplorer.open()"
 			>
 				{{ i18n.t('View implementation') }}
@@ -235,7 +235,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 		</div>
 		<div
 			data-tutorial-target="preview"
-			:class="pika({ position: 'relative', display: 'flex', flexDirection: 'column', flex: '1 1 auto', overflow: 'hidden', background: 'var(--lab-color-bg)', minHeight: '0' })"
+			class="relative flex flex-col flex-auto overflow-hidden bg-lab-bg min-h-0"
 		>
 			<!-- Stale-preview notice (audit U07): says why the Preview lags and offers the way out. -->
 			<div
@@ -304,12 +304,12 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 				title="Widget Lab Preview"
 				data-testid="preview-frame"
 				sandbox="allow-scripts allow-same-origin allow-forms"
-				:class="pika({ width: '100%', flex: '1 1 auto', minHeight: '0', border: 'none', background: 'var(--lab-color-bg)' })"
+				class="w-full flex-auto min-h-0 [border:none] bg-lab-bg"
 				:style="{ display: store.preview.value === null || (store.previewHost.error.value !== null && !frameKeepsRunning) ? 'none' : 'block' }"
 			/>
 			<p
 				v-if="store.preview.value === null"
-				:class="pika({ padding: '16px', margin: '0', color: 'var(--lab-color-text-muted)', fontSize: '13px' })"
+				class="p-[16px] m-0 text-lab-text-muted text-[13px]"
 			>
 				{{ i18n.t('Preview unavailable — there is no valid Preview revision. See the Blueprint tab for diagnostics.') }}
 			</p>

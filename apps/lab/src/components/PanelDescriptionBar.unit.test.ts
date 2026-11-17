@@ -3,7 +3,6 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LabI18nKey } from '../composables/use-lab-i18n'
-import { testGlobalProperties } from '../test-support'
 import { testGlobalPlugins } from '../test-support-ui'
 import PanelDescriptionBar from './PanelDescriptionBar.vue'
 
@@ -13,7 +12,6 @@ function mountBar(storageKey: string) {
 	return mount(PanelDescriptionBar, {
 		props: { storageKey, text: 'Describes the panel' },
 		global: {
-			config: { globalProperties: testGlobalProperties },
 			plugins: testGlobalPlugins,
 			provide: { [LabI18nKey as symbol]: i18n },
 		},
