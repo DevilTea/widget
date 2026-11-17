@@ -7,6 +7,7 @@
  * No Core Runtime or frame DOM is reachable through this component's state.
  */
 import type { InspectorClient } from '@deviltea/widget-inspector/client'
+import UButton from '@nuxt/ui/components/Button.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
 import { useLabI18n } from '../../composables/use-lab-i18n'
@@ -213,12 +214,27 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 			data-tutorial-target="preview"
 			:class="pika({ position: 'relative', display: 'flex', flexDirection: 'column', flex: '1 1 auto', overflow: 'hidden', background: 'var(--lab-color-bg)', minHeight: '0' })"
 		>
+			<!-- Stale-preview notice (audit U07): says why the Preview lags and offers the way out. -->
 			<div
 				v-if="store.revisionStatus.value.isDiverged"
 				data-testid="preview-diverged-status"
-				:class="pika({ margin: '10px 16px 0', padding: '6px 8px', border: '1px solid var(--lab-color-warning)', borderRadius: 'var(--lab-radius)', color: 'var(--lab-color-warning)', background: 'var(--lab-color-surface-alt)', fontSize: '11px', flex: '0 0 auto' })"
+				role="status"
+				class="mx-4 mt-2.5 flex flex-none flex-wrap items-center gap-x-2 gap-y-1 rounded-(--lab-radius) border border-(--lab-color-warning) bg-(--lab-color-surface-alt) px-2 py-1 text-[11px] text-(--lab-color-warning)"
 			>
-				{{ i18n.t('Running previous valid Preview revision r{previewRevision}; current Document is r{documentRevision}.', { previewRevision: store.revisionStatus.value.previewRevision ?? '', documentRevision: store.revisionStatus.value.documentRevision }) }}
+				<span class="min-w-0 flex-1 wrap-anywhere">
+					{{ store.status.value.validity.kind === 'problems'
+						? i18n.t(store.status.value.validity.count === 1 ? 'Your last change has {count} problem, so the preview still shows the last working version.' : 'Your last change has {count} problems, so the preview still shows the last working version.', { count: store.status.value.validity.count })
+						: i18n.t('The preview does not show your latest change yet. It still shows the last working version.') }}
+				</span>
+				<UButton
+					data-testid="preview-show-problems"
+					color="neutral"
+					variant="outline"
+					size="xs"
+					icon="i-lucide-list-checks"
+					:label="i18n.t('Show problems')"
+					@click="store.showProblems()"
+				/>
 			</div>
 			<iframe
 				ref="previewFrame"

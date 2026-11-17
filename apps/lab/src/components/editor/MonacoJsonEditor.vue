@@ -4,15 +4,20 @@
  * this file imports `modern-monaco` directly. Styling stays scoped here rather than joining the
  * application-wide PikaCSS surface.
  */
-import { ref, watch } from 'vue'
+import type { EditorMarker } from '../../composables/use-monaco-editor'
+import { computed, ref, watch } from 'vue'
 import { useMonacoJsonEditor } from '../../composables/use-monaco-editor'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
 	modelValue: string
-}>()
+	/** Error squiggles over ranges of `modelValue`. */
+	markers?: readonly EditorMarker[]
+}>(), { markers: () => [] })
 
 const emit = defineEmits<{
 	'update:modelValue': [value: string]
+	/** Cmd/Ctrl+Enter inside the editor. */
+	'apply': []
 }>()
 
 const container = ref<HTMLElement | null>(null)
@@ -24,15 +29,23 @@ watch(() => props.modelValue, (next) => {
 	modelValueRef.value = next
 })
 
-useMonacoJsonEditor(container, {
+const markersRef = computed(() => props.markers)
+
+const { revealRange } = useMonacoJsonEditor(container, {
 	modelValue: modelValueRef,
 	onChange: text => emit('update:modelValue', text),
+	markers: markersRef,
+	onApply: () => emit('apply'),
 })
+
+defineExpose({ revealRange })
 </script>
 
 <template>
 	<div
 		ref="container"
+		data-testid="json-editor"
+		:data-marker-count="markers.length"
 		class="monaco-json-editor"
 	/>
 </template>
