@@ -33,6 +33,8 @@ const props = defineProps<{
 	busy: boolean
 	/** Edit the value as its JSON text whatever it is (the config of a widget whose config is not an object). */
 	asJson?: boolean
+	/** A commit at this path (config-relative, joined with `.`) was not applied: that control shows the Document's value again. `tick` makes a repeat count. */
+	resync?: { readonly path: string, readonly tick: number } | null
 }>()
 
 const emit = defineEmits<{
@@ -66,13 +68,28 @@ watch(() => props.value, (value) => {
 })
 
 /**
+ * Re-creates this field's own control (and nothing else, so other fields keep what has been typed into them but not
+ * committed) when a commit at its path was refused: a switch or list the user already moved, and a text still holding the
+ * rejected input, show what the Document holds.
+ */
+const controlKey = ref(0)
+watch(() => props.resync, (resync) => {
+	if (resync === null || resync === undefined || resync.path !== props.path.join('.'))
+		return
+	text.value = toText(props.value)
+	invalid.value = false
+	controlKey.value++
+})
+
+/**
  * While a command runs the controls stay in the page and stay focusable (a disabled control would hand keyboard focus to
  * the body at every commit); they only stop reporting edits.
  */
-function emitEdit(path: ConfigPath, edit: ConfigEdit): void {
+function emitEdit(path: ConfigPath, edit: ConfigEdit): boolean {
 	if (props.busy)
-		return
+		return false
 	emit('edit', path, edit)
+	return true
 }
 
 function commitText(): void {
@@ -130,8 +147,8 @@ function addField(): void {
 	const current = field.value
 	if (current.kind !== 'object' || newField.value === '')
 		return
-	emitEdit([...props.path, newField.value], { op: 'add', value: defaultValueFor(props.root, current.properties[newField.value] ?? null) as never })
-	newField.value = ''
+	if (emitEdit([...props.path, newField.value], { op: 'add', value: defaultValueFor(props.root, current.properties[newField.value] ?? null) as never }))
+		newField.value = ''
 }
 
 function addKey(): void {
@@ -139,8 +156,8 @@ function addKey(): void {
 	const key = newKey.value.trim()
 	if (current.kind !== 'object' || current.additional === null || key === '' || Object.hasOwn(objectValue.value, key))
 		return
-	emitEdit([...props.path, key], { op: 'add', value: defaultValueFor(props.root, current.additional) as never })
-	newKey.value = ''
+	if (emitEdit([...props.path, key], { op: 'add', value: defaultValueFor(props.root, current.additional) as never }))
+		newKey.value = ''
 }
 
 function addItem(): void {
@@ -176,6 +193,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 				>
 					<USwitch
 						:id="`${id}-control`"
+						:key="controlKey"
 						:modelValue="value === true"
 						:aria-disabled="busy ? 'true' : undefined"
 						size="xl"
@@ -189,6 +207,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 				<select
 					v-else-if="field.kind === 'enum'"
 					:id="`${id}-control`"
+					:key="controlKey"
 					:value="field.options.indexOf(value as never)"
 					:aria-disabled="busy ? 'true' : undefined"
 					:class="controlClass"
@@ -209,6 +228,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					<textarea
 						v-if="field.kind === 'json'"
 						:id="`${id}-control`"
+						:key="controlKey"
 						v-model="text"
 						:aria-disabled="busy ? 'true' : undefined"
 						:aria-invalid="invalid"
@@ -221,6 +241,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					<input
 						v-else
 						:id="`${id}-control`"
+						:key="controlKey"
 						v-model="text"
 						type="text"
 						:inputmode="field.kind === 'number' ? 'decimal' : undefined"
@@ -324,6 +345,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:path="[...path, key]"
 						:label="key"
 						:removable="canRemoveKey(field, key)"
+						:resync="resync"
 						:busy="busy"
 						@edit="(p, e) => emitEdit(p, e)"
 					/>
@@ -404,6 +426,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:path="[...path, index]"
 						:label="`#${index + 1}`"
 						:removable="canRemoveItem(field, arrayValue.length)"
+						:resync="resync"
 						:busy="busy"
 						@edit="(p, e) => emitEdit(p, e)"
 					/>

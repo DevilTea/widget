@@ -18,8 +18,9 @@ const selectedNode = computed(() => selectedNodeId.value === null ? null : docum
 const busy = ref(false)
 const outcomeMessage = ref<string | null>(null)
 const editorEl = useTemplateRef<HTMLElement>('editorEl')
-/** Bumped when a commit did not go through, so every control shows what the Document holds (a switch or list the user already moved would not). */
-const editorKey = ref(0)
+/** Set when a commit did not go through: the control at that path shows what the Document holds again (a switch or list the user already moved would not), the others keep their uncommitted text. */
+const resync = ref<{ readonly path: string, readonly tick: number } | null>(null)
+let resyncTick = 0
 
 /** The plugin's public config metadata for the selected widget: `null` when it has no config capability. */
 const catalogConfig = computed(() => {
@@ -59,17 +60,19 @@ function unsupportedMessage(reason: AuthorUnsupportedReason): string {
 	}
 }
 
-/** The first control of the field at `path` (or of the group it is), if it is in the page. */
+/** The first control of the field at `path` (or of the group it is), if it is in the page. Compared by attribute, not through a selector, so no path can break the lookup. */
 function controlAt(path: ConfigPath): HTMLElement | null {
-	const field = editorEl.value?.querySelector(`[data-config-path="${path.join('.')
-		.replaceAll('"', '\\"')}"]`)
+	const wanted = path.join('.')
+	const field = [...editorEl.value?.querySelectorAll<HTMLElement>('[data-config-path]') ?? []].find(element => element.dataset.configPath === wanted)
 	return field?.querySelector<HTMLElement>('button[role="switch"], select, textarea, input, button') ?? null
 }
 
 /**
  * Keyboard focus after a command. The controls are never disabled, so an edit that replaced a value leaves focus where it
  * was; what is left to do is to follow focus that lost its element: a new field or item takes it, a removed one hands it to
- * the field that took its place, else to its list or object.
+ * the field that took its place, else to its list or object. Focus is only ever moved when it is on nothing (the body, after its
+ * control was re-created) or still inside the editor: if the user went elsewhere while the command ran (another header control,
+ * the JSON editor), it stays there, so typing and Space go where they were sent.
  */
 async function keepFocus(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 	await nextTick()
@@ -77,15 +80,22 @@ async function keepFocus(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 	if (root === null)
 		return
 	const active = document.activeElement
-	const kept = active !== null && active !== document.body && root.contains(active)
-	// Focus that is still inside the editor stays (a replaced value, or the button of a removed item, which the next item now holds).
-	if (kept && edit.op !== 'add')
+	const lost = active === null || active === document.body
+	const inside = !lost && root.contains(active)
+	if (!lost && !inside)
 		return
-	const target = (edit.op === 'remove' ? controlAt(path) ?? controlAt(path.slice(0, -1)) : controlAt(path)) ?? (kept ? null : root)
+	// Focus that is still inside the editor stays (a replaced value, or the button of a removed item, which the next item now holds).
+	if (inside && edit.op !== 'add')
+		return
+	const target = (edit.op === 'remove' ? controlAt(path) ?? controlAt(path.slice(0, -1)) : controlAt(path)) ?? (lost ? root : null)
 	target?.focus()
 }
 
 async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
+	// Synchronous, so a second trigger in the same task is dropped here without touching the message, the controls or `busy`
+	// (the controls' own `busy` prop only updates with the next render).
+	if (busy.value)
+		return
 	const nodeId = selectedNodeId.value
 	if (nodeId === null || selectedNode.value?.resolved !== true)
 		return
@@ -109,8 +119,8 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 	finally {
 		busy.value = false
 	}
-	if (!applied)
-		editorKey.value++
+	if (!applied && edit.op === 'replace')
+		resync.value = { path: path.join('.'), tick: ++resyncTick }
 	await keepFocus(path, edit)
 }
 </script>
@@ -157,8 +167,8 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 							{{ i18n.t(configSchema === null ? 'This plugin publishes no config schema, so values are typed by what they hold and nothing can be added or removed here. Use JSON for that.' : 'Each change is applied to the Document at once and restarts the preview (its answers start over). Use Undo to take a change back.') }}
 						</p>
 						<ConfigFieldEditor
-							:key="editorKey"
 							bare
+							:resync="resync"
 							:asJson="configAsJson"
 							:root="configSchema"
 							:schema="configSchema"

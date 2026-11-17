@@ -668,8 +668,11 @@ a list, a number) has no keys: it is edited whole, as JSON, and replacing it is 
 
 The controls are never `disabled` while a command runs (a disabled control hands keyboard focus to the body at every commit); they carry `aria-disabled`
 and stop reporting edits. `AuthorStructureView.vue` then keeps keyboard focus in the editor: focus that is still on a control stays, a new field or item takes it,
-a removed one hands it to the control that took its place. A commit that is not applied (a dirty JSON draft, a patch error, a stale selection) re-keys the editor,
-so every control, a list or a switch the user already moved included, shows what the Document holds again.
+a removed one hands it to the control that took its place. It only ever moves focus that is on nothing (the body) or still inside the editor: focus the user moved to another
+control while the command ran stays where they put it. `onEdit` drops a second trigger while a command runs synchronously (`busy` is set before the first `await`; the
+controls' own `busy` prop only follows with the next render), and the add controls keep what was chosen or typed when their edit was not reported. A commit that is not applied
+(a dirty JSON draft, a patch error, a stale selection) re-creates only the control at the edit's path (`resync`, passed down the tree): a list or a switch the user already moved, and
+a text holding the rejected input, show what the Document holds again, and text typed into other fields is kept.
 
 `EditConfigCommand` (`{ nodeId, documentRevision, configPath, edit: replace | add | remove }`; `ReplaceConfigScalarCommand` still exists for
 the scalar case) carries both the current Document `InspectionNodeId` and Document revision; `src/lab/author.ts` resolves that exact
@@ -886,8 +889,8 @@ differ (`lib/config-compare.ts`, structural equality; it names the top-level fie
 
 **Preview failure.** `previewHost.error` holds the cause of a mount that failed, and the Lab says so instead of leaving a blank pane (`data-testid=preview-error`,
 the engine's message verbatim, **Try again**). Two cases are told apart (`data-frame-state`, `previewHost.runtimeSurvives`): the frame did not answer in time (`readinessTimeoutMs`, 15 s)
-or its connection closed by itself, so nothing can be said to run (`lost`: the connection the Lab held is dropped, the dead iframe is hidden, the header chip is `failed`,
-"Preview failed to load"); or the frame answered with an error (a mount it refuses: session or generation mismatch, unknown showcase, invalid source) and still runs the last Preview
+or its connection closed by itself, or it answered with an error after it had already taken down the Runtime it replaced (`runtimeTornDown` on the host's error reply, a Lab-internal field of the preview-host protocol, not the Inspector protocol), so nothing runs (`lost`: the connection the Lab held is dropped, the dead iframe is hidden, the header chip is `failed`,
+"Preview failed to load"); or the frame answered with an error before it touched anything (a mount it refuses: session or generation mismatch, unknown showcase, invalid source) and still runs the last Preview
 that mounted (`running`: the iframe stays, the copy says it still shows the last version, the chip is the ordinary `stale`). **Try again** is `LabStore.retryPreview()` ->
 `LabSession.retryPreview()`: it mounts the newest valid Document if that is ahead of the Preview (a promotion that failed leaves the Document committed and
 the Preview snapshot on the older revision, which would otherwise stay `stale` after a successful retry), else the Preview as it is, and only then does the Preview snapshot

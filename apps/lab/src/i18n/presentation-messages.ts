@@ -325,7 +325,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	// Preview failure (audit U22).
 	'Preview failed to load': '預覽載入失敗',
 	'The preview could not be loaded': '無法載入預覽',
-	'The preview frame did not respond, so nothing is running. Try again; if it keeps failing, reload the page.': '預覽框架沒有回應，所以目前沒有任何內容在執行。請再試一次；如果一直失敗，請重新整理頁面。',
+	'Nothing is running in the preview: the frame did not respond, lost its connection or could not start your last change. Try again; if it keeps failing, reload the page.': '預覽裡目前沒有任何內容在執行：框架沒有回應、連線中斷，或無法啟動你的最後一次變更。請再試一次；如果一直失敗，請重新整理頁面。',
 	'Try again': '再試一次',
 	'The preview could not be updated': '無法更新預覽',
 	'The preview frame refused the last change, so it still shows the last version that loaded. Try again; if it keeps failing, reload the page.': '預覽框架拒絕了最後一次變更，所以仍顯示最後一個成功載入的版本。請再試一次；如果一直失敗，請重新整理頁面。',

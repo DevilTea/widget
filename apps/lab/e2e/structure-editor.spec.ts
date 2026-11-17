@@ -341,6 +341,61 @@ test.describe('keyboard focus stays through a commit', () => {
 	})
 })
 
+test.describe('focus and triggers while a commit runs', () => {
+	test('focus the user moved to another control while the commit ran stays there', async ({ page }) => {
+		const editor = await openStructure(page, /guests : Numeric/)
+		const integer = field(editor, 'integer')
+			.getByRole('switch')
+		// In one task: the switch is clicked (the commit starts and takes a while: the Preview is mounted again) and focus
+		// goes to a header control. When the commit resolves it must not pull focus back into Structure.
+		await integer.evaluate((element) => {
+			(element as HTMLElement).click()
+			;(document.querySelector('[data-testid="status-details"]') as HTMLElement).focus()
+		})
+		await expect(page.getByTestId('author-command-outcome'))
+			.toContainText('applied to Document r1')
+		await expect(page.getByTestId('status-details'))
+			.toBeFocused()
+		await expect(editor.locator(':focus'))
+			.toHaveCount(0)
+	})
+
+	test('a second trigger in the same task is dropped without a message, a refusal or a second commit', async ({ page }) => {
+		const editor = await openStructure(page, /guests : Numeric/)
+		const integer = field(editor, 'integer')
+			.getByRole('switch')
+		await integer.evaluate((element) => {
+			(element as HTMLElement).click()
+			;(element as HTMLElement).click()
+		})
+		const outcome = page.getByTestId('author-command-outcome')
+		await expect(outcome)
+			.toHaveText('Author command applied to Document r1.')
+		await expect(integer)
+			.not
+			.toBeChecked()
+		expect((configOf(await documentSource(page), 'guests')).integer)
+			.toBe(false)
+		// Nothing arrives later to overwrite the message (a queued second command would answer "unavailable").
+		await expect(outcome)
+			.not
+			.toContainText('unavailable')
+	})
+
+	test('a free key with a quote in its name is found again, and takes the focus', async ({ page }) => {
+		const editor = await openStructure(page, /guests : Numeric/)
+		const label = editor.locator('[role="group"][aria-label="label"]')
+		await label.getByRole('textbox', { name: 'Name of the key to add to label' })
+			.fill('a"b')
+		await label.getByRole('button', { name: 'Add key' })
+			.click()
+		await expect(page.getByTestId('author-command-outcome'))
+			.toContainText('applied to Document r1')
+		await expect.poll(() => page.evaluate(() => (document.activeElement?.closest('[data-config-path]') as HTMLElement | null)?.dataset.configPath))
+			.toBe('label.a"b')
+	})
+})
+
 test.describe('a commit that is refused leaves the controls showing the Document', () => {
 	test('a list and a switch snap back when the JSON draft is dirty', async ({ page }) => {
 		const editor = await openStructure(page, /phone : ShortAnswer/)
@@ -369,6 +424,25 @@ test.describe('a commit that is refused leaves the controls showing the Document
 			.toBeChecked()
 		await expect(integer)
 			.toBeFocused()
+	})
+
+	test('only the control of the refused edit is reset: text typed into another field is still there', async ({ page }) => {
+		const editor = await openStructure(page, /guests : Numeric/)
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
+		const max = field(editor, 'max')
+			.getByRole('textbox')
+		await max.fill('42')
+		const min = field(editor, 'min')
+			.getByRole('textbox')
+		await min.fill('7')
+		await min.press('Enter')
+		await expect(page.getByTestId('author-command-outcome'))
+			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
+		// The refused one shows the Document again; the one never committed keeps what was typed.
+		await expect(min)
+			.toHaveValue('0')
+		await expect(max)
+			.toHaveValue('42')
 	})
 })
 
