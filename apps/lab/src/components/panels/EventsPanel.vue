@@ -184,7 +184,7 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 						v-model="onlySelected"
 						type="checkbox"
 						data-testid="events-only-selected"
-						class="size-4 cursor-pointer accent-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+						class="size-6 cursor-pointer accent-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
 					>
 					<span>{{ i18n.t('Only the selected widget') }}</span>
 				</label>

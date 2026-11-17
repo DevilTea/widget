@@ -81,7 +81,7 @@ const label = computed(() => `${props.entry.widgetId} : ${props.entry.widgetType
 				data-testid="event-widget"
 				:disabled="!selectable"
 				:title="selectable ? i18n.t('Select {widget} in the Preview', { widget: label }) : i18n.t('{widget} is not in the current Preview', { widget: label })"
-				class="min-h-6 shrink-0 cursor-pointer rounded-(--lab-radius) border-0 bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-default hover:bg-elevated focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary disabled:cursor-default disabled:text-muted disabled:hover:bg-transparent"
+				class="min-h-6 shrink-0 cursor-pointer rounded-(--lab-radius) border-0 bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-default hover:bg-elevated hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary disabled:cursor-default disabled:text-muted disabled:hover:bg-transparent disabled:hover:no-underline"
 				@click="emit('select')"
 			>
 				{{ label }}
