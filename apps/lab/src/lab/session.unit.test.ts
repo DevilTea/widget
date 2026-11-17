@@ -1,7 +1,7 @@
 import type { WidgetSystem } from '@deviltea/widget-core'
 import type { SandboxPlugins } from '../sandbox/plugins'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
 import { replaceConfigScalar } from './author'
@@ -787,5 +787,86 @@ describe('labSession', () => {
 		session.setDraftSourceText(validSource)
 		expect(calls)
 			.toBe(7)
+	})
+
+	describe('retryPreview (audit U22)', () => {
+		it('after a promotion that failed, mounts the newest valid Document, so the Preview and the revision status agree', async () => {
+			const mounted: number[] = []
+			let failNext = false
+			const session = new LabSession({
+				system: sandboxSystem,
+				initialSourceText: validSource,
+				hooks: {
+					replacePreview: (preview) => {
+						if (failNext) {
+							failNext = false
+							throw new Error('Preview iframe did not become ready within 1000 ms.')
+						}
+						mounted.push(preview.revision)
+					},
+				},
+			})
+			failNext = true
+			session.setDraftSourceText(secondValidSource)
+			await expect(session.apply())
+				.rejects
+				.toThrow('did not become ready')
+			// The Document committed; the Preview is still the older one.
+			expect(session.documentState.revision)
+				.toBe(1)
+			expect(session.preview?.revision)
+				.toBe(0)
+
+			await session.retryPreview()
+
+			expect(mounted)
+				.toEqual([1])
+			expect(session.preview?.revision)
+				.toBe(1)
+			expect(session.preview?.sourceText)
+				.toBe(session.documentState.sourceText)
+		})
+
+		it('with an invalid Document, mounts the last valid Preview again; with nothing to mount it does nothing', async () => {
+			const mounted: number[] = []
+			const session = new LabSession({
+				system: sandboxSystem,
+				initialSourceText: validSource,
+				hooks: { replacePreview: (preview) => { mounted.push(preview.revision) } },
+			})
+			await session.applyPreset(invalidSource)
+			expect(session.preview?.revision)
+				.toBe(0)
+
+			await session.retryPreview()
+			expect(mounted)
+				.toEqual([0])
+			expect(session.preview?.revision)
+				.toBe(0)
+
+			const replacePreview = vi.fn()
+			const none = new LabSession({ system: sandboxSystem, initialSourceText: invalidSource, hooks: { replacePreview } })
+			await expect(none.retryPreview())
+				.resolves
+				.toBeUndefined()
+			expect(replacePreview)
+				.not
+				.toHaveBeenCalled()
+		})
+
+		it('a mount that fails again rejects and leaves the Preview as it was', async () => {
+			const session = new LabSession({
+				system: sandboxSystem,
+				initialSourceText: validSource,
+				hooks: { replacePreview: () => { throw new Error('still down') } },
+			})
+			await expect(session.retryPreview())
+				.rejects
+				.toThrow('still down')
+			expect(session.preview?.revision)
+				.toBe(0)
+			expect(session.isApplying)
+				.toBe(false)
+		})
 	})
 })

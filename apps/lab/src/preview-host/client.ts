@@ -13,7 +13,15 @@ import {
 	PREVIEW_HOST_PROTOCOL_VERSION,
 } from './protocol'
 
-export class PreviewHostClientError extends Error {}
+/**
+ * `answered`: the frame itself replied with an error (a refused mount: session/generation mismatch, unknown showcase, invalid
+ * source), so the frame is alive and still runs what it ran before. Otherwise the channel failed (disconnected, closed).
+ */
+export class PreviewHostClientError extends Error {
+	constructor(message: string, readonly answered = false) {
+		super(message)
+	}
+}
 
 export interface PreviewHostClient {
 	mount: (sessionId: string, generation: number, preview: PreviewHostDescriptor) => Promise<PreviewHostMountedResponse>
@@ -48,7 +56,7 @@ export function createPreviewHostClient(transport: InspectorTransport): PreviewH
 				return
 			pending.delete(response.requestId)
 			if (response.kind === 'error')
-				entry.reject(new PreviewHostClientError(response.message))
+				entry.reject(new PreviewHostClientError(response.message, true))
 			else
 				entry.resolve(response)
 			return

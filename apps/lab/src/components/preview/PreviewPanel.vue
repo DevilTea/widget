@@ -32,12 +32,14 @@ const inspectCommandPending = shallowRef(false)
 let inspectorClient: InspectorClient | null = null
 
 const retrying = shallowRef(false)
+/** The frame refused a change but still runs the last Preview that mounted: its content stays on screen. */
+const frameKeepsRunning = computed(() => store.previewHost.error.value !== null && store.previewHost.runtimeSurvives.value)
 
 /** Audit U22: tries the Preview again after it failed to load, timed out or lost its connection. */
 async function retryPreview(): Promise<void> {
 	retrying.value = true
 	try {
-		await store.previewHost.retry()
+		await store.retryPreview()
 	}
 	catch {
 		// The failure is shown through `previewHost.error` again.
@@ -263,6 +265,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 			<div
 				v-if="store.previewHost.error.value !== null"
 				data-testid="preview-error"
+				:data-frame-state="frameKeepsRunning ? 'running' : 'lost'"
 				role="alert"
 				class="m-4 flex flex-none flex-col gap-2 rounded-(--lab-radius) border border-(--lab-color-danger) bg-(--lab-color-surface-alt) p-3 text-xs text-(--lab-color-text)"
 			>
@@ -272,10 +275,10 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 						class="size-4 shrink-0 text-(--lab-color-danger)"
 						aria-hidden="true"
 					/>
-					{{ i18n.t('The preview could not be loaded') }}
+					{{ i18n.t(frameKeepsRunning ? 'The preview could not be updated' : 'The preview could not be loaded') }}
 				</div>
 				<p class="m-0">
-					{{ i18n.t('The preview frame did not respond, so nothing is running. Try again; if it keeps failing, reload the page.') }}
+					{{ i18n.t(frameKeepsRunning ? 'The preview frame refused the last change, so it still shows the last version that loaded. Try again; if it keeps failing, reload the page.' : 'The preview frame did not respond, so nothing is running. Try again; if it keeps failing, reload the page.') }}
 				</p>
 				<p
 					data-testid="preview-error-detail"
@@ -302,7 +305,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 				data-testid="preview-frame"
 				sandbox="allow-scripts allow-same-origin allow-forms"
 				:class="pika({ width: '100%', flex: '1 1 auto', minHeight: '0', border: 'none', background: 'var(--lab-color-bg)' })"
-				:style="{ display: store.preview.value === null || store.previewHost.error.value !== null ? 'none' : 'block' }"
+				:style="{ display: store.preview.value === null || (store.previewHost.error.value !== null && !frameKeepsRunning) ? 'none' : 'block' }"
 			/>
 			<p
 				v-if="store.preview.value === null"

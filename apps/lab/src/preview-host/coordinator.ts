@@ -4,14 +4,18 @@ import type { LabTheme } from '../theme/theme'
 import type { PreviewFrameConnection, PreviewFrameDriver } from './frame-driver'
 import type { PreviewHostDescriptor, PreviewTourId } from './protocol'
 import { shallowRef } from 'vue'
+import { PreviewHostClientError } from './client'
 
 export interface PreviewHostCoordinator {
 	readonly connection: Readonly<Ref<PreviewFrameConnection | null>>
 	readonly error: Readonly<Ref<string | null>>
+	/**
+	 * With an `error`: the frame answered a refused mount and still runs the last Preview that mounted (`true`), or the
+	 * frame did not answer / lost its connection and nothing can be said to run (`false`, and `connection` is `null`).
+	 */
+	readonly runtimeSurvives: Readonly<Ref<boolean>>
 	attachDriver: (driver: PreviewFrameDriver) => () => void
 	replace: (descriptor: PreviewHostDescriptor) => Promise<PreviewFrameConnection | null>
-	/** Mounts the latest requested Preview again, after a failure (audit U22). `null` when nothing is wanted or no driver is attached. */
-	retry: () => Promise<PreviewFrameConnection | null>
 	updatePresentation: (locale: LabLocale, theme: LabTheme) => void
 	setTutorialSpotlight: (target: string | null) => void
 	evaluateTutorial: (tourId: PreviewTourId, stepIndex: number, progress: number) => Promise<number>
@@ -26,6 +30,7 @@ export interface PreviewHostCoordinator {
 export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 	const connection = shallowRef<PreviewFrameConnection | null>(null)
 	const error = shallowRef<string | null>(null)
+	const runtimeSurvives = shallowRef(false)
 	const observationListeners = new Set<(tourId: PreviewTourId) => void>()
 	let driver: PreviewFrameDriver | null = null
 	let stopDriverObservation: (() => void) | null = null
@@ -50,12 +55,19 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 			selectedDriver.setTutorialSpotlight(tutorialSpotlight)
 			connection.value = next
 			error.value = null
+			runtimeSurvives.value = false
 			return next
 		}
 		catch (cause) {
 			if (driver !== selectedDriver || epoch !== selectedEpoch || desired !== descriptor)
 				return null
 			const failure = cause instanceof Error ? cause : new Error(String(cause))
+			// A refusal the frame answered leaves what it ran before running. Anything else (no answer in time, a closed
+			// channel) tore the connection down, so the connection the Lab holds describes a Runtime nobody can reach.
+			const refused = failure instanceof PreviewHostClientError && failure.answered
+			if (!refused)
+				connection.value = null
+			runtimeSurvives.value = refused && connection.value !== null
 			error.value = failure.message
 			throw failure
 		}
@@ -73,6 +85,7 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 	return {
 		connection,
 		error,
+		runtimeSurvives,
 		attachDriver(nextDriver) {
 			if (disposed) {
 				nextDriver.dispose()
@@ -90,6 +103,7 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 					return
 				// The Runtime that connection described is gone with the frame: say so instead of showing stale values.
 				connection.value = null
+				runtimeSurvives.value = false
 				error.value = 'The connection to the preview frame was closed.'
 			})
 			stopDriverObservation = nextDriver.onTutorialObservation((tourId) => {
@@ -118,17 +132,6 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 			desired = descriptor
 			if (driver === null)
 				return Promise.resolve(null)
-			const operation = queue.then(() => performReplace(descriptor), () => performReplace(descriptor))
-			queue = operation.then(() => undefined, () => undefined)
-			return operation
-		},
-		retry() {
-			if (disposed)
-				return Promise.reject(new Error('Preview host coordinator is disposed.'))
-			const descriptor = desired
-			if (descriptor === null || driver === null)
-				return Promise.resolve(null)
-			error.value = null
 			const operation = queue.then(() => performReplace(descriptor), () => performReplace(descriptor))
 			queue = operation.then(() => undefined, () => undefined)
 			return operation
