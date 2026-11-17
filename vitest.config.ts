@@ -3,16 +3,31 @@ import { defineConfig } from 'vitest/config'
 import { labNuxtUi } from './apps/lab/nuxt-ui'
 
 export default defineConfig({
-	plugins: [Vue(), labNuxtUi()],
+	plugins: [Vue()],
 	test: {
 		// The retention tests observe garbage collection, which needs the collector exposed to the workers.
 		execArgv: ['--expose-gc'],
-		// Lab unit tests: icons stay offline even where a test does not import `test-support-ui.ts`.
-		setupFiles: ['./apps/lab/src/test-setup.ts'],
-		include: [
-			'packages/**/src/**/*.unit.test.ts',
-			'apps/**/src/**/*.unit.test.ts',
-			'scripts/**/*.unit.test.ts',
+		// Two projects share everything above and below (plugins, `execArgv`, coverage, typecheck). Only the Lab's
+		// realm loads its Nuxt UI plugin and offline-icons setup, so a Lab or Iconify break cannot fail the
+		// package tests at setup.
+		projects: [
+			{
+				extends: true,
+				test: {
+					name: 'packages',
+					include: ['packages/**/src/**/*.unit.test.ts', 'scripts/**/*.unit.test.ts'],
+				},
+			},
+			{
+				extends: true,
+				plugins: [labNuxtUi()],
+				test: {
+					name: 'lab',
+					include: ['apps/**/src/**/*.unit.test.ts'],
+					// Icons stay offline even where a test does not import `test-support-ui.ts`.
+					setupFiles: ['./apps/lab/src/test-setup.ts'],
+				},
+			},
 		],
 		coverage: {
 			enabled: true,
