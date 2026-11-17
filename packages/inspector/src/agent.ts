@@ -1,4 +1,4 @@
-import type { WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { RuntimeMethodDiagnostic, WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { InspectionNodeId, RuntimeWidgetInspection } from '@deviltea/widget-core/inspection'
 import type { SemanticGeometryController } from './geometry'
 import type {
@@ -7,6 +7,7 @@ import type {
 	InspectorProtocolError,
 	InspectorRequestMessage,
 	InspectorRequestMethod,
+	InspectorRuntimeMemberSnapshot,
 	InspectorSemanticTarget,
 	WidgetRef,
 } from './protocol'
@@ -19,6 +20,7 @@ import {
 	projectBlueprintSnapshot,
 	projectEventArgs,
 	projectRuntimeMemberSnapshot,
+	projectRuntimeMethodSnapshot,
 	projectRuntimeWidgetSnapshot,
 } from './projection'
 import {
@@ -75,6 +77,18 @@ const PROTOCOL_0_4_EVENTS = Object.freeze([
 
 /** `runtime.disposed` and the `runtime-disposed` error code exist from this protocol minor on. */
 const RUNTIME_LIFECYCLE_PROTOCOL_MINOR = 4
+
+/** Method members (`diagnostics`), Method `runtime.subscribeMember` and their `runtime.memberChanged` exist from this protocol minor on. */
+const METHOD_SNAPSHOT_PROTOCOL_MINOR = 5
+
+/**
+ * The only parts of a public `RuntimeMethod` the Agent touches. It never calls the Method itself: a Method
+ * invocation would run plugin code and could write State, which the read-only boundary excludes.
+ */
+interface MethodDiagnosticsSource {
+	readonly getDiagnostics: () => readonly RuntimeMethodDiagnostic[]
+	readonly subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeMethodDiagnostic[]) => void) => () => void
+}
 
 let runtimeSequence = 1
 let subscriptionSequence = 1
@@ -279,6 +293,30 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	function resolveWidget(ref: WidgetRef): RuntimeWidgetInspection | null {
 		const nodeId = resolveNodeId(ref)
 		return nodeId === null ? null : runtimeInspection.getWidget(nodeId)
+	}
+
+	/**
+	 * Method diagnostics are not part of Core inspection (no Method facade, by accepted decision), so they are
+	 * read from the public Runtime: the widget with this id, then the own `name` key of its null-prototype
+	 * `methods` record. Widget ids are unique in a valid Blueprint.
+	 */
+	function resolveMethodDiagnostics(widget: RuntimeWidgetInspection, name: string): MethodDiagnosticsSource | null {
+		const runtimeWidget = options.runtime.getWidget(widget.blueprintNode.node.id) as { readonly methods?: Readonly<Record<string, unknown>> } | null
+		const methods = runtimeWidget?.methods
+		if (methods === undefined || !Object.hasOwn(methods, name))
+			return null
+		const method = methods[name] as Partial<MethodDiagnosticsSource> | null | undefined
+		return typeof method?.getDiagnostics === 'function' && typeof method.subscribeDiagnostics === 'function'
+			? method as MethodDiagnosticsSource
+			: null
+	}
+
+	function readMethodDiagnostics(nodeId: InspectionNodeId, name: string): readonly RuntimeMethodDiagnostic[] | null {
+		const widget = runtimeInspection.getWidget(nodeId)
+		return widget === null
+			? null
+			: (resolveMethodDiagnostics(widget, name)
+					?.getDiagnostics() ?? null)
 	}
 
 	function nodeForAnchor(anchor: Pick<DomAnchor, 'widgetId' | 'widgetType'>): WidgetRef | null {
@@ -509,9 +547,37 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		}
 		const member = request.params.member
-		const observable = member.type === 'state' ? widget.getState(member.name) : widget.getProperty(member.name)
-		const projected = projectRuntimeMemberSnapshot(widget, member, valueEncoding())
-		if (observable === null || projected === null) {
+		if (member.type === 'method' && currentMinor() < METHOD_SNAPSHOT_PROTOCOL_MINOR) {
+			// A peer below 0.5 sees exactly the 0.4 answer for a member type it does not know.
+			sendError(request.requestId, protocolError('invalid-params', 'Invalid parameters for the requested Inspector method.'))
+			return
+		}
+		let projected: InspectorRuntimeMemberSnapshot | null = null
+		let subscribeToMember: ((notify: (next: InspectorRuntimeMemberSnapshot) => void) => () => void) | null = null
+		if (member.type === 'method') {
+			const method = resolveMethodDiagnostics(widget, member.name)
+			if (method !== null) {
+				projected = projectRuntimeMethodSnapshot(member.name, method.getDiagnostics(), valueEncoding())
+				subscribeToMember = notify => method.subscribeDiagnostics((diagnostics) => {
+					// A peer re-negotiated below 0.5 must not receive a member shape it does not know.
+					if (negotiatedMinor >= METHOD_SNAPSHOT_PROTOCOL_MINOR)
+						notify(projectRuntimeMethodSnapshot(member.name, diagnostics, valueEncoding()))
+				})
+			}
+		}
+		else {
+			const observable = member.type === 'state' ? widget.getState(member.name) : widget.getProperty(member.name)
+			const stateOrProperty = { type: member.type, name: member.name }
+			projected = observable === null ? null : projectRuntimeMemberSnapshot(widget, stateOrProperty, valueEncoding())
+			if (observable !== null) {
+				subscribeToMember = notify => observable.subscribe(() => {
+					const next = projectRuntimeMemberSnapshot(widget, stateOrProperty, valueEncoding())
+					if (next !== null)
+						notify(next)
+				})
+			}
+		}
+		if (projected === null || subscribeToMember === null) {
 			sendError(request.requestId, protocolError('member-not-found', 'The requested Runtime member does not exist.'))
 			return
 		}
@@ -520,16 +586,11 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		const subscriptionId = `subscription-${subscriptionSequence++}`
 		let unsubscribe: () => void
 		try {
-			unsubscribe = observable.subscribe(() => {
-				const next = projectRuntimeMemberSnapshot(widget, member, valueEncoding())
-				if (next !== null) {
-					emit('runtime.memberChanged', {
-						subscriptionId,
-						ref: request.params.ref,
-						member: next,
-					})
-				}
-			})
+			unsubscribe = subscribeToMember(next => emit('runtime.memberChanged', {
+				subscriptionId,
+				ref: request.params.ref,
+				member: next,
+			}))
 		}
 		catch {
 			sendError(request.requestId, protocolError('internal-error', 'Unable to subscribe to the Runtime member.'))
@@ -680,7 +741,17 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					return
 				}
 				const nodeId = resolveNodeId(request.params.ref)
-				const snapshot = nodeId === null ? null : projectRuntimeWidgetSnapshot(runtimeId, runtimeInspection, nodeId, valueEncoding())
+				const snapshot = nodeId === null
+					? null
+					: projectRuntimeWidgetSnapshot(
+							runtimeId,
+							runtimeInspection,
+							nodeId,
+							valueEncoding(),
+							currentMinor() < METHOD_SNAPSHOT_PROTOCOL_MINOR
+								? null
+								: name => readMethodDiagnostics(nodeId, name),
+						)
 				if (snapshot === null) {
 					sendError(request.requestId, protocolError('widget-not-found', 'The requested widget does not exist in this Runtime snapshot.'))
 					return
