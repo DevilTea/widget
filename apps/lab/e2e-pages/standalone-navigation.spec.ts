@@ -63,7 +63,7 @@ test('VitePress opens Widget Lab as a standalone document and preserves the pers
 	const documentLoadsBeforeClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
 
 	await link.click()
-	await page.waitForURL('**/widget/lab/?lang=zh-TW')
+	await page.waitForURL('**/widget/lab/?lang=zh-TW&showcase=survey')
 
 	await expect(page.getByText('Widget Lab', { exact: true })
 		.first())
@@ -74,8 +74,9 @@ test('VitePress opens Widget Lab as a standalone document and preserves the pers
 		.toBe('/widget/lab/')
 	await expect(page.locator('html'))
 		.toHaveAttribute('lang', 'zh-TW')
-	await expect(page.locator('select:has(option[value="zh-TW"])'))
-		.toHaveValue('zh-TW')
+	// The Lab chrome follows the persisted locale (the Apply button is its machine-independent probe).
+	await expect(page.getByRole('button', { name: '套用', exact: true }))
+		.toBeVisible()
 	const documentLoadsAfterClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
 	expect(documentLoadsAfterClick)
 		.toBe(documentLoadsBeforeClick + 1)
@@ -86,7 +87,7 @@ test('VitePress opens Widget Lab as a standalone document and preserves the pers
 		.first())
 		.toBeVisible()
 	await expect(page)
-		.toHaveURL(/\/widget\/lab\/\?lang=zh-TW$/)
+		.toHaveURL(/\/widget\/lab\/\?lang=zh-TW&showcase=survey$/)
 })
 
 test('Home page hero action opens Widget Lab as a standalone document navigation', async ({ page }) => {
@@ -224,11 +225,11 @@ for (const [explicitLocale, storedLocale] of [['en', 'zh-TW'], ['zh-TW', 'en']] 
 			.toBe('/widget/lab/')
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', explicitLocale)
-		await expect(page.locator('select:has(option[value="zh-TW"])'))
-			.toHaveValue(explicitLocale)
+		await expect(page.getByRole('button', { name: explicitLocale === 'zh-TW' ? '套用' : 'Apply', exact: true }))
+			.toBeVisible()
 		expect(await page.evaluate(key => localStorage.getItem(key), LOCALE_STORAGE_KEY))
 			.toBe(explicitLocale)
 		await expect(page)
-			.toHaveURL(new RegExp(`/widget/lab/\\?lang=${explicitLocale}&probe=pages#entry$`))
+			.toHaveURL(new RegExp(`/widget/lab/\\?lang=${explicitLocale}&probe=pages&showcase=survey#entry$`))
 	})
 }
