@@ -88,15 +88,23 @@ watchEffect(() => {
 // made `inert` so it cannot be focused or tabbed to behind the overlay (it stays mounted, per #27).
 const supportedViewport = useSupportedWorkbenchViewport()
 
-function onKeydown(event: KeyboardEvent): void {
-	// Cmd/Ctrl+Enter is a UX shortcut for the same Apply command the header button invokes, so it honors
-	// the button's enabled condition (`canApply`). It runs in the CAPTURE phase: Dockview's tab buttons
-	// preventDefault Enter (it activates the tab), so by the bubbling phase the event would look "already
-	// handled" and Apply would never fire from a focused tab (audit U05). It yields to IME composition (keyCode
-	// 229 covers engines that report it without `isComposing`), key repeat, events something earlier already
-	// claimed, the editor itself (Monaco binds Cmd/Ctrl+Enter to "insert line"; `use-monaco-editor.ts` registers
-	// the same Apply as an editor command, so letting both run would Apply twice) and open menus (Enter
-	// selects an item there), open modal dialogs, and the narrow-viewport gate (the workbench is `inert` behind it).
+/**
+ * Cmd/Ctrl+Enter is a UX shortcut for the same Apply command the header button invokes, so it honors the
+ * button's enabled condition (`canApply`). Who gets the event first is deliberate:
+ *
+ * - Everything except Dockview tabs is handled in the BUBBLE phase, so a control that owns Enter wins
+ *   (`defaultPrevented` is honoured; a Graph node's `@keydown.enter.prevent.stop` never reaches here at all).
+ * - Dockview's tab buttons preventDefault Enter themselves (it activates the tab), so by the bubble phase a focused
+ *   tab's event always looks "already handled" and Apply would never fire from it (audit U05). Events whose
+ *   target is inside a tab are therefore handled in the CAPTURE phase, which runs before the tab's own handler;
+ *   the handler then prevents the default, so the bubble listener below skips the same event.
+ *
+ * It yields to IME composition (keyCode 229 covers engines that report it without `isComposing`), key repeat, the
+ * editor itself (Monaco binds Cmd/Ctrl+Enter to "insert line"; `use-monaco-editor.ts` registers the same
+ * Apply as an editor action, so letting both run would Apply twice), open menus (Enter selects an item there),
+ * open modal dialogs, and the narrow-viewport gate (the workbench is `inert` behind it).
+ */
+function applyOnShortcut(event: KeyboardEvent): void {
 	if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey))
 		return
 	if (event.isComposing || event.keyCode === 229 || event.repeat || event.defaultPrevented)
@@ -113,8 +121,19 @@ function onKeydown(event: KeyboardEvent): void {
 	void store.apply()
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown, true))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
+function onKeydownCapture(event: KeyboardEvent): void {
+	if (event.target instanceof Element && event.target.closest('.dv-tab') !== null)
+		applyOnShortcut(event)
+}
+
+onMounted(() => {
+	window.addEventListener('keydown', onKeydownCapture, true)
+	window.addEventListener('keydown', applyOnShortcut)
+})
+onBeforeUnmount(() => {
+	window.removeEventListener('keydown', onKeydownCapture, true)
+	window.removeEventListener('keydown', applyOnShortcut)
+})
 // `store.dispose()` (which disposes the final active Runtime) runs from `onUnmounted`, not
 // `onBeforeUnmount`: Vue only guarantees every descendant — including Workbench's Preview
 // `WidgetRenderer` subtree — has fully unmounted by the time a component's own `onUnmounted` fires.

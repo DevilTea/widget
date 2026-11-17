@@ -167,7 +167,7 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 		wrapper.unmount()
 	})
 
-	it('applies even when a control below the window already prevents Enter (a focused Dockview tab does)', () => {
+	it('applies from a focused Dockview tab although the tab prevents Enter itself, and only once', () => {
 		const wrapper = mountApp()
 		tutorial!.dismissWelcome()
 		const tab = document.createElement('div')
@@ -175,11 +175,36 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 		tab.addEventListener('keydown', event => event.preventDefault())
 		document.body.append(tab)
 
-		tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }))
+		const event = new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true })
+		tab.dispatchEvent(event)
 
+		// The capture-phase handler claimed it; the bubble-phase one saw the claimed event and skipped it.
 		expect(apply)
 			.toHaveBeenCalledTimes(1)
+		expect(event.defaultPrevented)
+			.toBe(true)
 		tab.remove()
+		wrapper.unmount()
+	})
+
+	it('leaves Enter to a control that owns it (a Graph node prevents and stops it), even though Apply is available', () => {
+		const wrapper = mountApp()
+		tutorial!.dismissWelcome()
+		const owner = document.createElement('div')
+		owner.addEventListener('keydown', (event) => {
+			event.preventDefault()
+			event.stopPropagation()
+		})
+		const claimedOnly = document.createElement('div')
+		claimedOnly.addEventListener('keydown', event => event.preventDefault())
+		document.body.append(owner, claimedOnly)
+
+		for (const target of [owner, claimedOnly])
+			target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }))
+
+		expect(apply).not.toHaveBeenCalled()
+		owner.remove()
+		claimedOnly.remove()
 		wrapper.unmount()
 	})
 
