@@ -163,6 +163,8 @@ window.addEventListener('message', (event) => {
 			return
 		}
 
+		// Set once the Runtime this mount replaces has been taken down: an error after that point leaves nothing running.
+		let runtimeTornDown = false
 		mountQueue = mountQueue.then(async () => {
 			if (request.sessionId !== sessionId || request.generation !== generation) {
 				sendSafely(hostTransport, {
@@ -211,6 +213,7 @@ window.addEventListener('message', (event) => {
 			}
 
 			teardownMountedPreview()
+			runtimeTornDown = true
 			const runtime = blueprint.createRuntime()
 			const Root = defineComponent({
 				name: 'PreviewFrameRoot',
@@ -268,6 +271,7 @@ window.addEventListener('message', (event) => {
 					kind: 'error',
 					requestId: request.requestId,
 					message: error instanceof Error ? error.message : String(error),
+					...(runtimeTornDown ? { runtimeTornDown: true } : {}),
 				})
 			})
 	})

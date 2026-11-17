@@ -62,9 +62,10 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 			if (driver !== selectedDriver || epoch !== selectedEpoch || desired !== descriptor)
 				return null
 			const failure = cause instanceof Error ? cause : new Error(String(cause))
-			// A refusal the frame answered leaves what it ran before running. Anything else (no answer in time, a closed
-			// channel) tore the connection down, so the connection the Lab holds describes a Runtime nobody can reach.
-			const refused = failure instanceof PreviewHostClientError && failure.answered
+			// A refusal the frame answered, before it touched what it ran, leaves that running. Anything else (no answer in
+			// time, a closed channel, an answer that says the old Runtime was already taken down) leaves a connection that
+			// describes a Runtime nobody can reach.
+			const refused = failure instanceof PreviewHostClientError && failure.answered && !failure.runtimeTornDown
 			if (!refused)
 				connection.value = null
 			runtimeSurvives.value = refused && connection.value !== null

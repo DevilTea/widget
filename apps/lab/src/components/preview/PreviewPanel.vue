@@ -278,7 +278,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 					{{ i18n.t(frameKeepsRunning ? 'The preview could not be updated' : 'The preview could not be loaded') }}
 				</div>
 				<p class="m-0">
-					{{ i18n.t(frameKeepsRunning ? 'The preview frame refused the last change, so it still shows the last version that loaded. Try again; if it keeps failing, reload the page.' : 'The preview frame did not respond, so nothing is running. Try again; if it keeps failing, reload the page.') }}
+					{{ i18n.t(frameKeepsRunning ? 'The preview frame refused the last change, so it still shows the last version that loaded. Try again; if it keeps failing, reload the page.' : 'Nothing is running in the preview: the frame did not respond, lost its connection or could not start your last change. Try again; if it keeps failing, reload the page.') }}
 				</p>
 				<p
 					data-testid="preview-error-detail"

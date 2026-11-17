@@ -70,6 +70,12 @@ export interface PreviewHostErrorResponse {
 	readonly kind: 'error'
 	readonly requestId: string
 	readonly message: string
+	/**
+	 * The frame had already taken down the Runtime it ran before when the mount failed (a failure after the point where
+	 * the new one replaces it), so nothing runs any more. Absent: the old Runtime is untouched. Lab-internal, like the
+	 * rest of this protocol; the Inspector protocol is not involved.
+	 */
+	readonly runtimeTornDown?: boolean
 }
 
 export type PreviewHostResponse = PreviewHostMountedResponse | PreviewHostTutorialEvaluatedResponse | PreviewHostErrorResponse
@@ -162,8 +168,11 @@ export function parsePreviewHostResponse(value: unknown): PreviewHostResponse | 
 			? value as unknown as PreviewHostTutorialEvaluatedResponse
 			: null
 	}
-	if (value.kind === 'error')
-		return typeof value.message === 'string' ? value as unknown as PreviewHostErrorResponse : null
+	if (value.kind === 'error') {
+		return typeof value.message === 'string' && (value.runtimeTornDown === undefined || typeof value.runtimeTornDown === 'boolean')
+			? value as unknown as PreviewHostErrorResponse
+			: null
+	}
 	return null
 }
 

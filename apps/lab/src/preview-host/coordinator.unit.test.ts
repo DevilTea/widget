@@ -266,6 +266,42 @@ describe('preview host coordinator', () => {
 		coordinator.dispose()
 	})
 
+	it('an error the frame answered after it took down the old Runtime leaves nothing running, unlike one answered before', async () => {
+		const coordinator = createPreviewHostCoordinator()
+		let attempt = 0
+		const mount = vi.fn(async ({ revision }: { revision: number }) => {
+			attempt++
+			if (attempt === 2)
+				throw new PreviewHostClientError('Unknown Preview showcase: nope.', true, false)
+			if (attempt === 3)
+				throw new PreviewHostClientError('Preview frame root disappeared during mount.', true, true)
+			return connection(revision)
+		}) as unknown as PreviewFrameDriver['mount']
+		coordinator.attachDriver(driverOf(mount))
+		await coordinator.replace({ showcaseId: 'survey', revision: 1, sourceText: '{}' })
+
+		// Refused before the frame touched anything: revision 1 still runs.
+		await expect(coordinator.replace({ showcaseId: 'nope', revision: 2, sourceText: '{}' }))
+			.rejects
+			.toThrow('Unknown Preview showcase')
+		expect(coordinator.connection.value?.revision)
+			.toBe(1)
+		expect(coordinator.runtimeSurvives.value)
+			.toBe(true)
+
+		// Failed after the frame replaced its Runtime: the frame answered, but nothing runs.
+		await expect(coordinator.replace({ showcaseId: 'survey', revision: 3, sourceText: '{}' }))
+			.rejects
+			.toThrow('root disappeared')
+		expect(coordinator.connection.value)
+			.toBeNull()
+		expect(coordinator.runtimeSurvives.value)
+			.toBe(false)
+		expect(coordinator.error.value)
+			.toBe('Preview frame root disappeared during mount.')
+		coordinator.dispose()
+	})
+
 	it('drops the connection and reports an error when the frame closes by itself, and recovers on the next mount', async () => {
 		const coordinator = createPreviewHostCoordinator()
 		const closeListeners = new Set<() => void>()
