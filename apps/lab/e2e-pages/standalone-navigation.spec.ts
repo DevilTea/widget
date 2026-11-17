@@ -199,6 +199,10 @@ test('built Widget Lab runtime assets execute under the Pages base', async ({ pa
 		.click()
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
+	// Relations is the default view; the Graph (and its layout Worker) is one click away.
+	await page.getByRole('tablist', { name: 'Dependencies views' })
+		.getByRole('tab', { name: 'Graph' })
+		.click()
 	const graphNodes = page.locator('.vue-flow__node')
 	await expect(graphNodes.first())
 		.toBeVisible({ timeout: 15_000 })
