@@ -10,6 +10,8 @@ export interface PreviewHostCoordinator {
 	readonly error: Readonly<Ref<string | null>>
 	attachDriver: (driver: PreviewFrameDriver) => () => void
 	replace: (descriptor: PreviewHostDescriptor) => Promise<PreviewFrameConnection | null>
+	/** Mounts the latest requested Preview again, after a failure (audit U22). `null` when nothing is wanted or no driver is attached. */
+	retry: () => Promise<PreviewFrameConnection | null>
 	updatePresentation: (locale: LabLocale, theme: LabTheme) => void
 	setTutorialSpotlight: (target: string | null) => void
 	evaluateTutorial: (tourId: PreviewTourId, stepIndex: number, progress: number) => Promise<number>
@@ -27,6 +29,7 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 	const observationListeners = new Set<(tourId: PreviewTourId) => void>()
 	let driver: PreviewFrameDriver | null = null
 	let stopDriverObservation: (() => void) | null = null
+	let stopDriverCloseObservation: (() => void) | null = null
 	let epoch = 0
 	let disposed = false
 	let queue: Promise<unknown> = Promise.resolve()
@@ -78,9 +81,17 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 			if (driver !== null && driver !== nextDriver)
 				driver.dispose()
 			stopDriverObservation?.()
+			stopDriverCloseObservation?.()
 			driver = nextDriver
 			epoch++
 			const currentEpoch = epoch
+			stopDriverCloseObservation = nextDriver.onUnexpectedClose(() => {
+				if (driver !== nextDriver || epoch !== currentEpoch)
+					return
+				// The Runtime that connection described is gone with the frame: say so instead of showing stale values.
+				connection.value = null
+				error.value = 'The connection to the preview frame was closed.'
+			})
 			stopDriverObservation = nextDriver.onTutorialObservation((tourId) => {
 				if (driver !== nextDriver || epoch !== currentEpoch)
 					return
@@ -93,6 +104,8 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 					return
 				stopDriverObservation?.()
 				stopDriverObservation = null
+				stopDriverCloseObservation?.()
+				stopDriverCloseObservation = null
 				driver = null
 				epoch++
 				connection.value = null
@@ -105,6 +118,17 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 			desired = descriptor
 			if (driver === null)
 				return Promise.resolve(null)
+			const operation = queue.then(() => performReplace(descriptor), () => performReplace(descriptor))
+			queue = operation.then(() => undefined, () => undefined)
+			return operation
+		},
+		retry() {
+			if (disposed)
+				return Promise.reject(new Error('Preview host coordinator is disposed.'))
+			const descriptor = desired
+			if (descriptor === null || driver === null)
+				return Promise.resolve(null)
+			error.value = null
 			const operation = queue.then(() => performReplace(descriptor), () => performReplace(descriptor))
 			queue = operation.then(() => undefined, () => undefined)
 			return operation
@@ -130,6 +154,8 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 			connection.value = null
 			stopDriverObservation?.()
 			stopDriverObservation = null
+			stopDriverCloseObservation?.()
+			stopDriverCloseObservation = null
 			driver?.dispose()
 			driver = null
 			observationListeners.clear()

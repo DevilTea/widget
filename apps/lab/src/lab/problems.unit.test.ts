@@ -3,7 +3,7 @@ import { createWidgetDocument } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { getShowcase } from '../showcases/registry'
-import { collectProblems, problemSpan } from './problems'
+import { collectProblems, groupProblems, problemSpan } from './problems'
 
 function problemsOf(showcaseId: string, presetId: string, parseError: SourceParseError | null = null) {
 	const showcase = getShowcase(showcaseId)!
@@ -110,5 +110,47 @@ describe('problemSpan', () => {
 		})
 		expect(textOf(broken, problemSpan(syntax[0]!, text)))
 			.toBe('n')
+	})
+})
+
+describe('groupProblems', () => {
+	it('shows the diagnostics of one evaluation cycle as one entry that lists the members', () => {
+		const { problems } = problemsOf('survey', 'survey-cycle')
+		expect(problems.map(problem => problem.code))
+			.toEqual(['property-evaluation-cycle', 'property-evaluation-cycle', 'property-evaluation-cycle', 'property-evaluation-cycle'])
+		const entries = groupProblems(problems)
+		expect(entries)
+			.toHaveLength(1)
+		const entry = entries[0]!
+		expect(entry.kind)
+			.toBe('cycle')
+		if (entry.kind !== 'cycle')
+			return
+		// Core's diagnostics are carried through untouched, in Core's order.
+		expect(entry.problems)
+			.toEqual(problems)
+		expect(entry.members.length)
+			.toBeGreaterThanOrEqual(entry.problems.length)
+		expect(entry.members.every(member => /^[\w-]+\.\w+$/.test(member)))
+			.toBe(true)
+	})
+
+	it('leaves other diagnostics, and a cycle reported once, as single rows in Core order', () => {
+		const { problems } = problemsOf('survey', 'survey-ai-draft')
+		expect(groupProblems(problems)
+			.map(entry => entry.kind))
+			.toEqual(problems.map(() => 'problem'))
+
+		const [first] = problemsOf('survey', 'survey-cycle').problems
+		expect(groupProblems([first!])
+			.map(entry => entry.kind))
+			.toEqual(['problem'])
+	})
+
+	it('keeps a syntax error first and ungrouped ahead of a grouped cycle', () => {
+		const { problems } = problemsOf('survey', 'survey-cycle', { message: 'Unexpected token', sourceText: '{' })
+		expect(groupProblems(problems)
+			.map(entry => entry.kind))
+			.toEqual(['problem', 'cycle'])
 	})
 })

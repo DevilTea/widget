@@ -25,12 +25,18 @@ export interface PreviewFrameDriver {
 	setTutorialSpotlight: (target: string | null) => void
 	evaluateTutorial: (tourId: PreviewTourId, stepIndex: number, progress: number) => Promise<number>
 	onTutorialObservation: (listener: (tourId: PreviewTourId) => void) => () => void
+	/**
+	 * Called when the frame's connection closes by itself (the Preview document went away without this driver
+	 * having navigated, replaced or disposed it). Not called for a close the driver caused.
+	 */
+	onUnexpectedClose: (listener: () => void) => () => void
 	dispose: () => void
 }
 
 export interface PreviewFrameDriverOptions {
 	/** Exact origin that serves preview-frame.html. Defaults to the parent document's origin. */
 	readonly frameOrigin?: string
+	/** How long the frame has to answer the mount before the attempt fails. Defaults to 15 s. */
 	readonly readinessTimeoutMs?: number
 }
 
@@ -85,6 +91,7 @@ export function createPreviewFrameDriver(
 	if (targetOrigin === 'null')
 		throw new TypeError('Preview frame origin must be a non-opaque origin.')
 	const observationListeners = new Set<(tourId: PreviewTourId) => void>()
+	const closeListeners = new Set<() => void>()
 	let generation = 0
 	let physical: PhysicalConnection | null = null
 	let connecting: Promise<PhysicalConnection> | null = null
@@ -177,8 +184,14 @@ export function createPreviewFrameDriver(
 					}
 				})
 				hostTransport.subscribeClose(() => {
-					if (physical === result)
-						physical = null
+					if (physical !== result)
+						return
+					// Closed under us: nothing in this driver tore the connection down (that clears `physical` first).
+					physical = null
+					if (!disposed) {
+						for (const listener of [...closeListeners])
+							listener()
+					}
 				})
 				target.postMessage(
 					createInspectorFrameBootstrapRequest(sessionId, targetGeneration),
@@ -238,11 +251,16 @@ export function createPreviewFrameDriver(
 			observationListeners.add(listener)
 			return () => observationListeners.delete(listener)
 		},
+		onUnexpectedClose(listener) {
+			closeListeners.add(listener)
+			return () => closeListeners.delete(listener)
+		},
 		dispose() {
 			if (disposed)
 				return
 			disposed = true
 			observationListeners.clear()
+			closeListeners.clear()
 			teardownPhysical()
 			iframe.removeEventListener('load', onFrameLoad)
 			iframe.removeAttribute('src')

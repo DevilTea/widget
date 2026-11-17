@@ -35,7 +35,25 @@ export interface LabProblem {
 	readonly widgetLevel: boolean
 	/** Syntax problems only: the text that failed to parse, so the offset in the message maps onto it. */
 	readonly syntaxSourceText: string | null
+	/**
+	 * Only for a `property-evaluation-cycle` diagnostic: which cycle it belongs to. Core shares one `related` list
+	 * between every diagnostic of a cycle, so the list's identity names the cycle; `members` is that list as
+	 * `id.member` labels, in Core's member order. Presentation only: the row's own code and message stay Core's.
+	 */
+	readonly cycle: LabProblemCycle | null
 }
+
+export interface LabProblemCycle {
+	/** Stable within one list: the position of the cycle's first diagnostic. */
+	readonly id: string
+	/** Every member of the cycle (properties and methods), `widgetId.memberName`, in Core's order. */
+	readonly members: readonly string[]
+}
+
+/** One entry of the Problems list: a single problem, or several diagnostics of the same evaluation cycle shown as one. */
+export type LabProblemEntry
+	= | { readonly kind: 'problem', readonly key: string, readonly problem: LabProblem }
+		| { readonly kind: 'cycle', readonly key: string, readonly members: readonly string[], readonly problems: readonly LabProblem[] }
 
 function jsonSegments(path: readonly PropertyKey[] | undefined): JsonPathSegment[] {
 	return path === undefined ? [] : path.filter((segment): segment is JsonPathSegment => typeof segment !== 'symbol')
@@ -108,10 +126,21 @@ export function collectProblems(
 			sourcePath: null,
 			widgetLevel: false,
 			syntaxSourceText: parseError.sourceText,
+			cycle: null,
 		})
 	}
+	// Core shares one `related` list between the diagnostics of a cycle; its identity is the cycle's identity.
+	const cycles = new Map<object, LabProblemCycle>()
 	blueprint.diagnostics.forEach((diagnostic, index) => {
 		const location = diagnostic.location
+		let cycle: LabProblemCycle | null = null
+		if (diagnostic.code === 'property-evaluation-cycle') {
+			cycle = cycles.get(diagnostic.related) ?? null
+			if (cycle === null) {
+				cycle = { id: `cycle-${index}`, members: diagnostic.related.map(related => cycleMemberLabel(related, inspection)) }
+				cycles.set(diagnostic.related, cycle)
+			}
+		}
 		problems.push({
 			key: `diagnostic-${index}`,
 			kind: 'diagnostic',
@@ -122,9 +151,48 @@ export function collectProblems(
 			sourcePath: diagnosticSourcePath(blueprint, diagnostic),
 			widgetLevel: isWidgetLevel(diagnostic),
 			syntaxSourceText: null,
+			cycle,
 		})
 	})
 	return problems
+}
+
+function cycleMemberLabel(location: BlueprintDiagnosticLocation, inspection: BlueprintInspection): string {
+	const nodeId = location.type === 'source' ? null : inspection.getNodeId(location.node)
+	const node = nodeId === null ? null : inspection.getNode(nodeId)
+	const widget = node === null ? '?' : node.resolved ? node.node.id : (node.id ?? '?')
+	return location.type === 'property' || location.type === 'method' ? `${widget}.${location.name}` : widget
+}
+
+/**
+ * The rows the Problems list shows: every problem as it is, except that the diagnostics of one evaluation cycle
+ * (two or more) become a single `cycle` entry that lists its members. The diagnostics themselves are untouched and
+ * the list still counts them one by one; only the presentation is grouped. Order follows the first member of each
+ * group.
+ */
+export function groupProblems(problems: readonly LabProblem[]): readonly LabProblemEntry[] {
+	const sizes = new Map<string, number>()
+	for (const problem of problems) {
+		if (problem.cycle !== null)
+			sizes.set(problem.cycle.id, (sizes.get(problem.cycle.id) ?? 0) + 1)
+	}
+	const entries: LabProblemEntry[] = []
+	const groups = new Map<string, LabProblem[]>()
+	for (const problem of problems) {
+		const cycle = problem.cycle
+		if (cycle === null || (sizes.get(cycle.id) ?? 0) < 2) {
+			entries.push({ kind: 'problem', key: problem.key, problem })
+			continue
+		}
+		let members = groups.get(cycle.id)
+		if (members === undefined) {
+			members = []
+			groups.set(cycle.id, members)
+			entries.push({ kind: 'cycle', key: cycle.id, members: cycle.members, problems: members })
+		}
+		members.push(problem)
+	}
+	return entries
 }
 
 /**

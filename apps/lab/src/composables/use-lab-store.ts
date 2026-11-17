@@ -368,6 +368,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			diagnosticCount: blueprint.diagnostics.length,
 			hasParseError: session.parseError !== null,
 			revisions: getLabRevisionStatus(session.documentState.revision, session.preview?.revision ?? null),
+			previewFailed: previewHost.error.value !== null,
 		})
 	})
 	// Depends on the committed Blueprint and the Lab-only parse error, both reference-stable computeds, rather than

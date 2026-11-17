@@ -8,10 +8,9 @@
 
 import type { Ref } from 'vue'
 import jsonGrammar from 'tm-grammars/grammars/json.json'
-import oneDarkProTheme from 'tm-themes/themes/one-dark-pro.json'
-import oneLightTheme from 'tm-themes/themes/one-light.json'
 import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
 import { CODE_TAB_SIZE } from '../code-view/settings'
+import { labOneDarkProTheme, labOneLightTheme } from '../theme/monaco-themes'
 import { syntaxThemeForLabTheme } from '../theme/theme'
 import { useLabTheme } from './use-lab-theme'
 
@@ -25,7 +24,7 @@ function ensureMonaco(): Promise<Monaco> {
 	// Theme objects are passed directly so modern-monaco never resolves theme names through its CDN
 	// fallback. The LSP-free `core` entry likewise preserves #30's same-origin/self-contained contract.
 	monacoPromise ??= import('modern-monaco/core').then(({ init }) => init({
-		themes: [oneLightTheme as any, oneDarkProTheme as any],
+		themes: [labOneLightTheme as any, labOneDarkProTheme as any],
 		langs: [jsonGrammar as any],
 	}))
 	return monacoPromise

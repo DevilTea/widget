@@ -8,12 +8,14 @@
  */
 import type { InspectorClient } from '@deviltea/widget-inspector/client'
 import UButton from '@nuxt/ui/components/Button.vue'
+import UIcon from '@nuxt/ui/components/Icon.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { useLabTheme } from '../../composables/use-lab-theme'
 import { resolveFocusedWidget } from '../../implementation/focused-widget'
+import { previewReadinessTimeoutOverride } from '../../lab-test-seam'
 import { createPreviewFrameDriver } from '../../preview-host/frame-driver'
 import { getShowcase } from '../../showcases/registry'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
@@ -28,6 +30,22 @@ const inspectRequested = shallowRef(false)
 const inspectorReady = shallowRef(false)
 const inspectCommandPending = shallowRef(false)
 let inspectorClient: InspectorClient | null = null
+
+const retrying = shallowRef(false)
+
+/** Audit U22: tries the Preview again after it failed to load, timed out or lost its connection. */
+async function retryPreview(): Promise<void> {
+	retrying.value = true
+	try {
+		await store.previewHost.retry()
+	}
+	catch {
+		// The failure is shown through `previewHost.error` again.
+	}
+	finally {
+		retrying.value = false
+	}
+}
 
 const curatedEntryAvailable = computed(() => {
 	const widget = resolveFocusedWidget(store.documentState.value.blueprint, store.documentFocus.value)
@@ -47,6 +65,7 @@ watch(
 			theme: theme.theme.value,
 		}), {
 			frameOrigin: import.meta.env.VITE_PREVIEW_FRAME_ORIGIN,
+			readinessTimeoutMs: previewReadinessTimeoutOverride(),
 		})
 		const detach = store.previewHost.attachDriver(driver)
 		onCleanup(detach)
@@ -190,8 +209,8 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 				:aria-pressed="inspectActive"
 				:disabled="!inspectorReady || inspectCommandPending"
 				:class="inspectActive
-					? pika({ 'padding': '3px 10px', 'fontSize': '11px', 'fontWeight': '600', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-accent)', 'background': 'var(--lab-color-accent)', 'color': 'var(--lab-color-accent-contrast)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })
-					: pika({ 'padding': '3px 10px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+					? pika({ 'padding': '3px 10px', 'minHeight': '24px', 'fontSize': '11px', 'fontWeight': '600', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-accent)', 'background': 'var(--lab-color-accent)', 'color': 'var(--lab-color-accent-contrast)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })
+					: pika({ 'padding': '3px 10px', 'minHeight': '24px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 				@click="toggleInspect"
 			>
 				{{ i18n.t('Inspect') }}
@@ -206,7 +225,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 				type="button"
 				data-testid="preview-view-implementation"
 				:disabled="!curatedEntryAvailable"
-				:class="pika({ 'marginLeft': 'auto', 'padding': '3px 10px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+				:class="pika({ 'marginLeft': 'auto', 'padding': '3px 10px', 'minHeight': '24px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 				@click="implementationExplorer.open()"
 			>
 				{{ i18n.t('View implementation') }}
@@ -240,13 +259,50 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 					@click="store.showProblems()"
 				/>
 			</div>
+			<!-- Audit U22: the frame did not load or lost its connection: say so, show the cause, offer a retry. -->
+			<div
+				v-if="store.previewHost.error.value !== null"
+				data-testid="preview-error"
+				role="alert"
+				class="m-4 flex flex-none flex-col gap-2 rounded-(--lab-radius) border border-(--lab-color-danger) bg-(--lab-color-surface-alt) p-3 text-xs text-(--lab-color-text)"
+			>
+				<div class="flex items-center gap-2 text-sm font-semibold">
+					<UIcon
+						name="i-lucide-circle-x"
+						class="size-4 shrink-0 text-(--lab-color-danger)"
+						aria-hidden="true"
+					/>
+					{{ i18n.t('The preview could not be loaded') }}
+				</div>
+				<p class="m-0">
+					{{ i18n.t('The preview frame did not respond, so nothing is running. Try again; if it keeps failing, reload the page.') }}
+				</p>
+				<p
+					data-testid="preview-error-detail"
+					class="m-0 font-mono text-[11px] wrap-anywhere text-(--lab-color-text-muted)"
+				>
+					{{ store.previewHost.error.value }}
+				</p>
+				<div>
+					<UButton
+						data-testid="preview-retry"
+						color="primary"
+						size="sm"
+						icon="i-lucide-refresh-cw"
+						:loading="retrying"
+						:disabled="retrying"
+						:label="i18n.t('Try again')"
+						@click="retryPreview"
+					/>
+				</div>
+			</div>
 			<iframe
 				ref="previewFrame"
 				title="Widget Lab Preview"
 				data-testid="preview-frame"
 				sandbox="allow-scripts allow-same-origin allow-forms"
 				:class="pika({ width: '100%', flex: '1 1 auto', minHeight: '0', border: 'none', background: 'var(--lab-color-bg)' })"
-				:style="{ display: store.preview.value === null ? 'none' : 'block' }"
+				:style="{ display: store.preview.value === null || store.previewHost.error.value !== null ? 'none' : 'block' }"
 			/>
 			<p
 				v-if="store.preview.value === null"
