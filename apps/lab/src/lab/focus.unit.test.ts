@@ -3,6 +3,7 @@ import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
+import { replaceConfigScalar } from './author'
 import { createInspectorFocusStore } from './focus'
 import { LabSession } from './session'
 
@@ -148,6 +149,45 @@ describe('createInspectorFocusStore', () => {
 
 		expect(store.getFocus())
 			.toEqual(custom)
+	})
+
+	it('keeps focus on the same widget and member after a Structure command, so edits can follow each other', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const store = createInspectorFocusStore(session)
+		const inspection = inspectBlueprint(session.documentState.blueprint)
+		const title = inspection.nodes.find(entry => entry.node.resolved && entry.node.id === 'title')!
+		store.setFocus({ nodeId: title.nodeId, member: { type: 'property', name: 'text' } })
+
+		const outcome = await session.author(replaceConfigScalar(0, title.nodeId, 'text', 'edited'))
+
+		expect(outcome.status)
+			.toBe('applied')
+		const after = inspectBlueprint(session.documentState.blueprint)
+		const titleAfter = after.nodes.find(entry => entry.node.resolved && entry.node.id === 'title')!
+		expect(store.getFocus())
+			.toEqual({ nodeId: titleAfter.nodeId, member: { type: 'property', name: 'text' } })
+		expect(store.getScopedFocus('document'))
+			.toMatchObject({ revision: 1 })
+	})
+
+	it('goes back to the root when the widget cannot be found again by its id and type', async () => {
+		const duplicated = JSON.stringify({
+			id: 'root',
+			type: 'Stack',
+			slots: { items: [
+				{ id: 'same', type: 'Text', config: { text: 'a' } },
+				{ id: 'same', type: 'Text', config: { text: 'b' } },
+			] },
+		})
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: duplicated })
+		const store = createInspectorFocusStore(session)
+		const first = inspectBlueprint(session.documentState.blueprint).nodes.filter(entry => entry.node.resolved && entry.node.id === 'same')[0]!
+		store.setFocus({ nodeId: first.nodeId })
+
+		await session.author(replaceConfigScalar(0, first.nodeId, 'text', 'edited'))
+
+		expect(store.getFocus())
+			.toEqual({ nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId })
 	})
 
 	it('notifies subscribers on focus change and stops after unsubscribing', () => {

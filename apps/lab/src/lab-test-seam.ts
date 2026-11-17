@@ -24,12 +24,27 @@ import type { LabStore } from './composables/use-lab-store'
 /** Scoped to this seam module on purpose — no other file needs to know about `__WIDGET_LAB_TEST__`. */
 export interface WidgetLabTestSeam {
 	setDraftSourceText: (text: string) => void
+	/** The applied Document source, as the Document holds it (read-only: for specs that check what an edit wrote). */
+	getDocumentSourceText: () => string
 }
 
 declare global {
 	interface Window {
 		__WIDGET_LAB_TEST__?: WidgetLabTestSeam
 	}
+}
+
+/**
+ * `?lab-test&preview-timeout-ms=N`: how long the Preview frame has to answer before its mount fails. The real default (15 s)
+ * is far too long to wait for in a browser contract of the failure state (audit U22), so a spec shortens it. Absent
+ * `lab-test`, or for anything that is not a positive whole number, there is no override.
+ */
+export function previewReadinessTimeoutOverride(): number | undefined {
+	const params = new URLSearchParams(location.search)
+	if (!params.has('lab-test'))
+		return undefined
+	const value = Number(params.get('preview-timeout-ms'))
+	return Number.isInteger(value) && value > 0 ? value : undefined
 }
 
 export function installLabTestSeam(store: LabStore): void {
@@ -40,5 +55,6 @@ export function installLabTestSeam(store: LabStore): void {
 
 	window.__WIDGET_LAB_TEST__ = {
 		setDraftSourceText: text => store.setDraftSourceText(text),
+		getDocumentSourceText: () => store.documentState.value.sourceText,
 	}
 }

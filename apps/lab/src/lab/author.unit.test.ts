@@ -7,7 +7,7 @@ import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
 import { surveyPresets } from '../showcases/survey/presets'
 import { surveySystem } from '../showcases/survey/system'
-import { createAuthorPatch, getAuthorConfigScalars, replaceConfigScalar } from './author'
+import { createAuthorPatch, editConfig, replaceConfigScalar } from './author'
 
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText
 
@@ -90,34 +90,71 @@ describe('author command lowering', () => {
 		expect(result)
 			.toEqual({ ok: true, patch: [{ op: 'replace', path: ['config', 'a/b~c'], value: 'new' }] })
 	})
+})
 
-	it('only exposes existing scalar config values to the Structure view', () => {
-		const blueprint = sandboxSystem.createBlueprint(JSON.parse(validSource))
-		const inspection = inspectBlueprint(blueprint)
-		const title = inspection.nodes.find(node => node.resolved && node.node.id === 'title')!
+describe('edit-config lowering (issue #230 PR 3c, audit U15)', () => {
+	const source = surveyPresets.find(preset => preset.id === 'survey-default')!.sourceText
+	const blueprint = surveySystem.createBlueprint(JSON.parse(source))
+	const inspection = inspectBlueprint(blueprint)
+	const nodeOf = (id: string) => inspection.nodes.find(node => node.resolved && node.node.id === id)!
+	const sessions = nodeOf('sessions')
+	const guests = nodeOf('guests')
+	const phone = nodeOf('phone')
 
-		expect(getAuthorConfigScalars(title))
-			.toEqual([{ key: 'text', value: 'Widget Lab sandbox' }])
+	it('replaces a nested value by its source path', () => {
+		expect(createAuthorPatch(blueprint, editConfig(0, guests.nodeId, ['max'], { op: 'replace', value: 5 }), 0))
+			.toEqual({ ok: true, patch: [{ op: 'replace', path: [...guests.sourcePath, 'config', 'max'], value: 5 }] })
+		expect(createAuthorPatch(blueprint, editConfig(0, sessions.nodeId, ['options', 1, 'label', 'en'], { op: 'replace', value: 'Laser' }), 0))
+			.toEqual({ ok: true, patch: [{ op: 'replace', path: [...sessions.sourcePath, 'config', 'options', 1, 'label', 'en'], value: 'Laser' }] })
 	})
 
-	it('excludes null-valued config fields so they remain editable through JSON', () => {
-		interface NullableInterfaces extends WidgetInterfaces {
-			config: { raw: { readonly label: string, readonly note: string | null }, resolved: { readonly label: string, readonly note: string | null } }
-		}
-		const plugin = createWidgetPlugin('Nullable')
-			.description('Nullable')
-			.interfaces<NullableInterfaces>()
-			.config({
-				description: 'Nullable config',
-				validate: (input): input is { readonly label: string, readonly note: string | null } => typeof input === 'object' && input !== null && typeof (input as Record<string, unknown>).label === 'string',
-				resolve: raw => ({ label: raw?.label ?? '', note: raw?.note ?? null }),
-			})
-			.done()
-		const system = createWidgetSystem({ plugins: [plugin] })
-		const blueprint = system.createBlueprint({ id: 'root', type: 'Nullable', config: { label: 'Question', note: null } })
-		const root = inspectBlueprint(blueprint).nodes.find(node => node.resolved && node.node.id === 'root')!
+	it('adds an absent object key and removes an existing one', () => {
+		expect(createAuthorPatch(blueprint, editConfig(0, guests.nodeId, ['help'], { op: 'add', value: { en: 'x' } }), 0))
+			.toEqual({ ok: true, patch: [{ op: 'add', path: [...guests.sourcePath, 'config', 'help'], value: { en: 'x' } }] })
+		expect(createAuthorPatch(blueprint, editConfig(0, phone.nodeId, ['maxLength'], { op: 'remove' }), 0))
+			.toEqual({ ok: true, patch: [{ op: 'remove', path: [...phone.sourcePath, 'config', 'maxLength'] }] })
+	})
 
-		expect(getAuthorConfigScalars(root))
-			.toEqual([{ key: 'label', value: 'Question' }])
+	it('inserts into an array at an index and appends with the pointer form, escaping what a pointer must', () => {
+		expect(createAuthorPatch(blueprint, editConfig(0, sessions.nodeId, ['options', 1], { op: 'add', value: { value: 'x', label: { en: 'X' } } }), 0))
+			.toEqual({ ok: true, patch: [{ op: 'add', path: [...sessions.sourcePath, 'config', 'options', 1], value: { value: 'x', label: { en: 'X' } } }] })
+		const append = createAuthorPatch(blueprint, editConfig(0, sessions.nodeId, ['options', 3], { op: 'add', value: 'x' }), 0)
+		expect(append)
+			.toEqual({ ok: true, patch: [{ op: 'add', path: `/${[...sessions.sourcePath, 'config', 'options', '-'].join('/')}`, value: 'x' }] })
+		expect(createAuthorPatch(blueprint, editConfig(0, sessions.nodeId, ['options', 2], { op: 'remove' }), 0))
+			.toEqual({ ok: true, patch: [{ op: 'remove', path: [...sessions.sourcePath, 'config', 'options', 2] }] })
+	})
+
+	it('creates the config object when the widget has none yet', () => {
+		const bare = sandboxSystem.createBlueprint({ id: 'root', type: 'Stack', slots: { items: [{ id: 'title', type: 'Text' }] } })
+		const title = inspectBlueprint(bare).nodes.find(node => node.resolved && node.node.id === 'title')!
+		expect(createAuthorPatch(bare, editConfig(0, title.nodeId, ['text'], { op: 'add', value: 'hello' }), 0))
+			.toEqual({ ok: true, patch: [{ op: 'add', path: [...title.sourcePath, 'config'], value: { text: 'hello' } }] })
+		expect(createAuthorPatch(bare, editConfig(0, title.nodeId, ['text'], { op: 'replace', value: 'hello' }), 0))
+			.toEqual({ ok: false, reason: 'config-not-found' })
+	})
+
+	it('refuses what no longer fits the Document, without producing a patch', () => {
+		const refuse = (command: ReturnType<typeof editConfig>) => createAuthorPatch(blueprint, command, 0)
+		expect(refuse(editConfig(1, guests.nodeId, ['max'], { op: 'replace', value: 5 })))
+			.toEqual({ ok: false, reason: 'stale-selection' })
+		expect(refuse(editConfig(0, 999_999 as InspectionNodeId, ['max'], { op: 'replace', value: 5 })))
+			.toEqual({ ok: false, reason: 'widget-not-found' })
+		expect(refuse(editConfig(0, guests.nodeId, [], { op: 'replace', value: 5 })))
+			.toEqual({ ok: false, reason: 'config-path-not-found' })
+		expect(refuse(editConfig(0, guests.nodeId, ['nope'], { op: 'replace', value: 5 })))
+			.toEqual({ ok: false, reason: 'config-path-not-found' })
+		expect(refuse(editConfig(0, guests.nodeId, ['nope'], { op: 'remove' })))
+			.toEqual({ ok: false, reason: 'config-path-not-found' })
+		expect(refuse(editConfig(0, guests.nodeId, ['max'], { op: 'add', value: 5 })))
+			.toEqual({ ok: false, reason: 'config-path-exists' })
+		expect(refuse(editConfig(0, sessions.nodeId, ['options', 9], { op: 'add', value: 'x' })))
+			.toEqual({ ok: false, reason: 'config-path-not-found' })
+		expect(refuse(editConfig(0, sessions.nodeId, ['options', 9], { op: 'remove' })))
+			.toEqual({ ok: false, reason: 'config-path-not-found' })
+		expect(refuse(editConfig(0, guests.nodeId, ['max'], { op: 'replace', value: Number.NaN })))
+			.toEqual({ ok: false, reason: 'invalid-value' })
+		expect(refuse(editConfig(0, guests.nodeId, ['min', 'deeper'], { op: 'replace', value: 1 })))
+			.toEqual({ ok: false, reason: 'config-path-not-found' })
 	})
 })
