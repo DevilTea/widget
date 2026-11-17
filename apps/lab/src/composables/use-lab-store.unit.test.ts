@@ -686,3 +686,137 @@ describe('createLabStore() graph cluster expansion', () => {
 			.toBe(0)
 	})
 })
+
+describe('createLabStore() header and feedback state', () => {
+	const secondText = '{ "id": "root", "type": "Text", "config": { "text": "second" } }\n'
+
+	it('derives Apply/Undo availability from the draft and the applied history', async () => {
+		const store = createSandboxStore()
+		expect(store.canApply.value)
+			.toBe(false)
+		expect(store.canUndo.value)
+			.toBe(false)
+
+		store.setDraftSourceText(secondText)
+		expect(store.canApply.value)
+			.toBe(true)
+		const applying = store.apply()
+		expect(store.canApply.value)
+			.toBe(false)
+		await applying
+		expect(store.undoDepth.value)
+			.toBe(1)
+		expect(store.canUndo.value)
+			.toBe(true)
+
+		store.setDraftSourceText(`${secondText} `)
+		expect(store.canUndo.value)
+			.toBe(false)
+		store.revert()
+		expect(store.canUndo.value)
+			.toBe(true)
+
+		expect(await store.undoLastApply())
+			.toMatchObject({ status: 'undone' })
+		expect(store.documentState.value.revision)
+			.toBe(2)
+		expect(store.draftSourceText.value)
+			.toBe(store.documentState.value.sourceText)
+		expect(store.canUndo.value)
+			.toBe(false)
+		store.dispose()
+	})
+
+	it('names the loaded preset until the source stops matching it, then reports edited', async () => {
+		const store = createSandboxStore()
+		expect(store.loadedPresetId.value)
+			.toBe('valid-interactive')
+		expect(store.example.value)
+			.toMatchObject({ kind: 'preset', preset: { id: 'valid-interactive' } })
+
+		await store.applyPreset('invalid-semantic')
+		expect(store.loadedPresetId.value)
+			.toBe('invalid-semantic')
+		expect(store.example.value)
+			.toMatchObject({ kind: 'preset', preset: { id: 'invalid-semantic' } })
+
+		store.setDraftSourceText(secondText)
+		expect(store.example.value.kind)
+			.toBe('edited')
+		await store.apply()
+		expect(store.example.value.kind)
+			.toBe('edited')
+
+		await store.undoLastApply()
+		expect(store.example.value)
+			.toMatchObject({ kind: 'preset', preset: { id: 'invalid-semantic' } })
+
+		await store.switchShowcase('survey')
+		expect(store.loadedPresetId.value)
+			.toBe('survey-default')
+		expect(store.example.value)
+			.toMatchObject({ kind: 'preset', preset: { id: 'survey-default' } })
+		store.dispose()
+	})
+
+	it('starts a fresh undo history in a switched showcase', async () => {
+		const store = createSandboxStore()
+		store.setDraftSourceText(secondText)
+		await store.apply()
+		expect(store.canUndo.value)
+			.toBe(true)
+
+		await store.switchShowcase('survey')
+
+		expect(store.undoDepth.value)
+			.toBe(0)
+		expect(store.canUndo.value)
+			.toBe(false)
+		store.dispose()
+	})
+
+	it('derives plain-language status and the Problems list from the last Apply', async () => {
+		const store = createSandboxStore()
+		expect(store.status.value)
+			.toEqual({ validity: { kind: 'valid' }, preview: 'current' })
+		expect(store.problems.value)
+			.toEqual([])
+
+		await store.applyPreset('invalid-semantic')
+		expect(store.status.value)
+			.toEqual({ validity: { kind: 'problems', count: 1 }, preview: 'stale' })
+		expect(store.problems.value)
+			.toHaveLength(1)
+		expect(store.problems.value[0])
+			.toMatchObject({ kind: 'diagnostic', code: 'missing-dependency-target' })
+
+		store.setDraftSourceText('{ broken')
+		await store.apply()
+		expect(store.status.value.validity)
+			.toEqual({ kind: 'problems', count: 2 })
+		expect(store.problems.value.map(problem => problem.kind))
+			.toEqual(['syntax', 'diagnostic'])
+
+		// Editing clears the Lab-only syntax error, as before.
+		store.setDraftSourceText(secondText)
+		expect(store.problems.value.map(problem => problem.kind))
+			.toEqual(['diagnostic'])
+		store.dispose()
+	})
+
+	it('showProblems() opens Author > JSON and flags the Problems list for focus', () => {
+		const store = createSandboxStore()
+		store.activeTab.value = 'runtime'
+		store.authorView.value = 'catalog'
+
+		store.showProblems()
+
+		expect(store.activeTab.value)
+			.toBe('author')
+		expect(store.authorView.value)
+			.toBe('json')
+		expect(store.problemsFocusPending.value)
+			.toBe(true)
+		store.dispose()
+	})
+})

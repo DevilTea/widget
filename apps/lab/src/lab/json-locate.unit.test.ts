@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { endOfLine, jsonSyntaxErrorOffset, jsonSyntaxErrorSpan, locateJsonMember, locateJsonPath } from './json-locate'
+import { endOfLine, jsonSyntaxErrorOffset, jsonSyntaxErrorSpan, locateJsonMember, locateJsonPath, scanJsonSyntaxError } from './json-locate'
 
 const text = `{
   "id": "root",
@@ -103,7 +103,7 @@ describe('jsonSyntaxErrorOffset', () => {
 		expect(jsonSyntaxErrorOffset('JSON.parse: expected property name or \'}\' at line 3 column 3 of the JSON data', source))
 			.toBe(source.indexOf('oops'))
 		expect(jsonSyntaxErrorOffset('JSON Parse error: Expected \'}\'', source))
-			.toBe(source.length)
+			.toBe(source.indexOf('oops'))
 		expect(jsonSyntaxErrorOffset('at position 9999', source))
 			.toBe(source.length)
 	})
@@ -116,6 +116,35 @@ describe('jsonSyntaxErrorOffset', () => {
 			.toEqual({ start: 2, end: 3 })
 		expect(jsonSyntaxErrorSpan('anything', ''))
 			.toEqual({ start: 0, end: 0 })
+	})
+
+	it('locates positionless engine messages (V8 "Unexpected token") with its own scan of the same text', () => {
+		const source = '{\n  "languages": x["en"]\n}'
+		let message = ''
+		try {
+			JSON.parse(source)
+		}
+		catch (error) {
+			message = (error as Error).message
+		}
+		expect(source.slice(jsonSyntaxErrorOffset(message, source))
+			.startsWith('x['))
+			.toBe(true)
+	})
+
+	it('scans to where text stops being JSON, and reports null for valid JSON', () => {
+		expect(scanJsonSyntaxError('{ "a": 1 }'))
+			.toBeNull()
+		expect(scanJsonSyntaxError('{ "a": 1,, }'))
+			.toBe(9)
+		expect(scanJsonSyntaxError('{ "a": '))
+			.toBe(7)
+		expect(scanJsonSyntaxError('{ "a": 1 } x'))
+			.toBe(11)
+		expect(scanJsonSyntaxError('["bad \\q escape"]'))
+			.toBe(1)
+		expect(scanJsonSyntaxError(''))
+			.toBe(0)
 	})
 
 	it('matches what the running engine reports for a real JSON.parse failure', () => {

@@ -1,9 +1,35 @@
 <script setup lang="ts">
-/** Compact Lab utility header: presentation controls, semantic status, tutorial entry, and Apply actions. */
+/**
+ * Lab header (audit U01, U02, U04, U05, U24), grouped by job and kept on one row from 1280px up:
+ *
+ *   Widget Lab | Examples menu | status chips ... | Apply / Revert / Undo / Format | overflow menu
+ *
+ * - The Examples menu combines showcase and preset and always names what is open: the showcase plus the last
+ *   loaded preset, or "edited" once the source no longer matches it. Loading either with an unapplied editor
+ *   draft first asks (`DraftGuardDialog`).
+ * - Two plain-language chips replace the internal-vocabulary ones: is the Document valid, and does the
+ *   Preview show it. Revision numbers and Linked/Diverged are developer details in a popover.
+ * - Apply, Revert, Undo (the previously applied source, as a new revision) and Format are the edit actions.
+ *   A disabled one stays focusable (`aria-disabled`) so its tooltip can say why.
+ * - The overflow menu holds the tutorial, theme, language and the Developer submenu (Implementation and
+ *   Document Tools).
+ *
+ * Built on Nuxt UI (explicit imports; see AGENTS.md "Nuxt UI and Tailwind"). The tutorial dialogs and the
+ * draft guard are native `<dialog>`s, which is fine here: no Nuxt UI overlay is ever opened from inside one.
+ */
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { LabLocale } from '../i18n/locale'
+import type { ShowcasePreset } from '../showcases/registry'
 import type { LabTheme } from '../theme/theme'
+import UBadge from '@nuxt/ui/components/Badge.vue'
+import UButton from '@nuxt/ui/components/Button.vue'
+import UDropdownMenu from '@nuxt/ui/components/DropdownMenu.vue'
+import UFieldGroup from '@nuxt/ui/components/FieldGroup.vue'
+import UPopover from '@nuxt/ui/components/Popover.vue'
+import UTooltip from '@nuxt/ui/components/Tooltip.vue'
 import { computed } from 'vue'
 import { useDocumentTools } from '../composables/use-document-tools'
+import { useDraftGuard } from '../composables/use-draft-guard'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
@@ -15,22 +41,127 @@ const store = useLabStore()
 const theme = useLabTheme()
 const tutorial = useTutorialStore()
 const i18n = useLabI18n()
+const draftGuard = useDraftGuard()
 const implementationExplorer = useImplementationExplorer()
 const documentTools = useDocumentTools()
 
+// ---------------------------------------------------------------------------------------------------------
+// Examples menu
+
 // Listed showcases only, plus the current one when a hidden test fixture was opened with `?showcase=<id>`,
-// so the selector never shows a blank value.
+// so the menu always shows what is open.
 const showcaseOptions = computed(() => {
 	const current = getShowcase(store.showcaseId.value)
 	return current === undefined || store.showcases.includes(current) ? store.showcases : [...store.showcases, current]
 })
+const currentShowcaseLabel = computed(() => {
+	const current = getShowcase(store.showcaseId.value)
+	return i18n.t(current?.label ?? store.showcaseId.value)
+})
+const exampleLabel = computed(() => {
+	const example = store.example.value
+	return example.kind === 'preset' ? i18n.t(example.preset.label) : i18n.t('edited')
+})
 
-const blueprintStatus = computed(() => store.documentState.value.blueprint.status)
-const diagnosticCount = computed(() => store.documentState.value.blueprint.diagnostics.length)
-const documentRevision = computed(() => store.documentState.value.revision)
-const previewRevision = computed(() => store.revisionStatus.value.previewRevision)
+function chooseShowcase(id: string, label: string): void {
+	if (id === store.showcaseId.value)
+		return
+	draftGuard.request(label, () => void store.switchShowcase(id))
+}
 
-const tutorialButtonLabel = computed(() => {
+function choosePreset(preset: ShowcasePreset): void {
+	draftGuard.request(i18n.t(preset.label), () => void store.applyPreset(preset.id))
+}
+
+const exampleItems = computed<DropdownMenuItem[][]>(() => [
+	[
+		{ type: 'label', label: i18n.t('Showcase') },
+		...showcaseOptions.value.map(showcase => ({
+			type: 'checkbox' as const,
+			label: i18n.t(showcase.label),
+			checked: showcase.id === store.showcaseId.value,
+			onSelect: () => chooseShowcase(showcase.id, i18n.t(showcase.label)),
+		})),
+	],
+	[
+		{ type: 'label', label: i18n.t('Preset') },
+		...store.presets.value.map(preset => ({
+			type: 'checkbox' as const,
+			label: i18n.t(preset.label),
+			description: i18n.t(preset.description),
+			checked: store.example.value.kind === 'preset' && store.example.value.preset.id === preset.id,
+			onSelect: () => choosePreset(preset),
+		})),
+	],
+])
+
+// ---------------------------------------------------------------------------------------------------------
+// Status chips
+
+const validity = computed(() => store.status.value.validity)
+const previewState = computed(() => store.status.value.preview)
+const validityLabel = computed(() => {
+	const value = validity.value
+	if (value.kind === 'valid')
+		return i18n.t('Valid')
+	return i18n.t(value.count === 1 ? '{count} problem' : '{count} problems', { count: value.count })
+})
+const previewLabel = computed(() => {
+	switch (previewState.value) {
+		case 'current': return i18n.t('Preview up to date')
+		case 'stale': return i18n.t('Preview shows the last valid version')
+		default: return i18n.t('No preview yet')
+	}
+})
+const previewColor = computed(() => previewState.value === 'current' ? 'success' : previewState.value === 'stale' ? 'warning' : 'neutral')
+
+const linkLabel = computed(() => {
+	const status = store.revisionStatus.value
+	return i18n.t(status.isLinked ? 'Linked / Synced' : status.state === 'diverged' ? 'Diverged / Unlinked' : 'Unlinked')
+})
+
+// ---------------------------------------------------------------------------------------------------------
+// Edit actions. Disabled buttons use `aria-disabled` (not `disabled`) so they stay focusable and keep their
+// tooltip, which explains why they are unavailable.
+
+const applyLabel = computed(() => i18n.t(store.isApplying.value ? 'Applying…' : 'Apply'))
+const applyTooltip = computed(() => {
+	if (store.isApplying.value)
+		return i18n.t('Applying…')
+	return store.isDirty.value ? i18n.t('Apply your edits to the document and preview') : i18n.t('Nothing to apply: no unapplied edits')
+})
+const revertTooltip = computed(() => store.isDirty.value
+	? i18n.t('Discard your unapplied edits')
+	: i18n.t('Nothing to revert: no unapplied edits'))
+const undoTooltip = computed(() => {
+	if (store.canUndo.value)
+		return i18n.t('Undo last apply: restore the previously applied version as a new revision')
+	if (store.isApplying.value)
+		return i18n.t('Wait for the current Apply to finish')
+	if (store.isDirty.value)
+		return i18n.t('Apply or revert your unapplied edits before undoing')
+	return i18n.t('Nothing to undo yet')
+})
+
+function onApply(): void {
+	if (store.canApply.value)
+		void store.apply()
+}
+
+function onRevert(): void {
+	if (store.isDirty.value)
+		store.revert()
+}
+
+function onUndo(): void {
+	if (store.canUndo.value)
+		void store.undoLastApply()
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Overflow menu
+
+const tutorialLabel = computed(() => {
 	switch (tutorial.snapshot.value.status) {
 		case 'paused': return i18n.t('Resume tutorial')
 		case 'completed': return i18n.t('Restart tutorial')
@@ -39,7 +170,7 @@ const tutorialButtonLabel = computed(() => {
 	}
 })
 
-function onTutorialButtonClick(): void {
+function onTutorialSelect(): void {
 	switch (tutorial.snapshot.value.status) {
 		case 'paused':
 			tutorial.requestResume()
@@ -55,167 +186,239 @@ function onTutorialButtonClick(): void {
 	}
 }
 
-function onPresetChange(event: Event): void {
-	const id = (event.target as HTMLSelectElement).value
-	if (id === '')
-		return
-	void store.applyPreset(id)
-	;(event.target as HTMLSelectElement).value = ''
-}
+const themeOptions: readonly { readonly value: LabTheme, readonly label: string }[] = [
+	{ value: 'light', label: 'Light' },
+	{ value: 'dark', label: 'Dark' },
+]
+const localeOptions: readonly { readonly value: LabLocale, readonly label: string }[] = [
+	{ value: 'en', label: 'English' },
+	{ value: 'zh-TW', label: '繁體中文' },
+]
 
-function onShowcaseChange(event: Event): void {
-	const id = (event.target as HTMLSelectElement).value
-	void store.switchShowcase(id)
-}
-
-function onThemeChange(event: Event): void {
-	theme.setTheme((event.target as HTMLSelectElement).value as LabTheme)
-}
-
-function onLocaleChange(event: Event): void {
-	i18n.setLocale((event.target as HTMLSelectElement).value as LabLocale)
-}
+const overflowItems = computed<DropdownMenuItem[][]>(() => [
+	[
+		{
+			label: tutorialLabel.value,
+			icon: 'i-lucide-graduation-cap',
+			disabled: tutorial.startPending.value,
+			onSelect: onTutorialSelect,
+		},
+	],
+	[
+		{
+			label: i18n.t('Theme'),
+			icon: 'i-lucide-sun-moon',
+			children: themeOptions.map(option => ({
+				type: 'checkbox' as const,
+				label: i18n.t(option.label),
+				checked: theme.theme.value === option.value,
+				onSelect: () => theme.setTheme(option.value),
+			})),
+		},
+		{
+			label: i18n.t('Language'),
+			icon: 'i-lucide-languages',
+			children: localeOptions.map(option => ({
+				type: 'checkbox' as const,
+				label: option.label,
+				checked: i18n.locale.value === option.value,
+				onSelect: () => i18n.setLocale(option.value),
+			})),
+		},
+	],
+	[
+		{
+			label: i18n.t('Developer'),
+			icon: 'i-lucide-code',
+			children: [
+				{
+					label: i18n.t('Implementation'),
+					icon: 'i-lucide-file-code',
+					onSelect: () => implementationExplorer.open('catalog'),
+				},
+				{
+					label: i18n.t('Document Tools'),
+					icon: 'i-lucide-wrench',
+					onSelect: () => documentTools.open(),
+				},
+			],
+		},
+	],
+])
 </script>
 
 <template>
-	<header :class="pika({ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', rowGap: '6px', padding: '8px 14px', borderBottom: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)', flex: '0 0 auto' })">
-		<strong :class="pika({ fontSize: '13px', letterSpacing: '0.02em' })">Widget Lab</strong>
+	<header class="flex flex-none items-center gap-2 border-b border-default bg-muted px-3 py-1.5">
+		<strong class="whitespace-nowrap text-[13px] tracking-wide">Widget Lab</strong>
 
-		<select
-			:value="store.showcaseId.value"
-			:class="pika({ background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 8px', fontSize: '12px' })"
-			:aria-label="i18n.t('Switch showcase')"
-			@change="onShowcaseChange"
+		<UDropdownMenu
+			:items="exampleItems"
+			:content="{ align: 'start' }"
+			:ui="{ content: 'w-80 max-w-[90vw]' }"
 		>
-			<option
-				v-for="showcase in showcaseOptions"
-				:key="showcase.id"
-				:value="showcase.id"
+			<UButton
+				data-testid="examples-menu"
+				color="neutral"
+				variant="outline"
+				size="sm"
+				trailingIcon="i-lucide-chevron-down"
+				class="min-w-0 max-w-88 justify-between"
 			>
-				{{ i18n.t(showcase.label) }}
-			</option>
-		</select>
+				<span class="sr-only">{{ i18n.t('Examples:') }}</span>
+				<span
+					data-testid="examples-showcase"
+					class="truncate font-semibold"
+				>{{ currentShowcaseLabel }}</span>
+				<span
+					data-testid="examples-preset"
+					:data-example-kind="store.example.value.kind"
+					class="truncate text-muted"
+				>· {{ exampleLabel }}</span>
+			</UButton>
+		</UDropdownMenu>
 
-		<select
-			:class="pika({ background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 8px', fontSize: '12px' })"
-			:aria-label="i18n.t('Load a preset')"
-			@change="onPresetChange"
-		>
-			<option value="">
-				{{ i18n.t('Preset…') }}
-			</option>
-			<option
-				v-for="preset in store.presets.value"
-				:key="preset.id"
-				:value="preset.id"
-				:title="i18n.t(preset.description)"
-			>
-				{{ i18n.t(preset.label) }}
-			</option>
-		</select>
+		<span class="flex-1" />
 
-		<button
-			type="button"
-			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
-			@click="implementationExplorer.open('catalog')"
-		>
-			{{ i18n.t('Implementation') }}
-		</button>
-		<button
-			type="button"
-			data-testid="open-document-tools"
-			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
-			@click="documentTools.open()"
-		>
-			{{ i18n.t('Document Tools') }}
-		</button>
-		<button
-			type="button"
-			:disabled="tutorial.startPending.value"
-			:class="pika({ 'padding': '5px 10px', 'fontSize': '12px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
-			@click="onTutorialButtonClick"
-		>
-			{{ tutorialButtonLabel }}
-		</button>
-
-		<span :class="pika({ marginLeft: 'auto' })" />
-
-		<span
+		<UBadge
 			data-testid="document-status"
-			:class="pika({ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
-			:style="{ color: blueprintStatus === 'valid' ? 'var(--lab-color-ok)' : 'var(--lab-color-danger)' }"
-		>
-			{{ i18n.t('Document r{revision}', { revision: documentRevision }) }} · {{ i18n.t('Blueprint') }}: {{ i18n.t(blueprintStatus) }} ({{ diagnosticCount }} {{ i18n.t(diagnosticCount === 1 ? 'diagnostic' : 'diagnostics') }})
-		</span>
-
-		<span
+			:data-state="validity.kind"
+			:data-problem-count="validity.kind === 'problems' ? validity.count : 0"
+			:color="validity.kind === 'valid' ? 'success' : 'error'"
+			variant="subtle"
+			size="md"
+			:icon="validity.kind === 'valid' ? 'i-lucide-circle-check' : 'i-lucide-circle-alert'"
+			:label="validityLabel"
+			class="whitespace-nowrap"
+		/>
+		<UBadge
 			data-testid="preview-status"
-			:class="pika({ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
-			:style="{ color: previewRevision === null ? 'var(--lab-color-text-muted)' : store.revisionStatus.value.isPreviewStale ? 'var(--lab-color-warning)' : 'var(--lab-color-ok)' }"
-		>
-			{{ previewRevision === null ? i18n.t('Preview unavailable') : i18n.t('Preview r{revision}', { revision: previewRevision }) }}
-		</span>
+			:data-state="previewState"
+			:color="previewColor"
+			variant="subtle"
+			size="md"
+			:icon="previewState === 'current' ? 'i-lucide-circle-check' : previewState === 'stale' ? 'i-lucide-triangle-alert' : 'i-lucide-circle-dashed'"
+			:label="previewLabel"
+			class="whitespace-nowrap"
+		/>
 
-		<span
-			data-testid="revision-link-status"
-			:class="pika({ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: '600', border: '1px solid var(--lab-color-border)' })"
-			:style="{ color: store.revisionStatus.value.isLinked ? 'var(--lab-color-ok)' : 'var(--lab-color-warning)' }"
-		>
-			<span aria-hidden="true">{{ store.revisionStatus.value.isLinked ? '●' : '!' }}</span>
-			{{ i18n.t(store.revisionStatus.value.isLinked ? 'Linked / Synced' : store.revisionStatus.value.state === 'diverged' ? 'Diverged / Unlinked' : 'Unlinked') }}
-		</span>
+		<UPopover :content="{ align: 'end' }">
+			<UButton
+				data-testid="status-details"
+				color="neutral"
+				variant="ghost"
+				size="sm"
+				square
+				icon="i-lucide-info"
+				:aria-label="i18n.t('Document and preview details')"
+			/>
+			<template #content>
+				<dl
+					data-testid="status-details-panel"
+					class="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 p-3 text-xs"
+				>
+					<dt class="text-muted">
+						{{ i18n.t('Document') }}
+					</dt>
+					<dd
+						data-testid="status-document-revision"
+						class="m-0 font-mono"
+					>
+						r{{ store.revisionStatus.value.documentRevision }}
+					</dd>
+					<dt class="text-muted">
+						{{ i18n.t('Preview') }}
+					</dt>
+					<dd
+						data-testid="status-preview-revision"
+						class="m-0 font-mono"
+					>
+						{{ store.revisionStatus.value.previewRevision === null ? i18n.t('Preview unavailable') : `r${store.revisionStatus.value.previewRevision}` }}
+					</dd>
+					<dt class="text-muted">
+						{{ i18n.t('Blueprint status') }}
+					</dt>
+					<dd class="m-0">
+						{{ i18n.t(store.documentState.value.blueprint.status) }} · {{ store.documentState.value.blueprint.diagnostics.length }} {{ i18n.t(store.documentState.value.blueprint.diagnostics.length === 1 ? 'diagnostic' : 'diagnostics') }}
+					</dd>
+					<dt class="text-muted">
+						{{ i18n.t('Revisions') }}
+					</dt>
+					<dd
+						data-testid="revision-link-status"
+						class="m-0"
+						:class="store.revisionStatus.value.isLinked ? 'text-success' : 'text-warning'"
+					>
+						{{ linkLabel }}
+					</dd>
+				</dl>
+			</template>
+		</UPopover>
 
-		<select
-			:value="theme.theme.value"
-			:class="pika({ width: '64px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
-			:aria-label="i18n.t('Theme')"
-			@change="onThemeChange"
-		>
-			<option value="light">
-				{{ i18n.t('Light') }}
-			</option>
-			<option value="dark">
-				{{ i18n.t('Dark') }}
-			</option>
-		</select>
+		<UFieldGroup size="sm">
+			<UTooltip
+				:text="applyTooltip"
+				:kbds="['meta', 'enter']"
+			>
+				<UButton
+					data-testid="apply-button"
+					color="primary"
+					variant="solid"
+					icon="i-lucide-check"
+					:label="applyLabel"
+					:aria-disabled="!store.canApply.value"
+					class="aria-disabled:opacity-50"
+					@click="onApply"
+				/>
+			</UTooltip>
+			<UTooltip :text="revertTooltip">
+				<UButton
+					data-testid="revert-button"
+					color="neutral"
+					variant="outline"
+					icon="i-lucide-rotate-ccw"
+					:label="i18n.t('Revert')"
+					:aria-disabled="!store.isDirty.value"
+					class="aria-disabled:opacity-50"
+					@click="onRevert"
+				/>
+			</UTooltip>
+			<UTooltip :text="undoTooltip">
+				<UButton
+					data-testid="undo-button"
+					color="neutral"
+					variant="outline"
+					icon="i-lucide-undo-2"
+					:label="i18n.t('Undo')"
+					:aria-disabled="!store.canUndo.value"
+					class="aria-disabled:opacity-50"
+					@click="onUndo"
+				/>
+			</UTooltip>
+			<UTooltip :text="i18n.t('Format the JSON draft')">
+				<UButton
+					data-testid="format-button"
+					color="neutral"
+					variant="outline"
+					icon="i-lucide-align-left"
+					:label="i18n.t('Format')"
+					@click="store.format()"
+				/>
+			</UTooltip>
+		</UFieldGroup>
 
-		<select
-			:value="i18n.locale.value"
-			:class="pika({ width: '64px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '12px' })"
-			:aria-label="i18n.t('Language')"
-			@change="onLocaleChange"
+		<UDropdownMenu
+			:items="overflowItems"
+			:content="{ align: 'end' }"
 		>
-			<option value="en">
-				EN
-			</option>
-			<option value="zh-TW">
-				繁中
-			</option>
-		</select>
-
-		<button
-			type="button"
-			:disabled="!store.isDirty.value"
-			:class="pika({ 'padding': '5px 10px', 'fontSize': '12px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
-			@click="store.revert()"
-		>
-			{{ i18n.t('Revert') }}
-		</button>
-		<button
-			type="button"
-			:class="pika({ padding: '5px 10px', fontSize: '12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
-			@click="store.format()"
-		>
-			{{ i18n.t('Format') }}
-		</button>
-		<button
-			type="button"
-			:disabled="!store.isDirty.value || store.isApplying.value"
-			:title="`${i18n.t('Apply')} (Cmd/Ctrl+Enter)`"
-			:class="pika({ 'padding': '5px 12px', 'fontSize': '12px', 'fontWeight': '600', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-accent)', 'background': 'var(--lab-color-accent)', 'color': 'var(--lab-color-accent-contrast)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
-			@click="store.apply()"
-		>
-			{{ i18n.t(store.isApplying.value ? 'Applying…' : 'Apply') }}
-		</button>
+			<UButton
+				data-testid="overflow-menu"
+				color="neutral"
+				variant="ghost"
+				size="sm"
+				square
+				icon="i-lucide-ellipsis"
+				:aria-label="i18n.t('More')"
+			/>
+		</UDropdownMenu>
 	</header>
 </template>

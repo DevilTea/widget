@@ -42,10 +42,19 @@ interface JsonEntry {
 	readonly value: JsonNode
 }
 
-class JsonScanError extends Error {}
+/** A syntax failure of the scanner, carrying the offset it stopped at. */
+class JsonScanError extends Error {
+	constructor(readonly offset: number) {
+		super('Invalid JSON')
+	}
+}
 
 function parseJsonNode(text: string): JsonNode {
 	let index = 0
+
+	function fail(at: number = index): never {
+		throw new JsonScanError(at)
+	}
 
 	function skipWhitespace(): void {
 		while (index < text.length && (text[index] === ' ' || text[index] === '\n' || text[index] === '\r' || text[index] === '\t'))
@@ -55,15 +64,23 @@ function parseJsonNode(text: string): JsonNode {
 	function scanString(): { value: string, span: JsonSpan } {
 		const start = index
 		if (text[index] !== '"')
-			throw new JsonScanError()
+			fail()
 		index++
 		while (index < text.length && text[index] !== '"') {
 			index += text[index] === '\\' ? 2 : 1
 		}
 		if (index >= text.length)
-			throw new JsonScanError()
+			fail()
 		index++
-		return { value: JSON.parse(text.slice(start, index)) as string, span: { start, end: index } }
+		let value: string
+		try {
+			value = JSON.parse(text.slice(start, index)) as string
+		}
+		catch {
+			// A control character or an invalid escape inside the string.
+			fail(start)
+		}
+		return { value, span: { start, end: index } }
 	}
 
 	function scanValue(): JsonNode {
@@ -83,7 +100,7 @@ function parseJsonNode(text: string): JsonNode {
 				const key = scanString()
 				skipWhitespace()
 				if (text[index] !== ':')
-					throw new JsonScanError()
+					fail()
 				index++
 				entries.push({ key: key.value, keySpan: key.span, value: scanValue() })
 				skipWhitespace()
@@ -95,7 +112,7 @@ function parseJsonNode(text: string): JsonNode {
 					index++
 					return { kind: 'object', start, end: index, entries, items: [] }
 				}
-				throw new JsonScanError()
+				fail()
 			}
 		}
 		if (char === '[') {
@@ -117,7 +134,7 @@ function parseJsonNode(text: string): JsonNode {
 					index++
 					return { kind: 'array', start, end: index, entries: [], items }
 				}
-				throw new JsonScanError()
+				fail()
 			}
 		}
 		if (char === '"') {
@@ -126,7 +143,7 @@ function parseJsonNode(text: string): JsonNode {
 		}
 		const literal = /^(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)/.exec(text.slice(index, index + 64))
 		if (literal === null)
-			throw new JsonScanError()
+			fail()
 		index += literal[0].length
 		return { kind: 'primitive', start, end: index, entries: [], items: [] }
 	}
@@ -134,7 +151,7 @@ function parseJsonNode(text: string): JsonNode {
 	const root = scanValue()
 	skipWhitespace()
 	if (index !== text.length)
-		throw new JsonScanError()
+		fail()
 	return root
 }
 
@@ -168,7 +185,8 @@ export function locateJsonPath(text: string, path: JsonPath): JsonLocation | nul
 		let nextKey: JsonSpan | null = null
 		if (node.kind === 'object' && typeof segment === 'string') {
 			// `JSON.parse` keeps the last of duplicate keys, so does the lookup.
-			const entry = node.entries.findLast(candidate => candidate.key === segment)
+			const entry = [...node.entries].reverse()
+				.find(candidate => candidate.key === segment)
 			next = entry?.value
 			nextKey = entry?.keySpan ?? null
 		}
@@ -209,10 +227,23 @@ function offsetOfLineColumn(text: string, line: number, column: number): number 
 	return Math.min(text.length, offset + Math.max(0, column - 1))
 }
 
+/** The offset where `text` stops being valid JSON (this module's own scan), or `null` when it is valid. */
+export function scanJsonSyntaxError(text: string): number | null {
+	try {
+		parseJsonNode(text)
+		return null
+	}
+	catch (error) {
+		return error instanceof JsonScanError ? error.offset : text.length
+	}
+}
+
 /**
- * The character offset a `JSON.parse` `SyntaxError` message points at. V8 reports `at position N`
- * (`(line L column C)` in recent versions); Firefox reports `at line L column C`. A message without a
- * position (Safari) falls back to the end of the text. The message itself is never altered or classified.
+ * The character offset a `JSON.parse` `SyntaxError` points at. Engines word the message differently and do
+ * not always say where: V8 reports `at position N` for some errors but only quotes a snippet for others
+ * (`Unexpected token 'x', ...`), Firefox reports `at line L column C`, Safari gives no position. So the
+ * message's position is used when it has one, and otherwise the offset where this module's own scan of the
+ * same text stops. The message itself is never altered or classified.
  */
 export function jsonSyntaxErrorOffset(message: string, text: string): number {
 	const position = /\bposition (\d+)/.exec(message)
@@ -221,7 +252,7 @@ export function jsonSyntaxErrorOffset(message: string, text: string): number {
 	const lineColumn = /\bline (\d+) column (\d+)/.exec(message)
 	if (lineColumn !== null)
 		return offsetOfLineColumn(text, Number(lineColumn[1]), Number(lineColumn[2]))
-	return text.length
+	return scanJsonSyntaxError(text) ?? text.length
 }
 
 /** A one-character span at the syntax error (or the last character when the error is at the very end). */

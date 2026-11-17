@@ -69,15 +69,21 @@
 
 import type { WidgetDocumentSnapshot } from '@deviltea/widget-core'
 import type { InjectionKey, Ref } from 'vue'
+import type { ExampleState } from '../lab/example'
 import type { DocumentScopedInspectorFocus, InspectorFocus, InspectorFocusScope, InspectorFocusStore, PreviewInspectorFocus, PreviewScopedInspectorFocus } from '../lab/focus'
-import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentTraceEvent, RevisionConflictDemoResult } from '../lab/types'
+import type { LabProblem } from '../lab/problems'
+import type { LabStatus } from '../lab/status'
+import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentTraceEvent, RevisionConflictDemoResult, UndoOutcome } from '../lab/types'
 import type { PreviewHostCoordinator } from '../preview-host/coordinator'
 import type { ShowcaseEntry, ShowcasePreset } from '../showcases/registry'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, inject, shallowRef, watch } from 'vue'
+import { deriveExampleState } from '../lab/example'
 import { createInspectorFocusStore } from '../lab/focus'
+import { collectProblems } from '../lab/problems'
 import { getLabRevisionStatus } from '../lab/revisions'
 import { LabSession } from '../lab/session'
+import { deriveLabStatus } from '../lab/status'
 import { createPreviewHostCoordinator } from '../preview-host/coordinator'
 import { defaultShowcase, listedShowcases, showcases } from '../showcases/registry'
 
@@ -113,6 +119,30 @@ export interface LabStore {
 	readonly documentTrace: Readonly<Ref<readonly LabDocumentTraceEvent[]>>
 	readonly isApplying: Readonly<Ref<boolean>>
 	readonly isDirty: Readonly<Ref<boolean>>
+	/** Apply is available: an unapplied draft exists and no lifecycle command is running. */
+	readonly canApply: Readonly<Ref<boolean>>
+	/**
+	 * "Undo last apply" is available: a previously applied source exists, there is no unapplied draft (Undo
+	 * never discards typing; Revert or Apply it first) and no lifecycle command is running.
+	 */
+	readonly canUndo: Readonly<Ref<boolean>>
+	/** How many applied sources "Undo last apply" can step back through (bounded by `LAB_UNDO_LIMIT`). */
+	readonly undoDepth: Readonly<Ref<number>>
+	/** Plain-language header status: Document validity and whether Preview shows it. */
+	readonly status: Readonly<Ref<LabStatus>>
+	/** The Problems list: the last Apply's JSON syntax error and the Document's Core diagnostics. */
+	readonly problems: Readonly<Ref<readonly LabProblem[]>>
+	/** The preset the document was last started from (the showcase default on entry, then the last loaded preset). */
+	readonly loadedPresetId: Readonly<Ref<string | null>>
+	/** What the Examples menu names: the loaded preset, or "edited" once the source no longer matches it. */
+	readonly example: Readonly<Ref<ExampleState<ShowcasePreset>>>
+	/** Which Author view is open. Lives here (not in `AuthorPanel`) so other surfaces can open the JSON view. */
+	readonly authorView: Ref<'catalog' | 'structure' | 'json'>
+	/**
+	 * Set by `showProblems()`: `AuthorJsonView` moves focus to its Problems list (when it is already mounted, or
+	 * as soon as it mounts) and clears the flag.
+	 */
+	readonly problemsFocusPending: Ref<boolean>
 	/** @deprecated Use `documentFocus` or `previewFocus` according to the surface's scope. */
 	readonly focus: Readonly<Ref<InspectorFocus | null>>
 	/** The showcases the header lists (hidden test-only fixtures excluded; `switchShowcase()` still accepts them). */
@@ -138,7 +168,12 @@ export interface LabStore {
 	apply: () => Promise<ApplyOutcome>
 	author: (command: AuthorCommand) => Promise<AuthorOutcome>
 	format: () => void
+	/** Discards the unapplied draft only (the applied Document is untouched). See `undoLastApply` for going back. */
 	revert: () => void
+	/** Restores the previously applied source as a new Document revision; see `LabSession.undoLastApply()`. */
+	undoLastApply: () => Promise<UndoOutcome>
+	/** Opens Author > JSON and moves focus to the Problems list. */
+	showProblems: () => void
 	applyPreset: (presetId: string) => Promise<ApplyOutcome | undefined>
 	demonstrateRevisionConflict: () => RevisionConflictDemoResult | null
 	/** No-op when `id` is unknown or already the current showcase. Serialized against Apply/itself. */
@@ -158,6 +193,9 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	const previewHost = createPreviewHostCoordinator()
 	const showcaseId = shallowRef(initialShowcase.id)
 	const presets = shallowRef<readonly ShowcasePreset[]>(initialShowcase.presets)
+	const loadedPresetId = shallowRef<string | null>(initialShowcase.defaultPreset.id)
+	const authorView = shallowRef<'catalog' | 'structure' | 'json'>('json')
+	const problemsFocusPending = shallowRef(false)
 
 	const sessionTick = shallowRef(0)
 	const documentTick = shallowRef(0)
@@ -300,6 +338,12 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		void sessionTick.value
 		return session.isDirty
 	})
+	const canApply = computed(() => isDirty.value && !isApplying.value)
+	const undoDepth = computed(() => {
+		void sessionTick.value
+		return session.undoDepth
+	})
+	const canUndo = computed(() => undoDepth.value > 0 && !isDirty.value && !isApplying.value)
 	const focus = computed(() => {
 		void focusTick.value
 		return focusStore.getFocus()
@@ -315,6 +359,30 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	const revisionStatus = computed(() => {
 		void sessionTick.value
 		return getLabRevisionStatus(session.documentState.revision, session.preview?.revision ?? null)
+	})
+	const status = computed(() => {
+		void sessionTick.value
+		const { blueprint } = session.documentState
+		return deriveLabStatus({
+			blueprintStatus: blueprint.status,
+			diagnosticCount: blueprint.diagnostics.length,
+			hasParseError: session.parseError !== null,
+			revisions: getLabRevisionStatus(session.documentState.revision, session.preview?.revision ?? null),
+		})
+	})
+	const problems = computed(() => {
+		void sessionTick.value
+		const { blueprint } = session.documentState
+		return collectProblems(blueprint, inspectBlueprint(blueprint), session.parseError)
+	})
+	const example = computed(() => {
+		void sessionTick.value
+		return deriveExampleState({
+			loadedPresetId: loadedPresetId.value,
+			presets: presets.value,
+			appliedSourceText: session.documentState.sourceText,
+			isDirty: session.isDirty,
+		})
 	})
 	const lastAppliedSourcePatch = computed(() => {
 		void sessionTick.value
@@ -409,6 +477,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 
 		showcaseId.value = target.id
 		presets.value = target.presets
+		loadedPresetId.value = target.defaultPreset.id
 		graphExpandedClusterIds.value = new Set()
 		sessionTick.value++
 		documentTick.value++
@@ -445,6 +514,15 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		documentTrace,
 		isApplying,
 		isDirty,
+		canApply,
+		canUndo,
+		undoDepth,
+		status,
+		problems,
+		loadedPresetId,
+		example,
+		authorView,
+		problemsFocusPending,
 		focus,
 		showcases: listedShowcases,
 		showcaseId,
@@ -484,6 +562,17 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		},
 		format: () => session.format(),
 		revert: () => session.revert(),
+		undoLastApply: () => {
+			if (switchTransactionCount > 0)
+				return Promise.resolve({ status: 'skipped-concurrent' })
+			const outcome = session.undoLastApply()
+			return enqueue(() => outcome)
+		},
+		showProblems: () => {
+			activeTab.value = 'author'
+			authorView.value = 'json'
+			problemsFocusPending.value = true
+		},
 		applyPreset: (presetId) => {
 			// Same symmetric guard as `apply()` above, checked first so a concurrent switch also short-
 			// circuits the (otherwise pure) preset lookup rather than resolving it against a showcase that
@@ -496,8 +585,16 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			// Same reasoning as `apply()` above: `session.applyPreset()` synchronously sets the draft text
 			// and synchronously starts `session.apply()` (capture + concurrency guard) before this line
 			// returns. `enqueue()` only barriers a concurrent `switchShowcase()`/`apply()` behind it.
+			const targetSession = session
 			const outcome = session.applyPreset(preset.sourceText)
-			return enqueue(() => outcome)
+			return enqueue(async () => {
+				const result = await outcome
+				// A switch queued behind this preset replaces the session only after it settled, so the check
+				// is a guard rather than an expected case: never name a preset in a showcase it does not belong to.
+				if (result.status === 'applied' && session === targetSession)
+					loadedPresetId.value = presetId
+				return result
+			})
 		},
 		demonstrateRevisionConflict: () => {
 			if (switchTransactionCount > 0)

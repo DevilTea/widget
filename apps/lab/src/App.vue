@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, onUnmounted, provide, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onUnmounted, provide, watch, watchEffect } from 'vue'
+import DraftGuardDialog from './components/DraftGuardDialog.vue'
 import LabHeader from './components/LabHeader.vue'
 import TutorialConfirmDialog from './components/tutorial/TutorialConfirmDialog.vue'
 import TutorialRail from './components/tutorial/TutorialRail.vue'
 import WelcomeCard from './components/tutorial/WelcomeCard.vue'
 import Workbench from './components/Workbench.vue'
 import { createDocumentToolsStore, DocumentToolsKey } from './composables/use-document-tools'
+import { createDraftGuardStore, DraftGuardKey } from './composables/use-draft-guard'
 import { createImplementationExplorerStore, ImplementationExplorerKey } from './composables/use-implementation-explorer'
 import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
@@ -15,7 +17,7 @@ import { useSupportedWorkbenchViewport } from './composables/use-supported-workb
 import { createTutorialStore, TutorialStoreKey } from './composables/use-tutorial'
 import { disposeLayoutWorker } from './graph/layout-client'
 import { installLabTestSeam } from './lab-test-seam'
-import { resolveInitialShowcase } from './showcases/registry'
+import { resolveInitialShowcase, urlWithShowcase } from './showcases/registry'
 import 'dockview-vue/dist/styles/dockview.css'
 import './styles/dockview-theme.css'
 import './styles/tutorial-theme.css'
@@ -33,6 +35,11 @@ useNuxtUiThemeBridge(theme.theme)
 // fall back to the default. See `showcases/registry.ts`'s `resolveInitialShowcase`.
 const store = createLabStore(resolveInitialShowcase(location.search))
 provide(LabStoreKey, store)
+// Keep `?showcase=<id>` in the address bar in sync with the active showcase (no history entry), so a reload
+// restores it. The hidden Sandbox fixture is written too: the URL always names what is open.
+watch(store.showcaseId, (id) => {
+	history.replaceState(history.state, '', urlWithShowcase(location.href, id))
+}, { immediate: true })
 // Diagnostic #28 browser-contract seam (`?lab-test` only; inert otherwise) — see `lab-test-seam.ts`.
 installLabTestSeam(store)
 
@@ -54,6 +61,10 @@ provide(DocumentToolsKey, documentTools)
 // component can never see its own `provide()` call; passing them directly sidesteps that entirely.
 const tutorial = createTutorialStore(store, implementationExplorer)
 provide(TutorialStoreKey, tutorial)
+
+// Unapplied-draft confirmation for loading a preset / switching showcase (audit U03).
+const draftGuard = createDraftGuardStore(store)
+provide(DraftGuardKey, draftGuard)
 
 const tutorialRailVisible = computed(() => tutorial.snapshot.value.status === 'active')
 
@@ -79,26 +90,31 @@ const supportedViewport = useSupportedWorkbenchViewport()
 
 function onKeydown(event: KeyboardEvent): void {
 	// Cmd/Ctrl+Enter is a UX shortcut for the same Apply command the header button invokes, so it honors
-	// the button's enabled condition (`isDirty && !isApplying`). It yields to IME composition (keyCode 229
-	// covers engines that report it without `isComposing`), key repeat, handlers that already claimed the
-	// event (Monaco preventDefaults+stops keys it binds, so an editor-handled Cmd+Enter never reaches here),
-	// open tutorial modal dialogs, and the narrow-viewport gate (the workbench is `inert` behind it).
+	// the button's enabled condition (`canApply`). It runs in the CAPTURE phase: Dockview's tab buttons
+	// preventDefault Enter (it activates the tab), so by the bubbling phase the event would look "already
+	// handled" and Apply would never fire from a focused tab (audit U05). It yields to IME composition (keyCode
+	// 229 covers engines that report it without `isComposing`), key repeat, events something earlier already
+	// claimed, the editor itself (Monaco binds Cmd/Ctrl+Enter to "insert line"; `use-monaco-editor.ts` registers
+	// the same Apply as an editor command, so letting both run would Apply twice) and open menus (Enter
+	// selects an item there), open modal dialogs, and the narrow-viewport gate (the workbench is `inert` behind it).
 	if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey))
 		return
 	if (event.isComposing || event.keyCode === 229 || event.repeat || event.defaultPrevented)
 		return
-	if (tutorial.welcomeVisible.value || tutorial.confirmVisible.value)
+	if (event.target instanceof Element && event.target.closest('.monaco-editor, [role="menu"]') !== null)
+		return
+	if (tutorial.welcomeVisible.value || tutorial.confirmVisible.value || draftGuard.confirmVisible.value)
 		return
 	if (!supportedViewport.value)
 		return
-	if (!store.isDirty.value || store.isApplying.value)
+	if (!store.canApply.value)
 		return
 	event.preventDefault()
 	void store.apply()
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => window.addEventListener('keydown', onKeydown, true))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
 // `store.dispose()` (which disposes the final active Runtime) runs from `onUnmounted`, not
 // `onBeforeUnmount`: Vue only guarantees every descendant — including Workbench's Preview
 // `WidgetRenderer` subtree — has fully unmounted by the time a component's own `onUnmounted` fires.
@@ -134,6 +150,7 @@ onUnmounted(() => disposeLayoutWorker())
 		-->
 		<WelcomeCard />
 		<TutorialConfirmDialog />
+		<DraftGuardDialog />
 		<div
 			class="narrow-viewport-gate"
 			role="alert"

@@ -92,9 +92,21 @@ export function getShowcase(id: string): ShowcaseEntry | undefined {
 }
 
 /**
+ * The URL (path, query and hash) with `?showcase=<id>` set, every other parameter kept as is. Used to keep
+ * the address bar in sync with the active showcase through `history.replaceState`, so a reload restores it
+ * (the id is written even for the default showcase: the URL always says what is open).
+ */
+export function urlWithShowcase(href: string, id: string): string {
+	const url = new URL(href)
+	url.searchParams.set('showcase', id)
+	return `${url.pathname}${url.search}${url.hash}`
+}
+
+/**
  * The showcase the Lab starts in: the `?showcase=<id>` URL parameter selects any registered showcase
  * (listed or hidden), so e2e can open the hidden `sandbox` fixture without UI. A missing, empty or
- * unknown id falls back to `defaultShowcase`. Read once at startup; the selector does not write the URL.
+ * unknown id falls back to `defaultShowcase`. Read once at startup; `App.vue` then keeps the parameter in sync
+ * with the active showcase (`urlWithShowcase`).
  */
 export function resolveInitialShowcase(search: string): ShowcaseEntry {
 	const id = new URLSearchParams(search)

@@ -4,7 +4,7 @@ import type { LabStore } from './composables/use-lab-store'
 import type { TutorialStore } from './composables/use-tutorial'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h, inject, onUnmounted, shallowRef } from 'vue'
+import { computed, defineComponent, h, inject, onUnmounted, shallowRef } from 'vue'
 import App from './App.vue'
 import { createLabStore } from './composables/use-lab-store'
 import { TutorialStoreKey } from './composables/use-tutorial'
@@ -49,6 +49,7 @@ describe('app.vue teardown ordering', () => {
 			global: {
 				stubs: {
 					LabHeader: true,
+					DraftGuardDialog: true,
 					TutorialConfirmDialog: true,
 					TutorialRail: true,
 					WelcomeCard: true,
@@ -88,6 +89,7 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 			global: {
 				stubs: {
 					LabHeader: defineComponent({ name: 'LabHeader', render: () => h('header', { 'data-testid': 'header-probe' }) }),
+					DraftGuardDialog: true,
 					TutorialConfirmDialog: true,
 					TutorialRail: true,
 					WelcomeCard: TutorialProbe,
@@ -128,6 +130,7 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 				showcaseId: shallowRef('sandbox'),
 				isDirty,
 				isApplying,
+				canApply: computed(() => isDirty.value && !isApplying.value),
 				apply,
 				dispose: vi.fn(),
 			} as unknown as LabStore)
@@ -161,6 +164,40 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 		window.dispatchEvent(handled)
 
 		expect(apply).not.toHaveBeenCalled()
+		wrapper.unmount()
+	})
+
+	it('applies even when a control below the window already prevents Enter (a focused Dockview tab does)', () => {
+		const wrapper = mountApp()
+		tutorial!.dismissWelcome()
+		const tab = document.createElement('div')
+		tab.className = 'dv-tab'
+		tab.addEventListener('keydown', event => event.preventDefault())
+		document.body.append(tab)
+
+		tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }))
+
+		expect(apply)
+			.toHaveBeenCalledTimes(1)
+		tab.remove()
+		wrapper.unmount()
+	})
+
+	it('leaves the shortcut to the editor command inside Monaco and to open menus', () => {
+		const wrapper = mountApp()
+		tutorial!.dismissWelcome()
+		const editor = document.createElement('div')
+		editor.className = 'monaco-editor'
+		const menu = document.createElement('div')
+		menu.setAttribute('role', 'menu')
+		document.body.append(editor, menu)
+
+		for (const target of [editor, menu])
+			target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }))
+
+		expect(apply).not.toHaveBeenCalled()
+		editor.remove()
+		menu.remove()
 		wrapper.unmount()
 	})
 
