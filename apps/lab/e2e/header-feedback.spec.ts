@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { answerDraftGuard, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, previewFrame, selectShowcase, test } from './fixtures'
+import { answerDraftGuard, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openStatusDetails, previewFrame, selectShowcase, setLocale, test } from './fixtures'
 
 /**
  * Issue #230 PR 3a (audit U01-U07, U24): the grouped header, unapplied-draft protection, Undo last apply,
@@ -142,8 +142,9 @@ test.describe('menu focus handling', () => {
 		await expect(editor.locator('.monaco-editor'))
 			.toHaveClass(/focused/)
 		// The menu's own close handling runs when its exit animation ends: a regression (refocusing the menu
-		// button) only shows after that, so a negative needs a moment to be meaningful.
-		await page.waitForTimeout(500)
+		// button) only shows after that, so wait for exactly that: the closed menu's content leaving the DOM.
+		await expect(page.getByRole('menu'))
+			.toHaveCount(0)
 		await expect(editor.locator('.monaco-editor'))
 			.toHaveClass(/focused/)
 		await page.keyboard.insertText('typed while the menu was open')
@@ -175,9 +176,10 @@ test.describe('menu focus handling', () => {
 			.toHaveAttribute('aria-expanded', 'false')
 		await expect(page.getByRole('menuitem', { name: 'Tutorial', exact: true }))
 			.toBeVisible()
-		// The first menu's close must not take focus back from the second and close it too: closing is
-		// asynchronous, so a negative needs a moment to be meaningful.
-		await page.waitForTimeout(500)
+		// The first menu's close must not take focus back from the second and close it too: its close handling runs
+		// when its exit animation ends, i.e. when its content leaves the DOM (only the second menu is left).
+		await expect(page.getByRole('menu'))
+			.toHaveCount(1)
 		await expect(overflow)
 			.toHaveAttribute('aria-expanded', 'true')
 		await expect(page.getByRole('menuitem', { name: 'Tutorial', exact: true }))
@@ -187,7 +189,8 @@ test.describe('menu focus handling', () => {
 		await examples.click()
 		await expect(page.getByRole('menuitemcheckbox', { name: 'Valid — interactive' }))
 			.toBeVisible()
-		await page.waitForTimeout(500)
+		await expect(page.getByRole('menu'))
+			.toHaveCount(1)
 		await expect(examples)
 			.toHaveAttribute('aria-expanded', 'true')
 		await expect(overflow)
@@ -736,4 +739,126 @@ test.describe('plain-language wording follows the locale', () => {
 		await expect(page.getByTestId('author-problems'))
 			.toContainText('問題')
 	})
+})
+
+test.describe('status details popover (the former Author status box, folded in)', () => {
+	test('the Author panel no longer carries its own copy of the status', async ({ page }) => {
+		await openLab(page, 'showcase=survey')
+		await expect(page.getByTestId('author-document-status'))
+			.toHaveCount(0)
+		await expect(page.getByText('Document / recovery status'))
+			.toHaveCount(0)
+		await expect(page.getByRole('tab', { name: 'JSON' }))
+			.toBeVisible()
+	})
+
+	test('lists revisions, linkage, draft, compatibility, Blueprint status and recovery topology', async ({ page }) => {
+		await openLab(page, 'showcase=survey')
+		const panel = await openStatusDetails(page)
+
+		await expect(panel.getByTestId('status-document-revision'))
+			.toHaveText('r0')
+		await expect(panel.getByTestId('status-preview-revision'))
+			.toHaveText('r0')
+		await expect(panel.getByTestId('revision-link-status'))
+			.toHaveText('Linked / Synced')
+		await expect(panel.getByTestId('status-json-draft'))
+			.toHaveText('Matches committed Document')
+		await expect(panel.getByTestId('status-source-compat'))
+			.toHaveText('Compatible (Core)')
+		await expect(panel.getByTestId('status-blueprint'))
+			.toHaveText('valid · 0 diagnostics')
+		await expect(panel.getByTestId('status-recovery'))
+			.toHaveText('0 unresolved · 0 raw-slot placements')
+		// Each fact appears once.
+		await expect(panel.getByText('Blueprint status'))
+			.toHaveCount(1)
+		await expect(panel.getByText('Preview', { exact: true }))
+			.toHaveCount(1)
+	})
+
+	test('follows the document: an unapplied draft, then an invalid apply that leaves the preview behind', async ({ page }) => {
+		await openLab(page, 'showcase=survey')
+		await setDraft(page, '{ "id": "x", "type": "Survey" }')
+		let panel = await openStatusDetails(page)
+		await expect(panel.getByTestId('status-json-draft'))
+			.toHaveText('Unapplied draft')
+		await page.keyboard.press('Escape')
+		await expect(page.getByTestId('status-details-panel'))
+			.toHaveCount(0)
+
+		await loadPreset(page, 'survey-ai-draft', { discardDraft: true })
+		panel = await openStatusDetails(page)
+		await expect(panel.getByTestId('status-document-revision'))
+			.toHaveText('r1')
+		await expect(panel.getByTestId('status-preview-revision'))
+			.toHaveText('r0')
+		await expect(panel.getByTestId('revision-link-status'))
+			.toHaveText('Diverged / Unlinked')
+		await expect(panel.getByTestId('status-blueprint'))
+			.toHaveText('invalid · 5 diagnostics')
+		await expect(panel.getByTestId('status-recovery'))
+			.toContainText('1 unresolved')
+	})
+
+	test('opens and closes from the keyboard, with a named trigger, and gives focus back', async ({ page }) => {
+		await openLab(page, 'showcase=survey')
+		const trigger = page.getByTestId('status-details')
+		await expect(trigger)
+			.toHaveAccessibleName('Document and preview details')
+		await trigger.focus()
+		await page.keyboard.press('Enter')
+		await expect(page.getByTestId('status-details-panel'))
+			.toBeVisible()
+		await page.keyboard.press('Escape')
+		await expect(page.getByTestId('status-details-panel'))
+			.toHaveCount(0)
+		await expect(trigger)
+			.toBeFocused()
+	})
+
+	test('is translated in zh-TW', async ({ page }) => {
+		await openLab(page, 'showcase=survey')
+		await setLocale(page, 'zh-TW')
+		const panel = await openStatusDetails(page)
+		await expect(panel.getByTestId('status-json-draft'))
+			.toHaveText('與已提交 Document 相符')
+		await expect(panel.getByTestId('status-source-compat'))
+			.toHaveText('相容（Core）')
+		await expect(panel.getByTestId('status-recovery'))
+			.toHaveText('0 未解析 · 0 raw-slot placement')
+	})
+})
+
+test.describe('Monaco keeps its room with the Problems list open (PR 3a carry-over)', () => {
+	for (const [width, height] of [[1280, 800], [1440, 900]] as const) {
+		test(`at ${width}x${height} the editor stays tall and the list scrolls instead`, async ({ page }) => {
+			await page.setViewportSize({ width, height })
+			await openLab(page, 'showcase=survey')
+			await loadPreset(page, 'survey-ai-draft')
+			const problems = page.getByTestId('author-problems')
+			await expect(problems)
+				.toHaveAttribute('data-problem-count', '5')
+			await expect(problems.getByTestId('problem-row'))
+				.toHaveCount(5)
+
+			const editor = (await page.getByTestId('json-editor')
+				.boundingBox())!
+			const list = (await problems.boundingBox())!
+			// 312px before the redesign at 1280x800 (a 119px status box and a 192px list above and below it).
+			expect(editor.height, 'editor height')
+				.toBeGreaterThanOrEqual(height * 0.45)
+			expect(list.height, 'Problems list')
+				.toBeLessThanOrEqual(160)
+			expect(list.y + list.height, 'list inside the viewport')
+				.toBeLessThanOrEqual(height + 1)
+			// Every problem is still reachable (the list scrolls within itself).
+			await problems.getByTestId('problem-row')
+				.last()
+				.scrollIntoViewIfNeeded()
+			await expect(problems.getByTestId('problem-row')
+				.last())
+				.toBeVisible()
+		})
+	}
 })

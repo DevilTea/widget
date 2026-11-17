@@ -4,6 +4,7 @@ import type { InspectorRuntimeStateSnapshot, WidgetRef } from '@deviltea/widget-
 import { computed } from 'vue'
 import { useRemoteRuntimeMember } from '../../composables/use-remote-runtime-member'
 import { formatInspectableValue } from '../../runtime-inspector/format-value'
+import RuntimeValueRow from './RuntimeValueRow.vue'
 
 const props = defineProps<{
 	name: string
@@ -21,20 +22,19 @@ const snapshot = useRemoteRuntimeMember(
 	() => ({ type: 'state', name: props.name }),
 	() => props.initial,
 )
+const current = computed(() => snapshot.value)
 const displayValue = computed(() => {
-	const current = snapshot.value
-	return current?.type === 'state' ? formatInspectableValue(current.value) : '—'
+	const member = current.value
+	return member?.type === 'state' ? formatInspectableValue(member.value) : '—'
 })
 </script>
 
 <template>
-	<button
-		type="button"
-		:class="pika({ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', border: 'none', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
-		:style="{ background: selected ? 'var(--lab-color-surface-alt)' : 'transparent' }"
-		@click="emit('select')"
-	>
-		<span>{{ name }}</span>
-		<span :class="pika({ marginLeft: 'auto', color: 'var(--lab-color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' })">{{ displayValue }}</span>
-	</button>
+	<RuntimeValueRow
+		:name="name"
+		:summary="displayValue"
+		:value="current?.type === 'state' ? current.value : null"
+		:selected="selected"
+		@select="emit('select')"
+	/>
 </template>

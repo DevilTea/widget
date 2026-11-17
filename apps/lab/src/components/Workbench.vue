@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
- * Default two-column workbench (diagnostic #13 Widget Lab Phase 4 Checkpoint I): a left tool group with
- * tabs Author | Blueprint | Runtime | Dependencies (Author initially active, ~35-40% width) and a persistent
- * Preview on the right (~60-65% width, the dominant surface). Dockview owns tabs/resize/docking only —
- * it never becomes the semantic model for Author/Blueprint/Runtime/Dependencies/Preview.
+ * Default two-column workbench (diagnostic #13 Widget Lab Phase 4 Checkpoint I, widened by issue #230 PR 3b): a
+ * left tool group with tabs Author | Selected widget | Blueprint | Runtime | Dependencies (Author initially
+ * active, about half the width) and a persistent Preview on the right. Dockview owns tabs/resize/docking only —
+ * it never becomes the semantic model for the panels. The layout is saved to `localStorage` and restored on
+ * reload (`lab/layout-storage.ts`); "Reset layout" in the overflow menu goes back to the default.
  */
-import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue'
+import type { DockviewApi, DockviewReadyEvent, DockviewTheme, SerializedDockview, VueComponent } from 'dockview-vue'
 import type { LabToolTab } from '../composables/use-lab-store'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
 import { defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
@@ -13,17 +14,21 @@ import { useDocumentTools } from '../composables/use-document-tools'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
+import { useWorkbenchLayout } from '../composables/use-workbench-layout'
+import { CANONICAL_PANEL_IDS, clearSavedLayout, LAZY_PANEL_IDS, loadSavedLayout, saveLayout } from '../lab/layout-storage'
 import NonClosableTab from './NonClosableTab.vue'
 import AuthorPanel from './panels/AuthorPanel.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
 import DependenciesPanel from './panels/DependenciesPanel.vue'
 import RuntimePanel from './panels/RuntimePanel.vue'
+import SelectedWidgetPanel from './panels/SelectedWidgetPanel.vue'
 import PreviewPanel from './preview/PreviewPanel.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
 const documentTools = useDocumentTools()
+const workbenchLayout = useWorkbenchLayout()
 
 /**
  * Dockview applies its theme via the `theme` option's `className` (dockview-core stamps it on its own
@@ -50,6 +55,7 @@ const components: Record<string, VueComponent> = {
 	blueprint: BlueprintPanel as unknown as VueComponent,
 	runtime: RuntimePanel as unknown as VueComponent,
 	dependencies: DependenciesPanel as unknown as VueComponent,
+	widget: SelectedWidgetPanel as unknown as VueComponent,
 	preview: PreviewPanel as unknown as VueComponent,
 	// diagnostic #25 P3 Scope D: `defineAsyncComponent` (not a plain import) is the actual lazy boundary —
 	// `ImplementationPanel.vue` and everything it statically imports (the curated-file viewer, Shiki)
@@ -80,6 +86,9 @@ let stopTutorialTabActivationWatch: (() => void) | null = null
 // `onBeforeUnmount` instead.
 let stopImplementationOpenWatch: (() => void) | null = null
 let stopDocumentToolsOpenWatch: (() => void) | null = null
+let stopLayoutPersistence: (() => void) | null = null
+let stopLayoutResetWatch: (() => void) | null = null
+let stopTitleWatch: (() => void) | null = null
 
 /**
  * `dockview-vue`'s `<DockviewVue>` measures its container exactly once, synchronously, in its own
@@ -105,51 +114,138 @@ onBeforeUnmount(() => {
 	stopTutorialTabActivationWatch?.()
 	stopImplementationOpenWatch?.()
 	stopDocumentToolsOpenWatch?.()
+	stopLayoutPersistence?.()
+	stopLayoutResetWatch?.()
+	stopTitleWatch?.()
 })
 
-function onReady(event: DockviewReadyEvent): void {
-	const { api } = event
+/** Tab titles follow the Lab language at the moment a layout is built or restored (as they always did). */
+function canonicalTitles(): Readonly<Record<string, string>> {
+	return {
+		author: i18n.t('Author'),
+		widget: i18n.t('Selected widget'),
+		blueprint: 'Blueprint',
+		runtime: 'Runtime',
+		dependencies: i18n.t('Dependencies'),
+		preview: 'Preview',
+	}
+}
 
+/**
+ * The default layout: the tool group (Author, Selected widget, Blueprint, Runtime, Dependencies; Author active)
+ * left and the persistent Preview right. The tool area is wide on purpose (audit U12: Relations and the
+ * Implementation source are clipped in a column of about 29%): about half the workbench, between 420 and 940px.
+ * Users may resize the divider afterwards (Dockview owns that) and the result is remembered.
+ */
+function buildDefaultLayout(api: DockviewApi): void {
+	const titles = canonicalTitles()
 	// `tabComponent: 'nonClosable'` on every canonical panel (diagnostic #27 Finding 2) — see
 	// NonClosableTab.vue/tabComponents above for the mechanism.
-	api.addPanel({ id: 'author', component: 'author', tabComponent: 'nonClosable', title: i18n.t('Author') })
-	api.addPanel({
-		id: 'blueprint',
-		component: 'blueprint',
-		tabComponent: 'nonClosable',
-		title: 'Blueprint',
-		position: { referencePanel: 'author', direction: 'within' },
-		inactive: true,
-	})
-	api.addPanel({
-		id: 'runtime',
-		component: 'runtime',
-		tabComponent: 'nonClosable',
-		title: 'Runtime',
-		position: { referencePanel: 'author', direction: 'within' },
-		inactive: true,
-	})
-	api.addPanel({
-		id: 'dependencies',
-		component: 'dependencies',
-		tabComponent: 'nonClosable',
-		title: i18n.t('Dependencies'),
-		position: { referencePanel: 'author', direction: 'within' },
-		inactive: true,
-	})
+	api.addPanel({ id: 'author', component: 'author', tabComponent: 'nonClosable', title: titles.author })
+	for (const id of ['widget', 'blueprint', 'runtime', 'dependencies']) {
+		api.addPanel({
+			id,
+			component: id,
+			tabComponent: 'nonClosable',
+			title: titles[id],
+			position: { referencePanel: 'author', direction: 'within' },
+			inactive: true,
+		})
+	}
 	api.addPanel({
 		id: 'preview',
 		component: 'preview',
 		tabComponent: 'nonClosable',
-		title: 'Preview',
+		title: titles.preview,
 		position: { referencePanel: 'author', direction: 'right' },
 	})
 
-	// Default ~35-40% / ~60-65% split. Users may resize the divider afterwards (Dockview owns that).
-	const toolWidth = Math.round(Math.max(360, Math.min(560, api.width * 0.38)))
+	const toolWidth = Math.round(Math.max(420, Math.min(940, api.width * 0.48)))
 	api.getPanel('author')?.group.api.setSize({ width: toolWidth })
+}
+
+/**
+ * Restores the saved layout if there is a usable one. A layout Dockview cannot load (it can still throw for data
+ * that looks right) is discarded for good and the default is built instead. Panels that are opened on request
+ * (Implementation, Document Tools) are closed again: their content depends on a request this load did not make.
+ */
+function restoreOrBuildLayout(api: DockviewApi): void {
+	const saved = loadSavedLayout()
+	if (saved !== null) {
+		try {
+			api.fromJSON(saved as unknown as SerializedDockview)
+			const titles = canonicalTitles()
+			for (const id of CANONICAL_PANEL_IDS)
+				api.getPanel(id)?.api.setTitle(titles[id] ?? id)
+			for (const id of LAZY_PANEL_IDS)
+				api.getPanel(id)?.api.close()
+			return
+		}
+		catch {
+			api.clear()
+		}
+	}
+	// Whatever was stored was not usable (or nothing was): forget it, the default layout is saved on the next change.
+	clearSavedLayout()
+	buildDefaultLayout(api)
+}
+
+/** Saves the layout shortly after it settles, and once more when the page goes away. */
+function persistLayoutChanges(api: DockviewApi): void {
+	let timer: ReturnType<typeof setTimeout> | null = null
+	const flush = (): void => {
+		if (timer !== null) {
+			clearTimeout(timer)
+			timer = null
+		}
+		saveLayout(api.toJSON())
+	}
+	const subscription = api.onDidLayoutChange(() => {
+		if (timer !== null)
+			clearTimeout(timer)
+		timer = setTimeout(flush, 250)
+	})
+	window.addEventListener('pagehide', flush)
+	stopLayoutPersistence = () => {
+		subscription.dispose()
+		window.removeEventListener('pagehide', flush)
+		if (timer !== null)
+			clearTimeout(timer)
+	}
+}
+
+/** Tab titles follow a language switch (they used to be fixed when the panel was added). */
+function watchTitleLocale(api: DockviewApi): void {
+	stopTitleWatch = watch(i18n.locale, () => {
+		const titles = canonicalTitles()
+		for (const id of CANONICAL_PANEL_IDS)
+			api.getPanel(id)?.api.setTitle(titles[id] ?? id)
+	})
+}
+
+/** "Reset layout" (overflow menu): forget the saved layout and go back to the default one. */
+function watchLayoutResetRequests(api: DockviewApi): void {
+	stopLayoutResetWatch = watch(
+		() => workbenchLayout.resetRequestTick.value,
+		() => {
+			clearSavedLayout()
+			api.clear()
+			buildDefaultLayout(api)
+			store.activeTab.value = 'author'
+			api.getPanel('author')?.api.setActive()
+		},
+	)
+}
+
+function onReady(event: DockviewReadyEvent): void {
+	const { api } = event
+
+	restoreOrBuildLayout(api)
 
 	observeSize(api)
+	persistLayoutChanges(api)
+	watchLayoutResetRequests(api)
+	watchTitleLocale(api)
 	watchTutorialTabActivation(api)
 	watchImplementationOpenRequests(api)
 	watchDocumentToolsOpenRequests(api)
@@ -165,7 +261,7 @@ function onReady(event: DockviewReadyEvent): void {
  * no longer on screen ("Show problems" asking for Author after the user opened Runtime) still switches.
  * Both directions only ever set the same value, so they cannot loop.
  */
-const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'blueprint', 'runtime', 'dependencies', 'preview'])
+const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview'])
 
 function watchTutorialTabActivation(api: DockviewApi): void {
 	const stopWatch = watch(
@@ -272,6 +368,7 @@ function watchDocumentToolsOpenRequests(api: DockviewApi): void {
 	position: relative;
 	display: flex;
 	flex: 1 1 auto;
+	min-width: 0;
 	min-height: 0;
 }
 

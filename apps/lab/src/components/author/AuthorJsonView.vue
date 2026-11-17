@@ -60,7 +60,7 @@ onMounted(focusProblemsIfRequested)
 		>
 			{{ i18n.t('Expert JSON view: edit the draft, then use Apply. JSON is parsed into one root SourcePatch.') }}
 		</div>
-		<div class="min-h-0 flex-1">
+		<div class="min-h-60 flex-1">
 			<MonacoJsonEditor
 				ref="editor"
 				:modelValue="store.draftSourceText.value"

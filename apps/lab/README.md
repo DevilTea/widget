@@ -58,8 +58,9 @@ missing or unknown id falls back to the default. The parameter follows the activ
 The header is one row from 1280px up: the **Examples** menu (showcase and preset; it always names the showcase and the
 last loaded preset, or "edited" once the document changes), two plain-language status chips (the document is *Valid* or
 has *N problems*; the preview is *up to date* or *shows the last valid version*, with revisions and linkage in an info
-popover), the edit actions **Apply / Revert / Undo / Format**, and an overflow menu with Tutorial, Theme, Language and a
-Developer submenu (Implementation, Document Tools).
+popover, which also holds the JSON draft, Source JSON compatibility, Blueprint status and recovery facts), the edit actions
+**Apply / Revert / Undo / Format**, and an overflow menu with Tutorial, Theme, Language, **Reset layout** and a Developer submenu
+(Implementation, Document Tools).
 
 - **Apply** is also Cmd/Ctrl+Enter, inside the Monaco editor and from any focused tab; its tooltip shows the keys.
 - **Revert** discards the unapplied editor draft. **Undo** ("Undo last apply") restores the previously applied source as a
@@ -69,6 +70,19 @@ Developer submenu (Implementation, Document Tools).
 - After an Apply that leaves problems, the Author JSON view lists them under the editor (Core's code and message verbatim,
   or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. The preview shows a
   plain-language notice with **Show problems** while it still shows the last working version.
+
+## Layout, the Selected widget pane and the tutorial rail
+
+The tool area (Author, **Selected widget**, Blueprint, Runtime, Dependencies) takes about half the window by default. The Dockview layout
+(divider position, active tab) is saved in the browser and restored on reload; a saved layout from an older Lab, or a corrupt one, is
+ignored. **Reset layout** in the overflow menu goes back to the default. The tutorial rail is a docked column beside the workbench: it
+never covers the header, menus or the Preview.
+
+**Selected widget** explains one widget in one place: what the source declares for it (identity, config, slots, members,
+diagnostics) next to its live State and Property values. Choose the widget with Inspect in the Preview, or in Blueprint or
+Dependencies. Values open into a tree instead of being clipped; anything the Inspector snapshot left out (depth, entry or string
+limits) is marked as such. Config shows the resolved value, with the authored one a click away when it differs. Dependencies opens on
+Relations; the Graph is one click away.
 
 ## Dependency Graph
 

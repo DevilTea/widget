@@ -9,7 +9,6 @@ import { translateMessage } from './messages'
 const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'The declarative definition you edit — changes take effect when you press Apply': '你正在編輯的 declarative definition——按下「套用」後變更才會生效',
 	'Author workspace for the current Document: browse Core catalog metadata, edit Structure, or use expert JSON': '目前 Document 的 Author workspace：瀏覽 Core catalog metadata、編輯 Structure，或使用 expert JSON',
-	'Document / recovery status': 'Document／復原狀態',
 	'JSON draft': 'JSON draft',
 	'Syntax error (Lab-only draft)': '語法錯誤（僅限 Lab draft）',
 	'Unapplied draft': '尚未套用的 draft',
@@ -250,6 +249,37 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	// Survey renderer-owned fixed chrome. Question labels/help/options/errors, the title, the Submit label and
 	// the other survey texts are semantic/config data in the survey's own languages and deliberately stay verbatim.
 	'Response — what a backend reads': '回應——後端讀取的內容',
+
+	// Layout and the Selected widget pane (issue #230 PR 3b).
+	'Reset layout': '重設版面配置',
+	'Selected widget': '選取的 widget',
+	'One widget explained: what the source declares for it and what it holds right now. Select a widget with Inspect in the Preview, or in Blueprint or Dependencies': '一次說明一個 widget：source 對它的宣告，以及它目前持有的內容。可用 Preview 的檢視模式，或在 Blueprint、Dependencies 選取 widget',
+	'Declaration': '宣告',
+	'what the source says': 'source 怎麼寫',
+	'Runtime values': 'Runtime 的值',
+	'what it holds right now': '它目前持有的內容',
+	'This widget did not resolve, so it has no Runtime.': '這個 widget 沒有解析成功，所以沒有 Runtime。',
+	'No Runtime values yet: there is no valid preview to read them from.': '還沒有 Runtime 的值：目前沒有可讀取的有效預覽。',
+	'The preview shows the last valid version (r{preview}), not the current document (r{document}). Runtime values come from the preview: fix the problems and Apply to see this widget\'s values.': '預覽顯示的是最後一個有效版本（r{preview}），不是目前的 document（r{document}）。Runtime 的值來自預覽：修正問題並套用後，才看得到這個 widget 的值。',
+	'This widget is not in the running preview.': '這個 widget 不在執行中的預覽裡。',
+	'Loading Runtime values…': '正在載入 Runtime 的值…',
+	'Collapse the value of {name}': '收合 {name} 的值',
+	'Expand the value of {name}': '展開 {name} 的值',
+	'The same object as one shown elsewhere in this value (#{ref})': '與這個值中其他位置顯示的是同一個物件（#{ref}）',
+	'… more entries were left out by the Inspector snapshot': '… 還有更多項目被 Inspector snapshot 省略',
+	'… truncated by the Inspector snapshot (nested too deeply)': '… 被 Inspector snapshot 截斷（巢狀太深）',
+	'… cut by the Inspector snapshot': '… 被 Inspector snapshot 截短',
+	'empty array': '空陣列',
+	'empty object': '空物件',
+	'Parts of this value were left out by the Inspector snapshot, which limits depth, entries and string length. The Lab shows what the Inspector sends.': '這個值有部分被 Inspector snapshot 省略；snapshot 會限制深度、項目數與字串長度。Lab 顯示的就是 Inspector 傳來的內容。',
+	'(nothing authored)': '（source 裡沒有寫）',
+	'The resolved config is identical to the authored config.': '解析後的 config 與 source 裡寫的 config 完全相同。',
+	'Which config to show': '要顯示哪一份 config',
+	'Resolved': '解析後',
+	'As authored': '原始寫法',
+	'Showing what was written in the source.': '顯示 source 裡實際寫的內容。',
+	'Showing what the widget runs with after the plugin resolved it.': '顯示 plugin 解析後，widget 實際使用的內容。',
+	'Differs in:': '不同的欄位：',
 }
 
 export function translatePresentationMessage(locale: LabLocale, source: string): string {

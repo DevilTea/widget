@@ -236,3 +236,27 @@ export async function openDeveloperTool(page: Page, tool: 'implementation' | 'do
 export async function chooseTutorialMenuItem(page: Page, name = 'Tutorial'): Promise<void> {
 	await chooseFromMenu(page, 'overflow-menu', [() => page.getByRole('menuitem', { name, exact: true })])
 }
+
+/** Opens Dependencies and switches it to the Graph view (Relations is the default view, issue #230 PR 3b). */
+export async function openDependenciesGraph(page: Page): Promise<void> {
+	await page.getByRole('tab', { name: 'Dependencies', exact: true })
+		.click()
+	await page.getByRole('tablist', { name: 'Dependencies views' })
+		.getByRole('tab', { name: 'Graph' })
+		.click()
+}
+
+/**
+ * Opens the header's "Document and preview details" popover and returns its content. The popover holds the
+ * developer-vocabulary status (revisions, Linked/Diverged, JSON draft, Blueprint status, recovery topology);
+ * its content only exists while it is open.
+ */
+export async function openStatusDetails(page: Page): Promise<Locator> {
+	const trigger = page.getByTestId('status-details')
+	if ((await trigger.getAttribute('aria-expanded')) !== 'true')
+		await trigger.click()
+	const panel = page.getByTestId('status-details-panel')
+	await expect(panel)
+		.toBeVisible()
+	return panel
+}

@@ -48,6 +48,8 @@ export interface UseMonacoJsonEditorOptions {
 	readonly markers?: Readonly<Ref<readonly EditorMarker[]>>
 	/** Invoked by the editor's Cmd/Ctrl+Enter command (Monaco otherwise inserts a line there). */
 	readonly onApply?: () => void
+	/** The Apply action's name in the command palette, in the Lab language (it follows a language switch). */
+	readonly applyLabel?: Readonly<Ref<string>>
 }
 
 export interface UseMonacoJsonEditorResult {
@@ -118,6 +120,24 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		editor.focus()
 	}
 
+	/**
+	 * Monaco binds Cmd/Ctrl+Enter to "insert line below"; Apply takes it instead (audit U05). An action rather than
+	 * `addCommand()`: a command registers a global dynamic keybinding whose disposable is discarded, so every remount
+	 * of the editor would leak one; the action's keybinding is released with the action (disposed below, and here
+	 * when the label changes with the Lab language, which re-registers it under the new name).
+	 */
+	function registerApplyAction(): void {
+		if (editor === null || monaco === null)
+			return
+		applyAction?.dispose()
+		applyAction = editor.addAction({
+			id: APPLY_ACTION_ID,
+			label: options.applyLabel?.value ?? 'Apply',
+			keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+			run: () => options.onApply?.(),
+		})
+	}
+
 	onMounted(async () => {
 		monaco = await ensureMonaco()
 		const el = container.value
@@ -139,15 +159,7 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 				return
 			options.onChange(model.getValue())
 		})
-		// Monaco binds Cmd/Ctrl+Enter to "insert line below"; Apply takes it instead (audit U05). An action rather
-		// than `addCommand()`: a command registers a global dynamic keybinding whose disposable is discarded, so every
-		// remount of the editor would leak one; the action's keybinding is released with the action (disposed below).
-		applyAction = editor.addAction({
-			id: APPLY_ACTION_ID,
-			label: 'Apply',
-			keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-			run: () => options.onApply?.(),
-		})
+		registerApplyAction()
 		syncMarkers()
 		ready.value = true
 		if (pendingReveal !== null) {
@@ -158,6 +170,9 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 
 	if (options.markers !== undefined)
 		watch(options.markers, syncMarkers, { flush: 'post' })
+
+	if (options.applyLabel !== undefined)
+		watch(options.applyLabel, registerApplyAction)
 
 	watch(theme.theme, (next) => {
 		monaco?.editor.setTheme(syntaxThemeForLabTheme(next))

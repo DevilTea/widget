@@ -7,7 +7,8 @@
  *   projected directly from authoritative `SemanticGraph` without ELK or Vue Flow.
  * - `Graph`: top-level topological canvas with ELK layout and progressive cluster disclosure.
  *
- * Graph remains the default view. Both views share the authoritative Document-scoped focus
+ * Relations is the default view (issue #230 PR 3b: it is the readable one at the default tool width; the Graph is
+ * the opt-in topology view). Both views share the authoritative Document-scoped focus
  * and the `Show absent references` filter without duplicating semantic state.
  */
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
@@ -33,9 +34,9 @@ const { semanticGraph, layoutState, flow, layoutVersion } = useDependencyGraph()
 // Panel-local edge selection for Graph view
 const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdgeSelection(store)
 
-// View switcher: default to 'graph' so existing users do not open a blank focus-centric screen
+// View switcher: Relations first. With no widget focused it shows the root widget, so it never opens blank.
 type DependenciesView = 'graph' | 'relations'
-const activeView = ref<DependenciesView>('graph')
+const activeView = ref<DependenciesView>('relations')
 const relationsTab = useTemplateRef<HTMLButtonElement>('relationsTab')
 const graphTab = useTemplateRef<HTMLButtonElement>('graphTab')
 

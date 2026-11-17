@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { expect, expectDocumentStatus, expectPreviewStatus, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectPreviewStatus, openStatusDetails, previewFrame, test } from './fixtures'
 
 /**
  * Issue #28 Source/Apply lifecycle contract, deliberately not involving Monaco at all — it uses the
@@ -78,8 +78,10 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
 		.toBeVisible()
 	await expectPreviewStatus(page, 'current')
-	await expect(page.getByTestId('author-blueprint-status'))
+	await openStatusDetails(page)
+	await expect(page.getByTestId('status-blueprint'))
 		.toContainText('valid · 0 diagnostics')
+	await page.keyboard.press('Escape')
 	await expect(page.locator('.view-lines'))
 		.toHaveText(invalidDraft)
 	await expect(page.getByRole('button', { name: 'Apply', exact: true }))

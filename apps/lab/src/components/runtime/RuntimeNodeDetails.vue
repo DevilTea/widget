@@ -14,7 +14,12 @@ const props = defineProps<{
 	node: InspectorBlueprintNode | null
 	widgetSnapshot: InspectorRuntimeWidgetSnapshot | null
 	client: InspectorClient | null
+	/** Inside a pane that scrolls as a whole (Selected widget): no scroll area or height of its own. */
+	embedded?: boolean
 }>()
+
+/** Under the Selected widget pane's section heading (h3) the groups are h4, so no heading level is skipped. */
+const memberHeading = computed(() => props.embedded ? 'h4' : 'h5')
 
 const store = useLabStore()
 const i18n = useLabI18n()
@@ -63,11 +68,15 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 	<div
 		v-else
 		:class="pika({ display: 'flex', flexDirection: 'column', gap: '14px', padding: '10px', overflow: 'auto', height: '100%' })"
+		:style="embedded ? { overflow: 'visible', height: 'auto' } : undefined"
 	>
 		<section>
-			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+			<component
+				:is="memberHeading"
+				:class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })"
+			>
 				State ({{ stateMembers.length }})
-			</h5>
+			</component>
 			<template
 				v-for="member in stateMembers"
 				:key="member.name"
@@ -91,9 +100,12 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 		</section>
 
 		<section>
-			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+			<component
+				:is="memberHeading"
+				:class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })"
+			>
 				Properties ({{ propertyMembers.length }})
-			</h5>
+			</component>
 			<template
 				v-for="member in propertyMembers"
 				:key="member.name"
@@ -117,9 +129,12 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 		</section>
 
 		<section>
-			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+			<component
+				:is="memberHeading"
+				:class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })"
+			>
 				Methods ({{ methodMembers.length }}) — {{ i18n.t('inventory only') }}
-			</h5>
+			</component>
 			<RuntimeMethodRow
 				v-for="member in methodMembers"
 				:key="member.name"

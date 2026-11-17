@@ -1,25 +1,47 @@
 import type { Page } from '@playwright/test'
 import { expect, setTheme, test } from './fixtures'
 
-async function openSurveyDependencies(page: Page) {
+/** Opens the Survey's Dependencies tab; most tests here are about the Graph, so it is switched to unless asked not to. */
+async function openSurveyDependencies(page: Page, options: { graph?: boolean } = {}) {
 	await page.goto('/')
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
+	if (options.graph !== false) {
+		await page.getByRole('tablist', { name: 'Dependencies views' })
+			.getByRole('tab', { name: 'Graph' })
+			.click()
+	}
 }
 
+test('Relations is the default Dependencies view, with the Graph one click away', async ({ page }) => {
+	await openSurveyDependencies(page, { graph: false })
+
+	const viewTabs = page.getByRole('tablist', { name: 'Dependencies views' })
+	await expect(viewTabs.getByRole('tab', { name: 'Relations' }))
+		.toHaveAttribute('aria-selected', 'true')
+	await expect(page.getByRole('tabpanel', { name: 'Relations' }))
+		.toBeVisible()
+	await expect(page.locator('.vue-flow'))
+		.toHaveCount(0)
+
+	await viewTabs.getByRole('tab', { name: 'Graph' })
+		.click()
+	await expect(page.locator('.vue-flow'))
+		.toBeVisible()
+})
+
 test('Relations inspects shared Document focus and switching back to Graph preserves it without refitting', async ({ page }) => {
-	await openSurveyDependencies(page)
+	await openSurveyDependencies(page, { graph: false })
 
 	const viewTabs = page.getByRole('tablist', { name: 'Dependencies views' })
 	const graphViewTab = viewTabs.getByRole('tab', { name: 'Graph' })
 	const relationsViewTab = viewTabs.getByRole('tab', { name: 'Relations' })
 
-	await expect(graphViewTab)
+	await expect(relationsViewTab)
 		.toHaveAttribute('aria-selected', 'true')
 
 	// The default Document focus is the root widget. Relations deliberately treats that as
 	// "no useful focus" rather than inventing a selection.
-	await relationsViewTab.click()
 	await expect(page.getByText('No focus selected'))
 		.toBeVisible()
 	await expect(page.locator('.relations-view-surface'))

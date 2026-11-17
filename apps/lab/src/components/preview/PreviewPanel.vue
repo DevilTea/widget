@@ -84,7 +84,9 @@ watch(
 			if (inspectorClient !== client || selection.ref.runtimeId !== connection.runtimeId)
 				return
 			store.setFocus('preview', { nodeId: selection.ref.nodeId })
-			store.activeTab.value = store.revisionStatus.value.isLinked ? 'blueprint' : 'runtime'
+			// Linked: the Selected widget pane explains the widget (declaration and values). Diverged: only the
+			// Preview Runtime knows it, so the Runtime panel opens.
+			store.activeTab.value = store.revisionStatus.value.isLinked ? 'widget' : 'runtime'
 		})
 
 		void (async () => {

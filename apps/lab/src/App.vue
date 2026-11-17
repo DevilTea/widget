@@ -15,6 +15,7 @@ import { createLabThemeStore, LabThemeKey } from './composables/use-lab-theme'
 import { useNuxtUiThemeBridge } from './composables/use-nuxt-ui-theme-bridge'
 import { useSupportedWorkbenchViewport } from './composables/use-supported-workbench-viewport'
 import { createTutorialStore, TutorialStoreKey } from './composables/use-tutorial'
+import { createWorkbenchLayoutStore, WorkbenchLayoutKey } from './composables/use-workbench-layout'
 import { disposeLayoutWorker } from './graph/layout-client'
 import { installLabTestSeam } from './lab-test-seam'
 import { resolveInitialShowcase, urlWithShowcase } from './showcases/registry'
@@ -54,6 +55,9 @@ provide(ImplementationExplorerKey, implementationExplorer)
 // closable developer panel, while all Document data remains owned by LabSession/WidgetDocument.
 const documentTools = createDocumentToolsStore()
 provide(DocumentToolsKey, documentTools)
+
+// "Reset layout" (overflow menu) is a request that Workbench carries out on its Dockview instance.
+provide(WorkbenchLayoutKey, createWorkbenchLayoutStore())
 
 // diagnostic #25 P1: `createTutorialStore(store, ...)` takes the already-created `LabStore`/
 // `ImplementationExplorerStore` directly rather than injecting them back via `useLabStore()`/
@@ -191,17 +195,13 @@ onUnmounted(() => disposeLayoutWorker())
 }
 
 /*
- * diagnostic #25 P1: `.lab-body` is the tutorial rail's positioning reference (`position: relative`): the
- * rail is `position: absolute` against it, so it sits at the right edge of the workbench area, below the
- * header (it used to be `position: fixed` against the viewport and covered the header's right-hand controls).
- * This wrapper's job is otherwise narrow: give `Workbench` a sibling slot in the flex column without
- * disturbing `Workbench.vue`'s own `flex: 1 1 auto` sizing/`ResizeObserver` behavior — the rail, being
- * absolutely positioned, never participates in this flex layout at all, which is exactly what keeps
- * Workbench/Dockview's measured width unaffected by whether the rail is open (see `TutorialRail.vue`'s
- * header comment).
+ * `.lab-body` is a flex row below the header: the workbench takes the remaining width and the tutorial rail,
+ * when open, is a fixed-width column beside it (issue #230 PR 3b, audit U13; it used to be `position: fixed`
+ * and then `absolute`, both of which covered what was under them). `Workbench.vue` observes its own size, so
+ * Dockview re-lays out when the rail opens or closes; the header, the overflow menu and the Preview frame are
+ * never under the rail.
  */
 .lab-body {
-	position: relative;
 	display: flex;
 	flex: 1 1 auto;
 	min-height: 0;
