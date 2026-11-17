@@ -74,7 +74,7 @@ popover, which also holds the JSON draft, Source JSON compatibility, Blueprint s
 ## Editing a widget's config (Structure) and what the Lab says when something fails
 
 - **Author > Structure** edits the selected widget's config with controls that follow the plugin's config JSON Schema: a switch for a boolean, a
-  number box with the schema's limits, a list for an enum, a text box for a string, and Add / Remove for optional fields and list items where the schema allows
+  number box (Core checks the limits), a list for an enum, a text box for a string, and Add / Remove for optional fields and list items where the schema allows
   them. Every change goes through the same Document commit as Apply (Undo, the status chips and Problems keep working; it asks you to Apply or Revert an
   unapplied JSON draft first). Without a schema, values are typed by what they hold and anything else is edited as JSON.
 - Problems lists the several diagnostics Core reports for one evaluation cycle as one entry that expands to Core's own diagnostics.

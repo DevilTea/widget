@@ -256,6 +256,7 @@ function memberKindShort(kind: string): string {
 					</div>
 					<div
 						class="graph-cluster-counts"
+						role="group"
 						:aria-label="i18n.t('Member counts')"
 					>
 						<span
@@ -318,18 +319,21 @@ function memberKindShort(kind: string): string {
 					<span
 						v-if="data.transitivelyWrites"
 						class="graph-member-flag"
+						role="img"
 						:aria-label="i18n.t('Writes State directly or through the Methods it invokes')"
 						:title="i18n.t('Writes State directly or through the Methods it invokes')"
 					>W</span>
 					<span
 						v-if="data.transitivelyEmits"
 						class="graph-member-flag"
+						role="img"
 						:aria-label="i18n.t('Emits an Event directly or through the Methods it invokes')"
 						:title="i18n.t('Emits an Event directly or through the Methods it invokes')"
 					>E</span>
 					<span
 						v-if="data.invalidCycle"
 						class="graph-member-flag graph-member-flag--danger"
+						role="img"
 						:aria-label="i18n.t('invalid cycle')"
 						:title="i18n.t('invalid cycle')"
 					>!</span>

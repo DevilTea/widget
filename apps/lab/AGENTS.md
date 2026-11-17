@@ -651,24 +651,32 @@ through the catalog contracts; config schema metadata is authoring guidance, not
 
 `Structure` renders the current committed Document Blueprint inspection and uses Document-scoped focus.
 Since issue #230 PR 3c (audit U15) it edits the selected widget's whole authored `config`, type-aware
-(`ConfigFieldEditor.vue`, recursive, inside `AuthorStructureView.vue`): a switch for a boolean, a number box that knows
-`integer`/`minimum`/`maximum`, a list for an `enum`, a text box for a string, an object with its optional keys (add from a list, remove with
+(`ConfigFieldEditor.vue`, recursive, inside `AuthorStructureView.vue`): a switch for a boolean, a number box (decimal
+notation only; `integer`/`minimum`/`maximum` are Core's to check), a list for an `enum`, a text box for a string, an object with its optional keys (add from a list, remove with
 a button; free keys of an `additionalProperties` object are added by name) and an array with Add and Remove. The controls
 come from the plugin's passive config JSON Schema (`WidgetCatalogEntry.config.schema`, read by `src/lab/config-schema.ts`: `$ref`,
 `type`, `enum`/`const`, `oneOf`/`anyOf` by a shallow "does the value look like this branch" test, `properties`, `required`,
-`additionalProperties`, `items`, `minItems`/`maxItems`, the numeric and length limits, `default`, `description`). That reading chooses a
-control and what may be added or removed and never validates: Core's compiler stays the authority, and an edit that makes the Document
-invalid shows up as Core diagnostics in Problems. Without a schema (or inside a shape the module does not read, such as a `oneOf` no
+`additionalProperties`, `items`, `minItems`/`maxItems`, `default`, `description`; `$ref` is any local JSON Pointer, with `~0`, `~1` and percent escapes decoded). That reading chooses a
+control and what may be added or removed and never validates (the numeric limits are not checked in the editor, so the schema and the compiler cannot
+disagree): Core's compiler stays the authority, and an edit that makes the Document
+invalid shows up as Core diagnostics in Problems. A value read as one branch of a `oneOf` offers that branch's values only and says so (`union-hint`: other forms are
+edited in the JSON view). Without a schema (or inside a shape the module does not read, such as a `oneOf` no
 branch of which fits) values are typed by what they hold; scalars still get switch/number/text controls, objects and arrays offer no add or
 remove, and anything else is edited as its JSON text (Set value / Cmd or Ctrl+Enter). Switches and lists apply at once; text and number boxes apply
-on Enter or **Set value**, and a refusal (not a number, not an integer, outside `minimum`/`maximum`) is shown at the field and sends nothing.
+on Enter or **Set value**, and a refusal (not a number: `abc`, `0x10`, `Infinity`) is shown at the field and sends nothing. A config that is not an object (a string,
+a list, a number) has no keys: it is edited whole, as JSON, and replacing it is the empty-path edit.
+
+The controls are never `disabled` while a command runs (a disabled control hands keyboard focus to the body at every commit); they carry `aria-disabled`
+and stop reporting edits. `AuthorStructureView.vue` then keeps keyboard focus in the editor: focus that is still on a control stays, a new field or item takes it,
+a removed one hands it to the control that took its place. A commit that is not applied (a dirty JSON draft, a patch error, a stale selection) re-keys the editor,
+so every control, a list or a switch the user already moved included, shows what the Document holds again.
 
 `EditConfigCommand` (`{ nodeId, documentRevision, configPath, edit: replace | add | remove }`; `ReplaceConfigScalarCommand` still exists for
 the scalar case) carries both the current Document `InspectionNodeId` and Document revision; `src/lab/author.ts` resolves that exact
 snapshot node and lowers the command to a `SourcePatch` addressed by the node's Core-computed `sourcePath` (array form, except that appending
 to an array uses the JSON Pointer form `.../-`, the only way a patch can say "append"; the first key of a widget that has no `config` yet
-creates it). The component never constructs a patch and never targets a widget by id, which keeps duplicate authored ids and cross-revision focus
-safe. A path that no longer exists, an `add` over an existing key, a stale revision and a non-JSON value are explicit `unsupported` outcomes;
+creates it; so does a `null` config; an empty path replaces the whole config with any JSON value, or creates it). The component never constructs a patch and never targets a widget by id, which keeps duplicate authored ids and cross-revision focus
+safe. A path that no longer exists, an `add` over an existing key, a stale revision and a non-JSON value are explicit `unsupported` outcomes, each with its own message;
 mechanical patch failures are `patch-error`. After a **Structure** commit Document focus stays on the same widget and member (found again
 by id and type; an ambiguous or missing one goes back to the root), so edits can follow each other; every other commit (JSON Apply, preset,
 Undo, showcase switch) still resets to the root.
@@ -837,9 +845,9 @@ removed from the grid: its size goes to the previous sibling (the next one when 
 (a leaf takes the branch's size; a branch's children are lifted into the parent, scaled to fill it, and a root left with a single branch flips its axis), and
 `activeGroup`/`maximizedNode` are dropped when they pointed into the old tree, so the other dividers stay where the user put them. A grid it does not
 recognise (or one with nothing but lazy panels) is still unusable (default layout). After a restore `Workbench.vue` writes Dockview's active panel to `LabStore.activeTab` (the Dockview-to-store
-subscription is made later), so the store and the screen agree about the open tab (Dockview-vue also reports the restored active panel a moment later through
-`onDidActivePanelChange`, so that explicit write only closes the short window before; `e2e/layout.spec.ts` asks for Author from outside Dockview after a
-restore, but no browser spec can tell the two apart: with the write removed the spec still passes, because that later event arrives first). Saved sizes are proportional on restore, so a layout from a wide window fits a narrow one. Tab titles are
+subscription is made later), so the store and the screen agree about the open tab. Dockview-vue also reports the restored active panel a moment later through
+`onDidActivePanelChange`, so no browser spec can tell the write from that event (`e2e/layout.spec.ts` asks for Author from outside Dockview after a restore and passes either way);
+`Workbench.unit.test.ts` mounts the real Workbench over a saved layout with that event silenced and fails when the write is removed. Saved sizes are proportional on restore, so a layout from a wide window fits a narrow one. Tab titles are
 set when a layout is built or restored and follow a language switch. **Reset layout** (overflow menu; `WorkbenchLayoutStore` is a request
 bridge like Document Tools) clears the saved layout and rebuilds the default. The selected showcase is restored separately, by
 `?showcase=`.
@@ -876,10 +884,14 @@ differ (`lib/config-compare.ts`, structural equality; it names the top-level fie
 
 ### Preview failure and first paint (issue #230 PR 3c, audit U22, U23)
 
-**Preview failure.** If the Preview frame does not answer in time (`readinessTimeoutMs`, 15 s) or its connection closes by itself, `previewHost.error`
-holds the cause and the Lab says so instead of leaving a blank pane: the Preview pane shows an alert (`data-testid=preview-error`, the engine's message
-verbatim, **Try again**), the dead iframe is hidden, and the header's preview chip is `failed` ("Preview failed to load"). **Try again**
-(`previewHost.retry()`) mounts the latest requested Preview again, which reloads the frame; success clears the error. The coordinator learns about a
+**Preview failure.** `previewHost.error` holds the cause of a mount that failed, and the Lab says so instead of leaving a blank pane (`data-testid=preview-error`,
+the engine's message verbatim, **Try again**). Two cases are told apart (`data-frame-state`, `previewHost.runtimeSurvives`): the frame did not answer in time (`readinessTimeoutMs`, 15 s)
+or its connection closed by itself, so nothing can be said to run (`lost`: the connection the Lab held is dropped, the dead iframe is hidden, the header chip is `failed`,
+"Preview failed to load"); or the frame answered with an error (a mount it refuses: session or generation mismatch, unknown showcase, invalid source) and still runs the last Preview
+that mounted (`running`: the iframe stays, the copy says it still shows the last version, the chip is the ordinary `stale`). **Try again** is `LabStore.retryPreview()` ->
+`LabSession.retryPreview()`: it mounts the newest valid Document if that is ahead of the Preview (a promotion that failed leaves the Document committed and
+the Preview snapshot on the older revision, which would otherwise stay `stale` after a successful retry), else the Preview as it is, and only then does the Preview snapshot
+become that revision; success clears the error. The coordinator learns about a
 connection that closed by itself from the driver's `onUnexpectedClose` (not for a close the driver itself caused by navigating, timing out or
 disposing). A renderer that crashes without closing its port cannot be seen by the parent, so only a later failed mount or a closed port reports
 it. `?lab-test&preview-timeout-ms=N` shortens the timeout for specs only (`previewReadinessTimeoutOverride()`, inert without `lab-test`).

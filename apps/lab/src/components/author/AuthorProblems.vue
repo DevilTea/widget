@@ -12,7 +12,7 @@
  */
 import type { LabProblem } from '../../lab/problems'
 import UIcon from '@nuxt/ui/components/Icon.vue'
-import { computed, reactive, useTemplateRef } from 'vue'
+import { computed, reactive, useTemplateRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { groupProblems } from '../../lab/problems'
 
@@ -29,8 +29,12 @@ const emit = defineEmits<{
 const i18n = useLabI18n()
 const region = useTemplateRef<HTMLElement>('region')
 const entries = computed(() => groupProblems(props.problems))
-/** Which grouped entries are open (by cycle id); a new list starts collapsed. */
+/** Which grouped entries are open (by cycle id). A new list of problems starts collapsed: the ids are positions, so they would otherwise carry over. */
 const open = reactive<Record<string, boolean>>({})
+watch(() => props.problems, () => {
+	for (const key of Object.keys(open))
+		delete open[key]
+})
 
 const summary = computed(() => props.problems.length === 0
 	? i18n.t('No problems')
@@ -133,7 +137,7 @@ defineExpose({ focusList })
 							<span
 								data-testid="problem-cycle-members"
 								class="block wrap-anywhere font-mono text-[11px] text-muted"
-							>{{ entry.members.join(' → ') }}</span>
+							>{{ entry.members.join(', ') }}</span>
 							<span class="block text-[11px] text-muted">{{ i18n.t(open[entry.key] === true ? 'Core reports this loop once per Property; hide those {count} diagnostics' : 'Core reports this loop once per Property; show those {count} diagnostics', { count: entry.problems.length }) }}</span>
 						</span>
 					</button>

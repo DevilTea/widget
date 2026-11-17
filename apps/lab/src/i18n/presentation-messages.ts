@@ -193,7 +193,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Widget:': 'Widget：',
 	'Used by:': '被誰使用：',
 	'Depends on:': '依賴於：',
-	'members': '個 members',
+	'members': '個成員',
 	'Fit graph': '縮放至完整圖形',
 	'Expand all': '全部展開',
 	'Collapse all': '全部收合',
@@ -327,6 +327,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'The preview could not be loaded': '無法載入預覽',
 	'The preview frame did not respond, so nothing is running. Try again; if it keeps failing, reload the page.': '預覽框架沒有回應，所以目前沒有任何內容在執行。請再試一次；如果一直失敗，請重新整理頁面。',
 	'Try again': '再試一次',
+	'The preview could not be updated': '無法更新預覽',
+	'The preview frame refused the last change, so it still shows the last version that loaded. Try again; if it keeps failing, reload the page.': '預覽框架拒絕了最後一次變更，所以仍顯示最後一個成功載入的版本。請再試一次；如果一直失敗，請重新整理頁面。',
 
 	// Graph key and chrome (audit U11, U21).
 	'Graph key': 'Graph 標記說明',
@@ -339,6 +341,12 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Property members': 'Property 成員',
 	'Method members': 'Method 成員',
 	'Writes State directly or through the Methods it invokes': '直接或透過它所呼叫的 Methods 寫入 State',
+
+	'That field already exists.': '這個欄位已經存在。',
+	'That value cannot be stored in the source, because it is not JSON.': '這個值無法存進 source，因為它不是 JSON。',
+	'This widget has no config yet: add a field to create it.': '這個 widget 還沒有 config：加入一個欄位就會建立它。',
+	'Enter a number, such as 12 or 2.5.': '請輸入數字，例如 12 或 2.5。',
+	'This value has other forms; the JSON view edits those.': '這個值還有其他形式；請到 JSON 檢視編輯。',
 
 	// Grouped evaluation-cycle problems (issue #230 PR 3c, audit U16).
 	'{count} members depend on each other in a loop': '{count} 個 members 彼此循環依賴',

@@ -235,6 +235,34 @@ test.describe('grouped cycle problems (U16)', () => {
 			.toHaveClass(/focused/)
 	})
 
+	test('a new list of problems starts collapsed again, and the members are listed without a direction', async ({ page }) => {
+		await openLab(page)
+		await loadPreset(page, 'survey-cycle')
+		const group = page.getByTestId('author-problems')
+			.getByTestId('problem-group')
+		await group.click()
+		await expect(group)
+			.toHaveAttribute('aria-expanded', 'true')
+		// Core's list is in member order, not in the direction of the dependencies: no arrows.
+		const members = (await page.getByTestId('problem-cycle-members')
+			.textContent())!
+		expect(members)
+			.not
+			.toMatch(/[→>]/)
+		expect(members.split(', ')
+			.length)
+			.toBeGreaterThanOrEqual(4)
+
+		await loadPreset(page, 'survey-ai-draft')
+		await expect(page.getByTestId('author-problems')
+			.getByTestId('problem-group'))
+			.toHaveCount(0)
+		await loadPreset(page, 'survey-cycle')
+		await expect(page.getByTestId('author-problems')
+			.getByTestId('problem-group'))
+			.toHaveAttribute('aria-expanded', 'false')
+	})
+
 	test('the Blueprint panel\'s "All diagnostics" view still lists every diagnostic as Core reports them', async ({ page }) => {
 		await openLab(page)
 		await loadPreset(page, 'survey-cycle')
@@ -403,18 +431,10 @@ test.describe('first paint (U23)', () => {
 				.toHaveAttribute('data-lab-theme', theme)
 			await expect(page.locator('#app'))
 				.toBeEmpty()
+			// The page colour is the palette's own: #f6f7f9 (light) and #14161a (dark), written out here, not read back from the page.
 			const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
 			expect(background)
-				.toBe(theme === 'light'
-					? 'rgb(246, 247, 249)'
-					: await page.evaluate(() => {
-							const probe = document.createElement('i')
-							probe.style.color = 'var(--lab-color-bg)'
-							document.body.append(probe)
-							const color = getComputedStyle(probe).color
-							probe.remove()
-							return color
-						}))
+				.toBe(theme === 'light' ? 'rgb(246, 247, 249)' : 'rgb(20, 22, 26)')
 			expect(await page.evaluate(() => document.documentElement.style.colorScheme))
 				.toBe(theme)
 

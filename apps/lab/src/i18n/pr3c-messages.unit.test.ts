@@ -22,11 +22,13 @@ const files = [
 // Widget vocabulary the zh-TW catalog deliberately keeps in English, so its translation equals the key.
 const KEPT_IN_ENGLISH: ReadonlySet<string> = new Set(['Blueprint', 'Runtime', 'Preview', 'Config', 'Document r{revision}'])
 
-// Strings built as `i18n.t(cond ? 'a' : 'b')` are picked up too: every quoted literal inside the call.
+// Strings built as `i18n.t(cond ? 'a' : 'b')` are picked up too: every quoted literal inside the call, except the operand of a
+// comparison in its condition (`direction === 'in'`), which is a token and not a message.
 function literalsPassedToT(source: string): string[] {
 	const found: string[] = []
 	for (const call of source.matchAll(/i18n\.t\(((?:[^()]|\([^()]*\))*)\)/g)) {
-		for (const literal of call[1]!.matchAll(/'((?:[^'\\]|\\.)*)'/g))
+		const message = call[1]!.replace(/[!=]==?\s*'(?:[^'\\]|\\.)*'/g, '')
+		for (const literal of message.matchAll(/'((?:[^'\\]|\\.)*)'/g))
 			found.push(literal[1]!.replace(/\\'/g, '\''))
 	}
 	return found
@@ -37,9 +39,8 @@ describe('pR 3c strings', () => {
 		it(`${file.split('/')
 			.pop()} translates every fixed string to zh-TW`, () => {
 			const source = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8')
-			// Lowercase identifiers (`'array'`, `'syntax-error'`) are comparison tokens inside the same expression, not messages.
 			const literals = literalsPassedToT(source)
-				.filter(literal => literal !== '' && !/^[a-z][a-z-]*$/.test(literal))
+				.filter(literal => literal !== '')
 			expect(literals.length)
 				.toBeGreaterThan(0)
 			const untranslated = literals.filter(literal => !KEPT_IN_ENGLISH.has(literal) && translatePresentationMessage('zh-TW', literal) === literal)
