@@ -237,6 +237,7 @@ The Inspector is a read-only debugging boundary, not an access-control system.
 - **`hidden` is ambiguous.** `visibility: 'hidden'` covers both "anchors exist but have no layout rect" and "no anchor element exists for the Widget".
 - **Opaque class instances.** Anything that is not a plain object or array (`Date`, `Map`, `Set`, `Error`, class instances) is encoded as `{ type: 'opaque', kind: 'class-instance' }` with no contents.
 - **Display-only value encoding.** Values are bounded and lossy by design (see the limits above); the encoding is not a serialization format.
+- **Method diagnostics are read through tracked Core calls.** The inspection facades behind State and Property subscriptions run their listeners with no active subscriber, but a Method's public `getDiagnostics()` reads a signal and `subscribeDiagnostics()` creates a reactive effect. If a request is handled synchronously (the in-process transport delivers inside the sender's call) from inside a reactive effect that shares Core's alien-signals instance, `runtime.getWidgetSnapshot` subscribes that effect to the Method diagnostics, and a Method `runtime.subscribeMember` made there is parented to that effect and disposed when it re-runs: no further `runtime.memberChanged` arrives for it, although it still counts toward `maxSubscriptions`. Send requests from outside such effects; the MessagePort transport delivers asynchronously and is not affected. Core is unchanged by decision, and the Agent cannot untrack from outside Core.
 - **Not provided:** State diagnostics on the wire (a rejected `state.set()`), Method invocation facts (every call with its arguments and result, successes included), a redaction hook, new value kinds for `Date`/`Map`/`Set`, multiple DOM roots, and any kind of mutation.
 
 ## Versioning
@@ -254,6 +255,6 @@ Two independent axes:
 | 0.4 | `authorWritable`, `valueContractId` and `transitivelyEmits` on member DTOs, `runtime.disposed` event, `runtime-disposed` error code, `keyTruncated` marker. |
 | 0.5 | Method members (`diagnostics`) in Runtime widget snapshots, Method member subscriptions and `runtime.memberChanged`. |
 
-The protocol is currently `0.5`.
+The protocol is currently `0.5`, pending its first release with the packages' `0.2.0` (the widened `InspectorRuntimeMemberSnapshot` and `InspectorMemberRef['type']` unions break an exhaustive `switch` over them in TypeScript, so it is a minor release of all three packages; see [Migrating from 0.1 to 0.2](https://deviltea.github.io/widget/migration/0.2)).
 
 **Core peer range.** `@deviltea/widget-core` is a peer dependency published as `^<version>` (the workspace uses `workspace:^`). The Inspector is released together with Core and `@deviltea/widget-vue` under one version, and a breaking change in Core's inspection surface bumps the minor of all of them, so a given Inspector release works with the Core minor it was released with. An Inspector at `0.1.1` accepts Core `>=0.1.1 <0.2.0`; install the packages at the same version. A `^0.0.N` range would pin exactly one Core patch, so the release scripts refuse a `0.0.x` version.
