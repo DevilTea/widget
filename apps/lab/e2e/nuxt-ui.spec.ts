@@ -1,5 +1,5 @@
 import type { BrowserContext } from '@playwright/test'
-import { expect, previewFrame, test } from './fixtures'
+import { expect, previewFrame, setTheme, test } from './fixtures'
 
 /**
  * Nuxt UI + Tailwind v4 foundation contract (issue #230 PR 2): the Lab shell uses them, the Preview frame
@@ -28,15 +28,13 @@ test.describe('theme bridge (Lab theme store -> Nuxt UI .dark class)', () => {
 			expect(await html.evaluate(element => element.classList.contains('dark')))
 				.toBe(initial === 'dark')
 
-			await page.getByLabel('Theme')
-				.selectOption(other)
+			await setTheme(page, other)
 			await expect(html)
 				.toHaveAttribute('data-lab-theme', other)
 			expect(await html.evaluate(element => element.classList.contains('dark')))
 				.toBe(other === 'dark')
 
-			await page.getByLabel('Theme')
-				.selectOption(initial)
+			await setTheme(page, initial)
 			expect(await html.evaluate(element => element.classList.contains('dark')))
 				.toBe(initial === 'dark')
 
@@ -64,8 +62,7 @@ test.describe('theme bridge (Lab theme store -> Nuxt UI .dark class)', () => {
 		expect(await read('--ui-primary'))
 			.toBe(await read('--lab-color-accent'))
 
-		await page.getByLabel('Theme')
-			.selectOption('dark')
+		await setTheme(page, 'dark')
 		await expect(page.locator('html'))
 			.toHaveAttribute('data-lab-theme', 'dark')
 		expect(await read('--ui-bg'))

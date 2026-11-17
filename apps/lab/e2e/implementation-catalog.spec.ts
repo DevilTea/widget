@@ -1,11 +1,10 @@
-import { expect, test } from './fixtures'
+import { expect, openDeveloperTool, selectShowcase, test } from './fixtures'
 
 /** Issue #42: passive registered-plugin browsing alongside the existing focused-instance inspector. */
 test.describe('implementation registered-plugin catalog (issue #42)', () => {
 	test('opens directly from the header without widget focus and exposes every Sandbox curated plugin type', async ({ page }) => {
 		await page.goto('/?showcase=sandbox')
-		await page.getByRole('button', { name: 'Implementation', exact: true })
-			.click()
+		await openDeveloperTool(page, 'implementation')
 
 		await expect(page.getByRole('tab', { name: 'Implementation' }))
 			.toHaveAttribute('aria-selected', 'true')
@@ -37,15 +36,13 @@ test.describe('implementation registered-plugin catalog (issue #42)', () => {
 
 	test('switching showcases replaces the catalog with the new showcase registry', async ({ page }) => {
 		await page.goto('/?showcase=sandbox')
-		await page.getByRole('button', { name: 'Implementation', exact: true })
-			.click()
+		await openDeveloperTool(page, 'implementation')
 
 		let catalog = page.getByRole('navigation', { name: 'Registered plugins' })
 		await expect(catalog.getByRole('button', { name: 'Text', exact: true }))
 			.toBeVisible()
 
-		await page.getByLabel('Switch showcase')
-			.selectOption('survey')
+		await selectShowcase(page, 'survey')
 
 		catalog = page.getByRole('navigation', { name: 'Registered plugins' })
 		await expect(catalog.getByRole('button', { name: 'Survey', exact: true }))
@@ -66,8 +63,7 @@ test.describe('implementation registered-plugin catalog (issue #42)', () => {
 		await page.getByRole('button', { name: 'title : Text' })
 			.click()
 
-		await page.getByRole('button', { name: 'Implementation', exact: true })
-			.click()
+		await openDeveloperTool(page, 'implementation')
 		const catalog = page.getByRole('navigation', { name: 'Registered plugins' })
 		await catalog.getByRole('button', { name: 'Counter', exact: true })
 			.click()

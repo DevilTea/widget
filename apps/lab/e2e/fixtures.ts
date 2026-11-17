@@ -1,5 +1,7 @@
 import type { FrameLocator, Page } from '@playwright/test'
 import { test as base, expect } from '@playwright/test'
+import { sandboxPresets } from '../src/sandbox/presets'
+import { surveyPresets } from '../src/showcases/survey/presets'
 
 /**
  * Shared request boundary for the browser suite. Built-app tests default to the exact origin in
@@ -98,4 +100,135 @@ export { expect }
 /** The isolated Preview execution document introduced by issue #10 / Phase B2. */
 export function previewFrame(page: Page): FrameLocator {
 	return page.frameLocator('[data-testid=\"preview-frame\"]')
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Header menu helpers. The header's showcase/preset/theme/language/developer controls are Nuxt UI menus, so
+// specs go through these instead of ad-hoc menu clicks; when the header changes again only this block does.
+
+export type ShowcaseId = 'survey' | 'sandbox'
+export type LabLocaleId = 'en' | 'zh-TW'
+
+const SHOWCASE_LABELS: Readonly<Record<ShowcaseId, string>> = { survey: 'Interactive Survey', sandbox: 'Sandbox' }
+const PRESET_LABELS = new Map([...surveyPresets, ...sandboxPresets].map(preset => [preset.id, preset.label] as const))
+
+// Menu item names follow the page locale; the language names themselves never translate.
+const OVERFLOW_LABELS: Readonly<Record<LabLocaleId, { theme: string, language: string, developer: string, light: string, dark: string, implementation: string, documentTools: string }>> = {
+	'en': { theme: 'Theme', language: 'Language', developer: 'Developer', light: 'Light', dark: 'Dark', implementation: 'Implementation', documentTools: 'Document Tools' },
+	'zh-TW': { theme: '主題', language: '語言', developer: '開發者', light: '亮色', dark: '深色', implementation: 'Implementation', documentTools: 'Document Tools' },
+}
+const LANGUAGE_NAMES: Readonly<Record<LabLocaleId, string>> = { 'en': 'English', 'zh-TW': '繁體中文' }
+
+async function pageLocale(page: Page): Promise<LabLocaleId> {
+	const lang = await page.evaluate(() => document.documentElement.lang)
+	return lang === 'zh-TW' ? 'zh-TW' : 'en'
+}
+
+async function openMenu(page: Page, testId: string): Promise<void> {
+	await page.getByTestId(testId)
+		.click()
+	await expect(page.getByRole('menu'))
+		.toBeVisible()
+}
+
+/**
+ * Answers the unapplied-draft confirmation that a showcase switch or preset load raises over an unapplied
+ * draft: `discard` continues (and drops the draft), `keep` cancels. Resolves once the dialog is gone.
+ */
+export async function answerDraftGuard(page: Page, answer: 'discard' | 'keep'): Promise<void> {
+	const dialog = page.getByTestId('draft-guard-dialog')
+	await expect(dialog)
+		.toBeVisible()
+	await page.getByTestId(answer === 'discard' ? 'draft-guard-discard' : 'draft-guard-keep')
+		.click()
+	await expect(dialog)
+		.toBeHidden()
+}
+
+/** Switches showcase through the Examples menu. Pass `discardDraft` when an unapplied draft exists. */
+export async function selectShowcase(page: Page, id: ShowcaseId, options: { discardDraft?: boolean } = {}): Promise<void> {
+	await openMenu(page, 'examples-menu')
+	await page.getByRole('menuitemcheckbox', { name: SHOWCASE_LABELS[id] })
+		.click()
+	if (options.discardDraft === true)
+		await answerDraftGuard(page, 'discard')
+}
+
+/** Loads a preset of the current showcase through the Examples menu. Pass `discardDraft` when an unapplied draft exists. */
+export async function loadPreset(page: Page, id: string, options: { discardDraft?: boolean } = {}): Promise<void> {
+	const label = PRESET_LABELS.get(id)
+	if (label === undefined)
+		throw new Error(`Unknown preset id: ${id}`)
+	await openMenu(page, 'examples-menu')
+	await page.getByRole('menuitemcheckbox', { name: label })
+		.click()
+	if (options.discardDraft === true)
+		await answerDraftGuard(page, 'discard')
+}
+
+/** Asserts which showcase the Examples menu says is open (locale-free: reads the machine-readable id) and the URL follows it. */
+export async function expectShowcase(page: Page, id: ShowcaseId): Promise<void> {
+	await expect(page.getByTestId('examples-menu'))
+		.toHaveAttribute('data-showcase-id', id)
+	await expect(page)
+		.toHaveURL(new RegExp(`[?&]showcase=${id}(&|$)`))
+}
+
+/** The header's validity chip: `{ valid: true }`, or `{ problems: n }` (a JSON syntax error counts as a problem). */
+export async function expectDocumentStatus(page: Page, expected: { valid: true } | { problems: number }): Promise<void> {
+	const chip = page.getByTestId('document-status')
+	if ('valid' in expected) {
+		await expect(chip)
+			.toHaveAttribute('data-state', 'valid')
+		await expect(chip)
+			.toHaveText('Valid')
+		return
+	}
+	await expect(chip)
+		.toHaveAttribute('data-state', 'problems')
+	await expect(chip)
+		.toHaveAttribute('data-problem-count', String(expected.problems))
+	await expect(chip)
+		.toHaveText(expected.problems === 1 ? '1 problem' : `${expected.problems} problems`)
+}
+
+/** The header's preview chip: up to date (`current`), showing the last valid version (`stale`), or `unavailable`. */
+export async function expectPreviewStatus(page: Page, expected: 'current' | 'stale' | 'unavailable'): Promise<void> {
+	await expect(page.getByTestId('preview-status'))
+		.toHaveAttribute('data-state', expected)
+}
+
+export async function setTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
+	const labels = OVERFLOW_LABELS[await pageLocale(page)]
+	await openMenu(page, 'overflow-menu')
+	await page.getByRole('menuitem', { name: labels.theme })
+		.click()
+	await page.getByRole('menuitemcheckbox', { name: theme === 'light' ? labels.light : labels.dark })
+		.click()
+}
+
+export async function setLocale(page: Page, locale: LabLocaleId): Promise<void> {
+	const labels = OVERFLOW_LABELS[await pageLocale(page)]
+	await openMenu(page, 'overflow-menu')
+	await page.getByRole('menuitem', { name: labels.language })
+		.click()
+	await page.getByRole('menuitemcheckbox', { name: LANGUAGE_NAMES[locale] })
+		.click()
+}
+
+/** Opens the Implementation explorer or Document Tools from the overflow menu's Developer submenu. */
+export async function openDeveloperTool(page: Page, tool: 'implementation' | 'document-tools'): Promise<void> {
+	const labels = OVERFLOW_LABELS[await pageLocale(page)]
+	await openMenu(page, 'overflow-menu')
+	await page.getByRole('menuitem', { name: labels.developer })
+		.click()
+	await page.getByRole('menuitem', { name: tool === 'implementation' ? labels.implementation : labels.documentTools })
+		.click()
+}
+
+/** The tutorial entry of the overflow menu (its label follows the tutorial state: Tutorial, Pause, Resume, Restart). */
+export async function chooseTutorialMenuItem(page: Page, name = 'Tutorial'): Promise<void> {
+	await openMenu(page, 'overflow-menu')
+	await page.getByRole('menuitem', { name, exact: true })
+		.click()
 }
