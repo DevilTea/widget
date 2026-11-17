@@ -88,7 +88,7 @@ export async function createPreview(revision: number, options: { plain?: boolean
 	if (blueprint.status !== 'valid')
 		throw new Error('Expected the fixture to compile.')
 	const runtime = blueprint.createRuntime()
-	const widgetOf = (id: string) => runtime.getWidget(id)!.methods as unknown as { fire: (n: number) => void, ping: () => void }
+	const widgetOf = (id: string) => (runtime.getWidget(id) as unknown as { methods: { fire: (n: number) => void, ping: () => void } }).methods
 	const runtimeId = `runtime-r${revision}`
 	const pair = createInProcessInspectorTransportPair()
 	const agent = createInspectorAgent({ runtime, transport: pair.agent, runtimeId })
