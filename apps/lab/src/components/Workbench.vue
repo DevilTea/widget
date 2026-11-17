@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Default two-column workbench (diagnostic #13 Widget Lab Phase 4 Checkpoint I, widened by issue #230 PR 3b): a
- * left tool group with tabs Author | Selected widget | Blueprint | Runtime | Dependencies (Author initially
+ * left tool group with tabs Author | Selected widget | Blueprint | Runtime | Events | Dependencies (Author initially
  * active, about half the width) and a persistent Preview on the right. Dockview owns tabs/resize/docking only —
  * it never becomes the semantic model for the panels. The layout is saved to `localStorage` and restored on
  * reload (`lab/layout-storage.ts`); "Reset layout" in the overflow menu goes back to the default.
@@ -20,6 +20,7 @@ import NonClosableTab from './NonClosableTab.vue'
 import AuthorPanel from './panels/AuthorPanel.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
 import DependenciesPanel from './panels/DependenciesPanel.vue'
+import EventsPanel from './panels/EventsPanel.vue'
 import RuntimePanel from './panels/RuntimePanel.vue'
 import SelectedWidgetPanel from './panels/SelectedWidgetPanel.vue'
 import PreviewPanel from './preview/PreviewPanel.vue'
@@ -54,6 +55,7 @@ const components: Record<string, VueComponent> = {
 	author: AuthorPanel as unknown as VueComponent,
 	blueprint: BlueprintPanel as unknown as VueComponent,
 	runtime: RuntimePanel as unknown as VueComponent,
+	events: EventsPanel as unknown as VueComponent,
 	dependencies: DependenciesPanel as unknown as VueComponent,
 	widget: SelectedWidgetPanel as unknown as VueComponent,
 	preview: PreviewPanel as unknown as VueComponent,
@@ -120,7 +122,7 @@ onBeforeUnmount(() => {
 })
 
 /** The panels whose activation is mirrored in `LabStore.activeTab` (see `watchTutorialTabActivation`). */
-const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview'])
+const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview'])
 
 /** Tab titles follow the Lab language at the moment a layout is built or restored (as they always did). */
 function canonicalTitles(): Readonly<Record<string, string>> {
@@ -129,13 +131,14 @@ function canonicalTitles(): Readonly<Record<string, string>> {
 		widget: i18n.t('Selected widget'),
 		blueprint: 'Blueprint',
 		runtime: 'Runtime',
+		events: 'Events',
 		dependencies: i18n.t('Dependencies'),
 		preview: 'Preview',
 	}
 }
 
 /**
- * The default layout: the tool group (Author, Selected widget, Blueprint, Runtime, Dependencies; Author active)
+ * The default layout: the tool group (Author, Selected widget, Blueprint, Runtime, Events, Dependencies; Author active)
  * left and the persistent Preview right. The tool area is wide on purpose (audit U12: Relations and the
  * Implementation source are clipped in a column of about 29%): about half the workbench, between 420 and 940px.
  * Users may resize the divider afterwards (Dockview owns that) and the result is remembered.
@@ -145,7 +148,7 @@ function buildDefaultLayout(api: DockviewApi): void {
 	// `tabComponent: 'nonClosable'` on every canonical panel (diagnostic #27 Finding 2) — see
 	// NonClosableTab.vue/tabComponents above for the mechanism.
 	api.addPanel({ id: 'author', component: 'author', tabComponent: 'nonClosable', title: titles.author })
-	for (const id of ['widget', 'blueprint', 'runtime', 'dependencies']) {
+	for (const id of ['widget', 'blueprint', 'runtime', 'events', 'dependencies']) {
 		api.addPanel({
 			id,
 			component: id,

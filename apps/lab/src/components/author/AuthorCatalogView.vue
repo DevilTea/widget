@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref } from 'vue'
 import { catalogToJson, createAuthorCatalogViewModel } from '../../author/catalog'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
+import DeclaredEvents from '../events/DeclaredEvents.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
@@ -20,7 +21,7 @@ async function copyCatalog(): Promise<void> {
 		const writeText = navigator.clipboard?.writeText
 		if (writeText === undefined)
 			throw new Error('Clipboard API unavailable')
-		await writeText.call(navigator.clipboard, JSON.stringify(catalogToJson(viewModel.value.catalog), null, 2))
+		await writeText.call(navigator.clipboard, JSON.stringify(catalogToJson(viewModel.value.catalog, viewModel.value.widgets), null, 2))
 		copyState.value = 'copied'
 	}
 	catch {
@@ -88,12 +89,12 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 				</p>
 				<div :class="pika({ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '7px' })">
 					<span
-						v-for="capability in ['config', 'slots', 'state', 'properties', 'methods'] as const"
+						v-for="capability in ['config', 'slots', 'state', 'properties', 'methods', 'events'] as const"
 						:key="capability"
 						:class="pika({ padding: '2px 5px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
 						:style="{ opacity: widget.capabilities[capability] ? '1' : '0.4' }"
 					>
-						{{ i18n.t(capability === 'config' ? 'Config' : capability === 'slots' ? 'Slots' : capability === 'state' ? 'State' : capability === 'properties' ? 'Properties' : 'Methods') }}
+						{{ i18n.t(capability === 'config' ? 'Config' : capability === 'slots' ? 'Slots' : capability === 'state' ? 'State' : capability === 'properties' ? 'Properties' : capability === 'methods' ? 'Methods' : 'Events') }}
 					</span>
 				</div>
 				<div
@@ -125,6 +126,19 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 							<code>{{ name }}</code>: {{ description }}
 						</li>
 					</ul>
+				</div>
+				<div
+					v-if="widget.capabilities.events"
+					:data-testid="`author-catalog-events-${widget.entry.type}`"
+					:class="pika({ fontSize: '11px', marginTop: '5px' })"
+				>
+					<strong>{{ i18n.t('Events') }}:</strong>
+					<div :class="pika({ marginTop: '4px' })">
+						<DeclaredEvents
+							:events="widget.events"
+							:declared="widget.capabilities.events"
+						/>
+					</div>
 				</div>
 			</article>
 		</div>

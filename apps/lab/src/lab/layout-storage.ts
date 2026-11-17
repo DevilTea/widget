@@ -13,18 +13,18 @@
  */
 
 /** Bump when a change to the panels or their components makes an older saved layout meaningless. */
-export const LAYOUT_VERSION = 1
+export const LAYOUT_VERSION = 2
 
 export const LAYOUT_STORAGE_KEY = 'widget-lab:layout'
 
 /** The panels every layout holds; none of them can be closed. */
-export const CANONICAL_PANEL_IDS: readonly string[] = ['author', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview']
+export const CANONICAL_PANEL_IDS: readonly string[] = ['author', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview']
 
 /** Panels a user may open and close (added lazily); they are never restored, see `stripLazyPanels`. */
 export const LAZY_PANEL_IDS: readonly string[] = ['implementation', 'document-tools']
 
 /** Every Dockview component name `Workbench.vue` registers. */
-const KNOWN_COMPONENTS: ReadonlySet<string> = new Set(['author', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview', 'implementation', 'documentTools'])
+const KNOWN_COMPONENTS: ReadonlySet<string> = new Set(['author', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview', 'implementation', 'documentTools'])
 const KNOWN_TAB_COMPONENTS: ReadonlySet<string> = new Set(['nonClosable'])
 
 /** The subset of the Web Storage API this module needs. */

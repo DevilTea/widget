@@ -93,7 +93,7 @@ import { defaultShowcase, listedShowcases, showcases } from '../showcases/regist
  * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all five canonical panels
  * uniformly — activating Preview's own single-panel group is a harmless no-op, never a layout change.
  */
-export type LabToolTab = 'author' | 'widget' | 'blueprint' | 'runtime' | 'dependencies' | 'preview'
+export type LabToolTab = 'author' | 'widget' | 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'preview'
 
 export interface LabStore {
 	readonly session: LabSession

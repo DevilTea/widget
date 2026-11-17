@@ -83,7 +83,7 @@ popover, which also holds the JSON draft, Source JSON compatibility, Blueprint s
 
 ## Layout, the Selected widget pane and the tutorial rail
 
-The tool area (Author, **Selected widget**, Blueprint, Runtime, Dependencies) takes about half the window by default. The Dockview layout
+The tool area (Author, **Selected widget**, Blueprint, Runtime, **Events**, Dependencies) takes about half the window by default. The Dockview layout
 (divider position, active tab) is saved in the browser and restored on reload; a saved layout from an older Lab, or a corrupt one, is
 ignored. **Reset layout** in the overflow menu goes back to the default. The tutorial rail is a docked column beside the workbench: it
 never covers the header, menus or the Preview.
@@ -93,6 +93,8 @@ diagnostics) next to its live State and Property values. Choose the widget with 
 Dependencies. Values open into a tree instead of being clipped; anything the Inspector snapshot left out (depth, entry or string
 limits) is marked as such. Config shows the resolved value, with the authored one a click away when it differs. Dependencies opens on
 Relations; the Graph is one click away.
+
+**Events** lists what the running widgets emit, as it happens: time, Preview revision, widget, Event name and an expandable payload (the Survey emits `submitted` when you Submit valid answers). The declared Events of every widget type are in the Catalog and in the Selected widget declaration. The log records only while its tab is open, keeps the latest 500 entries and says when older ones were dropped; Pause, Clear, filters (widget, Event, only the selected widget) and a click on an entry's widget to select it are there too.
 
 ## Dependency Graph
 

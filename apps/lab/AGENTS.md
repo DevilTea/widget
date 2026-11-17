@@ -16,7 +16,7 @@ stale prose here or historical `DevilTea/deviltea-labs#13` checkpoints that `Dev
 Private, never-published workspace application with two roles:
 
 1. **Lab shell** — the two-column workbench's `Author` workspace (Catalog/Structure/JSON), Preview, the
-   `Selected widget` pane, and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
+   `Selected widget` pane, the live `Events` log, and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
    `@deviltea/widget-vue`.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
    `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default and the only showcase
@@ -116,7 +116,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   selected via `AddPanelOptions.tabComponent` on each of the six canonical panels' `addPanel()` calls, it
   renders only a title (kept in step with `onDidTitleChange`, so a language switch retitles it), no close control, so those panels can never be closed; Dockview's own `Tab`
   wrapper — drag/reorder/dock/resize/activate — is untouched, since a `tabComponent` only replaces what
-  that wrapper renders as content), `panels/*` (Author/Selected widget/Blueprint/Runtime/Dependencies tabs, plus the
+  that wrapper renders as content), `panels/*` (Author/Selected widget/Blueprint/Runtime/Events/Dependencies tabs, plus the
   lazily-registered `ImplementationPanel.vue` — `DevilTea/deviltea-labs#25` P3; it is the one panel `Workbench.vue`
   registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
   deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
@@ -642,10 +642,11 @@ The canonical authored surface is the outer `Author` panel with three Lab-owned 
 public `session.system.catalog` and public `WidgetPlugin.capabilities`; it never reads or derives from the
 curated `ShowcaseEntry.sources` Implementation Explorer registry. Catalog entries carry the plugin and config
 descriptions, slot descriptions, and optional passive Draft 2020-12 config JSON Schema metadata (Event descriptions
-are not in the catalog; they come from `inspectPlugin`); capability-presence facts come from
-`WidgetPlugin.capabilities`. An entry with a schema shows it in a collapsed `<details>`, and "Copy catalog JSON"
+are not in `system.catalog`: `author/catalog.ts` reads them per plugin through `inspectPlugin` from `@deviltea/widget-core/inspection`
+and lists them, name and description verbatim, in an `Events` section; Core publishes no Event payload schema, so the Catalog shows none);
+capability-presence facts come from `WidgetPlugin.capabilities`. An entry with a schema shows it in a collapsed `<details>`, and "Copy catalog JSON"
 copies the whole public catalog as plain JSON (`{ widgets: [{ type, description, config: { description, schema } | null,
-slots: { name: description } | null }] }`) so the plugin definitions can be handed to an AI as authoring context.
+slots: { name: description } | null, events: { name: description } | null }] }`; `events` is added by the Lab from `inspectPlugin` and is `null` without the Events capability) so the plugin definitions can be handed to an AI as authoring context.
 The view must not invent state/property/method schemas or member definitions that Core does not publish
 through the catalog contracts; config schema metadata is authoring guidance, not Runtime validation truth.
 
@@ -831,7 +832,7 @@ do not merge the two outer panels merely to remove presentation duplication.
 
 ### Workbench layout and the Selected widget pane (issue #230 PR 3b)
 
-**Layout.** The default layout is two Dockview groups: the tool group (Author, Selected widget, Blueprint, Runtime, Dependencies;
+**Layout.** The default layout is two Dockview groups: the tool group (Author, Selected widget, Blueprint, Runtime, Events, Dependencies;
 Author active) and Preview. The tool group is about half the workbench (48%, clamped to 420-940px; it was about 29%, which clipped
 Relations and the Implementation source). The layout is saved to `localStorage` (`widget-lab:layout`, value
 `{ version, layout }` where `layout` is `DockviewApi.toJSON()`) 250ms after it settles and on `pagehide`, and restored by
@@ -839,8 +840,7 @@ Relations and the Implementation source). The layout is saved to `localStorage` 
 current `LAYOUT_VERSION`, every canonical panel, panels that name registered components only, and a sized grid; anything else (invalid
 JSON, another version, a missing panel, an unknown component) reads as "none" and the default layout is built. Dockview's
 `fromJSON` can still throw for plausible data: that is caught, and the default is built. Whatever was stored and not usable is removed.
-Bump `LAYOUT_VERSION` whenever a change to the panels or their components would make an old saved layout wrong (the first version
-already includes the Selected widget panel). All storage access is try/catch; blocked storage means "nothing saved". Panels opened on
+Bump `LAYOUT_VERSION` whenever a change to the panels or their components would make an old saved layout wrong (version 1 already included the Selected widget panel; version 2 added the Events panel, so a layout saved before it is discarded once and the default is built). All storage access is try/catch; blocked storage means "nothing saved". Panels opened on
 request (Implementation, Document Tools) are saved with the layout but stripped from the data before Dockview loads it
 (`stripLazyPanels`, applied by `loadSavedLayout`), because their content depends on a request that load did not make; a group whose
 active panel was one of them activates its first remaining panel, and a group that held only such panels (a lazy panel dragged into a group of its own) is
@@ -872,6 +872,26 @@ they were; the pane reuses their detail components and does not replace them. Bo
 shared source (`use-selected-runtime-widget.ts`, one per store): requested once per selection, and only while at least one panel reports itself visible
 (`usePanelVisibility(params.api)`, Dockview's `isVisible`/`onDidVisibilityChange`). A panel that is not visible reads `null`, so the member rows under it, which subscribe
 to the remote Runtime, are not rendered and hold no subscription.
+
+**Events (audit U09).** Events are visible in two places. *Declared*: `components/events/DeclaredEvents.vue` lists a plugin's Events
+(name and description, verbatim and untranslated, no payload schema because Core publishes none) in the Catalog and in
+`BlueprintNodeDetails` (so also the Selected widget declaration and the Blueprint panel), from `inspectPlugin` / the Blueprint inspection's
+`events`. *Occurring*: `EventsPanel.vue` (canonical panel `events`, tab `Events`, after Runtime) is a live log over the Inspector
+protocol only (`runtime.subscribeEvent` / `runtime.eventOccurred`, never a Core Runtime; it cannot emit). `composables/use-event-log.ts` is
+one shared source per store: it subscribes to every Event of every resolved widget in the current Preview connection's Blueprint
+snapshot, only while at least one consumer reports itself visible (`usePanelVisibility`), and releases every subscription when the panel
+hides, the connection is replaced (Apply, retry, remount) or the consumer is disposed; a subscription answered after that is released
+at once. Core delivers future occurrences only, so **what happens while the Events tab is hidden is not recorded** (the panel says so).
+Entries are `{ seq, at, revision, runtimeId, nodeId, widgetId, widgetType, event, args }`; `at` is when the Lab received it (the protocol
+carries no timestamp), `revision` is the Preview revision that emitted it, `args` are the Inspector's bounded `InspectableValue` DTOs shown
+with the same `InspectableValueTree` and truncation marking as Runtime values. The buffer holds the last `EVENT_LOG_LIMIT` (500) entries and the
+panel says how many older ones were dropped; entries survive an Apply (tagged with their revision) and are cleared by Clear and by a
+showcase switch. Pause keeps the subscriptions but records nothing and counts what it skipped. Filters (widget, Event name, "only the
+selected widget") are the panel's own state. An entry's widget button selects that widget in the Preview by id and type (node ids belong to the
+Runtime that emitted it) and is disabled when the current Preview no longer has it. The live region announces Pause/Resume/Clear and a count
+that settles after a quiet second, never one announcement per Event. The only Event the Survey emits is `submitted` (root `open-day`, from `submit()`);
+the hidden Sandbox declares none. Tests: `events/`, `use-event-log.unit.test.ts` and `EventsPanel.unit.test.ts` run a real Core Runtime behind a real Inspector
+Agent (`events/test-support.ts`); `e2e/events.spec.ts` drives the Survey.
 
 **Runtime values (audit U10).** State and Property rows are `RuntimeValueRow.vue`: the member name and a one-line summary that takes
 the room the row has (no fixed width; its full text is the tooltip), a separate named disclosure button (`aria-expanded`,
