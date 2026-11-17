@@ -104,6 +104,17 @@ describe('isPlausibleLayout', () => {
 			.toBe(false)
 	})
 
+	it('requires the Events panel, and a layout saved before it (version 1) is not used', () => {
+		const layout = realLayout()
+		delete (layout.panels as Record<string, unknown>).events
+		expect(isPlausibleLayout(layout))
+			.toBe(false)
+		expect(parseSavedLayout(stored(layout)))
+			.toBeNull()
+		expect(LAYOUT_VERSION)
+			.toBeGreaterThanOrEqual(2)
+	})
+
 	it('rejects a panel that names a component the Lab does not register', () => {
 		const layout = realLayout()
 		;(layout.panels as Record<string, Record<string, unknown>>).runtime!.contentComponent = 'somethingElse'
