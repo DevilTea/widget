@@ -172,16 +172,17 @@ onUnmounted(() => disposeLayoutWorker())
 }
 
 /*
- * diagnostic #25 P1: `.lab-body` is the tutorial rail's `position: fixed` positioning reference in spirit
- * only — `TutorialRail.vue` actually positions itself against the viewport (`top`/`bottom`/`right: 0`),
- * not this container, since the rail must stay docked to the real right edge regardless of `.lab-body`'s
- * own box. This wrapper's job is narrower: give `Workbench` a sibling slot in the flex column without
+ * diagnostic #25 P1: `.lab-body` is the tutorial rail's positioning reference (`position: relative`): the
+ * rail is `position: absolute` against it, so it sits at the right edge of the workbench area, below the
+ * header (it used to be `position: fixed` against the viewport and covered the header's right-hand controls).
+ * This wrapper's job is otherwise narrow: give `Workbench` a sibling slot in the flex column without
  * disturbing `Workbench.vue`'s own `flex: 1 1 auto` sizing/`ResizeObserver` behavior — the rail, being
- * `position: fixed`, never participates in this flex layout at all, which is exactly what keeps
+ * absolutely positioned, never participates in this flex layout at all, which is exactly what keeps
  * Workbench/Dockview's measured width unaffected by whether the rail is open (see `TutorialRail.vue`'s
- * header comment on the viewport contract).
+ * header comment).
  */
 .lab-body {
+	position: relative;
 	display: flex;
 	flex: 1 1 auto;
 	min-height: 0;

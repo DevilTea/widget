@@ -1,6 +1,9 @@
 <script setup lang="ts">
 /**
- * Fixed tutorial rail (diagnostic #25). #43 translates its presentation copy at render time so the
+ * Tutorial rail docked to the right edge of the workbench area (diagnostic #25). It is positioned against
+ * `.lab-body` (App.vue), i.e. it starts below the header, so it never covers the header's right-hand
+ * controls (the overflow menu). It still overlays the workbench itself; docking it as a real column is a later
+ * step of the Lab redesign (issue #230). #43 translates its presentation copy at render time so the
  * framework-agnostic tutorial scripts remain stable semantic/pedagogical definitions rather than
  * depending on Vue/i18n state.
  */
@@ -19,7 +22,7 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 	<aside
 		:aria-label="i18n.t('Tutorial')"
 		:class="pika({
-			position: 'fixed',
+			position: 'absolute',
 			top: '0',
 			bottom: '0',
 			right: '0',

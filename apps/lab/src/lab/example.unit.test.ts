@@ -22,12 +22,19 @@ describe('deriveExampleState', () => {
 			.toEqual({ kind: 'edited' })
 	})
 
-	it('is edited when the preset is unknown or none was loaded, and names it again once the source matches', () => {
-		expect(deriveExampleState({ loadedPresetId: null, presets, appliedSourceText: '{ "a": 1 }\n', isDirty: false }))
+	it('is edited when no preset matches, and names the preset again once the source matches', () => {
+		expect(deriveExampleState({ loadedPresetId: null, presets, appliedSourceText: '{ "a": 3 }\n', isDirty: false }))
 			.toEqual({ kind: 'edited' })
-		expect(deriveExampleState({ loadedPresetId: 'gone', presets, appliedSourceText: '{ "a": 1 }\n', isDirty: false }))
+		expect(deriveExampleState({ loadedPresetId: 'gone', presets, appliedSourceText: '{ "a": 3 }\n', isDirty: false }))
 			.toEqual({ kind: 'edited' })
 		expect(deriveExampleState({ loadedPresetId: 'default', presets, appliedSourceText: '{ "a": 1 }\n', isDirty: false }))
 			.toEqual({ kind: 'preset', preset: presets[0] })
+	})
+
+	it('names another preset of the showcase when the source equals it exactly (Undo back to the default)', () => {
+		expect(deriveExampleState({ loadedPresetId: 'other', presets, appliedSourceText: '{ "a": 1 }\n', isDirty: false }))
+			.toEqual({ kind: 'preset', preset: presets[0] })
+		expect(deriveExampleState({ loadedPresetId: null, presets, appliedSourceText: '{ "a": 2 }\n', isDirty: false }))
+			.toEqual({ kind: 'preset', preset: presets[1] })
 	})
 })

@@ -1,6 +1,6 @@
 /**
  * What the header's Examples menu says the current document is: the last loaded preset while the document
- * still is exactly that preset's source, otherwise "edited". Pure presentation logic over state the Lab
+ * still is exactly that preset's source (or whichever preset of the showcase it exactly equals), otherwise "edited". Pure presentation logic over state the Lab
  * store already has; it never decides what is applied.
  */
 
@@ -24,8 +24,13 @@ export interface ExampleStateInput<Preset extends ExamplePresetRef> {
 }
 
 export function deriveExampleState<Preset extends ExamplePresetRef>(input: ExampleStateInput<Preset>): ExampleState<Preset> {
-	const preset = input.loadedPresetId === null ? undefined : input.presets.find(candidate => candidate.id === input.loadedPresetId)
-	if (preset !== undefined && !input.isDirty && input.appliedSourceText === preset.sourceText)
-		return { kind: 'preset', preset }
-	return { kind: 'edited' }
+	if (input.isDirty)
+		return { kind: 'edited' }
+	const loaded = input.loadedPresetId === null ? undefined : input.presets.find(candidate => candidate.id === input.loadedPresetId)
+	// The loaded preset wins; otherwise any preset of the showcase the source is exactly equal to (Undo back
+	// to the default after loading another preset names the default again instead of saying "edited").
+	const preset = loaded !== undefined && input.appliedSourceText === loaded.sourceText
+		? loaded
+		: input.presets.find(candidate => candidate.sourceText === input.appliedSourceText)
+	return preset === undefined ? { kind: 'edited' } : { kind: 'preset', preset }
 }

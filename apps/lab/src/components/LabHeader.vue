@@ -18,6 +18,7 @@
  * draft guard are native `<dialog>`s, which is fine here: no Nuxt UI overlay is ever opened from inside one.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
+import type { ComponentPublicInstance } from 'vue'
 import type { LabLocale } from '../i18n/locale'
 import type { ShowcasePreset } from '../showcases/registry'
 import type { LabTheme } from '../theme/theme'
@@ -27,7 +28,7 @@ import UDropdownMenu from '@nuxt/ui/components/DropdownMenu.vue'
 import UFieldGroup from '@nuxt/ui/components/FieldGroup.vue'
 import UPopover from '@nuxt/ui/components/Popover.vue'
 import UTooltip from '@nuxt/ui/components/Tooltip.vue'
-import { computed } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 import { useDocumentTools } from '../composables/use-document-tools'
 import { useDraftGuard } from '../composables/use-draft-guard'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
@@ -63,14 +64,39 @@ const exampleLabel = computed(() => {
 	return example.kind === 'preset' ? i18n.t(example.preset.label) : i18n.t('edited')
 })
 
+// An action that may open a modal dialog (the draft guard, the tutorial's own confirmation) waits until the
+// menu that chose it has closed and focus is back on the menu's trigger: the dialog then records that trigger
+// as the control to return focus to, instead of a menu item that is about to disappear. `onCloseAutoFocus` is
+// Reka's hook for that moment; the trigger is focused here (and Reka's own restore prevented) so the order
+// is guaranteed, and the action runs in the next task, after focus has settled.
+let afterMenuClose: (() => void) | null = null
+const examplesTrigger = useTemplateRef<ComponentPublicInstance>('examplesTrigger')
+const overflowTrigger = useTemplateRef<ComponentPublicInstance>('overflowTrigger')
+
+function menuContent(align: 'start' | 'end', trigger: typeof examplesTrigger) {
+	return {
+		align,
+		onCloseAutoFocus: (event: Event) => {
+			event.preventDefault()
+			;(trigger.value?.$el as HTMLElement | undefined)?.focus()
+			const action = afterMenuClose
+			afterMenuClose = null
+			if (action !== null)
+				setTimeout(action, 0)
+		},
+	}
+}
+const examplesContent = menuContent('start', examplesTrigger)
+const overflowContent = menuContent('end', overflowTrigger)
+
 function chooseShowcase(id: string, label: string): void {
 	if (id === store.showcaseId.value)
 		return
-	draftGuard.request(label, () => void store.switchShowcase(id))
+	afterMenuClose = () => draftGuard.request(label, () => void store.switchShowcase(id))
 }
 
 function choosePreset(preset: ShowcasePreset): void {
-	draftGuard.request(i18n.t(preset.label), () => void store.applyPreset(preset.id))
+	afterMenuClose = () => draftGuard.request(i18n.t(preset.label), () => void store.applyPreset(preset.id))
 }
 
 const exampleItems = computed<DropdownMenuItem[][]>(() => [
@@ -171,6 +197,10 @@ const tutorialLabel = computed(() => {
 })
 
 function onTutorialSelect(): void {
+	afterMenuClose = onTutorialAction
+}
+
+function onTutorialAction(): void {
 	switch (tutorial.snapshot.value.status) {
 		case 'paused':
 			tutorial.requestResume()
@@ -253,11 +283,14 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 
 		<UDropdownMenu
 			:items="exampleItems"
-			:content="{ align: 'start' }"
+			:content="examplesContent"
 			:ui="{ content: 'w-80 max-w-[90vw]' }"
 		>
 			<UButton
+				ref="examplesTrigger"
 				data-testid="examples-menu"
+				:data-showcase-id="store.showcaseId.value"
+				:data-preset-id="store.example.value.kind === 'preset' ? store.example.value.preset.id : ''"
 				color="neutral"
 				variant="outline"
 				size="sm"
@@ -408,9 +441,10 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 
 		<UDropdownMenu
 			:items="overflowItems"
-			:content="{ align: 'end' }"
+			:content="overflowContent"
 		>
 			<UButton
+				ref="overflowTrigger"
 				data-testid="overflow-menu"
 				color="neutral"
 				variant="ghost"

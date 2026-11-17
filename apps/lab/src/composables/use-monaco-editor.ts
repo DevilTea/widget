@@ -100,9 +100,14 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		}))
 	}
 
+	// A reveal asked for before the editor finished loading (Monaco is imported lazily) is replayed once it is up.
+	let pendingReveal: { readonly start: number, readonly end: number } | null = null
+
 	function revealRange(start: number, end: number): void {
-		if (editor === null || model === null)
+		if (editor === null || model === null) {
+			pendingReveal = { start, end }
 			return
+		}
 		const from = model.getPositionAt(start)
 		const to = model.getPositionAt(end)
 		const range = { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column }
@@ -136,6 +141,10 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => options.onApply?.())
 		syncMarkers()
 		ready.value = true
+		if (pendingReveal !== null) {
+			revealRange(pendingReveal.start, pendingReveal.end)
+			pendingReveal = null
+		}
 	})
 
 	if (options.markers !== undefined)

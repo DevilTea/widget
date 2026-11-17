@@ -47,7 +47,7 @@ defineExpose({ focusList })
 		:aria-label="i18n.t('Problems')"
 		class="flex max-h-48 min-h-0 flex-none flex-col border-t border-default bg-muted text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
 	>
-		<header class="flex flex-none items-center gap-2 px-3 py-1.5">
+		<div class="flex flex-none items-center gap-2 px-3 py-1.5">
 			<h3 class="m-0 text-xs font-semibold">
 				{{ i18n.t('Problems') }}
 			</h3>
@@ -62,7 +62,7 @@ defineExpose({ focusList })
 			>
 				{{ i18n.t(draftIsDirty ? 'From the last Apply. Locations follow your current text.' : 'From the last Apply') }}
 			</span>
-		</header>
+		</div>
 		<ul
 			v-if="problems.length > 0"
 			class="m-0 flex min-h-0 list-none flex-col gap-1 overflow-y-auto p-0 px-2 pb-2"
