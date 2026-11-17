@@ -382,17 +382,17 @@ test.describe('focus and triggers while a commit runs', () => {
 			.toContainText('unavailable')
 	})
 
-	test('a free key with a quote in its name is found again, and takes the focus', async ({ page }) => {
+	test('a free key with a backslash and a quote in its name is found again, and takes the focus', async ({ page }) => {
 		const editor = await openStructure(page, /guests : Numeric/)
 		const label = editor.locator('[role="group"][aria-label="label"]')
 		await label.getByRole('textbox', { name: 'Name of the key to add to label' })
-			.fill('a"b')
+			.fill('a\\b"c')
 		await label.getByRole('button', { name: 'Add key' })
 			.click()
 		await expect(page.getByTestId('author-command-outcome'))
 			.toContainText('applied to Document r1')
 		await expect.poll(() => page.evaluate(() => (document.activeElement?.closest('[data-config-path]') as HTMLElement | null)?.dataset.configPath))
-			.toBe('label.a"b')
+			.toBe('label.a\\b"c')
 	})
 })
 
