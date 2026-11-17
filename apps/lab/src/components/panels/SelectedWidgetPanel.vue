@@ -11,16 +11,19 @@
  * revisions. Both halves are the existing detail components, so Blueprint and Runtime stay as they are. Read-only.
  */
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
+import type { PanelVisibilityApi } from '../../composables/use-panel-visibility'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
+import { usePanelVisibility } from '../../composables/use-panel-visibility'
 import { useSelectedRuntimeWidget } from '../../composables/use-selected-runtime-widget'
 import { getRuntimeInspectorSource } from '../../runtime-inspector/source'
 import BlueprintNodeDetails from '../blueprint/BlueprintNodeDetails.vue'
 import InspectorPanelShell from '../inspector/InspectorPanelShell.vue'
 import RuntimeNodeDetails from '../runtime/RuntimeNodeDetails.vue'
 
+const props = defineProps<{ params?: { api?: PanelVisibilityApi } }>()
 const store = useLabStore()
 const i18n = useLabI18n()
 
@@ -32,7 +35,8 @@ const selectedNode = computed(() => {
 })
 
 const source = computed(() => getRuntimeInspectorSource(store.preview.value, store.documentState.value.revision))
-const { connection, selectedNode: runtimeNode, widgetSnapshot } = useSelectedRuntimeWidget()
+const visible = usePanelVisibility(props.params?.api)
+const { connection, selectedNode: runtimeNode, widgetSnapshot } = useSelectedRuntimeWidget(visible)
 
 type RuntimeState = 'ready' | 'loading' | 'no-preview' | 'diverged' | 'unresolved' | 'unavailable'
 const runtimeState = computed<RuntimeState>(() => {

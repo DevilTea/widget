@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { PanelVisibilityApi } from '../../composables/use-panel-visibility'
 /**
  * Remote Runtime Inspector for Phase B2. The panel consumes only Inspector protocol DTOs from the
  * iframe-owned Runtime; it never imports `inspectRuntime()` and never receives a Core Runtime object.
@@ -6,6 +7,7 @@
 import { computed } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
+import { usePanelVisibility } from '../../composables/use-panel-visibility'
 import { useSelectedRuntimeWidget } from '../../composables/use-selected-runtime-widget'
 import { getRuntimeInspectorSource } from '../../runtime-inspector/source'
 import InspectorPanelShell from '../inspector/InspectorPanelShell.vue'
@@ -13,10 +15,12 @@ import InspectorSplitLayout from '../inspector/InspectorSplitLayout.vue'
 import RuntimeBlueprintTree from '../runtime/RuntimeBlueprintTree.vue'
 import RuntimeNodeDetails from '../runtime/RuntimeNodeDetails.vue'
 
+const props = defineProps<{ params?: { api?: PanelVisibilityApi } }>()
 const store = useLabStore()
 const i18n = useLabI18n()
 const source = computed(() => getRuntimeInspectorSource(store.preview.value, store.documentState.value.revision))
-const { connection, blueprint, selectedNodeId, selectedNode, widgetSnapshot } = useSelectedRuntimeWidget()
+const visible = usePanelVisibility(props.params?.api)
+const { connection, blueprint, selectedNodeId, selectedNode, widgetSnapshot } = useSelectedRuntimeWidget(visible)
 
 function selectNode(nodeId: number): void {
 	store.setFocus('preview', { nodeId })

@@ -47,7 +47,8 @@ const diagnosticCount = computed(() => inspectionNode.value?.node.diagnostics.le
 				textAlign: 'left',
 				border: 'none',
 				borderRadius: 'var(--lab-radius)',
-				padding: '3px 6px',
+				padding: '4px 6px',
+				minHeight: '24px',
 				fontSize: '12px',
 				fontFamily: 'var(--lab-font-mono)',
 				color: 'var(--lab-color-text)',
@@ -66,7 +67,7 @@ const diagnosticCount = computed(() => inspectionNode.value?.node.diagnostics.le
 			<span :class="pika({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })">{{ label }}</span>
 			<span
 				v-if="diagnosticCount > 0"
-				:class="pika({ marginLeft: 'auto', fontSize: '10px', color: 'var(--lab-color-danger)', flex: '0 0 auto' })"
+				:class="pika({ marginLeft: 'auto', fontSize: '11px', color: 'var(--lab-color-danger)', flex: '0 0 auto' })"
 			>{{ diagnosticCount }}</span>
 		</button>
 
@@ -75,7 +76,7 @@ const diagnosticCount = computed(() => inspectionNode.value?.node.diagnostics.le
 			:key="group.name"
 		>
 			<div
-				:class="pika({ fontSize: '10px', color: 'var(--lab-color-text-muted)', letterSpacing: '0.03em', textTransform: 'uppercase' })"
+				:class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)', letterSpacing: '0.03em', textTransform: 'uppercase' })"
 				:style="{ paddingLeft: `${6 + (depth + 1) * 14}px` }"
 			>
 				{{ group.name }} · {{ group.placement }}

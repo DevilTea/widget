@@ -23,6 +23,7 @@ import { projectSemanticGraph } from '../../graph/projection'
 import { projectRelations } from '../../graph/relations'
 import GraphCanvas from '../graph/GraphCanvas.vue'
 import GraphEdgeDetails from '../graph/GraphEdgeDetails.vue'
+import GraphKey from '../graph/GraphKey.vue'
 import GraphLegend from '../graph/GraphLegend.vue'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 import RelationsView from './relations/RelationsView.vue'
@@ -89,6 +90,9 @@ const relationsModel = computed(() => {
 const graphCanvas = useTemplateRef<InstanceType<typeof GraphCanvas>>('graphCanvas')
 function onFitGraphClick(): void {
 	graphCanvas.value?.fitGraph()
+}
+function onZoomClick(direction: 'in' | 'out'): void {
+	graphCanvas.value?.zoomGraph(direction)
 }
 
 function onSelectMember(payload: { nodeId: InspectionNodeId, member: { type: GraphVertexKind, name: string } }): void {
@@ -183,7 +187,8 @@ const statusLabel = computed(() => {
 					:tabindex="activeView === 'relations' ? 0 : -1"
 					:class="[
 						pika({
-							padding: '2px 9px',
+							padding: '3px 10px',
+							minHeight: '24px',
 							fontSize: '11px',
 							border: 'none',
 							cursor: 'pointer',
@@ -208,7 +213,8 @@ const statusLabel = computed(() => {
 					:tabindex="activeView === 'graph' ? 0 : -1"
 					:class="[
 						pika({
-							padding: '2px 9px',
+							padding: '3px 10px',
+							minHeight: '24px',
 							fontSize: '11px',
 							border: 'none',
 							cursor: 'pointer',
@@ -227,20 +233,22 @@ const statusLabel = computed(() => {
 			</div>
 
 			<!-- Shared filter: Show absent references -->
-			<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' })">
+			<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', minHeight: '24px' })">
 				<input
 					v-model="store.graphShowAbsent.value"
 					type="checkbox"
+					:class="pika({ width: '16px', height: '16px', margin: '0' })"
 				>
 				{{ i18n.t('Show absent references') }}
 			</label>
 
 			<!-- Graph-only controls -->
 			<template v-if="activeView === 'graph'">
-				<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' })">
+				<label :class="pika({ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', minHeight: '24px' })">
 					<input
 						v-model="store.graphShowIsolatedMembers.value"
 						type="checkbox"
+						:class="pika({ width: '16px', height: '16px', margin: '0' })"
 					>
 					{{ i18n.t('Show isolated members') }}
 				</label>
@@ -250,6 +258,7 @@ const statusLabel = computed(() => {
 					:aria-label="i18n.t('Fit graph')"
 					:class="pika({
 						'padding': '3px 8px',
+						'minHeight': '24px',
 						'fontSize': '11px',
 						'borderRadius': 'var(--lab-radius)',
 						'border': '1px solid var(--lab-color-border)',
@@ -263,11 +272,36 @@ const statusLabel = computed(() => {
 					{{ i18n.t('Fit graph') }}
 				</button>
 				<button
+					v-for="direction in (['in', 'out'] as const)"
+					:key="direction"
+					type="button"
+					:data-testid="`graph-zoom-${direction}`"
+					:disabled="flow === null"
+					:aria-label="i18n.t(direction === 'in' ? 'Zoom in' : 'Zoom out')"
+					:title="i18n.t(direction === 'in' ? 'Zoom in' : 'Zoom out')"
+					:class="pika({
+						'minWidth': '24px',
+						'minHeight': '24px',
+						'fontSize': '14px',
+						'lineHeight': '1',
+						'borderRadius': 'var(--lab-radius)',
+						'border': '1px solid var(--lab-color-border)',
+						'background': 'var(--lab-color-surface-alt)',
+						'color': 'var(--lab-color-text)',
+						'cursor': 'pointer',
+						'$:disabled': { opacity: '0.5', cursor: 'not-allowed' },
+					})"
+					@click="onZoomClick(direction)"
+				>
+					<span aria-hidden="true">{{ direction === 'in' ? '+' : '−' }}</span>
+				</button>
+				<button
 					type="button"
 					:disabled="flow === null"
 					:aria-label="i18n.t('Expand all')"
 					:class="pika({
 						'padding': '3px 8px',
+						'minHeight': '24px',
 						'fontSize': '11px',
 						'borderRadius': 'var(--lab-radius)',
 						'border': '1px solid var(--lab-color-border)',
@@ -286,6 +320,7 @@ const statusLabel = computed(() => {
 					:aria-label="i18n.t('Collapse all')"
 					:class="pika({
 						'padding': '3px 8px',
+						'minHeight': '24px',
 						'fontSize': '11px',
 						'borderRadius': 'var(--lab-radius)',
 						'border': '1px solid var(--lab-color-border)',
@@ -318,6 +353,7 @@ const statusLabel = computed(() => {
 				class="dependencies-graph-view"
 				:class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative', display: 'flex', flexDirection: 'column' })"
 			>
+				<GraphKey />
 				<div :class="pika({ flex: '1 1 auto', minHeight: '0', position: 'relative' })">
 					<GraphCanvas
 						v-if="flow !== null"

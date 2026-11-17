@@ -24,7 +24,7 @@ function dependencyText(reference: InspectorDependencyReference): string {
 			:key="index"
 			:class="pika({ border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '6px 8px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' })"
 		>
-			<span :class="pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '10px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text-muted)', alignSelf: 'flex-start' })">
+			<span :class="pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '11px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text-muted)', alignSelf: 'flex-start' })">
 				{{ diagnostic.code }}
 			</span>
 			<div>{{ diagnostic.message }}</div>

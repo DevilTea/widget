@@ -250,12 +250,90 @@ describe('stripLazyPanels', () => {
 			.toBe(before)
 	})
 
-	it('gives up (null) when a lazy panel is alone in its group, so the default layout is built', () => {
-		const layout = layoutWithLazyPanels()
-		layout.grid.root.data[0]!.data.views = layout.grid.root.data[0]!.data.views.filter(view => view !== 'implementation' && view !== 'document-tools')
-		layout.grid.root.data.push({ type: 'leaf', data: { views: ['implementation'], activeView: 'implementation' }, size: 100 })
-		expect(stripLazyPanels(layout as never))
-			.toBeNull()
+	describe('a lazy panel alone in its group (the rest of the layout is kept)', () => {
+		const lazyLeaf = (size: number, id = '9') => ({ type: 'leaf', data: { views: ['implementation'], activeView: 'implementation', id }, size })
+		const canonicalLeaf = (views: string[], size: number, id: string) => ({ type: 'leaf', data: { views, activeView: views[0], id }, size })
+		const TOOLS = ['author', 'widget', 'blueprint', 'runtime', 'dependencies']
+		const grid = (layout: unknown) => (layout as { grid: { root: { data: { type: string, size: number, data: unknown }[], size: number }, orientation: string } }).grid
+		const withRoot = (root: unknown, extra: Record<string, unknown> = {}) => ({ ...layoutWithLazyPanels(), ...extra, grid: { ...(realLayout().grid as object), root } })
+
+		it('removes the group beside the others and gives its size to the previous sibling', () => {
+			const layout = withRoot({ type: 'branch', size: 859, data: [canonicalLeaf(TOOLS, 600, '1'), canonicalLeaf(['preview'], 540, '2'), lazyLeaf(300)] }, { activeGroup: '9' })
+			const stripped = stripLazyPanels(layout as never)!
+			expect(grid(stripped).root.data.map(child => child.size))
+				.toEqual([600, 840])
+			expect(grid(stripped).root.data)
+				.toHaveLength(2)
+			expect(stripped.activeGroup)
+				.toBeUndefined()
+			expect(isPlausibleLayout(stripped))
+				.toBe(true)
+		})
+
+		it('gives the size to the next sibling when the removed group came first', () => {
+			const layout = withRoot({ type: 'branch', size: 859, data: [lazyLeaf(200), canonicalLeaf(TOOLS, 600, '1'), canonicalLeaf(['preview'], 640, '2')] })
+			expect(grid(stripLazyPanels(layout as never)).root.data.map(child => child.size))
+				.toEqual([800, 640])
+		})
+
+		it('collapses a stack that is left with one group into that group, with the stack\'s size', () => {
+			// Tool group above the Implementation panel, Preview on the right.
+			const stack = { type: 'branch', size: 691, data: [canonicalLeaf(TOOLS, 500, '1'), lazyLeaf(359)] }
+			const layout = withRoot({ type: 'branch', size: 859, data: [stack, canonicalLeaf(['preview'], 749, '2')] })
+			const stripped = stripLazyPanels(layout as never)!
+			expect(grid(stripped).root.data.map(child => [child.type, child.size]))
+				.toEqual([['leaf', 691], ['leaf', 749]])
+			expect(grid(stripped).orientation)
+				.toBe('HORIZONTAL')
+		})
+
+		it('lifts the rows of a column that is left with a single row into the parent, scaled to fill the column', () => {
+			// root(H): [ column(V): [ row(H): [tools, preview], lazy ] ]  ->  root(H): [tools, preview]
+			const row = { type: 'branch', size: 700, data: [canonicalLeaf(TOOLS, 400, '1'), canonicalLeaf(['preview'], 1040, '2')] }
+			const layout = withRoot({ type: 'branch', size: 859, data: [{ type: 'branch', size: 1440, data: [row, lazyLeaf(159)] }] })
+			const stripped = stripLazyPanels(layout as never)!
+			expect(grid(stripped).orientation)
+				.toBe('HORIZONTAL')
+			expect(grid(stripped).root.data.map(child => child.size))
+				.toEqual([400, 1040])
+			expect(isPlausibleLayout(stripped))
+				.toBe(true)
+		})
+
+		it('flips the root axis when its only remaining child is a branch', () => {
+			// root(H): [ column(V): [ row(H), row(H) ], lazy ]  ->  root(V): [ row(H), row(H) ]
+			const top = { type: 'branch', size: 400, data: [canonicalLeaf(TOOLS, 700, '1'), canonicalLeaf(['preview'], 740, '2')] }
+			const bottom = { type: 'branch', size: 459, data: [canonicalLeaf(['author'], 1440, '3')] }
+			const layout = withRoot({ type: 'branch', size: 859, data: [{ type: 'branch', size: 1240, data: [top, bottom] }, lazyLeaf(200)] })
+			const stripped = stripLazyPanels(layout as never)!
+			expect(grid(stripped).orientation)
+				.toBe('VERTICAL')
+			expect(grid(stripped).root.size)
+				.toBe(1440)
+			expect(grid(stripped).root.data.map(child => child.size))
+				.toEqual([400, 459])
+		})
+
+		it('lifts the children of a branch that is left with a single branch into its parent, scaled to fill it', () => {
+			// root(H): [ A(V): [ B(H): [x, y], lazy ], preview ] -> root(H): [ x, y, preview ]
+			const b = { type: 'branch', size: 600, data: [canonicalLeaf(['author', 'widget'], 200, '1'), canonicalLeaf(['blueprint', 'runtime', 'dependencies'], 200, '3')] }
+			const a = { type: 'branch', size: 800, data: [b, lazyLeaf(200)] }
+			const layout = withRoot({ type: 'branch', size: 859, data: [a, canonicalLeaf(['preview'], 640, '2')] })
+			const stripped = stripLazyPanels(layout as never)!
+			expect(grid(stripped).root.data.map(child => child.size))
+				.toEqual([400, 400, 640])
+			expect(grid(stripped).orientation)
+				.toBe('HORIZONTAL')
+		})
+
+		it('is null when nothing but lazy panels would be left, or the grid is not a recognisable shape', () => {
+			expect(stripLazyPanels(withRoot({ type: 'branch', size: 859, data: [lazyLeaf(100)] }) as never))
+				.toBeNull()
+			expect(stripLazyPanels(withRoot({ type: 'branch', size: 859, data: [{ type: 'leaf', data: 'x' }] }) as never))
+				.toBeNull()
+			expect(stripLazyPanels(withRoot({ type: 'leaf', size: 859, data: { views: ['preview'] } }) as never))
+				.toBeNull()
+		})
 	})
 
 	it('drops floating groups that held only lazy panels and filters the others', () => {

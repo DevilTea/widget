@@ -44,7 +44,7 @@ function toggle(): void {
 			type="button"
 			:aria-expanded="open"
 			:aria-controls="panelId"
-			:class="pika({ 'padding': '3px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+			:class="pika({ 'padding': '3px 8px', 'minHeight': '24px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
 			@click="toggle"
 		>
 			{{ i18n.t('Legend') }}
@@ -58,7 +58,7 @@ function toggle(): void {
 			:class="pika({ position: 'absolute', top: 'calc(100% + 4px)', left: '0', zIndex: '10', width: '300px', padding: '10px 12px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)', boxShadow: '0 8px 24px color-mix(in srgb, black 40%, transparent)', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11px' })"
 		>
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '10px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
 					{{ i18n.t('Widgets and members') }}
 				</h5>
 				<ul :class="pika({ margin: '0', padding: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '4px' })">
@@ -108,7 +108,7 @@ function toggle(): void {
 			</section>
 
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '10px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
 					{{ i18n.t('Edges (owner → what it depends on)') }}
 				</h5>
 				<ul :class="pika({ margin: '0', padding: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '4px' })">
@@ -128,7 +128,7 @@ function toggle(): void {
 			</section>
 
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '10px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
 					{{ i18n.t('Stubs (a dependency with no resolved target)') }}
 				</h5>
 				<ul :class="pika({ margin: '0', padding: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '4px' })">

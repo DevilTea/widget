@@ -60,14 +60,14 @@ const semanticEdges = computed<readonly DisplaySubEdge[]>(() => {
 			]"
 		>
 			<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
-				<span :class="pika({ fontSize: '10px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text-muted)' })">{{ subEdge.operation }}</span>
+				<span :class="pika({ fontSize: '11px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text-muted)' })">{{ subEdge.operation }}</span>
 				<span
 					v-if="subEdge.stubStatus"
-					:class="pika({ fontSize: '10px', color: 'var(--lab-color-danger)' })"
+					:class="pika({ fontSize: '11px', color: 'var(--lab-color-danger)' })"
 				>{{ subEdge.stubStatus }}</span>
 				<span
 					v-if="subEdge.invalidCycle"
-					:class="pika({ fontSize: '10px', color: 'var(--lab-color-danger)' })"
+					:class="pika({ fontSize: '11px', color: 'var(--lab-color-danger)' })"
 				>{{ i18n.t('invalid cycle') }}</span>
 			</div>
 			<div>{{ i18n.t('target') }}: {{ formatDependencyTarget(subEdge.reference.target) }} -&gt; {{ formatDependencyOperation(subEdge.reference.operation) }}</div>

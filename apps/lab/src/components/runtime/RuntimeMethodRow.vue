@@ -27,7 +27,7 @@ const i18n = useLabI18n()
 <template>
 	<button
 		type="button"
-		:class="pika({ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', border: 'none', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+		:class="pika({ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', border: 'none', borderRadius: 'var(--lab-radius)', padding: '4px 6px', minHeight: '24px', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
 		:style="{ background: selected ? 'var(--lab-color-surface-alt)' : 'transparent' }"
 		@click="emit('select')"
 	>
@@ -38,11 +38,11 @@ const i18n = useLabI18n()
 		>
 			<span
 				v-if="transitivelyWrites"
-				:class="pika({ fontSize: '10px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-warning)' })"
+				:class="pika({ fontSize: '11px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-warning)' })"
 			>writes</span>
 			<span
 				v-if="transitivelyEmits"
-				:class="pika({ fontSize: '10px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-warning)' })"
+				:class="pika({ fontSize: '11px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-warning)' })"
 				:title="i18n.t('Emits an Event directly or through the Methods it invokes')"
 			>emits</span>
 		</span>

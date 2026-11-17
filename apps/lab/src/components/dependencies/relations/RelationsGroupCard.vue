@@ -107,7 +107,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 				<span
 					v-if="group.isSameWidget"
 					:class="pika({
-						fontSize: '9px',
+						fontSize: '11px',
 						padding: '1px 4px',
 						borderRadius: '2px',
 						background: 'var(--lab-color-surface)',
@@ -120,7 +120,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 				<span
 					v-if="!group.isResolved"
 					:class="pika({
-						fontSize: '9px',
+						fontSize: '11px',
 						padding: '1px 4px',
 						borderRadius: '2px',
 						background: 'color-mix(in srgb, var(--lab-color-danger) 15%, transparent)',
@@ -131,7 +131,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 					{{ i18n.t('unresolved') }}
 				</span>
 			</div>
-			<span :class="pika({ fontSize: '10px', color: 'var(--lab-color-text-muted)' })">
+			<span :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
 				{{ group.rows.length }}
 			</span>
 		</div>
@@ -160,7 +160,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 						v-if="isWidgetMode"
 						:class="pika({
 							fontFamily: 'var(--lab-font-mono)',
-							fontSize: '10px',
+							fontSize: '11px',
 							color: 'var(--lab-color-text)',
 							background: 'var(--lab-color-surface-alt)',
 							padding: '1px 5px',
@@ -188,7 +188,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 						:class="[
 							`relations-operation-pill--${row.operation}`,
 							pika({
-								fontSize: '9px',
+								fontSize: '11px',
 								padding: '1px 5px',
 								borderRadius: '999px',
 								fontFamily: 'var(--lab-font-mono)',
@@ -223,7 +223,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 								},
 							}),
 						]"
-						:title="`Focus ${row.remoteMember.kind} '${row.remoteMember.name}' in ${row.remoteMember.widgetType} #${row.remoteMember.widgetId}`"
+						:title="i18n.t('Focus {kind} {name} in {widget}', { kind: row.remoteMember.kind, name: row.remoteMember.name, widget: `${row.remoteMember.widgetType} #${row.remoteMember.widgetId}` })"
 						@click="emit('selectMember', { nodeId: row.remoteMember.nodeId, member: { type: row.remoteMember.kind, name: row.remoteMember.name } })"
 					>
 						<span
@@ -264,7 +264,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 						</span>
 						<span>{{ row.stubTarget.memberName }}</span>
 						<span
-							:class="[pika({ fontSize: '9px', color: 'var(--lab-color-text-muted)', fontStyle: 'italic' }), row.stubStatus === 'invalid' && 'relations-stub-status--invalid']"
+							:class="[pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)', fontStyle: 'italic' }), row.stubStatus === 'invalid' && 'relations-stub-status--invalid']"
 						>
 							({{ row.stubStatus }})
 						</span>
@@ -274,16 +274,16 @@ function memberKindShort(kind: GraphVertexKind): string {
 					<span
 						v-if="row.invalidCycle"
 						:class="pika({
-							fontSize: '9px',
+							fontSize: '11px',
 							fontWeight: 'bold',
 							color: 'var(--lab-color-danger)',
 							padding: '0 4px',
 							borderRadius: '2px',
 							background: 'color-mix(in srgb, var(--lab-color-danger) 15%, transparent)',
 						})"
-						title="invalid evaluation cycle"
+						:title="i18n.t('invalid evaluation cycle')"
 					>
-						! cycle
+						! {{ i18n.t('cycle') }}
 					</span>
 				</div>
 
@@ -292,7 +292,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 					v-if="formatDiagnosticPath(row.path)"
 					class="relations-row-path"
 					:class="[
-						pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '10px', color: 'var(--lab-color-text-muted)' }),
+						pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '11px', color: 'var(--lab-color-text-muted)' }),
 						isWidgetMode && 'relations-row-path--widget-mode',
 					]"
 				>
@@ -308,10 +308,11 @@ function memberKindShort(kind: GraphVertexKind): string {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 13px;
-	height: 13px;
-	border-radius: 2px;
-	font-size: 9px;
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	border-radius: 3px;
+	font-size: 11px;
 	font-weight: 700;
 	line-height: 1;
 }

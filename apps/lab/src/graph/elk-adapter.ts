@@ -14,14 +14,14 @@ import type { LayoutedGraph, LayoutGraphOptions, LayoutRect } from './layout'
 import type { SemanticGraph } from './types'
 
 /** Fixed member-vertex footprint. Deliberately simple fixed sizing — no text-measurement dependency. */
-export const VERTEX_WIDTH = 160
-export const VERTEX_HEIGHT = 32
+export const VERTEX_WIDTH = 200
+export const VERTEX_HEIGHT = 36
 /** Reference stubs render smaller than a real member vertex (diagnostic #13 Phase 5: "distinct visual"). */
-export const STUB_WIDTH = 132
-export const STUB_HEIGHT = 24
+export const STUB_WIDTH = 140
+export const STUB_HEIGHT = 28
 /** Collapsed widget cluster footprint for top-level progressive disclosure view. */
-export const COLLAPSED_CLUSTER_WIDTH = 220
-export const COLLAPSED_CLUSTER_HEIGHT = 72
+export const COLLAPSED_CLUSTER_WIDTH = 240
+export const COLLAPSED_CLUSTER_HEIGHT = 88
 
 const ROOT_LAYOUT_OPTIONS = {
 	'elk.algorithm': 'layered',
@@ -37,7 +37,7 @@ const ROOT_LAYOUT_OPTIONS = {
 } as const
 
 const CLUSTER_LAYOUT_OPTIONS = {
-	'elk.padding': '[top=48,left=16,bottom=16,right=16]',
+	'elk.padding': '[top=52,left=16,bottom=16,right=16]',
 } as const
 
 function emptyClusterNode(id: string): ElkNode {

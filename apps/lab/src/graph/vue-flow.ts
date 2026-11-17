@@ -59,6 +59,8 @@ export interface ToVueFlowOptions {
 	readonly expandedClusterIds?: ReadonlySet<string>
 	readonly focused?: InspectorFocus | null
 	readonly rootNodeId?: InspectionNodeId
+	/** The label of an aggregated edge: how many dependencies it stands for. English (`1 dep`, `4 deps`) when absent. */
+	readonly countLabel?: (count: number) => string
 }
 
 function stubLabel(status: GraphStubStatus): string {
@@ -332,6 +334,7 @@ export function toVueFlow(
 			targetHandle: 't',
 			type: 'smoothstep',
 			label: edge.operation,
+			ariaLabel: edge.operation,
 			class: `graph-edge graph-edge--${edge.operation}${edge.invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}`,
 			data: { operation: edge.operation, path: edge.path, reference: edge.reference, invalidCycle: edge.invalidCycle, isDimmed },
 			selectable: true,
@@ -347,9 +350,10 @@ export function toVueFlow(
 		const primaryOp = semanticEdges[0]!.operation
 		const invalidCycle = semanticEdges.some(e => e.invalidCycle)
 		const isClusterLevel = effectiveSource.startsWith('cluster:') || effectiveTarget.startsWith('cluster:')
+		const countLabel = options?.countLabel ?? ((count: number) => `${count} ${count === 1 ? 'dep' : 'deps'}`)
 		const label = isClusterLevel
-			? `${semanticEdges.length} ${semanticEdges.length === 1 ? 'dep' : 'deps'}`
-			: (semanticEdges.length === 1 ? primaryOp : `${semanticEdges.length} deps`)
+			? countLabel(semanticEdges.length)
+			: (semanticEdges.length === 1 ? primaryOp : countLabel(semanticEdges.length))
 
 		edges.push({
 			id: edgeId,
@@ -359,6 +363,7 @@ export function toVueFlow(
 			targetHandle: 't',
 			type: 'smoothstep',
 			label,
+			ariaLabel: label,
 			class: `graph-edge graph-edge--${primaryOp} graph-edge--aggregate${invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}`,
 			data: {
 				operation: primaryOp,
@@ -391,6 +396,7 @@ export function toVueFlow(
 			targetHandle: 't',
 			type: 'straight',
 			label: stubLabel(stub.status),
+			ariaLabel: stubLabel(stub.status),
 			class: `graph-edge graph-edge--stub graph-edge--${stub.status}${isDimmed ? ' graph-edge--dimmed' : ''}`,
 			data: { operation: stub.operation, path: stub.path, reference: stub.reference, stubStatus: stub.status, isDimmed },
 			selectable: true,
