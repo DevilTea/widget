@@ -23,6 +23,19 @@ export function labNuxtUi() {
 		dts: false,
 		// The Lab is a single workbench with no router: links render as plain anchors, `vue-router` is not needed.
 		router: false,
+		ui: {
+			tooltip: {
+				slots: {
+					// No exit animation for tooltips. Reka keeps a closed tooltip's content mounted until its exit
+					// animation has ended, and a mounted content still hears the "a tooltip opened" event of the NEXT
+					// tooltip, including its own trigger's next open, and closes that tooltip again. With the exit
+					// animation delayed (a throttled or busy page: closed tooltips were seen still mounted seconds
+					// later) a keyboard user tabbing onto a header button sometimes got no tooltip, and the disabled
+					// buttons explain themselves only in it. Without the animation a closed tooltip unmounts at once.
+					content: 'data-[state=closed]:animate-none',
+				},
+			},
+		},
 		icon: {
 			// Icons are inlined at build time from the locally installed `@iconify-json/lucide` collection
 			// (`scan` finds literal `i-lucide-*` names in `src`); nothing is fetched from the Iconify API,

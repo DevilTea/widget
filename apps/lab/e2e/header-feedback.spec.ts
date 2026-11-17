@@ -387,19 +387,12 @@ test.describe('Undo last apply (U04)', () => {
 		await setDraft(page, textDocument('typing in progress'))
 		await expect(undo)
 			.toHaveAttribute('aria-disabled', 'true')
-		// Three things made this a coin toss (about 1 run in 15; it also happens on PR 3a's tree). The tooltip opens for
-		// keyboard focus only (Reka's `ignoreNonKeyboardFocus`), and a script `focus()` counts as keyboard focus only when
-		// the last input was a key (Chromium's :focus-visible heuristic), but the last input was the mouse click on Apply:
-		// press a key first. And Reka keeps a closed tooltip's content mounted until its exit animation ends, where it still
-		// hears the "a tooltip opened" event of the next open and closes it again (seen as the Apply tooltip lingering for a
-		// few milliseconds while Undo's never showed): move the mouse off Apply and wait for every tooltip to be gone.
-		// (Tooltips are `[data-reka-popper-content-wrapper]` elements; Monaco's hover widgets also have role "tooltip".)
-		await page.mouse.move(300, 500)
+		// The tooltip opens for keyboard focus only (Reka's `ignoreNonKeyboardFocus`), and a script `focus()` counts as
+		// keyboard focus only when the user's last input was a key (Chromium's :focus-visible heuristic), but the last
+		// input here was the mouse click on Apply: press a key first. (Nothing waits for other tooltips to go away: a
+		// closed tooltip unmounts at once, see `nuxt-ui.ts`, and `e2e/tooltips.spec.ts` pins real Tab navigation.)
 		await page.keyboard.press('Escape')
-		await expect(page.locator('[data-reka-popper-content-wrapper]'))
-			.toHaveCount(0)
 		await undo.focus()
-		// (Another tooltip may still be fading out, hence the name filter.)
 		await expect(page.getByRole('tooltip', { name: 'Apply or revert your unapplied edits before undoing' }))
 			.toBeAttached()
 		// Activating it anyway does nothing (the button stays focusable, so the click is forced through).
