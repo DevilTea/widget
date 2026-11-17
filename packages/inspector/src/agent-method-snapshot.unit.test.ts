@@ -642,6 +642,64 @@ describe('method members and the negotiated minor', () => {
 		}
 	})
 
+	// A 0.4 Agent (fe06189) rejected the Method member type while classifying the request, before the runtime id, the
+	// widget and the disposal were looked at. The answer, message and envelope minor must not depend on what else is wrong.
+	describe.each([
+		{ ref: 'valid', dispose: false },
+		{ ref: 'stale runtime id', dispose: false },
+		{ ref: 'unknown node id', dispose: false },
+		{ ref: 'valid', dispose: true },
+		{ ref: 'stale runtime id', dispose: true },
+	] as const)('a 0.4 peer subscribing to a Method (ref: $ref, Runtime disposed: $dispose)', ({ ref: kind, dispose }) => {
+		it.each([true, false])('is answered invalid-params exactly as a 0.4 Agent did, with a handshake: %s', async (handshake) => {
+			const fixture = createFixture()
+			try {
+				const widget = await fixture.refOf('probe')
+				const ref = kind === 'stale runtime id' ? { runtimeId: 'gone', nodeId: widget.nodeId } : kind === 'unknown node id' ? { runtimeId: widget.runtimeId, nodeId: 999 } : widget
+				if (handshake)
+					fixture.raw(4, 'handshake', { protocol: { major: 0, minor: 4 } })
+				if (dispose)
+					fixture.runtime.dispose()
+				const eventsBefore = fixture.rawEvents.length
+
+				for (const name of ['check', 'missing']) {
+					const answer = fixture.raw(4, 'runtime.subscribeMember', { ref, member: { type: 'method', name } })
+					expect(answer)
+						.toEqual({
+							protocol: { major: 0, minor: 4 },
+							kind: 'response',
+							requestId: answer.requestId,
+							ok: false,
+							error: { code: 'invalid-params', message: 'Invalid parameters for the requested Inspector method.' },
+						})
+				}
+				// The rejection never observes the Runtime, so it announces nothing either.
+				expect(fixture.rawEvents.length)
+					.toBe(eventsBefore)
+			}
+			finally {
+				fixture.dispose()
+			}
+		})
+	})
+
+	it('answers a 0.5 peer addressing a stale Runtime or an unknown node as before: runtime-not-found, widget-not-found', async () => {
+		const fixture = createFixture()
+		try {
+			const widget = await fixture.refOf('probe')
+			expect(fixture.raw(5, 'runtime.subscribeMember', { ref: { runtimeId: 'gone', nodeId: widget.nodeId }, member: { type: 'method', name: 'check' } }))
+				.toMatchObject({ ok: false, error: { code: 'runtime-not-found' } })
+			expect(fixture.raw(5, 'runtime.subscribeMember', { ref: { runtimeId: widget.runtimeId, nodeId: 999 }, member: { type: 'method', name: 'check' } }))
+				.toMatchObject({ ok: false, error: { code: 'widget-not-found' } })
+			fixture.runtime.dispose()
+			expect(fixture.raw(5, 'runtime.subscribeMember', { ref: widget, member: { type: 'method', name: 'check' } }))
+				.toMatchObject({ ok: false, error: { code: 'runtime-disposed' } })
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
 	it('keeps State and Property subscriptions of a 0.4 peer working', async () => {
 		const fixture = createFixture()
 		try {

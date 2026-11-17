@@ -90,6 +90,9 @@ interface MethodDiagnosticsSource {
 	readonly subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeMethodDiagnostic[]) => void) => () => void
 }
 
+/** The `invalid-params` message of every protocol minor; a 0.4 peer must see this exact text. */
+const INVALID_PARAMS_MESSAGE = 'Invalid parameters for the requested Inspector method.'
+
 let runtimeSequence = 1
 let subscriptionSequence = 1
 
@@ -299,6 +302,14 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	 * Method diagnostics are not part of Core inspection (no Method facade, by accepted decision), so they are
 	 * read from the public Runtime: the widget with this id, then the own `name` key of its null-prototype
 	 * `methods` record. Widget ids are unique in a valid Blueprint.
+	 *
+	 * Unlike the State and Property listener paths, which Core runs with no active subscriber, these reads are tracked:
+	 * `getDiagnostics()` reads a signal and `subscribeDiagnostics()` creates a reactive effect. A request handled
+	 * synchronously (the in-process transport) from inside a reactive effect that shares Core's alien-signals instance
+	 * would therefore subscribe that effect to the Method's diagnostics, and a Method subscription made there would be
+	 * parented to it and disposed when it re-runs, while still counting toward `maxSubscriptions`. Core is unchanged by
+	 * decision and the Agent cannot untrack from here (it does not depend on alien-signals); the MessagePort transport
+	 * delivers asynchronously and is not affected. See "Known limitations" in the Inspector docs.
 	 */
 	function resolveMethodDiagnostics(widget: RuntimeWidgetInspection, name: string): MethodDiagnosticsSource | null {
 		const runtimeWidget = options.runtime.getWidget(widget.blueprintNode.node.id) as { readonly methods?: Readonly<Record<string, unknown>> } | null
@@ -547,11 +558,6 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		}
 		const member = request.params.member
-		if (member.type === 'method' && currentMinor() < METHOD_SNAPSHOT_PROTOCOL_MINOR) {
-			// A peer below 0.5 sees exactly the 0.4 answer for a member type it does not know.
-			sendError(request.requestId, protocolError('invalid-params', 'Invalid parameters for the requested Inspector method.'))
-			return
-		}
 		let projected: InspectorRuntimeMemberSnapshot | null = null
 		let subscribeToMember: ((notify: (next: InspectorRuntimeMemberSnapshot) => void) => () => void) | null = null
 		if (member.type === 'method') {
@@ -687,6 +693,18 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		if (!isCompatibleProtocolVersion(request.protocol)) {
 			sendError(request.requestId, protocolError('unsupported-version', `Unsupported Inspector protocol major ${request.protocol.major}.`))
 			return
+		}
+
+		// A peer below 0.5 does not know the Method member type, so a 0.4 Agent rejected it while classifying the
+		// request: before any addressing, capability or disposal check, and without observing the Runtime. The
+		// answer, its message and its envelope minor are the same here, whatever else would have been wrong.
+		if (request.method === 'runtime.subscribeMember' && request.params.member.type === 'method') {
+			const minor = Math.min(negotiatedMinor, request.protocol.minor)
+			if (minor < METHOD_SNAPSHOT_PROTOCOL_MINOR) {
+				requestMinor = minor
+				sendError(request.requestId, protocolError('invalid-params', INVALID_PARAMS_MESSAGE))
+				return
+			}
 		}
 
 		const runtimeDisposed = observeRuntimeDisposal()
@@ -863,7 +881,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 				sendError(requestId, protocolError('unknown-method', 'The requested method is not defined by this Inspector protocol.'))
 			}
 			else if (classified.code === 'invalid-params') {
-				sendError(requestId, protocolError('invalid-params', 'Invalid parameters for the requested Inspector method.'))
+				sendError(requestId, protocolError('invalid-params', INVALID_PARAMS_MESSAGE))
 			}
 			else {
 				sendError(requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
