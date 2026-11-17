@@ -12,7 +12,7 @@
  */
 
 import type { AnyWidgetPluginTuple, JsonValue, SourcePatch, WidgetDocument, WidgetDocumentSnapshot, WidgetSystem } from '@deviltea/widget-core'
-import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentState, LabDocumentTraceEvent, LabPatchOrigin, LabPreviewSnapshot, LabSessionHooks, LabSessionListener, RevisionConflictDemoResult, SourceParseError } from './types'
+import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentState, LabDocumentTraceEvent, LabPatchOrigin, LabPreviewSnapshot, LabSessionHooks, LabSessionListener, RevisionConflictDemoResult, SourceParseError, UndoOutcome } from './types'
 import { createWidgetDocument } from '@deviltea/widget-core'
 import { createAuthorPatch } from './author'
 
@@ -43,6 +43,8 @@ function snapshotPatch(patch: SourcePatch): SourcePatch {
 }
 
 export const LAB_DOCUMENT_TRACE_LIMIT = 20
+/** How many applied sources "Undo last apply" can step back through. */
+export const LAB_UNDO_LIMIT = 20
 
 export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	private readonly document: WidgetDocument<Plugins>
@@ -55,6 +57,12 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	private previewSnapshotValue: LabPreviewSnapshot<Plugins> | null
 	private lastAppliedSourcePatchValue: LabAppliedSourcePatch | null = null
 	private readonly documentTraceValue: LabDocumentTraceEvent[] = []
+	/**
+	 * Source texts the Document held before each of its last `LAB_UNDO_LIMIT` revision-advancing commits,
+	 * oldest first. It is a convenience for "Undo last apply" only: restoring one goes back through the
+	 * ordinary `WidgetDocument` commit path as a new revision, so this is never an authoritative history.
+	 */
+	private readonly undoStack: string[] = []
 	private applying = false
 
 	constructor(options: LabSessionOptions<Plugins>) {
@@ -108,6 +116,11 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 
 	get isDirty(): boolean {
 		return this.draftText !== this.documentStateValue.sourceText
+	}
+
+	/** How many applied sources "Undo last apply" can still restore. */
+	get undoDepth(): number {
+		return this.undoStack.length
 	}
 
 	/** Latest successfully accepted SourcePatch, retained as Lab session telemetry only. */
@@ -250,6 +263,49 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		}
 	}
 
+	/**
+	 * Restores the source the Document held before its last revision-advancing commit, as a NEW Document
+	 * revision through the same root-replacement commit and Preview promotion path as Apply (never by
+	 * rewinding Core's Document). Distinct from `revert()`, which only discards the unapplied draft:
+	 *
+	 * - unavailable while an unapplied draft exists (`draft-dirty`: Revert or Apply it first, so Undo can
+	 *   never discard typing silently) and while another command runs;
+	 * - the restored source becomes the draft too (clean afterwards), unless the user typed during the commit;
+	 * - Undo itself pushes no history, so repeated Undo walks back through the stack one step at a time.
+	 */
+	async undoLastApply(): Promise<UndoOutcome> {
+		if (this.applying)
+			return { status: 'skipped-concurrent' }
+		if (this.isDirty)
+			return { status: 'draft-dirty' }
+		const previousText = this.undoStack.at(-1)
+		if (previousText === undefined)
+			return { status: 'nothing-to-undo' }
+
+		const capturedDraftText = this.draftText
+		this.applying = true
+		this.emit()
+		try {
+			// Every stacked text was parsed by an earlier Apply (or is the constructor's valid initial text).
+			const definition = JSON.parse(previousText) as JsonValue
+			const outcome = await this.commitPatch([{ op: 'replace', path: '', value: definition }], previousText, definition, 'undo')
+			if (outcome.status === 'patch-error')
+				return outcome
+			if (outcome.status !== 'applied')
+				return { status: 'skipped-concurrent' }
+			this.undoStack.pop()
+			if (this.draftText === capturedDraftText) {
+				this.draftText = this.documentStateValue.sourceText
+				this.parseErrorValue = null
+			}
+			return { status: 'undone', blueprintStatus: outcome.blueprintStatus }
+		}
+		finally {
+			this.applying = false
+			this.emit()
+		}
+	}
+
 	/** Shared Document commit + Preview promotion lifecycle for JSON and Structure authoring. */
 	private async commitPatch(
 		patch: Parameters<WidgetDocument<Plugins>['applyPatch']>[0],
@@ -294,6 +350,11 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 			return { status: 'applied', blueprintStatus: previousDocument.blueprint.status }
 		}
 
+		if (origin !== 'undo') {
+			this.undoStack.push(previousDocument.sourceText)
+			if (this.undoStack.length > LAB_UNDO_LIMIT)
+				this.undoStack.splice(0, this.undoStack.length - LAB_UNDO_LIMIT)
+		}
 		this.documentStateValue = {
 			sourceText: nextSourceText,
 			definition: nextDefinition,

@@ -77,6 +77,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Structure commit observed': '觀察到 Structure commit',
 	'changed': '已變更',
 	'no-op': 'no-op',
+	'Undo last apply': '復原上次套用',
+	'Undo commit observed': '觀察到復原 commit',
 	'JSON draft parse error observed': '觀察到 JSON draft parse error',
 	'SourcePatch failure observed': '觀察到 SourcePatch failure',
 	'Conflict demonstration observed': '觀察到 conflict 示範',

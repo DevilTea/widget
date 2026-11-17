@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
 import { replaceConfigScalar } from './author'
-import { LAB_DOCUMENT_TRACE_LIMIT, LabSession } from './session'
+import { LAB_DOCUMENT_TRACE_LIMIT, LAB_UNDO_LIMIT, LabSession } from './session'
 
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText
 const invalidSource = sandboxPresets.find(preset => preset.id === 'invalid-semantic')!.sourceText
@@ -85,6 +85,154 @@ describe('labSession', () => {
 			.toBe(0)
 		expect(session.documentTrace.at(-1))
 			.toMatchObject({ kind: 'patch-error', revision: 0, code: 'json-incompatible-value', reason: 'max-depth-exceeded', path: expect.any(Array) })
+	})
+
+	describe('undo last apply', () => {
+		const thirdValidSource = '{ "id": "root", "type": "Text", "config": { "text": "third snapshot" } }\n'
+
+		it('restores the previously applied source as a new Document revision and promotes it to Preview', async () => {
+			const events: string[] = []
+			const session = new LabSession({
+				system: sandboxSystem,
+				initialSourceText: validSource,
+				hooks: { replacePreview: (preview) => { events.push(`preview:r${preview.revision}`) } },
+			})
+			expect(session.undoDepth)
+				.toBe(0)
+			session.setDraftSourceText(secondValidSource)
+			await session.apply()
+			expect(session.undoDepth)
+				.toBe(1)
+
+			const outcome = await session.undoLastApply()
+
+			expect(outcome)
+				.toEqual({ status: 'undone', blueprintStatus: 'valid' })
+			// A new revision (r2), not a rewind to r0, and it went through the ordinary Preview promotion.
+			expect(session.documentState.revision)
+				.toBe(2)
+			expect(session.documentState.sourceText)
+				.toBe(validSource)
+			expect(session.preview?.revision)
+				.toBe(2)
+			expect(events)
+				.toEqual(['preview:r1', 'preview:r2'])
+			expect(session.draftSourceText)
+				.toBe(validSource)
+			expect(session.isDirty)
+				.toBe(false)
+			expect(session.lastAppliedSourcePatch)
+				.toMatchObject({ origin: 'undo', revision: 2, patch: [{ op: 'replace', path: '' }] })
+			expect(session.undoDepth)
+				.toBe(0)
+		})
+
+		it('walks back one applied source at a time and reports nothing-to-undo at the bottom', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			for (const text of [secondValidSource, thirdValidSource]) {
+				session.setDraftSourceText(text)
+				await session.apply()
+			}
+			expect(session.undoDepth)
+				.toBe(2)
+
+			await session.undoLastApply()
+			expect(session.documentState.sourceText)
+				.toBe(secondValidSource)
+			await session.undoLastApply()
+			expect(session.documentState.sourceText)
+				.toBe(validSource)
+			expect(await session.undoLastApply())
+				.toEqual({ status: 'nothing-to-undo' })
+			expect(session.documentState.revision)
+				.toBe(4)
+		})
+
+		it('can undo an invalid apply while the old Preview was still running, and an applied invalid source back again', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			session.setDraftSourceText(invalidSource)
+			await session.apply()
+			expect(session.documentState.blueprint.status)
+				.toBe('invalid')
+			expect(session.preview?.revision)
+				.toBe(0)
+
+			expect(await session.undoLastApply())
+				.toEqual({ status: 'undone', blueprintStatus: 'valid' })
+			expect(session.documentState.blueprint.status)
+				.toBe('valid')
+			expect(session.preview?.revision)
+				.toBe(2)
+		})
+
+		it('is unavailable while an unapplied draft exists and never discards it', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			session.setDraftSourceText(secondValidSource)
+			await session.apply()
+			session.setDraftSourceText(thirdValidSource)
+
+			expect(await session.undoLastApply())
+				.toEqual({ status: 'draft-dirty' })
+			expect(session.draftSourceText)
+				.toBe(thirdValidSource)
+			expect(session.documentState.revision)
+				.toBe(1)
+
+			session.revert()
+			expect(await session.undoLastApply())
+				.toMatchObject({ status: 'undone' })
+		})
+
+		it('does not record a structural no-op apply, a failed parse, or the undo itself', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			session.setDraftSourceText(JSON.stringify(JSON.parse(validSource)))
+			await session.apply()
+			session.setDraftSourceText('{ nope')
+			await session.apply()
+			expect(session.undoDepth)
+				.toBe(0)
+
+			session.setDraftSourceText(secondValidSource)
+			await session.apply()
+			expect(session.undoDepth)
+				.toBe(1)
+			await session.undoLastApply()
+			expect(session.undoDepth)
+				.toBe(0)
+		})
+
+		it('records Structure commits too and keeps the stack bounded', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			const nodeId = inspectBlueprint(session.documentState.blueprint).nodes.find(node => node.resolved && node.node.id === 'title')!.nodeId
+			await session.author(replaceConfigScalar(0, nodeId, 'text', 'changed through Structure'))
+			expect(session.undoDepth)
+				.toBe(1)
+			await session.undoLastApply()
+			expect(session.documentState.sourceText)
+				.toBe(validSource)
+
+			for (let index = 0; index < 30; index++) {
+				session.setDraftSourceText(`{ "id": "root", "type": "Text", "config": { "text": "n${index}" } }`)
+				await session.apply()
+			}
+			expect(session.undoDepth)
+				.toBe(LAB_UNDO_LIMIT)
+		})
+
+		it('skips a concurrent command instead of overlapping it', async () => {
+			const gate = createDeferred()
+			const session = new LabSession({
+				system: sandboxSystem,
+				initialSourceText: validSource,
+				hooks: { replacePreview: () => gate.promise },
+			})
+			session.setDraftSourceText(secondValidSource)
+			const applying = session.apply()
+			expect(await session.undoLastApply())
+				.toEqual({ status: 'skipped-concurrent' })
+			gate.resolve()
+			await applying
+		})
 	})
 
 	it('keeps the observation trace bounded and drops the oldest entries', async () => {

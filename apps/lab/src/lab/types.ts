@@ -79,8 +79,19 @@ export type ApplyOutcome
 		| { readonly status: 'patch-error', readonly failure: ApplyPatchFailure }
 		| { readonly status: 'applied', readonly blueprintStatus: 'valid' | 'invalid' }
 
+/**
+ * Result of `LabSession.undoLastApply()`. `nothing-to-undo` and `draft-dirty` are the two "not available"
+ * states the header explains in its tooltip; the others mirror `ApplyOutcome`.
+ */
+export type UndoOutcome
+	= | { readonly status: 'nothing-to-undo' }
+		| { readonly status: 'draft-dirty' }
+		| { readonly status: 'skipped-concurrent' }
+		| { readonly status: 'patch-error', readonly failure: ApplyPatchFailure }
+		| { readonly status: 'undone', readonly blueprintStatus: 'valid' | 'invalid' }
+
 /** Lab-only provenance for the latest applied patch; this is telemetry, not authored-state authority. */
-export type LabPatchOrigin = 'json' | 'structure'
+export type LabPatchOrigin = 'json' | 'structure' | 'undo'
 
 export interface LabAppliedSourcePatch {
 	readonly origin: LabPatchOrigin
