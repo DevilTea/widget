@@ -162,7 +162,12 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     keys (`id`, `type`, `config`, `slots`, and the reserved `meta` extension key); any other own key makes
     the Blueprint invalid (`unexpected-widget-field`). `src/showcases/registry.unit.test.ts` pins this.
 - `pika.config.ts` — the Lab's small PikaCSS token set (`variables.definitions`, safe-listed so the
-  hand-authored `src/styles/dockview-theme.css` can reference them via plain `var()`).
+  hand-authored `src/styles/dockview-theme.css` can reference them via plain `var()`). The success/OK colour
+  is the single token `--lab-color-ok` in both themes (dark here, light in `global.css`); do not add a second
+  name for it (audit U17: `--lab-color-success` existed only in dark, `--lab-color-ok` only in light).
+- `nuxt-ui.ts`, `src/styles/lab-ui.css`, `src/composables/use-nuxt-ui-theme-bridge.ts`, `src/ui/offline-icons.ts`,
+  `src/test-support-ui.ts`, `scripts/nuxt-ui-codegen.mjs` — the Nuxt UI + Tailwind v4 foundation, see "Nuxt UI
+  and Tailwind" below. The Lab shell (`index.html` -> `main.ts`) uses it; the Preview frame never does.
 - `src/styles/preview-frame.css` — base rules for the Preview frame only (imported by
   `preview-frame-main.ts`, never by the shell): line-height 1.5, controls inheriting the surrounding font,
   square text inputs and pointer cursors, i.e. the subset of the removed Vuetify reset the survey renderers
@@ -179,11 +184,11 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
 ```bash
 pnpm dev         # vite dev server
 pnpm build       # vite build
-pnpm typecheck   # generates pika.gen.ts, then vue-tsc over app, unit tests, and browser/Page specs
+pnpm typecheck   # generates pika.gen.ts and the Nuxt UI theme templates, then vue-tsc over app, unit tests, and browser/Page specs
 pnpm test        # vitest run for this app's colocated *.unit.test.ts
 ```
 
-`vite.config.ts`/`vitest.config.ts`/`pika.config.ts` and Playwright config files themselves are not
+`vite.config.ts`/`vitest.config.ts`/`pika.config.ts`/`nuxt-ui.ts` and Playwright config files themselves are not
 part of `pnpm typecheck`'s program, matching every other package in this repo (none type-check their
 own bundler config files). Browser/Page specs under `e2e/` and `e2e-pages/` are typechecked through
 `tsconfig.browser-tests.json`, including the preset fixtures they import (`src/sandbox/presets.ts` and
@@ -194,6 +199,7 @@ Playwright suites remain separate runtime jobs.
 Vite plugin would otherwise only produce as a side effect of an actual `pnpm dev`/`pnpm build` pass, and
 which augments Vue's `ComponentCustomProperties` so `pika()` type-checks inside `<template>`. This keeps
 `pnpm typecheck` correct on a clean checkout without requiring a prior dev/build run.
+It then runs `nuxt-ui:codegen` (`scripts/nuxt-ui-codegen.mjs`) for the same reason, see "Nuxt UI and Tailwind".
 
 ## Deployment (GitHub Pages)
 
@@ -235,7 +241,9 @@ Intentional, not incidental (`DevilTea/deviltea-labs#30` Scope B) — the produc
 building this app in isolation:
 
 ```text
-main app JS (lab-*.js + shared global-*.js) ~678 KB + ~287 KB raw / ~177 KB + ~93 KB gzip — eager
+main app JS (lab-*.js + shared global-*.js) ~847 KB + ~288 KB raw / ~230 KB + ~94 KB gzip — eager
+                                         (was ~678 KB + ~287 KB / ~177 KB + ~93 KB before Nuxt UI)
+Nuxt UI Toast (Toast-*.js)               ~30 KB raw / ~9 KB gzip   — loaded on first toast (none is shown yet)
 modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
@@ -245,7 +253,9 @@ Implementation panel + Shiki (ImplementationPanel-*.js)
 curated raw-source chunks (per curated file, e.g. ShortAnswerRenderer-*.js)
                                          ~2-21 KB raw / ~1-6.2 KB gzip each — loaded on first
                                          selection of that file's tab
-CSS (lab-*.css + global-*.css)            ~128 KB + ~9 KB raw / ~12 KB + ~3 KB gzip — eager
+CSS (lab-*.css + global-*.css)            ~325 KB + ~9 KB raw / ~37 KB + ~3 KB gzip — eager
+                                         (was ~128 KB + ~9 KB / ~12 KB + ~3 KB; the Lab shell only: Tailwind utilities
+                                         plus the theme of every Nuxt UI component, see "Nuxt UI and Tailwind")
 ```
 
 - **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
@@ -308,6 +318,79 @@ CSS (lab-*.css + global-*.css)            ~128 KB + ~9 KB raw / ~12 KB + ~3 KB g
   first open and present after (page.on('request') across a full page load, matching this section's own
   verification method) — mirroring the network-blocked fixture's own "assert what is/isn't fetched"
   posture (`e2e/fixtures.ts`) rather than adding a second, parallel assertion mechanism.
+
+## Nuxt UI and Tailwind
+
+Issue `DevilTea/widget#230` (Lab redesign) adopts Nuxt UI 4 (Tailwind v4) for the Lab chrome through its **Vite
+plugin**, not Nuxt. This is the foundation: it changes no Lab behaviour or appearance except the migrated
+surfaces below. PikaCSS stays for everything not yet migrated and is removed in a later PR.
+
+- **Scope: Lab shell only.** `main.ts` imports `src/styles/lab-ui.css` (Tailwind theme + utilities, Nuxt UI),
+  installs Nuxt UI's Vue plugin and wraps `App` in `UApp` (`toaster: null` until a surface needs toasts;
+  `UApp` renders no element). `preview-frame-main.ts` / `preview-frame.html` never import any of it, so the showcase
+  renderers are untouched; `e2e/nuxt-ui.spec.ts` pins that the frame document has no Tailwind/Nuxt UI CSS, no
+  `.dark` class and no `--ui-*` tokens. This also holds when the frame runs on a distinct origin
+  (`playwright.preview-origin.config.ts`).
+- **Plugin set-up** (`nuxt-ui.ts`, shared by `vite.config.ts`, `vitest.config.ts` and the repository root
+  `vitest.config.ts`). `@nuxt/ui/vite` works with `unplugin-vue/vite` as is (the Lab does not use
+  `@vitejs/plugin-vue`): it adds its own plugins (templates, icons, Tailwind) around whichever Vue plugin is
+  present, and `vite build`, the dev server and Vitest all run with it. `@nuxt/ui` is excluded from dep
+  pre-bundling by the plugin itself. Versions come from the pnpm catalog (`@nuxt/ui`, `tailwindcss`,
+  `@iconify-json/lucide`, `@iconify/vue`); the repo's `minimumReleaseAge` applies, so a brand-new release
+  (`@nuxt/ui@4.12.1+` at the time of writing) is not installable until it is three days old.
+- **Explicit imports, no generated declarations.** `autoImport`, `components` and `dts` are off: import
+  `UButton from '@nuxt/ui/components/Button.vue'` and composables from `@nuxt/ui/composables`. Nothing like
+  `auto-imports.d.ts` / `components.d.ts` is generated, so there is nothing to commit, ignore or hand-edit, and
+  `pnpm typecheck` cannot depend on a prior build. The only generated input is Nuxt UI's theme types
+  (`node_modules/.nuxt-ui/ui/*`, mapped by `#build/ui` paths in `tsconfig.app.json`), which the plugin writes from
+  its `config` hook; `pnpm typecheck` writes them first through `nuxt-ui:codegen`
+  (`scripts/nuxt-ui-codegen.mjs`, which resolves `vite.config.ts` and does nothing else), the same pattern as
+  `pika:codegen`. Do not enable auto-import to save an import line.
+- **Cascade layers.** Order, lowest to highest: `theme`, `base`, `preflights` (PikaCSS tokens), `components`,
+  `utilities` (Tailwind utilities, Nuxt UI component classes, and PikaCSS's `utilities`, whose layer name is
+  fixed by its generated CSS, so the two share it; their classes never meet on one element). The statement lives
+  inline in `index.html` because the first `@layer` statement the browser sees fixes the order and Vite emits the
+  shared PikaCSS stylesheet link before the Tailwind one; `lab-ui.css` repeats it. Unlayered CSS (`global.css`,
+  `dockview-theme.css`, scoped SFC styles) beats every layer, so Dockview, Vue Flow, Monaco and Shiki styling is
+  untouched. `e2e/nuxt-ui.spec.ts` probes the resolved order in a real browser.
+- **No global Tailwind preflight (yet).** `lab-ui.css` imports `tailwindcss/theme.css` and
+  `tailwindcss/utilities.css` only. The preflight would change the existing chrome (measured on the survey Lab at
+  1440x900: header 77px -> 83px, every button/select 27px -> 30px, `border-*-style` none -> solid on ~120 elements,
+  line-height, tab-size), so the few resets Nuxt UI components need are scoped to `[data-slot]` (every Nuxt UI
+  element has it) in the `base` layer. Adopt the full preflight when the chrome itself moves to Tailwind, and
+  remove that scoped block then. Tailwind source detection is `source(none)` plus explicit `@source`s
+  (`index.html`, `App.vue`, `src/components`); a Tailwind class in any other directory needs one more `@source`.
+- **Theme bridge, one source of truth.** The Lab theme store (`use-lab-theme.ts`, `theme/theme.ts`,
+  `data-lab-theme` on `<html>`) stays authoritative. `useNuxtUiThemeBridge()` (called by `App.vue`) mirrors it onto
+  the `.dark` class Nuxt UI's `dark:` variants read, synchronously with `data-lab-theme`. Nuxt UI's own colour mode
+  (`useDark()`, `vueuse-color-scheme` in localStorage, `UColorModeButton`) is disabled with `colorMode: false`
+  so nothing else can set the class or persist a competing preference; never add a second theme control.
+  Nuxt UI's `--ui-*` tokens are mapped to the Lab palette in `lab-ui.css` as plain `var(--lab-color-*)`
+  references (so they follow both themes without a per-theme block): `--ui-bg` = `bg`, `bg-muted` = `surface`,
+  `bg-elevated` = `surface-alt`, `bg-accented` = `border`, `bg-inverted` = `text`; `--ui-text*` = `text` / `text-muted`
+  (`text-inverted` = `accent-contrast`); `--ui-border*` = `border`; `--ui-primary` / `info` = `accent`, `success` =
+  `ok`, `warning`, `error` = `danger`; `--ui-radius` = `--lab-radius`. The mapping is unlayered on purpose (it must
+  beat Nuxt UI's `theme`-layer defaults, including its `.dark` block). Add a token to the Lab palette first, then map it.
+- **Offline.** No remote fonts (the plugin is not given a font provider and `lab-ui.css` has no `@import url()`)
+  and no remote icons: `i-lucide-*` names are inlined at build time from `@iconify-json/lucide` (`icon.clientBundle.scan`
+  over `src/**/*.{vue,ts}`; names built at runtime or from another collection must be listed in
+  `clientBundle.icons` / installed), and `disableRemoteIcons()` (`src/ui/offline-icons.ts`, called by `main.ts` and
+  `test-support-ui.ts`) removes Iconify's `fetch`, so an unbundled name is a missing icon, never a request to
+  `api.iconify.design`. Everything is same-origin, so the offline e2e fixture and the `/widget/lab/` Pages base work
+  (`pnpm docs:build:pages` + `test:pages`).
+- **Unit tests.** Mount a Nuxt UI component with `global: { config: { globalProperties: testGlobalProperties },
+  plugins: testGlobalPlugins }` (`src/test-support.ts` for the `pika` mocks, `src/test-support-ui.ts` for the real
+  Nuxt UI plugin). A component that renders a Nuxt UI icon without the plugin has no bundled icons, which is why
+  `InspectorPanelPrimitives.unit.test.ts` passes it. Overlays/tooltips/toasts also need `UApp` as an ancestor.
+- **Migrated so far.** `PanelDescriptionBar.vue`'s dismiss button is a `UButton` (ghost, neutral, `xs`, square,
+  `i-lucide-x`, 24px target, solid accent focus ring), keeping its `aria-label` and the `button[aria-label="Dismiss"]`
+  selector. Native `<select>`s are deliberately not migrated (many specs use `selectOption`); that belongs to the
+  shell redesign.
+- **Cost.** The eager Lab chunk grows by about 168 KB raw / 54 KB gzip (Nuxt UI runtime, reka-ui, iconify,
+  tailwind-variants, `UApp`) and the Lab CSS by about 197 KB raw / 25 KB gzip (the Nuxt UI component themes).
+  The plugin's `experimental.componentDetection` would cut the CSS to about 184 KB (verified once) but is
+  experimental and only sees components present when Vite starts, so it is not enabled; revisit when the set of
+  used components stabilises.
 
 ## Package boundaries
 
