@@ -173,19 +173,26 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   - Authored sources the Lab ships (presets, tutorial, e2e fixtures) must use only Core's recognized widget
     keys (`id`, `type`, `config`, `slots`, and the reserved `meta` extension key); any other own key makes
     the Blueprint invalid (`unexpected-widget-field`). `src/showcases/registry.unit.test.ts` pins this.
-- `pika.config.ts` — the Lab's small PikaCSS token set (`variables.definitions`, safe-listed so the
-  hand-authored `src/styles/dockview-theme.css` can reference them via plain `var()`). The success/OK colour
-  is the single token `--lab-color-ok` in both themes (dark here, light in `global.css`); do not add a second
-  name for it (audit U17: `--lab-color-success` existed only in dark, `--lab-color-ok` only in light).
+- `src/styles/global.css` — plain CSS shared by the Lab shell and the Preview frame: the Lab palette tokens
+  (`--lab-color-*`, `--lab-radius`, `--lab-font-*`; dark on `:root`, light under `html[data-lab-theme='light']`),
+  referenced by `src/styles/dockview-theme.css`, Monaco's styling and, through `@theme inline` in `lab-ui.css`, by the
+  chrome's Tailwind utilities. The success/OK colour is the single token `--lab-color-ok` in both themes; do not
+  add a second name for it (audit U17: `--lab-color-success` existed only in dark, `--lab-color-ok` only in light).
 - `nuxt-ui.ts`, `src/styles/lab-ui.css`, `src/composables/use-nuxt-ui-theme-bridge.ts`, `src/ui/offline-icons.ts`,
   `src/test-support-ui.ts`, `src/test-setup.ts`, `scripts/nuxt-ui-codegen.mjs` — the Nuxt UI + Tailwind v4 foundation, see "Nuxt UI
   and Tailwind" below. The Lab shell (`index.html` -> `main.ts`) uses it; the Preview frame never does.
 - `src/styles/preview-frame.css` — base rules for the Preview frame only (imported by
   `preview-frame-main.ts`, never by the shell): line-height 1.5, controls inheriting the surrounding font,
   square text inputs and pointer cursors, i.e. the subset of the removed Vuetify reset the survey renderers
-  were styled against. It sits in a layer declared after PikaCSS's `utilities`, so it wins over PikaCSS
-  utilities on those properties (see `showcases/survey/renderers/control-style.ts`). Do not move these rules
-  into `global.css`: the Lab chrome keeps the UA defaults.
+  were styled against. It sits in a layer of its own, below every unlayered rule (the renderers' scoped
+  styles), like a reset; the survey's native controls also carry their colour, size and weight inline (see
+  `showcases/survey/renderers/control-style.ts`). Do not move these rules into `global.css`: the Lab chrome
+  keeps the UA defaults.
+- Styling, in one place: the **chrome** (everything outside the Preview frame) is Tailwind v4 utilities and Nuxt
+  UI components, in the `class` attribute of the template; the **showcase renderers** (everything inside the
+  frame) are plain CSS, a `<style scoped>` block per renderer, with no Tailwind class and no import from the
+  chrome. PikaCSS is gone from the repository: no `pika()`, no plugin, no generated `pika.gen.*`. See
+  "Nuxt UI and Tailwind" below and `src/styles/styling-boundary.unit.test.ts`.
 - `src/**/*.unit.test.ts` — colocated Vitest unit tests for `src/lab/`, `src/graph/`,
   `src/runtime-inspector/`, `src/sandbox/`, `src/composables/` and `src/showcases/**` (plugins,
   presets, and selected renderer contracts via `@vue/test-utils` + `happy-dom`), run by both this
@@ -196,22 +203,19 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
 ```bash
 pnpm dev         # vite dev server
 pnpm build       # vite build
-pnpm typecheck   # generates pika.gen.ts and the Nuxt UI theme templates, then vue-tsc over app, unit tests, and browser/Page specs
+pnpm typecheck   # generates the Nuxt UI theme templates, then vue-tsc over app, unit tests, and browser/Page specs
 pnpm test        # vitest run for this app's colocated *.unit.test.ts
 ```
 
-`vite.config.ts`/`vitest.config.ts`/`pika.config.ts`/`nuxt-ui.ts` and Playwright config files themselves are not
+`vite.config.ts`/`vitest.config.ts`/`nuxt-ui.ts` and Playwright config files themselves are not
 part of `pnpm typecheck`'s program, matching every other package in this repo (none type-check their
 own bundler config files). Browser/Page specs under `e2e/` and `e2e-pages/` are typechecked through
 `tsconfig.browser-tests.json`, including the preset fixtures they import (`src/sandbox/presets.ts` and
 `src/showcases/survey/presets.ts`), while the two
 Playwright suites remain separate runtime jobs.
-`pnpm typecheck` first runs `pika:codegen` (`scripts/pika-codegen.mjs`), which generates
-`src/pika.gen.ts` directly through `@pikacss/integration` — the same file `@pikacss/unplugin-pikacss`'s
-Vite plugin would otherwise only produce as a side effect of an actual `pnpm dev`/`pnpm build` pass, and
-which augments Vue's `ComponentCustomProperties` so `pika()` type-checks inside `<template>`. This keeps
-`pnpm typecheck` correct on a clean checkout without requiring a prior dev/build run.
-It then runs `nuxt-ui:codegen` (`scripts/nuxt-ui-codegen.mjs`) for the same reason, see "Nuxt UI and Tailwind".
+`pnpm typecheck` first runs `nuxt-ui:codegen` (`scripts/nuxt-ui-codegen.mjs`), which writes the Nuxt UI theme types
+that Vite would otherwise only produce as a side effect of a dev/build pass, so it is correct on a clean checkout
+without a prior dev/build run, see "Nuxt UI and Tailwind". No other file is generated.
 
 ## Deployment (GitHub Pages)
 
@@ -265,9 +269,10 @@ Implementation panel + Shiki (ImplementationPanel-*.js)
 curated raw-source chunks (per curated file, e.g. ShortAnswerRenderer-*.js)
                                          ~2-21 KB raw / ~1-6.2 KB gzip each — loaded on first
                                          selection of that file's tab
-CSS (lab-*.css + global-*.css)            ~325 KB + ~9 KB raw / ~37 KB + ~3 KB gzip — eager
-                                         (was ~128 KB + ~9 KB / ~12 KB + ~3 KB; the Lab shell only: Tailwind utilities
-                                         plus the theme of every Nuxt UI component, see "Nuxt UI and Tailwind")
+CSS (lab-*.css + global-*.css)            ~340 KB + ~6 KB raw / ~40 KB + ~1.5 KB gzip — eager
+                                         (was ~128 KB + ~9 KB / ~12 KB + ~3 KB before Nuxt UI; the Lab shell only: Tailwind utilities
+                                         plus the theme of every Nuxt UI component, see "Nuxt UI and Tailwind". global-*.css is
+                                         plain CSS: the palette tokens and the survey renderers' scoped styles, which the frame loads too)
 ```
 
 - **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
@@ -334,8 +339,9 @@ CSS (lab-*.css + global-*.css)            ~325 KB + ~9 KB raw / ~37 KB + ~3 KB g
 ## Nuxt UI and Tailwind
 
 Issue `DevilTea/widget#230` (Lab redesign) adopts Nuxt UI 4 (Tailwind v4) for the Lab chrome through its **Vite
-plugin**, not Nuxt. This is the foundation: it changes no Lab behaviour or appearance except the migrated
-surfaces below. PikaCSS stays for everything not yet migrated and is removed in a later PR.
+plugin**, not Nuxt. It is the Lab chrome's only styling system: PikaCSS was removed from the Lab by the PR that
+ported its ~340 style calls to Tailwind utilities with no visual change (the Lab palette is exposed as
+`text-lab-*`, `bg-lab-*`, `border-lab-*`, `accent-lab-*`, `rounded-lab` and `font-lab-*` utilities).
 
 - **Tooltips have no exit animation** (`nuxt-ui.ts`, `ui.tooltip.slots.content`). Reka keeps a closed tooltip's content mounted until its
   exit animation ends, and every mounted content listens for the "a tooltip opened" event and closes its own root, including the root of the
@@ -346,8 +352,11 @@ surfaces below. PikaCSS stays for everything not yet migrated and is removed in 
 - **Scope: Lab shell only.** `main.ts` imports `src/styles/lab-ui.css` (Tailwind theme + utilities, Nuxt UI),
   installs Nuxt UI's Vue plugin and wraps `App` in `UApp` (`toaster: null` until a surface needs toasts;
   `UApp` renders no element). `preview-frame-main.ts` / `preview-frame.html` never import any of it, so the showcase
-  renderers are untouched; `e2e/nuxt-ui.spec.ts` pins, on the same-origin build, that the frame document has no
-  Tailwind/Nuxt UI CSS, no `.dark` class and no `--ui-*` tokens. The frame's CSS does not depend on its origin
+  renderers are untouched. The renderers (`showcases/survey/renderers`) are styled with a `<style scoped>` block each, in
+  plain CSS over the `--lab-*` tokens of `global.css`, never with a Tailwind class (Tailwind does not even scan them:
+  `lab-ui.css` lists its `@source`s explicitly). `src/styles/styling-boundary.unit.test.ts` walks the frame entry's imports
+  and fails if any reaches `lab-ui.css`, Tailwind, Nuxt UI or `src/components`; `e2e/nuxt-ui.spec.ts` pins, on the same-origin
+  build, that the frame document has no Tailwind/Nuxt UI CSS, no `.dark` class and no `--ui-*` tokens. The frame's CSS does not depend on its origin
   (the entry never imports it), but `playwright.preview-origin.config.ts` only runs `preview-origin.spec.ts`
   (the frame boots and connects cross-origin); it does not repeat these assertions.
 - **Plugin set-up** (`nuxt-ui.ts`, shared by `vite.config.ts`, `vitest.config.ts` and the repository root
@@ -363,14 +372,12 @@ surfaces below. PikaCSS stays for everything not yet migrated and is removed in 
   `pnpm typecheck` cannot depend on a prior build. The only generated input is Nuxt UI's theme types
   (`node_modules/.nuxt-ui/ui/*`, mapped by `#build/ui` paths in `tsconfig.app.json`), which the plugin writes from
   its `config` hook; `pnpm typecheck` writes them first through `nuxt-ui:codegen`
-  (`scripts/nuxt-ui-codegen.mjs`, which resolves `vite.config.ts` and does nothing else), the same pattern as
-  `pika:codegen`. Do not enable auto-import to save an import line.
+  (`scripts/nuxt-ui-codegen.mjs`, which resolves `vite.config.ts` and does nothing else). Do not enable auto-import to save an import line.
 - **Cascade layers.** Order, lowest to highest: `properties` (Tailwind's `@property` fallback, which must rank
-  below everything that sets a `--tw-*` variable), `theme`, `base`, `preflights` (PikaCSS tokens), `components`,
-  `utilities` (Tailwind utilities, Nuxt UI component classes, and PikaCSS's `utilities`, whose layer name is
-  fixed by its generated CSS, so the two share it; their classes never meet on one element). The statement lives
-  inline in `index.html` because the first `@layer` statement the browser sees fixes the order and Vite emits the
-  shared PikaCSS stylesheet link before the Tailwind one; `lab-ui.css` repeats it. Unlayered CSS (`global.css`,
+  below everything that sets a `--tw-*` variable), `theme`, `base`, `components`,
+  `utilities` (Tailwind utilities and the classes Nuxt UI components are made of). The statement lives inline in
+  `index.html` because the first `@layer` statement the browser sees fixes the order and Vite may emit the shared
+  `global.css` stylesheet link before the Tailwind one; `lab-ui.css` repeats it. Unlayered CSS (`global.css`,
   `dockview-theme.css`, scoped SFC styles) beats every layer, so Dockview, Vue Flow, Monaco and Shiki styling is
   untouched. `e2e/nuxt-ui.spec.ts` probes the resolved order in a real browser.
 - **No global Tailwind preflight (yet); a `[data-slot]`-scoped preflight instead.** `lab-ui.css` imports
@@ -412,9 +419,7 @@ surfaces below. PikaCSS stays for everything not yet migrated and is removed in 
   Iconify's `fetch`, so an unbundled name is a missing icon, never a request to
   `api.iconify.design`. Everything is same-origin, so the offline e2e fixture and the `/widget/lab/` Pages base work
   (`pnpm docs:build:pages` + `test:pages`).
-- **Unit tests.** Mount a Nuxt UI component with `global: { config: { globalProperties: testGlobalProperties },
-  plugins: testGlobalPlugins }` (`src/test-support.ts` for the `pika` mocks, `src/test-support-ui.ts` for the real
-  Nuxt UI plugin). A component that renders a Nuxt UI icon without the plugin has no bundled icons, which is why
+- **Unit tests.** Mount a Nuxt UI component with `global: { plugins: testGlobalPlugins }` (`src/test-support-ui.ts`, the real Nuxt UI plugin). A component that renders a Nuxt UI icon without the plugin has no bundled icons, which is why
   `InspectorPanelPrimitives.unit.test.ts` passes it. Overlays/tooltips/toasts also need `UApp` as an ancestor.
 - **Overlays inside Lab dialogs.** The Lab's own dialogs are native `<dialog>.showModal()` (top layer), while `UApp`
   portals Nuxt UI overlays (`UPopover`, `UTooltip`, `USelectMenu`, `UDropdownMenu`...) to `body`. An overlay opened
@@ -541,7 +546,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
     is `updatable`.
 - `src/components/graph/GraphCanvas.vue` — the only place in this app that imports `@vue-flow/core`
   (and its structural `dist/style.css`); custom node templates for `cluster`, `member`, and `stub`,
-  themed through Lab/PikaCSS tokens. Collapsed and expanded cluster identities and expanded member cards are keyboard-focusable/selectable without changing expansion state. The collapsed cluster card makes widget type primary, widget id
+  themed through the Lab palette tokens. Collapsed and expanded cluster identities and expanded member cards are keyboard-focusable/selectable without changing expansion state. The collapsed cluster card makes widget type primary, widget id
   secondary, and summarizes member inventory as S/P/M counts; the expanded cluster becomes a subdued
   compound inspector shell rather than a dashed debug boundary. Member nodes keep State/Property/Method
   distinguishable by a small letter badge plus restrained accent, so kind is not encoded by color alone.
@@ -935,7 +940,7 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
 ### Accessibility, language and polish (issue #230 PR 3c, audit U18-U21)
 
 - **Targets and text.** Interactive elements of the chrome are at least 24px high (and wide, except text controls that are wider anyway); no text of the
-  chrome (HTML or the Graph's SVG labels) is under 11px (`pika({ fontSize })` values and scoped CSS were raised; do not add a smaller one). A native checkbox
+  chrome (HTML or the Graph's SVG labels) is under 11px (the Tailwind `text-[..px]` utilities and scoped CSS were raised; do not add a smaller one). A native checkbox
   is 16px with its label as the 24px target. The check is run by hand with a Playwright script that lists visible interactive elements under 24px and
   text nodes under 11px per surface, plus axe-core (tags wcag2a, wcag2aa, wcag21aa, wcag22aa and best-practice; both themes, 1440px) on Header, Author (JSON, Catalog,
   Structure), Selected widget, Blueprint, Runtime and Dependencies (Relations, Graph); axe is deliberately not a dependency of the repository.

@@ -53,5 +53,5 @@ The npm Trusted Publisher configuration must name repository `DevilTea/widget` a
 - This repository is ESM (`"type": "module"`) and uses pnpm 10 with versions managed by `pnpm-workspace.yaml` catalogs.
 - `@deviltea/eslint-config` and `@deviltea/tsconfig` are external DevilTea tooling dependencies owned by `DevilTea/deviltea-labs`; do not copy their implementation into this repository.
 - Follow the nearest package/app `AGENTS.md` for component-specific constraints. `CLAUDE.md` mirrors it by reference for compatible agent tooling.
-- Do not hand-edit generated `dist/`, generated PikaCSS files, Playwright output, or TypeScript build-info files.
+- Do not hand-edit generated `dist/`, Playwright output, or TypeScript build-info files.
 - Before handoff, run the narrowest relevant test first, then lint/typecheck/build or the full `pnpm check` when practical.
