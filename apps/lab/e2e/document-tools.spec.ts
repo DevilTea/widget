@@ -49,7 +49,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 			.click()
 		await page.getByRole('button', { name: 'title : Text' })
 			.click()
-		await page.getByLabel('text')
+		await page.getByLabel('text', { exact: true })
 			.fill('Document Tools structure patch')
 		await page.getByRole('button', { name: 'Set value' })
 			.click()

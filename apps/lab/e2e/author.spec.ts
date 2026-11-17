@@ -14,7 +14,7 @@ test('Author workspace exposes Core catalog, Structure commands, and synchronize
 		.click()
 	await page.getByRole('button', { name: 'title : Text' })
 		.click()
-	await page.getByLabel('text')
+	await page.getByLabel('text', { exact: true })
 		.fill('edited in Structure')
 	await page.getByRole('button', { name: 'Set value' })
 		.click()
@@ -139,8 +139,12 @@ test('rejects blank numeric Structure values while preserving scalar editing beh
 	await maxField.locator('..')
 		.getByRole('button', { name: 'Set value' })
 		.click()
+	// The refusal is shown at the field, and nothing was sent to the Document.
+	await expect(page.locator('[data-config-path="max"]')
+		.getByRole('alert'))
+		.toHaveText('Enter a valid value of the same scalar type.')
 	await expect(page.getByTestId('author-command-outcome'))
-		.toContainText('Enter a valid value of the same scalar type.')
+		.toHaveCount(0)
 
 	await maxField.fill('2')
 	await maxField.locator('..')

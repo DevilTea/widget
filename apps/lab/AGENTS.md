@@ -546,7 +546,9 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   compound inspector shell rather than a dashed debug boundary. Member nodes keep State/Property/Method
   distinguishable by a small letter badge plus restrained accent, so kind is not encoded by color alone.
   Edge operation is encoded primarily by stroke treatment (reads thin solid, writes stronger solid,
-  invokes dashed), while exact non-aggregate labels are visually secondary until hover/selection.
+  invokes dashed). Since PR 3c (audit U11) every edge label (the aggregate counts too) is hidden until its edge is hovered or selected, because neighbouring
+  labels ran into each other; all text is 11px or more (members 12px, node footprints `VERTEX_WIDTH` 200 x 36, `COLLAPSED_CLUSTER` 240 x 88 to fit it), and `GraphKey.vue`,
+  a row above the canvas that is always visible, says what S, P, M, W, E, ! and the three line styles mean, so the Legend popover is only the long form.
   Handles remain intentionally unobtrusive and the canvas uses only a subtle dot grid: these cues must
   never imply that the readonly inspector is an editable node editor.
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container
@@ -573,7 +575,8 @@ partially measured subset and then incorrectly marking that generation fitted. `
 `layoutVersion` (incremented only when ELK layout succeeds), which resets fit tracking so the graph
 automatically refits on semantic graph replacements and cluster expansion/collapse, while ordinary
 Runtime activity and focus deemphasis never trigger a refit. `DependenciesPanel.vue`'s Graph view also exposes an explicit
-**Fit graph** button along with **Expand all** / **Collapse all** controls in the toolbar.
+**Fit graph** button along with **Zoom in** / **Zoom out** and **Expand all** / **Collapse all** controls in the toolbar. Fit leaves 8% around the graph (it used to
+leave 20%, so a fitted graph used about 40% of the canvas); an expanded Survey is still larger than the pane and is read by zooming.
 
 ## Layout worker boundary
 
@@ -647,12 +650,28 @@ The view must not invent state/property/method schemas or member definitions tha
 through the catalog contracts; config schema metadata is authoring guidance, not Runtime validation truth.
 
 `Structure` renders the current committed Document Blueprint inspection and uses Document-scoped focus.
-Its deliberately narrow operation is replacing an existing scalar config value on the selected inspection
-node. `ReplaceConfigScalarCommand` carries both the current Document `InspectionNodeId` and Document
-revision; `src/lab/author.ts` resolves that exact snapshot node and lowers the command to an array-form
-`SourcePatch` addressed by the node's Core-computed `sourcePath`. The component never constructs a patch and never targets a widget by id, which keeps
-duplicate authored ids and cross-revision focus safe. Unsupported/non-scalar fields and mechanical patch
-failures are explicit outcomes.
+Since issue #230 PR 3c (audit U15) it edits the selected widget's whole authored `config`, type-aware
+(`ConfigFieldEditor.vue`, recursive, inside `AuthorStructureView.vue`): a switch for a boolean, a number box that knows
+`integer`/`minimum`/`maximum`, a list for an `enum`, a text box for a string, an object with its optional keys (add from a list, remove with
+a button; free keys of an `additionalProperties` object are added by name) and an array with Add and Remove. The controls
+come from the plugin's passive config JSON Schema (`WidgetCatalogEntry.config.schema`, read by `src/lab/config-schema.ts`: `$ref`,
+`type`, `enum`/`const`, `oneOf`/`anyOf` by a shallow "does the value look like this branch" test, `properties`, `required`,
+`additionalProperties`, `items`, `minItems`/`maxItems`, the numeric and length limits, `default`, `description`). That reading chooses a
+control and what may be added or removed and never validates: Core's compiler stays the authority, and an edit that makes the Document
+invalid shows up as Core diagnostics in Problems. Without a schema (or inside a shape the module does not read, such as a `oneOf` no
+branch of which fits) values are typed by what they hold; scalars still get switch/number/text controls, objects and arrays offer no add or
+remove, and anything else is edited as its JSON text (Set value / Cmd or Ctrl+Enter). Switches and lists apply at once; text and number boxes apply
+on Enter or **Set value**, and a refusal (not a number, not an integer, outside `minimum`/`maximum`) is shown at the field and sends nothing.
+
+`EditConfigCommand` (`{ nodeId, documentRevision, configPath, edit: replace | add | remove }`; `ReplaceConfigScalarCommand` still exists for
+the scalar case) carries both the current Document `InspectionNodeId` and Document revision; `src/lab/author.ts` resolves that exact
+snapshot node and lowers the command to a `SourcePatch` addressed by the node's Core-computed `sourcePath` (array form, except that appending
+to an array uses the JSON Pointer form `.../-`, the only way a patch can say "append"; the first key of a widget that has no `config` yet
+creates it). The component never constructs a patch and never targets a widget by id, which keeps duplicate authored ids and cross-revision focus
+safe. A path that no longer exists, an `add` over an existing key, a stale revision and a non-JSON value are explicit `unsupported` outcomes;
+mechanical patch failures are `patch-error`. After a **Structure** commit Document focus stays on the same widget and member (found again
+by id and type; an ambiguous or missing one goes back to the root), so edits can follow each other; every other commit (JSON Apply, preset,
+Undo, showcase switch) still resets to the root.
 
 Successful Structure commands and JSON Apply share `LabSession`'s Document commit and Runtime promotion
 boundary. A successful Structure commit rewrites both applied source text and the JSON draft to deterministic
@@ -764,8 +783,15 @@ nearest existing ancestor. A syntax error is located by the engine's message pos
 Squiggles are model decorations with Monaco's `squiggly-error` class, not `setModelMarkers()` markers: in the vendored
 `editor-core` build the marker service holds markers but never turns them into decorations (checked in a real browser), so
 markers would draw nothing. `data-marker-count` on `[data-testid=json-editor]` is the number of ranges handed to the editor
-(only lines in the viewport render a `.squiggly-error` element). Core's repeated cycle diagnostics are listed as Core
-reports them (audit U16 is a later item). The Blueprint panel's "All diagnostics" view is unchanged.
+(only lines in the viewport render a `.squiggly-error` element).
+
+**Grouped cycles (audit U16).** Core reports an evaluation cycle once per Property in it, each time with the same `related` list (one frozen array
+shared by those diagnostics). `collectProblems()` tags such a problem with its cycle (`LabProblem.cycle`: the list's identity as an id and the members
+as `widget.member` labels) and `groupProblems()` turns two or more problems of one cycle into one `cycle` entry; `AuthorProblems.vue` shows it collapsed
+(`data-testid=problem-group`, `aria-expanded`, the code, "N members depend on each other in a loop" and the members in Core's order) and expanding it lists
+Core's own diagnostics, one `problem-row` each, code, message and location verbatim, each still a jump. Only the presentation is grouped: the list,
+the summary, `data-problem-count`, the header chip, the editor squiggles and the Blueprint panel's "All diagnostics" view keep Core's count and text
+(a cycle with a single diagnostic is an ordinary row).
 
 ### Stale-preview notice
 
@@ -806,16 +832,23 @@ Bump `LAYOUT_VERSION` whenever a change to the panels or their components would 
 already includes the Selected widget panel). All storage access is try/catch; blocked storage means "nothing saved". Panels opened on
 request (Implementation, Document Tools) are saved with the layout but stripped from the data before Dockview loads it
 (`stripLazyPanels`, applied by `loadSavedLayout`), because their content depends on a request that load did not make; a group whose
-active panel was one of them activates its first remaining panel, and a lazy panel alone in its own group makes the whole saved layout
-unusable (default layout). After a restore `Workbench.vue` writes Dockview's active panel to `LabStore.activeTab` (the Dockview-to-store
-subscription is made later), so the store and the screen agree about the open tab. Saved sizes are proportional on restore, so a layout from a wide window fits a narrow one. Tab titles are
+active panel was one of them activates its first remaining panel, and a group that held only such panels (a lazy panel dragged into a group of its own) is
+removed from the grid: its size goes to the previous sibling (the next one when it came first), a branch left with one child is replaced by it
+(a leaf takes the branch's size; a branch's children are lifted into the parent, scaled to fill it, and a root left with a single branch flips its axis), and
+`activeGroup`/`maximizedNode` are dropped when they pointed into the old tree, so the other dividers stay where the user put them. A grid it does not
+recognise (or one with nothing but lazy panels) is still unusable (default layout). After a restore `Workbench.vue` writes Dockview's active panel to `LabStore.activeTab` (the Dockview-to-store
+subscription is made later), so the store and the screen agree about the open tab (Dockview-vue also reports the restored active panel a moment later through
+`onDidActivePanelChange`, so that explicit write only closes the short window before; `e2e/layout.spec.ts` asks for Author from outside Dockview after a
+restore, but no browser spec can tell the two apart: with the write removed the spec still passes, because that later event arrives first). Saved sizes are proportional on restore, so a layout from a wide window fits a narrow one. Tab titles are
 set when a layout is built or restored and follow a language switch. **Reset layout** (overflow menu; `WorkbenchLayoutStore` is a request
 bridge like Document Tools) clears the saved layout and rebuilds the default. The selected showcase is restored separately, by
 `?showcase=`.
 
 **Tutorial rail.** `TutorialRail.vue` is a 320px flex column beside `Workbench` inside `.lab-body`. `Workbench.vue` already observes
 its own size, so Dockview re-lays out when the rail opens or closes, and the rail never covers the header, the overflow menu, the
-Dockview groups or the Preview frame (the survey's own Language select). `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
+Dockview groups or the Preview frame (the survey's own Language select). With the rail open at 1280px the tool area is about 460px, narrower than the three
+Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used by, the focus, Depends on) and scrolls vertically below 680px of **pane** width
+(a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
 
 **Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview
@@ -824,7 +857,10 @@ location, config, slots, members, diagnostics; right `RuntimeNodeDetails` (`embe
 panel uses (`useSelectedRuntimeWidget()`, shared by both). The Runtime half only exists while the Preview shows the Document's
 revision (Preview focus is the linked mapping of Document focus); otherwise the pane says why (`data-runtime-state`: `diverged`,
 `no-preview`, `unresolved`, `unavailable`, `loading`, `ready`) instead of mixing revisions. Blueprint and Runtime stay as
-they were; the pane reuses their detail components and does not replace them.
+they were; the pane reuses their detail components and does not replace them. Both panels stay mounted while their tab is hidden, so the Runtime snapshot is one
+shared source (`use-selected-runtime-widget.ts`, one per store): requested once per selection, and only while at least one panel reports itself visible
+(`usePanelVisibility(params.api)`, Dockview's `isVisible`/`onDidVisibilityChange`). A panel that is not visible reads `null`, so the member rows under it, which subscribe
+to the remote Runtime, are not rendered and hold no subscription.
 
 **Runtime values (audit U10).** State and Property rows are `RuntimeValueRow.vue`: the member name and a one-line summary that takes
 the room the row has (no fixed width; its full text is the tooltip), a separate named disclosure button (`aria-expanded`,
@@ -837,6 +873,44 @@ summary) still prints `<truncated>`.
 
 **Config (audit U25).** `ConfigView.vue` shows the resolved config by default and the authored one on request, and only when they
 differ (`lib/config-compare.ts`, structural equality; it names the top-level fields that differ); equal configs are one block with a note.
+
+### Preview failure and first paint (issue #230 PR 3c, audit U22, U23)
+
+**Preview failure.** If the Preview frame does not answer in time (`readinessTimeoutMs`, 15 s) or its connection closes by itself, `previewHost.error`
+holds the cause and the Lab says so instead of leaving a blank pane: the Preview pane shows an alert (`data-testid=preview-error`, the engine's message
+verbatim, **Try again**), the dead iframe is hidden, and the header's preview chip is `failed` ("Preview failed to load"). **Try again**
+(`previewHost.retry()`) mounts the latest requested Preview again, which reloads the frame; success clears the error. The coordinator learns about a
+connection that closed by itself from the driver's `onUnexpectedClose` (not for a close the driver itself caused by navigating, timing out or
+disposing). A renderer that crashes without closing its port cannot be seen by the parent, so only a later failed mount or a closed port reports
+it. `?lab-test&preview-timeout-ms=N` shortens the timeout for specs only (`previewReadinessTimeoutOverride()`, inert without `lab-test`).
+
+**First paint.** The stylesheet's default palette is the dark one and `html[data-lab-theme='light']` only exists once the app module has run,
+so a light user used to see a dark screen first. `index.html` now has an inline script that sets `data-lab-theme` and `color-scheme` from the same
+inputs as `resolveLabTheme()` (the stored `widget-lab:theme`, else the system preference, else light) before anything paints;
+`theme-bootstrap.unit.test.ts` runs that exact script against `resolveLabTheme()`, and `e2e/polish.spec.ts` holds the app's entry module and checks the
+theme and the page colour before it has loaded. Keep the script in step with `STORAGE_KEY` in `use-lab-theme.ts`.
+
+### Accessibility, language and polish (issue #230 PR 3c, audit U18-U21)
+
+- **Targets and text.** Interactive elements of the chrome are at least 24px high (and wide, except text controls that are wider anyway); no text of the
+  chrome (HTML or the Graph's SVG labels) is under 11px (`pika({ fontSize })` values and scoped CSS were raised; do not add a smaller one). A native checkbox
+  is 16px with its label as the 24px target. The check is run by hand with a Playwright script that lists visible interactive elements under 24px and
+  text nodes under 11px per surface, plus axe-core (tags wcag2a, wcag2aa, wcag21aa, wcag22aa and best-practice; both themes, 1440px) on Header, Author (JSON, Catalog,
+  Structure), Selected widget, Blueprint, Runtime and Dependencies (Relations, Graph); axe is deliberately not a dependency of the repository.
+  `e2e/polish.spec.ts` pins the Graph's sizes.
+- **Focus.** `dockview-theme.css` draws a 2px accent ring (inside the tab) on a Dockview tab or tab action reached with the keyboard (`:focus-visible`; Dockview's own
+  1px divider-colour outline is `!important`, so the Lab's rule is too, and more specific). The Graph's expand/collapse toggles, cluster buttons and member
+  cards have a 2px accent outline. Graph **edges** cannot take focus: Vue Flow writes their `tabIndex` attribute with a capital I, which SVG ignores; Relations
+  is the keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
+- **Language.** Navigation names are Taiwan Chinese: Author is 編寫, Dependencies 相依性, Relations 關聯, Graph 關係圖, Catalog 目錄, Structure 結構 (tab titles
+  follow a language switch). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source) and so do
+  the developer panels **Implementation** and **Document Tools** (they name features of the docs and Core, and the specs reach them by those names), `JSON` and the
+  product name. Source-owned text is never translated: Core diagnostics, plugin and schema descriptions, the survey's questions and the engine messages. The
+  survey examples' names and descriptions in the Examples menu are Lab copy and are translated. `i18n/pr3c-messages.unit.test.ts` fails when a literal passed to
+  `i18n.t()` in the PR 3c surfaces has no zh-TW entry.
+- **Monaco contrast (U18).** `theme/monaco-themes.ts` is One Light and One Dark Pro with the colours that failed 4.5:1 on the editor background replaced by
+  value (light line numbers, string green, property-name red and the teal of `true/false/null`; dark line numbers and property-name red); the Shiki viewer of
+  the Implementation panel still reads the unmodified themes. `monaco-themes.unit.test.ts` computes the contrast.
 
 ### Document Tools developer panel (Phase 6)
 
@@ -896,7 +970,7 @@ happy-dom unit tests.
 
 Browser specs reach the header's menus only through the helpers in `e2e/fixtures.ts` (`selectShowcase`, `loadPreset`,
 `setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, `openStatusDetails`,
-`openDependenciesGraph` (Relations is the default Dependencies view), and the `expectShowcase` /
+`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey examples), and the `expectShowcase` /
 `expectDocumentStatus` / `expectPreviewStatus` assertions), never with ad-hoc menu clicks, so a future header change touches one
 file. Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
 Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a

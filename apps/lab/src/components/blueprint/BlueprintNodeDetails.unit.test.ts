@@ -43,6 +43,6 @@ describe('blueprintNodeDetails empty state', () => {
 	it('has zh-TW copy for the embedded variant', () => {
 		expect(mountEmpty(true, 'zh-TW')
 			.text())
-			.toBe('尚未選取 widget——請用 Preview 的檢視模式，或在 Blueprint、Dependencies 選一個，即可查看它的宣告。')
+			.toBe('尚未選取 widget——請用 Preview 的檢視模式，或在 Blueprint、「相依性」選一個，即可查看它的宣告。')
 	})
 })

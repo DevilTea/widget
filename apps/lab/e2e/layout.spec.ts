@@ -210,8 +210,12 @@ test.describe('saved layout', () => {
 			.toHaveAttribute('aria-selected', 'false')
 	})
 
-	test('the restored active tab is the store\'s active tab too: "Show problems" still switches to Author from it', async ({ page }) => {
-		await openLab(page)
+	test('the restored active tab is the store\'s active tab too: a request for Author from outside Dockview still switches to it', async ({ page }) => {
+		// Nothing in Dockview is clicked after the reload and no menu is opened: the Examples menu and a panel click
+		// both hand focus to Dockview, which reports its own activation. Only the header's Apply (outside Dockview)
+		// and the notice's button are used, so the only thing that can know Runtime is the open tab is the store.
+		await page.goto('/?showcase=survey&lab-test')
+		await page.waitForFunction(() => typeof (window as any).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
 		await page.getByRole('tab', { name: 'Runtime', exact: true })
 			.click()
 		await expect.poll(() => page.evaluate(key => localStorage.getItem(key)
@@ -219,16 +223,64 @@ test.describe('saved layout', () => {
 			.toBe(true)
 
 		await page.reload()
+		await page.waitForFunction(() => typeof (window as any).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
 		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
 			.toHaveAttribute('aria-selected', 'true')
-		// An invalid apply leaves the preview behind; its notice asks for the Author tab. When the store still
-		// believed Author was active (it never heard about the restored Runtime tab) nothing happened.
-		await loadPreset(page, 'survey-ai-draft')
+		// An invalid apply leaves the preview behind; its notice asks for the Author tab.
+		await page.evaluate(() => (window as any).__WIDGET_LAB_TEST__.setDraftSourceText('{ "id": "x", "type": "NotAWidget" }'))
+		await page.getByRole('button', { name: 'Apply', exact: true })
+			.click()
 		await page.getByRole('button', { name: 'Show problems' })
 			.click()
 		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByTestId('author-problems'))
+			.toBeVisible()
+	})
+
+	test('a panel opened on request that sits alone in its own group is dropped; the rest of the layout, dividers included, is kept', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 })
+		await openLab(page)
+		await dragDivider(page, 120)
+		const dragged = await toolWidth(page)
+		await expect.poll(() => savedToolSize(page))
+			.toBeCloseTo(dragged, -1)
+
+		// What the user would have saved after dragging Implementation under the tool group: a column holding the tool
+		// group and Implementation in a group of its own.
+		await page.evaluate((key) => {
+			const stored = JSON.parse(localStorage.getItem(key)!)
+			const { layout } = stored
+			const tools = layout.grid.root.data[0]
+			const height = layout.grid.height
+			layout.grid.root.data[0] = {
+				type: 'branch',
+				size: tools.size,
+				data: [
+					{ ...tools, size: Math.round(height * 0.6) },
+					{ type: 'leaf', data: { views: ['implementation'], activeView: 'implementation', id: 'lazy-group' }, size: Math.round(height * 0.4) },
+				],
+			}
+			layout.panels.implementation = { id: 'implementation', contentComponent: 'implementation', title: 'Implementation' }
+			localStorage.setItem(key, JSON.stringify(stored))
+		}, LAYOUT_KEY)
+
+		await page.reload()
+		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
+			.toBeVisible()
+		await expect(page.getByRole('tab', { name: 'Implementation', exact: true }))
+			.toHaveCount(0)
+		// The divider is where the user left it, not at the default 48%.
+		expect(await toolWidth(page))
+			.toBeCloseTo(dragged, -1)
+		expect(Math.abs(dragged / 1440 - 0.48))
+			.toBeGreaterThan(0.04)
+		// Both groups are still there and usable.
+		await page.getByRole('tab', { name: 'Runtime', exact: true })
+			.click()
+		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByRole('tab', { name: 'Preview', exact: true }))
 			.toBeVisible()
 	})
 })
@@ -423,5 +475,70 @@ test.describe('tutorial rail is a docked column (U13)', () => {
 		const preview = await width(group(page, 'Preview'))
 		expect(tool / (tool + preview))
 			.toBeCloseTo(resized / 1440, 1)
+	})
+
+	test('Relations is usable beside the open rail at 1280x800: its columns stack instead of scrolling sideways', async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 800 })
+		await openLab(page)
+		await chooseTutorialMenuItem(page)
+		await expect(page.getByRole('complementary', { name: 'Tutorial' }))
+			.toBeVisible()
+		await page.getByRole('tab', { name: 'Blueprint', exact: true })
+			.click()
+		await page.getByRole('button', { name: /sessions : MultipleChoice/ })
+			.click()
+		await page.getByRole('tab', { name: 'Dependencies', exact: true })
+			.click()
+
+		const tool = (await group(page, 'Dependencies')
+			.boundingBox())!
+		expect(tool.width, 'the tool area is narrow here')
+			.toBeLessThan(600)
+		const surface = page.locator('.relations-view-surface')
+		await expect(surface)
+			.toBeVisible()
+		expect(await surface.evaluate(element => element.scrollWidth > element.clientWidth + 1), 'sideways scrolling')
+			.toBe(false)
+		const columns = ['incoming', 'center', 'outgoing'] as const
+		const boxes = []
+		for (const column of columns) {
+			boxes.push((await page.locator(`.relations-column--${column}`)
+				.boundingBox())!)
+		}
+		for (const box of boxes) {
+			expect(box.x, 'inside the tool area')
+				.toBeGreaterThanOrEqual(tool.x - 1)
+			expect(box.x + box.width, 'inside the tool area')
+				.toBeLessThanOrEqual(tool.x + tool.width + 1)
+		}
+		// One above the other, in the order Used by, the focus, Depends on.
+		expect(boxes[1]!.y)
+			.toBeGreaterThanOrEqual(boxes[0]!.y + boxes[0]!.height - 1)
+		expect(boxes[2]!.y)
+			.toBeGreaterThanOrEqual(boxes[1]!.y + boxes[1]!.height - 1)
+		for (const heading of ['Used by', 'Focused widget', 'Depends on']) {
+			await expect(page.getByText(heading, { exact: true })
+				.first())
+				.toBeVisible()
+		}
+	})
+
+	test('Relations keeps its three columns when the pane is wide enough', async ({ page }) => {
+		await page.setViewportSize({ width: 1920, height: 1080 })
+		await openLab(page)
+		await page.getByRole('tab', { name: 'Blueprint', exact: true })
+			.click()
+		await page.getByRole('button', { name: /sessions : MultipleChoice/ })
+			.click()
+		await page.getByRole('tab', { name: 'Dependencies', exact: true })
+			.click()
+		const [incoming, center, outgoing] = await Promise.all(['incoming', 'center', 'outgoing'].map(async column => (await page.locator(`.relations-column--${column}`)
+			.boundingBox())!))
+		expect(Math.abs(incoming!.y - center!.y))
+			.toBeLessThan(2)
+		expect(Math.abs(center!.y - outgoing!.y))
+			.toBeLessThan(2)
+		expect(center!.x)
+			.toBeGreaterThan(incoming!.x + 100)
 	})
 })

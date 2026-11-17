@@ -71,6 +71,16 @@ popover, which also holds the JSON draft, Source JSON compatibility, Blueprint s
   or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. The preview shows a
   plain-language notice with **Show problems** while it still shows the last working version.
 
+## Editing a widget's config (Structure) and what the Lab says when something fails
+
+- **Author > Structure** edits the selected widget's config with controls that follow the plugin's config JSON Schema: a switch for a boolean, a
+  number box with the schema's limits, a list for an enum, a text box for a string, and Add / Remove for optional fields and list items where the schema allows
+  them. Every change goes through the same Document commit as Apply (Undo, the status chips and Problems keep working; it asks you to Apply or Revert an
+  unapplied JSON draft first). Without a schema, values are typed by what they hold and anything else is edited as JSON.
+- Problems lists the several diagnostics Core reports for one evaluation cycle as one entry that expands to Core's own diagnostics.
+- If the Preview frame cannot load, the Preview pane says so with the cause and a **Try again** button, and the header chip reads "Preview failed to load".
+- Graph: an always-visible key explains the badges and line styles, edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph.
+
 ## Layout, the Selected widget pane and the tutorial rail
 
 The tool area (Author, **Selected widget**, Blueprint, Runtime, Dependencies) takes about half the window by default. The Dockview layout
