@@ -706,18 +706,26 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   status and Linked / Diverged are developer details in the info popover (`status-details`; `revision-link-status` lives there).
 - *Edit actions*: a disabled action keeps `aria-disabled="true"` instead of `disabled` so it stays focusable and its tooltip
   can say why (nothing to apply / revert / undo, or "apply or revert your unapplied edits before undoing"); the click
-  handler also refuses. Apply's tooltip shows the shortcut as key caps. Undo is labelled "Undo" (its tooltip says
-  "Undo last apply"): a name containing "apply" would collide with specs that look Apply up by name.
-- *Cmd/Ctrl+Enter* applies from Monaco (an editor command registered in `use-monaco-editor.ts`; Monaco binds the key to
-  "insert line" otherwise) and from anywhere else through `App.vue`'s window listener, which runs in the **capture** phase because a
-  focused Dockview tab preventDefaults Enter, so the bubbling phase saw an "already handled" event. It leaves events inside
-  `.monaco-editor` (the editor command handles those) and open `[role=menu]`s alone, and honours `canApply`.
+  handler also refuses. Apply's tooltip shows the shortcut as key caps. Undo shows "Undo" and is
+  named "Undo last apply" for assistive technology (the visible text is contained in the name); because that name contains
+  "apply", specs and helpers must look the Apply button up with `exact: true` (or its test id).
+- *Cmd/Ctrl+Enter* applies from Monaco (an editor *action* registered in `use-monaco-editor.ts` and disposed with the editor; a
+  `addCommand()` would leak a global keybinding per remount; Monaco binds the key to "insert line" otherwise) and from anywhere
+  else through `App.vue`'s window listeners. Everything except Dockview tabs is handled in the **bubble** phase, so a control that
+  owns Enter wins (`defaultPrevented` is honoured; a Graph node's `@keydown.enter.prevent.stop` never reaches the window). A
+  focused Dockview tab preventDefaults Enter itself, so events whose target is inside `.dv-tab` are handled in the **capture** phase and
+  claimed (the bubble listener then skips them). It leaves events inside `.monaco-editor` (the editor action handles those) and open
+  `[role=menu]`s alone, and honours `canApply`.
 - *Unapplied-draft protection*: loading a preset or switching showcase while `isDirty` asks first
   (`DraftGuardDialog`, a native `alertdialog` through `useModalDialog`, "Keep editing" first and focused, Escape = keep, "Discard
   changes" continues). The guard lives in the header/UI layer (`createDraftGuardStore`), never inside
   `LabStore.switchShowcase()`/`applyPreset()`, so the tutorial (which has its own dirty-draft confirmation and calls the store
   directly) never asks twice. A header action that can open a dialog (the guard, the tutorial's confirmation) runs only after
-  its menu closed and focus was put back on the menu's trigger (`onCloseAutoFocus`), so the dialog's focus-return target is that trigger.
+  its menu closed (`onCloseAutoFocus`) and, when the menu closed by Escape or an item select, focus was put back on the menu's trigger,
+  so the dialog's focus-return target is that trigger. When the menu closed because the user interacted *outside* it (clicked into
+  Monaco, onto the other header menu; tracked with `onInteractOutside`, as Reka's own handler does for non-modal menus) focus is left
+  where the user put it: refocusing the trigger there swallowed typing and closed the menu that click had just opened. A chosen item's
+  action runs in both cases. e2e (`menu focus handling`) pins both, and the menu helpers click a menu path once, with no retry.
 - `LabStore.authorView` (Catalog / Structure / JSON) lives in the store, not in `AuthorPanel`, so other surfaces can
   open the JSON view; `showProblems()` sets `activeTab`, `authorView` and `problemsFocusPending`. `Workbench.vue` now also feeds
   Dockview's active panel back into `activeTab` (and never re-activates the panel already active, which moves DOM focus out of
@@ -731,6 +739,9 @@ After an Apply the JSON view shows the Problems list under the editor (`AuthorPr
 `collectProblems()` (`src/lab/problems.ts`) lists the last Apply's JSON `SyntaxError` (Lab-only, `SourceParseError`, first)
 and the committed Document's Core diagnostics in Core's order; `code` and `message` are Core's (or the engine's), verbatim and
 never translated, parsed or classified. Each row jumps to a source range and has an error squiggle over the same range.
+`LabStore.problems` depends only on the committed Blueprint and the parse error (reference-stable computeds), not on the
+per-keystroke session tick, so typing re-runs neither the inspection nor the collection; the editor's squiggle ranges are
+recomputed from the current text on every edit, because they must follow it.
 
 The range is located by source path in the **current editor text**, so it stays on target while the user edits and an
 unapplied draft is still mapped (a note says the rows are "from the last Apply"; an unparsable draft has no ranges). The
@@ -753,7 +764,8 @@ reports them (audit U16 is a later item). The Blueprint panel's "All diagnostics
 
 When the Preview lags the Document the notice above it says why and offers an action: "Your last change has N problems,
 so the preview still shows the last working version." with **Show problems** (`preview-show-problems`, `store.showProblems()`),
-or, if the Document is valid but the Preview has not caught up, a plain "does not show your latest change yet" line.
+or, if the Document is valid but the Preview has not caught up, a plain "does not show your latest change yet" line without
+the button (a valid Document has no problems to show).
 `data-testid="preview-diverged-status"`; revision numbers appear only in the header's details popover.
 
 ### Separate inspector panels with shared presentation primitives (Phase 5)
