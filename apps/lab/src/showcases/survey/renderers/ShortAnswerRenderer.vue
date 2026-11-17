@@ -43,10 +43,26 @@ function onInput(event: Event): void {
 				:aria-describedby="describedBy"
 				:aria-invalid="invalid ? 'true' : undefined"
 				:aria-required="isRequired ? 'true' : undefined"
-				:class="pika({ boxSizing: 'border-box', width: '100%', maxWidth: '420px', minHeight: '40px', padding: '6px 10px', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface-alt)' })"
+				class="field"
 				:style="FIELD_STYLE"
 				@input="onInput"
 			>
 		</template>
 	</QuestionFrame>
 </template>
+
+<style scoped>
+/*
+ * The text colour, size, weight and border of a native control are set inline (`control-style.ts`). The corners
+ * stay square: `styles/preview-frame.css` gives `input` a zero radius, so the survey's text inputs have always
+ * been square (the language select, which that rule does not touch, is rounded).
+ */
+.field {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 420px;
+	min-height: 40px;
+	padding: 6px 10px;
+	background: var(--lab-color-surface-alt);
+}
+</style>

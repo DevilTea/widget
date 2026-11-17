@@ -41,12 +41,12 @@ function select(value: string): void {
 		:anchor="anchor"
 		:tutorialTarget="tutorialTarget"
 	>
-		<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '2px' })">
+		<div class="options">
 			<label
 				v-for="row in rows"
 				:key="row.value"
 				:data-option-value="row.value"
-				:class="pika({ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '32px', padding: '4px 0', fontSize: '17px', cursor: 'pointer' })"
+				class="option"
 				:style="row.enabled ? undefined : { color: 'var(--lab-color-text-muted)', cursor: 'not-allowed' }"
 			>
 				<input
@@ -55,7 +55,7 @@ function select(value: string): void {
 					:value="row.value"
 					:checked="answer === row.value"
 					:disabled="!row.enabled"
-					:class="pika({ flex: 'none', width: '24px', height: '24px', margin: '0', accentColor: 'var(--lab-color-accent)' })"
+					class="option-control"
 					@change="select(row.value)"
 				>
 				<span>{{ row.label }}</span>
@@ -63,3 +63,29 @@ function select(value: string): void {
 		</div>
 	</QuestionFrame>
 </template>
+
+<style scoped>
+.options {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.option {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 32px;
+	padding: 4px 0;
+	font-size: 17px;
+	cursor: pointer;
+}
+
+.option-control {
+	flex: none;
+	width: 24px;
+	height: 24px;
+	margin: 0;
+	accent-color: var(--lab-color-accent);
+}
+</style>

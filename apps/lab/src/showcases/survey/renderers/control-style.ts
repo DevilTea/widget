@@ -1,12 +1,12 @@
 /**
  * Inline style for the native form controls of the survey (inputs, the language select, Submit).
  *
- * The Preview frame's base layer (`styles/preview-frame.css`: `button, input, select, textarea { font:
- * inherit }`, which replaces the reset of the removed Vuetify styles) is declared after PikaCSS's
- * `utilities` layer, so it beats PikaCSS utilities on those properties. The colour, size and weight a
- * control needs to stay readable on a projector are therefore set inline, which beats every layer; the
- * order of the Lab's layers is deliberately not changed. The border uses `--lab-color-text-muted`, which
- * is at least 3:1 against the card surface in both themes (WCAG 1.4.11), unlike `--lab-color-border`.
+ * The Preview frame's base layer (`styles/preview-frame.css`: `button, input, select, textarea { font: inherit }`,
+ * which replaces the reset of the removed Vuetify styles) would otherwise decide the font of these controls. The
+ * colour, size and weight a control needs to stay readable on a projector are set inline, which beats every
+ * stylesheet rule whatever its layer or specificity, so no frame stylesheet can quietly change them. The border uses
+ * `--lab-color-text-muted`, which is at least 3:1 against the card surface in both themes (WCAG 1.4.11), unlike
+ * `--lab-color-border`.
  */
 
 import type { CSSProperties } from 'vue'

@@ -57,23 +57,24 @@ const isRadioGroup = computed(() => props.groupRole === 'radiogroup')
 		:aria-required="isRadioGroup && required ? 'true' : undefined"
 		:aria-invalid="isRadioGroup && invalid ? 'true' : undefined"
 		:aria-describedby="group ? describedBy : undefined"
-		:class="pika({ display: 'flex', flexDirection: 'column', gap: '8px', margin: '0', minWidth: '0', padding: '14px 16px', border: '0', boxShadow: 'inset 0 0 0 1px var(--lab-color-border)', borderRadius: 'var(--lab-radius)', background: 'var(--lab-color-surface)', color: 'var(--lab-color-text)', fontSize: '16px' })"
+		class="question"
 	>
 		<component
 			:is="group ? 'legend' : 'label'"
 			:for="group ? undefined : inputId"
-			:class="[pika({ padding: '0', fontSize: '18px', fontWeight: '600', lineHeight: '1.35' }), group ? pika({ float: 'left', width: '100%', marginBottom: '8px' }) : undefined]"
+			class="question-label"
+			:class="[group && 'question-label-group']"
 		>
 			{{ label }}<span
 				v-if="required"
 				aria-hidden="true"
-				:class="pika({ marginLeft: '4px', color: 'var(--lab-color-danger)' })"
+				class="question-required"
 			>*</span>
 		</component>
 		<p
 			v-if="help"
 			:id="helpId"
-			:class="pika({ margin: '0', fontSize: '15px', color: 'var(--lab-color-text-muted)' })"
+			class="question-help"
 		>
 			{{ help }}
 		</p>
@@ -86,17 +87,75 @@ const isRadioGroup = computed(() => props.groupRole === 'radiogroup')
 		<div
 			:id="errorsId"
 			aria-live="polite"
-			:class="pika({ display: 'flex', flexDirection: 'column', gap: '4px' })"
+			class="question-errors"
 		>
 			<p
 				v-for="(error, index) in errors"
 				:key="`${index}:${error.code}`"
 				data-testid="survey-question-error"
 				:data-error-code="error.code"
-				:class="pika({ margin: '0', padding: '2px 0 2px 10px', borderLeft: '4px solid var(--lab-color-danger)', fontSize: '16px', fontWeight: '600', lineHeight: '1.35', color: 'var(--lab-color-danger)' })"
+				class="question-error"
 			>
 				<span aria-hidden="true">&#9888; </span>{{ error.message }}
 			</p>
 		</div>
 	</component>
 </template>
+
+<style scoped>
+.question {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+	min-width: 0;
+	padding: 14px 16px;
+	border: 0;
+	box-shadow: inset 0 0 0 1px var(--lab-color-border);
+	border-radius: var(--lab-radius);
+	background: var(--lab-color-surface);
+	color: var(--lab-color-text);
+	font-size: 16px;
+}
+
+.question-label {
+	padding: 0;
+	font-size: 18px;
+	font-weight: 600;
+	line-height: 1.35;
+}
+
+/* A group's legend: floated, see the file comment. */
+.question-label-group {
+	float: left;
+	width: 100%;
+	margin-bottom: 8px;
+}
+
+.question-required {
+	margin-left: 4px;
+	color: var(--lab-color-danger);
+}
+
+.question-help {
+	margin: 0;
+	font-size: 15px;
+	color: var(--lab-color-text-muted);
+}
+
+.question-errors {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.question-error {
+	margin: 0;
+	padding: 2px 0 2px 10px;
+	border-left: 4px solid var(--lab-color-danger);
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1.35;
+	color: var(--lab-color-danger);
+}
+</style>
