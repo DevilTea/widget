@@ -550,8 +550,12 @@ function memberKindShort(kind: string): string {
 	outline-offset: 2px;
 }
 
+/* A 24px target; the collapsed card keeps its own stacked, left-aligned identity. */
 .graph-cluster-identity {
 	min-height: 24px;
+}
+
+.graph-cluster-identity:not(.graph-cluster-identity--collapsed) {
 	align-items: center;
 }
 

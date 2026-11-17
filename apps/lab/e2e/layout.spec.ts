@@ -247,8 +247,9 @@ test.describe('saved layout', () => {
 			.toBeCloseTo(dragged, -1)
 
 		// What the user would have saved after dragging Implementation under the tool group: a column holding the tool
-		// group and Implementation in a group of its own.
-		await page.evaluate((key) => {
+		// group and Implementation in a group of its own. It is put in storage by an init script of the next document,
+		// because leaving this one writes the current layout over whatever is in storage (the pagehide save).
+		const crafted = await page.evaluate((key) => {
 			const stored = JSON.parse(localStorage.getItem(key)!)
 			const { layout } = stored
 			const tools = layout.grid.root.data[0]
@@ -262,10 +263,16 @@ test.describe('saved layout', () => {
 				],
 			}
 			layout.panels.implementation = { id: 'implementation', contentComponent: 'implementation', title: 'Implementation' }
-			localStorage.setItem(key, JSON.stringify(stored))
+			return JSON.stringify(stored)
 		}, LAYOUT_KEY)
+		await page.addInitScript(({ key, value }) => {
+			if (sessionStorage.getItem('crafted-layout-written') === null) {
+				localStorage.setItem(key, value)
+				sessionStorage.setItem('crafted-layout-written', '1')
+			}
+		}, { key: LAYOUT_KEY, value: crafted })
 
-		await page.reload()
+		await page.goto('/?showcase=survey')
 		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
 			.toBeVisible()
 		await expect(page.getByRole('tab', { name: 'Implementation', exact: true }))
