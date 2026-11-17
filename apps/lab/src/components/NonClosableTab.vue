@@ -17,16 +17,25 @@
  * (`DockviewPanelApi.title`) instead.
  */
 import type { DockviewPanelApi } from 'dockview-vue'
+import { onBeforeUnmount, ref } from 'vue'
 
 const props = defineProps<{
 	params: {
 		api: DockviewPanelApi
 	}
 }>()
+
+// `api.title` is a plain getter, so follow `onDidTitleChange` to keep the tab in step when a title changes (the Lab
+// language switch retitles the translated tabs).
+const title = ref(props.params.api.title)
+const titleChange = props.params.api.onDidTitleChange((event) => {
+	title.value = event.title
+})
+onBeforeUnmount(() => titleChange.dispose())
 </script>
 
 <template>
 	<span
 		:class="pika({ position: 'relative', display: 'flex', alignItems: 'center', height: '100%', width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })"
-	>{{ props.params.api.title }}</span>
+	>{{ title }}</span>
 </template>

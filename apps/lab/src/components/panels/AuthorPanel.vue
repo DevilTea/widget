@@ -3,7 +3,6 @@ import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import AuthorCatalogView from '../author/AuthorCatalogView.vue'
 import AuthorJsonView from '../author/AuthorJsonView.vue'
-import AuthorStatusSurface from '../author/AuthorStatusSurface.vue'
 import AuthorStructureView from '../author/AuthorStructureView.vue'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
@@ -20,7 +19,6 @@ const view = store.authorView
 			storageKey="widget-lab:panel-desc:author"
 			text="Author workspace for the current Document: browse Core catalog metadata, edit Structure, or use expert JSON"
 		/>
-		<AuthorStatusSurface />
 		<div
 			:class="pika({ display: 'flex', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })"
 			role="tablist"

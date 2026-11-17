@@ -6,6 +6,7 @@
  */
 import type { EditorMarker } from '../../composables/use-monaco-editor'
 import { computed, ref, watch } from 'vue'
+import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useMonacoJsonEditor } from '../../composables/use-monaco-editor'
 
 const props = withDefaults(defineProps<{
@@ -30,12 +31,16 @@ watch(() => props.modelValue, (next) => {
 })
 
 const markersRef = computed(() => props.markers)
+const i18n = useLabI18n()
+// The command-palette name of the Apply action, in the Lab language.
+const applyLabel = computed(() => i18n.t('Apply'))
 
 const { revealRange } = useMonacoJsonEditor(container, {
 	modelValue: modelValueRef,
 	onChange: text => emit('update:modelValue', text),
 	markers: markersRef,
 	onApply: () => emit('apply'),
+	applyLabel,
 })
 
 defineExpose({ revealRange })

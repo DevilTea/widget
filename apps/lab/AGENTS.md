@@ -15,8 +15,8 @@ stale prose here or historical `DevilTea/deviltea-labs#13` checkpoints that `Dev
 
 Private, never-published workspace application with two roles:
 
-1. **Lab shell** — the two-column workbench's `Author` workspace (Catalog/Structure/JSON), Preview,
-   and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
+1. **Lab shell** — the two-column workbench's `Author` workspace (Catalog/Structure/JSON), Preview, the
+   `Selected widget` pane, and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
    `@deviltea/widget-vue`.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
    `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default and the only showcase
@@ -48,7 +48,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   `json-locate.ts` (maps a source path onto offsets of the JSON text, and a `JSON.parse` failure onto an offset),
   `problems.ts` (the Problems model, see "Problems list and editor squiggles" below), `status.ts` (the two
   plain-language header chips), `example.ts` (what the Examples menu says is open) and `draft-guard.ts` (the
-  unapplied-draft confirmation state machine). No Vue
+  unapplied-draft confirmation state machine) and, from PR 3b, `layout-storage.ts` (the saved Dockview layout format). No Vue
   import here on purpose — this is the regression-worthy core, independently testable.
 - `src/composables/use-lab-store.ts` — the one place that bridges `LabSession`/focus store into Vue
   `computed()` refs and supplies the `LabSessionHooks` seam (`detachPreview`/`mountPreview`) that
@@ -62,7 +62,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   itself (not derived from `session`) so they survive Apply.
 - `src/composables/use-monaco-editor.ts` + `src/components/editor/MonacoJsonEditor.vue` — the entire
   `modern-monaco` integration surface. Nothing else in this app imports `modern-monaco`. Besides the text model it
-  owns the editor's Cmd/Ctrl+Enter command (Apply), error squiggles over caller-supplied offset ranges and
+  owns the editor's Cmd/Ctrl+Enter command (Apply, registered as an action named in the Lab language and re-registered on a language switch), error squiggles over caller-supplied offset ranges and
   `revealRange()` (select + scroll + focus; a request made before Monaco has loaded is replayed once it is up).
 - `src/composables/use-draft-guard.ts` + `src/components/DraftGuardDialog.vue` — Vue bridge and native-dialog
   confirmation for the unapplied-draft guard (see "Header, status chips and draft protection" below).
@@ -111,12 +111,12 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   structured fields (`code`, `location`, `path`, `reason`, ...). The Lab does not enumerate or label
   diagnostic/failure codes: a code is shown verbatim, so a new Core code needs no Lab change.
 - `src/components/` — the app shell: `LabHeader.vue` (the grouped header, see "Header, status chips and draft
-  protection" below), `Workbench.vue` (`dockview-vue` two-column default layout), `NonClosableTab.vue`
+  protection" below), `Workbench.vue` (`dockview-vue` two-column layout, about half the width for the tool group by default, saved and restored, see "Workbench layout and the Selected widget pane" below), `NonClosableTab.vue`
   (a custom Dockview `tabComponent` — `DevilTea/deviltea-labs#27` Finding 2: registered as `tabComponents.nonClosable` and
-  selected via `AddPanelOptions.tabComponent` on each of the five canonical panels' `addPanel()` calls, it
-  renders only a title, no close control, so those panels can never be closed; Dockview's own `Tab`
+  selected via `AddPanelOptions.tabComponent` on each of the six canonical panels' `addPanel()` calls, it
+  renders only a title (kept in step with `onDidTitleChange`, so a language switch retitles it), no close control, so those panels can never be closed; Dockview's own `Tab`
   wrapper — drag/reorder/dock/resize/activate — is untouched, since a `tabComponent` only replaces what
-  that wrapper renders as content), `panels/*` (Author/Blueprint/Runtime/Dependencies tabs, plus the
+  that wrapper renders as content), `panels/*` (Author/Selected widget/Blueprint/Runtime/Dependencies tabs, plus the
   lazily-registered `ImplementationPanel.vue` — `DevilTea/deviltea-labs#25` P3; it is the one panel `Workbench.vue`
   registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
   deliberately not a sixth canonical non-closable surface), `preview/PreviewPanel.vue`,
@@ -282,7 +282,7 @@ CSS (lab-*.css + global-*.css)            ~325 KB + ~9 KB raw / ~37 KB + ~3 KB g
   `editor-core.mjs` is never in Vite's module graph at all (loaded by `modern-monaco` itself via the
   importmap-resolved dynamic `import()` described in "Deployment" above). Both are still fetched
   **during initial load today**, though: `AuthorJsonView.vue` renders `MonacoJsonEditor` when the JSON view is active,
-  Dockview mounts every one of the five canonical panels' Vue components as soon as `Workbench.vue`'s
+  Dockview mounts every one of the six canonical panels' Vue components as soon as `Workbench.vue`'s
   `onReady()` calls `addPanel()` for it (`inactive: true` only controls which tab is initially
   *selected*, not whether Dockview mounts the panel's content — verified: dockview-vue keeps every
   panel's rendered content in the DOM, not just the active one), and Author is the panel added first /
@@ -317,7 +317,7 @@ CSS (lab-*.css + global-*.css)            ~325 KB + ~9 KB raw / ~37 KB + ~3 KB g
   itself is only ever added to Dockview (`api.addPanel({ id: 'implementation', ... })`) the first time
   `ImplementationExplorerStore.open()` is called — from Preview's "View implementation" button,
   Blueprint's selected-node detail, or the Survey tour's step 8 link — never at `onReady()` time the way
-  the five canonical panels are. Verified by loading the built app fresh and driving each of those three
+  the six canonical panels are. Verified by loading the built app fresh and driving each of those three
   entry points: no request for `ImplementationPanel-*.js` (which statically bundles
   `src/implementation/shiki-highlighter.ts` — `@shikijs/core`, `@shikijs/engine-javascript`, and the
   `typescript`/`vue`/`json` `tm-grammars` grammars + `tm-themes`' `one-dark-pro` theme) occurs before the
@@ -337,6 +337,12 @@ Issue `DevilTea/widget#230` (Lab redesign) adopts Nuxt UI 4 (Tailwind v4) for th
 plugin**, not Nuxt. This is the foundation: it changes no Lab behaviour or appearance except the migrated
 surfaces below. PikaCSS stays for everything not yet migrated and is removed in a later PR.
 
+- **Tooltips have no exit animation** (`nuxt-ui.ts`, `ui.tooltip.slots.content`). Reka keeps a closed tooltip's content mounted until its
+  exit animation ends, and every mounted content listens for the "a tooltip opened" event and closes its own root, including the root of the
+  tooltip that was just opened again. A late animation end (busy or throttled page) therefore sometimes killed the tooltip of a header
+  button a keyboard user had just tabbed onto, and disabled buttons explain themselves only in the tooltip. Without the animation a closed
+  tooltip unmounts at once. `e2e/tooltips.spec.ts` pins real Tab/Shift+Tab navigation, once with every tooltip animation stretched to ten
+  minutes (deterministic) and once plainly over many rounds. Do not re-add a `data-[state=closed]:animate-*` class to tooltips.
 - **Scope: Lab shell only.** `main.ts` imports `src/styles/lab-ui.css` (Tailwind theme + utilities, Nuxt UI),
   installs Nuxt UI's Vue plugin and wraps `App` in `UApp` (`toaster: null` until a surface needs toasts;
   `UApp` renders no element). `preview-frame-main.ts` / `preview-frame.html` never import any of it, so the showcase
@@ -492,7 +498,7 @@ holds the same `getSnapshot()`/`subscribe()`-only discipline.
 
 ## Dependencies inspector
 
-The canonical readonly `Dependencies` Dockview panel owns two presentation views over the same current Document Blueprint facts. `Graph` remains the default topology view; `Relations` is a focus-centric dependency inspector. Switching views is presentation-only: it preserves shared Document focus and never mutates semantic state.
+The canonical readonly `Dependencies` Dockview panel owns two presentation views over the same current Document Blueprint facts. `Relations` (a focus-centric dependency inspector, readable at the default tool width) is the default view since issue #230 PR 3b; `Graph` is the opt-in topology view. Switching views is presentation-only: it preserves shared Document focus and never mutates semantic state.
 
 `src/graph/` implements the authoritative Lab-side dependency projections. The Graph view continues to use this pipeline:
 
@@ -658,8 +664,9 @@ Document commit path, not a history).
 
 ### Author recovery and diagnostics (Phase 4)
 
-AuthorStatusSurface.vue is a Lab-owned status projection for the current Document. It reads the
-draft's Lab-only SourceParseError, Core's committed blueprint.sourceJsonCompatible and blueprint.status,
+`StatusDetails.vue` (the header's "Document and preview details" popover; it used to be the Author panel's own
+`AuthorStatusSurface.vue` box, folded into the popover by issue #230 PR 3b so the facts are shown once) is a Lab-owned status
+projection for the current Document. It reads the draft's Lab-only SourceParseError, Core's committed blueprint.sourceJsonCompatible and blueprint.status,
 Core's aggregate blueprint.diagnostics.length, Core inspection recovery counts, and the existing
 Document/Preview revision link status. It does not parse JSON outside Apply, perform a compatibility
 check, classify diagnostic codes, or turn a diagnostic message into a second protocol. JSON syntax errors
@@ -730,8 +737,8 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   open the JSON view; `showProblems()` sets `activeTab`, `authorView` and `problemsFocusPending`. `Workbench.vue` now also feeds
   Dockview's active panel back into `activeTab` (and never re-activates the panel already active, which moves DOM focus out of
   Monaco), so asking for a tab that is "already" `activeTab` in the store but no longer on screen still switches.
-- The tutorial rail is `position: absolute` against `.lab-body` (below the header) instead of fixed against the viewport, so it no longer
-  covers the header's overflow menu; docking it as a column is still a later step of issue #230.
+- The tutorial rail is a docked column: a 320px flex item beside `Workbench` in `.lab-body` (below the header), see "Workbench layout
+  and the Selected widget pane". It was `position: fixed`, then `absolute`, and covered what was under it both times.
 
 ### Problems list and editor squiggles
 
@@ -774,8 +781,8 @@ Blueprint and Runtime remain separate outer, canonical Dockview panels. `Bluepri
 current Document inspection surface for semantic status, diagnostics, recovery nodes, and Document
 focus; `RuntimePanel.vue` is the Preview-revision surface for passive Runtime state/property/method
 inspection and Preview focus. They must not gain a shared Blueprint/Runtime mode, shared revision state,
-or cross-revision `InspectionNodeId` mapping. Preview Inspect continues to select Blueprint when
-Document/Preview revisions are linked and Runtime when they diverge; Graph and Implementation retain
+or cross-revision `InspectionNodeId` mapping. Preview Inspect selects the Selected widget pane when
+Document/Preview revisions are linked (it selected Blueprint before) and Runtime when they diverge; Graph and Implementation retain
 their existing Document-scoped entry points.
 
 `src/components/inspector/InspectorPanelShell.vue` and `InspectorSplitLayout.vue` are intentionally
@@ -784,6 +791,52 @@ column-container chrome; the split layout owns only the tree/divider/details col
 Runtime continue to provide their own data, status lines, diagnostics, recovery behavior, selection
 handlers, and details components. Do not use these primitives as a semantic or focus abstraction, and
 do not merge the two outer panels merely to remove presentation duplication.
+
+### Workbench layout and the Selected widget pane (issue #230 PR 3b)
+
+**Layout.** The default layout is two Dockview groups: the tool group (Author, Selected widget, Blueprint, Runtime, Dependencies;
+Author active) and Preview. The tool group is about half the workbench (48%, clamped to 420-940px; it was about 29%, which clipped
+Relations and the Implementation source). The layout is saved to `localStorage` (`widget-lab:layout`, value
+`{ version, layout }` where `layout` is `DockviewApi.toJSON()`) 250ms after it settles and on `pagehide`, and restored by
+`Workbench.vue` on load. `src/lab/layout-storage.ts` (no Vue, storage injected) owns the format: a layout is used only if it has the
+current `LAYOUT_VERSION`, every canonical panel, panels that name registered components only, and a sized grid; anything else (invalid
+JSON, another version, a missing panel, an unknown component) reads as "none" and the default layout is built. Dockview's
+`fromJSON` can still throw for plausible data: that is caught, and the default is built. Whatever was stored and not usable is removed.
+Bump `LAYOUT_VERSION` whenever a change to the panels or their components would make an old saved layout wrong (the first version
+already includes the Selected widget panel). All storage access is try/catch; blocked storage means "nothing saved". Panels opened on
+request (Implementation, Document Tools) are saved with the layout but stripped from the data before Dockview loads it
+(`stripLazyPanels`, applied by `loadSavedLayout`), because their content depends on a request that load did not make; a group whose
+active panel was one of them activates its first remaining panel, and a lazy panel alone in its own group makes the whole saved layout
+unusable (default layout). After a restore `Workbench.vue` writes Dockview's active panel to `LabStore.activeTab` (the Dockview-to-store
+subscription is made later), so the store and the screen agree about the open tab. Saved sizes are proportional on restore, so a layout from a wide window fits a narrow one. Tab titles are
+set when a layout is built or restored and follow a language switch. **Reset layout** (overflow menu; `WorkbenchLayoutStore` is a request
+bridge like Document Tools) clears the saved layout and rebuilds the default. The selected showcase is restored separately, by
+`?showcase=`.
+
+**Tutorial rail.** `TutorialRail.vue` is a 320px flex column beside `Workbench` inside `.lab-body`. `Workbench.vue` already observes
+its own size, so Dockview re-lays out when the rail opens or closes, and the rail never covers the header, the overflow menu, the
+Dockview groups or the Preview frame (the survey's own Language select). `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
+
+**Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
+declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview
+Inspect all set it). Left (stacked below 600px of pane width, by container query) `BlueprintNodeDetails` (`embedded`): identity,
+location, config, slots, members, diagnostics; right `RuntimeNodeDetails` (`embedded`) over the same Preview connection the Runtime
+panel uses (`useSelectedRuntimeWidget()`, shared by both). The Runtime half only exists while the Preview shows the Document's
+revision (Preview focus is the linked mapping of Document focus); otherwise the pane says why (`data-runtime-state`: `diverged`,
+`no-preview`, `unresolved`, `unavailable`, `loading`, `ready`) instead of mixing revisions. Blueprint and Runtime stay as
+they were; the pane reuses their detail components and does not replace them.
+
+**Runtime values (audit U10).** State and Property rows are `RuntimeValueRow.vue`: the member name and a one-line summary that takes
+the room the row has (no fixed width; its full text is the tooltip), a separate named disclosure button (`aria-expanded`,
+"Value of NAME") for containers and long or cut strings, and a separate select button (focus). The open value is
+`InspectableValueTree.vue`, an expandable tree over the Inspector value DTO. The limits that remove information (depth 4, 50 entries,
+1000 nodes, 500 characters) belong to the Inspector snapshot, set in `packages/inspector`; the Lab does not change the protocol or work
+around them and instead marks every cut where it happened ("truncated by the Inspector snapshot (nested too deeply)", "more entries
+were left out", "cut"), with one note under a value that has any (`hasTruncation()`). `formatInspectableValue()` (the one-line
+summary) still prints `<truncated>`.
+
+**Config (audit U25).** `ConfigView.vue` shows the resolved config by default and the authored one on request, and only when they
+differ (`lib/config-compare.ts`, structural equality; it names the top-level fields that differ); equal configs are one block with a note.
 
 ### Document Tools developer panel (Phase 6)
 
@@ -842,7 +895,8 @@ browser-semantics assertions (focus, keyboard navigation, dialog behavior) there
 happy-dom unit tests.
 
 Browser specs reach the header's menus only through the helpers in `e2e/fixtures.ts` (`selectShowcase`, `loadPreset`,
-`setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, and the `expectShowcase` /
+`setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, `openStatusDetails`,
+`openDependenciesGraph` (Relations is the default Dependencies view), and the `expectShowcase` /
 `expectDocumentStatus` / `expectPreviewStatus` assertions), never with ad-hoc menu clicks, so a future header change touches one
 file. Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
 Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a

@@ -80,9 +80,11 @@ const MIN_TARGET_SIZE_PX = 24
  * Clicks a Preview control through the part of it the tutorial rail does NOT cover, after proving that
  * part is at least a minimum-size pointer target.
  *
- * At the 900px minimum-supported width the `position: fixed` rail overlays the right ~320px of the
- * persistent Preview by design (`TutorialRail.vue`'s viewport contract), so several required Survey
- * controls straddle the rail's left edge in every environment. A plain `locator.click()` hit-tests only
+ * The rail is a docked column now (issue #230 PR 3b), so nothing of the Preview is under it and `layout.spec.ts`
+ * pins that. This helper predates the change and stays as a stricter check: it proves the part of the control
+ * left of the rail edge is a usable target. (At the 900px minimum-supported width the rail used to overlay the
+ * right ~320px of the Preview, so several required Survey controls straddled its edge.) A plain
+ * `locator.click()` hit-tests only
  * the control's center point, which made the old contract depend on whether font metrics happened to
  * put "Generate result"'s center left of the rail edge (CI) or ~0.7px right of it (macOS system font).
  * This measures the unobscured slice explicitly instead, then clicks inside it with Playwright's normal

@@ -1,4 +1,4 @@
-import { expect, loadPreset, test } from './fixtures'
+import { expect, loadPreset, openStatusDetails, test } from './fixtures'
 
 test('Author workspace exposes Core catalog, Structure commands, and synchronized JSON', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
@@ -19,8 +19,10 @@ test('Author workspace exposes Core catalog, Structure commands, and synchronize
 	await page.getByRole('button', { name: 'Set value' })
 		.click()
 
-	await expect(page.getByTestId('author-document-status'))
-		.toContainText('Document r1')
+	await openStatusDetails(page)
+	await expect(page.getByTestId('status-document-revision'))
+		.toHaveText('r1')
+	await page.keyboard.press('Escape')
 	await expect(page.getByTestId('author-command-outcome'))
 		.toContainText('Author command applied')
 
@@ -33,10 +35,12 @@ test('Author workspace exposes Core catalog, Structure commands, and synchronize
 test('recovery keeps unresolved/raw-slot nodes visible and navigates node diagnostics through Document focus', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
 	await loadPreset(page, 'raw-slot-recovery')
-	await expect(page.getByTestId('author-recovery-status'))
+	await openStatusDetails(page)
+	await expect(page.getByTestId('status-recovery'))
 		.toContainText('1 unresolved')
-	await expect(page.getByTestId('author-recovery-status'))
+	await expect(page.getByTestId('status-recovery'))
 		.toContainText('1 raw-slot placements')
+	await page.keyboard.press('Escape')
 	await page.getByRole('tab', { name: 'Blueprint' })
 		.click()
 	await page.getByRole('button', { name: /All diagnostics/ })
@@ -71,9 +75,8 @@ test('recovery keeps unresolved/raw-slot nodes visible and navigates node diagno
 	expect(await orphanNode.evaluate(element => getComputedStyle(element).backgroundColor))
 		.not.toBe(mysteryBackgroundAfter)
 
-	await page.getByRole('tab', { name: 'Author' })
-		.click()
-	const recoveryStatus = page.getByTestId('author-recovery-status')
+	await openStatusDetails(page)
+	const recoveryStatus = page.getByTestId('status-recovery')
 	await expect(recoveryStatus)
 		.toContainText('1 unresolved')
 	await expect(recoveryStatus)
@@ -113,11 +116,12 @@ test('semantic diagnostics navigate to current Document focus while source-only 
 	await page.evaluate(() => (window as any).__WIDGET_LAB_TEST__.setDraftSourceText('{'))
 	await page.getByRole('button', { name: 'Apply', exact: true })
 		.click()
-	await expect(page.getByTestId('author-json-draft-status'))
+	await openStatusDetails(page)
+	await expect(page.getByTestId('status-json-draft'))
 		.toContainText('Syntax error (Lab-only draft)')
-	await expect(page.getByTestId('author-source-json-compatibility'))
+	await expect(page.getByTestId('status-source-compat'))
 		.toContainText('Compatible (Core)')
-	await expect(page.getByTestId('author-blueprint-status'))
+	await expect(page.getByTestId('status-blueprint'))
 		.toContainText('valid')
 })
 

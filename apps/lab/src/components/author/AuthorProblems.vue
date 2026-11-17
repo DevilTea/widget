@@ -45,7 +45,7 @@ defineExpose({ focusList })
 		:data-problem-count="problems.length"
 		tabindex="-1"
 		:aria-label="i18n.t('Problems')"
-		class="flex max-h-48 min-h-0 flex-none flex-col border-t border-default bg-muted text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
+		class="flex max-h-40 min-h-12 shrink flex-col border-t border-default bg-muted text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
 	>
 		<div class="flex flex-none items-center gap-2 px-3 py-1.5">
 			<h3 class="m-0 text-xs font-semibold">

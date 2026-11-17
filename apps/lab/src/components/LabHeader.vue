@@ -8,11 +8,12 @@
  *   loaded preset, or "edited" once the source no longer matches it. Loading either with an unapplied editor
  *   draft first asks (`DraftGuardDialog`).
  * - Two plain-language chips replace the internal-vocabulary ones: is the Document valid, and does the
- *   Preview show it. Revision numbers and Linked/Diverged are developer details in a popover.
+ *   Preview show it. Revision numbers, Linked/Diverged and the draft/recovery facts that the Author panel used to show in its own
+ *   box are developer details in a popover (`StatusDetails.vue`).
  * - Apply, Revert, Undo (the previously applied source, as a new revision) and Format are the edit actions.
  *   A disabled one stays focusable (`aria-disabled`) so its tooltip can say why.
- * - The overflow menu holds the tutorial, theme, language and the Developer submenu (Implementation and
- *   Document Tools).
+ * - The overflow menu holds the tutorial, theme, language, Reset layout (the Dockview layout is remembered across
+ *   reloads) and the Developer submenu (Implementation and Document Tools).
  *
  * Built on Nuxt UI (explicit imports; see AGENTS.md "Nuxt UI and Tailwind"). The tutorial dialogs and the
  * draft guard are native `<dialog>`s, which is fine here: no Nuxt UI overlay is ever opened from inside one.
@@ -36,7 +37,9 @@ import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
 import { useLabTheme } from '../composables/use-lab-theme'
 import { useTutorialStore } from '../composables/use-tutorial'
+import { useWorkbenchLayout } from '../composables/use-workbench-layout'
 import { getShowcase } from '../showcases/registry'
+import StatusDetails from './StatusDetails.vue'
 
 const store = useLabStore()
 const theme = useLabTheme()
@@ -45,6 +48,7 @@ const i18n = useLabI18n()
 const draftGuard = useDraftGuard()
 const implementationExplorer = useImplementationExplorer()
 const documentTools = useDocumentTools()
+const workbenchLayout = useWorkbenchLayout()
 
 // ---------------------------------------------------------------------------------------------------------
 // Examples menu
@@ -168,11 +172,6 @@ const previewLabel = computed(() => {
 })
 const previewColor = computed(() => previewState.value === 'current' ? 'success' : previewState.value === 'stale' ? 'warning' : 'neutral')
 
-const linkLabel = computed(() => {
-	const status = store.revisionStatus.value
-	return i18n.t(status.isLinked ? 'Linked / Synced' : status.state === 'diverged' ? 'Diverged / Unlinked' : 'Unlinked')
-})
-
 // ---------------------------------------------------------------------------------------------------------
 // Edit actions. Disabled buttons use `aria-disabled` (not `disabled`) so they stay focusable and keep their
 // tooltip, which explains why they are unavailable.
@@ -285,6 +284,13 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 	],
 	[
 		{
+			label: i18n.t('Reset layout'),
+			icon: 'i-lucide-layout-dashboard',
+			onSelect: () => workbenchLayout.requestReset(),
+		},
+	],
+	[
+		{
 			label: i18n.t('Developer'),
 			icon: 'i-lucide-code',
 			children: [
@@ -376,45 +382,7 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 				:aria-label="i18n.t('Document and preview details')"
 			/>
 			<template #content>
-				<dl
-					data-testid="status-details-panel"
-					class="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 p-3 text-xs"
-				>
-					<dt class="text-muted">
-						{{ i18n.t('Document') }}
-					</dt>
-					<dd
-						data-testid="status-document-revision"
-						class="m-0 font-mono"
-					>
-						r{{ store.revisionStatus.value.documentRevision }}
-					</dd>
-					<dt class="text-muted">
-						{{ i18n.t('Preview') }}
-					</dt>
-					<dd
-						data-testid="status-preview-revision"
-						class="m-0 font-mono"
-					>
-						{{ store.revisionStatus.value.previewRevision === null ? i18n.t('Preview unavailable') : `r${store.revisionStatus.value.previewRevision}` }}
-					</dd>
-					<dt class="text-muted">
-						{{ i18n.t('Blueprint status') }}
-					</dt>
-					<dd class="m-0">
-						{{ i18n.t(store.documentState.value.blueprint.status) }} · {{ store.documentState.value.blueprint.diagnostics.length }} {{ i18n.t(store.documentState.value.blueprint.diagnostics.length === 1 ? 'diagnostic' : 'diagnostics') }}
-					</dd>
-					<dt class="text-muted">
-						{{ i18n.t('Revisions') }}
-					</dt>
-					<dd
-						data-testid="revision-link-status"
-						class="m-0"
-						:class="store.revisionStatus.value.isLinked ? 'text-success' : 'text-warning'"
-					>
-						{{ linkLabel }}
-					</dd>
-				</dl>
+				<StatusDetails />
 			</template>
 		</UPopover>
 

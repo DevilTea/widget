@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * Tutorial rail docked to the right edge of the workbench area (diagnostic #25). It is positioned against
- * `.lab-body` (App.vue), i.e. it starts below the header, so it never covers the header's right-hand
- * controls (the overflow menu). It still overlays the workbench itself; docking it as a real column is a later
- * step of the Lab redesign (issue #230). #43 translates its presentation copy at render time so the
+ * Tutorial rail (diagnostic #25), a real column at the right edge of `.lab-body` (App.vue; issue #230 PR 3b,
+ * audit U13): a fixed-width flex item beside the workbench, below the header, so the workbench and Dockview give up
+ * its width instead of being covered by it. It never overlaps the header (the overflow menu), the Dockview groups
+ * or the Preview frame (the survey's own Language select). #43 translates its presentation copy at render time so the
  * framework-agnostic tutorial scripts remain stable semantic/pedagogical definitions rather than
  * depending on Vue/i18n state.
  */
@@ -21,18 +21,15 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 <template>
 	<aside
 		:aria-label="i18n.t('Tutorial')"
+		data-testid="tutorial-rail"
 		:class="pika({
-			position: 'absolute',
-			top: '0',
-			bottom: '0',
-			right: '0',
+			flex: '0 0 320px',
 			width: '320px',
-			zIndex: '400',
+			minHeight: '0',
 			display: 'flex',
 			flexDirection: 'column',
 			borderLeft: '1px solid var(--lab-color-border)',
 			background: 'var(--lab-color-surface)',
-			boxShadow: '-8px 0 24px color-mix(in srgb, black 30%, transparent)',
 		})"
 	>
 		<header

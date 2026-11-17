@@ -150,3 +150,37 @@ describe('runtimePropertyRow failed Property display', () => {
 			.toHaveLength(1)
 	})
 })
+
+describe('runtimePropertyRow value disclosure (audit U10)', () => {
+	const objectValue = {
+		type: 'object' as const,
+		id: 1,
+		truncated: false,
+		entries: [{ key: 'errors', value: { type: 'array' as const, id: 2, truncated: false, items: [{ type: 'truncated' as const, reason: 'max-depth' as const }] } }],
+	}
+
+	it('keeps the one-line summary unclipped and opens the whole value on request', async () => {
+		const wrapper = await mountRow(property({ status: 'completed', result: { ok: true, value: objectValue } }))
+
+		expect(wrapper.get('[data-testid="value-summary"]')
+			.text())
+			.toBe('{ "errors": [<truncated>] }')
+		expect(wrapper.find('[data-testid="value-detail"]')
+			.exists())
+			.toBe(false)
+
+		await wrapper.get('[data-testid="value-expand"]')
+			.trigger('click')
+		expect(wrapper.get('[data-testid="value-detail"]')
+			.text())
+			.toContain('truncated by the Inspector snapshot')
+	})
+
+	it('offers no value disclosure for a failed Property, only its diagnostics', async () => {
+		const wrapper = await mountRow(failed(invalidResult))
+
+		expect(wrapper.find('[data-testid="value-expand"]')
+			.exists())
+			.toBe(false)
+	})
+})

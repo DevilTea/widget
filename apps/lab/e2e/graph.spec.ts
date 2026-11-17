@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, expectShowcase, selectShowcase, test } from './fixtures'
+import { expect, expectShowcase, openDependenciesGraph, selectShowcase, test } from './fixtures'
 
 /**
  * Issue #28 Dependency Graph contract. Uses the Survey showcase (a richer topology than the default
@@ -13,8 +13,7 @@ import { expect, expectShowcase, selectShowcase, test } from './fixtures'
 
 test('Survey Dependency Graph lays out and renders nodes', async ({ page }) => {
 	await page.goto('/')
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openDependenciesGraph(page)
 
 	const nodes = page.locator('.vue-flow__node')
 	await expect(nodes.first())
@@ -43,8 +42,7 @@ function intersects(a: { x: number, y: number, width: number, height: number }, 
 
 /** Opens Dependencies and asserts the Graph renders nodes and that some intersect the visible canvas. */
 async function expectGraphNodesIntersectViewportOnFirstOpen(page: Page): Promise<void> {
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openDependenciesGraph(page)
 
 	const canvas = page.locator('.vue-flow')
 	const nodes = page.locator('.vue-flow__node')
@@ -103,8 +101,7 @@ test('"Fit graph" contains every expected Survey node (issues #27, #104)', async
 	const fitTolerancePx = 2
 
 	await page.goto('/')
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openDependenciesGraph(page)
 
 	const canvas = page.locator('.vue-flow')
 	const nodes = page.locator('.vue-flow__node')
@@ -199,8 +196,7 @@ test('"Fit graph" contains every expected Survey node (issues #27, #104)', async
 
 test('progressive disclosure collapses clusters initially, expands on click, and supports Expand/Collapse all', async ({ page }) => {
 	await page.goto('/')
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openDependenciesGraph(page)
 
 	const canvas = page.locator('.vue-flow')
 	await expect(canvas.locator('.graph-node--cluster')
@@ -325,8 +321,7 @@ test('progressive disclosure collapses clusters initially, expands on click, and
 
 test('focusing a member highlights subgraph and dims unrelated nodes', async ({ page }) => {
 	await page.goto('/')
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openDependenciesGraph(page)
 
 	// Expand all so members are visible
 	await page.getByRole('button', { name: 'Expand all' })
@@ -359,8 +354,7 @@ test('focusing a member highlights subgraph and dims unrelated nodes', async ({ 
 
 test('expanded member nodes can be focused from the keyboard', async ({ page }) => {
 	await page.goto('/')
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openDependenciesGraph(page)
 	await page.getByRole('button', { name: 'Expand all' })
 		.click()
 
@@ -377,8 +371,7 @@ test('expanded member nodes can be focused from the keyboard', async ({ page }) 
 
 test('Graph legend is a plain disclosure (not a menu popup), opens/closes via keyboard, and names the three edge kinds', async ({ page }) => {
 	await page.goto('/')
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openDependenciesGraph(page)
 
 	const legendButton = page.getByRole('button', { name: 'Legend' })
 	await expect(legendButton)

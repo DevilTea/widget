@@ -6,6 +6,7 @@ import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useRemoteRuntimeMember } from '../../composables/use-remote-runtime-member'
 import { formatInspectableValue } from '../../runtime-inspector/format-value'
 import RuntimePropertyDiagnosticList from './RuntimePropertyDiagnosticList.vue'
+import RuntimeValueRow from './RuntimeValueRow.vue'
 
 const props = defineProps<{
 	name: string
@@ -37,6 +38,11 @@ const statusLabel = computed(() => {
 				diagnosticWord: current.result.diagnostics.length === 1 ? i18n.t('diagnostic') : i18n.t('diagnostics'),
 			})
 })
+/** The value to open as a tree: only a successful, evaluated Property has one. */
+const okValue = computed(() => {
+	const current = propertySnapshot.value
+	return current !== null && current.status === 'completed' && current.result.ok ? current.result.value : null
+})
 const failedDiagnostics = computed(() => {
 	const current = propertySnapshot.value
 	return current !== null && current.status === 'completed' && !current.result.ok ? current.result.diagnostics : []
@@ -45,25 +51,21 @@ const failedDiagnostics = computed(() => {
 
 <template>
 	<div>
-		<button
-			type="button"
-			:class="pika({ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', border: 'none', borderRadius: 'var(--lab-radius)', padding: '4px 6px', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
-			:style="{ background: selected ? 'var(--lab-color-surface-alt)' : 'transparent' }"
-			@click="emit('select')"
-		>
-			<span>{{ name }}</span>
-			<span
-				:class="pika({ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' })"
-				:style="{ color: failedDiagnostics.length > 0 ? 'var(--lab-color-danger)' : 'var(--lab-color-text-muted)' }"
-			>{{ statusLabel }}</span>
-		</button>
+		<RuntimeValueRow
+			:name="name"
+			:summary="statusLabel"
+			:value="okValue"
+			:selected="selected"
+			:danger="failedDiagnostics.length > 0"
+			@select="emit('select')"
+		/>
 		<div
 			v-if="failedDiagnostics.length > 0"
-			:class="pika({ paddingLeft: '14px', marginTop: '4px' })"
+			:class="pika({ paddingLeft: '30px', marginTop: '4px' })"
 		>
 			<button
 				type="button"
-				:class="pika({ fontSize: '10px', color: 'var(--lab-color-accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 0 4px' })"
+				:class="pika({ fontSize: '11px', color: 'var(--lab-color-accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 0 4px' })"
 				@click="showDiagnostics = !showDiagnostics"
 			>
 				{{ i18n.t(showDiagnostics ? 'hide diagnostics' : 'show diagnostics') }}

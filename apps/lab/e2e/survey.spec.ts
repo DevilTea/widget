@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSurveyPreset, surveyPresets } from '../src/showcases/survey/presets'
-import { expect, expectDocumentStatus, expectPreviewStatus, loadPreset, openDeveloperTool, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectPreviewStatus, loadPreset, openDependenciesGraph, openDeveloperTool, previewFrame, test } from './fixtures'
 
 /**
  * Interactive Survey acceptance contract: the Maker Space open-day sign-up survey
@@ -88,8 +88,7 @@ test('1. JSON to UI: the default document renders as a form, Blueprint is valid,
 		.toContainText('Maker Space open day: sign-up')
 	await expectDocumentStatus(page, { valid: true })
 
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openDependenciesGraph(page)
 	const clusters = page.locator('.vue-flow__node[data-id^="cluster:"]')
 	await expect(clusters.first())
 		.toBeVisible({ timeout: 15_000 })
@@ -310,8 +309,7 @@ test('6. cycle: an edit that makes Guests and the kids\' corner depend on each o
 	expect(chipTitles.some(title => /(?:guests : Numeric|sessions : MultipleChoice) · property "/.test(title ?? '')))
 		.toBe(true)
 
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openDependenciesGraph(page)
 	const cycleBadges = page.locator('.graph-node--cluster [title="invalid cycle"]')
 	await expect(cycleBadges.first())
 		.toBeVisible({ timeout: 15_000 })

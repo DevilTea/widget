@@ -13,12 +13,15 @@ import { useImplementationExplorer } from '../../composables/use-implementation-
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { getShowcase } from '../../showcases/registry'
+import ConfigView from './ConfigView.vue'
 import DiagnosticList from './DiagnosticList.vue'
 
 const props = defineProps<{
 	node: BlueprintInspectionNode | null
 	blueprint: WidgetSystemBlueprint
 	inspection: BlueprintInspection
+	/** Inside a pane that scrolls as a whole (Selected widget): no scroll area or height of its own. */
+	embedded?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -60,11 +63,14 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 		v-if="node === null"
 		:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
 	>
-		{{ i18n.t('No node selected — click a node in the tree on the left to see its config, slots, and diagnostics.') }}
+		{{ embedded
+			? i18n.t('No widget selected — choose one with Inspect in the Preview, or in Blueprint or Dependencies, to see its declaration.')
+			: i18n.t('No node selected — click a node in the tree on the left to see its config, slots, and diagnostics.') }}
 	</div>
 	<div
 		v-else
 		:class="pika({ padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'auto', height: '100%' })"
+		:style="embedded ? { overflow: 'visible', height: 'auto' } : undefined"
 	>
 		<div :class="pika({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' })">
 			<div>
@@ -91,10 +97,12 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
 					{{ i18n.t('Config') }}
 				</h5>
-				<pre
+				<ConfigView
 					v-if="node.capabilities.config"
-					:class="pika({ margin: '0', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
-				>{{ JSON.stringify(readConfigFields(node.node as unknown as { rawConfig?: unknown, config?: unknown }), null, 2) }}</pre>
+					:key="node.nodeId"
+					:rawConfig="readConfigFields(node.node as unknown as { rawConfig?: unknown, config?: unknown }).rawConfig"
+					:config="readConfigFields(node.node as unknown as { rawConfig?: unknown, config?: unknown }).config"
+				/>
 				<p
 					v-else
 					:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"

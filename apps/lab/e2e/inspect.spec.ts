@@ -102,8 +102,8 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.getByText(COUNTER_TEXT_0, { exact: true }))
 			.toBeVisible()
 
-		// Drives the existing shared focus + activates Blueprint for immediate visible feedback.
-		await expect(page.getByRole('tab', { name: 'Blueprint' }))
+		// Drives the existing shared focus + opens the Selected widget pane for immediate visible feedback.
+		await expect(page.getByRole('tab', { name: 'Selected widget' }))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
 			.toBeVisible()
@@ -134,7 +134,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.getByText(COUNTER_TEXT_0, { exact: true })
 			.click()
 
-		await expect(page.getByRole('tab', { name: 'Blueprint' }))
+		await expect(page.getByRole('tab', { name: 'Selected widget' }))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
 			.toBeVisible()
@@ -226,7 +226,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await phoneInput.click()
 
 		// (a) the correct semantic widget is selected/focused in the inspector.
-		await expect(page.getByRole('tab', { name: 'Blueprint' }))
+		await expect(page.getByRole('tab', { name: 'Selected widget' }))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByRole('heading', { name: 'phone : ShortAnswer' }))
 			.toBeVisible()
@@ -292,7 +292,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 
 		await counterValue.click()
 
-		await expect(page.getByRole('tab', { name: 'Blueprint' }))
+		await expect(page.getByRole('tab', { name: 'Selected widget' }))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
 			.toBeVisible()

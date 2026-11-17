@@ -2,14 +2,14 @@ import { expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, prev
 
 /**
  * Issue #28 Lab shell / workbench contract: the app loads with the header's showcase/preset/Apply
- * controls and all five workbench panel tabs (`Workbench.vue`'s Source/Blueprint/Runtime/Graph/Preview)
- * available.
+ * controls and all six workbench panel tabs (`Workbench.vue`'s Author/Selected widget/Blueprint/Runtime/
+ * Dependencies/Preview) available.
  *
  * Loaded against the network-blocked BUILT app (see `fixtures.ts`/`playwright.config.ts`) — Source is
  * the initially active tab, so this also exercises the Source editor initializing under that block.
  */
 
-test('app loads with header controls and all five panel tabs', async ({ page }) => {
+test('app loads with header controls and all six panel tabs', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
 
 	await expectShowcase(page, 'sandbox')
@@ -24,7 +24,7 @@ test('app loads with header controls and all five panel tabs', async ({ page }) 
 	await expect(page.getByRole('button', { name: 'Format' }))
 		.toBeVisible()
 
-	for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
+	for (const name of ['Author', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 		const tab = page.getByRole('tab', { name })
 		await expect(tab)
 			.toBeVisible()
@@ -35,6 +35,12 @@ test('app loads with header controls and all five panel tabs', async ({ page }) 
 		switch (name) {
 			case 'Author':
 				await expect(panel.locator('.monaco-editor'))
+					.toBeVisible()
+				break
+			case 'Selected widget':
+				await expect(panel.getByTestId('selected-widget-declaration'))
+					.toBeVisible()
+				await expect(panel.getByTestId('selected-widget-runtime'))
 					.toBeVisible()
 				break
 			case 'Blueprint':
@@ -48,7 +54,8 @@ test('app loads with header controls and all five panel tabs', async ({ page }) 
 					.toBeVisible()
 				break
 			case 'Dependencies':
-				await expect(panel.locator('.vue-flow'))
+				// Relations is the default view; the Graph canvas only mounts once it is chosen.
+				await expect(panel.getByRole('tabpanel', { name: 'Relations' }))
 					.toBeVisible()
 				break
 			case 'Preview':
@@ -161,7 +168,7 @@ test('Source editor initializes only from built preview assets (issues #30, #102
 test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => {
 	await page.goto('/')
 
-	const panelNames = ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']
+	const panelNames = ['Author', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']
 
 	// The five canonical panels use a custom Dockview tab renderer (`NonClosableTab.vue`) that never
 	// renders a close control — so there is no in-tab button affordance to find at all.
