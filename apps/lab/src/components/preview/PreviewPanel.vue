@@ -226,7 +226,9 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 						? i18n.t(store.status.value.validity.count === 1 ? 'Your last change has {count} problem, so the preview still shows the last working version.' : 'Your last change has {count} problems, so the preview still shows the last working version.', { count: store.status.value.validity.count })
 						: i18n.t('The preview does not show your latest change yet. It still shows the last working version.') }}
 				</span>
+				<!-- Only when there are problems to show: a valid Document has an empty list. -->
 				<UButton
+					v-if="store.status.value.validity.kind === 'problems'"
 					data-testid="preview-show-problems"
 					color="neutral"
 					variant="outline"

@@ -56,6 +56,7 @@ export interface UseMonacoJsonEditorResult {
 	revealRange: (start: number, end: number) => void
 }
 
+const APPLY_ACTION_ID = 'widget-lab.apply'
 const ERROR_RULER_COLOR = '#e5484d'
 
 /** Hover text is Markdown; diagnostic messages are plain text, so escape every Markdown control character. */
@@ -70,6 +71,7 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 	let editor: MonacoEditor | null = null
 	let model: MonacoModel | null = null
 	let applyingExternalChange = false
+	let applyAction: { dispose: () => void } | null = null
 	let markerCollection: ReturnType<MonacoEditor['createDecorationsCollection']> | null = null
 
 	/**
@@ -137,8 +139,15 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 				return
 			options.onChange(model.getValue())
 		})
-		// Monaco binds Cmd/Ctrl+Enter to "insert line below"; Apply takes it instead (audit U05).
-		editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => options.onApply?.())
+		// Monaco binds Cmd/Ctrl+Enter to "insert line below"; Apply takes it instead (audit U05). An action rather
+		// than `addCommand()`: a command registers a global dynamic keybinding whose disposable is discarded, so every
+		// remount of the editor would leak one; the action's keybinding is released with the action (disposed below).
+		applyAction = editor.addAction({
+			id: APPLY_ACTION_ID,
+			label: 'Apply',
+			keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+			run: () => options.onApply?.(),
+		})
 		syncMarkers()
 		ready.value = true
 		if (pendingReveal !== null) {
@@ -164,6 +173,8 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 	})
 
 	onBeforeUnmount(() => {
+		applyAction?.dispose()
+		applyAction = null
 		editor?.dispose()
 		model?.dispose()
 	})

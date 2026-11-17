@@ -804,6 +804,23 @@ describe('createLabStore() header and feedback state', () => {
 		store.dispose()
 	})
 
+	it('does not recompute the Problems list while the draft is edited (only a commit or the parse error changes it)', async () => {
+		const store = createSandboxStore()
+		await store.applyPreset('invalid-semantic')
+		const listed = store.problems.value
+
+		store.setDraftSourceText(secondText)
+		store.setDraftSourceText(`${secondText} `)
+		expect(store.problems.value)
+			.toBe(listed)
+
+		await store.apply()
+		expect(store.problems.value).not.toBe(listed)
+		expect(store.problems.value)
+			.toEqual([])
+		store.dispose()
+	})
+
 	it('showProblems() opens Author > JSON and flags the Problems list for focus', () => {
 		const store = createSandboxStore()
 		store.activeTab.value = 'runtime'

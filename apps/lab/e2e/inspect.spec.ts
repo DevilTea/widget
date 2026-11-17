@@ -258,7 +258,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 
 		const draft = defaultSandboxPreset.sourceText.replace('Widget Lab sandbox', 'Widget Lab sandbox INSPECT REPLACED')
 		await setDraftSourceText(page, draft)
-		await page.getByRole('button', { name: 'Apply' })
+		await page.getByRole('button', { name: 'Apply', exact: true })
 			.click()
 
 		await expect(previewFrame(page)

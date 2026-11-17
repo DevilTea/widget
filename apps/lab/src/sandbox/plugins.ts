@@ -1,7 +1,7 @@
 /**
  * Widget Lab sandbox plugins.
  *
- * These are test-only fixtures (hidden from the showcase selector, opened with `?showcase=sandbox`) for
+ * These are test-only fixtures (hidden from the Examples menu, opened with `?showcase=sandbox`) for
  * exercising the Lab shell (workbench, Apply lifecycle, Blueprint Inspector, Preview) — deliberately
  * small and private to `widget-lab`, not a showcase; see this app's `AGENTS.md` for the boundary. Every
  * plugin is built exclusively through `@deviltea/widget-core`'s public `createWidgetPlugin` contract.

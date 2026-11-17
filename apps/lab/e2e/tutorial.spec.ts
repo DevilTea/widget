@@ -202,7 +202,7 @@ test('skipping the tour leaves the Lab fully usable', async ({ page }) => {
 		.click()
 	await expect(page.getByRole('tab', { name: 'Runtime' }))
 		.toHaveAttribute('aria-selected', 'true')
-	await expect(page.getByRole('button', { name: 'Apply' }))
+	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 		.toBeVisible()
 })
 
@@ -216,7 +216,7 @@ test.describe('dirty-draft confirmation dialog', () => {
 		await page.evaluate((source) => {
 			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)
 		}, '{ "id": "root", "type": "Text", "config": { "text": "dirtied by test" } }')
-		await expect(page.getByRole('button', { name: 'Apply' }))
+		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 			.toBeEnabled()
 	}
 
@@ -249,7 +249,7 @@ test.describe('dirty-draft confirmation dialog', () => {
 			.toBeFocused()
 
 		// Cancel touched nothing: the draft is still dirty and no tour started.
-		await expect(page.getByRole('button', { name: 'Apply' }))
+		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 			.toBeEnabled()
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toHaveCount(0)
@@ -285,7 +285,7 @@ test.describe('dirty-draft confirmation dialog', () => {
 		await expect(initiator)
 			.toBeFocused()
 
-		await expect(page.getByRole('button', { name: 'Apply' }))
+		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 			.toBeEnabled()
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toHaveCount(0)

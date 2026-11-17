@@ -123,6 +123,97 @@ test.describe('header layout (U01)', () => {
 	})
 })
 
+test.describe('menu focus handling', () => {
+	test('clicking into the editor while a menu is open closes it and leaves focus (and typing) in the editor', async ({ page }) => {
+		await openLab(page, 'showcase=sandbox')
+		const trigger = page.getByTestId('examples-menu')
+		await trigger.click()
+		await expect(trigger)
+			.toHaveAttribute('aria-expanded', 'true')
+
+		// Click on a line of the editor that is below the open menu (the menu covers the top lines), and type.
+		const editor = page.getByTestId('json-editor')
+		const line = (await editor.locator('.view-line')
+			.filter({ hasText: /"id":\s"note"/ })
+			.boundingBox())!
+		await page.mouse.click(line.x + 60, line.y + line.height / 2)
+		await expect(trigger)
+			.toHaveAttribute('aria-expanded', 'false')
+		await expect(editor.locator('.monaco-editor'))
+			.toHaveClass(/focused/)
+		// The menu's own close handling runs when its exit animation ends: a regression (refocusing the menu
+		// button) only shows after that, so a negative needs a moment to be meaningful.
+		await page.waitForTimeout(500)
+		await expect(editor.locator('.monaco-editor'))
+			.toHaveClass(/focused/)
+		await page.keyboard.insertText('typed while the menu was open')
+
+		// The typing landed in the editor (the draft is dirty) and focus did not jump back to the menu button.
+		await expect(page.getByTestId('apply-button'))
+			.toHaveAttribute('aria-disabled', 'false')
+		await expect(trigger)
+			.not
+			.toBeFocused()
+		await expect(page.locator('.view-lines'))
+			.toContainText('typed while the menu was open')
+	})
+
+	test('opening the other header menu while one is open switches to it instead of closing both', async ({ page }) => {
+		await openLab(page, 'showcase=sandbox')
+		const examples = page.getByTestId('examples-menu')
+		const overflow = page.getByTestId('overflow-menu')
+		await examples.click()
+		// Let the first menu finish opening (the bug needed a settled menu), then switch.
+		await expect(page.getByRole('menuitemcheckbox', { name: 'Valid — interactive' }))
+			.toBeVisible()
+
+		await overflow.click()
+
+		await expect(overflow)
+			.toHaveAttribute('aria-expanded', 'true')
+		await expect(examples)
+			.toHaveAttribute('aria-expanded', 'false')
+		await expect(page.getByRole('menuitem', { name: 'Tutorial', exact: true }))
+			.toBeVisible()
+		// The first menu's close must not take focus back from the second and close it too: closing is
+		// asynchronous, so a negative needs a moment to be meaningful.
+		await page.waitForTimeout(500)
+		await expect(overflow)
+			.toHaveAttribute('aria-expanded', 'true')
+		await expect(page.getByRole('menuitem', { name: 'Tutorial', exact: true }))
+			.toBeVisible()
+
+		// And back the other way.
+		await examples.click()
+		await expect(page.getByRole('menuitemcheckbox', { name: 'Valid — interactive' }))
+			.toBeVisible()
+		await page.waitForTimeout(500)
+		await expect(examples)
+			.toHaveAttribute('aria-expanded', 'true')
+		await expect(overflow)
+			.toHaveAttribute('aria-expanded', 'false')
+	})
+
+	test('Escape and choosing an item still return focus to the trigger', async ({ page }) => {
+		await openLab(page, 'showcase=sandbox')
+		const examples = page.getByTestId('examples-menu')
+		await examples.click()
+		await page.keyboard.press('Escape')
+		await expect(examples)
+			.toHaveAttribute('aria-expanded', 'false')
+		await expect(examples)
+			.toBeFocused()
+
+		await examples.click()
+		await page.getByRole('menuitemcheckbox', { name: 'Valid — interactive' })
+			.click()
+		await expect(examples)
+			.toHaveAttribute('aria-expanded', 'false')
+		await expect(examples)
+			.toBeFocused()
+	})
+})
+
 test.describe('Examples menu and the showcase URL (U01, U03)', () => {
 	test('always names the showcase and the last loaded preset, and says edited once the document changes', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
@@ -258,6 +349,14 @@ test.describe('Undo last apply (U04)', () => {
 		const undo = page.getByTestId('undo-button')
 		const revert = page.getByTestId('revert-button')
 		const apply = page.getByTestId('apply-button')
+
+		// The visible text is "Undo"; the accessible name says what it does, and does not collide with Apply's name.
+		await expect(page.getByRole('button', { name: 'Undo last apply', exact: true }))
+			.toBeVisible()
+		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
+			.toHaveCount(1)
+		await expect(undo)
+			.toHaveText('Undo')
 
 		// Nothing applied yet: disabled, and the tooltip says why (the button stays focusable).
 		await expect(undo)

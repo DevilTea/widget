@@ -42,10 +42,10 @@ test('draft source does not affect Preview until Apply, then Apply updates it', 
 	await expect(previewFrame(page)
 		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
 		.toHaveCount(0)
-	await expect(page.getByRole('button', { name: 'Apply' }))
+	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 		.toBeEnabled()
 
-	await page.getByRole('button', { name: 'Apply' })
+	await page.getByRole('button', { name: 'Apply', exact: true })
 		.click()
 	await expect(previewFrame(page)
 		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
@@ -55,7 +55,7 @@ test('draft source does not affect Preview until Apply, then Apply updates it', 
 test('an invalid draft preserves the prior active snapshot and surfaces a visible parse error', async ({ page }) => {
 	const draft = defaultSandboxPreset.sourceText.replace('Widget Lab sandbox', 'Widget Lab sandbox DRAFT')
 	await setDraftSourceText(page, draft)
-	await page.getByRole('button', { name: 'Apply' })
+	await page.getByRole('button', { name: 'Apply', exact: true })
 		.click()
 	await expect(previewFrame(page)
 		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
@@ -69,9 +69,9 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 	// enabled because it is dirty even though the active Preview snapshot is still valid (#38 guard).
 	await expect(page.locator('.view-lines'))
 		.toHaveText(invalidDraft)
-	await expect(page.getByRole('button', { name: 'Apply' }))
+	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 		.toBeEnabled()
-	await page.getByRole('button', { name: 'Apply' })
+	await page.getByRole('button', { name: 'Apply', exact: true })
 		.click()
 
 	await expect(previewFrame(page)
@@ -82,7 +82,7 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 		.toContainText('valid · 0 diagnostics')
 	await expect(page.locator('.view-lines'))
 		.toHaveText(invalidDraft)
-	await expect(page.getByRole('button', { name: 'Apply' }))
+	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 		.toBeEnabled()
 
 	// Visible status: the syntax error is a problem of the last Apply, so the header chip counts it and the
@@ -94,7 +94,7 @@ test('an invalid draft preserves the prior active snapshot and surfaces a visibl
 
 test('an invalid Document retains the prior Preview and explains the divergence', async ({ page }) => {
 	await setDraftSourceText(page, '{ "id": "root", "type": "NoSuchWidgetType" }')
-	await page.getByRole('button', { name: 'Apply' })
+	await page.getByRole('button', { name: 'Apply', exact: true })
 		.click()
 	await expectDocumentStatus(page, { problems: 1 })
 	await expectPreviewStatus(page, 'stale')

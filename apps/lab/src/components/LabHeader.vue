@@ -67,27 +67,54 @@ const exampleLabel = computed(() => {
 // An action that may open a modal dialog (the draft guard, the tutorial's own confirmation) waits until the
 // menu that chose it has closed and focus is back on the menu's trigger: the dialog then records that trigger
 // as the control to return focus to, instead of a menu item that is about to disappear. `onCloseAutoFocus` is
-// Reka's hook for that moment; the trigger is focused here (and Reka's own restore prevented) so the order
-// is guaranteed, and the action runs in the next task, after focus has settled.
+// Reka's hook for that moment; the trigger is focused here (and Reka's own restore, which runs a task later
+// than anything scheduled from this handler, prevented) so the order is guaranteed, and the action runs in the
+// next task, after focus has settled.
+//
+// Like Reka's own handler, this refocuses the trigger only when the menu closed WITHOUT an interaction outside
+// it (Escape, an item select). A non-modal menu also closes because the user clicked or focused something else
+// (into Monaco, onto the other header menu); stealing focus back to the trigger then would swallow the typing
+// or close the menu that click just opened. `onInteractOutside` records that case (mirroring Reka, any outside
+// interaction of a non-modal menu counts); the flag is reset when the menu opens and when it has been consumed.
 let afterMenuClose: (() => void) | null = null
 const examplesTrigger = useTemplateRef<ComponentPublicInstance>('examplesTrigger')
 const overflowTrigger = useTemplateRef<ComponentPublicInstance>('overflowTrigger')
 
-function menuContent(align: 'start' | 'end', trigger: typeof examplesTrigger) {
+function createMenuFocusHandling(align: 'start' | 'end', trigger: typeof examplesTrigger) {
+	let interactedOutside = false
 	return {
-		align,
-		onCloseAutoFocus: (event: Event) => {
-			event.preventDefault()
-			;(trigger.value?.$el as HTMLElement | undefined)?.focus()
-			const action = afterMenuClose
-			afterMenuClose = null
-			if (action !== null)
-				setTimeout(action, 0)
+		content: {
+			align,
+			onInteractOutside: (event: Event) => {
+				if (!event.defaultPrevented)
+					interactedOutside = true
+			},
+			onCloseAutoFocus: (event: Event) => {
+				const outside = interactedOutside
+				interactedOutside = false
+				const action = afterMenuClose
+				afterMenuClose = null
+				if (outside) {
+					// Leave focus where the user put it (Reka's own handler skips the refocus too). A chosen item's
+					// action must still run, though: a click elsewhere can land while the menu is still leaving.
+					if (action !== null)
+						setTimeout(action, 0)
+					return
+				}
+				event.preventDefault()
+				;(trigger.value?.$el as HTMLElement | undefined)?.focus()
+				if (action !== null)
+					setTimeout(action, 0)
+			},
+		},
+		onOpenChange: (open: boolean) => {
+			if (open)
+				interactedOutside = false
 		},
 	}
 }
-const examplesContent = menuContent('start', examplesTrigger)
-const overflowContent = menuContent('end', overflowTrigger)
+const examplesFocus = createMenuFocusHandling('start', examplesTrigger)
+const overflowFocus = createMenuFocusHandling('end', overflowTrigger)
 
 function chooseShowcase(id: string, label: string): void {
 	if (id === store.showcaseId.value)
@@ -283,9 +310,10 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 
 		<UDropdownMenu
 			:items="exampleItems"
-			:content="examplesContent"
+			:content="examplesFocus.content"
 			:modal="false"
 			:ui="{ content: 'w-80 max-w-[90vw]' }"
+			@update:open="examplesFocus.onOpenChange"
 		>
 			<UButton
 				ref="examplesTrigger"
@@ -425,6 +453,7 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 					variant="outline"
 					icon="i-lucide-undo-2"
 					:label="i18n.t('Undo')"
+					:aria-label="i18n.t('Undo last apply')"
 					:aria-disabled="!store.canUndo.value"
 					class="aria-disabled:opacity-50"
 					@click="onUndo"
@@ -444,8 +473,9 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 
 		<UDropdownMenu
 			:items="overflowItems"
-			:content="overflowContent"
+			:content="overflowFocus.content"
 			:modal="false"
+			@update:open="overflowFocus.onOpenChange"
 		>
 			<UButton
 				ref="overflowTrigger"

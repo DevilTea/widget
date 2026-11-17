@@ -125,23 +125,20 @@ async function pageLocale(page: Page): Promise<LabLocaleId> {
 }
 
 /**
- * Opens a header menu by its trigger and clicks one path of items (`[submenu, leaf]` or `[item]`). The menus are
- * non-modal, so they dismiss when focus moves elsewhere (a Dockview panel that was just added takes focus a
- * moment later), and a menu that was just closed can linger in the DOM for its exit animation. So "open" is read
- * from the trigger's `aria-expanded` (never from the number of `menu` roles), and the whole path is retried
- * from the trigger if the menu closed under it.
+ * Opens a header menu by its trigger and clicks one path of items (`[submenu, leaf]` or `[item]`), once: a menu
+ * that closes by itself must fail the spec, not be retried into passing (an earlier retrying version hid a focus
+ * bug that closed the menus under the user). A menu that was just closed can linger in the DOM for its exit
+ * animation, so "open" is read from the trigger's `aria-expanded`, never from the number of `menu` roles.
  */
 async function chooseFromMenu(page: Page, triggerTestId: string, path: readonly (() => Locator)[]): Promise<void> {
 	const trigger = page.getByTestId(triggerTestId)
-	await expect(async () => {
-		if ((await trigger.getAttribute('aria-expanded')) !== 'true')
-			await trigger.click({ timeout: 2000 })
-		for (const item of path) {
-			await item()
-				.click({ timeout: 2000 })
-		}
-	})
-		.toPass({ timeout: 15_000 })
+	await trigger.click()
+	await expect(trigger)
+		.toHaveAttribute('aria-expanded', 'true')
+	for (const item of path) {
+		await item()
+			.click()
+	}
 }
 
 /**

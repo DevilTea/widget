@@ -370,11 +370,11 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			revisions: getLabRevisionStatus(session.documentState.revision, session.preview?.revision ?? null),
 		})
 	})
-	const problems = computed(() => {
-		void sessionTick.value
-		const { blueprint } = session.documentState
-		return collectProblems(blueprint, inspectBlueprint(blueprint), session.parseError)
-	})
+	// Depends on the committed Blueprint and the Lab-only parse error, both reference-stable computeds, rather than
+	// on `sessionTick` (which every keystroke bumps): typing re-runs neither the Blueprint inspection nor the
+	// diagnostic collection; only a commit, an Apply that fails to parse, or the first edit after such a failure does.
+	const committedBlueprint = computed(() => documentState.value.blueprint)
+	const problems = computed(() => collectProblems(committedBlueprint.value, inspectBlueprint(committedBlueprint.value), parseError.value))
 	const example = computed(() => {
 		void sessionTick.value
 		return deriveExampleState({
