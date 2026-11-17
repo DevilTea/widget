@@ -1,0 +1,121 @@
+/**
+ * Tailwind v4 + Nuxt UI for the Lab shell ONLY (`main.ts`). The Preview frame entry
+ * (`preview-frame-main.ts`) never imports this file, so Tailwind's theme tokens and utilities cannot reach
+ * the showcase renderers (verified by the frame computed-style/geometry diff recorded in the PR that
+ * introduced this file).
+ *
+ * Cascade layers, lowest to highest priority:
+ *
+ *   theme        Tailwind design tokens and Nuxt UI's `--ui-*` defaults
+ *   base         the scoped Nuxt UI reset below (no Tailwind preflight, see "No global preflight")
+ *   preflights   PikaCSS `:root` tokens (`--lab-*`)            -- name is PikaCSS's, see `pika.config.ts`
+ *   components   (Tailwind/Nuxt UI component layer, normally empty)
+ *   utilities    Tailwind utilities, the classes Nuxt UI components are made of, AND PikaCSS's `utilities`
+ *                (`pk-*` atomic classes). PikaCSS's layer name is fixed by its generated CSS, so the two
+ *                share this layer; their classes never target the same element, and inside the layer the
+ *                later source wins.
+ *
+ * The order is declared inline in `index.html` (the first `@layer` statement the browser sees fixes the
+ * order, and Vite emits the shared PikaCSS stylesheet before this one), and repeated here for readers and
+ * for any tool that loads this file alone. Unlayered CSS (`global.css`, `dockview-theme.css`, scoped SFC
+ * styles) beats every layer, so Dockview, Vue Flow, Monaco, Shiki and the hand-written chrome rules keep
+ * winning over Tailwind.
+ */
+@layer theme, base, preflights, components, utilities;
+
+/*
+ * No global preflight. `@import "tailwindcss"` would include `tailwindcss/preflight.css`, which sets
+ * `html { line-height: 1.5; tab-size: 4 }`, `border: 0 solid` on every element, resets headings, lists,
+ * buttons and form controls... Measured against the current chrome (header 77px -> 83px, every button and
+ * select 27px -> 30px, `border-*-style` none -> solid on ~120 elements), that changes the PikaCSS- and
+ * UA-styled chrome, which this PR must not do. So only the theme and the utilities are imported, and the
+ * few resets Nuxt UI components need are scoped to the elements Nuxt UI renders (`[data-slot]`, set by every
+ * Nuxt UI component) in the `base` layer below. Adopt the full preflight when the chrome itself moves to
+ * Tailwind (later PRs of the redesign), not before.
+ *
+ * `source(none)` turns off Tailwind's automatic source detection (the whole project, including showcase
+ * sources and JSON text) and lists only Lab chrome explicitly. Nuxt UI adds its own `@source` for its
+ * components.
+ */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "@nuxt/ui";
+
+@source "../../index.html";
+@source "../App.vue";
+@source "../components";
+
+/*
+ * The slice of Tailwind's preflight Nuxt UI components rely on, limited to Nuxt UI's own elements.
+ * Buttons and form controls otherwise keep the UA background, border, padding and font.
+ */
+@layer base {
+	[data-slot] {
+		border: 0 solid;
+	}
+
+	button[data-slot],
+	input[data-slot],
+	select[data-slot],
+	textarea[data-slot] {
+		font: inherit;
+		font-feature-settings: inherit;
+		letter-spacing: inherit;
+		color: inherit;
+		background-color: transparent;
+		border-radius: 0;
+		margin: 0;
+		padding: 0;
+		opacity: 1;
+	}
+
+	a[data-slot] {
+		color: inherit;
+		text-decoration: inherit;
+	}
+
+	svg[data-slot],
+	img[data-slot] {
+		display: block;
+		vertical-align: middle;
+	}
+}
+
+/*
+ * Theme bridge, tokens. The Lab palette (`--lab-color-*`, defined by PikaCSS for dark and by
+ * `global.css` under `html[data-lab-theme='light']`) is authoritative; Nuxt UI's semantic tokens are
+ * pointed at it. They are plain `var()` references, so they follow `data-lab-theme` by themselves; no
+ * `.dark` variant of the mapping is needed. The `.dark` class (`composables/use-nuxt-ui-theme-bridge.ts`)
+ * only exists so Nuxt UI's `dark:` variants agree with the Lab theme.
+ *
+ * Unlayered on purpose: this must beat Nuxt UI's `theme`-layer defaults, including its `.dark` block.
+ */
+:root,
+.light,
+.dark {
+	--ui-radius: var(--lab-radius);
+
+	--ui-bg: var(--lab-color-bg);
+	--ui-bg-muted: var(--lab-color-surface);
+	--ui-bg-elevated: var(--lab-color-surface-alt);
+	--ui-bg-accented: var(--lab-color-border);
+	--ui-bg-inverted: var(--lab-color-text);
+
+	--ui-text: var(--lab-color-text);
+	--ui-text-highlighted: var(--lab-color-text);
+	--ui-text-toned: var(--lab-color-text-muted);
+	--ui-text-muted: var(--lab-color-text-muted);
+	--ui-text-dimmed: color-mix(in srgb, var(--lab-color-text-muted) 70%, var(--lab-color-bg));
+	--ui-text-inverted: var(--lab-color-accent-contrast);
+
+	--ui-border: var(--lab-color-border);
+	--ui-border-muted: var(--lab-color-border);
+	--ui-border-accented: color-mix(in srgb, var(--lab-color-text-muted) 60%, var(--lab-color-border));
+	--ui-border-inverted: var(--lab-color-text);
+
+	--ui-primary: var(--lab-color-accent);
+	--ui-info: var(--lab-color-accent);
+	--ui-success: var(--lab-color-ok);
+	--ui-warning: var(--lab-color-warning);
+	--ui-error: var(--lab-color-danger);
+}

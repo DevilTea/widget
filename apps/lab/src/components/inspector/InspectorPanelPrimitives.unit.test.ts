@@ -3,11 +3,14 @@ import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
 import { testGlobalProperties } from '../../test-support'
+import { testGlobalPlugins } from '../../test-support-ui'
 import InspectorPanelShell from './InspectorPanelShell.vue'
 import InspectorSplitLayout from './InspectorSplitLayout.vue'
 
 const global = {
 	config: { globalProperties: testGlobalProperties },
+	// The description bar's dismiss button is a Nuxt UI `UButton`.
+	plugins: testGlobalPlugins,
 	provide: {
 		[LabI18nKey as symbol]: {
 			locale: { value: 'en' },
