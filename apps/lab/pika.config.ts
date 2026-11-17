@@ -25,7 +25,7 @@ export default defineEngineConfig({
 			'--lab-color-accent-contrast',
 			'--lab-color-danger',
 			'--lab-color-warning',
-			'--lab-color-success',
+			'--lab-color-ok',
 			'--lab-radius',
 			'--lab-font-mono',
 			'--lab-font-sans',
@@ -41,7 +41,9 @@ export default defineEngineConfig({
 			'--lab-color-accent-contrast': '#04101f',
 			'--lab-color-danger': '#f2545b',
 			'--lab-color-warning': '#e8a33d',
-			'--lab-color-success': '#3fbf7f',
+			// One token for success/OK in both themes (audit U17): this is the dark value, `styles/global.css`
+			// overrides it for `html[data-lab-theme='light']`. Never reintroduce a second name for it.
+			'--lab-color-ok': '#3fbf7f',
 			'--lab-radius': '6px',
 			'--lab-font-mono': '"SFMono-Regular", ui-monospace, Menlo, Consolas, monospace',
 			'--lab-font-sans': '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',

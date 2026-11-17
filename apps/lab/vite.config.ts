@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import pikacss from '@pikacss/unplugin-pikacss/vite'
 import Vue from 'unplugin-vue/vite'
 import { defineConfig } from 'vite'
+import { labNuxtUi } from './nuxt-ui'
 import { vendorModernMonacoEditorCore } from './vite-plugin-vendor-modern-monaco-editor-core'
 
 export default defineConfig({
@@ -20,6 +21,9 @@ export default defineConfig({
 			cssCodegen: './src/pika.gen.css',
 		}),
 		Vue(),
+		// Nuxt UI + Tailwind v4. Only the Lab entry imports their CSS (`src/styles/lab-ui.css` from `main.ts`); the
+		// Preview frame entry never does. See `nuxt-ui.ts`.
+		labNuxtUi(),
 		// Self-hosts `modern-monaco`'s editor engine (issue #30 Scope A) — see the plugin's own
 		// file-level comment for the full mechanism.
 		vendorModernMonacoEditorCore(),

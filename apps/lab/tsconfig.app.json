@@ -2,6 +2,11 @@
 	"extends": "@deviltea/tsconfig/browser",
 	"compilerOptions": {
 		"composite": true,
+		// Nuxt UI's theme types (`pnpm nuxt-ui:codegen` writes them under node_modules; see nuxt-ui.ts).
+		"paths": {
+			"#build/ui": ["./node_modules/.nuxt-ui/ui/index.ts"],
+			"#build/ui/*": ["./node_modules/.nuxt-ui/ui/*"]
+		},
 		"types": ["vite/client"]
 	},
 	"include": [

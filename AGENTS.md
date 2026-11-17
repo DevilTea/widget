@@ -26,7 +26,7 @@ pnpm build
 pnpm check
 ```
 
-`pnpm test:unit` runs the root Vitest configuration over `packages/**/src/**/*.unit.test.ts`, `apps/**/src/**/*.unit.test.ts`, and `scripts/**/*.unit.test.ts`. Browser and built-Pages contracts are intentionally separate CI jobs.
+`pnpm test:unit` runs the root Vitest configuration over `packages/**/src/**/*.unit.test.ts`, `apps/**/src/**/*.unit.test.ts`, and `scripts/**/*.unit.test.ts`, as two Vitest projects (`packages`, covering `packages/` and `scripts/`, and `lab`, covering `apps/`) that share the root plugins, coverage and settings; only `lab` loads the Lab's Nuxt UI plugin and setup file. Browser and built-Pages contracts are intentionally separate CI jobs.
 
 ## Releasing
 

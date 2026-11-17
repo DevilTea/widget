@@ -10,6 +10,7 @@ import { createImplementationExplorerStore, ImplementationExplorerKey } from './
 import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
 import { createLabThemeStore, LabThemeKey } from './composables/use-lab-theme'
+import { useNuxtUiThemeBridge } from './composables/use-nuxt-ui-theme-bridge'
 import { useSupportedWorkbenchViewport } from './composables/use-supported-workbench-viewport'
 import { createTutorialStore, TutorialStoreKey } from './composables/use-tutorial'
 import { disposeLayoutWorker } from './graph/layout-client'
@@ -25,6 +26,8 @@ const i18n = createLabI18nStore()
 provide(LabI18nKey, i18n)
 const theme = createLabThemeStore()
 provide(LabThemeKey, theme)
+// Nuxt UI's `.dark` class follows the Lab theme store (the single source of truth); see the composable.
+useNuxtUiThemeBridge(theme.theme)
 
 // `?showcase=<id>` picks the starting showcase (also hidden test fixtures such as `sandbox`); unknown ids
 // fall back to the default. See `showcases/registry.ts`'s `resolveInitialShowcase`.
