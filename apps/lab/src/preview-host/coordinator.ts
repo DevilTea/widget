@@ -4,10 +4,16 @@ import type { LabTheme } from '../theme/theme'
 import type { PreviewFrameConnection, PreviewFrameDriver } from './frame-driver'
 import type { PreviewHostDescriptor, PreviewTourId } from './protocol'
 import { shallowRef } from 'vue'
+import { PreviewHostClientError } from './client'
 
 export interface PreviewHostCoordinator {
 	readonly connection: Readonly<Ref<PreviewFrameConnection | null>>
 	readonly error: Readonly<Ref<string | null>>
+	/**
+	 * With an `error`: the frame answered a refused mount and still runs the last Preview that mounted (`true`), or the
+	 * frame did not answer / lost its connection and nothing can be said to run (`false`, and `connection` is `null`).
+	 */
+	readonly runtimeSurvives: Readonly<Ref<boolean>>
 	attachDriver: (driver: PreviewFrameDriver) => () => void
 	replace: (descriptor: PreviewHostDescriptor) => Promise<PreviewFrameConnection | null>
 	updatePresentation: (locale: LabLocale, theme: LabTheme) => void
@@ -24,9 +30,11 @@ export interface PreviewHostCoordinator {
 export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 	const connection = shallowRef<PreviewFrameConnection | null>(null)
 	const error = shallowRef<string | null>(null)
+	const runtimeSurvives = shallowRef(false)
 	const observationListeners = new Set<(tourId: PreviewTourId) => void>()
 	let driver: PreviewFrameDriver | null = null
 	let stopDriverObservation: (() => void) | null = null
+	let stopDriverCloseObservation: (() => void) | null = null
 	let epoch = 0
 	let disposed = false
 	let queue: Promise<unknown> = Promise.resolve()
@@ -47,12 +55,20 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 			selectedDriver.setTutorialSpotlight(tutorialSpotlight)
 			connection.value = next
 			error.value = null
+			runtimeSurvives.value = false
 			return next
 		}
 		catch (cause) {
 			if (driver !== selectedDriver || epoch !== selectedEpoch || desired !== descriptor)
 				return null
 			const failure = cause instanceof Error ? cause : new Error(String(cause))
+			// A refusal the frame answered, before it touched what it ran, leaves that running. Anything else (no answer in
+			// time, a closed channel, an answer that says the old Runtime was already taken down) leaves a connection that
+			// describes a Runtime nobody can reach.
+			const refused = failure instanceof PreviewHostClientError && failure.answered && !failure.runtimeTornDown
+			if (!refused)
+				connection.value = null
+			runtimeSurvives.value = refused && connection.value !== null
 			error.value = failure.message
 			throw failure
 		}
@@ -70,6 +86,7 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 	return {
 		connection,
 		error,
+		runtimeSurvives,
 		attachDriver(nextDriver) {
 			if (disposed) {
 				nextDriver.dispose()
@@ -78,9 +95,18 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 			if (driver !== null && driver !== nextDriver)
 				driver.dispose()
 			stopDriverObservation?.()
+			stopDriverCloseObservation?.()
 			driver = nextDriver
 			epoch++
 			const currentEpoch = epoch
+			stopDriverCloseObservation = nextDriver.onUnexpectedClose(() => {
+				if (driver !== nextDriver || epoch !== currentEpoch)
+					return
+				// The Runtime that connection described is gone with the frame: say so instead of showing stale values.
+				connection.value = null
+				runtimeSurvives.value = false
+				error.value = 'The connection to the preview frame was closed.'
+			})
 			stopDriverObservation = nextDriver.onTutorialObservation((tourId) => {
 				if (driver !== nextDriver || epoch !== currentEpoch)
 					return
@@ -93,6 +119,8 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 					return
 				stopDriverObservation?.()
 				stopDriverObservation = null
+				stopDriverCloseObservation?.()
+				stopDriverCloseObservation = null
 				driver = null
 				epoch++
 				connection.value = null
@@ -130,6 +158,8 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 			connection.value = null
 			stopDriverObservation?.()
 			stopDriverObservation = null
+			stopDriverCloseObservation?.()
+			stopDriverCloseObservation = null
 			driver?.dispose()
 			driver = null
 			observationListeners.clear()

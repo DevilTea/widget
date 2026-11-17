@@ -81,7 +81,7 @@ const i18n = useLabI18n()
 					marginTop: '6px',
 					paddingTop: '12px',
 					borderTop: '1px solid var(--lab-color-border)',
-					fontSize: '10px',
+					fontSize: '11px',
 					textAlign: 'left',
 					width: '100%',
 					color: 'var(--lab-color-text-muted)',
@@ -90,7 +90,7 @@ const i18n = useLabI18n()
 					gap: '4px',
 				})"
 			>
-				<span :class="pika({ fontWeight: '600', textTransform: 'uppercase', fontSize: '9px' })">
+				<span :class="pika({ fontWeight: '600', textTransform: 'uppercase', fontSize: '11px' })">
 					{{ i18n.t('How to select focus:') }}
 				</span>
 				<div>• <strong>Preview</strong>: {{ i18n.t('Turn on Inspect and click a widget') }}</div>

@@ -85,7 +85,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 				v-if="curatedEntryAvailable"
 				type="button"
 				data-testid="blueprint-view-implementation"
-				:class="pika({ flex: '0 0 auto', padding: '3px 10px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				:class="pika({ flex: '0 0 auto', padding: '3px 10px', minHeight: '24px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
 				@click="implementationExplorer.open()"
 			>
 				{{ i18n.t('View implementation') }}

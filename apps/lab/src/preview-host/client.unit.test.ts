@@ -45,6 +45,29 @@ describe('preview host client', () => {
 		}
 	})
 
+	it('says whether an error the frame answered came after it had taken down the old Runtime', async () => {
+		const pair = createInProcessInspectorTransportPair()
+		const client = createPreviewHostClient(pair.client)
+		const requests: ReturnType<typeof parsePreviewHostRequest>[] = []
+		pair.agent.subscribe((raw) => {
+			const request = parsePreviewHostRequest(raw)
+			if (request !== null)
+				requests.push(request)
+		})
+		try {
+			const refused = client.mount('session-a', 1, { showcaseId: 'nope', revision: 0, sourceText: '{}' })
+			const lateFailure = client.mount('session-a', 1, { showcaseId: 'survey', revision: 1, sourceText: '{}' })
+			pair.agent.send({ protocol: PREVIEW_HOST_PROTOCOL_VERSION, kind: 'error', requestId: requests[0]!.requestId, message: 'Unknown Preview showcase: nope.' })
+			pair.agent.send({ protocol: PREVIEW_HOST_PROTOCOL_VERSION, kind: 'error', requestId: requests[1]!.requestId, message: 'Preview frame root disappeared during mount.', runtimeTornDown: true })
+			await expect(refused).rejects.toMatchObject({ answered: true, runtimeTornDown: false })
+			await expect(lateFailure).rejects.toMatchObject({ answered: true, runtimeTornDown: true })
+		}
+		finally {
+			client.close()
+			pair.agent.close()
+		}
+	})
+
 	it('forwards observation events and rejects pending requests on disconnect', async () => {
 		const pair = createInProcessInspectorTransportPair()
 		const client = createPreviewHostClient(pair.client)
@@ -57,5 +80,6 @@ describe('preview host client', () => {
 		const pending = client.mount('session-a', 1, { showcaseId: 'survey', revision: 0, sourceText: '{}' })
 		pair.agent.close()
 		await expect(pending).rejects.toBeInstanceOf(PreviewHostClientError)
+		await expect(pending).rejects.toMatchObject({ answered: false, runtimeTornDown: false })
 	})
 })

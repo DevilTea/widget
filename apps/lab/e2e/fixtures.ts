@@ -111,6 +111,12 @@ export type LabLocaleId = 'en' | 'zh-TW'
 
 const SHOWCASE_LABELS: Readonly<Record<ShowcaseId, string>> = { survey: 'Interactive Survey', sandbox: 'Sandbox' }
 const PRESET_LABELS = new Map([...surveyPresets, ...sandboxPresets].map(preset => [preset.id, preset.label] as const))
+// The survey examples are translated in the zh-TW Lab (the sandbox ones are a hidden fixture and are not).
+const PRESET_LABELS_ZH_TW: ReadonlyMap<string, string> = new Map([
+	['survey-default', '預設——開放日報名'],
+	['survey-ai-draft', 'AI 草稿——五個錯誤'],
+	['survey-cycle', '循環——同行人數 ↔ 親子區'],
+])
 
 // Menu item names follow the page locale; the language names themselves never translate.
 const OVERFLOW_LABELS: Readonly<Record<LabLocaleId, { theme: string, language: string, developer: string, light: string, dark: string, implementation: string, documentTools: string }>> = {
@@ -164,9 +170,10 @@ export async function selectShowcase(page: Page, id: ShowcaseId, options: { disc
 
 /** Loads a preset of the current showcase through the Examples menu. Pass `discardDraft` when an unapplied draft exists. */
 export async function loadPreset(page: Page, id: string, options: { discardDraft?: boolean } = {}): Promise<void> {
-	const label = PRESET_LABELS.get(id)
-	if (label === undefined)
+	const english = PRESET_LABELS.get(id)
+	if (english === undefined)
 		throw new Error(`Unknown preset id: ${id}`)
+	const label = (await pageLocale(page)) === 'zh-TW' ? PRESET_LABELS_ZH_TW.get(id) ?? english : english
 	await chooseFromMenu(page, 'examples-menu', [() => page.getByRole('menuitemcheckbox', { name: label })])
 	if (options.discardDraft === true)
 		await answerDraftGuard(page, 'discard')
@@ -199,7 +206,7 @@ export async function expectDocumentStatus(page: Page, expected: { valid: true }
 }
 
 /** The header's preview chip: up to date (`current`), showing the last valid version (`stale`), or `unavailable`. */
-export async function expectPreviewStatus(page: Page, expected: 'current' | 'stale' | 'unavailable'): Promise<void> {
+export async function expectPreviewStatus(page: Page, expected: 'current' | 'stale' | 'unavailable' | 'failed'): Promise<void> {
 	await expect(page.getByTestId('preview-status'))
 		.toHaveAttribute('data-state', expected)
 }

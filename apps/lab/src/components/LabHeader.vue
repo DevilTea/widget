@@ -167,10 +167,11 @@ const previewLabel = computed(() => {
 	switch (previewState.value) {
 		case 'current': return i18n.t('Preview up to date')
 		case 'stale': return i18n.t('Preview shows the last valid version')
+		case 'failed': return i18n.t('Preview failed to load')
 		default: return i18n.t('No preview yet')
 	}
 })
-const previewColor = computed(() => previewState.value === 'current' ? 'success' : previewState.value === 'stale' ? 'warning' : 'neutral')
+const previewColor = computed(() => previewState.value === 'current' ? 'success' : previewState.value === 'stale' ? 'warning' : previewState.value === 'failed' ? 'error' : 'neutral')
 
 // ---------------------------------------------------------------------------------------------------------
 // Edit actions. Disabled buttons use `aria-disabled` (not `disabled`) so they stay focusable and keep their
@@ -365,7 +366,7 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 			:color="previewColor"
 			variant="subtle"
 			size="md"
-			:icon="previewState === 'current' ? 'i-lucide-circle-check' : previewState === 'stale' ? 'i-lucide-triangle-alert' : 'i-lucide-circle-dashed'"
+			:icon="previewState === 'current' ? 'i-lucide-circle-check' : previewState === 'stale' ? 'i-lucide-triangle-alert' : previewState === 'failed' ? 'i-lucide-circle-x' : 'i-lucide-circle-dashed'"
 			:label="previewLabel"
 			:ui="{ label: 'text-default' }"
 			class="whitespace-nowrap"

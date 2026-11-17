@@ -6,7 +6,7 @@
  * `@deviltea/widget-core`'s public Blueprint/Runtime contract and never reinterprets it.
  */
 
-import type { AnyWidgetPluginTuple, ApplyPatchFailure, ApplyPatchResult, DiagnosticPath, JsonCompatibilityReason, JsonPrimitive, SourcePatch, ValidWidgetSystemBlueprint, WidgetSystemBlueprint } from '@deviltea/widget-core'
+import type { AnyWidgetPluginTuple, ApplyPatchFailure, ApplyPatchResult, DiagnosticPath, JsonCompatibilityReason, JsonPrimitive, JsonValue, SourcePatch, ValidWidgetSystemBlueprint, WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 
 /** The deliberately narrow semantic command surface exposed by the Phase 3 Structure view. */
@@ -19,13 +19,34 @@ export interface ReplaceConfigScalarCommand {
 	readonly value: JsonPrimitive
 }
 
-export type AuthorCommand = ReplaceConfigScalarCommand
+/** One change inside a widget's authored `config` (audit U15): replace a value, add a key or array item, or remove one. */
+export type ConfigEdit
+	= | { readonly op: 'replace', readonly value: JsonValue }
+		| { readonly op: 'add', readonly value: JsonValue }
+		| { readonly op: 'remove' }
+
+/**
+ * A change at `configPath` (relative to the widget's `config`, never empty) of the selected node. `add` creates an
+ * object key that is absent or inserts at an array index (`index === length` appends); `replace` and `remove` need
+ * the path to exist. Lowered to a `SourcePatch` by `lab/author.ts`, exactly like the scalar command.
+ */
+export interface EditConfigCommand {
+	readonly type: 'edit-config'
+	readonly nodeId: InspectionNodeId
+	readonly documentRevision: number
+	readonly configPath: readonly (string | number)[]
+	readonly edit: ConfigEdit
+}
+
+export type AuthorCommand = ReplaceConfigScalarCommand | EditConfigCommand
+
+export type AuthorUnsupportedReason = 'stale-selection' | 'widget-not-found' | 'config-not-found' | 'config-value-not-scalar' | 'invalid-value' | 'config-path-not-found' | 'config-path-exists'
 
 export type AuthorOutcome
 	= | { readonly status: 'applied', readonly blueprintStatus: 'valid' | 'invalid' }
 		| { readonly status: 'skipped-concurrent' }
 		| { readonly status: 'draft-dirty' }
-		| { readonly status: 'unsupported', readonly reason: 'stale-selection' | 'widget-not-found' | 'config-not-found' | 'config-value-not-scalar' | 'invalid-value' }
+		| { readonly status: 'unsupported', readonly reason: AuthorUnsupportedReason }
 		| { readonly status: 'patch-error', readonly failure: ApplyPatchFailure }
 
 /**

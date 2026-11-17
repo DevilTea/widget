@@ -34,9 +34,15 @@ const emit = defineEmits<{
 	toggleCluster: [clusterId: string]
 }>()
 
+/**
+ * Fit leaves 8% around the graph (it used to leave 20%, so a fitted graph used about 40% of the canvas: audit U11).
+ * Everything is still in view afterwards; the text itself is 11px or more before the zoom.
+ */
+const FIT_OPTIONS = { padding: 0.08 } as const
+
 const i18n = useLabI18n()
 const vueFlowContainer = ref<HTMLElement | null>(null)
-const { fitView, getNodes, onNodesChange, onNodesInitialized } = useVueFlow()
+const { fitView, getNodes, onNodesChange, onNodesInitialized, zoomIn, zoomOut } = useVueFlow()
 
 let fitted = false
 let resizeObserver: ResizeObserver | null = null
@@ -82,7 +88,7 @@ async function attemptFit(): Promise<boolean> {
 	if (!areCurrentNodesMeasured())
 		return false
 
-	const success = await fitView({ padding: 0.2 })
+	const success = await fitView(FIT_OPTIONS)
 	if (success) {
 		fitted = true
 		return true
@@ -91,7 +97,7 @@ async function attemptFit(): Promise<boolean> {
 }
 
 function fitGraph(): void {
-	void fitView({ padding: 0.2 })
+	void fitView(FIT_OPTIONS)
 }
 
 onNodesInitialized(() => {
@@ -125,7 +131,12 @@ watch(() => props.layoutVersion, () => {
 	void nextTick(attemptFit)
 })
 
-defineExpose({ fitGraph })
+/** Keyboard route to zooming (the wheel and pinch already zoom): a fitted large graph is read by zooming in. */
+function zoomGraph(direction: 'in' | 'out'): void {
+	void (direction === 'in' ? zoomIn() : zoomOut())
+}
+
+defineExpose({ fitGraph, zoomGraph })
 
 function onNodeClick({ node }: NodeMouseEvent): void {
 	if (node.type === 'cluster') {
@@ -190,7 +201,7 @@ function memberKindShort(kind: string): string {
 							<span class="graph-cluster-type">{{ data.widgetType }}</span>
 							<span class="graph-cluster-id">#{{ data.widgetId }}</span>
 						</button>
-						<span class="graph-cluster-meta">{{ data.memberCount }} members</span>
+						<span class="graph-cluster-meta">{{ data.memberCount }} {{ i18n.t('members') }}</span>
 						<button
 							type="button"
 							class="graph-cluster-toggle"
@@ -204,8 +215,8 @@ function memberKindShort(kind: string): string {
 					<span
 						v-if="data.hasInvalidCycle"
 						class="graph-cluster-alert"
-						title="invalid cycle"
-					>! cycle</span>
+						:title="i18n.t('invalid cycle')"
+					>! {{ i18n.t('cycle') }}</span>
 				</div>
 
 				<div
@@ -245,28 +256,29 @@ function memberKindShort(kind: string): string {
 					</div>
 					<div
 						class="graph-cluster-counts"
-						aria-label="member counts"
+						role="group"
+						:aria-label="i18n.t('Member counts')"
 					>
 						<span
 							v-if="data.memberCounts?.state"
 							class="graph-kind-count graph-kind-count--state"
-							title="State members"
+							:title="i18n.t('State members')"
 						>S {{ data.memberCounts.state }}</span>
 						<span
 							v-if="data.memberCounts?.property"
 							class="graph-kind-count graph-kind-count--property"
-							title="Property members"
+							:title="i18n.t('Property members')"
 						>P {{ data.memberCounts.property }}</span>
 						<span
 							v-if="data.memberCounts?.method"
 							class="graph-kind-count graph-kind-count--method"
-							title="Method members"
+							:title="i18n.t('Method members')"
 						>M {{ data.memberCounts.method }}</span>
 						<span
 							v-if="data.hasInvalidCycle"
 							class="graph-cluster-alert"
-							title="invalid cycle"
-						>! cycle</span>
+							:title="i18n.t('invalid cycle')"
+						>! {{ i18n.t('cycle') }}</span>
 					</div>
 					<Handle
 						id="t"
@@ -307,19 +319,23 @@ function memberKindShort(kind: string): string {
 					<span
 						v-if="data.transitivelyWrites"
 						class="graph-member-flag"
-						title="transitivelyWrites"
+						role="img"
+						:aria-label="i18n.t('Writes State directly or through the Methods it invokes')"
+						:title="i18n.t('Writes State directly or through the Methods it invokes')"
 					>W</span>
 					<span
 						v-if="data.transitivelyEmits"
 						class="graph-member-flag"
+						role="img"
 						:aria-label="i18n.t('Emits an Event directly or through the Methods it invokes')"
 						:title="i18n.t('Emits an Event directly or through the Methods it invokes')"
 					>E</span>
 					<span
 						v-if="data.invalidCycle"
 						class="graph-member-flag graph-member-flag--danger"
-						aria-label="invalid cycle"
-						title="invalid cycle"
+						role="img"
+						:aria-label="i18n.t('invalid cycle')"
+						:title="i18n.t('invalid cycle')"
 					>!</span>
 				</div>
 				<Handle
@@ -403,7 +419,7 @@ function memberKindShort(kind: string): string {
 	top: 0;
 	left: 0;
 	right: 0;
-	height: 38px;
+	height: 40px;
 	display: flex;
 	align-items: center;
 	gap: 7px;
@@ -458,13 +474,13 @@ function memberKindShort(kind: string): string {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: 9px;
+	font-size: 11px;
 	color: var(--lab-color-text-muted);
 }
 
 .graph-cluster-meta {
 	flex-shrink: 0;
-	font-size: 9px;
+	font-size: 11px;
 	color: var(--lab-color-text-muted);
 }
 
@@ -472,21 +488,21 @@ function memberKindShort(kind: string): string {
 	display: flex;
 	align-items: center;
 	gap: 4px;
-	min-height: 18px;
+	min-height: 20px;
 	margin-top: auto;
 }
 
 .graph-kind-count {
 	display: inline-flex;
 	align-items: center;
-	min-width: 22px;
-	height: 16px;
-	padding: 0 5px;
+	min-width: 28px;
+	height: 20px;
+	padding: 0 6px;
 	border: 1px solid color-mix(in srgb, var(--graph-kind-color) 42%, var(--lab-color-border));
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--graph-kind-color) 8%, var(--lab-color-surface));
 	color: color-mix(in srgb, var(--graph-kind-color) 72%, var(--lab-color-text));
-	font-size: 8px;
+	font-size: 11px;
 	font-weight: 700;
 	line-height: 1;
 }
@@ -507,9 +523,9 @@ function memberKindShort(kind: string): string {
 }
 
 .graph-cluster-toggle {
-	width: 21px;
-	height: 21px;
-	flex: 0 0 21px;
+	width: 24px;
+	height: 24px;
+	flex: 0 0 24px;
 	display: inline-grid;
 	place-items: center;
 	padding: 0;
@@ -518,24 +534,38 @@ function memberKindShort(kind: string): string {
 	background: color-mix(in srgb, var(--lab-color-surface) 88%, transparent);
 	color: var(--lab-color-text-muted);
 	font-family: var(--lab-font-mono);
-	font-size: 13px;
+	font-size: 15px;
 	font-weight: 700;
 	line-height: 1;
 	cursor: pointer;
 	transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
-.graph-cluster-toggle:hover,
-.graph-cluster-toggle:focus-visible {
+.graph-cluster-toggle:hover {
 	border-color: color-mix(in srgb, var(--lab-color-accent) 58%, var(--lab-color-border));
 	background: color-mix(in srgb, var(--lab-color-accent) 8%, var(--lab-color-surface));
 	color: var(--lab-color-accent);
-	outline: none;
+}
+
+/* Audit U20: a visible keyboard focus ring on every Graph control, not only a tint. */
+.graph-cluster-toggle:focus-visible,
+.graph-cluster-identity:focus-visible {
+	outline: 2px solid var(--lab-color-accent);
+	outline-offset: 2px;
+}
+
+/* A 24px target; the collapsed card keeps its own stacked, left-aligned identity. */
+.graph-cluster-identity {
+	min-height: 24px;
+}
+
+.graph-cluster-identity:not(.graph-cluster-identity--collapsed) {
+	align-items: center;
 }
 
 .graph-cluster-alert {
 	flex-shrink: 0;
-	font-size: 8px;
+	font-size: 11px;
 	font-weight: 700;
 	color: var(--lab-color-danger);
 	text-transform: uppercase;
@@ -563,7 +593,7 @@ function memberKindShort(kind: string): string {
 	background: var(--lab-color-surface);
 	color: var(--lab-color-text);
 	font-family: var(--lab-font-mono);
-	font-size: 10px;
+	font-size: 12px;
 	cursor: pointer;
 	box-shadow: 0 1px 3px color-mix(in srgb, var(--lab-color-text) 6%, transparent);
 	transition: border-color 120ms ease, box-shadow 120ms ease, opacity 160ms ease;
@@ -586,16 +616,16 @@ function memberKindShort(kind: string): string {
 }
 
 .graph-member-kind {
-	width: 17px;
-	height: 17px;
-	flex: 0 0 17px;
+	width: 20px;
+	height: 20px;
+	flex: 0 0 20px;
 	display: inline-grid;
 	place-items: center;
 	border: 1px solid color-mix(in srgb, var(--graph-kind-color) 42%, var(--lab-color-border));
 	border-radius: 5px;
 	background: color-mix(in srgb, var(--graph-kind-color) 8%, var(--lab-color-surface-alt));
 	color: color-mix(in srgb, var(--graph-kind-color) 78%, var(--lab-color-text));
-	font-size: 8px;
+	font-size: 11px;
 	font-weight: 800;
 }
 
@@ -611,13 +641,13 @@ function memberKindShort(kind: string): string {
 	flex-shrink: 0;
 	display: inline-grid;
 	place-items: center;
-	min-width: 15px;
-	height: 15px;
-	padding: 0 3px;
+	min-width: 20px;
+	height: 20px;
+	padding: 0 4px;
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--lab-color-warning) 10%, transparent);
 	color: var(--lab-color-warning);
-	font-size: 8px;
+	font-size: 11px;
 	font-weight: 800;
 }
 
@@ -639,7 +669,7 @@ function memberKindShort(kind: string): string {
 	background: color-mix(in srgb, var(--lab-color-surface) 80%, transparent);
 	color: var(--lab-color-text-muted);
 	font-family: var(--lab-font-mono);
-	font-size: 9px;
+	font-size: 11px;
 }
 
 .graph-stub-card--invalid {
@@ -715,41 +745,47 @@ function memberKindShort(kind: string): string {
 	opacity: 0.1;
 }
 
+/*
+ * Edge labels (audit U11). Labels of neighbouring edges ran into each other ("1 dep-deps"), so a label is shown only
+ * for the edge that is hovered or selected. The kind of edge stays readable without it: the stroke is solid,
+ * bold or dashed (see the key above the canvas and the Legend), and the label is part of the edge's accessible name.
+ * 11px is the smallest text anywhere in the Lab.
+ */
 :deep(.vue-flow__edge-text) {
-	fill: var(--lab-color-text-muted);
+	fill: var(--lab-color-text);
 	font-family: var(--lab-font-mono);
-	font-size: 9px;
-	font-weight: 600;
+	font-size: 11px;
+	font-weight: 700;
 }
 
 :deep(.vue-flow__edge-textbg) {
 	fill: var(--lab-color-surface);
-	fill-opacity: 0.86;
+	stroke: var(--lab-color-border);
+	stroke-width: 0.6px;
+	fill-opacity: 0.97;
 }
 
-:deep(.graph-edge:not(.graph-edge--aggregate) .vue-flow__edge-text),
-:deep(.graph-edge:not(.graph-edge--aggregate) .vue-flow__edge-textbg) {
-	opacity: 0.46;
+:deep(.graph-edge .vue-flow__edge-text),
+:deep(.graph-edge .vue-flow__edge-textbg) {
+	opacity: 0;
 	transition: opacity 120ms ease;
 }
 
-:deep(.graph-edge:not(.graph-edge--aggregate):hover .vue-flow__edge-text),
-:deep(.graph-edge:not(.graph-edge--aggregate):hover .vue-flow__edge-textbg),
-:deep(.graph-edge:not(.graph-edge--aggregate).selected .vue-flow__edge-text),
-:deep(.graph-edge:not(.graph-edge--aggregate).selected .vue-flow__edge-textbg) {
+:deep(.graph-edge:hover .vue-flow__edge-text),
+:deep(.graph-edge:hover .vue-flow__edge-textbg),
+:deep(.graph-edge.selected .vue-flow__edge-text),
+:deep(.graph-edge.selected .vue-flow__edge-textbg) {
 	opacity: 1;
 }
 
-:deep(.graph-edge--aggregate .vue-flow__edge-text) {
-	fill: var(--lab-color-text);
-	font-size: 9px;
-	font-weight: 700;
-}
-
-:deep(.graph-edge--aggregate .vue-flow__edge-textbg) {
-	fill: var(--lab-color-surface);
-	stroke: var(--lab-color-border);
-	stroke-width: 0.6px;
-	fill-opacity: 0.96;
+/*
+ * Audit U20: a node reached with the keyboard gets a visible ring. Edges are not part of the Tab order: Vue Flow writes
+ * their `tabIndex` attribute with a capital I, which an SVG element ignores, so they never take focus (the Relations view is the
+ * keyboard route to the same facts).
+ */
+:deep(.vue-flow__node:focus-visible) {
+	outline: 2px solid var(--lab-color-accent);
+	outline-offset: 2px;
+	border-radius: var(--lab-radius);
 }
 </style>

@@ -8,7 +8,7 @@ import { translateMessage } from './messages'
  */
 const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'The declarative definition you edit — changes take effect when you press Apply': '你正在編輯的 declarative definition——按下「套用」後變更才會生效',
-	'Author workspace for the current Document: browse Core catalog metadata, edit Structure, or use expert JSON': '目前 Document 的 Author workspace：瀏覽 Core catalog metadata、編輯 Structure，或使用 expert JSON',
+	'Author workspace for the current Document: browse Core catalog metadata, edit Structure, or use expert JSON': '目前 Document 的編寫區：瀏覽 Core 的 catalog、編輯結構，或直接用 JSON 編輯',
 	'JSON draft': 'JSON draft',
 	'Syntax error (Lab-only draft)': '語法錯誤（僅限 Lab draft）',
 	'Unapplied draft': '尚未套用的 draft',
@@ -34,7 +34,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Properties': 'Properties',
 	'Methods': 'Methods',
 	'Slots': 'Slots',
-	'Author views': 'Author 檢視',
+	'Author views': '編寫檢視',
 	'Select an authored widget to see its editable scalar config fields.': '選取 authored widget 以查看可編輯的 scalar config 欄位。',
 	'No existing scalar config fields on this widget.': '這個 widget 沒有現有的 scalar config 欄位。',
 	'Set value': '設定值',
@@ -171,9 +171,9 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 
 	'Show absent references': '顯示缺少的 references',
 	'Show isolated members': '顯示孤立 members',
-	'Dependencies': 'Dependencies',
-	'Relations': 'Relations',
-	'Dependencies views': 'Dependencies 檢視',
+	'Dependencies': '相依性',
+	'Relations': '關聯',
+	'Dependencies views': '相依性檢視',
 	'Used by': '被誰使用',
 	'Depends on': '依賴於',
 	'Focused member': '聚焦的 member',
@@ -193,7 +193,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Widget:': 'Widget：',
 	'Used by:': '被誰使用：',
 	'Depends on:': '依賴於：',
-	'members': '個 members',
+	'members': '個成員',
 	'Fit graph': '縮放至完整圖形',
 	'Expand all': '全部展開',
 	'Collapse all': '全部收合',
@@ -232,8 +232,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 
 	'Focused instance': '聚焦的 instance',
 	'Registered plugins': '已註冊 plugins',
-	'No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Dependencies to see its implementation here.': '目前沒有聚焦的 widget。請從 Preview（檢視模式）、Blueprint 或 Dependencies 選取 widget，即可在這裡查看實作。',
-	'No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Dependencies, or browse Registered plugins without selecting an instance.': '目前沒有聚焦的 widget。可從 Preview（檢視模式）、Blueprint 或 Dependencies 選取 widget，或直接瀏覽已註冊 plugins 而不選取 instance。',
+	'No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Dependencies to see its implementation here.': '目前沒有聚焦的 widget。請從 Preview（檢視模式）、Blueprint 或「相依性」選取 widget，即可在這裡查看實作。',
+	'No widget is focused. Select a widget in Preview (Inspect mode), Blueprint, or Dependencies, or browse Registered plugins without selecting an instance.': '目前沒有聚焦的 widget。可從 Preview（檢視模式）、Blueprint 或「相依性」選取 widget，或直接瀏覽已註冊 plugins 而不選取 instance。',
 	'has no curated Implementation entry yet.': '目前沒有經整理的 Implementation 項目。',
 	'This showcase has no curated registered-plugin Implementation entries.': '這個展示範例沒有經整理的已註冊 plugin Implementation 項目。',
 	'Applied instance': '已套用 instance',
@@ -253,7 +253,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	// Layout and the Selected widget pane (issue #230 PR 3b).
 	'Reset layout': '重設版面配置',
 	'Selected widget': '選取的 widget',
-	'One widget explained: what the source declares for it and what it holds right now. Select a widget with Inspect in the Preview, or in Blueprint or Dependencies': '一次說明一個 widget：source 對它的宣告，以及它目前持有的內容。可用 Preview 的檢視模式，或在 Blueprint、Dependencies 選取 widget',
+	'One widget explained: what the source declares for it and what it holds right now. Select a widget with Inspect in the Preview, or in Blueprint or Dependencies': '一次說明一個 widget：source 對它的宣告，以及它目前持有的內容。可用 Preview 的檢視模式，或在 Blueprint、相依性選取 widget',
 	'Declaration': '宣告',
 	'what the source says': 'source 怎麼寫',
 	'Runtime values': 'Runtime 的值',
@@ -264,7 +264,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'This widget is not in the running preview.': '這個 widget 不在執行中的預覽裡。',
 	'Loading Runtime values…': '正在載入 Runtime 的值…',
 	'Value of {name}': '{name} 的值',
-	'No widget selected — choose one with Inspect in the Preview, or in Blueprint or Dependencies, to see its declaration.': '尚未選取 widget——請用 Preview 的檢視模式，或在 Blueprint、Dependencies 選一個，即可查看它的宣告。',
+	'No widget selected — choose one with Inspect in the Preview, or in Blueprint or Dependencies, to see its declaration.': '尚未選取 widget——請用 Preview 的檢視模式，或在 Blueprint、「相依性」選一個，即可查看它的宣告。',
 	'(no resolved config)': '（沒有解析後的 config）',
 	'The same object as one shown elsewhere in this value (#{ref})': '與這個值中其他位置顯示的是同一個物件（#{ref}）',
 	'… more entries were left out by the Inspector snapshot': '… 還有更多項目被 Inspector snapshot 省略',
@@ -281,6 +281,77 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Showing what was written in the source.': '顯示 source 裡實際寫的內容。',
 	'Showing what the widget runs with after the plugin resolved it.': '顯示 plugin 解析後，widget 實際使用的內容。',
 	'Differs in:': '不同的欄位：',
+
+	// Structure editor (issue #230 PR 3c, audit U15).
+	'Select an authored widget to edit its config.': '請選擇一個 widget 來編輯它的 config。',
+	'This widget has no config.': '這個 widget 沒有 config。',
+	'This plugin publishes no config schema, so values are typed by what they hold and nothing can be added or removed here. Use JSON for that.': '這個 plugin 沒有提供 config schema，所以這裡只依值本身的型別編輯，無法新增或移除項目；需要的話請用 JSON。',
+	'Each change is applied to the Document at once and restarts the preview (its answers start over). Use Undo to take a change back.': '每次變更都會立刻套用到 Document，並讓預覽重新開始（先前的作答會清空）。可用「復原」撤回變更。',
+	'On': '開',
+	'Off': '關',
+	'Enter valid JSON.': '請輸入有效的 JSON。',
+	'Remove {name}': '移除 {name}',
+	'list ({count})': '清單（{count} 項）',
+	'Nothing set yet.': '尚未設定任何欄位。',
+	'Optional field to add to {name}': '要加入 {name} 的選填欄位',
+	'Add an optional field…': '加入選填欄位…',
+	'Add field': '加入欄位',
+	'Name of the key to add to {name}': '要加入 {name} 的鍵名',
+	'New key': '新的鍵名',
+	'Add key': '加入鍵',
+	'The list is empty.': '清單是空的。',
+	'Add item to {name}': '在 {name} 加入項目',
+
+	'Focus widget {name}': '聚焦 widget {name}',
+	'Focus {kind} {name}': '聚焦 {kind} {name}',
+	'Focus {kind} {name} in {widget}': '聚焦 {widget} 的 {kind} {name}',
+	'invalid evaluation cycle': '無效的 evaluation cycle',
+	'writes': '寫入',
+	'emits': '發出',
+
+	// Survey example names (Examples menu). The widgets' own text (survey questions, schema descriptions) is source-owned.
+	'Default — open day sign-up': '預設——開放日報名',
+	'AI draft — five mistakes': 'AI 草稿——五個錯誤',
+	'Cycle — Guests ↔ Kids\' corner': '循環——同行人數 ↔ 親子區',
+	'A valid Maker Space open day sign-up: plain and conditional visibility and requiredness, option conditions, one custom rule, two languages, all four question types.': '一份有效的創客空間開放日報名：一般與有條件的顯示和必填、選項條件、一條自訂規則、兩種語言，以及全部四種題型。',
+	'The default with five deliberate mistakes, one per widget: an empty option list, a condition on a question that does not exist, an operator that does not fit its target, a missing translation and an unknown question type. Each is a located diagnostic.': '預設範例加上五個刻意的錯誤，每個 widget 一個：空的選項清單、指向不存在題目的條件、與目標不合的運算子、缺少翻譯，以及未知的題型。每個錯誤都有對應的位置。',
+	'The default where Guests is shown only to people who picked the kids\' corner, while the kids\' corner is shown only to people who bring guests. The conditions form a loop, so the Blueprint is invalid with four property-evaluation-cycle diagnostics.': '預設範例中，「同行人數」只對選了親子區的人顯示，而親子區又只對有同行人數的人顯示。這些條件形成循環，所以 Blueprint 無效，並有四個 property-evaluation-cycle diagnostics。',
+
+	'Zoom in': '放大',
+	'Zoom out': '縮小',
+	'{count} dep': '{count} 個依賴',
+	'{count} deps': '{count} 個依賴',
+
+	// Preview failure (audit U22).
+	'Preview failed to load': '預覽載入失敗',
+	'The preview could not be loaded': '無法載入預覽',
+	'Nothing is running in the preview: the frame did not respond, lost its connection or could not start your last change. Try again; if it keeps failing, reload the page.': '預覽裡目前沒有任何內容在執行：框架沒有回應、連線中斷，或無法啟動你的最後一次變更。請再試一次；如果一直失敗，請重新整理頁面。',
+	'Try again': '再試一次',
+	'The preview could not be updated': '無法更新預覽',
+	'The preview frame refused the last change, so it still shows the last version that loaded. Try again; if it keeps failing, reload the page.': '預覽框架拒絕了最後一次變更，所以仍顯示最後一個成功載入的版本。請再試一次；如果一直失敗，請重新整理頁面。',
+
+	// Graph key and chrome (audit U11, U21).
+	'Graph key': 'Graph 標記說明',
+	'writes State': '寫入 State',
+	'emits an Event': '發出 Event',
+	'in an invalid cycle': '位於無效循環中',
+	'cycle': '循環',
+	'Member counts': '成員數量',
+	'State members': 'State 成員',
+	'Property members': 'Property 成員',
+	'Method members': 'Method 成員',
+	'Writes State directly or through the Methods it invokes': '直接或透過它所呼叫的 Methods 寫入 State',
+
+	'That field already exists.': '這個欄位已經存在。',
+	'That value cannot be stored in the source, because it is not JSON.': '這個值無法存進 source，因為它不是 JSON。',
+	'This widget has no config yet: add a field to create it.': '這個 widget 還沒有 config：加入一個欄位就會建立它。',
+	'Enter a number, such as 12 or 2.5.': '請輸入數字，例如 12 或 2.5。',
+	'This value has other forms; the JSON view edits those.': '這個值還有其他形式；請到 JSON 檢視編輯。',
+
+	// Grouped evaluation-cycle problems (issue #230 PR 3c, audit U16).
+	'{count} members depend on each other in a loop': '{count} 個 members 彼此循環依賴',
+	'Core reports this loop once per Property; show those {count} diagnostics': 'Core 對循環中的每個 Property 各回報一次；展開這 {count} 則 diagnostics',
+	'Core reports this loop once per Property; hide those {count} diagnostics': 'Core 對循環中的每個 Property 各回報一次；收合這 {count} 則 diagnostics',
 }
 
 export function translatePresentationMessage(locale: LabLocale, source: string): string {

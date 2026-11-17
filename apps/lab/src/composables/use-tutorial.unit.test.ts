@@ -87,6 +87,7 @@ function createFakePreviewDriver(): {
 			observationListeners.add(listener)
 			return () => observationListeners.delete(listener)
 		},
+		onUnexpectedClose: () => () => {},
 		dispose: () => {},
 	}
 	return {

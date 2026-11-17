@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { getLabRevisionStatus } from './revisions'
 import { deriveLabStatus } from './status'
 
-function status(options: { blueprint: 'valid' | 'invalid', diagnostics?: number, parseError?: boolean, document: number, preview: number | null }) {
+function status(options: { blueprint: 'valid' | 'invalid', diagnostics?: number, parseError?: boolean, document: number, preview: number | null, previewFailed?: boolean }) {
 	return deriveLabStatus({
 		blueprintStatus: options.blueprint,
 		diagnosticCount: options.diagnostics ?? 0,
 		hasParseError: options.parseError ?? false,
 		revisions: getLabRevisionStatus(options.document, options.preview),
+		previewFailed: options.previewFailed,
 	})
 }
 
@@ -34,6 +35,15 @@ describe('deriveLabStatus', () => {
 	it('reports an unavailable preview when no valid Document was ever promoted', () => {
 		expect(status({ blueprint: 'invalid', diagnostics: 2, document: 0, preview: null }))
 			.toEqual({ validity: { kind: 'problems', count: 2 }, preview: 'unavailable' })
+	})
+
+	it('reports a Preview frame that failed as failed, whatever revisions the Lab holds', () => {
+		expect(status({ blueprint: 'valid', document: 0, preview: 0, previewFailed: true }))
+			.toEqual({ validity: { kind: 'valid' }, preview: 'failed' })
+		expect(status({ blueprint: 'valid', document: 0, preview: null, previewFailed: true }).preview)
+			.toBe('failed')
+		expect(status({ blueprint: 'valid', document: 0, preview: 0, previewFailed: false }).preview)
+			.toBe('current')
 	})
 
 	it('never reports zero problems for an invalid Blueprint', () => {

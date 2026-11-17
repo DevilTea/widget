@@ -126,7 +126,7 @@ function runConflictDemo(): void {
 					</div>
 					<pre
 						data-testid="document-tools-patch"
-						:class="pika({ margin: '6px 0 0', padding: '8px', overflow: 'auto', fontSize: '10px', fontFamily: 'var(--lab-font-mono)', background: 'var(--lab-color-surface-alt)', border: '1px solid var(--lab-color-border)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
+						:class="pika({ margin: '6px 0 0', padding: '8px', overflow: 'auto', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', background: 'var(--lab-color-surface-alt)', border: '1px solid var(--lab-color-border)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
 					>{{ patchText }}</pre>
 				</template>
 			</section>
@@ -181,7 +181,7 @@ function runConflictDemo(): void {
 				</p>
 				<pre
 					v-if="separatedProjectionText !== null"
-					:class="pika({ margin: '6px 0 0', padding: '8px', overflow: 'auto', fontSize: '10px', fontFamily: 'var(--lab-font-mono)', background: 'var(--lab-color-surface-alt)', border: '1px solid var(--lab-color-border)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
+					:class="pika({ margin: '6px 0 0', padding: '8px', overflow: 'auto', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', background: 'var(--lab-color-surface-alt)', border: '1px solid var(--lab-color-border)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
 				>{{ separatedProjectionText }}</pre>
 				<p
 					v-else

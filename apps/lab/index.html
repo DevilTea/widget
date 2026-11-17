@@ -13,6 +13,30 @@
 		<style>
 			@layer properties, theme, base, preflights, components, utilities;
 		</style>
+		<!--
+			First-paint theme (audit U23). The stylesheet's default palette is the dark one and the light palette only
+			applies under `html[data-lab-theme='light']`, which the app sets when its module has loaded; a light-theme user
+			therefore saw a dark screen first. This sets the same two things (`data-lab-theme`, `color-scheme`) from the
+			same inputs as `resolveLabTheme()` in `src/theme/theme.ts` (the stored `widget-lab:theme`, else the system
+			preference, else light) before anything is painted. `theme-bootstrap.unit.test.ts` runs this exact script against
+			`resolveLabTheme()`. It must stay in step with `STORAGE_KEY` in `use-lab-theme.ts`.
+		-->
+		<script>
+			(function () {
+				var theme = null;
+				try {
+					var stored = localStorage.getItem('widget-lab:theme');
+					if (stored === 'light' || stored === 'dark') theme = stored;
+				} catch (error) {
+					// Blocked storage: fall through to the system preference.
+				}
+				if (theme === null) {
+					theme = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				}
+				document.documentElement.setAttribute('data-lab-theme', theme);
+				document.documentElement.style.colorScheme = theme;
+			})();
+		</script>
 	</head>
 	<body>
 		<div id="app" class="isolate"></div>

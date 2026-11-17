@@ -5,7 +5,8 @@
  *
  * - Validity: is the Document the user last applied (or the last Apply attempt) free of problems? A JSON
  *   syntax error of the last Apply counts as one problem, because no Document was committed from that text.
- * - Preview: does the Preview show that Document, or the last valid version before it?
+ * - Preview: does the Preview show that Document, or the last valid version before it? A Preview frame that
+ *   failed to load or lost its connection (audit U22) is `failed`, whatever revisions the Lab holds.
  */
 
 import type { LabRevisionStatus } from './revisions'
@@ -14,7 +15,7 @@ export type ValidityStatus
 	= | { readonly kind: 'valid' }
 		| { readonly kind: 'problems', readonly count: number }
 
-export type PreviewStatus = 'current' | 'stale' | 'unavailable'
+export type PreviewStatus = 'current' | 'stale' | 'unavailable' | 'failed'
 
 export interface LabStatus {
 	readonly validity: ValidityStatus
@@ -26,6 +27,8 @@ export interface LabStatusInput {
 	readonly diagnosticCount: number
 	readonly hasParseError: boolean
 	readonly revisions: Pick<LabRevisionStatus, 'previewRevision' | 'isLinked'>
+	/** The Preview frame reported a failure (did not load, or closed by itself) that has not been retried successfully. */
+	readonly previewFailed?: boolean
 }
 
 export function deriveLabStatus(input: LabStatusInput): LabStatus {
@@ -34,8 +37,10 @@ export function deriveLabStatus(input: LabStatusInput): LabStatus {
 		? { kind: 'valid' }
 		// An invalid Blueprint always has at least one diagnostic; `max` keeps the chip honest if that ever changed.
 		: { kind: 'problems', count: Math.max(1, count) }
-	const preview: PreviewStatus = input.revisions.previewRevision === null
-		? 'unavailable'
-		: input.revisions.isLinked ? 'current' : 'stale'
+	const preview: PreviewStatus = input.previewFailed === true
+		? 'failed'
+		: input.revisions.previewRevision === null
+			? 'unavailable'
+			: input.revisions.isLinked ? 'current' : 'stale'
 	return { validity, preview }
 }

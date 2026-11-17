@@ -20,6 +20,7 @@ import { layoutGraph } from '../graph/layout-client'
 import { createLayoutSession } from '../graph/layout-session'
 import { projectSemanticGraph } from '../graph/projection'
 import { toVueFlow } from '../graph/vue-flow'
+import { useLabI18n } from './use-lab-i18n'
 import { useLabStore } from './use-lab-store'
 
 export interface DependencyGraphView {
@@ -32,6 +33,7 @@ export interface DependencyGraphView {
 
 export function useDependencyGraph(): DependencyGraphView {
 	const store = useLabStore()
+	const i18n = useLabI18n()
 	const session = createLayoutSession(layoutGraph)
 
 	const tick = shallowRef(0)
@@ -72,6 +74,7 @@ export function useDependencyGraph(): DependencyGraphView {
 			expandedClusterIds: state.options?.expandedClusterIds,
 			focused: store.focus.value,
 			rootNodeId,
+			countLabel: count => i18n.t(count === 1 ? '{count} dep' : '{count} deps', { count }),
 		})
 	})
 

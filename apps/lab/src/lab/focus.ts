@@ -82,6 +82,19 @@ function documentNodeForIdentity(blueprint: WidgetSystemBlueprint, identity: Wid
 	return null
 }
 
+/** The one node of `blueprint` with this identity; `null` when there is none or the identity is ambiguous (duplicate ids). */
+function uniqueDocumentNodeForIdentity(blueprint: WidgetSystemBlueprint, identity: WidgetIdentity): InspectionNodeId | null {
+	let found: InspectionNodeId | null = null
+	for (const entry of inspectBlueprint(blueprint).nodes) {
+		if (entry.node.resolved && entry.node.id === identity.widgetId && entry.node.type === identity.widgetType) {
+			if (found !== null)
+				return null
+			found = entry.nodeId
+		}
+	}
+	return found
+}
+
 function remoteIdentity(snapshot: InspectorBlueprintSnapshot, nodeId: number): WidgetIdentity | null {
 	const node = snapshot.nodes.find(candidate => candidate.nodeId === nodeId)
 	return node !== undefined && node.resolved && node.widgetId !== undefined && node.widgetType !== undefined
@@ -124,10 +137,24 @@ export function createInspectorFocusStore<Plugins extends AnyWidgetPluginTuple>(
 		const changed = document.revision !== lastDocumentRevision || document.blueprint !== lastDocumentBlueprint
 		if (!changed)
 			return false
+		const previousBlueprint = lastDocumentBlueprint
+		const previousFocus = documentFocus
 		lastDocumentRevision = document.revision
 		lastDocumentBlueprint = document.blueprint
+		// A Structure command edits one widget's config and nothing else: the user stays on that widget (and member), so
+		// several edits in a row do not each send them back to the root. Every other kind of commit (JSON Apply, a preset,
+		// Undo, a showcase switch) can replace the whole tree and resets to the root, as before. The widget is found again
+		// by its id and type; an ambiguous or missing one also means the root.
+		const lastPatch = session.lastAppliedSourcePatch
+		let keptNodeId: InspectionNodeId | null = null
+		if (lastPatch?.origin === 'structure' && lastPatch.revision === document.revision && previousFocus !== null) {
+			const identity = documentIdentity(previousBlueprint, previousFocus.nodeId)
+			keptNodeId = identity === null ? null : uniqueDocumentNodeForIdentity(document.blueprint, identity)
+		}
 		documentFocus = {
-			...rootFocusOf(document.blueprint),
+			...(keptNodeId === null
+				? rootFocusOf(document.blueprint)
+				: { nodeId: keptNodeId, ...(previousFocus?.member === undefined ? {} : { member: previousFocus.member }) }),
 			scope: 'document',
 			revision: document.revision,
 		}

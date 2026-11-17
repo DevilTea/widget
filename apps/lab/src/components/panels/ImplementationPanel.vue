@@ -191,7 +191,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 					v-if="selectedFile !== null"
 					:class="pika({ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: '0', minWidth: '0' })"
 				>
-					<div :class="pika({ padding: '4px 10px', fontSize: '10px', color: 'var(--lab-color-text-muted)', fontFamily: 'var(--lab-font-mono)', overflowX: 'auto', flex: '0 0 auto' })">
+					<div :class="pika({ padding: '4px 10px', fontSize: '11px', color: 'var(--lab-color-text-muted)', fontFamily: 'var(--lab-font-mono)', overflowX: 'auto', flex: '0 0 auto' })">
 						{{ selectedFile.path }}
 					</div>
 					<div :class="pika({ flex: '1 1 auto', minHeight: '0', minWidth: '0' })">

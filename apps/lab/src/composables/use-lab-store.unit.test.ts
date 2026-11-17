@@ -55,6 +55,7 @@ function createRecordingDriver(options: {
 		setTutorialSpotlight: () => {},
 		evaluateTutorial: async (_tourId, _stepIndex, progress) => progress,
 		onTutorialObservation: () => () => {},
+		onUnexpectedClose: () => () => {},
 		dispose,
 	}
 	return { driver, mount, dispose }

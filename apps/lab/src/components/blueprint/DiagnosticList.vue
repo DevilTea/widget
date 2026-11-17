@@ -141,7 +141,7 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 			:class="pika({ border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '6px 8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' })"
 		>
 			<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
-				<span :class="pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '10px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text-muted)' })">
+				<span :class="pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '11px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text-muted)' })">
 					{{ diagnostic.code }}
 				</span>
 				<button

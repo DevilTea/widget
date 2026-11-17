@@ -15,11 +15,14 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Pause tutorial': '暫停教學',
 	'Blueprint': 'Blueprint',
 	'Runtime': 'Runtime',
-	'Author': 'Author',
-	'Dependencies': 'Dependencies',
-	'Relations': 'Relations',
-	'Catalog': 'Catalog',
-	'Structure': 'Structure',
+	// Panel and view names are Lab navigation, so they are Taiwan Chinese; Widget vocabulary (Blueprint, Runtime,
+	// Preview, Document, State, Property, Method, Event) and the developer panels (Implementation, Document Tools)
+	// stay English, as they are in the docs and in Core's own text.
+	'Author': '編寫',
+	'Dependencies': '相依性',
+	'Relations': '關聯',
+	'Catalog': '目錄',
+	'Structure': '結構',
 	'JSON': 'JSON',
 	'Document Tools': 'Document Tools',
 	'active': '運作中',
@@ -80,14 +83,14 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'The submitted copy kept its values and gained the "Answers changed since you submitted" marker. The submission is a stored State snapshot; the response is a live Property — open "Response — what a backend reads" below the form to see its current values.': '已送出的副本保留原本的值，並出現「Answers changed since you submitted」標記。送出的內容是儲存起來的 State snapshot；response 則是即時的 Property——展開表單下方的「回應——後端讀取的內容」即可看到它目前的值。',
 	'Map the views': '理解各個檢視',
 	'Each of these views is a real navigation shortcut — try one.': '這些檢視都是實際可用的導覽捷徑——選一個試試看。',
-	'Author = the declarative definition and structure you edit · Blueprint = what the applied Author source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Dependencies = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.': 'Author = 你編輯的 declarative definition 與結構 · Blueprint = 已套用 Author source 編譯後的結果 · Runtime = live State / Properties / Methods / Diagnostics · Dependencies = 已宣告 dependencies · Preview = Vue 呈現層 · Implementation = 這個 widget type 背後的 plugin + renderer 程式碼。',
+	'Author = the declarative definition and structure you edit · Blueprint = what the applied Author source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Dependencies = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.': '編寫 = 你編輯的 declarative definition 與結構 · Blueprint = 已套用的編寫內容 source 編譯後的結果 · Runtime = live State / Properties / Methods / Diagnostics · 相依性 = 已宣告 dependencies · Preview = Vue 呈現層 · Implementation = 這個 widget type 背後的 plugin + renderer 程式碼。',
 	'Source': 'Source',
-	'Graph': 'Graph',
+	'Graph': '關係圖',
 	'Preview': 'Preview',
 	'Implementation': 'Implementation',
 	'Try it yourself': '接下來自己試試看',
 	'You now know State, Property, Method, and dependency.': '你現在已經認識 State、Property、Method 與 dependency。',
-	'Open any inspector, or edit the Author JSON and press Apply.': '可以打開任一 inspector，或直接編輯 Author JSON 後按 Apply。',
+	'Open any inspector, or edit the Author JSON and press Apply.': '可以打開任一 inspector，或直接編輯 JSON 後按「套用」。',
 }
 
 export function translateMessage(locale: LabLocale, source: string): string {

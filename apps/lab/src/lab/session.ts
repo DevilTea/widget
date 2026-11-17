@@ -306,6 +306,33 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		}
 	}
 
+	/**
+	 * Mounts the Preview again after a failure to mount it (audit U22): the newest valid Document if it is ahead of the
+	 * Preview (a promotion that failed leaves the Document committed and the Preview on the older revision), else the
+	 * Preview as it is. On success the Preview is that snapshot, so the revision status agrees with what the frame shows.
+	 * Unavailable while another command runs; a failing mount rejects again, and the Preview stays as it was.
+	 */
+	async retryPreview(): Promise<void> {
+		if (this.applying)
+			return
+		const document = this.documentStateValue
+		const target: LabPreviewSnapshot<Plugins> | null = document.blueprint.status === 'valid'
+			? { revision: document.revision, sourceText: document.sourceText, blueprint: document.blueprint }
+			: this.previewSnapshotValue
+		if (target === null)
+			return
+		this.applying = true
+		this.emit()
+		try {
+			await this.hooks.replacePreview(target)
+			this.previewSnapshotValue = target
+		}
+		finally {
+			this.applying = false
+			this.emit()
+		}
+	}
+
 	/** Shared Document commit + Preview promotion lifecycle for JSON and Structure authoring. */
 	private async commitPatch(
 		patch: Parameters<WidgetDocument<Plugins>['applyPatch']>[0],

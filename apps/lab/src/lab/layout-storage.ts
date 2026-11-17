@@ -85,7 +85,7 @@ export function parseSavedLayout(raw: string | null): SavedLayout | null {
 	return isPlausibleLayout(parsed.layout) ? parsed.layout : null
 }
 
-/** A group's `{ views, activeView, id }` as Dockview serialises it. */
+/** A group's `{ views, activeView, id }` as Dockview serialises it; `false` when no panel is left in it. */
 function stripGroupData(data: unknown): boolean {
 	if (!isRecord(data) || !Array.isArray(data.views))
 		return false
@@ -99,27 +99,115 @@ function stripGroupData(data: unknown): boolean {
 	return true
 }
 
-function stripGridNode(node: unknown): boolean {
-	if (!isRecord(node))
-		return false
-	if (node.type === 'leaf')
-		return stripGroupData(node.data)
-	return node.type === 'branch' && Array.isArray(node.data) && node.data.every(child => stripGridNode(child))
+type GridNode = Record<string, unknown> & { size: number }
+
+function isGridNode(value: unknown): value is GridNode {
+	return isRecord(value) && typeof value.size === 'number' && Number.isFinite(value.size) && value.size >= 0 && (value.type === 'leaf' || value.type === 'branch')
+}
+
+/**
+ * Prunes the panels opened on request from one grid node, in place, and returns the nodes that take its place in
+ * its parent: the node itself, nothing (a group that held only lazy panels is gone) or, when a branch is left with
+ * a single child, that child. `size` is the node's extent along its parent's axis, so:
+ * - a removed child hands its size to the previous kept sibling (or the next one when it was first), so the
+ *   siblings keep their proportions and the divider moves only where the group was;
+ * - a branch left with one leaf is replaced by the leaf, which takes the branch's size;
+ * - a branch left with one branch (which runs along the parent's axis again, Dockview alternates orientation by
+ *   depth) is replaced by that branch's children, scaled to fill the branch's size.
+ * Returns `null` when the node is not a recognisable grid node, which makes the whole layout unusable.
+ */
+function pruneGridNode(node: unknown, removedIds: Set<string>): GridNode[] | null {
+	if (!isGridNode(node))
+		return null
+	if (node.type === 'leaf') {
+		const data = node.data
+		const groupId = isRecord(data) && typeof data.id === 'string' ? data.id : null
+		if (stripGroupData(data))
+			return [node]
+		if (groupId !== null)
+			removedIds.add(groupId)
+		return []
+	}
+	if (!Array.isArray(node.data))
+		return null
+	const kept: GridNode[] = []
+	let carried = 0
+	for (const child of node.data) {
+		const size = isGridNode(child) ? child.size : 0
+		const replacement = pruneGridNode(child, removedIds)
+		if (replacement === null)
+			return null
+		if (replacement.length === 0) {
+			if (kept.length > 0)
+				kept[kept.length - 1]!.size += size
+			else
+				carried += size
+			continue
+		}
+		replacement[0]!.size += carried
+		carried = 0
+		kept.push(...replacement)
+	}
+	node.data = kept
+	if (kept.length === 0)
+		return []
+	if (kept.length === 1) {
+		const only = kept[0]!
+		if (only.type === 'leaf') {
+			only.size = node.size
+			return [only]
+		}
+		const grandchildren = Array.isArray(only.data) ? only.data as GridNode[] : []
+		const total = grandchildren.reduce((sum, child) => sum + child.size, 0)
+		const scale = total > 0 ? node.size / total : 1
+		for (const child of grandchildren)
+			child.size *= scale
+		return grandchildren
+	}
+	return [node]
 }
 
 /**
  * The layout without the panels that are opened on request (Implementation, Document Tools), which are never
  * restored: their content depends on a request a page load did not make. Done on the data, before Dockview sees
  * it, so no such panel is ever created, and a group whose active panel was one of them activates its first
- * remaining panel instead of whatever neighbour closing it would have left active. Returns a new object (the input
- * is not modified), or `null` when a group would be left empty (a lazy panel alone in its own group): removing the
- * group would leave its siblings' sizes inconsistent, so the caller builds the default layout instead.
+ * remaining panel instead of whatever neighbour closing it would have left active. A group that held only such
+ * panels (a lazy panel the user had dragged into a group of its own) is removed from the grid and its size goes to
+ * a neighbour, so the other dividers stay where the user put them (`pruneGridNode`). Returns a new object (the input
+ * is not modified), or `null` when the grid is not a shape this module recognises or nothing would be left.
  */
 export function stripLazyPanels(layout: SavedLayout): SavedLayout | null {
 	const copy = structuredClone(layout)
 	const grid = copy.grid
-	if (!isRecord(grid) || !stripGridNode(grid.root))
+	if (!isRecord(grid) || !isGridNode(grid.root) || grid.root.type !== 'branch')
 		return null
+	const removedIds = new Set<string>()
+	const root = grid.root
+	const replacement = pruneGridNode(root, removedIds)
+	if (replacement === null || replacement.length === 0)
+		return null
+	if (replacement[0] === root) {
+		// The root stays a branch of its own.
+	}
+	else if (replacement.length === 1 && replacement[0]!.type === 'leaf') {
+		// One group is left: a root with a single leaf, as Dockview itself saves it.
+		grid.root = { type: 'branch', data: replacement, size: root.size }
+	}
+	else {
+		// The root had a single branch child, whose children now sit directly in the root; the axis flips with them.
+		// A root's size is its extent across its own axis (the height of a horizontal root).
+		const vertical = grid.orientation === 'HORIZONTAL'
+		if (grid.orientation !== 'HORIZONTAL' && grid.orientation !== 'VERTICAL')
+			return null
+		grid.orientation = vertical ? 'VERTICAL' : 'HORIZONTAL'
+		grid.root = { type: 'branch', data: replacement, size: Number(vertical ? grid.width : grid.height) }
+	}
+	if (removedIds.size > 0) {
+		// Locations in the saved data refer to the tree that was just reshaped; the maximised group, if any, is dropped.
+		delete grid.maximizedNode
+		if (typeof copy.activeGroup === 'string' && removedIds.has(copy.activeGroup))
+			delete copy.activeGroup
+	}
 	for (const key of ['floatingGroups', 'popoutGroups'] as const) {
 		const entries = copy[key]
 		if (Array.isArray(entries))

@@ -67,7 +67,7 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 			<button
 				type="button"
 				data-testid="author-catalog-copy"
-				:class="pika({ flexShrink: '0', padding: '3px 8px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				:class="pika({ flexShrink: '0', padding: '3px 8px', minHeight: '24px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
 				@click="copyCatalog"
 			>
 				{{ copyLabel() }}
@@ -90,7 +90,7 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 					<span
 						v-for="capability in ['config', 'slots', 'state', 'properties', 'methods'] as const"
 						:key="capability"
-						:class="pika({ padding: '2px 5px', borderRadius: '999px', fontSize: '10px', border: '1px solid var(--lab-color-border)' })"
+						:class="pika({ padding: '2px 5px', borderRadius: '999px', fontSize: '11px', border: '1px solid var(--lab-color-border)' })"
 						:style="{ opacity: widget.capabilities[capability] ? '1' : '0.4' }"
 					>
 						{{ i18n.t(capability === 'config' ? 'Config' : capability === 'slots' ? 'Slots' : capability === 'state' ? 'State' : capability === 'properties' ? 'Properties' : 'Methods') }}
@@ -107,7 +107,7 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 					:data-testid="`author-catalog-schema-${widget.entry.type}`"
 					:class="pika({ fontSize: '11px', marginBottom: '5px' })"
 				>
-					<summary :class="pika({ cursor: 'pointer' })">
+					<summary :class="pika({ cursor: 'pointer', minHeight: '24px', display: 'list-item', lineHeight: '24px' })">
 						<strong>{{ i18n.t('Config JSON Schema') }}</strong>
 					</summary>
 					<pre :class="pika({ margin: '4px 0 0', padding: '6px', maxHeight: '240px', overflow: 'auto', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)' })">{{ widget.configSchemaText }}</pre>

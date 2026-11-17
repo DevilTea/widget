@@ -13,7 +13,16 @@ import {
 	PREVIEW_HOST_PROTOCOL_VERSION,
 } from './protocol'
 
-export class PreviewHostClientError extends Error {}
+/**
+ * `answered`: the frame itself replied with an error (a mount it refused or could not finish), so the frame is alive.
+ * `runtimeTornDown`: it had already taken down the Runtime it ran before, so nothing runs; without it the old Runtime still
+ * runs. Neither: the channel failed (disconnected, closed).
+ */
+export class PreviewHostClientError extends Error {
+	constructor(message: string, readonly answered = false, readonly runtimeTornDown = false) {
+		super(message)
+	}
+}
 
 export interface PreviewHostClient {
 	mount: (sessionId: string, generation: number, preview: PreviewHostDescriptor) => Promise<PreviewHostMountedResponse>
@@ -48,7 +57,7 @@ export function createPreviewHostClient(transport: InspectorTransport): PreviewH
 				return
 			pending.delete(response.requestId)
 			if (response.kind === 'error')
-				entry.reject(new PreviewHostClientError(response.message))
+				entry.reject(new PreviewHostClientError(response.message, true, response.runtimeTornDown === true))
 			else
 				entry.resolve(response)
 			return

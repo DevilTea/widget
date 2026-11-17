@@ -1,5 +1,6 @@
 import type { PreviewFrameConnection, PreviewFrameDriver } from './frame-driver'
 import { describe, expect, it, vi } from 'vitest'
+import { PreviewHostClientError } from './client'
 import { createPreviewHostCoordinator } from './coordinator'
 
 function connection(revision: number): PreviewFrameConnection {
@@ -13,13 +14,17 @@ function connection(revision: number): PreviewFrameConnection {
 	}
 }
 
-function driverOf(mount: PreviewFrameDriver['mount']): PreviewFrameDriver {
+function driverOf(mount: PreviewFrameDriver['mount'], closeListeners: Set<() => void> = new Set()): PreviewFrameDriver {
 	return {
 		mount,
 		updatePresentation: () => {},
 		setTutorialSpotlight: () => {},
 		evaluateTutorial: async (_tour, _step, progress) => progress,
 		onTutorialObservation: () => () => {},
+		onUnexpectedClose: (listener) => {
+			closeListeners.add(listener)
+			return () => closeListeners.delete(listener)
+		},
 		dispose: () => {},
 	}
 }
@@ -165,7 +170,7 @@ describe('preview host coordinator', () => {
 			if (descriptor.revision === 1)
 				await firstGate
 			if (descriptor.revision === 3)
-				throw new Error('frame mount failed')
+				throw new PreviewHostClientError('frame mount failed', true)
 			return connection(descriptor.revision)
 		}) as unknown as PreviewFrameDriver['mount']
 		coordinator.attachDriver(driverOf(mount))
@@ -192,6 +197,130 @@ describe('preview host coordinator', () => {
 			.resolves.toMatchObject({ revision: 4 })
 		expect(coordinator.connection.value?.revision)
 			.toBe(4)
+		expect(coordinator.error.value)
+			.toBeNull()
+		coordinator.dispose()
+	})
+
+	it('keeps a failed mount as the error and publishes the next request when it works (audit U22)', async () => {
+		const coordinator = createPreviewHostCoordinator()
+		let attempts = 0
+		const mount = vi.fn(async ({ revision }: { revision: number }) => {
+			attempts++
+			if (attempts === 1)
+				throw new Error('Preview iframe did not become ready within 1000 ms.')
+			return connection(revision)
+		}) as unknown as PreviewFrameDriver['mount']
+		coordinator.attachDriver(driverOf(mount))
+
+		await expect(coordinator.replace({ showcaseId: 'survey', revision: 3, sourceText: '{}' }))
+			.rejects
+			.toThrow('did not become ready')
+		expect(coordinator.error.value)
+			.toBe('Preview iframe did not become ready within 1000 ms.')
+		expect(coordinator.connection.value)
+			.toBeNull()
+		expect(coordinator.runtimeSurvives.value)
+			.toBe(false)
+
+		const retried = await coordinator.replace({ showcaseId: 'survey', revision: 3, sourceText: '{}' })
+		expect(retried?.revision)
+			.toBe(3)
+		expect(coordinator.error.value)
+			.toBeNull()
+		expect(coordinator.connection.value?.revision)
+			.toBe(3)
+		coordinator.dispose()
+	})
+
+	it('a timeout drops the connection the Lab held, but a refusal the frame answered keeps the Runtime that still runs', async () => {
+		const coordinator = createPreviewHostCoordinator()
+		let attempt = 0
+		const mount = vi.fn(async ({ revision }: { revision: number }) => {
+			attempt++
+			if (attempt === 2)
+				throw new PreviewHostClientError('Unknown Preview showcase: nope.', true)
+			if (attempt === 3)
+				throw new Error('Preview iframe did not become ready within 1000 ms.')
+			return connection(revision)
+		}) as unknown as PreviewFrameDriver['mount']
+		coordinator.attachDriver(driverOf(mount))
+		await coordinator.replace({ showcaseId: 'survey', revision: 1, sourceText: '{}' })
+
+		await expect(coordinator.replace({ showcaseId: 'nope', revision: 2, sourceText: '{}' }))
+			.rejects
+			.toThrow('Unknown Preview showcase')
+		// The frame answered, so it still runs revision 1.
+		expect(coordinator.connection.value?.revision)
+			.toBe(1)
+		expect(coordinator.runtimeSurvives.value)
+			.toBe(true)
+
+		await expect(coordinator.replace({ showcaseId: 'survey', revision: 3, sourceText: '{}' }))
+			.rejects
+			.toThrow('did not become ready')
+		expect(coordinator.connection.value)
+			.toBeNull()
+		expect(coordinator.runtimeSurvives.value)
+			.toBe(false)
+		coordinator.dispose()
+	})
+
+	it('an error the frame answered after it took down the old Runtime leaves nothing running, unlike one answered before', async () => {
+		const coordinator = createPreviewHostCoordinator()
+		let attempt = 0
+		const mount = vi.fn(async ({ revision }: { revision: number }) => {
+			attempt++
+			if (attempt === 2)
+				throw new PreviewHostClientError('Unknown Preview showcase: nope.', true, false)
+			if (attempt === 3)
+				throw new PreviewHostClientError('Preview frame root disappeared during mount.', true, true)
+			return connection(revision)
+		}) as unknown as PreviewFrameDriver['mount']
+		coordinator.attachDriver(driverOf(mount))
+		await coordinator.replace({ showcaseId: 'survey', revision: 1, sourceText: '{}' })
+
+		// Refused before the frame touched anything: revision 1 still runs.
+		await expect(coordinator.replace({ showcaseId: 'nope', revision: 2, sourceText: '{}' }))
+			.rejects
+			.toThrow('Unknown Preview showcase')
+		expect(coordinator.connection.value?.revision)
+			.toBe(1)
+		expect(coordinator.runtimeSurvives.value)
+			.toBe(true)
+
+		// Failed after the frame replaced its Runtime: the frame answered, but nothing runs.
+		await expect(coordinator.replace({ showcaseId: 'survey', revision: 3, sourceText: '{}' }))
+			.rejects
+			.toThrow('root disappeared')
+		expect(coordinator.connection.value)
+			.toBeNull()
+		expect(coordinator.runtimeSurvives.value)
+			.toBe(false)
+		expect(coordinator.error.value)
+			.toBe('Preview frame root disappeared during mount.')
+		coordinator.dispose()
+	})
+
+	it('drops the connection and reports an error when the frame closes by itself, and recovers on the next mount', async () => {
+		const coordinator = createPreviewHostCoordinator()
+		const closeListeners = new Set<() => void>()
+		const mount = vi.fn(async ({ revision }: { revision: number }) => connection(revision)) as unknown as PreviewFrameDriver['mount']
+		coordinator.attachDriver(driverOf(mount, closeListeners))
+		await coordinator.replace({ showcaseId: 'survey', revision: 1, sourceText: '{}' })
+		expect(coordinator.connection.value?.revision)
+			.toBe(1)
+
+		for (const listener of closeListeners)
+			listener()
+		expect(coordinator.connection.value)
+			.toBeNull()
+		expect(coordinator.error.value)
+			.toBe('The connection to the preview frame was closed.')
+
+		await coordinator.replace({ showcaseId: 'survey', revision: 1, sourceText: '{}' })
+		expect(coordinator.connection.value?.revision)
+			.toBe(1)
 		expect(coordinator.error.value)
 			.toBeNull()
 		coordinator.dispose()

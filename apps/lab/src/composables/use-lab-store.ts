@@ -172,6 +172,8 @@ export interface LabStore {
 	revert: () => void
 	/** Restores the previously applied source as a new Document revision; see `LabSession.undoLastApply()`. */
 	undoLastApply: () => Promise<UndoOutcome>
+	/** Mounts the Preview again after it failed to load or to take a change; see `LabSession.retryPreview()`. */
+	retryPreview: () => Promise<void>
 	/** Opens Author > JSON and moves focus to the Problems list. */
 	showProblems: () => void
 	applyPreset: (presetId: string) => Promise<ApplyOutcome | undefined>
@@ -368,6 +370,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			diagnosticCount: blueprint.diagnostics.length,
 			hasParseError: session.parseError !== null,
 			revisions: getLabRevisionStatus(session.documentState.revision, session.preview?.revision ?? null),
+			previewFailed: previewHost.error.value !== null && !previewHost.runtimeSurvives.value,
 		})
 	})
 	// Depends on the committed Blueprint and the Lab-only parse error, both reference-stable computeds, rather than
@@ -562,6 +565,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		},
 		format: () => session.format(),
 		revert: () => session.revert(),
+		retryPreview: () => enqueue(() => session.retryPreview()),
 		undoLastApply: () => {
 			if (switchTransactionCount > 0)
 				return Promise.resolve({ status: 'skipped-concurrent' })
