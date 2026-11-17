@@ -17,6 +17,7 @@ import EventsPanel from './EventsPanel.vue'
 
 const mounted: VueWrapper[] = []
 afterEach(() => {
+	vi.useRealTimers()
 	for (const wrapper of mounted.splice(0))
 		wrapper.unmount()
 	disposePreviews()
@@ -44,7 +45,7 @@ async function mountPanel(options: { nested?: boolean, locale?: 'en' | 'zh-TW' }
 	const previewFocus = shallowRef<{ nodeId: number } | null>(null)
 	const setFocus = vi.fn()
 	const store = {
-		previewHost: { connection },
+		previewHost: { connection, error: shallowRef<string | null>(null) },
 		previewFocus,
 		preview: shallowRef({ revision: 3 }),
 		documentState: shallowRef({ revision: 3 }),
@@ -92,7 +93,7 @@ describe('eventsPanel', () => {
 			.toContain('No Events yet.')
 		expect(wrapper.get('[data-testid="events-listening"]')
 			.text())
-			.toBe('Listening to 2 declared Events on 1 widgets.')
+			.toBe('Listening to 2 declared Events on 1 widget.')
 		expect(wrapper.get('[data-testid="events-count"]')
 			.text())
 			.toBe('0 recorded Events')
@@ -183,8 +184,9 @@ describe('eventsPanel', () => {
 		expect(pause.text())
 			.toBe('Pause')
 		await pause.trigger('click')
+		// The label says what a click does now; a pressed state on top of it would say the opposite.
 		expect(pause.attributes('aria-pressed'))
-			.toBe('true')
+			.toBeUndefined()
 		expect(pause.text())
 			.toBe('Resume')
 		expect(wrapper.get('[data-testid="events-paused-note"]')
@@ -272,6 +274,22 @@ describe('eventsPanel', () => {
 			.toHaveLength(3)
 	})
 
+	it('marks the rows of the selected widget with aria-current', async () => {
+		const { wrapper, preview, previewFocus, connection } = await mountPanel({ nested: true })
+		preview.fire(1, 'notifier')
+		preview.fire(2, 'inner')
+		await nextTick()
+		const current = () => rows(wrapper)
+			.map(row => row.get('[data-testid="event-widget"]')
+				.attributes('aria-current') ?? '')
+		expect(current())
+			.toEqual(['', ''])
+		previewFocus.value = { nodeId: connection.value!.blueprint.nodes.find(node => node.widgetId === 'inner')!.nodeId }
+		await nextTick()
+		expect(current())
+			.toEqual(['true', ''])
+	})
+
 	it('selects the widget of an entry in the Preview, and disables that for a widget the Preview no longer has', async () => {
 		const { wrapper, preview, setFocus, connection } = await mountPanel({ nested: true })
 		preview.fire(1, 'inner')
@@ -287,9 +305,15 @@ describe('eventsPanel', () => {
 		connection.value = next.connection
 		await settle()
 		const stale = rows(wrapper)[0]!.get('[data-testid="event-widget"]')
+		// Still focusable (not `disabled`), activation is ignored, and the reason is its description.
 		expect(stale.attributes('disabled'))
-			.toBeDefined()
+			.toBeUndefined()
+		expect(stale.attributes('aria-disabled'))
+			.toBe('true')
 		expect(stale.attributes('title'))
+			.toBe('inner : Notifier is not in the current Preview')
+		expect(wrapper.get(`#${stale.attributes('aria-describedby')}`)
+			.text())
 			.toBe('inner : Notifier is not in the current Preview')
 		setFocus.mockClear()
 		await stale.trigger('click')
@@ -304,25 +328,84 @@ describe('eventsPanel', () => {
 			.toEqual(['4', '3'])
 	})
 
-	it('listens only while its tab is visible', async () => {
+	it('records while its tab is hidden, so the Events are there when it is opened', async () => {
 		const { wrapper, preview, visibility } = await mountPanel()
-		expect(preview.active.size)
-			.toBe(2)
 		visibility.show(false)
 		await settle()
-		expect(preview.active.size)
-			.toBe(0)
-		preview.ping()
-		visibility.show(true)
-		await settle()
+		// Hidden and still listening to everything it declares.
 		expect(preview.active.size)
 			.toBe(2)
-		expect(rows(wrapper))
-			.toHaveLength(0)
 		preview.ping()
 		await nextTick()
+		visibility.show(true)
+		await settle()
 		expect(rows(wrapper))
 			.toHaveLength(1)
+		expect(preview.active.size)
+			.toBe(2)
+	})
+
+	it('speaks the singular where there is one: one Event, one widget, one older entry dropped, one not recorded', async () => {
+		const { wrapper, preview } = await mountPanel()
+		preview.ping()
+		await nextTick()
+		expect(wrapper.get('[data-testid="events-count"]')
+			.text())
+			.toBe('1 recorded Event')
+		await wrapper.get('[data-testid="events-filter-event"]')
+			.setValue('pinged')
+		expect(wrapper.get('[data-testid="events-count"]')
+			.text())
+			.toBe('1 of 1 recorded Event shown')
+		await wrapper.get('[data-testid="events-filter-event"]')
+			.setValue('')
+
+		await wrapper.get('[data-testid="events-pause"]')
+			.trigger('click')
+		preview.ping()
+		await nextTick()
+		expect(wrapper.get('[data-testid="events-paused-note"]')
+			.text())
+			.toBe('Paused: 1 Event was not recorded.')
+		await wrapper.get('[data-testid="events-pause"]')
+			.trigger('click')
+		expect(wrapper.get('[data-testid="events-paused-note"]')
+			.text())
+			.toBe('1 Event was not recorded while the log was paused.')
+	})
+
+	it('announces one settled count after a burst of Events, not one announcement per Event', async () => {
+		vi.useFakeTimers()
+		const { wrapper, preview } = await mountPanel()
+		const live = wrapper.get('[data-testid="events-live"]')
+		expect(live.text())
+			.toBe('')
+		const announced: string[] = []
+		const observer = new MutationObserver(() => announced.push(live.text()))
+		observer.observe(live.element, { childList: true, characterData: true, subtree: true })
+
+		for (let i = 0; i < 4; i++) {
+			preview.ping()
+			await nextTick()
+			vi.advanceTimersByTime(200)
+			await nextTick()
+		}
+		// 800 ms after the first Event, 200 ms after the last: nothing was announced yet.
+		expect(live.text())
+			.toBe('')
+
+		vi.advanceTimersByTime(799)
+		await nextTick()
+		expect(live.text())
+			.toBe('')
+		vi.advanceTimersByTime(1)
+		await nextTick()
+		expect(live.text())
+			.toBe('4 Events recorded')
+		await Promise.resolve()
+		expect(announced)
+			.toEqual(['4 Events recorded'])
+		observer.disconnect()
 	})
 
 	it('speaks Taiwan Chinese with the Event vocabulary and Runtime data left as they are', async () => {

@@ -67,8 +67,10 @@ export interface Preview {
 	readonly active: Set<string>
 	/** Every request method the client sent, in order. */
 	readonly requests: string[]
-	/** Delays every `runtime.subscribeEvent` answer until `release()`. */
-	readonly gate: { hold: boolean, release: () => void }
+	/** Delays every `runtime.subscribeEvent` answer until `release()`, which lets all the delayed ones through. */
+	readonly gate: { hold: boolean, readonly pending: (() => void)[], release: () => void }
+	/** Disposes this Preview's Agent only; the client (shared or not) stays open. */
+	disposeAgent: () => void
 	dispose: () => void
 }
 
@@ -79,8 +81,25 @@ export function disposePreviews(): void {
 		dispose()
 }
 
-/** A real Core Runtime behind a real Inspector Agent; `plain`: its only widget declares no Events; `nested`: a second Notifier, `inner`, in the root's slot. */
-export async function createPreview(revision: number, options: { plain?: boolean, nested?: boolean } = {}): Promise<Preview> {
+/** One Inspector client and transport that several Previews' Agents take turns on, as the browser's frame does across an Apply. */
+export interface PreviewLink {
+	readonly pair: ReturnType<typeof createInProcessInspectorTransportPair>
+	readonly client: InspectorClient
+}
+
+export function createPreviewLink(): PreviewLink {
+	const pair = createInProcessInspectorTransportPair()
+	const client = createInspectorClient(pair.client)
+	disposers.push(() => client.dispose())
+	return { pair, client }
+}
+
+/**
+ * A real Core Runtime behind a real Inspector Agent. `plain`: its only widget declares no Events; `nested`: a second
+ * Notifier, `inner`, in the root's slot; `link`: reuse that client and transport instead of making new ones (dispose the
+ * previous Preview's Agent first: one Agent per transport per Runtime).
+ */
+export async function createPreview(revision: number, options: { plain?: boolean, nested?: boolean, link?: PreviewLink } = {}): Promise<Preview> {
 	const system = createWidgetSystem({ plugins: [NotifierPlugin, PlainPlugin] })
 	const blueprint = system.createBlueprint(options.plain === true
 		? { id: 'only', type: 'Plain' }
@@ -90,21 +109,29 @@ export async function createPreview(revision: number, options: { plain?: boolean
 	const runtime = blueprint.createRuntime()
 	const widgetOf = (id: string) => (runtime.getWidget(id) as unknown as { methods: { fire: (n: number) => void, ping: () => void } }).methods
 	const runtimeId = `runtime-r${revision}`
-	const pair = createInProcessInspectorTransportPair()
-	const agent = createInspectorAgent({ runtime, transport: pair.agent, runtimeId })
-	const client = createInspectorClient(pair.client)
+	const link = options.link ?? createPreviewLink()
+	// With a shared link the transport outlives the Agent, as the Preview frame's channel does across an Apply.
+	const agent = createInspectorAgent({ runtime, transport: link.pair.agent, runtimeId, closeTransportOnDispose: options.link === undefined })
+	const client = link.client
 	const snapshot = await client.request('blueprint.getSnapshot', { runtimeId })
 
 	const active = new Set<string>()
 	const requests: string[] = []
-	const gate = { hold: false, release: () => {} }
+	const gate = {
+		hold: false,
+		pending: [] as (() => void)[],
+		release: () => {
+			for (const resolve of gate.pending.splice(0))
+				resolve()
+		},
+	}
 	const tracked: InspectorClient = {
 		...client,
 		request: (async (method: string, params: unknown) => {
 			requests.push(method)
 			if (method === 'runtime.subscribeEvent' && gate.hold) {
 				await new Promise<void>((resolve) => {
-					gate.release = resolve
+					gate.pending.push(resolve)
 				})
 			}
 			const result = await (client.request as (m: string, p: unknown) => Promise<unknown>)(method, params)
@@ -115,11 +142,7 @@ export async function createPreview(revision: number, options: { plain?: boolean
 			return result
 		}) as InspectorClient['request'],
 	}
-	const dispose = (): void => {
-		client.dispose()
-		agent.dispose()
-	}
-	disposers.push(dispose)
+	disposers.push(() => agent.dispose())
 	return {
 		connection: { runtimeId, revision, blueprint: snapshot, inspectorClient: tracked },
 		fire: (value: number, widgetId = 'notifier') => widgetOf(widgetId)
@@ -129,6 +152,7 @@ export async function createPreview(revision: number, options: { plain?: boolean
 		active,
 		requests,
 		gate,
-		dispose,
+		disposeAgent: () => agent.dispose(),
+		dispose: () => agent.dispose(),
 	}
 }

@@ -3,7 +3,8 @@
  * One occurrence in the Events log (issue #230, audit U09): the time it reached the Lab, the Preview revision that
  * emitted it, the widget, the Event name and a one-line payload summary; a disclosure opens the payload as the same
  * expandable value tree the Runtime values use, with whatever the Inspector snapshot cut marked where it was cut. The
- * widget is a button that selects it in the Preview (disabled when the current Preview no longer has it). Event name,
+ * widget is a button that selects it in the Preview (aria-disabled, and still focusable, when the current Preview no longer has
+ * it, with the reason as its description). Event name,
  * widget id and type and the payload are Runtime data and are shown verbatim. Presentation only.
  */
 import type { EventLogEntry } from '../../events/event-log'
@@ -34,6 +35,13 @@ const summary = computed(() => hasPayload.value
 	: '')
 const truncated = computed(() => props.entry.args.some(hasTruncation))
 const label = computed(() => `${props.entry.widgetId} : ${props.entry.widgetType}`)
+const reasonId = useId()
+const reason = computed(() => props.selectable ? null : i18n.t('{widget} is not in the current Preview', { widget: label.value }))
+
+function select(): void {
+	if (props.selectable)
+		emit('select')
+}
 </script>
 
 <template>
@@ -79,13 +87,20 @@ const label = computed(() => `${props.entry.widgetId} : ${props.entry.widgetType
 			<button
 				type="button"
 				data-testid="event-widget"
-				:disabled="!selectable"
-				:title="selectable ? i18n.t('Select {widget} in the Preview', { widget: label }) : i18n.t('{widget} is not in the current Preview', { widget: label })"
-				class="min-h-6 shrink-0 cursor-pointer rounded-(--lab-radius) border-0 bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-default hover:bg-elevated hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary disabled:cursor-default disabled:text-muted disabled:hover:bg-transparent disabled:hover:no-underline"
-				@click="emit('select')"
+				:aria-disabled="selectable ? undefined : 'true'"
+				:aria-current="selected ? 'true' : undefined"
+				:aria-describedby="reason === null ? undefined : reasonId"
+				:title="reason ?? i18n.t('Select {widget} in the Preview', { widget: label })"
+				class="min-h-6 shrink-0 cursor-pointer rounded-(--lab-radius) border-0 bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-default hover:bg-elevated hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary aria-disabled:cursor-default aria-disabled:text-muted aria-disabled:hover:bg-transparent aria-disabled:hover:no-underline"
+				@click="select"
 			>
 				{{ label }}
 			</button>
+			<span
+				v-if="reason !== null"
+				:id="reasonId"
+				class="sr-only"
+			>{{ reason }}</span>
 			<span
 				data-testid="event-name"
 				class="shrink-0 font-mono text-[11px] font-semibold"

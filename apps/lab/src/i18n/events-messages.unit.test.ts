@@ -12,6 +12,7 @@ const files = [
 	'../components/panels/EventsPanel.vue',
 	'../components/events/EventLogEntryRow.vue',
 	'../components/events/DeclaredEvents.vue',
+	'../components/NonClosableTab.vue',
 ]
 
 // Widget vocabulary the zh-TW catalog deliberately keeps in English, so its translation equals the key.

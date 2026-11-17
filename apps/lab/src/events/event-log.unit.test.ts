@@ -1,6 +1,6 @@
 import type { EventLogBuffer, EventLogEntry } from './event-log'
 import { describe, expect, it } from 'vitest'
-import { appendEventLogEntry, EMPTY_EVENT_LOG, EVENT_LOG_LIMIT, formatEventTime, NO_EVENT_FILTER, visibleEventLogEntries } from './event-log'
+import { appendEventLogEntry, EMPTY_EVENT_LOG, EVENT_LOG_LIMIT, formatEventTime, isSameWidget, NO_EVENT_FILTER, visibleEventLogEntries } from './event-log'
 
 function entry(seq: number, overrides: Partial<EventLogEntry> = {}): EventLogEntry {
 	return { seq, at: 0, revision: 1, runtimeId: 'r', nodeId: 1, widgetId: 'form', widgetType: 'Survey', event: 'submitted', args: [], ...overrides }
@@ -48,22 +48,37 @@ describe('event log filter', () => {
 			.toEqual([3, 2, 1])
 	})
 
-	it('filters by widget, by Event name and by the selected widget, all together', () => {
+	it('filters by widget, by Event name and by the selected widget (id and type), all together', () => {
 		const seqs = (filter: Partial<typeof NO_EVENT_FILTER>): number[] => visibleEventLogEntries(entries, { ...NO_EVENT_FILTER, ...filter })
 			.map(item => item.seq)
+		const selected = (widgetId: string, widgetType = 'Survey') => ({ onlySelected: true, selectedWidget: { widgetId, widgetType } })
 		expect(seqs({ widgetId: 'a' }))
 			.toEqual([3, 1])
 		expect(seqs({ event: 'submitted' }))
 			.toEqual([3, 2])
-		expect(seqs({ selectedWidgetId: 'b' }))
+		expect(seqs(selected('b')))
 			.toEqual([2])
 		expect(seqs({ widgetId: 'a', event: 'submitted' }))
 			.toEqual([3])
-		expect(seqs({ widgetId: 'a', selectedWidgetId: 'b' }))
+		expect(seqs({ widgetId: 'a', ...selected('b') }))
 			.toEqual([])
-		// Nothing selected: the caller passes an id no widget has, so nothing matches.
-		expect(seqs({ selectedWidgetId: '' }))
+		// A selection is remembered by the panel, but only matters while the option is on.
+		expect(seqs({ onlySelected: false, selectedWidget: { widgetId: 'b', widgetType: 'Survey' } }))
+			.toEqual([3, 2, 1])
+		// Nothing selected: nothing matches.
+		expect(seqs({ onlySelected: true, selectedWidget: null }))
 			.toEqual([])
+	})
+
+	it('does not take another widget for the selected one when only the id is the same', () => {
+		const mixed = [entry(1, { widgetId: 'a', widgetType: 'Survey' }), entry(2, { widgetId: 'a', widgetType: 'Numeric' })]
+		expect(visibleEventLogEntries(mixed, { ...NO_EVENT_FILTER, onlySelected: true, selectedWidget: { widgetId: 'a', widgetType: 'Numeric' } })
+			.map(item => item.seq))
+			.toEqual([2])
+		expect(isSameWidget(mixed[0]!, { widgetId: 'a', widgetType: 'Numeric' }))
+			.toBe(false)
+		expect(isSameWidget(mixed[0]!, null))
+			.toBe(false)
 	})
 })
 

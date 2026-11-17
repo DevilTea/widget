@@ -26,10 +26,10 @@ async function openLab(page: Page, query = 'lab-test'): Promise<void> {
 }
 
 async function openEvents(page: Page): Promise<Locator> {
-	await page.getByRole('tab', { name: 'Events', exact: true })
+	await eventsTab(page)
 		.click()
 	await expect(page.getByTestId('events-listening'))
-		.toHaveText('Listening to 1 declared Events on 1 widgets.')
+		.toHaveText('Listening to 1 declared Event on 1 widget.')
 	return page.getByTestId('events-panel')
 }
 
@@ -50,6 +50,11 @@ async function submit(page: Page): Promise<void> {
 	await previewFrame(page)
 		.getByRole('button', { name: 'Submit', exact: true })
 		.click()
+}
+
+/** The Events tab: its accessible name gains " , N new" while entries arrived since it was last visible. */
+function eventsTab(page: Page): Locator {
+	return page.getByRole('tab', { name: /^Events( , \d+ new)?$/ })
 }
 
 const entries = (page: Page): Locator => page.getByTestId('event-entry')
@@ -153,7 +158,7 @@ test.describe('events log', () => {
 		await expect(payload)
 			.toContainText('"onsite"')
 		await expect(panel.getByTestId('events-count'))
-			.toHaveText('1 recorded Events')
+			.toHaveText('1 recorded Event')
 	})
 
 	test('pauses without recording, resumes, and clears', async ({ page }) => {
@@ -164,17 +169,23 @@ test.describe('events log', () => {
 		await expectEntries(page, 1)
 
 		const pause = panel.getByTestId('events-pause')
-		await pause.click()
 		await expect(pause)
-			.toHaveAttribute('aria-pressed', 'true')
+			.toHaveText('Pause')
+		await pause.click()
+		// One control: its label says what a click does now, and there is no pressed state to contradict it.
+		await expect(pause)
+			.toHaveText('Resume')
+		await expect(pause)
+			.not
+			.toHaveAttribute('aria-pressed', /.*/)
 		await submit(page)
 		await expect(panel.getByTestId('events-paused-note'))
-			.toHaveText('Paused: 1 Events were not recorded.')
+			.toHaveText('Paused: 1 Event was not recorded.')
 		await expectEntries(page, 1)
 
 		await pause.click()
 		await expect(pause)
-			.toHaveAttribute('aria-pressed', 'false')
+			.toHaveText('Pause')
 		await submit(page)
 		await expectEntries(page, 2)
 
@@ -202,7 +213,7 @@ test.describe('events log', () => {
 			.selectOption('submitted')
 		await expectEntries(page, 1)
 		await expect(panel.getByTestId('events-count'))
-			.toHaveText('1 of 1 recorded Events shown')
+			.toHaveText('1 of 1 recorded Event shown')
 		await panel.getByTestId('events-filter-widget')
 			.selectOption('')
 		await panel.getByTestId('events-filter-event')
@@ -214,7 +225,7 @@ test.describe('events log', () => {
 		await page.getByRole('button', { name: /mode : SingleChoice/ })
 			.first()
 			.click()
-		await page.getByRole('tab', { name: 'Events', exact: true })
+		await eventsTab(page)
 			.click()
 		await panel.getByTestId('events-only-selected')
 			.check()
@@ -240,32 +251,48 @@ test.describe('events log', () => {
 			.toBeVisible()
 	})
 
-	test('records nothing while its tab is hidden, and listens again when it is shown', async ({ page }) => {
+	test('records while its tab is hidden, counts what arrived on the tab, and has it all when the tab is opened', async ({ page }) => {
 		await openLab(page)
+		// The Events tab was never opened. The panel is mounted and listening all the same (its DOM is not in the page
+		// while hidden, so the tab says whether the log is recording).
+		await expect(eventsTab(page)
+			.locator('[data-recording]'))
+			.toHaveAttribute('data-recording', 'true')
 		await answerSurvey(page)
-		// The Events tab was never opened: this Submit happens with nobody listening.
 		await submit(page)
 		await expect(previewFrame(page)
 			.getByTestId('survey-submitted'))
 			.toBeVisible()
+		await expect(page.getByTestId('events-unseen'))
+			.toHaveText('1')
+		await expect(eventsTab(page))
+			.toHaveAccessibleName('Events , 1 new')
 
-		await openEvents(page)
-		await expectEntries(page, 0)
-
-		await submit(page)
+		await eventsTab(page)
+			.click()
 		await expectEntries(page, 1)
+		await expect(page.getByTestId('events-unseen'))
+			.toHaveCount(0)
+		await expect(eventsTab(page))
+			.toHaveAccessibleName('Events')
 
-		// Hidden again: the next Submit is not recorded, though the first still is.
+		// Seen while the tab is open: no count.
+		await submit(page)
+		await expectEntries(page, 2)
+		await expect(page.getByTestId('events-unseen'))
+			.toHaveCount(0)
+
+		// Hidden again: recorded, and counted on the tab; the log was not announced Event by Event.
 		await page.getByRole('tab', { name: 'Author', exact: true })
 			.click()
 		await submit(page)
-		await page.getByRole('tab', { name: 'Events', exact: true })
+		await expect(page.getByTestId('events-unseen'))
+			.toHaveText('1')
+		await eventsTab(page)
 			.click()
-		await expect(page.getByTestId('events-listening'))
-			.toHaveText('Listening to 1 declared Events on 1 widgets.')
-		await expectEntries(page, 1)
-		await submit(page)
-		await expectEntries(page, 2)
+		await expectEntries(page, 3)
+		await expect(page.getByTestId('events-unseen'))
+			.toHaveCount(0)
 	})
 
 	test('listens to the new Preview after Apply, and tags each entry with the revision that emitted it', async ({ page }) => {
@@ -287,7 +314,7 @@ test.describe('events log', () => {
 			.getByRole('heading', { name: 'Maker Space open day: sign-up (v2)' }))
 			.toBeVisible()
 		await expect(page.getByTestId('events-listening'))
-			.toHaveText('Listening to 1 declared Events on 1 widgets.')
+			.toHaveText('Listening to 1 declared Event on 1 widget.')
 
 		await answerSurvey(page)
 		await submit(page)
@@ -305,9 +332,9 @@ test.describe('events log', () => {
 	test('says when a Preview declares no Events, and listens to the survey after a showcase switch', async ({ page }) => {
 		// The Sandbox (a hidden fixture, opened by URL) declares no Events; the Examples menu switches to the survey.
 		await page.goto('/?showcase=sandbox')
-		await expect(page.getByRole('tab', { name: 'Events', exact: true }))
+		await expect(eventsTab(page))
 			.toBeVisible()
-		await page.getByRole('tab', { name: 'Events', exact: true })
+		await eventsTab(page)
 			.click()
 		const panel = page.getByTestId('events-panel')
 		await expect(panel.getByTestId('events-listening'))
@@ -319,7 +346,7 @@ test.describe('events log', () => {
 			.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 			.toBeVisible()
 		await expect(panel.getByTestId('events-listening'))
-			.toHaveText('Listening to 1 declared Events on 1 widgets.')
+			.toHaveText('Listening to 1 declared Event on 1 widget.')
 		await answerSurvey(page)
 		await submit(page)
 		await expectEntries(page, 1)

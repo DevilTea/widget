@@ -62,18 +62,21 @@ export interface AuthorCatalogJson {
 /**
  * Plain JSON projection of the public catalog ("AI context"): Core's slot Map becomes an object. Events are not part
  * of `system.catalog`, so they are added from the view-model's `inspectPlugin` reading (`null` without the capability).
+ * `widgets` is required, and must hold every catalog entry, so that `events: null` can only mean "no capability".
  */
-export function catalogToJson(catalog: WidgetCatalog, widgets: readonly AuthorCatalogWidget[] = []): AuthorCatalogJson {
+export function catalogToJson(catalog: WidgetCatalog, widgets: readonly AuthorCatalogWidget[]): AuthorCatalogJson {
 	const eventsByType = new Map(widgets.map(widget => [widget.entry.type, widget] as const))
 	return {
 		widgets: catalog.widgets.map((entry) => {
 			const declared = eventsByType.get(entry.type)
+			if (declared === undefined)
+				throw new Error(`The catalog entry "${entry.type}" has no view-model widget to read its Events from.`)
 			return {
 				type: entry.type,
 				description: entry.description,
 				config: entry.config === null ? null : { description: entry.config.description, schema: entry.config.schema },
 				slots: entry.descriptions.slots === null ? null : Object.fromEntries(entry.descriptions.slots),
-				events: declared === undefined || !declared.capabilities.events ? null : Object.fromEntries(declared.events.map(event => [event.name, event.description])),
+				events: !declared.capabilities.events ? null : Object.fromEntries(declared.events.map(event => [event.name, event.description])),
 			}
 		}),
 	}

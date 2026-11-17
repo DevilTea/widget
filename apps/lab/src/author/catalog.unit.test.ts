@@ -87,15 +87,17 @@ describe('declared Events', () => {
 		const { catalog, widgets } = createAuthorCatalogViewModel(fixtureSystem)
 		expect(catalogToJson(catalog, widgets).widgets[0]?.events)
 			.toEqual({ closed: 'The panel was closed. Carries the reason.', opened: 'The panel was opened.' })
-		// Without the view-model's widgets there is nothing to read Events from.
-		expect(catalogToJson(catalog).widgets[0]?.events)
-			.toBeNull()
+	})
+
+	it('refuses to guess when a catalog entry has no view-model widget', () => {
+		expect(() => catalogToJson(fixtureSystem.catalog, []))
+			.toThrow('The catalog entry "Panel" has no view-model widget')
 	})
 })
 
 describe('catalogToJson', () => {
 	it('keeps the schema and turns slot maps into plain objects', () => {
-		const json = catalogToJson(fixtureSystem.catalog)
+		const json = catalogToJson(fixtureSystem.catalog, createAuthorCatalogViewModel(fixtureSystem).widgets)
 		expect(json)
 			.toEqual({
 				widgets: [{
@@ -103,7 +105,7 @@ describe('catalogToJson', () => {
 					description: 'Fixture panel',
 					config: { description: 'Panel config', schema },
 					slots: { body: 'Panel body' },
-					events: null,
+					events: { closed: 'The panel was closed. Carries the reason.', opened: 'The panel was opened.' },
 				}],
 			})
 		expect(JSON.parse(JSON.stringify(json)))
@@ -111,7 +113,7 @@ describe('catalogToJson', () => {
 	})
 
 	it('uses null for missing config and slots', () => {
-		const widgets = catalogToJson(sandboxSystem.catalog).widgets
+		const widgets = catalogToJson(sandboxSystem.catalog, createAuthorCatalogViewModel(sandboxSystem).widgets).widgets
 		const stack = widgets.find(widget => widget.type === 'Stack')
 		expect(stack?.config)
 			.toBeNull()

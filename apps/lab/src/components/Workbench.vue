@@ -297,7 +297,7 @@ function watchTutorialTabActivation(api: DockviewApi): void {
  * `open()` call increments it, so the watch only ever fires on an actual request, never at setup time.
  * The Implementation panel is added `within` the same tab group as Author/Blueprint/Runtime/Dependencies, with
  * NO `tabComponent` override — Dockview's own default tab (close button included) is exactly the
- * "closable, default tab component" the panel is specified to use, unlike the five canonical panels'
+ * "closable, default tab component" the panel is specified to use, unlike the seven canonical panels'
  * `nonClosable` tab.
  */
 function watchImplementationOpenRequests(api: DockviewApi): void {

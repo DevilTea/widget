@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { PanelVisibilityApi } from '../../composables/use-panel-visibility'
+import type { WidgetIdentity } from '../../events/event-log'
 /**
  * The live Events log (issue #230, audit U09): every Event the running Preview's widgets emit, as it happens. The
  * data plane is the Inspector protocol alone (`runtime.subscribeEvent` / `runtime.eventOccurred`, see
  * `composables/use-event-log.ts`); this panel never receives a Core Runtime and cannot emit. It listens only while
- * its tab is the visible one, so what happens while it is hidden is not recorded: say so instead of implying a
- * complete history.
+ * its tab is the visible one: the log is recorded while the panel is mounted (see `composables/use-event-log.ts`), so what
+ * happened while another tab was open is here when this one is opened.
  */
 import UButton from '@nuxt/ui/components/Button.vue'
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
@@ -13,7 +14,7 @@ import { useEventLog } from '../../composables/use-event-log'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { usePanelVisibility } from '../../composables/use-panel-visibility'
-import { EVENT_LOG_LIMIT, visibleEventLogEntries } from '../../events/event-log'
+import { EVENT_LOG_LIMIT, isSameWidget, visibleEventLogEntries } from '../../events/event-log'
 import { getRuntimeInspectorSource } from '../../runtime-inspector/source'
 import EventLogEntryRow from '../events/EventLogEntryRow.vue'
 import InspectorPanelShell from '../inspector/InspectorPanelShell.vue'
@@ -32,11 +33,11 @@ const widgetFilter = ref('')
 const eventFilter = ref('')
 const onlySelected = ref(false)
 
-/** The widget selected in the Preview, by id: entries carry the id and type, not a node id of a Runtime that may be gone. */
-const selectedWidgetId = computed<string | null>(() => {
+/** The widget selected in the Preview, by id and type: entries carry those, not a node id of a Runtime that may be gone. */
+const selectedWidget = computed<WidgetIdentity | null>(() => {
 	const nodeId = store.previewFocus.value?.nodeId
 	const node = nodeId === undefined ? undefined : connection.value?.blueprint.nodes.find(candidate => candidate.nodeId === nodeId)
-	return node?.resolved ? node.widgetId ?? null : null
+	return node?.resolved && node.widgetId !== undefined && node.widgetType !== undefined ? { widgetId: node.widgetId, widgetType: node.widgetType } : null
 })
 
 const widgetOptions = computed(() => [...new Set([
@@ -54,7 +55,8 @@ const shown = computed(() => visibleEventLogEntries(log.entries.value, {
 	widgetId: widgetFilter.value === '' ? null : widgetFilter.value,
 	event: eventFilter.value === '' ? null : eventFilter.value,
 	// "Only the selected widget" with nothing selected shows nothing rather than everything.
-	selectedWidgetId: onlySelected.value ? selectedWidgetId.value ?? '' : null,
+	onlySelected: onlySelected.value,
+	selectedWidget: selectedWidget.value,
 }))
 const filtering = computed(() => widgetFilter.value !== '' || eventFilter.value !== '' || onlySelected.value)
 
@@ -94,7 +96,8 @@ watch(() => log.entries.value.length + log.dropped.value, (total) => {
 		return
 	settleTimer = setTimeout(() => {
 		settleTimer = null
-		announcement.value = i18n.t('{count} Events recorded', { count: log.entries.value.length })
+		const count = log.entries.value.length
+		announcement.value = i18n.t(count === 1 ? '{count} Event recorded' : '{count} Events recorded', { count })
 	}, 1000)
 })
 onScopeDispose(() => {
@@ -106,10 +109,17 @@ const listeningText = computed(() => {
 	const listening = log.listening.value
 	switch (listening.state) {
 		case 'no-preview': return i18n.t('No valid preview to listen to: fix the problems and Apply, and Events will be recorded from the new preview.')
+		case 'loading': return i18n.t('Waiting for the preview to load. Events are recorded once it is running.')
+		case 'lost': return i18n.t('The preview is not connected, so no Events are being recorded. Use Try again in the preview, or Apply again.')
 		case 'no-events': return i18n.t('The widgets in this preview declare no Events, so there is nothing to record.')
-		case 'listening': return listening.failed > 0
-			? i18n.t('Listening to {events} of {total} declared Events on {widgets} widgets; {failed} could not be subscribed.', { events: listening.events, total: listening.events + listening.failed, widgets: listening.widgets, failed: listening.failed })
-			: i18n.t('Listening to {events} declared Events on {widgets} widgets.', { events: listening.events, widgets: listening.widgets })
+		case 'listening': {
+			const events = i18n.t(listening.events === 1 ? '{count} declared Event' : '{count} declared Events', { count: listening.events })
+			const widgets = i18n.t(listening.widgets === 1 ? '{count} widget' : '{count} widgets', { count: listening.widgets })
+			const listened = i18n.t('Listening to {events} on {widgets}.', { events, widgets })
+			return listening.failed === 0
+				? listened
+				: `${listened} ${i18n.t(listening.failed === 1 ? 'Could not subscribe to {count} Event.' : 'Could not subscribe to {count} Events.', { count: listening.failed })}`
+		}
 		default: return ''
 	}
 })
@@ -120,7 +130,7 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 <template>
 	<InspectorPanelShell
 		storageKey="widget-lab:panel-desc:events"
-		text="Events the running widgets emit, listed as they happen. Only what happens while this tab is open is recorded"
+		text="Events the running widgets emit, listed as they happen, also while another tab is open. The latest 500 are kept"
 	>
 		<div
 			data-testid="events-panel"
@@ -135,7 +145,6 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 					size="xs"
 					:icon="log.paused.value ? 'i-lucide-play' : 'i-lucide-pause'"
 					:label="log.paused.value ? i18n.t('Resume') : i18n.t('Pause')"
-					:aria-pressed="log.paused.value"
 					class="outline-primary focus-visible:outline-2"
 					@click="togglePaused"
 				/>
@@ -199,20 +208,20 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 					v-if="log.paused.value"
 					data-testid="events-paused-note"
 				>{{ log.skippedWhilePaused.value > 0
-					? i18n.t('Paused: {count} Events were not recorded.', { count: log.skippedWhilePaused.value })
+					? i18n.t(log.skippedWhilePaused.value === 1 ? 'Paused: {count} Event was not recorded.' : 'Paused: {count} Events were not recorded.', { count: log.skippedWhilePaused.value })
 					: i18n.t('Paused: Events that happen now are not recorded.') }}</span>
 				<span
 					v-else-if="log.skippedWhilePaused.value > 0"
 					data-testid="events-paused-note"
-				>{{ i18n.t('{count} Events were not recorded while the log was paused.', { count: log.skippedWhilePaused.value }) }}</span>
+				>{{ i18n.t(log.skippedWhilePaused.value === 1 ? '{count} Event was not recorded while the log was paused.' : '{count} Events were not recorded while the log was paused.', { count: log.skippedWhilePaused.value }) }}</span>
 				<span
 					v-if="log.dropped.value > 0"
 					data-testid="events-dropped-note"
 					class="text-warning"
-				>{{ i18n.t('Showing the latest {limit} Events: {count} older ones were dropped.', { limit: EVENT_LOG_LIMIT, count: log.dropped.value }) }}</span>
+				>{{ i18n.t(log.dropped.value === 1 ? 'Showing the latest {limit} Events: {count} older one was dropped.' : 'Showing the latest {limit} Events: {count} older ones were dropped.', { limit: EVENT_LOG_LIMIT, count: log.dropped.value }) }}</span>
 				<span data-testid="events-count">{{ filtering
-					? i18n.t('{shown} of {total} recorded Events shown', { shown: shown.length, total: log.entries.value.length })
-					: i18n.t('{total} recorded Events', { total: log.entries.value.length }) }}</span>
+					? i18n.t(log.entries.value.length === 1 ? '{shown} of {total} recorded Event shown' : '{shown} of {total} recorded Events shown', { shown: shown.length, total: log.entries.value.length })
+					: i18n.t(log.entries.value.length === 1 ? '{total} recorded Event' : '{total} recorded Events', { total: log.entries.value.length }) }}</span>
 			</div>
 
 			<!-- Polite and throttled: the count after a burst settles, and what Pause/Resume/Clear did. Not one announcement per Event. -->
@@ -236,7 +245,7 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 					:key="entry.seq"
 					:entry="entry"
 					:selectable="currentNodeId(entry) !== null"
-					:selected="selectedWidgetId === entry.widgetId"
+					:selected="isSameWidget(entry, selectedWidget)"
 					@select="select(entry)"
 				/>
 			</ol>

@@ -13,7 +13,7 @@
  */
 
 /** Bump when a change to the panels or their components makes an older saved layout meaningless. */
-export const LAYOUT_VERSION = 2
+export const LAYOUT_VERSION = 1
 
 export const LAYOUT_STORAGE_KEY = 'widget-lab:layout'
 

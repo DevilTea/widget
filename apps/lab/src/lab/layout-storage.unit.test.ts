@@ -104,15 +104,16 @@ describe('isPlausibleLayout', () => {
 			.toBe(false)
 	})
 
-	it('requires the Events panel, and a layout saved before it (version 1) is not used', () => {
+	it('requires the Events panel: a layout saved before it existed is not used, with no version bump needed', () => {
 		const layout = realLayout()
 		delete (layout.panels as Record<string, unknown>).events
 		expect(isPlausibleLayout(layout))
 			.toBe(false)
+		// Stored with the current version, exactly as an older Lab wrote it: still read as "no saved layout".
 		expect(parseSavedLayout(stored(layout)))
 			.toBeNull()
-		expect(LAYOUT_VERSION)
-			.toBeGreaterThanOrEqual(2)
+		expect(loadSavedLayout({ getItem: () => stored(layout), setItem: () => {}, removeItem: () => {} }))
+			.toBeNull()
 	})
 
 	it('rejects a panel that names a component the Lab does not register', () => {

@@ -89,8 +89,8 @@ import { defaultShowcase, listedShowcases, showcases } from '../showcases/regist
 
 /**
  * `'preview'` is included (diagnostic #25 P1) even though Preview lives in its own always-visible Dockview
- * group, never the same tab group as the other four: it lets `Workbench.vue`'s tab-activation bridge
- * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all five canonical panels
+ * group, never the same tab group as the other six: it lets `Workbench.vue`'s tab-activation bridge
+ * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all seven canonical panels
  * uniformly — activating Preview's own single-panel group is a harmless no-op, never a layout change.
  */
 export type LabToolTab = 'author' | 'widget' | 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'preview'

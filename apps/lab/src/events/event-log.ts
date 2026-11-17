@@ -44,21 +44,33 @@ export function appendEventLogEntry(buffer: EventLogBuffer, entry: EventLogEntry
 		: { entries: entries.slice(overflow), dropped: buffer.dropped + overflow }
 }
 
+/** A widget as the log identifies it: id and type (an id alone could be another widget after an Apply). */
+export interface WidgetIdentity {
+	readonly widgetId: string
+	readonly widgetType: string
+}
+
 export interface EventLogFilter {
 	/** Only this widget id; `null` for all widgets. */
 	readonly widgetId: string | null
 	/** Only this Event name; `null` for all Events. */
 	readonly event: string | null
-	/** Only the widget selected in the Preview (its id); `null` when the option is off. */
-	readonly selectedWidgetId: string | null
+	/** `true`: only `selectedWidget`; with no widget selected (`null`) nothing matches. */
+	readonly onlySelected: boolean
+	/** The widget selected in the Preview, when there is one. */
+	readonly selectedWidget: WidgetIdentity | null
 }
 
-export const NO_EVENT_FILTER: EventLogFilter = Object.freeze({ widgetId: null, event: null, selectedWidgetId: null })
+export const NO_EVENT_FILTER: EventLogFilter = Object.freeze({ widgetId: null, event: null, onlySelected: false, selectedWidget: null })
+
+export function isSameWidget(entry: WidgetIdentity, widget: WidgetIdentity | null): boolean {
+	return widget !== null && entry.widgetId === widget.widgetId && entry.widgetType === widget.widgetType
+}
 
 export function matchesEventFilter(entry: EventLogEntry, filter: EventLogFilter): boolean {
 	return (filter.widgetId === null || entry.widgetId === filter.widgetId)
 		&& (filter.event === null || entry.event === filter.event)
-		&& (filter.selectedWidgetId === null || entry.widgetId === filter.selectedWidgetId)
+		&& (!filter.onlySelected || isSameWidget(entry, filter.selectedWidget))
 }
 
 /** Newest first, as the panel lists them. */

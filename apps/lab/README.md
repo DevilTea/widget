@@ -94,7 +94,7 @@ Dependencies. Values open into a tree instead of being clipped; anything the Ins
 limits) is marked as such. Config shows the resolved value, with the authored one a click away when it differs. Dependencies opens on
 Relations; the Graph is one click away.
 
-**Events** lists what the running widgets emit, as it happens: time, Preview revision, widget, Event name and an expandable payload (the Survey emits `submitted` when you Submit valid answers). The declared Events of every widget type are in the Catalog and in the Selected widget declaration. The log records only while its tab is open, keeps the latest 500 entries and says when older ones were dropped; Pause, Clear, filters (widget, Event, only the selected widget) and a click on an entry's widget to select it are there too.
+**Events** lists what the running widgets emit, as it happens: time, Preview revision, widget, Event name and an expandable payload (the Survey emits `submitted` when you Submit valid answers). The declared Events of every widget type are in the Catalog and in the Selected widget declaration. The log records whenever the Preview is running, also while another tab is open (the Events tab shows how many entries arrived since you last looked), keeps the latest 500 entries and says when older ones were dropped; Pause, Clear, filters (widget, Event, only the selected widget) and a click on an entry's widget to select it are there too.
 
 ## Dependency Graph
 
