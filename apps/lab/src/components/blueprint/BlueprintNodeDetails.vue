@@ -13,6 +13,7 @@ import { useImplementationExplorer } from '../../composables/use-implementation-
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { getShowcase } from '../../showcases/registry'
+import DeclaredEvents from '../events/DeclaredEvents.vue'
 import ConfigView from './ConfigView.vue'
 import DiagnosticList from './DiagnosticList.vue'
 
@@ -145,8 +146,18 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 					{{ i18n.t('Members') }}
 				</h5>
 				<p :class="pika({ margin: '0', fontSize: '11px' })">
-					{{ node.state.length }} State · {{ node.properties.length }} {{ node.properties.length === 1 ? 'Property' : 'Properties' }} · {{ node.methods.length }} {{ node.methods.length === 1 ? 'Method' : 'Methods' }}
+					{{ node.state.length }} State · {{ node.properties.length }} {{ node.properties.length === 1 ? 'Property' : 'Properties' }} · {{ node.methods.length }} {{ node.methods.length === 1 ? 'Method' : 'Methods' }} · {{ node.events.length }} {{ node.events.length === 1 ? 'Event' : 'Events' }}
 				</p>
+			</section>
+
+			<section data-testid="blueprint-node-events">
+				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+					Events ({{ node.events.length }})
+				</h5>
+				<DeclaredEvents
+					:events="node.events"
+					:declared="node.capabilities.events"
+				/>
 			</section>
 		</template>
 		<template v-else>
