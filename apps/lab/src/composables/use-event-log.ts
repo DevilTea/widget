@@ -15,11 +15,18 @@
  * - switching showcase clears the buffer (those entries describe widgets of another application) and ignores whatever
  *   the previous showcase's connection still sends until the new one has replaced it.
  *
+ * Method failures (issue #230, audit U08): from protocol 0.5 the log also subscribes to every Method of every resolved
+ * widget (`runtime.subscribeMember` with a Method member) and records an entry whenever a Method's diagnostic snapshot
+ * arrives (`runtime.memberChanged`) with diagnostics. The snapshot is a current fact and not a call log (Core keeps no
+ * history of Method calls): the Method's state when the subscription starts is not an occurrence and is not recorded, a
+ * snapshot that became empty again (a later success) records nothing, and changes made inside one Runtime call can arrive
+ * as one entry. These entries are listed next to the Events but are not Events, and the log never invokes a Method.
+ *
  * Read-only: the Inspector has no emit authority and neither has this module.
  */
 import type { InspectorBlueprintNode } from '@deviltea/widget-inspector/protocol'
 import type { ComputedRef, Ref } from 'vue'
-import type { EventLogBuffer, EventLogEntry } from '../events/event-log'
+import type { EventLogBuffer, EventLogItem } from '../events/event-log'
 import type { PreviewFrameConnection } from '../preview-host/frame-driver'
 import type { LabStore } from './use-lab-store'
 import { computed, effectScope, onScopeDispose, shallowRef, watch } from 'vue'
@@ -32,6 +39,14 @@ export interface EventEmitterWidget {
 	readonly widgetId: string
 	readonly widgetType: string
 	readonly events: readonly string[]
+}
+
+/** One widget of the current Preview that declares Methods. */
+export interface MethodWidget {
+	readonly nodeId: number
+	readonly widgetId: string
+	readonly widgetType: string
+	readonly methods: readonly string[]
 }
 
 export type EventLogListening
@@ -48,11 +63,17 @@ export type EventLogListening
 		| { readonly state: 'listening', readonly widgets: number, readonly events: number, readonly failed: number }
 
 export interface EventLog {
-	readonly entries: Readonly<Ref<readonly EventLogEntry[]>>
+	readonly entries: Readonly<Ref<readonly EventLogItem[]>>
 	/** Entries dropped because the buffer was full, since the log was last cleared. */
 	readonly dropped: Readonly<Ref<number>>
-	/** Occurrences that arrived while the log was paused and were therefore not recorded. */
+	/** Event occurrences that arrived while the log was paused and were therefore not recorded. */
 	readonly skippedWhilePaused: Readonly<Ref<number>>
+	/** Method failures that arrived while the log was paused and were therefore not recorded. */
+	readonly skippedFailuresWhilePaused: Readonly<Ref<number>>
+	/** Method failures recorded since the log was last cleared (including any that were dropped from the buffer). */
+	readonly recordedFailures: Readonly<Ref<number>>
+	/** The Methods the log watches for failures, and how many of them it could not subscribe to. */
+	readonly watchingMethods: Readonly<Ref<{ readonly methods: number, readonly failed: number }>>
 	/** Entries recorded while no consumer was visible, since one last was. */
 	readonly unseen: Readonly<Ref<number>>
 	readonly paused: Readonly<Ref<boolean>>
@@ -67,6 +88,9 @@ interface SharedSource {
 	readonly buffer: Ref<EventLogBuffer>
 	readonly paused: Ref<boolean>
 	readonly skippedWhilePaused: Ref<number>
+	readonly skippedFailuresWhilePaused: Ref<number>
+	readonly recordedFailures: Ref<number>
+	readonly watchingMethods: Ref<{ readonly methods: number, readonly failed: number }>
 	readonly unseen: Ref<number>
 	readonly subscribed: Ref<{ readonly widgets: number, readonly events: number, readonly failed: number }>
 	readonly listening: ComputedRef<EventLogListening>
@@ -75,7 +99,7 @@ interface SharedSource {
 	readonly consumers: Ref<number>
 	/** How many of them are visible right now. */
 	readonly viewers: Ref<number>
-	readonly entries: ComputedRef<readonly EventLogEntry[]>
+	readonly entries: ComputedRef<readonly EventLogItem[]>
 	readonly dropped: ComputedRef<number>
 	clear: () => void
 }
@@ -94,6 +118,18 @@ function emittersOf(nodes: readonly InspectorBlueprintNode[]): readonly EventEmi
 	return found
 }
 
+function methodWidgetsOf(nodes: readonly InspectorBlueprintNode[]): readonly MethodWidget[] {
+	const found: MethodWidget[] = []
+	for (const node of nodes) {
+		if (!node.resolved || node.widgetId === undefined || node.widgetType === undefined)
+			continue
+		const methods = (node.methods ?? []).map(method => method.name)
+		if (methods.length > 0)
+			found.push({ nodeId: node.nodeId, widgetId: node.widgetId, widgetType: node.widgetType, methods })
+	}
+	return found
+}
+
 function sharedSource(store: LabStore): SharedSource {
 	const existing = sources.get(store)
 	if (existing !== undefined)
@@ -107,6 +143,9 @@ function sharedSource(store: LabStore): SharedSource {
 		const buffer = shallowRef<EventLogBuffer>(EMPTY_EVENT_LOG)
 		const paused = shallowRef(false)
 		const skippedWhilePaused = shallowRef(0)
+		const skippedFailuresWhilePaused = shallowRef(0)
+		const recordedFailures = shallowRef(0)
+		const watchingMethods = shallowRef({ methods: 0, failed: 0 })
 		const unseen = shallowRef(0)
 		const subscribed = shallowRef({ widgets: 0, events: 0, failed: 0 })
 		const consumers = shallowRef(0)
@@ -130,6 +169,8 @@ function sharedSource(store: LabStore): SharedSource {
 		function clear(): void {
 			buffer.value = EMPTY_EVENT_LOG
 			skippedWhilePaused.value = 0
+			skippedFailuresWhilePaused.value = 0
+			recordedFailures.value = 0
 			unseen.value = 0
 		}
 
@@ -151,19 +192,27 @@ function sharedSource(store: LabStore): SharedSource {
 			[connection, active] as const,
 			([current, isActive], _previous, onCleanup) => {
 				subscribed.value = { widgets: 0, events: 0, failed: 0 }
+				watchingMethods.value = { methods: 0, failed: 0 }
 				if (!isActive || current === null)
 					return
 				const widgets = emittersOf(current.blueprint.nodes)
-				if (widgets.length === 0)
+				const methodWidgets = methodWidgetsOf(current.blueprint.nodes)
+				if (widgets.length === 0 && methodWidgets.length === 0)
 					return
 
 				const client = current.inspectorClient
 				const targets = new Map<string, EventEmitterWidget & { readonly event: string }>()
+				const methodTargets = new Map<string, MethodWidget & { readonly method: string }>()
 				const held: string[] = []
+				const heldMethods: string[] = []
 				let live = true
 				let failed = 0
+				let methodsFailed = 0
 				const report = (): void => {
 					subscribed.value = { widgets: new Set([...targets.values()].map(target => target.nodeId)).size, events: targets.size, failed }
+				}
+				const reportMethods = (): void => {
+					watchingMethods.value = { methods: methodTargets.size, failed: methodsFailed }
 				}
 
 				const stopListening = client.on('runtime.eventOccurred', (occurrence) => {
@@ -178,6 +227,7 @@ function sharedSource(store: LabStore): SharedSource {
 					}
 					sequence += 1
 					buffer.value = appendEventLogEntry(buffer.value, {
+						kind: 'event',
 						seq: sequence,
 						at: Date.now(),
 						revision: current.revision,
@@ -192,6 +242,40 @@ function sharedSource(store: LabStore): SharedSource {
 						unseen.value += 1
 				})
 
+				// A Method's snapshot changed: only one that now holds diagnostics is a failure to record.
+				const stopListeningToMethods = client.on('runtime.memberChanged', (change) => {
+					if (!live || current === staleConnection || change.member.type !== 'method' || change.member.diagnostics.length === 0)
+						return
+					const target = methodTargets.get(change.subscriptionId)
+					if (target === undefined)
+						return
+					if (paused.value) {
+						skippedFailuresWhilePaused.value += 1
+						return
+					}
+					sequence += 1
+					recordedFailures.value += 1
+					buffer.value = appendEventLogEntry(buffer.value, {
+						kind: 'method-failure',
+						seq: sequence,
+						at: Date.now(),
+						revision: current.revision,
+						runtimeId: current.runtimeId,
+						nodeId: target.nodeId,
+						widgetId: target.widgetId,
+						widgetType: target.widgetType,
+						method: target.method,
+						diagnostics: change.member.diagnostics,
+					}, EVENT_LOG_LIMIT)
+					if (viewers.value === 0)
+						unseen.value += 1
+				})
+
+				const releaseMethod = (subscriptionId: string): void => {
+					void client.request('runtime.unsubscribeMember', { subscriptionId })
+						.catch(() => {})
+				}
+
 				const release = (subscriptionId: string): void => {
 					// The connection may already be closed (a replaced Preview), or its Agent gone while the client lives on
 					// (an Apply): nothing is left to release then, and a refusal is not worth reporting.
@@ -202,10 +286,15 @@ function sharedSource(store: LabStore): SharedSource {
 				onCleanup(() => {
 					live = false
 					stopListening()
+					stopListeningToMethods()
 					for (const subscriptionId of held)
 						release(subscriptionId)
 					held.length = 0
 					targets.clear()
+					for (const subscriptionId of heldMethods)
+						releaseMethod(subscriptionId)
+					heldMethods.length = 0
+					methodTargets.clear()
 				})
 
 				for (const widget of widgets) {
@@ -229,6 +318,27 @@ function sharedSource(store: LabStore): SharedSource {
 							})
 					}
 				}
+
+				for (const widget of methodWidgets) {
+					for (const method of widget.methods) {
+						void client.request('runtime.subscribeMember', { ref: { runtimeId: current.runtimeId, nodeId: widget.nodeId }, member: { type: 'method', name: method } })
+							.then((result) => {
+								if (!live) {
+									releaseMethod(result.subscriptionId)
+									return
+								}
+								heldMethods.push(result.subscriptionId)
+								methodTargets.set(result.subscriptionId, { ...widget, method })
+								reportMethods()
+							})
+							.catch(() => {
+								if (!live)
+									return
+								methodsFailed += 1
+								reportMethods()
+							})
+					}
+				}
 			},
 			{ immediate: true },
 		)
@@ -237,6 +347,9 @@ function sharedSource(store: LabStore): SharedSource {
 			buffer,
 			paused,
 			skippedWhilePaused,
+			skippedFailuresWhilePaused,
+			recordedFailures,
+			watchingMethods,
 			unseen,
 			subscribed,
 			listening,
@@ -261,7 +374,7 @@ export function useEventLogTabState(): { readonly unseen: Readonly<Ref<number>>,
 	const source = sharedSource(useLabStore())
 	return {
 		unseen: source.unseen,
-		recording: computed(() => source.listening.value.state === 'listening' && source.listening.value.events > 0),
+		recording: computed(() => (source.listening.value.state === 'listening' && source.listening.value.events > 0) || source.watchingMethods.value.methods > 0),
 	}
 }
 
@@ -292,6 +405,9 @@ export function useEventLog(visible: Readonly<Ref<boolean>> = shallowRef(true)):
 		entries: source.entries,
 		dropped: source.dropped,
 		skippedWhilePaused: source.skippedWhilePaused,
+		skippedFailuresWhilePaused: source.skippedFailuresWhilePaused,
+		recordedFailures: source.recordedFailures,
+		watchingMethods: source.watchingMethods,
 		unseen: source.unseen,
 		paused: source.paused,
 		listening: source.listening,

@@ -40,7 +40,7 @@ describe('blueprintNodeDetails declared Events', () => {
 			.text())
 			.toContain('Events (2)')
 		expect(wrapper.text())
-			.toContain('2 Methods · 2 Events')
+			.toContain('3 Methods · 2 Events')
 	})
 
 	it('says so when the plugin declares no Events capability, and keeps the description untranslated in zh-TW', () => {

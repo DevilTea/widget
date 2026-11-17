@@ -157,8 +157,9 @@ test.describe('events log', () => {
 			.toContainText('mode')
 		await expect(payload)
 			.toContainText('"onsite"')
+		// The blocked Submit above is listed too, as a Method failure (see method-failures.spec.ts), so the log now counts entries.
 		await expect(panel.getByTestId('events-count'))
-			.toHaveText('1 recorded Event')
+			.toHaveText('2 recorded entries')
 	})
 
 	test('pauses without recording, resumes, and clears', async ({ page }) => {
@@ -330,7 +331,7 @@ test.describe('events log', () => {
 	})
 
 	test('says when a Preview declares no Events, and listens to the survey after a showcase switch', async ({ page }) => {
-		// The Sandbox (a hidden fixture, opened by URL) declares no Events; the Examples menu switches to the survey.
+		// The Sandbox (a hidden fixture, opened by URL) declares no Events (it has Methods, whose failures are still recorded); the Examples menu switches to the survey.
 		await page.goto('/?showcase=sandbox')
 		await expect(eventsTab(page))
 			.toBeVisible()
@@ -338,7 +339,7 @@ test.describe('events log', () => {
 			.click()
 		const panel = page.getByTestId('events-panel')
 		await expect(panel.getByTestId('events-listening'))
-			.toHaveText('The widgets in this preview declare no Events, so there is nothing to record.')
+			.toHaveText('The widgets in this preview declare no Events. Failed Method calls are still recorded.')
 		await expectEntries(page, 0)
 
 		await selectShowcase(page, 'survey')

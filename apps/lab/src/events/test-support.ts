@@ -16,6 +16,7 @@ interface NotifierInterfaces extends WidgetInterfaces {
 	methods: {
 		fire: (value: number) => void
 		ping: () => void
+		check: (ok: boolean) => boolean
 	}
 	events: {
 		changed: [payload: { value: number, label: string }]
@@ -41,10 +42,39 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 			execute: ({ emit }) => {
 				emit.pinged()
 			},
+		})
+		.check({
+			validateArgs: (args): args is [boolean] => args.length === 1 && typeof args[0] === 'boolean',
+			execute: ({ args: [ok], addDiagnostic }) => {
+				if (!ok)
+					addDiagnostic({ message: 'The check failed.', reason: 'not-ok' })
+				return ok
+			},
 		}))
 	.events(events => events
 		.changed({ description: 'The value changed.' })
 		.pinged({ description: 'Pinged.' }))
+	.done()
+
+/** Declares Methods but no Events: the log has nothing to listen to except Method failures. */
+interface CheckerInterfaces extends WidgetInterfaces {
+	methods: {
+		check: (ok: boolean) => boolean
+	}
+}
+
+export const CheckerPlugin = createWidgetPlugin('Checker')
+	.description('Methods only')
+	.interfaces<CheckerInterfaces>()
+	.methods(methods => methods
+		.check({
+			validateArgs: (args): args is [boolean] => args.length === 1 && typeof args[0] === 'boolean',
+			execute: ({ args: [ok], addDiagnostic }) => {
+				if (!ok)
+					addDiagnostic({ message: 'The check failed.', reason: 'not-ok' })
+				return ok
+			},
+		}))
 	.done()
 
 export const PlainPlugin = createWidgetPlugin('Plain')
@@ -63,6 +93,10 @@ export interface Preview {
 	readonly fire: (value: number, widgetId?: string) => void
 	/** Emits `pinged` with no payload from `widgetId` (default the root). */
 	readonly ping: (widgetId?: string) => void
+	/** Calls `check(ok)` on `widgetId` (default the root): `check(false)` returns with an `invalid-method-result` diagnostic (`reason: 'not-ok'`). */
+	readonly check: (ok: boolean, widgetId?: string) => void
+	/** Method subscriptions the Agent currently holds for this Preview: subscribeMember answered minus unsubscribeMember. */
+	readonly activeMembers: Set<string>
 	/** Subscriptions the Agent currently holds for this Preview: subscribes answered minus unsubscribes. */
 	readonly active: Set<string>
 	/** Every request method the client sent, in order. */
@@ -99,15 +133,17 @@ export function createPreviewLink(): PreviewLink {
  * Notifier, `inner`, in the root's slot; `link`: reuse that client and transport instead of making new ones (dispose the
  * previous Preview's Agent first: one Agent per transport per Runtime).
  */
-export async function createPreview(revision: number, options: { plain?: boolean, nested?: boolean, link?: PreviewLink } = {}): Promise<Preview> {
-	const system = createWidgetSystem({ plugins: [NotifierPlugin, PlainPlugin] })
+export async function createPreview(revision: number, options: { plain?: boolean, methodsOnly?: boolean, nested?: boolean, link?: PreviewLink } = {}): Promise<Preview> {
+	const system = createWidgetSystem({ plugins: [NotifierPlugin, PlainPlugin, CheckerPlugin] })
 	const blueprint = system.createBlueprint(options.plain === true
 		? { id: 'only', type: 'Plain' }
-		: { id: 'notifier', type: 'Notifier', ...(options.nested === true ? { slots: { children: [{ id: 'inner', type: 'Notifier' }] } } : {}) })
+		: options.methodsOnly === true
+			? { id: 'checker', type: 'Checker' }
+			: { id: 'notifier', type: 'Notifier', ...(options.nested === true ? { slots: { children: [{ id: 'inner', type: 'Notifier' }] } } : {}) })
 	if (blueprint.status !== 'valid')
 		throw new Error('Expected the fixture to compile.')
 	const runtime = blueprint.createRuntime()
-	const widgetOf = (id: string) => (runtime.getWidget(id) as unknown as { methods: { fire: (n: number) => void, ping: () => void } }).methods
+	const widgetOf = (id: string) => (runtime.getWidget(id) as unknown as { methods: { fire: (n: number) => void, ping: () => void, check: (ok: boolean) => boolean } }).methods
 	const runtimeId = `runtime-r${revision}`
 	const link = options.link ?? createPreviewLink()
 	// With a shared link the transport outlives the Agent, as the Preview frame's channel does across an Apply.
@@ -116,6 +152,7 @@ export async function createPreview(revision: number, options: { plain?: boolean
 	const snapshot = await client.request('blueprint.getSnapshot', { runtimeId })
 
 	const active = new Set<string>()
+	const activeMembers = new Set<string>()
 	const requests: string[] = []
 	const gate = {
 		hold: false,
@@ -139,6 +176,10 @@ export async function createPreview(revision: number, options: { plain?: boolean
 				active.add((result as { subscriptionId: string }).subscriptionId)
 			if (method === 'runtime.unsubscribeEvent')
 				active.delete((params as { subscriptionId: string }).subscriptionId)
+			if (method === 'runtime.subscribeMember' && (params as { member: { type: string } }).member.type === 'method')
+				activeMembers.add((result as { subscriptionId: string }).subscriptionId)
+			if (method === 'runtime.unsubscribeMember')
+				activeMembers.delete((params as { subscriptionId: string }).subscriptionId)
 			return result
 		}) as InspectorClient['request'],
 	}
@@ -149,7 +190,12 @@ export async function createPreview(revision: number, options: { plain?: boolean
 			.fire(value),
 		ping: (widgetId = 'notifier') => widgetOf(widgetId)
 			.ping(),
+		check: (ok: boolean, widgetId = 'notifier') => {
+			widgetOf(widgetId)
+				.check(ok)
+		},
 		active,
+		activeMembers,
 		requests,
 		gate,
 		disposeAgent: () => agent.dispose(),
