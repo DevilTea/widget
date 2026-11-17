@@ -26,8 +26,6 @@ const REQUIRED_MESSAGE = 'This question is required.'
 async function openSurvey(page: Page): Promise<void> {
 	await page.goto('/?lab-test')
 	await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
 	await expect(previewFrame(page)
 		.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 		.toBeVisible()

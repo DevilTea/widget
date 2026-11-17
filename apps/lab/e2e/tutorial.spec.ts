@@ -170,7 +170,10 @@ test.describe('welcome card', () => {
 	})
 
 	test('"Start the tour" dismisses the welcome card and begins the Survey tour', async ({ page }) => {
-		await page.goto('/')
+		// Start from the hidden Sandbox fixture so the selector's final `survey` value proves the switch.
+		await page.goto('/?showcase=sandbox')
+		await expect(page.getByLabel('Switch showcase'))
+			.toHaveValue('sandbox')
 		await page.getByRole('button', { name: 'Start the tour' })
 			.click()
 

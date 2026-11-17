@@ -512,7 +512,7 @@ A future SSR design would need, and this guide does not decide:
 
 ## Design constraints
 
-- **No domain widgets.** Survey/Product Prototype (or any other) domain
+- **No domain widgets.** Lab showcase (or any other) domain
   widgets stay out of this package.
 - **No editor-domain UI.** Lab inspectors, source editors, and similar
   editor-domain operations stay out of this package.

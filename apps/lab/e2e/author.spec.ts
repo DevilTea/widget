@@ -125,8 +125,6 @@ test('semantic diagnostics navigate to current Document focus while source-only 
 
 test('rejects blank numeric Structure values while preserving scalar editing behavior', async ({ page }) => {
 	await page.goto('/')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
 	await page.getByRole('tab', { name: 'Author' })
 		.click()
 	await page.getByRole('tab', { name: 'Structure' })

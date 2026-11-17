@@ -35,10 +35,6 @@ async function setDraftSourceText(page: Page, text: string): Promise<void> {
 }
 
 test.describe('Inspect mode (issue #25 P2)', () => {
-	test.beforeEach(async ({ page }) => {
-		await page.goto('/')
-	})
-
 	test('is off by default: Sandbox Counter buttons behave normally', async ({ page }) => {
 		await page.goto('/?showcase=sandbox')
 
@@ -54,6 +50,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 	})
 
 	test('toggling on: hovering a Survey question outlines it and shows the type#id badge', async ({ page }) => {
+		await page.goto('/')
 		await inspectToggle(page)
 			.click()
 		await expect(inspectToggle(page))
@@ -146,6 +143,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 	})
 
 	test('Escape exits Inspect mode: badge disappears and subsequent clicks act normally', async ({ page }) => {
+		await page.goto('/')
 		await inspectToggle(page)
 			.click()
 		const phoneLabel = previewFrame(page)
@@ -216,6 +214,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 	 * `pointerdown`/`pointerup` are also suppressed at the capture boundary.
 	 */
 	test('inspect-click on a native focusable control (Survey "Phone number" input) selects the widget without focusing/activating it or mutating its State', async ({ page }) => {
+		await page.goto('/')
 		const phoneInput = previewFrame(page)
 			.getByLabel('Phone number')
 		await expect(phoneInput)

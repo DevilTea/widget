@@ -8,7 +8,7 @@
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { InspectorAgent } from '@deviltea/widget-inspector/agent'
 import type { App } from 'vue'
-import type { PreviewHostRequest, PreviewTourId } from './preview-host/protocol'
+import type { PreviewHostRequest } from './preview-host/protocol'
 import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
 import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
 import {
@@ -31,6 +31,7 @@ import { SURVEY_TOUR_ID, surveyTourScript } from './tutorial/survey-script'
 import 'pika.css'
 import './styles/global.css'
 import './styles/tutorial-theme.css'
+import './styles/preview-frame.css'
 
 interface MountedPreview {
 	readonly app: App
@@ -54,10 +55,6 @@ const theme = createLabThemeStore()
 let mounted: MountedPreview | null = null
 let bootstrapAccepted = false
 let mountQueue: Promise<void> = Promise.resolve()
-
-function scriptFor(_tourId: PreviewTourId) {
-	return surveyTourScript
-}
 
 function sendSafely(transport: { readonly closed: boolean, send: (message: unknown) => void }, message: unknown): void {
 	if (transport.closed)
@@ -105,7 +102,8 @@ function progressForRequest(request: Extract<PreviewHostRequest, { kind: 'tutori
 	const current = mounted
 	if (current === null || current.showcaseId !== request.tourId)
 		return request.progress
-	const script = scriptFor(request.tourId)
+	// `PreviewTourId` is `'survey'` today, so the evaluated script is always the Survey tour's.
+	const script = surveyTourScript
 	const step = script.steps[request.stepIndex]
 	if (step === undefined)
 		return request.progress

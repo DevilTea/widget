@@ -1,0 +1,68 @@
+/**
+ * Base rules for the Preview frame ONLY (`preview-frame-main.ts`); never imported by the Lab shell, whose
+ * chrome keeps the UA defaults.
+ *
+ * Until the Vuetify showcase was removed, the frame loaded `vuetify/styles`, and the survey renderers were
+ * authored and styled against its core reset/base (`@layer vuetify-core.reset` / `vuetify-core.base`).
+ * Removing it changed how the survey looked (line-height 1.5, controls inheriting the surrounding font,
+ * square text inputs, pointer cursors on buttons). This is the small subset of that reset/base that the
+ * renderers actually depended on, kept so the survey looks the same.
+ *
+ * The rules sit in a layer declared after PikaCSS's `utilities` layer, exactly where the Vuetify reset sat,
+ * so (like it did) they win over PikaCSS utilities; this is why the survey sets control colours/sizes
+ * inline (`showcases/survey/renderers/control-style.ts`).
+ */
+
+@layer preflights, utilities, preview-frame-base;
+
+@layer preview-frame-base {
+	html {
+		line-height: 1.5;
+		tab-size: 4;
+		text-rendering: optimizeLegibility;
+		-webkit-text-size-adjust: 100%;
+	}
+
+	input {
+		border-radius: 0;
+	}
+
+	button,
+	input,
+	optgroup,
+	select,
+	textarea {
+		font: inherit;
+	}
+
+	optgroup {
+		font-weight: bold;
+	}
+
+	button,
+	[type='button'],
+	[type='reset'],
+	[type='submit'],
+	[role='button'] {
+		cursor: pointer;
+		color: inherit;
+	}
+
+	[aria-busy='true'] {
+		cursor: progress;
+	}
+
+	[aria-controls] {
+		cursor: pointer;
+	}
+
+	[disabled],
+	[aria-disabled='true'] {
+		cursor: default;
+	}
+
+	[type='number']::-webkit-inner-spin-button,
+	[type='number']::-webkit-outer-spin-button {
+		height: auto;
+	}
+}

@@ -13,7 +13,7 @@ import { createLabStore } from './use-lab-store'
 
 /** Most lifecycle tests drive the minimal Sandbox fixture, which is hidden and no longer the default. */
 function createSandboxStore(): LabStore {
-	return createLabStore(getShowcase('sandbox'))
+	return createLabStore(getShowcase('sandbox')!)
 }
 
 const capturedText = '{ "id": "root", "type": "Text", "config": { "text": "captured snapshot" } }\n'

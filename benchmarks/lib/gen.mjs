@@ -20,7 +20,7 @@ import { loadCore } from './load.mjs'
 const core = await loadCore()
 const { createWidgetPlugin, createWidgetSystem } = core
 
-/** What a "standard" unit looks like: roughly the shape of the Lab's survey / CRM plugins, a little larger. */
+/** What a "standard" unit looks like: roughly the shape of the Lab's survey plugins, a little larger. */
 export const STANDARD = Object.freeze({
 	shape: 'tree', // 'flat' | 'tree' | 'deep'
 	fanout: 8, // tree: children per group

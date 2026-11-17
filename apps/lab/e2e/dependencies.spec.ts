@@ -3,8 +3,6 @@ import { expect, test } from './fixtures'
 
 async function openSurveyDependencies(page: Page) {
 	await page.goto('/')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 }

@@ -233,7 +233,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			engine.resume(actions())
 			// A step with a no-predicate (or already-satisfied) stage must reveal immediately on entry —
 			// see `next()`'s comment below; `resume()` re-enters the current step the same way `next()`/
-			// `back()` do, and the `watch` above only re-fires on a Runtime/showcase/status/tour *identity*
+			// `back()` do, and the `watch` above only re-fires on a Runtime/showcase/status *identity*
 			// change, none of which a plain pause/resume cycle produces.
 			recheckNow()
 		},
@@ -261,7 +261,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			// Entering a new step whose first stage has no predicate (or one already satisfied by
 			// Runtime state the visitor produced earlier) must reveal its text immediately, not wait for
 			// the next incidental Runtime tick — the `watch` above only re-fires on a Runtime/showcase/
-			// status/tour *identity* change, which a same-showcase `next()` never produces.
+			// status *identity* change, which a same-showcase `next()` never produces.
 			recheckNow()
 			if (engine.getSnapshot().status === 'completed')
 				markTourCompleted(SURVEY_TOUR_ID)

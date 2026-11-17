@@ -163,6 +163,12 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     the Blueprint invalid (`unexpected-widget-field`). `src/showcases/registry.unit.test.ts` pins this.
 - `pika.config.ts` — the Lab's small PikaCSS token set (`variables.definitions`, safe-listed so the
   hand-authored `src/styles/dockview-theme.css` can reference them via plain `var()`).
+- `src/styles/preview-frame.css` — base rules for the Preview frame only (imported by
+  `preview-frame-main.ts`, never by the shell): line-height 1.5, controls inheriting the surrounding font,
+  square text inputs and pointer cursors, i.e. the subset of the removed Vuetify reset the survey renderers
+  were styled against. It sits in a layer declared after PikaCSS's `utilities`, so it wins over PikaCSS
+  utilities on those properties (see `showcases/survey/renderers/control-style.ts`). Do not move these rules
+  into `global.css`: the Lab chrome keeps the UA defaults.
 - `src/**/*.unit.test.ts` — colocated Vitest unit tests for `src/lab/`, `src/graph/`,
   `src/runtime-inspector/`, `src/sandbox/`, `src/composables/` and `src/showcases/**` (plugins,
   presets, and selected renderer contracts via `@vue/test-utils` + `happy-dom`), run by both this
@@ -229,17 +235,17 @@ Intentional, not incidental (`DevilTea/deviltea-labs#30` Scope B) — the produc
 building this app in isolation:
 
 ```text
-main app JS (index-*.js)                ~778 KB raw / ~214 KB gzip  — eager
+main app JS (lab-*.js + shared global-*.js) ~678 KB + ~287 KB raw / ~177 KB + ~93 KB gzip — eager
 modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
 Implementation panel + Shiki (ImplementationPanel-*.js)
-                                         ~373 KB raw / ~74 KB gzip  — loaded on first Implementation open
+                                         ~375 KB raw / ~75 KB gzip  — loaded on first Implementation open
 curated raw-source chunks (per curated file, e.g. ShortAnswerRenderer-*.js)
-                                         ~0.6-14 KB raw / ~0.4-4.3 KB gzip each — loaded on first
+                                         ~2-21 KB raw / ~1-6.2 KB gzip each — loaded on first
                                          selection of that file's tab
-CSS (index-*.css)                       ~120 KB raw / ~11 KB gzip   — eager
+CSS (lab-*.css + global-*.css)            ~128 KB + ~9 KB raw / ~12 KB + ~3 KB gzip — eager
 ```
 
 - **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,

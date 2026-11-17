@@ -39,7 +39,7 @@ pnpm build       # tsdown (includes publint)
 
 This package owns the renderer/lifecycle/reactivity adapter surface only. It must not own:
 
-- Survey/Product Prototype or any other domain widgets
+- Lab showcase (Survey or any other) domain widgets
 - Lab inspectors, source editors, or other editor-domain UI
 - persistence/versioning/migration of any kind
 - showcase-specific application state or business rules

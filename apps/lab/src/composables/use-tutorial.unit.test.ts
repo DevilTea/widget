@@ -105,7 +105,7 @@ beforeEach(() => {
 describe('createTutorialStore() duplicate start requests', () => {
 	it('makes a rejected synchronous request a no-op while the first showcase switch is pending', async () => {
 		// Start from the hidden Sandbox fixture so the tour has to switch showcase (Survey is the default).
-		const store = createLabStore(getShowcase('sandbox'))
+		const store = createLabStore(getShowcase('sandbox')!)
 		const deferredSwitch = createDeferred<void>()
 		const switchShowcase = vi.fn(() => deferredSwitch.promise)
 		store.switchShowcase = switchShowcase
