@@ -1,9 +1,9 @@
-import type { EventLogBuffer, EventLogEntry } from './event-log'
+import type { EventLogBuffer, EventLogEntry, EventLogItem, MethodFailureEntry } from './event-log'
 import { describe, expect, it } from 'vitest'
 import { appendEventLogEntry, EMPTY_EVENT_LOG, EVENT_LOG_LIMIT, formatEventTime, isSameWidget, NO_EVENT_FILTER, visibleEventLogEntries } from './event-log'
 
 function entry(seq: number, overrides: Partial<EventLogEntry> = {}): EventLogEntry {
-	return { seq, at: 0, revision: 1, runtimeId: 'r', nodeId: 1, widgetId: 'form', widgetType: 'Survey', event: 'submitted', args: [], ...overrides }
+	return { kind: 'event', seq, at: 0, revision: 1, runtimeId: 'r', nodeId: 1, widgetId: 'form', widgetType: 'Survey', event: 'submitted', args: [], ...overrides }
 }
 
 describe('event log buffer', () => {
@@ -79,6 +79,63 @@ describe('event log filter', () => {
 			.toBe(false)
 		expect(isSameWidget(mixed[0]!, null))
 			.toBe(false)
+	})
+})
+
+function failure(seq: number, overrides: Partial<MethodFailureEntry> = {}): MethodFailureEntry {
+	return { kind: 'method-failure', seq, at: 0, revision: 1, runtimeId: 'r', nodeId: 1, widgetId: 'form', widgetType: 'Survey', method: 'submit', diagnostics: [], ...overrides }
+}
+
+describe('event log with Method failures', () => {
+	const entries: EventLogItem[] = [
+		entry(1, { widgetId: 'a', event: 'submitted' }),
+		failure(2, { widgetId: 'a', method: 'submit' }),
+		failure(3, { widgetId: 'b', method: 'submit' }),
+		entry(4, { widgetId: 'b', event: 'submitted' }),
+	]
+	const seqs = (filter: Partial<typeof NO_EVENT_FILTER>): number[] => visibleEventLogEntries(entries, { ...NO_EVENT_FILTER, ...filter })
+		.map(item => item.seq)
+
+	it('keeps Events and Method failures in one bounded buffer', () => {
+		let buffer: EventLogBuffer = EMPTY_EVENT_LOG
+		for (let seq = 1; seq <= EVENT_LOG_LIMIT + 3; seq++)
+			buffer = appendEventLogEntry(buffer, seq % 2 === 0 ? failure(seq) : entry(seq))
+		expect(buffer.entries)
+			.toHaveLength(EVENT_LOG_LIMIT)
+		expect(buffer.dropped)
+			.toBe(3)
+		expect(buffer.entries[0]!.seq)
+			.toBe(4)
+	})
+
+	it('lists both kinds newest first without a filter', () => {
+		expect(seqs({}))
+			.toEqual([4, 3, 2, 1])
+	})
+
+	it('filters by kind', () => {
+		expect(seqs({ kind: 'events' }))
+			.toEqual([4, 1])
+		expect(seqs({ kind: 'method-failures' }))
+			.toEqual([3, 2])
+	})
+
+	it('applies the widget and selected-widget filters to both kinds', () => {
+		expect(seqs({ widgetId: 'a' }))
+			.toEqual([2, 1])
+		expect(seqs({ onlySelected: true, selectedWidget: { widgetId: 'b', widgetType: 'Survey' } }))
+			.toEqual([4, 3])
+		expect(seqs({ widgetId: 'b', kind: 'method-failures' }))
+			.toEqual([3])
+	})
+
+	it('never matches a Method failure against an Event name, even one equal to the Method name', () => {
+		expect(seqs({ event: 'submitted' }))
+			.toEqual([4, 1])
+		expect(seqs({ event: 'submit' }))
+			.toEqual([])
+		expect(seqs({ event: 'submitted', kind: 'method-failures' }))
+			.toEqual([])
 	})
 })
 

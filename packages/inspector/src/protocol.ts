@@ -12,7 +12,7 @@ export interface InspectorProtocolVersion {
 	readonly minor: number
 }
 
-export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 4 }) satisfies InspectorProtocolVersion
+export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 5 }) satisfies InspectorProtocolVersion
 
 export interface InspectorCapabilities {
 	readonly methods: readonly InspectorRequestMethod[]
@@ -57,7 +57,8 @@ export type InspectorHitTestResult
 		| { readonly target: InspectorSemanticTarget, readonly geometry: InspectorGeometrySnapshot }
 
 export interface InspectorMemberRef {
-	readonly type: 'state' | 'property'
+	/** `'method'` was added in protocol 0.5; a peer negotiated below 0.5 receives `invalid-params` for it, as before. */
+	readonly type: 'state' | 'property' | 'method'
 	readonly name: string
 }
 
@@ -252,7 +253,22 @@ export interface InspectorRuntimePropertySnapshot {
 		| { readonly status: 'completed', readonly result: InspectorRuntimePropertyResult }
 }
 
-export type InspectorRuntimeMemberSnapshot = InspectorRuntimeStateSnapshot | InspectorRuntimePropertySnapshot
+/**
+ * Added in protocol 0.5. A Method's current diagnostic snapshot (Core `RuntimeMethod.getDiagnostics()`): the
+ * diagnostics of its latest invocation that returned a result. It is empty before any invocation has returned
+ * and after one that succeeded, and an invocation that threw leaves it unchanged, so it is a current fact and
+ * not a call log. The Agent never invokes the Method.
+ */
+export interface InspectorRuntimeMethodSnapshot {
+	readonly type: 'method'
+	readonly name: string
+	readonly diagnostics: readonly InspectorRuntimeDiagnostic[]
+}
+
+export type InspectorRuntimeMemberSnapshot
+	= | InspectorRuntimeStateSnapshot
+		| InspectorRuntimePropertySnapshot
+		| InspectorRuntimeMethodSnapshot
 
 export interface InspectorRuntimeWidgetSnapshot {
 	readonly ref: WidgetRef
@@ -456,7 +472,7 @@ function isWidgetRef(value: unknown): value is WidgetRef {
 
 function isMemberRef(value: unknown): value is InspectorMemberRef {
 	return isRecord(value)
-		&& (value.type === 'state' || value.type === 'property')
+		&& (value.type === 'state' || value.type === 'property' || value.type === 'method')
 		&& typeof value.name === 'string'
 }
 
@@ -611,8 +627,8 @@ export function parseInspectorUnrecognizedErrorResponse(value: unknown): Inspect
 	}
 }
 
-function isRuntimeMemberSnapshot(value: unknown): value is InspectorRuntimeMemberSnapshot {
-	return isWireRuntimeMemberSnapshot(value)
+function isRuntimeMemberSnapshot(value: unknown, protocolMinor: number): value is InspectorRuntimeMemberSnapshot {
+	return isWireRuntimeMemberSnapshot(value, protocolMinor)
 }
 
 function isGeometryRect(value: unknown): value is InspectorGeometryRect {
@@ -689,11 +705,11 @@ export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 				&& typeof value.widgetId === 'string'
 				&& typeof value.widgetType === 'string'
 				&& Array.isArray(value.members)
-				&& value.members.every(isRuntimeMemberSnapshot)
+				&& value.members.every(member => isRuntimeMemberSnapshot(member, protocolMinor))
 		case 'runtime.subscribeMember':
 			return isRecord(value)
 				&& typeof value.subscriptionId === 'string'
-				&& isRuntimeMemberSnapshot(value.member)
+				&& isRuntimeMemberSnapshot(value.member, protocolMinor)
 		case 'runtime.subscribeEvent':
 			return isRecord(value)
 				&& typeof value.subscriptionId === 'string'
@@ -753,7 +769,7 @@ export function parseInspectorEventMessage(value: unknown): InspectorEventMessag
 		case 'runtime.memberChanged':
 			return typeof value.payload.subscriptionId === 'string'
 				&& isWidgetRef(value.payload.ref)
-				&& isRuntimeMemberSnapshot(value.payload.member)
+				&& isRuntimeMemberSnapshot(value.payload.member, value.protocol.minor)
 				? value as InspectorEventMessage
 				: null
 		case 'inspect.hovered':

@@ -472,11 +472,16 @@ export function isRuntimeDiagnostic(value: unknown): value is InspectorRuntimeDi
 	}
 }
 
-export function isRuntimeMemberSnapshot(value: unknown): value is InspectorRuntimeMemberSnapshot {
+/** `method` member snapshots exist from this protocol minor on. */
+const METHOD_SNAPSHOT_PROTOCOL_MINOR = 5
+
+export function isRuntimeMemberSnapshot(value: unknown, protocolMinor: number = METHOD_SNAPSHOT_PROTOCOL_MINOR): value is InspectorRuntimeMemberSnapshot {
 	if (!isRecord(value) || typeof value.name !== 'string')
 		return false
 	if (value.type === 'state')
 		return isInspectableValue(value.value)
+	if (value.type === 'method')
+		return protocolMinor >= METHOD_SNAPSHOT_PROTOCOL_MINOR && Array.isArray(value.diagnostics) && value.diagnostics.every(isRuntimeDiagnostic)
 	if (value.type !== 'property' || !isRecord(value.snapshot))
 		return false
 	if (value.snapshot.status === 'never-evaluated')

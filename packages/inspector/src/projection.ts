@@ -2,6 +2,7 @@ import type {
 	BlueprintDependencyReference,
 	BlueprintNodeDiagnostic,
 	BlueprintNodeDiagnosticLocation,
+	RuntimeMethodDiagnostic,
 	RuntimeWidgetDiagnostic,
 } from '@deviltea/widget-core'
 import type {
@@ -21,6 +22,7 @@ import type {
 	InspectorDiagnosticLocation,
 	InspectorRuntimeDiagnostic,
 	InspectorRuntimeMemberSnapshot,
+	InspectorRuntimeMethodSnapshot,
 	InspectorRuntimePropertySnapshot,
 	InspectorRuntimeWidgetSnapshot,
 	InspectorSlot,
@@ -276,6 +278,23 @@ function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspecti
 	}
 }
 
+/**
+ * Projects a Method's current diagnostic snapshot (protocol 0.5+). Each diagnostic goes through the same
+ * field-by-field projection as a Property failure, so `args`, `result`, `dependency`, `related` and `cause`
+ * are named and every value is encoded within the Agent's value limits.
+ */
+export function projectRuntimeMethodSnapshot(
+	name: string,
+	diagnostics: readonly RuntimeMethodDiagnostic[],
+	encoding: InspectableValueEncodingOptions,
+): InspectorRuntimeMethodSnapshot {
+	return {
+		type: 'method',
+		name,
+		diagnostics: diagnostics.map(diagnostic => projectRuntimeDiagnostic(diagnostic, encoding)),
+	}
+}
+
 export function projectRuntimeMemberSnapshot(
 	widget: RuntimeWidgetInspection,
 	member: { readonly type: 'state' | 'property', readonly name: string },
@@ -301,6 +320,11 @@ export function projectRuntimeWidgetSnapshot(
 	runtimeInspection: RuntimeInspection,
 	nodeId: InspectionNodeId,
 	encoding: InspectableValueEncodingOptions,
+	/**
+	 * Reads a Method's current diagnostics from the public Runtime, or `null` when the Method cannot be read.
+	 * Pass `null` itself for a peer negotiated below 0.5, which sees no Method members.
+	 */
+	readMethodDiagnostics: ((name: string) => readonly RuntimeMethodDiagnostic[] | null) | null = null,
 ): InspectorRuntimeWidgetSnapshot | null {
 	const widget = runtimeInspection.getWidget(nodeId)
 	if (widget === null || !widget.blueprintNode.resolved)
@@ -316,6 +340,13 @@ export function projectRuntimeWidgetSnapshot(
 		const projected = projectRuntimeMemberSnapshot(widget, property, encoding)
 		if (projected !== null)
 			members.push(projected)
+	}
+	if (readMethodDiagnostics !== null) {
+		for (const method of widget.blueprintNode.methods) {
+			const diagnostics = readMethodDiagnostics(method.name)
+			if (diagnostics !== null)
+				members.push(projectRuntimeMethodSnapshot(method.name, diagnostics, encoding))
+		}
 	}
 
 	return {

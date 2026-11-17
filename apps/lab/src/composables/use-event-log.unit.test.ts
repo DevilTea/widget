@@ -58,7 +58,7 @@ describe('useEventLog()', () => {
 		const [changed, pinged] = consumer.value.entries.value
 		expect(changed)
 			.toMatchObject({ widgetId: 'notifier', widgetType: 'Notifier', event: 'changed', revision: 3, runtimeId: 'runtime-r3' })
-		expect(changed!.args)
+		expect(changed?.kind === 'event' ? changed.args : null)
 			.toEqual([{
 				type: 'object',
 				id: 1,
@@ -368,7 +368,7 @@ describe('useEventLog()', () => {
 			.toBe(2)
 		second.fire(2)
 		first.fire(3)
-		expect(consumer.value.entries.value.map(entry => [entry.revision, entry.event]))
+		expect(consumer.value.entries.value.map(entry => [entry.revision, entry.kind === 'event' ? entry.event : null]))
 			.toEqual([[1, 'changed'], [2, 'changed']])
 		expect(consumer.value.listening.value)
 			.toEqual({ state: 'listening', widgets: 1, events: 2, failed: 0 })

@@ -204,14 +204,14 @@ describe('wire projection builds every DTO field by field', () => {
 
 	it('declares the new minor and reports it in the handshake', async () => {
 		expect(INSPECTOR_PROTOCOL_VERSION)
-			.toEqual({ major: 0, minor: 4 })
+			.toEqual({ major: 0, minor: 5 })
 		const pair = createInProcessInspectorTransportPair()
 		const agent = createInspectorAgent({ runtime: createBlueprint()
 			.createRuntime(), transport: pair.agent })
 		const client = createInspectorClient(pair.client)
 		try {
 			expect((await client.handshake()).protocol)
-				.toEqual({ major: 0, minor: 4 })
+				.toEqual({ major: 0, minor: 5 })
 		}
 		finally {
 			client.dispose()

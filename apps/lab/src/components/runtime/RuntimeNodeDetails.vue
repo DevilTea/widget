@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { InspectorClient } from '@deviltea/widget-inspector/client'
 /** Remote Runtime Inspector member list. All live values arrive through InspectorClient DTOs. */
-import type { InspectorBlueprintNode, InspectorRuntimePropertySnapshot, InspectorRuntimeStateSnapshot, InspectorRuntimeWidgetSnapshot } from '@deviltea/widget-inspector/protocol'
+import type { InspectorBlueprintNode, InspectorRuntimeMethodSnapshot, InspectorRuntimePropertySnapshot, InspectorRuntimeStateSnapshot, InspectorRuntimeWidgetSnapshot } from '@deviltea/widget-inspector/protocol'
 import type { InspectorFocusMember } from '../../lab/focus'
 import { computed } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
@@ -43,6 +43,12 @@ function stateSnapshot(name: string): InspectorRuntimeStateSnapshot | null {
 function propertySnapshot(name: string): InspectorRuntimePropertySnapshot | null {
 	const member = props.widgetSnapshot?.members.find(candidate => candidate.type === 'property' && candidate.name === name)
 	return member?.type === 'property' ? member : null
+}
+
+/** The Method's snapshot, which the Inspector reports from protocol 0.5; `null` for a peer that reports none. */
+function methodSnapshot(name: string): InspectorRuntimeMethodSnapshot | null {
+	const member = props.widgetSnapshot?.members.find(candidate => candidate.type === 'method' && candidate.name === name)
+	return member?.type === 'method' ? member : null
 }
 
 function isSelected(type: InspectorFocusMember['type'], name: string): boolean {
@@ -133,7 +139,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 				:is="memberHeading"
 				class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted"
 			>
-				Methods ({{ methodMembers.length }}) — {{ i18n.t('inventory only') }}
+				Methods ({{ methodMembers.length }})
 			</component>
 			<RuntimeMethodRow
 				v-for="member in methodMembers"
@@ -141,6 +147,9 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 				:name="member.name"
 				:transitivelyWrites="member.transitivelyWrites"
 				:transitivelyEmits="member.transitivelyEmits"
+				:client="client"
+				:widgetRef="widgetSnapshot.ref"
+				:initial="methodSnapshot(member.name)"
 				:selected="isSelected('method', member.name)"
 				@select="selectMember('method', member.name)"
 			/>

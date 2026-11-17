@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { PanelVisibilityApi } from '../../composables/use-panel-visibility'
-import type { WidgetIdentity } from '../../events/event-log'
+import type { EventLogKindFilter, WidgetIdentity } from '../../events/event-log'
 /**
- * The live Events log (issue #230, audit U09): every Event the running Preview's widgets emit, as it happens. The
- * data plane is the Inspector protocol alone (`runtime.subscribeEvent` / `runtime.eventOccurred`, see
- * `composables/use-event-log.ts`); this panel never receives a Core Runtime and cannot emit. It listens only while
+ * The live Events log (issue #230, audit U09): every Event the running Preview's widgets emit, as it happens, and (audit
+ * U08, protocol 0.5) every Method failure, listed next to them and labelled as such because it is not an Event. The
+ * data plane is the Inspector protocol alone (`runtime.subscribeEvent` / `runtime.eventOccurred`, and a Method member's
+ * `runtime.subscribeMember` / `runtime.memberChanged`, see `composables/use-event-log.ts`); this panel never receives a Core
+ * Runtime and cannot emit or invoke. It listens only while
  * its tab is the visible one: the log is recorded while the panel is mounted (see `composables/use-event-log.ts`), so what
  * happened while another tab was open is here when this one is opened.
  */
@@ -17,6 +19,7 @@ import { usePanelVisibility } from '../../composables/use-panel-visibility'
 import { EVENT_LOG_LIMIT, isSameWidget, visibleEventLogEntries } from '../../events/event-log'
 import { getRuntimeInspectorSource } from '../../runtime-inspector/source'
 import EventLogEntryRow from '../events/EventLogEntryRow.vue'
+import MethodFailureEntryRow from '../events/MethodFailureEntryRow.vue'
 import InspectorPanelShell from '../inspector/InspectorPanelShell.vue'
 
 const props = defineProps<{ params?: { api?: PanelVisibilityApi } }>()
@@ -32,6 +35,7 @@ const connection = computed(() => store.previewHost.connection.value)
 const widgetFilter = ref('')
 const eventFilter = ref('')
 const onlySelected = ref(false)
+const kindFilter = ref<EventLogKindFilter>('all')
 
 /** The widget selected in the Preview, by id and type: entries carry those, not a node id of a Runtime that may be gone. */
 const selectedWidget = computed<WidgetIdentity | null>(() => {
@@ -47,18 +51,24 @@ const widgetOptions = computed(() => [...new Set([
 ])].sort())
 const eventOptions = computed(() => [...new Set([
 	...log.emitters.value.flatMap(widget => widget.events),
-	...log.entries.value.map(entry => entry.event),
+	...log.entries.value.flatMap(entry => entry.kind === 'event' ? [entry.event] : []),
 	...(eventFilter.value === '' ? [] : [eventFilter.value]),
 ])].sort())
 
 const shown = computed(() => visibleEventLogEntries(log.entries.value, {
 	widgetId: widgetFilter.value === '' ? null : widgetFilter.value,
 	event: eventFilter.value === '' ? null : eventFilter.value,
+	kind: kindFilter.value,
 	// "Only the selected widget" with nothing selected shows nothing rather than everything.
 	onlySelected: onlySelected.value,
 	selectedWidget: selectedWidget.value,
 }))
-const filtering = computed(() => widgetFilter.value !== '' || eventFilter.value !== '' || onlySelected.value)
+const filtering = computed(() => widgetFilter.value !== '' || eventFilter.value !== '' || kindFilter.value !== 'all' || onlySelected.value)
+/**
+ * Whether the log has held a Method failure since it was cleared. Its counts and notes then speak of entries, since they
+ * count Events and Method failures alike; until then they say Events, exactly as before.
+ */
+const mixed = computed(() => log.recordedFailures.value > 0)
 
 /** The node of the current Preview that is this entry's widget, when it still has one. */
 function currentNodeId(entry: { readonly widgetId: string, readonly widgetType: string }): number | null {
@@ -97,7 +107,9 @@ watch(() => log.entries.value.length + log.dropped.value, (total) => {
 	settleTimer = setTimeout(() => {
 		settleTimer = null
 		const count = log.entries.value.length
-		announcement.value = i18n.t(count === 1 ? '{count} Event recorded' : '{count} Events recorded', { count })
+		announcement.value = mixed.value
+			? i18n.t(count === 1 ? '{count} entry recorded' : '{count} entries recorded', { count })
+			: i18n.t(count === 1 ? '{count} Event recorded' : '{count} Events recorded', { count })
 	}, 1000)
 })
 onScopeDispose(() => {
@@ -111,7 +123,9 @@ const listeningText = computed(() => {
 		case 'no-preview': return i18n.t('No valid preview to listen to: fix the problems and Apply, and Events will be recorded from the new preview.')
 		case 'loading': return i18n.t('Waiting for the preview to load. Events are recorded once it is running.')
 		case 'lost': return i18n.t('The preview is not connected, so no Events are being recorded. Use Try again in the preview, or Apply again.')
-		case 'no-events': return i18n.t('The widgets in this preview declare no Events, so there is nothing to record.')
+		case 'no-events': return log.watchingMethods.value.methods > 0
+			? i18n.t('The widgets in this preview declare no Events. Failed Method calls are still recorded.')
+			: i18n.t('The widgets in this preview declare no Events, so there is nothing to record.')
 		case 'listening': {
 			const events = i18n.t(listening.events === 1 ? '{count} declared Event' : '{count} declared Events', { count: listening.events })
 			const widgets = i18n.t(listening.widgets === 1 ? '{count} widget' : '{count} widgets', { count: listening.widgets })
@@ -124,13 +138,21 @@ const listeningText = computed(() => {
 	}
 })
 
+const methodsText = computed(() => {
+	const { methods, failed } = log.watchingMethods.value
+	const watching = methods > 0 ? i18n.t(methods === 1 ? 'Watching {count} Method for failed calls.' : 'Watching {count} Methods for failed calls.', { count: methods }) : ''
+	const unavailable = failed > 0 ? i18n.t(failed === 1 ? 'Could not subscribe to {count} Method.' : 'Could not subscribe to {count} Methods.', { count: failed }) : ''
+	return [watching, unavailable].filter(text => text !== '')
+		.join(' ')
+})
+
 const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-default bg-default px-1.5 font-mono text-[11px] text-default focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary'
 </script>
 
 <template>
 	<InspectorPanelShell
 		storageKey="widget-lab:panel-desc:events"
-		text="Events the running widgets emit, listed as they happen, also while another tab is open. The latest 500 are kept"
+		text="Events the running widgets emit and Method calls that fail, listed as they happen, also while another tab is open. The latest 500 are kept"
 	>
 		<div
 			data-testid="events-panel"
@@ -188,6 +210,18 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 						>{{ name }}</option>
 					</select>
 				</label>
+				<label class="flex items-center gap-1">
+					<span class="text-muted">{{ i18n.t('Show') }}</span>
+					<select
+						v-model="kindFilter"
+						data-testid="events-filter-kind"
+						:class="selectClass"
+					>
+						<option value="all">{{ i18n.t('Events and Method failures') }}</option>
+						<option value="events">{{ i18n.t('Events only') }}</option>
+						<option value="method-failures">{{ i18n.t('Method failures only') }}</option>
+					</select>
+				</label>
 				<label class="flex min-h-6 cursor-pointer items-center gap-1">
 					<input
 						v-model="onlySelected"
@@ -205,6 +239,10 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 			>
 				<span data-testid="events-listening">{{ listeningText }}</span>
 				<span
+					v-if="methodsText !== ''"
+					data-testid="events-methods-listening"
+				>{{ methodsText }}</span>
+				<span
 					v-if="log.paused.value"
 					data-testid="events-paused-note"
 				>{{ log.skippedWhilePaused.value > 0
@@ -215,13 +253,25 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 					data-testid="events-paused-note"
 				>{{ i18n.t(log.skippedWhilePaused.value === 1 ? '{count} Event was not recorded while the log was paused.' : '{count} Events were not recorded while the log was paused.', { count: log.skippedWhilePaused.value }) }}</span>
 				<span
+					v-if="log.skippedFailuresWhilePaused.value > 0"
+					data-testid="events-paused-failures-note"
+				>{{ log.paused.value
+					? i18n.t(log.skippedFailuresWhilePaused.value === 1 ? 'Paused: {count} Method failure was not recorded.' : 'Paused: {count} Method failures were not recorded.', { count: log.skippedFailuresWhilePaused.value })
+					: i18n.t(log.skippedFailuresWhilePaused.value === 1 ? '{count} Method failure was not recorded while the log was paused.' : '{count} Method failures were not recorded while the log was paused.', { count: log.skippedFailuresWhilePaused.value }) }}</span>
+				<span
 					v-if="log.dropped.value > 0"
 					data-testid="events-dropped-note"
 					class="text-warning"
-				>{{ i18n.t(log.dropped.value === 1 ? 'Showing the latest {limit} Events: {count} older one was dropped.' : 'Showing the latest {limit} Events: {count} older ones were dropped.', { limit: EVENT_LOG_LIMIT, count: log.dropped.value }) }}</span>
-				<span data-testid="events-count">{{ filtering
-					? i18n.t(log.entries.value.length === 1 ? '{shown} of {total} recorded Event shown' : '{shown} of {total} recorded Events shown', { shown: shown.length, total: log.entries.value.length })
-					: i18n.t(log.entries.value.length === 1 ? '{total} recorded Event' : '{total} recorded Events', { total: log.entries.value.length }) }}</span>
+				>{{ mixed
+					? i18n.t(log.dropped.value === 1 ? 'Showing the latest {limit} entries: {count} older one was dropped.' : 'Showing the latest {limit} entries: {count} older ones were dropped.', { limit: EVENT_LOG_LIMIT, count: log.dropped.value })
+					: i18n.t(log.dropped.value === 1 ? 'Showing the latest {limit} Events: {count} older one was dropped.' : 'Showing the latest {limit} Events: {count} older ones were dropped.', { limit: EVENT_LOG_LIMIT, count: log.dropped.value }) }}</span>
+				<span data-testid="events-count">{{ mixed
+					? (filtering
+						? i18n.t(log.entries.value.length === 1 ? '{shown} of {total} recorded entry shown' : '{shown} of {total} recorded entries shown', { shown: shown.length, total: log.entries.value.length })
+						: i18n.t(log.entries.value.length === 1 ? '{total} recorded entry' : '{total} recorded entries', { total: log.entries.value.length }))
+					: (filtering
+						? i18n.t(log.entries.value.length === 1 ? '{shown} of {total} recorded Event shown' : '{shown} of {total} recorded Events shown', { shown: shown.length, total: log.entries.value.length })
+						: i18n.t(log.entries.value.length === 1 ? '{total} recorded Event' : '{total} recorded Events', { total: log.entries.value.length })) }}</span>
 			</div>
 
 			<!-- Polite and throttled: the count after a burst settles, and what Pause/Resume/Clear did. Not one announcement per Event. -->
@@ -237,17 +287,28 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 			<ol
 				v-if="shown.length > 0"
 				data-testid="events-list"
-				:aria-label="i18n.t('Recorded Events, newest first')"
+				:aria-label="mixed ? i18n.t('Recorded Events and Method failures, newest first') : i18n.t('Recorded Events, newest first')"
 				class="m-0 min-h-0 flex-1 list-none overflow-auto p-0"
 			>
-				<EventLogEntryRow
+				<template
 					v-for="entry in shown"
 					:key="entry.seq"
-					:entry="entry"
-					:selectable="currentNodeId(entry) !== null"
-					:selected="isSameWidget(entry, selectedWidget)"
-					@select="select(entry)"
-				/>
+				>
+					<EventLogEntryRow
+						v-if="entry.kind === 'event'"
+						:entry="entry"
+						:selectable="currentNodeId(entry) !== null"
+						:selected="isSameWidget(entry, selectedWidget)"
+						@select="select(entry)"
+					/>
+					<MethodFailureEntryRow
+						v-else
+						:entry="entry"
+						:selectable="currentNodeId(entry) !== null"
+						:selected="isSameWidget(entry, selectedWidget)"
+						@select="select(entry)"
+					/>
+				</template>
 			</ol>
 			<p
 				v-else
@@ -255,7 +316,7 @@ const selectClass = 'h-6 min-w-0 max-w-44 rounded-(--lab-radius) border border-d
 				class="m-0 px-3 py-3 text-xs text-muted"
 			>
 				{{ log.entries.value.length > 0
-					? i18n.t('No recorded Event matches the filters.')
+					? i18n.t(mixed ? 'No recorded entry matches the filters.' : 'No recorded Event matches the filters.')
 					: i18n.t('No Events yet. Use the Preview (for example submit the form): each Event a widget emits is listed here.') }}
 			</p>
 		</div>
