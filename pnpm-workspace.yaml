@@ -14,6 +14,9 @@ catalog:
   '@clack/prompts': ^0.10.1
   '@deviltea/eslint-config': 9.0.0
   '@deviltea/tsconfig': 1.0.0
+  '@iconify-json/lucide': ^1.2.0
+  '@iconify/vue': ^5.0.0
+  '@nuxt/ui': ^4.12.0
   '@pikacss/core': ^0.0.61
   '@pikacss/integration': ^0.0.61
   '@pikacss/unplugin-pikacss': ^0.0.61
@@ -36,6 +39,7 @@ catalog:
   pathe: ^2.0.3
   publint: ^0.3.21
   simple-git-hooks: ^2.13.1
+  tailwindcss: ^4.3.0
   tm-grammars: ^1.32.3
   tm-themes: ^1.12.3
   tsdown: ^0.22.3

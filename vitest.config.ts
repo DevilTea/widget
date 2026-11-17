@@ -1,8 +1,9 @@
 import Vue from 'unplugin-vue/vite'
 import { defineConfig } from 'vitest/config'
+import { labNuxtUi } from './apps/lab/nuxt-ui'
 
 export default defineConfig({
-	plugins: [Vue()],
+	plugins: [Vue(), labNuxtUi()],
 	test: {
 		// The retention tests observe garbage collection, which needs the collector exposed to the workers.
 		execArgv: ['--expose-gc'],
