@@ -79,7 +79,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 			</component>
 			<template
 				v-for="member in stateMembers"
-				:key="member.name"
+				:key="`${widgetSnapshot.ref.nodeId}:${member.name}`"
 			>
 				<RuntimeStateRow
 					v-if="stateSnapshot(member.name) !== null"
@@ -108,7 +108,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 			</component>
 			<template
 				v-for="member in propertyMembers"
-				:key="member.name"
+				:key="`${widgetSnapshot.ref.nodeId}:${member.name}`"
 			>
 				<RuntimePropertyRow
 					v-if="propertySnapshot(member.name) !== null"
@@ -137,7 +137,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 			</component>
 			<RuntimeMethodRow
 				v-for="member in methodMembers"
-				:key="member.name"
+				:key="`${widgetSnapshot.ref.nodeId}:${member.name}`"
 				:name="member.name"
 				:transitivelyWrites="member.transitivelyWrites"
 				:transitivelyEmits="member.transitivelyEmits"

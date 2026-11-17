@@ -20,7 +20,7 @@ export const LAYOUT_STORAGE_KEY = 'widget-lab:layout'
 /** The panels every layout holds; none of them can be closed. */
 export const CANONICAL_PANEL_IDS: readonly string[] = ['author', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview']
 
-/** Panels a user may open and close (added lazily); they are never restored, see `Workbench.vue`. */
+/** Panels a user may open and close (added lazily); they are never restored, see `stripLazyPanels`. */
 export const LAZY_PANEL_IDS: readonly string[] = ['implementation', 'document-tools']
 
 /** Every Dockview component name `Workbench.vue` registers. */
@@ -85,6 +85,54 @@ export function parseSavedLayout(raw: string | null): SavedLayout | null {
 	return isPlausibleLayout(parsed.layout) ? parsed.layout : null
 }
 
+/** A group's `{ views, activeView, id }` as Dockview serialises it. */
+function stripGroupData(data: unknown): boolean {
+	if (!isRecord(data) || !Array.isArray(data.views))
+		return false
+	const views = data.views.filter(view => typeof view === 'string' && !LAZY_PANEL_IDS.includes(view))
+	if (views.length === 0)
+		return false
+	data.views = views
+	// A lazy panel that was the active one: fall back to the group's first remaining (canonical) panel.
+	if (typeof data.activeView !== 'string' || !views.includes(data.activeView))
+		data.activeView = views[0]
+	return true
+}
+
+function stripGridNode(node: unknown): boolean {
+	if (!isRecord(node))
+		return false
+	if (node.type === 'leaf')
+		return stripGroupData(node.data)
+	return node.type === 'branch' && Array.isArray(node.data) && node.data.every(child => stripGridNode(child))
+}
+
+/**
+ * The layout without the panels that are opened on request (Implementation, Document Tools), which are never
+ * restored: their content depends on a request a page load did not make. Done on the data, before Dockview sees
+ * it, so no such panel is ever created, and a group whose active panel was one of them activates its first
+ * remaining panel instead of whatever neighbour closing it would have left active. Returns a new object (the input
+ * is not modified), or `null` when a group would be left empty (a lazy panel alone in its own group): removing the
+ * group would leave its siblings' sizes inconsistent, so the caller builds the default layout instead.
+ */
+export function stripLazyPanels(layout: SavedLayout): SavedLayout | null {
+	const copy = structuredClone(layout)
+	const grid = copy.grid
+	if (!isRecord(grid) || !stripGridNode(grid.root))
+		return null
+	for (const key of ['floatingGroups', 'popoutGroups'] as const) {
+		const entries = copy[key]
+		if (Array.isArray(entries))
+			copy[key] = entries.filter(entry => isRecord(entry) && stripGroupData(entry.data))
+	}
+	const panels = copy.panels
+	if (isRecord(panels)) {
+		for (const id of LAZY_PANEL_IDS)
+			delete panels[id]
+	}
+	return copy
+}
+
 /** The browser's `localStorage`, or `null` where even touching it throws (blocked site data). */
 export function browserLayoutStorage(): LayoutStorage | null {
 	try {
@@ -99,7 +147,8 @@ export function loadSavedLayout(storage: LayoutStorage | null = browserLayoutSto
 	if (storage === null)
 		return null
 	try {
-		return parseSavedLayout(storage.getItem(LAYOUT_STORAGE_KEY))
+		const saved = parseSavedLayout(storage.getItem(LAYOUT_STORAGE_KEY))
+		return saved === null ? null : stripLazyPanels(saved)
 	}
 	catch {
 		return null

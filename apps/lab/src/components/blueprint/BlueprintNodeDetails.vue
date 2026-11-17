@@ -63,7 +63,9 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 		v-if="node === null"
 		:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
 	>
-		{{ i18n.t('No node selected — click a node in the tree on the left to see its config, slots, and diagnostics.') }}
+		{{ embedded
+			? i18n.t('No widget selected — choose one with Inspect in the Preview, or in Blueprint or Dependencies, to see its declaration.')
+			: i18n.t('No node selected — click a node in the tree on the left to see its config, slots, and diagnostics.') }}
 	</div>
 	<div
 		v-else

@@ -8,6 +8,7 @@ import {
 	loadSavedLayout,
 	parseSavedLayout,
 	saveLayout,
+	stripLazyPanels,
 } from './layout-storage'
 
 /** A layout exactly as `DockviewApi.toJSON()` produced it in the browser (Runtime tab active, 691px tool group). */
@@ -196,5 +197,88 @@ describe('load, save and clear', () => {
 		expect(() => clearSavedLayout(null))
 			.not
 			.toThrow()
+	})
+})
+
+interface GroupData { views: string[], activeView: string }
+interface GridLayout { grid: { root: { data: { type?: string, data: GroupData, size?: number }[] } }, panels: Record<string, unknown> }
+
+/** The real layout with Implementation (active by default) and Document Tools opened in the tool group. */
+function layoutWithLazyPanels(active = 'implementation'): GridLayout {
+	const layout = realLayout() as unknown as GridLayout
+	const tool = layout.grid.root.data[0]!.data
+	tool.views.push('implementation', 'document-tools')
+	tool.activeView = active
+	layout.panels.implementation = { id: 'implementation', contentComponent: 'implementation', title: 'Implementation' }
+	layout.panels['document-tools'] = { id: 'document-tools', contentComponent: 'documentTools', title: 'Document Tools' }
+	return layout
+}
+
+const toolGroup = (layout: unknown): GroupData => (layout as GridLayout).grid.root.data[0]!.data
+
+describe('stripLazyPanels', () => {
+	it('removes panels opened on request from the groups and the panel table', () => {
+		const stripped = stripLazyPanels(layoutWithLazyPanels() as never)!
+		expect(toolGroup(stripped).views)
+			.toEqual(['author', 'widget', 'blueprint', 'runtime', 'dependencies'])
+		expect(Object.keys((stripped as unknown as GridLayout).panels))
+			.toEqual(['author', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview'])
+		expect(isPlausibleLayout(stripped))
+			.toBe(true)
+	})
+
+	it('makes the first canonical panel active when the saved active panel was one of them', () => {
+		// Closing Implementation after the restore would have left its neighbour (Dependencies) active.
+		expect(toolGroup(stripLazyPanels(layoutWithLazyPanels('implementation') as never)).activeView)
+			.toBe('author')
+		expect(toolGroup(stripLazyPanels(layoutWithLazyPanels('document-tools') as never)).activeView)
+			.toBe('author')
+	})
+
+	it('keeps a canonical active panel, and leaves a layout without such panels as it was', () => {
+		expect(toolGroup(stripLazyPanels(layoutWithLazyPanels('runtime') as never)).activeView)
+			.toBe('runtime')
+		expect(stripLazyPanels(realLayout()))
+			.toEqual(realLayout())
+	})
+
+	it('does not modify its input', () => {
+		const layout = layoutWithLazyPanels()
+		const before = JSON.stringify(layout)
+		stripLazyPanels(layout as never)
+		expect(JSON.stringify(layout))
+			.toBe(before)
+	})
+
+	it('gives up (null) when a lazy panel is alone in its group, so the default layout is built', () => {
+		const layout = layoutWithLazyPanels()
+		layout.grid.root.data[0]!.data.views = layout.grid.root.data[0]!.data.views.filter(view => view !== 'implementation' && view !== 'document-tools')
+		layout.grid.root.data.push({ type: 'leaf', data: { views: ['implementation'], activeView: 'implementation' }, size: 100 })
+		expect(stripLazyPanels(layout as never))
+			.toBeNull()
+	})
+
+	it('drops floating groups that held only lazy panels and filters the others', () => {
+		const layout = {
+			...layoutWithLazyPanels(),
+			floatingGroups: [
+				{ data: { views: ['implementation'], activeView: 'implementation', id: '9' }, position: {} },
+				{ data: { views: ['runtime', 'document-tools'], activeView: 'document-tools', id: '10' }, position: {} },
+			],
+		}
+		const stripped = stripLazyPanels(layout as never) as unknown as { floatingGroups: { data: GroupData }[] }
+		expect(stripped.floatingGroups)
+			.toHaveLength(1)
+		expect(stripped.floatingGroups[0]!.data)
+			.toMatchObject({ views: ['runtime'], activeView: 'runtime' })
+	})
+
+	it('is applied when a saved layout is loaded', () => {
+		const loaded = loadSavedLayout(memoryStorage({ [LAYOUT_STORAGE_KEY]: stored(layoutWithLazyPanels()) }))
+		expect(toolGroup(loaded).views)
+			.not
+			.toContain('implementation')
+		expect(toolGroup(loaded).activeView)
+			.toBe('author')
 	})
 })

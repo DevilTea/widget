@@ -337,6 +337,12 @@ Issue `DevilTea/widget#230` (Lab redesign) adopts Nuxt UI 4 (Tailwind v4) for th
 plugin**, not Nuxt. This is the foundation: it changes no Lab behaviour or appearance except the migrated
 surfaces below. PikaCSS stays for everything not yet migrated and is removed in a later PR.
 
+- **Tooltips have no exit animation** (`nuxt-ui.ts`, `ui.tooltip.slots.content`). Reka keeps a closed tooltip's content mounted until its
+  exit animation ends, and every mounted content listens for the "a tooltip opened" event and closes its own root, including the root of the
+  tooltip that was just opened again. A late animation end (busy or throttled page) therefore sometimes killed the tooltip of a header
+  button a keyboard user had just tabbed onto, and disabled buttons explain themselves only in the tooltip. Without the animation a closed
+  tooltip unmounts at once. `e2e/tooltips.spec.ts` pins real Tab/Shift+Tab navigation, once with every tooltip animation stretched to ten
+  minutes (deterministic) and once plainly over many rounds. Do not re-add a `data-[state=closed]:animate-*` class to tooltips.
 - **Scope: Lab shell only.** `main.ts` imports `src/styles/lab-ui.css` (Tailwind theme + utilities, Nuxt UI),
   installs Nuxt UI's Vue plugin and wraps `App` in `UApp` (`toaster: null` until a surface needs toasts;
   `UApp` renders no element). `preview-frame-main.ts` / `preview-frame.html` never import any of it, so the showcase
@@ -798,8 +804,11 @@ JSON, another version, a missing panel, an unknown component) reads as "none" an
 `fromJSON` can still throw for plausible data: that is caught, and the default is built. Whatever was stored and not usable is removed.
 Bump `LAYOUT_VERSION` whenever a change to the panels or their components would make an old saved layout wrong (the first version
 already includes the Selected widget panel). All storage access is try/catch; blocked storage means "nothing saved". Panels opened on
-request (Implementation, Document Tools) are saved with the layout but closed again on restore, because their content depends on a
-request that load did not make. Saved sizes are proportional on restore, so a layout from a wide window fits a narrow one. Tab titles are
+request (Implementation, Document Tools) are saved with the layout but stripped from the data before Dockview loads it
+(`stripLazyPanels`, applied by `loadSavedLayout`), because their content depends on a request that load did not make; a group whose
+active panel was one of them activates its first remaining panel, and a lazy panel alone in its own group makes the whole saved layout
+unusable (default layout). After a restore `Workbench.vue` writes Dockview's active panel to `LabStore.activeTab` (the Dockview-to-store
+subscription is made later), so the store and the screen agree about the open tab. Saved sizes are proportional on restore, so a layout from a wide window fits a narrow one. Tab titles are
 set when a layout is built or restored and follow a language switch. **Reset layout** (overflow menu; `WorkbenchLayoutStore` is a request
 bridge like Document Tools) clears the saved layout and rebuilds the default. The selected showcase is restored separately, by
 `?showcase=`.
@@ -819,7 +828,7 @@ they were; the pane reuses their detail components and does not replace them.
 
 **Runtime values (audit U10).** State and Property rows are `RuntimeValueRow.vue`: the member name and a one-line summary that takes
 the room the row has (no fixed width; its full text is the tooltip), a separate named disclosure button (`aria-expanded`,
-"Expand/Collapse the value of NAME") for containers and long or cut strings, and a separate select button (focus). The open value is
+"Value of NAME") for containers and long or cut strings, and a separate select button (focus). The open value is
 `InspectableValueTree.vue`, an expandable tree over the Inspector value DTO. The limits that remove information (depth 4, 50 entries,
 1000 nodes, 500 characters) belong to the Inspector snapshot, set in `packages/inspector`; the Lab does not change the protocol or work
 around them and instead marks every cut where it happened ("truncated by the Inspector snapshot (nested too deeply)", "more entries

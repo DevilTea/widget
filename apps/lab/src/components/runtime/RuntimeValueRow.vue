@@ -43,8 +43,8 @@ const truncated = computed(() => props.value !== null && hasTruncation(props.val
 				type="button"
 				data-testid="value-expand"
 				:aria-expanded="expanded"
-				:aria-controls="detailId"
-				:aria-label="i18n.t(expanded ? 'Collapse the value of {name}' : 'Expand the value of {name}', { name })"
+				:aria-controls="expanded ? detailId : undefined"
+				:aria-label="i18n.t('Value of {name}', { name })"
 				class="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-(--lab-radius) border-0 bg-transparent text-muted hover:bg-elevated focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
 				@click="expanded = !expanded"
 			>

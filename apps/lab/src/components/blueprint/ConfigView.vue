@@ -18,7 +18,9 @@ const i18n = useLabI18n()
 const showAuthored = ref(false)
 const comparison = computed(() => compareConfig(props.rawConfig, props.config))
 const shown = computed(() => comparison.value.kind === 'different' && showAuthored.value ? props.rawConfig : props.config)
-const text = computed(() => JSON.stringify(shown.value, null, 2) ?? i18n.t('(nothing authored)'))
+// A value JSON cannot print (`undefined`) says what that means in the mode being shown.
+const showingAuthored = computed(() => comparison.value.kind === 'different' && showAuthored.value)
+const text = computed(() => JSON.stringify(shown.value, null, 2) ?? i18n.t(showingAuthored.value ? '(nothing authored)' : '(no resolved config)'))
 const changedKeys = computed(() => comparison.value.kind === 'different' ? comparison.value.changedKeys : [])
 </script>
 

@@ -191,8 +191,9 @@ test.describe('saved layout', () => {
 	test('panels opened on request (Implementation) are not restored after a reload', async ({ page }) => {
 		await openLab(page)
 		await openDeveloperTool(page, 'implementation')
+		// Implementation is the active tab in what was saved.
 		await expect.poll(() => page.evaluate(key => localStorage.getItem(key)
-			?.includes('"implementation"'), LAYOUT_KEY))
+			?.includes('"activeView":"implementation"'), LAYOUT_KEY))
 			.toBe(true)
 
 		await page.reload()
@@ -201,6 +202,33 @@ test.describe('saved layout', () => {
 		await expect(page.getByRole('tab', { name: 'Implementation', exact: true }))
 			.toHaveCount(0)
 		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
+			.toBeVisible()
+		// A canonical tab is active (the first one), not whatever neighbour closing Implementation would have left.
+		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByRole('tab', { name: 'Dependencies', exact: true }))
+			.toHaveAttribute('aria-selected', 'false')
+	})
+
+	test('the restored active tab is the store\'s active tab too: "Show problems" still switches to Author from it', async ({ page }) => {
+		await openLab(page)
+		await page.getByRole('tab', { name: 'Runtime', exact: true })
+			.click()
+		await expect.poll(() => page.evaluate(key => localStorage.getItem(key)
+			?.includes('"activeView":"runtime"'), LAYOUT_KEY))
+			.toBe(true)
+
+		await page.reload()
+		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
+			.toHaveAttribute('aria-selected', 'true')
+		// An invalid apply leaves the preview behind; its notice asks for the Author tab. When the store still
+		// believed Author was active (it never heard about the restored Runtime tab) nothing happened.
+		await loadPreset(page, 'survey-ai-draft')
+		await page.getByRole('button', { name: 'Show problems' })
+			.click()
+		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('author-problems'))
 			.toBeVisible()
 	})
 })

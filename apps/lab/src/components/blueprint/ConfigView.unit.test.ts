@@ -73,4 +73,11 @@ describe('configView (audit U25)', () => {
 			.text())
 			.toBe('(nothing authored)')
 	})
+
+	it('says so, in the Resolved mode too, when there is no resolved config (not "nothing authored")', () => {
+		const wrapper = mountView({ size: 3 }, undefined)
+		expect(wrapper.get('pre')
+			.text())
+			.toBe('(no resolved config)')
+	})
 })

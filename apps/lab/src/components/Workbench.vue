@@ -15,7 +15,7 @@ import { useImplementationExplorer } from '../composables/use-implementation-exp
 import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
 import { useWorkbenchLayout } from '../composables/use-workbench-layout'
-import { CANONICAL_PANEL_IDS, clearSavedLayout, LAZY_PANEL_IDS, loadSavedLayout, saveLayout } from '../lab/layout-storage'
+import { CANONICAL_PANEL_IDS, clearSavedLayout, loadSavedLayout, saveLayout } from '../lab/layout-storage'
 import NonClosableTab from './NonClosableTab.vue'
 import AuthorPanel from './panels/AuthorPanel.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
@@ -119,6 +119,9 @@ onBeforeUnmount(() => {
 	stopTitleWatch?.()
 })
 
+/** The panels whose activation is mirrored in `LabStore.activeTab` (see `watchTutorialTabActivation`). */
+const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview'])
+
 /** Tab titles follow the Lab language at the moment a layout is built or restored (as they always did). */
 function canonicalTitles(): Readonly<Record<string, string>> {
 	return {
@@ -167,7 +170,9 @@ function buildDefaultLayout(api: DockviewApi): void {
 /**
  * Restores the saved layout if there is a usable one. A layout Dockview cannot load (it can still throw for data
  * that looks right) is discarded for good and the default is built instead. Panels that are opened on request
- * (Implementation, Document Tools) are closed again: their content depends on a request this load did not make.
+ * (Implementation, Document Tools) are not in the loaded layout at all (`loadSavedLayout` strips them), so none is
+ * created and none can leave a neighbour active. The restored active panel is written to `LabStore.activeTab`
+ * here, because the Dockview-to-store subscription (`watchTutorialTabActivation`) is made after the restore.
  */
 function restoreOrBuildLayout(api: DockviewApi): void {
 	const saved = loadSavedLayout()
@@ -177,8 +182,9 @@ function restoreOrBuildLayout(api: DockviewApi): void {
 			const titles = canonicalTitles()
 			for (const id of CANONICAL_PANEL_IDS)
 				api.getPanel(id)?.api.setTitle(titles[id] ?? id)
-			for (const id of LAZY_PANEL_IDS)
-				api.getPanel(id)?.api.close()
+			const active = api.activePanel?.id
+			if (active !== undefined && CANONICAL_TAB_IDS.has(active))
+				store.activeTab.value = active as LabToolTab
 			return
 		}
 		catch {
@@ -261,8 +267,6 @@ function onReady(event: DockviewReadyEvent): void {
  * no longer on screen ("Show problems" asking for Author after the user opened Runtime) still switches.
  * Both directions only ever set the same value, so they cannot loop.
  */
-const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview'])
-
 function watchTutorialTabActivation(api: DockviewApi): void {
 	const stopWatch = watch(
 		() => store.activeTab.value,
