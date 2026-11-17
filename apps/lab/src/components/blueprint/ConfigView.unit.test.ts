@@ -2,14 +2,13 @@
 
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { testGlobalProperties } from '../../test-support'
 import { labI18nProvide } from '../../test-support-i18n'
 import ConfigView from './ConfigView.vue'
 
 function mountView(rawConfig: unknown, config: unknown) {
 	return mount(ConfigView, {
 		props: { rawConfig, config },
-		global: { config: { globalProperties: testGlobalProperties }, provide: labI18nProvide() },
+		global: { provide: labI18nProvide() },
 	})
 }
 

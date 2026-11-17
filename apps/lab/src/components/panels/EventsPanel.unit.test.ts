@@ -10,7 +10,6 @@ import { nextTick, shallowRef } from 'vue'
 import { LabStoreKey } from '../../composables/use-lab-store'
 import { EVENT_LOG_LIMIT } from '../../events/event-log'
 import { createPreview, disposePreviews } from '../../events/test-support'
-import { testGlobalProperties } from '../../test-support'
 import { labI18nProvide } from '../../test-support-i18n'
 import { testGlobalPlugins } from '../../test-support-ui'
 import EventsPanel from './EventsPanel.vue'
@@ -73,7 +72,6 @@ async function mountPanel(options: { nested?: boolean, locale?: 'en' | 'zh-TW' }
 	const wrapper = mount(EventsPanel, {
 		props: { params: { api } },
 		global: {
-			config: { globalProperties: testGlobalProperties },
 			plugins: testGlobalPlugins,
 			provide: { ...labI18nProvide(options.locale ?? 'en'), [LabStoreKey as symbol]: store },
 		},

@@ -9,7 +9,6 @@
 import type { InspectableValue } from '@deviltea/widget-inspector/value'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { testGlobalProperties } from '../../test-support'
 import { labI18nProvide } from '../../test-support-i18n'
 import { testGlobalPlugins } from '../../test-support-ui'
 import InspectableValueTree from './InspectableValueTree.vue'
@@ -31,7 +30,7 @@ const depthCut: InspectableValue = { type: 'truncated', reason: 'max-depth' }
 function mountTree(value: InspectableValue, props: { openDepth?: number } = {}) {
 	return mount(InspectableValueTree, {
 		props: { value, ...props },
-		global: { config: { globalProperties: testGlobalProperties }, plugins: testGlobalPlugins, provide: labI18nProvide() },
+		global: { plugins: testGlobalPlugins, provide: labI18nProvide() },
 	})
 }
 
@@ -145,7 +144,7 @@ describe('inspectableValueTree', () => {
 	it('translates its chrome in zh-TW', () => {
 		const wrapper = mount(InspectableValueTree, {
 			props: { value: obj({ errors: arr([depthCut]) }) },
-			global: { config: { globalProperties: testGlobalProperties }, plugins: testGlobalPlugins, provide: labI18nProvide('zh-TW') },
+			global: { plugins: testGlobalPlugins, provide: labI18nProvide('zh-TW') },
 		})
 		expect(wrapper.find('[data-testid="value-truncated"]')
 			.text())

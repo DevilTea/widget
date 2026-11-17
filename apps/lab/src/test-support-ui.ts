@@ -1,13 +1,12 @@
 /**
- * Mount globals for Lab unit tests that render a Nuxt UI component. Kept apart from `test-support.ts` on
- * purpose: importing Nuxt UI's Vue plugin evaluates its runtime (icons, head, ...), which tests that mount
- * only PikaCSS-styled components should not pay for or be exposed to.
+ * Mount globals for Lab unit tests that render a Nuxt UI component. Importing Nuxt UI's Vue plugin evaluates its
+ * runtime (icons, head, ...), which tests that mount only plain components should not pay for or be exposed to.
  *
  * Icons stay offline for every Lab unit test through `test-setup.ts` (Vitest `setupFiles`).
  *
  * Usage:
  *
- *   mount(Component, { global: { config: { globalProperties: testGlobalProperties }, plugins: testGlobalPlugins } })
+ *   mount(Component, { global: { plugins: testGlobalPlugins } })
  *
  * It is the real plugin, not stubs: `labNuxtUi()` (`nuxt-ui.ts`) is part of every Vitest config (this app's
  * and the repository root's), so `#imports`/`#build/*` resolve and a mounted `UButton` renders its real

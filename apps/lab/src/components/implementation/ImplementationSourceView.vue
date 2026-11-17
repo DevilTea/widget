@@ -77,10 +77,10 @@ async function copy(): Promise<void> {
 
 <template>
 	<div class="implementation-source-view">
-		<div :class="pika({ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })">
+		<div class="flex justify-end p-[4px_8px] border-b border-b-lab-border flex-[0_0_auto]">
 			<button
 				type="button"
-				:class="pika({ padding: '2px 8px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				class="p-[2px_8px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
 				@click="copy"
 			>
 				{{ copyLabel }}
@@ -89,13 +89,13 @@ async function copy(): Promise<void> {
 		<div class="implementation-source-view__scroll">
 			<p
 				v-if="status === 'loading'"
-				:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)' })"
+				class="p-[10px] text-lab-text-muted"
 			>
 				{{ i18n.t('Loading…') }}
 			</p>
 			<p
 				v-else-if="status === 'error'"
-				:class="pika({ padding: '10px', color: 'var(--lab-color-danger)' })"
+				class="p-[10px] text-lab-danger"
 			>
 				{{ i18n.t('Failed to render this source.') }}
 			</p>
@@ -103,7 +103,7 @@ async function copy(): Promise<void> {
 			<div
 				v-else
 				data-testid="implementation-code"
-				:class="pika({ padding: '10px' })"
+				class="p-[10px]"
 				:style="{ tabSize: String(CODE_TAB_SIZE) }"
 				v-html="html"
 			/>

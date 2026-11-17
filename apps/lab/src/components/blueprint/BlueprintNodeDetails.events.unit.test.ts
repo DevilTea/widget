@@ -8,7 +8,6 @@ import { shallowRef } from 'vue'
 import { ImplementationExplorerKey } from '../../composables/use-implementation-explorer'
 import { LabStoreKey } from '../../composables/use-lab-store'
 import { NotifierPlugin, PlainPlugin } from '../../events/test-support'
-import { testGlobalProperties } from '../../test-support'
 import { labI18nProvide } from '../../test-support-i18n'
 import BlueprintNodeDetails from './BlueprintNodeDetails.vue'
 
@@ -20,7 +19,6 @@ function mountNode(type: 'Notifier' | 'Plain', locale: 'en' | 'zh-TW' = 'en') {
 	return mount(BlueprintNodeDetails, {
 		props: { node: inspection.getNode(inspection.rootNodeId), blueprint, inspection, embedded: true },
 		global: {
-			config: { globalProperties: testGlobalProperties },
 			provide: {
 				...labI18nProvide(locale),
 				[LabStoreKey as symbol]: { showcaseId: shallowRef('survey') },

@@ -2,7 +2,7 @@
 /**
  * Local component boundary around the Monaco integration (`useMonacoJsonEditor`). Nothing outside
  * this file imports `modern-monaco` directly. Styling stays scoped here rather than joining the
- * application-wide PikaCSS surface.
+ * application-wide stylesheets.
  */
 import type { EditorMarker } from '../../composables/use-monaco-editor'
 import { computed, ref, watch } from 'vue'

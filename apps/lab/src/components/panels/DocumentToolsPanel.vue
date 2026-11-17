@@ -92,23 +92,23 @@ function runConflictDemo(): void {
 <template>
 	<div
 		data-testid="document-tools-panel"
-		:class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0', minWidth: '0' })"
+		class="flex flex-col h-full min-h-0 min-w-0"
 	>
 		<PanelDescriptionBar
 			storageKey="widget-lab:panel-desc:document-tools"
 			text="Developer observations for the current Document — transient, read-only, and never authoring history"
 		/>
-		<div :class="pika({ flex: '1 1 auto', minHeight: '0', overflow: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '14px' })">
+		<div class="flex-auto min-h-0 overflow-auto p-[10px] flex flex-col gap-[14px]">
 			<section data-testid="document-tools-latest-patch">
-				<div :class="pika({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' })">
-					<h3 :class="pika({ margin: '0', fontSize: '12px' })">
+				<div class="flex items-center justify-between gap-[8px]">
+					<h3 class="m-0 text-[12px]">
 						{{ i18n.t('Latest applied SourcePatch') }}
 					</h3>
 					<button
 						type="button"
 						data-testid="document-tools-copy-patch"
 						:disabled="latestPatch === null"
-						:class="pika({ 'padding': '3px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+						class="p-[3px_8px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 						@click="copyPatch"
 					>
 						{{ copyLabel() }}
@@ -116,47 +116,47 @@ function runConflictDemo(): void {
 				</div>
 				<p
 					v-if="latestPatch === null"
-					:class="pika({ margin: '6px 0 0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+					class="m-[6px_0_0] text-[11px] text-lab-text-muted"
 				>
 					{{ i18n.t('No SourcePatch has been applied in this session.') }}
 				</p>
 				<template v-else>
-					<div :class="pika({ marginTop: '6px', fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
+					<div class="mt-[6px] text-[11px] text-lab-text-muted">
 						{{ i18n.t(latestPatch.origin === 'json' ? 'JSON Apply' : latestPatch.origin === 'undo' ? 'Undo last apply' : 'Structure command') }} · {{ i18n.t('Document r{revision}', { revision: latestPatch.revision }) }}
 					</div>
 					<pre
 						data-testid="document-tools-patch"
-						:class="pika({ margin: '6px 0 0', padding: '8px', overflow: 'auto', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', background: 'var(--lab-color-surface-alt)', border: '1px solid var(--lab-color-border)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
+						class="m-[6px_0_0] p-[8px] overflow-auto text-[11px] font-lab-mono bg-lab-surface-alt border border-lab-border whitespace-pre-wrap [word-break:break-word]"
 					>{{ patchText }}</pre>
 				</template>
 			</section>
 
 			<section data-testid="document-tools-revision">
-				<h3 :class="pika({ margin: '0', fontSize: '12px' })">
+				<h3 class="m-0 text-[12px]">
 					{{ i18n.t('Document revision and optimistic concurrency') }}
 				</h3>
-				<dl :class="pika({ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: '10px', rowGap: '4px', margin: '6px 0 0', fontSize: '11px' })">
+				<dl class="grid grid-cols-[auto_1fr] gap-x-[10px] gap-y-[4px] m-[6px_0_0] text-[11px]">
 					<dt>{{ i18n.t('Document revision') }}</dt>
-					<dd :class="pika({ margin: '0', fontFamily: 'var(--lab-font-mono)' })">
+					<dd class="m-0 font-lab-mono">
 						r{{ store.documentSnapshot.value.revision }}
 					</dd>
 					<dt>{{ i18n.t('Next apply expectedRevision') }}</dt>
-					<dd :class="pika({ margin: '0', fontFamily: 'var(--lab-font-mono)' })">
+					<dd class="m-0 font-lab-mono">
 						{{ store.documentSnapshot.value.revision }}
 					</dd>
 					<dt>{{ i18n.t('Preview revision') }}</dt>
-					<dd :class="pika({ margin: '0', fontFamily: 'var(--lab-font-mono)' })">
+					<dd class="m-0 font-lab-mono">
 						{{ store.preview.value?.revision ?? i18n.t('unavailable') }}
 					</dd>
 				</dl>
-				<p :class="pika({ margin: '8px 0 0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
+				<p class="m-[8px_0_0] text-[11px] text-lab-text-muted">
 					{{ i18n.t('This fixture submits a harmless test operation with a deliberately stale expectedRevision directly to WidgetDocument.applyPatch().') }}
 				</p>
 				<button
 					type="button"
 					data-testid="document-tools-run-conflict"
 					:disabled="store.isApplying.value"
-					:class="pika({ 'marginTop': '8px', 'padding': '4px 8px', 'fontSize': '11px', 'borderRadius': 'var(--lab-radius)', 'border': '1px solid var(--lab-color-border)', 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'cursor': 'pointer', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
+					class="mt-[8px] p-[4px_8px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 					@click="runConflictDemo"
 				>
 					{{ i18n.t('Run conflict demonstration') }}
@@ -164,7 +164,7 @@ function runConflictDemo(): void {
 				<div
 					v-if="conflictDemo !== null"
 					data-testid="document-tools-conflict-result"
-					:class="pika({ marginTop: '8px', padding: '8px', fontSize: '11px', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)' })"
+					class="mt-[8px] p-[8px] text-[11px] border border-lab-border bg-lab-surface-alt"
 				>
 					<strong>{{ i18n.t('Core result') }}: <code>{{ conflictFailureCode ?? i18n.t('accepted') }}</code></strong>
 					<div>{{ i18n.t('expectedRevision') }}: <code>{{ conflictDemo.expectedRevision }}</code> · {{ i18n.t('actualRevision') }}: <code>{{ conflictDemo.afterDocumentRevision }}</code></div>
@@ -173,26 +173,26 @@ function runConflictDemo(): void {
 			</section>
 
 			<section data-testid="document-tools-separated-source">
-				<h3 :class="pika({ margin: '0', fontSize: '12px' })">
+				<h3 class="m-0 text-[12px]">
 					{{ i18n.t('Separated-source projection') }}
 				</h3>
-				<p :class="pika({ margin: '6px 0 0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
+				<p class="m-[6px_0_0] text-[11px] text-lab-text-muted">
 					{{ i18n.t('Core projection of the current Document source; read-only and not an alternate authoring representation.') }}
 				</p>
 				<pre
 					v-if="separatedProjectionText !== null"
-					:class="pika({ margin: '6px 0 0', padding: '8px', overflow: 'auto', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', background: 'var(--lab-color-surface-alt)', border: '1px solid var(--lab-color-border)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
+					class="m-[6px_0_0] p-[8px] overflow-auto text-[11px] font-lab-mono bg-lab-surface-alt border border-lab-border whitespace-pre-wrap [word-break:break-word]"
 				>{{ separatedProjectionText }}</pre>
 				<p
 					v-else
-					:class="pika({ margin: '6px 0 0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+					class="m-[6px_0_0] text-[11px] text-lab-text-muted"
 				>
 					{{ i18n.t(separatedProjection === null ? 'Projection is available only for a valid Core WidgetSource.' : 'Core could not project this source.') }}
 				</p>
 				<ul
 					v-if="separatedDiagnostics.length > 0"
 					data-testid="document-tools-separated-diagnostics"
-					:class="pika({ listStyle: 'none', margin: '6px 0 0', padding: '0', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px' })"
+					class="list-none m-[6px_0_0] p-0 flex flex-col gap-[4px] text-[11px]"
 				>
 					<li
 						v-for="(diagnostic, index) in separatedDiagnostics"
@@ -204,26 +204,26 @@ function runConflictDemo(): void {
 			</section>
 
 			<section data-testid="document-tools-trace">
-				<h3 :class="pika({ margin: '0', fontSize: '12px' })">
+				<h3 class="m-0 text-[12px]">
 					{{ i18n.t('Bounded session trace (observation only)') }}
 				</h3>
-				<p :class="pika({ margin: '6px 0 0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
+				<p class="m-[6px_0_0] text-[11px] text-lab-text-muted">
 					{{ i18n.t('This finite trace is telemetry only: it cannot replay, restore, undo, or redo Document state.') }}
 				</p>
 				<p
 					v-if="trace.length === 0"
-					:class="pika({ margin: '6px 0 0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+					class="m-[6px_0_0] text-[11px] text-lab-text-muted"
 				>
 					{{ i18n.t('No Document observations yet.') }}
 				</p>
 				<ol
 					v-else
-					:class="pika({ margin: '6px 0 0', paddingLeft: '20px', fontSize: '11px' })"
+					class="m-[6px_0_0] pl-[20px] text-[11px]"
 				>
 					<li
 						v-for="(event, index) in [...trace].reverse()"
 						:key="`${event.kind}-${index}`"
-						:class="pika({ marginBottom: '4px' })"
+						class="mb-[4px]"
 					>
 						<template v-if="event.kind === 'commit'">
 							{{ i18n.t(event.origin === 'json' ? 'JSON commit observed' : event.origin === 'undo' ? 'Undo commit observed' : 'Structure commit observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }} · {{ i18n.t(event.changed ? 'changed' : 'no-op') }}

@@ -14,13 +14,13 @@ const view = store.authorView
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '0' })">
+	<div class="flex flex-col h-full min-h-0">
 		<PanelDescriptionBar
 			storageKey="widget-lab:panel-desc:author"
 			text="Author workspace for the current Document: browse Core catalog metadata, edit Structure, or use expert JSON"
 		/>
 		<div
-			:class="pika({ display: 'flex', borderBottom: '1px solid var(--lab-color-border)', flex: '0 0 auto' })"
+			class="flex border-b border-b-lab-border flex-[0_0_auto]"
 			role="tablist"
 			:aria-label="i18n.t('Author views')"
 		>
@@ -30,14 +30,14 @@ const view = store.authorView
 				type="button"
 				role="tab"
 				:aria-selected="view === tab"
-				:class="pika({ flex: '1 1 auto', padding: '6px', fontSize: '11px', border: 'none', background: 'transparent', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				class="flex-auto p-[6px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer"
 				:style="{ fontWeight: view === tab ? '600' : 'normal', borderBottom: view === tab ? '2px solid var(--lab-color-accent)' : 'none' }"
 				@click="view = tab"
 			>
 				{{ i18n.t(tab === 'catalog' ? 'Catalog' : tab === 'structure' ? 'Structure' : 'JSON') }}
 			</button>
 		</div>
-		<div :class="pika({ flex: '1 1 auto', minHeight: '0' })">
+		<div class="flex-auto min-h-0">
 			<AuthorCatalogView v-if="view === 'catalog'" />
 			<AuthorStructureView v-else-if="view === 'structure'" />
 			<AuthorJsonView v-else />

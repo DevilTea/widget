@@ -5,11 +5,9 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
 import { sandboxSystem } from '../../sandbox/system'
-import { testGlobalProperties } from '../../test-support'
 import DiagnosticList from './DiagnosticList.vue'
 
 const global = {
-	config: { globalProperties: testGlobalProperties },
 	provide: {
 		[LabI18nKey as symbol]: {
 			locale: { value: 'en' },

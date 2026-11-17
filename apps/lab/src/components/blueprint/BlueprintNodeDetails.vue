@@ -62,7 +62,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 <template>
 	<div
 		v-if="node === null"
-		:class="pika({ padding: '10px', color: 'var(--lab-color-text-muted)', fontSize: '12px' })"
+		class="p-[10px] text-lab-text-muted text-[12px]"
 	>
 		{{ embedded
 			? i18n.t('No widget selected — choose one with Inspect in the Preview, or in Blueprint or Dependencies, to see its declaration.')
@@ -70,15 +70,15 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 	</div>
 	<div
 		v-else
-		:class="pika({ padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'auto', height: '100%' })"
+		class="p-[10px] flex flex-col gap-[12px] overflow-auto h-full"
 		:style="embedded ? { overflow: 'visible', height: 'auto' } : undefined"
 	>
-		<div :class="pika({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' })">
+		<div class="flex items-start justify-between gap-[8px]">
 			<div>
-				<h4 :class="pika({ margin: '0 0 4px', fontSize: '13px', fontFamily: 'var(--lab-font-mono)' })">
+				<h4 class="m-[0_0_4px] text-[13px] font-lab-mono">
 					{{ node.resolved ? `${node.node.id} : ${node.node.type}` : i18n.t('Unresolved node') }}
 				</h4>
-				<div :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
+				<div class="text-[11px] text-lab-text-muted">
 					{{ i18n.t('status') }}: {{ node.resolved ? 'resolved' : 'unresolved' }} · {{ i18n.t('location') }}: {{ locationLabel }}
 				</div>
 			</div>
@@ -86,7 +86,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 				v-if="curatedEntryAvailable"
 				type="button"
 				data-testid="blueprint-view-implementation"
-				:class="pika({ flex: '0 0 auto', padding: '3px 10px', minHeight: '24px', fontSize: '11px', borderRadius: 'var(--lab-radius)', border: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+				class="flex-[0_0_auto] p-[3px_10px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
 				@click="implementationExplorer.open()"
 			>
 				{{ i18n.t('View implementation') }}
@@ -95,7 +95,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 
 		<template v-if="node.resolved">
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted">
 					{{ i18n.t('Config') }}
 				</h5>
 				<ConfigView
@@ -106,19 +106,19 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 				/>
 				<p
 					v-else
-					:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+					class="m-0 text-[11px] text-lab-text-muted"
 				>
 					{{ i18n.t('No config capability.') }}
 				</p>
 			</section>
 
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted">
 					{{ i18n.t('Semantic slots') }}
 				</h5>
 				<ul
 					v-if="node.capabilities.slots && node.semanticSlots.length > 0"
-					:class="pika({ margin: '0', paddingLeft: '16px', fontSize: '11px' })"
+					class="m-0 pl-[16px] text-[11px]"
 				>
 					<li
 						v-for="slot in node.semanticSlots"
@@ -129,29 +129,29 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 				</ul>
 				<p
 					v-else-if="node.capabilities.slots"
-					:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+					class="m-0 text-[11px] text-lab-text-muted"
 				>
 					{{ i18n.t('Slots capability present, but declares no slot names (e.g. explicit-empty') }} <code>slots: never</code>{{ i18n.t(').') }}
 				</p>
 				<p
 					v-else
-					:class="pika({ margin: '0', fontSize: '11px', color: 'var(--lab-color-text-muted)' })"
+					class="m-0 text-[11px] text-lab-text-muted"
 				>
 					{{ i18n.t('No slots capability.') }}
 				</p>
 			</section>
 
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted">
 					{{ i18n.t('Members') }}
 				</h5>
-				<p :class="pika({ margin: '0', fontSize: '11px' })">
+				<p class="m-0 text-[11px]">
 					{{ node.state.length }} State · {{ node.properties.length }} {{ node.properties.length === 1 ? 'Property' : 'Properties' }} · {{ node.methods.length }} {{ node.methods.length === 1 ? 'Method' : 'Methods' }} · {{ node.events.length }} {{ node.events.length === 1 ? 'Event' : 'Events' }}
 				</p>
 			</section>
 
 			<section data-testid="blueprint-node-events">
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted">
 					Events ({{ node.events.length }})
 				</h5>
 				<DeclaredEvents
@@ -162,17 +162,17 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 		</template>
 		<template v-else>
 			<section>
-				<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+				<h5 class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted">
 					{{ i18n.t('Source') }}
 				</h5>
 				<pre
-					:class="pika({ margin: '0', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' })"
+					class="m-0 text-[11px] font-lab-mono whitespace-pre-wrap [word-break:break-word]"
 				>{{ JSON.stringify(node.node.source, null, 2) }}</pre>
 			</section>
 		</template>
 
 		<section>
-			<h5 :class="pika({ margin: '0 0 4px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--lab-color-text-muted)' })">
+			<h5 class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted">
 				{{ i18n.t('Diagnostics') }} ({{ node.node.diagnostics.length }})
 			</h5>
 			<DiagnosticList

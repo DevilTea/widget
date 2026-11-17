@@ -58,7 +58,7 @@ const unseenLabel = computed(() => {
 <template>
 	<span
 		:data-recording="eventsTab === null ? undefined : String(eventsTab.recording.value)"
-		:class="pika({ position: 'relative', display: 'flex', alignItems: 'center', height: '100%', width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })"
+		class="relative flex items-center h-full w-full whitespace-nowrap overflow-hidden text-ellipsis"
 	>{{ title }}<template v-if="unseen !== null && unseen > 0"><span
 		data-testid="events-unseen"
 		aria-hidden="true"

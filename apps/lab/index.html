@@ -6,12 +6,12 @@
 		<title>Widget Lab</title>
 		<!--
 			Cascade layer order for the Lab shell (rationale: `src/styles/lab-ui.css`). It is inline on purpose: the
-			first `@layer` statement the browser sees fixes the order, and Vite emits the shared PikaCSS chunk's
-			stylesheet link BEFORE the Tailwind one, so a statement inside `lab-ui.css` alone would come too late
-			and leave Tailwind's `base` above PikaCSS's `utilities`. The Preview frame page has no such statement.
+			first `@layer` statement the browser sees fixes the order, and Vite emits the shared `global.css` chunk's
+			stylesheet link BEFORE the Tailwind one, so a statement inside `lab-ui.css` alone could come too late.
+			The Preview frame page has no such statement.
 		-->
 		<style>
-			@layer properties, theme, base, preflights, components, utilities;
+			@layer properties, theme, base, components, utilities;
 		</style>
 		<!--
 			First-paint theme (audit U23). The stylesheet's default palette is the dark one and the light palette only

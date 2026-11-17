@@ -4,7 +4,7 @@
  * Viewer-only: pan/zoom/fit and readonly node/edge selection — nodes are never draggable/connectable and
  * no edge is updatable, so this component can never produce graph editing, edge creation/deletion, or
  * reparenting. The only place in this app that imports `@vue-flow/core` (and its required base
- * stylesheet); theming beyond that structural stylesheet comes from PikaCSS tokens, not Vue Flow's own
+ * stylesheet); theming beyond that structural stylesheet comes from the Lab palette tokens, not Vue Flow's own
  * default theme CSS.
  *
  * Viewport fit & progressive disclosure:
@@ -164,8 +164,7 @@ function memberKindShort(kind: string): string {
 <template>
 	<div
 		ref="vueFlowContainer"
-		class="graph-canvas-surface"
-		:class="pika({ width: '100%', height: '100%', position: 'relative' })"
+		class="graph-canvas-surface w-full h-full relative"
 	>
 		<VueFlow
 			:nodes="nodes"
@@ -176,8 +175,7 @@ function memberKindShort(kind: string): string {
 			:elementsSelectable="true"
 			:zoomOnDoubleClick="false"
 			:minZoom="0.1"
-			class="graph-canvas-flow"
-			:class="pika({ width: '100%', height: '100%' })"
+			class="graph-canvas-flow w-full h-full"
 			@nodeClick="onNodeClick"
 			@edgeClick="onEdgeClick"
 		>

@@ -10,87 +10,31 @@ const i18n = useLabI18n()
 
 <template>
 	<div
-		class="relations-empty-state"
-		:class="pika({
-			display: 'flex',
-			flexDirection: 'column',
-			alignItems: 'center',
-			justifyContent: 'center',
-			height: '100%',
-			padding: '32px 24px',
-			textAlign: 'center',
-			color: 'var(--lab-color-text-muted)',
-			fontFamily: 'var(--lab-font-sans)',
-		})"
+		class="relations-empty-state flex flex-col items-center justify-center h-full p-[32px_24px] text-center text-lab-text-muted font-lab-sans"
 	>
 		<div
-			class="relations-empty-card"
-			:class="pika({
-				maxWidth: '420px',
-				padding: '24px 28px',
-				borderRadius: 'var(--lab-radius)',
-				border: '1px dashed var(--lab-color-border)',
-				background: 'var(--lab-color-surface)',
-				display: 'flex',
-				flexDirection: 'column',
-				alignItems: 'center',
-				gap: '12px',
-				boxShadow: '0 2px 10px color-mix(in srgb, var(--lab-color-text) 4%, transparent)',
-			})"
+			class="relations-empty-card max-w-[420px] p-[24px_28px] rounded-lab border border-lab-border border-dashed bg-lab-surface flex flex-col items-center gap-[12px] [box-shadow:0_2px_10px_color-mix(in_srgb,var(--lab-color-text)_4%,transparent)]"
 		>
 			<div
-				class="relations-empty-icon"
-				:class="pika({
-					display: 'flex',
-					alignItems: 'center',
-					justifyContent: 'center',
-					width: '40px',
-					height: '40px',
-					borderRadius: '50%',
-					background: 'var(--lab-color-surface-alt)',
-					color: 'var(--lab-color-text)',
-					fontSize: '18px',
-					fontWeight: 'bold',
-				})"
+				class="relations-empty-icon flex items-center justify-center w-[40px] h-[40px] rounded-[50%] bg-lab-surface-alt text-lab-text text-[18px] font-bold"
 				aria-hidden="true"
 			>
 				☍
 			</div>
 			<h4
-				:class="pika({
-					margin: '0',
-					fontSize: '13px',
-					fontWeight: '600',
-					color: 'var(--lab-color-text)',
-				})"
+				class="m-0 text-[13px] font-semibold text-lab-text"
 			>
 				{{ i18n.t('No focus selected') }}
 			</h4>
 			<p
-				:class="pika({
-					margin: '0',
-					fontSize: '11px',
-					lineHeight: '1.5',
-					color: 'var(--lab-color-text-muted)',
-				})"
+				class="m-0 text-[11px] leading-[1.5] text-lab-text-muted"
 			>
 				{{ i18n.t(message) }}
 			</p>
 			<div
-				:class="pika({
-					marginTop: '6px',
-					paddingTop: '12px',
-					borderTop: '1px solid var(--lab-color-border)',
-					fontSize: '11px',
-					textAlign: 'left',
-					width: '100%',
-					color: 'var(--lab-color-text-muted)',
-					display: 'flex',
-					flexDirection: 'column',
-					gap: '4px',
-				})"
+				class="mt-[6px] pt-[12px] border-t border-t-lab-border text-[11px] text-left w-full text-lab-text-muted flex flex-col gap-[4px]"
 			>
-				<span :class="pika({ fontWeight: '600', textTransform: 'uppercase', fontSize: '11px' })">
+				<span class="font-semibold uppercase text-[11px]">
 					{{ i18n.t('How to select focus:') }}
 				</span>
 				<div>• <strong>Preview</strong>: {{ i18n.t('Turn on Inspect and click a widget') }}</div>

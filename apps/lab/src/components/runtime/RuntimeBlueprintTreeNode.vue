@@ -26,7 +26,7 @@ const label = computed(() => {
 	<div>
 		<button
 			type="button"
-			:class="pika({ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', textAlign: 'left', border: 'none', borderRadius: 'var(--lab-radius)', padding: '4px 6px', minHeight: '24px', fontSize: '12px', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text)', cursor: 'pointer' })"
+			class="flex items-center gap-[6px] w-full text-left [border:none] rounded-lab p-[4px_6px] min-h-[24px] text-[12px] font-lab-mono text-lab-text cursor-pointer"
 			:style="{
 				paddingLeft: `${6 + depth * 14}px`,
 				background: nodeId === selectedNodeId ? 'var(--lab-color-surface-alt)' : 'transparent',
@@ -34,13 +34,13 @@ const label = computed(() => {
 			@click="emit('select', nodeId)"
 		>
 			<span
-				:class="pika({ width: '7px', height: '7px', borderRadius: '999px', flex: '0 0 auto' })"
+				class="w-[7px] h-[7px] rounded-[999px] flex-[0_0_auto]"
 				:style="{ background: node?.resolved ? 'var(--lab-color-ok)' : 'var(--lab-color-danger)' }"
 			/>
-			<span :class="pika({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })">{{ label }}</span>
+			<span class="overflow-hidden text-ellipsis whitespace-nowrap">{{ label }}</span>
 			<span
 				v-if="(node?.diagnostics.length ?? 0) > 0"
-				:class="pika({ marginLeft: 'auto', fontSize: '11px', color: 'var(--lab-color-danger)', flex: '0 0 auto' })"
+				class="ml-[auto] text-[11px] text-lab-danger flex-[0_0_auto]"
 			>{{ node?.diagnostics.length }}</span>
 		</button>
 
@@ -49,7 +49,7 @@ const label = computed(() => {
 			:key="group.name"
 		>
 			<div
-				:class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)', letterSpacing: '0.03em', textTransform: 'uppercase' })"
+				class="text-[11px] text-lab-text-muted tracking-[0.03em] uppercase"
 				:style="{ paddingLeft: `${6 + (depth + 1) * 14}px` }"
 			>
 				{{ group.name }}<template v-if="group.placement">

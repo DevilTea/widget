@@ -4,7 +4,6 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { shallowRef } from 'vue'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
-import { testGlobalProperties } from '../../test-support'
 import RuntimeMethodRow from './RuntimeMethodRow.vue'
 
 const EMITS_TOOLTIP = 'Emits an Event directly or through the Methods it invokes'
@@ -13,7 +12,6 @@ function mountRow(props: { transitivelyWrites: boolean, transitivelyEmits?: bool
 	return mount(RuntimeMethodRow, {
 		props: { name: 'ping', selected: false, ...props },
 		global: {
-			config: { globalProperties: testGlobalProperties },
 			provide: {
 				[LabI18nKey as symbol]: {
 					locale: shallowRef(locale),

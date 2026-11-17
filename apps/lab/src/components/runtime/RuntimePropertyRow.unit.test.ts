@@ -14,7 +14,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { shallowRef } from 'vue'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
 import { translatePresentationMessage } from '../../i18n/presentation-messages'
-import { testGlobalProperties } from '../../test-support'
 import RuntimePropertyRow from './RuntimePropertyRow.vue'
 
 const widgetRef: WidgetRef = { runtimeId: 'runtime-1', nodeId: 3 }
@@ -57,7 +56,6 @@ async function mountRow(initial: InspectorRuntimePropertySnapshot) {
 	const wrapper = mount(RuntimePropertyRow, {
 		props: { name: 'value', client: createClient(initial), widgetRef, initial, selected: false },
 		global: {
-			config: { globalProperties: testGlobalProperties },
 			provide: {
 				[LabI18nKey as symbol]: {
 					locale: shallowRef('en'),

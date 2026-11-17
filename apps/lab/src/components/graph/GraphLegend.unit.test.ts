@@ -2,14 +2,12 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
-import { testGlobalProperties } from '../../test-support'
 import GraphLegend from './GraphLegend.vue'
 
 describe('graphLegend Method badges', () => {
 	it('explains both the W and the E badge once opened', async () => {
 		const wrapper = mount(GraphLegend, {
 			global: {
-				config: { globalProperties: testGlobalProperties },
 				provide: {
 					[LabI18nKey as symbol]: { locale: { value: 'en' }, locales: ['en'], setLocale: () => {}, t: (source: string) => source },
 				},

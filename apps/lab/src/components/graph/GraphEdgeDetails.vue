@@ -44,30 +44,30 @@ const semanticEdges = computed<readonly DisplaySubEdge[]>(() => {
 </script>
 
 <template>
-	<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px 10px', fontSize: '11px', fontFamily: 'var(--lab-font-mono)', borderTop: '1px solid var(--lab-color-border)', background: 'var(--lab-color-surface)', maxHeight: '160px', overflowY: 'auto' })">
+	<div class="flex flex-col gap-[8px] p-[8px_10px] text-[11px] font-lab-mono border-t border-t-lab-border bg-lab-surface max-h-[160px] overflow-y-auto">
 		<div
 			v-if="semanticEdges.length > 1"
-			:class="pika({ fontSize: '11px', fontWeight: 'bold', color: 'var(--lab-color-text)' })"
+			class="text-[11px] font-bold text-lab-text"
 		>
 			{{ semanticEdges.length }} {{ i18n.t('aggregated dependencies') }}:
 		</div>
 		<div
 			v-for="(subEdge, index) in semanticEdges"
 			:key="subEdge.id || index"
+			class="flex flex-col gap-[2px]"
 			:class="[
-				pika({ display: 'flex', flexDirection: 'column', gap: '2px' }),
-				semanticEdges.length > 1 && index < semanticEdges.length - 1 ? pika({ borderBottom: '1px dashed var(--lab-color-border)', paddingBottom: '4px' }) : null,
+				semanticEdges.length > 1 && index < semanticEdges.length - 1 ? 'border-b border-b-lab-border [border-bottom-style:dashed] pb-[4px]' : null,
 			]"
 		>
-			<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
-				<span :class="pika({ fontSize: '11px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text-muted)' })">{{ subEdge.operation }}</span>
+			<div class="flex items-center gap-[6px]">
+				<span class="text-[11px] p-[1px_5px] rounded-[999px] bg-lab-surface-alt text-lab-text-muted">{{ subEdge.operation }}</span>
 				<span
 					v-if="subEdge.stubStatus"
-					:class="pika({ fontSize: '11px', color: 'var(--lab-color-danger)' })"
+					class="text-[11px] text-lab-danger"
 				>{{ subEdge.stubStatus }}</span>
 				<span
 					v-if="subEdge.invalidCycle"
-					:class="pika({ fontSize: '11px', color: 'var(--lab-color-danger)' })"
+					class="text-[11px] text-lab-danger"
 				>{{ i18n.t('invalid cycle') }}</span>
 			</div>
 			<div>{{ i18n.t('target') }}: {{ formatDependencyTarget(subEdge.reference.target) }} -&gt; {{ formatDependencyOperation(subEdge.reference.operation) }}</div>

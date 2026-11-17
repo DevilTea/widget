@@ -18,19 +18,19 @@ function dependencyText(reference: InspectorDependencyReference): string {
 </script>
 
 <template>
-	<ul :class="pika({ listStyle: 'none', margin: '0', padding: '0', display: 'flex', flexDirection: 'column', gap: '6px' })">
+	<ul class="list-none m-0 p-0 flex flex-col gap-[6px]">
 		<li
 			v-for="(diagnostic, index) in diagnostics"
 			:key="index"
-			:class="pika({ border: '1px solid var(--lab-color-border)', borderRadius: 'var(--lab-radius)', padding: '6px 8px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' })"
+			class="border border-lab-border rounded-lab p-[6px_8px] text-[11px] flex flex-col gap-[4px]"
 		>
-			<span :class="pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '11px', padding: '1px 5px', borderRadius: '999px', background: 'var(--lab-color-surface-alt)', color: 'var(--lab-color-text-muted)', alignSelf: 'flex-start' })">
+			<span class="font-lab-mono text-[11px] p-[1px_5px] rounded-[999px] bg-lab-surface-alt text-lab-text-muted self-start">
 				{{ diagnostic.code }}
 			</span>
 			<div>{{ diagnostic.message }}</div>
 			<dl
 				v-if="diagnostic.code === 'invalid-property-result'"
-				:class="pika({ margin: '0', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)', display: 'flex', flexDirection: 'column', gap: '2px' })"
+				class="m-0 font-lab-mono text-lab-text-muted flex flex-col gap-[2px]"
 			>
 				<div v-if="diagnostic.path !== undefined">
 					path: {{ formatDiagnosticPath(diagnostic.path) }}
@@ -39,7 +39,7 @@ function dependencyText(reference: InspectorDependencyReference): string {
 			</dl>
 			<dl
 				v-if="diagnostic.dependency !== undefined"
-				:class="pika({ margin: '0', fontFamily: 'var(--lab-font-mono)', color: 'var(--lab-color-text-muted)', display: 'flex', flexDirection: 'column', gap: '2px' })"
+				class="m-0 font-lab-mono text-lab-text-muted flex flex-col gap-[2px]"
 			>
 				<div>dependency: {{ dependencyText(diagnostic.dependency) }}</div>
 				<div v-if="diagnostic.code === 'dependency-value-rejected'">

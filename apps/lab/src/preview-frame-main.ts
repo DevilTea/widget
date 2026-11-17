@@ -28,7 +28,6 @@ import {
 import { getShowcase } from './showcases/registry'
 import { createRuntimeReader, subscribeObservationTargets } from './tutorial/inspection-reader'
 import { SURVEY_TOUR_ID, surveyTourScript } from './tutorial/survey-script'
-import 'pika.css'
 import './styles/global.css'
 import './styles/tutorial-theme.css'
 import './styles/preview-frame.css'

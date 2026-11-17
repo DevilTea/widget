@@ -6,7 +6,6 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { shallowRef } from 'vue'
 import { LabI18nKey } from '../../../composables/use-lab-i18n'
-import { testGlobalProperties } from '../../../test-support'
 import RelationsView from './RelationsView.vue'
 
 function method(flags: { transitivelyWrites?: boolean, transitivelyEmits?: boolean }): RelationsMemberIdentity {
@@ -26,7 +25,6 @@ function mountModel(model: RelationsViewModel) {
 	return mount(RelationsView, {
 		props: { model },
 		global: {
-			config: { globalProperties: testGlobalProperties },
 			provide: {
 				[LabI18nKey as symbol]: { locale: shallowRef('en'), locales: ['en'], setLocale: () => {}, t: (source: string) => source },
 			},

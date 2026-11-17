@@ -42,83 +42,32 @@ function memberKindShort(kind: GraphVertexKind): string {
 		class="relations-container"
 	>
 		<div
-			class="relations-view-surface"
-			:class="pika({
-				display: 'flex',
-				flexDirection: 'row',
-				height: '100%',
-				minHeight: '0',
-				width: '100%',
-				overflowX: 'auto',
-				overflowY: 'hidden',
-				background: 'var(--lab-color-surface)',
-			})"
+			class="relations-view-surface flex flex-row h-full min-h-0 w-full overflow-x-auto overflow-y-hidden bg-lab-surface"
 		>
 			<!-- Left Column: Used by (Incoming) -->
 			<div
-				class="relations-column relations-column--incoming"
-				:class="pika({
-					flex: '1 1 33%',
-					minWidth: '220px',
-					display: 'flex',
-					flexDirection: 'column',
-					borderRight: '1px solid var(--lab-color-border)',
-					minHeight: '0',
-				})"
+				class="relations-column relations-column--incoming flex-[1_1_33%] min-w-[220px] flex flex-col border-r border-r-lab-border min-h-0"
 			>
 				<div
-					class="relations-column-header"
-					:class="pika({
-						padding: '8px 12px',
-						borderBottom: '1px solid var(--lab-color-border)',
-						background: 'var(--lab-color-surface-alt)',
-						display: 'flex',
-						alignItems: 'center',
-						justifyContent: 'space-between',
-						fontSize: '11px',
-						fontWeight: '600',
-						flex: '0 0 auto',
-					})"
+					class="relations-column-header p-[8px_12px] border-b border-b-lab-border bg-lab-surface-alt flex items-center justify-between text-[11px] font-semibold flex-[0_0_auto]"
 				>
-					<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
-						<span :class="pika({ color: 'var(--lab-color-text-muted)' })">←</span>
+					<div class="flex items-center gap-[6px]">
+						<span class="text-lab-text-muted">←</span>
 						<span>{{ i18n.t('Used by') }}</span>
 					</div>
 					<span
-						class="relations-counter-badge"
-						:class="pika({
-							fontSize: '11px',
-							padding: '1px 6px',
-							borderRadius: '999px',
-							background: 'var(--lab-color-surface)',
-							border: '1px solid var(--lab-color-border)',
-							color: 'var(--lab-color-text-muted)',
-						})"
+						class="relations-counter-badge text-[11px] p-[1px_6px] rounded-[999px] bg-lab-surface border border-lab-border text-lab-text-muted"
 					>
 						{{ model.totalUsedByCount }}
 					</span>
 				</div>
 
 				<div
-					class="relations-column-content"
-					:class="pika({
-						flex: '1 1 auto',
-						overflowY: 'auto',
-						padding: '8px',
-						display: 'flex',
-						flexDirection: 'column',
-						gap: '8px',
-					})"
+					class="relations-column-content flex-auto overflow-y-auto p-[8px] flex flex-col gap-[8px]"
 				>
 					<div
 						v-if="model.usedBy.length === 0"
-						:class="pika({
-							padding: '16px 12px',
-							fontSize: '11px',
-							color: 'var(--lab-color-text-muted)',
-							textAlign: 'center',
-							fontStyle: 'italic',
-						})"
+						class="p-[16px_12px] text-[11px] text-lab-text-muted text-center italic"
 					>
 						{{ i18n.t('No incoming dependencies') }}
 					</div>
@@ -136,30 +85,10 @@ function memberKindShort(kind: GraphVertexKind): string {
 
 			<!-- Center Column: Selected Entity Identity & Context -->
 			<div
-				class="relations-column relations-column--center"
-				:class="pika({
-					flex: '1 1 34%',
-					minWidth: '240px',
-					display: 'flex',
-					flexDirection: 'column',
-					borderRight: '1px solid var(--lab-color-border)',
-					background: 'color-mix(in srgb, var(--lab-color-surface-alt) 40%, var(--lab-color-surface))',
-					minHeight: '0',
-				})"
+				class="relations-column relations-column--center flex-[1_1_34%] min-w-[240px] flex flex-col border-r border-r-lab-border [background:color-mix(in_srgb,var(--lab-color-surface-alt)_40%,var(--lab-color-surface))] min-h-0"
 			>
 				<div
-					class="relations-column-header"
-					:class="pika({
-						padding: '8px 12px',
-						borderBottom: '1px solid var(--lab-color-border)',
-						background: 'var(--lab-color-surface-alt)',
-						display: 'flex',
-						alignItems: 'center',
-						justifyContent: 'space-between',
-						fontSize: '11px',
-						fontWeight: '600',
-						flex: '0 0 auto',
-					})"
+					class="relations-column-header p-[8px_12px] border-b border-b-lab-border bg-lab-surface-alt flex items-center justify-between text-[11px] font-semibold flex-[0_0_auto]"
 				>
 					<span>
 						{{ model.mode === 'member' ? i18n.t('Focused member') : i18n.t('Focused widget') }}
@@ -173,66 +102,36 @@ function memberKindShort(kind: GraphVertexKind): string {
 					</span>
 					<span
 						v-else
-						:class="pika({
-							fontSize: '11px',
-							color: 'var(--lab-color-text-muted)',
-							fontFamily: 'var(--lab-font-mono)',
-						})"
+						class="text-[11px] text-lab-text-muted font-lab-mono"
 					>
 						#{{ model.selectedWidget.widgetId }}
 					</span>
 				</div>
 
 				<div
-					class="relations-column-content"
-					:class="pika({
-						flex: '1 1 auto',
-						overflowY: 'auto',
-						padding: '10px',
-						display: 'flex',
-						flexDirection: 'column',
-						gap: '12px',
-					})"
+					class="relations-column-content flex-auto overflow-y-auto p-[10px] flex flex-col gap-[12px]"
 				>
 					<!-- Member Context (when mode === 'member') -->
 					<template v-if="model.mode === 'member'">
 						<div
-							class="relations-focus-card"
-							:class="pika({
-								padding: '10px 12px',
-								borderRadius: 'var(--lab-radius)',
-								border: '1px solid var(--lab-color-border)',
-								background: 'var(--lab-color-surface)',
-								display: 'flex',
-								flexDirection: 'column',
-								gap: '8px',
-							})"
+							class="relations-focus-card p-[10px_12px] rounded-lab border border-lab-border bg-lab-surface flex flex-col gap-[8px]"
 						>
 							<!-- Owning Widget link -->
-							<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px' })">
-								<span :class="pika({ color: 'var(--lab-color-text-muted)', fontSize: '11px' })">{{ i18n.t('Widget:') }}</span>
+							<div class="flex items-center gap-[6px] text-[11px]">
+								<span class="text-lab-text-muted text-[11px]">{{ i18n.t('Widget:') }}</span>
 								<button
 									type="button"
-									:class="pika({
-										'background': 'transparent',
-										'border': 'none',
-										'padding': '0',
-										'cursor': 'pointer',
-										'fontFamily': 'var(--lab-font-mono)',
-										'fontSize': '11px',
-										'color': 'var(--lab-color-text)',
-										'$:hover': { textDecoration: 'underline' },
-									})"
+									class="bg-transparent [border:none] p-0 cursor-pointer font-lab-mono text-[11px] text-lab-text hover:underline"
 									:title="i18n.t('Focus widget {name}', { name: `${model.selectedMember.widgetType} #${model.selectedMember.widgetId}` })"
 									@click="emit('selectWidget', model.selectedMember.nodeId)"
 								>
 									<strong>{{ model.selectedMember.widgetType }}</strong>
-									<span :class="pika({ color: 'var(--lab-color-text-muted)' })"> #{{ model.selectedMember.widgetId }}</span>
+									<span class="text-lab-text-muted"> #{{ model.selectedMember.widgetId }}</span>
 								</button>
 							</div>
 
 							<!-- Selected Member Display -->
-							<div :class="pika({ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' })">
+							<div class="flex items-center gap-[8px] flex-wrap">
 								<span
 									class="relations-kind-badge"
 									:class="`relations-kind-badge--${model.selectedMember.kind}`"
@@ -240,50 +139,26 @@ function memberKindShort(kind: GraphVertexKind): string {
 								>
 									{{ memberKindShort(model.selectedMember.kind) }}
 								</span>
-								<span :class="pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '13px', fontWeight: 'bold' })">
+								<span class="font-lab-mono text-[13px] font-bold">
 									{{ model.selectedMember.name }}
 								</span>
 								<span
 									v-if="model.selectedMember.transitivelyWrites"
-									:class="pika({
-										fontSize: '11px',
-										fontWeight: 'bold',
-										padding: '1px 5px',
-										borderRadius: '2px',
-										background: 'color-mix(in srgb, var(--lab-color-warning) 20%, transparent)',
-										color: 'var(--lab-color-warning)',
-										border: '1px solid color-mix(in srgb, var(--lab-color-warning) 40%, transparent)',
-									})"
+									class="text-[11px] font-bold p-[1px_5px] rounded-[2px] [background:color-mix(in_srgb,var(--lab-color-warning)_20%,transparent)] text-lab-warning [border:1px_solid_color-mix(in_srgb,var(--lab-color-warning)_40%,transparent)]"
 									:title="i18n.t('Writes State directly or through the Methods it invokes')"
 								>
 									W {{ i18n.t('writes') }}
 								</span>
 								<span
 									v-if="model.selectedMember.transitivelyEmits"
-									:class="pika({
-										fontSize: '11px',
-										fontWeight: 'bold',
-										padding: '1px 5px',
-										borderRadius: '2px',
-										background: 'color-mix(in srgb, var(--lab-color-warning) 20%, transparent)',
-										color: 'var(--lab-color-warning)',
-										border: '1px solid color-mix(in srgb, var(--lab-color-warning) 40%, transparent)',
-									})"
+									class="text-[11px] font-bold p-[1px_5px] rounded-[2px] [background:color-mix(in_srgb,var(--lab-color-warning)_20%,transparent)] text-lab-warning [border:1px_solid_color-mix(in_srgb,var(--lab-color-warning)_40%,transparent)]"
 									:title="i18n.t('Emits an Event directly or through the Methods it invokes')"
 								>
 									E {{ i18n.t('emits') }}
 								</span>
 								<span
 									v-if="model.selectedMember.invalidCycle"
-									:class="pika({
-										fontSize: '11px',
-										fontWeight: 'bold',
-										padding: '1px 5px',
-										borderRadius: '2px',
-										background: 'color-mix(in srgb, var(--lab-color-danger) 20%, transparent)',
-										color: 'var(--lab-color-danger)',
-										border: '1px solid color-mix(in srgb, var(--lab-color-danger) 40%, transparent)',
-									})"
+									class="text-[11px] font-bold p-[1px_5px] rounded-[2px] [background:color-mix(in_srgb,var(--lab-color-danger)_20%,transparent)] text-lab-danger [border:1px_solid_color-mix(in_srgb,var(--lab-color-danger)_40%,transparent)]"
 									:title="i18n.t('invalid evaluation cycle')"
 								>
 									! {{ i18n.t('cycle') }}
@@ -292,14 +167,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 
 							<!-- Member Summary counts -->
 							<div
-								:class="pika({
-									display: 'flex',
-									gap: '12px',
-									paddingTop: '6px',
-									borderTop: '1px solid var(--lab-color-border)',
-									fontSize: '11px',
-									color: 'var(--lab-color-text-muted)',
-								})"
+								class="flex gap-[12px] pt-[6px] border-t border-t-lab-border text-[11px] text-lab-text-muted"
 							>
 								<div>{{ i18n.t('Used by:') }} <strong>{{ model.totalUsedByCount }}</strong></div>
 								<div>{{ i18n.t('Depends on:') }} <strong>{{ model.totalDependsOnCount }}</strong></div>
@@ -310,73 +178,51 @@ function memberKindShort(kind: GraphVertexKind): string {
 					<!-- Widget Context (when mode === 'widget') -->
 					<template v-else>
 						<div
-							class="relations-focus-card"
-							:class="pika({
-								padding: '10px 12px',
-								borderRadius: 'var(--lab-radius)',
-								border: '1px solid var(--lab-color-border)',
-								background: 'var(--lab-color-surface)',
-								display: 'flex',
-								flexDirection: 'column',
-								gap: '8px',
-							})"
+							class="relations-focus-card p-[10px_12px] rounded-lab border border-lab-border bg-lab-surface flex flex-col gap-[8px]"
 						>
-							<div :class="pika({ display: 'flex', alignItems: 'center', justifyContent: 'space-between' })">
-								<div :class="pika({ fontFamily: 'var(--lab-font-mono)', fontSize: '13px' })">
+							<div class="flex items-center justify-between">
+								<div class="font-lab-mono text-[13px]">
 									<strong>{{ model.selectedWidget.widgetType }}</strong>
-									<span :class="pika({ color: 'var(--lab-color-text-muted)' })"> #{{ model.selectedWidget.widgetId }}</span>
+									<span class="text-lab-text-muted"> #{{ model.selectedWidget.widgetId }}</span>
 								</div>
 							</div>
 
 							<!-- Counts -->
-							<div :class="pika({ display: 'flex', gap: '8px', fontSize: '11px', fontFamily: 'var(--lab-font-mono)' })">
+							<div class="flex gap-[8px] text-[11px] font-lab-mono">
 								<span
 									v-if="model.selectedWidget.memberCounts.state"
-									:class="pika({ color: 'var(--lab-color-ok)' })"
+									class="text-lab-ok"
 								>
 									S {{ model.selectedWidget.memberCounts.state }}
 								</span>
 								<span
 									v-if="model.selectedWidget.memberCounts.property"
-									:class="pika({ color: 'var(--lab-color-warning)' })"
+									class="text-lab-warning"
 								>
 									P {{ model.selectedWidget.memberCounts.property }}
 								</span>
 								<span
 									v-if="model.selectedWidget.memberCounts.method"
-									:class="pika({ color: 'var(--lab-color-accent)' })"
+									class="text-lab-accent"
 								>
 									M {{ model.selectedWidget.memberCounts.method }}
 								</span>
-								<span :class="pika({ color: 'var(--lab-color-text-muted)', marginLeft: 'auto' })">
+								<span class="text-lab-text-muted ml-[auto]">
 									{{ model.selectedWidget.memberCounts.total }} {{ i18n.t('members') }}
 								</span>
 							</div>
 
 							<!-- Widget Members list -->
-							<div :class="pika({ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' })">
-								<span :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)', fontWeight: '600', textTransform: 'uppercase' })">
+							<div class="flex flex-col gap-[4px] mt-[4px]">
+								<span class="text-[11px] text-lab-text-muted font-semibold uppercase">
 									{{ i18n.t('Members') }}
 								</span>
-								<div :class="pika({ display: 'flex', flexWrap: 'wrap', gap: '4px' })">
+								<div class="flex flex-wrap gap-[4px]">
 									<button
 										v-for="member in model.selectedWidget.members"
 										:key="`${member.kind}:${member.name}`"
 										type="button"
-										:class="pika({
-											'display': 'inline-flex',
-											'alignItems': 'center',
-											'gap': '4px',
-											'padding': '2px 6px',
-											'borderRadius': '3px',
-											'border': '1px solid var(--lab-color-border)',
-											'background': 'var(--lab-color-surface-alt)',
-											'color': 'var(--lab-color-text)',
-											'fontFamily': 'var(--lab-font-mono)',
-											'fontSize': '11px',
-											'cursor': 'pointer',
-											'$:hover': { borderColor: 'var(--lab-color-accent)' },
-										})"
+										class="inline-flex items-center gap-[4px] p-[2px_6px] rounded-[3px] border border-lab-border bg-lab-surface-alt text-lab-text font-lab-mono text-[11px] cursor-pointer hover:border-lab-accent"
 										:title="i18n.t('Focus {kind} {name}', { kind: member.kind, name: member.name })"
 										@click="emit('selectMember', { nodeId: member.nodeId, member: { type: member.kind, name: member.name } })"
 									>
@@ -389,16 +235,16 @@ function memberKindShort(kind: GraphVertexKind): string {
 										<span>{{ member.name }}</span>
 										<span
 											v-if="member.transitivelyWrites"
-											:class="pika({ color: 'var(--lab-color-warning)', fontWeight: 'bold' })"
+											class="text-lab-warning font-bold"
 										>W</span>
 										<span
 											v-if="member.transitivelyEmits"
-											:class="pika({ color: 'var(--lab-color-warning)', fontWeight: 'bold' })"
+											class="text-lab-warning font-bold"
 											:title="i18n.t('Emits an Event directly or through the Methods it invokes')"
 										>E</span>
 										<span
 											v-if="member.invalidCycle"
-											:class="pika({ color: 'var(--lab-color-danger)', fontWeight: 'bold' })"
+											class="text-lab-danger font-bold"
 										>!</span>
 									</button>
 								</div>
@@ -407,64 +253,35 @@ function memberKindShort(kind: GraphVertexKind): string {
 
 						<!-- Internal dependencies section (requirement 3: compact separate section) -->
 						<div
-							class="relations-internal-section"
-							:class="pika({
-								padding: '10px 12px',
-								borderRadius: 'var(--lab-radius)',
-								border: '1px solid var(--lab-color-border)',
-								background: 'var(--lab-color-surface)',
-								display: 'flex',
-								flexDirection: 'column',
-								gap: '6px',
-							})"
+							class="relations-internal-section p-[10px_12px] rounded-lab border border-lab-border bg-lab-surface flex flex-col gap-[6px]"
 						>
-							<div :class="pika({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' })">
-								<span :class="pika({ fontWeight: '600' })">{{ i18n.t('Internal dependencies') }}</span>
-								<span :class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
+							<div class="flex items-center justify-between text-[11px]">
+								<span class="font-semibold">{{ i18n.t('Internal dependencies') }}</span>
+								<span class="text-[11px] text-lab-text-muted">
 									{{ model.totalInternalCount }}
 								</span>
 							</div>
 
 							<div
 								v-if="model.internal.length === 0"
-								:class="pika({ fontSize: '11px', color: 'var(--lab-color-text-muted)', fontStyle: 'italic' })"
+								class="text-[11px] text-lab-text-muted italic"
 							>
 								{{ i18n.t('No internal dependencies between members') }}
 							</div>
 
 							<div
 								v-else
-								:class="pika({ display: 'flex', flexDirection: 'column', gap: '4px' })"
+								class="flex flex-col gap-[4px]"
 							>
 								<div
 									v-for="item in model.internal"
 									:key="item.id"
-									:class="pika({
-										display: 'flex',
-										alignItems: 'center',
-										gap: '5px',
-										fontSize: '11px',
-										fontFamily: 'var(--lab-font-mono)',
-										padding: '3px 0',
-										borderBottom: '1px dashed var(--lab-color-border)',
-									})"
+									class="flex items-center gap-[5px] text-[11px] font-lab-mono p-[3px_0] border-b border-b-lab-border [border-bottom-style:dashed]"
 								>
 									<!-- Source member button -->
 									<button
 										type="button"
-										:class="pika({
-											'background': 'transparent',
-											'border': 'none',
-											'padding': '0',
-											'cursor': 'pointer',
-											'display': 'inline-flex',
-											'alignItems': 'center',
-											'gap': '3px',
-											'fontFamily': 'var(--lab-font-mono)',
-											'fontSize': '11px',
-											'color': 'var(--lab-color-text)',
-											'$:hover': { textDecoration: 'underline' },
-										})"
+										class="bg-transparent [border:none] p-0 cursor-pointer inline-flex items-center gap-[3px] font-lab-mono text-[11px] text-lab-text hover:underline"
 										@click="emit('selectMember', { nodeId: item.sourceMember.nodeId, member: { type: item.sourceMember.kind, name: item.sourceMember.name } })"
 									>
 										<span
@@ -476,7 +293,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 										<span>{{ item.sourceMember.name }}</span>
 									</button>
 
-									<span :class="pika({ color: 'var(--lab-color-text-muted)', fontSize: '11px' })">
+									<span class="text-lab-text-muted text-[11px]">
 										{{ item.operation }}
 									</span>
 
@@ -484,19 +301,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 									<button
 										v-if="item.resolved && item.targetMember"
 										type="button"
-										:class="pika({
-											'background': 'transparent',
-											'border': 'none',
-											'padding': '0',
-											'cursor': 'pointer',
-											'display': 'inline-flex',
-											'alignItems': 'center',
-											'gap': '3px',
-											'fontFamily': 'var(--lab-font-mono)',
-											'fontSize': '11px',
-											'color': 'var(--lab-color-text)',
-											'$:hover': { textDecoration: 'underline' },
-										})"
+										class="bg-transparent [border:none] p-0 cursor-pointer inline-flex items-center gap-[3px] font-lab-mono text-[11px] text-lab-text hover:underline"
 										@click="emit('selectMember', { nodeId: item.targetMember.nodeId, member: { type: item.targetMember.kind, name: item.targetMember.name } })"
 									>
 										<span
@@ -510,17 +315,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 
 									<span
 										v-else-if="item.stubTarget"
-										class="relations-internal-stub-target"
-										:class="pika({
-											display: 'inline-flex',
-											alignItems: 'center',
-											gap: '4px',
-											padding: '1px 6px',
-											borderRadius: '3px',
-											border: '1px dashed var(--lab-color-danger)',
-											background: 'color-mix(in srgb, var(--lab-color-danger) 8%, transparent)',
-											color: 'var(--lab-color-text)',
-										})"
+										class="relations-internal-stub-target inline-flex items-center gap-[4px] p-[1px_6px] rounded-[3px] border border-lab-danger border-dashed [background:color-mix(in_srgb,var(--lab-color-danger)_8%,transparent)] text-lab-text"
 										:title="`${item.stubStatus}: ${item.stubTarget.targetDescription}`"
 									>
 										<span
@@ -529,8 +324,8 @@ function memberKindShort(kind: GraphVertexKind): string {
 										>
 											{{ memberKindShort(item.stubTarget.memberKind) }}
 										</span>
-										<span :class="pika({ fontFamily: 'var(--lab-font-mono)' })">{{ item.stubTarget.memberName }}</span>
-										<span :class="pika({ fontSize: '11px', color: 'var(--lab-color-danger)', fontWeight: '600' })">{{ i18n.t('unresolved') }}</span>
+										<span class="font-lab-mono">{{ item.stubTarget.memberName }}</span>
+										<span class="text-[11px] text-lab-danger font-semibold">{{ i18n.t('unresolved') }}</span>
 									</span>
 								</div>
 							</div>
@@ -541,68 +336,28 @@ function memberKindShort(kind: GraphVertexKind): string {
 
 			<!-- Right Column: Depends on (Outgoing) -->
 			<div
-				class="relations-column relations-column--outgoing"
-				:class="pika({
-					flex: '1 1 33%',
-					minWidth: '220px',
-					display: 'flex',
-					flexDirection: 'column',
-					minHeight: '0',
-				})"
+				class="relations-column relations-column--outgoing flex-[1_1_33%] min-w-[220px] flex flex-col min-h-0"
 			>
 				<div
-					class="relations-column-header"
-					:class="pika({
-						padding: '8px 12px',
-						borderBottom: '1px solid var(--lab-color-border)',
-						background: 'var(--lab-color-surface-alt)',
-						display: 'flex',
-						alignItems: 'center',
-						justifyContent: 'space-between',
-						fontSize: '11px',
-						fontWeight: '600',
-						flex: '0 0 auto',
-					})"
+					class="relations-column-header p-[8px_12px] border-b border-b-lab-border bg-lab-surface-alt flex items-center justify-between text-[11px] font-semibold flex-[0_0_auto]"
 				>
-					<div :class="pika({ display: 'flex', alignItems: 'center', gap: '6px' })">
+					<div class="flex items-center gap-[6px]">
 						<span>{{ i18n.t('Depends on') }}</span>
-						<span :class="pika({ color: 'var(--lab-color-text-muted)' })">→</span>
+						<span class="text-lab-text-muted">→</span>
 					</div>
 					<span
-						class="relations-counter-badge"
-						:class="pika({
-							fontSize: '11px',
-							padding: '1px 6px',
-							borderRadius: '999px',
-							background: 'var(--lab-color-surface)',
-							border: '1px solid var(--lab-color-border)',
-							color: 'var(--lab-color-text-muted)',
-						})"
+						class="relations-counter-badge text-[11px] p-[1px_6px] rounded-[999px] bg-lab-surface border border-lab-border text-lab-text-muted"
 					>
 						{{ model.totalDependsOnCount }}
 					</span>
 				</div>
 
 				<div
-					class="relations-column-content"
-					:class="pika({
-						flex: '1 1 auto',
-						overflowY: 'auto',
-						padding: '8px',
-						display: 'flex',
-						flexDirection: 'column',
-						gap: '8px',
-					})"
+					class="relations-column-content flex-auto overflow-y-auto p-[8px] flex flex-col gap-[8px]"
 				>
 					<div
 						v-if="model.dependsOn.length === 0"
-						:class="pika({
-							padding: '16px 12px',
-							fontSize: '11px',
-							color: 'var(--lab-color-text-muted)',
-							textAlign: 'center',
-							fontStyle: 'italic',
-						})"
+						class="p-[16px_12px] text-[11px] text-lab-text-muted text-center italic"
 					>
 						{{ i18n.t('No outgoing dependencies') }}
 					</div>
@@ -626,7 +381,7 @@ function memberKindShort(kind: GraphVertexKind): string {
  * Three columns need about 680px (220 + 240 + 220). Narrower than that, which is what the tool area gets at 1280px
  * with the tutorial rail open (about 460px), they stack (Used by, the focus, Depends on) and the pane scrolls
  * vertically instead of scrolling sideways. The pane's own width decides, not the window's: dragging the divider
- * changes it too. Unlayered, so it wins over the PikaCSS atoms of the template.
+ * changes it too. Unlayered, so it wins over the Tailwind utilities of the template.
  */
 .relations-container {
 	container-type: inline-size;

@@ -6,7 +6,6 @@ export default deviltea({
 		'**/dist/**',
 		'**/.vitepress/cache/**',
 		'**/.vitepress/dist/**',
-		'**/pika.gen.*',
 		'**/test-results/**',
 		'**/playwright-report/**',
 	],

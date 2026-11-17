@@ -13,7 +13,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-	<div :class="pika({ overflow: 'auto', height: '100%', padding: '6px 4px' })">
+	<div class="overflow-auto h-full p-[6px_4px]">
 		<RuntimeBlueprintTreeNode
 			:snapshot="snapshot"
 			:nodeId="snapshot.rootNodeId"

@@ -3,12 +3,10 @@ import type { JsonSchema } from '../../lab/config-schema'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { LabI18nKey } from '../../composables/use-lab-i18n'
-import { testGlobalProperties } from '../../test-support'
 import { testGlobalPlugins } from '../../test-support-ui'
 import ConfigFieldEditor from './ConfigFieldEditor.vue'
 
 const global = {
-	config: { globalProperties: testGlobalProperties },
 	plugins: testGlobalPlugins,
 	provide: {
 		[LabI18nKey as symbol]: {

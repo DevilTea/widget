@@ -38,8 +38,8 @@ const workbenchLayout = useWorkbenchLayout()
  * level above where dockview-core would otherwise apply its own default (`dockview-theme-abyss`) and
  * shadow any same-named `--dv-*` custom properties set higher up. Basing this on `themeAbyss` keeps
  * its non-color layout defaults (gap, tab indicator, drag overlay, ...); only `className` changes, to
- * the small custom theme in `src/styles/dockview-theme.css` whose variables derive from PikaCSS
- * tokens.
+ * the small custom theme in `src/styles/dockview-theme.css` whose variables derive from the Lab palette
+ * tokens (`src/styles/global.css`).
  */
 const labTheme: DockviewTheme = {
 	...themeAbyss,
