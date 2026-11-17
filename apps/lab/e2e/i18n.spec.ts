@@ -1,23 +1,13 @@
-import { expect, previewFrame, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, openDeveloperTool, previewFrame, setLocale, setTheme, test } from './fixtures'
 
 const LOCALE_STORAGE_KEY = 'widget-lab:locale'
 const THEME_STORAGE_KEY = 'widget-lab:theme'
-
-function localeSelect(page: import('@playwright/test').Page) {
-	return page.locator('select:has(option[value="zh-TW"])')
-}
-
-function themeSelect(page: import('@playwright/test').Page) {
-	return page.locator('select:has(option[value="light"]):has(option[value="dark"])')
-}
 
 test.describe('lab localization (issue #43)', () => {
 	test('explicit zh-TW query overrides stored en and locale switching preserves unrelated query/hash', async ({ context, page }) => {
 		await context.addInitScript(key => localStorage.setItem(key, 'en'), LOCALE_STORAGE_KEY)
 		await page.goto('/?lang=zh-TW&probe=keep#anchor')
 
-		await expect(localeSelect(page))
-			.toHaveValue('zh-TW')
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'zh-TW')
 		await expect(page.getByRole('button', { name: '套用', exact: true }))
@@ -25,10 +15,9 @@ test.describe('lab localization (issue #43)', () => {
 		expect(await page.evaluate(key => localStorage.getItem(key), LOCALE_STORAGE_KEY))
 			.toBe('zh-TW')
 		await expect(page)
-			.toHaveURL(/\?lang=zh-TW&probe=keep#anchor$/)
+			.toHaveURL(/\?lang=zh-TW&probe=keep&showcase=survey#anchor$/)
 
-		await localeSelect(page)
-			.selectOption('en')
+		await setLocale(page, 'en')
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'en')
 		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
@@ -36,19 +25,17 @@ test.describe('lab localization (issue #43)', () => {
 		expect(await page.evaluate(key => localStorage.getItem(key), LOCALE_STORAGE_KEY))
 			.toBe('en')
 		await expect(page)
-			.toHaveURL(/\?lang=en&probe=keep#anchor$/)
+			.toHaveURL(/\?lang=en&probe=keep&showcase=survey#anchor$/)
 
 		await page.reload()
-		await expect(localeSelect(page))
-			.toHaveValue('en')
+		await expect(page.locator('html'))
+			.toHaveAttribute('lang', 'en')
 	})
 
 	test('explicit en query overrides stored zh-TW', async ({ context, page }) => {
 		await context.addInitScript(key => localStorage.setItem(key, 'zh-TW'), LOCALE_STORAGE_KEY)
 		await page.goto('/?lang=en')
 
-		await expect(localeSelect(page))
-			.toHaveValue('en')
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'en')
 		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
@@ -61,10 +48,8 @@ test.describe('lab localization (issue #43)', () => {
 		await context.addInitScript(key => localStorage.setItem(key, 'zh-TW'), LOCALE_STORAGE_KEY)
 		await page.goto('/?probe=stored#state')
 
-		await expect(localeSelect(page))
-			.toHaveValue('zh-TW')
 		await expect(page)
-			.toHaveURL(/\?probe=stored&lang=zh-TW#state$/)
+			.toHaveURL(/\?probe=stored&lang=zh-TW&showcase=survey#state$/)
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'zh-TW')
 	})
@@ -73,46 +58,48 @@ test.describe('lab localization (issue #43)', () => {
 		await context.addInitScript(key => localStorage.setItem(key, 'light'), THEME_STORAGE_KEY)
 		await page.goto('/?lang=zh-TW&probe=orthogonal#state')
 
-		await expect(localeSelect(page))
-			.toHaveValue('zh-TW')
-		await expect(themeSelect(page))
-			.toHaveValue('light')
-		await expect(page.getByLabel('主題'))
-			.toBeVisible()
-		await expect(page.getByLabel('主題')
-			.locator('option[value="light"]'))
-			.toHaveText('亮色')
-		await expect(page.getByLabel('主題')
-			.locator('option[value="dark"]'))
-			.toHaveText('深色')
+		await expect(page.locator('html'))
+			.toHaveAttribute('lang', 'zh-TW')
+		await expect(page.locator('html'))
+			.toHaveAttribute('data-lab-theme', 'light')
 
-		await themeSelect(page)
-			.selectOption('dark')
+		// The Theme submenu is localized and shows the current theme as the checked item.
+		await page.getByTestId('overflow-menu')
+			.click()
+		await page.getByRole('menuitem', { name: '主題', exact: true })
+			.click()
+		await expect(page.getByRole('menuitemcheckbox', { name: '亮色', exact: true }))
+			.toBeVisible()
+		await expect(page.getByRole('menuitemcheckbox', { name: '亮色', exact: true }))
+			.toHaveAttribute('aria-checked', 'true')
+		await expect(page.getByRole('menuitemcheckbox', { name: '深色', exact: true }))
+			.toHaveAttribute('aria-checked', 'false')
+		await page.keyboard.press('Escape')
+		await page.keyboard.press('Escape')
+		await expect(page.getByTestId('overflow-menu'))
+			.toHaveAttribute('aria-expanded', 'false')
+
+		await setTheme(page, 'dark')
 		await expect(page.locator('html'))
 			.toHaveAttribute('data-lab-theme', 'dark')
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'zh-TW')
-		await expect(localeSelect(page))
-			.toHaveValue('zh-TW')
 		expect(await page.evaluate(key => localStorage.getItem(key), THEME_STORAGE_KEY))
 			.toBe('dark')
 		expect(await page.evaluate(key => localStorage.getItem(key), LOCALE_STORAGE_KEY))
 			.toBe('zh-TW')
 		await expect(page)
-			.toHaveURL(/\?lang=zh-TW&probe=orthogonal#state$/)
+			.toHaveURL(/\?lang=zh-TW&probe=orthogonal&showcase=survey#state$/)
 
-		await localeSelect(page)
-			.selectOption('en')
+		await setLocale(page, 'en')
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'en')
 		await expect(page.locator('html'))
 			.toHaveAttribute('data-lab-theme', 'dark')
-		await expect(themeSelect(page))
-			.toHaveValue('dark')
 		expect(await page.evaluate(key => localStorage.getItem(key), THEME_STORAGE_KEY))
 			.toBe('dark')
 		await expect(page)
-			.toHaveURL(/\?lang=en&probe=orthogonal#state$/)
+			.toHaveURL(/\?lang=en&probe=orthogonal&showcase=survey#state$/)
 	})
 
 	test('changing locale preserves live Runtime state and shared inspector focus', async ({ page }) => {
@@ -131,8 +118,7 @@ test.describe('lab localization (issue #43)', () => {
 		await expect(page.getByTestId('blueprint-view-implementation'))
 			.toBeVisible()
 
-		await localeSelect(page)
-			.selectOption('zh-TW')
+		await setLocale(page, 'zh-TW')
 
 		// Locale is presentation-only: the same Runtime instance/state remains live and the same selected
 		// Blueprint widget remains focused; no Apply/recompile/showcase replacement is involved.
@@ -152,8 +138,7 @@ test.describe('lab localization (issue #43)', () => {
 
 	test('changing locale translates the current tutorial step without restarting tutorial progress', async ({ page }) => {
 		await page.goto('/?lang=en')
-		await page.getByRole('button', { name: 'Tutorial', exact: true })
-			.click()
+		await chooseTutorialMenuItem(page)
 
 		const rail = page.getByRole('complementary', { name: 'Tutorial' })
 		await expect(rail)
@@ -172,8 +157,7 @@ test.describe('lab localization (issue #43)', () => {
 		await expect(rail.getByText('One answer, stored as State', { exact: true }))
 			.toBeVisible()
 
-		await localeSelect(page)
-			.selectOption('zh-TW')
+		await setLocale(page, 'zh-TW')
 
 		const translatedRail = page.getByRole('complementary', { name: '教學' })
 		await expect(translatedRail.getByText('第 2 步，共 9 步', { exact: true }))
@@ -186,8 +170,7 @@ test.describe('lab localization (issue #43)', () => {
 
 	test('registered-plugin catalog chrome translates while plugin identity and source stay verbatim', async ({ page }) => {
 		await page.goto('/?lang=zh-TW&showcase=sandbox')
-		await page.getByRole('button', { name: 'Implementation', exact: true })
-			.click()
+		await openDeveloperTool(page, 'implementation')
 
 		await expect(page.getByRole('button', { name: '已註冊 plugins', exact: true }))
 			.toHaveAttribute('aria-pressed', 'true')

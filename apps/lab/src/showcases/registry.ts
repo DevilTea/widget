@@ -33,7 +33,7 @@ export interface ShowcaseEntry {
 	readonly label: string
 	/**
 	 * Test-only fixture: registered (so `?showcase=<id>`, `switchShowcase()` and the Preview frame resolve
-	 * it) but never listed in the header's showcase selector and never the default.
+	 * it) but never listed in the header's Examples menu and never the default.
 	 */
 	readonly hidden?: boolean
 	readonly system: WidgetSystem<AnyWidgetPluginTuple>
@@ -58,7 +58,7 @@ export interface ShowcaseEntry {
  *
  * `survey` is the default and the only showcase listed in the UI. `sandbox` is a hidden, test-only
  * fixture (minimal Counter/Text/... widgets plus the invalid/raw-slot recovery presets): it is not listed
- * in the showcase selector and is reachable only through `?showcase=sandbox` (see `resolveInitialShowcase`).
+ * in the Examples menu and is reachable only through `?showcase=sandbox` (see `resolveInitialShowcase`).
  */
 export const showcases: readonly ShowcaseEntry[] = [
 	{
@@ -82,7 +82,7 @@ export const showcases: readonly ShowcaseEntry[] = [
 	},
 ]
 
-/** The showcases the header's selector lists: every registered showcase that is not a hidden fixture. */
+/** The showcases the header's Examples menu lists: every registered showcase that is not a hidden fixture. */
 export const listedShowcases: readonly ShowcaseEntry[] = showcases.filter(showcase => showcase.hidden !== true)
 
 export const defaultShowcase: ShowcaseEntry = listedShowcases[0]!
@@ -92,9 +92,21 @@ export function getShowcase(id: string): ShowcaseEntry | undefined {
 }
 
 /**
+ * The URL (path, query and hash) with `?showcase=<id>` set, every other parameter kept as is. Used to keep
+ * the address bar in sync with the active showcase through `history.replaceState`, so a reload restores it
+ * (the id is written even for the default showcase: the URL always says what is open).
+ */
+export function urlWithShowcase(href: string, id: string): string {
+	const url = new URL(href)
+	url.searchParams.set('showcase', id)
+	return `${url.pathname}${url.search}${url.hash}`
+}
+
+/**
  * The showcase the Lab starts in: the `?showcase=<id>` URL parameter selects any registered showcase
  * (listed or hidden), so e2e can open the hidden `sandbox` fixture without UI. A missing, empty or
- * unknown id falls back to `defaultShowcase`. Read once at startup; the selector does not write the URL.
+ * unknown id falls back to `defaultShowcase`. Read once at startup; `App.vue` then keeps the parameter in sync
+ * with the active showcase (`urlWithShowcase`).
  */
 export function resolveInitialShowcase(search: string): ShowcaseEntry {
 	const id = new URLSearchParams(search)

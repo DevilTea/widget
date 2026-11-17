@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, test } from './fixtures'
+import { expect, expectShowcase, selectShowcase, test } from './fixtures'
 
 /**
  * Issue #28 Dependency Graph contract. Uses the Survey showcase (a richer topology than the default
@@ -86,10 +86,8 @@ for (const showcaseId of ['sandbox', 'survey'] as const) {
 // but the default): start on the hidden Sandbox, switch to Survey with the selector, then open Graph.
 test('survey graph nodes intersect the visible viewport on first open after switching showcase from the Sandbox (issue #27)', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
-	await page.getByLabel('Switch showcase')
-		.selectOption('survey')
-	await expect(page.getByLabel('Switch showcase'))
-		.toHaveValue('survey')
+	await selectShowcase(page, 'survey')
+	await expectShowcase(page, 'survey')
 	await expectGraphNodesIntersectViewportOnFirstOpen(page)
 })
 

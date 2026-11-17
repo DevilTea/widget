@@ -1,5 +1,5 @@
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { expect, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, openDeveloperTool, test } from './fixtures'
 
 const GATE_TEXT = 'Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.'
 
@@ -51,8 +51,8 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 			seam?.setDraftSourceText(source)
 		}, draft)
 
-		const tutorialButton = page.getByRole('button', { name: 'Tutorial', exact: true })
-		await tutorialButton.click()
+		const initiator = page.getByTestId('overflow-menu')
+		await chooseTutorialMenuItem(page)
 		const confirm = page.getByRole('alertdialog')
 		await expect(confirm)
 			.toBeVisible()
@@ -71,7 +71,7 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 
 		// Presentation-only suppression/reopen must retain the *original* dialog initiator. A new
 		// `showModal()` after widening must not replace this with body/gate focus.
-		await expect(tutorialButton)
+		await expect(initiator)
 			.toBeFocused()
 
 		// Cancel kept the draft intact and unapplied: Source still contains the marker after the top-layer
@@ -87,8 +87,7 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 test('Implementation owns long-line overflow locally at the 900px minimum supported width', async ({ page }) => {
 	await page.setViewportSize({ width: 900, height: 800 })
 	await page.goto('/?showcase=sandbox')
-	await page.getByRole('button', { name: 'Implementation', exact: true })
-		.click()
+	await openDeveloperTool(page, 'implementation')
 
 	const catalog = page.getByRole('navigation', { name: 'Registered plugins' })
 	await expect(catalog)

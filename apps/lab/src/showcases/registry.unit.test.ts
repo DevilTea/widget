@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultShowcase, getShowcase, listedShowcases, resolveInitialShowcase, showcases } from './registry'
+import { defaultShowcase, getShowcase, listedShowcases, resolveInitialShowcase, showcases, urlWithShowcase } from './registry'
 
 describe('showcase registry listing and ?showcase= selection', () => {
 	it('lists only Interactive Survey, which is the default; sandbox is a registered hidden fixture', () => {
@@ -24,6 +24,25 @@ describe('showcase registry listing and ?showcase= selection', () => {
 		for (const search of ['', '?lang=zh-TW', '?showcase=', '?showcase=crm', '?showcase=vuetify-tasks', '?showcase=SANDBOX']) {
 			expect(resolveInitialShowcase(search).id, search)
 				.toBe('survey')
+		}
+	})
+})
+
+describe('urlWithShowcase', () => {
+	it('sets the showcase parameter and keeps every other parameter, the path and the hash', () => {
+		expect(urlWithShowcase('http://localhost:4173/widget/lab/?lang=zh-TW&lab-test#frag', 'sandbox'))
+			.toBe('/widget/lab/?lang=zh-TW&lab-test=&showcase=sandbox#frag')
+		expect(urlWithShowcase('http://localhost:4173/?showcase=survey', 'sandbox'))
+			.toBe('/?showcase=sandbox')
+		expect(urlWithShowcase('http://localhost:4173/', 'survey'))
+			.toBe('/?showcase=survey')
+	})
+
+	it('round-trips through resolveInitialShowcase', () => {
+		for (const showcase of showcases) {
+			const url = new URL(urlWithShowcase('http://localhost/?lab-test', showcase.id), 'http://localhost')
+			expect(resolveInitialShowcase(url.search).id)
+				.toBe(showcase.id)
 		}
 	})
 })

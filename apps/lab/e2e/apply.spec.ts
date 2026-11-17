@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { expect, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectPreviewStatus, previewFrame, test } from './fixtures'
 
 /**
  * Issue #28 Source/Apply lifecycle contract, deliberately not involving Monaco at all — it uses the
@@ -42,10 +42,10 @@ test('draft source does not affect Preview until Apply, then Apply updates it', 
 	await expect(previewFrame(page)
 		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
 		.toHaveCount(0)
-	await expect(page.getByRole('button', { name: 'Apply' }))
+	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 		.toBeEnabled()
 
-	await page.getByRole('button', { name: 'Apply' })
+	await page.getByRole('button', { name: 'Apply', exact: true })
 		.click()
 	await expect(previewFrame(page)
 		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
@@ -55,54 +55,54 @@ test('draft source does not affect Preview until Apply, then Apply updates it', 
 test('an invalid draft preserves the prior active snapshot and surfaces a visible parse error', async ({ page }) => {
 	const draft = defaultSandboxPreset.sourceText.replace('Widget Lab sandbox', 'Widget Lab sandbox DRAFT')
 	await setDraftSourceText(page, draft)
-	await page.getByRole('button', { name: 'Apply' })
+	await page.getByRole('button', { name: 'Apply', exact: true })
 		.click()
 	await expect(previewFrame(page)
 		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
 		.toBeVisible()
 
 	// A `JSON.parse` failure at Apply time leaves `active` (and therefore Preview) untouched
-	// (`LabSession.apply()`) — the Blueprint/Runtime status pills stay exactly as they were.
+	// (`LabSession.apply()`): the committed Document and the Preview revision stay exactly as they were.
 	const invalidDraft = '{"broken":'
 	await setDraftSourceText(page, invalidDraft)
 	// The invalid draft is still the live Monaco model and must remain editable/visible; Apply is
 	// enabled because it is dirty even though the active Preview snapshot is still valid (#38 guard).
 	await expect(page.locator('.view-lines'))
 		.toHaveText(invalidDraft)
-	await expect(page.getByRole('button', { name: 'Apply' }))
+	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 		.toBeEnabled()
-	await page.getByRole('button', { name: 'Apply' })
+	await page.getByRole('button', { name: 'Apply', exact: true })
 		.click()
 
 	await expect(previewFrame(page)
 		.getByText('Widget Lab sandbox DRAFT', { exact: true }))
 		.toBeVisible()
-	await expect(page.getByText('Blueprint: valid'))
-		.toBeVisible()
-	await expect(page.getByText('Preview r1'))
-		.toBeVisible()
+	await expectPreviewStatus(page, 'current')
+	await expect(page.getByTestId('author-blueprint-status'))
+		.toContainText('valid · 0 diagnostics')
 	await expect(page.locator('.view-lines'))
 		.toHaveText(invalidDraft)
-	await expect(page.getByRole('button', { name: 'Apply' }))
+	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 		.toBeEnabled()
 
-	// Visible status: the Author JSON view's parse-error banner (`AuthorJsonView.vue`'s
-	// `store.parseError.value`) — LabHeader's own status pills never reflect a Lab-only parse error.
-	await expect(page.getByText('SyntaxError:'))
-		.toBeVisible()
+	// Visible status: the syntax error is a problem of the last Apply, so the header chip counts it and the
+	// Problems list under the editor names it (`LabStore.problems`), without touching the Document.
+	await expectDocumentStatus(page, { problems: 1 })
+	await expect(page.getByTestId('author-problems'))
+		.toContainText('SyntaxError:')
 })
 
 test('an invalid Document retains the prior Preview and explains the divergence', async ({ page }) => {
 	await setDraftSourceText(page, '{ "id": "root", "type": "NoSuchWidgetType" }')
-	await page.getByRole('button', { name: 'Apply' })
+	await page.getByRole('button', { name: 'Apply', exact: true })
 		.click()
-	await expect(page.getByText('Blueprint: invalid', { exact: false }))
-		.toBeVisible()
+	await expectDocumentStatus(page, { problems: 1 })
+	await expectPreviewStatus(page, 'stale')
 
 	await page.getByRole('tab', { name: 'Runtime' })
 		.click()
-	await expect(page.getByText('Running previous valid Preview revision r0; current Document is r1.', { exact: false }))
-		.toBeVisible()
+	await expect(page.getByTestId('preview-diverged-status'))
+		.toContainText('Your last change has 1 problem, so the preview still shows the last working version.')
 	await expect(page.getByRole('tabpanel', { name: 'Runtime' })
 		.getByText('Preview r0', { exact: true }))
 		.toBeVisible()

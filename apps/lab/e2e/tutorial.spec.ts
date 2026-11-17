@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { expect, previewFrame, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectShowcase, previewFrame, test } from './fixtures'
 
 /**
  * Issue #25 P1 tutorial contract. `fixtures.ts` pre-dismisses the Welcome card for every test in this
@@ -20,8 +20,7 @@ const WELCOME_TITLE = 'Widget Lab lets you change a real app, then see where tha
 const CONFIRM_TITLE = 'Starting the tutorial will load the Survey teaching example and replace your unapplied changes.'
 
 async function startTourFromHeader(page: Page): Promise<void> {
-	await page.getByRole('button', { name: 'Tutorial', exact: true })
-		.click()
+	await chooseTutorialMenuItem(page)
 	await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 		.toBeVisible()
 }
@@ -160,9 +159,11 @@ test.describe('welcome card', () => {
 		await page.reload()
 		await expect(page.getByRole('dialog', { name: WELCOME_TITLE }))
 			.toHaveCount(0)
-		const tutorialButton = page.getByRole('button', { name: 'Tutorial', exact: true })
-		await expect(tutorialButton)
+		await page.getByTestId('overflow-menu')
+			.click()
+		await expect(page.getByRole('menuitem', { name: 'Tutorial', exact: true }))
 			.toBeEnabled()
+		await page.keyboard.press('Escape')
 
 		// Lab use is fully unaffected.
 		await expect(page.getByRole('tab', { name: 'Author' }))
@@ -172,8 +173,7 @@ test.describe('welcome card', () => {
 	test('"Start the tour" dismisses the welcome card and begins the Survey tour', async ({ page }) => {
 		// Start from the hidden Sandbox fixture so the selector's final `survey` value proves the switch.
 		await page.goto('/?showcase=sandbox')
-		await expect(page.getByLabel('Switch showcase'))
-			.toHaveValue('sandbox')
+		await expectShowcase(page, 'sandbox')
 		await page.getByRole('button', { name: 'Start the tour' })
 			.click()
 
@@ -181,8 +181,7 @@ test.describe('welcome card', () => {
 			.toHaveCount(0)
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toBeVisible()
-		await expect(page.getByLabel('Switch showcase'))
-			.toHaveValue('survey')
+		await expectShowcase(page, 'survey')
 	})
 })
 
@@ -203,7 +202,7 @@ test('skipping the tour leaves the Lab fully usable', async ({ page }) => {
 		.click()
 	await expect(page.getByRole('tab', { name: 'Runtime' }))
 		.toHaveAttribute('aria-selected', 'true')
-	await expect(page.getByRole('button', { name: 'Apply' }))
+	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 		.toBeVisible()
 })
 
@@ -217,15 +216,15 @@ test.describe('dirty-draft confirmation dialog', () => {
 		await page.evaluate((source) => {
 			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)
 		}, '{ "id": "root", "type": "Text", "config": { "text": "dirtied by test" } }')
-		await expect(page.getByRole('button', { name: 'Apply' }))
+		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 			.toBeEnabled()
 	}
 
 	test('appears before starting, moves focus in, keeps the background out of the keyboard focus order, and Cancel preserves the draft while restoring focus to the header button', async ({ page }) => {
 		await dirtyTheDraft(page)
 
-		const tutorialButton = page.getByRole('button', { name: 'Tutorial', exact: true })
-		await tutorialButton.click()
+		const initiator = page.getByTestId('overflow-menu')
+		await chooseTutorialMenuItem(page)
 
 		const confirmDialog = page.getByRole('alertdialog', { name: CONFIRM_TITLE })
 		await expect(confirmDialog)
@@ -236,7 +235,7 @@ test.describe('dirty-draft confirmation dialog', () => {
 		await expect(startTourButton)
 			.toBeFocused()
 
-		// Background workbench controls (including the header button that opened this) are not
+		// Background workbench controls (including the header menu that opened this) are not
 		// keyboard-reachable while this is modal.
 		await sampleTabContainment(page)
 
@@ -244,12 +243,13 @@ test.describe('dirty-draft confirmation dialog', () => {
 			.click()
 		await expect(confirmDialog)
 			.toHaveCount(0)
-		// Closing restores focus to the initiating control (the header Tutorial button).
-		await expect(tutorialButton)
+		// Closing restores focus to the initiating control (the header menu's trigger: the Tutorial item
+		// itself is gone once its menu closed).
+		await expect(initiator)
 			.toBeFocused()
 
 		// Cancel touched nothing: the draft is still dirty and no tour started.
-		await expect(page.getByRole('button', { name: 'Apply' }))
+		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 			.toBeEnabled()
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toHaveCount(0)
@@ -272,8 +272,8 @@ test.describe('dirty-draft confirmation dialog', () => {
 	test('Escape is the safe Cancel path — preserves the draft and restores focus, same as the Cancel button', async ({ page }) => {
 		await dirtyTheDraft(page)
 
-		const tutorialButton = page.getByRole('button', { name: 'Tutorial', exact: true })
-		await tutorialButton.click()
+		const initiator = page.getByTestId('overflow-menu')
+		await chooseTutorialMenuItem(page)
 
 		const confirmDialog = page.getByRole('alertdialog', { name: CONFIRM_TITLE })
 		await expect(confirmDialog)
@@ -282,10 +282,10 @@ test.describe('dirty-draft confirmation dialog', () => {
 		await page.keyboard.press('Escape')
 		await expect(confirmDialog)
 			.toHaveCount(0)
-		await expect(tutorialButton)
+		await expect(initiator)
 			.toBeFocused()
 
-		await expect(page.getByRole('button', { name: 'Apply' }))
+		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 			.toBeEnabled()
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toHaveCount(0)
@@ -299,13 +299,12 @@ test.describe('dirty-draft confirmation dialog', () => {
 			.toBeVisible()
 
 		// The guard was released by Escape/Cancel — a fresh request is accepted, not coalesced away.
-		await tutorialButton.click()
+		await chooseTutorialMenuItem(page)
 		await page.getByRole('button', { name: 'Start tour' })
 			.click()
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toBeVisible()
-		await expect(page.getByLabel('Switch showcase'))
-			.toHaveValue('survey')
+		await expectShowcase(page, 'survey')
 	})
 })
 
@@ -313,21 +312,23 @@ test('rapid double-click on the header Tutorial button starts the tour exactly o
 	await page.goto('/')
 
 	// Two synthetic clicks dispatched in the SAME synchronous browser-side task — this is the realistic
-	// race `start-request.ts`'s guard exists for: a second click landing before Vue's reactive
-	// `:disabled` binding has actually patched the real DOM, not merely two well-spaced Playwright
-	// `.click()` calls (which the button's own `disabled` attribute would already block on its own).
+	// race `start-request.ts`'s guard exists for: a second activation landing before the menu has closed
+	// and Vue has patched the real DOM, not merely two well-spaced Playwright `.click()` calls.
+	await page.getByTestId('overflow-menu')
+		.click()
+	await expect(page.getByRole('menuitem', { name: 'Tutorial', exact: true }))
+		.toBeVisible()
 	await page.evaluate(() => {
-		const button = Array.from(document.querySelectorAll('button'))
-			.find(candidate => candidate.textContent?.trim() === 'Tutorial')
-		button?.click()
-		button?.click()
+		const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+			.find(candidate => candidate.textContent?.trim() === 'Tutorial') as HTMLElement | undefined
+		item?.click()
+		item?.click()
 	})
 
 	const rail = page.getByRole('complementary', { name: RAIL_LABEL })
 	await expect(rail)
 		.toBeVisible()
-	await expect(page.getByLabel('Switch showcase'))
-		.toHaveValue('survey')
+	await expectShowcase(page, 'survey')
 	await expect(rail.getByText('Step 1 of 9'))
 		.toBeVisible()
 
@@ -629,12 +630,14 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 
 	await expect(rail)
 		.toHaveCount(0)
-	const tutorialButton = page.getByRole('button', { name: 'Restart tutorial' })
-	await expect(tutorialButton)
+	await page.getByTestId('overflow-menu')
+		.click()
+	await expect(page.getByRole('menuitem', { name: 'Restart tutorial', exact: true }))
 		.toBeVisible()
+	await page.keyboard.press('Escape')
 
-	// Restart from the header button works after completion.
-	await tutorialButton.click()
+	// Restart from the header menu works after completion.
+	await chooseTutorialMenuItem(page, 'Restart tutorial')
 	await expect(rail)
 		.toBeVisible()
 	await expect(rail.getByText('This is the Interactive Survey — a sign-up form rendered from one JSON definition.'))

@@ -31,13 +31,37 @@ function ensureMonaco(): Promise<Monaco> {
 	return monacoPromise
 }
 
+/** An error marker (squiggle) over a half-open character range of the editor text. */
+export interface EditorMarker {
+	readonly start: number
+	readonly end: number
+	/** Shown verbatim in the hover. */
+	readonly message: string
+	/** Optional short code shown next to the message (a Core diagnostic code). */
+	readonly code?: string
+}
+
 export interface UseMonacoJsonEditorOptions {
 	readonly modelValue: Ref<string>
 	readonly onChange: (text: string) => void
+	/** Error markers to show; offsets refer to `modelValue`'s text. */
+	readonly markers?: Readonly<Ref<readonly EditorMarker[]>>
+	/** Invoked by the editor's Cmd/Ctrl+Enter command (Monaco otherwise inserts a line there). */
+	readonly onApply?: () => void
 }
 
 export interface UseMonacoJsonEditorResult {
 	readonly ready: Readonly<Ref<boolean>>
+	/** Selects the range, scrolls it into view and focuses the editor. No-op before the editor is ready. */
+	revealRange: (start: number, end: number) => void
+}
+
+const APPLY_ACTION_ID = 'widget-lab.apply'
+const ERROR_RULER_COLOR = '#e5484d'
+
+/** Hover text is Markdown; diagnostic messages are plain text, so escape every Markdown control character. */
+function escapeMarkdown(text: string): string {
+	return text.replace(/[\\`*_{}[\]()#+\-.!|<>~]/g, '\\$&')
 }
 
 export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options: UseMonacoJsonEditorOptions): UseMonacoJsonEditorResult {
@@ -47,6 +71,52 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 	let editor: MonacoEditor | null = null
 	let model: MonacoModel | null = null
 	let applyingExternalChange = false
+	let applyAction: { dispose: () => void } | null = null
+	let markerCollection: ReturnType<MonacoEditor['createDecorationsCollection']> | null = null
+
+	/**
+	 * Renders the markers as error squiggles. They are model decorations with Monaco's own `squiggly-error`
+	 * class rather than `setModelMarkers()` markers: in the vendored `editor-core` build, markers reach the
+	 * marker service but never become decorations (verified in the browser: the service holds them,
+	 * `getAllDecorations()` has no `squiggly-error` entry), so nothing would be drawn. The hover shows the
+	 * code and message verbatim.
+	 */
+	function syncMarkers(): void {
+		if (editor === null || model === null)
+			return
+		const current = model
+		const markers = options.markers?.value ?? []
+		markerCollection ??= editor.createDecorationsCollection()
+		markerCollection.set(markers.map((marker) => {
+			// `getPositionAt` clamps to the model, so a marker computed for slightly older text can never throw.
+			const from = current.getPositionAt(marker.start)
+			const to = current.getPositionAt(Math.max(marker.end, marker.start + 1))
+			return {
+				range: { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column },
+				options: {
+					className: 'squiggly-error',
+					hoverMessage: { value: escapeMarkdown(marker.code === undefined ? marker.message : `${marker.code}: ${marker.message}`) },
+					overviewRuler: { color: ERROR_RULER_COLOR, position: 4 /* OverviewRulerLane.Right */ },
+				},
+			}
+		}))
+	}
+
+	// A reveal asked for before the editor finished loading (Monaco is imported lazily) is replayed once it is up.
+	let pendingReveal: { readonly start: number, readonly end: number } | null = null
+
+	function revealRange(start: number, end: number): void {
+		if (editor === null || model === null) {
+			pendingReveal = { start, end }
+			return
+		}
+		const from = model.getPositionAt(start)
+		const to = model.getPositionAt(end)
+		const range = { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column }
+		editor.setSelection(range)
+		editor.revealRangeInCenterIfOutsideViewport(range)
+		editor.focus()
+	}
 
 	onMounted(async () => {
 		monaco = await ensureMonaco()
@@ -69,8 +139,25 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 				return
 			options.onChange(model.getValue())
 		})
+		// Monaco binds Cmd/Ctrl+Enter to "insert line below"; Apply takes it instead (audit U05). An action rather
+		// than `addCommand()`: a command registers a global dynamic keybinding whose disposable is discarded, so every
+		// remount of the editor would leak one; the action's keybinding is released with the action (disposed below).
+		applyAction = editor.addAction({
+			id: APPLY_ACTION_ID,
+			label: 'Apply',
+			keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+			run: () => options.onApply?.(),
+		})
+		syncMarkers()
 		ready.value = true
+		if (pendingReveal !== null) {
+			revealRange(pendingReveal.start, pendingReveal.end)
+			pendingReveal = null
+		}
 	})
+
+	if (options.markers !== undefined)
+		watch(options.markers, syncMarkers, { flush: 'post' })
 
 	watch(theme.theme, (next) => {
 		monaco?.editor.setTheme(syntaxThemeForLabTheme(next))
@@ -82,12 +169,15 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		applyingExternalChange = true
 		model.setValue(next)
 		applyingExternalChange = false
+		syncMarkers()
 	})
 
 	onBeforeUnmount(() => {
+		applyAction?.dispose()
+		applyAction = null
 		editor?.dispose()
 		model?.dispose()
 	})
 
-	return { ready }
+	return { ready, revealRange }
 }

@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, loadPreset, test } from './fixtures'
 
 test('Author workspace exposes Core catalog, Structure commands, and synchronized JSON', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
@@ -19,7 +19,7 @@ test('Author workspace exposes Core catalog, Structure commands, and synchronize
 	await page.getByRole('button', { name: 'Set value' })
 		.click()
 
-	await expect(page.getByTestId('document-status'))
+	await expect(page.getByTestId('author-document-status'))
 		.toContainText('Document r1')
 	await expect(page.getByTestId('author-command-outcome'))
 		.toContainText('Author command applied')
@@ -32,8 +32,7 @@ test('Author workspace exposes Core catalog, Structure commands, and synchronize
 
 test('recovery keeps unresolved/raw-slot nodes visible and navigates node diagnostics through Document focus', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
-	await page.locator('select[aria-label="Load a preset"]')
-		.selectOption('raw-slot-recovery')
+	await loadPreset(page, 'raw-slot-recovery')
 	await expect(page.getByTestId('author-recovery-status'))
 		.toContainText('1 unresolved')
 	await expect(page.getByTestId('author-recovery-status'))
@@ -83,8 +82,7 @@ test('recovery keeps unresolved/raw-slot nodes visible and navigates node diagno
 
 test('semantic diagnostics navigate to current Document focus while source-only diagnostics remain non-navigable', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
-	await page.locator('select[aria-label="Load a preset"]')
-		.selectOption('invalid-semantic')
+	await loadPreset(page, 'invalid-semantic')
 	await page.getByRole('tab', { name: 'Blueprint' })
 		.click()
 	await page.getByRole('button', { name: /All diagnostics/ })

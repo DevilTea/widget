@@ -1,4 +1,4 @@
-import { expect, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, previewFrame, test } from './fixtures'
 
 /**
  * Issue #28 Lab shell / workbench contract: the app loads with the header's showcase/preset/Apply
@@ -12,11 +12,16 @@ import { expect, previewFrame, test } from './fixtures'
 test('app loads with header controls and all five panel tabs', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
 
-	await expect(page.getByLabel('Switch showcase'))
+	await expectShowcase(page, 'sandbox')
+	await expect(page.getByTestId('examples-menu'))
 		.toBeVisible()
-	await expect(page.getByLabel('Load a preset'))
+	await expect(page.getByTestId('overflow-menu'))
 		.toBeVisible()
-	await expect(page.getByRole('button', { name: 'Apply' }))
+	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
+		.toBeVisible()
+	await expect(page.getByRole('button', { name: 'Revert' }))
+		.toBeVisible()
+	await expect(page.getByRole('button', { name: 'Format' }))
 		.toBeVisible()
 
 	for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
@@ -138,10 +143,8 @@ test('Source editor initializes only from built preview assets (issues #30, #102
 		.toContainText('Widget Lab sandbox')
 
 	// Every other panel/header control is unaffected (unchanged from before self-hosting).
-	await expect(page.getByText('Blueprint: valid'))
-		.toBeVisible()
-	await expect(page.getByText('Preview r0'))
-		.toBeVisible()
+	await expectDocumentStatus(page, { valid: true })
+	await expectPreviewStatus(page, 'current')
 	await page.getByRole('tab', { name: 'Blueprint' })
 		.click()
 	await expect(page.getByRole('tab', { name: 'Blueprint' }))

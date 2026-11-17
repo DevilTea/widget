@@ -20,7 +20,7 @@ Private, never-published workspace application with two roles:
    `@deviltea/widget-vue`.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
    `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default and the only showcase
-   listed in the header's showcase selector; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
+   listed in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
    test-only fixture (see "Showcase selection" below). The former `Product Prototype` (`crm`) and
    `Vuetify Task Workspace` (`vuetify-tasks`) showcases, and the CRM tour, were removed (tracking issue
    `DevilTea/widget#230`); new showcases are added after the Lab redesign.
@@ -28,32 +28,44 @@ Private, never-published workspace application with two roles:
 ### Showcase selection (`?showcase=<id>`)
 
 `src/showcases/registry.ts` registers every showcase; an entry with `hidden: true` is registered but not
-listed. `listedShowcases` (what the header selector and `LabStore.showcases` expose) and the default
+listed. `listedShowcases` (what the header's Examples menu and `LabStore.showcases` expose) and the default
 (`defaultShowcase`, the first listed entry: `survey`) exclude hidden entries. `resolveInitialShowcase()`
 reads the `?showcase=<id>` URL parameter once at startup (`App.vue` -> `createLabStore(initialShowcase)`),
 accepting any registered id, listed or hidden; a missing, empty or unknown id falls back to the default.
-The selector does not write the URL, and `?lang=` switching keeps `?showcase=` like any other unrelated
-parameter. When a hidden fixture is open, the selector lists it as an extra option so its value is never
-blank. This is how e2e opens the Sandbox (`?showcase=sandbox`, combinable with `?lab-test`); do not add a
+`App.vue` then keeps the parameter in step with the active showcase: it watches `LabStore.showcaseId` and
+rewrites it with `history.replaceState` (`urlWithShowcase()`; no history entry, other parameters, the path and
+the hash untouched, the id written even for the default showcase), so a reload restores the showcase;
+`?lang=` switching keeps `?showcase=` like any other unrelated parameter. When a hidden fixture is open, the
+Examples menu lists it as an extra item so what is open is always named. This is how e2e opens the Sandbox (`?showcase=sandbox`, combinable with `?lab-test`); do not add a
 user-facing affordance for hidden showcases.
 
 The app deploys to GitHub Pages together with `docs/site` (see "Deployment" below).
 
 - `src/lab/` — framework-agnostic, unit-tested authoring/runtime-host lifecycle logic: `LabSession`
   (JSON draft + authoritative `WidgetDocument` mutation + Runtime promotion, `types.ts`), `author.ts`
-  (high-level Structure commands lowered to `SourcePatch`), and the shared
-  cross-inspector focus store (`focus.ts`). No Vue
+  (high-level Structure commands lowered to `SourcePatch`), the shared
+  cross-inspector focus store (`focus.ts`), and the header/feedback logic of issue #230 PR 3a:
+  `json-locate.ts` (maps a source path onto offsets of the JSON text, and a `JSON.parse` failure onto an offset),
+  `problems.ts` (the Problems model, see "Problems list and editor squiggles" below), `status.ts` (the two
+  plain-language header chips), `example.ts` (what the Examples menu says is open) and `draft-guard.ts` (the
+  unapplied-draft confirmation state machine). No Vue
   import here on purpose — this is the regression-worthy core, independently testable.
 - `src/composables/use-lab-store.ts` — the one place that bridges `LabSession`/focus store into Vue
   `computed()` refs and supplies the `LabSessionHooks` seam (`detachPreview`/`mountPreview`) that
   guarantees unmount-before-dispose ordering via `nextTick()`. Owns `switchShowcase()` — the
   application-level whole-context replacement operation (teardown old Runtime → create target
   revision-0 Document/Runtime → mount it), serialized with Apply/preset/revert through one
-  `enqueue()` promise chain. Also owns `graphShowAbsent`/`graphShowIsolatedMembers` — Dependencies/Graph
+  `enqueue()` promise chain (`undoLastApply()` joins it too). It also exposes the derived header state
+  (`canApply`, `canUndo`, `status`, `problems`, `example`/`loadedPresetId`) and `authorView`/`showProblems()`.
+  Also owns `graphShowAbsent`/`graphShowIsolatedMembers` — Dependencies/Graph
   presentation preferences that deliberately live as plain refs on the `LabStore` object
   itself (not derived from `session`) so they survive Apply.
 - `src/composables/use-monaco-editor.ts` + `src/components/editor/MonacoJsonEditor.vue` — the entire
-  `modern-monaco` integration surface. Nothing else in this app imports `modern-monaco`.
+  `modern-monaco` integration surface. Nothing else in this app imports `modern-monaco`. Besides the text model it
+  owns the editor's Cmd/Ctrl+Enter command (Apply), error squiggles over caller-supplied offset ranges and
+  `revealRange()` (select + scroll + focus; a request made before Monaco has loaded is replayed once it is up).
+- `src/composables/use-draft-guard.ts` + `src/components/DraftGuardDialog.vue` — Vue bridge and native-dialog
+  confirmation for the unapplied-draft guard (see "Header, status chips and draft protection" below).
 - `src/composables/use-inspect-anchor.ts` — the Lab's one-line-per-renderer projection of `useWidget()` identity onto a
   renderer's root element. It only wraps `inspectAnchorAttributes` from `@deviltea/widget-inspector/anchor`, which owns
   the attribute contract (names, identity-only shape, nesting/multi-fragment semantics); `@deviltea/widget-vue` itself
@@ -98,8 +110,8 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   panel. `message` is never parsed for structure; every field beyond it comes from the diagnostic's own
   structured fields (`code`, `location`, `path`, `reason`, ...). The Lab does not enumerate or label
   diagnostic/failure codes: a code is shown verbatim, so a new Core code needs no Lab change.
-- `src/components/` — the app shell: `LabHeader.vue` (compact header: showcase selector, preset,
-  status, Apply), `Workbench.vue` (`dockview-vue` two-column default layout), `NonClosableTab.vue`
+- `src/components/` — the app shell: `LabHeader.vue` (the grouped header, see "Header, status chips and draft
+  protection" below), `Workbench.vue` (`dockview-vue` two-column default layout), `NonClosableTab.vue`
   (a custom Dockview `tabComponent` — `DevilTea/deviltea-labs#27` Finding 2: registered as `tabComponents.nonClosable` and
   selected via `AddPanelOptions.tabComponent` on each of the five canonical panels' `addPanel()` calls, it
   renders only a title, no close control, so those panels can never be closed; Dockview's own `Tab`
@@ -406,8 +418,13 @@ surfaces below. PikaCSS stays for everything not yet migrated and is removed in 
   inside `WelcomeCard`/`TutorialConfirmDialog`.
 - **Migrated so far.** `PanelDescriptionBar.vue`'s dismiss button is a `UButton` (ghost, neutral, `xs`, square,
   `i-lucide-x`, 24px target, solid accent focus ring), keeping its `aria-label` and the `button[aria-label="Dismiss"]`
-  selector. Native `<select>`s are deliberately not migrated (many specs use `selectOption`); that belongs to the
-  shell redesign.
+  selector. `LabHeader.vue` (menus, buttons, tooltips, badges, popover), `DraftGuardDialog.vue` (buttons) and the
+  Problems list (`author/AuthorProblems.vue`) are Nuxt UI + Tailwind too, together with the stale-preview notice in
+  `PreviewPanel.vue`. The header's native `<select>`s are gone; specs go through the helpers in `e2e/fixtures.ts`.
+  Notes from that migration: menu items cannot carry a `data-testid` (Nuxt UI does not forward it), so specs find them
+  by role and name; both header menus are `:modal="false"` (Reka's modal menu `aria-hidden`s the whole page, which axe
+  reports as `aria-hidden-focus`); a badge keeps its colour on the icon and uses the default text colour
+  (`:ui="{ label: 'text-default' }"`) because the tinted `text-error`/`text-warning` fail contrast on their tint.
 - **Cost.** The eager Lab chunk grows by about 168 KB raw / 54 KB gzip (Nuxt UI runtime, reka-ui, iconify,
   tailwind-variants, `UApp`) and the Lab CSS by about 197 KB raw / 25 KB gzip (the Nuxt UI component themes).
   The plugin's `experimental.componentDetection` would cut the CSS to about 184 KB (verified once) but is
@@ -597,6 +614,17 @@ the target session's already-authoritative revision-0 Runtime directly; re-apply
 source merely to trigger mounting is forbidden because Core correctly treats it as `changed:false`. All
 lifecycle-mutating operations remain serialized by the Lab store's transaction boundary.
 
+**Revert vs. Undo last apply.** Revert discards the unapplied draft only (disabled when there is none). *Undo last
+apply* (`LabSession.undoLastApply()`, `LabStore.undoLastApply()`) restores the source the Document held before its
+last revision-advancing commit, as a NEW Document revision through the same root-replacement commit and Preview
+promotion path as Apply (origin `'undo'` in Document Tools): it never rewinds Core's Document, so revision numbers keep
+growing (r0 -> r1 -> undo -> r2) and the Preview is replaced like for any valid commit. The session keeps a bounded
+stack (`LAB_UNDO_LIMIT` = 20) of the previous applied source text, pushed by every commit that advances the revision
+(JSON Apply, presets, Structure commands; not a structural no-op, not a failed parse, not Undo itself, so repeated Undo
+walks back one step at a time). It is unavailable while an unapplied draft exists (`draft-dirty`: it would silently discard typing;
+Revert or Apply first) and while another command runs; a fresh showcase session starts with an empty stack. The stack is a
+convenience over the Document commit path, not an authoritative history, redo does not exist, and nothing persists.
+
 ## Author workspace (Phase 3)
 
 The canonical authored surface is the outer `Author` panel with three Lab-owned views: `Catalog`,
@@ -624,8 +652,9 @@ Successful Structure commands and JSON Apply share `LabSession`'s Document commi
 boundary. A successful Structure commit rewrites both applied source text and the JSON draft to deterministic
 pretty JSON only when the draft still equals the command's captured clean text; a concurrent Monaco edit is
 preserved as dirty. Invalid Document commits advance the authored revision while retaining the prior valid
-Preview revision. No persistence, history, undo/redo, collaboration, drag/drop, or Runtime-state migration
-belongs to this Phase 3 workspace.
+Preview revision. No persistence, authoritative history, redo, collaboration, drag/drop, or Runtime-state migration
+belongs to this Phase 3 workspace (the bounded "Undo last apply" stack in "Apply lifecycle" is a convenience over the
+Document commit path, not a history).
 
 ### Author recovery and diagnostics (Phase 4)
 
@@ -654,8 +683,90 @@ diagnostic navigation writes Document-scoped shared focus; it never consumes Pre
 across diverged revisions. Structure and Blueprint read that same Document focus, while Runtime and
 Preview retain their Preview-revision scope.
 
-Phase 4 adds no persistence/history/undo/redo/editor framework, second validator, compatibility
+Phase 4 adds no persistence/history/redo/editor framework, second validator, compatibility
 implementation, or alternative authored source authority.
+
+### Header, status chips and draft protection
+
+`LabHeader.vue` is one row from 1280px up (`e2e/header-feedback.spec.ts` pins it at 1280/1440/1920), grouped by job:
+the title; the **Examples** menu; two plain-language **status chips** and a details popover; the edit actions
+**Apply / Revert / Undo / Format**; and an **overflow** menu with Tutorial, Theme, Language and a **Developer**
+submenu (Implementation, Document Tools). Hidden test fixtures stay reachable only through `?showcase=`.
+
+- *Examples menu* (`UDropdownMenu`): a Showcase group and the current showcase's Preset group (checkbox items, the
+  current one checked). The trigger always names the showcase and the last loaded preset
+  (`LabStore.loadedPresetId`: the showcase default on entry, then the last preset loaded), or "edited": `deriveExampleState()`
+  names the loaded preset only while there is no unapplied draft and the applied source text equals that preset's text (or
+  another preset of the showcase it exactly equals, so Undo back to the default names the default again), otherwise
+  `edited`. `data-showcase-id`, `data-preset-id` and `data-example-kind` are the machine-readable hooks.
+- *Status chips* (`deriveLabStatus()`): validity (`data-state` `valid` | `problems`, `data-problem-count`;
+  "Valid" / "N problems"; a JSON syntax error of the last Apply counts as one problem, since no Document was committed
+  from that text) and preview (`data-state` `current` | `stale` | `unavailable`: "Preview up to date" / "Preview shows the
+  last valid version" / "No preview yet"). `data-testid` stays `document-status` / `preview-status`. Revision numbers, the Blueprint
+  status and Linked / Diverged are developer details in the info popover (`status-details`; `revision-link-status` lives there).
+- *Edit actions*: a disabled action keeps `aria-disabled="true"` instead of `disabled` so it stays focusable and its tooltip
+  can say why (nothing to apply / revert / undo, or "apply or revert your unapplied edits before undoing"); the click
+  handler also refuses. Apply's tooltip shows the shortcut as key caps. Undo shows "Undo" and is
+  named "Undo last apply" for assistive technology (the visible text is contained in the name); because that name contains
+  "apply", specs and helpers must look the Apply button up with `exact: true` (or its test id).
+- *Cmd/Ctrl+Enter* applies from Monaco (an editor *action* registered in `use-monaco-editor.ts` and disposed with the editor; a
+  `addCommand()` would leak a global keybinding per remount; Monaco binds the key to "insert line" otherwise) and from anywhere
+  else through `App.vue`'s window listeners. Everything except Dockview tabs is handled in the **bubble** phase, so a control that
+  owns Enter wins (`defaultPrevented` is honoured; a Graph node's `@keydown.enter.prevent.stop` never reaches the window). A
+  focused Dockview tab preventDefaults Enter itself, so events whose target is inside `.dv-tab` are handled in the **capture** phase and
+  claimed (the bubble listener then skips them). It leaves events inside `.monaco-editor` (the editor action handles those) and open
+  `[role=menu]`s alone, and honours `canApply`.
+- *Unapplied-draft protection*: loading a preset or switching showcase while `isDirty` asks first
+  (`DraftGuardDialog`, a native `alertdialog` through `useModalDialog`, "Keep editing" first and focused, Escape = keep, "Discard
+  changes" continues). The guard lives in the header/UI layer (`createDraftGuardStore`), never inside
+  `LabStore.switchShowcase()`/`applyPreset()`, so the tutorial (which has its own dirty-draft confirmation and calls the store
+  directly) never asks twice. A header action that can open a dialog (the guard, the tutorial's confirmation) runs only after
+  its menu closed (`onCloseAutoFocus`) and, when the menu closed by Escape or an item select, focus was put back on the menu's trigger,
+  so the dialog's focus-return target is that trigger. When the menu closed because the user interacted *outside* it (clicked into
+  Monaco, onto the other header menu; tracked with `onInteractOutside`, as Reka's own handler does for non-modal menus) focus is left
+  where the user put it: refocusing the trigger there swallowed typing and closed the menu that click had just opened. A chosen item's
+  action runs in both cases. e2e (`menu focus handling`) pins both, and the menu helpers click a menu path once, with no retry.
+- `LabStore.authorView` (Catalog / Structure / JSON) lives in the store, not in `AuthorPanel`, so other surfaces can
+  open the JSON view; `showProblems()` sets `activeTab`, `authorView` and `problemsFocusPending`. `Workbench.vue` now also feeds
+  Dockview's active panel back into `activeTab` (and never re-activates the panel already active, which moves DOM focus out of
+  Monaco), so asking for a tab that is "already" `activeTab` in the store but no longer on screen still switches.
+- The tutorial rail is `position: absolute` against `.lab-body` (below the header) instead of fixed against the viewport, so it no longer
+  covers the header's overflow menu; docking it as a column is still a later step of issue #230.
+
+### Problems list and editor squiggles
+
+After an Apply the JSON view shows the Problems list under the editor (`AuthorProblems.vue`, in `AuthorJsonView.vue`).
+`collectProblems()` (`src/lab/problems.ts`) lists the last Apply's JSON `SyntaxError` (Lab-only, `SourceParseError`, first)
+and the committed Document's Core diagnostics in Core's order; `code` and `message` are Core's (or the engine's), verbatim and
+never translated, parsed or classified. Each row jumps to a source range and has an error squiggle over the same range.
+`LabStore.problems` depends only on the committed Blueprint and the parse error (reference-stable computeds), not on the
+per-keystroke session tick, so typing re-runs neither the inspection nor the collection; the editor's squiggle ranges are
+recomputed from the current text on every edit, because they must follow it.
+
+The range is located by source path in the **current editor text**, so it stays on target while the user edits and an
+unapplied draft is still mapped (a note says the rows are "from the last Apply"; an unparsable draft has no ranges). The
+path is `blueprint.getSourcePath(node)` of the diagnostic's location node plus its own relative part (`invalid-widget-config`'s
+`path` is config-relative, the other diagnostics' `path` is node-relative, a `slot` / `slot-child` location adds
+`slots[slot][index]`, a source-level diagnostic's `path` is absolute). `problemSpan()` then highlights a primitive value whole,
+a widget (or one of its Property/Method members) by its `"id"` (else `"type"`) member, any other object/array by its property key
+(or, for an array item or the root, the line it opens on), never a whole subtree; a path that no longer exists resolves to its
+nearest existing ancestor. A syntax error is located by the engine's message position when it has one (V8 does not always:
+"Unexpected token ..." has none) and otherwise by `json-locate.ts`'s own scan of the same text. A Core diagnostic with no node
+(`getSourcePath()` returns `null`) points at the root.
+
+Squiggles are model decorations with Monaco's `squiggly-error` class, not `setModelMarkers()` markers: in the vendored
+`editor-core` build the marker service holds markers but never turns them into decorations (checked in a real browser), so
+markers would draw nothing. `data-marker-count` on `[data-testid=json-editor]` is the number of ranges handed to the editor
+(only lines in the viewport render a `.squiggly-error` element). Core's repeated cycle diagnostics are listed as Core
+reports them (audit U16 is a later item). The Blueprint panel's "All diagnostics" view is unchanged.
+
+### Stale-preview notice
+
+When the Preview lags the Document the notice above it says why and offers an action: "Your last change has N problems,
+so the preview still shows the last working version." with **Show problems** (`preview-show-problems`, `store.showProblems()`),
+or, if the Document is valid but the Preview has not caught up, a plain "does not show your latest change yet" line without
+the button (a valid Document has no problems to show).
+`data-testid="preview-diverged-status"`; revision numbers appear only in the header's details popover.
 
 ### Separate inspector panels with shared presentation primitives (Phase 5)
 
@@ -695,8 +806,8 @@ there are any. It is a read-only projection of the current Document source, neve
 authority or validator; invalid/recovery Documents show that the Core precondition is unavailable.
 
 The Document trace is a finite, session-only ring of Lab-observed parse/commit/patch/conflict metadata.
-It is explicitly telemetry: no persistence, replay, restore, undo/redo, collaboration, or authoritative
-history semantics may be added. Runtime/Preview behavior, revision-scoped focus, Author recovery,
+It is explicitly telemetry: no persistence, replay, restore, redo, collaboration, or authoritative
+history semantics may be added (an "Undo last apply" commit is just another observed commit, origin `undo`). Runtime/Preview behavior, revision-scoped focus, Author recovery,
 Blueprint/Runtime separation, Dependencies, and Implementation entry points remain unchanged.
 
 ## Active follow-up backlog
@@ -729,6 +840,13 @@ until it lands, workbench/editor/browser-integration behavior has no automated c
 compensate by writing broad DOM-simulation tests for it, and once the harness exists, put
 browser-semantics assertions (focus, keyboard navigation, dialog behavior) there instead of in
 happy-dom unit tests.
+
+Browser specs reach the header's menus only through the helpers in `e2e/fixtures.ts` (`selectShowcase`, `loadPreset`,
+`setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, and the `expectShowcase` /
+`expectDocumentStatus` / `expectPreviewStatus` assertions), never with ad-hoc menu clicks, so a future header change touches one
+file. Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
+Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a
+JSON string (double-click a word, `keyboard.insertText`) instead of inserting a whole document.
 
 Root AGENTS.md's coverage policy lists the packages whose runtime source joins the root Vitest V8
 coverage report; this app is **not** on that list and its sources are excluded from the coverage

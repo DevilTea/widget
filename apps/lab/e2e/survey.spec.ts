@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSurveyPreset, surveyPresets } from '../src/showcases/survey/presets'
-import { expect, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectPreviewStatus, loadPreset, openDeveloperTool, previewFrame, test } from './fixtures'
 
 /**
  * Interactive Survey acceptance contract: the Maker Space open-day sign-up survey
@@ -86,8 +86,7 @@ test('1. JSON to UI: the default document renders as a form, Blueprint is valid,
 		.click()
 	await expect(page.locator('.view-lines'))
 		.toContainText('Maker Space open day: sign-up')
-	await expect(page.getByTestId('document-status'))
-		.toContainText('Blueprint: valid (0 diagnostics)')
+	await expectDocumentStatus(page, { valid: true })
 
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
@@ -184,8 +183,7 @@ test('3. multi-language: the survey switches to 繁體中文 while the Lab chrom
 	// The Lab's own chrome is unaffected by the survey's language.
 	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 		.toBeVisible()
-	await expect(page.getByTestId('document-status'))
-		.toContainText('Blueprint: valid')
+	await expectDocumentStatus(page, { valid: true })
 
 	await preview.getByLabel('Language')
 		.selectOption('en')
@@ -202,11 +200,9 @@ test('4. editor: a fifth question without a zh-TW label is a located error until
 	await setDraft(page, JSON.stringify(document, null, 2))
 	await apply(page)
 
-	await expect(page.getByTestId('document-status'))
-		.toContainText('Blueprint: invalid (1 diagnostic)')
+	await expectDocumentStatus(page, { problems: 1 })
 	// The previous revision keeps running in Preview: the new question is not rendered.
-	await expect(page.getByTestId('preview-status'))
-		.toContainText('Preview r0')
+	await expectPreviewStatus(page, 'stale')
 	await expect(preview.getByText('Anything else we should know?'))
 		.toHaveCount(0)
 
@@ -227,20 +223,16 @@ test('4. editor: a fifth question without a zh-TW label is a located error until
 	document.slots.questions[4].config.label['zh-TW'] = '還有什麼想讓我們知道的嗎？'
 	await setDraft(page, JSON.stringify(document, null, 2))
 	await apply(page)
-	await expect(page.getByTestId('document-status'))
-		.toContainText('Blueprint: valid (0 diagnostics)')
-	await expect(page.getByTestId('preview-status'))
-		.toContainText('Preview r2')
+	await expectDocumentStatus(page, { valid: true })
+	await expectPreviewStatus(page, 'current')
 	await expect(preview.getByText('Anything else we should know?'))
 		.toBeVisible()
 })
 
 test('5. located diagnostics: the AI draft preset lists five, and fixing "mod" removes exactly one', async ({ page }) => {
 	await openSurvey(page)
-	await page.locator('select[aria-label="Load a preset"]')
-		.selectOption('survey-ai-draft')
-	await expect(page.getByTestId('document-status'))
-		.toContainText('Blueprint: invalid (5 diagnostics)')
+	await loadPreset(page, 'survey-ai-draft')
+	await expectDocumentStatus(page, { problems: 5 })
 
 	await openBlueprintDiagnostics(page)
 	const rows = await diagnosticRows(page)
@@ -282,8 +274,7 @@ test('5. located diagnostics: the AI draft preset lists five, and fixing "mod" r
 		.toBe(surveyPresets.find(preset => preset.id === 'survey-ai-draft')!.sourceText)
 	await setDraft(page, fixed)
 	await apply(page)
-	await expect(page.getByTestId('document-status'))
-		.toContainText('Blueprint: invalid (4 diagnostics)')
+	await expectDocumentStatus(page, { problems: 4 })
 	await openBlueprintDiagnostics(page)
 	expect((await diagnosticRows(page)).map(row => row.code))
 		.not
@@ -298,8 +289,7 @@ test('6. cycle: an edit that makes Guests and the kids\' corner depend on each o
 	question(document, 'guests').config.visibleWhen = { question: 'sessions', op: 'includes', value: 'kids' }
 	await setDraft(page, JSON.stringify(document, null, 2))
 	await apply(page)
-	await expect(page.getByTestId('document-status'))
-		.toContainText('Blueprint: invalid (4 diagnostics)')
+	await expectDocumentStatus(page, { problems: 4 })
 
 	await openBlueprintDiagnostics(page)
 	const rows = await diagnosticRows(page)
@@ -337,16 +327,13 @@ test('6. cycle: an edit that makes Guests and the kids\' corner depend on each o
 	// Reverting the edit makes the Document valid again.
 	await setDraft(page, defaultSurveyPreset.sourceText)
 	await apply(page)
-	await expect(page.getByTestId('document-status'))
-		.toContainText('Blueprint: valid (0 diagnostics)')
+	await expectDocumentStatus(page, { valid: true })
 })
 
 test('6b. the cycle preset is the same four evaluation cycles', async ({ page }) => {
 	await openSurvey(page)
-	await page.locator('select[aria-label="Load a preset"]')
-		.selectOption('survey-cycle')
-	await expect(page.getByTestId('document-status'))
-		.toContainText('Blueprint: invalid (4 diagnostics)')
+	await loadPreset(page, 'survey-cycle')
+	await expectDocumentStatus(page, { problems: 4 })
 	await openBlueprintDiagnostics(page)
 	expect((await diagnosticRows(page)).map(row => row.code))
 		.toEqual(['property-evaluation-cycle', 'property-evaluation-cycle', 'property-evaluation-cycle', 'property-evaluation-cycle'])
@@ -490,8 +477,7 @@ test('9. AI context: Catalog shows the Numeric config schema and copies the cata
 		.toContain('Condition')
 
 	// Implementation for `Numeric` curates its plugin file.
-	await page.getByRole('button', { name: 'Implementation', exact: true })
-		.click()
+	await openDeveloperTool(page, 'implementation')
 	await page.getByRole('navigation', { name: 'Registered plugins' })
 		.getByRole('button', { name: 'Numeric', exact: true })
 		.click()

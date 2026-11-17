@@ -1,4 +1,4 @@
-import { expect, previewFrame, test } from './fixtures'
+import { expect, previewFrame, setTheme, test } from './fixtures'
 
 const THEME_STORAGE_KEY = 'widget-lab:theme'
 
@@ -14,9 +14,6 @@ test.describe('lab theme (issue #44)', () => {
 		await seedTheme(context, 'light')
 		await page.goto('/?showcase=sandbox')
 
-		const themeSelect = page.getByLabel('Theme')
-		await expect(themeSelect)
-			.toHaveValue('light')
 		await expect(page.locator('html'))
 			.toHaveAttribute('data-lab-theme', 'light')
 		await expect(page.locator('.monaco-editor'))
@@ -42,7 +39,7 @@ test.describe('lab theme (issue #44)', () => {
 			.getByText('count: 1 · doubled: 2', { exact: true }))
 			.toBeVisible()
 
-		await themeSelect.selectOption('dark')
+		await setTheme(page, 'dark')
 		await expect(page.locator('html'))
 			.toHaveAttribute('data-lab-theme', 'dark')
 		await expect(previewFrame(page)
@@ -68,8 +65,8 @@ test.describe('lab theme (issue #44)', () => {
 			.toBe(labBackgroundDark)
 
 		await page.reload()
-		await expect(themeSelect)
-			.toHaveValue('dark')
+		await expect(page.locator('html'))
+			.toHaveAttribute('data-lab-theme', 'dark')
 	})
 
 	test('rehighlights already-loaded Implementation source when theme changes without reloading source text', async ({ context, page, blockedRequestUrls }) => {
@@ -99,8 +96,7 @@ test.describe('lab theme (issue #44)', () => {
 		})
 		const lightImportColor = await importTokenColor()
 
-		await page.getByLabel('Theme')
-			.selectOption('dark')
+		await setTheme(page, 'dark')
 		await expect.poll(async () => pre.evaluate(element => getComputedStyle(element).backgroundColor))
 			.not.toBe(lightBackground)
 		// Shiki legitimately changes token segmentation between themes, so do not compare span counts.

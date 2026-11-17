@@ -1,4 +1,4 @@
-import { expect, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectShowcase, loadPreset, openDeveloperTool, previewFrame, selectShowcase, test } from './fixtures'
 
 test.describe('Document Tools developer panel (Phase 6)', () => {
 	test('is lazy-added, closable, and reopenable without changing canonical panels', async ({ page }) => {
@@ -11,8 +11,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 		const documentToolsChunk = /\/assets\/DocumentToolsPanel-[^/]+\.js(?:\?.*)?$/
 		expect(requestedUrls.some(url => documentToolsChunk.test(url)))
 			.toBe(false)
-		await page.getByTestId('open-document-tools')
-			.click()
+		await openDeveloperTool(page, 'document-tools')
 
 		const toolsTab = page.getByRole('tab', { name: 'Document Tools' })
 		await expect(toolsTab)
@@ -31,8 +30,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 		await expect(toolsTab)
 			.toHaveCount(0)
 
-		await page.getByTestId('open-document-tools')
-			.click()
+		await openDeveloperTool(page, 'document-tools')
 		await expect(page.getByRole('tab', { name: 'Document Tools' }))
 			.toHaveAttribute('aria-selected', 'true')
 		for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
@@ -43,8 +41,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 
 	test('shows latest Structure/JSON patches, copies the patch, and reports a non-mutating Core conflict', async ({ page }) => {
 		await page.goto('/?lab-test&showcase=sandbox')
-		await page.getByTestId('open-document-tools')
-			.click()
+		await openDeveloperTool(page, 'document-tools')
 
 		await page.getByRole('tab', { name: 'Author' })
 			.click()
@@ -57,8 +54,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 		await page.getByRole('button', { name: 'Set value' })
 			.click()
 
-		await page.getByTestId('open-document-tools')
-			.click()
+		await openDeveloperTool(page, 'document-tools')
 		await expect(page.getByTestId('document-tools-latest-patch'))
 			.toContainText('Structure command')
 		await expect(page.getByTestId('document-tools-patch'))
@@ -102,8 +98,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 		})))
 		await page.getByRole('button', { name: 'Apply', exact: true })
 			.click()
-		await page.getByTestId('open-document-tools')
-			.click()
+		await openDeveloperTool(page, 'document-tools')
 		await expect(page.getByTestId('document-tools-latest-patch'))
 			.toContainText('JSON Apply')
 		await expect(page.getByTestId('document-tools-patch'))
@@ -115,34 +110,28 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 
 	test('clears the conflict result when a new Document revision is committed', async ({ page }) => {
 		await page.goto('/?lab-test&showcase=sandbox')
-		await page.getByTestId('open-document-tools')
-			.click()
+		await openDeveloperTool(page, 'document-tools')
 		await page.getByTestId('document-tools-run-conflict')
 			.click()
 		await expect(page.getByTestId('document-tools-conflict-result'))
 			.toBeVisible()
 
-		await page.getByLabel('Load a preset')
-			.selectOption('invalid-semantic')
-		await expect(page.getByTestId('document-status'))
-			.toContainText('invalid')
+		await loadPreset(page, 'invalid-semantic')
+		await expectDocumentStatus(page, { problems: 1 })
 		await expect(page.getByTestId('document-tools-conflict-result'))
 			.toHaveCount(0)
 	})
 
 	test('clears the conflict result when a showcase replaces the session at the same revision', async ({ page }) => {
 		await page.goto('/?lab-test&showcase=sandbox')
-		await page.getByTestId('open-document-tools')
-			.click()
+		await openDeveloperTool(page, 'document-tools')
 		await page.getByTestId('document-tools-run-conflict')
 			.click()
 		await expect(page.getByTestId('document-tools-conflict-result'))
 			.toBeVisible()
 
-		await page.getByLabel('Switch showcase')
-			.selectOption('survey')
-		await expect(page.getByLabel('Switch showcase'))
-			.toHaveValue('survey')
+		await selectShowcase(page, 'survey')
+		await expectShowcase(page, 'survey')
 		await expect(page.getByTestId('document-tools-conflict-result'))
 			.toHaveCount(0)
 	})

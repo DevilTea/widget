@@ -1,13 +1,9 @@
-import { expect, test } from './fixtures'
+import { expect, setLocale, test } from './fixtures'
 
 interface LabTestWindow {
 	__WIDGET_LAB_TEST__?: {
 		setDraftSourceText: (text: string) => void
 	}
-}
-
-function localeSelect(page: import('@playwright/test').Page) {
-	return page.locator('select:has(option[value="zh-TW"])')
 }
 
 test('core diagnostic text is not localized when presentation locale changes (issue #43)', async ({ page }) => {
@@ -39,8 +35,7 @@ test('core diagnostic text is not localized when presentation locale changes (is
 		.nth(1)
 	const englishDiagnostic = await diagnosticMessage.textContent()
 
-	await localeSelect(page)
-		.selectOption('zh-TW')
+	await setLocale(page, 'zh-TW')
 	await expect(page.getByRole('button', { name: /所有問題/ }))
 		.toBeVisible()
 	await expect(diagnosticItem.locator('span')

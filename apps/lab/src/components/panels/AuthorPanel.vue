@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
+import { useLabStore } from '../../composables/use-lab-store'
 import AuthorCatalogView from '../author/AuthorCatalogView.vue'
 import AuthorJsonView from '../author/AuthorJsonView.vue'
 import AuthorStatusSurface from '../author/AuthorStatusSurface.vue'
@@ -8,8 +8,10 @@ import AuthorStructureView from '../author/AuthorStructureView.vue'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
 const i18n = useLabI18n()
+const store = useLabStore()
 // JSON remains the initial view so the former Source panel's eager Monaco mount and loading contract stay intact.
-const view = ref<'catalog' | 'structure' | 'json'>('json')
+// The open view lives on the store so other surfaces (the stale-preview notice's "Show problems") can open JSON.
+const view = store.authorView
 </script>
 
 <template>

@@ -122,7 +122,7 @@ function runConflictDemo(): void {
 				</p>
 				<template v-else>
 					<div :class="pika({ marginTop: '6px', fontSize: '11px', color: 'var(--lab-color-text-muted)' })">
-						{{ i18n.t(latestPatch.origin === 'json' ? 'JSON Apply' : 'Structure command') }} · {{ i18n.t('Document r{revision}', { revision: latestPatch.revision }) }}
+						{{ i18n.t(latestPatch.origin === 'json' ? 'JSON Apply' : latestPatch.origin === 'undo' ? 'Undo last apply' : 'Structure command') }} · {{ i18n.t('Document r{revision}', { revision: latestPatch.revision }) }}
 					</div>
 					<pre
 						data-testid="document-tools-patch"
@@ -226,7 +226,7 @@ function runConflictDemo(): void {
 						:class="pika({ marginBottom: '4px' })"
 					>
 						<template v-if="event.kind === 'commit'">
-							{{ i18n.t(event.origin === 'json' ? 'JSON commit observed' : 'Structure commit observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }} · {{ i18n.t(event.changed ? 'changed' : 'no-op') }}
+							{{ i18n.t(event.origin === 'json' ? 'JSON commit observed' : event.origin === 'undo' ? 'Undo commit observed' : 'Structure commit observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }} · {{ i18n.t(event.changed ? 'changed' : 'no-op') }}
 						</template>
 						<template v-else-if="event.kind === 'parse-error'">
 							{{ i18n.t('JSON draft parse error observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }}

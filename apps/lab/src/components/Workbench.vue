@@ -6,6 +6,7 @@
  * it never becomes the semantic model for Author/Blueprint/Runtime/Dependencies/Preview.
  */
 import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue'
+import type { LabToolTab } from '../composables/use-lab-store'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
 import { defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
 import { useDocumentTools } from '../composables/use-document-tools'
@@ -159,17 +160,32 @@ function onReady(event: DockviewReadyEvent): void {
  * Runtime" link) needs: `LabStore.activeTab` already existed as a plain `Ref<LabToolTab>` with no
  * observable effect on Dockview — this is the one place that makes assigning it actually switch the
  * visible tab, via `DockviewApi.getPanel(id)?.api.setActive()` (`dockview-core`'s
- * `DockviewPanelApi.setActive()`). One-directional on purpose (Dockview -> `activeTab` is not wired):
- * nothing outside the tutorial reads `activeTab` today, so keeping this minimal avoids a second source
- * of truth for "which tab is active" that the rest of the shell would have to stay in sync with.
+ * `DockviewPanelApi.setActive()`). It is also followed the other way (Dockview -> `activeTab`): a tab the
+ * user clicks becomes `activeTab`, so a later request for a tab that is already `activeTab` in the store but
+ * no longer on screen ("Show problems" asking for Author after the user opened Runtime) still switches.
+ * Both directions only ever set the same value, so they cannot loop.
  */
+const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'blueprint', 'runtime', 'dependencies', 'preview'])
+
 function watchTutorialTabActivation(api: DockviewApi): void {
-	stopTutorialTabActivationWatch = watch(
+	const stopWatch = watch(
 		() => store.activeTab.value,
 		(tab) => {
-			api.getPanel(tab)?.api.setActive()
+			// Activating moves DOM focus (into the panel's group), so never re-activate what the user already
+			// activated themselves: that is what a tab click echoed through `activeTab` would otherwise do,
+			// stealing focus from, say, the Monaco editor the user just clicked into.
+			if (api.activePanel?.id !== tab)
+				api.getPanel(tab)?.api.setActive()
 		},
 	)
+	const activePanelChange = api.onDidActivePanelChange(({ panel }) => {
+		if (panel !== undefined && CANONICAL_TAB_IDS.has(panel.id))
+			store.activeTab.value = panel.id as LabToolTab
+	})
+	stopTutorialTabActivationWatch = () => {
+		stopWatch()
+		activePanelChange.dispose()
+	}
 }
 
 /**

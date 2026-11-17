@@ -15,8 +15,9 @@ export interface DeterministicStartInput {
 	/**
 	 * `LabStore.isDirty.value` at the moment start/restart was requested — whether the CURRENT
 	 * showcase's draft Source text differs from its last applied snapshot. Switching away from a
-	 * different, non-dirty showcase is not itself a reason to confirm (the existing showcase selector
-	 * already does that unprompted) — only an unapplied draft edit is.
+	 * different, non-dirty showcase is not itself a reason to confirm (the Examples menu switches showcases
+	 * unprompted too, and asks only about an unapplied draft, through the separate draft guard) — only an
+	 * unapplied draft edit is.
 	 */
 	readonly isDirty: boolean
 }

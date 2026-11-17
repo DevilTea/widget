@@ -47,10 +47,28 @@ pnpm --filter widget-lab test:pages
 the last demonstrating a cross-widget `registerDeps` dependency) with three preset source texts: a
 fully valid interactive one, one that is intentionally semantically invalid (to demo diagnostics), and
 one that exercises Blueprint recovery (an unresolved node and a raw-slot placement). These are
-test-only fixtures for this shell, hidden from the showcase selector. "Interactive Survey" is the default
+test-only fixtures for this shell, hidden from the Examples menu. "Interactive Survey" is the default
 and only listed showcase (registered in `src/showcases/registry.ts`, which also registers the hidden
 `sandbox`). Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
-missing or unknown id falls back to the default.
+missing or unknown id falls back to the default. The parameter follows the active showcase (the Lab rewrites it with
+`history.replaceState`), so reloading restores it.
+
+## Header, editing feedback and Undo
+
+The header is one row from 1280px up: the **Examples** menu (showcase and preset; it always names the showcase and the
+last loaded preset, or "edited" once the document changes), two plain-language status chips (the document is *Valid* or
+has *N problems*; the preview is *up to date* or *shows the last valid version*, with revisions and linkage in an info
+popover), the edit actions **Apply / Revert / Undo / Format**, and an overflow menu with Tutorial, Theme, Language and a
+Developer submenu (Implementation, Document Tools).
+
+- **Apply** is also Cmd/Ctrl+Enter, inside the Monaco editor and from any focused tab; its tooltip shows the keys.
+- **Revert** discards the unapplied editor draft. **Undo** ("Undo last apply") restores the previously applied source as a
+  *new* Document revision (through the same commit path as Apply, up to 20 steps back); it is unavailable while an
+  unapplied draft exists, and a tooltip says why for every disabled action.
+- Loading a preset or switching showcase over an unapplied draft asks first (Keep editing / Discard changes).
+- After an Apply that leaves problems, the Author JSON view lists them under the editor (Core's code and message verbatim,
+  or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. The preview shows a
+  plain-language notice with **Show problems** while it still shows the last working version.
 
 ## Dependency Graph
 

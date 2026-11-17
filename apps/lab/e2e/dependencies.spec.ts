@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, test } from './fixtures'
+import { expect, setTheme, test } from './fixtures'
 
 async function openSurveyDependencies(page: Page) {
 	await page.goto('/')
@@ -188,8 +188,7 @@ test('Relations keeps page-level width contained at the 900px minimum in light a
 		.toBeVisible()
 
 	for (const theme of ['light', 'dark'] as const) {
-		await page.getByLabel('Theme')
-			.selectOption(theme)
+		await setTheme(page, theme)
 		await expect.poll(async () => page.evaluate(() => ({
 			scrollWidth: document.documentElement.scrollWidth,
 			clientWidth: document.documentElement.clientWidth,
