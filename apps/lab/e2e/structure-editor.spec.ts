@@ -64,24 +64,19 @@ test.describe('type-aware controls', () => {
 			.toBeChecked()
 	})
 
-	test('a number box applies on Enter, refuses what the schema rules out and says so', async ({ page }) => {
+	test('a number box applies on Enter, refuses what is not a number, and leaves limits to Core', async ({ page }) => {
 		const editor = await openStructure(page, /phone : ShortAnswer/)
-		// `maxLength` is an integer of at least 1.
 		const maxLength = field(editor, 'maxLength')
 			.getByRole('textbox')
-		await maxLength.fill('2.5')
-		await maxLength.press('Enter')
-		await expect(field(editor, 'maxLength')
-			.getByRole('alert'))
-			.toHaveText('Enter a valid value of the same scalar type.')
-		await expect(page.getByTestId('author-command-outcome'))
-			.toHaveCount(0)
-
-		await maxLength.fill('0')
-		await maxLength.press('Enter')
-		await expect(field(editor, 'maxLength')
-			.getByRole('alert'))
-			.toBeVisible()
+		for (const text of ['abc', '0x10', 'Infinity', '']) {
+			await maxLength.fill(text)
+			await maxLength.press('Enter')
+			await expect(field(editor, 'maxLength')
+				.getByRole('alert'))
+				.toHaveText('Enter a number, such as 12 or 2.5.')
+			await expect(page.getByTestId('author-command-outcome'))
+				.toHaveCount(0)
+		}
 
 		await maxLength.fill('12')
 		await maxLength.press('Enter')
@@ -89,6 +84,17 @@ test.describe('type-aware controls', () => {
 			.toContainText('Author command applied')
 		expect(configOf(await documentSource(page), 'phone').maxLength)
 			.toBe(12)
+
+		// `maxLength` is an integer of at least 1 in the schema. The editor does not judge that: the value goes to Core,
+		// which reports it, so the schema and the compiler cannot disagree about what is allowed.
+		await maxLength.fill('2.5')
+		await maxLength.press('Enter')
+		await expect(page.getByTestId('author-command-outcome'))
+			.toContainText('Author command applied')
+		expect(configOf(await documentSource(page), 'phone').maxLength)
+			.toBe(2.5)
+		await expect(page.getByTestId('document-status'))
+			.toHaveAttribute('data-state', 'problems')
 	})
 
 	test('an enum is a list of the schema\'s options, also inside a condition', async ({ page }) => {
@@ -100,8 +106,14 @@ test.describe('type-aware controls', () => {
 			.toHaveValue(/\d/)
 		await expect(op.locator('option:checked'))
 			.toHaveText('equals')
-		await expect(op.locator('option'))
-			.toHaveText(['equals', 'notEquals'])
+		// The branch of the condition this value is (a leaf with an equality operator) offers its own operators; the
+		// editor does not claim to list all the schema allows, and says where the other forms are edited.
+		await expect(op.locator('option', { hasText: 'notEquals' }))
+			.toHaveCount(1)
+		await expect(field(editor, 'required')
+			.getByTestId('union-hint')
+			.first())
+			.toHaveText('This value has other forms; the JSON view edits those.')
 
 		await op.selectOption({ label: 'notEquals' })
 		await expect(page.getByTestId('author-command-outcome'))
@@ -236,6 +248,200 @@ test.describe('the Document stays the authority', () => {
 		await expect(editor.getByRole('button', { name: '移除 max' }))
 			.toBeVisible()
 		await expect(editor.getByRole('combobox', { name: '要加入 config 的選填欄位' }))
+			.toBeVisible()
+	})
+})
+
+test.describe('keyboard focus stays through a commit', () => {
+	test('after a switch, a number, a list, an added field and a removed one', async ({ page }) => {
+		const editor = await openStructure(page, /guests : Numeric/)
+		const outcome = page.getByTestId('author-command-outcome')
+
+		// A switch, with Space.
+		const integer = field(editor, 'integer')
+			.getByRole('switch')
+		await integer.focus()
+		await page.keyboard.press('Space')
+		await expect(outcome)
+			.toContainText('applied to Document r1')
+		await expect(integer)
+			.toBeFocused()
+
+		// A number box, with Enter.
+		const min = field(editor, 'min')
+			.getByRole('textbox')
+		await min.focus()
+		await page.keyboard.press('Control+a')
+		await page.keyboard.type('1')
+		await page.keyboard.press('Enter')
+		await expect(outcome)
+			.toContainText('applied to Document r2')
+		await expect(min)
+			.toBeFocused()
+
+		// A field is removed with Enter on its button: focus is still in the editor, on the control that took its place.
+		await editor.getByRole('button', { name: 'Remove max' })
+			.focus()
+		await page.keyboard.press('Enter')
+		await expect(outcome)
+			.toContainText('applied to Document r3')
+		await expect(field(editor, 'max'))
+			.toHaveCount(0)
+		await expect(editor.locator(':focus'))
+			.toHaveCount(1)
+
+		// A field is added from the list with Enter on its button: focus moves to the new field's control.
+		await editor.getByRole('combobox', { name: 'Optional field to add to config' })
+			.selectOption('max')
+		await editor.getByRole('button', { name: 'Add field' })
+			.focus()
+		await page.keyboard.press('Enter')
+		await expect(outcome)
+			.toContainText('applied to Document r4')
+		await expect(field(editor, 'max')
+			.getByRole('textbox'))
+			.toBeFocused()
+	})
+
+	test('after a choice from a list, and after an array item is added and removed', async ({ page }) => {
+		const phone = await openStructure(page, /phone : ShortAnswer/)
+		const op = field(phone, 'required.op')
+			.getByRole('combobox')
+		// (Arrow keys open the list on some platforms, so the choice itself is made through Playwright; the focus is the user's.)
+		await op.focus()
+		await op.selectOption({ label: 'notEquals' })
+		await expect(page.getByTestId('author-command-outcome'))
+			.toContainText('applied to Document r1')
+		await expect(op.locator('option:checked'))
+			.toHaveText('notEquals')
+		await expect(op)
+			.toBeFocused()
+
+		await page.getByRole('button', { name: /sessions : MultipleChoice/ })
+			.click()
+		const options = page.getByTestId('structure-editor')
+			.locator('[role="group"][aria-label="options"]')
+		await options.getByRole('button', { name: 'Add item to options' })
+			.focus()
+		await page.keyboard.press('Enter')
+		await expect(options.getByRole('button', { name: 'Remove #4' }))
+			.toBeVisible()
+		// The new item has the focus (its first control), not the page.
+		await expect(page.getByTestId('structure-editor')
+			.locator(':focus'))
+			.toHaveCount(1)
+		await options.getByRole('button', { name: 'Remove #4' })
+			.focus()
+		await page.keyboard.press('Enter')
+		await expect(options.getByRole('button', { name: 'Remove #4' }))
+			.toHaveCount(0)
+		await expect(page.getByTestId('structure-editor')
+			.locator(':focus'))
+			.toHaveCount(1)
+	})
+})
+
+test.describe('a commit that is refused leaves the controls showing the Document', () => {
+	test('a list and a switch snap back when the JSON draft is dirty', async ({ page }) => {
+		const editor = await openStructure(page, /phone : ShortAnswer/)
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
+
+		const op = field(editor, 'required.op')
+			.getByRole('combobox')
+		await op.selectOption({ label: 'notEquals' })
+		await expect(page.getByTestId('author-command-outcome'))
+			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
+		await expect(op.locator('option:checked'))
+			.toHaveText('equals')
+		expect((configOf(await documentSource(page), 'phone').required as { op: string }).op)
+			.toBe('equals')
+
+		await page.getByRole('button', { name: /guests : Numeric/ })
+			.click()
+		const integer = field(editor, 'integer')
+			.getByRole('switch')
+		await expect(integer)
+			.toBeChecked()
+		await integer.click()
+		await expect(page.getByTestId('author-command-outcome'))
+			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
+		await expect(integer)
+			.toBeChecked()
+		await expect(integer)
+			.toBeFocused()
+	})
+})
+
+test.describe('a config that is not an object, or is missing', () => {
+	async function applyDraft(page: Page, source: unknown): Promise<void> {
+		await page.evaluate(text => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText(text), JSON.stringify(source))
+		await page.getByRole('button', { name: 'Apply', exact: true })
+			.click()
+		await expect(page.getByTestId('document-status'))
+			.toBeVisible()
+	}
+	const openRoot = async (page: Page): Promise<Locator> => {
+		await page.getByRole('tab', { name: 'Author', exact: true })
+			.click()
+		await page.getByRole('tab', { name: 'Structure', exact: true })
+			.click()
+		const editor = page.getByTestId('structure-editor')
+		await expect(editor)
+			.toBeVisible()
+		return editor
+	}
+
+	for (const [label, config] of [['a string', 'x'], ['a list', []], ['a number', 7]] as const) {
+		test(`${label} is edited whole, as JSON, and replaced by an object`, async ({ page }) => {
+			await page.goto('/?lab-test&showcase=sandbox')
+			await applyDraft(page, { id: 'root', type: 'Text', config })
+			const editor = await openRoot(page)
+			const box = field(editor, '')
+				.getByRole('textbox')
+			await expect(box)
+				.toHaveValue(JSON.stringify(config))
+			await box.fill('{ "text": "fixed" }')
+			await field(editor, '')
+				.getByRole('button', { name: /Set value/ })
+				.click()
+			await expect(page.getByTestId('author-command-outcome'))
+				.toContainText('Author command applied')
+			expect(JSON.parse(await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.getDocumentSourceText())).config)
+				.toEqual({ text: 'fixed' })
+			await expect(page.getByTestId('document-status'))
+				.toHaveAttribute('data-state', 'valid')
+			await expect(field(editor, 'text'))
+				.toBeVisible()
+		})
+	}
+
+	test('a config of null is shown as an empty object and the first optional field creates it', async ({ page }) => {
+		await page.goto('/?lab-test&showcase=survey')
+		await applyDraft(page, { id: 'open-day', type: 'Survey', config: null })
+		const editor = await openRoot(page)
+		await expect(editor)
+			.toContainText('Nothing set yet.')
+		await editor.getByRole('combobox', { name: 'Optional field to add to config' })
+			.selectOption('languages')
+		await editor.getByRole('button', { name: 'Add field' })
+			.click()
+		await expect(page.getByTestId('author-command-outcome'))
+			.toContainText('Author command applied')
+		expect(JSON.parse(await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.getDocumentSourceText())).config)
+			.toEqual({ languages: ['en'] })
+	})
+
+	test('a widget without a config gets one from its first field, and a refused edit says what is wrong', async ({ page }) => {
+		await page.goto('/?lab-test&showcase=survey')
+		await applyDraft(page, { id: 'open-day', type: 'Survey' })
+		const editor = await openRoot(page)
+		await editor.getByRole('combobox', { name: 'Optional field to add to config' })
+			.selectOption('title')
+		await editor.getByRole('button', { name: 'Add field' })
+			.click()
+		await expect(page.getByTestId('author-command-outcome'))
+			.toContainText('Author command applied')
+		await expect(field(editor, 'title'))
 			.toBeVisible()
 	})
 })

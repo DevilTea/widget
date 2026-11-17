@@ -142,7 +142,7 @@ test('rejects blank numeric Structure values while preserving scalar editing beh
 	// The refusal is shown at the field, and nothing was sent to the Document.
 	await expect(page.locator('[data-config-path="max"]')
 		.getByRole('alert'))
-		.toHaveText('Enter a valid value of the same scalar type.')
+		.toHaveText('Enter a number, such as 12 or 2.5.')
 	await expect(page.getByTestId('author-command-outcome'))
 		.toHaveCount(0)
 

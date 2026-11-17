@@ -20,7 +20,8 @@ export type ConfigPath = readonly ConfigPathSegment[]
 
 export type FieldKind
 	= | { readonly kind: 'boolean' }
-		| { readonly kind: 'number', readonly integer: boolean, readonly min: number | null, readonly max: number | null }
+		/** Any finite number: `integer`, `minimum` and `maximum` are Core's to check, not the editor's. */
+		| { readonly kind: 'number' }
 		| { readonly kind: 'string', readonly maxLength: number | null }
 		| { readonly kind: 'enum', readonly options: readonly (string | number | boolean)[] }
 		| {
@@ -49,6 +50,8 @@ export interface FieldModel {
 	readonly description: string | null
 	/** The (resolved, union-selected) schema the field was read from, `null` without one. */
 	readonly schema: JsonSchema | null
+	/** The value was read as one branch of a `oneOf`/`anyOf`: the schema allows other forms that this editor does not offer. */
+	readonly viaUnion?: boolean
 }
 
 const MAX_DEPTH = 24
@@ -65,15 +68,47 @@ function numberOrNull(value: unknown): number | null {
 	return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-/** Follows `$ref` (`#/$defs/Name`, `#/definitions/Name`); sibling keywords of the `$ref` (a description) win over the target's. */
+/** One reference token of a JSON Pointer (RFC 6901), with the percent-encoding of a URI fragment undone; `null` when it is malformed. */
+function decodePointerToken(token: string): string | null {
+	let decoded: string
+	try {
+		decoded = decodeURIComponent(token)
+	}
+	catch {
+		return null
+	}
+	return decoded.replaceAll('~1', '/')
+		.replaceAll('~0', '~')
+}
+
+/** The schema a local `$ref` (`#`, `#/$defs/Name`, any JSON Pointer inside the root schema) points at. */
+function followRef(root: JsonSchema | null, ref: string): JsonSchema | null {
+	if (root === null || (ref !== '#' && !ref.startsWith('#/')))
+		return null
+	let current: unknown = root
+	for (const token of ref === '#'
+		? []
+		: ref.slice(2)
+				.split('/')) {
+		const key = decodePointerToken(token)
+		if (key === null || !(isRecord(current) || Array.isArray(current)) || !Object.hasOwn(current, key))
+			return null
+		current = (current as Record<string, unknown>)[key]
+	}
+	return asSchema(current)
+}
+
+/**
+ * Follows `$ref` (a local JSON Pointer such as `#/$defs/Name`, with `~0`, `~1` and percent escapes decoded); sibling keywords of
+ * the `$ref` (a description) win over the target's.
+ */
 export function resolveSchema(root: JsonSchema | null, schema: JsonSchema | null): JsonSchema | null {
 	let current = schema
 	for (let hops = 0; current !== null && hops < MAX_DEPTH; hops++) {
 		const ref = current.$ref
 		if (typeof ref !== 'string')
 			return current
-		const match = /^#\/(?:\$defs|definitions)\/(.+)$/.exec(ref)
-		const target = match === null || root === null ? null : asSchema((asSchema(root.$defs) ?? asSchema(root.definitions))?.[match[1]!])
+		const target = followRef(root, ref)
 		if (target === null)
 			return null
 		const { $ref: _ref, ...siblings } = current
@@ -165,7 +200,7 @@ function inferFromValue(value: unknown): FieldKind {
 	if (typeof value === 'boolean')
 		return { kind: 'boolean' }
 	if (typeof value === 'number')
-		return { kind: 'number', integer: Number.isInteger(value), min: null, max: null }
+		return { kind: 'number' }
 	if (typeof value === 'string')
 		return { kind: 'string', maxLength: null }
 	if (Array.isArray(value))
@@ -186,7 +221,7 @@ export function describeField(root: JsonSchema | null, schema: JsonSchema | null
 		return { field: { kind: 'json' }, description, schema: resolved }
 	if (branch !== null) {
 		const inner = describeField(root, { ...branch, ...(description === null ? {} : { description }) }, value, depth + 1)
-		return inner
+		return { ...inner, viaUnion: true }
 	}
 
 	const options = 'const' in resolved ? [resolved.const] : Array.isArray(resolved.enum) ? resolved.enum : null
@@ -208,7 +243,7 @@ export function describeField(root: JsonSchema | null, schema: JsonSchema | null
 			return { field: { kind: 'boolean' }, description, schema: resolved }
 		case 'number':
 		case 'integer':
-			return { field: { kind: 'number', integer: type === 'integer', min: numberOrNull(resolved.minimum), max: numberOrNull(resolved.maximum) }, description, schema: resolved }
+			return { field: { kind: 'number' }, description, schema: resolved }
 		case 'string':
 			return { field: { kind: 'string', maxLength: numberOrNull(resolved.maxLength) }, description, schema: resolved }
 		case 'array':
@@ -309,14 +344,15 @@ export function canRemoveItem(field: Extract<FieldKind, { kind: 'array' }>, leng
 	return field.known && length > field.minItems
 }
 
-/** Text for a number box → a number, or `null` when it is not a finite number the schema accepts. */
-export function parseNumberText(text: string, field: Extract<FieldKind, { kind: 'number' }>): number | null {
-	if (text.trim() === '')
+/**
+ * Text for a number box → a number, or `null` when it is not a finite number in decimal notation (`12`, `-0.5`, `1e3`; not `0x10`,
+ * `Infinity` or an empty box). The schema's `integer`, `minimum` and `maximum` are not checked here: a value outside them goes to Core,
+ * which reports it.
+ */
+export function parseNumberText(text: string): number | null {
+	const trimmed = text.trim()
+	if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed))
 		return null
-	const parsed = Number(text)
-	if (!Number.isFinite(parsed) || (field.integer && !Number.isInteger(parsed)))
-		return null
-	if ((field.min !== null && parsed < field.min) || (field.max !== null && parsed > field.max))
-		return null
-	return parsed
+	const parsed = Number(trimmed)
+	return Number.isFinite(parsed) ? parsed : null
 }

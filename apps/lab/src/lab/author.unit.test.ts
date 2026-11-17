@@ -140,8 +140,10 @@ describe('edit-config lowering (issue #230 PR 3c, audit U15)', () => {
 			.toEqual({ ok: false, reason: 'stale-selection' })
 		expect(refuse(editConfig(0, 999_999 as InspectionNodeId, ['max'], { op: 'replace', value: 5 })))
 			.toEqual({ ok: false, reason: 'widget-not-found' })
-		expect(refuse(editConfig(0, guests.nodeId, [], { op: 'replace', value: 5 })))
+		expect(refuse(editConfig(0, guests.nodeId, [], { op: 'remove' })))
 			.toEqual({ ok: false, reason: 'config-path-not-found' })
+		expect(refuse(editConfig(0, guests.nodeId, [], { op: 'add', value: {} })))
+			.toEqual({ ok: false, reason: 'config-path-exists' })
 		expect(refuse(editConfig(0, guests.nodeId, ['nope'], { op: 'replace', value: 5 })))
 			.toEqual({ ok: false, reason: 'config-path-not-found' })
 		expect(refuse(editConfig(0, guests.nodeId, ['nope'], { op: 'remove' })))
@@ -156,5 +158,46 @@ describe('edit-config lowering (issue #230 PR 3c, audit U15)', () => {
 			.toEqual({ ok: false, reason: 'invalid-value' })
 		expect(refuse(editConfig(0, guests.nodeId, ['min', 'deeper'], { op: 'replace', value: 1 })))
 			.toEqual({ ok: false, reason: 'config-path-not-found' })
+	})
+
+	describe('the whole config (issue #230 PR 3c review)', () => {
+		const bare = (config: unknown) => {
+			const source = { id: 'root', type: 'Stack', slots: { items: [{ id: 'title', type: 'Text', ...(config === undefined ? {} : { config }) }] } }
+			const blueprint = sandboxSystem.createBlueprint(source)
+			const title = inspectBlueprint(blueprint).nodes.find(node => node.node.resolved && node.node.id === 'title')!
+			return { blueprint, title }
+		}
+
+		it('replaces a config that is a string, a list or null, whatever it is, with any JSON value', () => {
+			for (const config of ['x', [], null, { text: 'a' }]) {
+				const { blueprint, title } = bare(config)
+				expect(createAuthorPatch(blueprint, editConfig(0, title.nodeId, [], { op: 'replace', value: { text: 'fixed' } }), 0), JSON.stringify(config))
+					.toEqual({ ok: true, patch: [{ op: 'replace', path: [...title.sourcePath, 'config'], value: { text: 'fixed' } }] })
+			}
+		})
+
+		it('creates a config that is absent, by replace or add', () => {
+			const { blueprint, title } = bare(undefined)
+			for (const op of ['replace', 'add'] as const) {
+				expect(createAuthorPatch(blueprint, editConfig(0, title.nodeId, [], { op, value: { text: 'new' } }), 0))
+					.toEqual({ ok: true, patch: [{ op: 'add', path: [...title.sourcePath, 'config'], value: { text: 'new' } }] })
+			}
+		})
+
+		it('adds the first key to a config that is null, which the editor shows as an empty object', () => {
+			const { blueprint, title } = bare(null)
+			expect(createAuthorPatch(blueprint, editConfig(0, title.nodeId, ['text'], { op: 'add', value: 'hello' }), 0))
+				.toEqual({ ok: true, patch: [{ op: 'replace', path: [...title.sourcePath, 'config'], value: { text: 'hello' } }] })
+			expect(createAuthorPatch(blueprint, editConfig(0, title.nodeId, ['text', 'deeper'], { op: 'add', value: 'x' }), 0))
+				.toEqual({ ok: false, reason: 'config-path-not-found' })
+		})
+
+		it('refuses a key inside a config that is not an object, and an add over a config that exists', () => {
+			const { blueprint, title } = bare('x')
+			expect(createAuthorPatch(blueprint, editConfig(0, title.nodeId, ['text'], { op: 'add', value: 'x' }), 0))
+				.toEqual({ ok: false, reason: 'config-path-not-found' })
+			expect(createAuthorPatch(blueprint, editConfig(0, title.nodeId, [], { op: 'add', value: {} }), 0))
+				.toEqual({ ok: false, reason: 'config-path-exists' })
+		})
 	})
 })

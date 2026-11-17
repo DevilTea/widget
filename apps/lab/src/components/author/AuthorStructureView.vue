@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { ConfigPath, JsonSchema } from '../../lab/config-schema'
-import type { ConfigEdit } from '../../lab/types'
+import type { AuthorUnsupportedReason, ConfigEdit } from '../../lab/types'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { editConfig } from '../../lab/author'
@@ -17,6 +17,9 @@ const selectedNodeId = computed<InspectionNodeId | null>(() => store.documentFoc
 const selectedNode = computed(() => selectedNodeId.value === null ? null : documentInspection.value.getNode(selectedNodeId.value))
 const busy = ref(false)
 const outcomeMessage = ref<string | null>(null)
+const editorEl = useTemplateRef<HTMLElement>('editorEl')
+/** Bumped when a commit did not go through, so every control shows what the Document holds (a switch or list the user already moved would not). */
+const editorKey = ref(0)
 
 /** The plugin's public config metadata for the selected widget: `null` when it has no config capability. */
 const catalogConfig = computed(() => {
@@ -28,7 +31,7 @@ const catalogConfig = computed(() => {
 })
 const configSchema = computed(() => (catalogConfig.value?.schema ?? null) as JsonSchema | null)
 
-/** The widget's authored config object (empty when it was written without one). */
+/** The widget's authored config (an empty object when it was written without one, or as `null`). */
 const configValue = computed<unknown>(() => {
 	const node = selectedNode.value
 	if (node === null || !node.resolved)
@@ -36,6 +39,8 @@ const configValue = computed<unknown>(() => {
 	const source = node.node.source as { readonly config?: unknown } | null
 	return source?.config ?? {}
 })
+/** A config that is not an object (a string, a list, a number) has no keys to edit: it is edited whole, as JSON. */
+const configAsJson = computed(() => typeof configValue.value !== 'object' || Array.isArray(configValue.value))
 
 watch([selectedNodeId, () => store.documentState.value.revision], () => {
 	outcomeMessage.value = null
@@ -45,14 +50,51 @@ function selectNode(nodeId: InspectionNodeId): void {
 	store.setFocus('document', { nodeId })
 }
 
+function unsupportedMessage(reason: AuthorUnsupportedReason): string {
+	switch (reason) {
+		case 'config-path-exists': return i18n.t('That field already exists.')
+		case 'invalid-value': return i18n.t('That value cannot be stored in the source, because it is not JSON.')
+		case 'config-not-found': return i18n.t('This widget has no config yet: add a field to create it.')
+		default: return i18n.t('This selected value is no longer available in the current Document.')
+	}
+}
+
+/** The first control of the field at `path` (or of the group it is), if it is in the page. */
+function controlAt(path: ConfigPath): HTMLElement | null {
+	const field = editorEl.value?.querySelector(`[data-config-path="${path.join('.')
+		.replaceAll('"', '\\"')}"]`)
+	return field?.querySelector<HTMLElement>('button[role="switch"], select, textarea, input, button') ?? null
+}
+
+/**
+ * Keyboard focus after a command. The controls are never disabled, so an edit that replaced a value leaves focus where it
+ * was; what is left to do is to follow focus that lost its element: a new field or item takes it, a removed one hands it to
+ * the field that took its place, else to its list or object.
+ */
+async function keepFocus(path: ConfigPath, edit: ConfigEdit): Promise<void> {
+	await nextTick()
+	const root = editorEl.value
+	if (root === null)
+		return
+	const active = document.activeElement
+	const kept = active !== null && active !== document.body && root.contains(active)
+	// Focus that is still inside the editor stays (a replaced value, or the button of a removed item, which the next item now holds).
+	if (kept && edit.op !== 'add')
+		return
+	const target = (edit.op === 'remove' ? controlAt(path) ?? controlAt(path.slice(0, -1)) : controlAt(path)) ?? (kept ? null : root)
+	target?.focus()
+}
+
 async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 	const nodeId = selectedNodeId.value
 	if (nodeId === null || selectedNode.value?.resolved !== true)
 		return
 	busy.value = true
 	outcomeMessage.value = null
+	let applied = false
 	try {
 		const outcome = await store.author(editConfig(store.documentState.value.revision, nodeId, path, edit))
+		applied = outcome.status === 'applied'
 		if (outcome.status === 'applied')
 			outcomeMessage.value = i18n.t('Author command applied to Document r{revision}.', { revision: store.documentState.value.revision })
 		else if (outcome.status === 'draft-dirty')
@@ -60,13 +102,16 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 		else if (outcome.status === 'patch-error')
 			outcomeMessage.value = i18n.t('The author command could not be applied: {message}', { message: outcome.failure.message })
 		else if (outcome.status === 'unsupported')
-			outcomeMessage.value = i18n.t('This selected value is no longer available in the current Document.')
+			outcomeMessage.value = unsupportedMessage(outcome.reason)
 		else
 			outcomeMessage.value = i18n.t('The author command is unavailable while another lifecycle command is running.')
 	}
 	finally {
 		busy.value = false
 	}
+	if (!applied)
+		editorKey.value++
+	await keepFocus(path, edit)
 }
 </script>
 
@@ -79,7 +124,9 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 		/>
 		<div class="bg-(--lab-color-border)" />
 		<div
+			ref="editorEl"
 			data-testid="structure-editor"
+			tabindex="-1"
 			class="min-w-0 overflow-auto p-2.5"
 		>
 			<div
@@ -110,7 +157,9 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 							{{ i18n.t(configSchema === null ? 'This plugin publishes no config schema, so values are typed by what they hold and nothing can be added or removed here. Use JSON for that.' : 'Each change is applied to the Document at once and restarts the preview (its answers start over). Use Undo to take a change back.') }}
 						</p>
 						<ConfigFieldEditor
+							:key="editorKey"
 							bare
+							:asJson="configAsJson"
 							:root="configSchema"
 							:schema="configSchema"
 							:value="configValue"

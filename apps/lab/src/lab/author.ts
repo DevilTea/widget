@@ -84,8 +84,6 @@ function lowerEdit<Plugins extends AnyWidgetPluginTuple>(
 ): AuthorPatchResult {
 	if (command.documentRevision !== documentRevision)
 		return { ok: false, reason: 'stale-selection' }
-	if (command.configPath.length === 0)
-		return { ok: false, reason: 'config-path-not-found' }
 	if (command.edit.op !== 'remove' && !isJsonValue(command.edit.value))
 		return { ok: false, reason: 'invalid-value' }
 
@@ -99,11 +97,21 @@ function lowerEdit<Plugins extends AnyWidgetPluginTuple>(
 	const configPath = [...node.sourcePath, 'config']
 	const config = node.node.source.config
 
-	// A widget authored without a `config` yet: the first added key creates it.
-	if (config === undefined) {
+	// The whole config (an empty path): replace it with any JSON value, whatever it is now (an object, a list, a string,
+	// `null`), creating it when it is absent. This is how a config that is not an object, which has no keys to edit, is fixed.
+	if (command.configPath.length === 0) {
+		if (edit.op === 'remove')
+			return { ok: false, reason: 'config-path-not-found' }
+		if (edit.op === 'add' && config !== undefined && config !== null)
+			return { ok: false, reason: 'config-path-exists' }
+		return { ok: true, patch: [{ op: config === undefined ? 'add' : 'replace', path: configPath, value: edit.value }] }
+	}
+
+	// A widget authored without a `config` yet (or with `"config": null`): the first added key creates it.
+	if (config === undefined || config === null) {
 		if (edit.op !== 'add' || command.configPath.length !== 1)
-			return { ok: false, reason: 'config-not-found' }
-		return { ok: true, patch: [{ op: 'add', path: configPath, value: { [command.configPath[0]!]: edit.value } }] }
+			return { ok: false, reason: config === undefined ? 'config-not-found' : 'config-path-not-found' }
+		return { ok: true, patch: [{ op: config === undefined ? 'add' : 'replace', path: configPath, value: { [command.configPath[0]!]: edit.value } }] }
 	}
 
 	let parent: unknown = config

@@ -10,13 +10,13 @@ const survey = surveyConfigSchema as unknown as JsonSchema
 const property = (root: JsonSchema, key: string): JsonSchema => (root.properties as Record<string, JsonSchema>)[key]!
 
 describe('describeField', () => {
-	it('reads scalar controls from the schema type, with numeric limits', () => {
+	it('reads scalar controls from the schema type; the numeric limits stay Core\'s to check', () => {
 		expect(describeField(numeric, property(numeric, 'integer'), true).field)
 			.toEqual({ kind: 'boolean' })
 		expect(describeField(numeric, property(numeric, 'min'), 0).field)
-			.toEqual({ kind: 'number', integer: false, min: null, max: null })
+			.toEqual({ kind: 'number' })
 		expect(describeField(shortAnswer, property(shortAnswer, 'maxLength'), 20).field)
-			.toEqual({ kind: 'number', integer: true, min: 1, max: null })
+			.toEqual({ kind: 'number' })
 	})
 
 	it('reads an enum from the schema options and keeps the description', () => {
@@ -61,8 +61,9 @@ describe('describeField', () => {
 			.toEqual({ kind: 'boolean' })
 		expect(describeField(null, null, 'text').field)
 			.toEqual({ kind: 'string', maxLength: null })
+		// Without a schema a whole number may become a decimal, as it could before.
 		expect(describeField(null, null, 3).field)
-			.toMatchObject({ kind: 'number', integer: true })
+			.toEqual({ kind: 'number' })
 		const object = describeField(null, null, { a: 1 }).field
 		const array = describeField(null, null, [1]).field
 		if (object.kind !== 'object' || array.kind !== 'array')
@@ -149,19 +150,42 @@ describe('helpers', () => {
 			.toBe(true)
 	})
 
-	it('parses number text within the schema limits', () => {
-		const field = { kind: 'number', integer: true, min: 1, max: 5 } as const
-		expect(parseNumberText('3', field))
-			.toBe(3)
-		expect(parseNumberText('', field))
+	it('parses number text in decimal notation only, and leaves the schema limits to Core', () => {
+		for (const [text, expected] of [['3', 3], [' 12 ', 12], ['2.5', 2.5], ['-0.5', -0.5], ['.5', 0.5], ['1e3', 1000], ['0', 0], ['6', 6]] as const) {
+			expect(parseNumberText(text))
+				.toBe(expected)
+		}
+		for (const text of ['', '   ', 'abc', '0x10', '0b1', 'Infinity', 'NaN', '1,5', '1e999', '--1']) {
+			expect(parseNumberText(text), JSON.stringify(text))
+				.toBeNull()
+		}
+	})
+
+	it('follows a local JSON Pointer $ref, decoding ~1, ~0 and percent escapes', () => {
+		const root: JsonSchema = {
+			$defs: { 'a/b': { type: 'string' }, 'c~d': { type: 'number' }, 'e f': { type: 'boolean' }, 'nested': { properties: { x: { type: 'integer' } } } },
+		}
+		expect(resolveSchema(root, { $ref: '#/$defs/a~1b' }))
+			.toEqual({ type: 'string' })
+		expect(resolveSchema(root, { $ref: '#/$defs/c~0d' }))
+			.toEqual({ type: 'number' })
+		expect(resolveSchema(root, { $ref: '#/$defs/e%20f' }))
+			.toEqual({ type: 'boolean' })
+		expect(resolveSchema(root, { $ref: '#/$defs/nested/properties/x' }))
+			.toEqual({ type: 'integer' })
+		expect(resolveSchema(root, { $ref: '#/$defs/a/b' }))
 			.toBeNull()
-		expect(parseNumberText('2.5', field))
+		expect(resolveSchema(root, { $ref: '#/$defs/%E0%A4%A' }))
 			.toBeNull()
-		expect(parseNumberText('0', field))
+		expect(resolveSchema(root, { $ref: 'https://example.com/schema' }))
 			.toBeNull()
-		expect(parseNumberText('6', field))
-			.toBeNull()
-		expect(parseNumberText('abc', field))
-			.toBeNull()
+	})
+
+	it('marks a value read as one branch of a union, so the editor can say other forms exist', () => {
+		const required = describeField(multiple, property(multiple, 'required'), true)
+		expect(required.viaUnion)
+			.toBe(true)
+		expect(describeField(multiple, property(multiple, 'minSelected'), 1).viaUnion)
+			.toBeUndefined()
 	})
 })

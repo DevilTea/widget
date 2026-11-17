@@ -31,6 +31,8 @@ const props = defineProps<{
 	/** May be removed from its parent (an optional object key, or an array item above the minimum). */
 	removable?: boolean
 	busy: boolean
+	/** Edit the value as its JSON text whatever it is (the config of a widget whose config is not an object). */
+	asJson?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -40,14 +42,17 @@ const emit = defineEmits<{
 const i18n = useLabI18n()
 const id = useId()
 
-const model = computed(() => describeField(props.root, props.schema, props.value))
+const model = computed(() => props.asJson === true
+	? { field: { kind: 'json' as const }, description: null, schema: null, viaUnion: false }
+	: describeField(props.root, props.schema, props.value))
 const field = computed(() => model.value.field)
 const description = computed(() => model.value.description ?? undefined)
 
 function toText(value: unknown): string {
-	if (typeof value === 'string')
+	// A JSON box shows JSON, a string too (`"x"`), so what is typed back is the JSON of the value it replaces.
+	if (field.value.kind !== 'json' && typeof value === 'string')
 		return value
-	if (typeof value === 'number')
+	if (field.value.kind !== 'json' && typeof value === 'number')
 		return String(value)
 	return JSON.stringify(value, null, 2) ?? ''
 }
@@ -60,7 +65,13 @@ watch(() => props.value, (value) => {
 	invalid.value = false
 })
 
+/**
+ * While a command runs the controls stay in the page and stay focusable (a disabled control would hand keyboard focus to
+ * the body at every commit); they only stop reporting edits.
+ */
 function emitEdit(path: ConfigPath, edit: ConfigEdit): void {
+	if (props.busy)
+		return
 	emit('edit', path, edit)
 }
 
@@ -72,7 +83,7 @@ function commitText(): void {
 		return
 	}
 	if (current.kind === 'number') {
-		const parsed = parseNumberText(text.value, current)
+		const parsed = parseNumberText(text.value)
 		invalid.value = parsed === null
 		if (parsed !== null && parsed !== props.value)
 			emitEdit(props.path, { op: 'replace', value: parsed })
@@ -94,6 +105,9 @@ function onChoice(event: Event): void {
 	if (current.kind !== 'enum')
 		return
 	const option = current.options[Number(select.value)]
+	// Controlled: the list shows the Document's value again at once, and the new one when the commit has applied. A
+	// commit that is refused (a dirty JSON draft, a patch error) therefore leaves it showing what the Document holds.
+	select.value = String(current.options.indexOf(props.value as never))
 	if (option !== undefined && option !== props.value)
 		emitEdit(props.path, { op: 'replace', value: option })
 }
@@ -136,7 +150,7 @@ function addItem(): void {
 	emitEdit([...props.path, arrayValue.value.length], { op: 'add', value: defaultValueFor(props.root, current.items) as never })
 }
 
-const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default bg-default px-2 font-mono text-xs text-default focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary disabled:opacity-60 aria-invalid:border-error'
+const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default bg-default px-2 font-mono text-xs text-default focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary aria-disabled:opacity-60 aria-invalid:border-error'
 </script>
 
 <template>
@@ -163,7 +177,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					<USwitch
 						:id="`${id}-control`"
 						:modelValue="value === true"
-						:disabled="busy"
+						:aria-disabled="busy ? 'true' : undefined"
 						size="xl"
 						@update:modelValue="emitEdit(path, { op: 'replace', value: $event })"
 					/>
@@ -175,7 +189,8 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 				<select
 					v-else-if="field.kind === 'enum'"
 					:id="`${id}-control`"
-					:disabled="busy"
+					:value="field.options.indexOf(value as never)"
+					:aria-disabled="busy ? 'true' : undefined"
 					:class="controlClass"
 					@change="onChoice"
 				>
@@ -183,7 +198,6 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						v-for="(option, index) in field.options"
 						:key="index"
 						:value="index"
-						:selected="option === value"
 					>
 						{{ String(option) }}
 					</option>
@@ -196,7 +210,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						v-if="field.kind === 'json'"
 						:id="`${id}-control`"
 						v-model="text"
-						:disabled="busy"
+						:aria-disabled="busy ? 'true' : undefined"
 						:aria-invalid="invalid"
 						rows="3"
 						class="h-auto flex-1 py-1"
@@ -210,7 +224,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						v-model="text"
 						type="text"
 						:inputmode="field.kind === 'number' ? 'decimal' : undefined"
-						:disabled="busy"
+						:aria-disabled="busy ? 'true' : undefined"
 						:aria-invalid="invalid"
 						class="flex-1"
 						:class="[controlClass]"
@@ -220,7 +234,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						type="button"
 						color="primary"
 						size="sm"
-						:disabled="busy"
+						:aria-disabled="busy ? 'true' : undefined"
 						:aria-label="`${i18n.t('Set value')}: ${label}`"
 						@click="commitText"
 					>
@@ -232,7 +246,14 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					role="alert"
 					class="m-0 text-xs text-error"
 				>
-					{{ field.kind === 'json' ? i18n.t('Enter valid JSON.') : i18n.t('Enter a valid value of the same scalar type.') }}
+					{{ field.kind === 'json' ? i18n.t('Enter valid JSON.') : i18n.t('Enter a number, such as 12 or 2.5.') }}
+				</p>
+				<p
+					v-if="model.viaUnion"
+					data-testid="union-hint"
+					class="m-0 text-xs text-muted"
+				>
+					{{ i18n.t('This value has other forms; the JSON view edits those.') }}
 				</p>
 			</div>
 			<UButton
@@ -243,7 +264,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 				size="sm"
 				square
 				icon="i-lucide-trash-2"
-				:disabled="busy"
+				:aria-disabled="busy ? 'true' : undefined"
 				:aria-label="i18n.t('Remove {name}', { name: label })"
 				@click="emitEdit(path, { op: 'remove' })"
 			/>
@@ -280,11 +301,18 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					size="sm"
 					square
 					icon="i-lucide-trash-2"
-					:disabled="busy"
+					:aria-disabled="busy ? 'true' : undefined"
 					:aria-label="i18n.t('Remove {name}', { name: label })"
 					@click="emitEdit(path, { op: 'remove' })"
 				/>
 			</div>
+			<p
+				v-if="model.viaUnion"
+				data-testid="union-hint"
+				class="m-0 mb-1 text-xs text-muted"
+			>
+				{{ i18n.t('This value has other forms; the JSON view edits those.') }}
+			</p>
 			<div :class="bare ? '' : 'ml-1 border-l border-default pl-3'">
 				<template v-if="field.kind === 'object'">
 					<ConfigFieldEditor
@@ -311,7 +339,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					>
 						<select
 							v-model="newField"
-							:disabled="busy"
+							:aria-disabled="busy ? 'true' : undefined"
 							:aria-label="i18n.t('Optional field to add to {name}', { name: label })"
 							class="flex-1"
 							:class="[controlClass]"
@@ -333,7 +361,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 							variant="outline"
 							size="sm"
 							icon="i-lucide-plus"
-							:disabled="busy || newField === ''"
+							:aria-disabled="busy || newField === '' ? 'true' : undefined"
 							@click="addField"
 						>
 							{{ i18n.t('Add field') }}
@@ -346,7 +374,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						<input
 							v-model="newKey"
 							type="text"
-							:disabled="busy"
+							:aria-disabled="busy ? 'true' : undefined"
 							:aria-label="i18n.t('Name of the key to add to {name}', { name: label })"
 							:placeholder="i18n.t('New key')"
 							class="flex-1"
@@ -359,7 +387,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 							variant="outline"
 							size="sm"
 							icon="i-lucide-plus"
-							:disabled="busy || newKey.trim() === '' || Object.hasOwn(objectValue, newKey.trim())"
+							:aria-disabled="busy || newKey.trim() === '' || Object.hasOwn(objectValue, newKey.trim()) ? 'true' : undefined"
 							@click="addKey"
 						>
 							{{ i18n.t('Add key') }}
@@ -393,7 +421,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						size="sm"
 						icon="i-lucide-plus"
 						class="mb-1.5"
-						:disabled="busy"
+						:aria-disabled="busy ? 'true' : undefined"
 						@click="addItem"
 					>
 						{{ i18n.t('Add item to {name}', { name: label }) }}
