@@ -1,4 +1,4 @@
-import type { FrameLocator, Page } from '@playwright/test'
+import type { FrameLocator, Locator, Page } from '@playwright/test'
 import { test as base, expect } from '@playwright/test'
 import { sandboxPresets } from '../src/sandbox/presets'
 import { surveyPresets } from '../src/showcases/survey/presets'
@@ -124,11 +124,24 @@ async function pageLocale(page: Page): Promise<LabLocaleId> {
 	return lang === 'zh-TW' ? 'zh-TW' : 'en'
 }
 
-async function openMenu(page: Page, testId: string): Promise<void> {
-	await page.getByTestId(testId)
-		.click()
-	await expect(page.getByRole('menu'))
-		.toBeVisible()
+/**
+ * Opens a header menu by its trigger and clicks one path of items (`[submenu, leaf]` or `[item]`). The menus are
+ * non-modal, so they dismiss when focus moves elsewhere (a Dockview panel that was just added takes focus a
+ * moment later), and a menu that was just closed can linger in the DOM for its exit animation. So "open" is read
+ * from the trigger's `aria-expanded` (never from the number of `menu` roles), and the whole path is retried
+ * from the trigger if the menu closed under it.
+ */
+async function chooseFromMenu(page: Page, triggerTestId: string, path: readonly (() => Locator)[]): Promise<void> {
+	const trigger = page.getByTestId(triggerTestId)
+	await expect(async () => {
+		if ((await trigger.getAttribute('aria-expanded')) !== 'true')
+			await trigger.click({ timeout: 2000 })
+		for (const item of path) {
+			await item()
+				.click({ timeout: 2000 })
+		}
+	})
+		.toPass({ timeout: 15_000 })
 }
 
 /**
@@ -147,9 +160,7 @@ export async function answerDraftGuard(page: Page, answer: 'discard' | 'keep'): 
 
 /** Switches showcase through the Examples menu. Pass `discardDraft` when an unapplied draft exists. */
 export async function selectShowcase(page: Page, id: ShowcaseId, options: { discardDraft?: boolean } = {}): Promise<void> {
-	await openMenu(page, 'examples-menu')
-	await page.getByRole('menuitemcheckbox', { name: SHOWCASE_LABELS[id] })
-		.click()
+	await chooseFromMenu(page, 'examples-menu', [() => page.getByRole('menuitemcheckbox', { name: SHOWCASE_LABELS[id] })])
 	if (options.discardDraft === true)
 		await answerDraftGuard(page, 'discard')
 }
@@ -159,9 +170,7 @@ export async function loadPreset(page: Page, id: string, options: { discardDraft
 	const label = PRESET_LABELS.get(id)
 	if (label === undefined)
 		throw new Error(`Unknown preset id: ${id}`)
-	await openMenu(page, 'examples-menu')
-	await page.getByRole('menuitemcheckbox', { name: label })
-		.click()
+	await chooseFromMenu(page, 'examples-menu', [() => page.getByRole('menuitemcheckbox', { name: label })])
 	if (options.discardDraft === true)
 		await answerDraftGuard(page, 'discard')
 }
@@ -200,35 +209,33 @@ export async function expectPreviewStatus(page: Page, expected: 'current' | 'sta
 
 export async function setTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
 	const labels = OVERFLOW_LABELS[await pageLocale(page)]
-	await openMenu(page, 'overflow-menu')
-	await page.getByRole('menuitem', { name: labels.theme })
-		.click()
-	await page.getByRole('menuitemcheckbox', { name: theme === 'light' ? labels.light : labels.dark })
-		.click()
+	await chooseFromMenu(page, 'overflow-menu', [
+		() => page.getByRole('menuitem', { name: labels.theme }),
+		() => page.getByRole('menuitemcheckbox', { name: theme === 'light' ? labels.light : labels.dark }),
+	])
 }
 
 export async function setLocale(page: Page, locale: LabLocaleId): Promise<void> {
 	const labels = OVERFLOW_LABELS[await pageLocale(page)]
-	await openMenu(page, 'overflow-menu')
-	await page.getByRole('menuitem', { name: labels.language })
-		.click()
-	await page.getByRole('menuitemcheckbox', { name: LANGUAGE_NAMES[locale] })
-		.click()
+	await chooseFromMenu(page, 'overflow-menu', [
+		() => page.getByRole('menuitem', { name: labels.language }),
+		() => page.getByRole('menuitemcheckbox', { name: LANGUAGE_NAMES[locale] }),
+	])
 }
 
 /** Opens the Implementation explorer or Document Tools from the overflow menu's Developer submenu. */
 export async function openDeveloperTool(page: Page, tool: 'implementation' | 'document-tools'): Promise<void> {
 	const labels = OVERFLOW_LABELS[await pageLocale(page)]
-	await openMenu(page, 'overflow-menu')
-	await page.getByRole('menuitem', { name: labels.developer })
-		.click()
-	await page.getByRole('menuitem', { name: tool === 'implementation' ? labels.implementation : labels.documentTools })
-		.click()
+	await chooseFromMenu(page, 'overflow-menu', [
+		() => page.getByRole('menuitem', { name: labels.developer }),
+		() => page.getByRole('menuitem', { name: tool === 'implementation' ? labels.implementation : labels.documentTools }),
+	])
+	// The panel is added and activated asynchronously and takes focus: wait for that before the next menu is opened.
+	await expect(page.getByRole('tab', { name: tool === 'implementation' ? 'Implementation' : 'Document Tools', exact: true }))
+		.toHaveAttribute('aria-selected', 'true')
 }
 
 /** The tutorial entry of the overflow menu (its label follows the tutorial state: Tutorial, Pause, Resume, Restart). */
 export async function chooseTutorialMenuItem(page: Page, name = 'Tutorial'): Promise<void> {
-	await openMenu(page, 'overflow-menu')
-	await page.getByRole('menuitem', { name, exact: true })
-		.click()
+	await chooseFromMenu(page, 'overflow-menu', [() => page.getByRole('menuitem', { name, exact: true })])
 }

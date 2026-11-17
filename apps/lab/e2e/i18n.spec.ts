@@ -76,8 +76,8 @@ test.describe('lab localization (issue #43)', () => {
 			.toHaveAttribute('aria-checked', 'false')
 		await page.keyboard.press('Escape')
 		await page.keyboard.press('Escape')
-		await expect(page.getByRole('menu'))
-			.toHaveCount(0)
+		await expect(page.getByTestId('overflow-menu'))
+			.toHaveAttribute('aria-expanded', 'false')
 
 		await setTheme(page, 'dark')
 		await expect(page.locator('html'))

@@ -284,6 +284,7 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 		<UDropdownMenu
 			:items="exampleItems"
 			:content="examplesContent"
+			:modal="false"
 			:ui="{ content: 'w-80 max-w-[90vw]' }"
 		>
 			<UButton
@@ -321,6 +322,7 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 			size="md"
 			:icon="validity.kind === 'valid' ? 'i-lucide-circle-check' : 'i-lucide-circle-alert'"
 			:label="validityLabel"
+			:ui="{ label: 'text-default' }"
 			class="whitespace-nowrap"
 		/>
 		<UBadge
@@ -331,6 +333,7 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 			size="md"
 			:icon="previewState === 'current' ? 'i-lucide-circle-check' : previewState === 'stale' ? 'i-lucide-triangle-alert' : 'i-lucide-circle-dashed'"
 			:label="previewLabel"
+			:ui="{ label: 'text-default' }"
 			class="whitespace-nowrap"
 		/>
 
@@ -442,6 +445,7 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 		<UDropdownMenu
 			:items="overflowItems"
 			:content="overflowContent"
+			:modal="false"
 		>
 			<UButton
 				ref="overflowTrigger"
