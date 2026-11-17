@@ -21,8 +21,9 @@ test('Relations is the default Dependencies view, with the Graph one click away'
 		.toHaveAttribute('aria-selected', 'true')
 	await expect(page.getByRole('tabpanel', { name: 'Relations' }))
 		.toBeVisible()
+	// The Graph canvas may already be laid out behind it (the two views are kept mounted), but it is not shown.
 	await expect(page.locator('.vue-flow'))
-		.toHaveCount(0)
+		.toBeHidden()
 
 	await viewTabs.getByRole('tab', { name: 'Graph' })
 		.click()

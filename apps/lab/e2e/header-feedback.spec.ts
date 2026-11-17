@@ -387,6 +387,13 @@ test.describe('Undo last apply (U04)', () => {
 		await setDraft(page, textDocument('typing in progress'))
 		await expect(undo)
 			.toHaveAttribute('aria-disabled', 'true')
+		// Three things made this a coin toss (about 1 run in 15; it also happens on PR 3a's tree): the tooltip opens for
+		// keyboard focus only (Reka's `ignoreNonKeyboardFocus`), and a script `focus()` counts as keyboard focus only when
+		// the last input was a key (Chromium's :focus-visible heuristic), but the last input was the mouse click on Apply;
+		// and the mouse still rested on Apply (moving it away removed the remaining failures; the tooltip interplay is not diagnosed). So: move the mouse
+		// off the header and press a key first.
+		await page.mouse.move(300, 500)
+		await page.keyboard.press('Escape')
 		await undo.focus()
 		// (Another tooltip may still be fading out, hence the name filter.)
 		await expect(page.getByRole('tooltip', { name: 'Apply or revert your unapplied edits before undoing' }))
