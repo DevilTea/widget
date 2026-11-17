@@ -2,20 +2,19 @@
  * Isolated Preview execution realm (issue #10 / Phase B2).
  *
  * The parent transfers exactly one bootstrap MessagePort. This frame owns the actual showcase Runtime,
- * Vue renderer, Vuetify provider, InspectorAgent, tutorial semantic observation, and inspected DOM.
+ * Vue renderer, InspectorAgent, tutorial semantic observation, and inspected DOM.
  * The parent never receives Runtime/Blueprint objects or arbitrary Runtime values.
  */
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { InspectorAgent } from '@deviltea/widget-inspector/agent'
 import type { App } from 'vue'
-import type { PreviewHostRequest } from './preview-host/protocol'
+import type { PreviewHostRequest, PreviewTourId } from './preview-host/protocol'
 import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
 import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
 import {
 	acceptInspectorFrameBootstrap,
 } from '@deviltea/widget-inspector/frame-bootstrap'
 import { createApp, defineComponent, h } from 'vue'
-import { createVuetify } from 'vuetify'
 import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
 import { createLabThemeStore, LabThemeKey } from './composables/use-lab-theme'
 import { derivePreviewParentOrigin } from './preview-host/parent-origin'
@@ -27,10 +26,8 @@ import {
 	PREVIEW_INSPECTOR_CHANNEL,
 } from './preview-host/protocol'
 import { getShowcase } from './showcases/registry'
-import { CRM_TOUR_ID, crmTourScript } from './tutorial/crm-script'
 import { createRuntimeReader, subscribeObservationTargets } from './tutorial/inspection-reader'
 import { SURVEY_TOUR_ID, surveyTourScript } from './tutorial/survey-script'
-import 'vuetify/styles'
 import 'pika.css'
 import './styles/global.css'
 import './styles/tutorial-theme.css'
@@ -58,8 +55,8 @@ let mounted: MountedPreview | null = null
 let bootstrapAccepted = false
 let mountQueue: Promise<void> = Promise.resolve()
 
-function scriptFor(tourId: 'survey' | 'crm') {
-	return tourId === SURVEY_TOUR_ID ? surveyTourScript : crmTourScript
+function scriptFor(_tourId: PreviewTourId) {
+	return surveyTourScript
 }
 
 function sendSafely(transport: { readonly closed: boolean, send: (message: unknown) => void }, message: unknown): void {
@@ -224,7 +221,6 @@ window.addEventListener('message', (event) => {
 			const app = createApp(Root)
 			app.provide(LabI18nKey, i18n)
 			app.provide(LabThemeKey, theme)
-			app.use(createVuetify({ theme: { defaultTheme: 'system' } }))
 			app.mount('#app')
 
 			const root = document.getElementById('app')
@@ -240,9 +236,7 @@ window.addEventListener('message', (event) => {
 				dom: { root },
 			})
 
-			const script = request.preview.showcaseId === SURVEY_TOUR_ID
-				? surveyTourScript
-				: request.preview.showcaseId === CRM_TOUR_ID ? crmTourScript : null
+			const script = request.preview.showcaseId === SURVEY_TOUR_ID ? surveyTourScript : null
 			const stopTutorialObservation = script === null
 				? () => {}
 				: subscribeObservationTargets(runtime, script.observationTargets, () => {

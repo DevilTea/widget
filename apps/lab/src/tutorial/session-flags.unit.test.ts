@@ -45,7 +45,7 @@ describe('tutorial session flags', () => {
 	it('a tour starts uncompleted', () => {
 		expect(isTourCompleted('survey', storage))
 			.toBe(false)
-		expect(isTourCompleted('crm', storage))
+		expect(isTourCompleted('other-tour', storage))
 			.toBe(false)
 	})
 
@@ -59,13 +59,13 @@ describe('tutorial session flags', () => {
 		markTourCompleted('survey', storage)
 		expect(isTourCompleted('survey', storage))
 			.toBe(true)
-		expect(isTourCompleted('crm', storage))
+		expect(isTourCompleted('other-tour', storage))
 			.toBe(false)
 
-		markTourCompleted('crm', storage)
+		markTourCompleted('other-tour', storage)
 		expect(isTourCompleted('survey', storage))
 			.toBe(true)
-		expect(isTourCompleted('crm', storage))
+		expect(isTourCompleted('other-tour', storage))
 			.toBe(true)
 	})
 
@@ -82,14 +82,14 @@ describe('tutorial session flags', () => {
 	it('a fresh storage (simulating a new browser session) reports every flag unset', () => {
 		markWelcomeDismissed(storage)
 		markTourCompleted('survey', storage)
-		markTourCompleted('crm', storage)
+		markTourCompleted('other-tour', storage)
 
 		const freshSessionStorage = createFakeStorage()
 		expect(isWelcomeDismissed(freshSessionStorage))
 			.toBe(false)
 		expect(isTourCompleted('survey', freshSessionStorage))
 			.toBe(false)
-		expect(isTourCompleted('crm', freshSessionStorage))
+		expect(isTourCompleted('other-tour', freshSessionStorage))
 			.toBe(false)
 	})
 })

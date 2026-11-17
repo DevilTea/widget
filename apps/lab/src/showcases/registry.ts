@@ -12,22 +12,14 @@
 import type { AnyWidgetPluginTuple, WidgetSystem } from '@deviltea/widget-core'
 import type { Component } from 'vue'
 import type { SourcesRegistry } from '../implementation/types'
-import { defineAsyncComponent } from 'vue'
 import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
 import { SandboxRenderer } from '../sandbox/renderers'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
-import { crmPresets, defaultCrmPreset } from './crm/presets'
-import { CrmRenderer } from './crm/renderers'
-import { crmSources } from './crm/sources'
-import { crmSystem } from './crm/system'
 import { defaultSurveyPreset, surveyPresets } from './survey/presets'
 import { SurveyRenderer } from './survey/renderers'
 import { surveySources } from './survey/sources'
 import { surveySystem } from './survey/system'
-import { defaultVuetifyTaskPreset, vuetifyTaskPresets } from './vuetify-tasks/presets'
-import { vuetifyTaskSources } from './vuetify-tasks/sources'
-import { vuetifyTaskSystem } from './vuetify-tasks/system'
 
 export interface ShowcasePreset {
 	readonly id: string
@@ -39,6 +31,11 @@ export interface ShowcasePreset {
 export interface ShowcaseEntry {
 	readonly id: string
 	readonly label: string
+	/**
+	 * Test-only fixture: registered (so `?showcase=<id>`, `switchShowcase()` and the Preview frame resolve
+	 * it) but never listed in the header's showcase selector and never the default.
+	 */
+	readonly hidden?: boolean
 	readonly system: WidgetSystem<AnyWidgetPluginTuple>
 	/** The component `createWidgetVueRenderer` returned for this showcase's system. */
 	readonly renderer: Component
@@ -58,17 +55,12 @@ export interface ShowcaseEntry {
  * registry is a runtime lookup table across showcases with different plugin universes, and every
  * consumer (`LabSession`, `createWidgetVueRenderer`'s own `runtime.blueprint.system === system`
  * identity check) only ever needs object identity, never the precise literal-type union.
+ *
+ * `survey` is the default and the only showcase listed in the UI. `sandbox` is a hidden, test-only
+ * fixture (minimal Counter/Text/... widgets plus the invalid/raw-slot recovery presets): it is not listed
+ * in the showcase selector and is reachable only through `?showcase=sandbox` (see `resolveInitialShowcase`).
  */
 export const showcases: readonly ShowcaseEntry[] = [
-	{
-		id: 'sandbox',
-		label: 'Sandbox',
-		system: sandboxSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
-		renderer: SandboxRenderer as unknown as Component,
-		presets: sandboxPresets,
-		defaultPreset: defaultSandboxPreset,
-		sources: sandboxSources,
-	},
 	{
 		id: 'survey',
 		label: 'Interactive Survey',
@@ -79,31 +71,33 @@ export const showcases: readonly ShowcaseEntry[] = [
 		sources: surveySources,
 	},
 	{
-		id: 'crm',
-		label: 'Product Prototype',
-		system: crmSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
-		renderer: CrmRenderer as unknown as Component,
-		presets: crmPresets,
-		defaultPreset: defaultCrmPreset,
-		sources: crmSources,
-	},
-	{
-		id: 'vuetify-tasks',
-		label: 'Vuetify Task Workspace',
-		system: vuetifyTaskSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
-		// Vuetify is intentionally the heavyweight integration showcase. Keep its renderer (and its
-		// component CSS) outside the Lab shell's eager bundle; the async component still receives the same
-		// Runtime prop once this showcase is selected. Vuetify's app-level injection is installed in main.ts.
-		renderer: defineAsyncComponent(() => import('./vuetify-tasks/renderers')
-			.then(module => module.VuetifyTaskRenderer)) as unknown as Component,
-		presets: vuetifyTaskPresets,
-		defaultPreset: defaultVuetifyTaskPreset,
-		sources: vuetifyTaskSources,
+		id: 'sandbox',
+		label: 'Sandbox',
+		hidden: true,
+		system: sandboxSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
+		renderer: SandboxRenderer as unknown as Component,
+		presets: sandboxPresets,
+		defaultPreset: defaultSandboxPreset,
+		sources: sandboxSources,
 	},
 ]
 
-export const defaultShowcase: ShowcaseEntry = showcases[0]!
+/** The showcases the header's selector lists: every registered showcase that is not a hidden fixture. */
+export const listedShowcases: readonly ShowcaseEntry[] = showcases.filter(showcase => showcase.hidden !== true)
+
+export const defaultShowcase: ShowcaseEntry = listedShowcases[0]!
 
 export function getShowcase(id: string): ShowcaseEntry | undefined {
 	return showcases.find(showcase => showcase.id === id)
+}
+
+/**
+ * The showcase the Lab starts in: the `?showcase=<id>` URL parameter selects any registered showcase
+ * (listed or hidden), so e2e can open the hidden `sandbox` fixture without UI. A missing, empty or
+ * unknown id falls back to `defaultShowcase`. Read once at startup; the selector does not write the URL.
+ */
+export function resolveInitialShowcase(search: string): ShowcaseEntry {
+	const id = new URLSearchParams(search)
+		.get('showcase')
+	return (id === null ? undefined : getShowcase(id)) ?? defaultShowcase
 }

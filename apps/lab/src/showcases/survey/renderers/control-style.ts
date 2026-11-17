@@ -1,10 +1,9 @@
 /**
  * Inline style for the native form controls of the survey (inputs, the language select, Submit).
  *
- * The Lab's Vuetify reset (`button, input, select { color: inherit; font: inherit }` in
- * `@layer vuetify-core.reset`) beats PikaCSS utilities (`@layer utilities`), so the colour, size and
- * weight a control needs to stay readable on a projector are set inline, which beats every layer. The
- * order of the Lab's layers is deliberately not changed. The border uses `--lab-color-text-muted`, which
+ * The colour, size and weight a control needs to stay readable on a projector are set inline (this beats
+ * every cascade layer; it was introduced to beat the Lab's former Vuetify reset layer, and is kept as is so the
+ * survey looks the same). The border uses `--lab-color-text-muted`, which
  * is at least 3:1 against the card surface in both themes (WCAG 1.4.11), unlike `--lab-color-border`.
  */
 

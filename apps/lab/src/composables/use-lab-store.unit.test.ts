@@ -8,7 +8,13 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, onUnmounted } from 'vue'
 import { replaceConfigScalar } from '../lab/author'
+import { getShowcase } from '../showcases/registry'
 import { createLabStore } from './use-lab-store'
+
+/** Most lifecycle tests drive the minimal Sandbox fixture, which is hidden and no longer the default. */
+function createSandboxStore(): LabStore {
+	return createLabStore(getShowcase('sandbox'))
+}
 
 const capturedText = '{ "id": "root", "type": "Text", "config": { "text": "captured snapshot" } }\n'
 const laterText = '{ "id": "root", "type": "Text", "config": { "text": "later snapshot" } }\n'
@@ -73,7 +79,7 @@ function mountShowcases(mount: ReturnType<typeof vi.fn>): string[] {
 
 describe('createLabStore() remote Preview ownership', () => {
 	it('disposes the iframe driver and clears the remote connection', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver()
 		await attachDriver(store, recorded.driver)
 		expect(store.previewHost.connection.value?.revision)
@@ -88,7 +94,7 @@ describe('createLabStore() remote Preview ownership', () => {
 	})
 
 	it('retains the last-valid remote Preview when the current Document becomes invalid', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver()
 		await attachDriver(store, recorded.driver)
 		const retained = store.preview.value!
@@ -108,7 +114,7 @@ describe('createLabStore() remote Preview ownership', () => {
 
 	it('mirrors App.vue teardown ordering: descendants unmount before the iframe host is disposed', async () => {
 		const events: string[] = []
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver({ onDispose: () => events.push('driver-dispose') })
 		await attachDriver(store, recorded.driver)
 
@@ -144,7 +150,7 @@ describe('createLabStore() remote Preview ownership', () => {
 
 describe('createLabStore() Preview source forwarding', () => {
 	it('mounts authoritative source text initially, after Apply, and after switching showcases', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver()
 		await attachDriver(store, recorded.driver)
 
@@ -191,7 +197,7 @@ describe('createLabStore() Preview source forwarding', () => {
 
 describe('createLabStore() committed Document bridge', () => {
 	it('exposes the high-level Author command and promotes the new valid revision remotely', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver()
 		await attachDriver(store, recorded.driver)
 		const nodeId = inspectBlueprint(store.documentState.value.blueprint).nodes.find(node => node.resolved && node.node.id === 'title')!.nodeId
@@ -216,7 +222,7 @@ describe('createLabStore() committed Document bridge', () => {
 	})
 
 	it('tracks changed commits but does not remotely replace a structural no-op', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver()
 		await attachDriver(store, recorded.driver)
 		const initial = store.documentSnapshot.value
@@ -243,7 +249,7 @@ describe('createLabStore() committed Document bridge', () => {
 	})
 
 	it('exposes current Document and retained Preview revisions independently after an invalid commit', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver()
 		await attachDriver(store, recorded.driver)
 		const initialPreview = store.preview.value!
@@ -266,7 +272,7 @@ describe('createLabStore() committed Document bridge', () => {
 
 describe('createLabStore() graph filter preferences', () => {
 	it('survive a changed successful Apply to a new valid Blueprint', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		store.graphShowAbsent.value = true
 		store.graphShowIsolatedMembers.value = true
 		const previousDocument = store.documentState.value
@@ -295,7 +301,7 @@ describe('createLabStore() graph filter preferences', () => {
 	})
 
 	it('survive an Apply that lands on an invalid Blueprint', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		store.graphShowAbsent.value = true
 		const retained = store.preview.value!
 
@@ -313,18 +319,34 @@ describe('createLabStore() graph filter preferences', () => {
 })
 
 describe('createLabStore() switchShowcase()', () => {
-	it('starts on the default sandbox authored context', () => {
+	it('starts on the default (survey) authored context and lists only non-hidden showcases', () => {
 		const store = createLabStore()
 		expect(store.showcaseId.value)
-			.toBe('sandbox')
+			.toBe('survey')
+		expect(store.showcases.map(showcase => showcase.id))
+			.toEqual(['survey'])
 		expect(store.documentState.value.blueprint.status)
 			.toBe('valid')
 		expect(store.preview.value?.revision)
 			.toBe(0)
+		store.dispose()
+	})
+
+	it('starts on the given initial showcase, including a hidden test fixture', () => {
+		const store = createSandboxStore()
+		expect(store.showcaseId.value)
+			.toBe('sandbox')
+		expect(store.presets.value.some(preset => preset.id === 'valid-interactive'))
+			.toBe(true)
+		expect(store.documentState.value.blueprint.status)
+			.toBe('valid')
+		expect(store.preview.value?.revision)
+			.toBe(0)
+		store.dispose()
 	})
 
 	it('replaces the authored session/presets and promotes the target revision-0 Preview', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver()
 		await attachDriver(store, recorded.driver)
 		const oldSession = store.session
@@ -350,7 +372,7 @@ describe('createLabStore() switchShowcase()', () => {
 	})
 
 	it('loads the target showcase default source as the new Document and draft', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		await store.switchShowcase('survey')
 
 		expect(store.draftSourceText.value)
@@ -360,7 +382,7 @@ describe('createLabStore() switchShowcase()', () => {
 	})
 
 	it('is a no-op for the current or an unknown showcase', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const session = store.session
 
 		await store.switchShowcase('sandbox')
@@ -373,7 +395,7 @@ describe('createLabStore() switchShowcase()', () => {
 	})
 
 	it('resolves applyPreset() against the new showcase after switching', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		await store.switchShowcase('survey')
 
 		const outcome = await store.applyPreset('survey-cycle')
@@ -385,7 +407,7 @@ describe('createLabStore() switchShowcase()', () => {
 	})
 
 	it('adopts the target authoritative revision-0 snapshot without a synthetic same-source Apply', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		await store.switchShowcase('survey')
 
 		expect(store.documentState.value.revision)
@@ -400,7 +422,7 @@ describe('createLabStore() switchShowcase()', () => {
 describe('createLabStore() lifecycle transaction serialization', () => {
 	it('serializes an in-flight valid Apply before a concurrent showcase switch', async () => {
 		const gate = createDeferred()
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver({
 			beforeMount: descriptor => descriptor.showcaseId === 'sandbox' && descriptor.revision === 1 ? gate.promise : undefined,
 		})
@@ -432,7 +454,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 	})
 
 	it('serializes repeated switchShowcase() calls and the last queued call wins', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver()
 		await attachDriver(store, recorded.driver)
 
@@ -451,7 +473,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 	})
 
 	it('serializes switchShowcase() behind an already-started applyPreset()', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const applyPresetPromise = store.applyPreset('invalid-semantic')
 		const switchPromise = store.switchShowcase('survey')
 		const [applyPresetOutcome] = await Promise.all([applyPresetPromise, switchPromise])
@@ -466,7 +488,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 
 	it('captures the Apply draft at command-call time even while remote promotion is pending', async () => {
 		const gate = createDeferred()
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver({
 			beforeMount: descriptor => descriptor.revision === 1 ? gate.promise : undefined,
 		})
@@ -493,7 +515,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 
 	it('rejects a second same-turn Apply while the first one is in flight', async () => {
 		const gate = createDeferred()
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver({
 			beforeMount: descriptor => descriptor.revision === 1 ? gate.promise : undefined,
 		})
@@ -516,7 +538,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 
 	it('blocks a new apply() while a showcase switch occupies the lifecycle boundary', async () => {
 		const gate = createDeferred()
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver({
 			beforeMount: descriptor => descriptor.showcaseId === 'survey' ? gate.promise : undefined,
 		})
@@ -541,7 +563,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 
 	it('blocks a new applyPreset() while a showcase switch occupies the lifecycle boundary', async () => {
 		const gate = createDeferred()
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver({
 			beforeMount: descriptor => descriptor.showcaseId === 'survey' ? gate.promise : undefined,
 		})
@@ -566,7 +588,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 
 	it('does not record a conflict demonstration while a showcase switch is outstanding', async () => {
 		const gate = createDeferred()
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver({
 			beforeMount: descriptor => descriptor.showcaseId === 'survey' ? gate.promise : undefined,
 		})
@@ -592,7 +614,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 
 	it('dispose() during a remote showcase mount prevents a late connection from being published', async () => {
 		const gate = createDeferred()
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const recorded = createRecordingDriver({
 			beforeMount: descriptor => descriptor.showcaseId === 'survey' ? gate.promise : undefined,
 		})
@@ -614,7 +636,7 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 
 describe('createLabStore() graph cluster expansion', () => {
 	it('supports expanding, collapsing, and toggling clusters', () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		expect(store.graphExpandedClusterIds.value.size)
 			.toBe(0)
 
@@ -633,7 +655,7 @@ describe('createLabStore() graph cluster expansion', () => {
 	})
 
 	it('supports expandAll and collapseAll', () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		store.expandAllGraphClusters()
 		expect(store.graphExpandedClusterIds.value.size)
 			.toBeGreaterThan(0)
@@ -643,7 +665,7 @@ describe('createLabStore() graph cluster expansion', () => {
 	})
 
 	it('keeps graph cluster presentation state unchanged when a member is focused', () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		const inspection = inspectBlueprint(store.documentState.value.blueprint)
 		const titleWidget = inspection.nodes.find(node => node.resolved && node.node.id === 'title')!
 
@@ -657,7 +679,7 @@ describe('createLabStore() graph cluster expansion', () => {
 	})
 
 	it('resets expanded clusters on switchShowcase', async () => {
-		const store = createLabStore()
+		const store = createSandboxStore()
 		store.expandGraphCluster('cluster:custom')
 		await store.switchShowcase('survey')
 		expect(store.graphExpandedClusterIds.value.size)

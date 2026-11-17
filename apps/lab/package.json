@@ -27,8 +27,7 @@
 		"modern-monaco": "catalog:",
 		"tm-grammars": "catalog:",
 		"tm-themes": "catalog:",
-		"vue": "catalog:",
-		"vuetify": "catalog:"
+		"vue": "catalog:"
 	},
 	"devDependencies": {
 		"@deviltea/tsconfig": "catalog:",

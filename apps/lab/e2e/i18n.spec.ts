@@ -116,7 +116,7 @@ test.describe('lab localization (issue #43)', () => {
 	})
 
 	test('changing locale preserves live Runtime state and shared inspector focus', async ({ page }) => {
-		await page.goto('/?lang=en')
+		await page.goto('/?lang=en&showcase=sandbox')
 		await previewFrame(page)
 			.getByRole('button', { name: '+1', exact: true })
 			.click()
@@ -185,7 +185,7 @@ test.describe('lab localization (issue #43)', () => {
 	})
 
 	test('registered-plugin catalog chrome translates while plugin identity and source stay verbatim', async ({ page }) => {
-		await page.goto('/?lang=zh-TW')
+		await page.goto('/?lang=zh-TW&showcase=sandbox')
 		await page.getByRole('button', { name: 'Implementation', exact: true })
 			.click()
 
@@ -205,40 +205,23 @@ test.describe('lab localization (issue #43)', () => {
 			.toContainText('createWidgetPlugin(\'Counter\')')
 	})
 
-	test('renderer-owned CRM chrome translates while config/data projection remains verbatim', async ({ page }) => {
+	test('renderer-owned Survey chrome translates while config/data projection remains verbatim', async ({ page }) => {
 		await page.goto('/?lang=zh-TW')
-		await page.getByLabel('切換展示範例')
-			.selectOption('crm')
 
 		// These strings are hardcoded renderer-owned presentation chrome.
 		await expect(previewFrame(page)
-			.getByText('銷售案件 CRM', { exact: true }))
+			.getByText('回應——後端讀取的內容', { exact: true }))
 			.toBeVisible()
 		await expect(previewFrame(page)
-			.getByText('互動式產品原型——Showcase B', { exact: true }))
-			.toBeVisible()
-		await expect(previewFrame(page)
-			.getByText('各階段案件數', { exact: true }))
-			.toBeVisible()
-		await expect(previewFrame(page)
-			.getByText('案件詳細資料', { exact: true }))
-			.toBeVisible()
-		await expect(previewFrame(page)
-			.getByText('從表格選取案件以查看詳細資料。', { exact: true }))
+			.getByText('語言', { exact: true }))
 			.toBeVisible()
 
 		// These come from applied Source/config/data and deliberately bypass the presentation translator.
 		await expect(previewFrame(page)
-			.getByRole('button', { name: 'Reset data', exact: true }))
+			.getByText('Phone number', { exact: true }))
 			.toBeVisible()
 		await expect(previewFrame(page)
-			.getByText('Visible deals', { exact: true }))
-			.toBeVisible()
-		await expect(previewFrame(page)
-			.getByRole('columnheader', { name: 'Company', exact: true }))
-			.toBeVisible()
-		await expect(previewFrame(page)
-			.getByText('Aurora Systems', { exact: true }))
-			.toBeVisible()
+			.getByText('Response — what a backend reads', { exact: true }))
+			.toHaveCount(0)
 	})
 })

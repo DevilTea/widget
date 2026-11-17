@@ -2,8 +2,6 @@
 
 import type { StyleItem } from '@pikacss/unplugin-pikacss'
 import type { ComponentCustomProperties } from 'vue'
-import { reactive } from 'vue'
-import { createVuetify } from 'vuetify'
 
 type StyleFunction = (...params: StyleItem[]) => string
 
@@ -15,17 +13,7 @@ function makeStyleFunction() {
 	})
 }
 
-const vuetify = createVuetify()
-
 export const testGlobalProperties: ComponentCustomProperties = {
-	$vuetify: {
-		defaults: vuetify.defaults.value,
-		display: reactive(vuetify.display),
-		theme: reactive(vuetify.theme),
-		icons: vuetify.icons,
-		locale: reactive(vuetify.locale),
-		date: vuetify.date.instance,
-	},
 	pika: makeStyleFunction(),
 	pikap: makeStyleFunction(),
 }

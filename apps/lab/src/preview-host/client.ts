@@ -5,6 +5,7 @@ import type {
 	PreviewHostMountedResponse,
 	PreviewHostResponse,
 	PreviewHostTutorialEvaluatedResponse,
+	PreviewTourId,
 } from './protocol'
 import {
 	parsePreviewHostEvent,
@@ -16,7 +17,7 @@ export class PreviewHostClientError extends Error {}
 
 export interface PreviewHostClient {
 	mount: (sessionId: string, generation: number, preview: PreviewHostDescriptor) => Promise<PreviewHostMountedResponse>
-	evaluateTutorial: (tourId: 'survey' | 'crm', stepIndex: number, progress: number) => Promise<PreviewHostTutorialEvaluatedResponse>
+	evaluateTutorial: (tourId: PreviewTourId, stepIndex: number, progress: number) => Promise<PreviewHostTutorialEvaluatedResponse>
 	updatePresentation: (locale: 'en' | 'zh-TW', theme: 'light' | 'dark') => void
 	setTutorialSpotlight: (target: string | null) => void
 	onEvent: (listener: (event: PreviewHostEvent) => void) => () => void

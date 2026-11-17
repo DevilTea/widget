@@ -6,17 +6,17 @@ import { expect, previewFrame, test } from './fixtures'
  * Issue #25 P2 "Preview -> semantic inspector bridge" (Inspect mode) contract.
  *
  * Fixtures used:
- *  - CRM showcase (`crm-default` preset): `reset-data` (`Button`, "Reset data") nested inside
- *    `crm-toolbar` (`Toolbar`) nested inside `crm-app` (`AppShell`) — the nested-anchor case; and
- *    `change-stage` (`Button`, "Change stage") inside the Deal details panel — its press opens the
- *    "Change deal stage" modal, a clearly observable underlying action to prove suppressed/not-suppressed.
+ *  - Sandbox test fixture (`?showcase=sandbox`, `valid-interactive` preset): the `counter-1` (`Counter`)
+ *    widget nested inside `root` (`Stack`) — the nested-anchor case; its "+1" button changes the visible
+ *    `count: N · doubled: M` text, a clearly observable underlying action to prove suppressed/not-suppressed.
  *  - Survey showcase (`survey-default` preset): `phone` (`ShortAnswer`, label "Phone number") — visible on
  *    load, so a plain hover/badge target and a native text input; `mode` (`SingleChoice`) whose "On site"
  *    answer makes `guests` appear (the Property-driven proof that a write reached State).
  */
 
 const INSPECT_TOGGLE = { name: 'Inspect' }
-const CHANGE_STAGE_DIALOG = { name: 'Change deal stage' }
+const COUNTER_TEXT_0 = 'count: 0 · doubled: 0'
+const COUNTER_TEXT_1 = 'count: 1 · doubled: 2'
 
 function inspectToggle(page: Page) {
 	return page.getByRole('button', INSPECT_TOGGLE)
@@ -34,50 +34,26 @@ async function setDraftSourceText(page: Page, text: string): Promise<void> {
 	}, text)
 }
 
-async function selectAuroraDeal(page: Page): Promise<void> {
-	const preview = previewFrame(page)
-	// Selecting a row is itself a normal (non-Inspect) interaction — done before Inspect mode is ever
-	// turned on, since an Inspect-mode click on the table row would resolve to `deal-table` (the whole
-	// `Table` widget is the innermost anchor for a data row) and suppress `selectRow` entirely.
-	await preview.getByRole('row')
-		.filter({ hasText: 'Aurora Systems' })
-		.click()
-	await expect(preview.getByRole('button', { name: 'Change stage' }))
-		.toBeVisible()
-}
-
 test.describe('Inspect mode (issue #25 P2)', () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto('/')
 	})
 
-	test('is off by default: CRM rows/buttons behave normally', async ({ page }) => {
-		await page.getByLabel('Switch showcase')
-			.selectOption('crm')
+	test('is off by default: Sandbox Counter buttons behave normally', async ({ page }) => {
+		await page.goto('/?showcase=sandbox')
 
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'false')
 
-		await selectAuroraDeal(page)
-
 		await previewFrame(page)
-			.getByRole('button', { name: 'Change stage' })
+			.getByRole('button', { name: '+1' })
 			.click()
 		await expect(previewFrame(page)
-			.getByRole('dialog', CHANGE_STAGE_DIALOG))
+			.getByText(COUNTER_TEXT_1, { exact: true }))
 			.toBeVisible()
-		await previewFrame(page)
-			.locator('body')
-			.press('Escape')
-		await expect(previewFrame(page)
-			.getByRole('dialog', CHANGE_STAGE_DIALOG))
-			.toBeHidden()
 	})
 
 	test('toggling on: hovering a Survey question outlines it and shows the type#id badge', async ({ page }) => {
-		await page.getByLabel('Switch showcase')
-			.selectOption('survey')
-
 		await inspectToggle(page)
 			.click()
 		await expect(inspectToggle(page))
@@ -114,27 +90,25 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.toBeVisible()
 	})
 
-	test('inspect-click on a CRM Button suppresses its action but drives shared focus into Blueprint and Runtime', async ({ page }) => {
-		await page.getByLabel('Switch showcase')
-			.selectOption('crm')
-		await selectAuroraDeal(page)
+	test('inspect-click on a Sandbox Counter button suppresses its action but drives shared focus into Blueprint and Runtime', async ({ page }) => {
+		await page.goto('/?showcase=sandbox')
 
 		await inspectToggle(page)
 			.click()
 
 		await previewFrame(page)
-			.getByRole('button', { name: 'Change stage' })
+			.getByRole('button', { name: '+1' })
 			.click()
 
-		// Suppressed: no modal, no store mutation.
+		// Suppressed: the Counter State did not change.
 		await expect(previewFrame(page)
-			.getByRole('dialog', CHANGE_STAGE_DIALOG))
-			.toHaveCount(0)
+			.getByText(COUNTER_TEXT_0, { exact: true }))
+			.toBeVisible()
 
 		// Drives the existing shared focus + activates Blueprint for immediate visible feedback.
 		await expect(page.getByRole('tab', { name: 'Blueprint' }))
 			.toHaveAttribute('aria-selected', 'true')
-		await expect(page.getByRole('heading', { name: 'change-stage : Button' }))
+		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
 			.toBeVisible()
 
 		// Runtime reflects the exact same shared focus once opened: the same tree row is the selected
@@ -142,43 +116,36 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		// specific color value.
 		await page.getByRole('tab', { name: 'Runtime' })
 			.click()
-		const changeStageRow = page.getByRole('button', { name: 'change-stage : Button' })
-		const resetDataRow = page.getByRole('button', { name: 'reset-data : Button' })
+		const counterRow = page.getByRole('button', { name: 'counter-1 : Counter' })
+		const summaryRow = page.getByRole('button', { name: 'summary-1 : Summary' })
 		const [selectedBackground, otherBackground] = await Promise.all([
-			changeStageRow.evaluate(el => getComputedStyle(el).backgroundColor),
-			resetDataRow.evaluate(el => getComputedStyle(el).backgroundColor),
+			counterRow.evaluate(el => getComputedStyle(el).backgroundColor),
+			summaryRow.evaluate(el => getComputedStyle(el).backgroundColor),
 		])
 		expect(selectedBackground)
 			.not.toBe(otherBackground)
 	})
 
-	test('innermost inspect anchor wins: a Button nested inside the CRM toolbar/AppShell selects itself, not its container', async ({ page }) => {
-		await page.getByLabel('Switch showcase')
-			.selectOption('crm')
+	test('innermost inspect anchor wins: a Counter nested inside the root Stack selects itself, not its container', async ({ page }) => {
+		await page.goto('/?showcase=sandbox')
 
 		await inspectToggle(page)
 			.click()
 
-		// `reset-data` (Button) is nested inside `crm-toolbar` (Toolbar) inside `crm-app` (AppShell) —
-		// all three are stamped Inspect anchors.
+		// `counter-1` (Counter) is nested inside `root` (Stack) — both are stamped Inspect anchors.
 		await previewFrame(page)
-			.getByRole('button', { name: 'Reset data' })
+			.getByText(COUNTER_TEXT_0, { exact: true })
 			.click()
 
 		await expect(page.getByRole('tab', { name: 'Blueprint' }))
 			.toHaveAttribute('aria-selected', 'true')
-		await expect(page.getByRole('heading', { name: 'reset-data : Button' }))
+		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
 			.toBeVisible()
-		await expect(page.getByRole('heading', { name: 'crm-toolbar : Toolbar' }))
-			.toHaveCount(0)
-		await expect(page.getByRole('heading', { name: 'crm-app : AppShell' }))
+		await expect(page.getByRole('heading', { name: 'root : Stack' }))
 			.toHaveCount(0)
 	})
 
 	test('Escape exits Inspect mode: badge disappears and subsequent clicks act normally', async ({ page }) => {
-		await page.getByLabel('Switch showcase')
-			.selectOption('survey')
-
 		await inspectToggle(page)
 			.click()
 		const phoneLabel = previewFrame(page)
@@ -218,9 +185,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 	})
 
 	test('toggling off restores normal Preview behavior immediately', async ({ page }) => {
-		await page.getByLabel('Switch showcase')
-			.selectOption('crm')
-		await selectAuroraDeal(page)
+		await page.goto('/?showcase=sandbox')
 
 		await inspectToggle(page)
 			.click()
@@ -234,10 +199,10 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.toHaveAttribute('aria-pressed', 'false')
 
 		await previewFrame(page)
-			.getByRole('button', { name: 'Change stage' })
+			.getByRole('button', { name: '+1' })
 			.click()
 		await expect(previewFrame(page)
-			.getByRole('dialog', CHANGE_STAGE_DIALOG))
+			.getByText(COUNTER_TEXT_1, { exact: true }))
 			.toBeVisible()
 	})
 
@@ -251,9 +216,6 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 	 * `pointerdown`/`pointerup` are also suppressed at the capture boundary.
 	 */
 	test('inspect-click on a native focusable control (Survey "Phone number" input) selects the widget without focusing/activating it or mutating its State', async ({ page }) => {
-		await page.getByLabel('Switch showcase')
-			.selectOption('survey')
-
 		const phoneInput = previewFrame(page)
 			.getByLabel('Phone number')
 		await expect(phoneInput)
@@ -280,16 +242,14 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 	})
 
 	/**
-	 * Merge-gate review round 1, blocker 2: Sandbox is the Lab's DEFAULT showcase
-	 * (`showcases/registry.ts`'s `defaultShowcase`), so an Inspect toggle that is a non-functional mode
-	 * there (zero anchors) is a user-visible capability lie. `sandbox/renderers.ts`'s five render-function
-	 * renderers now each project `widgetId`/`widgetType` onto their own root vnode via
-	 * `useInspectAnchor()` — this exercises that against the Counter widget (`counter-1`) from the
-	 * default `valid-interactive` Sandbox preset, with no showcase switch at all (the true first-load
-	 * default state).
+	 * Merge-gate review round 1, blocker 2: an Inspect toggle that is a non-functional mode (zero anchors)
+	 * is a user-visible capability lie. `sandbox/renderers.ts`'s five render-function renderers each
+	 * project `widgetId`/`widgetType` onto their own root vnode via `useInspectAnchor()` — the two tests
+	 * below exercise that against the Counter widget (`counter-1`) from the `valid-interactive` preset of
+	 * the hidden Sandbox test fixture (`?showcase=sandbox`).
 	 */
 	test('restores requested Inspect state after Apply replaces the Preview Runtime', async ({ page }) => {
-		await page.goto('/?lab-test')
+		await page.goto('/?lab-test&showcase=sandbox')
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
 
 		await inspectToggle(page)
@@ -317,7 +277,8 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.toBeVisible()
 	})
 
-	test('Sandbox (the default showcase): Inspect works against the default state — hover/click the Counter widget', async ({ page }) => {
+	test('Sandbox fixture: Inspect works against its initial state — hover/click the Counter widget', async ({ page }) => {
+		await page.goto('/?showcase=sandbox')
 		await inspectToggle(page)
 			.click()
 		await expect(inspectToggle(page))

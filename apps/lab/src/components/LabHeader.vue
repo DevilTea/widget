@@ -1,6 +1,5 @@
 <script setup lang="ts">
 /** Compact Lab utility header: presentation controls, semantic status, tutorial entry, and Apply actions. */
-import type { TutorialTourId } from '../composables/use-tutorial'
 import type { LabLocale } from '../i18n/locale'
 import type { LabTheme } from '../theme/theme'
 import { computed } from 'vue'
@@ -10,6 +9,7 @@ import { useLabI18n } from '../composables/use-lab-i18n'
 import { useLabStore } from '../composables/use-lab-store'
 import { useLabTheme } from '../composables/use-lab-theme'
 import { useTutorialStore } from '../composables/use-tutorial'
+import { getShowcase } from '../showcases/registry'
 
 const store = useLabStore()
 const theme = useLabTheme()
@@ -17,6 +17,13 @@ const tutorial = useTutorialStore()
 const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
 const documentTools = useDocumentTools()
+
+// Listed showcases only, plus the current one when a hidden test fixture was opened with `?showcase=<id>`,
+// so the selector never shows a blank value.
+const showcaseOptions = computed(() => {
+	const current = getShowcase(store.showcaseId.value)
+	return current === undefined || store.showcases.includes(current) ? store.showcases : [...store.showcases, current]
+})
 
 const blueprintStatus = computed(() => store.documentState.value.blueprint.status)
 const diagnosticCount = computed(() => store.documentState.value.blueprint.diagnostics.length)
@@ -46,10 +53,6 @@ function onTutorialButtonClick(): void {
 		default:
 			tutorial.requestStart()
 	}
-}
-
-function onTutorialTourChange(event: Event): void {
-	tutorial.selectTour((event.target as HTMLSelectElement).value as TutorialTourId)
 }
 
 function onPresetChange(event: Event): void {
@@ -85,7 +88,7 @@ function onLocaleChange(event: Event): void {
 			@change="onShowcaseChange"
 		>
 			<option
-				v-for="showcase in store.showcases"
+				v-for="showcase in showcaseOptions"
 				:key="showcase.id"
 				:value="showcase.id"
 			>
@@ -126,22 +129,6 @@ function onLocaleChange(event: Event): void {
 		>
 			{{ i18n.t('Document Tools') }}
 		</button>
-
-		<select
-			v-if="tutorial.crmTourUnlocked.value"
-			:value="tutorial.activeTourId.value"
-			:disabled="tutorial.tourPickerDisabled.value"
-			:class="pika({ 'background': 'var(--lab-color-surface-alt)', 'color': 'var(--lab-color-text)', 'border': '1px solid var(--lab-color-border)', 'borderRadius': 'var(--lab-radius)', 'padding': '4px 8px', 'fontSize': '12px', '$:disabled': { opacity: '0.5', cursor: 'not-allowed' } })"
-			:aria-label="i18n.t('Choose tutorial')"
-			@change="onTutorialTourChange"
-		>
-			<option value="survey">
-				{{ i18n.t('Survey tour') }}
-			</option>
-			<option value="crm">
-				{{ i18n.t('CRM tour') }}
-			</option>
-		</select>
 		<button
 			type="button"
 			:disabled="tutorial.startPending.value"

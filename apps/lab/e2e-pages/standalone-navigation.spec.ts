@@ -186,7 +186,7 @@ test('built Widget Lab runtime assets execute under the Pages base', async ({ pa
 	}))
 		.toBe('/widget/lab/preview-frame.html')
 	await expect(page.frameLocator('[data-testid="preview-frame"]')
-		.getByText('Widget Lab sandbox', { exact: true }))
+		.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 		.toBeVisible({ timeout: 15_000 })
 
 	await expect(page.locator('.monaco-editor'))

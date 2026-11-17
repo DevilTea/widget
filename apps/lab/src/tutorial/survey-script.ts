@@ -180,15 +180,7 @@ export const surveyTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You now know State, Property, Method, and dependency.',
-				reveal: 'Try the CRM tour, open any inspector, or edit the Author JSON and press Apply.',
-			}],
-			// diagnostic #25 P4 Scope B: the completion state's direct "Take the CRM tour" offer. This is the
-			// hand-back (last) step, so `TutorialActions.startTour()`'s own "finish the current step first"
-			// behavior applies — clicking this reads as completing the Survey tour, not abandoning it.
-			links: [{
-				id: 'take-crm-tour',
-				label: 'Take the CRM tour',
-				run: actions => actions.startTour('crm'),
+				reveal: 'Open any inspector, or edit the Author JSON and press Apply.',
 			}],
 		},
 	],

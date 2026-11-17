@@ -1,9 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Regression coverage for merge-gate review round 2, blocker 2: "at most one current tour" — the header
- * tour-picker must not be able to orphan an active/paused engine, or race a pending start/restart
- * request (`selectTour()`'s own defensive checks, independent of `LabHeader.vue` actually disabling the
- * `<select>`).
+ * Tutorial store lifecycle coverage: duplicate start requests and Preview recheck ordering.
  *
  * Against the REAL `createLabStore()` (diagnostic #25's own `use-lab-store.unit.test.ts` precedent: called
  * directly, no component mount needed for plain reactivity/lifecycle-hook registration to work) — for
@@ -17,6 +14,7 @@ import type { PreviewFrameConnection, PreviewFrameDriver } from '../preview-host
 import type { ImplementationExplorerStore } from './use-implementation-explorer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { shallowRef } from 'vue'
+import { getShowcase } from '../showcases/registry'
 import { createLabStore } from './use-lab-store'
 import { createTutorialStore } from './use-tutorial'
 
@@ -47,7 +45,7 @@ async function flush(): Promise<void> {
 }
 
 interface DeferredTutorialEvaluation {
-	tourId: 'survey' | 'crm'
+	tourId: 'survey'
 	stepIndex: number
 	progress: number
 	resolve: (progress: number) => void
@@ -68,10 +66,10 @@ function previewConnection(revision: number): PreviewFrameConnection {
 function createFakePreviewDriver(): {
 	driver: PreviewFrameDriver
 	evaluations: DeferredTutorialEvaluation[]
-	emitTutorialObservation: (tourId: 'survey' | 'crm') => void
+	emitTutorialObservation: (tourId: 'survey') => void
 } {
 	const evaluations: DeferredTutorialEvaluation[] = []
-	const observationListeners = new Set<(tourId: 'survey' | 'crm') => void>()
+	const observationListeners = new Set<(tourId: 'survey') => void>()
 	const driver: PreviewFrameDriver = {
 		mount: async descriptor => previewConnection(descriptor.revision),
 		updatePresentation: () => {},
@@ -104,130 +102,10 @@ beforeEach(() => {
 	sessionStorage.clear()
 })
 
-describe('createTutorialStore() "at most one current tour" invariant (selectTour)', () => {
-	it('with CRM active, selectTour(\'survey\') is a no-op — activeTourId/status stay CRM/active, never orphaned', async () => {
-		sessionStorage.setItem('widget-lab:tutorial:completed:survey', '1')
-		const store = createLabStore()
-		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
-
-		expect(tutorial.crmTourUnlocked.value)
-			.toBe(true)
-		tutorial.selectTour('crm')
-		expect(tutorial.activeTourId.value)
-			.toBe('crm')
-
-		tutorial.requestStart()
-		await flush()
-		expect(tutorial.snapshot.value.status)
-			.toBe('active')
-		expect(tutorial.tourPickerDisabled.value)
-			.toBe(true)
-
-		// The actual regression: switching away while CRM is active must be rejected.
-		tutorial.selectTour('survey')
-		expect(tutorial.activeTourId.value)
-			.toBe('crm')
-		expect(tutorial.snapshot.value.status)
-			.toBe('active')
-
-		store.dispose()
-	})
-
-	it('a paused tour also blocks selectTour — pausing does not release the "current tour" invariant', async () => {
-		sessionStorage.setItem('widget-lab:tutorial:completed:survey', '1')
-		const store = createLabStore()
-		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
-
-		tutorial.selectTour('crm')
-		tutorial.requestStart()
-		await flush()
-		expect(tutorial.snapshot.value.status)
-			.toBe('active')
-
-		tutorial.pause()
-		expect(tutorial.snapshot.value.status)
-			.toBe('paused')
-		expect(tutorial.tourPickerDisabled.value)
-			.toBe(true)
-
-		tutorial.selectTour('survey')
-		expect(tutorial.activeTourId.value)
-			.toBe('crm')
-
-		store.dispose()
-	})
-
-	it('during a pending start, selectTour is rejected; once the start settles, the started tour IS the active/visible one', async () => {
-		sessionStorage.setItem('widget-lab:tutorial:completed:survey', '1')
-		const store = createLabStore()
-		const deferredSwitch = createDeferred<void>()
-		// Overrides the one call `loadTourDefault('crm')` makes from the default Sandbox showcase — a
-		// plain property reassignment on the returned `LabStore` object (none of its methods are
-		// `readonly` in the interface), so the rest of `store` stays the real, unmodified implementation.
-		store.switchShowcase = () => deferredSwitch.promise
-
-		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
-
-		tutorial.selectTour('crm')
-		expect(tutorial.activeTourId.value)
-			.toBe('crm')
-
-		tutorial.requestStart() // loadTourDefault('crm') is now pending on `deferredSwitch`
-		expect(tutorial.tourPickerDisabled.value)
-			.toBe(true)
-		// The CRM engine has not even started yet (still 'idle') at this point — this is exactly the
-		// "worst window" the review flagged: an engine-status-only check would miss it entirely.
-		expect(tutorial.snapshot.value.status)
-			.toBe('idle')
-
-		// Rejected while pending — this is the regression: without the guard-phase check, this would
-		// silently move `activeTourId` to 'survey' while CRM's own start is still in flight, and the CRM
-		// engine would start moments later with `activeTourId` already pointed elsewhere (no rail, no
-		// observation subscription — an orphaned active engine).
-		tutorial.selectTour('survey')
-		expect(tutorial.activeTourId.value)
-			.toBe('crm')
-
-		deferredSwitch.resolve()
-		await flush()
-
-		// Settled: CRM is the one that actually started, and it IS the active/visible tour.
-		expect(tutorial.activeTourId.value)
-			.toBe('crm')
-		expect(tutorial.snapshot.value.status)
-			.toBe('active')
-		expect(tutorial.tourPickerDisabled.value)
-			.toBe(true) // now blocked for the ordinary "active" reason, not the pending-start one
-
-		store.dispose()
-	})
-
-	it('once idle/completed again, selectTour is accepted normally', async () => {
-		sessionStorage.setItem('widget-lab:tutorial:completed:survey', '1')
-		const store = createLabStore()
-		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
-
-		tutorial.selectTour('crm')
-		tutorial.requestStart()
-		await flush()
-		expect(tutorial.snapshot.value.status)
-			.toBe('active')
-
-		tutorial.skip() // -> idle, releasing the invariant
-		expect(tutorial.tourPickerDisabled.value)
-			.toBe(false)
-
-		tutorial.selectTour('survey')
-		expect(tutorial.activeTourId.value)
-			.toBe('survey')
-
-		store.dispose()
-	})
-})
-
 describe('createTutorialStore() duplicate start requests', () => {
 	it('makes a rejected synchronous request a no-op while the first showcase switch is pending', async () => {
-		const store = createLabStore()
+		// Start from the hidden Sandbox fixture so the tour has to switch showcase (Survey is the default).
+		const store = createLabStore(getShowcase('sandbox'))
 		const deferredSwitch = createDeferred<void>()
 		const switchShowcase = vi.fn(() => deferredSwitch.promise)
 		store.switchShowcase = switchShowcase

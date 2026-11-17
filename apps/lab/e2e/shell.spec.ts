@@ -10,7 +10,7 @@ import { expect, previewFrame, test } from './fixtures'
  */
 
 test('app loads with header controls and all five panel tabs', async ({ page }) => {
-	await page.goto('/')
+	await page.goto('/?showcase=sandbox')
 
 	await expect(page.getByLabel('Switch showcase'))
 		.toBeVisible()
@@ -56,7 +56,7 @@ test('app loads with header controls and all five panel tabs', async ({ page }) 
 })
 
 test('Blueprint and Runtime keep separate outer inspector surfaces', async ({ page }) => {
-	await page.goto('/')
+	await page.goto('/?showcase=sandbox')
 
 	await page.getByRole('tab', { name: 'Blueprint' })
 		.click()
@@ -124,7 +124,7 @@ test('Source editor initializes only from built preview assets (issues #30, #102
 	const pageErrors: Error[] = []
 	page.on('pageerror', error => pageErrors.push(error))
 
-	await page.goto('/')
+	await page.goto('/?showcase=sandbox')
 
 	const editor = page.locator('.monaco-editor')
 	await expect(editor)

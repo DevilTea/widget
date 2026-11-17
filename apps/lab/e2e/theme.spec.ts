@@ -12,7 +12,7 @@ async function seedTheme(context: import('@playwright/test').BrowserContext, the
 test.describe('lab theme (issue #44)', () => {
 	test('switches document, Monaco, and Dockview presentation without resetting Runtime state', async ({ context, page }) => {
 		await seedTheme(context, 'light')
-		await page.goto('/')
+		await page.goto('/?showcase=sandbox')
 
 		const themeSelect = page.getByLabel('Theme')
 		await expect(themeSelect)
@@ -74,7 +74,7 @@ test.describe('lab theme (issue #44)', () => {
 
 	test('rehighlights already-loaded Implementation source when theme changes without reloading source text', async ({ context, page, blockedRequestUrls }) => {
 		await seedTheme(context, 'light')
-		await page.goto('/')
+		await page.goto('/?showcase=sandbox')
 		await page.getByRole('tab', { name: 'Blueprint' })
 			.click()
 		await page.getByRole('button', { name: 'title : Text' })

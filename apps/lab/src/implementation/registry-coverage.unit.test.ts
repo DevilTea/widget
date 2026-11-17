@@ -10,19 +10,13 @@ import type { SourcesRegistry } from './types'
 import { describe, expect, it } from 'vitest'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
-import { crmSources } from '../showcases/crm/sources'
-import { crmSystem } from '../showcases/crm/system'
 import { surveySources } from '../showcases/survey/sources'
 import { surveySystem } from '../showcases/survey/system'
-import { vuetifyTaskSources } from '../showcases/vuetify-tasks/sources'
-import { vuetifyTaskSystem } from '../showcases/vuetify-tasks/system'
 import { findDanglingRegistryTypes, findUncuratedPluginTypes } from './registry-coverage'
 
 const showcases: readonly { readonly label: string, readonly system: WidgetSystem<AnyWidgetPluginTuple>, readonly sources: SourcesRegistry }[] = [
 	{ label: 'sandbox', system: sandboxSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: sandboxSources },
 	{ label: 'survey', system: surveySystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: surveySources },
-	{ label: 'crm', system: crmSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: crmSources },
-	{ label: 'vuetify-tasks', system: vuetifyTaskSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: vuetifyTaskSources },
 ]
 
 const fixtureEntry: SourcesRegistry[string] = {

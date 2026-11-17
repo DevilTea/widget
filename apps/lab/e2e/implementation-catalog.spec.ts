@@ -3,7 +3,7 @@ import { expect, test } from './fixtures'
 /** Issue #42: passive registered-plugin browsing alongside the existing focused-instance inspector. */
 test.describe('implementation registered-plugin catalog (issue #42)', () => {
 	test('opens directly from the header without widget focus and exposes every Sandbox curated plugin type', async ({ page }) => {
-		await page.goto('/')
+		await page.goto('/?showcase=sandbox')
 		await page.getByRole('button', { name: 'Implementation', exact: true })
 			.click()
 
@@ -36,7 +36,7 @@ test.describe('implementation registered-plugin catalog (issue #42)', () => {
 	})
 
 	test('switching showcases replaces the catalog with the new showcase registry', async ({ page }) => {
-		await page.goto('/')
+		await page.goto('/?showcase=sandbox')
 		await page.getByRole('button', { name: 'Implementation', exact: true })
 			.click()
 
@@ -59,7 +59,7 @@ test.describe('implementation registered-plugin catalog (issue #42)', () => {
 	})
 
 	test('catalog browsing never changes shared focus, and contextual View implementation requests return to Focused instance', async ({ page }) => {
-		await page.goto('/')
+		await page.goto('/?showcase=sandbox')
 
 		await page.getByRole('tab', { name: 'Blueprint' })
 			.click()

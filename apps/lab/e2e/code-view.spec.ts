@@ -52,7 +52,7 @@ test.describe('code-view tab width (issue #46)', () => {
 	})
 
 	test('readonly Implementation/Shiki source inherits the four-column CSS tab width', async ({ page }) => {
-		await page.goto('/')
+		await page.goto('/?showcase=sandbox')
 		await page.getByRole('tab', { name: 'Blueprint' })
 			.click()
 		await page.getByRole('button', { name: 'title : Text' })

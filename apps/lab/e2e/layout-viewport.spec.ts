@@ -39,7 +39,7 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 	})
 
 	test('the dirty-draft confirmation survives shrink/widen without applying, losing the draft, or losing its focus-return target', async ({ page }) => {
-		await page.goto('/?lab-test')
+		await page.goto('/?lab-test&showcase=sandbox')
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
 
 		// Use a known-valid Source fixture through the same LabStore seam as the Apply contracts. Reading
@@ -86,7 +86,7 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 
 test('Implementation owns long-line overflow locally at the 900px minimum supported width', async ({ page }) => {
 	await page.setViewportSize({ width: 900, height: 800 })
-	await page.goto('/')
+	await page.goto('/?showcase=sandbox')
 	await page.getByRole('button', { name: 'Implementation', exact: true })
 		.click()
 
