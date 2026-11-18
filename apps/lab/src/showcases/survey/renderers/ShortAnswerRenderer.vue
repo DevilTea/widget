@@ -5,9 +5,9 @@
  * counts it). It sets no `maxlength`: a text that is too long is stored and reported in `errors`.
  */
 import { useWidget } from '@deviltea/widget-vue'
-import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
-import { surveyQuestionTarget } from '../../../tutorial/survey-target-map'
+import { useInspectAnchor } from '../../../showcase-host'
 import { ShortAnswerPlugin } from '../plugins/short-answer'
+import { surveyQuestionTarget } from '../tutorial-targets'
 import { FIELD_STYLE } from './control-style'
 import QuestionFrame from './QuestionFrame.vue'
 
@@ -63,6 +63,6 @@ function onInput(event: Event): void {
 	max-width: 420px;
 	min-height: 40px;
 	padding: 6px 10px;
-	background: var(--lab-color-surface-alt);
+	background: var(--survey-color-surface-alt);
 }
 </style>

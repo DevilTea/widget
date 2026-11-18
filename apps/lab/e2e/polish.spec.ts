@@ -432,8 +432,8 @@ test.describe('first paint (U23)', () => {
 			await expect(page.locator('#app'))
 				.toBeEmpty()
 			// The page colour is the palette's own: #f6f7f9 (light) and #14161a (dark), written out here, not read back from the page.
-			const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
-			expect(background)
+			// It comes from the shell's stylesheet, which loads while the held entry module has not run: poll until it is applied.
+			await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
 				.toBe(theme === 'light' ? 'rgb(246, 247, 249)' : 'rgb(20, 22, 26)')
 			expect(await page.evaluate(() => document.documentElement.style.colorScheme))
 				.toBe(theme)

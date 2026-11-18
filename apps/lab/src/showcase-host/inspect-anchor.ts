@@ -7,7 +7,7 @@ import { inspectAnchorAttributes } from '@deviltea/widget-inspector/anchor'
  * `@deviltea/widget-vue`'s `useWidget()` identity amendment ("useWidget() may expose readonly local widget
  * identity") deliberately supplies `widgetId`/`widgetType` as plain identity values only, with no
  * DOM-stamping behavior of its own. The attribute contract itself (names, shape, and what the Agent
- * does with them) is owned by `@deviltea/widget-inspector/anchor`; this composable is only the Lab's one
+ * does with them) is owned by `@deviltea/widget-inspector/anchor`; this composable is only the showcases' one
  * deliberate projection point, reused one-line-per-renderer by every showcase renderer that has a
  * rendered root (a renderer with no rendered root — a semantic-only stub — has nothing to stamp and
  * skips this entirely).

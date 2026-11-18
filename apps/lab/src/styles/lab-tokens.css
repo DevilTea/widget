@@ -1,0 +1,43 @@
+/**
+ * The Lab palette tokens (`--lab-color-*`, `--lab-radius`, `--lab-font-*`), shared by the two documents that are the
+ * Lab's own: the shell (`main.ts`, through `global.css`; read by Dockview, Monaco and the Tailwind utilities) and the
+ * Preview frame DOCUMENT (`preview-frame-main.ts`: the frame's background and text, the tutorial spotlight and the
+ * Inspect overlay, all host glue). Showcases never read these: a showcase defines and reads its own tokens
+ * (`src/showcases/survey/renderers/SurveyRootRenderer.vue` declares `--survey-*`), and
+ * `styles/showcase-isolation.unit.test.ts` fails when a file under `src/showcases` or `src/sandbox` mentions `--lab-`.
+ *
+ * Plain CSS: the dark palette is the resilient fallback/default on `:root`; the document-level `[data-lab-theme]`
+ * override below provides the alternate light palette without creating a second component styling system (#44).
+ */
+
+:root {
+	--lab-color-bg: #14161a;
+	--lab-color-surface: #1b1e24;
+	--lab-color-surface-alt: #22262e;
+	--lab-color-border: #2c313a;
+	--lab-color-text: #e6e8eb;
+	--lab-color-text-muted: #9aa2af;
+	--lab-color-accent: #5b9dff;
+	--lab-color-accent-contrast: #04101f;
+	--lab-color-danger: #f2545b;
+	--lab-color-warning: #e8a33d;
+	/* One token for success/OK in both themes (audit U17): this is the dark value, the light one is below. Never reintroduce a second name for it. */
+	--lab-color-ok: #3fbf7f;
+	--lab-radius: 6px;
+	--lab-font-mono: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+	--lab-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html[data-lab-theme='light'] {
+	--lab-color-bg: #f6f7f9;
+	--lab-color-surface: #ffffff;
+	--lab-color-surface-alt: #eef1f5;
+	--lab-color-border: #d4d9e2;
+	--lab-color-text: #1b1f24;
+	--lab-color-text-muted: #596273;
+	--lab-color-accent: #1769e0;
+	--lab-color-accent-contrast: #ffffff;
+	--lab-color-danger: #c9373f;
+	--lab-color-warning: #9a6200;
+	--lab-color-ok: #18794e;
+}

@@ -69,6 +69,33 @@ test.describe('lab theme (issue #44)', () => {
 			.toHaveAttribute('data-lab-theme', 'dark')
 	})
 
+	test('reaches the survey showcase through the host contract: its own tokens follow the theme, with no Lab token involved', async ({ context, page }) => {
+		await seedTheme(context, 'light')
+		await page.goto('/')
+		const survey = previewFrame(page)
+			.locator('.survey')
+		await expect(survey)
+			.toBeVisible()
+		const surveyState = () => survey.evaluate(element => ({
+			theme: element.getAttribute('data-survey-theme'),
+			surface: getComputedStyle(element)
+				.getPropertyValue('--survey-color-surface')
+				.trim(),
+			text: getComputedStyle(element).color,
+		}))
+		// The survey's own palette, written out here: white card surface and near-black text (light), dark surface and near-white text (dark).
+		await expect.poll(surveyState)
+			.toEqual({ theme: 'light', surface: '#ffffff', text: 'rgb(27, 31, 36)' })
+
+		await setTheme(page, 'dark')
+		await expect.poll(surveyState)
+			.toEqual({ theme: 'dark', surface: '#1b1e24', text: 'rgb(230, 232, 235)' })
+
+		await setTheme(page, 'light')
+		await expect.poll(surveyState)
+			.toEqual({ theme: 'light', surface: '#ffffff', text: 'rgb(27, 31, 36)' })
+	})
+
 	test('rehighlights already-loaded Implementation source when theme changes without reloading source text', async ({ context, page, blockedRequestUrls }) => {
 		await seedTheme(context, 'light')
 		await page.goto('/?showcase=sandbox')

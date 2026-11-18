@@ -9,14 +9,15 @@ import type { WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { InspectorAgent } from '@deviltea/widget-inspector/agent'
 import type { App } from 'vue'
 import type { PreviewHostRequest } from './preview-host/protocol'
+import type { ShowcaseHost } from './showcase-host'
 import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
 import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
 import {
 	acceptInspectorFrameBootstrap,
 } from '@deviltea/widget-inspector/frame-bootstrap'
 import { createApp, defineComponent, h } from 'vue'
-import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
-import { createLabThemeStore, LabThemeKey } from './composables/use-lab-theme'
+import { createLabI18nStore } from './composables/use-lab-i18n'
+import { createLabThemeStore } from './composables/use-lab-theme'
 import { derivePreviewParentOrigin } from './preview-host/parent-origin'
 import {
 	parsePreviewHostCommand,
@@ -25,10 +26,11 @@ import {
 	PREVIEW_HOST_PROTOCOL_VERSION,
 	PREVIEW_INSPECTOR_CHANNEL,
 } from './preview-host/protocol'
+import { ShowcaseHostKey } from './showcase-host'
 import { getShowcase } from './showcases/registry'
 import { createRuntimeReader, subscribeObservationTargets } from './tutorial/inspection-reader'
 import { SURVEY_TOUR_ID, surveyTourScript } from './tutorial/survey-script'
-import './styles/global.css'
+import './styles/lab-tokens.css'
 import './styles/tutorial-theme.css'
 import './styles/preview-frame.css'
 
@@ -51,6 +53,12 @@ const expectedParentOrigin = derivePreviewParentOrigin(document.referrer)
 
 const i18n = createLabI18nStore()
 const theme = createLabThemeStore()
+/**
+ * The frame-side adapter from the Lab's presentation stores to the showcase host contract
+ * (`showcase-host/host.ts`): a showcase sees only the current locale and theme, never these stores.
+ * The assignment is type-checked: if the Lab gains a locale or theme the contract does not know, this stops compiling.
+ */
+const showcaseHost: ShowcaseHost = { locale: i18n.locale, theme: theme.theme }
 let mounted: MountedPreview | null = null
 let bootstrapAccepted = false
 let mountQueue: Promise<void> = Promise.resolve()
@@ -219,8 +227,7 @@ window.addEventListener('message', (event) => {
 				setup: () => () => h(showcase.renderer, { runtime }),
 			})
 			const app = createApp(Root)
-			app.provide(LabI18nKey, i18n)
-			app.provide(LabThemeKey, theme)
+			app.provide(ShowcaseHostKey, showcaseHost)
 			app.mount('#app')
 
 			const root = document.getElementById('app')

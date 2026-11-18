@@ -11,7 +11,7 @@
 
 import type { AnyWidgetPluginTuple, WidgetSystem } from '@deviltea/widget-core'
 import type { Component } from 'vue'
-import type { SourcesRegistry } from '../implementation/types'
+import type { SourcesRegistry } from '../showcase-host'
 import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
 import { SandboxRenderer } from '../sandbox/renderers'
 import { sandboxSources } from '../sandbox/sources'
@@ -43,7 +43,7 @@ export interface ShowcaseEntry {
 	readonly defaultPreset: ShowcasePreset
 	/**
 	 * Curated Implementation-explorer registry (diagnostic #25 P3 Scope A) — metadata only (plugin type ->
-	 * file descriptors with lazy `load()` thunks, see `implementation/types.ts`), trivially small, so
+	 * file descriptors with lazy `load()` thunks, see `showcase-host/sources.ts`), trivially small, so
 	 * this field is safe to keep eager alongside the rest of `ShowcaseEntry` without pulling any raw
 	 * source text or Shiki into the eager/shared chunk graph.
 	 */

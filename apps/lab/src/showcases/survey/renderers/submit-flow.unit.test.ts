@@ -112,18 +112,18 @@ describe('native control style', () => {
 			.attributes('style') ?? ''
 		const submit = style('[data-testid="survey-submit"]')
 		expect(submit)
-			.toContain('color: var(--lab-color-accent-contrast)')
+			.toContain('color: var(--survey-color-accent-contrast)')
 		expect(submit)
 			.toContain('font-size: 17px')
 		expect(submit)
 			.toContain('font-weight: 600')
 		for (const selector of ['select', `${widgetSelector('guests')} input`, `${widgetSelector('phone')} input`]) {
 			expect(style(selector), selector)
-				.toContain('color: var(--lab-color-text)')
+				.toContain('color: var(--survey-color-text)')
 			expect(style(selector), selector)
 				.toContain('font-size: 17px')
 			expect(style(selector), selector)
-				.toContain('border-color: var(--lab-color-text-muted)')
+				.toContain('border-color: var(--survey-color-text-muted)')
 		}
 		wrapper.unmount()
 	})

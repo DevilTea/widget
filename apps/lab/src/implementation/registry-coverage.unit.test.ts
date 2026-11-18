@@ -6,7 +6,7 @@
  */
 
 import type { AnyWidgetPluginTuple, WidgetSystem } from '@deviltea/widget-core'
-import type { SourcesRegistry } from './types'
+import type { SourcesRegistry } from '../showcase-host'
 import { describe, expect, it } from 'vitest'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'

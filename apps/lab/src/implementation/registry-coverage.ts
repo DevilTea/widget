@@ -3,11 +3,11 @@
  * sanity: every referenced plugin type exists in the corresponding system — import the systems and
  * assert coverage/no-dangling entries").
  *
- * Framework-agnostic, pure — no Vue import, matching `src/implementation/types.ts`'s split.
+ * Framework-agnostic, pure — no Vue import, matching `src/showcase-host/sources.ts`'s split.
  */
 
 import type { AnyWidgetPluginTuple, WidgetSystem } from '@deviltea/widget-core'
-import type { SourcesRegistry } from './types'
+import type { SourcesRegistry } from '../showcase-host'
 
 /**
  * Every registry key that is NOT a real plugin type registered on `system`. A typo'd/renamed/removed

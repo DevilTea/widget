@@ -1,17 +1,19 @@
 /**
- * Curated Implementation-explorer registry shape (diagnostic #25 P3 Scope A "curated registry").
+ * Curated Implementation-explorer registry shape (diagnostic #25 P3 Scope A "curated registry"). It is part of
+ * the showcase host contract: every showcase's `sources.ts` declares its registry in this shape and the Lab's
+ * Implementation explorer consumes it.
  *
  * Framework-agnostic, metadata-only (no Vue import) — mirrors `src/tutorial/types.ts`'s split from its
  * own Vue bridge. `CuratedSourceFile.load()` is the one deliberate lazy boundary the gate review's
  * "loading boundaries" amendment locked ("raw `?raw` payloads sit behind explorer-only dynamic
  * loaders, so neither the registry nor the tutorial pulls source text or Shiki into the shell's
- * initial chunks"): it is a function returning a dynamic `import('...?raw')`, never an
+ * initial chunks"): it is a function returning a dynamic import of a `?raw` module, never an
  * already-resolved string, so a showcase's `sources.ts` module (this type's concrete instances) can be
  * imported eagerly — it is trivially small, plugin-type -> file-descriptor metadata only — without
  * pulling any raw source *text* into the eager/shared chunk graph. Only actually *calling* `load()`
  * (from `src/components/implementation/ImplementationFile.vue`, reachable only once the Implementation
  * panel itself has been mounted — see `Workbench.vue`'s `defineAsyncComponent` registration) triggers
- * the fetch, and each distinct `import('...?raw')` specifier is Vite's own per-file async-chunk
+ * the fetch, and each distinct `?raw` import specifier is Vite's own per-file async-chunk
  * boundary — one small chunk per curated file, never one bundle of every curated file's text.
  */
 

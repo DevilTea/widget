@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { listFiles, specifiersOf } from './boundary-support'
 
 /**
  * Styling boundaries of the Lab (issue #230):
@@ -16,27 +17,6 @@ import { describe, expect, it } from 'vitest'
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const srcRoot = join(appRoot, 'src')
 const thisFile = fileURLToPath(import.meta.url)
-
-function listFiles(directory: string, files: string[] = []): string[] {
-	for (const entry of readdirSync(directory, { withFileTypes: true })) {
-		if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'test-results' || entry.name === 'playwright-report')
-			continue
-		const path = join(directory, entry.name)
-		if (entry.isDirectory())
-			listFiles(path, files)
-		else
-			files.push(path)
-	}
-	return files
-}
-
-/** Every module/stylesheet specifier a file imports (static, side-effect, dynamic and CSS `@import`). */
-function specifiersOf(source: string): string[] {
-	const found: string[] = []
-	for (const match of source.matchAll(/(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|@import\s+(?:url\()?)['"]([^'"]+)['"]/g))
-		found.push(match[1]!)
-	return found
-}
 
 function resolveLocal(from: string, specifier: string): string | null {
 	if (!specifier.startsWith('.'))
@@ -122,14 +102,19 @@ describe('the Preview frame does not reach the chrome styling pipeline', () => {
 		const visited = [...seen].map(file => relative(srcRoot, file))
 		expect(visited)
 			.toEqual(expect.arrayContaining([
-				'styles/global.css',
+				'styles/lab-tokens.css',
 				'styles/preview-frame.css',
+				'showcase-host/index.ts',
 				'showcases/survey/renderers/SurveyRootRenderer.vue',
 			]))
+		// The shell's baseline (dialogs, narrow-viewport gate, document font) is not part of the frame document.
+		expect(visited)
+			.not
+			.toContain('styles/global.css')
 	})
 
 	it('has no Tailwind source or @theme in the frame stylesheets', () => {
-		for (const name of ['global.css', 'preview-frame.css', 'tutorial-theme.css']) {
+		for (const name of ['global.css', 'lab-tokens.css', 'preview-frame.css', 'tutorial-theme.css']) {
 			const css = readFileSync(join(srcRoot, 'styles', name), 'utf8')
 			expect(css, name)
 				.not

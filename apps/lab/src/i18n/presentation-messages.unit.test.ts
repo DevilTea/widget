@@ -7,8 +7,6 @@ describe('presentation localization boundary', () => {
 			.toBe('已套用 instance')
 		expect(translatePresentationMessage('zh-TW', 'Legend'))
 			.toBe('圖例')
-		expect(translatePresentationMessage('zh-TW', 'Response — what a backend reads'))
-			.toBe('回應——後端讀取的內容')
 		expect(translatePresentationMessage('zh-TW', 'Theme'))
 			.toBe('主題')
 		expect(translatePresentationMessage('zh-TW', 'Light'))

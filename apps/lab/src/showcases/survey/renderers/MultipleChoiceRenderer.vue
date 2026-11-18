@@ -7,9 +7,9 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
-import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
-import { surveyQuestionTarget } from '../../../tutorial/survey-target-map'
+import { useInspectAnchor } from '../../../showcase-host'
 import { MultipleChoicePlugin } from '../plugins/multiple-choice'
+import { surveyQuestionTarget } from '../tutorial-targets'
 import { choiceRows } from './choice-rows'
 import QuestionFrame from './QuestionFrame.vue'
 
@@ -45,7 +45,7 @@ function toggle(value: string, checked: boolean): void {
 				:key="row.value"
 				:data-option-value="row.value"
 				class="option"
-				:style="row.enabled ? undefined : { color: 'var(--lab-color-text-muted)', cursor: 'not-allowed' }"
+				:style="row.enabled ? undefined : { color: 'var(--survey-color-text-muted)', cursor: 'not-allowed' }"
 			>
 				<input
 					type="checkbox"
@@ -83,6 +83,6 @@ function toggle(value: string, checked: boolean): void {
 	width: 24px;
 	height: 24px;
 	margin: 0;
-	accent-color: var(--lab-color-accent);
+	accent-color: var(--survey-color-accent);
 }
 </style>
