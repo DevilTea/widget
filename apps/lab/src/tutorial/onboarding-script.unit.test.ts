@@ -49,7 +49,6 @@ describe('onboardingTourScript shape', () => {
 				{ widgetId: 'account', member: { type: 'state', key: 'name' } },
 				{ widgetId: 'account', member: { type: 'state', key: 'email' } },
 				{ widgetId: 'induction', member: { type: 'state', key: 'status' } },
-				{ widgetId: 'induction', member: { type: 'state', key: 'ticket' } },
 			])
 		const { reader } = setup()
 		for (const { widgetId, member } of onboardingTourScript.observationTargets) {
@@ -158,14 +157,19 @@ describe('steps "load-booking", "async-booking" and "stale-answers"', () => {
 			.toBe(true)
 	})
 
-	it('"stale-answers" needs a second request (ticket 2)', () => {
+	it('"stale-answers" is not complete on entry however the previous step was done (even after a declined 17:00 first, which already makes ticket 2), and completes when the booking is cancelled', () => {
 		const { widgets, reader } = setup('onboarding-ready-to-book')
 		const complete = stage('stale-answers')
+		// The previous step's other suggestion: ask for 17:00 (declined), then for a slot that is confirmed: ticket 2.
+		widgets.induction.methods.requestSlot('2026-12-05', '17:00')
+		widgets.induction.methods.settleBooking(1, { status: 'declined', reason: 'fully-booked' })
 		widgets.induction.methods.requestSlot('2026-12-05', '10:00')
+		widgets.induction.methods.settleBooking(2, { status: 'confirmed', reference: 'TM-1' })
+		expect(widgets.induction.state.ticket.get())
+			.toBe(2)
 		expect(complete(reader))
 			.toBe(false)
 		widgets.induction.methods.cancelBooking()
-		widgets.induction.methods.requestSlot('2026-12-12', '14:00')
 		expect(complete(reader))
 			.toBe(true)
 	})
@@ -175,6 +179,37 @@ describe('steps "load-booking", "async-booking" and "stale-answers"', () => {
 			.toContain('Nothing inside Core waited')
 		expect(step('load-booking').stages[0].reveal)
 			.toContain('the page, as the host, does the waiting')
+	})
+})
+
+describe('step "arguments", in the state the previous step leaves (the deep-link preset)', () => {
+	it('names a step that really is locked there: 1.5, 9 and 2 give the codes the text says, and 3 (where the visitor is) is not an error', () => {
+		const { widgets } = setup('onboarding-deep-link')
+		const { root } = widgets
+		const codes = (): { code: string, reason?: string }[] => root.methods.goTo.getDiagnostics()
+			.map(({ code, reason }) => ({ code, reason }))
+		root.methods.goTo(1.5)
+		expect(codes())
+			.toEqual([{ code: 'invalid-method-arguments', reason: 'not-a-whole-number' }])
+		root.methods.goTo(9)
+		expect(codes())
+			.toEqual([{ code: 'invalid-method-result', reason: 'no-such-step' }])
+		root.methods.goTo(2)
+		expect(codes())
+			.toEqual([{ code: 'invalid-method-result', reason: 'step-locked' }])
+		// The step the visitor is on is never locked and clears the failure: the text must not send them there.
+		expect(root.methods.goTo(3).ok)
+			.toBe(true)
+		expect(codes())
+			.toEqual([])
+		const { prompt, reveal } = step('arguments').stages[0]
+		expect(prompt)
+			.toContain('then 9, then 2.')
+		expect(reveal)
+			.toContain('Type 2 while the steps before it are incomplete: step-locked')
+		expect(reveal)
+			.not
+			.toContain('Type 3')
 	})
 })
 
@@ -245,7 +280,6 @@ describe('the whole script on real Runtimes', () => {
 		settle()
 		expectStep('stale-answers', false)
 		ready.widgets.induction.methods.cancelBooking()
-		ready.widgets.induction.methods.requestSlot('2026-12-12', '14:00')
 		settle()
 		expectStep('stale-answers', true)
 		engine.next(actions)

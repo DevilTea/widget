@@ -31,7 +31,6 @@ export const onboardingTourScript: TutorialScript = {
 		{ widgetId: 'account', member: { type: 'state', key: 'name' } },
 		{ widgetId: 'account', member: { type: 'state', key: 'email' } },
 		{ widgetId: 'induction', member: { type: 'state', key: 'status' } },
-		{ widgetId: 'induction', member: { type: 'state', key: 'ticket' } },
 	],
 	steps: [
 		{
@@ -107,8 +106,8 @@ export const onboardingTourScript: TutorialScript = {
 			target: 'onboarding-jump',
 			onEnter: actions => actions.setFocus('onboarding', { type: 'method', name: 'goTo' }),
 			stages: [{
-				prompt: 'Try it: type 1.5 into "Go to step number" and press Go, then 9, then 3.',
-				reveal: 'Type 1.5 and press Go: invalid-method-arguments with reason not-a-whole-number. validateArgs refused it, so execute never ran. Type 9: the argument is a whole number, so it passes, but execute finds there is no such step, and that is invalid-method-result with reason no-such-step. validateArgs sees only the arguments and the config, never the Blueprint or the other widgets, so a rule that needs them is checked in execute. Type 3 while the steps before it are incomplete: step-locked, because the read-only Method canEnter, which goTo calls, says no. In the Events tab each one is a Method failure; the page only translates the reason.',
+				prompt: 'Try it: type 1.5 into "Go to step number" and press Go, then 9, then 2.',
+				reveal: 'Type 1.5 and press Go: invalid-method-arguments with reason not-a-whole-number. validateArgs refused it, so execute never ran. Type 9: the argument is a whole number, so it passes, but execute finds there is no such step, and that is invalid-method-result with reason no-such-step. validateArgs sees only the arguments and the config, never the Blueprint or the other widgets, so a rule that needs them is checked in execute. Type 2 while the steps before it are incomplete: step-locked, because the read-only Method canEnter, which goTo calls, says no. In the Events tab each one is a Method failure; the page only translates the reason.',
 			}],
 			links: [
 				{ id: 'see-go-to', label: 'See goTo() in Selected widget', run: (actions) => {
@@ -154,11 +153,12 @@ export const onboardingTourScript: TutorialScript = {
 			id: 'stale-answers',
 			title: 'A late answer is ignored',
 			target: 'onboarding-office',
-			onEnter: actions => actions.setFocus('induction', { type: 'state', name: 'ticket' }),
+			onEnter: actions => actions.setFocus('induction', { type: 'state', name: 'status' }),
 			stages: [{
-				prompt: 'Try it: cancel the booking, then request another slot.',
-				isComplete: reader => typeof reader.readState('induction', 'ticket') === 'number' && (reader.readState('induction', 'ticket') as number) >= 2,
-				reveal: 'Every request has a ticket, kept in State, and settleBooking applies an answer only if its ticket is still the newest. Cancelling emitted slotCancelled, and the host recalled the request, so no answer came. If the office cannot recall a request, the answer still arrives later, and settleBooking returns false and changes nothing. Switch off "The office can recall a cancelled request", request a slot, cancel it, request another and let the office answer: the page\'s activity list says the first answer was ignored. Core\'s guide calls this the guard for work that cannot be cancelled.',
+				prompt: 'Try it: cancel the booking.',
+				// The previous step ends with a confirmed booking: cancelling it is what leaves that status.
+				isComplete: reader => reader.readState('induction', 'status') === 'idle',
+				reveal: 'Cancelling emitted slotCancelled. Every request has a ticket, kept in State, and settleBooking applies an answer only if its ticket is still the newest. Cancelling a request that is still waiting makes the host recall it, so no answer comes. If the office cannot recall a request, the answer still arrives later, and settleBooking returns false and changes nothing. Switch off "The office can recall a cancelled request", request a slot, cancel it, request another and let the office answer: the page\'s activity list says the first answer was ignored. Core\'s guide calls this the guard for work that cannot be cancelled.',
 			}],
 			links: [
 				{ id: 'see-settle', label: 'See settleBooking() in Selected widget', run: (actions) => {

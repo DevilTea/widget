@@ -210,6 +210,26 @@ test.describe('Events with a host listener', () => {
 			.toHaveText('Heard completed. Queued a welcome message to sam@example.org.')
 	})
 
+	test('after Finish focus is on the finished card\'s heading, and after Start over on the step\'s heading (no stepChanged is emitted for either)', async ({ page }) => {
+		await openReady(page)
+		const preview = previewFrame(page)
+		await preview.getByTestId('office-hold')
+			.check()
+		await requestSlot(page, '2026-12-05', '10:00')
+		await preview.getByTestId('office-answer-now')
+			.click()
+		await expect(preview.getByTestId('induction-status'))
+			.toHaveAttribute('data-status', 'confirmed')
+		await preview.getByTestId('onboarding-finish')
+			.click()
+		await expect(preview.getByRole('heading', { name: /^You are on the list/, level: 2 }))
+			.toBeFocused()
+		await preview.getByTestId('onboarding-start-over')
+			.click()
+		await expect(preview.getByRole('heading', { name: 'Book your induction', level: 2 }))
+			.toBeFocused()
+	})
+
 	test('the declared Events are listed in Selected widget, with the plugin\'s own description', async ({ page }) => {
 		await openOnboarding(page)
 		await selectWidget(page, /induction : InductionStep/)
@@ -842,6 +862,22 @@ test.describe('tutorial', () => {
 			.toBeVisible()
 		await expect(preview.locator('[data-tutorial-target="onboarding-jump"]'))
 			.toHaveClass(/tutorial-spotlight/)
+		// Done here, in the state the previous step left (the deep-link wizard on its last step): the three numbers the text names
+		// give the three codes it names (the step the visitor is on, 3, would be no failure at all).
+		for (const [typed, expected] of [
+			['1.5', 'invalid-method-arguments · not-a-whole-number'],
+			['9', 'invalid-method-result · no-such-step'],
+			['2', 'invalid-method-result · step-locked'],
+		] as const) {
+			await preview.getByTestId('onboarding-jump-input')
+				.fill(typed)
+			await preview.getByTestId('onboarding-jump-go')
+				.click()
+			await expect(preview.getByTestId('onboarding-problem-code'), typed)
+				.toHaveText(expected)
+		}
+		await expect(preview.getByRole('alert'))
+			.toHaveCount(1)
 		await next.click()
 
 		// 6 booking is asynchronous work: the visitor loads the ready-to-book preset.
@@ -872,13 +908,12 @@ test.describe('tutorial', () => {
 			.toBeVisible()
 		await next.click()
 
-		// 8 a late answer is ignored: needs a second request.
+		// 8 a late answer is ignored: it opens when the booking is cancelled.
 		const staleObservation = rail.getByText('Every request has a ticket, kept in State', { exact: false })
 		await expect(staleObservation)
 			.toHaveCount(0)
 		await preview.getByTestId('induction-cancel')
 			.click()
-		await requestSlot(page, '2026-12-12', '14:00')
 		await expect(staleObservation)
 			.toBeVisible()
 		await next.click()

@@ -8,8 +8,23 @@
 import { describe, expect, it } from 'vitest'
 import { onboardingMessages } from '../showcases/onboarding/messages'
 import { onboardingPresets } from '../showcases/onboarding/presets'
+import { onboardingTourScript } from '../tutorial/onboarding-script'
 import { translateMessage } from './messages'
 import { translatePresentationMessage } from './presentation-messages'
+
+describe('the tour quotes the Lab\'s own labels', () => {
+	it('names the Method row status the way the zh-TW Lab shows it', () => {
+		const reveal = onboardingTourScript.steps.find(step => step.id === 'refused-move')!.stages[0].reveal
+		const zh = translatePresentationMessage('zh-TW', reveal)
+		expect(reveal)
+			.toContain('"Last call failed"')
+		expect(zh)
+			.toContain(`「${translatePresentationMessage('zh-TW', 'Last call failed')}」`)
+		expect(zh)
+			.not
+			.toContain('Last call failed')
+	})
+})
 
 describe('onboarding Examples menu text', () => {
 	it('has a zh-TW label and description for every preset (the Examples menu translates them)', () => {
