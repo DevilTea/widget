@@ -37,7 +37,7 @@ const { onCancel, onNativeClose } = useModalDialog('dialog', {
 				id="tutorial-confirm-dialog-title"
 				class="m-0 text-[13px]"
 			>
-				{{ i18n.t('Starting the tutorial will load the Survey teaching example and replace your unapplied changes.') }}
+				{{ i18n.t(tutorial.confirmMessage.value) }}
 			</p>
 			<div class="flex gap-[8px] mt-[4px]">
 				<button

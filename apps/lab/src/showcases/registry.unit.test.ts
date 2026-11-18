@@ -2,20 +2,24 @@ import { describe, expect, it } from 'vitest'
 import { defaultShowcase, getShowcase, listedShowcases, resolveInitialShowcase, showcases, urlWithShowcase } from './registry'
 
 describe('showcase registry listing and ?showcase= selection', () => {
-	it('lists only Interactive Survey, which is the default; sandbox is a registered hidden fixture', () => {
+	it('lists Interactive Survey (the default) and then the Trip budget splitter; sandbox is a registered hidden fixture', () => {
 		expect(listedShowcases.map(showcase => showcase.id))
-			.toEqual(['survey'])
+			.toEqual(['survey', 'trip-budget'])
 		expect(defaultShowcase.id)
 			.toBe('survey')
 		expect(getShowcase('sandbox')?.hidden)
 			.toBe(true)
+		expect(getShowcase('trip-budget')?.hidden)
+			.toBeUndefined()
 		expect(showcases.map(showcase => showcase.id))
-			.toEqual(['survey', 'sandbox'])
+			.toEqual(['survey', 'trip-budget', 'sandbox'])
 	})
 
 	it('selects any registered showcase, listed or hidden, from the query string', () => {
 		expect(resolveInitialShowcase('?showcase=sandbox').id)
 			.toBe('sandbox')
+		expect(resolveInitialShowcase('?showcase=trip-budget').id)
+			.toBe('trip-budget')
 		expect(resolveInitialShowcase('?lab-test&showcase=survey').id)
 			.toBe('survey')
 	})

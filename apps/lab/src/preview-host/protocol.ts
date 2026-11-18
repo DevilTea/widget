@@ -1,11 +1,13 @@
 /** Lab-private Preview-frame control protocol. Inspector traffic uses a sibling logical channel. */
 
+import { TOUR_IDS } from '../tutorial/tours'
+
 export const PREVIEW_HOST_PROTOCOL_VERSION = 1
 export const PREVIEW_HOST_CHANNEL = 'preview-host'
 export const PREVIEW_INSPECTOR_CHANNEL = 'inspector'
 
 /** Tutorial tour ids the Preview frame can evaluate. A tour id is the id of the showcase it teaches. */
-export type PreviewTourId = 'survey'
+export type PreviewTourId = string
 
 export interface PreviewHostDescriptor {
 	readonly showcaseId: string
@@ -102,7 +104,7 @@ function hasProtocol(value: Record<string, unknown>): boolean {
 }
 
 function isTourId(value: unknown): value is PreviewTourId {
-	return value === 'survey'
+	return typeof value === 'string' && TOUR_IDS.includes(value)
 }
 
 export function isPreviewHostDescriptor(value: unknown): value is PreviewHostDescriptor {

@@ -27,7 +27,7 @@ import {
 } from './preview-host/protocol'
 import { getShowcase } from './showcases/registry'
 import { createRuntimeReader, subscribeObservationTargets } from './tutorial/inspection-reader'
-import { SURVEY_TOUR_ID, surveyTourScript } from './tutorial/survey-script'
+import { getTour } from './tutorial/tours'
 import './styles/global.css'
 import './styles/tutorial-theme.css'
 import './styles/preview-frame.css'
@@ -101,9 +101,8 @@ function progressForRequest(request: Extract<PreviewHostRequest, { kind: 'tutori
 	const current = mounted
 	if (current === null || current.showcaseId !== request.tourId)
 		return request.progress
-	// `PreviewTourId` is `'survey'` today, so the evaluated script is always the Survey tour's.
-	const script = surveyTourScript
-	const step = script.steps[request.stepIndex]
+	const script = getTour(request.tourId)?.script
+	const step = script?.steps[request.stepIndex]
 	if (step === undefined)
 		return request.progress
 	let progress = Math.min(request.progress, step.stages.length)
@@ -236,7 +235,7 @@ window.addEventListener('message', (event) => {
 				dom: { root },
 			})
 
-			const script = request.preview.showcaseId === SURVEY_TOUR_ID ? surveyTourScript : null
+			const script = getTour(request.preview.showcaseId)?.script ?? null
 			const stopTutorialObservation = script === null
 				? () => {}
 				: subscribeObservationTargets(runtime, script.observationTargets, () => {

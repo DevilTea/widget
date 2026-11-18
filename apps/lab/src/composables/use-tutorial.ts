@@ -6,9 +6,15 @@
  * subscribes the passive Runtime-observation surface (`../tutorial/inspection-reader.ts`) that drives
  * `TutorialEngine.recheck()`. Mirrors `use-lab-store.ts`'s role for `LabSession`.
  *
- * The Lab ships exactly one tour today (Survey), so this module owns one `TutorialEngine`. Its tour id is
- * the id of the showcase it teaches (`SURVEY_TOUR_ID`), which is how `loadTourDefault()` and the Preview
- * frame's semantic observation pair a tour with its showcase.
+ * The Lab ships one tour per showcase that has one (`../tutorial/tours.ts`: Survey, Trip budget), and this
+ * module owns one `TutorialEngine` for each. A tour id is the id of the showcase it teaches, which is how
+ * `loadTourDefault()` and the Preview frame's semantic observation pair a tour with its showcase.
+ *
+ * `activeTourId` decides which engine every method below (`next`/`back`/`skip`/`pause`/`requestResume`/
+ * `runLink` and the returned `snapshot`) operates on; there is deliberately no "current tour" inside
+ * `TutorialEngine` itself. It follows the open showcase while no tour is running (the showcase's own tour,
+ * or the default tour for a showcase without one), and a tour that is running or paused is tied to its
+ * showcase: leaving that showcase ends it, so the rail never describes a showcase that is not open.
  */
 
 import type { InjectionKey, Ref } from 'vue'
@@ -22,12 +28,17 @@ import { createTutorialEngine } from '../tutorial/engine'
 import { findBlueprintNodeId } from '../tutorial/inspection-reader'
 import { isTourCompleted, isWelcomeDismissed, markTourCompleted, markWelcomeDismissed } from '../tutorial/session-flags'
 import { createStartRequestGuard } from '../tutorial/start-request'
-import { SURVEY_TOUR_ID, surveyTourScript } from '../tutorial/survey-script'
+import { DEFAULT_TOUR_ID, getTour, tourForShowcase, tours } from '../tutorial/tours'
 
 export interface TutorialStore {
 	readonly snapshot: Readonly<Ref<TutorialEngineSnapshot>>
 	readonly welcomeVisible: Readonly<Ref<boolean>>
 	readonly confirmVisible: Readonly<Ref<boolean>>
+	/**
+	 * The English message id the dirty-draft confirmation shows for the tour about to start (each tour names its own
+	 * teaching example).
+	 */
+	readonly confirmMessage: Readonly<Ref<string>>
 	/**
 	 * `true` only while the deterministic reload + `engine.start()`/`restart()` is actually in flight
 	 * (`start-request.ts`'s `'loading'` phase) — deliberately NOT while a dirty-draft confirmation is
@@ -41,6 +52,8 @@ export interface TutorialStore {
 	 * dialogs already exclude every OTHER control from the tab order via native `showModal()` anyway.
 	 */
 	readonly startPending: Readonly<Ref<boolean>>
+	/** The tour every method below operates on (see this module's header). */
+	readonly activeTourId: Readonly<Ref<string>>
 	/** Welcome card's "Explore on my own" — dismisses without starting the tour. */
 	dismissWelcome: () => void
 	/** Welcome card's "Start the tour", and the header's "Tutorial" entry when the engine is idle. */
@@ -66,31 +79,46 @@ export const TutorialStoreKey: InjectionKey<TutorialStore> = Symbol('widget-lab:
 /**
  * Loads a tour's known default preset through the exact same Apply pipeline every other Source mutation
  * uses (diagnostic #25 OWNER decision) — switching showcase when not already on the target one already
- * applies its `defaultPreset` (which IS the tour's own default — `survey-default`; see
- * `showcases/registry.ts`), so only the already-on-that-showcase case needs an explicit `applyPreset()`
- * (covers a different preset, or a Runtime the visitor mutated through Preview without ever dirtying the
- * draft — see `deterministic-start.ts`'s header on why `isDirty` alone cannot detect that).
+ * applies its `defaultPreset` (which IS the tour's own default; see `showcases/registry.ts`), so only the
+ * already-on-that-showcase case needs an explicit `applyPreset()` (covers a different preset, or a Runtime
+ * the visitor mutated through Preview without ever dirtying the draft — see `deterministic-start.ts`'s header
+ * on why `isDirty` alone cannot detect that).
  */
-async function loadTourDefault(store: LabStore): Promise<void> {
-	if (store.showcaseId.value === SURVEY_TOUR_ID)
-		await store.applyPreset('survey-default')
+async function loadTourDefault(store: LabStore, tourId: string): Promise<void> {
+	const tour = getTour(tourId)
+	if (tour === undefined)
+		return
+	if (store.showcaseId.value === tourId)
+		await store.applyPreset(tour.defaultPresetId)
 	else
-		await store.switchShowcase(SURVEY_TOUR_ID)
+		await store.switchShowcase(tourId)
 }
 
 export function createTutorialStore(store: LabStore, implementationExplorer: ImplementationExplorerStore): TutorialStore {
-	const engine: TutorialEngine = createTutorialEngine(surveyTourScript)
-	if (isTourCompleted(SURVEY_TOUR_ID))
-		engine.restoreCompleted()
+	const engines = new Map<string, TutorialEngine>(tours.map(tour => [tour.id, createTutorialEngine(tour.script)]))
+	for (const tour of tours) {
+		if (isTourCompleted(tour.id))
+			engines.get(tour.id)!.restoreCompleted()
+	}
+
+	const activeTourId = shallowRef<string>(tourForShowcase(store.showcaseId.value).id)
+	function engineOf(tourId: string): TutorialEngine {
+		return engines.get(tourId)!
+	}
+	function activeEngine(): TutorialEngine {
+		return engineOf(activeTourId.value)
+	}
 
 	const engineTick = shallowRef(0)
-	const unsubscribeEngine = engine.subscribe(() => {
+	const unsubscribeEngines = [...engines.values()].map(engine => engine.subscribe(() => {
 		engineTick.value++
-	})
+	}))
 	const snapshot = computed(() => {
 		void engineTick.value
-		return engine.getSnapshot()
+		return activeEngine()
+			.getSnapshot()
 	})
+	const confirmMessage = computed(() => getTour(activeTourId.value)?.startConfirmMessage ?? tourForShowcase(DEFAULT_TOUR_ID).startConfirmMessage)
 
 	const welcomeVisible = shallowRef(!isWelcomeDismissed())
 	const confirmVisible = shallowRef(false)
@@ -114,6 +142,27 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		startPending.value = startRequestGuard.getPhase() === 'loading'
 	}
 
+	/**
+	 * Keeps `activeTourId` on the open showcase's tour. A tour that is running or paused belongs to its showcase:
+	 * when another showcase opens (not during a start request, which switches showcase on purpose) it ends, so
+	 * the rail never describes a showcase that is not open.
+	 */
+	function followShowcase(showcaseId: string): void {
+		const target = tourForShowcase(showcaseId).id
+		const current = activeTourId.value
+		if (target === current)
+			return
+		const status = engineOf(current)
+			.getSnapshot().status
+		if (status === 'active' || status === 'paused') {
+			if (startRequestGuard.getPhase() !== 'idle')
+				return
+			engineOf(current)
+				.skip()
+		}
+		activeTourId.value = target
+	}
+
 	function actions(): TutorialActions {
 		return {
 			setFocus: (widgetId, member) => {
@@ -132,16 +181,18 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 
 	let recheckSequence = 0
 	function recheckNow(): void {
+		const engine = activeEngine()
+		const tourId = activeTourId.value
 		const before = engine.getSnapshot()
-		if (before.status !== 'active' || before.step === null || store.showcaseId.value !== SURVEY_TOUR_ID)
+		if (before.status !== 'active' || before.step === null || store.showcaseId.value !== tourId)
 			return
 		const connection = store.previewHost.connection.value
 		if (connection === null)
 			return
 		const sequence = ++recheckSequence
-		void store.previewHost.evaluateTutorial(SURVEY_TOUR_ID, before.stepIndex, before.revealed.length)
+		void store.previewHost.evaluateTutorial(tourId, before.stepIndex, before.revealed.length)
 			.then((progress) => {
-				if (sequence !== recheckSequence)
+				if (sequence !== recheckSequence || activeTourId.value !== tourId)
 					return
 				const current = engine.getSnapshot()
 				if (current.status !== 'active' || current.stepIndex !== before.stepIndex)
@@ -153,9 +204,11 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			})
 	}
 
-	function beginTour(isRestart: boolean): void {
-		void loadTourDefault(store)
+	function beginTour(tourId: string, isRestart: boolean): void {
+		void loadTourDefault(store, tourId)
 			.then(() => {
+				activeTourId.value = tourId
+				const engine = engineOf(tourId)
 				if (isRestart)
 					engine.restart(actions())
 				else
@@ -184,41 +237,46 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		if (!accepted)
 			return
 
+		const tourId = activeTourId.value
 		if (decision.needsConfirmation) {
-			pendingConfirmAction = () => beginTour(isRestart)
+			pendingConfirmAction = () => beginTour(tourId, isRestart)
 			confirmVisible.value = true
 			return
 		}
-		beginTour(isRestart)
+		beginTour(tourId, isRestart)
 	}
 
 	// Runtime predicate evaluation now lives with the iframe-owned Runtime. The parent subscribes only to
 	// a semantic "an observed member changed" signal, then asks the host to evaluate the current step
 	// and return the monotonic completed-stage count. No Runtime value crosses the frame boundary.
 	const stopRemoteObservation = store.previewHost.onTutorialObservation((tourId) => {
-		if (tourId === SURVEY_TOUR_ID)
+		if (tourId === activeTourId.value)
 			recheckNow()
 	})
 
 	watch(
-		() => [store.previewHost.connection.value?.runtimeId ?? null, snapshot.value.status, store.showcaseId.value] as const,
-		([runtimeId, status, showcaseId]) => {
-			if (runtimeId !== null && status === 'active' && showcaseId === SURVEY_TOUR_ID)
+		() => [store.previewHost.connection.value?.runtimeId ?? null, snapshot.value.status, store.showcaseId.value, activeTourId.value] as const,
+		([runtimeId, status, showcaseId, tourId]) => {
+			if (runtimeId !== null && status === 'active' && showcaseId === tourId)
 				recheckNow()
 		},
 		{ immediate: true },
 	)
 
+	watch(() => store.showcaseId.value, showcaseId => followShowcase(showcaseId))
+
 	onUnmounted(() => {
 		stopRemoteObservation()
-		unsubscribeEngine()
+		for (const unsubscribe of unsubscribeEngines) unsubscribe()
 	})
 
 	return {
 		snapshot,
 		welcomeVisible,
 		confirmVisible,
+		confirmMessage,
 		startPending,
+		activeTourId,
 		dismissWelcome: () => {
 			markWelcomeDismissed()
 			welcomeVisible.value = false
@@ -230,7 +288,8 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		},
 		requestRestart: () => requestStartOrRestart(true),
 		requestResume: () => {
-			engine.resume(actions())
+			activeEngine()
+				.resume(actions())
 			// A step with a no-predicate (or already-satisfied) stage must reveal immediately on entry —
 			// see `next()`'s comment below; `resume()` re-enters the current step the same way `next()`/
 			// `back()` do, and the `watch` above only re-fires on a Runtime/showcase/status *identity*
@@ -257,22 +316,29 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			syncPending()
 		},
 		next: () => {
-			engine.next(actions())
+			activeEngine()
+				.next(actions())
 			// Entering a new step whose first stage has no predicate (or one already satisfied by
 			// Runtime state the visitor produced earlier) must reveal its text immediately, not wait for
 			// the next incidental Runtime tick — the `watch` above only re-fires on a Runtime/showcase/
 			// status *identity* change, which a same-showcase `next()` never produces.
 			recheckNow()
-			if (engine.getSnapshot().status === 'completed')
-				markTourCompleted(SURVEY_TOUR_ID)
+			if (activeEngine()
+				.getSnapshot().status === 'completed') {
+				markTourCompleted(activeTourId.value)
+			}
 		},
 		back: () => {
-			engine.back(actions())
+			activeEngine()
+				.back(actions())
 			recheckNow()
 		},
-		skip: () => engine.skip(),
-		pause: () => engine.pause(),
-		runLink: linkId => engine.runLink(linkId, actions()),
+		skip: () => activeEngine()
+			.skip(),
+		pause: () => activeEngine()
+			.pause(),
+		runLink: linkId => activeEngine()
+			.runLink(linkId, actions()),
 	}
 }
 
