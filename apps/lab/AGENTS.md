@@ -66,7 +66,10 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   `revealRange()` (select + scroll + focus; a request made before Monaco has loaded is replayed once it is up).
 - `src/composables/use-draft-guard.ts` + `src/components/DraftGuardDialog.vue` — Vue bridge and native-dialog
   confirmation for the unapplied-draft guard (see "Header, status chips and draft protection" below).
-- `src/composables/use-inspect-anchor.ts` — the Lab's one-line-per-renderer projection of `useWidget()` identity onto a
+- `src/showcase-host/` — the showcase host contract (see "Showcase isolation" below): the one module outside its own
+  directory a showcase may import. `host.ts` (`ShowcaseHost`: locale and theme), `messages.ts` (showcase-local messages
+  selected by the host locale), `sources.ts` (the curated Implementation registry types) and `inspect-anchor.ts`
+  (`useInspectAnchor`), the one-line-per-renderer projection of `useWidget()` identity onto a
   renderer's root element. It only wraps `inspectAnchorAttributes` from `@deviltea/widget-inspector/anchor`, which owns
   the attribute contract (names, identity-only shape, nesting/multi-fragment semantics); `@deviltea/widget-vue` itself
   still stamps no DOM attributes. Browser coverage lives in `e2e/inspect-anchors.spec.ts` (real `widget-vue` renderers).
@@ -128,7 +131,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   host-command protocol, `lifecycle.ts` is the generation-aware `booting`/`ready`/`replacing`/
   `disconnected`/`error` state machine). The parent never holds a Core Runtime or frame DOM. The Agent
   owns bounded Preview DOM hit-testing, pointer suppression, an Agent-owned ShadowRoot overlay for
-  highlight/badge chrome (renderer elements are never mutated; the Lab only themes it through `--widget-inspector-*` custom properties in `global.css`), and Escape cleanup, while the panel only translates scoped `WidgetRef`
+  highlight/badge chrome (renderer elements are never mutated; the Lab only themes it through `--widget-inspector-*` custom properties in `preview-frame.css`), and Escape cleanup, while the panel only translates scoped `WidgetRef`
   selection events into the existing Preview focus/navigation rules. `DevilTea/widget#8` tracked the Phase B
   implementation and `DevilTea/widget#5` remains the iframe/extension umbrella,
   `inspector/*` (presentation-only inspector shell and tree/details split layout shared by Blueprint and
@@ -162,7 +165,9 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     would create a cycle; the Lab has no editor operations), `renderers/` (Vue renderer components),
     `sources.ts`, `system.ts`, `test-support.ts`. The Survey tour (`tutorial/survey-script.ts`) is
     authored against `survey-default`; its `data-tutorial-target` lookup is keyed by widget id
-    (`tutorial/survey-target-map.ts`).
+    (`showcases/survey/tutorial-targets.ts`: the survey owns which of its elements carry a target name; the
+    tutorial, which is host glue, only reads those attributes), `messages.ts` (the renderers' own
+    locale-selected text).
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.
@@ -173,16 +178,23 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   - Authored sources the Lab ships (presets, tutorial, e2e fixtures) must use only Core's recognized widget
     keys (`id`, `type`, `config`, `slots`, and the reserved `meta` extension key); any other own key makes
     the Blueprint invalid (`unexpected-widget-field`). `src/showcases/registry.unit.test.ts` pins this.
-- `src/styles/global.css` — plain CSS shared by the Lab shell and the Preview frame: the Lab palette tokens
-  (`--lab-color-*`, `--lab-radius`, `--lab-font-*`; dark on `:root`, light under `html[data-lab-theme='light']`),
-  referenced by `src/styles/dockview-theme.css`, Monaco's styling and, through `@theme inline` in `lab-ui.css`, by the
-  chrome's Tailwind utilities. The success/OK colour is the single token `--lab-color-ok` in both themes; do not
+- `src/styles/lab-tokens.css` — the Lab palette tokens (`--lab-color-*`, `--lab-radius`, `--lab-font-*`; dark on `:root`,
+  light under `html[data-lab-theme='light']`), shared by the two documents that are the Lab's own: the shell and the Preview
+  frame document (its background, text, tutorial spotlight and Inspect overlay, all host glue). Referenced by
+  `src/styles/dockview-theme.css`, Monaco's styling and, through the theme bridge in `lab-ui.css`, by the chrome's Tailwind
+  utilities. The success/OK colour is the single token `--lab-color-ok` in both themes; do not
   add a second name for it (audit U17: `--lab-color-success` existed only in dark, `--lab-color-ok` only in light).
+  Showcases never read these tokens (see "Showcase isolation").
+- `src/styles/global.css` — the baseline of the Lab SHELL document only (`main.ts`): it imports `lab-tokens.css` and adds
+  box-sizing, the document font/colour, native dialog colour and the narrow-viewport overflow rule. The Preview frame does
+  not import it.
 - `nuxt-ui.ts`, `src/styles/lab-ui.css`, `src/composables/use-nuxt-ui-theme-bridge.ts`, `src/ui/offline-icons.ts`,
   `src/test-support-ui.ts`, `src/test-setup.ts`, `scripts/nuxt-ui-codegen.mjs` — the Nuxt UI + Tailwind v4 foundation, see "Nuxt UI
   and Tailwind" below. The Lab shell (`index.html` -> `main.ts`) uses it; the Preview frame never does.
-- `src/styles/preview-frame.css` — base rules for the Preview frame only (imported by
-  `preview-frame-main.ts`, never by the shell): line-height 1.5, controls inheriting the surrounding font,
+- `src/styles/preview-frame.css` — the Preview frame document's own stylesheet (imported by
+  `preview-frame-main.ts` after `lab-tokens.css`, never by the shell): the document baseline (box-sizing, the background,
+  colour, font family and size a showcase inherits, and the `--widget-inspector-*` theme of the Inspect overlay) and the
+  base layer: line-height 1.5, controls inheriting the surrounding font,
   square text inputs and pointer cursors, i.e. the subset of the removed Vuetify reset the survey renderers
   were styled against. It sits in a layer of its own, below every unlayered rule (the renderers' scoped
   styles), like a reset; the survey's native controls also carry their colour, size and weight inline (see
@@ -353,7 +365,7 @@ ported its ~340 style calls to Tailwind utilities with no visual change (the Lab
   installs Nuxt UI's Vue plugin and wraps `App` in `UApp` (`toaster: null` until a surface needs toasts;
   `UApp` renders no element). `preview-frame-main.ts` / `preview-frame.html` never import any of it, so the showcase
   renderers are untouched. The renderers (`showcases/survey/renderers`) are styled with a `<style scoped>` block each, in
-  plain CSS over the `--lab-*` tokens of `global.css`, never with a Tailwind class (Tailwind does not even scan them:
+  plain CSS over their own `--survey-*` tokens (never the Lab's `--lab-*`), never with a Tailwind class (Tailwind does not even scan them:
   `lab-ui.css` lists its `@source`s explicitly). `src/styles/styling-boundary.unit.test.ts` walks the frame entry's imports
   and fails if any reaches `lab-ui.css`, Tailwind, Nuxt UI or `src/components`; `e2e/nuxt-ui.spec.ts` pins, on the same-origin
   build, that the frame document has no Tailwind/Nuxt UI CSS, no `.dark` class and no `--ui-*` tokens. The frame's CSS does not depend on its origin
@@ -441,6 +453,47 @@ ported its ~340 style calls to Tailwind utilities with no visual change (the Lab
   The plugin's `experimental.componentDetection` would cut the CSS to about 184 KB (verified once) but is
   experimental and only sees components present when Vite starts, so it is not enabled; revisit when the set of
   used components stabilises.
+
+## Showcase isolation
+
+Showcase code (`src/showcases/<id>/**` and `src/sandbox/**`) runs inside the Preview frame iframe and is completely isolated
+from the Lab: it shares no stylesheet, token, store or module with the chrome. What it receives from its host is the
+**showcase host contract**, `src/showcase-host/`:
+
+- `ShowcaseHost` (`host.ts`): `locale` (`'en' | 'zh-TW'`) and `theme` (`'light' | 'dark'`) as readonly refs, provided with
+  `app.provide(ShowcaseHostKey, host)` and read with `useShowcaseHost()` (it throws outside a provider). That is all a
+  showcase cannot know for itself; do not widen it without a reason that holds for every showcase.
+- `defineShowcaseMessages()` / `useShowcaseMessages()` (`messages.ts`): a showcase keeps its own text, one table per locale
+  (every locale must have every key), and selects from it by the host locale. Showcase *content* (the survey's title,
+  questions and options) is Document data in the showcase's own language and never goes through this.
+- `useInspectAnchor()` (`inspect-anchor.ts`) and the `SourcesRegistry` types (`sources.ts`): the Inspect anchor projection and the
+  curated Implementation sources shape.
+
+The Preview frame entry (`src/preview-frame-main.ts`) is the adapter: it builds a `ShowcaseHost` from the Lab's own theme and
+locale stores (the `presentation.update` host command still drives those) and provides it. Frame-side glue (that entry, the
+tutorial spotlight and observation, `styles/preview-frame.css`, `styles/tutorial-theme.css`) may use Lab modules and
+`--lab-*` tokens; showcases may not. The tutorial reaches into a showcase only through `data-tutorial-target` attributes the
+showcase stamps itself (`showcases/survey/tutorial-targets.ts`).
+
+**What a showcase file may import:** its own directory, `src/showcase-host`, `vue`, and `@deviltea/widget-*` packages (and, in a test,
+`vitest` and `@vue/test-utils`). **What it may not:** anything else, in particular `composables/`, `i18n/`, `theme/`, `tutorial/`,
+`styles/`, `components/`, `lab/`, another showcase, or a chrome library (Nuxt UI, Tailwind, Dockview, Vue Flow, Monaco). Its CSS
+(a `<style>` block, a stylesheet or an inline style) may not mention `--lab-*` or `data-lab-theme`.
+`src/styles/showcase-isolation.unit.test.ts` enforces both over every file, tests included; `showcases/registry.ts` (the Lab-side
+index of showcases) is its one exemption, and `styles/styling-boundary.unit.test.ts` keeps chrome CSS out of the frame's import graph.
+
+**Styling.** A showcase owns its colour tokens. The survey declares `--survey-*` on its root element (`SurveyRootRenderer.vue`),
+dark by default and light under `.survey[data-survey-theme='light']`, where `data-survey-theme` is bound to `host.theme`; question
+renderers and `control-style.ts` read only those tokens. The palette values are the survey's own copy (they happen to equal the
+Lab's; a visual change to either is made in that one alone). The frame document supplies only the surface the showcase is drawn
+on and what it inherits (text colour, font family and size) from `preview-frame.css`; the Sandbox sets no colours of its own and
+relies on that inheritance.
+
+**Adding a showcase.** Create `src/showcases/<id>/` with its plugins, system, presets, renderers, `messages.ts` (if it has
+Lab-side text), `sources.ts` and renderer styles; import the host contract for locale, theme, inspect anchors and the sources
+types, and nothing else of the Lab. Declare colour tokens on the renderer root keyed off `useShowcaseHost().theme`. Register it
+in `showcases/registry.ts`. Test renderers with a plain-ref `ShowcaseHost` (`survey/renderers/test-harness.ts` shows how), and run
+`pnpm exec vitest run src/styles` to check the isolation guard.
 
 ## Package boundaries
 

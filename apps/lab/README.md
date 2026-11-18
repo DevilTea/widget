@@ -23,7 +23,7 @@ persistence/editor-domain state, sandbox fixtures vs. showcases).
 - **Nuxt UI 4 + Tailwind v4** (through Nuxt UI's Vite plugin, not Nuxt) for the Lab shell only; the Preview
   frame never loads it (the showcase renderers are styled with plain scoped CSS). Dockview's structural
   stylesheet is themed through a small custom theme (`src/styles/dockview-theme.css`) whose CSS variables
-  derive from the Lab palette tokens (`src/styles/global.css`); Vue Flow's own default theme CSS is not
+  derive from the Lab palette tokens (`src/styles/lab-tokens.css`); Vue Flow's own default theme CSS is not
   imported — only its structural `dist/style.css` is, so canvas visuals stay palette-token-driven. The Lab
   theme store stays the single source
   of truth (`data-lab-theme`, mirrored onto Nuxt UI's `.dark` class, with `--ui-*` tokens mapped to the Lab
@@ -52,6 +52,13 @@ and only listed showcase (registered in `src/showcases/registry.ts`, which also 
 `sandbox`). Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
 missing or unknown id falls back to the default. The parameter follows the active showcase (the Lab rewrites it with
 `history.replaceState`), so reloading restores it.
+
+Showcases are isolated from the Lab: they render in the Preview iframe and import only their own directory, the small
+host contract in `src/showcase-host/` (the host's locale and theme, showcase-local messages, the Inspect anchor and the
+curated sources types), `vue` and the `@deviltea/widget-*` packages. A showcase declares its own colour tokens (the survey's
+`--survey-*`) and its own translations, so none of the Lab's `--lab-*` tokens, stores or i18n tables reach it;
+`src/styles/showcase-isolation.unit.test.ts` enforces this. See "Showcase isolation" in `AGENTS.md`, which also says how
+to add a showcase.
 
 ## Header, editing feedback and Undo
 
