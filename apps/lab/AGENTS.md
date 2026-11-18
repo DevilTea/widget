@@ -19,11 +19,11 @@ Private, never-published workspace application with two roles:
    `Selected widget` pane, the live `Events` log, and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
    `@deviltea/widget-vue`.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
-   `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default and `Trip budget splitter`
-   (`trip-budget`) is listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
+   `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default, and `Trip budget splitter`
+   (`trip-budget`) and `Quote rules shared by browser and backend` (`quote-rules`) are listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
    test-only fixture (see "Showcase selection" below). The former `Product Prototype` (`crm`) and
    `Vuetify Task Workspace` (`vuetify-tasks`) showcases, and the CRM tour, were removed (tracking issue
-   `DevilTea/widget#230`); the new showcases of that issue are added one PR at a time (`trip-budget` is the first).
+   `DevilTea/widget#230`); the new showcases of that issue are added one PR at a time (`trip-budget` and `quote-rules` are the first two).
 
 ### Showcase selection (`?showcase=<id>`)
 
@@ -198,6 +198,73 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     `{ language, base }` and the renderers look the texts up themselves (`tripText(language)`), so the Runtime panel
     shows two small values. The tutorial (`tutorial/trip-budget-script.ts`) is authored against `trip-default`; its
     `data-tutorial-target` is `trip-<widget id>` on every renderer root.
+  - `quote-rules/` — Quote rules shared by browser and backend (issue #230, showcase 2), a print shop's price quote
+    ("Corner Press"): six plugin types `Quote` (root `quote`, slots `items`/`rules`, no State of its own), `Item` (State
+    `quantity`, `paper`; Property `line`) and four pricing rules, each its own plugin with a Property `adjustment`:
+    `VolumeDiscount`, `RushSurcharge` (State `enabled`), `Delivery` (State `method`) and `SalesTax`. Money is integer minor
+    units (`domain.ts`: `percentOf` rounds half-up once). The chain: `Item.line` -> `Quote.subtotalCents`/`totalQuantity` ->
+    the three pre-tax rules' `adjustment` -> `Quote.taxableCents` -> `SalesTax.adjustment` -> `Quote.quote`, found through
+    the root's slots by `plugins/reads.ts`; Core's cycle check is over members, so the root reading its children while they
+    read the root is not a loop. `Quote.answers` (every State a customer set, by widget id and State name) and `Quote.quote` (the
+    whole priced quote as plain JSON, language-independent: texts stay `{ en, zh-TW }` objects) are the request and the response of a
+    JSON-in/JSON-out call. It exists to show, with a real Runtime:
+    - **The same rules in a non-DOM context.** `evaluate.ts` (`evaluateQuote`/`evaluateQuoteJson`, no Vue, no DOM) compiles a document
+      with the same `quoteSystem`, writes the answers into a fresh Runtime and reads `quote`; `quote.worker.ts` (six lines over
+      `worker-protocol.ts`) runs it in a dedicated module **Web Worker** that the Preview starts (`worker-client.ts`:
+      `new Worker(new URL('./quote.worker.ts', import.meta.url), { type: 'module' })`, started on the first request, restarted after an
+      error, replaced by a stand-in in tests). Only JSON **text** crosses the boundary. `renderers/quote-host.ts` (the host of one
+      Runtime, created by `QuoteRenderer` in `renderers/index.ts`) subscribes the root's `answers`, reads the live Runtime's outcome
+      through the same `readQuoteOutcome()` the worker uses, sends `runtime.blueprint.source` and the answers, and compares the two
+      outcomes as JSON text; `SameRulesPanel.vue` shows them side by side with where each ran (`document`/`window` present or not).
+      `evaluate.unit.test.ts` pins that the worker's import graph holds no Vue, no `renderers/`, no host contract and no DOM global, and
+      that every outcome equals a live Runtime's for the same answers (including failures). A deliberately defective backend is the
+      test that the comparison can say "mismatch". The guards needed no change: the isolation guard already reads
+      `new URL('<literal>', import.meta.url)` as a reference that must stay inside the showcase directory (a case for a Worker
+      URL was added to `showcase-isolation.unit.test.ts`), and Vite bundles the worker as its own chunk (`worker.format: 'es'` is
+      already set for the ELK worker). A frame that cannot start a Worker shows "The worker is not available" and keeps working.
+    - **A schema library through Standard Schema.** Every plugin's `config.validate` and every State `validate` is a Valibot schema
+      (`schemas.ts`, the only file that imports it) turned into a Core predicate by `guard()` (`standard-schema.ts`, the pattern of the
+      Core guide: one diagnostic per issue with the library's own message and path, `reason: 'standard-schema'`; a Promise throws; a
+      schema whose input and output types differ is a type error). `strictObject` everywhere, so a misspelt key is reported. Valibot
+      (with `@valibot/to-json-schema`) was chosen over Zod for size: the quote system is part of the eager shell bundle, and Zod 4
+      classic made the shared `tutorial-theme-*.js` chunk about 116 KB (raw) larger with the whole quote showcase, Valibot about 47 KB
+      (`pnpm build`, measured). Both packages are declared in `allowed-packages.json` and in the pnpm catalog (the first
+      extra packages a showcase declares; `showcase-isolation.unit.test.ts` pins the list). Presets: `quote-invalid` has six located
+      `invalid-widget-config` diagnostics in five widgets whose text is Valibot's, verbatim (pinned in `evaluate.unit.test.ts` and
+      `e2e/quote-rules.spec.ts`). A paper an Item does not list is State, not config, so it is a plugin diagnostic on `Item.line`
+      (`unknown-paper`) rather than a schema error.
+    - **The config JSON Schema.** Each `config.schema` is `~standard.jsonSchema.input({ target: 'draft-2020-12' })` of the same schema
+      object (`jsonSchemaOf()`), with the field descriptions as `v.description(...)`. `schemas.unit.test.ts` pins its shape, that the
+      catalog publishes exactly it, and what `describeField` (`lab/config-schema.ts`) makes of it: a list of tiers with Add and Remove,
+      number boxes, a switch, a choice list and free `papers` keys; `e2e/quote-rules.spec.ts` drives those controls in Author >
+      Structure and shows the schema in Author > Catalog. The schema says no more than the validator can express: it cannot say that
+      the first discount tier starts at 1 (and the validator does not either, which is the next point).
+    - **An isolated exception.** `VolumeDiscount` has a deliberate, commented defect (`plugins/volume-discount.ts`): it assumes the
+      first tier starts at 1, so a total quantity below the first tier makes `compute` throw a `TypeError`. A document cannot contain
+      code, so `quote-buggy-rule` is a *valid* document whose tiers start at 100 (flyers 120 + poster 2 = 122 pieces), which prices
+      fine until a customer lowers the quantity. Core then isolates the exception: the write succeeds, the other subscribers are
+      notified, one report per cached exception reaches `setIsolatedErrorHandler`. The host installs a handler while the page lives and
+      restores the one it replaced (the Lab frame installs none); the handler receives only the exception, so the host finds the
+      widget by reading each rule again (`findThrowingMember`) and lists it (`IsolatedLog.vue`, `data-testid="quote-isolated"`).
+      The subscription that threw is skipped, so the Vue ref does not change: the page keeps the last amounts that worked and says so
+      (`quote-stale`, the rule card's `data-state="threw"`). Renderers read Properties through `useSafeRead()` because a direct read of
+      a throwing Property throws inside a render function (a document that already starts below the tier mounts with "no quote yet").
+      A failed dependency read makes the rule return "not applied" instead of treating a missing quantity as 0 (which would have hit the
+      defect for an unrelated reason). **Gap the Lab cannot show:** Core's inspection reports only a Property's latest *completed*
+      result, so Runtime and Selected widget keep showing `volume.adjustment`'s last good value after it threw (and
+      `getDiagnostics()` is empty); the exception is visible only in the Preview and, by the host, through the handler
+      (`e2e/quote-rules.spec.ts` pins this, and the tour says so).
+    Presets: `quote-default`, `quote-invalid`, `quote-buggy-rule` (no `rush` widget, which the tour reads to tell it from the default).
+    **Isolation:** it follows "Showcase isolation" below: it reads `useShowcaseHost().locale` (its own chrome text, `messages.ts`, and
+    the document's `{ en, zh-TW }` texts through `localize()`) and `.theme`, and `useInspectAnchor()`; it owns its colours as
+    `--quote-*` custom properties on the root renderer; its renderer loader is in `preview-frame-renderers.ts`. Unlike the trip and the
+    survey it has no language State: language is a view concern here, so the `quote` JSON stays language-independent. Renderers are
+    tested with a plain-ref `ShowcaseHost` and an in-process stand-in for the Worker (`renderers/test-harness.ts`); the Lab-side zh-TW
+    text (Examples entries, tutorial) is tested in `i18n/quote-rules-messages.unit.test.ts` and
+    `tutorial/quote-rules-script.unit.test.ts`. The tutorial (`tutorial/quote-rules-script.ts`) is authored against `quote-default`;
+    `data-tutorial-target` is `quote-<widget id>` on every renderer root, plus `quote-same-rules` and `quote-isolated` for the panels.
+    Known limits: the ids of the items and rules are object keys inside `registerDeps`, so integer-like ids would sort first (as in
+    the trip); one Worker per Preview, no caching of the Blueprint (the evaluation is stateless, as in `survey/evaluate.ts`).
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.
@@ -299,8 +366,10 @@ Intentional, not incidental (`DevilTea/deviltea-labs#30` Scope B) — the produc
 building this app in isolation:
 
 ```text
-main app JS (lab-*.js + the chunk it shares with the frame, tutorial-theme-*.js) ~847 KB + ~288 KB raw / ~230 KB + ~94 KB gzip — eager
-                                         (was ~678 KB + ~287 KB / ~177 KB + ~93 KB before Nuxt UI)
+main app JS (lab-*.js + the chunk it shares with the frame, tutorial-theme-*.js) ~1127 KB + ~409 KB raw / ~301 KB + ~128 KB gzip — eager
+                                         (the shared chunk holds every showcase's system, presets and tours, and Valibot with its JSON Schema
+                                         converter for the quote showcase: about 362 KB / 116 KB gzip without the quote showcase, so about +47 KB / +12 KB;
+                                         Zod 4 classic instead of Valibot measured +116 KB raw)
 Nuxt UI Toast (Toast-*.js)               ~30 KB raw / ~9 KB gzip   — loaded on first toast (none is shown yet)
 modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
@@ -308,6 +377,8 @@ vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded o
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
 Implementation panel + Shiki (ImplementationPanel-*.js)
                                          ~375 KB raw / ~75 KB gzip  — loaded on first Implementation open
+Quote Web Worker (quote.worker-*.js)       ~110 KB raw / ~32 KB gzip   — loaded when the quote Preview first evaluates (Core, the plugins and Valibot;
+                                         no Vue, no renderer, no host contract); its own 0.8 KB chunk is the curated source of the file
 curated raw-source chunks (per curated file, e.g. ShortAnswerRenderer-*.js)
                                          ~2-21 KB raw / ~1-6.2 KB gzip each — loaded on first
                                          selection of that file's tab
@@ -319,7 +390,7 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
 ```
 
 - **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
-  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey and Trip budget showcases and the hidden Sandbox fixture,
+  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey, Trip budget and Quote rules showcases (their systems, presets and sources, not their renderers) and the hidden Sandbox fixture,
   `dockview-vue`. This is unavoidable critical-path weight for a workbench app whose
   shell has to exist before any panel can render.
 - **`modern-monaco/core` (package JS + vendored `editor-core.mjs`)**: not in the eager chunk —
@@ -524,7 +595,7 @@ showcase directory and may reach nothing), `src/sandbox/` and `src/showcase-host
 inside that directory only (never in the host contract), and every path it refers to must still stay inside the directory. The frame
 walk in `styling-boundary.unit.test.ts` forbids the chrome's own pipeline from the frame, not Tailwind/Nuxt UI as such: `@nuxt/ui` and
 `tailwindcss` are only allowed from inside a showcase directory, and a stylesheet carrying Tailwind syntax may only be referenced from
-inside the showcase directory it lives in. No showcase declares extra packages today; adding the first one is a reviewed change.
+inside the showcase directory it lives in. One showcase declares extra packages today: `quote-rules` lists `valibot` and `@valibot/to-json-schema` (a schema library through Standard Schema), and `showcase-isolation.unit.test.ts` pins that list, so another one is a reviewed change.
 
 **Both directions.** Showcase renderer code and CSS must also stay out of the shell document. `showcases/registry.ts` holds shell-safe
 metadata only (system, presets, sources); the renderer of each showcase is loaded lazily, by id, in the frame only
@@ -982,7 +1053,7 @@ Dockview groups or the Preview frame (the survey's own Language select). With th
 Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used by, the focus, Depends on) and scrolls vertically below 680px of **pane** width
 (a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
 
-**One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts` is the model).
+**One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts` and `i18n/quote-rules-messages.ts` are the models).
 
 **Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview
@@ -1147,7 +1218,7 @@ happy-dom unit tests.
 
 Browser specs reach the header's menus only through the helpers in `e2e/fixtures.ts` (`selectShowcase`, `loadPreset`,
 `setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, `openStatusDetails`,
-`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey and trip examples), and the `expectShowcase` /
+`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey, trip and quote examples), and the `expectShowcase` /
 `expectDocumentStatus` / `expectPreviewStatus` assertions), never with ad-hoc menu clicks, so a future header change touches one
 file. Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
 Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a

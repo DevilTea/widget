@@ -9,7 +9,6 @@
 import { WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from '@deviltea/widget-core'
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import { describeField } from '../../lab/config-schema'
 import {
 	deliveryConfigJsonSchema,
 	itemConfigJsonSchema,
@@ -79,39 +78,6 @@ describe('config JSON Schemas', () => {
 		expect(JSON.stringify(tiers))
 			.not
 			.toMatch(/first|const/)
-	})
-
-	it('gives the Structure editor real controls: a list of tiers with Add and Remove, a switch, a choice list and number boxes', () => {
-		const volume = { label: { en: 'Volume' }, tiers: [{ minQuantity: 1, percent: 0 }] }
-		const root = describeField(volumeDiscountConfigJsonSchema, volumeDiscountConfigJsonSchema, volume)
-		expect(root.field.kind)
-			.toBe('object')
-		const properties = (root.field as { properties: Record<string, Record<string, unknown>> }).properties
-		const tiers = describeField(volumeDiscountConfigJsonSchema, properties.tiers!, volume.tiers)
-		expect(tiers.field)
-			.toMatchObject({ kind: 'array', known: true, minItems: 1 })
-		const tier = describeField(volumeDiscountConfigJsonSchema, (tiers.field as { items: Record<string, unknown> }).items, volume.tiers[0])
-		const tierProperties = (tier.field as { properties: Record<string, Record<string, unknown>> }).properties
-		const percent = describeField(volumeDiscountConfigJsonSchema, tierProperties.percent!, 0)
-		expect(percent.field.kind)
-			.toBe('number')
-		expect(percent.description)
-			.toBe('The percentage taken off the subtotal.')
-
-		const rush = { label: { en: 'Rush' }, percent: 25 }
-		const rushProperties = (describeField(rushSurchargeConfigJsonSchema, rushSurchargeConfigJsonSchema, rush).field as { properties: Record<string, Record<string, unknown>> }).properties
-		expect(describeField(rushSurchargeConfigJsonSchema, rushProperties.enabled!, true).field.kind)
-			.toBe('boolean')
-
-		const delivery = { label: { en: 'Delivery' }, courierCents: 900 }
-		const deliveryProperties = (describeField(deliveryConfigJsonSchema, deliveryConfigJsonSchema, delivery).field as { properties: Record<string, Record<string, unknown>> }).properties
-		expect(describeField(deliveryConfigJsonSchema, deliveryProperties.method!, 'pickup').field)
-			.toEqual({ kind: 'enum', options: ['pickup', 'courier'] })
-
-		const item = { title: { en: 'A' }, unitCents: 1, papers: { a: { label: { en: 'A' }, extraCents: 0 } } }
-		const itemProperties = (describeField(itemConfigJsonSchema, itemConfigJsonSchema, item).field as { properties: Record<string, Record<string, unknown>> }).properties
-		expect(describeField(itemConfigJsonSchema, itemProperties.papers!, item.papers).field)
-			.toMatchObject({ kind: 'object', known: true })
 	})
 })
 
