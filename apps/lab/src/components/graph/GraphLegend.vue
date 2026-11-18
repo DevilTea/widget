@@ -132,7 +132,7 @@ function toggle(): void {
 					{{ i18n.t('The arrowhead is on the target: A → B means A depends on B. In Relations, B is listed under "Depends on" for A, and A under "Used by" for B.') }}
 				</p>
 				<p class="m-[4px_0_0]">
-					{{ i18n.t('While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it); every other edge fades.') }}
+					{{ i18n.t('While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it); every other edge fades. A tag is left out where there is no room for it: the Relations view has the full list.') }}
 				</p>
 				<p class="m-[4px_0_0] text-lab-text-muted italic">
 					{{ i18n.t('Line style distinguishes edge kinds; aggregate labels show dependency counts, while details preserve exact operations.') }}

@@ -14,8 +14,11 @@ interface Point { x: number, y: number }
 interface RenderedGraph {
 	/** Screen pixels per flow unit. */
 	zoom: number
-	/** The font size of the widget type on a collapsed card, on screen. */
+	/** The font sizes of the widget type and of its id on a collapsed card, on screen. */
 	cardTitlePx: number | null
+	cardIdPx: number | null
+	/** Whether the layer of the focus tags comes after (so is drawn above) every edge and card. */
+	tagLayerAboveEdges: boolean
 	cards: { id: string, rect: Rect }[]
 	edges: {
 		id: string
@@ -83,9 +86,10 @@ async function readGraph(page: Page): Promise<RenderedGraph> {
 			const marker = markerUrl === null ? null : document.getElementById(markerUrl[1]!)
 			const markerShape = marker?.querySelector('polyline, path')
 			const scaleNow = scale === null ? 1 : Number(scale[1])
-			const tag = edge.querySelector('.graph-edge-relation')
-			const tagRect = tag?.getBoundingClientRect()
-			const tagText = tag?.querySelector('.vue-flow__edge-text')
+			const tag = [...document.querySelectorAll<SVGGElement>('.graph-tag-layer .graph-tag')].find(candidate => candidate.dataset.edgeId === edge.dataset.id)
+			const tagRect = tag?.querySelector('.graph-tag-bg')
+				?.getBoundingClientRect()
+			const tagText = tag?.querySelector('.graph-tag-text')
 			return {
 				id: edge.dataset.id!,
 				d: path.getAttribute('d') ?? '',
@@ -102,8 +106,19 @@ async function readGraph(page: Page): Promise<RenderedGraph> {
 			}
 		})
 		const title = document.querySelector('.graph-cluster-type')
+		const idLabel = document.querySelector('.graph-cluster-id')
 		const zoom = scale === null ? 1 : Number(scale[1])
-		return { zoom, cardTitlePx: title === null ? null : Number.parseFloat(getComputedStyle(title).fontSize) * zoom, cards, edges }
+		const layer = document.querySelector('.graph-tag-layer')
+		// The layer follows (is drawn after, so above) a container when that container precedes it in the document.
+		const precedes = (selector: string): boolean => layer !== null && (layer.compareDocumentPosition(document.querySelector(selector)!) & Node.DOCUMENT_POSITION_PRECEDING) !== 0
+		return {
+			zoom,
+			cardTitlePx: title === null ? null : Number.parseFloat(getComputedStyle(title).fontSize) * zoom,
+			cardIdPx: idLabel === null ? null : Number.parseFloat(getComputedStyle(idLabel).fontSize) * zoom,
+			tagLayerAboveEdges: precedes('.vue-flow__edges') && precedes('.vue-flow__nodes'),
+			cards,
+			edges,
+		}
 	})
 }
 
@@ -194,117 +209,220 @@ test('survey expanded Graph: Bezier edges, each with an arrowhead', async ({ pag
 test('the default Survey Fit at 1440 x 900 keeps the card text at 11px or more', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 })
 	await openGraph(page, 'survey')
-	const { zoom, cardTitlePx } = await readGraph(page)
+	const { zoom, cardTitlePx, cardIdPx } = await readGraph(page)
 	expect(zoom)
-		.toBeGreaterThanOrEqual(0.9)
+		.toBeGreaterThanOrEqual(0.95)
 	expect(cardTitlePx!)
+		.toBeGreaterThanOrEqual(10.9)
+	expect(cardIdPx!)
 		.toBeGreaterThanOrEqual(10.9)
 })
 
-test('focusing a widget fades the other edges, colours its own, and tags each in the Relations view\'s words next to the focused card', async ({ page }) => {
-	await page.setViewportSize({ width: 1440, height: 900 })
+test('the default Survey Fit at 1280 x 800 keeps the card text close to 11px (it was 9.7px and 8.9px)', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 })
 	await openGraph(page, 'survey')
-	await page.locator('.graph-cluster-identity--collapsed')
-		.filter({ hasText: '#mode' })
-		.click()
-	await expect(page.locator('.graph-node--focused'))
-		.toContainText('#mode')
-	// The edges fade with a transition: wait until the unrelated ones have.
-	await expect(page.locator('.graph-edge--dimmed'))
-		.not
-		.toHaveCount(0)
+	const { zoom, cardTitlePx, cardIdPx } = await readGraph(page)
+	expect(zoom)
+		.toBeGreaterThanOrEqual(0.82)
+	expect(cardTitlePx!)
+		.toBeGreaterThanOrEqual(10.5)
+	expect(cardIdPx!)
+		.toBeGreaterThanOrEqual(9.8)
+})
+
+test('Fit reaches the whole expanded Trip budget, and a person cannot wheel a small graph down to a dot', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'trip-budget', { expanded: true })
+	const canvas = (await page.locator('.vue-flow')
+		.boundingBox())!
+	const { zoom, cards } = await readGraph(page)
+	expect(zoom)
+		.toBeLessThan(0.1)
+	for (const card of cards) {
+		expect(card.rect.x, card.id)
+			.toBeGreaterThanOrEqual(canvas.x - 1)
+		expect(card.rect.x + card.rect.width, card.id)
+			.toBeLessThanOrEqual(canvas.x + canvas.width + 1)
+	}
+
+	// The collapsed Survey fits at 0.95: Zoom out stops at about a quarter of that, not at 0.05.
+	await page.goto('/?showcase=survey')
+	await openDependenciesGraph(page)
+	await expect(page.locator('.graph-node--cluster')
+		.first())
+		.toBeVisible({ timeout: 15_000 })
+	for (let press = 0; press < 25; press++) {
+		await page.getByRole('button', { name: 'Zoom out' })
+			.click()
+	}
 	await expect(async () => {
-		const { edges } = await readGraph(page)
-		expect(edges.filter(edge => edge.opacity < 0.35).length)
-			.toBeGreaterThan(0)
-		expect(edges.filter(edge => edge.opacity > 0.9 && edge.opacity < 1).length)
-			.toBe(0)
+		const { zoom: out } = await readGraph(page)
+		expect(out)
+			.toBeGreaterThanOrEqual(0.2)
+		expect(out)
+			.toBeLessThan(0.4)
 	})
 		.toPass()
+})
 
-	const { cards, edges } = await readGraph(page)
-	const focused = cards.find(card => card.id === 'cluster:1')!.rect
-	const leaving = edges.filter(edge => edge.classes.includes('graph-edge--depends-on'))
-	const arriving = edges.filter(edge => edge.classes.includes('graph-edge--used-by'))
-	expect(leaving.length)
-		.toBeGreaterThan(0)
-	expect(arriving.length)
-		.toBeGreaterThan(0)
+interface FocusCase {
+	showcase: 'survey' | 'trip-budget'
+	/** Text of the widget's card identity, and the id of its cluster node. */
+	identity: string
+	cluster: string
+	/** The names the tags give the other ends, when the test checks them. */
+	names?: Record<string, string>
+	/** How many tags have room at the default Fit of 1440 x 900. */
+	atLeast: number
+}
 
-	// Every edge that does not touch #mode (cluster:1) is faded; every one that does is solid, in the accent colour, and tagged.
-	const touches = (edge: { id: string }): boolean => (JSON.parse(edge.id.slice('edge:'.length)) as string[]).includes('cluster:1')
-	const unrelated = edges.filter(edge => !touches(edge))
-	expect(unrelated.length)
-		.toBeGreaterThan(0)
-	for (const edge of unrelated) {
-		expect(edge.classes, edge.id)
-			.toContain('graph-edge--dimmed')
-		expect(edge.opacity, edge.id)
-			.toBeLessThan(0.35)
-	}
-	const accent = await page.evaluate(() => {
-		const probe = document.createElement('span')
-		probe.style.color = 'var(--lab-color-accent)'
-		document.body.append(probe)
-		const colour = getComputedStyle(probe).color
-		probe.remove()
-		return colour
-	})
-	const related = edges.filter(touches)
-	expect(related.length)
-		.toBe(leaving.length + arriving.length)
-	for (const edge of related) {
-		expect(edge.opacity, edge.id)
-			.toBe(1)
-		expect(edge.stroke, edge.id)
-			.toBe(accent)
-		expect(edge.marker!.fill, edge.id)
-			.toBe(accent)
-	}
+const focusCases: FocusCase[] = [
+	{ showcase: 'survey', identity: '#mode', cluster: 'cluster:1', names: { 'cluster:0': '#open-day', 'cluster:2': '#guests', 'cluster:3': '#sessions', 'cluster:4': '#phone' }, atLeast: 3 },
+	{ showcase: 'survey', identity: '#guests', cluster: 'cluster:2', names: { 'cluster:0': '#open-day', 'cluster:1': '#mode', 'cluster:3': '#sessions', 'cluster:4': '#phone' }, atLeast: 3 },
+	{ showcase: 'trip-budget', identity: '#hotel', cluster: 'cluster:6', atLeast: 2 },
+]
 
-	// The tag says which, in the words of the Relations view, with the other end named so it cannot read backwards, and agrees
-	// with where the arrowhead is. It sits on its edge in the half nearer the focused card, covers neither a card nor another tag
-	// (a tag that does not fit is left out), and is 11px or more on screen.
-	const names: Record<string, string> = { 'cluster:0': '#open-day', 'cluster:2': '#guests', 'cluster:3': '#sessions', 'cluster:4': '#phone' }
-	const tagged = related.filter(edge => edge.relationTag !== null)
-	// 4 of the 5 edges around #mode have a tag at the default Fit of the Survey (the fifth has no room left between the cards).
-	expect(tagged.length)
-		.toBeGreaterThanOrEqual(4)
-	const intersect = (a: Rect, b: Rect): boolean => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
-	for (const edge of tagged) {
-		const [source, target] = JSON.parse(edge.id.slice('edge:'.length)) as [string, string]
-		const leavesFocus = source === 'cluster:1'
-		const other = leavesFocus ? target : source
-		expect(edge.relationTag!.text, edge.id)
-			.toBe(`${leavesFocus ? 'Depends on' : 'Used by'} ${names[other]}`)
-		const near = leavesFocus ? edge.points[0]! : edge.points.at(-1)!
-		const far = leavesFocus ? edge.points.at(-1)! : edge.points[0]!
-		expect(onBorder(focused, near, 3), `${edge.id} touches the focused widget at its ${leavesFocus ? 'start' : 'end'}`)
+for (const focus of focusCases) {
+	test(`focusing ${focus.identity} (${focus.showcase}) fades the other edges, colours its own, and tags them in the Relations view's words, on nothing`, async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 })
+		await openGraph(page, focus.showcase)
+		await page.locator('.graph-cluster-identity--collapsed')
+			.filter({ hasText: focus.identity })
+			.click()
+		await expect(page.locator('.graph-node--focused'))
+			.toContainText(focus.identity)
+		// The edges fade with a transition: wait until the unrelated ones have.
+		await expect(page.locator('.graph-edge--dimmed'))
+			.not
+			.toHaveCount(0)
+		await expect(async () => {
+			const { edges } = await readGraph(page)
+			expect(edges.filter(edge => edge.opacity < 0.35).length)
+				.toBeGreaterThan(0)
+			expect(edges.filter(edge => edge.opacity > 0.9 && edge.opacity < 1).length)
+				.toBe(0)
+		})
+			.toPass()
+
+		const { cards, edges, tagLayerAboveEdges } = await readGraph(page)
+		// The tags are drawn in a layer after every edge and card, so no edge is drawn across their text.
+		expect(tagLayerAboveEdges)
 			.toBe(true)
-		const rect = edge.relationTag!.rect
-		const centre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
-		expect(Math.hypot(centre.x - near.x, centre.y - near.y), `${edge.id} tag is nearer the focused card than the other end`)
-			.toBeLessThan(Math.hypot(centre.x - far.x, centre.y - far.y))
-		expect(edge.relationTag!.fontPx, `${edge.id} tag text on screen`)
-			.toBeGreaterThanOrEqual(10.9)
-		for (const card of cards) {
-			expect(intersect(rect, card.rect), `${edge.id} tag covers ${card.id}`)
-				.toBe(false)
+		const focused = cards.find(card => card.id === focus.cluster)!.rect
+		const leaving = edges.filter(edge => edge.classes.includes('graph-edge--depends-on'))
+		const arriving = edges.filter(edge => edge.classes.includes('graph-edge--used-by'))
+		expect(leaving.length)
+			.toBeGreaterThan(0)
+		expect(arriving.length)
+			.toBeGreaterThan(0)
+
+		// Every edge that does not touch the focus is faded; every one that does is solid and in the accent colour (arrowhead too).
+		const touches = (edge: { id: string }): boolean => (JSON.parse(edge.id.slice('edge:'.length)) as string[]).includes(focus.cluster)
+		const unrelated = edges.filter(edge => !touches(edge))
+		for (const edge of unrelated) {
+			expect(edge.classes, edge.id)
+				.toContain('graph-edge--dimmed')
+			expect(edge.opacity, edge.id)
+				.toBeLessThan(0.35)
 		}
-		for (const otherEdge of tagged) {
-			if (otherEdge !== edge) {
-				expect(intersect(rect, otherEdge.relationTag!.rect), `${edge.id} tag covers the tag of ${otherEdge.id}`)
+		const accent = await page.evaluate(() => {
+			const probe = document.createElement('span')
+			probe.style.color = 'var(--lab-color-accent)'
+			document.body.append(probe)
+			const colour = getComputedStyle(probe).color
+			probe.remove()
+			return colour
+		})
+		const related = edges.filter(touches)
+		expect(related.length)
+			.toBe(leaving.length + arriving.length)
+		for (const edge of related) {
+			expect(edge.opacity, edge.id)
+				.toBe(1)
+			expect(edge.stroke, edge.id)
+				.toBe(accent)
+			expect(edge.marker!.fill, edge.id)
+				.toBe(accent)
+		}
+
+		// The tag says which, in the words of the Relations view, with the other end named so it cannot read backwards, and agrees
+		// with where the arrowhead is. It sits on its edge in the half nearer the focused card, covers no card, no arrowhead of any
+		// edge around the focus (its own included) and no other tag (a tag that does not fit is left out), and is 11px or more.
+		const tagged = related.filter(edge => edge.relationTag !== null)
+		expect(tagged.length)
+			.toBeGreaterThanOrEqual(focus.atLeast)
+		// Each direction that has edges has a tag.
+		expect(tagged.some(edge => edge.classes.includes('graph-edge--depends-on')))
+			.toBe(true)
+		expect(tagged.some(edge => edge.classes.includes('graph-edge--used-by')))
+			.toBe(true)
+		const intersect = (a: Rect, b: Rect): boolean => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+		const inside = (rect: Rect, point: Point): boolean => point.x > rect.x && point.x < rect.x + rect.width && point.y > rect.y && point.y < rect.y + rect.height
+		// Points of the arrowhead drawn at the end of an edge: a triangle `length` long (on screen) and 0.8 as wide.
+		const arrowhead = (edge: { points: Point[], marker: { markerLength: number } | null }): Point[] => {
+			const tip = edge.points.at(-1)!
+			let travelled = 0
+			let back = tip
+			// The point exactly `markerLength` back along the path (the samples are about 10px apart, so interpolate in the last segment).
+			for (let index = edge.points.length - 1; index > 0; index--) {
+				const previous = edge.points[index - 1]!
+				const step = Math.hypot(edge.points[index]!.x - previous.x, edge.points[index]!.y - previous.y)
+				if (travelled + step >= edge.marker!.markerLength) {
+					const t = (edge.marker!.markerLength - travelled) / step
+					back = { x: edge.points[index]!.x + (previous.x - edge.points[index]!.x) * t, y: edge.points[index]!.y + (previous.y - edge.points[index]!.y) * t }
+					break
+				}
+				travelled += step
+				back = previous
+			}
+			const length = Math.hypot(tip.x - back.x, tip.y - back.y) || 1
+			const side = { x: -(tip.y - back.y) / length * edge.marker!.markerLength * 0.4, y: (tip.x - back.x) / length * edge.marker!.markerLength * 0.4 }
+			const points: Point[] = []
+			for (let along = 0; along <= 10; along++) {
+				for (let across = -5; across <= 5; across++) {
+					const t = along / 10
+					points.push({ x: back.x + (tip.x - back.x) * t + side.x * (1 - t) * (across / 5), y: back.y + (tip.y - back.y) * t + side.y * (1 - t) * (across / 5) })
+				}
+			}
+			return points
+		}
+		for (const edge of tagged) {
+			const [source, target] = JSON.parse(edge.id.slice('edge:'.length)) as [string, string]
+			const leavesFocus = source === focus.cluster
+			const other = leavesFocus ? target : source
+			const prefix = leavesFocus ? 'Depends on' : 'Used by'
+			expect(edge.relationTag!.text, edge.id)
+				.toBe(focus.names ? `${prefix} ${focus.names[other]}` : edge.relationTag!.text)
+			expect(edge.relationTag!.text, edge.id)
+				.toMatch(new RegExp(`^${prefix} #`))
+			const near = leavesFocus ? edge.points[0]! : edge.points.at(-1)!
+			const far = leavesFocus ? edge.points.at(-1)! : edge.points[0]!
+			expect(onBorder(focused, near, 3), `${edge.id} touches the focused widget at its ${leavesFocus ? 'start' : 'end'}`)
+				.toBe(true)
+			const rect = edge.relationTag!.rect
+			const centre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+			expect(Math.hypot(centre.x - near.x, centre.y - near.y), `${edge.id} tag is nearer the focused card than the other end`)
+				.toBeLessThan(Math.hypot(centre.x - far.x, centre.y - far.y))
+			expect(edge.relationTag!.fontPx, `${edge.id} tag text on screen`)
+				.toBeGreaterThanOrEqual(10.9)
+			for (const card of cards) {
+				expect(intersect(rect, card.rect), `${edge.id} tag covers ${card.id}`)
 					.toBe(false)
 			}
+			for (const around of related) {
+				expect(arrowhead(around)
+					.some(point => inside(rect, point)), `${edge.id} tag covers the arrowhead of ${around.id}`)
+					.toBe(false)
+			}
+			for (const otherEdge of tagged) {
+				if (otherEdge !== edge) {
+					expect(intersect(rect, otherEdge.relationTag!.rect), `${edge.id} tag covers the tag of ${otherEdge.id}`)
+						.toBe(false)
+				}
+			}
 		}
-	}
-	expect(tagged.filter(edge => edge.classes.includes('graph-edge--depends-on'))
-		.every(edge => edge.relationTag!.text.startsWith('Depends on')))
-		.toBe(true)
-	expect(tagged.filter(edge => edge.classes.includes('graph-edge--used-by'))
-		.every(edge => edge.relationTag!.text.startsWith('Used by')))
-		.toBe(true)
-})
+	})
+}
 
 test('the key and the Legend state the direction convention', async ({ page }) => {
 	await openGraph(page, 'survey')

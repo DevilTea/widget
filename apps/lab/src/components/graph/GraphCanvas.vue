@@ -17,12 +17,12 @@
 import type { NodeMouseEvent } from '@vue-flow/core'
 import type { GraphFlowEdge, GraphFlowNode } from '../../graph/vue-flow'
 import { Handle, Position, useVueFlow, VueFlow } from '@vue-flow/core'
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useGraphTags } from '../../composables/use-graph-tags'
 import { useLabI18n } from '../../composables/use-lab-i18n'
-import { placeTags } from '../../graph/tag-placement'
+import { tagSize } from '../../graph/tag-placement'
 import { GRAPH_EDGE_TYPE } from '../../graph/vue-flow'
 import { ARROW_KINDS, arrowMarkerId, ZOOM_BUCKETS, zoomBucket } from '../../graph/zoom-scale'
-import { GraphTagsKey } from './graph-tags'
 import GraphDependencyEdge from './GraphDependencyEdge.vue'
 import '@vue-flow/core/dist/style.css'
 
@@ -40,38 +40,42 @@ const emit = defineEmits<{
 }>()
 
 /**
- * Fit leaves 8% around the graph (it used to leave 20%, so a fitted graph used about 40% of the canvas: audit U11).
- * Everything is still in view afterwards; the text itself is 11px or more before the zoom.
+ * Fit leaves 4% around the graph (it used to leave 20%, then 8%: a fitted graph used about 40% of the canvas, audit U11, and the
+ * Survey's card text was under 11px on screen at 1280 x 800). Everything is still in view afterwards, curves included.
  */
-const FIT_OPTIONS = { padding: 0.08 } as const
+const FIT_OPTIONS = { padding: 0.04 } as const
+
+/** Fit may go this far out (the whole expanded Trip budget fits at about 0.06). */
+const FIT_MIN_ZOOM = 0.05
+/** Whatever Fit settled on, a person can zoom out to about a quarter of it, but never below this unless Fit itself is lower: a small graph is not wheeled down to a dot. */
+const MANUAL_MIN_ZOOM = 0.1
 
 const i18n = useLabI18n()
 const vueFlowContainer = ref<HTMLElement | null>(null)
-const { fitBounds, fitView, getNodes, onNodesChange, onNodesInitialized, viewport, zoomIn, zoomOut } = useVueFlow()
+const { fitBounds, fitView, getNodes, getSelectedEdges, onNodesChange, onNodesInitialized, setMinZoom, viewport, zoomIn, zoomOut } = useVueFlow()
 
 /**
- * The tags of the edges around the focus ("Depends on #sessions", "Used by #phone"), placed together so that none covers a card
- * or another tag; one that does not fit is left out (see `graph/tag-placement.ts`). They are re-placed only when the graph, the
- * focus or the zoom bucket changes, not on every wheel tick, and not at all below the zoom where text cannot be legible.
+ * The tags of the edges around the focus ("Depends on #sessions", "Used by #phone"), placed together so that none covers a card,
+ * an arrowhead or another tag; one that does not fit is left out (see `graph/tag-placement.ts`). They are re-placed only when
+ * the graph, the focus or the zoom bucket changes, not on every wheel tick or pan step (see `composables/use-graph-tags.ts`).
+ * They are drawn in one layer above every edge and card (the `zoom-pane` slot of Vue Flow), so no edge is drawn across their text.
  */
-const tagPlacements = computed(() => {
-	const bucket = zoomBucket(viewport.value.zoom)
-	const tags = props.edges
-		.filter(edge => edge.data?.relation !== undefined && edge.data.route !== undefined)
-		.map(edge => ({
-			id: edge.id,
-			route: edge.data!.route!,
-			relation: edge.data!.relation!,
-			text: i18n.t(edge.data!.relation === 'depends-on' ? 'Depends on {name}' : 'Used by {name}', { name: edge.data!.otherEnd ?? '' }),
-		}))
-	if (!bucket.showTags || tags.length === 0)
-		return new Map()
-	const cards = getNodes.value
+const bucket = computed(() => zoomBucket(viewport.value.zoom))
+const tagPlacements = useGraphTags({
+	edges: () => props.edges,
+	cards: () => getNodes.value
 		.filter(node => !(node.type === 'cluster' && node.data.isExpanded === true))
-		.map(node => ({ x: node.computedPosition.x, y: node.computedPosition.y, width: node.dimensions.width, height: node.dimensions.height }))
-	return placeTags(tags, cards, bucket.font)
+		.map(node => ({ x: node.computedPosition.x, y: node.computedPosition.y, width: node.dimensions.width, height: node.dimensions.height })),
+	zoom: () => viewport.value.zoom,
+	text: (relation, name) => i18n.t(relation === 'depends-on' ? 'Depends on {name}' : 'Used by {name}', { name }),
 })
-provide(GraphTagsKey, tagPlacements)
+function tagBox(tag: { x: number, y: number, text: string }): { x: number, y: number, width: number, height: number } {
+	const { width, height } = tagSize(tag.text, bucket.value.font)
+	return { x: tag.x - width / 2, y: tag.y - height / 2, width, height }
+}
+/** The tag of an edge gives way to the edge's own label while the edge is hovered or selected. */
+const hoveredEdgeId = ref<string | null>(null)
+const tagIsHidden = (edgeId: string): boolean => edgeId === hoveredEdgeId.value || getSelectedEdges.value.some(edge => edge.id === edgeId)
 
 let fitted = false
 let resizeObserver: ResizeObserver | null = null
@@ -107,7 +111,7 @@ function areCurrentNodesMeasured(): boolean {
  * Fits the cards and the curves between them. A long edge runs in a corridor ELK reserved beside the cards, so fitting only
  * the cards would cut those curves off at the edge of the canvas.
  */
-function fitContent(): Promise<boolean> {
+async function fitContent(): Promise<boolean> {
 	let minX = Infinity
 	let minY = Infinity
 	let maxX = -Infinity
@@ -126,9 +130,14 @@ function fitContent(): Promise<boolean> {
 			maxY = Math.max(maxY, point.y)
 		}
 	}
-	if (!Number.isFinite(minX))
-		return fitView(FIT_OPTIONS)
-	return fitBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, FIT_OPTIONS)
+	// Fit may reach far out; afterwards the manual zoom floor follows the zoom Fit settled on.
+	setMinZoom(FIT_MIN_ZOOM)
+	const success = Number.isFinite(minX)
+		? await fitBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, FIT_OPTIONS)
+		: await fitView(FIT_OPTIONS)
+	const fitZoom = viewport.value.zoom
+	setMinZoom(Math.max(FIT_MIN_ZOOM, Math.min(fitZoom, Math.max(MANUAL_MIN_ZOOM, fitZoom * 0.25))))
+	return success
 }
 
 async function attemptFit(): Promise<boolean> {
@@ -237,18 +246,18 @@ function memberKindShort(kind: string): string {
 		>
 			<defs>
 				<template
-					v-for="bucket in ZOOM_BUCKETS"
-					:key="bucket.min"
+					v-for="level in ZOOM_BUCKETS"
+					:key="level.min"
 				>
 					<marker
 						v-for="kind in ARROW_KINDS"
-						:id="arrowMarkerId(kind, bucket)"
+						:id="arrowMarkerId(kind, level)"
 						:key="kind"
 						viewBox="0 0 10 8"
 						refX="10"
 						refY="4"
-						:markerWidth="bucket.arrow"
-						:markerHeight="bucket.arrow * 0.8"
+						:markerWidth="level.arrow"
+						:markerHeight="level.arrow * 0.8"
 						markerUnits="userSpaceOnUse"
 						orient="auto-start-reverse"
 					>
@@ -272,7 +281,44 @@ function memberKindShort(kind: string): string {
 			class="graph-canvas-flow w-full h-full"
 			@nodeClick="onNodeClick"
 			@edgeClick="onEdgeClick"
+			@edgeMouseEnter="hoveredEdgeId = $event.edge.id"
+			@edgeMouseLeave="hoveredEdgeId = null"
 		>
+			<!-- The focus tags, above every edge and card: a tag is part of no edge, so an edge drawn later cannot cross its text. -->
+			<template #zoom-pane>
+				<svg
+					class="graph-tag-layer"
+					aria-hidden="true"
+				>
+					<g
+						v-for="[edgeId, tag] in tagPlacements"
+						:key="edgeId"
+						class="graph-tag"
+						:class="{ 'graph-tag--hidden': tagIsHidden(edgeId) }"
+						:data-edge-id="edgeId"
+						:data-relation="tag.relation"
+					>
+						<rect
+							class="graph-tag-bg"
+							:x="tagBox(tag).x"
+							:y="tagBox(tag).y"
+							:width="tagBox(tag).width"
+							:height="tagBox(tag).height"
+							:rx="4 * bucket.font / 11"
+						/>
+						<text
+							class="graph-tag-text"
+							:x="tag.x"
+							:y="tag.y"
+							text-anchor="middle"
+							dominant-baseline="central"
+							:style="{ fontSize: `${bucket.font}px` }"
+							v-text="tag.text"
+						/>
+					</g>
+				</svg>
+			</template>
+
 			<template #[`edge-${GRAPH_EDGE_TYPE}`]="edge">
 				<GraphDependencyEdge v-bind="edge" />
 			</template>
@@ -559,7 +605,8 @@ function memberKindShort(kind: string): string {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: 12px;
+	/* 13/12px (it was 12/11): at the default Fit of a 1280 x 800 window (0.84) the type and the id are still about 11px on screen. */
+	font-size: 13px;
 	font-weight: 650;
 	letter-spacing: -0.01em;
 	color: var(--lab-color-text);
@@ -570,7 +617,7 @@ function memberKindShort(kind: string): string {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: 11px;
+	font-size: 12px;
 	color: var(--lab-color-text-muted);
 }
 
@@ -598,7 +645,7 @@ function memberKindShort(kind: string): string {
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--graph-kind-color) 8%, var(--lab-color-surface));
 	color: color-mix(in srgb, var(--graph-kind-color) 72%, var(--lab-color-text));
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 700;
 	line-height: 1;
 }
@@ -918,13 +965,30 @@ function memberKindShort(kind: string): string {
 	stroke-width: 2.2;
 }
 
-:deep(.graph-edge .graph-edge-relation .vue-flow__edge-text),
-:deep(.graph-edge .graph-edge-relation .vue-flow__edge-textbg) {
-	opacity: 1;
+.graph-tag-layer {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 1px;
+	height: 1px;
+	overflow: visible;
+	pointer-events: none;
 }
 
-:deep(.graph-edge:hover .graph-edge-relation),
-:deep(.graph-edge.selected .graph-edge-relation) {
+.graph-tag-bg {
+	fill: var(--lab-color-surface);
+	stroke: var(--lab-color-border);
+	stroke-width: 0.6px;
+	fill-opacity: 0.97;
+}
+
+.graph-tag-text {
+	fill: var(--lab-color-text);
+	font-family: var(--lab-font-mono);
+	font-weight: 700;
+}
+
+.graph-tag--hidden {
 	opacity: 0;
 }
 

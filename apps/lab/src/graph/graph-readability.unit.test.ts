@@ -23,13 +23,13 @@ import { defaultSurveyPreset } from '../showcases/survey/presets'
 import { surveySystem } from '../showcases/survey/system'
 import { defaultTripBudgetPreset } from '../showcases/trip-budget/presets'
 import { tripBudgetSystem } from '../showcases/trip-budget/system'
-import { sampleRoute } from './edge-geometry'
+import { routePointAtDistance, sampleRoute } from './edge-geometry'
 import { fromElkResult, toElkGraph } from './elk-adapter'
 import { projectSemanticGraph } from './projection'
 import { projectRelations } from './relations'
 import { placeTags } from './tag-placement'
 import { toVueFlow } from './vue-flow'
-import { ARROW_KINDS } from './zoom-scale'
+import { ARROW_KINDS, ZOOM_BUCKETS } from './zoom-scale'
 
 const elk = new ELK()
 
@@ -131,8 +131,8 @@ function isOnBorder(point: GraphPoint, card: Card, tolerance = 1.5): boolean {
 	return withinX && withinY && (onVertical || onHorizontal)
 }
 
-/** The zoom `fitBounds` settles on for a canvas of this size: Vue Flow makes the content `1 + padding` times its own size (measured in the real Lab: 0.95 for the Survey at 1440 x 900). */
-function fitZoom(drawn: DrawnGraph, canvas: { width: number, height: number }, padding = 0.08): number {
+/** The zoom `fitBounds` settles on for a canvas of this size: Vue Flow makes the content `1 + padding` times its own size (measured in the real Lab: 0.99 for the Survey at 1440 x 900 with the 0.04 Fit padding). */
+function fitZoom(drawn: DrawnGraph, canvas: { width: number, height: number }, padding = 0.04): number {
 	const points = [
 		...drawn.cards.flatMap(card => [{ x: card.x, y: card.y }, { x: card.x + card.width, y: card.y + card.height }]),
 		...drawn.edges.flatMap(edge => edge.data?.route ?? []),
@@ -213,17 +213,44 @@ describe.each(Object.keys(SHOWCASES) as ShowcaseName[])('%s Graph', (name) => {
 })
 
 describe('focus tags', () => {
-	// The tags of the edges around one widget, placed at the font size the zoom bucket of the showcase's Fit uses.
+	// The tags of the edges around one widget, placed at the font size (and arrowhead length) of the zoom buckets the showcase's Fit
+	// uses: the Survey fits at 0.95 (font 13) at 1440 x 900 and 0.84 (font 13) at 1280 x 800, the Trip budget at 0.37 (font 32).
 	const cases = [
-		{ showcase: 'survey', widget: 'mode', fonts: [11, 13, 16], most: [11, 13] },
-		{ showcase: 'trip-budget', widget: 'hotel', fonts: [27, 32], most: [] },
+		{ showcase: 'survey', widget: 'mode', fonts: [11, 13, 16], atLeast: 3 },
+		{ showcase: 'survey', widget: 'guests', fonts: [11, 13, 16], atLeast: 3 },
+		{ showcase: 'trip-budget', widget: 'hotel', fonts: [27, 32], atLeast: 2 },
+		{ showcase: 'trip-budget', widget: 'ana', fonts: [27, 32], atLeast: 2 },
 	] as const
 
-	for (const { showcase, widget, fonts, most } of cases) {
-		it.each(fonts)(`places the tags around #${widget} of the ${showcase} on no card and on no other tag, nearer to #${widget} than to the other end, and drops one that does not fit (font %s)`, async (font) => {
+	interface Box { x: number, y: number, width: number, height: number }
+	const overlaps = (a: Box, b: Box): boolean =>
+		Math.min(a.x + a.width / 2, b.x + b.width / 2) - Math.max(a.x - a.width / 2, b.x - b.width / 2) > 0
+		&& Math.min(a.y + a.height / 2, b.y + b.height / 2) - Math.max(a.y - a.height / 2, b.y - b.height / 2) > 0
+
+	/** Points inside the arrowhead drawn at the end of a route (a triangle, `arrow` long and 0.8 as wide): measured on the triangle, not on the box the placement used. */
+	function arrowheadPoints(route: readonly GraphPoint[], arrow: number): GraphPoint[] {
+		const tip = route.at(-1)!
+		const back = routePointAtDistance(route, arrow, 'end')
+		const length = Math.hypot(tip.x - back.x, tip.y - back.y)
+		const side = { x: -(tip.y - back.y) / length * arrow * 0.4, y: (tip.x - back.x) / length * arrow * 0.4 }
+		const points: GraphPoint[] = []
+		for (let along = 0; along <= 10; along++) {
+			for (let across = -5; across <= 5; across++) {
+				const t = along / 10
+				// Inside the triangle: the width shrinks linearly from the base to the tip.
+				const width = (1 - t) * (across / 5)
+				points.push({ x: back.x + (tip.x - back.x) * t + side.x * width, y: back.y + (tip.y - back.y) * t + side.y * width })
+			}
+		}
+		return points
+	}
+
+	for (const { showcase, widget, fonts, atLeast } of cases) {
+		it.each(fonts)(`places the tags around #${widget} of the ${showcase} on no card, no arrowhead and no other tag, nearer to #${widget} than to the other end (font %s)`, async (font) => {
 			const drawn = await draw(showcase, false)
-			const focused = drawn.redraw(widget)
-			const tagged = focused.filter(edge => edge.data?.relation !== undefined)
+			const bucket = ZOOM_BUCKETS.find(candidate => candidate.font === font)!
+			const tagged = drawn.redraw(widget)
+				.filter(edge => edge.data?.relation !== undefined)
 			expect(tagged.length)
 				.toBeGreaterThan(3)
 			const tags = tagged.map(edge => ({
@@ -232,19 +259,25 @@ describe('focus tags', () => {
 				relation: edge.data!.relation!,
 				text: `${edge.data!.relation === 'depends-on' ? 'Depends on' : 'Used by'} ${edge.data!.otherEnd}`,
 			}))
-			const placed = placeTags(tags, drawn.cards, font)
-			// The Survey's Fit zoom (0.95 at 1440 x 900) uses fonts 11 and 13: 4 of its 5 tags fit there. Elsewhere fewer may, but some do.
+			const placed = placeTags(tags, drawn.cards, { font, arrow: bucket.arrow })
+			// Tags that do not fit are not drawn, but some do.
 			expect(placed.size)
-				.toBeGreaterThanOrEqual(most.includes(font as never) ? 4 : 3)
+				.toBeGreaterThanOrEqual(atLeast)
 
-			const rects = [...placed.values()]
 			const meeting: string[] = []
 			for (const [id, tag] of placed) {
 				for (const card of drawn.cards) {
 					if (overlaps(tag, { x: card.x + card.width / 2, y: card.y + card.height / 2, width: card.width, height: card.height }))
 						meeting.push(`${id} on card ${card.id}`)
 				}
-				for (const other of rects) {
+				// No arrowhead of any edge around the focus, its own included.
+				for (const edge of tags) {
+					const hit = arrowheadPoints(edge.route, bucket.arrow)
+						.some(point => Math.abs(point.x - tag.x) < tag.width / 2 && Math.abs(point.y - tag.y) < tag.height / 2)
+					if (hit)
+						meeting.push(`${id} on the arrowhead of ${edge.id}`)
+				}
+				for (const other of placed.values()) {
 					if (other !== tag && overlaps(tag, other))
 						meeting.push(`${id} on ${other.text}`)
 				}
@@ -259,26 +292,26 @@ describe('focus tags', () => {
 				expect(Math.hypot(tag.x - near.x, tag.y - near.y), input.id)
 					.toBeLessThanOrEqual(Math.hypot(tag.x - far.x, tag.y - far.y) + 1)
 			}
-		})
-	}
 
-	function overlaps(a: { x: number, y: number, width: number, height: number }, b: { x: number, y: number, width: number, height: number }): boolean {
-		return Math.min(a.x + a.width / 2, b.x + b.width / 2) - Math.max(a.x - a.width / 2, b.x - b.width / 2) > 0
-			&& Math.min(a.y + a.height / 2, b.y + b.height / 2) - Math.max(a.y - a.height / 2, b.y - b.height / 2) > 0
+			// The two directions take turns: when both exist and any tag of the rarer one fits, it gets one.
+			const relations = new Set([...placed.values()].map(tag => tag.relation))
+			expect(relations.size, 'both directions are tagged')
+				.toBe(new Set(tags.map(tag => tag.relation)).size)
+		})
 	}
 })
 
 describe('fitted size', () => {
 	it('keeps the collapsed Survey and Trip budget readable, and the expanded Survey about as large as it was', async () => {
 		// The zoom counts the curves as well as the cards (a long edge runs in a corridor beside them). Measured in the browser at
-		// 1440 x 900: collapsed Survey 0.95 (main: 1.16, with the cards 21px apart), collapsed Trip budget 0.37 (main: 0.39), expanded
-		// Survey 0.26 (main: 0.30, counting the cards only). The Survey's text is 11px or more on screen only above about 0.9.
+		// 1440 x 900: collapsed Survey 0.99 (main: 1.16, with the cards 21px apart), collapsed Trip budget 0.39 (main: 0.39), expanded
+		// Survey 0.27 (main: 0.30, counting the cards only). The Survey's text is 11px or more on screen only above about 0.9.
 		expect(fitZoom(await draw('survey', false), CANVAS_1440))
-			.toBeGreaterThan(0.9)
+			.toBeGreaterThan(0.97)
 		expect(fitZoom(await draw('trip-budget', false), CANVAS_1440))
-			.toBeGreaterThan(0.33)
+			.toBeGreaterThan(0.34)
 		expect(fitZoom(await draw('survey', true), CANVAS_1440))
-			.toBeGreaterThan(0.24)
+			.toBeGreaterThan(0.25)
 	})
 })
 

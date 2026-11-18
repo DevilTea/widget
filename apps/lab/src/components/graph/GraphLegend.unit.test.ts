@@ -42,5 +42,8 @@ describe('graphLegend Method badges', () => {
 			.toContain('"Depends on"')
 		expect(direction)
 			.toContain('"Used by"')
+		// Tags that do not fit are left out, and the Legend says so.
+		expect(wrapper.text())
+			.toContain('A tag is left out where there is no room for it: the Relations view has the full list.')
 	})
 })
