@@ -23,12 +23,14 @@
 		"@nuxt/ui": "catalog:",
 		"@shikijs/core": "catalog:",
 		"@shikijs/engine-javascript": "catalog:",
+		"@valibot/to-json-schema": "catalog:",
 		"@vue-flow/core": "catalog:",
 		"dockview-vue": "catalog:",
 		"elkjs": "catalog:",
 		"modern-monaco": "catalog:",
 		"tm-grammars": "catalog:",
 		"tm-themes": "catalog:",
+		"valibot": "catalog:",
 		"vue": "catalog:"
 	},
 	"devDependencies": {

@@ -47,9 +47,9 @@ pnpm --filter widget-lab test:pages
 the last demonstrating a cross-widget `registerDeps` dependency) with three preset source texts: a
 fully valid interactive one, one that is intentionally semantically invalid (to demo diagnostics), and
 one that exercises Blueprint recovery (an unresolved node and a raw-slot placement). These are
-test-only fixtures for this shell, hidden from the Examples menu. Two showcases are listed, both registered in
-`src/showcases/registry.ts` (which also registers the hidden `sandbox`): "Interactive Survey" (the default) and
-"Trip budget splitter". Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
+test-only fixtures for this shell, hidden from the Examples menu. Three showcases are listed, all registered in
+`src/showcases/registry.ts` (which also registers the hidden `sandbox`): "Interactive Survey" (the default),
+"Trip budget splitter" and "Quote rules shared by browser and backend". Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
 missing or unknown id falls back to the default. The parameter follows the active showcase (the Lab rewrites it with
 `history.replaceState`), so reloading restores it.
 
@@ -82,6 +82,26 @@ The presets are `trip-default`, `trip-invalid` and `trip-unsupported-currency`; 
 nothing in a trip reads the settlement. The tutorial rail has a tour for the showcase; the overflow menu's Tutorial starts the
 tour of whichever showcase is open (the Survey's for a showcase that has none). The showcase follows the showcase host contract (it reads only the host's light/dark theme and
 the Inspect anchor) and styles itself with its own `--trip-*` tokens; its language is Widget State, not the Lab's locale.
+
+### Quote rules shared by browser and backend
+
+A print shop ("Corner Press") quotes a job: three printed items (quantity and paper), a volume discount, a rush surcharge, a
+courier fee and a sales tax. The widgets are `Quote` (root), `Item`, `VolumeDiscount`, `RushSurcharge`, `Delivery` and
+`SalesTax`; the plugins are in `src/showcases/quote-rules/plugins/`. The pricing rules are plugins, so the very same files run
+in the Preview and in a Web Worker that stands in for a backend. What it shows, and where in the Lab:
+
+| Core feature | In the showcase | Where to see it |
+|---|---|---|
+| JSON-in/JSON-out evaluation without a renderer | `src/showcases/quote-rules/evaluate.ts` compiles the document, writes the answers (`Quote.answers`) into a fresh Runtime and returns `Quote.quote`; `quote.worker.ts` runs it in a module Web Worker with no DOM, and only JSON text crosses | Preview: "The same rules, run twice" shows the page's quote and the worker's side by side, where each ran (the worker has no `document` or `window`) and that the two are the same JSON; change any answer and both follow |
+| A schema library through Standard Schema | Valibot schemas validate every config and the State a customer writes; `guard()` (`standard-schema.ts`) turns each issue into a Core diagnostic with the library's own message | Preset "Invalid config": Problems lists six located diagnostics with Valibot's messages, verbatim; a quantity of 0 in the Preview is refused and the old value stays |
+| Config JSON Schema | each plugin's `config.schema` is the same Valibot schema object's JSON Schema (`~standard.jsonSchema`) | Author > Structure: a list of tiers with Add and Remove, number boxes, a switch and a choice list; Author > Catalog: the schema |
+| The isolated-exception receiver | `VolumeDiscount` has a deliberate defect: below its first tier its `compute` throws. Core isolates the exception, and the Preview installs `setIsolatedErrorHandler` and lists it | Preset "Buggy rule": set the A5 flyers quantity to 50 (with the poster that is 52 pieces, below the first tier, 100; any flyers quantity up to 97 does it). The page keeps the last amounts and says so; "Isolated exceptions" names the rule. The Lab cannot show it: Runtime and Selected widget keep the Property's last completed value |
+| Property chains and `resetState` | `Item.line` -> `Quote.subtotalCents` -> the rules' `adjustment` -> `Quote.taxableCents` -> `SalesTax.adjustment` -> `Quote.quote`; "Start over" is `runtime.resetState()` | Dependencies > Relations / Graph; the Preview |
+
+The presets are `quote-default`, `quote-invalid` and `quote-buggy-rule`. The tutorial rail has a tour for the showcase (en and zh-TW).
+The showcase follows the showcase host contract (it reads the host's locale and light/dark theme and the Inspect anchor) and styles
+itself with its own `--quote-*` tokens. It is the first showcase with extra packages (`valibot` and `@valibot/to-json-schema`, in its
+`allowed-packages.json`) and the first with a Web Worker (its file is inside the showcase directory, as the isolation guard requires).
 
 ## Header, editing feedback and Undo
 
