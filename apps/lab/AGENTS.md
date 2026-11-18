@@ -642,7 +642,16 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   Accepts optional `LayoutGraphOptions` (`expandedClusterIds`). Collapsed clusters are treated as leaf
   nodes with compact dimensions (`COLLAPSED_CLUSTER_WIDTH`, `COLLAPSED_CLUSTER_HEIGHT`), and cross-cluster
   edges between collapsed clusters connect to the cluster node directly with duplicate endpoints collapsed
-  for layout efficiency. Unit-testable without a worker or the real elkjs runtime.
+  for layout efficiency. Unit-testable without a worker or the real elkjs runtime. Since issue #230 ("the Graph is hard
+  to read") ELK only places the cards and finds each edge's corridor: layered, top to bottom, `NETWORK_SIMPLEX`
+  placement and `GREEDY_MODEL_ORDER` cycle breaking, `POLYLINE` routing with `elk.json.edgeCoords: ROOT` so every
+  edge's route points come back in canvas coordinates, and the spacing in `LAYOUT_SPACING` (cards 72, layers 128,
+  edge-to-card 40, edge-to-edge 20; `CLUSTER_SPACING` inside an expanded widget). The numbers are the smallest that keep
+  the cards visibly apart and the fitted collapsed Survey about 0.8 zoom and the collapsed Trip budget about 0.35-0.45;
+  `fromElkResult()` also returns every edge's route (`LayoutedGraph.edges`), keyed by `aggregateEdgeId()`, the id of
+  the Vue Flow edge drawn for it.
+- `edge-geometry.ts` — pure: a route becomes a chain of cubic Beziers with vertical tangents (`routePath()`: only `M`
+  and `C` commands, so a two-point edge is one `C`), plus the label point and the sample points the quality tests read.
 - `layout.ts` — the shared `LayoutedGraph`/`LayoutGraphFn` adapter shapes and `LayoutGraphOptions`.
 - `layout-session.ts` — `createLayoutSession(layoutFn)`: framework-agnostic, generation-guarded async
   wrapper around any `LayoutGraphFn` (real or a test fake). A layout result for a superseded `request()`
@@ -658,6 +667,12 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
     `semanticEdges` retains every exact member-level operation/path/reference for the details surface.
   - Selecting/focusing a widget or member highlights the connected subgraph and deemphasizes
     unrelated nodes and edges (`isDimmed` / `graph-node--dimmed` / `graph-edge--dimmed`).
+  - **Direction** (issue #230): an edge runs from the member that declares a dependency to the member it depends on
+    (owner -> target, as above) and its arrowhead (`markerEnd`, `arrowclosed`, a Lab token colour so it follows the theme
+    and matches the stroke it ends) is on the target: `A → B` means "A depends on B", the Relations view's "Depends on"
+    for A and "Used by" for B. While a widget or member is focused, each highlighted edge carries `data.relation`
+    (`depends-on` when it leaves the focus, `used-by` when it arrives; none inside the focus itself) and the matching
+    `graph-edge--depends-on` / `--used-by` class. Every edge uses the one Vue Flow edge type `GRAPH_EDGE_TYPE`.
   - Vue Flow is strictly viewer-only: every node is `draggable: false`/`connectable: false` and no edge
     is `updatable`.
 - `src/components/graph/GraphCanvas.vue` — the only place in this app that imports `@vue-flow/core`
@@ -670,8 +685,13 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   invokes dashed). Since PR 3c (audit U11) every edge label (the aggregate counts too) is hidden until its edge is hovered or selected, because neighbouring
   labels ran into each other; all text is 11px or more (members 12px, node footprints `VERTEX_WIDTH` 200 x 36, `COLLAPSED_CLUSTER` 240 x 88 to fit it), and `GraphKey.vue`,
   a row above the canvas that is always visible, says what S, P, M, W, E, ! and the three line styles mean, so the Legend popover is only the long form.
-  Handles remain intentionally unobtrusive and the canvas uses only a subtle dot grid: these cues must
-  never imply that the readonly inspector is an editable node editor.
+  Edges are drawn by `GraphDependencyEdge.vue` (registered under `GRAPH_EDGE_TYPE`): Bezier curves through ELK's route
+  points, starting and ending on the card borders where ELK spread them, so several edges of one card stay apart and none
+  runs behind a card; without route points it falls back to Vue Flow's own handle positions. The key's first item states
+  the direction (`A → B: A depends on B`), the Legend explains it with the Relations words, and a focused widget's or
+  member's edges are tagged "Depends on" / "Used by" (hidden while the edge itself is hovered, which shows its operation).
+  The handles Vue Flow requires are invisible (an edge does not attach to them) and the canvas uses only a subtle dot
+  grid: these cues must never imply that the readonly inspector is an editable node editor.
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container
   `path` + reference target/operation, plus aggregated semantic dependencies list when an aggregated
   cluster-to-cluster edge is selected) — edge selection stays local, never expands into shared focus.
@@ -697,7 +717,10 @@ partially measured subset and then incorrectly marking that generation fitted. `
 automatically refits on semantic graph replacements and cluster expansion/collapse, while ordinary
 Runtime activity and focus deemphasis never trigger a refit. `DependenciesPanel.vue`'s Graph view also exposes an explicit
 **Fit graph** button along with **Zoom in** / **Zoom out** and **Expand all** / **Collapse all** controls in the toolbar. Fit leaves 8% around the graph (it used to
-leave 20%, so a fitted graph used about 40% of the canvas); an expanded Survey is still larger than the pane and is read by zooming.
+leave 20%, so a fitted graph used about 40% of the canvas) and fits the curves as well as the cards (`fitBounds` over both),
+because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.24 zoom) and is read by zooming.
+`src/graph/graph-readability.unit.test.ts` (real ELK on both showcases) and `e2e/graph-readability.spec.ts` pin the spacing, the
+Bezier paths, the arrowheads and "no edge behind a card"; the expanded Trip budget is only checked for spacing, curves and arrowheads.
 
 ## Layout worker boundary
 

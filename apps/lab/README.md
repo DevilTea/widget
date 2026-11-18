@@ -109,7 +109,7 @@ popover, which also holds the JSON draft, Source JSON compatibility, Blueprint s
   unapplied JSON draft first). Without a schema, values are typed by what they hold and anything else is edited as JSON.
 - Problems lists the several diagnostics Core reports for one evaluation cycle as one entry that expands to Core's own diagnostics.
 - If the Preview frame cannot load, the Preview pane says so with the cause and a **Try again** button, and the header chip reads "Preview failed to load".
-- Graph: an always-visible key explains the badges and line styles, edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph.
+- Graph: an always-visible key explains the badges, the line styles and the direction of an edge, edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph. Cards are spread out, edges are Bezier curves that pass between the cards, and every edge ends in an arrowhead on the member it depends on (`A → B` means A depends on B: the Relations view lists B under "Depends on" for A and A under "Used by" for B). While a widget or member is selected, the edges around it are tagged "Depends on" or "Used by".
 
 ## Layout, the Selected widget pane and the tutorial rail
 
@@ -136,6 +136,10 @@ renders it read-only through Vue Flow:
 ```text
 inspection facts -> projectSemanticGraph() -> toElkGraph() -> ELK layout (Worker) -> toVueFlow()
 ```
+
+ELK only places the cards and finds the corridor each long edge uses between the layers (generous spacing, top to
+bottom); the canvas draws every edge itself as cubic Bezier curves through those points, with the arrowhead on the
+member the edge's owner depends on.
 
 Available even for an invalid Blueprint (compile-time facts only, no Runtime dependency). See
 AGENTS.md's "Dependency Graph" and "Layout worker boundary" sections for the module map and the
