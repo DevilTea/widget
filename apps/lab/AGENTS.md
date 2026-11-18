@@ -19,11 +19,11 @@ Private, never-published workspace application with two roles:
    `Selected widget` pane, the live `Events` log, and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
    `@deviltea/widget-vue`.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
-   `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default and the only showcase
-   listed in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
+   `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default and `Trip budget splitter`
+   (`trip-budget`) is listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
    test-only fixture (see "Showcase selection" below). The former `Product Prototype` (`crm`) and
    `Vuetify Task Workspace` (`vuetify-tasks`) showcases, and the CRM tour, were removed (tracking issue
-   `DevilTea/widget#230`); new showcases are added after the Lab redesign.
+   `DevilTea/widget#230`); the new showcases of that issue are added one PR at a time (`trip-budget` is the first).
 
 ### Showcase selection (`?showcase=<id>`)
 
@@ -163,6 +163,31 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     `sources.ts`, `system.ts`, `test-support.ts`. The Survey tour (`tutorial/survey-script.ts`) is
     authored against `survey-default`; its `data-tutorial-target` lookup is keyed by widget id
     (`tutorial/survey-target-map.ts`).
+  - `trip-budget/` — Trip budget splitter (issue #230, showcase 1), the Lisbon weekend: five plugin types `Trip` (root
+    `lisbon`, slots `settings`/`people`/`expenses`/`summary`, State `language`), `Currency`, `Person`, `Expense` and
+    `Settlement`. Money is integer minor units of the base currency from `Expense.amountBase` on (`domain.ts`: `splitEqually`,
+    `splitByPercent`, `settle`, `roundToStep`, the built-in en/zh-TW texts). It exists to show, with a real Runtime:
+    a **Property chain across widgets** (`Currency.convert` -> `Expense.amountBase` -> `shares` -> `Person.owed`/`paid` ->
+    `balance` -> `Settlement.balances` -> `transfers`, found through the root's slots by `plugins/reads.ts`);
+    **read-only Methods called by Properties** (`Currency.convert` and `roundTransfer`; the second reads State
+    `roundStep`, so the Properties that call it recompute when it changes); **laziness** (`Expense.breakdown` and
+    `Person.ledger` are read only by `ExpenseBreakdownView.vue` / `PersonLedgerView.vue`, which exist only while a
+    disclosure is open: the Runtime panel says `Never evaluated` until then, keeps the last result after the disclosure
+    is closed, and cannot show who is subscribed); and **`resetState`**, which `useWidget()` does not expose, so the
+    host component `TripBudgetRenderer` (`renderers/index.ts`) provides `resetWidget(id)` and `resetAll()` to the
+    renderers (`renderers/reset-host.ts`). A failed dependency fails the consumer, so an expense in a currency with no
+    rate fails `amountBase`, `shares`, every person's `paid`/`owed`/`balance` and the settlement (`Failed` in
+    Selected widget). A Method called through a dependency records no failure of its own (its row says "No failure
+    recorded"); the failure is on the consumers. Presets: `trip-default`, `trip-invalid` (four located diagnostics, one
+    per widget, pinned by `presets.unit.test.ts`) and `trip-unsupported-currency`; there is no cycle preset (nothing reads
+    the settlement). **Isolation (owner direction):** the showcase imports nothing from the Lab except `host.ts`, the one
+    adapter from the Lab's locale and theme stores to two refs (`useTripShowcaseHost()`; swap it for a shared showcase-host
+    contract later without touching a renderer), and uses its own `--trip-*` custom properties (defined on the root
+    renderer from the host theme), never the chrome's `--lab-*` tokens, `useLabI18n` or the Lab's inspect-anchor
+    composable (it calls `@deviltea/widget-inspector/anchor` directly). `isolation.unit.test.ts` pins that. `view` is
+    `{ language, base }` and the renderers look the texts up themselves (`tripText(language)`), so the Runtime panel
+    shows two small values. The tutorial (`tutorial/trip-budget-script.ts`) is authored against `trip-default`; its
+    `data-tutorial-target` is `trip-<widget id>` on every renderer root.
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.
@@ -276,7 +301,7 @@ CSS (lab-*.css + global-*.css)            ~340 KB + ~6 KB raw / ~40 KB + ~1.5 KB
 ```
 
 - **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
-  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey showcase and the hidden Sandbox fixture,
+  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey and Trip budget showcases and the hidden Sandbox fixture,
   `dockview-vue`. This is unavoidable critical-path weight for a workbench app whose
   shell has to exist before any panel can render.
 - **`modern-monaco/core` (package JS + vendored `editor-core.mjs`)**: not in the eager chunk —
@@ -872,6 +897,8 @@ Dockview groups or the Preview frame (the survey's own Language select). With th
 Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used by, the focus, Depends on) and scrolls vertically below 680px of **pane** width
 (a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
 
+**One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts` is the model).
+
 **Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview
 Inspect all set it). Left (stacked below 600px of pane width, by container query) `BlueprintNodeDetails` (`embedded`): identity,
@@ -1035,7 +1062,7 @@ happy-dom unit tests.
 
 Browser specs reach the header's menus only through the helpers in `e2e/fixtures.ts` (`selectShowcase`, `loadPreset`,
 `setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, `openStatusDetails`,
-`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey examples), and the `expectShowcase` /
+`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey and trip examples), and the `expectShowcase` /
 `expectDocumentStatus` / `expectPreviewStatus` assertions), never with ad-hoc menu clicks, so a future header change touches one
 file. Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
 Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a

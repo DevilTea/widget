@@ -75,14 +75,14 @@ export const tripBudgetTourScript: TutorialScript = {
 			stages: [{
 				prompt: 'Try it: change the Museum tickets currency from USD to GBP.',
 				isComplete: reader => reader.readState('museum', 'currency') === 'GBP',
-				reveal: 'The converted amount changed. The museum widget knows no rates: its amountBase Property calls the Currency widget\'s Method convert(amount, currency). The Method is read-only (it writes no State and emits no Event), and that is the only kind of Method Core lets a Property depend on. Select the Currency widget and its Methods show writes: no and emits: no.',
+				reveal: 'The converted amount changed. The museum widget knows no rates: its amountBase Property calls the Currency widget\'s Method convert(amount, currency). Core only lets a Property depend on a Method that is read-only: it writes no State and emits no Event. In Relations, select convert: it has neither a W (writes State) nor an E (emits an Event) badge.',
 			}],
 			links: [{
 				id: 'see-method',
-				label: 'See the Method on Currency',
+				label: 'Follow the Method in Relations',
 				run: (actions) => {
 					actions.setFocus('currency', { type: 'method', name: 'convert' })
-					actions.activateTab('widget')
+					actions.activateTab('dependencies')
 				},
 			}],
 		},
@@ -149,10 +149,9 @@ export const tripBudgetTourScript: TutorialScript = {
 			target: null,
 			stages: [{
 				prompt: 'Open the Examples menu and load "Draft with mistakes", then "Run-time failure".',
-				reveal: 'Draft with mistakes has four located diagnostics (a rate of 0, percentages that add up to 90, a negative amount, a payer who is not on the trip): they appear in Problems, and the Preview keeps the last valid version. Run-time failure compiles, but its museum currency has no rate: Currency.convert fails when it runs, and every Property that depends on it fails too. Look for Method failure in Events and Selected widget.',
+				reveal: 'Draft with mistakes has four located diagnostics (a rate of 0, percentages that add up to 90, a negative amount, a payer who is not on the trip): they appear in Problems, and the Preview keeps the last valid version. Run-time failure compiles, but its museum currency has no rate: Currency.convert fails when it runs, and every Property that depends on it fails too. Select the museum widget in Selected widget: amountBase and shares say Failed, with the diagnostic.',
 			}],
 			links: [
-				{ id: 'view-events', label: 'Events', run: actions => actions.activateTab('events') },
 				{ id: 'view-widget', label: 'Selected widget', run: actions => actions.activateTab('widget') },
 			],
 		},

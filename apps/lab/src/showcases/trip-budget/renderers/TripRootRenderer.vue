@@ -12,8 +12,8 @@
  * thing put back afterwards, so Start over does not also switch the language of the page.
  */
 import { useWidget } from '@deviltea/widget-vue'
-import { inject, useId } from 'vue'
-import { LANGUAGE_ENDONYMS, TRIP_LANGUAGES } from '../domain'
+import { computed, inject, useId } from 'vue'
+import { LANGUAGE_ENDONYMS, TRIP_LANGUAGES, tripText } from '../domain'
 import { useTripShowcaseHost } from '../host'
 import { TripPlugin } from '../plugins/trip'
 import { useInspectAnchor } from './anchor'
@@ -23,6 +23,7 @@ import { TripResetHostKey } from './reset-host'
 const { useState, useProperties, WidgetSlot, widgetId, widgetType } = useWidget(TripPlugin)
 const { language } = useState()
 const { title, view } = useProperties()
+const text = computed(() => tripText(view.value?.language ?? 'en'))
 const host = inject(TripResetHostKey, null)
 const { theme } = useTripShowcaseHost()
 
@@ -44,7 +45,7 @@ function onStartOver(): void {
 </script>
 
 <template>
-	<div
+	<main
 		v-bind="anchor"
 		:data-tutorial-target="`trip-${widgetId}`"
 		:data-trip-theme="theme"
@@ -58,7 +59,7 @@ function onStartOver(): void {
 				<label
 					:for="languageId"
 					class="trip-tools-label"
-				>{{ view?.text.language ?? 'Language' }}</label>
+				>{{ text.language }}</label>
 				<select
 					:id="languageId"
 					:value="language ?? ''"
@@ -79,12 +80,12 @@ function onStartOver(): void {
 					type="button"
 					class="trip-button"
 					:style="BUTTON_STYLE"
-					:title="view?.text.startOverHint"
+					:title="text.startOverHint"
 					data-testid="trip-start-over"
 					data-tutorial-target="trip-start-over"
 					@click="onStartOver"
 				>
-					{{ view?.text.startOver ?? 'Start over' }}
+					{{ text.startOver }}
 				</button>
 			</div>
 		</header>
@@ -100,7 +101,7 @@ function onStartOver(): void {
 				:id="peopleHeadingId"
 				class="trip-heading"
 			>
-				{{ view?.text.people ?? 'People' }}
+				{{ text.people }}
 			</h2>
 			<div class="trip-people">
 				<WidgetSlot name="people" />
@@ -115,13 +116,13 @@ function onStartOver(): void {
 				:id="expensesHeadingId"
 				class="trip-heading"
 			>
-				{{ view?.text.expenses ?? 'Expenses' }}
+				{{ text.expenses }}
 			</h2>
 			<div class="trip-expenses">
 				<WidgetSlot name="expenses" />
 			</div>
 		</section>
-	</div>
+	</main>
 </template>
 
 <style scoped>
@@ -221,6 +222,7 @@ function onStartOver(): void {
 }
 
 .trip-people {
+	align-items: start;
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 	gap: 10px;

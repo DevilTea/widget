@@ -12,7 +12,7 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, inject, ref, useId } from 'vue'
-import { fill, formatMoney } from '../domain'
+import { fill, formatMoney, tripText } from '../domain'
 import { ExpensePlugin } from '../plugins/expense'
 import { useInspectAnchor } from './anchor'
 import { BUTTON_STYLE, FIELD_STYLE } from './control-style'
@@ -22,6 +22,7 @@ import { TripResetHostKey } from './reset-host'
 const { useState, useProperties, config, widgetId, widgetType } = useWidget(ExpensePlugin)
 const { amount, currency, paidBy, among } = useState()
 const { title, view, roster, currencies, errors, amountBase, counted } = useProperties()
+const text = computed(() => tripText(view.value?.language ?? 'en'))
 const host = inject(TripResetHostKey, null)
 
 const amountId = useId()
@@ -42,12 +43,12 @@ const converted = computed(() => {
 	const base = view.value?.base
 	if (base === undefined || currency.value === base || amountBase.value === null || amountBase.value === 0)
 		return null
-	return fill(view.value?.text.asBase ?? '≈ {amount}', { amount: formatMoney(amountBase.value, base, view.value!.language) })
+	return fill(text.value.asBase, { amount: formatMoney(amountBase.value, base, view.value!.language) })
 })
 
 /** `amountBase` projects to null when the conversion failed (a currency with no rate). */
 const conversionFailed = computed(() => amountBase.value === null)
-const splitLabel = computed(() => config.split.mode === 'equal' ? view.value?.text.splitEqual : view.value?.text.splitPercent)
+const splitLabel = computed(() => config.split.mode === 'equal' ? text.value.splitEqual : text.value.splitPercent)
 const percentLines = computed(() => {
 	if (config.split.mode !== 'percent')
 		return []
@@ -101,7 +102,7 @@ function onWheel(event: Event): void {
 				<label
 					:for="amountId"
 					class="expense-label"
-				>{{ view?.text.amount ?? 'Amount' }}</label>
+				>{{ text.amount }}</label>
 				<input
 					:id="amountId"
 					type="number"
@@ -121,7 +122,7 @@ function onWheel(event: Event): void {
 				<label
 					:for="currencyId"
 					class="expense-label"
-				>{{ view?.text.currency ?? 'Currency' }}</label>
+				>{{ text.currency }}</label>
 				<select
 					:id="currencyId"
 					:value="currency ?? ''"
@@ -143,7 +144,7 @@ function onWheel(event: Event): void {
 				<label
 					:for="paidById"
 					class="expense-label"
-				>{{ view?.text.paidBy ?? 'Paid by' }}</label>
+				>{{ text.paidBy }}</label>
 				<select
 					:id="paidById"
 					:value="paidBy ?? ''"
@@ -179,7 +180,7 @@ function onWheel(event: Event): void {
 			class="expense-participants"
 		>
 			<legend class="expense-label">
-				{{ view?.text.sharedBy ?? 'Shared by' }}
+				{{ text.sharedBy }}
 			</legend>
 			<label
 				v-for="entry in roster ?? []"
@@ -201,7 +202,7 @@ function onWheel(event: Event): void {
 			data-testid="trip-percents"
 			class="expense-percents"
 		>
-			<span class="expense-label">{{ view?.text.sharedBy ?? 'Shared by' }}</span>
+			<span class="expense-label">{{ text.sharedBy }}</span>
 			{{ percentLines.join(' · ') }}
 		</p>
 
@@ -217,7 +218,7 @@ function onWheel(event: Event): void {
 				:data-error-code="error.code"
 				class="expense-error"
 			>
-				<span aria-hidden="true">&#9888; </span>{{ error.message }} {{ view?.text.notCounted }}
+				<span aria-hidden="true">&#9888; </span>{{ error.message }} {{ text.notCounted }}
 			</p>
 			<p
 				v-if="conversionFailed"
@@ -225,7 +226,7 @@ function onWheel(event: Event): void {
 				data-testid="trip-conversion-failed"
 				class="expense-error"
 			>
-				<span aria-hidden="true">&#9888; </span>{{ view?.text.conversionFailed ?? 'No rate for this currency, so the settlement cannot be computed.' }}
+				<span aria-hidden="true">&#9888; </span>{{ text.conversionFailed }}
 			</p>
 		</div>
 
@@ -237,7 +238,7 @@ function onWheel(event: Event): void {
 				data-testid="trip-reset-expense"
 				@click="host?.resetWidget(widgetId)"
 			>
-				{{ view?.text.resetExpense ?? 'Reset this expense' }}
+				{{ text.resetExpense }}
 			</button>
 			<button
 				type="button"
@@ -248,7 +249,7 @@ function onWheel(event: Event): void {
 				data-testid="trip-breakdown-toggle"
 				@click="breakdownOpen = !breakdownOpen"
 			>
-				{{ breakdownOpen ? view?.text.hideBreakdown ?? 'Hide breakdown' : view?.text.showBreakdown ?? 'Show breakdown' }}
+				{{ breakdownOpen ? text.hideBreakdown : text.showBreakdown }}
 			</button>
 		</div>
 

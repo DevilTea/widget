@@ -7,11 +7,13 @@
  * first evaluation of `ledger`) starts when this component renders and is released when it unmounts.
  */
 import { useWidget } from '@deviltea/widget-vue'
-import { fill, formatMoney } from '../domain'
+import { computed } from 'vue'
+import { fill, formatMoney, tripText } from '../domain'
 import { PersonPlugin } from '../plugins/person'
 
 const { useProperties } = useWidget(PersonPlugin)
 const { ledger, view } = useProperties()
+const text = computed(() => tripText(view.value?.language ?? 'en'))
 
 function money(cents: number): string {
 	return view.value === null ? String(cents / 100) : formatMoney(cents, view.value.base, view.value.language)
@@ -24,13 +26,13 @@ function money(cents: number): string {
 		data-testid="trip-ledger"
 	>
 		<h4 class="ledger-title">
-			{{ view?.text.ledgerTitle ?? 'Ledger' }}
+			{{ text.ledgerTitle }}
 		</h4>
 		<p
 			v-if="ledger === null || ledger.entries.length === 0"
 			class="ledger-empty"
 		>
-			{{ view?.text.ledgerEmpty ?? 'No expenses yet.' }}
+			{{ text.ledgerEmpty }}
 		</p>
 		<ul
 			v-else
@@ -43,9 +45,9 @@ function money(cents: number): string {
 			>
 				<span class="ledger-expense">{{ entry.title }}</span>
 				<span class="ledger-figures">
-					<template v-if="entry.paidCents > 0">{{ fill(view?.text.ledgerPaid ?? 'paid {amount}', { amount: money(entry.paidCents) }) }}</template>
+					<template v-if="entry.paidCents > 0">{{ fill(text.ledgerPaid, { amount: money(entry.paidCents) }) }}</template>
 					<template v-if="entry.paidCents > 0 && entry.shareCents > 0"> · </template>
-					<template v-if="entry.shareCents > 0">{{ fill(view?.text.ledgerShare ?? 'share {amount}', { amount: money(entry.shareCents) }) }}</template>
+					<template v-if="entry.shareCents > 0">{{ fill(text.ledgerShare, { amount: money(entry.shareCents) }) }}</template>
 				</span>
 			</li>
 		</ul>

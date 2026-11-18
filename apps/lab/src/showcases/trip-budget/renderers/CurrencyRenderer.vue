@@ -8,7 +8,7 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, useId } from 'vue'
-import { fill, ROUND_STEPS, roundStepLabel } from '../domain'
+import { fill, ROUND_STEPS, roundStepLabel, tripText } from '../domain'
 import { CurrencyPlugin } from '../plugins/currency'
 import { useInspectAnchor } from './anchor'
 import { FIELD_STYLE } from './control-style'
@@ -16,11 +16,12 @@ import { FIELD_STYLE } from './control-style'
 const { useState, useProperties, widgetId, widgetType } = useWidget(CurrencyPlugin)
 const { roundStep } = useState()
 const { view, base, rates } = useProperties()
+const text = computed(() => tripText(view.value?.language ?? 'en'))
 
 const selectId = useId()
 const anchor = useInspectAnchor(widgetId, widgetType)
 const rateLines = computed(() => Object.entries(rates.value ?? {})
-	.map(([code, rate]) => fill(view.value?.text.rate ?? '1 {currency} = {rate} {base}', { currency: code, rate, base: base.value ?? '' })))
+	.map(([code, rate]) => fill(text.value.rate, { currency: code, rate, base: base.value ?? '' })))
 
 function onRoundChange(event: Event): void {
 	roundStep.value = Number((event.target as HTMLSelectElement).value)
@@ -31,21 +32,21 @@ function onRoundChange(event: Event): void {
 	<section
 		v-bind="anchor"
 		:data-tutorial-target="`trip-${widgetId}`"
-		:aria-label="view?.text.settings ?? 'Money settings'"
+		:aria-label="text.settings"
 		class="currency"
 	>
 		<h2 class="currency-heading">
-			{{ view?.text.settings ?? 'Money settings' }}
+			{{ text.settings }}
 		</h2>
 		<p class="currency-line">
-			<span class="currency-label">{{ view?.text.baseCurrency ?? 'Base currency' }}</span>
+			<span class="currency-label">{{ text.baseCurrency }}</span>
 			<strong data-testid="trip-base-currency">{{ base }}</strong>
 		</p>
 		<p
 			v-if="rateLines.length > 0"
 			class="currency-line"
 		>
-			<span class="currency-label">{{ view?.text.rates ?? 'Rates' }}</span>
+			<span class="currency-label">{{ text.rates }}</span>
 			<span
 				data-testid="trip-rates"
 				class="currency-rates"
@@ -55,7 +56,7 @@ function onRoundChange(event: Event): void {
 			<label
 				:for="selectId"
 				class="currency-label"
-			>{{ view?.text.roundTo ?? 'Round transfers to' }}</label>
+			>{{ text.roundTo }}</label>
 			<select
 				:id="selectId"
 				:value="roundStep ?? 1"
@@ -69,7 +70,7 @@ function onRoundChange(event: Event): void {
 					:key="step"
 					:value="step"
 				>
-					{{ view ? roundStepLabel(step, view.text) : step }}
+					{{ roundStepLabel(step, text) }}
 				</option>
 			</select>
 		</div>

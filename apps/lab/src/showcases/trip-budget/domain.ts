@@ -363,11 +363,14 @@ export function expenseProblemText(code: ExpenseProblemCode, text: TripText): st
 // Property value shapes
 // -------------------------------------------------------------------------------------------------
 
-/** What every widget's `view` Property says: the trip language, the base currency and the built-in texts. */
+/**
+ * What every widget's `view` Property says: the trip language and the base currency. The built-in texts
+ * (`tripText(language)`) are a plain lookup the renderers do themselves, so the Runtime panel shows two small
+ * values instead of the whole text table.
+ */
 export interface TripView {
 	readonly language: string
 	readonly base: string
-	readonly text: TripText
 }
 
 export interface RosterEntry { readonly id: string, readonly name: string }

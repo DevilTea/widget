@@ -9,7 +9,7 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, ref, useId } from 'vue'
-import { fill, formatMoney } from '../domain'
+import { fill, formatMoney, tripText } from '../domain'
 import { PersonPlugin } from '../plugins/person'
 import { useInspectAnchor } from './anchor'
 import { BUTTON_STYLE } from './control-style'
@@ -17,6 +17,7 @@ import PersonLedgerView from './PersonLedgerView.vue'
 
 const { useProperties, widgetId, widgetType } = useWidget(PersonPlugin)
 const { name, view, paid, owed, balance } = useProperties()
+const text = computed(() => tripText(view.value?.language ?? 'en'))
 
 const ledgerOpen = ref(false)
 const ledgerId = useId()
@@ -33,14 +34,13 @@ const sign = computed<'owed' | 'owes' | 'even' | 'unknown'>(() => {
 })
 
 const status = computed(() => {
-	const text = view.value?.text
-	if (text === undefined || balance.value === null)
+	if (balance.value === null)
 		return ''
 	if (sign.value === 'owed')
-		return `+ ${fill(text.isOwed, { amount: money(balance.value) })}`
+		return `+ ${fill(text.value.isOwed, { amount: money(balance.value) })}`
 	if (sign.value === 'owes')
-		return `− ${fill(text.owes, { amount: money(-balance.value) })}`
-	return text.isEven
+		return `− ${fill(text.value.owes, { amount: money(-balance.value) })}`
+	return text.value.isEven
 })
 </script>
 
@@ -62,11 +62,11 @@ const status = computed(() => {
 			{{ status }}
 		</p>
 		<dl class="person-figures">
-			<dt>{{ view?.text.paid ?? 'Paid' }}</dt>
+			<dt>{{ text.paid }}</dt>
 			<dd data-testid="trip-person-paid">
 				{{ money(paid) }}
 			</dd>
-			<dt>{{ view?.text.share ?? 'Share of costs' }}</dt>
+			<dt>{{ text.share }}</dt>
 			<dd data-testid="trip-person-owed">
 				{{ money(owed) }}
 			</dd>
@@ -80,7 +80,7 @@ const status = computed(() => {
 			data-testid="trip-ledger-toggle"
 			@click="ledgerOpen = !ledgerOpen"
 		>
-			{{ ledgerOpen ? view?.text.hideLedger ?? 'Hide ledger' : view?.text.showLedger ?? 'Show ledger' }}
+			{{ ledgerOpen ? text.hideLedger : text.showLedger }}
 		</button>
 		<PersonLedgerView
 			v-if="ledgerOpen"

@@ -13,7 +13,7 @@
 
 import type { BlueprintCompileView, DependencyBuilder, ExecutionResult, PropertyGetDepExpression, WidgetInterfaces } from '@deviltea/widget-core'
 import type { TripView } from '../domain'
-import { DEFAULT_TRIP_LANGUAGE, tripText } from '../domain'
+import { DEFAULT_TRIP_LANGUAGE } from '../domain'
 
 /** The part of the dependency builder these helpers use; every plugin's Property builder satisfies it. */
 export type TripDeps = Pick<DependencyBuilder<WidgetInterfaces, 'property'>, 'widget' | 'root'>
@@ -128,5 +128,5 @@ export function languageFrom(readers: ViewReaders): string {
 /** The `view` of a widget from its executed reads; a failed read is already a recorded dependency diagnostic. */
 export function viewFrom(readers: ViewReaders): TripView {
 	const language = languageFrom(readers)
-	return { language, base: valueOrNull(readers.base) ?? FALLBACK_BASE, text: tripText(language) }
+	return { language, base: valueOrNull(readers.base) ?? FALLBACK_BASE }
 }

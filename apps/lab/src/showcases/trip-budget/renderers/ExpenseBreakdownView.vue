@@ -8,11 +8,13 @@
  * first evaluation of `breakdown`) starts when this component renders and is released when it unmounts.
  */
 import { useWidget } from '@deviltea/widget-vue'
-import { fill, formatMoney, formatPlainAmount } from '../domain'
+import { computed } from 'vue'
+import { fill, formatMoney, formatPlainAmount, tripText } from '../domain'
 import { ExpensePlugin } from '../plugins/expense'
 
 const { useProperties } = useWidget(ExpensePlugin)
 const { breakdown, view } = useProperties()
+const text = computed(() => tripText(view.value?.language ?? 'en'))
 
 function money(cents: number): string {
 	return view.value === null ? String(cents / 100) : formatMoney(cents, view.value.base, view.value.language)
@@ -25,7 +27,7 @@ function money(cents: number): string {
 		data-testid="trip-breakdown"
 	>
 		<h4 class="breakdown-title">
-			{{ view?.text.breakdownTitle ?? 'Breakdown' }}
+			{{ text.breakdownTitle }}
 		</h4>
 		<p
 			v-if="breakdown?.conversion"
@@ -33,7 +35,7 @@ function money(cents: number): string {
 			class="breakdown-line"
 		>
 			{{
-				fill(view?.text.breakdownConversion ?? '', {
+				fill(text.breakdownConversion, {
 					amount: formatPlainAmount(breakdown.conversion.amount, view?.language ?? 'en'),
 					currency: breakdown.conversion.currency,
 					rate: breakdown.conversion.rate,
@@ -52,7 +54,7 @@ function money(cents: number): string {
 				class="breakdown-line"
 			>
 				{{
-					fill(line.percent === null ? view?.text.breakdownShareEqual ?? '' : view?.text.breakdownSharePercent ?? '', {
+					fill(line.percent === null ? text.breakdownShareEqual : text.breakdownSharePercent, {
 						name: line.name,
 						amount: money(line.cents),
 						percent: line.percent ?? '',
@@ -65,7 +67,7 @@ function money(cents: number): string {
 			data-testid="trip-breakdown-remainder"
 			class="breakdown-note"
 		>
-			{{ fill(breakdown.remainderCents === 1 ? view?.text.breakdownRemainder ?? '' : view?.text.breakdownRemainderMany ?? '', { cents: breakdown.remainderCents }) }}
+			{{ fill(breakdown.remainderCents === 1 ? text.breakdownRemainder : text.breakdownRemainderMany, { cents: breakdown.remainderCents }) }}
 		</p>
 	</div>
 </template>

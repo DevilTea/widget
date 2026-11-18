@@ -8,12 +8,13 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
-import { fill, formatMoney } from '../domain'
+import { fill, formatMoney, tripText } from '../domain'
 import { SettlementPlugin } from '../plugins/settlement'
 import { useInspectAnchor } from './anchor'
 
 const { useProperties, widgetId, widgetType } = useWidget(SettlementPlugin)
 const { view, total, transfers } = useProperties()
+const text = computed(() => tripText(view.value?.language ?? 'en'))
 const anchor = useInspectAnchor(widgetId, widgetType)
 
 function money(cents: number): string {
@@ -22,7 +23,7 @@ function money(cents: number): string {
 
 const failed = computed(() => transfers.value === null || total.value === null)
 const gap = computed(() => transfers.value !== null && transfers.value.roundingGapCents !== 0
-	? fill(view.value?.text.roundingGap ?? '', { amount: money(Math.abs(transfers.value.roundingGapCents)) })
+	? fill(text.value.roundingGap, { amount: money(Math.abs(transfers.value.roundingGapCents)) })
 	: null)
 </script>
 
@@ -34,7 +35,7 @@ const gap = computed(() => transfers.value !== null && transfers.value.roundingG
 		class="settlement"
 	>
 		<h2 class="settlement-heading">
-			{{ view?.text.settlement ?? 'Settlement' }}
+			{{ text.settlement }}
 		</h2>
 		<p
 			v-if="failed"
@@ -42,22 +43,22 @@ const gap = computed(() => transfers.value !== null && transfers.value.roundingG
 			data-testid="trip-settlement-failed"
 			class="settlement-failed"
 		>
-			<span aria-hidden="true">&#9888; </span>{{ view?.text.conversionFailed ?? 'The settlement cannot be computed.' }}
+			<span aria-hidden="true">&#9888; </span>{{ text.conversionFailed }}
 		</p>
 		<template v-else>
 			<p class="settlement-total">
-				<span class="settlement-label">{{ view?.text.totalSpent ?? 'Total spent' }}</span>
+				<span class="settlement-label">{{ text.totalSpent }}</span>
 				<strong data-testid="trip-total">{{ money(total ?? 0) }}</strong>
 			</p>
 			<h3 class="settlement-subheading">
-				{{ view?.text.whoPaysWhom ?? 'Who pays whom' }}
+				{{ text.whoPaysWhom }}
 			</h3>
 			<p
 				v-if="transfers !== null && transfers.transfers.length === 0"
 				data-testid="trip-all-settled"
 				class="settlement-settled"
 			>
-				{{ view?.text.allSettled ?? 'Everyone is settled up.' }}
+				{{ text.allSettled }}
 			</p>
 			<ul
 				v-else
@@ -72,7 +73,7 @@ const gap = computed(() => transfers.value !== null && transfers.value.roundingG
 					:data-to="transfer.to"
 					class="settlement-transfer"
 				>
-					<span>{{ fill(view?.text.transfer ?? '{from} pays {to}', { from: transfer.fromName, to: transfer.toName }) }}</span>
+					<span>{{ fill(text.transfer, { from: transfer.fromName, to: transfer.toName }) }}</span>
 					<strong class="settlement-amount">{{ money(transfer.cents) }}</strong>
 				</li>
 			</ul>
