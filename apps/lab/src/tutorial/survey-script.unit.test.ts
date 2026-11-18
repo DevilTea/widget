@@ -13,6 +13,7 @@
 import type { TutorialActions, TutorialStepDefinition } from './types'
 import { describe, expect, it, vi } from 'vitest'
 import { translateMessage } from '../i18n/messages'
+import { surveyMessages } from '../showcases/survey/messages'
 import { createSurveyRuntime, widgetOfType } from '../showcases/survey/test-support'
 import { createTutorialEngine } from './engine'
 import { createRuntimeReader } from './inspection-reader'
@@ -392,5 +393,18 @@ describe('the whole script on a real Runtime', () => {
 		advance()
 		expect(engine.getSnapshot().status)
 			.toBe('completed')
+	})
+})
+
+describe('the tour names the survey Response label', () => {
+	it('quotes the survey renderer summary text in both locales (the survey owns the wording, the tour only quotes it)', () => {
+		const reveals = surveyTourScript.steps.flatMap(step => step.stages.map(stage => stage.reveal))
+			.filter(reveal => reveal.includes('Response — what a backend reads'))
+		expect(reveals)
+			.toHaveLength(1)
+		expect(reveals[0])
+			.toContain(`"${surveyMessages.en.response}"`)
+		expect(translateMessage('zh-TW', reveals[0]!))
+			.toContain(surveyMessages['zh-TW'].response)
 	})
 })

@@ -8,12 +8,41 @@
  * square text inputs, pointer cursors on buttons). This is the small subset of that reset/base that the
  * renderers actually depended on, kept so the survey looks the same.
  *
- * The frame is plain CSS end to end: these base rules, the renderers' own `<style scoped>` blocks and `global.css`.
+ * The frame is plain CSS end to end: the document baseline and base rules below, `lab-tokens.css` and the renderers' own `<style scoped>` blocks.
  * It never loads the Lab chrome's Tailwind/Nuxt UI pipeline (`styles/lab-ui.css`). The base rules sit in a layer of their
  * own so that they rank below every unlayered renderer rule, like a reset; the one place a renderer relies on them is
  * the square corners of its text inputs (`input { border-radius: 0 }`). Text colour, size, weight and borders of the
  * native controls are still set inline (`showcases/survey/renderers/control-style.ts`), which also beats this layer.
  */
+
+/*
+ * The frame DOCUMENT's own baseline (host glue, not showcase content): the surface the showcase is drawn on and what
+ * it inherits (text colour, font family and size), from the Lab palette (`lab-tokens.css`), plus the Inspect
+ * overlay's theme. A showcase may rely on inheriting the font from here, but it never reads these `--lab-*` tokens:
+ * it declares its own (`--survey-*`). The frame's size, margin and padding are in `preview-frame.html`. The
+ * shell's baseline (`global.css`: dialogs, the narrow-viewport gate) is not loaded here.
+ */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	background: var(--lab-color-bg);
+	color: var(--lab-color-text);
+	font-family: var(--lab-font-sans);
+	font-size: 13px;
+	-webkit-font-smoothing: antialiased;
+	/*
+	 * Inspect mode's hover highlight. InspectorAgent draws it in its own ShadowRoot overlay (it never touches
+	 * renderer elements), so document CSS cannot target the highlight. The Agent reads these inherited custom
+	 * properties instead, which keeps the reusable Agent free of Vue styling and lets the Lab theme it.
+	 */
+	--widget-inspector-accent: var(--lab-color-accent);
+	--widget-inspector-accent-contrast: var(--lab-color-accent-contrast);
+	--widget-inspector-fill: color-mix(in srgb, var(--lab-color-accent) 12%, transparent);
+}
 
 @layer preview-frame-base {
 	html {

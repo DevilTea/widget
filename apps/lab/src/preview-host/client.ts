@@ -17,9 +17,11 @@ import {
  * `answered`: the frame itself replied with an error (a mount it refused or could not finish), so the frame is alive.
  * `runtimeTornDown`: it had already taken down the Runtime it ran before, so nothing runs; without it the old Runtime still
  * runs. Neither: the channel failed (disconnected, closed).
+ * `discardFrame`: the frame document cannot recover in place (a module it needs failed to load and stays failed in that
+ * document), so it has to be replaced before the next mount; what it ran goes with it.
  */
 export class PreviewHostClientError extends Error {
-	constructor(message: string, readonly answered = false, readonly runtimeTornDown = false) {
+	constructor(message: string, readonly answered = false, readonly runtimeTornDown = false, readonly discardFrame = false) {
 		super(message)
 	}
 }
@@ -57,7 +59,7 @@ export function createPreviewHostClient(transport: InspectorTransport): PreviewH
 				return
 			pending.delete(response.requestId)
 			if (response.kind === 'error')
-				entry.reject(new PreviewHostClientError(response.message, true, response.runtimeTornDown === true))
+				entry.reject(new PreviewHostClientError(response.message, true, response.runtimeTornDown === true, response.discardFrame === true))
 			else
 				entry.resolve(response)
 			return

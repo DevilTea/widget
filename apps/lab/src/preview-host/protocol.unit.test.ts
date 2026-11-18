@@ -63,6 +63,9 @@ describe('preview host protocol', () => {
 		// An error may say that the frame had already taken down what it ran before (Lab-internal field).
 		expect(parsePreviewHostResponse({ ...error, runtimeTornDown: true }))
 			.toEqual({ ...error, runtimeTornDown: true })
+		// ...or that the frame document cannot recover in place and must be replaced.
+		expect(parsePreviewHostResponse({ ...error, discardFrame: true }))
+			.toEqual({ ...error, discardFrame: true })
 		expect(parsePreviewHostEvent(observation))
 			.toEqual(observation)
 
@@ -77,6 +80,7 @@ describe('preview host protocol', () => {
 			{ ...evaluated, progress: 1.5 },
 			{ ...error, message: 42 },
 			{ ...error, runtimeTornDown: 'yes' },
+			{ ...error, discardFrame: 'yes' },
 		]) {
 			expect(parsePreviewHostResponse(invalid))
 				.toBeNull()

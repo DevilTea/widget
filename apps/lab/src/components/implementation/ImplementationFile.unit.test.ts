@@ -11,7 +11,7 @@
  * file-load race, not Shiki's own (separately covered) async highlighting. #43 supplies an English
  * identity translator so the new presentation-only locale dependency does not alter this race contract.
  */
-import type { CuratedSourceFile } from '../../implementation/types'
+import type { CuratedSourceFile } from '../../showcase-host'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { LabI18nKey } from '../../composables/use-lab-i18n'

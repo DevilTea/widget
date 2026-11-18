@@ -13,8 +13,8 @@
 import type { AnswerValue } from '../domain'
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, useId } from 'vue'
-import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
-import { useLabI18n } from '../../../composables/use-lab-i18n'
+import { useInspectAnchor, useShowcaseHost, useShowcaseMessages } from '../../../showcase-host'
+import { surveyMessages } from '../messages'
 import { SurveyPlugin } from '../plugins/survey'
 import { FIELD_STYLE, PRIMARY_BUTTON_STYLE } from './control-style'
 
@@ -23,7 +23,8 @@ const { language, submitted } = useState()
 const { text, canSubmit, changedSinceSubmit, response } = useProperties()
 const { submit } = useMethods()
 const { submit: submitDiagnostics } = useMethodDiagnostics()
-const i18n = useLabI18n()
+const host = useShowcaseHost()
+const { t } = useShowcaseMessages(surveyMessages)
 
 const languageId = useId()
 const anchor = useInspectAnchor(widgetId, widgetType)
@@ -58,6 +59,7 @@ function onSubmit(): void {
 		v-bind="anchor"
 		:data-changed-since-submit="changedSinceSubmit === true"
 		class="survey"
+		:data-survey-theme="host.theme.value"
 	>
 		<header class="survey-header">
 			<h1 class="survey-title">
@@ -67,7 +69,7 @@ function onSubmit(): void {
 				<label
 					:for="languageId"
 					class="survey-language-label"
-				>{{ i18n.t('Language') }}</label>
+				>{{ t('language') }}</label>
 				<select
 					:id="languageId"
 					:value="language ?? ''"
@@ -150,7 +152,7 @@ function onSubmit(): void {
 			class="survey-response"
 		>
 			<summary class="survey-response-summary">
-				{{ i18n.t('Response — what a backend reads') }}
+				{{ t('response') }}
 			</summary>
 			<pre
 				data-testid="survey-response-json"
@@ -161,6 +163,40 @@ function onSubmit(): void {
 </template>
 
 <style scoped>
+/*
+ * The survey's own colour tokens (`--survey-*`), the only ones any survey renderer reads. They are declared
+ * on the root element, so every question renderer inside it inherits them, and are keyed off the theme the
+ * host provides (`data-survey-theme`, from `useShowcaseHost().theme`): dark is the default, light overrides
+ * it. The values are the survey's own palette, deliberately not read from the Lab chrome's tokens.
+ */
+.survey {
+	color-scheme: dark;
+	--survey-color-surface: #1b1e24;
+	--survey-color-surface-alt: #22262e;
+	--survey-color-border: #2c313a;
+	--survey-color-text: #e6e8eb;
+	--survey-color-text-muted: #9aa2af;
+	--survey-color-accent: #5b9dff;
+	--survey-color-accent-contrast: #04101f;
+	--survey-color-danger: #f2545b;
+	--survey-color-warning: #e8a33d;
+	--survey-radius: 6px;
+	--survey-font-mono: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+}
+
+.survey[data-survey-theme='light'] {
+	color-scheme: light;
+	--survey-color-surface: #ffffff;
+	--survey-color-surface-alt: #eef1f5;
+	--survey-color-border: #d4d9e2;
+	--survey-color-text: #1b1f24;
+	--survey-color-text-muted: #596273;
+	--survey-color-accent: #1769e0;
+	--survey-color-accent-contrast: #ffffff;
+	--survey-color-danger: #c9373f;
+	--survey-color-warning: #9a6200;
+}
+
 .survey {
 	display: flex;
 	flex-direction: column;
@@ -168,7 +204,7 @@ function onSubmit(): void {
 	box-sizing: border-box;
 	max-width: 760px;
 	padding: 20px;
-	color: var(--lab-color-text);
+	color: var(--survey-color-text);
 	font-size: 16px;
 }
 
@@ -194,15 +230,15 @@ function onSubmit(): void {
 
 .survey-language-label {
 	font-size: 15px;
-	color: var(--lab-color-text-muted);
+	color: var(--survey-color-text-muted);
 }
 
 /* The select's text colour, size, weight and border are set inline (`control-style.ts`). */
 .survey-language-select {
 	min-height: 40px;
 	padding: 6px 10px;
-	border-radius: var(--lab-radius);
-	background: var(--lab-color-surface-alt);
+	border-radius: var(--survey-radius);
+	background: var(--survey-color-surface-alt);
 }
 
 .survey-questions {
@@ -222,19 +258,19 @@ function onSubmit(): void {
 .survey-submit {
 	min-height: 44px;
 	padding: 8px 28px;
-	border: 1px solid var(--lab-color-accent);
-	border-radius: var(--lab-radius);
-	background: var(--lab-color-accent);
+	border: 1px solid var(--survey-color-accent);
+	border-radius: var(--survey-radius);
+	background: var(--survey-color-accent);
 	cursor: pointer;
 }
 
 .survey-diagnostic {
 	margin: 0;
 	padding: 2px 0 2px 10px;
-	border-left: 4px solid var(--lab-color-danger);
+	border-left: 4px solid var(--survey-color-danger);
 	font-size: 16px;
 	font-weight: 600;
-	color: var(--lab-color-danger);
+	color: var(--survey-color-danger);
 }
 
 .survey-submitted {
@@ -242,9 +278,9 @@ function onSubmit(): void {
 	flex-direction: column;
 	gap: 8px;
 	padding: 14px 16px;
-	border: 2px solid var(--lab-color-accent);
-	border-radius: var(--lab-radius);
-	background: var(--lab-color-surface);
+	border: 2px solid var(--survey-color-accent);
+	border-radius: var(--survey-radius);
+	background: var(--survey-color-surface);
 }
 
 .survey-submitted-title {
@@ -258,11 +294,11 @@ function onSubmit(): void {
 
 .survey-changed {
 	padding: 2px 10px;
-	border: 1px solid var(--lab-color-warning);
+	border: 1px solid var(--survey-color-warning);
 	border-radius: 999px;
 	font-size: 15px;
 	font-weight: 600;
-	color: var(--lab-color-warning);
+	color: var(--survey-color-warning);
 }
 
 .survey-answers {
@@ -274,8 +310,8 @@ function onSubmit(): void {
 }
 
 .survey-answer-id {
-	font-family: var(--lab-font-mono);
-	color: var(--lab-color-text-muted);
+	font-family: var(--survey-font-mono);
+	color: var(--survey-color-text-muted);
 }
 
 .survey-answer-value {
@@ -283,9 +319,9 @@ function onSubmit(): void {
 }
 
 .survey-response {
-	border: 1px solid var(--lab-color-border);
-	border-radius: var(--lab-radius);
-	background: var(--lab-color-surface);
+	border: 1px solid var(--survey-color-border);
+	border-radius: var(--survey-radius);
+	background: var(--survey-color-surface);
 }
 
 .survey-response-summary {
@@ -300,9 +336,9 @@ function onSubmit(): void {
 	padding: 12px 16px;
 	max-height: 360px;
 	overflow: auto;
-	font-family: var(--lab-font-mono);
+	font-family: var(--survey-font-mono);
 	font-size: 14px;
 	line-height: 1.45;
-	border-top: 1px solid var(--lab-color-border);
+	border-top: 1px solid var(--survey-color-border);
 }
 </style>

@@ -58,9 +58,12 @@ describe('preview host client', () => {
 			const refused = client.mount('session-a', 1, { showcaseId: 'nope', revision: 0, sourceText: '{}' })
 			const lateFailure = client.mount('session-a', 1, { showcaseId: 'survey', revision: 1, sourceText: '{}' })
 			pair.agent.send({ protocol: PREVIEW_HOST_PROTOCOL_VERSION, kind: 'error', requestId: requests[0]!.requestId, message: 'Unknown Preview showcase: nope.' })
+			const discarded = client.mount('session-a', 1, { showcaseId: 'survey', revision: 2, sourceText: '{}' })
 			pair.agent.send({ protocol: PREVIEW_HOST_PROTOCOL_VERSION, kind: 'error', requestId: requests[1]!.requestId, message: 'Preview frame root disappeared during mount.', runtimeTornDown: true })
-			await expect(refused).rejects.toMatchObject({ answered: true, runtimeTornDown: false })
-			await expect(lateFailure).rejects.toMatchObject({ answered: true, runtimeTornDown: true })
+			pair.agent.send({ protocol: PREVIEW_HOST_PROTOCOL_VERSION, kind: 'error', requestId: requests[2]!.requestId, message: 'renderer failed to load', discardFrame: true })
+			await expect(refused).rejects.toMatchObject({ answered: true, runtimeTornDown: false, discardFrame: false })
+			await expect(lateFailure).rejects.toMatchObject({ answered: true, runtimeTornDown: true, discardFrame: false })
+			await expect(discarded).rejects.toMatchObject({ answered: true, runtimeTornDown: false, discardFrame: true })
 		}
 		finally {
 			client.close()

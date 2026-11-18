@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SURVEY_QUESTION_TARGETS, surveyQuestionTarget } from './survey-target-map'
+import { SURVEY_QUESTION_TARGETS, surveyQuestionTarget } from './tutorial-targets'
 
 describe('surveyQuestionTarget', () => {
 	it('maps the two spotlighted questions of the survey form to their tutorial targets', () => {

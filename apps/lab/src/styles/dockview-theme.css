@@ -1,5 +1,5 @@
 /**
- * Small custom Dockview theme adapted from the Lab's palette tokens (`global.css`), per diagnostic #13
+ * Small custom Dockview theme adapted from the Lab palette tokens (`lab-tokens.css`), per diagnostic #13
  * (Widget Lab Phase 4) comment "Widget Lab implementation stack": Dockview's structural stylesheet
  * (`dockview-vue/dist/styles/dockview.css`, imported once in `App.vue`) supplies layout mechanics;
  * this file only overrides its themeable CSS custom properties. Dockview never becomes a second

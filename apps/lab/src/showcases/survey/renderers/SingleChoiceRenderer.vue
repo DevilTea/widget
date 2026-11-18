@@ -9,9 +9,9 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, useId } from 'vue'
-import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
-import { surveyQuestionTarget } from '../../../tutorial/survey-target-map'
+import { useInspectAnchor } from '../../../showcase-host'
 import { SingleChoicePlugin } from '../plugins/single-choice'
+import { surveyQuestionTarget } from '../tutorial-targets'
 import { choiceRows } from './choice-rows'
 import QuestionFrame from './QuestionFrame.vue'
 
@@ -47,7 +47,7 @@ function select(value: string): void {
 				:key="row.value"
 				:data-option-value="row.value"
 				class="option"
-				:style="row.enabled ? undefined : { color: 'var(--lab-color-text-muted)', cursor: 'not-allowed' }"
+				:style="row.enabled ? undefined : { color: 'var(--survey-color-text-muted)', cursor: 'not-allowed' }"
 			>
 				<input
 					type="radio"
@@ -86,6 +86,6 @@ function select(value: string): void {
 	width: 24px;
 	height: 24px;
 	margin: 0;
-	accent-color: var(--lab-color-accent);
+	accent-color: var(--survey-color-accent);
 }
 </style>

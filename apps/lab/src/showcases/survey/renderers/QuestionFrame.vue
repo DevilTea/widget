@@ -111,10 +111,10 @@ const isRadioGroup = computed(() => props.groupRole === 'radiogroup')
 	min-width: 0;
 	padding: 14px 16px;
 	border: 0;
-	box-shadow: inset 0 0 0 1px var(--lab-color-border);
-	border-radius: var(--lab-radius);
-	background: var(--lab-color-surface);
-	color: var(--lab-color-text);
+	box-shadow: inset 0 0 0 1px var(--survey-color-border);
+	border-radius: var(--survey-radius);
+	background: var(--survey-color-surface);
+	color: var(--survey-color-text);
 	font-size: 16px;
 }
 
@@ -134,13 +134,13 @@ const isRadioGroup = computed(() => props.groupRole === 'radiogroup')
 
 .question-required {
 	margin-left: 4px;
-	color: var(--lab-color-danger);
+	color: var(--survey-color-danger);
 }
 
 .question-help {
 	margin: 0;
 	font-size: 15px;
-	color: var(--lab-color-text-muted);
+	color: var(--survey-color-text-muted);
 }
 
 .question-errors {
@@ -152,10 +152,10 @@ const isRadioGroup = computed(() => props.groupRole === 'radiogroup')
 .question-error {
 	margin: 0;
 	padding: 2px 0 2px 10px;
-	border-left: 4px solid var(--lab-color-danger);
+	border-left: 4px solid var(--survey-color-danger);
 	font-size: 16px;
 	font-weight: 600;
 	line-height: 1.35;
-	color: var(--lab-color-danger);
+	color: var(--survey-color-danger);
 }
 </style>

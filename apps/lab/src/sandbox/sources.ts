@@ -7,7 +7,7 @@
  * either file's text more than once regardless of how many widget types reference it.
  */
 
-import type { SourcesRegistry } from '../implementation/types'
+import type { SourcesRegistry } from '../showcase-host'
 
 const PLUGINS_PATH = 'apps/lab/src/sandbox/plugins.ts'
 const RENDERERS_PATH = 'apps/lab/src/sandbox/renderers.ts'
