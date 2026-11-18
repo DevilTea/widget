@@ -4,6 +4,9 @@
  * styles mean, in one row above the canvas, so none of it needs the Legend popover. It states only what
  * `GraphCanvas.vue` renders: the same letters, the same kind colours (State = ok, Property = warning, Method =
  * accent) and the same strokes. The Legend still has the long form.
+ *
+ * The first item is the direction of every edge: an arrowhead on the target, so `A → B` means "A depends on B", which is
+ * the Relations view's own wording ("Depends on" lists B for A, "Used by" lists A for B).
  */
 import { useLabI18n } from '../../composables/use-lab-i18n'
 
@@ -16,6 +19,27 @@ const i18n = useLabI18n()
 		:aria-label="i18n.t('Graph key')"
 		class="m-0 flex flex-none list-none flex-wrap items-center gap-x-3 gap-y-1 border-b border-default bg-muted px-2 py-1 text-[11px] text-default"
 	>
+		<li
+			data-testid="graph-key-direction"
+			class="flex items-center gap-1"
+		>
+			<svg
+				class="graph-key-arrow"
+				viewBox="0 0 28 10"
+				aria-hidden="true"
+			>
+				<path
+					d="M1 5 C 9 5 12 5 19 5"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+				/>
+				<path
+					d="M18 1.5 L26.5 5 L18 8.5 Z"
+					fill="currentColor"
+				/>
+			</svg>{{ i18n.t('A → B: A depends on B') }}
+		</li>
 		<li class="flex items-center gap-1">
 			<span class="graph-key-badge graph-key-badge--state">S</span>State
 		</li>
@@ -78,6 +102,13 @@ const i18n = useLabI18n()
 
 .graph-key-badge--danger {
 	--key-color: var(--lab-color-danger);
+}
+
+.graph-key-arrow {
+	width: 28px;
+	height: 10px;
+	flex: 0 0 28px;
+	color: var(--lab-color-text-muted);
 }
 
 .graph-key-line {

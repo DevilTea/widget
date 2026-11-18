@@ -97,7 +97,8 @@ test.describe('default layout (U12)', () => {
 		const tool = (await group(page, 'Author')
 			.boundingBox())!
 		for (const heading of ['Used by', 'Focused widget', 'Depends on']) {
-			const box = (await page.getByText(heading, { exact: true })
+			// Within Relations: the Graph stays mounted (hidden) and tags the edges of the focused widget with the same two words.
+			const box = (await surface.getByText(heading, { exact: true })
 				.first()
 				.boundingBox())!
 			expect(box.x + box.width, `${heading} inside the tool area`)
@@ -524,7 +525,7 @@ test.describe('tutorial rail is a docked column (U13)', () => {
 		expect(boxes[2]!.y)
 			.toBeGreaterThanOrEqual(boxes[1]!.y + boxes[1]!.height - 1)
 		for (const heading of ['Used by', 'Focused widget', 'Depends on']) {
-			await expect(page.getByText(heading, { exact: true })
+			await expect(surface.getByText(heading, { exact: true })
 				.first())
 				.toBeVisible()
 		}

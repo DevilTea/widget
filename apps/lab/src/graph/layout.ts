@@ -8,6 +8,7 @@
  * import lives exclusively inside `layout.worker.ts`.
  */
 
+import type { GraphEdgeRoute } from './edge-geometry'
 import type { SemanticGraph } from './types'
 
 export interface LayoutRect {
@@ -22,6 +23,17 @@ export interface LayoutedGraph {
 	readonly clusters: ReadonlyMap<string, LayoutRect>
 	readonly vertices: ReadonlyMap<string, LayoutRect>
 	readonly stubs: ReadonlyMap<string, LayoutRect>
+	/**
+	 * ELK's route points for each edge, keyed by the id of the Vue Flow edge drawn for it (flow coordinates, see
+	 * `edge-geometry.ts`). Absent when a layout function reports no routing; the canvas then draws a plain
+	 * two-point Bezier between the handles.
+	 */
+	readonly edges?: ReadonlyMap<string, GraphEdgeRoute>
+}
+
+/** The id of the one presentation edge that stands for every dependency between the same two effective endpoints (a vertex, or a collapsed cluster). */
+export function aggregateEdgeId(effectiveSource: string, effectiveTarget: string): string {
+	return `edge:${JSON.stringify([effectiveSource, effectiveTarget])}`
 }
 
 export interface LayoutGraphOptions {

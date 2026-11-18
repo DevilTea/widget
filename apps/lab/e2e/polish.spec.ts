@@ -47,6 +47,8 @@ test.describe('Graph readability (U11)', () => {
 		await expect(key)
 			.toBeVisible()
 		await expect(key)
+			.toContainText('A → B: A depends on B')
+		await expect(key)
 			.toContainText('Wwrites State')
 		await expect(key)
 			.toContainText('Eemits an Event')
@@ -373,6 +375,8 @@ test.describe('the Lab language in the chrome (U21)', () => {
 			.click()
 		await expect(page.getByTestId('graph-key'))
 			.toContainText('寫入 State')
+		await expect(page.getByTestId('graph-key'))
+			.toContainText('A → B：A 依賴於 B')
 	})
 
 	test('the tab titles follow a language switch', async ({ page }) => {
