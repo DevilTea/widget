@@ -36,6 +36,9 @@ catalogs:
     '@types/node':
       specifier: ^24.13.2
       version: 24.13.3
+    '@valibot/to-json-schema':
+      specifier: ^1.8.0
+      version: 1.8.0
     '@vitest/coverage-v8':
       specifier: ^4.1.9
       version: 4.1.11
@@ -102,6 +105,9 @@ catalogs:
     unplugin-vue:
       specifier: ^7.2.0
       version: 7.2.0
+    valibot:
+      specifier: ^1.5.0
+      version: 1.5.0
     vite:
       specifier: ^7.3.6
       version: 7.3.6
@@ -202,13 +208,16 @@ importers:
         version: 5.0.5(vue@3.5.42(typescript@6.0.3))
       '@nuxt/ui':
         specifier: 'catalog:'
-        version: 4.12.0(e4186169dcb93c20a9b9963da32bac75)
+        version: 4.12.0(5efb2d66e6c7f3701cbfcb307c9266fb)
       '@shikijs/core':
         specifier: 'catalog:'
         version: 4.4.3
       '@shikijs/engine-javascript':
         specifier: 'catalog:'
         version: 4.4.3
+      '@valibot/to-json-schema':
+        specifier: 'catalog:'
+        version: 1.8.0(valibot@1.5.0(typescript@6.0.3))
       '@vue-flow/core':
         specifier: 'catalog:'
         version: 1.48.2(vue@3.5.42(typescript@6.0.3))
@@ -227,6 +236,9 @@ importers:
       tm-themes:
         specifier: 'catalog:'
         version: 1.12.10
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@6.0.3)
       vue:
         specifier: 'catalog:'
         version: 3.5.42(typescript@6.0.3)
@@ -1880,6 +1892,11 @@ packages:
         optional: true
       webpack:
         optional: true
+
+  '@valibot/to-json-schema@1.8.0':
+    resolution: {integrity: sha512-a0M+uwCuQZEPAo65NYkFSJ14O5c213KoSZmPdoCfuFvUhfULi4T2Z6Tpjv6lTVMW9RoLm74RpRAjNEa43KcN+g==}
+    peerDependencies:
+      valibot: ^1.5.0
 
   '@vitejs/plugin-vue@6.0.8':
     resolution: {integrity: sha512-0ZjgOg7oO6farnNGup7yvoM/YXZV84OZxHAwtflItNa/6zzQyVb5LNxyea3FEKEX2XlagIKzrlH7wwxkKgtiew==}
@@ -4377,6 +4394,14 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
+  valibot@1.5.0:
+    resolution: {integrity: sha512-nil6AkP2TChWL43Z5uJ6GTxX01CUA+g8LWUM+N/rB9NBbkUMaUsi9PUNzlUPgoKASgmx9f7eGOYpJ04/fSa6FQ==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   vaul-vue@0.4.1:
     resolution: {integrity: sha512-A6jOWOZX5yvyo1qMn7IveoWN91mJI5L3BUKsIwkg6qrTGgHs1Sb1JF/vyLJgnbN1rH4OOOxFbtqL9A46bOyGUQ==}
     peerDependencies:
@@ -5295,7 +5320,7 @@ snapshots:
       pkg-types: 2.4.0
       std-env: 4.3.0
 
-  '@nuxt/ui@4.12.0(e4186169dcb93c20a9b9963da32bac75)':
+  '@nuxt/ui@4.12.0(5efb2d66e6c7f3701cbfcb307c9266fb)':
     dependencies:
       '@floating-ui/dom': 1.8.0
       '@iconify/vue': 5.0.5(vue@3.5.42(typescript@6.0.3))
@@ -5364,6 +5389,7 @@ snapshots:
     optionalDependencies:
       '@internationalized/date': 3.12.4
       '@internationalized/number': 3.6.9
+      valibot: 1.5.0(typescript@6.0.3)
     transitivePeerDependencies:
       - '@azure/app-configuration'
       - '@azure/cosmos'
@@ -6175,6 +6201,10 @@ snapshots:
       - rolldown
       - rollup
       - unloader
+
+  '@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3))':
+    dependencies:
+      valibot: 1.5.0(typescript@6.0.3)
 
   '@vitejs/plugin-vue@6.0.8(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.13)(yaml@2.9.0))(vue@3.5.42(typescript@6.0.3))':
     dependencies:
@@ -8878,6 +8908,10 @@ snapshots:
       punycode: 2.3.1
 
   util-deprecate@1.0.2: {}
+
+  valibot@1.5.0(typescript@6.0.3):
+    optionalDependencies:
+      typescript: 6.0.3
 
   vaul-vue@0.4.1(reka-ui@2.11.0(vue@3.5.42(typescript@6.0.3)))(vue@3.5.42(typescript@6.0.3)):
     dependencies:

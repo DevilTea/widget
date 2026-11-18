@@ -9,6 +9,7 @@
  */
 
 import type { TutorialScript } from './types'
+import { QUOTE_RULES_TOUR_ID, quoteRulesTourScript } from './quote-rules-script'
 import { SURVEY_TOUR_ID, surveyTourScript } from './survey-script'
 import { TRIP_BUDGET_TOUR_ID, tripBudgetTourScript } from './trip-budget-script'
 
@@ -40,6 +41,12 @@ export const tours: readonly TourEntry[] = [
 		script: tripBudgetTourScript,
 		defaultPresetId: 'trip-default',
 		startConfirmMessage: 'Starting the tutorial will load the Trip budget teaching example and replace your unapplied changes.',
+	},
+	{
+		id: QUOTE_RULES_TOUR_ID,
+		script: quoteRulesTourScript,
+		defaultPresetId: 'quote-default',
+		startConfirmMessage: 'Starting the tutorial will load the Quote rules teaching example and replace your unapplied changes.',
 	},
 ]
 

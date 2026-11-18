@@ -14,6 +14,7 @@ import type { Component } from 'vue'
 const loaders: Readonly<Record<string, () => Promise<Component>>> = {
 	'survey': async () => (await import('./showcases/survey/renderers')).SurveyRenderer as unknown as Component,
 	'trip-budget': async () => (await import('./showcases/trip-budget/renderers')).TripBudgetRenderer as unknown as Component,
+	'quote-rules': async () => (await import('./showcases/quote-rules/renderers')).QuoteRenderer as unknown as Component,
 	'sandbox': async () => (await import('./sandbox/renderers')).SandboxRenderer as unknown as Component,
 }
 

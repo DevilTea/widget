@@ -1,6 +1,7 @@
 import type { FrameLocator, Locator, Page } from '@playwright/test'
 import { test as base, expect } from '@playwright/test'
 import { sandboxPresets } from '../src/sandbox/presets'
+import { quotePresets } from '../src/showcases/quote-rules/presets'
 import { surveyPresets } from '../src/showcases/survey/presets'
 import { tripBudgetPresets } from '../src/showcases/trip-budget/presets'
 
@@ -107,12 +108,12 @@ export function previewFrame(page: Page): FrameLocator {
 // Header menu helpers. The header's showcase/preset/theme/language/developer controls are Nuxt UI menus, so
 // specs go through these instead of ad-hoc menu clicks; when the header changes again only this block does.
 
-export type ShowcaseId = 'survey' | 'trip-budget' | 'sandbox'
+export type ShowcaseId = 'survey' | 'trip-budget' | 'quote-rules' | 'sandbox'
 export type LabLocaleId = 'en' | 'zh-TW'
 
-const SHOWCASE_LABELS: Readonly<Record<ShowcaseId, string>> = { 'survey': 'Interactive Survey', 'trip-budget': 'Trip budget splitter', 'sandbox': 'Sandbox' }
-const PRESET_LABELS = new Map([...surveyPresets, ...tripBudgetPresets, ...sandboxPresets].map(preset => [preset.id, preset.label] as const))
-// The survey and trip examples are translated in the zh-TW Lab (the sandbox ones are a hidden fixture and are not).
+const SHOWCASE_LABELS: Readonly<Record<ShowcaseId, string>> = { 'survey': 'Interactive Survey', 'trip-budget': 'Trip budget splitter', 'quote-rules': 'Quote rules shared by browser and backend', 'sandbox': 'Sandbox' }
+const PRESET_LABELS = new Map([...surveyPresets, ...tripBudgetPresets, ...quotePresets, ...sandboxPresets].map(preset => [preset.id, preset.label] as const))
+// The survey, trip and quote examples are translated in the zh-TW Lab (the sandbox ones are a hidden fixture and are not).
 const PRESET_LABELS_ZH_TW: ReadonlyMap<string, string> = new Map([
 	['survey-default', '預設——開放日報名'],
 	['survey-ai-draft', 'AI 草稿——五個錯誤'],
@@ -120,6 +121,9 @@ const PRESET_LABELS_ZH_TW: ReadonlyMap<string, string> = new Map([
 	['trip-default', '預設——里斯本週末'],
 	['trip-invalid', '有錯誤的草稿——四個問題'],
 	['trip-unsupported-currency', '執行時失敗——沒有匯率的幣別'],
+	['quote-default', '預設——轉角印刷的印製報價'],
+	['quote-invalid', '無效的設定——schema 函式庫的診斷'],
+	['quote-buggy-rule', '有問題的規則——被隔離的例外'],
 ])
 
 // Menu item names follow the page locale; the language names themselves never translate.

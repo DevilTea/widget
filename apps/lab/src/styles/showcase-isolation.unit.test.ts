@@ -140,14 +140,16 @@ describe('showcases are isolated from the Lab', () => {
 			.toEqual([])
 	})
 
-	it('has valid allowed-packages.json files (none exist today: no showcase needs a package beyond Vue and Widget)', () => {
+	it('has valid allowed-packages.json files: exactly one today, the quote-rules showcase\'s schema library (Valibot and its JSON Schema converter, through Standard Schema)', () => {
 		const declared = [showcasesRoot, sandboxRoot]
 			.flatMap(root => listFiles(root))
 			.filter(file => file.endsWith(`/${ALLOWED_PACKAGES_FILE}`))
 		for (const file of declared)
 			expect(() => readAllowedPackages(dirname(file)), file).not.toThrow()
 		expect(declared.map(file => relative(srcRoot, file)))
-			.toEqual([])
+			.toEqual(['showcases/quote-rules/allowed-packages.json'])
+		expect([...readAllowedPackages(join(showcasesRoot, 'quote-rules'))])
+			.toEqual(['@valibot/to-json-schema', 'valibot'])
 	})
 
 	describe('the check itself (each forbidden reference is reported)', () => {
@@ -195,6 +197,20 @@ describe('showcases are isolated from the Lab', () => {
 				.toHaveLength(1)
 			expect(isolationOffences(sandbox, 'import { surveySystem } from \'../showcases/survey/system\''))
 				.toHaveLength(1)
+		})
+
+		it('accepts a module Worker whose URL stays inside the showcase directory, and reports one that leaves it or is not a literal', () => {
+			const quote = join(showcasesRoot, 'quote-rules', 'worker-client.ts')
+			expect(isolationOffences(quote, 'const worker = new Worker(new URL(\'./quote.worker.ts\', import.meta.url), { type: \'module\' })'))
+				.toEqual([])
+			for (const source of [
+				'const worker = new Worker(new URL(\'../../graph/layout.worker.ts\', import.meta.url), { type: \'module\' })',
+				'const worker = new Worker(new URL(\'../trip-budget/plugins/trip.ts\', import.meta.url), { type: \'module\' })',
+				'const worker = new Worker(new URL(file, import.meta.url), { type: \'module\' })',
+			]) {
+				expect(isolationOffences(quote, source), source)
+					.toHaveLength(1)
+			}
 		})
 
 		it('reports each other way out of the directory (template-literal and variable import(), import.meta.glob, require, new URL)', () => {

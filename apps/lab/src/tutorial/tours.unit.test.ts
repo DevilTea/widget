@@ -7,7 +7,7 @@ import { DEFAULT_TOUR_ID, getTour, TOUR_IDS, tourForShowcase, tours } from './to
 describe('tours', () => {
 	it('has one tour per showcase that teaches, under the showcase id, with a default preset the showcase has', () => {
 		expect(tours.map(tour => tour.id))
-			.toEqual(['survey', 'trip-budget'])
+			.toEqual(['survey', 'trip-budget', 'quote-rules'])
 		for (const tour of tours) {
 			expect(tour.script.id)
 				.toBe(tour.id)
@@ -24,6 +24,8 @@ describe('tours', () => {
 	it('picks the showcase\'s own tour, and the default tour for a showcase without one', () => {
 		expect(tourForShowcase('trip-budget').id)
 			.toBe('trip-budget')
+		expect(tourForShowcase('quote-rules').id)
+			.toBe('quote-rules')
 		expect(tourForShowcase('survey').id)
 			.toBe('survey')
 		expect(tourForShowcase('sandbox').id)
@@ -44,12 +46,15 @@ describe('tours', () => {
 
 	it('is what the host protocol accepts as a tour id', () => {
 		expect(TOUR_IDS)
-			.toEqual(['survey', 'trip-budget'])
+			.toEqual(['survey', 'trip-budget', 'quote-rules'])
 		const request = (tourId: string): unknown => ({ protocol: 1, kind: 'tutorial.evaluate', requestId: 'r', tourId, stepIndex: 0, progress: 0 })
 		expect(parsePreviewHostRequest(request('trip-budget')))
 			.not
 			.toBeNull()
 		expect(parsePreviewHostRequest(request('survey')))
+			.not
+			.toBeNull()
+		expect(parsePreviewHostRequest(request('quote-rules')))
 			.not
 			.toBeNull()
 		expect(parsePreviewHostRequest(request('sandbox')))

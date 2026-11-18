@@ -1,5 +1,6 @@
 import type { LabLocale } from './locale'
 import { translateMessage } from './messages'
+import { translateQuoteRulesMessage } from './quote-rules-messages'
 import { translateTripBudgetMessage } from './trip-budget-messages'
 
 /**
@@ -441,6 +442,9 @@ export function translatePresentationMessage(locale: LabLocale, source: string):
 		const trip = translateTripBudgetMessage(locale, source)
 		if (trip !== undefined)
 			return trip
+		const quote = translateQuoteRulesMessage(locale, source)
+		if (quote !== undefined)
+			return quote
 	}
 	return translateMessage(locale, source)
 }

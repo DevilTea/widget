@@ -17,6 +17,9 @@ import type { SourcesRegistry } from '../showcase-host'
 import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
+import { defaultQuotePreset, quotePresets } from './quote-rules/presets'
+import { quoteSources } from './quote-rules/sources'
+import { quoteSystem } from './quote-rules/system'
 import { defaultSurveyPreset, surveyPresets } from './survey/presets'
 import { surveySources } from './survey/sources'
 import { surveySystem } from './survey/system'
@@ -57,7 +60,7 @@ export interface ShowcaseEntry {
  * consumer (`LabSession`, `createWidgetVueRenderer`'s own `runtime.blueprint.system === system`
  * identity check) only ever needs object identity, never the precise literal-type union.
  *
- * `survey` is the default; `trip-budget` is listed after it in the Examples menu. `sandbox` is a hidden, test-only
+ * `survey` is the default; `trip-budget` and `quote-rules` are listed after it in the Examples menu. `sandbox` is a hidden, test-only
  * fixture (minimal Counter/Text/... widgets plus the invalid/raw-slot recovery presets): it is not listed
  * in the Examples menu and is reachable only through `?showcase=sandbox` (see `resolveInitialShowcase`).
  */
@@ -77,6 +80,14 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: tripBudgetPresets,
 		defaultPreset: defaultTripBudgetPreset,
 		sources: tripBudgetSources,
+	},
+	{
+		id: 'quote-rules',
+		label: 'Quote rules shared by browser and backend',
+		system: quoteSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
+		presets: quotePresets,
+		defaultPreset: defaultQuotePreset,
+		sources: quoteSources,
 	},
 	{
 		id: 'sandbox',
