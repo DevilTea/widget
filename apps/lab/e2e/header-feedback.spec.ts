@@ -131,11 +131,20 @@ test.describe('menu focus handling', () => {
 		await expect(trigger)
 			.toHaveAttribute('aria-expanded', 'true')
 
-		// Click on a line of the editor that is below the open menu (the menu covers the top lines), and type.
+		// Click on a line of the editor that is below the open menu (the menu covers the top lines, and grows with every
+		// showcase the Examples menu lists, so the line is found from the menu's own bottom edge), and type.
 		const editor = page.getByTestId('json-editor')
-		const line = (await editor.locator('.view-line')
-			.filter({ hasText: /"id":\s"note"/ })
+		const menuBox = (await page.getByRole('menu')
 			.boundingBox())!
+		const lines = await editor.locator('.view-line')
+			.evaluateAll(elements => elements.map((element) => {
+				const box = element.getBoundingClientRect()
+				return { x: box.x, y: box.y, height: box.height }
+			}))
+		const line = lines.filter(candidate => candidate.y > menuBox.y + menuBox.height + 8)
+			.at(0)!
+		expect(line, 'a line of the editor below the open menu')
+			.toBeDefined()
 		await page.mouse.click(line.x + 60, line.y + line.height / 2)
 		await expect(trigger)
 			.toHaveAttribute('aria-expanded', 'false')
