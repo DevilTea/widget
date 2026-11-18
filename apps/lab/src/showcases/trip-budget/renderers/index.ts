@@ -4,7 +4,7 @@
  * registration (the registry is exhaustive by construction).
  *
  * `TripBudgetRenderer` is the component the Lab mounts: the registry's own renderer wrapped in the **host**
- * that owns the Runtime. The host provides `resetState()` to the renderers below it (see `./host.ts`),
+ * that owns the Runtime. The host provides `resetState()` to the renderers below it (see `./reset-host.ts`),
  * because `useWidget()` deliberately exposes no Runtime.
  */
 

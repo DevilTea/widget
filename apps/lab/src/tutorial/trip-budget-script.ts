@@ -139,7 +139,7 @@ export const tripBudgetTourScript: TutorialScript = {
 				{
 					prompt: 'Try it: press "Reset this expense" on Hotel.',
 					isComplete: reader => hotelAmount(reader) === HOTEL_START,
-					reveal: 'Hotel went back to 420, the value the document authored, and the settlement followed. "Reset this expense" asks the host for widget.resetState(): every State member of that widget returns to its initial value. "Start over" calls runtime.resetState() for all widgets. It resets State only: Property and Method diagnostics are not cleared.',
+					reveal: 'Hotel went back to 420, the value the document authored, and the settlement followed. "Reset this expense" asks the host for widget.resetState(): every State member of that widget returns to its initial value. "Start over" calls runtime.resetState() for all widgets, and the host then writes the interface language back, so the page does not switch language. It resets State only: Property and Method diagnostics are not cleared.',
 				},
 			],
 		},

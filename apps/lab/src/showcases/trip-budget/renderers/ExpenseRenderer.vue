@@ -7,7 +7,7 @@
  * Reads: Properties `title`, `view`, `roster`, `currencies`, `errors`, `amountBase` and `counted` (the
  * `breakdown` is read only by `ExpenseBreakdownView.vue`, which exists only while the breakdown is open, so it
  * stays unevaluated until then). A conversion that failed projects `amountBase` to `null`, which is shown as
- * "no rate for this currency". "Reset this expense" asks the host (`./host.ts`) to call Core's
+ * "no rate for this currency". "Reset this expense" asks the host (`./reset-host.ts`) to call Core's
  * `resetState()` for this widget: its State goes back to the authored values.
  */
 import { useWidget } from '@deviltea/widget-vue'

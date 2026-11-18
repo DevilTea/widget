@@ -3,8 +3,8 @@
  * parts of a trip in slots: `settings` (exactly one Currency), `people`, `expenses` and `summary` (the
  * Settlement). It has no Method: everything a viewer changes is State on the widget it belongs to.
  *
- * Its Properties are `title` (the authored title in the trip language) and `view` (language, base
- * currency and the built-in texts). Every other widget has the same `view`, derived from the root's
+ * Its Properties are `title` (the authored title in the trip language) and `view` (the language and the base
+ * currency; the renderers look the built-in texts up from the language). Every other widget has the same `view`, derived from the root's
  * language, so a language switch reaches every widget through a declared dependency.
  */
 
@@ -28,7 +28,7 @@ export interface TripInterfaces extends WidgetInterfaces {
 }
 
 export const TripPlugin = createWidgetPlugin('Trip')
-	.description('The root of a trip budget. Holds the trip language (State `language`: en or zh-TW) and lays out the Currency (`settings`), the Persons (`people`), the Expenses (`expenses`) and the Settlement (`summary`). Properties: `title` (the title in the trip language) and `view` (language, base currency and the built-in texts).')
+	.description('The root of a trip budget. Holds the trip language (State `language`: en or zh-TW) and lays out the Currency (`settings`), the Persons (`people`), the Expenses (`expenses`) and the Settlement (`summary`). Properties: `title` (the title in the trip language) and `view` (the language and the base currency).')
 	.interfaces<TripInterfaces>()
 	.config({
 		description: 'The trip title per language (`en` is required, other languages fall back to it).',

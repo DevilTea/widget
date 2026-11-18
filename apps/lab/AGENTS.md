@@ -181,8 +181,10 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     is closed, and cannot show who is subscribed); and **`resetState`**, which `useWidget()` does not expose, so the
     host component `TripBudgetRenderer` (`renderers/index.ts`) provides `resetWidget(id)` and `resetAll()` to the
     renderers (`renderers/reset-host.ts`). A failed dependency fails the consumer, so an expense in a currency with no
-    rate fails `amountBase`, `shares`, every person's `paid`/`owed`/`balance` and the settlement (`Failed` in
-    Selected widget). A Method called through a dependency records no failure of its own (its row says "No failure
+    rate fails `amountBase`, `shares`, the payer's `paid`, every person's `owed`/`balance` and the settlement (`Failed` in
+    Selected widget). A consumer fails only when it calls the failing read, so every consumer checks `Expense.counted` first and an
+    expense that is not counted (nobody shares it, nobody paid) is left out before its amount is read: it never takes the settlement
+    down, even in a currency with no rate (`currency.unit.test.ts`). A Method called through a dependency records no failure of its own (its row says "No failure
     recorded"); the failure is on the consumers. Presets: `trip-default`, `trip-invalid` (four located diagnostics, one
     per widget, pinned by `presets.unit.test.ts`) and `trip-unsupported-currency`; there is no cycle preset (nothing reads
     the settlement). **Isolation:** it follows "Showcase isolation" below. It reads only `useShowcaseHost().theme` and `useInspectAnchor()`
