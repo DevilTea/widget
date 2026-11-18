@@ -328,6 +328,9 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 
 	// Graph key and chrome (audit U11, U21).
 	'Graph key': 'Graph 標記說明',
+	'A → B: A depends on B': 'A → B：A 依賴於 B',
+	'The arrowhead is on the target: A → B means A depends on B. In Relations, B is listed under "Depends on" for A, and A under "Used by" for B.': '箭頭在目標端：A → B 表示 A 依賴於 B。在 Relations 中，B 列在 A 的「依賴於」之下，A 列在 B 的「被誰使用」之下。',
+	'While a widget or member is selected, the edges around it are tagged "Depends on" (they leave it) or "Used by" (they arrive at it).': '選取 widget 或 member 時，它周圍的 edges 會標上「依賴於」（從它出發）或「被誰使用」（指向它）。',
 	'writes State': '寫入 State',
 	'emits an Event': '發出 Event',
 	'in an invalid cycle': '位於無效循環中',

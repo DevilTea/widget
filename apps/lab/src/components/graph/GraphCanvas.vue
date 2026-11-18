@@ -19,6 +19,8 @@ import type { GraphFlowEdge, GraphFlowNode } from '../../graph/vue-flow'
 import { Handle, Position, useVueFlow, VueFlow } from '@vue-flow/core'
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
+import { GRAPH_EDGE_TYPE } from '../../graph/vue-flow'
+import GraphDependencyEdge from './GraphDependencyEdge.vue'
 import '@vue-flow/core/dist/style.css'
 
 const props = defineProps<{
@@ -42,7 +44,7 @@ const FIT_OPTIONS = { padding: 0.08 } as const
 
 const i18n = useLabI18n()
 const vueFlowContainer = ref<HTMLElement | null>(null)
-const { fitView, getNodes, onNodesChange, onNodesInitialized, zoomIn, zoomOut } = useVueFlow()
+const { fitBounds, fitView, getNodes, onNodesChange, onNodesInitialized, zoomIn, zoomOut } = useVueFlow()
 
 let fitted = false
 let resizeObserver: ResizeObserver | null = null
@@ -74,6 +76,34 @@ function areCurrentNodesMeasured(): boolean {
 	return true
 }
 
+/**
+ * Fits the cards and the curves between them. A long edge runs in a corridor ELK reserved beside the cards, so fitting only
+ * the cards would cut those curves off at the edge of the canvas.
+ */
+function fitContent(): Promise<boolean> {
+	let minX = Infinity
+	let minY = Infinity
+	let maxX = -Infinity
+	let maxY = -Infinity
+	for (const node of getNodes.value) {
+		minX = Math.min(minX, node.computedPosition.x)
+		minY = Math.min(minY, node.computedPosition.y)
+		maxX = Math.max(maxX, node.computedPosition.x + node.dimensions.width)
+		maxY = Math.max(maxY, node.computedPosition.y + node.dimensions.height)
+	}
+	for (const edge of props.edges) {
+		for (const point of edge.data?.route ?? []) {
+			minX = Math.min(minX, point.x)
+			minY = Math.min(minY, point.y)
+			maxX = Math.max(maxX, point.x)
+			maxY = Math.max(maxY, point.y)
+		}
+	}
+	if (!Number.isFinite(minX))
+		return fitView(FIT_OPTIONS)
+	return fitBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, FIT_OPTIONS)
+}
+
 async function attemptFit(): Promise<boolean> {
 	if (fitted)
 		return true
@@ -88,7 +118,7 @@ async function attemptFit(): Promise<boolean> {
 	if (!areCurrentNodesMeasured())
 		return false
 
-	const success = await fitView(FIT_OPTIONS)
+	const success = await fitContent()
 	if (success) {
 		fitted = true
 		return true
@@ -97,7 +127,7 @@ async function attemptFit(): Promise<boolean> {
 }
 
 function fitGraph(): void {
-	void fitView(FIT_OPTIONS)
+	void fitContent()
 }
 
 onNodesInitialized(() => {
@@ -179,6 +209,10 @@ function memberKindShort(kind: string): string {
 			@nodeClick="onNodeClick"
 			@edgeClick="onEdgeClick"
 		>
+			<template #[`edge-${GRAPH_EDGE_TYPE}`]="edge">
+				<GraphDependencyEdge v-bind="edge" />
+			</template>
+
 			<template #node-cluster="{ data, id }">
 				<div
 					v-if="data.isExpanded"
@@ -685,18 +719,15 @@ function memberKindShort(kind: string): string {
 	box-shadow: 0 0 0 2px color-mix(in srgb, var(--lab-color-accent) 76%, transparent), 0 7px 20px color-mix(in srgb, var(--lab-color-accent) 16%, transparent);
 }
 
+/*
+ * Vue Flow needs a handle on every node, but an edge does not attach to it: it starts and ends where ELK routed it, on the
+ * card's border, spread along it so edges of one card stay apart. A visible dot would be a connection point that is not one.
+ */
 :deep(.vue-flow__handle) {
-	width: 5px;
-	height: 5px;
-	border: 1px solid var(--lab-color-surface);
-	background: var(--lab-color-text-muted);
-	opacity: 0.14;
-	transition: opacity 120ms ease;
-}
-
-:deep(.vue-flow__node:hover .vue-flow__handle),
-:deep(.vue-flow__node.selected .vue-flow__handle) {
-	opacity: 0.5;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
 }
 
 :deep(.graph-edge) {
@@ -774,6 +805,26 @@ function memberKindShort(kind: string): string {
 :deep(.graph-edge.selected .vue-flow__edge-text),
 :deep(.graph-edge.selected .vue-flow__edge-textbg) {
 	opacity: 1;
+}
+
+/*
+ * Direction while something is focused (issue #230): an edge that leaves the focused widget or member (it depends on the
+ * other end) and one that arrives at it (used by the other end) are both drawn heavier than the rest, and each carries a
+ * tag in the Relations view's words. The tag gives way to the operation label while the edge itself is hovered.
+ */
+:deep(.graph-edge--depends-on .vue-flow__edge-path),
+:deep(.graph-edge--used-by .vue-flow__edge-path) {
+	stroke-width: 2.4;
+}
+
+:deep(.graph-edge .graph-edge-relation .vue-flow__edge-text),
+:deep(.graph-edge .graph-edge-relation .vue-flow__edge-textbg) {
+	opacity: 1;
+}
+
+:deep(.graph-edge:hover .graph-edge-relation),
+:deep(.graph-edge.selected .graph-edge-relation) {
+	opacity: 0;
 }
 
 /*

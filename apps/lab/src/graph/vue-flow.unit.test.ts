@@ -9,7 +9,8 @@ import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { LayoutedGraph } from './layout'
 import type { SemanticGraph } from './types'
 import { describe, expect, it } from 'vitest'
-import { toVueFlow } from './vue-flow'
+import { aggregateEdgeId } from './layout'
+import { GRAPH_EDGE_TYPE, toVueFlow } from './vue-flow'
 
 function fixtureGraph(): SemanticGraph {
 	return {
@@ -257,5 +258,94 @@ describe('toVueFlow', () => {
 			.toBe(false)
 		expect(c3?.data?.isDimmed)
 			.toBe(true)
+	})
+
+	describe('direction (issue #230)', () => {
+		const expandedAll = new Set(['cluster:1', 'cluster:2', 'cluster:3'])
+		const reader = { nodeId: 1 as InspectionNodeId, member: { type: 'property' as const, name: 'reader' } }
+		const value = { nodeId: 2 as InspectionNodeId, member: { type: 'state' as const, name: 'value' } }
+
+		it('runs every edge from the owner to what it depends on, with the arrowhead on that target', () => {
+			const { edges } = toVueFlow(fixtureGraph(), fixtureLayout(), { expandedClusterIds: expandedAll })
+			expect(edges[0])
+				.toMatchObject({
+					source: '1:property:reader',
+					target: '2:state:value',
+					type: GRAPH_EDGE_TYPE,
+					markerEnd: { type: 'arrowclosed' },
+				})
+			expect(edges[0]?.markerStart)
+				.toBeUndefined()
+		})
+
+		it('colours the arrowhead like the stroke it ends, and in the danger colour for an invalid cycle', () => {
+			const base = fixtureGraph()
+			const withOperation = (operation: 'reads' | 'writes' | 'invokes', invalidCycle = false): SemanticGraph => ({
+				...base,
+				edges: [{ ...base.edges[0]!, operation, invalidCycle }],
+			})
+			const colorOf = (graph: SemanticGraph): string => (toVueFlow(graph, fixtureLayout(), { expandedClusterIds: expandedAll }).edges[0]!.markerEnd as { color: string }).color
+
+			expect(colorOf(withOperation('reads')))
+				.toBe('var(--lab-color-text-muted)')
+			expect(colorOf(withOperation('writes')))
+				.toContain('var(--lab-color-warning)')
+			expect(colorOf(withOperation('invokes')))
+				.toContain('var(--lab-color-accent)')
+			expect(colorOf(withOperation('reads', true)))
+				.toBe('var(--lab-color-danger)')
+		})
+
+		it('tags the edge of a focused member as "depends-on" when it leaves the member and "used-by" when it arrives', () => {
+			const outgoing = toVueFlow(fixtureGraph(), fixtureLayout(), { expandedClusterIds: expandedAll, focused: reader }).edges[0]!
+			expect(outgoing.data?.relation)
+				.toBe('depends-on')
+			expect(outgoing.class)
+				.toContain('graph-edge--depends-on')
+			expect(outgoing.class).not.toContain('graph-edge--used-by')
+
+			const incoming = toVueFlow(fixtureGraph(), fixtureLayout(), { expandedClusterIds: expandedAll, focused: value }).edges[0]!
+			expect(incoming.data?.relation)
+				.toBe('used-by')
+			expect(incoming.class)
+				.toContain('graph-edge--used-by')
+		})
+
+		it('tags the aggregate edge of a focused collapsed widget the same way, and leaves unrelated edges untagged', () => {
+			const asReader = toVueFlow(fixtureGraph(), fixtureLayout(), { expandedClusterIds: new Set(), focused: { nodeId: 1 as InspectionNodeId }, rootNodeId: 99 as InspectionNodeId }).edges[0]!
+			expect(asReader.data?.relation)
+				.toBe('depends-on')
+
+			const asTarget = toVueFlow(fixtureGraph(), fixtureLayout(), { expandedClusterIds: new Set(), focused: { nodeId: 2 as InspectionNodeId }, rootNodeId: 99 as InspectionNodeId }).edges[0]!
+			expect(asTarget.data?.relation)
+				.toBe('used-by')
+
+			const unrelated = toVueFlow(fixtureGraph(), fixtureLayout(), { expandedClusterIds: new Set(), focused: { nodeId: 3 as InspectionNodeId }, rootNodeId: 99 as InspectionNodeId }).edges[0]!
+			expect(unrelated.data?.isDimmed)
+				.toBe(true)
+			expect(unrelated.data?.relation)
+				.toBeUndefined()
+		})
+
+		it('tags nothing while nothing is focused, nor an edge between two members of the focused widget', () => {
+			expect(toVueFlow(fixtureGraph(), fixtureLayout(), { expandedClusterIds: expandedAll }).edges[0]!.data?.relation)
+				.toBeUndefined()
+
+			const graph = fixtureGraph()
+			const internal: SemanticGraph = { ...graph, edges: [{ ...graph.edges[0]!, targetVertexId: '1:property:reader' }], stubs: [] }
+			const { edges } = toVueFlow(internal, fixtureLayout(), { expandedClusterIds: expandedAll, focused: { nodeId: 1 as InspectionNodeId }, rootNodeId: 99 as InspectionNodeId })
+			expect(edges[0]!.data?.relation)
+				.toBeUndefined()
+		})
+
+		it('hands each edge the ELK route that belongs to it', () => {
+			const route = [{ x: 0, y: 0 }, { x: 10, y: 40 }]
+			const layout: LayoutedGraph = { ...fixtureLayout(), edges: new Map([[aggregateEdgeId('cluster:1', 'cluster:2'), route]]) }
+			const { edges } = toVueFlow(fixtureGraph(), layout, { expandedClusterIds: new Set() })
+			expect(edges[0]!.id)
+				.toBe(aggregateEdgeId('cluster:1', 'cluster:2'))
+			expect(edges[0]!.data?.route)
+				.toEqual(route)
+		})
 	})
 })

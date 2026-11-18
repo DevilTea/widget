@@ -9,10 +9,12 @@
 
 import type { BlueprintDependencyReference } from '@deviltea/widget-core'
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
-import type { Edge as VueFlowEdge, Node as VueFlowNode } from '@vue-flow/core'
+import type { EdgeMarker, MarkerType, Edge as VueFlowEdge, Node as VueFlowNode } from '@vue-flow/core'
 import type { InspectorFocus } from '../lab/focus'
+import type { GraphEdgeRoute } from './edge-geometry'
 import type { LayoutedGraph } from './layout'
 import type { GraphEdge, GraphEdgeOperation, GraphStubStatus, GraphVertexKind, SemanticGraph } from './types'
+import { aggregateEdgeId } from './layout'
 
 export type GraphNodeKind = 'cluster' | GraphVertexKind | 'stub'
 
@@ -40,7 +42,48 @@ export interface GraphNodeData {
 	readonly isDimmed?: boolean
 }
 
+/**
+ * What a highlighted edge is to the focused widget or member, in the words of the Relations view: the focus
+ * **depends on** the other end (the edge leaves the focus) or is **used by** it (the edge arrives at the focus).
+ * An edge between two members of the focus itself has neither.
+ */
+export type GraphEdgeRelation = 'depends-on' | 'used-by'
+
+/** The Vue Flow edge type every Graph edge uses: `GraphCanvas.vue` registers its Bezier edge under this name. */
+export const GRAPH_EDGE_TYPE = 'dependency'
+
+/** The size of every arrowhead in canvas px. It does not grow with the stroke (a highlighted edge is heavier), so the tip stays the same. */
+const ARROW_SIZE = 28
+
+/**
+ * The arrowhead of an edge. An edge always runs from the declaring owner to the member it declared a dependency on
+ * (`projection.ts`), and the arrowhead is on the target: **the arrow points at what the owner depends on**. The colour
+ * is a Lab token expression, so the same marker follows the light and the dark theme; it matches the stroke it ends.
+ */
+function arrowFor(color: string): EdgeMarker {
+	return { type: 'arrowclosed' as MarkerType, color, width: ARROW_SIZE, height: ARROW_SIZE, strokeWidth: 1.5, markerUnits: 'userSpaceOnUse' }
+}
+
+const MUTED_ARROW = 'var(--lab-color-text-muted)'
+const WRITES_ARROW = 'color-mix(in srgb, var(--lab-color-warning) 76%, var(--lab-color-text-muted))'
+const INVOKES_ARROW = 'color-mix(in srgb, var(--lab-color-accent) 74%, var(--lab-color-text-muted))'
+const DANGER_ARROW = 'var(--lab-color-danger)'
+
+function arrowColor(operation: GraphEdgeOperation, invalidCycle: boolean): string {
+	if (invalidCycle)
+		return DANGER_ARROW
+	if (operation === 'writes')
+		return WRITES_ARROW
+	if (operation === 'invokes')
+		return INVOKES_ARROW
+	return MUTED_ARROW
+}
+
 export interface GraphEdgeData {
+	/** ELK's route points for this edge (canvas coordinates); the edge is drawn as Bezier curves through them. */
+	readonly route?: GraphEdgeRoute
+	/** What the edge is to the focused widget or member; set only on a highlighted edge. */
+	readonly relation?: GraphEdgeRelation
 	readonly operation: GraphEdgeOperation
 	/** Dependency-container path (diagnostic #13 Phase 5: belongs in edge details, never on the canvas). */
 	readonly path: readonly (string | number)[]
@@ -119,7 +162,7 @@ export function toVueFlow(
 				group = {
 					effectiveSource,
 					effectiveTarget,
-					edgeId: `edge:${key}`,
+					edgeId: aggregateEdgeId(effectiveSource, effectiveTarget),
 					edges: [],
 				}
 				crossClusterMap.set(key, group)
@@ -210,6 +253,38 @@ export function toVueFlow(
 			}
 		}
 	}
+
+	// What the focus is: the member, or a widget with all its members and stubs. An edge that leaves it is something the
+	// focus depends on, one that arrives at it is something that uses the focus.
+	const focusIds = new Set<string>()
+	if (activeMemberKey) {
+		focusIds.add(activeMemberKey)
+		for (const stub of graph.stubs) {
+			if (stub.ownerVertexId === activeMemberKey)
+				focusIds.add(stub.id)
+		}
+	}
+	else if (activeClusterId) {
+		focusIds.add(activeClusterId)
+		for (const vertex of graph.vertices) {
+			if (vertex.clusterId === activeClusterId)
+				focusIds.add(vertex.id)
+		}
+		for (const stub of graph.stubs) {
+			if (clusterIdByVertex.get(stub.ownerVertexId) === activeClusterId)
+				focusIds.add(stub.id)
+		}
+	}
+	const relationOf = (source: string, target: string, isRelated: boolean): GraphEdgeRelation | undefined => {
+		if (!hasActiveInspection || !isRelated)
+			return undefined
+		const fromFocus = focusIds.has(source)
+		const toFocus = focusIds.has(target)
+		if (fromFocus === toFocus)
+			return undefined
+		return fromFocus ? 'depends-on' : 'used-by'
+	}
+	const relationClass = (relation: GraphEdgeRelation | undefined): string => relation === undefined ? '' : ` graph-edge--${relation}`
 
 	const nodes: GraphFlowNode[] = []
 
@@ -325,6 +400,7 @@ export function toVueFlow(
 		if (clusterId === undefined || !expandedClusterIds.has(clusterId))
 			continue
 		const isDimmed = hasActiveInspection && !relatedEdgeIds.has(edge.id)
+		const relation = relationOf(edge.sourceVertexId, edge.targetVertexId, !isDimmed)
 
 		edges.push({
 			id: edge.id,
@@ -332,11 +408,12 @@ export function toVueFlow(
 			sourceHandle: 'b',
 			target: edge.targetVertexId,
 			targetHandle: 't',
-			type: 'smoothstep',
+			type: GRAPH_EDGE_TYPE,
+			markerEnd: arrowFor(arrowColor(edge.operation, edge.invalidCycle)),
 			label: edge.operation,
 			ariaLabel: edge.operation,
-			class: `graph-edge graph-edge--${edge.operation}${edge.invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}`,
-			data: { operation: edge.operation, path: edge.path, reference: edge.reference, invalidCycle: edge.invalidCycle, isDimmed },
+			class: `graph-edge graph-edge--${edge.operation}${edge.invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}${relationClass(relation)}`,
+			data: { operation: edge.operation, path: edge.path, reference: edge.reference, invalidCycle: edge.invalidCycle, isDimmed, route: layout.edges?.get(edge.id), relation },
 			selectable: true,
 			updatable: false,
 			focusable: true,
@@ -347,6 +424,7 @@ export function toVueFlow(
 	for (const group of crossClusterMap.values()) {
 		const { effectiveSource, effectiveTarget, edgeId, edges: semanticEdges } = group
 		const isDimmed = hasActiveInspection && !relatedEdgeIds.has(edgeId)
+		const relation = relationOf(effectiveSource, effectiveTarget, !isDimmed)
 		const primaryOp = semanticEdges[0]!.operation
 		const invalidCycle = semanticEdges.some(e => e.invalidCycle)
 		const isClusterLevel = effectiveSource.startsWith('cluster:') || effectiveTarget.startsWith('cluster:')
@@ -361,10 +439,11 @@ export function toVueFlow(
 			sourceHandle: 'b',
 			target: effectiveTarget,
 			targetHandle: 't',
-			type: 'smoothstep',
+			type: GRAPH_EDGE_TYPE,
+			markerEnd: arrowFor(arrowColor(primaryOp, invalidCycle)),
 			label,
 			ariaLabel: label,
-			class: `graph-edge graph-edge--${primaryOp} graph-edge--aggregate${invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}`,
+			class: `graph-edge graph-edge--${primaryOp} graph-edge--aggregate${invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}${relationClass(relation)}`,
 			data: {
 				operation: primaryOp,
 				path: semanticEdges[0]!.path,
@@ -373,6 +452,8 @@ export function toVueFlow(
 				count: semanticEdges.length,
 				semanticEdges,
 				isDimmed,
+				route: layout.edges?.get(edgeId),
+				relation,
 			},
 			selectable: true,
 			updatable: false,
@@ -387,6 +468,7 @@ export function toVueFlow(
 			continue
 		const stubEdgeId = `${stub.id}-edge`
 		const isDimmed = hasActiveInspection && !relatedEdgeIds.has(stubEdgeId)
+		const relation = relationOf(stub.ownerVertexId, stub.id, !isDimmed)
 
 		edges.push({
 			id: stubEdgeId,
@@ -394,11 +476,12 @@ export function toVueFlow(
 			sourceHandle: 'b',
 			target: stub.id,
 			targetHandle: 't',
-			type: 'straight',
+			type: GRAPH_EDGE_TYPE,
+			markerEnd: arrowFor(stub.status === 'invalid' ? DANGER_ARROW : MUTED_ARROW),
 			label: stubLabel(stub.status),
 			ariaLabel: stubLabel(stub.status),
-			class: `graph-edge graph-edge--stub graph-edge--${stub.status}${isDimmed ? ' graph-edge--dimmed' : ''}`,
-			data: { operation: stub.operation, path: stub.path, reference: stub.reference, stubStatus: stub.status, isDimmed },
+			class: `graph-edge graph-edge--stub graph-edge--${stub.status}${isDimmed ? ' graph-edge--dimmed' : ''}${relationClass(relation)}`,
+			data: { operation: stub.operation, path: stub.path, reference: stub.reference, stubStatus: stub.status, isDimmed, route: layout.edges?.get(stubEdgeId), relation },
 			selectable: true,
 			updatable: false,
 			focusable: true,

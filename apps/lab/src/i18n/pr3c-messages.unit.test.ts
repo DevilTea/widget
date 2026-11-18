@@ -14,6 +14,8 @@ const files = [
 	'../components/author/AuthorStructureView.vue',
 	'../components/graph/GraphKey.vue',
 	'../components/graph/GraphCanvas.vue',
+	'../components/graph/GraphDependencyEdge.vue',
+	'../components/graph/GraphLegend.vue',
 	'../components/preview/PreviewPanel.vue',
 	'../components/dependencies/relations/RelationsView.vue',
 	'../components/dependencies/relations/RelationsGroupCard.vue',

@@ -9,6 +9,7 @@ import type { ElkNode } from 'elkjs/lib/elk-api'
 import type { SemanticGraph } from './types'
 import { describe, expect, it } from 'vitest'
 import { COLLAPSED_CLUSTER_HEIGHT, COLLAPSED_CLUSTER_WIDTH, fromElkResult, STUB_HEIGHT, STUB_WIDTH, toElkGraph, VERTEX_HEIGHT, VERTEX_WIDTH } from './elk-adapter'
+import { aggregateEdgeId } from './layout'
 
 function fixtureGraph(): SemanticGraph {
 	return {
@@ -56,7 +57,7 @@ describe('toElkGraph', () => {
 		expect(elkGraph.layoutOptions?.['elk.direction'])
 			.toBe('DOWN')
 		expect(elkGraph.layoutOptions?.['elk.edgeRouting'])
-			.toBe('ORTHOGONAL')
+			.toBe('POLYLINE')
 
 		const consumerCluster = elkGraph.children?.find(child => child.id === 'cluster:1')
 		const targetCluster = elkGraph.children?.find(child => child.id === 'cluster:2')
@@ -81,13 +82,15 @@ describe('toElkGraph', () => {
 	it('declares a cross-cluster edge at the root level rather than nesting it in either cluster', () => {
 		const elkGraph = toElkGraph(fixtureGraph())
 
+		// The ELK edge carries the id of the one presentation edge drawn for it, so its route can be found again.
+		const edgeId = aggregateEdgeId('1:property:reader', '2:state:value')
 		expect(elkGraph.edges?.map(edge => edge.id))
-			.toEqual(['1:property:reader#dep0'])
+			.toEqual([edgeId])
 		const consumerCluster = elkGraph.children?.find(child => child.id === 'cluster:1')
 		const targetCluster = elkGraph.children?.find(child => child.id === 'cluster:2')
-		expect(consumerCluster?.edges?.some(edge => edge.id === '1:property:reader#dep0'))
+		expect(consumerCluster?.edges?.some(edge => edge.id === edgeId))
 			.toBe(false)
-		expect(targetCluster?.edges?.some(edge => edge.id === '1:property:reader#dep0'))
+		expect(targetCluster?.edges?.some(edge => edge.id === edgeId))
 			.toBe(false)
 	})
 
@@ -135,7 +138,7 @@ describe('toElkGraph', () => {
 		expect(elkGraph.edges)
 			.toEqual([
 				{
-					id: '1:property:reader#dep0',
+					id: aggregateEdgeId('cluster:1', 'cluster:2'),
 					sources: ['cluster:1'],
 					targets: ['cluster:2'],
 				},
@@ -150,7 +153,7 @@ describe('toElkGraph', () => {
 		expect(elkGraph.edges)
 			.toEqual([
 				{
-					id: '1:property:reader#dep0',
+					id: aggregateEdgeId('1:property:reader', 'cluster:2'),
 					sources: ['1:property:reader'],
 					targets: ['cluster:2'],
 				},

@@ -10,8 +10,10 @@
  */
 
 import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk-api'
+import type { GraphEdgeRoute } from './edge-geometry'
 import type { LayoutedGraph, LayoutGraphOptions, LayoutRect } from './layout'
 import type { SemanticGraph } from './types'
+import { aggregateEdgeId } from './layout'
 
 /** Fixed member-vertex footprint. Deliberately simple fixed sizing — no text-measurement dependency. */
 export const VERTEX_WIDTH = 200
@@ -23,21 +25,63 @@ export const STUB_HEIGHT = 28
 export const COLLAPSED_CLUSTER_WIDTH = 240
 export const COLLAPSED_CLUSTER_HEIGHT = 88
 
+/**
+ * Spacing is deliberately generous (issue #230, "the Graph is hard to read"): cards need clear air so the curves that
+ * enter and leave them stay apart, and an arrowhead needs a few lines of curve before it reaches its card. The values
+ * are the smallest that keep the cards visibly apart and a fitted collapsed Survey (5 widgets) about 0.8 zoom and the
+ * collapsed Trip budget (12 widgets, 70 dependency pairs) about 0.45; larger values only shrink the Fit zoom.
+ */
+export const LAYOUT_SPACING = {
+	/** Minimum clear gap between two cards of the same layer (`elk.spacing.nodeNode`). */
+	nodeNode: 72,
+	/** Clear gap between two layers: the room an edge has to bend and for its arrowhead (`nodeNodeBetweenLayers`). */
+	betweenLayers: 128,
+	/** Clear gap between a card and an edge that passes it (`edgeNode`, `edgeNodeBetweenLayers`). */
+	edgeNode: 40,
+	/** Clear gap between two edges that run side by side (`edgeEdge`, `edgeEdgeBetweenLayers`). */
+	edgeEdge: 20,
+} as const
+
 const ROOT_LAYOUT_OPTIONS = {
 	'elk.algorithm': 'layered',
-	// Initial vertical direction for the narrow/tall inspector panel (diagnostic #13 Phase 5 "implementation
-	// stack" comment) — an implementation choice, not an architecture contract.
+	// Top to bottom: the pane is about as tall as it is wide, and a widget chain (the Trip budget's Settlement reads People
+	// and Expenses, which read the Currency and Trip) is deeper than it is broad. Left to right fitted both showcases at a
+	// third of this zoom. An edge points from the reader to what it reads, so an arrowhead mostly points down.
 	'elk.direction': 'DOWN',
-	'elk.edgeRouting': 'ORTHOGONAL',
+	// ELK only places the cards and finds the corridor each edge uses to pass the layers in between (its route points).
+	// The canvas draws every edge as a Bezier curve through those points (`edge-geometry.ts`), never ELK's own route.
+	'elk.edgeRouting': 'POLYLINE',
+	// Route points in canvas coordinates whichever hierarchy level the edge belongs to.
+	'elk.json.edgeCoords': 'ROOT',
 	// Required so cross-cluster edges (declared at the root) participate in one coherent layered layout
 	// together with each cluster's own internal member/stub edges.
 	'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-	'elk.layered.spacing.nodeNodeBetweenLayers': '56',
-	'elk.spacing.nodeNode': '24',
+	// Compact, with fewer layers than ELK's default cycle breaking: a dependency cycle between widgets (the Survey's questions
+	// read it back) is cut where it costs the least. Alone, NETWORK_SIMPLEX below fitted the collapsed Trip budget at 0.33;
+	// with this it fits at 0.46.
+	'elk.layered.cycleBreaking.strategy': 'GREEDY_MODEL_ORDER',
+	'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+	'elk.spacing.nodeNode': String(LAYOUT_SPACING.nodeNode),
+	'elk.layered.spacing.nodeNodeBetweenLayers': String(LAYOUT_SPACING.betweenLayers),
+	'elk.spacing.edgeNode': String(LAYOUT_SPACING.edgeNode),
+	'elk.layered.spacing.edgeNodeBetweenLayers': String(LAYOUT_SPACING.edgeNode),
+	'elk.spacing.edgeEdge': String(LAYOUT_SPACING.edgeEdge),
+	'elk.layered.spacing.edgeEdgeBetweenLayers': String(LAYOUT_SPACING.edgeEdge),
+} as const
+
+/** Spacing inside an expanded widget: members are 36px high cards, so these are smaller than between widgets but still leave an arrowhead its room. */
+export const CLUSTER_SPACING = {
+	nodeNode: 24,
+	betweenLayers: 48,
+	edgeNode: 20,
 } as const
 
 const CLUSTER_LAYOUT_OPTIONS = {
 	'elk.padding': '[top=52,left=16,bottom=16,right=16]',
+	'elk.spacing.nodeNode': String(CLUSTER_SPACING.nodeNode),
+	'elk.layered.spacing.nodeNodeBetweenLayers': String(CLUSTER_SPACING.betweenLayers),
+	'elk.spacing.edgeNode': String(CLUSTER_SPACING.edgeNode),
+	'elk.layered.spacing.edgeNodeBetweenLayers': String(CLUSTER_SPACING.edgeNode),
 } as const
 
 function emptyClusterNode(id: string): ElkNode {
@@ -110,7 +154,7 @@ export function toElkGraph(graph: SemanticGraph, options?: LayoutGraphOptions): 
 			if (!seenRootEdgeEndpoints.has(key)) {
 				seenRootEdgeEndpoints.add(key)
 				rootEdges.push({
-					id: edge.id,
+					id: aggregateEdgeId(effectiveSource, effectiveTarget),
 					sources: [effectiveSource],
 					targets: [effectiveTarget],
 				})
@@ -152,5 +196,20 @@ export function fromElkResult(result: ElkNode, graph: SemanticGraph, options?: L
 		}
 	}
 
-	return { clusters, vertices, stubs }
+	const edges = new Map<string, GraphEdgeRoute>()
+	const collectRoutes = (container: ElkNode): void => {
+		for (const edge of container.edges ?? []) {
+			const section = (edge as ElkExtendedEdge).sections?.[0]
+			if (section === undefined)
+				continue
+			edges.set(edge.id, [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(({ x, y }) => ({ x, y })))
+		}
+	}
+	collectRoutes(result)
+	for (const clusterNode of result.children ?? []) {
+		if (expandedClusterIds.has(clusterNode.id))
+			collectRoutes(clusterNode)
+	}
+
+	return { clusters, vertices, stubs, edges }
 }
