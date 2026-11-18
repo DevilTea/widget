@@ -187,7 +187,7 @@ describe('step "arguments", in the state the previous step leaves (the deep-link
 		const { widgets } = setup('onboarding-deep-link')
 		const { root } = widgets
 		const codes = (): { code: string, reason?: string }[] => root.methods.goTo.getDiagnostics()
-			.map(({ code, reason }) => ({ code, reason }))
+			.map(diagnostic => ({ code: diagnostic.code, reason: (diagnostic as { readonly reason?: string }).reason }))
 		root.methods.goTo(1.5)
 		expect(codes())
 			.toEqual([{ code: 'invalid-method-arguments', reason: 'not-a-whole-number' }])
