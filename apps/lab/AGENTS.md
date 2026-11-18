@@ -645,9 +645,10 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   for layout efficiency. Unit-testable without a worker or the real elkjs runtime. Since issue #230 ("the Graph is hard
   to read") ELK only places the cards and finds each edge's corridor: layered, top to bottom, `NETWORK_SIMPLEX`
   placement and `GREEDY_MODEL_ORDER` cycle breaking, `POLYLINE` routing with `elk.json.edgeCoords: ROOT` so every
-  edge's route points come back in canvas coordinates, and the spacing in `LAYOUT_SPACING` (cards 72, layers 128,
-  edge-to-card 40, edge-to-edge 20; `CLUSTER_SPACING` inside an expanded widget). The numbers are the smallest that keep
-  the cards visibly apart and the fitted collapsed Survey about 0.8 zoom and the collapsed Trip budget about 0.35-0.45;
+  edge's route points come back in canvas coordinates, and the spacing in `LAYOUT_SPACING` (cards 72, layers 88,
+  edge-to-card 40, edge-to-edge 20; `CLUSTER_SPACING` inside an expanded widget). The numbers keep the cards visibly apart
+  and the default collapsed Survey at 0.95 Fit zoom at 1440 x 900 (its card text is 11px or more on screen only above about 0.9;
+  128 between layers gave 0.82) and the collapsed Trip budget about 0.37;
   `fromElkResult()` also returns every edge's route (`LayoutedGraph.edges`), keyed by `aggregateEdgeId()`, the id of
   the Vue Flow edge drawn for it.
 - `edge-geometry.ts` — pure: a route becomes a chain of cubic Beziers with vertical tangents (`routePath()`: only `M`
@@ -668,11 +669,14 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   - Selecting/focusing a widget or member highlights the connected subgraph and deemphasizes
     unrelated nodes and edges (`isDimmed` / `graph-node--dimmed` / `graph-edge--dimmed`).
   - **Direction** (issue #230): an edge runs from the member that declares a dependency to the member it depends on
-    (owner -> target, as above) and its arrowhead (`markerEnd`, `arrowclosed`, a Lab token colour so it follows the theme
-    and matches the stroke it ends) is on the target: `A → B` means "A depends on B", the Relations view's "Depends on"
-    for A and "Used by" for B. While a widget or member is focused, each highlighted edge carries `data.relation`
-    (`depends-on` when it leaves the focus, `used-by` when it arrives; none inside the focus itself) and the matching
-    `graph-edge--depends-on` / `--used-by` class. Every edge uses the one Vue Flow edge type `GRAPH_EDGE_TYPE`.
+    (owner -> target, as above) and its arrowhead is on the target: `A → B` means "A depends on B", the Relations view's
+    "Depends on" for A and "Used by" for B. `data.arrow` names the colour family of the arrowhead (the operation's, `danger`
+    for an invalid cycle or stub, `accent` around the focus; the canvas draws the matching `<marker>`). While a widget or
+    member is focused, an edge is related when it touches the focus (decided against the focus's own members only, never
+    transitively): every other edge is dimmed (`graph-edge--dimmed`, opacity 0.25), each related edge carries
+    `data.relation` (`depends-on` when it leaves the focus, `used-by` when it arrives; none inside the focus itself), `data.otherEnd`
+    (the other end's name: `#sessions`, `#mode.value`) and the matching `graph-edge--depends-on` / `--used-by`
+    class (drawn in the accent colour). Every edge uses the one Vue Flow edge type `GRAPH_EDGE_TYPE`.
   - Vue Flow is strictly viewer-only: every node is `draggable: false`/`connectable: false` and no edge
     is `updatable`.
 - `src/components/graph/GraphCanvas.vue` — the only place in this app that imports `@vue-flow/core`
@@ -689,7 +693,19 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   points, starting and ending on the card borders where ELK spread them, so several edges of one card stay apart and none
   runs behind a card; without route points it falls back to Vue Flow's own handle positions. The key's first item states
   the direction (`A → B: A depends on B`), the Legend explains it with the Relations words, and a focused widget's or
-  member's edges are tagged "Depends on" / "Used by" (hidden while the edge itself is hovered, which shows its operation).
+  member's edges are tagged "Depends on #other" / "Used by #other" (hidden while the edge itself is hovered, which shows its
+  operation). The tags are placed together by `graph/tag-placement.ts` (`GraphCanvas.vue` computes the placements and provides them to the edges, `graph-tags.ts`):
+  each tag sits on its own edge in the half nearer the focused card, so it reads as being about that card, and takes the first
+  spot (going away from the card) where its box covers neither a card nor another tag; a tag with no such spot is not drawn
+  (the Trip budget's Expense has a dozen edges), the accent colour, the dimming and the arrowheads still mark the focus's edges and
+  Relations lists them all. `GraphDependencyEdge.vue` draws its labels itself (a rect and a text sized by `tagSize()`, the function
+  the placement used) because Vue Flow's `EdgeText` measures its box once at mount and so boxes 11px text around text of any other size.
+  `graph/zoom-scale.ts` cuts the zoom into nine buckets (1, 0.85, 0.72, 0.6, 0.5, 0.42, 0.35, 0.3, below): each has an arrowhead
+  length (12 to 48 canvas px) and an edge text size (11 to 46) that keep the arrowhead 12 screen px long and the text 11 or
+  more at the lowest zoom of the bucket (about 14px at the most), and tags are not drawn below 0.3 (the colour and the dimming remain). The arrowheads are
+  `<marker>`s defined in `GraphCanvas.vue` (one per colour family and bucket; Vue Flow's own `arrowclosed` draws at a quarter of
+  its nominal size) and `GraphDependencyEdge.vue` picks the one for the current bucket, so a wheel tick inside a bucket
+  re-renders nothing. Edge strokes are solid mixes of the muted text colour and the canvas (3.7:1 in the light theme).
   The handles Vue Flow requires are invisible (an edge does not attach to them) and the canvas uses only a subtle dot
   grid: these cues must never imply that the readonly inspector is an editable node editor.
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container
@@ -718,9 +734,11 @@ automatically refits on semantic graph replacements and cluster expansion/collap
 Runtime activity and focus deemphasis never trigger a refit. `DependenciesPanel.vue`'s Graph view also exposes an explicit
 **Fit graph** button along with **Zoom in** / **Zoom out** and **Expand all** / **Collapse all** controls in the toolbar. Fit leaves 8% around the graph (it used to
 leave 20%, so a fitted graph used about 40% of the canvas) and fits the curves as well as the cards (`fitBounds` over both),
-because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.24 zoom) and is read by zooming.
+because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.26 zoom) and is read by zooming. `minZoom` is 0.05 so Fit shows the whole
+expanded Trip budget (about 0.06).
 `src/graph/graph-readability.unit.test.ts` (real ELK on both showcases) and `e2e/graph-readability.spec.ts` pin the spacing, the
-Bezier paths, the arrowheads and "no edge behind a card"; the expanded Trip budget is only checked for spacing, curves and arrowheads.
+Bezier paths, the arrowheads and "no edge behind a card"; the arrowhead size, the 0.9 Fit floor of the default Survey (card text 11px or more), the dimming and the tags (placed on
+no card and no other tag, nearer the focus, 11px or more) are measured in the browser as well.
 
 ## Layout worker boundary
 

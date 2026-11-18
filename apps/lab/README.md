@@ -109,7 +109,7 @@ popover, which also holds the JSON draft, Source JSON compatibility, Blueprint s
   unapplied JSON draft first). Without a schema, values are typed by what they hold and anything else is edited as JSON.
 - Problems lists the several diagnostics Core reports for one evaluation cycle as one entry that expands to Core's own diagnostics.
 - If the Preview frame cannot load, the Preview pane says so with the cause and a **Try again** button, and the header chip reads "Preview failed to load".
-- Graph: an always-visible key explains the badges, the line styles and the direction of an edge, edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph. Cards are spread out, edges are Bezier curves that pass between the cards, and every edge ends in an arrowhead on the member it depends on (`A → B` means A depends on B: the Relations view lists B under "Depends on" for A and A under "Used by" for B). While a widget or member is selected, the edges around it are tagged "Depends on" or "Used by".
+- Graph: an always-visible key explains the badges, the line styles and the direction of an edge, edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph. Cards are spread out, edges are Bezier curves that pass between the cards, and every edge ends in an arrowhead on the member it depends on (`A → B` means A depends on B: the Relations view lists B under "Depends on" for A and A under "Used by" for B). While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it), and every other edge fades.
 
 ## Layout, the Selected widget pane and the tutorial rail
 
