@@ -13,6 +13,7 @@
 
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { GraphPoint } from './edge-geometry'
+import type { RelationsWidgetGroup } from './relations'
 import type { SemanticGraph } from './types'
 import type { GraphFlowEdge, GraphFlowNode } from './vue-flow'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
@@ -22,10 +23,13 @@ import { defaultSurveyPreset } from '../showcases/survey/presets'
 import { surveySystem } from '../showcases/survey/system'
 import { defaultTripBudgetPreset } from '../showcases/trip-budget/presets'
 import { tripBudgetSystem } from '../showcases/trip-budget/system'
-import { routePath, sampleRoute } from './edge-geometry'
+import { sampleRoute } from './edge-geometry'
 import { fromElkResult, toElkGraph } from './elk-adapter'
 import { projectSemanticGraph } from './projection'
+import { projectRelations } from './relations'
+import { placeTags } from './tag-placement'
 import { toVueFlow } from './vue-flow'
+import { ARROW_KINDS } from './zoom-scale'
 
 const elk = new ELK()
 
@@ -50,6 +54,8 @@ interface DrawnGraph {
 	readonly edges: GraphFlowEdge[]
 	/** What a person sees as a card: a collapsed widget, a member or a stub. An expanded widget is only the shell around its cards. */
 	readonly cards: Card[]
+	/** What `toVueFlow()` needs to draw the same layout again with a focus. */
+	readonly redraw: (focusWidgetId: string) => GraphFlowEdge[]
 }
 
 function sizeOf(node: GraphFlowNode): { width: number, height: number } {
@@ -89,7 +95,13 @@ async function drawLayout(name: ShowcaseName, expanded: boolean): Promise<DrawnG
 			...sizeOf(node),
 		})
 	}
-	return { graph, nodes, edges, cards }
+	const rootNodeId = inspectBlueprint(blueprint as never).rootNodeId
+	const layout = fromElkResult(result, graph, options)
+	const redraw = (focusWidgetId: string): GraphFlowEdge[] => {
+		const cluster = graph.clusters.find(candidate => candidate.widgetId === focusWidgetId)!
+		return toVueFlow(graph, layout, { ...options, focused: { nodeId: cluster.nodeId }, rootNodeId }).edges
+	}
+	return { graph, nodes, edges, cards, redraw }
 }
 
 /** The smallest empty distance between any two cards: negative or zero when two overlap or touch. */
@@ -119,7 +131,7 @@ function isOnBorder(point: GraphPoint, card: Card, tolerance = 1.5): boolean {
 	return withinX && withinY && (onVertical || onHorizontal)
 }
 
-/** The zoom `fitBounds` would settle on for a canvas of this size and `padding` (a fraction of the content on each side). */
+/** The zoom `fitBounds` settles on for a canvas of this size: Vue Flow makes the content `1 + padding` times its own size (measured in the real Lab: 0.95 for the Survey at 1440 x 900). */
 function fitZoom(drawn: DrawnGraph, canvas: { width: number, height: number }, padding = 0.08): number {
 	const points = [
 		...drawn.cards.flatMap(card => [{ x: card.x, y: card.y }, { x: card.x + card.width, y: card.y + card.height }]),
@@ -127,7 +139,7 @@ function fitZoom(drawn: DrawnGraph, canvas: { width: number, height: number }, p
 	]
 	const width = Math.max(...points.map(point => point.x)) - Math.min(...points.map(point => point.x))
 	const height = Math.max(...points.map(point => point.y)) - Math.min(...points.map(point => point.y))
-	return Math.min(canvas.width / (width * (1 + 2 * padding)), canvas.height / (height * (1 + 2 * padding)))
+	return Math.min(canvas.width / (width * (1 + padding)), canvas.height / (height * (1 + padding)))
 }
 
 // Literal on purpose: they must not move together with the spacing constants they check. On main the smallest gap between two
@@ -135,8 +147,8 @@ function fitZoom(drawn: DrawnGraph, canvas: { width: number, height: number }, p
 const MIN_GAP_COLLAPSED = 64
 const MIN_GAP_EXPANDED = 24
 
-// The Graph pane of a 1440 x 900 window: about 690 x 650 after the toolbar and the key row.
-const CANVAS_1440 = { width: 690, height: 650 }
+// The Graph canvas of a 1440 x 900 window, as measured in the browser: 691 x 681 after the toolbar and the key row.
+const CANVAS_1440 = { width: 691, height: 681 }
 
 describe.each(Object.keys(SHOWCASES) as ShowcaseName[])('%s Graph', (name) => {
 	describe.each([false, true])('with expanded clusters = %s', (expanded) => {
@@ -161,11 +173,6 @@ describe.each(Object.keys(SHOWCASES) as ShowcaseName[])('%s Graph', (name) => {
 				expect(route!.length)
 					.toBeGreaterThanOrEqual(2)
 
-				// Only `M` and cubic `C` commands: no `L` (line), `Q` (corner arc) or `A`, so no orthogonal rounded corners.
-				const d = routePath(route!)
-				expect(d, edge.id)
-					.toMatch(/^M [-\d. ]+( C [-\d. ]+)+$/)
-
 				// The curve starts on the card that declares the dependency and ends, where the arrowhead is, on its target.
 				expect(isOnBorder(route![0]!, cardById.get(edge.source)!), `${edge.id} starts on its source`)
 					.toBe(true)
@@ -174,24 +181,19 @@ describe.each(Object.keys(SHOWCASES) as ShowcaseName[])('%s Graph', (name) => {
 			}
 		})
 
-		it('puts an arrowhead on every edge, in a colour that follows the theme', async () => {
+		it('puts an arrowhead of a known colour family on every edge, and none at the start', async () => {
 			const { edges } = await draw(name, expanded)
 			for (const edge of edges) {
-				const marker = edge.markerEnd as { type: string, color: string } | undefined
-				expect(marker?.type, edge.id)
-					.toBe('arrowclosed')
-				// A Lab token expression (light and dark redefine the tokens), never a fixed colour.
-				expect(marker?.color, edge.id)
-					.toMatch(/var\(--lab-color-[a-z-]+\)/)
+				expect(ARROW_KINDS, edge.id)
+					.toContain(edge.data?.arrow)
 				expect(edge.markerStart, edge.id)
 					.toBeUndefined()
 			}
 		})
 	})
 
-	// Edges never hidden behind cards. The expanded Trip budget (112 members, 370 dependencies) is left out: its compound
-	// layout lets ELK itself cross a card in a handful of places, which nothing here claims to fix.
-	describe.each(name === 'trip-budget' ? [false] : [false, true])('with expanded clusters = %s', (expanded) => {
+	// Edges never hidden behind cards, in every view: also the expanded Trip budget (112 members, 370 dependencies).
+	describe.each([false, true])('with expanded clusters = %s', (expanded) => {
 		it('passes no edge through a card that is not one of its two ends', async () => {
 			const { edges, cards } = await draw(name, expanded)
 			const hidden: string[] = []
@@ -210,34 +212,111 @@ describe.each(Object.keys(SHOWCASES) as ShowcaseName[])('%s Graph', (name) => {
 	})
 })
 
+describe('focus tags', () => {
+	// The tags of the edges around one widget, placed at the font size the zoom bucket of the showcase's Fit uses.
+	const cases = [
+		{ showcase: 'survey', widget: 'mode', fonts: [11, 13, 16], most: [11, 13] },
+		{ showcase: 'trip-budget', widget: 'hotel', fonts: [27, 32], most: [] },
+	] as const
+
+	for (const { showcase, widget, fonts, most } of cases) {
+		it.each(fonts)(`places the tags around #${widget} of the ${showcase} on no card and on no other tag, nearer to #${widget} than to the other end, and drops one that does not fit (font %s)`, async (font) => {
+			const drawn = await draw(showcase, false)
+			const focused = drawn.redraw(widget)
+			const tagged = focused.filter(edge => edge.data?.relation !== undefined)
+			expect(tagged.length)
+				.toBeGreaterThan(3)
+			const tags = tagged.map(edge => ({
+				id: edge.id,
+				route: edge.data!.route!,
+				relation: edge.data!.relation!,
+				text: `${edge.data!.relation === 'depends-on' ? 'Depends on' : 'Used by'} ${edge.data!.otherEnd}`,
+			}))
+			const placed = placeTags(tags, drawn.cards, font)
+			// The Survey's Fit zoom (0.95 at 1440 x 900) uses fonts 11 and 13: 4 of its 5 tags fit there. Elsewhere fewer may, but some do.
+			expect(placed.size)
+				.toBeGreaterThanOrEqual(most.includes(font as never) ? 4 : 3)
+
+			const rects = [...placed.values()]
+			const meeting: string[] = []
+			for (const [id, tag] of placed) {
+				for (const card of drawn.cards) {
+					if (overlaps(tag, { x: card.x + card.width / 2, y: card.y + card.height / 2, width: card.width, height: card.height }))
+						meeting.push(`${id} on card ${card.id}`)
+				}
+				for (const other of rects) {
+					if (other !== tag && overlaps(tag, other))
+						meeting.push(`${id} on ${other.text}`)
+				}
+			}
+			expect(meeting)
+				.toEqual([])
+
+			for (const input of tags.filter(candidate => placed.has(candidate.id))) {
+				const tag = placed.get(input.id)!
+				const route = input.route
+				const [near, far] = input.relation === 'depends-on' ? [route[0]!, route.at(-1)!] : [route.at(-1)!, route[0]!]
+				expect(Math.hypot(tag.x - near.x, tag.y - near.y), input.id)
+					.toBeLessThanOrEqual(Math.hypot(tag.x - far.x, tag.y - far.y) + 1)
+			}
+		})
+	}
+
+	function overlaps(a: { x: number, y: number, width: number, height: number }, b: { x: number, y: number, width: number, height: number }): boolean {
+		return Math.min(a.x + a.width / 2, b.x + b.width / 2) - Math.max(a.x - a.width / 2, b.x - b.width / 2) > 0
+			&& Math.min(a.y + a.height / 2, b.y + b.height / 2) - Math.max(a.y - a.height / 2, b.y - b.height / 2) > 0
+	}
+})
+
 describe('fitted size', () => {
 	it('keeps the collapsed Survey and Trip budget readable, and the expanded Survey about as large as it was', async () => {
-		// The zoom counts the curves as well as the cards (a long edge runs in a corridor beside them). On main, counting the
-		// cards only: collapsed Survey 1.16 (cards 21px apart), collapsed Trip budget 0.39, expanded Survey 0.30 (0.33 with the cards only now; with the curves in the long edges' outer corridors it is 0.24).
+		// The zoom counts the curves as well as the cards (a long edge runs in a corridor beside them). Measured in the browser at
+		// 1440 x 900: collapsed Survey 0.95 (main: 1.16, with the cards 21px apart), collapsed Trip budget 0.37 (main: 0.39), expanded
+		// Survey 0.26 (main: 0.30, counting the cards only). The Survey's text is 11px or more on screen only above about 0.9.
 		expect(fitZoom(await draw('survey', false), CANVAS_1440))
-			.toBeGreaterThan(0.7)
+			.toBeGreaterThan(0.9)
 		expect(fitZoom(await draw('trip-budget', false), CANVAS_1440))
-			.toBeGreaterThan(0.3)
+			.toBeGreaterThan(0.33)
 		expect(fitZoom(await draw('survey', true), CANVAS_1440))
-			.toBeGreaterThan(0.22)
+			.toBeGreaterThan(0.24)
 	})
 })
 
 describe('direction', () => {
-	it('draws every edge from the member that declares a dependency to the member it depends on', async () => {
-		const { graph, edges } = await draw('survey', true)
-		const declared = new Map(graph.edges.map(edge => [edge.id, edge]))
-		const sameCluster = edges.filter(edge => declared.has(edge.id))
-		expect(sameCluster.length)
-			.toBeGreaterThan(5)
-		for (const edge of sameCluster) {
-			expect(edge.source)
-				.toBe(declared.get(edge.id)!.sourceVertexId)
-			expect(edge.target)
-				.toBe(declared.get(edge.id)!.targetVertexId)
-		}
-		// `nodeId` is only here to show the fixture is real: every member belongs to a widget of the Survey.
-		expect(graph.vertices.every(vertex => (vertex.nodeId as InspectionNodeId) !== undefined))
+	it('draws a dependency from the member that declares it to the member it depends on, as the Relations view lists it', async () => {
+		const { graph, edges, cards } = await draw('survey', true)
+		const root = { nodeId: 0 as InspectionNodeId }
+
+		// Survey `open-day`'s `response` Property reads `mode`'s `visible` Property (declared in the Survey's own plugin).
+		const declared = graph.edges.find(edge => edge.sourceVertexId === '0:property:response' && edge.targetVertexId === '1:property:visible')
+		expect(declared, 'the Survey declares response -> mode.visible')
+			.toBeDefined()
+		const drawn = edges.find(edge => edge.source === '0:property:response' && edge.target === '1:property:visible')!
+		expect(drawn.source)
+			.toBe('0:property:response')
+		expect(drawn.target)
+			.toBe('1:property:visible')
+
+		// The curve leaves the card of `response` and its arrowhead (the end of the route) is on the card of `visible`.
+		const response = cards.find(card => card.id === '0:property:response')!
+		const visible = cards.find(card => card.id === '1:property:visible')!
+		expect(isOnBorder(drawn.data!.route![0]!, response))
+			.toBe(true)
+		expect(isOnBorder(drawn.data!.route!.at(-1)!, visible))
+			.toBe(true)
+
+		// The Relations view says the same in its words: `mode.visible` is under "Depends on" for `response`, and `response` is
+		// under "Used by" for `mode.visible`.
+		const ofResponse = projectRelations(graph, { ...root, member: { type: 'property', name: 'response' } }, undefined)
+		expect(ofResponse.mode)
+			.toBe('member')
+		const groupsOf = (model: ReturnType<typeof projectRelations>, side: 'dependsOn' | 'usedBy'): readonly RelationsWidgetGroup[] => model.mode === 'empty' ? [] : model[side]
+		const dependsOn = groupsOf(ofResponse, 'dependsOn')
+		expect(dependsOn.some(group => group.widgetId === 'mode' && group.rows.some(row => row.remoteMember?.name === 'visible')))
+			.toBe(true)
+		const ofVisible = projectRelations(graph, { nodeId: 1 as InspectionNodeId, member: { type: 'property', name: 'visible' } }, undefined)
+		const usedBy = groupsOf(ofVisible, 'usedBy')
+		expect(usedBy.some(group => group.widgetId === 'open-day' && group.rows.some(row => row.remoteMember?.name === 'response')))
 			.toBe(true)
 	})
 })

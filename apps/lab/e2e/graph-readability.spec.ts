@@ -14,14 +14,20 @@ interface Point { x: number, y: number }
 interface RenderedGraph {
 	/** Screen pixels per flow unit. */
 	zoom: number
+	/** The font size of the widget type on a collapsed card, on screen. */
+	cardTitlePx: number | null
 	cards: { id: string, rect: Rect }[]
 	edges: {
 		id: string
 		d: string
 		classes: string
-		marker: { id: string, fill: string } | null
+		/** `markerLength` is the arrowhead's length in screen px as drawn at the current zoom. */
+		marker: { id: string, fill: string, markerLength: number } | null
 		points: Point[]
-		relationTag: string | null
+		opacity: number
+		stroke: string
+		/** The focus tag: its text, its box on screen, and its font size on screen. */
+		relationTag: { text: string, rect: Rect, fontPx: number } | null
 	}[]
 }
 
@@ -76,16 +82,28 @@ async function readGraph(page: Page): Promise<RenderedGraph> {
 			const markerUrl = /^url\(["']?#(.*?)["']?\)$/.exec(path.getAttribute('marker-end') ?? '')
 			const marker = markerUrl === null ? null : document.getElementById(markerUrl[1]!)
 			const markerShape = marker?.querySelector('polyline, path')
+			const scaleNow = scale === null ? 1 : Number(scale[1])
+			const tag = edge.querySelector('.graph-edge-relation')
+			const tagRect = tag?.getBoundingClientRect()
+			const tagText = tag?.querySelector('.vue-flow__edge-text')
 			return {
 				id: edge.dataset.id!,
 				d: path.getAttribute('d') ?? '',
 				classes: edge.getAttribute('class') ?? '',
-				marker: markerUrl === null || markerShape === null || markerShape === undefined ? null : { id: markerUrl[1]!, fill: getComputedStyle(markerShape).fill },
+				marker: markerUrl === null || markerShape === null || markerShape === undefined
+					? null
+					: { id: markerUrl[1]!, fill: getComputedStyle(markerShape).fill, markerLength: Number(marker!.getAttribute('markerWidth')) * scaleNow },
 				points,
-				relationTag: edge.querySelector('.graph-edge-relation')?.textContent?.trim() ?? null,
+				opacity: Number(getComputedStyle(edge).opacity),
+				stroke: getComputedStyle(path).stroke,
+				relationTag: tag === null || tagRect === undefined || tagText === null || tagText === undefined
+					? null
+					: { text: tagText.textContent?.trim() ?? '', rect: { x: tagRect.x, y: tagRect.y, width: tagRect.width, height: tagRect.height }, fontPx: Number.parseFloat(getComputedStyle(tagText).fontSize) * scaleNow },
 			}
 		})
-		return { zoom: scale === null ? 1 : Number(scale[1]), cards, edges }
+		const title = document.querySelector('.graph-cluster-type')
+		const zoom = scale === null ? 1 : Number(scale[1])
+		return { zoom, cardTitlePx: title === null ? null : Number.parseFloat(getComputedStyle(title).fontSize) * zoom, cards, edges }
 	})
 }
 
@@ -144,6 +162,9 @@ for (const showcase of ['survey', 'trip-budget'] as const) {
 			expect(edge.marker, `${edge.id} has an arrowhead`)
 				.not
 				.toBeNull()
+			// The arrowhead is legible at the default Fit: at least 10px long on screen (a quarter of its nominal size before the fix).
+			expect(edge.marker!.markerLength, `${edge.id} arrowhead length on screen`)
+				.toBeGreaterThanOrEqual(10)
 
 			// Never hidden behind a card that is not one of its two ends.
 			for (const card of cards) {
@@ -170,13 +191,36 @@ test('survey expanded Graph: Bezier edges, each with an arrowhead', async ({ pag
 	}
 })
 
-test('focusing a widget tags the edges that leave it "Depends on" and the edges that arrive at it "Used by"', async ({ page }) => {
+test('the default Survey Fit at 1440 x 900 keeps the card text at 11px or more', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'survey')
+	const { zoom, cardTitlePx } = await readGraph(page)
+	expect(zoom)
+		.toBeGreaterThanOrEqual(0.9)
+	expect(cardTitlePx!)
+		.toBeGreaterThanOrEqual(10.9)
+})
+
+test('focusing a widget fades the other edges, colours its own, and tags each in the Relations view\'s words next to the focused card', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
 	await openGraph(page, 'survey')
 	await page.locator('.graph-cluster-identity--collapsed')
 		.filter({ hasText: '#mode' })
 		.click()
 	await expect(page.locator('.graph-node--focused'))
 		.toContainText('#mode')
+	// The edges fade with a transition: wait until the unrelated ones have.
+	await expect(page.locator('.graph-edge--dimmed'))
+		.not
+		.toHaveCount(0)
+	await expect(async () => {
+		const { edges } = await readGraph(page)
+		expect(edges.filter(edge => edge.opacity < 0.35).length)
+			.toBeGreaterThan(0)
+		expect(edges.filter(edge => edge.opacity > 0.9 && edge.opacity < 1).length)
+			.toBe(0)
+	})
+		.toPass()
 
 	const { cards, edges } = await readGraph(page)
 	const focused = cards.find(card => card.id === 'cluster:1')!.rect
@@ -187,19 +231,79 @@ test('focusing a widget tags the edges that leave it "Depends on" and the edges 
 	expect(arriving.length)
 		.toBeGreaterThan(0)
 
-	// The tag says which, in the words of the Relations view, and agrees with where the arrowhead is.
-	for (const edge of leaving) {
-		expect(edge.relationTag)
-			.toBe('Depends on')
-		expect(onBorder(focused, edge.points[0]!, 3), `${edge.id} leaves the focused widget`)
-			.toBe(true)
+	// Every edge that does not touch #mode (cluster:1) is faded; every one that does is solid, in the accent colour, and tagged.
+	const touches = (edge: { id: string }): boolean => (JSON.parse(edge.id.slice('edge:'.length)) as string[]).includes('cluster:1')
+	const unrelated = edges.filter(edge => !touches(edge))
+	expect(unrelated.length)
+		.toBeGreaterThan(0)
+	for (const edge of unrelated) {
+		expect(edge.classes, edge.id)
+			.toContain('graph-edge--dimmed')
+		expect(edge.opacity, edge.id)
+			.toBeLessThan(0.35)
 	}
-	for (const edge of arriving) {
-		expect(edge.relationTag)
-			.toBe('Used by')
-		expect(onBorder(focused, edge.points.at(-1)!, 3), `${edge.id} arrives at the focused widget`)
-			.toBe(true)
+	const accent = await page.evaluate(() => {
+		const probe = document.createElement('span')
+		probe.style.color = 'var(--lab-color-accent)'
+		document.body.append(probe)
+		const colour = getComputedStyle(probe).color
+		probe.remove()
+		return colour
+	})
+	const related = edges.filter(touches)
+	expect(related.length)
+		.toBe(leaving.length + arriving.length)
+	for (const edge of related) {
+		expect(edge.opacity, edge.id)
+			.toBe(1)
+		expect(edge.stroke, edge.id)
+			.toBe(accent)
+		expect(edge.marker!.fill, edge.id)
+			.toBe(accent)
 	}
+
+	// The tag says which, in the words of the Relations view, with the other end named so it cannot read backwards, and agrees
+	// with where the arrowhead is. It sits on its edge in the half nearer the focused card, covers neither a card nor another tag
+	// (a tag that does not fit is left out), and is 11px or more on screen.
+	const names: Record<string, string> = { 'cluster:0': '#open-day', 'cluster:2': '#guests', 'cluster:3': '#sessions', 'cluster:4': '#phone' }
+	const tagged = related.filter(edge => edge.relationTag !== null)
+	// 4 of the 5 edges around #mode have a tag at the default Fit of the Survey (the fifth has no room left between the cards).
+	expect(tagged.length)
+		.toBeGreaterThanOrEqual(4)
+	const intersect = (a: Rect, b: Rect): boolean => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+	for (const edge of tagged) {
+		const [source, target] = JSON.parse(edge.id.slice('edge:'.length)) as [string, string]
+		const leavesFocus = source === 'cluster:1'
+		const other = leavesFocus ? target : source
+		expect(edge.relationTag!.text, edge.id)
+			.toBe(`${leavesFocus ? 'Depends on' : 'Used by'} ${names[other]}`)
+		const near = leavesFocus ? edge.points[0]! : edge.points.at(-1)!
+		const far = leavesFocus ? edge.points.at(-1)! : edge.points[0]!
+		expect(onBorder(focused, near, 3), `${edge.id} touches the focused widget at its ${leavesFocus ? 'start' : 'end'}`)
+			.toBe(true)
+		const rect = edge.relationTag!.rect
+		const centre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+		expect(Math.hypot(centre.x - near.x, centre.y - near.y), `${edge.id} tag is nearer the focused card than the other end`)
+			.toBeLessThan(Math.hypot(centre.x - far.x, centre.y - far.y))
+		expect(edge.relationTag!.fontPx, `${edge.id} tag text on screen`)
+			.toBeGreaterThanOrEqual(10.9)
+		for (const card of cards) {
+			expect(intersect(rect, card.rect), `${edge.id} tag covers ${card.id}`)
+				.toBe(false)
+		}
+		for (const otherEdge of tagged) {
+			if (otherEdge !== edge) {
+				expect(intersect(rect, otherEdge.relationTag!.rect), `${edge.id} tag covers the tag of ${otherEdge.id}`)
+					.toBe(false)
+			}
+		}
+	}
+	expect(tagged.filter(edge => edge.classes.includes('graph-edge--depends-on'))
+		.every(edge => edge.relationTag!.text.startsWith('Depends on')))
+		.toBe(true)
+	expect(tagged.filter(edge => edge.classes.includes('graph-edge--used-by'))
+		.every(edge => edge.relationTag!.text.startsWith('Used by')))
+		.toBe(true)
 })
 
 test('the key and the Legend state the direction convention', async ({ page }) => {
@@ -231,14 +335,16 @@ for (const theme of ['light', 'dark'] as const) {
 		const reads = edges.find(edge => edge.classes.includes('graph-edge--reads'))!
 		const tokenColour = await page.evaluate(() => {
 			const probe = document.createElement('span')
-			probe.style.color = 'var(--lab-color-text-muted)'
+			probe.style.color = 'color-mix(in srgb, var(--lab-color-text-muted) 82%, var(--lab-color-surface-alt))'
 			document.body.append(probe)
 			const colour = getComputedStyle(probe).color
 			probe.remove()
 			return colour
 		})
-		// The marker's fill is the Lab's muted text token as the current theme defines it.
+		// The marker's fill is the stroke it ends, in the current theme's tokens (a mix of the muted text colour and the canvas).
 		expect(reads.marker?.fill)
 			.toBe(tokenColour)
+		expect(reads.marker?.fill)
+			.toBe(reads.stroke)
 	})
 }

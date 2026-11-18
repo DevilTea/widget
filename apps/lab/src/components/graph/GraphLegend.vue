@@ -19,8 +19,8 @@
  *   stroke treatment (thin solid / stronger solid / dashed). Cluster-level aggregate edges show only a
  *   compact dependency count; exact semantic operations stay available in edge details.
  * - Every edge ends in an arrowhead on its target: `A → B` means "A depends on B" (the Relations view lists B under "Depends on"
- *   for A and A under "Used by" for B). While a widget or member is focused, the edges around it are tagged with those two
- *   Relations words ("Depends on" leaves it, "Used by" arrives at it).
+ *   for A and A under "Used by" for B). While a widget or member is focused, its edges turn to the accent colour and are tagged
+ *   with those two Relations words and the other end ("Depends on #x" leaves it, "Used by #x" arrives at it); the other edges fade.
  * - Stub nodes (`projectSemanticGraph()`'s `absent`/`invalid` dependency statuses, never a fabricated
  *   resolved edge) render as dashed pills: gray for `absent` (hidden unless "Show absent references" is
  *   on), red for `invalid` (always shown, per the panel's own filter contract).
@@ -132,7 +132,7 @@ function toggle(): void {
 					{{ i18n.t('The arrowhead is on the target: A → B means A depends on B. In Relations, B is listed under "Depends on" for A, and A under "Used by" for B.') }}
 				</p>
 				<p class="m-[4px_0_0]">
-					{{ i18n.t('While a widget or member is selected, the edges around it are tagged "Depends on" (they leave it) or "Used by" (they arrive at it).') }}
+					{{ i18n.t('While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it); every other edge fades.') }}
 				</p>
 				<p class="m-[4px_0_0] text-lab-text-muted italic">
 					{{ i18n.t('Line style distinguishes edge kinds; aggregate labels show dependency counts, while details preserve exact operations.') }}

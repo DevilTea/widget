@@ -9,11 +9,12 @@
 
 import type { BlueprintDependencyReference } from '@deviltea/widget-core'
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
-import type { EdgeMarker, MarkerType, Edge as VueFlowEdge, Node as VueFlowNode } from '@vue-flow/core'
+import type { Edge as VueFlowEdge, Node as VueFlowNode } from '@vue-flow/core'
 import type { InspectorFocus } from '../lab/focus'
 import type { GraphEdgeRoute } from './edge-geometry'
 import type { LayoutedGraph } from './layout'
 import type { GraphEdge, GraphEdgeOperation, GraphStubStatus, GraphVertexKind, SemanticGraph } from './types'
+import type { GraphArrowKind } from './zoom-scale'
 import { aggregateEdgeId } from './layout'
 
 export type GraphNodeKind = 'cluster' | GraphVertexKind | 'stub'
@@ -52,38 +53,33 @@ export type GraphEdgeRelation = 'depends-on' | 'used-by'
 /** The Vue Flow edge type every Graph edge uses: `GraphCanvas.vue` registers its Bezier edge under this name. */
 export const GRAPH_EDGE_TYPE = 'dependency'
 
-/** The size of every arrowhead in canvas px. It does not grow with the stroke (a highlighted edge is heavier), so the tip stays the same. */
-const ARROW_SIZE = 28
-
 /**
- * The arrowhead of an edge. An edge always runs from the declaring owner to the member it declared a dependency on
- * (`projection.ts`), and the arrowhead is on the target: **the arrow points at what the owner depends on**. The colour
- * is a Lab token expression, so the same marker follows the light and the dark theme; it matches the stroke it ends.
+ * The colour family of the arrowhead (and so of the stroke it ends, `GraphCanvas.vue` styles both by this name). An edge
+ * runs from the declaring owner to the member it declared a dependency on (`projection.ts`), and the arrowhead is on the
+ * target: **the arrow points at what the owner depends on**. An edge around the focused widget or member is `accent`,
+ * an invalid cycle or an invalid stub `danger`, otherwise the operation decides.
  */
-function arrowFor(color: string): EdgeMarker {
-	return { type: 'arrowclosed' as MarkerType, color, width: ARROW_SIZE, height: ARROW_SIZE, strokeWidth: 1.5, markerUnits: 'userSpaceOnUse' }
-}
-
-const MUTED_ARROW = 'var(--lab-color-text-muted)'
-const WRITES_ARROW = 'color-mix(in srgb, var(--lab-color-warning) 76%, var(--lab-color-text-muted))'
-const INVOKES_ARROW = 'color-mix(in srgb, var(--lab-color-accent) 74%, var(--lab-color-text-muted))'
-const DANGER_ARROW = 'var(--lab-color-danger)'
-
-function arrowColor(operation: GraphEdgeOperation, invalidCycle: boolean): string {
+function arrowKindOf(operation: GraphEdgeOperation, invalidCycle: boolean, relation: GraphEdgeRelation | undefined): GraphArrowKind {
 	if (invalidCycle)
-		return DANGER_ARROW
+		return 'danger'
+	if (relation !== undefined)
+		return 'accent'
 	if (operation === 'writes')
-		return WRITES_ARROW
+		return 'writes'
 	if (operation === 'invokes')
-		return INVOKES_ARROW
-	return MUTED_ARROW
+		return 'invokes'
+	return 'muted'
 }
 
 export interface GraphEdgeData {
 	/** ELK's route points for this edge (canvas coordinates); the edge is drawn as Bezier curves through them. */
 	readonly route?: GraphEdgeRoute
+	/** The colour family of the arrowhead on the edge's target; the canvas picks the marker of that family and zoom. */
+	readonly arrow: GraphArrowKind
 	/** What the edge is to the focused widget or member; set only on a highlighted edge. */
 	readonly relation?: GraphEdgeRelation
+	/** The other end in words (`#sessions`, `#mode.value`, `invalid`): what the focus depends on, or what uses it. Set with `relation`. */
+	readonly otherEnd?: string
 	readonly operation: GraphEdgeOperation
 	/** Dependency-container path (diagnostic #13 Phase 5: belongs in edge details, never on the canvas). */
 	readonly path: readonly (string | number)[]
@@ -171,118 +167,81 @@ export function toVueFlow(
 		}
 	}
 
-	// Compute related nodes and edges for focus deemphasis
+	// What the focus is, as semantic vertices: the member, or every member of the focused widget. An edge is related when
+	// it touches one; everything else is dimmed. Relatedness is only ever decided against this set.
+	const focusVertexIds = new Set<string>()
+	if (activeMemberKey) {
+		focusVertexIds.add(activeMemberKey)
+	}
+	else if (activeClusterId) {
+		for (const vertex of graph.vertices) {
+			if (vertex.clusterId === activeClusterId)
+				focusVertexIds.add(vertex.id)
+		}
+	}
+	const touchesFocus = (edge: GraphEdge): boolean => focusVertexIds.has(edge.sourceVertexId) || focusVertexIds.has(edge.targetVertexId)
+
 	const relatedNodeIds = new Set<string>()
 	const relatedEdgeIds = new Set<string>()
+	const markRelatedEnd = (id: string): void => {
+		relatedNodeIds.add(id)
+		const cluster = clusterIdByVertex.get(id)
+		if (cluster)
+			relatedNodeIds.add(cluster)
+	}
 
 	if (activeMemberKey) {
-		relatedNodeIds.add(activeMemberKey)
-		const ownerCluster = clusterIdByVertex.get(activeMemberKey)
-		if (ownerCluster)
-			relatedNodeIds.add(ownerCluster)
-
-		for (const stub of graph.stubs) {
-			if (stub.ownerVertexId === activeMemberKey) {
-				relatedNodeIds.add(stub.id)
-				relatedEdgeIds.add(`${stub.id}-edge`)
-			}
-		}
-
-		for (const edge of sameClusterEdges) {
-			if (edge.sourceVertexId === activeMemberKey || edge.targetVertexId === activeMemberKey) {
-				relatedEdgeIds.add(edge.id)
-				relatedNodeIds.add(edge.sourceVertexId)
-				relatedNodeIds.add(edge.targetVertexId)
-				const sourceCluster = clusterIdByVertex.get(edge.sourceVertexId)
-				if (sourceCluster)
-					relatedNodeIds.add(sourceCluster)
-				const targetCluster = clusterIdByVertex.get(edge.targetVertexId)
-				if (targetCluster)
-					relatedNodeIds.add(targetCluster)
-			}
-		}
-
-		for (const group of crossClusterMap.values()) {
-			const { effectiveSource, effectiveTarget, edgeId } = group
-			if (effectiveSource === activeMemberKey || effectiveTarget === activeMemberKey) {
-				relatedEdgeIds.add(edgeId)
-				relatedNodeIds.add(effectiveSource)
-				relatedNodeIds.add(effectiveTarget)
-				const sourceCluster = clusterIdByVertex.get(effectiveSource)
-				if (sourceCluster)
-					relatedNodeIds.add(sourceCluster)
-				const targetCluster = clusterIdByVertex.get(effectiveTarget)
-				if (targetCluster)
-					relatedNodeIds.add(targetCluster)
-			}
-		}
+		markRelatedEnd(activeMemberKey)
 	}
 	else if (activeClusterId) {
 		relatedNodeIds.add(activeClusterId)
-		for (const v of graph.vertices) {
-			if (v.clusterId === activeClusterId)
-				relatedNodeIds.add(v.id)
+		for (const id of focusVertexIds)
+			relatedNodeIds.add(id)
+		for (const stub of graph.stubs) {
+			if (clusterIdByVertex.get(stub.ownerVertexId) === activeClusterId)
+				relatedNodeIds.add(stub.id)
 		}
-		for (const s of graph.stubs) {
-			if (clusterIdByVertex.get(s.ownerVertexId) === activeClusterId) {
-				relatedNodeIds.add(s.id)
-				relatedEdgeIds.add(`${s.id}-edge`)
-			}
+	}
+	for (const stub of graph.stubs) {
+		if (focusVertexIds.has(stub.ownerVertexId)) {
+			relatedNodeIds.add(stub.id)
+			relatedEdgeIds.add(`${stub.id}-edge`)
 		}
-		for (const edge of sameClusterEdges) {
-			if (clusterIdByVertex.get(edge.sourceVertexId) === activeClusterId) {
-				relatedEdgeIds.add(edge.id)
-				relatedNodeIds.add(edge.sourceVertexId)
-				relatedNodeIds.add(edge.targetVertexId)
-			}
+	}
+	for (const edge of sameClusterEdges) {
+		if (touchesFocus(edge)) {
+			relatedEdgeIds.add(edge.id)
+			markRelatedEnd(edge.sourceVertexId)
+			markRelatedEnd(edge.targetVertexId)
 		}
-		for (const group of crossClusterMap.values()) {
-			const { effectiveSource, effectiveTarget, edgeId } = group
-			const sourceMatch = effectiveSource === activeClusterId || relatedNodeIds.has(effectiveSource)
-			const targetMatch = effectiveTarget === activeClusterId || relatedNodeIds.has(effectiveTarget)
-			if (sourceMatch || targetMatch) {
-				relatedEdgeIds.add(edgeId)
-				relatedNodeIds.add(effectiveSource)
-				relatedNodeIds.add(effectiveTarget)
-				const sourceCluster = clusterIdByVertex.get(effectiveSource)
-				if (sourceCluster)
-					relatedNodeIds.add(sourceCluster)
-				const targetCluster = clusterIdByVertex.get(effectiveTarget)
-				if (targetCluster)
-					relatedNodeIds.add(targetCluster)
-			}
+	}
+	for (const group of crossClusterMap.values()) {
+		if (group.edges.some(touchesFocus)) {
+			relatedEdgeIds.add(group.edgeId)
+			markRelatedEnd(group.effectiveSource)
+			markRelatedEnd(group.effectiveTarget)
 		}
 	}
 
-	// What the focus is: the member, or a widget with all its members and stubs. An edge that leaves it is something the
-	// focus depends on, one that arrives at it is something that uses the focus.
-	const focusIds = new Set<string>()
-	if (activeMemberKey) {
-		focusIds.add(activeMemberKey)
-		for (const stub of graph.stubs) {
-			if (stub.ownerVertexId === activeMemberKey)
-				focusIds.add(stub.id)
-		}
+	// What a related edge is to the focus, in the words of the Relations view: it leaves the focus (the focus depends on the
+	// other end) or arrives at it (the other end uses the focus). An edge inside the focus has neither.
+	const clusterById = new Map(graph.clusters.map(cluster => [cluster.id, cluster] as const))
+	const vertexById = new Map(graph.vertices.map(vertex => [vertex.id, vertex] as const))
+	const nameOf = (id: string): string => {
+		const cluster = clusterById.get(id)
+		if (cluster)
+			return `#${cluster.widgetId}`
+		const vertex = vertexById.get(id)
+		return vertex ? `#${clusterById.get(vertex.clusterId)?.widgetId ?? ''}.${vertex.name}` : id
 	}
-	else if (activeClusterId) {
-		focusIds.add(activeClusterId)
-		for (const vertex of graph.vertices) {
-			if (vertex.clusterId === activeClusterId)
-				focusIds.add(vertex.id)
-		}
-		for (const stub of graph.stubs) {
-			if (clusterIdByVertex.get(stub.ownerVertexId) === activeClusterId)
-				focusIds.add(stub.id)
-		}
-	}
-	const relationOf = (source: string, target: string, isRelated: boolean): GraphEdgeRelation | undefined => {
-		if (!hasActiveInspection || !isRelated)
+	const relationOf = (edges: readonly GraphEdge[], effectiveSource: string, effectiveTarget: string): { relation: GraphEdgeRelation, otherEnd: string } | undefined => {
+		if (!hasActiveInspection)
 			return undefined
-		const fromFocus = focusIds.has(source)
-		const toFocus = focusIds.has(target)
-		if (fromFocus === toFocus)
+		const leaving = edges.some(edge => focusVertexIds.has(edge.sourceVertexId) && !focusVertexIds.has(edge.targetVertexId))
+		const arriving = edges.some(edge => focusVertexIds.has(edge.targetVertexId) && !focusVertexIds.has(edge.sourceVertexId))
+		if (leaving === arriving)
 			return undefined
-		return fromFocus ? 'depends-on' : 'used-by'
+		return leaving ? { relation: 'depends-on', otherEnd: nameOf(effectiveTarget) } : { relation: 'used-by', otherEnd: nameOf(effectiveSource) }
 	}
 	const relationClass = (relation: GraphEdgeRelation | undefined): string => relation === undefined ? '' : ` graph-edge--${relation}`
 
@@ -400,7 +359,8 @@ export function toVueFlow(
 		if (clusterId === undefined || !expandedClusterIds.has(clusterId))
 			continue
 		const isDimmed = hasActiveInspection && !relatedEdgeIds.has(edge.id)
-		const relation = relationOf(edge.sourceVertexId, edge.targetVertexId, !isDimmed)
+		const related = relationOf([edge], edge.sourceVertexId, edge.targetVertexId)
+		const relation = related?.relation
 
 		edges.push({
 			id: edge.id,
@@ -409,11 +369,10 @@ export function toVueFlow(
 			target: edge.targetVertexId,
 			targetHandle: 't',
 			type: GRAPH_EDGE_TYPE,
-			markerEnd: arrowFor(arrowColor(edge.operation, edge.invalidCycle)),
 			label: edge.operation,
 			ariaLabel: edge.operation,
 			class: `graph-edge graph-edge--${edge.operation}${edge.invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}${relationClass(relation)}`,
-			data: { operation: edge.operation, path: edge.path, reference: edge.reference, invalidCycle: edge.invalidCycle, isDimmed, route: layout.edges?.get(edge.id), relation },
+			data: { operation: edge.operation, path: edge.path, reference: edge.reference, invalidCycle: edge.invalidCycle, isDimmed, route: layout.edges?.get(edge.id), arrow: arrowKindOf(edge.operation, edge.invalidCycle, relation), relation, otherEnd: related?.otherEnd },
 			selectable: true,
 			updatable: false,
 			focusable: true,
@@ -424,7 +383,8 @@ export function toVueFlow(
 	for (const group of crossClusterMap.values()) {
 		const { effectiveSource, effectiveTarget, edgeId, edges: semanticEdges } = group
 		const isDimmed = hasActiveInspection && !relatedEdgeIds.has(edgeId)
-		const relation = relationOf(effectiveSource, effectiveTarget, !isDimmed)
+		const related = relationOf(semanticEdges, effectiveSource, effectiveTarget)
+		const relation = related?.relation
 		const primaryOp = semanticEdges[0]!.operation
 		const invalidCycle = semanticEdges.some(e => e.invalidCycle)
 		const isClusterLevel = effectiveSource.startsWith('cluster:') || effectiveTarget.startsWith('cluster:')
@@ -440,7 +400,6 @@ export function toVueFlow(
 			target: effectiveTarget,
 			targetHandle: 't',
 			type: GRAPH_EDGE_TYPE,
-			markerEnd: arrowFor(arrowColor(primaryOp, invalidCycle)),
 			label,
 			ariaLabel: label,
 			class: `graph-edge graph-edge--${primaryOp} graph-edge--aggregate${invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}${relationClass(relation)}`,
@@ -453,7 +412,9 @@ export function toVueFlow(
 				semanticEdges,
 				isDimmed,
 				route: layout.edges?.get(edgeId),
+				arrow: arrowKindOf(primaryOp, invalidCycle, relation),
 				relation,
+				otherEnd: related?.otherEnd,
 			},
 			selectable: true,
 			updatable: false,
@@ -468,7 +429,10 @@ export function toVueFlow(
 			continue
 		const stubEdgeId = `${stub.id}-edge`
 		const isDimmed = hasActiveInspection && !relatedEdgeIds.has(stubEdgeId)
-		const relation = relationOf(stub.ownerVertexId, stub.id, !isDimmed)
+		const related = relatedEdgeIds.has(stubEdgeId) && focusVertexIds.has(stub.ownerVertexId)
+			? { relation: 'depends-on' as const, otherEnd: stubLabel(stub.status) }
+			: undefined
+		const relation = related?.relation
 
 		edges.push({
 			id: stubEdgeId,
@@ -477,11 +441,10 @@ export function toVueFlow(
 			target: stub.id,
 			targetHandle: 't',
 			type: GRAPH_EDGE_TYPE,
-			markerEnd: arrowFor(stub.status === 'invalid' ? DANGER_ARROW : MUTED_ARROW),
 			label: stubLabel(stub.status),
 			ariaLabel: stubLabel(stub.status),
 			class: `graph-edge graph-edge--stub graph-edge--${stub.status}${isDimmed ? ' graph-edge--dimmed' : ''}${relationClass(relation)}`,
-			data: { operation: stub.operation, path: stub.path, reference: stub.reference, stubStatus: stub.status, isDimmed, route: layout.edges?.get(stubEdgeId), relation },
+			data: { operation: stub.operation, path: stub.path, reference: stub.reference, stubStatus: stub.status, isDimmed, route: layout.edges?.get(stubEdgeId), arrow: stub.status === 'invalid' ? 'danger' : arrowKindOf(stub.operation, false, relation), relation, otherEnd: related?.otherEnd },
 			selectable: true,
 			updatable: false,
 			focusable: true,

@@ -19,6 +19,7 @@ const validSource = sandboxPresets.find(preset => preset.id === 'valid-interacti
 const invalidSource = sandboxPresets.find(preset => preset.id === 'invalid-semantic')!.sourceText
 
 const fakeEdge: GraphEdgeData = {
+	arrow: 'muted',
 	operation: 'reads',
 	path: ['pricing', 'base'],
 	reference: {

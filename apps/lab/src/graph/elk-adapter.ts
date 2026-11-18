@@ -27,15 +27,16 @@ export const COLLAPSED_CLUSTER_HEIGHT = 88
 
 /**
  * Spacing is deliberately generous (issue #230, "the Graph is hard to read"): cards need clear air so the curves that
- * enter and leave them stay apart, and an arrowhead needs a few lines of curve before it reaches its card. The values
- * are the smallest that keep the cards visibly apart and a fitted collapsed Survey (5 widgets) about 0.8 zoom and the
- * collapsed Trip budget (12 widgets, 70 dependency pairs) about 0.45; larger values only shrink the Fit zoom.
+ * enter and leave them stay apart, and an arrowhead needs a few lines of curve before it reaches its card. Every pixel
+ * costs Fit zoom, and below about 0.9 the default Survey's card text is under 11px on screen: with 128 between layers the
+ * collapsed Survey fitted at 0.82 (9.8px titles), with 88 it fits at 0.95 (11.4px) while `nodeNode` stays 72 so the cards
+ * are still far apart. The collapsed Trip budget (12 widgets, 70 dependency pairs) fits at about 0.37 either way.
  */
 export const LAYOUT_SPACING = {
 	/** Minimum clear gap between two cards of the same layer (`elk.spacing.nodeNode`). */
 	nodeNode: 72,
 	/** Clear gap between two layers: the room an edge has to bend and for its arrowhead (`nodeNodeBetweenLayers`). */
-	betweenLayers: 128,
+	betweenLayers: 88,
 	/** Clear gap between a card and an edge that passes it (`edgeNode`, `edgeNodeBetweenLayers`). */
 	edgeNode: 40,
 	/** Clear gap between two edges that run side by side (`edgeEdge`, `edgeEdgeBetweenLayers`). */

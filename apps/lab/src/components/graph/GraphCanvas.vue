@@ -17,9 +17,12 @@
 import type { NodeMouseEvent } from '@vue-flow/core'
 import type { GraphFlowEdge, GraphFlowNode } from '../../graph/vue-flow'
 import { Handle, Position, useVueFlow, VueFlow } from '@vue-flow/core'
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
+import { placeTags } from '../../graph/tag-placement'
 import { GRAPH_EDGE_TYPE } from '../../graph/vue-flow'
+import { ARROW_KINDS, arrowMarkerId, ZOOM_BUCKETS, zoomBucket } from '../../graph/zoom-scale'
+import { GraphTagsKey } from './graph-tags'
 import GraphDependencyEdge from './GraphDependencyEdge.vue'
 import '@vue-flow/core/dist/style.css'
 
@@ -44,7 +47,31 @@ const FIT_OPTIONS = { padding: 0.08 } as const
 
 const i18n = useLabI18n()
 const vueFlowContainer = ref<HTMLElement | null>(null)
-const { fitBounds, fitView, getNodes, onNodesChange, onNodesInitialized, zoomIn, zoomOut } = useVueFlow()
+const { fitBounds, fitView, getNodes, onNodesChange, onNodesInitialized, viewport, zoomIn, zoomOut } = useVueFlow()
+
+/**
+ * The tags of the edges around the focus ("Depends on #sessions", "Used by #phone"), placed together so that none covers a card
+ * or another tag; one that does not fit is left out (see `graph/tag-placement.ts`). They are re-placed only when the graph, the
+ * focus or the zoom bucket changes, not on every wheel tick, and not at all below the zoom where text cannot be legible.
+ */
+const tagPlacements = computed(() => {
+	const bucket = zoomBucket(viewport.value.zoom)
+	const tags = props.edges
+		.filter(edge => edge.data?.relation !== undefined && edge.data.route !== undefined)
+		.map(edge => ({
+			id: edge.id,
+			route: edge.data!.route!,
+			relation: edge.data!.relation!,
+			text: i18n.t(edge.data!.relation === 'depends-on' ? 'Depends on {name}' : 'Used by {name}', { name: edge.data!.otherEnd ?? '' }),
+		}))
+	if (!bucket.showTags || tags.length === 0)
+		return new Map()
+	const cards = getNodes.value
+		.filter(node => !(node.type === 'cluster' && node.data.isExpanded === true))
+		.map(node => ({ x: node.computedPosition.x, y: node.computedPosition.y, width: node.dimensions.width, height: node.dimensions.height }))
+	return placeTags(tags, cards, bucket.font)
+})
+provide(GraphTagsKey, tagPlacements)
 
 let fitted = false
 let resizeObserver: ResizeObserver | null = null
@@ -196,6 +223,43 @@ function memberKindShort(kind: string): string {
 		ref="vueFlowContainer"
 		class="graph-canvas-surface w-full h-full relative"
 	>
+		<!--
+			The arrowheads: one marker per colour family and zoom bucket (graph/zoom-scale.ts), a triangle whose tip is the end of the
+			edge. Vue Flow's own `arrowclosed` marker draws at a quarter of its nominal size (a 7 x 11px triangle at 28), so these are
+			defined here, and `GraphDependencyEdge.vue` points each edge at the one for its zoom.
+		-->
+		<svg
+			class="graph-arrow-defs"
+			width="0"
+			height="0"
+			aria-hidden="true"
+			focusable="false"
+		>
+			<defs>
+				<template
+					v-for="bucket in ZOOM_BUCKETS"
+					:key="bucket.min"
+				>
+					<marker
+						v-for="kind in ARROW_KINDS"
+						:id="arrowMarkerId(kind, bucket)"
+						:key="kind"
+						viewBox="0 0 10 8"
+						refX="10"
+						refY="4"
+						:markerWidth="bucket.arrow"
+						:markerHeight="bucket.arrow * 0.8"
+						markerUnits="userSpaceOnUse"
+						orient="auto-start-reverse"
+					>
+						<path
+							d="M0 0 L10 4 L0 8 Z"
+							:class="`graph-arrow graph-arrow--${kind}`"
+						/>
+					</marker>
+				</template>
+			</defs>
+		</svg>
 		<VueFlow
 			:nodes="nodes"
 			:edges="edges"
@@ -204,7 +268,7 @@ function memberKindShort(kind: string): string {
 			:edgesUpdatable="false"
 			:elementsSelectable="true"
 			:zoomOnDoubleClick="false"
-			:minZoom="0.1"
+			:minZoom="0.05"
 			class="graph-canvas-flow w-full h-full"
 			@nodeClick="onNodeClick"
 			@edgeClick="onEdgeClick"
@@ -734,8 +798,12 @@ function memberKindShort(kind: string): string {
 	transition: opacity 160ms ease;
 }
 
+/*
+ * A solid mix with the canvas, not a transparent one: the old 68% transparent muted line was 2.84:1 against the canvas in the light
+ * theme (under the 3:1 a line needs); this is 3.7:1 there and 4.5:1 in the dark theme.
+ */
 :deep(.graph-edge .vue-flow__edge-path) {
-	stroke: color-mix(in srgb, var(--lab-color-text-muted) 68%, transparent);
+	stroke: color-mix(in srgb, var(--lab-color-text-muted) 82%, var(--lab-color-surface-alt));
 	stroke-width: 1.25;
 	transition: stroke 120ms ease, stroke-width 120ms ease, opacity 160ms ease;
 }
@@ -771,7 +839,34 @@ function memberKindShort(kind: string): string {
 }
 
 :deep(.graph-edge--dimmed) {
-	opacity: 0.1;
+	opacity: 0.25;
+}
+
+/* The arrowheads: the fill matches the stroke of the edge they end (the accent one is an edge around the focus). */
+.graph-arrow--muted {
+	fill: color-mix(in srgb, var(--lab-color-text-muted) 82%, var(--lab-color-surface-alt));
+}
+
+.graph-arrow--writes {
+	fill: color-mix(in srgb, var(--lab-color-warning) 76%, var(--lab-color-text-muted));
+}
+
+.graph-arrow--invokes {
+	fill: color-mix(in srgb, var(--lab-color-accent) 74%, var(--lab-color-text-muted));
+}
+
+.graph-arrow--danger {
+	fill: var(--lab-color-danger);
+}
+
+.graph-arrow--accent {
+	fill: var(--lab-color-accent);
+}
+
+.graph-arrow-defs {
+	position: absolute;
+	width: 0;
+	height: 0;
 }
 
 /*
@@ -808,13 +903,19 @@ function memberKindShort(kind: string): string {
 }
 
 /*
- * Direction while something is focused (issue #230): an edge that leaves the focused widget or member (it depends on the
- * other end) and one that arrives at it (used by the other end) are both drawn heavier than the rest, and each carries a
- * tag in the Relations view's words. The tag gives way to the operation label while the edge itself is hovered.
+ * Direction while something is focused (issue #230): the edges around the focus are drawn in the accent colour and heavier
+ * (the arrowhead follows), every other edge is dimmed, and each edge around the focus carries a tag in the Relations view's
+ * words: "Depends on #other" when it leaves the focus, "Used by #other" when it arrives. The tag gives way to the operation
+ * label while the edge itself is hovered.
  */
+:deep(.graph-edge--depends-on:not(.graph-edge--invalid-cycle, .graph-edge--invalid) .vue-flow__edge-path),
+:deep(.graph-edge--used-by:not(.graph-edge--invalid-cycle, .graph-edge--invalid) .vue-flow__edge-path) {
+	stroke: var(--lab-color-accent);
+}
+
 :deep(.graph-edge--depends-on .vue-flow__edge-path),
 :deep(.graph-edge--used-by .vue-flow__edge-path) {
-	stroke-width: 2.4;
+	stroke-width: 2.2;
 }
 
 :deep(.graph-edge .graph-edge-relation .vue-flow__edge-text),

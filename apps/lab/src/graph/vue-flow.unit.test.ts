@@ -272,28 +272,35 @@ describe('toVueFlow', () => {
 					source: '1:property:reader',
 					target: '2:state:value',
 					type: GRAPH_EDGE_TYPE,
-					markerEnd: { type: 'arrowclosed' },
+					data: { arrow: 'muted' },
 				})
+			// The arrowhead is only ever at the end: the canvas draws one `markerEnd` marker per edge and no `markerStart`.
 			expect(edges[0]?.markerStart)
 				.toBeUndefined()
 		})
 
-		it('colours the arrowhead like the stroke it ends, and in the danger colour for an invalid cycle', () => {
+		it('gives the arrowhead the colour family of the stroke it ends: the operation, danger for an invalid cycle, accent around the focus', () => {
 			const base = fixtureGraph()
 			const withOperation = (operation: 'reads' | 'writes' | 'invokes', invalidCycle = false): SemanticGraph => ({
 				...base,
 				edges: [{ ...base.edges[0]!, operation, invalidCycle }],
 			})
-			const colorOf = (graph: SemanticGraph): string => (toVueFlow(graph, fixtureLayout(), { expandedClusterIds: expandedAll }).edges[0]!.markerEnd as { color: string }).color
+			const arrowOf = (graph: SemanticGraph, focused?: { nodeId: InspectionNodeId }): string | undefined =>
+				toVueFlow(graph, fixtureLayout(), { expandedClusterIds: expandedAll, focused, rootNodeId: 99 as InspectionNodeId }).edges[0]!.data?.arrow
 
-			expect(colorOf(withOperation('reads')))
-				.toBe('var(--lab-color-text-muted)')
-			expect(colorOf(withOperation('writes')))
-				.toContain('var(--lab-color-warning)')
-			expect(colorOf(withOperation('invokes')))
-				.toContain('var(--lab-color-accent)')
-			expect(colorOf(withOperation('reads', true)))
-				.toBe('var(--lab-color-danger)')
+			expect(arrowOf(withOperation('reads')))
+				.toBe('muted')
+			expect(arrowOf(withOperation('writes')))
+				.toBe('writes')
+			expect(arrowOf(withOperation('invokes')))
+				.toBe('invokes')
+			expect(arrowOf(withOperation('reads', true)))
+				.toBe('danger')
+			expect(arrowOf(withOperation('reads'), { nodeId: 1 as InspectionNodeId }))
+				.toBe('accent')
+			// An invalid cycle stays red even around the focus.
+			expect(arrowOf(withOperation('reads', true), { nodeId: 1 as InspectionNodeId }))
+				.toBe('danger')
 		})
 
 		it('tags the edge of a focused member as "depends-on" when it leaves the member and "used-by" when it arrives', () => {
@@ -346,6 +353,64 @@ describe('toVueFlow', () => {
 				.toBe(aggregateEdgeId('cluster:1', 'cluster:2'))
 			expect(edges[0]!.data?.route)
 				.toEqual(route)
+		})
+	})
+
+	describe('focus (issue #230)', () => {
+		// A -> B -> C and an unrelated D -> E, each a widget of one member (collapsed, so the edges are cluster to cluster).
+		function chain(): SemanticGraph {
+			const ids = ['0', '1', '2', '3', '4']
+			const name = (id: string): string => 'abcde'[Number(id)]!
+			const edge = (from: string, to: string) => ({
+				id: `${from}:property:p#dep0`,
+				sourceVertexId: `${from}:property:p`,
+				targetVertexId: `${to}:property:p`,
+				operation: 'reads' as const,
+				path: ['x'],
+				reference: { target: { type: 'widget' as const, widgetId: name(to), optional: false }, operation: { type: 'property-get' as const, name: 'p' } },
+				invalidCycle: false,
+			})
+			return {
+				clusters: ids.map((id, index) => ({ id: `cluster:${id}`, nodeId: index as InspectionNodeId, widgetId: name(id), widgetType: 'thing', label: `${name(id)} : thing` })),
+				vertices: ids.map((id, index) => ({ id: `${id}:property:p`, clusterId: `cluster:${id}`, nodeId: index as InspectionNodeId, kind: 'property' as const, name: 'p' })),
+				edges: [edge('0', '1'), edge('1', '2'), edge('3', '4')],
+				stubs: [],
+				invalidCycleVertexIds: new Set(),
+			}
+		}
+		function chainLayout(graph: SemanticGraph): LayoutedGraph {
+			return {
+				clusters: new Map(graph.clusters.map((cluster, index) => [cluster.id, { x: index * 300, y: 0, width: 240, height: 88 }])),
+				vertices: new Map(),
+				stubs: new Map(),
+			}
+		}
+		const dimmedEdges = (focusedNodeId: number): Record<string, boolean | undefined> => {
+			const graph = chain()
+			const { edges } = toVueFlow(graph, chainLayout(graph), { expandedClusterIds: new Set(), focused: { nodeId: focusedNodeId as InspectionNodeId }, rootNodeId: 99 as InspectionNodeId })
+			return Object.fromEntries(edges.map(edge => [`${edge.source}>${edge.target}`, edge.data?.isDimmed]))
+		}
+
+		it('dims every edge that does not touch the focused widget, however close it is to one that does', () => {
+			// Focus b (index 1): a -> b and b -> c touch it; d -> e does not.
+			expect(dimmedEdges(1))
+				.toEqual({ 'cluster:0>cluster:1': false, 'cluster:1>cluster:2': false, 'cluster:3>cluster:4': true })
+			// Focus a (index 0): only a -> b touches it. b -> c is next to it (b is related) but is not an edge of a, and must fade.
+			expect(dimmedEdges(0))
+				.toEqual({ 'cluster:0>cluster:1': false, 'cluster:1>cluster:2': true, 'cluster:3>cluster:4': true })
+		})
+
+		it('names the other end of an edge around the focus', () => {
+			const graph = chain()
+			const { edges } = toVueFlow(graph, chainLayout(graph), { expandedClusterIds: new Set(), focused: { nodeId: 1 as InspectionNodeId }, rootNodeId: 99 as InspectionNodeId })
+			const byId = (source: string) => edges.find(edge => edge.source === source)!.data!
+			// b is used by a (a -> b arrives at b) and depends on c (b -> c leaves b).
+			expect(byId('cluster:0'))
+				.toMatchObject({ relation: 'used-by', otherEnd: '#a' })
+			expect(byId('cluster:1'))
+				.toMatchObject({ relation: 'depends-on', otherEnd: '#c' })
+			expect(byId('cluster:3').relation)
+				.toBeUndefined()
 		})
 	})
 })

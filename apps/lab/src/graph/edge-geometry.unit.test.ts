@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { routeLabelPoint, routePath, sampleRoute, straightRoute } from './edge-geometry'
+import { routeLabelPoint, routePath, routePointAtDistance, sampleRoute, straightRoute } from './edge-geometry'
 
 describe('routePath', () => {
 	it('draws two points as a single cubic Bezier whose tangents are vertical at both ends', () => {
@@ -66,5 +66,36 @@ describe('sampleRoute and routeLabelPoint', () => {
 		const route = straightRoute({ x: 0, y: 0 }, { x: 100, y: 80 })
 		expect(routeLabelPoint(route, 0.35).y)
 			.toBeLessThan(routeLabelPoint(route, 0.65).y - 15)
+	})
+})
+
+describe('routePointAtDistance', () => {
+	it('finds the point a given distance along the curve from its start or from its end', () => {
+		const route = straightRoute({ x: 0, y: 0 }, { x: 0, y: 200 })
+		expect(routePointAtDistance(route, 50, 'start').y)
+			.toBeCloseTo(50, 0)
+		expect(routePointAtDistance(route, 50, 'end').y)
+			.toBeCloseTo(150, 0)
+		// A tag sits the same distance from the focused card whatever the edge's length.
+		const longer = straightRoute({ x: 0, y: 0 }, { x: 0, y: 600 })
+		expect(routePointAtDistance(longer, 50, 'start').y)
+			.toBeCloseTo(50, 0)
+		expect(routePointAtDistance(longer, 50, 'end').y)
+			.toBeCloseTo(550, 0)
+	})
+
+	it('measures along the curve, which is longer than the straight line between its ends', () => {
+		const route = straightRoute({ x: 0, y: 0 }, { x: 200, y: 100 })
+		const point = routePointAtDistance(route, 60, 'start')
+		expect(Math.hypot(point.x, point.y))
+			.toBeLessThan(60)
+	})
+
+	it('clamps to the curve', () => {
+		const route = straightRoute({ x: 0, y: 0 }, { x: 0, y: 40 })
+		expect(routePointAtDistance(route, 500, 'start'))
+			.toEqual({ x: 0, y: 40 })
+		expect(routePointAtDistance(route, 500, 'end'))
+			.toEqual({ x: 0, y: 0 })
 	})
 })

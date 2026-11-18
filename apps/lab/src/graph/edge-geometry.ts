@@ -100,6 +100,39 @@ export function routeLabelPoint(route: GraphEdgeRoute, fraction = 0.5): GraphPoi
 	return samples.reduce((best, point) => Math.abs(point.y - wanted) < Math.abs(best.y - wanted) ? point : best)
 }
 
+/** The length of the drawn curve in canvas px. */
+export function routeLength(route: GraphEdgeRoute): number {
+	const samples = sampleRoute(route, 24)
+	let length = 0
+	for (let index = 1; index < samples.length; index++)
+		length += Math.hypot(samples[index]!.x - samples[index - 1]!.x, samples[index]!.y - samples[index - 1]!.y)
+	return length
+}
+
+/**
+ * The point on the drawn curve `distance` canvas px along it from its start (`from: 'start'`) or from its end (`from: 'end'`),
+ * measured along the curve and clamped to it. A tag that explains an edge in terms of one card sits at a fixed distance from
+ * that card's end of the edge, whatever the edge's length.
+ */
+export function routePointAtDistance(route: GraphEdgeRoute, distance: number, from: 'start' | 'end'): GraphPoint {
+	const samples = sampleRoute(route, 24)
+	if (samples.length === 0)
+		return route[0] ?? { x: 0, y: 0 }
+	const ordered = from === 'start' ? samples : [...samples].reverse()
+	let travelled = 0
+	for (let index = 1; index < ordered.length; index++) {
+		const previous = ordered[index - 1]!
+		const point = ordered[index]!
+		const step = Math.hypot(point.x - previous.x, point.y - previous.y)
+		if (travelled + step >= distance) {
+			const t = step === 0 ? 0 : (distance - travelled) / step
+			return { x: previous.x + (point.x - previous.x) * t, y: previous.y + (point.y - previous.y) * t }
+		}
+		travelled += step
+	}
+	return ordered.at(-1)!
+}
+
 /**
  * The route of an edge that ELK gave no points for (a layout function without routing, a test fake): a plain
  * two-point Bezier between the two handle positions.
