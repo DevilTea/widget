@@ -647,8 +647,8 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   placement and `GREEDY_MODEL_ORDER` cycle breaking, `POLYLINE` routing with `elk.json.edgeCoords: ROOT` so every
   edge's route points come back in canvas coordinates, and the spacing in `LAYOUT_SPACING` (cards 72, layers 88,
   edge-to-card 40, edge-to-edge 20; `CLUSTER_SPACING` inside an expanded widget). The numbers keep the cards visibly apart
-  and the default collapsed Survey at 0.95 Fit zoom at 1440 x 900 (its card text is 11px or more on screen only above about 0.9;
-  128 between layers gave 0.82) and the collapsed Trip budget about 0.37;
+  and the default collapsed Survey at 0.99 Fit zoom at 1440 x 900 (0.84 at 1280 x 800; its card text is 11px or more on screen only
+  above about 0.9, and 128 between layers gave 0.82) and the collapsed Trip budget about 0.39;
   `fromElkResult()` also returns every edge's route (`LayoutedGraph.edges`), keyed by `aggregateEdgeId()`, the id of
   the Vue Flow edge drawn for it.
 - `edge-geometry.ts` — pure: a route becomes a chain of cubic Beziers with vertical tangents (`routePath()`: only `M`
@@ -694,10 +694,13 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   runs behind a card; without route points it falls back to Vue Flow's own handle positions. The key's first item states
   the direction (`A → B: A depends on B`), the Legend explains it with the Relations words, and a focused widget's or
   member's edges are tagged "Depends on #other" / "Used by #other" (hidden while the edge itself is hovered, which shows its
-  operation). The tags are placed together by `graph/tag-placement.ts` (`GraphCanvas.vue` computes the placements and provides them to the edges, `graph-tags.ts`):
+  operation). The tags are placed together by `graph/tag-placement.ts` (`composables/use-graph-tags.ts` computes them from the edges, the cards and the zoom *bucket*, so a
+  wheel tick or a pan step inside a bucket does not place again; `GraphCanvas.vue` draws them in one layer after every edge and card, the
+  `zoom-pane` slot of Vue Flow, so no edge is drawn across their text, and hides the tag of the edge that is hovered or selected):
   each tag sits on its own edge in the half nearer the focused card, so it reads as being about that card, and takes the first
-  spot (going away from the card) where its box covers neither a card nor another tag; a tag with no such spot is not drawn
-  (the Trip budget's Expense has a dozen edges), the accent colour, the dimming and the arrowheads still mark the focus's edges and
+  spot (going away from the card) where its box covers no card, no arrowhead of any edge around the focus (its own included) and
+  no other tag; the two directions take turns, the rarer first. A tag with no such spot is not drawn (the Trip budget's Expense has
+  a dozen edges; the Legend says so), the accent colour, the dimming and the arrowheads still mark the focus's edges and
   Relations lists them all. `GraphDependencyEdge.vue` draws its labels itself (a rect and a text sized by `tagSize()`, the function
   the placement used) because Vue Flow's `EdgeText` measures its box once at mount and so boxes 11px text around text of any other size.
   `graph/zoom-scale.ts` cuts the zoom into nine buckets (1, 0.85, 0.72, 0.6, 0.5, 0.42, 0.35, 0.3, below): each has an arrowhead
@@ -732,13 +735,14 @@ partially measured subset and then incorrectly marking that generation fitted. `
 `layoutVersion` (incremented only when ELK layout succeeds), which resets fit tracking so the graph
 automatically refits on semantic graph replacements and cluster expansion/collapse, while ordinary
 Runtime activity and focus deemphasis never trigger a refit. `DependenciesPanel.vue`'s Graph view also exposes an explicit
-**Fit graph** button along with **Zoom in** / **Zoom out** and **Expand all** / **Collapse all** controls in the toolbar. Fit leaves 8% around the graph (it used to
-leave 20%, so a fitted graph used about 40% of the canvas) and fits the curves as well as the cards (`fitBounds` over both),
-because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.26 zoom) and is read by zooming. `minZoom` is 0.05 so Fit shows the whole
-expanded Trip budget (about 0.06).
+**Fit graph** button along with **Zoom in** / **Zoom out** and **Expand all** / **Collapse all** controls in the toolbar. Fit leaves 4% around the graph (it used to
+leave 20%, then 8%) and fits the curves as well as the cards (`fitBounds` over both),
+because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.27 zoom) and is read by zooming. Fit may reach 0.05 so it shows the whole
+expanded Trip budget (about 0.06); afterwards the manual zoom floor (wheel, pinch, **Zoom out**) is `min(fit, max(0.1, fit / 4))`, so a small graph
+(the Survey fits at 0.99, so about 0.25) cannot be wheeled down to a dot. The collapsed card text is 13px (type) and 12px (id, S/P/M counts).
 `src/graph/graph-readability.unit.test.ts` (real ELK on both showcases) and `e2e/graph-readability.spec.ts` pin the spacing, the
-Bezier paths, the arrowheads and "no edge behind a card"; the arrowhead size, the 0.9 Fit floor of the default Survey (card text 11px or more), the dimming and the tags (placed on
-no card and no other tag, nearer the focus, 11px or more) are measured in the browser as well.
+Bezier paths, the arrowheads and "no edge behind a card"; the arrowhead size, the 0.95 Fit floor of the default Survey (card text 11px or more at 1440 x 900, near 11px at 1280 x 800), the dimming and
+the tags (on no card, no arrowhead and no other tag, nearer the focus, 11px or more, above every edge) are measured in the browser as well.
 
 ## Layout worker boundary
 
