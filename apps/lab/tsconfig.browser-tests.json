@@ -8,7 +8,8 @@
 		"./e2e/**/*.ts",
 		"./e2e-pages/**/*.ts",
 		"./src/sandbox/presets.ts",
-		"./src/showcases/survey/presets.ts"
+		"./src/showcases/survey/presets.ts",
+		"./src/showcases/trip-budget/presets.ts"
 	],
 	"exclude": []
 }
