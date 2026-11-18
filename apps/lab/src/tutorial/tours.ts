@@ -9,6 +9,7 @@
  */
 
 import type { TutorialScript } from './types'
+import { ONBOARDING_TOUR_ID, onboardingTourScript } from './onboarding-script'
 import { QUOTE_RULES_TOUR_ID, quoteRulesTourScript } from './quote-rules-script'
 import { SURVEY_TOUR_ID, surveyTourScript } from './survey-script'
 import { TRIP_BUDGET_TOUR_ID, tripBudgetTourScript } from './trip-budget-script'
@@ -47,6 +48,12 @@ export const tours: readonly TourEntry[] = [
 		script: quoteRulesTourScript,
 		defaultPresetId: 'quote-default',
 		startConfirmMessage: 'Starting the tutorial will load the Quote rules teaching example and replace your unapplied changes.',
+	},
+	{
+		id: ONBOARDING_TOUR_ID,
+		script: onboardingTourScript,
+		defaultPresetId: 'onboarding-default',
+		startConfirmMessage: 'Starting the tutorial will load the Onboarding teaching example and replace your unapplied changes.',
 	},
 ]
 

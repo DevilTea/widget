@@ -325,7 +325,7 @@ describe('createLabStore() switchShowcase()', () => {
 		expect(store.showcaseId.value)
 			.toBe('survey')
 		expect(store.showcases.map(showcase => showcase.id))
-			.toEqual(['survey', 'trip-budget', 'quote-rules'])
+			.toEqual(['survey', 'trip-budget', 'quote-rules', 'onboarding'])
 		expect(store.documentState.value.blueprint.status)
 			.toBe('valid')
 		expect(store.preview.value?.revision)

@@ -17,6 +17,9 @@ import type { SourcesRegistry } from '../showcase-host'
 import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
+import { defaultOnboardingPreset, onboardingPresets } from './onboarding/presets'
+import { onboardingSources } from './onboarding/sources'
+import { onboardingSystem } from './onboarding/system'
 import { defaultQuotePreset, quotePresets } from './quote-rules/presets'
 import { quoteSources } from './quote-rules/sources'
 import { quoteSystem } from './quote-rules/system'
@@ -60,7 +63,7 @@ export interface ShowcaseEntry {
  * consumer (`LabSession`, `createWidgetVueRenderer`'s own `runtime.blueprint.system === system`
  * identity check) only ever needs object identity, never the precise literal-type union.
  *
- * `survey` is the default; `trip-budget` and `quote-rules` are listed after it in the Examples menu. `sandbox` is a hidden, test-only
+ * `survey` is the default; `trip-budget`, `quote-rules` and `onboarding` are listed after it in the Examples menu. `sandbox` is a hidden, test-only
  * fixture (minimal Counter/Text/... widgets plus the invalid/raw-slot recovery presets): it is not listed
  * in the Examples menu and is reachable only through `?showcase=sandbox` (see `resolveInitialShowcase`).
  */
@@ -88,6 +91,14 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: quotePresets,
 		defaultPreset: defaultQuotePreset,
 		sources: quoteSources,
+	},
+	{
+		id: 'onboarding',
+		label: 'Onboarding wizard with an Events log',
+		system: onboardingSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
+		presets: onboardingPresets,
+		defaultPreset: defaultOnboardingPreset,
+		sources: onboardingSources,
 	},
 	{
 		id: 'sandbox',
