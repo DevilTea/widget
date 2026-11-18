@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, previewFrame, selectShowcase, setLocale, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
 
 /**
  * Trip budget splitter acceptance contract (issue #230, showcase 1): the Lisbon weekend trip
@@ -203,6 +203,27 @@ test.describe('the default trip', () => {
 			.toHaveText('重新開始')
 		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
 			.toBeVisible()
+	})
+})
+
+test.describe('theme', () => {
+	test('paints from its own tokens and follows the Lab theme, light and dark', async ({ page }) => {
+		await openTrip(page)
+		const root = previewFrame(page)
+			.locator('.trip')
+		const background = (): Promise<string> => root.evaluate(element => getComputedStyle(element).backgroundColor)
+
+		await setTheme(page, 'light')
+		await expect(root)
+			.toHaveAttribute('data-trip-theme', 'light')
+		expect(await background())
+			.toBe('rgb(246, 247, 249)')
+
+		await setTheme(page, 'dark')
+		await expect(root)
+			.toHaveAttribute('data-trip-theme', 'dark')
+		expect(await background())
+			.toBe('rgb(20, 22, 26)')
 	})
 })
 
