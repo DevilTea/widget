@@ -4,11 +4,12 @@
  * moves as Methods:
  *
  * - `canEnter(index)`: **read-only**. It writes no State and emits no Event, so Core lets other Methods (and
- *   Properties) depend on it; `goTo` calls it.
+ *   Properties) depend on it; `goTo` and `next` call it, so both apply the same locking rule.
  * - `next()`, `back()`, `goTo(index)`: write `current` and emit `stepChanged`. `goTo` validates its argument
  *   (`invalid-method-arguments`: not a whole number), but whether the step exists and may be entered depends on the
  *   Blueprint and on the other steps, which `validateArgs` cannot see, so those are `execute` diagnostics
- *   (`invalid-method-result`: `no-such-step`, `step-locked`).
+ *   (`invalid-method-result`: `no-such-step`, `step-locked`). `next` refuses an incomplete current step
+ *   (`step-incomplete`) and then a locked next step (`step-locked`).
  * - `finish()`: needs every step complete, writes `finished` and emits `completed` with every step's answers.
  *
  * A move that is refused writes nothing and emits nothing: the failure is the Method's diagnostic. A refused move is
@@ -94,8 +95,8 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 		.steps({
 			registerDeps: ({ dep, blueprint }) => ({ steps: stepSummaryReads(dep, blueprint) }),
 			compute: ({ deps, blueprint }) => stepChildrenOfView(blueprint)
-				.flatMap(({ id, type }, index) => {
-					const step = deps.steps[index]!
+				.flatMap(({ id, type }) => {
+					const step = deps.steps[id]!
 					const title = step.title()
 					const complete = step.complete()
 					const missing = step.missing()
@@ -127,8 +128,8 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 		.answers({
 			registerDeps: ({ dep, blueprint }) => ({ steps: stepAnswerReads(dep, blueprint) }),
 			compute: ({ deps, blueprint }) => Object.fromEntries(stepChildrenOfView(blueprint)
-				.flatMap(({ id }, index) => {
-					const answers = deps.steps[index]!.answers()
+				.flatMap(({ id }) => {
+					const answers = deps.steps[id]!.answers()
 					return answers.ok ? [[id, answers.value]] : []
 				})),
 		}))
@@ -152,6 +153,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 				progress: dep.self.properties.get('progress'),
 				steps: dep.self.properties.get('steps'),
 				finished: dep.self.state.get('finished'),
+				canEnter: dep.self.methods.invoke('canEnter'),
 				setCurrent: dep.self.state.set('current'),
 			}),
 			emits: ['stepChanged'],
@@ -173,6 +175,15 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 				}
 				if (current + 1 >= count) {
 					addDiagnostic({ message: 'This is the last step: use finish() to complete the wizard.', reason: 'last-step' })
+					return current
+				}
+				// The same rule goTo applies: the next step is entered only when canEnter says so (a step before the current
+				// one may be incomplete, for instance after a deep link).
+				const allowed = deps.canEnter(current + 1)
+				if (!allowed.ok)
+					return current
+				if (!allowed.value) {
+					addDiagnostic({ message: `Step ${current + 1} ("${stepIds[current + 1]}") is locked: finish the steps before it first.`, reason: 'step-locked' })
 					return current
 				}
 				deps.setCurrent(current + 1)

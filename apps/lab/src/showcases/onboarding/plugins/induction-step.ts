@@ -25,7 +25,7 @@ import type { InductionConfig, InductionRawConfig } from '../config'
 import type { BookingOutcome, BookingStatus, I18nText, InductionAnswers, Slot, SlotCancelled, SlotConfirmation, SlotDeclined, SlotRequest } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkInductionConfig, resolveInductionConfig } from '../config'
-import { describeValue, isBookingOutcome, isBookingStatus, isIsoDate, isNullableSlot, isNumber, isTime } from '../domain'
+import { describeValue, isBookingOutcome, isBookingStatus, isBoolean, isIsoDate, isNullableSlot, isNumber, isTime } from '../domain'
 import { inductionConfigSchema } from '../schemas'
 import { checkInsideOnboarding } from './structure'
 
@@ -60,7 +60,7 @@ export interface InductionInterfaces extends WidgetInterfaces {
 }
 
 export const InductionStepPlugin = createWidgetPlugin('InductionStep')
-	.description('Step 4 of the onboarding wizard: booking an induction slot, with the work kept at the host. Methods: `requestSlot(date, time)` (validated against the config; writes the request into State and emits `slotRequested` with a ticket), `settleBooking(ticket, outcome)` (the host\'s answer; applied only if the ticket is still the newest, otherwise ignored) and `cancelBooking()` (emits `slotCancelled`). Events: `slotRequested`, `slotConfirmed`, `slotDeclined`, `slotCancelled`. State: `status`, `ticket`, `slot`, `reference`, `reason`.')
+	.description('Step 4 of the onboarding wizard: booking an induction slot, with the work kept at the host. Methods: `requestSlot(date, time)` (validated against the config; writes the request into State and emits `slotRequested` with a ticket), `settleBooking(ticket, outcome)` (the host\'s answer; applied only if the ticket is still the newest, otherwise ignored) and `cancelBooking()` (emits `slotCancelled`); `requestSlot` and `cancelBooking` are refused once the wizard is finished. Events: `slotRequested`, `slotConfirmed`, `slotDeclined`, `slotCancelled`. State: `status`, `ticket`, `slot`, `reference`, `reason`.')
 	.interfaces<InductionInterfaces>()
 	.config({
 		description: 'The step title and the days and start times offered. Whether the booking office still has room is not known here: the host asks it.',
@@ -161,13 +161,21 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 				setSlot: dep.self.state.set('slot'),
 				setReference: dep.self.state.set('reference'),
 				setReason: dep.self.state.set('reason'),
+				// Once the wizard is finished its booking is part of what was completed, so it is not changed any more.
+				finished: dep.root.state.get('finished')
+					.validate(isBoolean),
 			}),
 			emits: ['slotRequested'],
 			execute: ({ args: [date, time], deps, emit, addDiagnostic }) => {
 				const status = deps.status()
 				const current = deps.ticket()
-				if (!status.ok || !current.ok)
+				const finished = deps.finished()
+				if (!status.ok || !current.ok || !finished.ok)
 					return 0 // the dependency failure is already recorded: the Method fails
+				if (finished.value === true) {
+					addDiagnostic({ message: 'The wizard is finished: the booking can no longer be changed.', reason: 'already-finished' })
+					return current.value ?? 0
+				}
 				if (status.value === 'requesting') {
 					addDiagnostic({ message: 'A request is still waiting for an answer: cancel it or wait for the answer before asking for another slot.', reason: 'booking-in-progress' })
 					return current.value ?? 0
@@ -242,14 +250,22 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 				setSlot: dep.self.state.set('slot'),
 				setReference: dep.self.state.set('reference'),
 				setReason: dep.self.state.set('reason'),
+				// Once the wizard is finished its booking is part of what was completed, so it is not changed any more.
+				finished: dep.root.state.get('finished')
+					.validate(isBoolean),
 			}),
 			emits: ['slotCancelled'],
 			execute: ({ deps, emit, addDiagnostic }) => {
 				const status = deps.status()
 				const ticket = deps.ticket()
 				const slot = deps.slot()
-				if (!status.ok || !ticket.ok || !slot.ok)
+				const finished = deps.finished()
+				if (!status.ok || !ticket.ok || !slot.ok || !finished.ok)
 					return 0
+				if (finished.value === true) {
+					addDiagnostic({ message: 'The wizard is finished: the booking can no longer be changed.', reason: 'already-finished' })
+					return ticket.value ?? 0
+				}
 				if ((status.value !== 'requesting' && status.value !== 'confirmed') || slot.value === null) {
 					addDiagnostic({ message: 'There is no request waiting and no slot booked: nothing to cancel.', reason: 'nothing-to-cancel' })
 					return ticket.value ?? 0

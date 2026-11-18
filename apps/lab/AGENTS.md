@@ -283,7 +283,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     and the config (the offered days and times); the checks that need the Blueprint or another widget, `no-such-step`, `step-locked`,
     `booking-in-progress`, are in `execute` and are `invalid-method-result`); **Method failures** (a refused move writes and emits nothing; its
     diagnostic is the Method's latest failure, listed by the Events tab and shown on the Method's row in Selected widget/Runtime, and the next
-    successful call replaces it); and **read-only versus writing Methods** (`Onboarding.canEnter` is read-only, `goTo` calls it, every other
+    successful call replaces it); and **read-only versus writing Methods** (`Onboarding.canEnter` is read-only, `goTo` and `next` call it, so both apply the same locking rule (`step-locked`), every other
     Method writes State and emits, so Relations marks them W and E; `plugins/wizard.unit.test.ts` pins the derived flags with
     `inspectBlueprint`). Core's code for a failed `validateArgs` is `invalid-method-arguments`. Presets: `onboarding-default`,
     `onboarding-ready-to-book` (`startStep: 3` with the first three steps prefilled), `onboarding-deep-link` (`startStep: 3`, nothing filled in)
@@ -320,8 +320,10 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       preset are gated on the State that preset starts in.
     - Known limits: the Lab's Events log lists a Method failure when the Method's latest diagnostic snapshot becomes non-empty, and Core keeps only
       the latest snapshot, so it is a fact about the latest call, not a call log; Event arguments are typed by TypeScript only, Core validates no payload
-      at run time; `validateArgs` cannot see the Blueprint, hence `goTo`'s range check is an `invalid-method-result`; a dependency container may hold
-      only dependency expressions, so the root's `steps` and `answers` Properties pair the dependency array with `stepChildren(blueprint)` by index.
+      at run time; `validateArgs` cannot see the Blueprint, hence `goTo`'s range check is an `invalid-method-result`; the root keys the step dependencies by
+      step id (`plugins/reads.ts`) and looks them up in the Blueprint's order (`stepChildren`), because a dependency container may hold only dependency
+      expressions (a plain id string in it throws), and an object would sort an integer-like id first. Once the wizard is finished
+      `requestSlot` and `cancelBooking` are refused (`already-finished`): the booking is part of what was completed; Start over (`resetState`) reopens it.
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.
