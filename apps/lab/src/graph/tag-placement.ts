@@ -4,8 +4,9 @@
  * A tag belongs to the focused card, so it sits on its edge a short way from that card, never past the middle of the edge. But
  * the edges of one card attach next to each other (about 20px apart) and a tag is 100px or more wide, so tags placed at a fixed
  * distance land on top of each other, and a tag next to the card is where the arrowheads are. They are therefore placed
- * together: each takes the first spot along its edge, going away from the card, where its box meets no card, no arrowhead of any
- * edge around the focus (its own included) and no tag placed before it (the tag stays centred on its edge: a tag shifted aside
+ * together: each takes the first spot along its edge, going away from the card, where its box lies inside the content (the
+ * cards and curves, which Fit always shows: a tag is not part of what Fit fits, so one outside it would be cut off by the pane),
+ * meets no card, no arrowhead of an edge and no tag placed before it (the tag stays centred on its edge: a tag shifted aside
  * would not be read as that edge's). The two directions take turns, the rarer one first, so each gets a tag when any fits. A tag
  * with no such spot is not drawn: on a dense graph at a low zoom (the Trip budget's Expense has a dozen edges) text of 11 screen px
  * simply does not fit, and the accent colour, the dimming and the arrowheads still say which edges are the focus's, while the
@@ -75,16 +76,37 @@ function overlapArea(a: TagRect, b: TagRect): number {
 	return width > 0 && height > 0 ? width * height : 0
 }
 
+export interface TagPlacementOptions {
+	/** The box (by its top-left corner) every tag must lie inside: what Fit shows. */
+	readonly bounds?: TagRect
+	/** The routes of the other edges (the dimmed ones): their arrowheads are not covered either. */
+	readonly otherRoutes?: readonly GraphEdgeRoute[]
+}
+
+/** The box (by its top-left corner) around cards and routes, which is what Fit fits; `undefined` when there is nothing. */
+export function contentBounds(cards: readonly TagRect[], routes: readonly GraphEdgeRoute[]): TagRect | undefined {
+	const xs = [...cards.flatMap(card => [card.x, card.x + card.width]), ...routes.flatMap(route => route.map(point => point.x))]
+	const ys = [...cards.flatMap(card => [card.y, card.y + card.height]), ...routes.flatMap(route => route.map(point => point.y))]
+	if (xs.length === 0)
+		return undefined
+	const x = Math.min(...xs)
+	const y = Math.min(...ys)
+	return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
+}
+
 /**
  * `obstacles` are boxes by their top-left corner (the cards); the result's boxes are by their centre (what an edge label is
  * positioned by).
  */
-export function placeTags(tags: readonly TagInput[], obstacles: readonly TagRect[], scale: TagScale): Map<string, TagPlacement> {
+export function placeTags(tags: readonly TagInput[], obstacles: readonly TagRect[], scale: TagScale, options: TagPlacementOptions = {}): Map<string, TagPlacement> {
 	const fixed: TagRect[] = [
 		...obstacles.map(rect => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, width: rect.width, height: rect.height })),
-		...tags.filter(tag => tag.route.length >= 2)
-			.map(tag => arrowheadBox(tag.route, scale.arrow)),
+		...[...tags.map(tag => tag.route), ...(options.otherRoutes ?? [])].filter(route => route.length >= 2)
+			.map(route => arrowheadBox(route, scale.arrow)),
 	]
+	const { bounds } = options
+	const isInside = (rect: TagRect): boolean => bounds === undefined
+		|| (rect.x - rect.width / 2 >= bounds.x && rect.x + rect.width / 2 <= bounds.x + bounds.width && rect.y - rect.height / 2 >= bounds.y && rect.y + rect.height / 2 <= bounds.y + bounds.height)
 	const focusEnd = (tag: TagInput): GraphPoint => (tag.relation === 'depends-on' ? tag.route[0]! : tag.route.at(-1)!)
 	const leftToRight = (relation: TagInput['relation']): TagInput[] => tags.filter(tag => tag.relation === relation && tag.route.length >= 2)
 		.sort((a, b) => focusEnd(a).x - focusEnd(b).x || a.id.localeCompare(b.id))
@@ -109,6 +131,8 @@ export function placeTags(tags: readonly TagInput[], obstacles: readonly TagRect
 		for (const fraction of FRACTIONS) {
 			const point = routePointAtDistance(tag.route, fraction * length, tag.relation === 'depends-on' ? 'start' : 'end')
 			const rect: TagRect = { x: point.x, y: point.y, ...size }
+			if (!isInside(rect))
+				continue
 			const cost = [...fixed, ...placedRects].reduce((sum, other) => sum + overlapArea(rect, other), 0)
 			if (best === undefined || cost < best.cost)
 				best = { rect, cost }

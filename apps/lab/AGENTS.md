@@ -698,8 +698,9 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   wheel tick or a pan step inside a bucket does not place again; `GraphCanvas.vue` draws them in one layer after every edge and card, the
   `zoom-pane` slot of Vue Flow, so no edge is drawn across their text, and hides the tag of the edge that is hovered or selected):
   each tag sits on its own edge in the half nearer the focused card, so it reads as being about that card, and takes the first
-  spot (going away from the card) where its box covers no card, no arrowhead of any edge around the focus (its own included) and
-  no other tag; the two directions take turns, the rarer first. A tag with no such spot is not drawn (the Trip budget's Expense has
+  spot (going away from the card) where its box lies inside the content bounds (the box around the cards and curves, which is what Fit
+  fits: a tag is no part of that, so one outside would be cut off by the pane) and covers no card, no arrowhead of any edge (its own
+  included, the dimmed edges' too) and no other tag; the two directions take turns, the rarer first. A tag with no such spot is not drawn (the Trip budget's Expense has
   a dozen edges; the Legend says so), the accent colour, the dimming and the arrowheads still mark the focus's edges and
   Relations lists them all. `GraphDependencyEdge.vue` draws its labels itself (a rect and a text sized by `tagSize()`, the function
   the placement used) because Vue Flow's `EdgeText` measures its box once at mount and so boxes 11px text around text of any other size.

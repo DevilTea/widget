@@ -267,9 +267,8 @@ test('Fit reaches the whole expanded Trip budget, and a person cannot wheel a sm
 
 interface FocusCase {
 	showcase: 'survey' | 'trip-budget'
-	/** Text of the widget's card identity, and the id of its cluster node. */
+	/** Text of the widget's card identity (its cluster node is found from it). */
 	identity: string
-	cluster: string
 	/** The names the tags give the other ends, when the test checks them. */
 	names?: Record<string, string>
 	/** How many tags have room at the default Fit of 1440 x 900. */
@@ -277,9 +276,13 @@ interface FocusCase {
 }
 
 const focusCases: FocusCase[] = [
-	{ showcase: 'survey', identity: '#mode', cluster: 'cluster:1', names: { 'cluster:0': '#open-day', 'cluster:2': '#guests', 'cluster:3': '#sessions', 'cluster:4': '#phone' }, atLeast: 3 },
-	{ showcase: 'survey', identity: '#guests', cluster: 'cluster:2', names: { 'cluster:0': '#open-day', 'cluster:1': '#mode', 'cluster:3': '#sessions', 'cluster:4': '#phone' }, atLeast: 3 },
-	{ showcase: 'trip-budget', identity: '#hotel', cluster: 'cluster:6', atLeast: 2 },
+	{ showcase: 'survey', identity: '#mode', names: { 'cluster:0': '#open-day', 'cluster:2': '#guests', 'cluster:3': '#sessions', 'cluster:4': '#phone' }, atLeast: 3 },
+	{ showcase: 'survey', identity: '#guests', names: { 'cluster:0': '#open-day', 'cluster:1': '#mode', 'cluster:3': '#sessions', 'cluster:4': '#phone' }, atLeast: 3 },
+	{ showcase: 'survey', identity: '#sessions', names: { 'cluster:0': '#open-day', 'cluster:1': '#mode', 'cluster:2': '#guests', 'cluster:4': '#phone' }, atLeast: 1 },
+	{ showcase: 'trip-budget', identity: '#hotel', atLeast: 3 },
+	{ showcase: 'trip-budget', identity: '#ana', atLeast: 3 },
+	{ showcase: 'trip-budget', identity: '#settlement', atLeast: 3 },
+	{ showcase: 'trip-budget', identity: '#currency', atLeast: 4 },
 ]
 
 for (const focus of focusCases) {
@@ -291,6 +294,9 @@ for (const focus of focusCases) {
 			.click()
 		await expect(page.locator('.graph-node--focused'))
 			.toContainText(focus.identity)
+		const clusterId = (await page.locator('.vue-flow__node')
+			.filter({ has: page.locator('.graph-cluster-identity--collapsed', { hasText: focus.identity }) })
+			.getAttribute('data-id'))!
 		// The edges fade with a transition: wait until the unrelated ones have.
 		await expect(page.locator('.graph-edge--dimmed'))
 			.not
@@ -308,16 +314,15 @@ for (const focus of focusCases) {
 		// The tags are drawn in a layer after every edge and card, so no edge is drawn across their text.
 		expect(tagLayerAboveEdges)
 			.toBe(true)
-		const focused = cards.find(card => card.id === focus.cluster)!.rect
+		const focused = cards.find(card => card.id === clusterId)!.rect
 		const leaving = edges.filter(edge => edge.classes.includes('graph-edge--depends-on'))
 		const arriving = edges.filter(edge => edge.classes.includes('graph-edge--used-by'))
-		expect(leaving.length)
-			.toBeGreaterThan(0)
-		expect(arriving.length)
-			.toBeGreaterThan(0)
+		// (#currency depends on nothing: its edges all arrive at it.)
+		expect(leaving.length + arriving.length)
+			.toBeGreaterThan(3)
 
 		// Every edge that does not touch the focus is faded; every one that does is solid and in the accent colour (arrowhead too).
-		const touches = (edge: { id: string }): boolean => (JSON.parse(edge.id.slice('edge:'.length)) as string[]).includes(focus.cluster)
+		const touches = (edge: { id: string }): boolean => (JSON.parse(edge.id.slice('edge:'.length)) as string[]).includes(clusterId)
 		const unrelated = edges.filter(edge => !touches(edge))
 		for (const edge of unrelated) {
 			expect(edge.classes, edge.id)
@@ -348,14 +353,18 @@ for (const focus of focusCases) {
 		// The tag says which, in the words of the Relations view, with the other end named so it cannot read backwards, and agrees
 		// with where the arrowhead is. It sits on its edge in the half nearer the focused card, covers no card, no arrowhead of any
 		// edge around the focus (its own included) and no other tag (a tag that does not fit is left out), and is 11px or more.
+		const pane = (await page.locator('.vue-flow')
+			.boundingBox())!
 		const tagged = related.filter(edge => edge.relationTag !== null)
 		expect(tagged.length)
 			.toBeGreaterThanOrEqual(focus.atLeast)
-		// Each direction that has edges has a tag.
-		expect(tagged.some(edge => edge.classes.includes('graph-edge--depends-on')))
-			.toBe(true)
-		expect(tagged.some(edge => edge.classes.includes('graph-edge--used-by')))
-			.toBe(true)
+		// Each direction that has edges has a tag, where the layout leaves room for one inside what Fit shows.
+		if (focus.identity !== '#sessions' && focus.identity !== '#ana') {
+			expect(tagged.some(edge => edge.classes.includes('graph-edge--depends-on')))
+				.toBe(leaving.length > 0)
+			expect(tagged.some(edge => edge.classes.includes('graph-edge--used-by')))
+				.toBe(arriving.length > 0)
+		}
 		const intersect = (a: Rect, b: Rect): boolean => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 		const inside = (rect: Rect, point: Point): boolean => point.x > rect.x && point.x < rect.x + rect.width && point.y > rect.y && point.y < rect.y + rect.height
 		// Points of the arrowhead drawn at the end of an edge: a triangle `length` long (on screen) and 0.8 as wide.
@@ -388,7 +397,7 @@ for (const focus of focusCases) {
 		}
 		for (const edge of tagged) {
 			const [source, target] = JSON.parse(edge.id.slice('edge:'.length)) as [string, string]
-			const leavesFocus = source === focus.cluster
+			const leavesFocus = source === clusterId
 			const other = leavesFocus ? target : source
 			const prefix = leavesFocus ? 'Depends on' : 'Used by'
 			expect(edge.relationTag!.text, edge.id)
@@ -396,13 +405,31 @@ for (const focus of focusCases) {
 			expect(edge.relationTag!.text, edge.id)
 				.toMatch(new RegExp(`^${prefix} #`))
 			const near = leavesFocus ? edge.points[0]! : edge.points.at(-1)!
-			const far = leavesFocus ? edge.points.at(-1)! : edge.points[0]!
 			expect(onBorder(focused, near, 3), `${edge.id} touches the focused widget at its ${leavesFocus ? 'start' : 'end'}`)
 				.toBe(true)
 			const rect = edge.relationTag!.rect
 			const centre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
-			expect(Math.hypot(centre.x - near.x, centre.y - near.y), `${edge.id} tag is nearer the focused card than the other end`)
-				.toBeLessThan(Math.hypot(centre.x - far.x, centre.y - far.y))
+			// On its edge, in the half nearer the focused card: measured along the curve, at the sample nearest the tag.
+			const along = [0]
+			for (let index = 1; index < edge.points.length; index++)
+				along.push(along[index - 1]! + Math.hypot(edge.points[index]!.x - edge.points[index - 1]!.x, edge.points[index]!.y - edge.points[index - 1]!.y))
+			let nearest = 0
+			for (let index = 1; index < edge.points.length; index++) {
+				if (Math.hypot(edge.points[index]!.x - centre.x, edge.points[index]!.y - centre.y) < Math.hypot(edge.points[nearest]!.x - centre.x, edge.points[nearest]!.y - centre.y))
+					nearest = index
+			}
+			const fromStart = along[nearest]! / along.at(-1)!
+			expect(leavesFocus ? fromStart : 1 - fromStart, `${edge.id} tag is in the half of the edge nearer the focused card`)
+				.toBeLessThanOrEqual(0.55)
+			// Fit does not fit the tags, so they must lie where Fit always shows: inside the pane, not cut off at its edges.
+			expect(rect.x, `${edge.id} tag left of the pane`)
+				.toBeGreaterThanOrEqual(pane.x - 0.5)
+			expect(rect.x + rect.width, `${edge.id} tag right of the pane`)
+				.toBeLessThanOrEqual(pane.x + pane.width + 0.5)
+			expect(rect.y, `${edge.id} tag top of the pane`)
+				.toBeGreaterThanOrEqual(pane.y - 0.5)
+			expect(rect.y + rect.height, `${edge.id} tag bottom of the pane`)
+				.toBeLessThanOrEqual(pane.y + pane.height + 0.5)
 			expect(edge.relationTag!.fontPx, `${edge.id} tag text on screen`)
 				.toBeGreaterThanOrEqual(10.9)
 			for (const card of cards) {

@@ -19,6 +19,7 @@ import type { GraphFlowEdge, GraphFlowNode } from './vue-flow'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import ELK from 'elkjs/lib/elk.bundled.js'
 import { describe, expect, it, vi } from 'vitest'
+import { useGraphTags } from '../composables/use-graph-tags'
 import { defaultSurveyPreset } from '../showcases/survey/presets'
 import { surveySystem } from '../showcases/survey/system'
 import { defaultTripBudgetPreset } from '../showcases/trip-budget/presets'
@@ -27,7 +28,6 @@ import { routePointAtDistance, sampleRoute } from './edge-geometry'
 import { fromElkResult, toElkGraph } from './elk-adapter'
 import { projectSemanticGraph } from './projection'
 import { projectRelations } from './relations'
-import { placeTags } from './tag-placement'
 import { toVueFlow } from './vue-flow'
 import { ARROW_KINDS, ZOOM_BUCKETS } from './zoom-scale'
 
@@ -216,10 +216,13 @@ describe('focus tags', () => {
 	// The tags of the edges around one widget, placed at the font size (and arrowhead length) of the zoom buckets the showcase's Fit
 	// uses: the Survey fits at 0.95 (font 13) at 1440 x 900 and 0.84 (font 13) at 1280 x 800, the Trip budget at 0.37 (font 32).
 	const cases = [
-		{ showcase: 'survey', widget: 'mode', fonts: [11, 13, 16], atLeast: 3 },
-		{ showcase: 'survey', widget: 'guests', fonts: [11, 13, 16], atLeast: 3 },
-		{ showcase: 'trip-budget', widget: 'hotel', fonts: [27, 32], atLeast: 2 },
-		{ showcase: 'trip-budget', widget: 'ana', fonts: [27, 32], atLeast: 2 },
+		{ showcase: 'survey', widget: 'mode', fonts: [11, 13, 16], atLeast: 3, both: true },
+		{ showcase: 'survey', widget: 'guests', fonts: [11, 13, 16], atLeast: 3, both: true },
+		{ showcase: 'survey', widget: 'sessions', fonts: [11, 13, 16], atLeast: 1, both: false },
+		{ showcase: 'trip-budget', widget: 'hotel', fonts: [27, 32], atLeast: 3, both: true },
+		{ showcase: 'trip-budget', widget: 'ana', fonts: [27, 32], atLeast: 3, both: false },
+		{ showcase: 'trip-budget', widget: 'settlement', fonts: [27, 32], atLeast: 3, both: true },
+		{ showcase: 'trip-budget', widget: 'currency', fonts: [27, 32], atLeast: 4, both: true },
 	] as const
 
 	interface Box { x: number, y: number, width: number, height: number }
@@ -245,8 +248,8 @@ describe('focus tags', () => {
 		return points
 	}
 
-	for (const { showcase, widget, fonts, atLeast } of cases) {
-		it.each(fonts)(`places the tags around #${widget} of the ${showcase} on no card, no arrowhead and no other tag, nearer to #${widget} than to the other end (font %s)`, async (font) => {
+	for (const { showcase, widget, fonts, atLeast, both } of cases) {
+		it.each(fonts)(`places the tags around #${widget} of the ${showcase} inside what Fit shows, on no card, no arrowhead and no other tag, nearer to #${widget} than to the other end (font %s)`, async (font) => {
 			const drawn = await draw(showcase, false)
 			const bucket = ZOOM_BUCKETS.find(candidate => candidate.font === font)!
 			const tagged = drawn.redraw(widget)
@@ -259,7 +262,14 @@ describe('focus tags', () => {
 				relation: edge.data!.relation!,
 				text: `${edge.data!.relation === 'depends-on' ? 'Depends on' : 'Used by'} ${edge.data!.otherEnd}`,
 			}))
-			const placed = placeTags(tags, drawn.cards, { font, arrow: bucket.arrow })
+			// The real path: the composable the canvas uses, at the lowest zoom of the bucket.
+			const focusedEdges = drawn.redraw(widget)
+			const placed = useGraphTags({
+				edges: () => focusedEdges,
+				cards: () => drawn.cards,
+				zoom: () => bucket.min,
+				text: (relation, name) => `${relation === 'depends-on' ? 'Depends on' : 'Used by'} ${name}`,
+			}).value
 			// Tags that do not fit are not drawn, but some do.
 			expect(placed.size)
 				.toBeGreaterThanOrEqual(atLeast)
@@ -270,8 +280,9 @@ describe('focus tags', () => {
 					if (overlaps(tag, { x: card.x + card.width / 2, y: card.y + card.height / 2, width: card.width, height: card.height }))
 						meeting.push(`${id} on card ${card.id}`)
 				}
-				// No arrowhead of any edge around the focus, its own included.
-				for (const edge of tags) {
+				// No arrowhead of any edge, its own included, the dimmed ones too.
+				for (const edge of focusedEdges.filter(candidate => candidate.data?.route !== undefined)
+					.map(candidate => ({ id: candidate.id, route: candidate.data!.route! }))) {
 					const hit = arrowheadPoints(edge.route, bucket.arrow)
 						.some(point => Math.abs(point.x - tag.x) < tag.width / 2 && Math.abs(point.y - tag.y) < tag.height / 2)
 					if (hit)
@@ -285,18 +296,51 @@ describe('focus tags', () => {
 			expect(meeting)
 				.toEqual([])
 
-			for (const input of tags.filter(candidate => placed.has(candidate.id))) {
-				const tag = placed.get(input.id)!
-				const route = input.route
-				const [near, far] = input.relation === 'depends-on' ? [route[0]!, route.at(-1)!] : [route.at(-1)!, route[0]!]
-				expect(Math.hypot(tag.x - near.x, tag.y - near.y), input.id)
-					.toBeLessThanOrEqual(Math.hypot(tag.x - far.x, tag.y - far.y) + 1)
+			// Inside what Fit always shows (the cards and the curves): a tag is no part of what Fit fits, so one outside would be cut
+			// off by the pane. Measured on a box of our own, not the one the placement used.
+			const everything = [
+				...drawn.cards.flatMap(card => [{ x: card.x, y: card.y }, { x: card.x + card.width, y: card.y + card.height }]),
+				...focusedEdges.flatMap(edge => edge.data?.route ?? []),
+			]
+			const left = Math.min(...everything.map(point => point.x))
+			const right = Math.max(...everything.map(point => point.x))
+			const top = Math.min(...everything.map(point => point.y))
+			const bottom = Math.max(...everything.map(point => point.y))
+			for (const [id, tag] of placed) {
+				expect(tag.x - tag.width / 2, `${id} left`)
+					.toBeGreaterThanOrEqual(left - 0.01)
+				expect(tag.x + tag.width / 2, `${id} right`)
+					.toBeLessThanOrEqual(right + 0.01)
+				expect(tag.y - tag.height / 2, `${id} top`)
+					.toBeGreaterThanOrEqual(top - 0.01)
+				expect(tag.y + tag.height / 2, `${id} bottom`)
+					.toBeLessThanOrEqual(bottom + 0.01)
 			}
 
-			// The two directions take turns: when both exist and any tag of the rarer one fits, it gets one.
+			// On its edge, in the half nearer the focused card: measured along the curve, at the point of the curve nearest the tag.
+			for (const input of tags.filter(candidate => placed.has(candidate.id))) {
+				const tag = placed.get(input.id)!
+				const samples = sampleRoute(input.route, 48)
+				const along = [0]
+				for (let index = 1; index < samples.length; index++)
+					along.push(along[index - 1]! + Math.hypot(samples[index]!.x - samples[index - 1]!.x, samples[index]!.y - samples[index - 1]!.y))
+				let nearest = 0
+				for (let index = 1; index < samples.length; index++) {
+					if (Math.hypot(samples[index]!.x - tag.x, samples[index]!.y - tag.y) < Math.hypot(samples[nearest]!.x - tag.x, samples[nearest]!.y - tag.y))
+						nearest = index
+				}
+				const fromStart = along[nearest]! / along.at(-1)!
+				expect(input.relation === 'depends-on' ? fromStart : 1 - fromStart, input.id)
+					.toBeLessThanOrEqual(0.52)
+			}
+
+			// The two directions take turns: where both exist and any tag of the rarer one fits, it gets one. (Not every edge has room
+			// inside what Fit shows: #sessions is at the top right of the Survey, #ana in the middle of a dense Trip budget.)
 			const relations = new Set([...placed.values()].map(tag => tag.relation))
-			expect(relations.size, 'both directions are tagged')
-				.toBe(new Set(tags.map(tag => tag.relation)).size)
+			if (both) {
+				expect(relations.size, 'both directions are tagged')
+					.toBe(new Set(tags.map(tag => tag.relation)).size)
+			}
 		})
 	}
 })
