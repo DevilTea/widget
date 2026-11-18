@@ -20,10 +20,10 @@ Private, never-published workspace application with two roles:
    `@deviltea/widget-vue`.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
    `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default, and `Trip budget splitter`
-   (`trip-budget`) and `Quote rules shared by browser and backend` (`quote-rules`) are listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
+   (`trip-budget`), `Quote rules shared by browser and backend` (`quote-rules`) and `Onboarding wizard with an Events log` (`onboarding`) are listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
    test-only fixture (see "Showcase selection" below). The former `Product Prototype` (`crm`) and
    `Vuetify Task Workspace` (`vuetify-tasks`) showcases, and the CRM tour, were removed (tracking issue
-   `DevilTea/widget#230`); the new showcases of that issue are added one PR at a time (`trip-budget` and `quote-rules` are the first two).
+   `DevilTea/widget#230`); the new showcases of that issue are added one PR at a time (`trip-budget`, `quote-rules` and `onboarding` are the first three).
 
 ### Showcase selection (`?showcase=<id>`)
 
@@ -271,6 +271,57 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     `data-tutorial-target` is `quote-<widget id>` on every renderer root, plus `quote-same-rules` and `quote-isolated` for the panels.
     Known limits: the ids of the items and rules are object keys inside `registerDeps`, so integer-like ids would sort first (as in
     the trip); one Worker per Preview, no caching of the Blueprint (the evaluation is stateless, as in `survey/evaluate.ts`).
+  - `onboarding/` — Onboarding wizard with an Events log (issue #230, showcase 3), a new-member onboarding for a community
+    workshop ("Tidepool Makers"): five plugin types `Onboarding` (root `onboarding`, slot `steps`, State `current` and `finished`),
+    `AccountStep`, `InterestsStep`, `SafetyStep` and `InductionStep` (every step has the same four Properties `title`, `missing`,
+    `complete` and `answers`, which is all the root reads, through `plugins/reads.ts`; the step ids come from the Blueprint, never from the
+    document's text). It exists to show, with a real Runtime: **declared and emitted Events** (`Onboarding`: `stepChanged`, `completed`;
+    `InductionStep`: `slotRequested`, `slotConfirmed`, `slotDeclined`, `slotCancelled`, each with an object payload, emitted from a Method
+    that lists it in `emits`); a **host listener** (`renderers/onboarding-host.ts`, created per Runtime by `OnboardingRenderer` in
+    `renderers/index.ts` and provided through `OnboardingHostKey`); **async work kept at the host** (see below); **Method argument validation**
+    (`goTo` and `requestSlot` use `validateArgs`, which sees only the arguments and the config, so `invalid-method-arguments` is about the shape
+    and the config (the offered days and times); the checks that need the Blueprint or another widget, `no-such-step`, `step-locked`,
+    `booking-in-progress`, are in `execute` and are `invalid-method-result`); **Method failures** (a refused move writes and emits nothing; its
+    diagnostic is the Method's latest failure, listed by the Events tab and shown on the Method's row in Selected widget/Runtime, and the next
+    successful call replaces it); and **read-only versus writing Methods** (`Onboarding.canEnter` is read-only, `goTo` calls it, every other
+    Method writes State and emits, so Relations marks them W and E; `plugins/wizard.unit.test.ts` pins the derived flags with
+    `inspectBlueprint`). Core's code for a failed `validateArgs` is `invalid-method-arguments`. Presets: `onboarding-default`,
+    `onboarding-ready-to-book` (`startStep: 3` with the first three steps prefilled), `onboarding-deep-link` (`startStep: 3`, nothing filled in)
+    and `onboarding-invalid` (four located diagnostics, pinned by `presets.unit.test.ts`).
+    - **The booking (async work at the host).** Core is synchronous: a Method cannot await, a returned Promise is a contract violation and the
+      `emit` and `deps` callables of a callback stop working when it returns (`plugins/induction.unit.test.ts` pins that a retained `emit` throws).
+      `requestSlot` therefore writes `status: 'requesting'`, a new `ticket`, the slot, and emits `slotRequested({ ticket, date, time })`, and
+      returns at once. The host (`onboarding-host.ts`) asks the simulated office (`booking-office.ts`: the answer is a pure function of the slot,
+      17:00 is always declined, the wait is a `Scheduler` that the Preview fills with `setTimeout` and the unit tests fire by hand) and calls
+      `settleBooking(ticket, outcome)`; the Method applies the answer only while `status` is `requesting` and the ticket is the current one, otherwise
+      it returns `false` and changes and emits nothing (Core's "Async work" guide: the ticket is the guard for work that cannot be cancelled).
+      `cancelBooking` emits `slotCancelled`; a host that can recall work (the office desk's "recall" switch, on by default) clears the timer. "Hold" keeps
+      the office from answering until the visitor lets it, which is how the e2e suite controls the timing without sleeping. Unmount and Runtime
+      disposal cancel every pending request (`runtime.subscribeDisposal`), and `resetAll()` forgets the requests in flight before `runtime.resetState()`
+      puts the tickets back to 0. The two switches are host settings, not widget State: the office is outside Core.
+    - **Isolation:** it follows "Showcase isolation" below. It reads `useShowcaseHost().locale` and `.theme` and `useInspectAnchor()`, owns its colours
+      as `--onboarding-*` custom properties on the root renderer and registers its renderer loader in `preview-frame-renderers.ts`. Its own chrome text
+      is `messages.ts` (en and zh-TW); the wizard's text is the document's `{ en, zh-TW }` objects. The page explains a refusal in the viewer's language
+      from the diagnostic's machine-readable `reason` (`PROBLEM_MESSAGE_KEYS`) and shows the Core `code` and `reason` untranslated; the diagnostic
+      `message` stays English and is what the Lab's panels show. No `allowed-packages.json`: it needs only Vue and Widget.
+    - **Announcements:** the page has one `role="alert"` at a time. `renderers/problem-board.ts` is the one place a refused call is shown: the root
+      renderer owns the board and every renderer reports the Method's latest diagnostic to it after a call (`reportCall`); a successful move clears it.
+      The booking status is the page's one `role="status"` (it changes only when the host settles), the activity list and the office desk are plain
+      lists, and no `aria-live` is used. When the host hears `stepChanged` the root moves focus to the entered step's heading (each step's `h2` has
+      `tabindex="-1"`); the buttons that call refused Methods are not disabled, so the Method's own refusal is what the visitor sees.
+    - **Tests:** plugins and the host are tested against real Runtimes (`plugins/wizard.unit.test.ts`, `plugins/induction.unit.test.ts`,
+      `renderers/onboarding-host.unit.test.ts`), renderers with a plain-ref `ShowcaseHost` and a hand-fired scheduler (`renderers/test-harness.ts`,
+      `renderers/onboarding-renderers.unit.test.ts`), and `e2e/onboarding.spec.ts` drives the real Lab. The Lab-side zh-TW text is in
+      `i18n/onboarding-messages.unit.test.ts` and `tutorial/onboarding-script.unit.test.ts`; `lab/config-schema.onboarding.unit.test.ts` pins
+      what the Structure editor makes of the config schemas. The tutorial (`tutorial/onboarding-script.ts`) is authored against `onboarding-default`; its
+      `data-tutorial-target` is `onboarding-<widget id>` on every renderer root, plus `onboarding-steps`, `-actions`, `-jump`, `-problem`,
+      `-induction-status`, `-office` and `-host-activity`. Property predicates see only State and already-evaluated Properties, never a Method
+      diagnostic or an Event, so the steps whose "do" leaves no State behind (a refused Next, a bad step number) are narrated, and the two that load a
+      preset are gated on the State that preset starts in.
+    - Known limits: the Lab's Events log lists a Method failure when the Method's latest diagnostic snapshot becomes non-empty, and Core keeps only
+      the latest snapshot, so it is a fact about the latest call, not a call log; Event arguments are typed by TypeScript only, Core validates no payload
+      at run time; `validateArgs` cannot see the Blueprint, hence `goTo`'s range check is an `invalid-method-result`; a dependency container may hold
+      only dependency expressions, so the root's `steps` and `answers` Properties pair the dependency array with `stepChildren(blueprint)` by index.
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.
@@ -398,7 +449,7 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
 ```
 
 - **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
-  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey, Trip budget and Quote rules showcases (their systems, presets and sources, not their renderers) and the hidden Sandbox fixture,
+  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey, Trip budget, Quote rules and Onboarding showcases (their systems, presets and sources, not their renderers) and the hidden Sandbox fixture,
   `dockview-vue`. This is unavoidable critical-path weight for a workbench app whose
   shell has to exist before any panel can render.
 - **`modern-monaco/core` (package JS + vendored `editor-core.mjs`)**: not in the eager chunk —
@@ -1061,7 +1112,7 @@ Dockview groups or the Preview frame (the survey's own Language select). With th
 Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used by, the focus, Depends on) and scrolls vertically below 680px of **pane** width
 (a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
 
-**One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts` and `i18n/quote-rules-messages.ts` are the models).
+**One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`, `onboarding`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts`, `i18n/quote-rules-messages.ts` and `i18n/onboarding-messages.ts` are the models).
 
 **Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview
@@ -1226,7 +1277,7 @@ happy-dom unit tests.
 
 Browser specs reach the header's menus only through the helpers in `e2e/fixtures.ts` (`selectShowcase`, `loadPreset`,
 `setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, `openStatusDetails`,
-`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey, trip and quote examples), and the `expectShowcase` /
+`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey, trip, quote and onboarding examples), and the `expectShowcase` /
 `expectDocumentStatus` / `expectPreviewStatus` assertions), never with ad-hoc menu clicks, so a future header change touches one
 file. Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
 Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a

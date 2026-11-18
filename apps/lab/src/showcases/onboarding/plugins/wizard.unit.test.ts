@@ -248,6 +248,9 @@ describe('onboarding: the deep-link preset', () => {
 		const { root } = widgetsOf(runtime)
 		expect(root.state.current.get())
 			.toBe(3)
+		// Where the visitor already is is never locked, even when the steps before it are not done.
+		expect(root.methods.goTo(3).ok)
+			.toBe(true)
 		expect(root.methods.next().ok)
 			.toBe(false)
 		expect(failureOf(root.methods.next))

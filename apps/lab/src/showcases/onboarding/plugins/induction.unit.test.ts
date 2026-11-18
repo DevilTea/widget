@@ -49,7 +49,7 @@ describe('inductionStep.requestSlot: arguments are validated against the config'
 		const { induction } = setup()
 		induction.methods.requestSlot('2026-12-06', '09:30')
 		expect(induction.methods.requestSlot.getDiagnostics()
-			.map(({ path, message }) => ({ path, message })))
+			.map(diagnostic => ({ path: (diagnostic as { readonly path?: unknown }).path, message: diagnostic.message })))
 			.toEqual([
 				{ path: [0], message: 'requestSlot: 2026-12-06 is not a day inductions are offered. Offered: 2026-12-05, 2026-12-12, 2026-12-19.' },
 				{ path: [1], message: 'requestSlot: 09:30 is not a start time that is offered. Offered: 10:00, 14:00, 17:00.' },
@@ -135,17 +135,15 @@ describe('inductionStep: request, settle and cancel', () => {
 	})
 
 	it.each([
-		['no request is waiting', (induction: ReturnType<typeof setup>['induction']) => { induction.methods.settleBooking(1, { status: 'confirmed', reference: 'TM-1' }) }],
+		['no request is waiting', () => {}],
 		['the ticket is not the newest', (induction: ReturnType<typeof setup>['induction']) => {
 			induction.methods.requestSlot('2026-12-05', '10:00')
 			induction.methods.cancelBooking()
 			induction.methods.requestSlot('2026-12-12', '14:00')
-			induction.methods.settleBooking(1, { status: 'confirmed', reference: 'TM-late' })
 		}],
 		['the request was cancelled', (induction: ReturnType<typeof setup>['induction']) => {
 			induction.methods.requestSlot('2026-12-05', '10:00')
 			induction.methods.cancelBooking()
-			induction.methods.settleBooking(1, { status: 'confirmed', reference: 'TM-late' })
 		}],
 	])('ignores a stale answer when %s: the Method succeeds with false, writes nothing and emits nothing', (_name, arrange) => {
 		const { induction, heard } = setup()

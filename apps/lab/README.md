@@ -47,9 +47,9 @@ pnpm --filter widget-lab test:pages
 the last demonstrating a cross-widget `registerDeps` dependency) with three preset source texts: a
 fully valid interactive one, one that is intentionally semantically invalid (to demo diagnostics), and
 one that exercises Blueprint recovery (an unresolved node and a raw-slot placement). These are
-test-only fixtures for this shell, hidden from the Examples menu. Three showcases are listed, all registered in
+test-only fixtures for this shell, hidden from the Examples menu. Four showcases are listed, all registered in
 `src/showcases/registry.ts` (which also registers the hidden `sandbox`): "Interactive Survey" (the default),
-"Trip budget splitter" and "Quote rules shared by browser and backend". Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
+"Trip budget splitter", "Quote rules shared by browser and backend" and "Onboarding wizard with an Events log". Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
 missing or unknown id falls back to the default. The parameter follows the active showcase (the Lab rewrites it with
 `history.replaceState`), so reloading restores it.
 
@@ -102,6 +102,30 @@ The presets are `quote-default`, `quote-invalid` and `quote-buggy-rule`. The tut
 The showcase follows the showcase host contract (it reads the host's locale and light/dark theme and the Inspect anchor) and styles
 itself with its own `--quote-*` tokens. It is the first showcase with extra packages (`valibot` and `@valibot/to-json-schema`, in its
 `allowed-packages.json`) and the first with a Web Worker (its file is inside the showcase directory, as the isolation guard requires).
+
+### Onboarding wizard with an Events log
+
+A new-member onboarding for a community workshop ("Tidepool Makers"): your details, interests, a three-rule safety briefing and
+an induction slot to book. The widgets are `Onboarding` (root), `AccountStep`, `InterestsStep`, `SafetyStep` and `InductionStep`;
+the plugins are in `src/showcases/onboarding/plugins/`. The page around the widgets is the *host*: it listens to the widgets'
+Events and does the waiting for a simulated booking office. What it shows, and where in the Lab:
+
+| Core feature | In the showcase | Where to see it |
+|---|---|---|
+| Declared and emitted Events | `Onboarding` declares `stepChanged` and `completed`, `InductionStep` declares `slotRequested`, `slotConfirmed`, `slotDeclined` and `slotCancelled`; each is emitted by a Method that lists it in `emits`, with an object payload | Events tab: each Event with its widget, revision and expandable payload; Selected widget / Catalog: the declared Events with their descriptions |
+| A host listener | `renderers/onboarding-host.ts` subscribes with `runtime.getWidget(id).events.<name>.subscribe()` (a widget cannot subscribe to an Event): it moves focus to the heading of the step that was entered, asks the office on `slotRequested`, and queues a welcome message on `completed` | Preview: "What this page did about the Events" lists what the host did; the Events tab lists the same Events from outside |
+| Async work kept at the host | `requestSlot(date, time)` writes the request into State with a ticket and emits `slotRequested`, then returns; the host waits for the office and calls `settleBooking(ticket, outcome)`, which applies an answer only while its ticket is the newest. A callback's `emit` and `deps` stop working when it returns, so nothing inside Core could wait | Preview > Book your induction: the status says the request is with the office, the office desk lists it; the Events tab shows `slotRequested` first and `slotConfirmed` (or `slotDeclined`: the office always declines 17:00) when the host settles |
+| Cancellation and a stale answer | `cancelBooking()` emits `slotCancelled`; the host recalls the request. With "The office can recall a cancelled request" switched off, the late answer still arrives and `settleBooking` ignores it (it returns `false`, writes and emits nothing). A showcase switch and an unmount cancel every pending request | Preview: the two switches on the office desk and the activity list ("ignored the answer: ticket #1 is no longer the newest") |
+| Method argument validation | `goTo(index)` and `requestSlot(date, time)` check their arguments in `validateArgs` (with the config for the offered days and times): `invalid-method-arguments`, and `execute` never runs. What needs the Blueprint or another widget (`no-such-step`, `step-locked`, a request already waiting) is checked in `execute`: `invalid-method-result` | Preview: "Go to step number" (type 1.5, 9, 2) and the date box of the induction; the page's one alert shows the Core code and reason |
+| Method failures and diagnostics | a refused move writes and emits nothing; its diagnostic is the Method's latest failure | Events tab: "Method failure" entries (not Events); Selected widget / Runtime: the Method's row says "Last call failed" with code, reason and message, and the next successful call clears it |
+| Read-only and writing Methods | `Onboarding.canEnter(index)` neither writes State nor emits, so Core derives it as read-only (and `goTo` calls it); `next`, `back`, `goTo`, `finish` and the induction's three Methods write and emit | Dependencies > Relations: focus a Method (Runtime > a Property row, then the Method in Relations): `canEnter` has no W and no E badge, the others have both |
+
+The presets are `onboarding-default`, `onboarding-ready-to-book` (opens on the induction with the first three steps done),
+`onboarding-deep-link` (opens on the last step with nothing filled in: Finish and a jump forward are refused, going back works) and
+`onboarding-invalid` (four located config and structure diagnostics). The tutorial rail has a tour for the showcase (en and zh-TW).
+The showcase follows the showcase host contract (it reads the host's locale and light/dark theme and the Inspect anchor) and styles
+itself with its own `--onboarding-*` tokens. The booking office is not a network request: its answer is a function of the slot and
+its timing is a `Scheduler` the host is given (timers in the Preview, a hand-fired one in tests, so no test sleeps).
 
 ## Header, editing feedback and Undo
 

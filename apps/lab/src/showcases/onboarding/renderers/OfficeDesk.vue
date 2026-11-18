@@ -43,7 +43,10 @@ const recallId = useId()
 				class="office-box"
 				data-testid="office-hold"
 			>
-			<label :for="holdId">{{ t('officeHold') }}</label>
+			<label
+				:for="holdId"
+				class="office-label"
+			>{{ t('officeHold') }}</label>
 		</div>
 		<div class="office-switch">
 			<input
@@ -53,7 +56,10 @@ const recallId = useId()
 				class="office-box"
 				data-testid="office-recall"
 			>
-			<label :for="recallId">{{ t('officeRecall') }}</label>
+			<label
+				:for="recallId"
+				class="office-label"
+			>{{ t('officeRecall') }}</label>
 		</div>
 		<ul
 			v-if="host.pending.value.length > 0"
@@ -118,6 +124,12 @@ const recallId = useId()
 	gap: 8px;
 	min-height: 28px;
 	font-size: 14px;
+}
+
+.office-label {
+	display: inline-flex;
+	align-items: center;
+	min-height: 28px;
 }
 
 .office-box {

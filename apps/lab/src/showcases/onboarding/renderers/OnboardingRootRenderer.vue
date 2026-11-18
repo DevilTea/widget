@@ -109,13 +109,21 @@ function onStartOver(): void {
 	onboardingHost?.resetAll()
 }
 
-// The host heard `stepChanged`: move focus to the heading of the step that was entered.
-watch(() => onboardingHost?.lastStepChange.value?.nonce, async (nonce) => {
-	if (nonce === undefined)
+// The host heard `stepChanged`: move focus to the heading of the step that was entered. The new step renders after the
+// Property that says where the wizard is has updated, so wait (a few ticks at most) until it is in the page.
+watch(() => onboardingHost?.lastStepChange.value?.nonce, async () => {
+	const to = onboardingHost?.lastStepChange.value?.change.to
+	if (to === undefined)
 		return
-	await nextTick()
-	stepRegion.value?.querySelector<HTMLElement>('h2')
-		?.focus()
+	for (let attempt = 0; attempt < 5; attempt++) {
+		await nextTick()
+		const entered = stepRegion.value?.querySelector<HTMLElement>(`[data-widget-id="${CSS.escape(to)}"]`)
+		if (entered !== null && entered !== undefined) {
+			entered.querySelector<HTMLElement>('h2')
+				?.focus()
+			return
+		}
+	}
 })
 
 const problemText = computed(() => {
