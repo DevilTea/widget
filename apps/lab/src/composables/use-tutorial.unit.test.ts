@@ -45,7 +45,7 @@ async function flush(): Promise<void> {
 }
 
 interface DeferredTutorialEvaluation {
-	tourId: 'survey'
+	tourId: string
 	stepIndex: number
 	progress: number
 	resolve: (progress: number) => void
@@ -66,10 +66,10 @@ function previewConnection(revision: number): PreviewFrameConnection {
 function createFakePreviewDriver(): {
 	driver: PreviewFrameDriver
 	evaluations: DeferredTutorialEvaluation[]
-	emitTutorialObservation: (tourId: 'survey') => void
+	emitTutorialObservation: (tourId: string) => void
 } {
 	const evaluations: DeferredTutorialEvaluation[] = []
-	const observationListeners = new Set<(tourId: 'survey') => void>()
+	const observationListeners = new Set<(tourId: string) => void>()
 	const driver: PreviewFrameDriver = {
 		mount: async descriptor => previewConnection(descriptor.revision),
 		updatePresentation: () => {},

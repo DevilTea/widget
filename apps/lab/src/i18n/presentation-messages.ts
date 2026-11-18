@@ -1,5 +1,6 @@
 import type { LabLocale } from './locale'
 import { translateMessage } from './messages'
+import { translateTripBudgetMessage } from './trip-budget-messages'
 
 /**
  * #43 audit of non-tutorial Lab-owned chrome. Keep semantic/source payloads out of this table: plugin
@@ -437,6 +438,9 @@ export function translatePresentationMessage(locale: LabLocale, source: string):
 		const translated = zhTWPresentationMessages[source]
 		if (translated !== undefined)
 			return translated
+		const trip = translateTripBudgetMessage(locale, source)
+		if (trip !== undefined)
+			return trip
 	}
 	return translateMessage(locale, source)
 }

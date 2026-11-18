@@ -20,6 +20,9 @@ import { sandboxSystem } from '../sandbox/system'
 import { defaultSurveyPreset, surveyPresets } from './survey/presets'
 import { surveySources } from './survey/sources'
 import { surveySystem } from './survey/system'
+import { defaultTripBudgetPreset, tripBudgetPresets } from './trip-budget/presets'
+import { tripBudgetSources } from './trip-budget/sources'
+import { tripBudgetSystem } from './trip-budget/system'
 
 export interface ShowcasePreset {
 	readonly id: string
@@ -54,7 +57,7 @@ export interface ShowcaseEntry {
  * consumer (`LabSession`, `createWidgetVueRenderer`'s own `runtime.blueprint.system === system`
  * identity check) only ever needs object identity, never the precise literal-type union.
  *
- * `survey` is the default and the only showcase listed in the UI. `sandbox` is a hidden, test-only
+ * `survey` is the default; `trip-budget` is listed after it in the Examples menu. `sandbox` is a hidden, test-only
  * fixture (minimal Counter/Text/... widgets plus the invalid/raw-slot recovery presets): it is not listed
  * in the Examples menu and is reachable only through `?showcase=sandbox` (see `resolveInitialShowcase`).
  */
@@ -66,6 +69,14 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: surveyPresets,
 		defaultPreset: defaultSurveyPreset,
 		sources: surveySources,
+	},
+	{
+		id: 'trip-budget',
+		label: 'Trip budget splitter',
+		system: tripBudgetSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
+		presets: tripBudgetPresets,
+		defaultPreset: defaultTripBudgetPreset,
+		sources: tripBudgetSources,
 	},
 	{
 		id: 'sandbox',

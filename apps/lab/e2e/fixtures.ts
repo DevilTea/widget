@@ -2,6 +2,7 @@ import type { FrameLocator, Locator, Page } from '@playwright/test'
 import { test as base, expect } from '@playwright/test'
 import { sandboxPresets } from '../src/sandbox/presets'
 import { surveyPresets } from '../src/showcases/survey/presets'
+import { tripBudgetPresets } from '../src/showcases/trip-budget/presets'
 
 /**
  * Shared request boundary for the browser suite. Built-app tests default to the exact origin in
@@ -106,16 +107,19 @@ export function previewFrame(page: Page): FrameLocator {
 // Header menu helpers. The header's showcase/preset/theme/language/developer controls are Nuxt UI menus, so
 // specs go through these instead of ad-hoc menu clicks; when the header changes again only this block does.
 
-export type ShowcaseId = 'survey' | 'sandbox'
+export type ShowcaseId = 'survey' | 'trip-budget' | 'sandbox'
 export type LabLocaleId = 'en' | 'zh-TW'
 
-const SHOWCASE_LABELS: Readonly<Record<ShowcaseId, string>> = { survey: 'Interactive Survey', sandbox: 'Sandbox' }
-const PRESET_LABELS = new Map([...surveyPresets, ...sandboxPresets].map(preset => [preset.id, preset.label] as const))
-// The survey examples are translated in the zh-TW Lab (the sandbox ones are a hidden fixture and are not).
+const SHOWCASE_LABELS: Readonly<Record<ShowcaseId, string>> = { 'survey': 'Interactive Survey', 'trip-budget': 'Trip budget splitter', 'sandbox': 'Sandbox' }
+const PRESET_LABELS = new Map([...surveyPresets, ...tripBudgetPresets, ...sandboxPresets].map(preset => [preset.id, preset.label] as const))
+// The survey and trip examples are translated in the zh-TW Lab (the sandbox ones are a hidden fixture and are not).
 const PRESET_LABELS_ZH_TW: ReadonlyMap<string, string> = new Map([
 	['survey-default', '預設——開放日報名'],
 	['survey-ai-draft', 'AI 草稿——五個錯誤'],
 	['survey-cycle', '循環——同行人數 ↔ 親子區'],
+	['trip-default', '預設——里斯本週末'],
+	['trip-invalid', '有錯誤的草稿——四個問題'],
+	['trip-unsupported-currency', '執行時失敗——沒有匯率的幣別'],
 ])
 
 // Menu item names follow the page locale; the language names themselves never translate.

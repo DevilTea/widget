@@ -47,9 +47,9 @@ pnpm --filter widget-lab test:pages
 the last demonstrating a cross-widget `registerDeps` dependency) with three preset source texts: a
 fully valid interactive one, one that is intentionally semantically invalid (to demo diagnostics), and
 one that exercises Blueprint recovery (an unresolved node and a raw-slot placement). These are
-test-only fixtures for this shell, hidden from the Examples menu. "Interactive Survey" is the default
-and only listed showcase (registered in `src/showcases/registry.ts`, which also registers the hidden
-`sandbox`). Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
+test-only fixtures for this shell, hidden from the Examples menu. Two showcases are listed, both registered in
+`src/showcases/registry.ts` (which also registers the hidden `sandbox`): "Interactive Survey" (the default) and
+"Trip budget splitter". Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
 missing or unknown id falls back to the default. The parameter follows the active showcase (the Lab rewrites it with
 `history.replaceState`), so reloading restores it.
 
@@ -62,6 +62,26 @@ reference that leaves the showcase's directory. The other direction holds too: t
 styles (renderers are loaded lazily, in the frame only, by `src/preview-frame-renderers.ts`;
 `src/styles/shell-isolation.unit.test.ts` checks the built `index.html`). See "Showcase isolation" in `AGENTS.md`, which also says how
 to add a showcase.
+
+### Trip budget splitter
+
+A small group plans a weekend in Lisbon: four people, five expenses in euros, dollars and pounds (equal and percentage
+splits) and a settlement of who pays whom. The widgets are `Trip` (root), `Currency`, `Person`, `Expense` and
+`Settlement`; the plugins are in `src/showcases/trip-budget/plugins/`. What it shows, and where in the Lab:
+
+| Core feature | In the showcase | Where to see it |
+|---|---|---|
+| Property chains across widgets | `Currency.convert` -> `Expense.amountBase` -> `Expense.shares` -> `Person.owed`/`paid` -> `Person.balance` -> `Settlement.balances` -> `Settlement.transfers` | Dependencies > Relations / Graph; Selected widget (the values) |
+| Read-only Methods read by a Property | `Currency.convert` (amount to base cents) and `Currency.roundTransfer` (reads State `roundStep`) | Relations: a Method with no W (writes) and no E (emits) badge; Selected widget: the Methods list |
+| Laziness | `Expense.breakdown` and `Person.ledger` are read only while a viewer opens them | Runtime / Selected widget: `Never evaluated` until opened. The Lab cannot show who is subscribed, only whether a Property was ever evaluated and its latest result |
+| `resetState` | "Reset this expense" (`widget.resetState()`) and "Start over" (`runtime.resetState()`, after which the host writes the interface language back so the page does not switch language), asked of the host (`renderers/reset-host.ts`) because `useWidget()` exposes no Runtime | Preview; the State values in Selected widget go back to the authored ones |
+| Validation | located config and structure diagnostics (a rate of 0, percentages that add up to 90, a negative amount, an unknown payer); a negative or missing amount typed at run time is an `errors` entry and the expense is not counted | Problems list (preset "Draft with mistakes"); the expense card |
+| Failure at run time | an expense in a currency with no rate: `convert` fails and so does everything that reads it | Preset "Run-time failure"; Selected widget shows `Failed` on `amountBase` and `shares` |
+
+The presets are `trip-default`, `trip-invalid` and `trip-unsupported-currency`; there is no cycle preset because
+nothing in a trip reads the settlement. The tutorial rail has a tour for the showcase; the overflow menu's Tutorial starts the
+tour of whichever showcase is open (the Survey's for a showcase that has none). The showcase follows the showcase host contract (it reads only the host's light/dark theme and
+the Inspect anchor) and styles itself with its own `--trip-*` tokens; its language is Widget State, not the Lab's locale.
 
 ## Header, editing feedback and Undo
 
