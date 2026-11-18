@@ -4,6 +4,7 @@
  * and a note) and, in the default slot, the control the customer has for it. It reads nothing itself.
  */
 import type { Adjustment } from '../domain'
+import type { RuleFailure } from './use-threw'
 import { computed, inject } from 'vue'
 import { QuoteCurrencyKey } from './currency'
 import { useQuoteText } from './use-quote-text'
@@ -11,8 +12,11 @@ import { useQuoteText } from './use-quote-text'
 const props = defineProps<{
 	readonly label: string
 	readonly adjustment: Adjustment | null
-	/** The rule's code threw while it was recomputed: `adjustment` is then the last one that worked. */
-	readonly threw: boolean
+	/**
+	 * `own`: this rule's code threw (`adjustment` is then the last one that worked). `input`: something this rule reads threw, so
+	 * the rule has no amount of its own. `null`: neither.
+	 */
+	readonly failure: RuleFailure | null
 }>()
 
 const { t, tf, signed } = useQuoteText()
@@ -33,7 +37,7 @@ const note = computed(() => {
 <template>
 	<article
 		class="rule"
-		:data-state="threw ? 'threw' : adjustment === null ? 'failed' : adjustment.applied ? 'applied' : 'idle'"
+		:data-state="failure === 'own' ? 'threw' : failure === 'input' ? 'input-threw' : adjustment === null ? 'failed' : adjustment.applied ? 'applied' : 'idle'"
 	>
 		<header class="rule-header">
 			<h3 class="rule-title">
@@ -53,12 +57,18 @@ const note = computed(() => {
 			{{ note }}
 		</p>
 		<p
-			v-if="threw"
+			v-if="failure === 'own'"
 			class="rule-threw"
-			role="alert"
 			data-testid="quote-rule-threw"
 		>
 			<span aria-hidden="true">&#9888; </span>{{ t('threwBadge') }}
+		</p>
+		<p
+			v-if="failure === 'input'"
+			class="rule-threw"
+			data-testid="quote-rule-input-threw"
+		>
+			<span aria-hidden="true">&#9888; </span>{{ t('inputThrewBadge') }}
 		</p>
 		<div class="rule-control">
 			<slot />
@@ -78,6 +88,7 @@ const note = computed(() => {
 }
 
 .rule[data-state='threw'],
+.rule[data-state='input-threw'],
 .rule[data-state='failed'] {
 	border-color: var(--quote-danger);
 }

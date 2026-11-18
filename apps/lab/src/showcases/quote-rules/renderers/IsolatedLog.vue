@@ -62,7 +62,7 @@ const entries = computed(() => host?.exceptions.value ?? [])
 				data-testid="quote-isolated-entry"
 			>
 				<code class="log-error">{{ entry.name }}: {{ entry.message }}</code>
-				<span class="log-source">{{ entry.widgetId === null ? t('isolatedUnknown') : tf('isolatedFrom', { widget: entry.widgetId, member: entry.member ?? '' }) }}</span>
+				<span class="log-source">{{ entry.widgetId === null ? t('isolatedUnknown') : tf('isolatedFrom', { widget: entry.widgetId, member: entry.member ?? '' }) }}<template v-if="entry.count > 1"> · <span data-testid="quote-isolated-count">{{ tf('isolatedRepeated', { count: String(entry.count) }) }}</span></template></span>
 			</li>
 		</ol>
 	</section>

@@ -6,7 +6,7 @@
  *
  * Presentation only: everything comes from the host (`./quote-host.ts`).
  */
-import { computed, inject, useId } from 'vue'
+import { computed, inject, shallowRef, useId, watchEffect } from 'vue'
 import OutcomeView from './OutcomeView.vue'
 import { QuoteHostKey } from './quote-host'
 import { useQuoteText } from './use-quote-text'
@@ -36,6 +36,13 @@ const comparisonText = computed(() => {
 		default: return t('pending')
 	}
 })
+
+/** The settled comparison, as text, for the live region: it keeps the last one while the worker is being asked again. */
+const announced = shallowRef('')
+watchEffect(() => {
+	if (host !== null && host.comparison.value !== 'pending')
+		announced.value = unavailableMessage.value === null ? comparisonText.value : `${comparisonText.value}: ${unavailableMessage.value}`
+})
 </script>
 
 <template>
@@ -54,9 +61,16 @@ const comparisonText = computed(() => {
 		<p class="same-intro">
 			{{ t('sameRulesIntro') }}
 		</p>
+		<!-- Only a settled result is announced: the text below goes through "waiting" on every keystroke, this one does not. -->
+		<p
+			class="sr-only"
+			role="status"
+			data-testid="quote-comparison-live"
+		>
+			{{ announced }}
+		</p>
 		<p
 			class="same-status"
-			role="status"
 			data-testid="quote-comparison"
 			:data-state="host.comparison.value"
 		>
@@ -125,6 +139,19 @@ const comparisonText = computed(() => {
 .same-status[data-state='mismatch'],
 .same-status[data-state='unavailable'] {
 	color: var(--quote-danger);
+}
+
+/* Visually hidden, still read out. */
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
 }
 
 .same-columns {

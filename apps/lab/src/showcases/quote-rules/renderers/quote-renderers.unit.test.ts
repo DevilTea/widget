@@ -10,7 +10,7 @@
 import { setIsolatedErrorHandler } from '@deviltea/widget-core'
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createQuoteRuntime, presetText, widgetOfType } from '../test-support'
+import { createQuoteRuntime, createRuntimeFor, presetText, widgetOfType } from '../test-support'
 import { createWorkerBackend } from '../worker-client'
 import { createInProcessWorker, createTamperedBackend, createTestHost, mountQuote, widgetSelector } from './test-harness'
 
@@ -94,14 +94,45 @@ describe('the page', () => {
 		wrapper.unmount()
 	})
 
-	it('refuses a quantity the schema library refuses: nothing is stored and the field shows the stored value again', async () => {
+	it('refuses a quantity the schema library refuses: nothing is stored, and the page shows the library\'s message until a valid one is stored', async () => {
 		const { runtime } = createQuoteRuntime()
-		const wrapper = await mountQuote(runtime)
+		const wrapper = await mountQuote(runtime, { attachTo: document.body })
+		const error = (): string | null => wrapper.find(`${widgetSelector('flyers')} [data-testid="quote-quantity-error"]`)
+			.exists()
+			? wrapper.find(`${widgetSelector('flyers')} [data-testid="quote-quantity-error"]`)
+					.text()
+			: null
+		const input = wrapper.find(`${widgetSelector('flyers')} [data-testid="quote-quantity"]`)
+		expect(error())
+			.toBeNull()
+
 		await typeQuantity(wrapper, 'flyers', '0')
 		expect(widgetOfType(runtime, 'flyers', 'Item').state.quantity.get())
 			.toBe(500)
 		expect(text(wrapper, '[data-testid="quote-total"]'))
 			.toBe('€125.30')
+		expect(error())
+			.toContain('Invalid value: Expected >=1 but received 0')
+		expect(input.attributes('aria-invalid'))
+			.toBe('true')
+		expect(document.getElementById(input.attributes('aria-describedby')!)?.textContent)
+			.toContain('Expected >=1 but received 0')
+
+		// An empty field is refused too, not silently put back.
+		await typeQuantity(wrapper, 'flyers', '')
+		expect(error())
+			.toContain('Invalid type')
+		// The error is not an alert (the page has one, the stale banner); it is a polite live region.
+		expect(wrapper.findAll('[role="alert"]'))
+			.toHaveLength(0)
+
+		await typeQuantity(wrapper, 'flyers', '600')
+		expect(error())
+			.toBeNull()
+		expect(input.attributes('aria-invalid'))
+			.toBeUndefined()
+		expect(widgetOfType(runtime, 'flyers', 'Item').state.quantity.get())
+			.toBe(600)
 		wrapper.unmount()
 	})
 
@@ -278,6 +309,9 @@ describe('a rule that throws', () => {
 		expect(wrapper.find('[data-testid="quote-stale"]')
 			.exists())
 			.toBe(true)
+		// One alert for the whole page (the banner), not one per card.
+		expect(wrapper.findAll('[role="alert"]'))
+			.toHaveLength(1)
 		// The page did not re-render the Property that threw: the last amounts stay.
 		expect(text(wrapper, '[data-testid="quote-total"]'))
 			.toBe('€45.75')
@@ -328,7 +362,7 @@ describe('a rule that throws', () => {
 		wrapper.unmount()
 	})
 
-	it('mounts a document that already starts below the first tier: no quote yet, the exception listed, nothing crashed', async () => {
+	it('mounts a document that already starts below the first tier: no quote yet, the exception listed once, the origin named, nothing crashed', async () => {
 		const { runtime } = createQuoteRuntime(presetText('quote-buggy-rule')
 			.replace('"quantity": 120', '"quantity": 10'))
 		const wrapper = await mountQuote(runtime)
@@ -337,17 +371,66 @@ describe('a rule that throws', () => {
 		expect(wrapper.find('[data-testid="quote-stale"]')
 			.exists())
 			.toBe(true)
+		// One cached exception, handed over once per subscription that first read it (the volume card's, the tax card's and
+		// the page's own), and listed once, at the rule whose code threw.
 		const entries = wrapper.findAll('[data-testid="quote-isolated-entry"]')
-		expect(entries.length)
-			.toBeGreaterThanOrEqual(1)
+		expect(entries)
+			.toHaveLength(1)
 		expect(entries[0]!.text())
 			.toContain('from volume.adjustment')
-		expect(wrapper.find(`${widgetSelector('volume')}`)
+		expect(entries[0]!.find('[data-testid="quote-isolated-count"]')
+			.text())
+			.toBe('handed over 3 times (one per subscription that read it)')
+		// The origin threw by itself; the tax only read something that threw, and says that.
+		expect(wrapper.find(widgetSelector('volume'))
 			.attributes('data-state'))
 			.toBe('threw')
+		expect(wrapper.find(`${widgetSelector('volume')} [data-testid="quote-rule-threw"]`)
+			.exists())
+			.toBe(true)
+		expect(wrapper.find(widgetSelector('tax'))
+			.attributes('data-state'))
+			.toBe('input-threw')
+		expect(wrapper.find(`${widgetSelector('tax')} [data-testid="quote-rule-threw"]`)
+			.exists())
+			.toBe(false)
+		expect(text(wrapper, `${widgetSelector('tax')} [data-testid="quote-rule-input-threw"]`))
+			.toContain('Something this rule reads threw an exception')
+		// One alert for the whole page, not one per card.
+		expect(wrapper.findAll('[role="alert"]'))
+			.toHaveLength(1)
 		// The worker has the same thing to say about the same document.
 		expect(text(wrapper, '[data-testid="quote-worker-failure"]'))
 			.toBe(text(wrapper, '[data-testid="quote-browser-failure"]'))
+		wrapper.unmount()
+	})
+
+	it('blames the rule whose code threw, not one that only reads it, whatever order the rules are listed in', async () => {
+		const document = JSON.parse(presetText('quote-buggy-rule'))
+		// tax first, then volume, then delivery: a document-order probe would stop at the tax.
+		document.slots.rules = [document.slots.rules[2], document.slots.rules[0], document.slots.rules[1]]
+		expect(document.slots.rules.map((rule: { id: string }) => rule.id))
+			.toEqual(['tax', 'volume', 'delivery'])
+		const { runtime } = createRuntimeFor(document)
+		const wrapper = await mountQuote(runtime)
+		await typeQuantity(wrapper, 'flyers', '50')
+		const entries = wrapper.findAll('[data-testid="quote-isolated-entry"]')
+		expect(entries)
+			.toHaveLength(1)
+		expect(entries[0]!.text())
+			.toContain('from volume.adjustment')
+		expect(entries[0]!.text())
+			.not
+			.toContain('tax')
+		expect(wrapper.find(widgetSelector('volume'))
+			.attributes('data-state'))
+			.toBe('threw')
+		expect(wrapper.find(widgetSelector('tax'))
+			.attributes('data-state'))
+			.not
+			.toBe('threw')
+		expect(text(wrapper, '[data-testid="quote-browser-failure"]'))
+			.toContain('volume.adjustment threw TypeError')
 		wrapper.unmount()
 	})
 

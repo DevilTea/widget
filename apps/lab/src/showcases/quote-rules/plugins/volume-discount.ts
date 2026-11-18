@@ -1,11 +1,12 @@
 /**
  * `VolumeDiscount`: a percentage off the subtotal, chosen by the total number of pieces. Property `adjustment`.
  *
- * **Deliberate defect, for the isolated-exception demonstration.** The tier that applies is the last one whose
- * `minQuantity` the total quantity reaches. The code takes it for granted that there is one, as if the first tier
- * always started at 1: the `!` below is the lie. The schema (`../schemas.ts`) does not require the first tier to
- * start at 1, so `quote-buggy-rule` is a *valid* document (the first tier starts at 100): while the total quantity
- * is 100 or more everything works, and the moment a customer lowers it, `compute` throws a `TypeError`.
+ * **Deliberate defect, for the isolated-exception demonstration.** The tier that applies is the one with the largest
+ * `minQuantity` that the total quantity reaches (tiers may be listed in any order). The code takes it for granted that
+ * there is one, as if the smallest tier always started at 1: the `!` below is the lie. The schema (`../schemas.ts`) does
+ * not require the smallest tier to start at 1, so `quote-buggy-rule` is a *valid* document (the smallest tier starts at
+ * 100): while the total quantity is 100 or more everything works, and the moment a customer lowers it, `compute` throws a
+ * `TypeError`.
  *
  * That is not a diagnostic (a fact about data) but an implementation exception, and Core treats it as one: a
  * direct `get()` rethrows it, while a subscription (the Preview's renderers subscribe) that recomputes the
@@ -32,10 +33,10 @@ export interface VolumeDiscountInterfaces extends WidgetInterfaces {
 }
 
 export const VolumeDiscountPlugin = createWidgetPlugin('VolumeDiscount')
-	.description('A percentage off the subtotal by the total number of pieces. Config: `label` and the ascending `tiers` (`minQuantity`, `percent`). Property `adjustment`: the (negative) amount. Known defect: it assumes the first tier starts at 1, so a quantity below the first tier makes `adjustment` throw instead of reporting a diagnostic.')
+	.description('A percentage off the subtotal by the total number of pieces. Config: `label` and the ascending `tiers` (`minQuantity`, `percent`). Property `adjustment`: the (negative) amount. Tiers may be in any order and the tier with the largest `minQuantity` that the total quantity reaches applies. Known defect: it assumes the smallest tier starts at 1, so a quantity below every tier makes `adjustment` throw instead of reporting a diagnostic.')
 	.interfaces<VolumeDiscountInterfaces>()
 	.config({
-		description: 'The label and the volume tiers. Validated by a Valibot schema through Standard Schema; the schema does not say that the first tier must start at 1.',
+		description: 'The label and the volume tiers (in any order; percentages count to two decimals). Validated by a Valibot schema through Standard Schema; the schema does not say that the smallest tier must start at 1.',
 		schema: volumeDiscountConfigJsonSchema,
 		validate: guard(volumeDiscountConfigSchema),
 		resolve: resolveVolumeDiscountConfig,
@@ -51,9 +52,14 @@ export const VolumeDiscountPlugin = createWidgetPlugin('VolumeDiscount')
 				return { type: 'VolumeDiscount', kind: 'discount', label: config.label, applied: false, percent: null, cents: 0, reason: null }
 			const quantity = quantityRead.value
 			const subtotal = valueOr(deps.subtotalCents, 0)
-			const reached = config.tiers.filter(tier => quantity >= tier.minQuantity)
-			// DEFECT (deliberate): `reached` is empty below the first tier, so `.at(-1)` is `undefined` and `.percent` throws.
-			const tier = reached.at(-1)!
+			// The tier that applies is the one with the largest `minQuantity` the total quantity reaches, wherever it is in the list.
+			let reached: (typeof config.tiers)[number] | undefined
+			for (const candidate of config.tiers) {
+				if (quantity >= candidate.minQuantity && (reached === undefined || candidate.minQuantity > reached.minQuantity))
+					reached = candidate
+			}
+			// DEFECT (deliberate): no tier is reached below the smallest `minQuantity`, so `reached` is `undefined` and `.percent` throws.
+			const tier = reached!
 			const percent = tier.percent
 			return { type: 'VolumeDiscount', kind: 'discount', label: config.label, applied: percent > 0, percent: percent > 0 ? percent : null, cents: percent > 0 ? -percentOf(subtotal, percent) : 0, reason: null }
 		},

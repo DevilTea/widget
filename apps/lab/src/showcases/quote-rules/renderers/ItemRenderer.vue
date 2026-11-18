@@ -15,14 +15,18 @@ import { FIELD_STYLE } from './control-style'
 import { QuoteCurrencyKey } from './currency'
 import { useQuoteText, useSafeRead } from './use-quote-text'
 
-const { useState, useProperties, config, widgetId, widgetType } = useWidget(ItemPlugin)
+const { useState, useStateDiagnostics, useProperties, config, widgetId, widgetType } = useWidget(ItemPlugin)
 const { quantity, paper } = useState()
+const { quantity: quantityDiagnostics } = useStateDiagnostics()
 const { line } = useProperties()
 const read = useSafeRead(line)
 const { t, tf, text, money } = useQuoteText()
 const currency = inject(QuoteCurrencyKey, 'EUR')
 
 const quantityId = useId()
+const quantityErrorId = useId()
+/** What the schema library said about the last quantity that was refused (verbatim); empty once a valid one is stored. */
+const quantityErrors = computed(() => (quantityDiagnostics.value ?? []).map(diagnostic => diagnostic.message))
 const paperId = useId()
 const anchor = useInspectAnchor(widgetId, widgetType)
 
@@ -82,6 +86,8 @@ function onWheel(event: Event): void {
 					:value="quantity ?? ''"
 					class="item-input"
 					:style="FIELD_STYLE"
+					:aria-invalid="quantityErrors.length > 0 ? 'true' : undefined"
+					:aria-describedby="quantityErrors.length > 0 ? quantityErrorId : undefined"
 					data-testid="quote-quantity"
 					@input="onQuantityInput"
 					@wheel="onWheel"
@@ -119,6 +125,20 @@ function onWheel(event: Event): void {
 					v-else
 					class="item-no-price"
 				>{{ t('noPrice') }}</span>
+			</p>
+		</div>
+		<div
+			:id="quantityErrorId"
+			aria-live="polite"
+			class="item-errors"
+		>
+			<p
+				v-for="message in quantityErrors"
+				:key="message"
+				class="item-error"
+				data-testid="quote-quantity-error"
+			>
+				<span aria-hidden="true">&#9888; </span>{{ t('quantity') }}: {{ message }}
 			</p>
 		</div>
 	</article>
@@ -191,6 +211,19 @@ function onWheel(event: Event): void {
 	font-size: 18px;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
+}
+
+.item-errors:empty {
+	display: none;
+}
+
+.item-error {
+	margin: 0;
+	padding: 2px 0 2px 10px;
+	border-left: 4px solid var(--quote-danger);
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--quote-danger);
 }
 
 .item-no-price {

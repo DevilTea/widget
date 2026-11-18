@@ -9,14 +9,14 @@ import { useInspectAnchor } from '../../../showcase-host'
 import { RushSurchargePlugin } from '../plugins/rush-surcharge'
 import RuleCard from './RuleCard.vue'
 import { useQuoteText, useSafeRead } from './use-quote-text'
-import { useThrew } from './use-threw'
+import { useRuleFailure } from './use-threw'
 
 const { useState, useProperties, config, widgetId, widgetType } = useWidget(RushSurchargePlugin)
 const { enabled } = useState()
 const { adjustment } = useProperties()
 const read = useSafeRead(adjustment)
 const { text } = useQuoteText()
-const threw = useThrew(widgetId)
+const failure = useRuleFailure(widgetId, read)
 const anchor = useInspectAnchor(widgetId, widgetType)
 const checkboxId = useId()
 </script>
@@ -27,7 +27,7 @@ const checkboxId = useId()
 		:data-tutorial-target="`quote-${widgetId}`"
 		:label="text(config.label)"
 		:adjustment="read.value"
-		:threw="threw || read.threw"
+		:failure="failure"
 	>
 		<label
 			:for="checkboxId"

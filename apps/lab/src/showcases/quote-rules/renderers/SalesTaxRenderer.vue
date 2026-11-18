@@ -5,13 +5,13 @@ import { useInspectAnchor } from '../../../showcase-host'
 import { SalesTaxPlugin } from '../plugins/sales-tax'
 import RuleCard from './RuleCard.vue'
 import { useQuoteText, useSafeRead } from './use-quote-text'
-import { useThrew } from './use-threw'
+import { useRuleFailure } from './use-threw'
 
 const { useProperties, config, widgetId, widgetType } = useWidget(SalesTaxPlugin)
 const { adjustment } = useProperties()
 const read = useSafeRead(adjustment)
 const { text } = useQuoteText()
-const threw = useThrew(widgetId)
+const failure = useRuleFailure(widgetId, read)
 const anchor = useInspectAnchor(widgetId, widgetType)
 </script>
 
@@ -21,6 +21,6 @@ const anchor = useInspectAnchor(widgetId, widgetType)
 		:data-tutorial-target="`quote-${widgetId}`"
 		:label="text(config.label)"
 		:adjustment="read.value"
-		:threw="threw || read.threw"
+		:failure="failure"
 	/>
 </template>

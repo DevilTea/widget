@@ -10,14 +10,14 @@ import { DeliveryPlugin } from '../plugins/delivery'
 import { FIELD_STYLE } from './control-style'
 import RuleCard from './RuleCard.vue'
 import { useQuoteText, useSafeRead } from './use-quote-text'
-import { useThrew } from './use-threw'
+import { useRuleFailure } from './use-threw'
 
 const { useState, useProperties, config, widgetId, widgetType } = useWidget(DeliveryPlugin)
 const { method } = useState()
 const { adjustment } = useProperties()
 const read = useSafeRead(adjustment)
 const { t, text } = useQuoteText()
-const threw = useThrew(widgetId)
+const failure = useRuleFailure(widgetId, read)
 const anchor = useInspectAnchor(widgetId, widgetType)
 const selectId = useId()
 
@@ -32,7 +32,7 @@ function onChange(event: Event): void {
 		:data-tutorial-target="`quote-${widgetId}`"
 		:label="text(config.label)"
 		:adjustment="read.value"
-		:threw="threw || read.threw"
+		:failure="failure"
 	>
 		<div class="delivery-field">
 			<label

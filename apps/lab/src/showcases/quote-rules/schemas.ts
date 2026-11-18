@@ -74,7 +74,7 @@ export const volumeDiscountConfigSchema = toStandardJsonSchema(v.strictObject({
 	tiers: described(v.pipe(v.array(v.strictObject({
 		minQuantity: described(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_QUANTITY)), 'From this total number of pieces on.'),
 		percent: percent('The percentage taken off the subtotal.'),
-	})), v.minLength(1)), 'Volume tiers in ascending order of "minQuantity". The tier with the largest "minQuantity" that the total quantity reaches applies.'),
+	})), v.minLength(1)), 'Volume tiers, in any order. The tier with the largest "minQuantity" that the total quantity reaches applies.'),
 }))
 
 export const rushSurchargeConfigSchema = toStandardJsonSchema(v.strictObject({

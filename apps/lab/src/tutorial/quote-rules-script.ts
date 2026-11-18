@@ -16,7 +16,9 @@
  * Property predicates see only values the Preview has already evaluated (`inspection-reader.ts` never forces
  * evaluation), and Core's inspection reports only a Property's latest *completed* result: a Property whose
  * `compute` threw still shows the result before it. So the isolated-exception step is gated on State (the flyers
- * quantity in the buggy preset, whose document has no `rush` widget) and says what the Lab cannot show.
+ * quantity in the buggy preset, whose document has no `rush` widget) and on the total number of pieces the Quote has evaluated being
+ * below that preset's first tier: the closest condition the Preview can observe, since the exception itself cannot be (a visitor
+ * who edits the tiers can satisfy it without a throw). The text says what the Lab cannot show.
  */
 
 import type { TutorialRuntimeReader, TutorialScript } from './types'
@@ -26,8 +28,17 @@ export const QUOTE_RULES_TOUR_ID = 'quote-rules'
 /** The authored starting quantity of the flyers in `quote-default`. */
 const FLYERS_START = 500
 
+/** The first (and smallest) volume tier of `quote-buggy-rule`: below it, the rule's code throws. */
+const BUGGY_FIRST_TIER = 100
+
 function flyersQuantity(reader: TutorialRuntimeReader): unknown {
 	return reader.readState('flyers', 'quantity')
+}
+
+/** The total number of pieces the Quote has evaluated, or `Infinity` while it has not (or failed to). */
+function totalQuantity(reader: TutorialRuntimeReader): number {
+	const total = reader.readProperty('quote', 'totalQuantity')
+	return total?.status === 'completed' && total.result.ok && typeof total.result.value === 'number' ? total.result.value : Number.POSITIVE_INFINITY
 }
 
 export const quoteRulesTourScript: TutorialScript = {
@@ -36,6 +47,7 @@ export const quoteRulesTourScript: TutorialScript = {
 		{ widgetId: 'flyers', member: { type: 'state', key: 'quantity' } },
 		{ widgetId: 'rush', member: { type: 'state', key: 'enabled' } },
 		{ widgetId: 'delivery', member: { type: 'state', key: 'method' } },
+		{ widgetId: 'quote', member: { type: 'property', key: 'totalQuantity' } },
 	],
 	steps: [
 		{
@@ -113,9 +125,9 @@ export const quoteRulesTourScript: TutorialScript = {
 			title: 'A rule that throws',
 			target: 'quote-isolated',
 			stages: [{
-				prompt: 'Open the Examples menu, load "Buggy rule", then set the A5 flyers quantity below 90, for example 50.',
-				isComplete: reader => reader.readState('rush', 'enabled') === undefined && typeof flyersQuantity(reader) === 'number' && (flyersQuantity(reader) as number) < 90,
-				reveal: 'The write succeeded: flyers is 50. But the volume rule\'s compute threw a TypeError, because no tier covers 52 pieces and the code assumed the first tier starts at 1. A throwing compute is not a Diagnostic. Core isolated it so the write and every other subscriber were unaffected, and handed it to setIsolatedErrorHandler, which this page installed: see Isolated exceptions. The amounts are the last ones that worked, and the page says so. The Lab\'s Runtime and Selected widget still show volume.adjustment\'s last completed value, because Core\'s inspection reports only completed results: it cannot show that exception.',
+				prompt: 'Open the Examples menu, load "Buggy rule", then set the A5 flyers quantity to 50: with the poster that is 52 pieces, below the first volume tier (100).',
+				isComplete: reader => reader.readState('rush', 'enabled') === undefined && totalQuantity(reader) < BUGGY_FIRST_TIER,
+				reveal: 'The write succeeded. But the volume rule\'s compute threw a TypeError, because the total number of pieces is below every tier and the code assumed the smallest tier starts at 1. A throwing compute is not a Diagnostic. Core isolated it so the write and every other subscriber were unaffected, and handed it to setIsolatedErrorHandler, which this page installed: see Isolated exceptions. The amounts are the last ones that worked, and the page says so. The Lab\'s Runtime and Selected widget still show volume.adjustment\'s last completed value, because Core\'s inspection reports only completed results: it cannot show that exception.',
 			}],
 			links: [{
 				id: 'see-volume',

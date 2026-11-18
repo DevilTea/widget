@@ -25,7 +25,7 @@ export const SalesTaxPlugin = createWidgetPlugin('SalesTax')
 	.description('A percentage of the taxable amount (the subtotal plus every other rule). Config: `label` and `percent`. Property `adjustment`: the tax.')
 	.interfaces<SalesTaxInterfaces>()
 	.config({
-		description: 'The label and the tax rate. Validated by a Valibot schema through Standard Schema.',
+		description: 'The label and the tax rate (counted to two decimals). Validated by a Valibot schema through Standard Schema.',
 		schema: salesTaxConfigJsonSchema,
 		validate: guard(salesTaxConfigSchema),
 		resolve: resolveSalesTaxConfig,

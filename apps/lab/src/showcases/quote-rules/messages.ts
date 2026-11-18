@@ -26,6 +26,7 @@ export const quoteMessages = defineShowcaseMessages({
 		courier: 'Courier',
 		noPrice: 'No price',
 		threwBadge: 'This rule threw an exception. The amount shown is the last one that worked.',
+		inputThrewBadge: 'Something this rule reads threw an exception, so it has no amount of its own.',
 		subtotal: 'Subtotal',
 		taxable: 'Taxable amount',
 		total: 'Total',
@@ -56,6 +57,7 @@ export const quoteMessages = defineShowcaseMessages({
 		isolatedEmpty: 'None so far.',
 		isolatedFrom: 'from {widget}.{member}',
 		isolatedUnknown: 'source not found',
+		isolatedRepeated: 'handed over {count} times (one per subscription that read it)',
 		clear: 'Clear',
 	},
 	'zh-TW': {
@@ -74,6 +76,7 @@ export const quoteMessages = defineShowcaseMessages({
 		courier: '快遞配送',
 		noPrice: '沒有價格',
 		threwBadge: '這條規則拋出了例外。顯示的是最後一次成功的金額。',
+		inputThrewBadge: '這條規則讀取的某個項目拋出了例外，所以它沒有自己的金額。',
 		subtotal: '小計',
 		taxable: '應稅金額',
 		total: '總計',
@@ -104,6 +107,7 @@ export const quoteMessages = defineShowcaseMessages({
 		isolatedEmpty: '目前沒有。',
 		isolatedFrom: '來自 {widget}.{member}',
 		isolatedUnknown: '找不到來源',
+		isolatedRepeated: '共交付 {count} 次（每個讀取它的訂閱各一次）',
 		clear: '清除',
 	},
 })

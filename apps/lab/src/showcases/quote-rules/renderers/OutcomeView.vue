@@ -92,7 +92,6 @@ const failure = computed(() => {
 			v-else-if="failure !== null"
 			class="outcome-failure"
 			:data-testid="`quote-${side}-failure`"
-			role="status"
 		>
 			<p class="outcome-failure-title">
 				<span aria-hidden="true">&#9888; </span>{{ failure.title }}

@@ -192,15 +192,34 @@ test.describe('the same rules in the page and in a Web Worker', () => {
 			.toHaveAttribute('data-state', 'match')
 	})
 
-	test('refuses a quantity the schema library refuses and keeps the stored one', async ({ page }) => {
+	test('refuses a quantity the schema library refuses, keeps the stored one and says why until a valid one is stored', async ({ page }) => {
 		await openQuote(page)
+		const error = widget(page, 'flyers')
+			.getByTestId('quote-quantity-error')
 		await quantity(page, 'flyers')
 			.fill('0')
+		await expect(error)
+			.toContainText('Invalid value: Expected >=1 but received 0')
+		await expect(quantity(page, 'flyers'))
+			.toHaveAttribute('aria-invalid', 'true')
 		await expect(previewFrame(page)
 			.getByTestId('quote-total'))
 			.toHaveText('€125.30')
 		await expect(quantity(page, 'flyers'))
 			.toHaveValue('500')
+		// Clearing the field is refused out loud too.
+		await quantity(page, 'flyers')
+			.fill('')
+		await expect(error)
+			.toContainText('Invalid type')
+		await quantity(page, 'flyers')
+			.fill('510')
+		await expect(error)
+			.toHaveCount(0)
+		await expect(previewFrame(page)
+			.getByTestId('quote-total'))
+			.not
+			.toHaveText('€125.30')
 	})
 })
 
@@ -374,6 +393,9 @@ test.describe('a rule that throws', () => {
 			.toContainText('from volume.adjustment')
 		await expect(widget(page, 'volume'))
 			.toHaveAttribute('data-state', 'threw')
+		// One alert for the whole page (the stale banner), not one per card.
+		await expect(preview.locator('[role="alert"]'))
+			.toHaveCount(1)
 		// The worker, which read the same document and answers, threw the same exception: the two columns agree.
 		await expect(preview.getByTestId('quote-browser-failure'))
 			.toContainText('volume.adjustment threw TypeError')
@@ -592,7 +614,7 @@ test.describe('tutorial', () => {
 		await expect(previewFrame(page)
 			.getByTestId('quote-total'))
 			.toHaveText('€45.75')
-		const throwObservation = rail.getByText('The write succeeded: flyers is 50.', { exact: false })
+		const throwObservation = rail.getByText('The write succeeded. But the volume rule', { exact: false })
 		await expect(throwObservation)
 			.toHaveCount(0)
 		await expect(next)

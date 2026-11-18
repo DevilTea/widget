@@ -79,6 +79,31 @@ describe('failures are data', () => {
 			.toEqual(live)
 	})
 
+	it('names the rule whose code threw, not one that only reads it, whatever order the rules are listed in', () => {
+		const document = JSON.parse(presetText('quote-buggy-rule'))
+		// tax first, then volume, then delivery: a probe in document order would stop at the tax, which rethrows the same error.
+		document.slots.rules = [document.slots.rules[2], document.slots.rules[0], document.slots.rules[1]]
+		expect(document.slots.rules.map((rule: { id: string }) => rule.id))
+			.toEqual(['tax', 'volume', 'delivery'])
+		const { runtime, request } = liveRuntime(document, { flyers: { quantity: 50 } })
+		const live = readQuoteOutcome(runtime)
+		expect(live)
+			.toMatchObject({ ok: false, failure: { kind: 'exception', widgetId: 'volume', member: 'adjustment' } })
+		expect(evaluateQuote(request).outcome)
+			.toEqual(live)
+		// The tax really does throw the same exception when it is read: that is why the order of the probe matters.
+		const tax = widgetOfType(runtime, 'tax', 'SalesTax')
+		let thrown: unknown
+		try {
+			tax.properties.adjustment.get()
+		}
+		catch (error) {
+			thrown = error
+		}
+		expect(thrown)
+			.toBeInstanceOf(TypeError)
+	})
+
 	it('reports a paper the item does not offer with that item\'s own diagnostic', () => {
 		const document = parsedPreset()
 		const { runtime, request } = liveRuntime(document, { flyers: { paper: 'velvet' } })

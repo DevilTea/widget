@@ -202,7 +202,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     ("Corner Press"): six plugin types `Quote` (root `quote`, slots `items`/`rules`, no State of its own), `Item` (State
     `quantity`, `paper`; Property `line`) and four pricing rules, each its own plugin with a Property `adjustment`:
     `VolumeDiscount`, `RushSurcharge` (State `enabled`), `Delivery` (State `method`) and `SalesTax`. Money is integer minor
-    units (`domain.ts`: `percentOf` rounds half-up once). The chain: `Item.line` -> `Quote.subtotalCents`/`totalQuantity` ->
+    units of the currency (`domain.ts`: `percentOf` rounds half-up once, on integers, with a percentage counted to two decimals; `formatMoney` takes the number of decimals from the currency through `Intl`, the quote JSON stays integers). The chain: `Item.line` -> `Quote.subtotalCents`/`totalQuantity` ->
     the three pre-tax rules' `adjustment` -> `Quote.taxableCents` -> `SalesTax.adjustment` -> `Quote.quote`, found through
     the root's slots by `plugins/reads.ts`; Core's cycle check is over members, so the root reading its children while they
     read the root is not a loop. `Quote.answers` (every State a customer set, by widget id and State name) and `Quote.quote` (the
@@ -238,16 +238,20 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       catalog publishes exactly it, and what `describeField` (`lab/config-schema.ts`) makes of it: a list of tiers with Add and Remove,
       number boxes, a switch, a choice list and free `papers` keys; `e2e/quote-rules.spec.ts` drives those controls in Author >
       Structure and shows the schema in Author > Catalog. The schema says no more than the validator can express: it cannot say that
-      the first discount tier starts at 1 (and the validator does not either, which is the next point).
+      the smallest discount tier starts at 1 (and the validator does not either, which is the next point).
     - **An isolated exception.** `VolumeDiscount` has a deliberate, commented defect (`plugins/volume-discount.ts`): it assumes the
-      first tier starts at 1, so a total quantity below the first tier makes `compute` throw a `TypeError`. A document cannot contain
+      smallest tier starts at 1, so a total quantity below every tier makes `compute` throw a `TypeError` (it applies the tier with the largest
+      `minQuantity` the quantity reaches, wherever the tier is listed). A document cannot contain
       code, so `quote-buggy-rule` is a *valid* document whose tiers start at 100 (flyers 120 + poster 2 = 122 pieces), which prices
       fine until a customer lowers the quantity. Core then isolates the exception: the write succeeds, the other subscribers are
       notified, one report per cached exception reaches `setIsolatedErrorHandler`. The host installs a handler while the page lives and
       restores the one it replaced (the Lab frame installs none); the handler receives only the exception, so the host finds the
-      widget by reading each rule again (`findThrowingMember`) and lists it (`IsolatedLog.vue`, `data-testid="quote-isolated"`).
+      widget by reading the members again, **in dependency order** (items, the rules that read the items' totals, then the tax:
+      `findThrowingMember`), because a Property that reads one that threw rethrows the very same object, so the first member that
+      throws it is the origin, whatever order the `rules` slot lists the rules in. It lists it once, with how many times Core handed
+      it over (one per subscription that first read the cached exception; `IsolatedLog.vue`, `data-testid="quote-isolated"`).
       The subscription that threw is skipped, so the Vue ref does not change: the page keeps the last amounts that worked and says so
-      (`quote-stale`, the rule card's `data-state="threw"`). Renderers read Properties through `useSafeRead()` because a direct read of
+      (`quote-stale`, the page's only `role="alert"`; the rule card's `data-state="threw"` for the rule whose code threw, `"input-threw"` for one that only reads it). Renderers read Properties through `useSafeRead()` because a direct read of
       a throwing Property throws inside a render function (a document that already starts below the tier mounts with "no quote yet").
       A failed dependency read makes the rule return "not applied" instead of treating a missing quantity as 0 (which would have hit the
       defect for an unrelated reason). **Gap the Lab cannot show:** Core's inspection reports only a Property's latest *completed*
@@ -258,7 +262,9 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     **Isolation:** it follows "Showcase isolation" below: it reads `useShowcaseHost().locale` (its own chrome text, `messages.ts`, and
     the document's `{ en, zh-TW }` texts through `localize()`) and `.theme`, and `useInspectAnchor()`; it owns its colours as
     `--quote-*` custom properties on the root renderer; its renderer loader is in `preview-frame-renderers.ts`. Unlike the trip and the
-    survey it has no language State: language is a view concern here, so the `quote` JSON stays language-independent. Renderers are
+    survey it has no language State: language is a view concern here, so the `quote` JSON stays language-independent. Announcements: the page has one `role="alert"` (the stale banner); the comparison line is not a live region, a hidden `role="status"`
+    carries only the settled result (so it does not read "waiting" and "identical" on every keystroke); a refused quantity shows the library's
+    message under the field (`quote-quantity-error`, `aria-invalid`, a polite live region) instead of snapping back silently. Renderers are
     tested with a plain-ref `ShowcaseHost` and an in-process stand-in for the Worker (`renderers/test-harness.ts`); the Lab-side zh-TW
     text (Examples entries, tutorial) is tested in `i18n/quote-rules-messages.unit.test.ts` and
     `tutorial/quote-rules-script.unit.test.ts`. The tutorial (`tutorial/quote-rules-script.ts`) is authored against `quote-default`;
@@ -366,10 +372,12 @@ Intentional, not incidental (`DevilTea/deviltea-labs#30` Scope B) — the produc
 building this app in isolation:
 
 ```text
-main app JS (lab-*.js + the chunk it shares with the frame, tutorial-theme-*.js) ~1127 KB + ~409 KB raw / ~301 KB + ~128 KB gzip — eager
-                                         (the shared chunk holds every showcase's system, presets and tours, and Valibot with its JSON Schema
-                                         converter for the quote showcase: about 362 KB / 116 KB gzip without the quote showcase, so about +47 KB / +12 KB;
-                                         Zod 4 classic instead of Valibot measured +116 KB raw)
+main app JS (lab-*.js + the chunk it shares with the frame, tutorial-theme-*.js) ~1127 KB + ~410 KB raw / ~301 KB + ~128 KB gzip — eager
+                                         (the figures of this entry and of the Quote Web Worker were re-measured with `pnpm build` at the quote-rules commit; the older
+                                         ~847 KB + ~288 KB and ~230 KB + ~94 KB had gone stale before that commit, so the difference to them is not
+                                         this showcase's. Its own share is the shared chunk only: ~362 KB / ~116 KB gzip on main without it, ~410 KB /
+                                         ~128 KB with it, about +48 KB / +12 KB (Valibot, its JSON Schema converter, the six plugins and the presets);
+                                         lab-*.js is the same 1126.86 KB both ways. Zod 4 classic instead of Valibot measured +116 KB raw)
 Nuxt UI Toast (Toast-*.js)               ~30 KB raw / ~9 KB gzip   — loaded on first toast (none is shown yet)
 modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
@@ -377,7 +385,7 @@ vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded o
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
 Implementation panel + Shiki (ImplementationPanel-*.js)
                                          ~375 KB raw / ~75 KB gzip  — loaded on first Implementation open
-Quote Web Worker (quote.worker-*.js)       ~110 KB raw / ~32 KB gzip   — loaded when the quote Preview first evaluates (Core, the plugins and Valibot;
+Quote Web Worker (quote.worker-*.js)       ~111 KB raw / ~32 KB gzip   — loaded when the quote Preview first evaluates (Core, the plugins and Valibot;
                                          no Vue, no renderer, no host contract); its own 0.8 KB chunk is the curated source of the file
 curated raw-source chunks (per curated file, e.g. ShortAnswerRenderer-*.js)
                                          ~2-21 KB raw / ~1-6.2 KB gzip each — loaded on first

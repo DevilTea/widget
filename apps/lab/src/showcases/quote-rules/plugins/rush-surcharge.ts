@@ -25,7 +25,7 @@ export const RushSurchargePlugin = createWidgetPlugin('RushSurcharge')
 	.description('A percentage of the subtotal added for rush production. Config: `label`, `percent` and the starting `enabled`. State `enabled`: the customer\'s choice. Property `adjustment`: the surcharge (0 while it is off).')
 	.interfaces<RushSurchargeInterfaces>()
 	.config({
-		description: 'The label, the percentage and whether rush starts switched on. Validated by a Valibot schema through Standard Schema.',
+		description: 'The label, the percentage (counted to two decimals) and whether rush starts switched on. Validated by a Valibot schema through Standard Schema.',
 		schema: rushSurchargeConfigJsonSchema,
 		validate: guard(rushSurchargeConfigSchema),
 		resolve: resolveRushSurchargeConfig,

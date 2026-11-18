@@ -27,9 +27,15 @@ export const PAPER_CODE_PATTERN = /^[a-z][a-z0-9-]*$/
 export const MAX_QUANTITY = 100_000
 export const MAX_CENTS = 100_000_000
 
-/** `percent` percent of `cents`, rounded half-up to a whole minor unit. */
+/**
+ * `percent` percent of `cents`, rounded half-up (half away from zero) to a whole minor unit. A percentage counts to two
+ * decimals (hundredths of a percent, `9.2` is 920): the arithmetic is then on integers only, so a result that is exactly
+ * half a unit (375 x 9.2% = 34.5) rounds up as it says, which `Math.round(cents * percent / 100)` does not (it gets 34).
+ */
 export function percentOf(cents: number, percent: number): number {
-	return Math.round(cents * percent / 100)
+	const product = cents * Math.round(percent * 100)
+	// `+ 0` turns a -0 into 0.
+	return Math.sign(product) * Math.floor((Math.abs(product) + 5000) / 10000) + 0
 }
 
 export type RuleKind = 'discount' | 'surcharge' | 'fee' | 'tax'
@@ -88,11 +94,15 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** The amount as text in the viewer's language, such as `€1,234.50`. */
+/**
+ * The amount as text in the viewer's language, such as `€1,234.50`. "Minor unit" is the currency's own: the number of
+ * decimals comes from the currency (`Intl`: 2 for EUR, 0 for JPY, 3 for KWD), so 500 is `¥500` but `€5.00`. Only the text
+ * is formatted here; the quote JSON stays integers of minor units, the same in every locale.
+ */
 export function formatMoney(cents: number, currency: string, language: string): string {
 	try {
-		return new Intl.NumberFormat(language, { style: 'currency', currency })
-			.format(cents / 100)
+		const format = new Intl.NumberFormat(language, { style: 'currency', currency })
+		return format.format(cents / 10 ** (format.resolvedOptions().maximumFractionDigits ?? 2))
 	}
 	catch {
 		return `${(cents / 100).toFixed(2)} ${currency}`

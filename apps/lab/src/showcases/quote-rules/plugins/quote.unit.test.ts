@@ -142,6 +142,24 @@ describe('the rules', () => {
 			.toMatchObject({ applied: true, percent: 10, cents: -1313 })
 	})
 
+	it('picks the tier with the largest minQuantity the quantity reaches, whatever order the tiers are listed in', () => {
+		const document = parsedPreset()
+		widgetOf(document, 'volume').config.tiers = [{ minQuantity: 1000, percent: 10 }, { minQuantity: 1, percent: 0 }, { minQuantity: 300, percent: 5 }]
+		const { quote, flyers } = setup(document)
+		// 2000 flyers + 250 + 2 = 2252 pieces reaches 1, 300 and 1000; the last one listed (300, 5%) is not the one: 10% applies.
+		flyers.state.quantity.set(2000)
+		// subtotal 2000 x 9 + 3500 + 2900 = 24400; 10% = 2440
+		expect(valueOr(quote).adjustments[0])
+			.toMatchObject({ id: 'volume', percent: 10, cents: -2440 })
+		// 20 + 252 = 272 pieces: only the 1-piece tier (0%) is reached.
+		flyers.state.quantity.set(20)
+		expect(valueOr(quote).adjustments[0])
+			.toMatchObject({ applied: false, percent: null, cents: 0 })
+		flyers.state.quantity.set(48)
+		expect(valueOr(quote).adjustments[0])
+			.toMatchObject({ percent: 5 })
+	})
+
 	it('prices a dearer paper: gloss flyers cost 12 each, so the flyers line is 6000 and the subtotal 12400', () => {
 		const { quote, flyers } = setup()
 		expect(flyers.state.paper.set('gloss').ok)

@@ -28,6 +28,7 @@
 import type { QuoteAnswers, QuoteResult } from './domain'
 import type { QuoteRuntime } from './system'
 import { isPlainObject } from './domain'
+import { PRE_TAX_RULE_TYPES } from './plugins/reads'
 import { quoteSystem } from './system'
 
 export interface QuoteRequest {
@@ -92,14 +93,23 @@ function invalidRequest(message: string): QuoteOutcome {
 	return { ok: false, failure: { kind: 'invalid-request', message } }
 }
 
-/** The ids of the root Quote's items, then its rules, in document order, for the members that can fail. */
+/**
+ * The members that can fail, **in dependency order**: the items (`line` reads only its own State), then the rules that
+ * read the items' totals (volume, rush, delivery), then the tax (which reads those rules). Siblings of one kind do not
+ * read one another, and Quote's own Properties never throw by themselves, so a member only ever depends on members
+ * listed before it. The order of the `rules` slot in the document does not matter.
+ */
 function memberTargets(runtime: QuoteRuntime): readonly { readonly widgetId: string, readonly member: 'line' | 'adjustment' }[] {
 	const blueprint = runtime.blueprint
 	const root = blueprint.root
+	const rules = blueprint.getChildrenAt(root, 'rules')
+	const isPreTax = (child: (typeof rules)[number]): boolean => child.resolved && (PRE_TAX_RULE_TYPES as readonly string[]).includes(child.type)
 	return [
 		...blueprint.getChildrenAt(root, 'items')
 			.map(child => ({ widgetId: child.id, member: 'line' as const })),
-		...blueprint.getChildrenAt(root, 'rules')
+		...rules.filter(isPreTax)
+			.map(child => ({ widgetId: child.id, member: 'adjustment' as const })),
+		...rules.filter(child => !isPreTax(child))
 			.map(child => ({ widgetId: child.id, member: 'adjustment' as const })),
 	]
 }
@@ -121,9 +131,11 @@ function probe(runtime: QuoteRuntime, widgetId: string, member: 'line' | 'adjust
 }
 
 /**
- * Which widget's code threw `error`. A Property that threw keeps the exception as its cached outcome, so reading
- * the Items and the rules again throws the very same object at the one that raised it (and at nothing else).
- * Core's isolated-error handler receives only the exception, so a host that wants to say "which rule" asks this.
+ * Which widget's code threw `error`: the origin, not a widget that merely read it. A Property that threw keeps the
+ * exception as its cached outcome, and a dependent that reads it (a direct `get()` or a dependency read) rethrows the
+ * very same object, so identity alone matches the origin and every member downstream of it. The members are therefore
+ * probed in dependency order (`memberTargets`) and the first one that throws it is the origin. Core's isolated-error
+ * handler receives only the exception, so a host that wants to say "which rule" asks this.
  */
 export function findThrowingMember(runtime: QuoteRuntime, error: unknown): { readonly widgetId: string, readonly member: string } | null {
 	for (const { widgetId, member } of memberTargets(runtime)) {
@@ -142,8 +154,9 @@ function failedMembers(runtime: QuoteRuntime): MemberDiagnostic[] {
 		if (read.thrown || read.result.ok)
 			continue
 		const diagnostics = (read.result.failure as { diagnostics?: readonly { code: string, message: string, reason?: unknown }[] } | undefined)?.diagnostics ?? []
-		// A dependent of the failed member only repeats the failure in its own words (`dependency-target-failed`).
-		for (const diagnostic of diagnostics.filter(candidate => !candidate.code.startsWith('dependency-')))
+		// A dependent of a failed member only repeats that failure in its own words (`dependency-target-failed`). A
+		// `dependency-value-rejected` is not a repeat: the dependent refused a value the other member returned fine.
+		for (const diagnostic of diagnostics.filter(candidate => candidate.code !== 'dependency-target-failed'))
 			found.push({ widgetId, member, code: diagnostic.code, message: diagnostic.message, reason: typeof diagnostic.reason === 'string' ? diagnostic.reason : null })
 	}
 	return found

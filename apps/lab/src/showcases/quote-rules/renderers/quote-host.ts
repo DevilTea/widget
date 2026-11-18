@@ -40,6 +40,12 @@ export interface IsolatedReport {
 	readonly message: string
 	readonly widgetId: string | null
 	readonly member: string | null
+	/**
+	 * How many times Core handed this very exception over. A Property that threw keeps the exception as its cached
+	 * outcome, and Core reports it once per hand-over pass, so each subscription that first reads it (a renderer's ref, a
+	 * dependent's) is a separate pass: one cached exception can arrive several times, and is listed once.
+	 */
+	readonly count: number
 }
 
 export interface QuoteHost {
@@ -76,6 +82,8 @@ export function createQuoteHost(runtime: QuoteRuntime, backend: QuoteBackend): Q
 	const browser = shallowRef<QuoteOutcome>(readQuoteOutcome(runtime))
 	const worker = shallowRef<WorkerView>({ status: 'pending', previous: null })
 	const exceptions = shallowRef<readonly IsolatedReport[]>([])
+	// The exception objects behind `exceptions`, in the same order: one entry per distinct exception (see `IsolatedReport.count`).
+	let seen: unknown[] = []
 	let sequence = 0
 	let requests = 0
 	let disposed = false
@@ -114,15 +122,23 @@ export function createQuoteHost(runtime: QuoteRuntime, backend: QuoteBackend): Q
 	// The handler is given the exception and nothing else. It runs after Core finished the write that caused it, so it
 	// may read the Runtime: that is how the widget is found.
 	const previousHandler = setIsolatedErrorHandler((error) => {
-		const where = findThrowingMember(runtime, error)
-		const report: IsolatedReport = {
-			sequence: ++sequence,
-			name: error instanceof Error ? error.name : 'Error',
-			message: error instanceof Error ? error.message : String(error),
-			widgetId: where?.widgetId ?? null,
-			member: where?.member ?? null,
+		const known = seen.indexOf(error)
+		if (known >= 0) {
+			exceptions.value = exceptions.value.map((entry, index) => index === known ? { ...entry, count: entry.count + 1 } : entry)
 		}
-		exceptions.value = [...exceptions.value, report].slice(-MAX_REPORTS)
+		else {
+			const where = findThrowingMember(runtime, error)
+			const report: IsolatedReport = {
+				sequence: ++sequence,
+				name: error instanceof Error ? error.name : 'Error',
+				message: error instanceof Error ? error.message : String(error),
+				widgetId: where?.widgetId ?? null,
+				member: where?.member ?? null,
+				count: 1,
+			}
+			seen = [...seen, error].slice(-MAX_REPORTS)
+			exceptions.value = [...exceptions.value, report].slice(-MAX_REPORTS)
+		}
 		// What the page now shows is the last quote that worked; the outcome of the live Runtime is the failure.
 		browser.value = readQuoteOutcome(runtime)
 	})
@@ -137,6 +153,7 @@ export function createQuoteHost(runtime: QuoteRuntime, backend: QuoteBackend): Q
 			comparison,
 			exceptions,
 			clearExceptions: () => {
+				seen = []
 				exceptions.value = []
 			},
 			resetAll: () => {

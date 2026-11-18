@@ -48,17 +48,22 @@ describe('quoteRulesTourScript shape', () => {
 				{ widgetId: 'flyers', member: { type: 'state', key: 'quantity' } },
 				{ widgetId: 'rush', member: { type: 'state', key: 'enabled' } },
 				{ widgetId: 'delivery', member: { type: 'state', key: 'method' } },
+				{ widgetId: 'quote', member: { type: 'property', key: 'totalQuantity' } },
 			])
 	})
 
 	it('only names widgets and members that exist in quote-default', () => {
 		const { reader } = setup()
 		for (const { widgetId, member } of quoteRulesTourScript.observationTargets) {
-			expect(member.type)
-				.toBe('state')
-			expect(reader.readState(widgetId, member.key), `${widgetId}.${member.key}`)
-				.not
-				.toBeUndefined()
+			if (member.type === 'state') {
+				expect(reader.readState(widgetId, member.key), `${widgetId}.${member.key}`)
+					.not
+					.toBeUndefined()
+			}
+			else {
+				expect(reader.readProperty(widgetId, member.key), `${widgetId}.${member.key}`)
+					.toEqual({ status: 'never-evaluated' })
+			}
 		}
 	})
 
@@ -139,22 +144,30 @@ describe('step "isolated-exception"', () => {
 			.toBe(false)
 	})
 
-	it('is true in the buggy-rule quote once the flyers are below 90, and not before', () => {
+	it('is true in the buggy-rule quote once the Quote has evaluated a total below its first tier (100), and not before', () => {
 		const { runtime, reader } = setup(presetText('quote-buggy-rule'))
 		const flyers = widgetOfType(runtime, 'flyers', 'Item')
-		expect(complete(reader))
-			.toBe(false)
-		flyers.state.quantity.set(90)
-		expect(complete(reader))
-			.toBe(false)
+		const quote = widgetOfType(runtime, 'quote', 'Quote')
+		// Nothing has evaluated the total yet: Property predicates never force evaluation.
 		flyers.state.quantity.set(50)
 		expect(complete(reader))
-			.toBe(true)
+			.toBe(false)
+		// flyers + the poster's 2 pieces: 100 is the first tier, 99 is below it.
+		for (const [flyersQuantity, expected] of [[120, false], [98, false], [97, true], [50, true]] as const) {
+			flyers.state.quantity.set(flyersQuantity)
+			quote.properties.totalQuantity.get()
+			expect(complete(reader), String(flyersQuantity))
+				.toBe(expected)
+		}
 	})
 
 	it('says what the Lab cannot show: a throwing Property keeps its last completed result in inspection', () => {
 		expect(step('isolated-exception').stages[0].reveal)
 			.toContain('it cannot show that exception')
+		// The reveal names no number of the preset: the threshold is the document's, not the text's.
+		expect(step('isolated-exception').stages[0].reveal)
+			.not
+			.toMatch(/\b(50|52|100)\b/)
 	})
 })
 
@@ -210,6 +223,7 @@ describe('the whole script on a real Runtime', () => {
 		expectStep('isolated-exception', false)
 		const buggyEngineReader = buggy.reader
 		widgetOfType(buggy.runtime, 'flyers', 'Item').state.quantity.set(50)
+		widgetOfType(buggy.runtime, 'quote', 'Quote').properties.totalQuantity.get()
 		engine.recheck(buggyEngineReader)
 		expectStep('isolated-exception', true)
 		engine.next(actions)
