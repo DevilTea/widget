@@ -270,6 +270,9 @@ export function createOnboardingHost(runtime: OnboardingRuntime, options: Onboar
 				activity.value = []
 			},
 			resetAll: () => {
+				// A disposed host has no Runtime to reset (a Method or resetState on a disposed Runtime throws).
+				if (disposed)
+					return
 				for (const entry of inFlight.values())
 					entry.cancel()
 				inFlight.clear()

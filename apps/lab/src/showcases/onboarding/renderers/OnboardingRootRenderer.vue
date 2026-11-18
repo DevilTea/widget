@@ -42,6 +42,7 @@ const jumpId = useId()
 const jumpHintId = useId()
 const stepsHeadingId = useId()
 const stepRegion = ref<HTMLElement | null>(null)
+const finishedHeading = ref<HTMLElement | null>(null)
 const jumpText = ref('')
 
 const count = computed(() => progress.value?.count ?? 0)
@@ -91,6 +92,9 @@ function onBack(): void {
 function onFinish(): void {
 	const succeeded = finish() !== null
 	reportCall(board, 'finish', diagnostics.finish.value, succeeded, { clearAll: true })
+	// The Finish button is replaced by the finished card, which takes the focus with it: put it on the card's heading.
+	if (succeeded)
+		void focusWhenRendered(() => finishedHeading.value)
 }
 
 /** A step button asks for that step: a locked one is refused by the Method (the page does not decide). */
@@ -107,6 +111,20 @@ function onJump(): void {
 function onStartOver(): void {
 	board.clear()
 	onboardingHost?.resetAll()
+	// resetState() emits no Event, and the button that was pressed leaves with the finished card: focus the step shown now.
+	void focusWhenRendered(() => stepRegion.value?.querySelector<HTMLElement>('h2'))
+}
+
+/** Focuses what `find` returns once it is in the page: the render that shows it follows the State write, so wait a few ticks at most. */
+async function focusWhenRendered(find: () => HTMLElement | null | undefined): Promise<void> {
+	for (let attempt = 0; attempt < 5; attempt++) {
+		await nextTick()
+		const target = find()
+		if (target !== null && target !== undefined) {
+			target.focus()
+			return
+		}
+	}
 }
 
 // The host heard `stepChanged`: move focus to the heading of the step that was entered. The new step renders after the
@@ -115,15 +133,7 @@ watch(() => onboardingHost?.lastStepChange.value?.nonce, async () => {
 	const to = onboardingHost?.lastStepChange.value?.change.to
 	if (to === undefined)
 		return
-	for (let attempt = 0; attempt < 5; attempt++) {
-		await nextTick()
-		const entered = stepRegion.value?.querySelector<HTMLElement>(`[data-widget-id="${CSS.escape(to)}"]`)
-		if (entered !== null && entered !== undefined) {
-			entered.querySelector<HTMLElement>('h2')
-				?.focus()
-			return
-		}
-	}
+	await focusWhenRendered(() => stepRegion.value?.querySelector<HTMLElement>(`[data-widget-id="${CSS.escape(to)}"] h2`))
 })
 
 const problemText = computed(() => {
@@ -290,7 +300,10 @@ const problemText = computed(() => {
 			data-testid="onboarding-finished"
 		>
 			<h2
+				ref="finishedHeading"
+				tabindex="-1"
 				class="onboarding-card-title"
+				data-testid="onboarding-finished-title"
 			>
 				{{ tf('finishedHeading', { name: summary.name }) }}
 			</h2>
@@ -521,6 +534,11 @@ const problemText = computed(() => {
 .onboarding-card-title {
 	margin: 0;
 	font-size: 20px;
+}
+
+.onboarding-card-title:focus-visible {
+	outline: 2px solid var(--onboarding-accent);
+	outline-offset: 2px;
 }
 
 .onboarding-finished p {
