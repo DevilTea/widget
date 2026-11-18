@@ -149,8 +149,8 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   tests import them directly and e2e opens them with `?showcase=sandbox`. Product-shaped showcases live
   in `src/showcases/`, never here; sandbox fixtures must stay small.
 - `src/showcases/` — the showcases and their registry:
-  - `registry.ts` — the deliberately minimal `{ id, label, hidden?, system, renderer, presets }` lookup
-    table (no routing, no persistence) consumed by `use-lab-store.ts`'s `switchShowcase`. Plugin-tuple
+  - `registry.ts` — the deliberately minimal `{ id, label, hidden?, system, presets, sources }` lookup
+    table (no routing, no persistence; shell-safe: it imports no renderer, see "Showcase isolation") consumed by `use-lab-store.ts`'s `switchShowcase`. Plugin-tuple
     types are erased to `WidgetSystem<AnyWidgetPluginTuple>` on purpose — consumers only need object
     identity.
   - `survey/` — Interactive Survey (the default showcase), the Maker Space open-day sign-up form (a survey rendered
@@ -269,7 +269,7 @@ Intentional, not incidental (`DevilTea/deviltea-labs#30` Scope B) — the produc
 building this app in isolation:
 
 ```text
-main app JS (lab-*.js + shared global-*.js) ~847 KB + ~288 KB raw / ~230 KB + ~94 KB gzip — eager
+main app JS (lab-*.js + the chunk it shares with the frame, tutorial-theme-*.js) ~847 KB + ~288 KB raw / ~230 KB + ~94 KB gzip — eager
                                          (was ~678 KB + ~287 KB / ~177 KB + ~93 KB before Nuxt UI)
 Nuxt UI Toast (Toast-*.js)               ~30 KB raw / ~9 KB gzip   — loaded on first toast (none is shown yet)
 modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
@@ -281,10 +281,11 @@ Implementation panel + Shiki (ImplementationPanel-*.js)
 curated raw-source chunks (per curated file, e.g. ShortAnswerRenderer-*.js)
                                          ~2-21 KB raw / ~1-6.2 KB gzip each — loaded on first
                                          selection of that file's tab
-CSS (lab-*.css + global-*.css)            ~340 KB + ~6 KB raw / ~40 KB + ~1.5 KB gzip — eager
+CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
                                          (was ~128 KB + ~9 KB / ~12 KB + ~3 KB before Nuxt UI; the Lab shell only: Tailwind utilities
-                                         plus the theme of every Nuxt UI component, see "Nuxt UI and Tailwind". global-*.css is
-                                         plain CSS: the palette tokens and the survey renderers' scoped styles, which the frame loads too)
+                                         plus the theme of every Nuxt UI component, see "Nuxt UI and Tailwind". It holds `global.css` and the palette
+                                         tokens too. No showcase renderer style is in it: the survey's scoped styles are in a separate chunk the
+                                         frame loads lazily, see "Showcase isolation")
 ```
 
 - **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
@@ -367,7 +368,8 @@ ported its ~340 style calls to Tailwind utilities with no visual change (the Lab
   renderers are untouched. The renderers (`showcases/survey/renderers`) are styled with a `<style scoped>` block each, in
   plain CSS over their own `--survey-*` tokens (never the Lab's `--lab-*`), never with a Tailwind class (Tailwind does not even scan them:
   `lab-ui.css` lists its `@source`s explicitly). `src/styles/styling-boundary.unit.test.ts` walks the frame entry's imports
-  and fails if any reaches `lab-ui.css`, Tailwind, Nuxt UI or `src/components`; `e2e/nuxt-ui.spec.ts` pins, on the same-origin
+  and fails if any reaches the chrome's pipeline (`lab-ui.css`, `nuxt-ui.ts`, `src/ui/`, `src/components/`, Dockview, Vue Flow, Monaco) or
+  `@nuxt/ui`/`tailwindcss` from outside a showcase directory; `e2e/nuxt-ui.spec.ts` pins, on the same-origin
   build, that the frame document has no Tailwind/Nuxt UI CSS, no `.dark` class and no `--ui-*` tokens. The frame's CSS does not depend on its origin
   (the entry never imports it), but `playwright.preview-origin.config.ts` only runs `preview-origin.spec.ts`
   (the frame boots and connects cross-origin); it does not repeat these assertions.
@@ -388,8 +390,9 @@ ported its ~340 style calls to Tailwind utilities with no visual change (the Lab
 - **Cascade layers.** Order, lowest to highest: `properties` (Tailwind's `@property` fallback, which must rank
   below everything that sets a `--tw-*` variable), `theme`, `base`, `components`,
   `utilities` (Tailwind utilities and the classes Nuxt UI components are made of). The statement lives inline in
-  `index.html` because the first `@layer` statement the browser sees fixes the order and Vite may emit the shared
-  `global.css` stylesheet link before the Tailwind one; `lab-ui.css` repeats it. Unlayered CSS (`global.css`,
+  `index.html` because the first `@layer` statement the browser sees fixes the order, and Vite links the stylesheet of a chunk
+  the shell shares with the frame (today `tutorial-theme-*.css`, which has no layers) before the entry's own, which holds
+  Tailwind and `global.css`; the inline statement keeps the order fixed whatever an earlier sheet gains. `lab-ui.css` repeats it. Unlayered CSS (`global.css`,
   `dockview-theme.css`, scoped SFC styles) beats every layer, so Dockview, Vue Flow, Monaco and Shiki styling is
   untouched. `e2e/nuxt-ui.spec.ts` probes the resolved order in a real browser.
 - **No global Tailwind preflight (yet); a `[data-slot]`-scoped preflight instead.** `lab-ui.css` imports
@@ -475,12 +478,29 @@ tutorial spotlight and observation, `styles/preview-frame.css`, `styles/tutorial
 `--lab-*` tokens; showcases may not. The tutorial reaches into a showcase only through `data-tutorial-target` attributes the
 showcase stamps itself (`showcases/survey/tutorial-targets.ts`).
 
-**What a showcase file may import:** its own directory, `src/showcase-host`, `vue`, and `@deviltea/widget-*` packages (and, in a test,
+**What a showcase file may refer to:** its own directory, `src/showcase-host`, `vue`, and `@deviltea/widget-*` packages (and, in a test,
 `vitest` and `@vue/test-utils`). **What it may not:** anything else, in particular `composables/`, `i18n/`, `theme/`, `tutorial/`,
-`styles/`, `components/`, `lab/`, another showcase, or a chrome library (Nuxt UI, Tailwind, Dockview, Vue Flow, Monaco). Its CSS
-(a `<style>` block, a stylesheet or an inline style) may not mention `--lab-*` or `data-lab-theme`.
-`src/styles/showcase-isolation.unit.test.ts` enforces both over every file, tests included; `showcases/registry.ts` (the Lab-side
-index of showcases) is its one exemption, and `styles/styling-boundary.unit.test.ts` keeps chrome CSS out of the frame's import graph.
+`styles/`, `components/`, `lab/`, another showcase, or a chrome library (Dockview, Vue Flow, Monaco). "Refer to" is every way a file
+reaches another one: static and dynamic imports, CSS `@import` and `url()` (quoted or not), SFC `<style src>`/`<script src>`, asset
+attributes and `new URL(..., import.meta.url)`. A reference the guard cannot resolve from the text (`import()` with a template or a
+variable, `import.meta.glob`, `require`) fails, and so does a file whose extension is not `.ts`, `.vue`, `.css` or `.json`, because it
+would not be scanned. Its CSS (a `<style>` block, a stylesheet or an inline style) may not mention `--lab-*` or `data-lab-theme`.
+`src/styles/showcase-isolation.unit.test.ts` enforces this over every file under `src/showcases/` (a file directly there belongs to no
+showcase directory and may reach nothing), `src/sandbox/` and `src/showcase-host/`, tests included; `showcases/registry.ts` and its test
+(the Lab-side index of showcases) are the only exemption. Each ablation case is in that test.
+
+**Extra packages.** A showcase that needs a library of its own (a future self-contained Nuxt UI/Tailwind showcase, say) declares it in
+`<its directory>/allowed-packages.json`, `{ "allowedPackages": ["@nuxt/ui", "tailwindcss"] }`: those packages and their subpaths are then allowed
+inside that directory only (never in the host contract), and every path it refers to must still stay inside the directory. The frame
+walk in `styling-boundary.unit.test.ts` forbids the chrome's own pipeline from the frame, not Tailwind/Nuxt UI as such: `@nuxt/ui` and
+`tailwindcss` are only allowed from inside a showcase directory, and a stylesheet carrying Tailwind syntax may only be referenced from
+inside the showcase directory it lives in. No showcase declares extra packages today; adding the first one is a reviewed change.
+
+**Both directions.** Showcase renderer code and CSS must also stay out of the shell document. `showcases/registry.ts` holds shell-safe
+metadata only (system, presets, sources); the renderer of each showcase is loaded lazily, by id, in the frame only
+(`src/preview-frame-renderers.ts`, imported by `preview-frame-main.ts`). `src/styles/shell-isolation.unit.test.ts` checks that `main.ts`'s
+import graph holds no showcase renderer, and, on the built `dist/`, that `index.html` links no stylesheet with showcase styles and statically
+loads no chunk with renderer code (it needs `pnpm build`, which `pnpm check` runs first).
 
 **Styling.** A showcase owns its colour tokens. The survey declares `--survey-*` on its root element (`SurveyRootRenderer.vue`),
 dark by default and light under `.survey[data-survey-theme='light']`, where `data-survey-theme` is bound to `host.theme`; question
@@ -491,8 +511,8 @@ relies on that inheritance.
 
 **Adding a showcase.** Create `src/showcases/<id>/` with its plugins, system, presets, renderers, `messages.ts` (if it has
 Lab-side text), `sources.ts` and renderer styles; import the host contract for locale, theme, inspect anchors and the sources
-types, and nothing else of the Lab. Declare colour tokens on the renderer root keyed off `useShowcaseHost().theme`. Register it
-in `showcases/registry.ts`. Test renderers with a plain-ref `ShowcaseHost` (`survey/renderers/test-harness.ts` shows how), and run
+types, and nothing else of the Lab. Declare colour tokens on the renderer root keyed off `useShowcaseHost().theme`. Register its shell-safe entry
+in `showcases/registry.ts` and its renderer loader in `preview-frame-renderers.ts`. Test renderers with a plain-ref `ShowcaseHost` (`survey/renderers/test-harness.ts` shows how), and run
 `pnpm exec vitest run src/styles` to check the isolation guard.
 
 ## Package boundaries

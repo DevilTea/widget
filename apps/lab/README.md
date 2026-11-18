@@ -57,7 +57,10 @@ Showcases are isolated from the Lab: they render in the Preview iframe and impor
 host contract in `src/showcase-host/` (the host's locale and theme, showcase-local messages, the Inspect anchor and the
 curated sources types), `vue` and the `@deviltea/widget-*` packages. A showcase declares its own colour tokens (the survey's
 `--survey-*`) and its own translations, so none of the Lab's `--lab-*` tokens, stores or i18n tables reach it;
-`src/styles/showcase-isolation.unit.test.ts` enforces this. See "Showcase isolation" in `AGENTS.md`, which also says how
+`src/styles/showcase-isolation.unit.test.ts` enforces this, including any import, `url()`, `<style src>` or dynamic
+reference that leaves the showcase's directory. The other direction holds too: the shell never loads showcase renderer code or
+styles (renderers are loaded lazily, in the frame only, by `src/preview-frame-renderers.ts`;
+`src/styles/shell-isolation.unit.test.ts` checks the built `index.html`). See "Showcase isolation" in `AGENTS.md`, which also says how
 to add a showcase.
 
 ## Header, editing feedback and Undo

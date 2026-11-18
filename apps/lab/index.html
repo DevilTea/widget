@@ -6,8 +6,9 @@
 		<title>Widget Lab</title>
 		<!--
 			Cascade layer order for the Lab shell (rationale: `src/styles/lab-ui.css`). It is inline on purpose: the
-			first `@layer` statement the browser sees fixes the order, and Vite emits the shared `global.css` chunk's
-			stylesheet link BEFORE the Tailwind one, so a statement inside `lab-ui.css` alone could come too late.
+			first `@layer` statement the browser sees fixes the order, and Vite links the stylesheet of a chunk shared with the
+			Preview frame (`tutorial-theme-*.css`) BEFORE the entry's own (Tailwind and `global.css`), so a statement inside
+			`lab-ui.css` alone could come too late if an earlier sheet ever declared a layer.
 			The Preview frame page has no such statement.
 		-->
 		<style>

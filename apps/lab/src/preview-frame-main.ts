@@ -18,6 +18,7 @@ import {
 import { createApp, defineComponent, h } from 'vue'
 import { createLabI18nStore } from './composables/use-lab-i18n'
 import { createLabThemeStore } from './composables/use-lab-theme'
+import { loadShowcaseRenderer } from './preview-frame-renderers'
 import { derivePreviewParentOrigin } from './preview-host/parent-origin'
 import {
 	parsePreviewHostCommand,
@@ -219,12 +220,24 @@ window.addEventListener('message', (event) => {
 				return
 			}
 
+			// Loaded before the running Preview is taken down: a renderer that fails to load leaves it untouched.
+			const renderer = await loadShowcaseRenderer(showcase.id)
+			if (renderer === undefined) {
+				sendSafely(hostTransport, {
+					protocol: PREVIEW_HOST_PROTOCOL_VERSION,
+					kind: 'error',
+					requestId: request.requestId,
+					message: `No Preview renderer for showcase: ${showcase.id}.`,
+				})
+				return
+			}
+
 			teardownMountedPreview()
 			runtimeTornDown = true
 			const runtime = blueprint.createRuntime()
 			const Root = defineComponent({
 				name: 'PreviewFrameRoot',
-				setup: () => () => h(showcase.renderer, { runtime }),
+				setup: () => () => h(renderer, { runtime }),
 			})
 			const app = createApp(Root)
 			app.provide(ShowcaseHostKey, showcaseHost)
