@@ -246,10 +246,6 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Failed to load {title}.': '無法載入 {title}。',
 	'Failed to render this source.': '無法顯示這份 source。',
 
-	// Survey renderer-owned fixed chrome. Question labels/help/options/errors, the title, the Submit label and
-	// the other survey texts are semantic/config data in the survey's own languages and deliberately stay verbatim.
-	'Response — what a backend reads': '回應——後端讀取的內容',
-
 	// Layout and the Selected widget pane (issue #230 PR 3b).
 	'Reset layout': '重設版面配置',
 	'Selected widget': '選取的 widget',

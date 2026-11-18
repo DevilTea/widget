@@ -4,11 +4,11 @@
  * condition grammar, its evaluation and the built-in answer messages live. The four question types also
  * list `renderers/QuestionFrame.vue` (where the label, help, errors and their ARIA wiring are rendered),
  * the choice types also `renderers/choice-rows.ts`, and all four `plugins/question-members.ts`, where
- * `visible`, `required`, the option states and `errors` are computed. Every file is a lazy `?raw` thunk (see `../../implementation/types.ts`), so this module
+ * `visible`, `required`, the option states and `errors` are computed. Every file is a lazy `?raw` thunk (see `../../showcase-host/sources.ts`), so this module
  * stays small and pulls no source text into the shell's initial chunks.
  */
 
-import type { SourcesRegistry } from '../../implementation/types'
+import type { SourcesRegistry } from '../../showcase-host'
 
 const ROOT = 'apps/lab/src/showcases/survey'
 

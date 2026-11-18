@@ -1,6 +1,6 @@
 /**
  * Laziness and subscriptions, observed through the same passive surface the Lab's Runtime panel uses
- * (`createRuntimeReader`: `getSnapshot()` only, which never evaluates anything).
+ * (`createPropertyReader`: `getSnapshot()` only, which never evaluates anything).
  *
  * Properties are lazy: Core runs one only when something reads it (`get()`) or subscribes to it. `breakdown`
  * (of an Expense) and `ledger` (of a Person) are read only when a viewer opens them, so a fresh Runtime, and
@@ -12,14 +12,13 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createRuntimeReader } from '../../../tutorial/inspection-reader'
-import { createTripRuntime, valueOf, widgetOfType } from '../test-support'
+import { createPropertyReader, createTripRuntime, valueOf, widgetOfType } from '../test-support'
 
 function setup() {
 	const { runtime } = createTripRuntime()
 	return {
 		runtime,
-		reader: createRuntimeReader(runtime),
+		reader: createPropertyReader(runtime),
 		hotel: widgetOfType(runtime, 'hotel', 'Expense'),
 		ben: widgetOfType(runtime, 'ben', 'Person'),
 		settlement: widgetOfType(runtime, 'settlement', 'Settlement'),

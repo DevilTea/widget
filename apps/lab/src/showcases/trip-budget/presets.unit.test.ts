@@ -4,8 +4,6 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { translateMessage } from '../../i18n/messages'
-import { translatePresentationMessage } from '../../i18n/presentation-messages'
 import { defaultTripBudgetPreset, tripBudgetPresets } from './presets'
 import { tripBudgetSystem } from './system'
 import { createTripRuntime, valueOf, widgetOfType } from './test-support'
@@ -21,21 +19,6 @@ describe('preset list', () => {
 			.toEqual(['trip-default', 'trip-invalid', 'trip-unsupported-currency'])
 		expect(defaultTripBudgetPreset)
 			.toBe(tripBudgetPresets[0])
-	})
-
-	it('has a zh-TW label and description for every preset (the Examples menu translates them)', () => {
-		for (const preset of tripBudgetPresets) {
-			expect(translatePresentationMessage('zh-TW', preset.label), preset.label)
-				.not
-				.toBe(preset.label)
-			expect(translatePresentationMessage('zh-TW', preset.description), preset.id)
-				.not
-				.toBe(preset.description)
-		}
-		expect(translatePresentationMessage('zh-TW', 'Trip budget splitter'))
-			.toBe('旅行分帳')
-		expect(translateMessage('en', 'Trip budget splitter'))
-			.toBe('Trip budget splitter')
 	})
 
 	it('has no cycle preset: nothing in a trip reads the settlement', () => {

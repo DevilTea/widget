@@ -4,11 +4,11 @@
  * arithmetic (splitting, settling, rounding) and the built-in texts live. The widgets that read other
  * widgets also list `plugins/reads.ts`, where the cross-widget dependencies are declared, and the
  * lazily-read Properties list the renderer component that is the only place they are read. Every file is a
- * lazy `?raw` thunk (see `../../implementation/types.ts`), so this module stays small and pulls no source
+ * lazy `?raw` thunk (see `../../showcase-host/sources.ts`), so this module stays small and pulls no source
  * text into the shell's initial chunks.
  */
 
-import type { SourcesRegistry } from '../../implementation/types'
+import type { SourcesRegistry } from '../../showcase-host'
 
 const ROOT = 'apps/lab/src/showcases/trip-budget'
 

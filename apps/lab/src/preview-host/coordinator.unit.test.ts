@@ -302,6 +302,35 @@ describe('preview host coordinator', () => {
 		coordinator.dispose()
 	})
 
+	it('an error that discards the frame leaves nothing running, and the next mount can recover', async () => {
+		const coordinator = createPreviewHostCoordinator()
+		let attempt = 0
+		const mount = vi.fn(async ({ revision }: { revision: number }) => {
+			attempt++
+			if (attempt === 2)
+				throw new PreviewHostClientError('renderer failed to load', true, false, true)
+			return connection(revision)
+		}) as unknown as PreviewFrameDriver['mount']
+		coordinator.attachDriver(driverOf(mount))
+		await coordinator.replace({ showcaseId: 'survey', revision: 1, sourceText: '{}' })
+
+		await expect(coordinator.replace({ showcaseId: 'survey', revision: 2, sourceText: '{}' }))
+			.rejects
+			.toThrow('renderer failed to load')
+		// Unlike a plain refusal, revision 1 does not survive: its frame is being replaced.
+		expect(coordinator.connection.value)
+			.toBeNull()
+		expect(coordinator.runtimeSurvives.value)
+			.toBe(false)
+
+		await coordinator.replace({ showcaseId: 'survey', revision: 2, sourceText: '{}' })
+		expect(coordinator.connection.value?.revision)
+			.toBe(2)
+		expect(coordinator.error.value)
+			.toBeNull()
+		coordinator.dispose()
+	})
+
 	it('drops the connection and reports an error when the frame closes by itself, and recovers on the next mount', async () => {
 		const coordinator = createPreviewHostCoordinator()
 		const closeListeners = new Set<() => void>()

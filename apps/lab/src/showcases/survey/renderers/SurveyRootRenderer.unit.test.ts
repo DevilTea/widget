@@ -7,7 +7,7 @@
 import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createSurveyRuntime, valueOf, widgetOfType } from '../test-support'
-import { mountSurvey, widgetSelector } from './test-harness'
+import { createTestHost, mountSurvey, widgetSelector } from './test-harness'
 
 function fillOnsite(runtime: ReturnType<typeof createSurveyRuntime>['runtime']): void {
 	widgetOfType(runtime, 'mode', 'SingleChoice').state.answer.set('onsite')
@@ -190,6 +190,51 @@ describe('surveyRootRenderer', () => {
 		expect(wrapper.find(widgetSelector('open-day'))
 			.attributes('data-changed-since-submit'))
 			.toBe('false')
+		wrapper.unmount()
+	})
+
+	it('follows the host locale: the language label and the response summary switch and switch back', async () => {
+		const { runtime } = createSurveyRuntime()
+		const host = createTestHost({ locale: 'en' })
+		const wrapper = await mountSurvey(runtime, { host })
+		const label = (): string => wrapper.find('label.survey-language-label')
+			.text()
+		const summary = (): string => wrapper.find('summary')
+			.text()
+
+		expect([label(), summary()])
+			.toEqual(['Language', 'Response — what a backend reads'])
+
+		host.locale.value = 'zh-TW'
+		await flushPromises()
+		expect([label(), summary()])
+			.toEqual(['語言', '回應——後端讀取的內容'])
+		// The survey's own content is in the survey's language (State), not the host locale.
+		expect(wrapper.find('h1')
+			.text())
+			.toBe('Maker Space open day: sign-up')
+
+		host.locale.value = 'en'
+		await flushPromises()
+		expect([label(), summary()])
+			.toEqual(['Language', 'Response — what a backend reads'])
+		wrapper.unmount()
+	})
+
+	it('follows the host theme through its own data-survey-theme attribute on the root', async () => {
+		const { runtime } = createSurveyRuntime()
+		const host = createTestHost({ theme: 'dark' })
+		const wrapper = await mountSurvey(runtime, { host })
+
+		expect(wrapper.find('.survey')
+			.attributes('data-survey-theme'))
+			.toBe('dark')
+
+		host.theme.value = 'light'
+		await flushPromises()
+		expect(wrapper.find('.survey')
+			.attributes('data-survey-theme'))
+			.toBe('light')
 		wrapper.unmount()
 	})
 })

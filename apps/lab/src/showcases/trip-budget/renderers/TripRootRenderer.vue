@@ -5,18 +5,17 @@
  * expenses so a change below shows its effect without scrolling).
  *
  * The page paints itself from its own `--trip-*` custom properties, chosen by the host's light/dark theme
- * (`../host.ts`, the showcase's only contact with the Lab); no chrome token is used.
+ * (`useShowcaseHost()` of the showcase host contract); no chrome token is used.
  *
  * Reads: Property `title` and `view` (the interface language), State `language`. Writes State `language`.
- * "Start over" asks the host (`./host.ts`) to call Core's `runtime.resetState()`; the language is the one
+ * "Start over" asks the host (`./reset-host.ts`) to call Core's `runtime.resetState()`; the language is the one
  * thing put back afterwards, so Start over does not also switch the language of the page.
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, inject, useId } from 'vue'
+import { useInspectAnchor, useShowcaseHost } from '../../../showcase-host'
 import { LANGUAGE_ENDONYMS, TRIP_LANGUAGES, tripText } from '../domain'
-import { useTripShowcaseHost } from '../host'
 import { TripPlugin } from '../plugins/trip'
-import { useInspectAnchor } from './anchor'
 import { BUTTON_STYLE, FIELD_STYLE } from './control-style'
 import { TripResetHostKey } from './reset-host'
 
@@ -25,7 +24,7 @@ const { language } = useState()
 const { title, view } = useProperties()
 const text = computed(() => tripText(view.value?.language ?? 'en'))
 const host = inject(TripResetHostKey, null)
-const { theme } = useTripShowcaseHost()
+const { theme } = useShowcaseHost()
 
 const languageId = useId()
 const peopleHeadingId = useId()

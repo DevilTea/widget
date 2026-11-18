@@ -6,17 +6,20 @@
  */
 
 import type { AnyWidgetPluginTuple, WidgetSystem } from '@deviltea/widget-core'
-import type { SourcesRegistry } from './types'
+import type { SourcesRegistry } from '../showcase-host'
 import { describe, expect, it } from 'vitest'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
 import { surveySources } from '../showcases/survey/sources'
 import { surveySystem } from '../showcases/survey/system'
+import { tripBudgetSources } from '../showcases/trip-budget/sources'
+import { tripBudgetSystem } from '../showcases/trip-budget/system'
 import { findDanglingRegistryTypes, findUncuratedPluginTypes } from './registry-coverage'
 
 const showcases: readonly { readonly label: string, readonly system: WidgetSystem<AnyWidgetPluginTuple>, readonly sources: SourcesRegistry }[] = [
 	{ label: 'sandbox', system: sandboxSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: sandboxSources },
 	{ label: 'survey', system: surveySystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: surveySources },
+	{ label: 'trip-budget', system: tripBudgetSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: tripBudgetSources },
 ]
 
 const fixtureEntry: SourcesRegistry[string] = {

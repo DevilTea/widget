@@ -1,46 +1,18 @@
 /**
- * Application-wide baseline, shared by the Lab shell and the Preview frame. It is plain CSS: the dark palette is the
- * resilient fallback/default on `:root`; #44's document-level `[data-lab-theme]` overrides below provide the alternate light palette without
- * creating a second component styling system. Every consumer continues to read the same semantic
- * `--lab-color-*` tokens, so Dockview and ordinary Lab chrome switch together.
+ * Baseline of the Lab SHELL document (`main.ts`). The Preview frame never imports it: the frame is its own document
+ * with its own baseline in `preview-frame.css`, so none of the shell's rules below (dialogs, the narrow-viewport gate,
+ * the document-wide font) can reach a showcase. What the two documents share is the palette,
+ * `lab-tokens.css`: dark on `:root`, light under `html[data-lab-theme='light']`. Dockview, Monaco, the shell's scoped
+ * styles and, through the theme bridge in `lab-ui.css`, Tailwind's utilities read the same semantic `--lab-color-*`
+ * tokens, so ordinary Lab chrome switches together.
  */
 
-:root {
-	--lab-color-bg: #14161a;
-	--lab-color-surface: #1b1e24;
-	--lab-color-surface-alt: #22262e;
-	--lab-color-border: #2c313a;
-	--lab-color-text: #e6e8eb;
-	--lab-color-text-muted: #9aa2af;
-	--lab-color-accent: #5b9dff;
-	--lab-color-accent-contrast: #04101f;
-	--lab-color-danger: #f2545b;
-	--lab-color-warning: #e8a33d;
-	/* One token for success/OK in both themes (audit U17): this is the dark value, the light one is below. Never reintroduce a second name for it. */
-	--lab-color-ok: #3fbf7f;
-	--lab-radius: 6px;
-	--lab-font-mono: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
-	--lab-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
+@import './lab-tokens.css';
 
 *,
 *::before,
 *::after {
 	box-sizing: border-box;
-}
-
-html[data-lab-theme='light'] {
-	--lab-color-bg: #f6f7f9;
-	--lab-color-surface: #ffffff;
-	--lab-color-surface-alt: #eef1f5;
-	--lab-color-border: #d4d9e2;
-	--lab-color-text: #1b1f24;
-	--lab-color-text-muted: #596273;
-	--lab-color-accent: #1769e0;
-	--lab-color-accent-contrast: #ffffff;
-	--lab-color-danger: #c9373f;
-	--lab-color-warning: #9a6200;
-	--lab-color-ok: #18794e;
 }
 
 html,
@@ -86,16 +58,4 @@ dialog {
 	body {
 		overflow-x: hidden;
 	}
-}
-
-/*
- * Inspect mode's hover highlight. InspectorAgent draws it in its own ShadowRoot overlay (it never
- * touches renderer elements), so document CSS cannot target the highlight. The Agent reads these
- * inherited custom properties instead, which keeps the reusable Agent free of Vue styling
- * and lets the Lab theme it.
- */
-body {
-	--widget-inspector-accent: var(--lab-color-accent);
-	--widget-inspector-accent-contrast: var(--lab-color-accent-contrast);
-	--widget-inspector-fill: color-mix(in srgb, var(--lab-color-accent) 12%, transparent);
 }

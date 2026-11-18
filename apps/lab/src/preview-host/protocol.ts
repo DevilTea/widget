@@ -78,6 +78,12 @@ export interface PreviewHostErrorResponse {
 	 * rest of this protocol; the Inspector protocol is not involved.
 	 */
 	readonly runtimeTornDown?: boolean
+	/**
+	 * The frame document cannot recover from this failure by itself (a module it needs failed to load, and the browser
+	 * remembers that failure for the life of the document), so the host must discard it and load a new one before the
+	 * next mount. Whatever it ran is gone with it. Absent: the frame stays usable. Lab-internal.
+	 */
+	readonly discardFrame?: boolean
 }
 
 export type PreviewHostResponse = PreviewHostMountedResponse | PreviewHostTutorialEvaluatedResponse | PreviewHostErrorResponse
@@ -171,7 +177,9 @@ export function parsePreviewHostResponse(value: unknown): PreviewHostResponse | 
 			: null
 	}
 	if (value.kind === 'error') {
-		return typeof value.message === 'string' && (value.runtimeTornDown === undefined || typeof value.runtimeTornDown === 'boolean')
+		return typeof value.message === 'string'
+			&& (value.runtimeTornDown === undefined || typeof value.runtimeTornDown === 'boolean')
+			&& (value.discardFrame === undefined || typeof value.discardFrame === 'boolean')
 			? value as unknown as PreviewHostErrorResponse
 			: null
 	}

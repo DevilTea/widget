@@ -16,7 +16,7 @@
 
 import { createWidgetVueRenderer, useWidget } from '@deviltea/widget-vue'
 import { defineComponent, h } from 'vue'
-import { useInspectAnchor } from '../composables/use-inspect-anchor'
+import { useInspectAnchor } from '../showcase-host'
 import { CounterPlugin, SectionPlugin, StackPlugin, SummaryPlugin, TextPlugin } from './plugins'
 import { sandboxSystem } from './system'
 

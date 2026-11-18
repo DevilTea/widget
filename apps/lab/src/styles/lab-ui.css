@@ -162,7 +162,7 @@
 }
 
 /*
- * Theme bridge, tokens. The Lab palette (`--lab-color-*`, defined by `global.css`: dark on
+ * Theme bridge, tokens. The Lab palette (`--lab-color-*`, defined by `lab-tokens.css`: dark on
  * `:root`, light under `html[data-lab-theme='light']`) is authoritative; Nuxt UI's semantic tokens are
  * pointed at it. They are plain `var()` references, so they follow `data-lab-theme` by themselves; no
  * `.dark` variant of the mapping is needed. The `.dark` class (`composables/use-nuxt-ui-theme-bridge.ts`)

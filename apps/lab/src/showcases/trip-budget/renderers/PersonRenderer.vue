@@ -9,9 +9,9 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, ref, useId } from 'vue'
+import { useInspectAnchor } from '../../../showcase-host'
 import { fill, formatMoney, tripText } from '../domain'
 import { PersonPlugin } from '../plugins/person'
-import { useInspectAnchor } from './anchor'
 import { BUTTON_STYLE } from './control-style'
 import PersonLedgerView from './PersonLedgerView.vue'
 

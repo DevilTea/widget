@@ -7,7 +7,7 @@ import type { PreviewHostDescriptor, PreviewTourId } from './protocol'
 import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
 import { createInspectorClient } from '@deviltea/widget-inspector/client'
 import { createInspectorFrameBootstrapRequest } from '@deviltea/widget-inspector/frame-bootstrap'
-import { createPreviewHostClient } from './client'
+import { createPreviewHostClient, PreviewHostClientError } from './client'
 import { PREVIEW_HOST_CHANNEL, PREVIEW_INSPECTOR_CHANNEL } from './protocol'
 
 export interface PreviewFrameConnection {
@@ -125,7 +125,10 @@ export function createPreviewFrameDriver(
 			return await Promise.race([operation, deadline])
 		}
 		catch (cause) {
-			if (cause instanceof PreviewFrameReadinessTimeoutError && physical === current)
+			// A frame that did not answer in time, or that says it cannot recover in place (a lazy module failed to load and
+			// stays failed in its document), is dropped: the next mount loads a new frame document.
+			const unusable = cause instanceof PreviewFrameReadinessTimeoutError || (cause instanceof PreviewHostClientError && cause.discardFrame)
+			if (unusable && physical === current)
 				teardownPhysical()
 			throw cause
 		}

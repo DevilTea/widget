@@ -17,6 +17,7 @@ $.verbose = true
 await $({ env: { ...process.env, WIDGET_LAB_BASE: LAB_BASE } })`pnpm --filter widget-lab... run build`
 await $`pnpm --filter docs run build`
 await rm(labTarget, { recursive: true, force: true })
-await cp(labDist, labTarget, { recursive: true })
+// The build manifest (`.vite/`) is for the Lab's own tests, not part of the deployed site.
+await cp(labDist, labTarget, { recursive: true, filter: source => !/[\\/]\.vite(?:[\\/]|$)/.test(source) })
 
 console.log(`Combined Pages artifact ready at ${docsDist} (Widget Lab under lab/, base ${LAB_BASE})`)

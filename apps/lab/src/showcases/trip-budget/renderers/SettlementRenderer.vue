@@ -8,9 +8,9 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed } from 'vue'
+import { useInspectAnchor } from '../../../showcase-host'
 import { fill, formatMoney, tripText } from '../domain'
 import { SettlementPlugin } from '../plugins/settlement'
-import { useInspectAnchor } from './anchor'
 
 const { useProperties, widgetId, widgetType } = useWidget(SettlementPlugin)
 const { view, total, transfers } = useProperties()
@@ -69,8 +69,6 @@ const gap = computed(() => transfers.value !== null && transfers.value.roundingG
 					v-for="transfer in transfers?.transfers ?? []"
 					:key="`${transfer.from}>${transfer.to}`"
 					data-testid="trip-transfer"
-					:data-from="transfer.from"
-					:data-to="transfer.to"
 					class="settlement-transfer"
 				>
 					<span>{{ fill(text.transfer, { from: transfer.fromName, to: transfer.toName }) }}</span>

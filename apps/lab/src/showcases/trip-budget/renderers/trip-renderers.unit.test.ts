@@ -5,11 +5,9 @@
  */
 import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { LabThemeKey } from '../../../composables/use-lab-theme'
-import { createRuntimeReader } from '../../../tutorial/inspection-reader'
 import { tripBudgetPresets } from '../presets'
-import { createTripRuntime, widgetOfType } from '../test-support'
-import { mountTrip, widgetSelector } from './test-harness'
+import { createPropertyReader, createTripRuntime, widgetOfType } from '../test-support'
+import { createTestHost, mountTrip, widgetSelector } from './test-harness'
 
 function presetSource(id: string): string {
 	return tripBudgetPresets.find(preset => preset.id === id)!.sourceText
@@ -109,19 +107,19 @@ describe('the page', () => {
 		wrapper.unmount()
 	})
 
-	it('paints from its own --trip tokens, chosen by the host theme, and defaults to light outside the Lab', async () => {
+	it('paints from its own --trip tokens, chosen by the host theme, and follows a theme switch', async () => {
 		const { runtime } = createTripRuntime()
-		const plain = await mountTrip(runtime)
-		expect(plain.find('.trip')
-			.attributes('data-trip-theme'))
-			.toBe('light')
-		plain.unmount()
-
-		const dark = await mountTrip(runtime, { provide: { [LabThemeKey as symbol]: { theme: { value: 'dark' }, themes: ['light', 'dark'], setTheme: () => {} } } })
-		expect(dark.find('.trip')
+		const host = createTestHost({ theme: 'dark' })
+		const wrapper = await mountTrip(runtime, { host })
+		expect(wrapper.find('.trip')
 			.attributes('data-trip-theme'))
 			.toBe('dark')
-		dark.unmount()
+		host.theme.value = 'light'
+		await flushPromises()
+		expect(wrapper.find('.trip')
+			.attributes('data-trip-theme'))
+			.toBe('light')
+		wrapper.unmount()
 	})
 })
 
@@ -322,7 +320,7 @@ describe('a failed chain', () => {
 describe('the lazily-read disclosures', () => {
 	it('evaluates breakdown only while it is open', async () => {
 		const { runtime } = createTripRuntime()
-		const reader = createRuntimeReader(runtime)
+		const reader = createPropertyReader(runtime)
 		const wrapper = await mountTrip(runtime)
 		const toggle = wrapper.find(`${widgetSelector('museum')} [data-testid="trip-breakdown-toggle"]`)
 
@@ -382,7 +380,7 @@ describe('the lazily-read disclosures', () => {
 
 	it('evaluates a person\'s ledger only while it is open', async () => {
 		const { runtime } = createTripRuntime()
-		const reader = createRuntimeReader(runtime)
+		const reader = createPropertyReader(runtime)
 		const wrapper = await mountTrip(runtime)
 		expect(reader.readProperty('ben', 'ledger'))
 			.toEqual({ status: 'never-evaluated' })

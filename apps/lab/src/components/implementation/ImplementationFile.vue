@@ -15,7 +15,7 @@
  * and both the ok and failure branches check it before writing anything. #43 localizes only the
  * loading/error sentence around the curated file title; title/path/raw source remain verbatim.
  */
-import type { CuratedSourceFile } from '../../implementation/types'
+import type { CuratedSourceFile } from '../../showcase-host'
 import { ref, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { languageForPath } from '../../implementation/shiki-highlighter'

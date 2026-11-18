@@ -9,14 +9,16 @@ import type { WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { InspectorAgent } from '@deviltea/widget-inspector/agent'
 import type { App } from 'vue'
 import type { PreviewHostRequest } from './preview-host/protocol'
+import type { ShowcaseHost } from './showcase-host'
 import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
 import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
 import {
 	acceptInspectorFrameBootstrap,
 } from '@deviltea/widget-inspector/frame-bootstrap'
 import { createApp, defineComponent, h } from 'vue'
-import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
-import { createLabThemeStore, LabThemeKey } from './composables/use-lab-theme'
+import { createLabI18nStore } from './composables/use-lab-i18n'
+import { createLabThemeStore } from './composables/use-lab-theme'
+import { loadShowcaseRenderer } from './preview-frame-renderers'
 import { derivePreviewParentOrigin } from './preview-host/parent-origin'
 import {
 	parsePreviewHostCommand,
@@ -25,10 +27,11 @@ import {
 	PREVIEW_HOST_PROTOCOL_VERSION,
 	PREVIEW_INSPECTOR_CHANNEL,
 } from './preview-host/protocol'
+import { ShowcaseHostKey } from './showcase-host'
 import { getShowcase } from './showcases/registry'
 import { createRuntimeReader, subscribeObservationTargets } from './tutorial/inspection-reader'
 import { getTour } from './tutorial/tours'
-import './styles/global.css'
+import './styles/lab-tokens.css'
 import './styles/tutorial-theme.css'
 import './styles/preview-frame.css'
 
@@ -51,6 +54,12 @@ const expectedParentOrigin = derivePreviewParentOrigin(document.referrer)
 
 const i18n = createLabI18nStore()
 const theme = createLabThemeStore()
+/**
+ * The frame-side adapter from the Lab's presentation stores to the showcase host contract
+ * (`showcase-host/host.ts`): a showcase sees only the current locale and theme, never these stores.
+ * The assignment is type-checked: if the Lab gains a locale or theme the contract does not know, this stops compiling.
+ */
+const showcaseHost: ShowcaseHost = { locale: i18n.locale, theme: theme.theme }
 let mounted: MountedPreview | null = null
 let bootstrapAccepted = false
 let mountQueue: Promise<void> = Promise.resolve()
@@ -210,16 +219,42 @@ window.addEventListener('message', (event) => {
 				return
 			}
 
+			// Loaded before the running Preview is taken down. A chunk that fails to load stays failed in this document (the
+			// browser caches the rejected import), so a retry in place could never succeed: the host is told to replace the
+			// frame, which also ends the Preview it ran.
+			let renderer: Awaited<ReturnType<typeof loadShowcaseRenderer>>
+			try {
+				renderer = await loadShowcaseRenderer(showcase.id)
+			}
+			catch (error) {
+				sendSafely(hostTransport, {
+					protocol: PREVIEW_HOST_PROTOCOL_VERSION,
+					kind: 'error',
+					requestId: request.requestId,
+					message: `The Preview renderer for "${showcase.id}" could not be loaded (${error instanceof Error ? error.message : String(error)}). The Preview was closed; Try again loads a new one.`,
+					discardFrame: true,
+				})
+				return
+			}
+			if (renderer === undefined) {
+				sendSafely(hostTransport, {
+					protocol: PREVIEW_HOST_PROTOCOL_VERSION,
+					kind: 'error',
+					requestId: request.requestId,
+					message: `No Preview renderer for showcase: ${showcase.id}.`,
+				})
+				return
+			}
+
 			teardownMountedPreview()
 			runtimeTornDown = true
 			const runtime = blueprint.createRuntime()
 			const Root = defineComponent({
 				name: 'PreviewFrameRoot',
-				setup: () => () => h(showcase.renderer, { runtime }),
+				setup: () => () => h(renderer, { runtime }),
 			})
 			const app = createApp(Root)
-			app.provide(LabI18nKey, i18n)
-			app.provide(LabThemeKey, theme)
+			app.provide(ShowcaseHostKey, showcaseHost)
 			app.mount('#app')
 
 			const root = document.getElementById('app')

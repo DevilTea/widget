@@ -7,6 +7,7 @@
 import type { RuntimeWidget } from '@deviltea/widget-core'
 import type { tripBudgetPlugins } from './plugins'
 import type { TripRuntime } from './system'
+import { inspectRuntime } from '@deviltea/widget-core/inspection'
 import { defaultTripBudgetPreset } from './presets'
 import { tripBudgetSystem } from './system'
 
@@ -52,4 +53,30 @@ export function defaultDocument(): any {
 /** One expense of a parsed document. */
 export function expenseOf(document: any, id: string): any {
 	return document.slots.expenses.find((candidate: { id: string }) => candidate.id === id)
+}
+
+/** What the Runtime panel can know of a Property: never evaluated, or the latest completed result. */
+export type PropertyStatus = { readonly status: 'never-evaluated' } | { readonly status: 'completed', readonly result: { readonly ok: boolean, readonly value: unknown } }
+
+/**
+ * A passive reader over Core's inspection (`getSnapshot()` only, which never evaluates anything): the same facts the
+ * Lab's Runtime panel shows. `undefined` when the widget or member does not exist.
+ */
+export function createPropertyReader(runtime: TripRuntime): { readonly readProperty: (widgetId: string, name: string) => PropertyStatus | undefined } {
+	const inspection = inspectRuntime(runtime)
+	return {
+		readProperty: (widgetId, name) => {
+			const node = inspection.blueprint.nodes.find(candidate => candidate.resolved && candidate.node.id === widgetId)
+			const snapshot = node === undefined
+				? undefined
+				: inspection.getWidget(node.nodeId)
+						?.getProperty(name)
+						?.getSnapshot()
+			if (snapshot === undefined)
+				return undefined
+			return snapshot.status === 'never-evaluated'
+				? { status: 'never-evaluated' }
+				: { status: 'completed', result: { ok: snapshot.result.ok, value: snapshot.result.ok ? snapshot.result.value : undefined } }
+		},
+	}
 }

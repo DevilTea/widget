@@ -7,9 +7,9 @@
  * scrolling over it never changes the value.
  */
 import { useWidget } from '@deviltea/widget-vue'
-import { useInspectAnchor } from '../../../composables/use-inspect-anchor'
-import { surveyQuestionTarget } from '../../../tutorial/survey-target-map'
+import { useInspectAnchor } from '../../../showcase-host'
 import { NumericPlugin } from '../plugins/numeric'
+import { surveyQuestionTarget } from '../tutorial-targets'
 import { FIELD_STYLE } from './control-style'
 import QuestionFrame from './QuestionFrame.vue'
 
@@ -72,6 +72,6 @@ function onWheel(event: Event): void {
 	max-width: 240px;
 	min-height: 40px;
 	padding: 6px 10px;
-	background: var(--lab-color-surface-alt);
+	background: var(--survey-color-surface-alt);
 }
 </style>

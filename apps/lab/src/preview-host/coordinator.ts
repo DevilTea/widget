@@ -63,9 +63,9 @@ export function createPreviewHostCoordinator(): PreviewHostCoordinator {
 				return null
 			const failure = cause instanceof Error ? cause : new Error(String(cause))
 			// A refusal the frame answered, before it touched what it ran, leaves that running. Anything else (no answer in
-			// time, a closed channel, an answer that says the old Runtime was already taken down) leaves a connection that
-			// describes a Runtime nobody can reach.
-			const refused = failure instanceof PreviewHostClientError && failure.answered && !failure.runtimeTornDown
+			// time, a closed channel, an answer that says the old Runtime was already taken down or that the frame is being
+			// discarded) leaves a connection that describes a Runtime nobody can reach.
+			const refused = failure instanceof PreviewHostClientError && failure.answered && !failure.runtimeTornDown && !failure.discardFrame
 			if (!refused)
 				connection.value = null
 			runtimeSurvives.value = refused && connection.value !== null

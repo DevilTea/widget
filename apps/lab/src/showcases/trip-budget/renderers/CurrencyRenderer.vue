@@ -8,9 +8,9 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, useId } from 'vue'
+import { useInspectAnchor } from '../../../showcase-host'
 import { fill, ROUND_STEPS, roundStepLabel, tripText } from '../domain'
 import { CurrencyPlugin } from '../plugins/currency'
-import { useInspectAnchor } from './anchor'
 import { FIELD_STYLE } from './control-style'
 
 const { useState, useProperties, widgetId, widgetType } = useWidget(CurrencyPlugin)

@@ -12,9 +12,9 @@
  */
 import { useWidget } from '@deviltea/widget-vue'
 import { computed, inject, ref, useId } from 'vue'
+import { useInspectAnchor } from '../../../showcase-host'
 import { fill, formatMoney, tripText } from '../domain'
 import { ExpensePlugin } from '../plugins/expense'
-import { useInspectAnchor } from './anchor'
 import { BUTTON_STYLE, FIELD_STYLE } from './control-style'
 import ExpenseBreakdownView from './ExpenseBreakdownView.vue'
 import { TripResetHostKey } from './reset-host'

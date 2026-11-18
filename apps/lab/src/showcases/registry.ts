@@ -5,23 +5,22 @@
  * (structure decisions) plus the "Source Apply lifecycle" checkpoint's "Presets / showcase changes"
  * section: "Switching showcases is a larger application-level replacement ... It detaches/disposes the
  * old Runtime, switches showcase context, loads the showcase source, and then uses the same Apply
- * pipeline." Deliberately minimal: no routing, no persistence — just an `{ id, label, system, renderer,
+ * pipeline." Deliberately minimal: no routing, no persistence — just an `{ id, label, system,
  * presets }` lookup table consumed by `use-lab-store.ts`'s `switchShowcase`.
+ *
+ * Shell-safe by construction: it imports no renderer, so no showcase component or stylesheet reaches the Lab shell
+ * document. A showcase's renderer is loaded only inside the Preview frame, through `preview-frame-renderers.ts`.
  */
 
 import type { AnyWidgetPluginTuple, WidgetSystem } from '@deviltea/widget-core'
-import type { Component } from 'vue'
-import type { SourcesRegistry } from '../implementation/types'
+import type { SourcesRegistry } from '../showcase-host'
 import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
-import { SandboxRenderer } from '../sandbox/renderers'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
 import { defaultSurveyPreset, surveyPresets } from './survey/presets'
-import { SurveyRenderer } from './survey/renderers'
 import { surveySources } from './survey/sources'
 import { surveySystem } from './survey/system'
 import { defaultTripBudgetPreset, tripBudgetPresets } from './trip-budget/presets'
-import { TripBudgetRenderer } from './trip-budget/renderers'
 import { tripBudgetSources } from './trip-budget/sources'
 import { tripBudgetSystem } from './trip-budget/system'
 
@@ -41,13 +40,11 @@ export interface ShowcaseEntry {
 	 */
 	readonly hidden?: boolean
 	readonly system: WidgetSystem<AnyWidgetPluginTuple>
-	/** The component `createWidgetVueRenderer` returned for this showcase's system. */
-	readonly renderer: Component
 	readonly presets: readonly ShowcasePreset[]
 	readonly defaultPreset: ShowcasePreset
 	/**
 	 * Curated Implementation-explorer registry (diagnostic #25 P3 Scope A) — metadata only (plugin type ->
-	 * file descriptors with lazy `load()` thunks, see `implementation/types.ts`), trivially small, so
+	 * file descriptors with lazy `load()` thunks, see `showcase-host/sources.ts`), trivially small, so
 	 * this field is safe to keep eager alongside the rest of `ShowcaseEntry` without pulling any raw
 	 * source text or Shiki into the eager/shared chunk graph.
 	 */
@@ -69,7 +66,6 @@ export const showcases: readonly ShowcaseEntry[] = [
 		id: 'survey',
 		label: 'Interactive Survey',
 		system: surveySystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
-		renderer: SurveyRenderer as unknown as Component,
 		presets: surveyPresets,
 		defaultPreset: defaultSurveyPreset,
 		sources: surveySources,
@@ -78,7 +74,6 @@ export const showcases: readonly ShowcaseEntry[] = [
 		id: 'trip-budget',
 		label: 'Trip budget splitter',
 		system: tripBudgetSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
-		renderer: TripBudgetRenderer as unknown as Component,
 		presets: tripBudgetPresets,
 		defaultPreset: defaultTripBudgetPreset,
 		sources: tripBudgetSources,
@@ -88,7 +83,6 @@ export const showcases: readonly ShowcaseEntry[] = [
 		label: 'Sandbox',
 		hidden: true,
 		system: sandboxSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
-		renderer: SandboxRenderer as unknown as Component,
 		presets: sandboxPresets,
 		defaultPreset: defaultSandboxPreset,
 		sources: sandboxSources,
