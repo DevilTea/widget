@@ -241,6 +241,29 @@ describe('showcases are isolated from the Lab', () => {
 			}
 		})
 
+		it('reports strings inside CSS image-set(), and fails closed on preprocessor styles and Sass @use/@forward', () => {
+			for (const source of [
+				'.a { background: image-set("../../../assets/a.png" 1x, "../../../assets/b.png" 2x) }',
+				'.a { background-image: -webkit-image-set(\'../../../assets/a.png\' 1x) }',
+				'.a { background: image-set(url(../../../assets/a.png) 1x, "./ok.png" 2x) }',
+				'<style lang="scss">.a { color: red }</style>',
+				'<style scoped lang=\'sass\'>.a\n  color: red</style>',
+				'<style lang=less>.a { color: red }</style>',
+				'<style lang="stylus">.a\n  color red</style>',
+				'@use "../../../styles/tokens";',
+				'@forward "../../../styles/tokens";',
+			]) {
+				expect(isolationOffences(survey, source), source)
+					.not
+					.toHaveLength(0)
+			}
+			// Inside the directory, image-set is fine.
+			expect(isolationOffences(survey, '.a { background: image-set("./a.png" 1x, "./b.png" 2x) }'))
+				.toEqual([])
+			expect(isolationOffences(survey, '<style lang="css">.a { color: red }</style>'))
+				.toEqual([])
+		})
+
 		it('reports a --lab-* token or the Lab theme attribute in CSS, an inline style or a selector', () => {
 			for (const source of [
 				'<style scoped>.a { color: var(--lab-color-text); }</style>',

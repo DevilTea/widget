@@ -499,8 +499,15 @@ inside the showcase directory it lives in. No showcase declares extra packages t
 **Both directions.** Showcase renderer code and CSS must also stay out of the shell document. `showcases/registry.ts` holds shell-safe
 metadata only (system, presets, sources); the renderer of each showcase is loaded lazily, by id, in the frame only
 (`src/preview-frame-renderers.ts`, imported by `preview-frame-main.ts`). `src/styles/shell-isolation.unit.test.ts` checks that `main.ts`'s
-import graph holds no showcase renderer, and, on the built `dist/`, that `index.html` links no stylesheet with showcase styles and statically
-loads no chunk with renderer code (it needs `pnpm build`, which `pnpm check` runs first).
+import graph holds no showcase renderer, and, on the built `dist/` (through Vite's `.vite/manifest.json`, enabled in `vite.config.ts` and not deployed), that
+every loader of `preview-frame-renderers.ts` is still its own lazy chunk (a renderer something static also imports would be merged into that
+importer's chunk), and that `index.html` links no stylesheet of those chunks and statically loads none of them. It derives the renderers from
+the manifest, so any showcase is covered. It needs `pnpm build`, which `pnpm check` runs first.
+
+**A renderer that fails to load.** A dynamic `import()` that fails stays failed for the life of that frame document (the browser caches the
+rejected module), so asking the same frame again could never succeed. The frame therefore answers a renderer-load failure with the protocol
+flag `discardFrame` (distinct from `runtimeTornDown`): the frame driver drops that frame, the coordinator reports that nothing runs, and
+"Try again" loads a new frame document and the chunk again (`e2e/polish.spec.ts`, "a showcase renderer chunk that fails to load once").
 
 **Styling.** A showcase owns its colour tokens. The survey declares `--survey-*` on its root element (`SurveyRootRenderer.vue`),
 dark by default and light under `.survey[data-survey-theme='light']`, where `data-survey-theme` is bound to `host.theme`; question

@@ -28,6 +28,8 @@ export default defineConfig({
 		format: 'es',
 	},
 	build: {
+		// `dist/.vite/manifest.json`: which chunk and stylesheet each module landed in, read by `src/styles/shell-isolation.unit.test.ts`.
+		manifest: true,
 		// Phase B2 Preview is a real second HTML document, not a component rendered in the Lab page.
 		// Keep both entries in one Vite build so dev, standalone production, and Pages subpath builds
 		// share the exact same module graph/base handling.

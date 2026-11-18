@@ -26,6 +26,23 @@ export interface References {
 /** `url(x)` targets that never leave the document: inlined data, fragments, and the like. */
 const INERT_URL = /^(?:data:|#|about:|blob:)/i
 
+/** A CSS resource target as a bundler resolves it: an unquoted or bare target is relative to the stylesheet. */
+function cssTarget(target: string): string {
+	return /^(?:\.{1,2}\/|[/~@]|[a-z][a-z0-9+.-]*:)/i.test(target) ? target : `./${target}`
+}
+
+/** The text between the parenthesis that opens at `open` and its match, or the rest of the source when it never closes. */
+function parenthesised(source: string, open: number): string {
+	let depth = 0
+	for (let index = open; index < source.length; index++) {
+		if (source[index] === '(')
+			depth++
+		else if (source[index] === ')' && --depth === 0)
+			return source.slice(open + 1, index)
+	}
+	return source.slice(open + 1)
+}
+
 /**
  * Every way a source file (TypeScript, a Vue SFC or CSS) can pull in another file, as far as text shows it:
  *
@@ -77,8 +94,21 @@ export function referencesOf(source: string): References {
 		const target = (match[1] ?? match[2] ?? match[3] ?? '').trim()
 		if (INERT_URL.test(target))
 			continue
-		specifiers.push(/^(?:\.{1,2}\/|[/~@]|[a-z][a-z0-9+.-]*:)/i.test(target) ? target : `./${target}`)
+		specifiers.push(cssTarget(target))
 	}
+	// `image-set()` takes plain strings as image targets, with no `url()` around them.
+	for (const match of source.matchAll(/(?:-webkit-)?image-set\(/g)) {
+		for (const target of parenthesised(source, match.index + match[0].length - 1)
+			.matchAll(/(["'])([^"']+)\1/g)) {
+			if (!INERT_URL.test(target[2]!))
+				specifiers.push(cssTarget(target[2]!))
+		}
+	}
+	// Preprocessor stylesheets and their module systems resolve files the text does not name plainly: fail closed.
+	if (/<style\b[^>]*\slang\s*=\s*["']?(?:scss|sass|less|styl|stylus)\b/.test(source))
+		opaque.push('a <style> block in a CSS preprocessor language (scss, sass, less, stylus)')
+	if (/@(?:use|forward)\s/.test(source))
+		opaque.push('a Sass @use/@forward')
 
 	// SFC blocks with `src`, and template asset attributes that Vue turns into imports.
 	for (const match of source.matchAll(/<(?:script|style|template)\b[^>]*?\ssrc\s*=\s*(['"])([^'"]+)\1/g))

@@ -220,8 +220,23 @@ window.addEventListener('message', (event) => {
 				return
 			}
 
-			// Loaded before the running Preview is taken down: a renderer that fails to load leaves it untouched.
-			const renderer = await loadShowcaseRenderer(showcase.id)
+			// Loaded before the running Preview is taken down. A chunk that fails to load stays failed in this document (the
+			// browser caches the rejected import), so a retry in place could never succeed: the host is told to replace the
+			// frame, which also ends the Preview it ran.
+			let renderer: Awaited<ReturnType<typeof loadShowcaseRenderer>>
+			try {
+				renderer = await loadShowcaseRenderer(showcase.id)
+			}
+			catch (error) {
+				sendSafely(hostTransport, {
+					protocol: PREVIEW_HOST_PROTOCOL_VERSION,
+					kind: 'error',
+					requestId: request.requestId,
+					message: `The Preview renderer for "${showcase.id}" could not be loaded (${error instanceof Error ? error.message : String(error)}). The Preview was closed; Try again loads a new one.`,
+					discardFrame: true,
+				})
+				return
+			}
 			if (renderer === undefined) {
 				sendSafely(hostTransport, {
 					protocol: PREVIEW_HOST_PROTOCOL_VERSION,

@@ -1,4 +1,7 @@
 import type { Page } from '@playwright/test'
+import { readdirSync, readFileSync } from 'node:fs'
+import { basename } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { expect, loadPreset, openDependenciesGraph, previewFrame, setLocale, test } from './fixtures'
 
 /**
@@ -16,6 +19,24 @@ async function openLab(page: Page, query = 'showcase=survey'): Promise<void> {
 	await expect(previewFrame(page)
 		.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 		.toBeVisible()
+}
+
+/** The JS chunks the built Preview frame loads lazily: every chunk in dist/assets outside the static import closure of preview-frame.html. */
+function lazyFrameChunks(): Set<string> {
+	const assets = fileURLToPath(new URL('../dist/assets/', import.meta.url))
+	const html = readFileSync(fileURLToPath(new URL('../dist/preview-frame.html', import.meta.url)), 'utf8')
+	const staticChunks = new Set<string>()
+	const queue = [...html.matchAll(/<(?:script|link)[^>]*\s(?:src|href)="([^"]+\.js)"/g)].map(match => basename(match[1]!))
+	while (queue.length > 0) {
+		const name = queue.pop()!
+		if (staticChunks.has(name))
+			continue
+		staticChunks.add(name)
+		for (const match of readFileSync(assets + name, 'utf8')
+			.matchAll(/(?:\bfrom|\bimport)\s*["'](\.\/[^"']+\.js)["']/g))
+			queue.push(basename(match[1]!))
+	}
+	return new Set([...(readdirSync(assets))].filter(name => name.endsWith('.js') && !staticChunks.has(name)))
 }
 
 test.describe('Graph readability (U11)', () => {
@@ -403,6 +424,66 @@ test.describe('a Preview that cannot load (U22)', () => {
 			.toBeVisible()
 		await expect(page.getByTestId('preview-status'))
 			.toHaveAttribute('data-state', 'current')
+	})
+
+	test('a showcase renderer chunk that fails to load once: Retry replaces the frame and the Preview comes back', async ({ page }) => {
+		// The frame's lazy chunks are the showcase renderers: every JS chunk of the built frame that is not in the static
+		// closure of preview-frame.html. A dynamic import() that fails stays failed in that document, so only a new frame recovers.
+		const lazy = lazyFrameChunks()
+		expect(lazy.size, 'the built frame has lazy renderer chunks')
+			.toBeGreaterThan(0)
+		let blocked = true
+		let lazyRequests = 0
+		let frameDocumentRequests = 0
+		await page.route('**/assets/*.js', async (route) => {
+			const request = route.request()
+			if (!lazy.has(basename(new URL(request.url()).pathname)) || !request.frame()
+				?.url()
+				.includes('preview-frame.html')) {
+				await route.continue()
+				return
+			}
+			lazyRequests++
+			if (blocked)
+				await route.abort('blockedbyclient')
+			else
+				await route.continue()
+		})
+		page.on('request', (request) => {
+			if (request.url()
+				.includes('/preview-frame.html')) {
+				frameDocumentRequests++
+			}
+		})
+		await page.goto('/?lab-test&showcase=survey')
+
+		const error = page.getByTestId('preview-error')
+		await expect(error)
+			.toBeVisible()
+		await expect(error)
+			.toContainText('The preview could not be loaded')
+		await expect(page.getByTestId('preview-error-detail'))
+			.toContainText('renderer for "survey"')
+		await expect(page.getByTestId('preview-status'))
+			.toHaveAttribute('data-state', 'failed')
+		expect(frameDocumentRequests)
+			.toBe(1)
+
+		blocked = false
+		await page.getByTestId('preview-retry')
+			.click()
+		await expect(error)
+			.toHaveCount(0)
+		await expect(previewFrame(page)
+			.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
+			.toBeVisible()
+		await expect(page.getByTestId('preview-status'))
+			.toHaveAttribute('data-state', 'current')
+		// Recovery needed a new frame document and a new request for the chunk.
+		expect(frameDocumentRequests)
+			.toBe(2)
+		expect(lazyRequests)
+			.toBeGreaterThan(1)
 	})
 
 	test('the failure state is announced in Taiwan Chinese too', async ({ page }) => {
