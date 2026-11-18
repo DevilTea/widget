@@ -8,6 +8,7 @@
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
+import { tripBudgetPresets } from '../presets'
 import { createTripRuntime, valueOf, widgetOfType } from '../test-support'
 
 function setup() {
@@ -148,14 +149,14 @@ describe('the Properties that call the Methods', () => {
 			.toEqual([12000, 6000, 5500])
 	})
 
-	it('drops a payment that rounds to nothing', () => {
+	it('drops a payment that rounds to nothing, but counts what it left over in the gap', () => {
 		const { runtime, currency, settlement } = setup()
 		for (const id of ['hotel', 'dinner', 'museum', 'taxi', 'market'])
 			widgetOfType(runtime, id, 'Expense').state.amount.set(0)
 		widgetOfType(runtime, 'market', 'Expense').state.amount.set(0.04)
 		currency.state.roundStep.set(500)
 		expect(valueOf(settlement.properties.transfers.get()))
-			.toMatchObject({ transfers: [] })
+			.toEqual({ transfers: [], roundingGapCents: 3 })
 	})
 
 	it('fails with the Method, all the way down the chain, when the currency has no rate; the rest of the trip is unaffected', () => {
@@ -165,9 +166,12 @@ describe('the Properties that call the Methods', () => {
 			.toBe(false)
 		expect(museum.properties.shares.get().ok)
 			.toBe(false)
-		// `paid` reads every expense's `amountBase`, so one expense that cannot be converted fails it for everyone.
-		expect(widgetOfType(runtime, 'ana', 'Person').properties.paid.get().ok)
+		// `paid` asks for an expense's amount only of the person who paid it: Chloe paid the museum, Ana did not.
+		expect(widgetOfType(runtime, 'chloe', 'Person').properties.paid.get().ok)
 			.toBe(false)
+		expect(widgetOfType(runtime, 'ana', 'Person').properties.paid.get().ok)
+			.toBe(true)
+		// Everyone reads every expense's `shares`, so `owed` and everything after it fails for all.
 		expect(widgetOfType(runtime, 'ana', 'Person').properties.owed.get().ok)
 			.toBe(false)
 		expect(widgetOfType(runtime, 'ana', 'Person').properties.balance.get().ok)
@@ -196,5 +200,70 @@ describe('the Properties that call the Methods', () => {
 			.toBeGreaterThan(0)
 		expect(diagnostics.every(diagnostic => diagnostic.code === 'dependency-target-failed' || diagnostic.code === 'dependency-value-rejected' || diagnostic.code.startsWith('dependency')))
 			.toBe(true)
+	})
+})
+
+describe('an expense that is not counted, in a currency with no rate', () => {
+	const unsupported = tripBudgetPresets.find(preset => preset.id === 'trip-unsupported-currency')!.sourceText
+
+	function chfSetup() {
+		const { runtime } = createTripRuntime(unsupported)
+		return {
+			runtime,
+			museum: widgetOfType(runtime, 'museum', 'Expense'),
+			settlement: widgetOfType(runtime, 'settlement', 'Settlement'),
+		}
+	}
+
+	it.each([
+		['nobody sharing', (museum: ReturnType<typeof chfSetup>['museum']) => museum.state.among.set([]), 'nobody-shares'],
+		['nobody who paid', (museum: ReturnType<typeof chfSetup>['museum']) => museum.state.paidBy.set(null), 'no-payer'],
+		['a negative amount', (museum: ReturnType<typeof chfSetup>['museum']) => museum.state.amount.set(-1), 'amount-negative'],
+		['no amount', (museum: ReturnType<typeof chfSetup>['museum']) => museum.state.amount.set(null), 'amount-missing'],
+	] as const)('settles without it, and the expense says why: %s', (_label, write, code) => {
+		const { runtime, museum, settlement } = chfSetup()
+		// Counted, in a currency with no rate: the whole chain fails.
+		expect(settlement.properties.transfers.get().ok)
+			.toBe(false)
+
+		expect(write(museum).ok)
+			.toBe(true)
+
+		expect(valueOf(museum.properties.problem.get()))
+			.toBe(code)
+		expect(valueOf(museum.properties.counted.get()))
+			.toBe(false)
+		expect(valueOf(museum.properties.shares.get()))
+			.toEqual({})
+		expect(valueOf(museum.properties.breakdown.get()))
+			.toEqual({ conversion: null, totalCents: 0, lines: [], remainderCents: 0 })
+		for (const id of ['ana', 'ben', 'chloe', 'dev']) {
+			const person = widgetOfType(runtime, id, 'Person')
+			expect(person.properties.paid.get().ok, `${id}.paid`)
+				.toBe(true)
+			expect(person.properties.ledger.get().ok, `${id}.ledger`)
+				.toBe(true)
+		}
+		const balances = valueOf(settlement.properties.balances.get())
+		expect(balances.reduce((sum, balance) => sum + balance.cents, 0))
+			.toBe(0)
+		// The other four expenses are 651.74 - 58.88 = 592.86.
+		expect(valueOf(settlement.properties.total.get()))
+			.toBe(65174 - 5888)
+		expect(valueOf(settlement.properties.transfers.get()).transfers.length)
+			.toBeGreaterThan(0)
+		// The expense's own amount is still not converted: its amountBase is the failure it was.
+		expect(museum.properties.amountBase.get().ok)
+			.toBe(code === 'amount-negative' || code === 'amount-missing')
+	})
+
+	it('fails again as soon as the expense is counted again', () => {
+		const { museum, settlement } = chfSetup()
+		museum.state.among.set([])
+		expect(settlement.properties.transfers.get().ok)
+			.toBe(true)
+		museum.state.among.set(['ana', 'chloe'])
+		expect(settlement.properties.transfers.get().ok)
+			.toBe(false)
 	})
 })

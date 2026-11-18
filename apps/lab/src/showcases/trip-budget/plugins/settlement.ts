@@ -73,9 +73,12 @@ export const SettlementPlugin = createWidgetPlugin('Settlement')
 			}),
 			compute: ({ deps }) => Object.values(deps.expenses)
 				.reduce((sum, read) => {
+					// `counted` first: an expense that is not counted is never asked for an `amountBase` that may fail.
 					const counted = read.counted()
+					if (!counted.ok || !counted.value)
+						return sum
 					const cents = read.cents()
-					return counted.ok && counted.value && cents.ok ? sum + cents.value : sum
+					return cents.ok ? sum + cents.value : sum
 				}, 0),
 		})
 		.transfers({
@@ -97,22 +100,22 @@ export const SettlementPlugin = createWidgetPlugin('Settlement')
 				if (!balances.ok)
 					return { transfers: [], roundingGapCents: 0 }
 				const names = new Map(balances.value.map(entry => [entry.id, entry.name]))
-				const transfers = settle(balances.value)
+				const rounded = settle(balances.value)
 					.map((transfer) => {
-						const rounded = deps.round === undefined ? undefined : deps.round(transfer.cents)
+						const result = deps.round === undefined ? undefined : deps.round(transfer.cents)
 						return {
 							from: transfer.from,
 							fromName: names.get(transfer.from) ?? transfer.from,
 							to: transfer.to,
 							toName: names.get(transfer.to) ?? transfer.to,
 							exactCents: transfer.cents,
-							cents: rounded?.ok === true ? rounded.value : transfer.cents,
+							cents: result?.ok === true ? result.value : transfer.cents,
 						}
 					})
-					.filter(transfer => transfer.cents > 0)
+				// A payment that rounds to nothing is not listed, but what it left over still counts in the gap.
 				return {
-					transfers,
-					roundingGapCents: transfers.reduce((sum, transfer) => sum + transfer.exactCents - transfer.cents, 0),
+					transfers: rounded.filter(transfer => transfer.cents > 0),
+					roundingGapCents: rounded.reduce((sum, transfer) => sum + transfer.exactCents - transfer.cents, 0),
 				}
 			},
 		}))

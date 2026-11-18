@@ -21,6 +21,9 @@ function money(cents: number): string {
 	return view.value === null ? String(cents / 100) : formatMoney(cents, view.value.base, view.value.language)
 }
 
+/** No payment is due: either the balances are all even, or every payment rounded to nothing (a gap is left). */
+const noPayments = computed(() => transfers.value !== null && transfers.value.transfers.length === 0)
+const roundedAway = computed(() => noPayments.value && transfers.value!.roundingGapCents !== 0)
 const failed = computed(() => transfers.value === null || total.value === null)
 const gap = computed(() => transfers.value !== null && transfers.value.roundingGapCents !== 0
 	? fill(text.value.roundingGap, { amount: money(Math.abs(transfers.value.roundingGapCents)) })
@@ -54,11 +57,11 @@ const gap = computed(() => transfers.value !== null && transfers.value.roundingG
 				{{ text.whoPaysWhom }}
 			</h3>
 			<p
-				v-if="transfers !== null && transfers.transfers.length === 0"
-				data-testid="trip-all-settled"
-				class="settlement-settled"
+				v-if="noPayments"
+				:data-testid="roundedAway ? 'trip-rounded-away' : 'trip-all-settled'"
+				:class="roundedAway ? 'settlement-note' : 'settlement-settled'"
 			>
-				{{ text.allSettled }}
+				{{ roundedAway ? text.roundedAway : text.allSettled }}
 			</p>
 			<ul
 				v-else

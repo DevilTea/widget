@@ -72,6 +72,21 @@ describe('the chain is declared, so Relations and the Graph can show it', () => 
 			.toEqual(['currency.roundTransfer', 'settlement.balances'])
 	})
 
+	it('declares only what each Property reads: language-only for errors, nothing about who shares for a percent split', () => {
+		const { runtime } = setup()
+		const inspection = inspectBlueprint(runtime.blueprint)
+		expect(declared(inspection, 'hotel', 'property', 'errors'))
+			.toEqual(['hotel.problem', 'lisbon.language'])
+		expect(declared(inspection, 'hotel', 'property', 'participants'))
+			.toEqual(['hotel.among', 'hotel.roster'])
+		expect(declared(inspection, 'taxi', 'property', 'participants'))
+			.toEqual([])
+		expect(declared(inspection, 'taxi', 'property', 'shares'))
+			.toEqual(['taxi.amountBase', 'taxi.counted'])
+		expect(declared(inspection, 'hotel', 'property', 'shares'))
+			.toEqual(['hotel.amountBase', 'hotel.counted', 'hotel.participants'])
+	})
+
 	it('has no cycle: nothing reads the settlement', () => {
 		const { runtime } = setup()
 		expect(inspectBlueprint(runtime.blueprint).invalidCycles)

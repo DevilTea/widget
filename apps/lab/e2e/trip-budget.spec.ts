@@ -275,6 +275,27 @@ test.describe('failures', () => {
 			.getByTestId('value-summary'))
 			.toContainText('Failed')
 
+		// An expense that is not counted is left out before its amount is read, so it cannot take the settlement down.
+		for (const person of ['ana', 'chloe', 'dev']) {
+			await expense(page, 'museum')
+				.getByTestId(`trip-share-${person}`)
+				.uncheck()
+		}
+		await expect(preview.getByTestId('trip-settlement-failed'))
+			.toHaveCount(0)
+		await expect(preview.getByTestId('trip-total'))
+			.toHaveText('€592.86')
+		await expect(expense(page, 'museum')
+			.getByTestId('trip-expense-error'))
+			.toContainText('Pick at least one person')
+		for (const person of ['ana', 'chloe', 'dev']) {
+			await expense(page, 'museum')
+				.getByTestId(`trip-share-${person}`)
+				.check()
+		}
+		await expect(preview.getByTestId('trip-settlement-failed'))
+			.toBeVisible()
+
 		// Choosing a currency the Currency knows brings the chain back.
 		await expense(page, 'museum')
 			.getByTestId('trip-currency')

@@ -266,6 +266,25 @@ describe('the money settings', () => {
 		wrapper.unmount()
 	})
 
+	it('does not say everyone is settled when every payment rounded to nothing, and still says what the rounding left over', async () => {
+		const { runtime } = createTripRuntime()
+		for (const id of ['hotel', 'dinner', 'museum', 'taxi'])
+			widgetOfType(runtime, id, 'Expense').state.amount.set(0)
+		widgetOfType(runtime, 'market', 'Expense').state.amount.set(0.04)
+		widgetOfType(runtime, 'currency', 'Currency').state.roundStep.set(500)
+		const wrapper = await mountTrip(runtime)
+		expect(wrapper.find('[data-testid="trip-all-settled"]')
+			.exists())
+			.toBe(false)
+		expect(wrapper.find('[data-testid="trip-rounded-away"]')
+			.text())
+			.toBe('Every payment is smaller than the rounding step, so none is due.')
+		expect(wrapper.find('[data-testid="trip-rounding-gap"]')
+			.text())
+			.toBe('Rounded transfers differ from the exact balances by €0.03 in total.')
+		wrapper.unmount()
+	})
+
 	it('says everyone is settled when there is nothing to pay', async () => {
 		const { runtime } = createTripRuntime()
 		for (const id of ['hotel', 'dinner', 'museum', 'taxi', 'market'])

@@ -13,7 +13,10 @@
  *   not even called;
  * - `problem`, `counted`, `errors`: whether the current input can be counted (an amount, no negative
  *   amount, somebody sharing it, somebody who paid). A negative or missing amount is stored and reported,
- *   never refused, like the survey's answer errors;
+ *   never refused, like the survey's answer errors. `counted` depends on nothing that can fail, and every
+ *   consumer (`shares`, `breakdown`, `Person.paid`/`ledger`, `Settlement.total`) checks it **before** it reads
+ *   `amountBase`: a failed dependency fails the consumer only when the consumer calls it, so an expense that is
+ *   not counted never takes the settlement down, even when its currency has no rate;
  * - `shares`: each participant's share in cents (equal or by percent), which add up to `amountBase`;
  * - `breakdown`: how the amount was converted and split, line by line. It is only read when a viewer opens
  *   it, so it is **lazy**: the Runtime has never evaluated it until someone looks.
@@ -126,16 +129,16 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.participants({
-			registerDeps: ({ dep }) => ({
-				among: dep.self.state.get('among'),
-				roster: dep.self.properties.get('roster'),
+			// Only an equal split reads State `among` and the roster; a percent split names its people in the config.
+			registerDeps: ({ dep, config }) => ({
+				...(config.split.mode === 'equal' ? { among: dep.self.state.get('among'), roster: dep.self.properties.get('roster') } : {}),
 			}),
 			compute: ({ deps, config }) => {
 				if (config.split.mode === 'percent')
 					return Object.keys(config.split.percents)
-				const among = deps.among()
-				const roster = deps.roster()
-				if (!among.ok || among.value === null || !roster.ok)
+				const among = deps.among?.()
+				const roster = deps.roster?.()
+				if (among === undefined || roster === undefined || !among.ok || among.value === null || !roster.ok)
 					return []
 				// Roster order, so the person who gets a leftover cent does not depend on the order of the clicks.
 				return roster.value.map(entry => entry.id)
@@ -169,7 +172,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 		.errors({
 			registerDeps: ({ dep, blueprint }) => ({
 				problem: dep.self.properties.get('problem'),
-				...viewReads(dep, blueprint),
+				...languageReads(dep, blueprint),
 			}),
 			compute: ({ deps }) => {
 				const problem = deps.problem()
@@ -206,20 +209,25 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.shares({
-			registerDeps: ({ dep }) => ({
+			registerDeps: ({ dep, config }) => ({
 				counted: dep.self.properties.get('counted'),
 				total: dep.self.properties.get('amountBase'),
-				participants: dep.self.properties.get('participants'),
+				// Only an equal split reads who shares; a percent split uses the authored percentages.
+				...(config.split.mode === 'equal' ? { participants: dep.self.properties.get('participants') } : {}),
 			}),
 			compute: ({ deps, config }) => {
+				// An expense that is not counted is left out before its amount is read: its `amountBase` may
+				// fail (a currency with no rate) and a consumer that never calls the failing read does not fail.
 				const counted = deps.counted()
-				const total = deps.total()
-				const participants = deps.participants()
-				if (!counted.ok || !counted.value || !total.ok || !participants.ok)
+				if (!counted.ok || !counted.value)
 					return {}
-				return config.split.mode === 'equal'
-					? splitEqually(total.value, participants.value)
-					: splitByPercent(total.value, config.split.percents)
+				const total = deps.total()
+				if (!total.ok)
+					return {}
+				if (config.split.mode === 'percent')
+					return splitByPercent(total.value, config.split.percents)
+				const participants = deps.participants?.()
+				return participants?.ok === true ? splitEqually(total.value, participants.value) : {}
 			},
 		})
 		.breakdown({
@@ -247,7 +255,11 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 				}
 			},
 			compute: ({ deps, config }): ExpenseBreakdown => {
+				const empty: ExpenseBreakdown = { conversion: null, totalCents: 0, lines: [], remainderCents: 0 }
+				// Not counted: nothing to explain, and nothing that can fail is read (see `shares`).
 				const counted = deps.counted()
+				if (!counted.ok || !counted.value)
+					return empty
 				const total = deps.total()
 				const shares = deps.shares()
 				const roster = deps.roster()
@@ -255,8 +267,8 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 				const currency = deps.currency()
 				const base = deps.base?.()
 				const rates = deps.rates?.()
-				if (!counted.ok || !counted.value || !total.ok || !shares.ok || !roster.ok || !amount.ok || amount.value === null || !currency.ok || currency.value === null)
-					return { conversion: null, totalCents: 0, lines: [], remainderCents: 0 }
+				if (!total.ok || !shares.ok || !roster.ok || !amount.ok || amount.value === null || !currency.ok || currency.value === null)
+					return empty
 				const rate = rates?.ok === true && Object.hasOwn(rates.value, currency.value) ? rates.value[currency.value] : undefined
 				const conversion = base?.ok === true && base.value !== currency.value && rate !== undefined
 					? { amount: amount.value, currency: currency.value, rate, baseCents: total.value }

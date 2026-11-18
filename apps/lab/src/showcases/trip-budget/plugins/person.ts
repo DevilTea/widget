@@ -72,10 +72,16 @@ export const PersonPlugin = createWidgetPlugin('Person')
 			}),
 			compute: ({ deps, widget }) => Object.values(deps.expenses)
 				.reduce((sum, read) => {
+					// `counted` first, then the payer, and the amount only for this person's own expense: an expense
+					// that is not counted (or paid by somebody else) is never asked for an `amountBase` that may fail.
 					const counted = read.counted()
+					if (!counted.ok || !counted.value)
+						return sum
 					const paidBy = read.paidBy()
+					if (!paidBy.ok || paidBy.value !== widget.id)
+						return sum
 					const cents = read.cents()
-					return counted.ok && counted.value && paidBy.ok && paidBy.value === widget.id && cents.ok ? sum + cents.value : sum
+					return cents.ok ? sum + cents.value : sum
 				}, 0),
 		})
 		.owed({
@@ -129,13 +135,17 @@ export const PersonPlugin = createWidgetPlugin('Person')
 				entries: Object.entries(deps.expenses)
 					.flatMap(([expense, read]): LedgerEntry[] => {
 						const counted = read.counted()
-						const title = read.title()
-						const paidBy = read.paidBy()
-						const cents = read.cents()
-						const shares = read.shares()
 						if (!counted.ok || !counted.value)
 							return []
-						const paidCents = paidBy.ok && paidBy.value === widget.id && cents.ok ? cents.value : 0
+						const title = read.title()
+						const paidBy = read.paidBy()
+						// The amount only for an expense this person paid (see `paid`).
+						let paidCents = 0
+						if (paidBy.ok && paidBy.value === widget.id) {
+							const cents = read.cents()
+							paidCents = cents.ok ? cents.value : 0
+						}
+						const shares = read.shares()
 						const shareCents = shares.ok && Object.hasOwn(shares.value, widget.id) ? shares.value[widget.id]! : 0
 						return paidCents === 0 && shareCents === 0
 							? []
