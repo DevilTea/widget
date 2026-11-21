@@ -116,7 +116,10 @@ function staticClosure(manifest: Manifest, roots: readonly string[]): Map<string
 /**
  * The chunks reachable from `roots` through static `imports` AND through `dynamicImports` other than `?raw` source texts, roots
  * included: a renderer may have lazy chunks of its own behind it (the renderer-packs showcase loads its Nuxt UI pack that way), and
- * those carry its code and styles just as much as the renderer entry.
+ * those carry its code and styles just as much as the renderer entry. This is deliberately strict: a lazy chunk a renderer
+ * reaches that the shell ALSO loads (the Nuxt UI runtime chunk `_Switch`, the chrome's `Toast.vue` chunk) is counted as
+ * renderer-owned too, so its stylesheets are checked against index.html as well; that may report a chunk that is shared on purpose
+ * (a false positive), and then the chunk or its styles are what to look at, not this rule.
  */
 function lazyClosure(manifest: Manifest, roots: readonly string[]): Map<string, ManifestChunk> {
 	const closure = new Map<string, ManifestChunk>()
