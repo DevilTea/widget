@@ -1,0 +1,44 @@
+/**
+ * `Appearance`: a capability (provider-style) widget. It owns how dense the page is and which colour mode it wants, as State:
+ * writing State is always accepted for a known value. Fields read `density` through `dep.widget(<id>)`, the id being a field of
+ * their own config: Core has no nearest-ancestor lookup, so nothing here "provides" anything to a subtree. `auto` means "follow
+ * the host theme"; the host theme is not known to Core, so the renderer pack resolves it (`resolveScheme`).
+ */
+
+import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { AppearanceConfig, AppearanceRawConfig } from '../config'
+import type { Density, Mode } from '../domain'
+import { createWidgetPlugin } from '@deviltea/widget-core'
+import { checkAppearanceConfig, resolveAppearanceConfig } from '../config'
+import { isDensity, isMode } from '../domain'
+import { appearanceConfigSchema } from '../schemas'
+import { checkAtMostOneAppearance } from './structure'
+
+export interface AppearanceInterfaces extends WidgetInterfaces {
+	config: { raw: AppearanceRawConfig, resolved: AppearanceConfig }
+	state: { density: Density, mode: Mode }
+}
+
+export const AppearancePlugin = createWidgetPlugin('Appearance')
+	.description('A capability widget: how dense the settings page is (State `density`: `comfortable` or `compact`) and which colour mode it wants (State `mode`: `auto`, `light` or `dark`; `auto` follows the host theme). Fields read `density` by naming this widget in their `appearance` config; there is no nearest-ancestor lookup.')
+	.interfaces<AppearanceInterfaces>()
+	.config({
+		description: 'The density and the colour mode at the start.',
+		schema: appearanceConfigSchema,
+		validate: (input, ctx): input is AppearanceRawConfig => {
+			checkAppearanceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
+			return !ctx.hasAnyDiagnostic()
+		},
+		resolve: resolveAppearanceConfig,
+	})
+	.structure(ctx => checkAtMostOneAppearance(ctx))
+	.state(state => state
+		.density({
+			validate: (input): input is Density => isDensity(input),
+			default: ({ config }) => config.density,
+		})
+		.mode({
+			validate: (input): input is Mode => isMode(input),
+			default: ({ config }) => config.mode,
+		}))
+	.done()

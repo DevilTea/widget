@@ -140,16 +140,18 @@ describe('showcases are isolated from the Lab', () => {
 			.toEqual([])
 	})
 
-	it('has valid allowed-packages.json files: exactly one today, the quote-rules showcase\'s schema library (Valibot and its JSON Schema converter, through Standard Schema)', () => {
+	it('has valid allowed-packages.json files: exactly two today, the quote-rules showcase\'s schema library (Valibot and its JSON Schema converter, through Standard Schema) and the renderer-packs showcase\'s own Nuxt UI instance (Nuxt UI, Tailwind and the Iconify runtime it draws icons with)', () => {
 		const declared = [showcasesRoot, sandboxRoot]
 			.flatMap(root => listFiles(root))
 			.filter(file => file.endsWith(`/${ALLOWED_PACKAGES_FILE}`))
 		for (const file of declared)
 			expect(() => readAllowedPackages(dirname(file)), file).not.toThrow()
 		expect(declared.map(file => relative(srcRoot, file)))
-			.toEqual(['showcases/quote-rules/allowed-packages.json'])
+			.toEqual(['showcases/quote-rules/allowed-packages.json', 'showcases/renderer-packs/allowed-packages.json'])
 		expect([...readAllowedPackages(join(showcasesRoot, 'quote-rules'))])
 			.toEqual(['@valibot/to-json-schema', 'valibot'])
+		expect([...readAllowedPackages(join(showcasesRoot, 'renderer-packs'))])
+			.toEqual(['@iconify/vue', '@nuxt/ui', 'tailwindcss'])
 	})
 
 	describe('the check itself (each forbidden reference is reported)', () => {

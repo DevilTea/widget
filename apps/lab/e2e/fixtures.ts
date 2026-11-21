@@ -4,6 +4,7 @@ import { sandboxPresets } from '../src/sandbox/presets'
 import { repairPresets } from '../src/showcases/document-repair/presets'
 import { onboardingPresets } from '../src/showcases/onboarding/presets'
 import { quotePresets } from '../src/showcases/quote-rules/presets'
+import { packsPresets } from '../src/showcases/renderer-packs/presets'
 import { surveyPresets } from '../src/showcases/survey/presets'
 import { tripBudgetPresets } from '../src/showcases/trip-budget/presets'
 
@@ -110,12 +111,12 @@ export function previewFrame(page: Page): FrameLocator {
 // Header menu helpers. The header's showcase/preset/theme/language/developer controls are Nuxt UI menus, so
 // specs go through these instead of ad-hoc menu clicks; when the header changes again only this block does.
 
-export type ShowcaseId = 'survey' | 'trip-budget' | 'quote-rules' | 'onboarding' | 'document-repair' | 'sandbox'
+export type ShowcaseId = 'survey' | 'trip-budget' | 'quote-rules' | 'onboarding' | 'document-repair' | 'renderer-packs' | 'sandbox'
 export type LabLocaleId = 'en' | 'zh-TW'
 
-const SHOWCASE_LABELS: Readonly<Record<ShowcaseId, string>> = { 'survey': 'Interactive Survey', 'trip-budget': 'Trip budget splitter', 'quote-rules': 'Quote rules shared by browser and backend', 'onboarding': 'Onboarding wizard with an Events log', 'document-repair': 'Legacy document repair', 'sandbox': 'Sandbox' }
-const PRESET_LABELS = new Map([...surveyPresets, ...tripBudgetPresets, ...quotePresets, ...onboardingPresets, ...repairPresets, ...sandboxPresets].map(preset => [preset.id, preset.label] as const))
-// The survey, trip, quote, onboarding and repair examples are translated in the zh-TW Lab (the sandbox ones are a hidden fixture and are not).
+const SHOWCASE_LABELS: Readonly<Record<ShowcaseId, string>> = { 'survey': 'Interactive Survey', 'trip-budget': 'Trip budget splitter', 'quote-rules': 'Quote rules shared by browser and backend', 'onboarding': 'Onboarding wizard with an Events log', 'document-repair': 'Legacy document repair', 'renderer-packs': 'One document, two renderer packs', 'sandbox': 'Sandbox' }
+const PRESET_LABELS = new Map([...surveyPresets, ...tripBudgetPresets, ...quotePresets, ...onboardingPresets, ...repairPresets, ...packsPresets, ...sandboxPresets].map(preset => [preset.id, preset.label] as const))
+// The survey, trip, quote, onboarding, repair and renderer packs examples are translated in the zh-TW Lab (the sandbox ones are a hidden fixture and are not).
 const PRESET_LABELS_ZH_TW: ReadonlyMap<string, string> = new Map([
 	['survey-default', '預設——開放日報名'],
 	['survey-ai-draft', 'AI 草稿——五個錯誤'],
@@ -132,6 +133,8 @@ const PRESET_LABELS_ZH_TW: ReadonlyMap<string, string> = new Map([
 	['onboarding-invalid', '有錯誤的草稿——四個問題'],
 	['repair-default', '預設——四份來自舊版本的草稿'],
 	['repair-invalid', '有錯誤的草稿——四個問題'],
+	['packs-default', '預設——兩組 renderer pack 的工作區設定'],
+	['packs-invalid', '有錯誤的草稿——四個問題'],
 ])
 
 // Menu item names follow the page locale; the language names themselves never translate.

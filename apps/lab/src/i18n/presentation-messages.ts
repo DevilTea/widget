@@ -3,6 +3,7 @@ import { translateDocumentRepairMessage } from './document-repair-messages'
 import { translateMessage } from './messages'
 import { translateOnboardingMessage } from './onboarding-messages'
 import { translateQuoteRulesMessage } from './quote-rules-messages'
+import { translateRendererPacksMessage } from './renderer-packs-messages'
 import { translateTripBudgetMessage } from './trip-budget-messages'
 
 /**
@@ -464,6 +465,9 @@ export function translatePresentationMessage(locale: LabLocale, source: string):
 		const repair = translateDocumentRepairMessage(locale, source)
 		if (repair !== undefined)
 			return repair
+		const packs = translateRendererPacksMessage(locale, source)
+		if (packs !== undefined)
+			return packs
 	}
 	return translateMessage(locale, source)
 }

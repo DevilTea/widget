@@ -12,6 +12,7 @@
 		"./src/showcases/document-repair/presets.ts",
 		"./src/showcases/onboarding/presets.ts",
 		"./src/showcases/quote-rules/presets.ts",
+		"./src/showcases/renderer-packs/presets.ts",
 		"./src/showcases/survey/presets.ts",
 		"./src/showcases/trip-budget/presets.ts"
 	],

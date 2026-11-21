@@ -26,6 +26,9 @@ import { onboardingSystem } from './onboarding/system'
 import { defaultQuotePreset, quotePresets } from './quote-rules/presets'
 import { quoteSources } from './quote-rules/sources'
 import { quoteSystem } from './quote-rules/system'
+import { defaultPacksPreset, packsPresets } from './renderer-packs/presets'
+import { packsSources } from './renderer-packs/sources'
+import { packsSystem } from './renderer-packs/system'
 import { defaultSurveyPreset, surveyPresets } from './survey/presets'
 import { surveySources } from './survey/sources'
 import { surveySystem } from './survey/system'
@@ -66,7 +69,7 @@ export interface ShowcaseEntry {
  * consumer (`LabSession`, `createWidgetVueRenderer`'s own `runtime.blueprint.system === system`
  * identity check) only ever needs object identity, never the precise literal-type union.
  *
- * `survey` is the default; `trip-budget`, `quote-rules`, `onboarding` and `document-repair` are listed after it in the Examples menu. `sandbox` is a hidden, test-only
+ * `survey` is the default; `trip-budget`, `quote-rules`, `onboarding`, `document-repair` and `renderer-packs` are listed after it in the Examples menu. `sandbox` is a hidden, test-only
  * fixture (minimal Counter/Text/... widgets plus the invalid/raw-slot recovery presets): it is not listed
  * in the Examples menu and is reachable only through `?showcase=sandbox` (see `resolveInitialShowcase`).
  */
@@ -110,6 +113,14 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: repairPresets,
 		defaultPreset: defaultRepairPreset,
 		sources: repairSources,
+	},
+	{
+		id: 'renderer-packs',
+		label: 'One document, two renderer packs',
+		system: packsSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
+		presets: packsPresets,
+		defaultPreset: defaultPacksPreset,
+		sources: packsSources,
 	},
 	{
 		id: 'sandbox',

@@ -1,0 +1,146 @@
+/**
+ * Tailwind v4 + Nuxt UI for the Nuxt UI renderer pack ONLY. This is the showcase's own Tailwind entry: it is imported by
+ * `NuxtUiPack.ts` and nothing else, which the frame loads lazily (a dynamic import in `../index.ts`), so the hand-written pack
+ * and every other showcase never load it, and the Lab shell never does either. The chrome's own Tailwind entry and this file share
+ * nothing: the chrome maps `--ui-*` to its palette on the document root, this file sets the pack's own `--ui-*` values on the pack root.
+ *
+ * What it does on purpose:
+ * - Cascade layers, lowest to highest: `properties`, `theme`, `base`, `components`, `utilities`.
+ * - No global Tailwind preflight. The full preflight is `html`/`*` rules and would restyle the hand-written pack drawn next to
+ *   this one, so only the theme and the utilities are imported and the preflight rules Nuxt UI needs are restated below, scoped to
+ *   the pack's own root (`.packs-ui`), which also contains the overlay container (`[data-packs-portal]`).
+ * - `source(none)` plus one explicit `@source`: only the Nuxt UI renderers of this showcase are scanned for class names. Nuxt UI
+ *   adds its own `@source` for its components.
+ * - The Nuxt UI tokens (`--ui-*`) of the pack are this file's own, set on the pack root (light) and on the same element when
+ *   it carries `.dark` (dark). `.dark` is a class on the pack root, driven by the page's Appearance mode (where `auto` follows
+ *   the host theme); it is never put on the frame `<html>`.
+ */
+@layer properties, theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "@nuxt/ui";
+
+@source "./";
+
+@layer base {
+	.packs-ui,
+	.packs-ui *,
+	.packs-ui *::before,
+	.packs-ui *::after {
+		box-sizing: border-box;
+		margin: 0;
+		padding: 0;
+		border: 0 solid;
+	}
+
+	.packs-ui {
+		line-height: 1.5;
+		tab-size: 4;
+		-webkit-text-size-adjust: 100%;
+	}
+
+	.packs-ui :is(h1, h2, h3, h4, h5, h6) {
+		font-size: inherit;
+		font-weight: inherit;
+	}
+
+	.packs-ui a {
+		color: inherit;
+		text-decoration: inherit;
+	}
+
+	.packs-ui :is(ol, ul, menu) {
+		list-style: none;
+	}
+
+	.packs-ui :is(img, svg, video, canvas, audio, iframe, embed, object) {
+		display: block;
+		vertical-align: middle;
+	}
+
+	.packs-ui :is(button, input, select, optgroup, textarea) {
+		font: inherit;
+		font-feature-settings: inherit;
+		font-variation-settings: inherit;
+		letter-spacing: inherit;
+		color: inherit;
+		border-radius: 0;
+		background-color: transparent;
+		opacity: 1;
+	}
+
+	.packs-ui :is(button, [type='button'], [type='reset'], [type='submit']) {
+		appearance: button;
+	}
+
+	.packs-ui ::placeholder {
+		opacity: 1;
+		color: color-mix(in oklab, currentcolor 50%, transparent);
+	}
+
+	.packs-ui textarea {
+		resize: vertical;
+	}
+
+	.packs-ui [hidden]:where(:not([hidden='until-found'])) {
+		display: none !important;
+	}
+}
+
+/*
+ * The pack's own Nuxt UI tokens. Unlayered, so they rank above the `theme` layer defaults (including Nuxt UI's `.dark` block
+ * and the generated colour block) on the same element. Dark is selected by the `dark` class on the pack root.
+ */
+.packs-ui {
+	--ui-radius: 0.375rem;
+	--ui-bg: #ffffff;
+	--ui-bg-muted: #f5f7fa;
+	--ui-bg-elevated: #eef1f5;
+	--ui-bg-accented: #dde2ea;
+	--ui-bg-inverted: #1b1f24;
+	--ui-text-dimmed: #667085;
+	--ui-text-muted: #596273;
+	--ui-text-toned: #3d4655;
+	--ui-text: #1b1f24;
+	--ui-text-highlighted: #0b0f14;
+	--ui-text-inverted: #ffffff;
+	--ui-border: #d4d9e2;
+	--ui-border-muted: #e3e7ee;
+	--ui-border-accented: #8a93a1;
+	--ui-border-inverted: #1b1f24;
+	--ui-primary: #0b6b5e;
+	--ui-secondary: #1769e0;
+	--ui-success: #18794e;
+	--ui-info: #1769e0;
+	--ui-warning: #8a5300;
+	--ui-error: #b3262f;
+	color-scheme: light;
+	background: var(--ui-bg);
+	color: var(--ui-text);
+}
+
+.packs-ui.dark {
+	--ui-bg: #14161a;
+	--ui-bg-muted: #1b1e24;
+	--ui-bg-elevated: #22262e;
+	--ui-bg-accented: #2c313a;
+	--ui-bg-inverted: #e6e8eb;
+	--ui-text-dimmed: #8a93a1;
+	--ui-text-muted: #9aa2af;
+	--ui-text-toned: #c3c8d1;
+	--ui-text: #e6e8eb;
+	--ui-text-highlighted: #ffffff;
+	--ui-text-inverted: #0b1220;
+	--ui-border: #2c313a;
+	--ui-border-muted: #262a32;
+	--ui-border-accented: #8a93a1;
+	--ui-border-inverted: #e6e8eb;
+	--ui-primary: #5eead4;
+	--ui-secondary: #7ab0ff;
+	--ui-success: #3fbf7f;
+	--ui-info: #7ab0ff;
+	--ui-warning: #f5b84b;
+	--ui-error: #ff7a80;
+	color-scheme: dark;
+}

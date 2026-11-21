@@ -17,6 +17,7 @@ const loaders: Readonly<Record<string, () => Promise<Component>>> = {
 	'quote-rules': async () => (await import('./showcases/quote-rules/renderers')).QuoteRenderer as unknown as Component,
 	'onboarding': async () => (await import('./showcases/onboarding/renderers')).OnboardingRenderer as unknown as Component,
 	'document-repair': async () => (await import('./showcases/document-repair/renderers')).DocumentRepairRenderer as unknown as Component,
+	'renderer-packs': async () => (await import('./showcases/renderer-packs/renderers')).loadRendererPacksRenderer(),
 	'sandbox': async () => (await import('./sandbox/renderers')).SandboxRenderer as unknown as Component,
 }
 

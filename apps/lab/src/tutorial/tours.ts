@@ -12,6 +12,7 @@ import type { TutorialScript } from './types'
 import { DOCUMENT_REPAIR_TOUR_ID, documentRepairTourScript } from './document-repair-script'
 import { ONBOARDING_TOUR_ID, onboardingTourScript } from './onboarding-script'
 import { QUOTE_RULES_TOUR_ID, quoteRulesTourScript } from './quote-rules-script'
+import { RENDERER_PACKS_TOUR_ID, rendererPacksTourScript } from './renderer-packs-script'
 import { SURVEY_TOUR_ID, surveyTourScript } from './survey-script'
 import { TRIP_BUDGET_TOUR_ID, tripBudgetTourScript } from './trip-budget-script'
 
@@ -61,6 +62,12 @@ export const tours: readonly TourEntry[] = [
 		script: documentRepairTourScript,
 		defaultPresetId: 'repair-default',
 		startConfirmMessage: 'Starting the tutorial will load the Legacy document repair teaching example and replace your unapplied changes.',
+	},
+	{
+		id: RENDERER_PACKS_TOUR_ID,
+		script: rendererPacksTourScript,
+		defaultPresetId: 'packs-default',
+		startConfirmMessage: 'Starting the tutorial will load the Renderer packs teaching example and replace your unapplied changes.',
 	},
 ]
 

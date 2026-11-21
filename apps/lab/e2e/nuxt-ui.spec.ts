@@ -215,13 +215,66 @@ test.describe('[data-slot]-scoped preflight', () => {
 test.describe('Preview frame isolation', () => {
 	// Every showcase, not only the minimal Sandbox: each loads its own renderer chunk (and its styles) into the frame. The
 	// list is the registry's, in its order (`showcases/registry.unit.test.ts` checks it).
-	for (const showcase of ['survey', 'trip-budget', 'quote-rules', 'onboarding', 'document-repair', 'sandbox'] as const) {
+	for (const showcase of ['survey', 'trip-budget', 'quote-rules', 'onboarding', 'document-repair', 'renderer-packs', 'sandbox'] as const) {
+		// The renderer-packs showcase is the one that legitimately brings its own Tailwind and Nuxt UI into the frame (in a nested
+		// app of its own, loaded lazily by its Nuxt UI pack), so its isolation is asserted the other way round, below.
+		if (showcase === 'renderer-packs')
+			continue
 		test(`the ${showcase} frame document loads no Tailwind or Nuxt UI CSS and receives no dark class`, async ({ context, page }) => {
 			await seedTheme(context, 'dark')
 			await page.goto(`/?showcase=${showcase}`)
 			await expectFrameIsolated(page, showcase)
 		})
 	}
+
+	test('the renderer-packs frame loads no Tailwind or Nuxt UI CSS until the Nuxt UI pack is chosen, and then nothing of the chrome\'s pipeline', async ({ context, page }) => {
+		await seedTheme(context, 'dark')
+		await page.goto('/?showcase=renderer-packs')
+		// The default pack is hand-written: the lazy Nuxt UI chunk (and its stylesheet) is not in the frame yet.
+		await expectFrameIsolated(page, 'renderer-packs')
+
+		const frame = previewFrame(page)
+		await frame.getByTestId('packs-choice-nui')
+			.check()
+		await expect(frame.getByTestId('nui-page'))
+			.toBeVisible({ timeout: 15_000 })
+		const handle = await page.locator('[data-testid="preview-frame"]')
+			.elementHandle()
+		const report = await (await handle!.contentFrame())!.evaluate(() => {
+			const root = document.documentElement
+			const rules = [...document.styleSheets]
+				.flatMap(sheet => [...sheet.cssRules].flatMap(function flatten(rule): CSSRule[] {
+					return 'cssRules' in rule ? [rule, ...[...(rule as CSSGroupingRule).cssRules].flatMap(flatten)] : [rule]
+				}))
+			const cssText = rules.map(rule => rule.cssText)
+				.join('\n')
+			const pack = document.querySelector('[data-testid="nui-page"]')!
+			const read = (element: Element, property: string) => getComputedStyle(element)
+				.getPropertyValue(property)
+				.trim()
+			return {
+				htmlClass: root.className,
+				darkElements: [...document.querySelectorAll('.dark')].map(element => element.getAttribute('data-testid')),
+				hasNuxtUiCss: /--ui-/.test(cssText),
+				// The chrome's mapping of the Nuxt UI tokens to the Lab palette: `--ui-*: var(--lab-color-*)`. It must not be here.
+				chromeMapping: /--ui-[\w-]+:\s*var\(--lab-color/.test(cssText),
+				// The pack's own accent, not the Lab's: neither the pack root nor the document root has `--ui-primary` mapped to the Lab accent.
+				packPrimary: read(pack, '--ui-primary'),
+				packPrimaryIsLabs: read(pack, '--ui-primary') === read(root, '--lab-color-accent'),
+				rootPrimaryIsLabs: read(root, '--ui-primary') === read(root, '--lab-color-accent'),
+			}
+		})
+		expect(report)
+			.toEqual({
+				htmlClass: '',
+				darkElements: ['nui-page'],
+				hasNuxtUiCss: true,
+				chromeMapping: false,
+				packPrimary: '#5eead4',
+				packPrimaryIsLabs: false,
+				rootPrimaryIsLabs: false,
+			})
+	})
 })
 
 async function expectFrameIsolated(page: Page, showcase: string): Promise<void> {
