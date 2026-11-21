@@ -5,7 +5,7 @@
  * every `a`), none of which may touch the hand-written pack or another showcase. The Preview reuses its frame document across
  * showcase switches (`preview-host/frame-driver.ts`), and a stylesheet that a lazy chunk brought in stays in the document: Vite's
  * preload helper adds the `<link>` once and remembers it, so it is never added again (and a link removed from outside is not
- * restored by the next `import()`). So the pack owns the element's presence itself, by reference counting, because packs come and
+ * restored by the next dynamic import of the chunk). So the pack owns the element's presence itself, by reference counting, because packs come and
  * go faster than a stylesheet loads:
  *
  * - `acquirePackStyles()` is called when a pack mounts. It puts a detached stylesheet element back (the same element) and returns a
