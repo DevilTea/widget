@@ -16,7 +16,7 @@ It implements the tooling side of `DevilTea/widget` Discussion #12, "Interfaces 
 | `src/schema.ts` | `emitFullSchema` (tree), `emitLlmSchema` (flat, LLM profile) and `emitConfigSchema` (one plugin's `config.raw`, full profile). |
 | `src/docs-types.ts`, `src/docs.ts` | The `WidgetDocs` object type (no imports; exported as `@deviltea/widget-skills/docs`) and `emitDocs(ir)`. |
 | `src/docs-cache.ts` | `createDocsCache`: generate a System's docs, or read them from the disk cache. |
-| `src/vite.ts` | `widgetDocs(options)`, exported as `@deviltea/widget-skills/vite`. |
+| `src/vite.ts` | `widgetDocs(options)`. A Vite or Vitest config imports it by relative path (see "The Vite plugin"); the `./vite` export only serves code Vite transforms. |
 | `virtual-widget-docs.d.ts` | `declare module 'virtual:widget-docs/*'`, exported as `@deviltea/widget-skills/virtual-widget-docs`. |
 | `src/flat.ts` | `createFlatConverter(ir)`: `treeToFlat` and `flatToTree`. |
 | `src/skills.ts` | The three Markdown skills. |
@@ -50,7 +50,8 @@ Tests run in the root `widget-skills` Vitest project (no Lab plugins or setup) o
 ## The Vite plugin
 
 ```text
-import { widgetDocs } from '@deviltea/widget-skills/vite'
+// apps/lab/vite.config.ts: a relative path, not the package name
+import { widgetDocs } from '../widget-skills/src/vite'
 
 widgetDocs({
 	systems: {
@@ -63,6 +64,7 @@ widgetDocs({
 import docs from 'virtual:widget-docs/onboarding' // WidgetDocs
 ```
 
+- Import the plugin in a Vite or Vitest config by relative path (`../widget-skills/src/vite` from the Lab, `./apps/widget-skills/src/vite` from the root), not by its package name. Vite bundles a config's relative imports, so the TypeScript sources are compiled with the config; it leaves a bare specifier such as `@deviltea/widget-skills/vite` to Node, which then loads `src/vite.ts` itself and fails on its extensionless relative imports (`ERR_MODULE_NOT_FOUND ... src/check`). Making the package-name import work would need `.ts` extensions on every relative import (`allowImportingTsExtensions`) and Node's type stripping on the whole module graph; the relative path needs neither. `src/vite-config.unit.test.ts` loads both spellings through Vite's `loadConfigFromFile`.
 - Pass each System's `tsconfig`: the one the module is compiled with (the Lab: `tsconfig.app.json`). Without it the nearest `tsconfig.json` above the module is used, which in a project with references is a solution file (`"files": []`). `readProgramConfig` refuses a tsconfig that does not include the module or compiles without `strictNullChecks` (which erases every `| null` and would be cached silently).
 - Each key of `systems` is a virtual module `virtual:widget-docs/<name>` (`<name>` matches `[\w.-]+`). Paths are relative to Vite's `root`. Its default export is a `WidgetDocs` object (`WIDGET_DOCS_VERSION` 2): every text carries the summary, `@remarks`, the constraint `tags`, and the `example`, `see`, `deprecated` and `defaultValue` tags; per plugin type its text and `typeNames` (the named types it mentions); `config` (JSDoc, `omittable`, printed raw/resolved types, and the JSON Schema of `config.raw`, Draft 2020-12, full profile); `slots` (JSDoc, `expectedTypes` or `null` for any widget, the contract's `Shape`, the expectation as written); `state` (with `authorWritable`), `properties`, `methods` (signature, parameters, returns), `events` (labelled payload) with JSDoc and printed types; `reasons` (JSDoc and the `details` type, `null` for `void`). A section is `null` when the capability is not declared and `{}` when it is declared empty. `types` lists every named type by name: its text, the declaration as written, and the fields of an object type with their texts and `optional`.
 - Generating **imports the System's module, which runs its top-level code** and that of everything it imports, through tsx in a worker thread that is terminated after the run. With `sourceTsconfig`, tsx gets the same `paths` as the type checker (a temporary tsconfig extends `tsconfig` and adds them), so types and runtime read the same files. `runtime: false` skips the import, the cross-check and `authorWritable`.

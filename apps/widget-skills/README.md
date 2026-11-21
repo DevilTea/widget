@@ -12,8 +12,8 @@ Private prototype. It reads a Widget System's TypeScript types and JSDoc (Core 0
 ## Vite plugin
 
 ```text
-// vite.config.ts (or a Vitest config)
-import { widgetDocs } from '@deviltea/widget-skills/vite'
+// vite.config.ts (or a Vitest config): import by relative path
+import { widgetDocs } from '../widget-skills/src/vite'
 
 export default defineConfig({
 	plugins: [widgetDocs({ systems: { survey: { module: 'src/survey-system.ts', export: 'surveySystem' } } })],
@@ -26,6 +26,9 @@ docs.plugins.Survey.slots.questions.summary
 
 Pass each System's `tsconfig` (the one that compiles the module, for an application `tsconfig.app.json`): a tsconfig that
 does not include the module, such as a solution file with `"files": []`, or one without `strictNullChecks` is refused.
+
+A config file must import the plugin by relative path, not by its package name: Vite hands a bare specifier to Node,
+which cannot load the plugin's TypeScript sources (`ERR_MODULE_NOT_FOUND ... src/check`).
 
 For the module's type, add `@deviltea/widget-skills/virtual-widget-docs` to `compilerOptions.types`.
 
