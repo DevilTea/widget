@@ -1000,10 +1000,12 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   `<marker>`s defined in `GraphCanvas.vue` (one per colour family and bucket; Vue Flow's own `arrowclosed` draws at a quarter of
   its nominal size) and `GraphDependencyEdge.vue` picks the one for the current bucket, so a wheel tick inside a bucket
   re-renders nothing. Edge strokes are solid mixes of the muted text colour and the canvas (3.7:1 in the light theme).
-  **Keyboard access to the edges** (issue #230 follow-up): the edges are one roving Tab stop. Vue Flow means edges to be focusable but writes
-  `tabIndex` (capital I) on the edge's SVG `<g>`, which SVG ignores, and binds its key handler as `onKeyDown`, which Vue registers for an
-  event named `key-down` that never fires. Neither is patched in Vue Flow: `GraphCanvas.vue` gives every edge a real lowercase `tabindex`
-  through Vue Flow's own per-edge `domAttributes` and handles the keys itself, delegated on the canvas. One stop was chosen
+  **Keyboard access to the edges** (issue #230 follow-up): the edges are one roving Tab stop. A Vue Flow edge with `focusable` on
+  (which `graph/vue-flow.ts` sets) gets `tabIndex: 0` as a DOM property, which Vue applies to the SVG `<g>` as `tabindex="0"` on every edge
+  (verified: twelve Tab stops in the Survey), and the property beats a `tabindex` attribute from `domAttributes`; it also binds its key handler
+  as `onKeyDown`, which Vue registers for an event named `key-down` that never fires. Nothing is patched in Vue Flow: `GraphCanvas.vue`
+  overrides `focusable: false` on every edge it hands Vue Flow, gives back `role="group"` and a real lowercase `tabindex` through the
+  per-edge `domAttributes`, and handles the keys itself, delegated on the canvas. Selection (click, Enter, Space) does not depend on `focusable`. One stop was chosen
   over "every edge is a Tab stop" (the expanded Trip budget has hundreds of edges) and over "edges only reachable from their focused card"
   (an edge would then have no route when nothing is selected, and a card's own keys are already taken by select/expand). `graph/edge-a11y.ts`
   (pure, unit-tested) orders the edges with the ones around the focused widget or member first; Arrow Down/Right, Arrow Up/Left (wrapping), Home
@@ -1054,7 +1056,7 @@ automatically refits on semantic graph replacements and cluster expansion/collap
 Runtime activity and focus deemphasis never trigger a refit. `DependenciesPanel.vue`'s Graph view also exposes an explicit
 **Fit graph** button along with **Zoom in** / **Zoom out** and **Expand all** / **Collapse all** controls in the toolbar. Fit leaves 4% around the graph (it used to
 leave 20%, then 8%) and fits the curves as well as the cards (`fitBounds` over both),
-because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.27 zoom) and is read by zooming. Fit may reach 0.05 so it shows the whole
+because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.27 zoom) and is read by zooming. Different ELK options for expanded widgets do not change that (issue #230, measured with the real ELK at a 691 x 681 canvas: `COFFMAN_GRAHAM` layering with `layerBound` 2 to 5, a tighter root, `BRANDES_KOEPF` placement; the best expanded Survey Fit was 0.306, member text about 3.7px, and the expanded Trip budget stayed between 0.047 and 0.076): 37 or 112 member cards cannot be shown at a readable size at once, so a readable expanded view needs a different interaction (expanding one widget at a time, or a semantic zoom), not layout options. Fit may reach 0.05 so it shows the whole
 expanded Trip budget (about 0.06); afterwards the manual zoom floor (wheel, pinch, **Zoom out**) is `min(fit, max(0.1, fit / 4))`, so a small graph
 (the Survey fits at 0.99, so about 0.25) cannot be wheeled down to a dot. The collapsed card text is 13px (type) and 12px (id, S/P/M counts).
 `src/graph/graph-readability.unit.test.ts` (real ELK on both showcases) and `e2e/graph-readability.spec.ts` pin the spacing, the

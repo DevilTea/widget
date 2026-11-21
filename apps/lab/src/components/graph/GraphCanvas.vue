@@ -224,10 +224,12 @@ function onEdgeClick({ edge }: { edge: GraphFlowEdge }): void {
 /**
  * Keyboard access to the edges (issue #230 follow-up; the pure part is `graph/edge-a11y.ts`).
  *
- * Vue Flow means its edges to be focusable, but writes `tabIndex` (capital I) on the edge's SVG `<g>`, which SVG ignores, and
- * binds its key handler as `onKeyDown`, which Vue turns into a listener for an event named `key-down` that never fires. Both are
- * repaired from outside, without a fork: every edge gets a real lowercase `tabindex` through Vue Flow's own `domAttributes`
- * escape hatch, and the keys are handled here, delegated on the canvas.
+ * Vue Flow's own focusability is no use for a roving stop: a focusable edge gets `tabIndex: 0` as a DOM property (Vue sets it on
+ * the SVG `<g>` and it shows as `tabindex="0"`, on every edge, and it beats a `tabindex` attribute from `domAttributes`), and its
+ * key handler is bound as `onKeyDown`, which Vue turns into a listener for an event named `key-down` that never fires. So every
+ * edge is made `focusable: false` (the projection sets it on), which also takes away the `role="group"`, `aria-describedby` and
+ * key handler that came with it. Without a fork, `domAttributes` gives back the role and a real lowercase `tabindex`, and the keys
+ * are handled here, delegated on the canvas.
  *
  * The edges are one roving Tab stop: exactly one edge has `tabindex="0"`, the rest `-1`, and the arrow keys move between
  * them, so a graph with dozens of edges costs one Tab press and Tab or Shift+Tab leaves the group from whichever edge the
@@ -266,7 +268,11 @@ const flowEdges = computed<GraphFlowEdge[]>(() => {
 	return props.edges.map(edge => ({
 		...edge,
 		ariaLabel: edgeAccessibleName(edge),
+		// Vue Flow's own focusability is off (the projection sets it on): it would write `tabIndex=0` on every edge, and that DOM
+		// property wins over the roving `tabindex` attribute below. The role it would have set with it is given back here.
+		focusable: false,
 		domAttributes: {
+			'role': 'group',
 			'tabindex': edge.id === tabStop ? 0 : -1,
 			'aria-describedby': edgeKeysId,
 			'aria-roledescription': roleDescription,
