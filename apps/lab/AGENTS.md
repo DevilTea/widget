@@ -805,13 +805,12 @@ State members render the remote member snapshot only — nothing in the inspecto
 `property.get()`. Property members render `Never evaluated` until the member snapshot reports
 `status: 'completed'` — the latest result some *real* Runtime consumer (Preview) naturally produced — and
 never `fresh`/`dirty`/`active`/`stale` labels. Methods show their name, the compiler's
-`transitivelyWrites` and `transitivelyEmits` facts (read from the Inspector snapshot, where `transitivelyEmits` exists only from protocol 0.4 and
-can be absent; a Method with both facts `false` is tagged `read-only`, and one without the emits fact is not) and, from protocol 0.5 (audit U08), their latest diagnostics: `RuntimeMethodRow.vue` subscribes to its Method member
+`transitivelyWrites` and `transitivelyEmits` facts (read from the Inspector snapshot, where both are always present since protocol 1.0; a Method with both facts `false` is tagged `read-only`) and (audit U08) their latest diagnostics: `RuntimeMethodRow.vue` subscribes to its Method member
 (`runtime.subscribeMember` with `{ type: 'method' }`, through `useRemoteRuntimeMember` like State and Property rows, so only while its panel is visible)
 and `MethodDiagnosticList.vue` renders each diagnostic's `code`, `message` (verbatim, never parsed), `reason`, `path`, `dependency`, `related`, `cause` and
 `args` / `result` / `received` (the same value tree and truncation marking as Runtime values). The snapshot is the diagnostics of the Method's latest call that
 returned, which Preview's own use produced: an empty one is "No failure recorded" and never "succeeded" or "never called" (it cannot tell those apart, and a
-call that threw leaves it unchanged); a row without a Method snapshot (a peer below 0.5) shows no status. There is still no invocation affordance and no call
+call that threw leaves it unchanged); a row whose Method snapshot has not arrived yet shows no status. There is still no invocation affordance and no call
 history (Core keeps none). The Runtime Inspector always follows the
 Preview connection and shows its Preview revision (`runtime-inspector/source.ts`); an invalid current
 Document may leave an older valid Preview running, so it is not an unavailable Runtime state by itself.
@@ -1276,7 +1275,7 @@ that settles after a quiet second, never one announcement per Event. The only Ev
 the hidden Sandbox declares none. Tests: `events/`, `use-event-log.unit.test.ts` and `EventsPanel.unit.test.ts` run a real Core Runtime behind a real Inspector
 Agent (`events/test-support.ts`); `e2e/events.spec.ts` drives the Survey.
 
-*Method failures (audit U08, protocol 0.5).* The same log also lists Method failures, labelled "Method failure" because they are not Events (`MethodFailureEntryRow.vue`,
+*Method failures (audit U08).* The same log also lists Method failures, labelled "Method failure" because they are not Events (`MethodFailureEntryRow.vue`,
 `kind: 'method-failure'` entries `{ …, method, diagnostics }` next to the `kind: 'event'` ones in the one 500-entry buffer). `use-event-log.ts` also subscribes to every
 Method of every resolved widget (`runtime.subscribeMember`, `{ type: 'method' }`, released with the Event subscriptions) and records an entry when a `runtime.memberChanged`
 carries a Method snapshot with diagnostics. What is recorded is the Method's diagnostic snapshot, a current fact and not a call log: the snapshot a Method already holds when the
@@ -1285,7 +1284,7 @@ row in Selected widget / Runtime; changes inside one Runtime call (a Method that
 (`skippedFailuresWhilePaused`); they count as unseen. A "Show" filter (Events and Method failures / Events only / Method failures only) joins the widget and "only the selected
 widget" filters, which apply to both kinds; an Event name filter never matches a failure. The counts and notes say "Events" until a failure has been recorded since the last Clear and
 "entries" afterwards. The status shows how many Methods are watched and how many could not be subscribed (a refusal is counted, not fatal). The Lab does not track the negotiated
-protocol minor: the shell and the Preview frame ship together, so a Method member is always available; a row or log entry for a peer without it simply has no snapshot. Tests:
+protocol minor: at protocol 1.0 the Method member and `transitivelyEmits` are always available (no minor gates them), and a peer on another protocol major, such as a `0.x` frame, cannot connect at all (`unsupported-version`), so the Lab never meets a peer without them. Tests:
 `use-event-log-method-failures.unit.test.ts`, `EventsPanelMethodFailures.unit.test.ts`, `RuntimeMethodRowFailures.unit.test.ts` (real Core and Agent) and `e2e/method-failures.spec.ts`.
 
 **Runtime values (audit U10).** State and Property rows are `RuntimeValueRow.vue`: the member name and a one-line summary that takes
