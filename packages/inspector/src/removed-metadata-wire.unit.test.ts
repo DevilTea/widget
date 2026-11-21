@@ -59,10 +59,27 @@ describe('config and Event metadata that protocol 1.0 no longer carries', () => 
 				.toHaveProperty('config')
 			expect(node?.events)
 				.toEqual([{ type: 'event', name: 'fired' }])
-			// No description or schema anywhere in the serialized snapshot.
-			const wire = JSON.stringify(blueprint)
-			expect(wire).not.toContain('description')
-			expect(wire).not.toContain('schema')
+			// No object in the serialized snapshot has a `description` or `schema` key (a value that merely contains the word is fine).
+			const keys = new Set<string>()
+			const collect = (value: unknown): void => {
+				if (Array.isArray(value)) {
+					value.forEach(collect)
+				}
+				else if (typeof value === 'object' && value !== null) {
+					for (const [key, child] of Object.entries(value)) {
+						keys.add(key)
+						collect(child)
+					}
+				}
+			}
+			collect(JSON.parse(JSON.stringify(blueprint)))
+			expect(keys.has('description'))
+				.toBe(false)
+			expect(keys.has('schema'))
+				.toBe(false)
+			// The collector sees keys at depth: a known one is there.
+			expect(keys.has('widgetId'))
+				.toBe(true)
 		}
 		finally {
 			client.dispose()
