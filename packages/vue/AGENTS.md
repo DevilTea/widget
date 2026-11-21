@@ -105,6 +105,9 @@ or to the widgets it hosts, never to this package.
   surface (e.g. `.effect`) that does not exist at runtime. `WidgetSlot`'s public type is a non-callable
   generic component/constructor shape (`new <Name>() => { $props, $slots }`), never `FunctionalComponent`, because the shared
   runtime value is a `defineComponent()` output, not a plain callable function.
+- The keyed surfaces (`useState()`, `useProperties()`, `useMethods()`, `emit`, the diagnostics surfaces) map homomorphically over
+  `keyof` the Interfaces section (so hover shows the member's JSDoc) and always with `-?`: every declared member has its accessor
+  at run time, so an optional member is never an optional key.
 - `createWidgetVueRenderer` validates exactly-once renderer coverage (and that every registered value is a component) against the actual bound
   `WidgetSystem` instance at construction time, and the returned component validates the `runtime` prop (object, same core copy,
   then `runtime.blueprint.system === boundSystem`) when it is first given a Runtime. Both are programmer/configuration

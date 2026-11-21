@@ -59,10 +59,15 @@ export type ReadonlyRef<T> = Readonly<Ref<T>>
  * property and would drop it. The `as` clause keeps the `WidgetMemberKey` (string) filter and, being a
  * key remapping of the same `keyof`, keeps the documentation too. An absent or `never` section maps to
  * an empty surface.
+ *
+ * Every mapping removes `?` (`-?`): a homomorphic mapping would otherwise copy an optional member's `?` onto the
+ * surface, but every declared member has its accessor at run time, so the key is always present. The value type is
+ * unchanged (an optional State member's value still admits `undefined`); the Method and Event mappings drop the
+ * `undefined` an optional member adds to the function or tuple type itself.
  */
 type KeyedSurface<Members, Value> = [Members] extends [never]
 	? Record<never, never>
-	: { readonly [Key in keyof Members as Key extends WidgetMemberKey ? Key : never]: Value }
+	: { readonly [Key in keyof Members as Key extends WidgetMemberKey ? Key : never]-?: Value }
 
 // -------------------------------------------------------------------------------------------------
 // Diagnostic reasons and details
@@ -127,7 +132,7 @@ export type UseWidgetConfigAccessor<Interfaces extends WidgetInterfaces> = HasWi
 
 type StateSurface<Members> = [Members] extends [never]
 	? Record<never, never>
-	: { readonly [Key in keyof Members as Key extends WidgetMemberKey ? Key : never]: Ref<Members[Key] | null> }
+	: { readonly [Key in keyof Members as Key extends WidgetMemberKey ? Key : never]-?: Ref<Members[Key] | null> }
 
 /** One writable `Ref` per declared State member, carrying the member's JSDoc. `null` while the value is failing. */
 export type UseWidgetStateSurface<Interfaces extends WidgetInterfaces> = StateSurface<WidgetStateOf<Interfaces>>
@@ -156,7 +161,7 @@ export type UseWidgetStateDiagnosticsAccessor<Interfaces extends WidgetInterface
 
 type PropertiesSurface<Members> = [Members] extends [never]
 	? Record<never, never>
-	: { readonly [Name in keyof Members as Name extends WidgetMemberKey ? Name : never]: ReadonlyRef<Members[Name] | null> }
+	: { readonly [Name in keyof Members as Name extends WidgetMemberKey ? Name : never]-?: ReadonlyRef<Members[Name] | null> }
 
 /** One readonly `Ref` per declared Property, carrying the Property's JSDoc. `null` while the Property is failing. */
 export type UseWidgetPropertiesSurface<Interfaces extends WidgetInterfaces> = PropertiesSurface<WidgetPropertiesOf<Interfaces>>
@@ -186,8 +191,8 @@ export type UseWidgetPropertyDiagnosticsAccessor<Interfaces extends WidgetInterf
 type EventEmitterSurface<Members> = [Members] extends [never]
 	? Record<never, never>
 	: {
-			readonly [Name in keyof Members as Name extends WidgetMemberKey ? Name : never]: Members[Name] extends readonly unknown[]
-				? (...args: Members[Name]) => void
+			readonly [Name in keyof Members as Name extends WidgetMemberKey ? Name : never]-?: Exclude<Members[Name], undefined> extends infer Args extends readonly unknown[]
+				? (...args: Args) => void
 				: never
 		}
 
@@ -205,7 +210,7 @@ export type UseWidgetEventEmitterAccessor<Interfaces extends WidgetInterfaces> =
 type MethodsSurface<Members> = [Members] extends [never]
 	? Record<never, never>
 	: {
-			readonly [Name in keyof Members as Name extends WidgetMemberKey ? Name : never]: Members[Name] extends (...args: infer Args) => infer Return
+			readonly [Name in keyof Members as Name extends WidgetMemberKey ? Name : never]-?: Exclude<Members[Name], undefined> extends (...args: infer Args) => infer Return
 				? (...args: Args) => Return | null
 				: never
 		}
