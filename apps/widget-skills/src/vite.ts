@@ -27,7 +27,11 @@ export interface WidgetDocsSystemOptions {
 	module: string
 	/** The name of the exported System. */
 	export: string
-	/** The tsconfig the module is compiled with, relative to `root`. Defaults to the nearest `tsconfig.json` above the module. */
+	/**
+	 * The tsconfig the module is compiled with, relative to `root`: for an application its app tsconfig (`tsconfig.app.json`).
+	 * Defaults to the nearest `tsconfig.json` above the module, which in a project with references is usually a solution file
+	 * and is refused: the tsconfig must include the module and enable `strictNullChecks`.
+	 */
 	tsconfig?: string
 	/** A tsconfig whose `compilerOptions.paths` are added on top (for example to resolve workspace packages to source). */
 	sourceTsconfig?: string

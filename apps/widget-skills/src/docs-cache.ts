@@ -41,7 +41,7 @@ export interface DocsSystem {
 	module: string
 	/** The name of the exported System. */
 	export: string
-	/** The tsconfig the module is compiled with. Defaults to the nearest `tsconfig.json` above the module. */
+	/** The tsconfig the module is compiled with (see `readProgramConfig`). Defaults to the nearest `tsconfig.json` above the module. */
 	tsconfig?: string
 	/** A tsconfig whose `compilerOptions.paths` are added on top. */
 	sourceTsconfig?: string

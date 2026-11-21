@@ -24,6 +24,9 @@ import docs from 'virtual:widget-docs/survey'
 docs.plugins.Survey.slots.questions.summary
 ```
 
+Pass each System's `tsconfig` (the one that compiles the module, for an application `tsconfig.app.json`): a tsconfig that
+does not include the module, such as a solution file with `"files": []`, or one without `strictNullChecks` is refused.
+
 For the module's type, add `@deviltea/widget-skills/virtual-widget-docs` to `compilerOptions.types`.
 
 Generating **imports the System's module and runs its top-level code** to cross-check the types against

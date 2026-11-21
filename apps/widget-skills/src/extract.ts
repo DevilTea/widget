@@ -43,11 +43,23 @@ function readPaths(tsconfigPath: string): Record<string, string[]> {
 		.map(([key, targets]) => [key, targets.map(target => resolve(base, target))]))
 }
 
-/** The tsconfig files a program's options come from: `tsconfigPath` (or the one found), the files it extends, and `sourceTsconfigPath`. */
 export interface ProgramConfig {
 	compilerOptions: ts.CompilerOptions
+	/** The tsconfig files the options come from: `tsconfigPath` (or the one found), the files it extends, and `sourceTsconfigPath`. */
 	configFiles: string[]
+	/** The tsconfig used (given or found); `undefined` when there is none and the defaults apply. */
+	tsconfigPath: string | undefined
 }
+
+/**
+ * Reads the compiler options for the System's module.
+ *
+ * Throws when the tsconfig does not list the module among its root files (a solution file such as
+ * `{ "files": [], "references": [...] }` lists none) or compiles without `strictNullChecks`: either would produce wrong
+ * documentation silently (without `strictNullChecks` every `| null` is erased, so an omittable config or a failing
+ * value reads as required). Pass the tsconfig the module is compiled with, for an application usually
+ * `tsconfig.app.json`.
+ */
 
 export function readProgramConfig(options: Pick<ExtractOptions, 'modulePath' | 'tsconfigPath' | 'sourceTsconfigPath'>): ProgramConfig {
 	const modulePath = resolve(options.modulePath)
@@ -61,6 +73,10 @@ export function readProgramConfig(options: Pick<ExtractOptions, 'modulePath' | '
 		if (parsed === undefined)
 			throw new Error(`Cannot parse ${tsconfigPath}.`)
 		compilerOptions = parsed.options
+		if (!parsed.fileNames.some(file => resolve(file) === modulePath))
+			throw new Error(`${tsconfigPath} does not include ${modulePath} (${parsed.fileNames.length === 0 ? 'it has no root files: a solution tsconfig?' : 'not in its files or include'}). Pass the tsconfig the module is compiled with (for an application, usually tsconfig.app.json).`)
+		if (!(compilerOptions.strictNullChecks ?? compilerOptions.strict ?? false))
+			throw new Error(`${tsconfigPath} compiles without strictNullChecks, which erases every "| null" from the types. Enable "strict" (or "strictNullChecks"), or pass the tsconfig the module is compiled with.`)
 		configFiles.push(tsconfigPath, ...((compilerOptions.configFile as ts.TsConfigSourceFile | undefined)?.extendedSourceFiles ?? []))
 	}
 	if (options.sourceTsconfigPath !== undefined) {
@@ -68,7 +84,7 @@ export function readProgramConfig(options: Pick<ExtractOptions, 'modulePath' | '
 		configFiles.push(sourceTsconfigPath)
 		compilerOptions = { ...compilerOptions, paths: { ...compilerOptions.paths, ...readPaths(sourceTsconfigPath) } }
 	}
-	return { compilerOptions, configFiles: [...new Set(configFiles.map(file => resolve(file)))] }
+	return { compilerOptions, configFiles: [...new Set(configFiles.map(file => resolve(file)))], tsconfigPath }
 }
 
 /** Builds the TypeScript program over the System's module. This is the expensive step a cache hit skips. */
