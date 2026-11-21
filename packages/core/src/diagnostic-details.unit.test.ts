@@ -442,7 +442,8 @@ describe('a non-JSON `details` is a contract violation', () => {
 			})
 			.state(state => state.count({
 				validate: (input, ctx): input is number => {
-					if (where === 'state')
+					// Only the write under test reports: the default (0) is validated when the Runtime is created.
+					if (where === 'state' && input === 1)
 						report(ctx)
 					return typeof input === 'number'
 				},

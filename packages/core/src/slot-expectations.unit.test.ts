@@ -505,7 +505,8 @@ describe('widgetSourceOf types TypeScript-authored sources', () => {
 			type: 'wizard',
 			meta: { note: 'kept' },
 			slots: {
-				steps: [{ id: 'a', type: 'step', config: { title: 'A' } }, { id: 'n', type: 'note' }],
+				// Only steps: the wizard reads each step's members, so a note here would be a missing-dependency diagnostic.
+				steps: [{ id: 'a', type: 'step', config: { title: 'A' } }],
 				extras: [{ id: 'x', type: 'wizard' }],
 				notes: [{ id: 'm', type: 'note' }],
 			},

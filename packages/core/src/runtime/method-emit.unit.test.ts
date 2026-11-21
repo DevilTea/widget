@@ -399,11 +399,8 @@ describe('plugin build with `emits`', () => {
 				.interfaces<FireInterfaces>()
 			expect(() => builder.methods(methods => attempt(methods as unknown as Record<string, (definition: unknown) => unknown>) as never))
 				.toThrow()
-			const resumed = builder as unknown as { events: (build: (section: Record<string, (definition: unknown) => unknown>) => unknown) => { done: () => unknown } }
-			const events = resumed.events((section) => {
-				section.fired!({})
-				section.other!({})
-			})
+			const resumed = builder as unknown as { events: (names: readonly string[]) => { done: () => unknown } }
+			const events = resumed.events(['fired', 'other'])
 			expectTypeErrorNaming(() => events.done(), 'js', 'a', 'zz')
 		}
 	})
