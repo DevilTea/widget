@@ -70,17 +70,58 @@ export interface WidgetSystemSlotTypeViolation<Type extends string> {
 
 type ContractSectionName = 'state' | 'properties' | 'methods' | 'events'
 
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+
+/**
+ * Whether a plugin's Method can stand in for the contract's. Compared as argument tuples and results, not as
+ * function types, so a method-style signature (`run(arg: T): R`, whose parameters TypeScript compares
+ * bivariantly) is held to the same rule as a property-style one: every argument list the contract allows is one
+ * the Method accepts (parameters contravariant, arity included), and the Method's result is assignable to the
+ * contract's (covariant; a contract result of `void` accepts any result).
+ */
+type ContractMethodSatisfied<Actual, Expected> = Actual extends (...args: infer ActualArgs) => infer ActualResult
+	? Expected extends (...args: infer ExpectedArgs) => infer ExpectedResult
+		? [ExpectedArgs] extends [ActualArgs]
+				? [ExpectedResult] extends [void] ? true : [ActualResult] extends [ExpectedResult] ? true : false
+				: false
+		: false
+	: false
+
+/**
+ * Whether a plugin's member satisfies the contract's, by the variance of its section:
+ *
+ * - `state`: invariant. A parent may read and write a child's State through its dependencies, so the two
+ *   types must be mutually assignable.
+ * - `properties`: covariant. A Property is only read.
+ * - `methods`: see {@link ContractMethodSatisfied}.
+ * - `events`: existence only. An Event is not reachable through a dependency, so its payload types nothing a
+ *   parent does.
+ */
+type ContractMemberSatisfied<Section extends ContractSectionName, Actual, Expected> = Section extends 'state'
+	? MutuallyAssignable<Actual, Expected>
+	: Section extends 'properties'
+		? [Actual] extends [Expected] ? true : false
+		: Section extends 'methods'
+			? ContractMethodSatisfied<Actual, Expected>
+			: true
+
+type ContractMemberMismatch<Section extends ContractSectionName> = Section extends 'state'
+	? 'with a type that is not the contract\'s (State is read and written, so the two types must be mutually assignable)'
+	: Section extends 'methods'
+		? 'with a signature that does not accept the contract\'s arguments or whose result is not assignable to the contract\'s'
+		: 'with a type that is not assignable to the contract\'s'
+
 /**
  * The members of one section of a contract's `Shape` that `Target` does not satisfy, as messages: a member
- * the plugin does not declare, or one whose type is not assignable to the contract's.
+ * the plugin does not declare, or one whose type breaks the section's variance rule.
  */
 type ContractSectionViolation<Shape, Target, Section extends ContractSectionName, Subject extends string> = Shape extends Record<Section, infer Expected>
 	? (Target extends Record<Section, infer Declared> ? Declared : Record<never, never>) extends infer Actual
 			? {
 					[Member in Extract<keyof Expected, string>]: Member extends keyof Actual
-						? [Actual[Member]] extends [Expected[Member]]
-								? never
-								: `${Subject} declares the ${Section} member "${Member}" with a type that is not assignable to the contract's`
+						? ContractMemberSatisfied<Section, Actual[Member], Expected[Member]> extends true
+							? never
+							: `${Subject} declares the ${Section} member "${Member}" ${ContractMemberMismatch<Section>}`
 						: `${Subject} declares no ${Section} member "${Member}"`
 				}[Extract<keyof Expected, string>]
 			: never

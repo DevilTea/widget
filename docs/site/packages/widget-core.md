@@ -638,8 +638,9 @@ responsible for enforcing it in `validateStructure`. What the expectation does:
 - it is checked by `createWidgetSystem`. Every plugin type a slot names (in a
   plain union or in a contract's `Types`) must be registered, and every plugin
   a contract names must satisfy its `Shape`: each member exists, and its type
-  is assignable to the contract's. A violation is a type error on `plugins`
-  that names the plugin and the member. A contract without `Types` names no
+  agrees with the contract's by the rule of its section (see the table
+  below). A violation is a type error on `plugins` that names the plugin and
+  the member. A contract without `Types` names no
   plugin, so nothing is checked against it, and a loosely typed System (a
   plugin typed with a broad `string`) is not checked;
 - it narrows the children of that slot, to the plugin types it names, in a
@@ -647,6 +648,17 @@ responsible for enforcing it in `validateStructure`. What the expectation does:
   [Authored source](#authored-source)). `WidgetSlotPluginTypeOf<Interfaces, Name>`
   is that union (`never` when the slot accepts any widget), for renderers and
   tools.
+
+How a named plugin's member is compared with the contract's:
+
+| Section | Rule | Why |
+|---|---|---|
+| `state` | invariant: the two types must be mutually assignable | a parent may read the State and, from a Method, write it; a plugin with `open: true` does not satisfy `open: boolean`, because the parent could write `false` |
+| `properties` | covariant: the plugin's type is assignable to the contract's | a Property is only read, so a narrower type (`title: 'Tile'` for `title: string`) is fine |
+| `methods` | the Method accepts every argument list the contract allows (parameters contravariant, arity included; extra optional parameters are fine), and its result is assignable to the contract's (a contract result of `void` accepts any result) | the parent invokes it with the contract's arguments and reads the contract's result. Method-style signatures (`run(arg: T): R`) are held to the same rule |
+| `events` | the Event exists; its payload is not compared | an Event is not reachable through a dependency, so its payload types nothing the parent does through `slot(name)` |
+
+A plugin may declare more members than the contract lists.
 
 A broad `string` or a pattern such as `\`x-${string}\`` (as a union member or in
 a contract's `Types`), a mix of a plugin type and a contract in one slot

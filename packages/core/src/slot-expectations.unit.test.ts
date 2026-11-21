@@ -18,7 +18,9 @@ import type {
 	UnknownTargetDependencyOperations,
 	WidgetChild,
 	WidgetContract,
+	WidgetInterfaces,
 	WidgetInterfacesViolationOf,
+	WidgetPlugin,
 	WidgetRegisterDepsContext,
 	WidgetSlotExpectedOf,
 	WidgetSlotNameOf,
@@ -769,21 +771,21 @@ describe('a WidgetContract that names the expected plugin types', () => {
 			.toHaveLength(3)
 	})
 
-	it('accepts a listed plugin whose member is narrower than the Shape, and extra members', () => {
+	it('accepts identical State, a narrower Property, a compatible Method and extra members', () => {
 		const deck = createDeck()
 		const card = createCardLike('card')
 		const tile = createWidgetPlugin('tile')
 			.interfaces<{
-			state: { open: true, pinned: boolean }
+			state: { open: boolean, pinned: boolean }
 			properties: { title: 'Tile' }
-			methods: { toggle: () => void }
+			methods: { toggle: (force?: boolean) => number }
 			events: { toggled: [open: boolean] }
 		}>()
 			.state(state => state
-				.open({ validate: (input): input is true => input === true, default: () => true })
+				.open({ validate: isBoolean, default: () => true })
 				.pinned({ validate: isBoolean, default: () => false }))
 			.properties(properties => properties.title({ compute: () => 'Tile' }))
-			.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
+			.methods(methods => methods.toggle({ validateArgs: (args): args is [force?: boolean] => args.length <= 1, execute: () => 1 }))
 			.events(['toggled'])
 			.done()
 
@@ -791,6 +793,85 @@ describe('a WidgetContract that names the expected plugin types', () => {
 			.toEqualTypeOf<unknown>()
 		expect(createWidgetSystem({ plugins: [deck, card, tile] }).plugins)
 			.toHaveLength(3)
+	})
+
+	describe('variance of the Shape check, per section', () => {
+		type Deck = WidgetPlugin<'deck', DeckInterfaces>
+		type Card = WidgetPlugin<'card', CardInterfaces>
+		/** The reasons a 'tile' with `Interfaces` is rejected for, beside a valid 'card'. */
+		type TileReason<Interfaces extends WidgetInterfaces> = ContractReason<WidgetSystemPluginsCheck<readonly [Deck, Card, WidgetPlugin<'tile', Interfaces>]>>
+		type Mentions<Reason, Section extends string, Member extends string> = Extract<Reason, `plugin "tile"${string}${Section} member "${Member}"${string}`>
+
+		it('state is invariant: a parent reads and writes it', () => {
+			// Narrower: the parent could write `false` into it.
+			expectTypeOf<Mentions<TileReason<Omit<CardInterfaces, 'state'> & { state: { open: true } }>, 'state', 'open'>>().not.toBeNever()
+			// Wider: the parent would read a value outside the contract.
+			expectTypeOf<Mentions<TileReason<Omit<CardInterfaces, 'state'> & { state: { open: boolean | 'half' } }>, 'state', 'open'>>().not.toBeNever()
+			// Identical: accepted.
+			expectTypeOf<TileReason<CardInterfaces>>()
+				.toBeNever()
+			// Only the offending member is named.
+			expectTypeOf<Mentions<TileReason<Omit<CardInterfaces, 'state'> & { state: { open: true } }>, string, 'title' | 'toggle' | 'toggled'>>()
+				.toBeNever()
+
+			const deck = createDeck()
+			const card = createCardLike('card')
+			const tile = createWidgetPlugin('tile')
+				.interfaces<Omit<CardInterfaces, 'state'> & { state: { open: true } }>()
+				.state(state => state.open({ validate: (input): input is true => input === true, default: () => true }))
+				.properties(properties => properties.title({ compute: () => 'Tile' }))
+				.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
+				.events(['toggled'])
+				.done()
+			// @ts-expect-error the tile's `open` State is `true`, the contract's is `boolean`
+			const system = createWidgetSystem({ plugins: [deck, card, tile] })
+			expect(system.plugins)
+				.toHaveLength(3)
+		})
+
+		it('properties are covariant: a parent only reads them', () => {
+			expectTypeOf<TileReason<Omit<CardInterfaces, 'properties'> & { properties: { title: 'Tile' } }>>()
+				.toBeNever()
+			expectTypeOf<Mentions<TileReason<Omit<CardInterfaces, 'properties'> & { properties: { title: string | null } }>, 'properties', 'title'>>().not.toBeNever()
+		})
+
+		// The method-style signatures below are the point of the test: TypeScript compares their parameters bivariantly.
+		/* eslint-disable ts/method-signature-style */
+		it('methods accept the arguments of the contract and return an assignable result, whatever the signature style', () => {
+			type WithMethods<Methods extends Record<string, (...args: any[]) => any>> = Omit<CardInterfaces, 'methods'> & { methods: Methods }
+
+			// A contract result of `void` accepts any result; optional extra parameters are fine.
+			expectTypeOf<TileReason<WithMethods<{ toggle: (force?: boolean) => number }>>>()
+				.toBeNever()
+			expectTypeOf<TileReason<WithMethods<{ toggle(force?: boolean): number }>>>()
+				.toBeNever()
+			// A required parameter the contract never passes is rejected, in both signature styles (a method-style
+			// signature is not let through by parameter bivariance).
+			expectTypeOf<Mentions<TileReason<WithMethods<{ toggle: (force: boolean) => void }>>, 'methods', 'toggle'>>().not.toBeNever()
+			expectTypeOf<Mentions<TileReason<WithMethods<{ toggle(force: boolean): void }>>, 'methods', 'toggle'>>().not.toBeNever()
+
+			// Parameters are contravariant and results covariant.
+			type Reader = WidgetContract<{ methods: { read: (key: 'a' | 'b') => string | number } }, 'tile'>
+			type ReaderReason<Methods extends Record<string, (...args: any[]) => any>> = ContractReason<WidgetSystemPluginsCheck<readonly [
+				WidgetPlugin<'shelf', { slots: { items: Reader } }>,
+				WidgetPlugin<'tile', { methods: Methods }>,
+			]>>
+			expectTypeOf<ReaderReason<{ read: (key: string) => string }>>()
+				.toBeNever()
+			expectTypeOf<ReaderReason<{ read(key: string): string }>>()
+				.toBeNever()
+			expectTypeOf<ReaderReason<{ read: (key: 'a') => string }>>().not.toBeNever()
+			expectTypeOf<ReaderReason<{ read(key: 'a'): string }>>().not.toBeNever()
+			expectTypeOf<ReaderReason<{ read: (key: string) => boolean }>>().not.toBeNever()
+		})
+
+		/* eslint-enable ts/method-signature-style */
+
+		it('events are checked for existence only: no dependency reaches them', () => {
+			expectTypeOf<TileReason<Omit<CardInterfaces, 'events'> & { events: { toggled: [] } }>>()
+				.toBeNever()
+			expectTypeOf<Mentions<TileReason<Omit<CardInterfaces, 'events'>>, 'events', 'toggled'>>().not.toBeNever()
+		})
 	})
 
 	it('does not check a contract without Types against any plugin, nor a loosely typed System', () => {
