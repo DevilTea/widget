@@ -148,23 +148,28 @@ function readJson(path: string): unknown {
 
 let generatorHash: string | undefined
 
-/** A hash of this generator's own sources (tests excluded), so a change to the generator invalidates every entry. */
-export function getGeneratorHash(): string {
-	if (generatorHash !== undefined)
-		return generatorHash
+/**
+ * A hash of the generator sources in `directory` (every `.ts` and `.mjs` file except tests) and `WIDGET_DOCS_VERSION`.
+ * An unreadable directory (the generator bundled without its sources) leaves only the version constant.
+ */
+export function generatorHashOf(directory: string): string {
 	const parts = [String(WIDGET_DOCS_VERSION)]
 	try {
-		const directory = dirname(fileURLToPath(import.meta.url))
 		for (const name of readdirSync(directory)
 			.sort()) {
-			if (name.endsWith('.ts') && !name.endsWith('.unit.test.ts'))
+			if ((name.endsWith('.ts') || name.endsWith('.mjs')) && !name.endsWith('.unit.test.ts'))
 				parts.push(name, readText(join(directory, name)))
 		}
 	}
 	catch {
 		// Bundled without its sources: only the version constant identifies the generator.
 	}
-	generatorHash = sha256(...parts)
+	return sha256(...parts)
+}
+
+/** `generatorHashOf` this generator's own directory, computed once per process: a change to the generator invalidates every entry. */
+export function getGeneratorHash(): string {
+	generatorHash ??= generatorHashOf(dirname(fileURLToPath(import.meta.url)))
 	return generatorHash
 }
 

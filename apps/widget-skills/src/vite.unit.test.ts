@@ -11,6 +11,7 @@ import docsFromVitest from 'virtual:widget-docs/survey'
 import { build, createServer } from 'vite'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { surveySystem } from '../fixtures/survey-system'
+import { generatorHashOf, getGeneratorHash } from './docs-cache'
 import { collectRuntimeFacts, createDocsCache, emitDocs, extractIr } from './index'
 import { widgetDocs } from './vite'
 
@@ -446,6 +447,86 @@ describe('widgetDocs through Vite', () => {
 			.toMatchObject({ expectedTypes: null, contract: '{ properties: { label: string; }; }' })
 		expect(warnings.join('\n'))
 			.toContain('Counter.state.step has no JSDoc.')
+	}, 120_000)
+})
+
+describe('the generator hash', () => {
+	it('changes with any generator source, and not with a test', () => {
+		const directory = mkdtempSync(join(scratch, 'generator-'))
+		writeFileSync(join(directory, 'schema.ts'), 'export const a = 1\n')
+		writeFileSync(join(directory, 'runtime-worker.mjs'), 'export {}\n')
+		writeFileSync(join(directory, 'schema.unit.test.ts'), '// a test\n')
+		const first = generatorHashOf(directory)
+
+		writeFileSync(join(directory, 'schema.unit.test.ts'), '// another test\n')
+		expect(generatorHashOf(directory))
+			.toBe(first)
+		writeFileSync(join(directory, 'schema.ts'), 'export const a = 2\n')
+		const edited = generatorHashOf(directory)
+		expect(edited).not.toBe(first)
+		writeFileSync(join(directory, 'runtime-worker.mjs'), 'export const b = 1\n')
+		expect(generatorHashOf(directory)).not.toBe(edited)
+		writeFileSync(join(directory, 'added.ts'), '')
+		expect(generatorHashOf(directory)).not.toBe(generatorHashOf(join(directory, 'missing')))
+
+		// The process-wide hash is the one of this package's own sources.
+		expect(getGeneratorHash())
+			.toBe(generatorHashOf(here))
+	})
+})
+
+describe('widgetDocs in a dev server with its real watcher', () => {
+	/** Loads `virtual:widget-docs/badge` until `accept` holds or the time runs out (the watcher reports asynchronously). */
+	async function loadUntil(server: ViteDevServer, accept: (docs: WidgetDocs) => boolean): Promise<WidgetDocs> {
+		const deadline = Date.now() + 20_000
+		for (;;) {
+			const { default: docs } = await server.ssrLoadModule('virtual:widget-docs/badge') as { default: WidgetDocs }
+			if (accept(docs) || Date.now() > deadline)
+				return docs
+			await new Promise(resolveTimer => setTimeout(resolveTimer, 100))
+		}
+	}
+
+	it('regenerates and serves the new docs after an edit and after a missing import is created, without HMR', async () => {
+		const { directory, system } = writableSystem()
+		writeFileSync(system.module, readFileSync(system.module, 'utf8')
+			.replace('config: { raw: Label, resolved: Label }', 'config: { raw: Label, resolved: Label }\n\t/** The extra State. */\n\tstate: { extra: Extra }')
+			.replace('import type { Label } from \'./labels\'', 'import type { Label } from \'./labels\'\nimport type { Extra } from \'./extra\''))
+		const server = await createServer({
+			configFile: false,
+			root: directory,
+			logLevel: 'silent',
+			appType: 'custom',
+			// HMR off: invalidation must not depend on `handleHotUpdate`.
+			server: { middlewareMode: true, hmr: false, ws: false },
+			plugins: [widgetDocs({ systems: { badge: { module: 'system.ts', export: 'system', tsconfig: 'tsconfig.json' } }, cacheDir: 'cache', runtime: false })],
+		})
+		try {
+			const fieldsOf = (docs: WidgetDocs): string[] => Object.keys(docs.types)
+				.sort()
+			const initial = await loadUntil(server, () => true)
+			expect(initial.types.Label!.fields!.text!.summary)
+				.toBe('The text.')
+			// `./extra` does not exist yet: the docs have no Extra type.
+			expect(fieldsOf(initial))
+				.toEqual(['Label'])
+
+			writeFileSync(join(directory, 'labels.ts'), '/** A label. */\nexport interface Label {\n\t/** The text shown. */\n\ttext: string\n}\n')
+			const edited = await loadUntil(server, docs => docs.types.Label!.fields!.text!.summary === 'The text shown.')
+			expect(edited.types.Label!.fields!.text!.summary)
+				.toBe('The text shown.')
+
+			writeFileSync(join(directory, 'extra.ts'), '/** More. */\nexport interface Extra {\n\t/** A note. */\n\tnote?: string\n}\n')
+			const created = await loadUntil(server, docs => 'Extra' in docs.types)
+			expect(fieldsOf(created))
+				.toEqual(['Extra', 'Label'])
+			// Once every import resolves, the result is cached.
+			expect(readdirSync(join(directory, 'cache')))
+				.toContain('badge.manifest.json')
+		}
+		finally {
+			await server.close()
+		}
 	}, 120_000)
 })
 
