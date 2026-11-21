@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, openDependenciesGraph, test } from './fixtures'
+import { expect, openDependenciesGraph, setLocale, test } from './fixtures'
 
 /**
  * Issue #230, "the Graph is hard to read": what a person sees in the real browser. The cards are spread out, every dependency
@@ -493,3 +493,109 @@ for (const theme of ['light', 'dark'] as const) {
 			.toBe(reads.stroke)
 	})
 }
+
+/**
+ * Keyboard access to the edges (issue #230 follow-up). They are one Tab stop: the arrow keys walk them, a focused edge shows
+ * what a hovered one shows plus a focus band, Enter or Space selects it as a click does (its details open), Escape clears.
+ */
+test('the edges are one Tab stop: arrows walk them, focus shows the label, Enter opens the details, Escape clears', async ({ page }) => {
+	await openGraph(page, 'survey')
+	const edges = page.locator('.vue-flow__edge')
+	const count = await edges.count()
+	expect(count)
+		.toBeGreaterThan(2)
+	// One edge is in the Tab order, the others are focusable only from it.
+	const tabStop = page.locator('.vue-flow__edge[tabindex="0"]')
+	await expect(tabStop)
+		.toHaveCount(1)
+	await expect(page.locator('.vue-flow__edge[tabindex="-1"]'))
+		.toHaveCount(count - 1)
+	// Named by what it is and by its two ends, in the direction of the arrow.
+	await expect(tabStop)
+		.toHaveAttribute('aria-label', /^\d+ deps?: #\S+ → #\S+$/)
+
+	// The edges come before the cards in the document, so Shift+Tab from the first card lands on the edges' Tab stop.
+	await page.locator('.vue-flow__node')
+		.first()
+		.focus()
+	await page.keyboard.press('Shift+Tab')
+	await expect(tabStop)
+		.toBeFocused()
+	// Focus shows the focus band and the label a hover shows.
+	await expect(tabStop.locator('.graph-edge-focus-ring'))
+		.toHaveCSS('opacity', '1')
+	await expect(tabStop.locator('.vue-flow__edge-text'))
+		.toHaveCSS('opacity', '1')
+	const firstId = await tabStop.getAttribute('data-id')
+
+	// The arrow keys walk the edges and wrap around.
+	await page.keyboard.press('ArrowDown')
+	const focused = page.locator('.vue-flow__edge:focus')
+	await expect(focused)
+		.toHaveCount(1)
+	const secondId = await focused.getAttribute('data-id')
+	expect(secondId)
+		.not.toBe(firstId)
+	await expect(focused.locator('.graph-edge-focus-ring'))
+		.toHaveCSS('opacity', '1')
+	await expect(tabStop.locator('.graph-edge-focus-ring'))
+		.toHaveCSS('opacity', '0')
+	await page.keyboard.press('ArrowUp')
+	await expect(tabStop)
+		.toBeFocused()
+	await page.keyboard.press('ArrowUp')
+	expect(await focused.getAttribute('data-id'))
+		.not.toBe(firstId)
+	await page.keyboard.press('Home')
+	await expect(tabStop)
+		.toBeFocused()
+
+	// Enter selects like a click: the edge is selected and its details open under the canvas.
+	const details = page.locator('[data-graph-edge-details]')
+	await expect(details)
+		.toHaveCount(0)
+	await page.keyboard.press('Enter')
+	await expect(tabStop)
+		.toHaveClass(/\bselected\b/)
+	await expect(details)
+		.toBeVisible()
+	await expect(details)
+		.toContainText('target:')
+
+	// Escape clears the selection and the details; focus stays on the edge.
+	await page.keyboard.press('Escape')
+	await expect(tabStop)
+		.not.toHaveClass(/\bselected\b/)
+	await expect(details)
+		.toHaveCount(0)
+	await expect(tabStop)
+		.toBeFocused()
+
+	// Space selects as well.
+	await page.keyboard.press('Space')
+	await expect(tabStop)
+		.toHaveClass(/\bselected\b/)
+	await expect(details)
+		.toBeVisible()
+})
+
+test('with a widget selected, the edges\' Tab stop is one of its own edges, and zh-TW names the edge', async ({ page }) => {
+	await openGraph(page, 'survey')
+	await page.locator('.graph-cluster-identity')
+		.first()
+		.click()
+	await expect(page.locator('.graph-edge--dimmed')
+		.first())
+		.toBeVisible()
+	const tabStop = page.locator('.vue-flow__edge[tabindex="0"]')
+	await expect(tabStop)
+		.toHaveCount(1)
+	await expect(tabStop)
+		.toHaveClass(/graph-edge--(depends-on|used-by)/)
+	await expect(tabStop)
+		.toHaveAttribute('aria-label', /^\d+ deps?: #\S+ → #\S+$/)
+
+	await setLocale(page, 'zh-TW')
+	await expect(tabStop)
+		.toHaveAttribute('aria-label', /^\d+ 個依賴：#\S+ → #\S+$/)
+})

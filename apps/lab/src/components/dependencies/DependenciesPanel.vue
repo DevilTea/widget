@@ -289,6 +289,7 @@ const statusLabel = computed(() => {
 						:layoutVersion="layoutVersion"
 						@nodeClick="onNodeClick"
 						@edgeClick="onEdgeClick"
+						@edgeClear="setSelectedEdgeData(null)"
 						@clusterClick="onClusterClick"
 						@toggleCluster="onToggleCluster"
 					/>

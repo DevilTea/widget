@@ -994,6 +994,20 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   `<marker>`s defined in `GraphCanvas.vue` (one per colour family and bucket; Vue Flow's own `arrowclosed` draws at a quarter of
   its nominal size) and `GraphDependencyEdge.vue` picks the one for the current bucket, so a wheel tick inside a bucket
   re-renders nothing. Edge strokes are solid mixes of the muted text colour and the canvas (3.7:1 in the light theme).
+  **Keyboard access to the edges** (issue #230 follow-up): the edges are one Tab stop. Vue Flow means edges to be focusable but writes
+  `tabIndex` (capital I) on the edge's SVG `<g>`, which SVG ignores, and binds its key handler as `onKeyDown`, which Vue registers for an
+  event named `key-down` that never fires. Neither is patched in Vue Flow: `GraphCanvas.vue` gives every edge a real lowercase `tabindex`
+  through Vue Flow's own per-edge `domAttributes` and handles the keys itself, delegated on the canvas. A roving-style single stop was chosen
+  over "every edge is a Tab stop" (the expanded Trip budget has hundreds of edges) and over "edges only reachable from their focused card"
+  (an edge would then have no route when nothing is selected, and a card's own keys are already taken by select/expand): `graph/edge-a11y.ts`
+  (pure, unit-tested) orders the edges with the ones around the focused widget or member first, the first of that order has `tabindex="0"`
+  and the rest `-1`, and Arrow Down/Right, Arrow Up/Left (wrapping), Home and End move DOM focus between them. The Tab stop is derived from the
+  graph and the focus, not from the last edge visited, so moving with the arrows re-renders nothing and "select a card, then Tab to the edges"
+  lands on that card's edges. A focused edge shows what a hovered one shows (its label; its focus tag gives way) and a wide accent band along the
+  curve (`.graph-edge-focus-ring`, `Highlight` in forced colours) at full opacity even when the selection dims it; Enter or Space selects it as a
+  click does and opens `GraphEdgeDetails`, Escape clears the selection (`edgeClear`) and is only consumed when there is one. The accessible name is
+  the label and both ends in the direction of the arrow (`reads: #form.valid → #name.value`, `3 deps: #form → #name`; zh-TW `3 個依賴：#form → #name`),
+  built from `data.sourceName`/`data.targetName`. `e2e/graph-readability.spec.ts` drives it with the real keyboard.
   The handles Vue Flow requires are invisible (an edge does not attach to them) and the canvas uses only a subtle dot
   grid: these cues must never imply that the readonly inspector is an editable node editor.
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container
@@ -1412,8 +1426,8 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
   `e2e/polish.spec.ts` pins the Graph's sizes.
 - **Focus.** `dockview-theme.css` draws a 2px accent ring (inside the tab) on a Dockview tab or tab action reached with the keyboard (`:focus-visible`; Dockview's own
   1px divider-colour outline is `!important`, so the Lab's rule is too, and more specific). The Graph's expand/collapse toggles, cluster buttons and member
-  cards have a 2px accent outline. Graph **edges** cannot take focus: Vue Flow writes their `tabIndex` attribute with a capital I, which SVG ignores; Relations
-  is the keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
+  cards have a 2px accent outline. Graph **edges** are one Tab stop walked with the arrow keys, with an accent band as
+  the focus indicator (see "Dependencies inspector"); Relations remains the dense keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
 - **Language.** Navigation names are Taiwan Chinese: Author is 編寫, Dependencies 相依性, Relations 關聯, Graph 關係圖, Catalog 目錄, Structure 結構 (tab titles
   follow a language switch). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source) and so do
   the developer panels **Implementation** and **Document Tools** (they name features of the docs and Core, and the specs reach them by those names), `JSON` and the

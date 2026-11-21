@@ -80,6 +80,9 @@ export interface GraphEdgeData {
 	readonly relation?: GraphEdgeRelation
 	/** The other end in words (`#sessions`, `#mode.value`, `invalid`): what the focus depends on, or what uses it. Set with `relation`. */
 	readonly otherEnd?: string
+	/** Both ends in words (`#sessions`, `#mode.value`, `invalid`): the accessible name of the edge is built from them (`graph/edge-a11y.ts`). */
+	readonly sourceName?: string
+	readonly targetName?: string
 	readonly operation: GraphEdgeOperation
 	/** Dependency-container path (diagnostic #13 Phase 5: belongs in edge details, never on the canvas). */
 	readonly path: readonly (string | number)[]
@@ -372,7 +375,7 @@ export function toVueFlow(
 			label: edge.operation,
 			ariaLabel: edge.operation,
 			class: `graph-edge graph-edge--${edge.operation}${edge.invalidCycle ? ' graph-edge--invalid-cycle' : ''}${isDimmed ? ' graph-edge--dimmed' : ''}${relationClass(relation)}`,
-			data: { operation: edge.operation, path: edge.path, reference: edge.reference, invalidCycle: edge.invalidCycle, isDimmed, route: layout.edges?.get(edge.id), arrow: arrowKindOf(edge.operation, edge.invalidCycle, relation), relation, otherEnd: related?.otherEnd },
+			data: { operation: edge.operation, path: edge.path, reference: edge.reference, invalidCycle: edge.invalidCycle, isDimmed, route: layout.edges?.get(edge.id), arrow: arrowKindOf(edge.operation, edge.invalidCycle, relation), relation, otherEnd: related?.otherEnd, sourceName: nameOf(edge.sourceVertexId), targetName: nameOf(edge.targetVertexId) },
 			selectable: true,
 			updatable: false,
 			focusable: true,
@@ -415,6 +418,8 @@ export function toVueFlow(
 				arrow: arrowKindOf(primaryOp, invalidCycle, relation),
 				relation,
 				otherEnd: related?.otherEnd,
+				sourceName: nameOf(effectiveSource),
+				targetName: nameOf(effectiveTarget),
 			},
 			selectable: true,
 			updatable: false,
@@ -444,7 +449,7 @@ export function toVueFlow(
 			label: stubLabel(stub.status),
 			ariaLabel: stubLabel(stub.status),
 			class: `graph-edge graph-edge--stub graph-edge--${stub.status}${isDimmed ? ' graph-edge--dimmed' : ''}${relationClass(relation)}`,
-			data: { operation: stub.operation, path: stub.path, reference: stub.reference, stubStatus: stub.status, isDimmed, route: layout.edges?.get(stubEdgeId), arrow: stub.status === 'invalid' ? 'danger' : arrowKindOf(stub.operation, false, relation), relation, otherEnd: related?.otherEnd },
+			data: { operation: stub.operation, path: stub.path, reference: stub.reference, stubStatus: stub.status, isDimmed, route: layout.edges?.get(stubEdgeId), arrow: stub.status === 'invalid' ? 'danger' : arrowKindOf(stub.operation, false, relation), relation, otherEnd: related?.otherEnd, sourceName: nameOf(stub.ownerVertexId), targetName: stubLabel(stub.status) },
 			selectable: true,
 			updatable: false,
 			focusable: true,

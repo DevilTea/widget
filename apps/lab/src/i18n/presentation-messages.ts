@@ -342,6 +342,7 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it); every other edge fades. A tag is left out where there is no room for it: the Relations view has the full list.': '選取 widget 或 member 時，它的 edges 會變成藍色，並標上「依賴於 #x」（從它出發）或「被 #x 使用」（指向它）；其他 edges 會淡出。空間不足的地方會省略標籤：完整清單請看 Relations 檢視。',
 	'Depends on {name}': '依賴於 {name}',
 	'Used by {name}': '被 {name} 使用',
+	'{label}: {source} → {target}': '{label}：{source} → {target}',
 	'writes State': '寫入 State',
 	'emits an Event': '發出 Event',
 	'in an invalid cycle': '位於無效循環中',
