@@ -649,8 +649,10 @@ test('the edges are one roving Tab stop: arrows walk them, Tab and Shift+Tab lea
 
 test('with a widget selected, the edges\' Tab stop is one of its own edges, and zh-TW names the edge', async ({ page }) => {
 	await openGraph(page, 'survey')
-	await page.locator('.graph-cluster-identity')
-		.first()
+	// #mode is related to some widgets and not to others, so the edges it is not part of are dimmed (the first widget in the
+	// document, #open-day, has an edge to every other widget and dims none).
+	await page.locator('.graph-cluster-identity--collapsed')
+		.filter({ hasText: '#mode' })
 		.click()
 	await expect(page.locator('.graph-edge--dimmed')
 		.first())
@@ -716,35 +718,33 @@ test('Backspace and Delete remove nothing from the Graph, with an edge or a card
 
 /**
  * A tag beside its edge is really drawn somewhere: a line from the edge and a dot on it. The Trip budget's widgets have many
- * edges each, so at the default Fit some tag of some widget has no room on its own edge.
- *
- * NOT YET OBSERVED: which widget needs a leader was not measured when this was written (the suite could not be run). Once it
- * has been, name that widget here instead of trying every one.
+ * edges each, so at the default Fit some tag has no room on its own edge. Measured with the real ELK at 1440 x 900 (Fit at 0.386,
+ * the Trip budget's font bucket of 32): the focused #settlement, #dev, #ana, #currency and #dinner each have one tag with a
+ * leader, #hotel has none. #dev is the one named here.
  */
-test('some focused Trip budget widget has a tag beside its edge, joined to it by a leader line with a dot', async ({ page }) => {
+test('focusing #dev in the Trip budget puts a tag beside its edge, joined to it by a leader line with a dot', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 })
 	await openGraph(page, 'trip-budget')
-	const identities = page.locator('.graph-cluster-identity')
-	const widgets = await identities.count()
-	let withLeader = 0
-	for (let index = 0; index < widgets; index++) {
-		await identities.nth(index)
-			.click()
-		await expect(page.locator('.graph-node--focused'))
-			.toHaveCount(1)
-		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-		const leaders = page.locator('.graph-tag-layer .graph-tag--leader')
-		const found = await leaders.count()
-		withLeader += found
-		for (let leader = 0; leader < found; leader++) {
-			await expect(leaders.nth(leader)
-				.locator('line.graph-tag-leader'))
-				.toHaveCount(1)
-			await expect(leaders.nth(leader)
-				.locator('circle.graph-tag-leader-dot'))
-				.toHaveCount(1)
-		}
-	}
-	expect(withLeader, 'tags beside their edge, over every widget of the Trip budget')
-		.toBeGreaterThan(0)
+	await page.locator('.graph-cluster-identity--collapsed')
+		.filter({ hasText: '#dev' })
+		.click()
+	await expect(page.locator('.graph-node--focused'))
+		.toContainText('#dev')
+	const leaders = page.locator('.graph-tag-layer .graph-tag--leader')
+	await expect(leaders)
+		.not
+		.toHaveCount(0)
+	const leader = leaders.first()
+	await expect(leader.locator('line.graph-tag-leader'))
+		.toHaveCount(1)
+	await expect(leader.locator('circle.graph-tag-leader-dot'))
+		.toHaveCount(1)
+	// The leader belongs to a tag of one of the edges that is drawn.
+	const edgeId = await leader.getAttribute('data-edge-id')
+	expect(edgeId)
+		.toBeTruthy()
+	const edgeIds = await page.locator('.vue-flow__edge')
+		.evaluateAll(elements => elements.map(element => element.getAttribute('data-id')))
+	expect(edgeIds)
+		.toContain(edgeId)
 })
