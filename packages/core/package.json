@@ -58,8 +58,7 @@
 		"typecheck:test": "tsc --project ./tsconfig.tests.json --noEmit"
 	},
 	"dependencies": {
-		"alien-signals": "catalog:",
-		"json-schema-typed": "catalog:"
+		"alien-signals": "catalog:"
 	},
 	"devDependencies": {
 		"@deviltea/tsconfig": "catalog:",
