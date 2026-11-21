@@ -47,9 +47,9 @@ pnpm --filter widget-lab test:pages
 the last demonstrating a cross-widget `registerDeps` dependency) with three preset source texts: a
 fully valid interactive one, one that is intentionally semantically invalid (to demo diagnostics), and
 one that exercises Blueprint recovery (an unresolved node and a raw-slot placement). These are
-test-only fixtures for this shell, hidden from the Examples menu. Five showcases are listed, all registered in
+test-only fixtures for this shell, hidden from the Examples menu. Six showcases are listed, all registered in
 `src/showcases/registry.ts` (which also registers the hidden `sandbox`): "Interactive Survey" (the default),
-"Trip budget splitter", "Quote rules shared by browser and backend", "Onboarding wizard with an Events log" and "Legacy document repair". Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
+"Trip budget splitter", "Quote rules shared by browser and backend", "Onboarding wizard with an Events log", "Legacy document repair" and "One document, two renderer packs". Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
 missing or unknown id falls back to the default. The parameter follows the active showcase (the Lab rewrites it with
 `history.replaceState`), so reloading restores it.
 
@@ -146,6 +146,25 @@ document) and the notice board (`Board` and `Notice`, the app's format, compiled
 The presets are `repair-default` (four drafts: saved with 1.x, 2.x, 3.x, and 2.x with a `Poll`) and `repair-invalid` (four located config diagnostics in the desk's own
 document). The tutorial rail has a tour for the showcase (en and zh-TW). The showcase follows the showcase host contract (it reads the host's locale and light/dark
 theme and the Inspect anchor) and styles itself with its own `--repair-*` tokens.
+
+### One document, two renderer packs
+
+A small workspace settings page: **one Document and one Runtime drawn by two renderer packs**, hand-written controls and a component library (Nuxt UI), one at a time or
+side by side. The pack is a choice of the host, not widget State, so switching mounts the other pack's renderers over the same Runtime and every value stays. The
+showcase lives in `src/showcases/renderer-packs/`; its Nuxt UI pack runs its **own** Nuxt UI instance (a nested Vue app, its own Tailwind entry, bundled icons, no
+network) inside the Preview frame. What it shows, and where in the Lab:
+
+| Core feature | In the showcase | Where to see it |
+|---|---|---|
+| One System, two renderer registries | both packs call `createWidgetVueRenderer` for the same eight plugin types and mount over the same Runtime; switching never disposes it | Preview: the renderer pack chooser; Runtime: the State, which holds no pack |
+| Named providers, no nearest-ancestor lookup | a field names its `Appearance` (`config.appearance`) and reads `density` through `dep.widget(id)`; a `DangerAction` names its `Notifier`; a name that matches no widget of that type is a located structure diagnostic | Dependencies (Relations); the "Draft with mistakes" example |
+| A Method that invokes another widget's Method | `DangerAction.confirm()` invokes the Notifier's `notify`, closes the question and emits `confirmed`; `notify` writes State and emits `notified` | Events tab (both Events, newest first); Relations marks `confirm` W and E |
+| Refused calls as diagnostics | `confirm()` without `ask()`, `ask()` twice and `dismiss()` of an unknown id write and emit nothing and are the Method's latest diagnostic | Selected widget / Runtime: the Method's row |
+| Overlays contained in the Preview | the confirmation is a native `<dialog>` (hand-written) or a `UModal` teleported into the Nuxt UI pack's own root; the Lab header stays operable while it is open and focus stays inside it | Preview: press "Archive workspace", then open the Examples menu |
+
+The presets are `packs-default` and `packs-invalid` (four located diagnostics). The tutorial rail has a tour for the showcase (en and zh-TW). The showcase follows the
+showcase host contract (it reads the host's locale and light/dark theme and the Inspect anchor, which both packs stamp) and styles itself with its own `--packs-*` tokens
+(hand-written pack) and `--ui-*` values on the Nuxt UI pack's root.
 
 ## Header, editing feedback and Undo
 

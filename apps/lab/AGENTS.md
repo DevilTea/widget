@@ -20,10 +20,10 @@ Private, never-published workspace application with two roles:
    `@deviltea/widget-vue`.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
    `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default, and `Trip budget splitter`
-   (`trip-budget`), `Quote rules shared by browser and backend` (`quote-rules`), `Onboarding wizard with an Events log` (`onboarding`) and `Legacy document repair` (`document-repair`) are listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
+   (`trip-budget`), `Quote rules shared by browser and backend` (`quote-rules`), `Onboarding wizard with an Events log` (`onboarding`), `Legacy document repair` (`document-repair`) and `One document, two renderer packs` (`renderer-packs`) are listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
    test-only fixture (see "Showcase selection" below). The former `Product Prototype` (`crm`) and
    `Vuetify Task Workspace` (`vuetify-tasks`) showcases, and the CRM tour, were removed (tracking issue
-   `DevilTea/widget#230`); the new showcases of that issue are added one PR at a time (`trip-budget`, `quote-rules`, `onboarding` and `document-repair` are the first four).
+   `DevilTea/widget#230`); the new showcases of that issue are added one PR at a time (`trip-budget`, `quote-rules`, `onboarding`, `document-repair` and `renderer-packs` are the first five).
 
 ### Showcase selection (`?showcase=<id>`)
 
@@ -391,6 +391,65 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       builds them from its own walk of the source, and `domain.unit.test.ts` checks that they agree with `blueprint.getSourcePath` of the nodes Core reports); a source that is not JSON
       gets no plan, because Core would refuse every operand with `json-incompatible-value`, and a legacy notice without a `config` is replaced without one (the app does not invent
       content), so it stays invalid.
+  - `renderer-packs/` — One document, two renderer packs (issue #230, showcase 5), a small "workspace settings" page: **one Document and one Runtime drawn by two renderer
+    packs**, hand-written controls and a component library (Nuxt UI), one at a time or side by side. Eight plugin types in one System (`system.ts`): `SettingsPage` (root
+    `settings`, config `title`, slots `providers` and `sections`; Property `appearance` is the `mode` and `density` of the first Appearance in its `providers` slot), the capability
+    widgets `Appearance` (State `density` `comfortable`/`compact`, State `mode` `auto`/`light`/`dark`, where `auto` means the host theme) and `Notifier` (State `items`; Methods
+    `notify(message, tone)`, which writes State and emits `notified`, and `dismiss(id)`; Properties `alert` and `status`), `Section` (config `title`, `description`, slot `fields`) and the
+    fields `TextField` (State `value`, Property `message`: the plugin's validation message in both languages), `Toggle` (State `on`), `Choice` (State `value`, refused unless it is an
+    option) and `DangerAction` (State `confirming`; Methods `ask()`, `cancel()` and `confirm()`, which invokes the Notifier's `notify`, closes the question and emits `confirmed`).
+    Business rules (`textProblem`, `appendNotification`, `announcementsOf`, `resolveScheme`) are in `domain.ts`, never in a renderer. It exists to show, with a real Runtime:
+    - **A renderer pack is a host-level choice.** `renderers/packs-host.ts` (`PacksHost`, created per Runtime by the page in `renderers/page.ts` and provided to both packs) holds the choice
+      (`hand`, `nui` or `both`); it is not widget State (the Runtime panel does not show it) and switching mounts the other pack's renderers over the same Runtime, which is never disposed,
+      so what was typed in one pack is in the other (`e2e/renderer-packs.spec.ts`, `renderers/pack-switching.unit.test.ts`). A new Runtime (Apply) gets a new host and the default pack
+      again. Both packs register a renderer for every plugin type of the same System (`renderers/handwritten/index.ts`, `renderers/nuxt-ui/index.ts`, each exhaustive by construction) and
+      both stamp `useInspectAnchor()` and a `packs-<widget id>` tutorial target on every renderer root.
+    - **Named providers, no provider shadowing** (`DevilTea/widget#3`). Core has no nearest-ancestor lookup, so `Appearance` and `Notifier` are ordinary widgets that others name: a field
+      has `config.appearance` and reads the Appearance's State `density` through `dep.widget(id)` (its Property `density`), and a `DangerAction` has `config.notifier` and `confirm()` invokes
+      `notify` through a declared `dep.widget(id)` Method dependency. A name that matches no widget, or one of the wrong type, is a located `invalid-widget-structure` diagnostic
+      (`plugins/structure.ts`: `unknown-appearance`, `not-an-appearance`, `unknown-notifier`, `not-a-notifier`; skipped for a widget whose config already failed, so one mistake is one
+      diagnostic) and the dependency is only declared for a provider that exists. Relations marks `ask` and `cancel` W and `confirm` W and E.
+    - **The Nuxt UI pack runs its own Nuxt UI instance in the frame.** `renderers/nuxt-ui/NuxtUiPack.ts` owns an element and `nested-app.ts` mounts a nested Vue app into it (`createApp`, once
+      per mount, unmounted on unmount or pack switch, counted by `liveNuxtUiApps()`/`createdNuxtUiApps()` for the tests): it installs `@nuxt/ui/vue-plugin`, wraps the pack in `UApp` with
+      `portal` set to `[data-packs-portal]`, an empty element `NuiSettingsPage.vue` renders inside the pack's root, so every overlay (`UModal`, the `USelect` menu) is teleported inside the
+      pack, never to the frame's `<body>`; it provides the `ShowcaseHost` and the `PacksHost` it injected from its parent, renders the pack with the same Runtime, sets its own
+      `app.config.idPrefix` (two Vue apps in one document would both hand out `v-0`, `v-1`...: the duplicate ids broke every `<label for>`, found by the e2e label check) and disposes the
+      `unhead` instance the plugin creates (its generated colour `<style>` leaves the head with the pack). Icons are the build-time bundle (`icon.clientBundle.scan` already covers `src/**`)
+      and `renderers/nuxt-ui/offline-icons.ts` is that approach's copy (a showcase may not import `src/ui/`): no Iconify fetch. The stylesheet `renderers/nuxt-ui/packs-ui.css` is the
+      showcase's own Tailwind v4 entry: `tailwindcss/theme.css` and `utilities.css` with `source(none)` plus one `@source` of the pack's directory, `@import "@nuxt/ui"`, a preflight
+      scoped to `.packs-ui` (a global preflight would restyle the hand-written pack next to it), and the pack's own `--ui-*` values on `.packs-ui` (light) and `.packs-ui.dark` (dark; a class
+      of the pack's root only, driven by `Appearance.mode`, with `auto` following the host theme, never on the frame `<html>`). Only `nested-app.ts` imports it, so it is part of the lazy chunk
+      of this pack: the default frame (hand-written) loads no Tailwind and no Nuxt UI CSS.
+    - **Lazy chunks.** `renderers/index.ts` is a thin facade (`loadRendererPacksRenderer()`, called by `preview-frame-renderers.ts`) behind which `renderers/page.ts` (the page, the hand-written
+      pack, what the packs share) and, behind that, `NuxtUiPack.ts` are lazy chunks. The facade exists because the pack shares modules with the page: the bundler puts them in the parent
+      chunk and the child imports them from there, so the parent chunk stops being the chunk of its entry module and the shell-isolation guard (which finds a renderer's chunk by its entry in the
+      build manifest) cannot tell it from a shared helper. `shell-isolation.unit.test.ts` now also follows the lazy chunks behind a renderer entry (`lazyClosure`), so the stylesheet of a nested
+      pack is covered too. A page chunk that fails to load is the loader's failure (`discardFrame`, like any renderer); a Nuxt UI chunk that fails leaves a message in its pane and the hand-written pack working (`renderers/pack-load-failure.unit.test.ts`).
+    - **Announcements and accessibility.** The page has one `role="alert"` (the Notifier's newest `danger` notification) and one `role="status"` (the newest of any other tone), kept by the
+      first visible pack only (`PacksHost.isLive`), so side by side there are still one of each; an empty status region stays in the accessibility tree. The confirmation of an action is drawn by
+      the pack whose button asked (`noteAsker`/`ownsDialog`), the other pane says "the confirmation is open in the other pane". The hand-written pack uses a native `<dialog>.showModal()`
+      (Esc and the close event are `cancel()`), the Nuxt UI pack a `UModal`: both are inside the Preview frame document, so the Lab shell stays operable while one is open (a Preview-local modal,
+      `DevilTea/widget#5`; nothing in the Lab is made `inert`) and focus is trapped inside it (`e2e/renderer-packs.spec.ts` measures both). Controls are at least 24px by their own box or their
+      label, with a visible focus ring.
+    - **Isolation:** it follows "Showcase isolation" below and is the second showcase with an `allowed-packages.json` (`@iconify/vue`, `@nuxt/ui`, `tailwindcss`, pinned in
+      `showcase-isolation.unit.test.ts`). It reads `useShowcaseHost().locale` and `.theme` and `useInspectAnchor()`, owns its colours as `--packs-*` custom properties (on the page frame,
+      keyed off the host theme, and on the hand-written pack's root, keyed off the Appearance's resolved scheme) and `--ui-*` on the Nuxt UI pack's root, and registers its renderer loader in
+      `preview-frame-renderers.ts`. The page's own text is `messages.ts` (en and zh-TW); labels, titles, options, confirmation questions and notifications are the document's `{ en, zh-TW }`
+      objects, and a validation message is the plugin's. `e2e/nuxt-ui.spec.ts` asserts the frame the other way round for this showcase (no Tailwind or Nuxt UI CSS until the Nuxt UI pack is
+      chosen, then none of the chrome's `--ui-*` to Lab palette mapping, no `dark` class on `<html>`).
+    - **Tests:** the plugins against real Runtimes (`plugins/settings.unit.test.ts`: provider reads, `confirm` invoking the Notifier, Events, refusals and their diagnostics, derived W/E),
+      `domain.unit.test.ts`, `config.unit.test.ts`, `presets.unit.test.ts`, both packs' renderers with a plain-ref `ShowcaseHost` (`renderers/hand-renderers.unit.test.ts`, and
+      `renderers/nui-renderers.unit.test.ts` with the harness's own `UApp` and plugin: `src/test-support-ui.ts` is the chrome's and a showcase may not import it),
+      `renderers/pack-switching.unit.test.ts` (one Runtime, the nested app created once and unmounted, overlays inside the pack's root, `dark` on the pack's root only, no duplicate ids,
+      side by side) and `e2e/renderer-packs.spec.ts`. The Lab-side zh-TW text is in `i18n/renderer-packs-messages.unit.test.ts` and `tutorial/renderer-packs-script.unit.test.ts`.
+      Presets: `packs-default` and `packs-invalid` (four located diagnostics: a text field with a `maxLength` of 0, a field whose `appearance` names no widget, a field whose `appearance` names
+      a Notifier, and a DangerAction whose `notifier` names no widget; pinned by `presets.unit.test.ts`). The tutorial (`tutorial/renderer-packs-script.ts`) is authored against `packs-default`;
+      its `data-tutorial-target` is `packs-<widget id>` on every renderer root of both packs, plus `packs-chooser`. It is gated on the State the visitor's action leaves (the box's value, the
+      density, the mode, `confirming`, the Notifier's items); the pack choice is the host's, not State, so the step about it is narrated.
+    - Known limits: the pack choice is not kept when Apply replaces the Runtime (a new host); a `Notifier` keeps at most `limit` notifications and only the newest alert and status are drawn
+      (older ones are State, visible in Runtime); both packs draw the confirmation of an action from one State, so which pane draws it is a host rule (the pane that asked); the Nuxt UI pack
+      is not tested for contrast by a tool (there is no axe in the suite), only for target size, labels and focus; the generated colour block of Nuxt UI (`--ui-color-*` on `:root`) does
+      reach the frame document while the pack is mounted, which the isolation spec accepts and asserts has none of the chrome's mapping.
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.
@@ -501,7 +560,18 @@ main app JS (lab-*.js + the chunk it shares with the frame, tutorial-theme-*.js)
                                          Re-measured with `pnpm build` at the document-repair commit: the shared chunk was ~500 KB / ~154 KB gzip without that showcase and
                                          ~522 KB / ~160 KB with it, about +22 KB / +6 KB (the two Systems, their plugins, `planRepair`, the fixtures and presets;
                                          the renderers are lazy); lab-*.js is 1139.16 KB both ways. The ~410 KB above had already drifted before it)
+                                         Re-measured with `pnpm build` at the renderer-packs commit (without the showcase: 1139.16 KB + 522.48 KB raw / 303.6 KB + 159.0 KB gzip):
+                                         lab-*.js 893.24 KB / 228.2 KB gzip, Switch-*.js 251.85 KB / 78.7 KB (the Nuxt UI runtime, which the shell and the lazy Nuxt UI pack
+                                         now share, so the bundler split it out of lab-*.js and the shell loads it with it) and the shared tutorial-theme-*.js 576.01 KB / 173.4 KB.
+                                         Eager total +5.9 KB raw / +3.3 KB gzip for lab-*.js and Switch-*.js together, and +53.5 KB raw / +14.4 KB gzip for the shared chunk (the eight
+                                         plugins, config checkers, schemas, domain, presets, sources thunks, the tour and the zh-TW text); no renderer is in it. Lab CSS is unchanged (342.5 KB / 39.7 KB)
 Nuxt UI Toast (Toast-*.js)               ~30 KB raw / ~9 KB gzip   — loaded on first toast (none is shown yet)
+Renderer packs page (page-*.js + page-*.css)
+                                         ~16.2 KB raw / ~5.8 KB gzip JS + ~9.1 KB / ~1.8 KB CSS — loaded when the showcase's Preview mounts (the page frame and the
+                                         hand-written pack; a 0.7 KB facade `index-*.js` and a 2.1 KB chunk sit next to it)
+Renderer packs Nuxt UI pack (NuxtUiPack-*.js + NuxtUiPack-*.css)
+                                         ~100.1 KB raw / ~23.9 KB gzip JS + ~197.7 KB / ~25.3 KB CSS — loaded the first time the Nuxt UI pack is chosen (its own
+                                         nested Vue app, the eight Nuxt UI renderers, Tailwind utilities and the Nuxt UI component themes); the default frame never loads it
 modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
@@ -521,7 +591,7 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
 ```
 
 - **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
-  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey, Trip budget, Quote rules and Onboarding showcases (their systems, presets and sources, not their renderers) and the hidden Sandbox fixture,
+  every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey, Trip budget, Quote rules, Onboarding, Legacy document repair and renderer-packs showcases (their systems, presets and sources, not their renderers) and the hidden Sandbox fixture,
   `dockview-vue`. This is unavoidable critical-path weight for a workbench app whose
   shell has to exist before any panel can render.
 - **`modern-monaco/core` (package JS + vendored `editor-core.mjs`)**: not in the eager chunk —
@@ -594,7 +664,7 @@ ported its ~375 style calls to Tailwind utilities with no visual change (the Lab
   button a keyboard user had just tabbed onto, and disabled buttons explain themselves only in the tooltip. Without the animation a closed
   tooltip unmounts at once. `e2e/tooltips.spec.ts` pins real Tab/Shift+Tab navigation, once with every tooltip animation stretched to ten
   minutes (deterministic) and once plainly over many rounds. Do not re-add a `data-[state=closed]:animate-*` class to tooltips.
-- **Scope: Lab shell only.** `main.ts` imports `src/styles/lab-ui.css` (Tailwind theme + utilities, Nuxt UI),
+- **Scope: Lab shell only, plus a showcase's own instance.** `main.ts` imports `src/styles/lab-ui.css` (Tailwind theme + utilities, Nuxt UI),
   installs Nuxt UI's Vue plugin and wraps `App` in `UApp` (`toaster: null` until a surface needs toasts;
   `UApp` renders no element). `preview-frame-main.ts` / `preview-frame.html` never import any of it, so the showcase
   renderers are untouched. The renderers (`showcases/survey/renderers`) are styled with a `<style scoped>` block each, in
@@ -602,7 +672,7 @@ ported its ~375 style calls to Tailwind utilities with no visual change (the Lab
   `lab-ui.css` lists its `@source`s explicitly). `src/styles/styling-boundary.unit.test.ts` walks the frame entry's imports
   and fails if any reaches the chrome's pipeline (`lab-ui.css`, `nuxt-ui.ts`, `src/ui/`, `src/components/`, Dockview, Vue Flow, Monaco) or
   `@nuxt/ui`/`tailwindcss` from outside a showcase directory; `e2e/nuxt-ui.spec.ts` pins, on the same-origin
-  build, that the frame document has no Tailwind/Nuxt UI CSS, no `.dark` class and no `--ui-*` tokens. The frame's CSS does not depend on its origin
+  build, that the frame document has no Tailwind/Nuxt UI CSS, no `.dark` class and no `--ui-*` tokens. The one exception is a showcase that brings **its own** Nuxt UI instance: `renderer-packs`' Nuxt UI pack mounts a nested Vue app with `@nuxt/ui/vue-plugin` and its own Tailwind entry inside the frame (see its entry above and "Extra packages"), loaded lazily and styled with its own `--ui-*` values on its own root; nothing of the chrome's pipeline reaches it (`styling-boundary.unit.test.ts`), and for that showcase `e2e/nuxt-ui.spec.ts` asserts the frame the other way round (no Tailwind or Nuxt UI CSS until the pack is chosen, then none of the chrome's `--ui-*` to Lab palette mapping and no `dark` class on `<html>`). The frame's CSS does not depend on its origin
   (the entry never imports it), but `playwright.preview-origin.config.ts` only runs `preview-origin.spec.ts`
   (the frame boots and connects cross-origin); it does not repeat these assertions.
 - **Plugin set-up** (`nuxt-ui.ts`, shared by `vite.config.ts`, `vitest.config.ts` and the repository root
@@ -726,13 +796,13 @@ showcase directory and may reach nothing), `src/sandbox/` and `src/showcase-host
 inside that directory only (never in the host contract), and every path it refers to must still stay inside the directory. The frame
 walk in `styling-boundary.unit.test.ts` forbids the chrome's own pipeline from the frame, not Tailwind/Nuxt UI as such: `@nuxt/ui` and
 `tailwindcss` are only allowed from inside a showcase directory, and a stylesheet carrying Tailwind syntax may only be referenced from
-inside the showcase directory it lives in. One showcase declares extra packages today: `quote-rules` lists `valibot` and `@valibot/to-json-schema` (a schema library through Standard Schema), and `showcase-isolation.unit.test.ts` pins that list, so another one is a reviewed change.
+inside the showcase directory it lives in. Two showcases declare extra packages today: `quote-rules` lists `valibot` and `@valibot/to-json-schema` (a schema library through Standard Schema) and `renderer-packs` lists `@nuxt/ui`, `tailwindcss` and `@iconify/vue` (its own Nuxt UI instance, its Tailwind entry and the Iconify runtime it switches off the network with), and `showcase-isolation.unit.test.ts` pins both lists, so another one is a reviewed change.
 
 **Both directions.** Showcase renderer code and CSS must also stay out of the shell document. `showcases/registry.ts` holds shell-safe
 metadata only (system, presets, sources); the renderer of each showcase is loaded lazily, by id, in the frame only
 (`src/preview-frame-renderers.ts`, imported by `preview-frame-main.ts`). `src/styles/shell-isolation.unit.test.ts` checks that `main.ts`'s
 import graph holds no showcase renderer, and, on the built `dist/` (through Vite's `.vite/manifest.json`, enabled in `vite.config.ts` and not deployed), that
-every loader of `preview-frame-renderers.ts` is still its own lazy chunk (a renderer something static also imports would be merged into that
+every loader of `preview-frame-renderers.ts` is still its own lazy chunk (a renderer with lazy chunks of its own behind it, such as the Nuxt UI pack, keeps a thin facade as its entry, see `renderer-packs/renderers/index.ts`, and the check follows those chunks and their stylesheets too) (a renderer something static also imports would be merged into that
 importer's chunk), and that `index.html` links no stylesheet of those chunks and statically loads none of them. It derives the renderers from
 the manifest, so any showcase is covered. It needs `pnpm build`, which `pnpm check` runs first.
 
@@ -1235,7 +1305,7 @@ Dockview groups or the Preview frame (the survey's own Language select). With th
 Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used by, the focus, Depends on) and scrolls vertically below 680px of **pane** width
 (a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
 
-**One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`, `onboarding`, `document-repair`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts`, `i18n/quote-rules-messages.ts`, `i18n/onboarding-messages.ts` and `i18n/document-repair-messages.ts` are the models).
+**One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`, `onboarding`, `document-repair`, `renderer-packs`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts`, `i18n/quote-rules-messages.ts`, `i18n/onboarding-messages.ts` and `i18n/document-repair-messages.ts` are the models).
 
 **Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview
@@ -1400,7 +1470,7 @@ happy-dom unit tests.
 
 Browser specs reach the header's menus only through the helpers in `e2e/fixtures.ts` (`selectShowcase`, `loadPreset`,
 `setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, `openStatusDetails`,
-`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey, trip, quote, onboarding and repair examples), and the `expectShowcase` /
+`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey, trip, quote, onboarding, repair and renderer packs examples), and the `expectShowcase` /
 `expectDocumentStatus` / `expectPreviewStatus` assertions), never with ad-hoc menu clicks, so a future header change touches one
 file. Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
 Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a
