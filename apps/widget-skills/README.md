@@ -32,7 +32,9 @@ For the module's type, add `@deviltea/widget-skills/virtual-widget-docs` to `com
 Generating **imports the System's module and runs its top-level code** to cross-check the types against
 `system.catalog` and `inspectPlugin` (`runtime: false` turns that off). The result is cached in
 `node_modules/.cache/widget-docs/`; a hit builds no TypeScript program. The key covers every source file the
-program read outside `node_modules`, the tsconfig files, the lockfile and the generator itself. Delete the directory
+program read outside `node_modules` (with the JavaScript next to declaration files and the nearest `package.json`), the
+tsconfig files, the lockfile, the installed state of `node_modules` and the generator itself; a program with an
+unresolved relative import is not cached. Delete the directory
 to clear the cache; `WIDGET_DOCS_CACHE=off` bypasses it, and a cache that cannot be written only logs a warning. See `AGENTS.md` for the details.
 
 ## Command line

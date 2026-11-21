@@ -10,9 +10,11 @@
  * everything it imports), to cross-check the names in the types against `system.catalog` and `inspectPlugin`. Only
  * name modules you would run. A disagreement fails the load with an error that lists it.
  *
- * In dev, the input files of each System are added to Vite's watcher. A change to one of them invalidates only the
- * virtual modules of the Systems that read it, and Vite updates their importers (HMR, or a reload when an importer
- * does not accept the update). A change to any other file regenerates nothing.
+ * In dev, the input files of each System, and the locations of its unresolved imports, are added to Vite's watcher.
+ * A change to one of them (an edit, a created or deleted file) invalidates only the virtual modules of the Systems that
+ * read it, also without HMR (`watchChange`). On an edit Vite also updates their importers (HMR, or a reload when an
+ * importer does not accept the update); after a created or deleted file the next load regenerates. A change to any
+ * other file regenerates nothing.
  */
 
 import type { HmrContext, Logger, ModuleNode, Plugin, ViteDevServer } from 'vite'
@@ -61,8 +63,8 @@ export function widgetDocs(options: WidgetDocsOptions): Plugin {
 	let cache: DocsCache | undefined
 	let serving = false
 	/** Vite's dev watcher; the input files of a System are added to it when the System is loaded. */
-	let watcher: ViteDevServer['watcher'] | undefined
-	/** System name to the input files of its last generation (absolute, as TypeScript and Vite spell them). */
+	let server: ViteDevServer | undefined
+	/** System name to the input files and missing import locations of its last generation (absolute, as TypeScript and Vite spell them). */
 	const inputs = new Map<string, ReadonlySet<string>>()
 	const pending = new Map<string, Promise<DocsResult>>()
 
@@ -88,8 +90,8 @@ export function widgetDocs(options: WidgetDocsOptions): Plugin {
 			sourceTsconfig: system.sourceTsconfig === undefined ? undefined : resolve(root, system.sourceTsconfig),
 		})
 			.then((result) => {
-				inputs.set(name, new Set(result.files))
-				watcher?.add(result.files)
+				inputs.set(name, new Set([...result.files, ...result.missing]))
+				server?.watcher.add([...result.files, ...result.missing])
 				return result
 			})
 			.finally(() => pending.delete(name))
@@ -119,18 +121,34 @@ export function widgetDocs(options: WidgetDocsOptions): Plugin {
 				return null
 			const name = id.slice(RESOLVED_PREFIX.length)
 			const result = await load(name)
-			// In dev `load()` adds the files to Vite's watcher and `handleHotUpdate` invalidates; in a watched build
-			// Rollup re-runs on these files. A hit reports no documentation problems (none were computed).
+			// In dev `load()` adds the files to Vite's watcher and `watchChange`/`handleHotUpdate` invalidate; in a watched
+			// build Rollup re-runs on these files. A hit reports the problems stored with the docs.
 			if (!serving) {
-				for (const file of result.files)
+				for (const file of [...result.files, ...result.missing])
 					this.addWatchFile(file)
 			}
-			if (result.check !== null && !result.check.ok)
+			if (!result.check.ok)
 				this.warn(`widget-docs: "${name}" has documentation problems:\n${formatCheck(result.check)}`)
 			return `export default JSON.parse(${JSON.stringify(JSON.stringify(result.docs))})\n`
 		},
-		configureServer(server) {
-			watcher = server.watcher
+		configureServer(devServer) {
+			server = devServer
+		},
+		// Runs for every watched change, with or without HMR, and for created and deleted files (`handleHotUpdate`
+		// only sees edits, and only with HMR on).
+		watchChange(id) {
+			if (server === undefined)
+				return
+			const file = resolve(id)
+			for (const [name, files] of inputs) {
+				if (!files.has(file))
+					continue
+				for (const environment of Object.values(server.environments)) {
+					const module = environment.moduleGraph.getModuleById(`${RESOLVED_PREFIX}${name}`)
+					if (module !== undefined)
+						environment.moduleGraph.invalidateModule(module)
+				}
+			}
 		},
 		handleHotUpdate(context: HmrContext) {
 			const file = resolve(context.file)
