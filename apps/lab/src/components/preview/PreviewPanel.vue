@@ -204,7 +204,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 			storageKey="widget-lab:panel-desc:preview"
 			text="The Vue presentation of the running widgets — interact here"
 		/>
-		<div class="flex items-center gap-[8px] p-[4px_8px] border-b border-b-lab-border flex-[0_0_auto]">
+		<div class="flex items-center gap-[8px] p-[4px_8px] border-b border-b-lab-border flex-none">
 			<button
 				type="button"
 				:aria-label="i18n.t('Inspect')"
@@ -227,7 +227,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 				type="button"
 				data-testid="preview-view-implementation"
 				:disabled="!curatedEntryAvailable"
-				class="ml-[auto] p-[3px_10px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+				class="ml-auto p-[3px_10px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 				@click="implementationExplorer.open()"
 			>
 				{{ i18n.t('View implementation') }}

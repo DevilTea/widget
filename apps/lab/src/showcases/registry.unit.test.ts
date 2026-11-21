@@ -1,5 +1,19 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { defaultShowcase, getShowcase, listedShowcases, resolveInitialShowcase, showcases, urlWithShowcase } from './registry'
+
+describe('the frame isolation e2e covers every registered showcase', () => {
+	it('lists exactly the registered ids, in order', () => {
+		const spec = readFileSync(fileURLToPath(new URL('../../e2e/nuxt-ui.spec.ts', import.meta.url)), 'utf8')
+		const list = /for \(const showcase of \[([^\]]+)\] as const\)/.exec(spec)
+		expect(list, 'the Preview frame isolation loop in e2e/nuxt-ui.spec.ts')
+			.not
+			.toBeNull()
+		expect([...list![1]!.matchAll(/'([^']+)'/g)].map(match => match[1]))
+			.toEqual(showcases.map(showcase => showcase.id))
+	})
+})
 
 describe('showcase registry listing and ?showcase= selection', () => {
 	it('lists Interactive Survey (the default), then the Trip budget splitter, the Quote rules showcase and the Onboarding wizard; sandbox is a registered hidden fixture', () => {

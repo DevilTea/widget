@@ -490,6 +490,35 @@ test.describe('a Preview that cannot load (U22)', () => {
 			.toBeGreaterThan(1)
 	})
 
+	test('a mount that fails after the running Preview was taken down says nothing runs (the frame\'s runtimeTornDown)', async ({ page }) => {
+		await page.goto('/?lab-test&showcase=trip-budget')
+		await expect(previewFrame(page)
+			.locator('[data-widget-id]')
+			.first())
+			.toBeVisible({ timeout: 15_000 })
+		await expect(page.getByTestId('preview-status'))
+			.toHaveAttribute('data-state', 'current')
+
+		// The frame loses its mount point: the next valid change is compiled and its renderer loaded, the running Preview is
+		// taken down, and only then does the mount fail. The frame says so, so the Lab must not claim the old Preview still runs.
+		await previewFrame(page)
+			.locator('#app')
+			.evaluate(element => element.remove())
+		await loadPreset(page, 'trip-unsupported-currency')
+
+		const error = page.getByTestId('preview-error')
+		await expect(error)
+			.toBeVisible()
+		await expect(error)
+			.toHaveAttribute('data-frame-state', 'lost')
+		await expect(error)
+			.toContainText('The preview could not be loaded')
+		await expect(page.getByTestId('preview-error-detail'))
+			.toContainText('Preview frame root disappeared during mount.')
+		await expect(page.getByTestId('preview-status'))
+			.toHaveAttribute('data-state', 'failed')
+	})
+
 	test('the failure state is announced in Taiwan Chinese too', async ({ page }) => {
 		await page.route('**/preview-frame.html**', route => route.abort('blockedbyclient'))
 		await page.goto('/?lab-test&showcase=survey&lang=zh-TW&preview-timeout-ms=1500')

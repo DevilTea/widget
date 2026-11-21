@@ -84,6 +84,20 @@ describe('relationsView Method effect markers', () => {
 			.toContain('W writes')
 	})
 
+	it('selected member: a Method that neither writes nor emits is said to be read-only; any effect, or an unknown one, is not', () => {
+		const readOnly = (flags: { transitivelyWrites?: boolean, transitivelyEmits?: boolean }): boolean => mountModel(memberModel(method(flags)))
+			.find('[data-testid="relations-read-only"]')
+			.exists()
+		expect(readOnly({ transitivelyWrites: false, transitivelyEmits: false }))
+			.toBe(true)
+		expect(readOnly({ transitivelyWrites: true, transitivelyEmits: false }))
+			.toBe(false)
+		expect(readOnly({ transitivelyWrites: false, transitivelyEmits: true }))
+			.toBe(false)
+		expect(readOnly({ transitivelyWrites: false }))
+			.toBe(false)
+	})
+
 	it('selected member: an absent transitivelyEmits (unknown) shows no emits marker', () => {
 		expect(mountModel(memberModel(method({ transitivelyWrites: true })))
 			.text())

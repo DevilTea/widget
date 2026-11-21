@@ -58,6 +58,11 @@ export type EventLogListening
 		| { readonly state: 'loading' }
 	/** The Preview frame was connected and is not any more (closed, did not answer), so nothing runs to listen to. */
 		| { readonly state: 'lost' }
+	/**
+	 * The frame refused to switch to the current showcase and still runs the previous one: its Events belong to another
+	 * application and are not recorded (nothing is subscribed on it).
+	 */
+		| { readonly state: 'previous-showcase' }
 	/** The Preview Runtime's widgets declare no Events at all. */
 		| { readonly state: 'no-events' }
 		| { readonly state: 'listening', readonly widgets: number, readonly events: number, readonly failed: number }
@@ -139,7 +144,15 @@ function sharedSource(store: LabStore): SharedSource {
 	const scope = effectScope(true)
 	const source = scope.run((): SharedSource => {
 		const connection = computed(() => store.previewHost.connection.value)
-		const emitters = computed(() => emittersOf(connection.value?.blueprint.nodes ?? []))
+		// The connection that was current when the showcase last changed: it belongs to the previous showcase. A ref, so the
+		// listening state and the subscriptions follow it when a refused switch leaves that connection current.
+		const staleConnection = shallowRef<PreviewFrameConnection | null>(null)
+		// The Preview error shown when the showcase last changed: only a different one says the frame refused the switch (the
+		// coordinator clears an error only when a mount succeeds, so an earlier refusal may still be shown while it loads).
+		// A refusal with the very same message as the earlier one cannot be told apart and reads as loading.
+		let errorAtSwitch: string | null = null
+		// What the log can show: nothing of the previous showcase, whose connection is still current until the new one mounts.
+		const emitters = computed(() => connection.value === null || connection.value === staleConnection.value ? [] : emittersOf(connection.value.blueprint.nodes))
 		const buffer = shallowRef<EventLogBuffer>(EMPTY_EVENT_LOG)
 		const paused = shallowRef(false)
 		const skippedWhilePaused = shallowRef(0)
@@ -152,9 +165,6 @@ function sharedSource(store: LabStore): SharedSource {
 		const viewers = shallowRef(0)
 		const active = computed(() => consumers.value > 0)
 		let sequence = 0
-		// The connection that was current when the showcase last changed: it belongs to the previous showcase.
-		let staleConnection: PreviewFrameConnection | null = null
-
 		const listening = computed<EventLogListening>(() => {
 			if (!active.value)
 				return { state: 'off' }
@@ -162,6 +172,12 @@ function sharedSource(store: LabStore): SharedSource {
 				if (store.preview.value === null)
 					return { state: 'no-preview' }
 				return store.previewHost.error.value === null ? { state: 'loading' } : { state: 'lost' }
+			}
+			// Until the new showcase mounts, the previous one's connection is still current: loading, or, once the frame
+			// refused the switch, the previous showcase.
+			if (connection.value === staleConnection.value) {
+				const error = store.previewHost.error.value
+				return error === null || error === errorAtSwitch ? { state: 'loading' } : { state: 'previous-showcase' }
 			}
 			return emitters.value.length === 0 ? { state: 'no-events' } : { state: 'listening', ...subscribed.value }
 		})
@@ -178,7 +194,8 @@ function sharedSource(store: LabStore): SharedSource {
 		// its connection stays current until the new one has mounted, so what it still sends is not recorded either.
 		watch(() => store.showcaseId.value, () => {
 			clear()
-			staleConnection = connection.value
+			errorAtSwitch = store.previewHost.error.value
+			staleConnection.value = connection.value
 		}, { flush: 'sync' })
 
 		// Looking at the log is seeing what it holds.
@@ -189,11 +206,11 @@ function sharedSource(store: LabStore): SharedSource {
 
 		// A list of sources (not one getter returning a fresh array): only a real change of one of them re-subscribes.
 		watch(
-			[connection, active] as const,
-			([current, isActive], _previous, onCleanup) => {
+			[connection, active, staleConnection] as const,
+			([current, isActive, stale], _previous, onCleanup) => {
 				subscribed.value = { widgets: 0, events: 0, failed: 0 }
 				watchingMethods.value = { methods: 0, failed: 0 }
-				if (!isActive || current === null)
+				if (!isActive || current === null || current === stale)
 					return
 				const widgets = emittersOf(current.blueprint.nodes)
 				const methodWidgets = methodWidgetsOf(current.blueprint.nodes)
@@ -216,7 +233,7 @@ function sharedSource(store: LabStore): SharedSource {
 				}
 
 				const stopListening = client.on('runtime.eventOccurred', (occurrence) => {
-					if (!live || current === staleConnection)
+					if (!live || current === staleConnection.value)
 						return
 					const target = targets.get(occurrence.subscriptionId)
 					if (target === undefined)
@@ -244,7 +261,7 @@ function sharedSource(store: LabStore): SharedSource {
 
 				// A Method's snapshot changed: only one that now holds diagnostics is a failure to record.
 				const stopListeningToMethods = client.on('runtime.memberChanged', (change) => {
-					if (!live || current === staleConnection || change.member.type !== 'method' || change.member.diagnostics.length === 0)
+					if (!live || current === staleConnection.value || change.member.type !== 'method' || change.member.diagnostics.length === 0)
 						return
 					const target = methodTargets.get(change.subscriptionId)
 					if (target === undefined)

@@ -16,6 +16,12 @@ const i18n = useLabI18n()
 const snapshot = computed(() => tutorial.snapshot.value)
 const step = computed(() => snapshot.value.step)
 const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?.finishLabel ?? 'Finish') : 'Next'))
+
+// Each footer button carries its own classes. A descendant rule on the footer (`[&_button]:bg-…`) is more specific than a
+// button's own utility, so the primary button never got its accent.
+const FOOTER_BUTTON = 'p-[6px_10px] text-[12px] rounded-lab border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+const SECONDARY_BUTTON = `${FOOTER_BUTTON} border-lab-border bg-lab-surface-alt text-lab-text`
+const PRIMARY_BUTTON = `${FOOTER_BUTTON} ml-auto font-semibold border-lab-accent bg-lab-accent text-lab-accent-contrast`
 </script>
 
 <template>
@@ -25,7 +31,7 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 		class="flex-[0_0_320px] w-[320px] min-h-0 flex flex-col border-l border-l-lab-border bg-lab-surface"
 	>
 		<header
-			class="flex items-center gap-[8px] p-[10px_12px] border-b border-b-lab-border flex-[0_0_auto]"
+			class="flex items-center gap-[8px] p-[10px_12px] border-b border-b-lab-border flex-none"
 		>
 			<strong class="text-[12px]">{{ i18n.t('Tutorial') }}</strong>
 			<span class="text-[11px] text-lab-text-muted">
@@ -34,7 +40,7 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 			<button
 				type="button"
 				:aria-label="i18n.t('Close tutorial')"
-				class="ml-[auto] p-[0_4px] text-[14px] leading-[1] [border:none] bg-transparent text-lab-text-muted cursor-pointer"
+				class="ml-auto inline-flex size-6 items-center justify-center rounded-lab border-0 bg-transparent text-[14px] leading-none text-lab-text-muted cursor-pointer hover:bg-lab-surface-alt hover:text-lab-text"
 				@click="tutorial.pause()"
 			>
 				×
@@ -84,18 +90,19 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 		</div>
 
 		<footer
-			class="flex gap-[8px] p-[10px_12px] border-t border-t-lab-border flex-[0_0_auto] [&_button]:p-[6px_10px] [&_button]:text-[12px] [&_button]:rounded-lab [&_button]:border [&_button]:border-lab-border [&_button]:bg-lab-surface-alt [&_button]:text-lab-text [&_button]:cursor-pointer"
+			class="flex gap-[8px] p-[10px_12px] border-t border-t-lab-border flex-none"
 		>
 			<button
 				type="button"
 				:disabled="snapshot.isFirstStep"
-				class="disabled:opacity-50 disabled:cursor-not-allowed"
+				:class="SECONDARY_BUTTON"
 				@click="tutorial.back()"
 			>
 				{{ i18n.t('Back') }}
 			</button>
 			<button
 				type="button"
+				:class="SECONDARY_BUTTON"
 				@click="tutorial.skip()"
 			>
 				{{ i18n.t('Skip tour') }}
@@ -103,7 +110,7 @@ const nextLabel = computed(() => i18n.t(snapshot.value.isLastStep ? (step.value?
 			<button
 				type="button"
 				:disabled="!snapshot.canAdvance"
-				class="ml-[auto] font-semibold border-lab-accent bg-lab-accent text-lab-accent-contrast disabled:opacity-50 disabled:cursor-not-allowed"
+				:class="PRIMARY_BUTTON"
 				@click="tutorial.next()"
 			>
 				{{ nextLabel }}

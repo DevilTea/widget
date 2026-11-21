@@ -75,7 +75,7 @@ export const tripBudgetTourScript: TutorialScript = {
 			stages: [{
 				prompt: 'Try it: change the Museum tickets currency from USD to GBP.',
 				isComplete: reader => reader.readState('museum', 'currency') === 'GBP',
-				reveal: 'The converted amount changed. The museum widget knows no rates: its amountBase Property calls the Currency widget\'s Method convert(amount, currency). Core only lets a Property depend on a Method that is read-only: it writes no State and emits no Event. In Relations, select convert: it has neither a W (writes State) nor an E (emits an Event) badge.',
+				reveal: 'The converted amount changed. The museum widget knows no rates: its amountBase Property calls the Currency widget\'s Method convert(amount, currency). Core only lets a Property depend on a Method that is read-only: it writes no State and emits no Event. In Relations, select convert: it is marked read-only, with neither a W (writes State) nor an E (emits an Event) badge.',
 			}],
 			links: [{
 				id: 'see-method',
@@ -139,7 +139,7 @@ export const tripBudgetTourScript: TutorialScript = {
 				{
 					prompt: 'Try it: press "Reset this expense" on Hotel.',
 					isComplete: reader => hotelAmount(reader) === HOTEL_START,
-					reveal: 'Hotel went back to 420, the value the document authored, and the settlement followed. "Reset this expense" asks the host for widget.resetState(): every State member of that widget returns to its initial value. "Start over" calls runtime.resetState() for all widgets, and the host then writes the interface language back, so the page does not switch language. It resets State only: Property and Method diagnostics are not cleared.',
+					reveal: 'Hotel went back to 420, the value the document authored, and the settlement followed. "Reset this expense" asks the host for widget.resetState(): every State member of that widget returns to its initial value. "Start over" calls runtime.resetState() for all widgets, and the root renderer then writes the interface language back, so the page does not switch language. It resets State only: Property and Method diagnostics are not cleared.',
 				},
 			],
 		},

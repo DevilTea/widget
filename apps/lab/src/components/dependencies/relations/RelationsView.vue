@@ -49,7 +49,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 				class="relations-column relations-column--incoming flex-[1_1_33%] min-w-[220px] flex flex-col border-r border-r-lab-border min-h-0"
 			>
 				<div
-					class="relations-column-header p-[8px_12px] border-b border-b-lab-border bg-lab-surface-alt flex items-center justify-between text-[11px] font-semibold flex-[0_0_auto]"
+					class="relations-column-header p-[8px_12px] border-b border-b-lab-border bg-lab-surface-alt flex items-center justify-between text-[11px] font-semibold flex-none"
 				>
 					<div class="flex items-center gap-[6px]">
 						<span class="text-lab-text-muted">←</span>
@@ -88,7 +88,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 				class="relations-column relations-column--center flex-[1_1_34%] min-w-[240px] flex flex-col border-r border-r-lab-border [background:color-mix(in_srgb,var(--lab-color-surface-alt)_40%,var(--lab-color-surface))] min-h-0"
 			>
 				<div
-					class="relations-column-header p-[8px_12px] border-b border-b-lab-border bg-lab-surface-alt flex items-center justify-between text-[11px] font-semibold flex-[0_0_auto]"
+					class="relations-column-header p-[8px_12px] border-b border-b-lab-border bg-lab-surface-alt flex items-center justify-between text-[11px] font-semibold flex-none"
 				>
 					<span>
 						{{ model.mode === 'member' ? i18n.t('Focused member') : i18n.t('Focused widget') }}
@@ -157,6 +157,14 @@ function memberKindShort(kind: GraphVertexKind): string {
 									E {{ i18n.t('emits') }}
 								</span>
 								<span
+									v-if="model.selectedMember.kind === 'method' && model.selectedMember.transitivelyWrites === false && model.selectedMember.transitivelyEmits === false"
+									data-testid="relations-read-only"
+									class="text-[11px] font-bold p-[1px_5px] rounded-[2px] border border-lab-border text-lab-text-muted"
+									:title="i18n.t('Writes no State and emits no Event, itself or through the Methods it invokes, so a Property may depend on it')"
+								>
+									{{ i18n.t('read-only') }}
+								</span>
+								<span
 									v-if="model.selectedMember.invalidCycle"
 									class="text-[11px] font-bold p-[1px_5px] rounded-[2px] [background:color-mix(in_srgb,var(--lab-color-danger)_20%,transparent)] text-lab-danger [border:1px_solid_color-mix(in_srgb,var(--lab-color-danger)_40%,transparent)]"
 									:title="i18n.t('invalid evaluation cycle')"
@@ -207,7 +215,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 								>
 									M {{ model.selectedWidget.memberCounts.method }}
 								</span>
-								<span class="text-lab-text-muted ml-[auto]">
+								<span class="text-lab-text-muted ml-auto">
 									{{ model.selectedWidget.memberCounts.total }} {{ i18n.t('members') }}
 								</span>
 							</div>
@@ -339,7 +347,7 @@ function memberKindShort(kind: GraphVertexKind): string {
 				class="relations-column relations-column--outgoing flex-[1_1_33%] min-w-[220px] flex flex-col min-h-0"
 			>
 				<div
-					class="relations-column-header p-[8px_12px] border-b border-b-lab-border bg-lab-surface-alt flex items-center justify-between text-[11px] font-semibold flex-[0_0_auto]"
+					class="relations-column-header p-[8px_12px] border-b border-b-lab-border bg-lab-surface-alt flex items-center justify-between text-[11px] font-semibold flex-none"
 				>
 					<div class="flex items-center gap-[6px]">
 						<span>{{ i18n.t('Depends on') }}</span>

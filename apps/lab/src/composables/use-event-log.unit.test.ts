@@ -323,6 +323,72 @@ describe('useEventLog()', () => {
 		consumer.unmount()
 	})
 
+	it('says the previous showcase still runs when the frame refused the switch, and subscribes to nothing on it', async () => {
+		const first = await createPreview(1)
+		const second = await createPreview(2)
+		const { store, showcaseId, connection, error } = fakeStore(first)
+		const consumer = mountConsumer(store, () => useEventLog(ref(true)))
+		await settle()
+		expect(consumer.value.listening.value)
+			.toEqual({ state: 'listening', widgets: 1, events: 2, failed: 0 })
+
+		// Switching: the previous showcase's connection is still current until the new one mounts. Its widgets are not
+		// offered as filters any more: nothing of theirs is recorded.
+		showcaseId.value = 'sandbox'
+		await settle()
+		expect(consumer.value.listening.value)
+			.toEqual({ state: 'loading' })
+		expect(consumer.value.emitters.value)
+			.toEqual([])
+		expect(consumer.value.watchingMethods.value)
+			.toEqual({ methods: 0, failed: 0 })
+		expect(first.requests.filter(request => request === 'runtime.unsubscribeEvent'))
+			.toHaveLength(2)
+
+		// The frame refused the switch and still runs the previous showcase: not "Listening".
+		error.value = 'The preview frame refused the change.'
+		await settle()
+		expect(consumer.value.listening.value)
+			.toEqual({ state: 'previous-showcase' })
+		first.fire(1)
+		expect(consumer.value.entries.value)
+			.toEqual([])
+
+		// Try again mounts the new showcase.
+		error.value = null
+		connection.value = second.connection
+		await settle()
+		expect(consumer.value.listening.value)
+			.toEqual({ state: 'listening', widgets: 1, events: 2, failed: 0 })
+		second.fire(2)
+		expect(consumer.value.entries.value.map(entry => entry.runtimeId))
+			.toEqual(['runtime-r2'])
+		consumer.unmount()
+	})
+
+	it('keeps saying loading after a switch when the only error is one shown before the switch', async () => {
+		const first = await createPreview(1)
+		const { store, showcaseId, error } = fakeStore(first)
+		const consumer = mountConsumer(store, () => useEventLog(ref(true)))
+		await settle()
+		// An Apply the frame refused: the old Preview still runs, and the error stays until a mount succeeds.
+		error.value = 'The preview frame refused the change.'
+		await settle()
+		expect(consumer.value.listening.value)
+			.toEqual({ state: 'listening', widgets: 1, events: 2, failed: 0 })
+
+		showcaseId.value = 'sandbox'
+		await settle()
+		expect(consumer.value.listening.value)
+			.toEqual({ state: 'loading' })
+		// The switch itself is refused: a new error.
+		error.value = 'Unknown Preview showcase: sandbox.'
+		await settle()
+		expect(consumer.value.listening.value)
+			.toEqual({ state: 'previous-showcase' })
+		consumer.unmount()
+	})
+
 	it('swallows the refusal of releasing subscriptions on a client that is already closed', async () => {
 		const first = await createPreview(1)
 		const second = await createPreview(2)

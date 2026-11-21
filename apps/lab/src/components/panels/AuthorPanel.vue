@@ -20,7 +20,7 @@ const view = store.authorView
 			text="Author workspace for the current Document: browse Core catalog metadata, edit Structure, or use expert JSON"
 		/>
 		<div
-			class="flex border-b border-b-lab-border flex-[0_0_auto]"
+			class="flex border-b border-b-lab-border flex-none"
 			role="tablist"
 			:aria-label="i18n.t('Author views')"
 		>

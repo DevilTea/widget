@@ -32,9 +32,9 @@ async function openReady(page: Page, query = ''): Promise<void> {
 		.toBeVisible()
 }
 
-/** The Events tab: its accessible name gains " , N new" while entries arrived since it was last visible. */
+/** The Events tab: its accessible name gains ", N new" while entries arrived since it was last visible. */
 async function openEvents(page: Page): Promise<Locator> {
-	await page.getByRole('tab', { name: /^Events( , \d+ new)?$/ })
+	await page.getByRole('tab', { name: /^Events(, \d+ new)?$/ })
 		.click()
 	await expect(page.getByTestId('events-listening'))
 		.toContainText('declared Events on 2 widgets.')

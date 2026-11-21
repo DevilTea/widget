@@ -278,7 +278,7 @@ describe('the money settings', () => {
 			.toBe(false)
 		expect(wrapper.find('[data-testid="trip-rounded-away"]')
 			.text())
-			.toBe('Every payment is smaller than the rounding step, so none is due.')
+			.toBe('Every payment is smaller than half the rounding step, so none is due.')
 		expect(wrapper.find('[data-testid="trip-rounding-gap"]')
 			.text())
 			.toBe('Rounded transfers differ from the exact balances by €0.03 in total.')

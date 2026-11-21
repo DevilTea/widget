@@ -152,7 +152,7 @@ const statusLabel = computed(() => {
 
 		<!-- Toolbar -->
 		<div
-			class="dependencies-toolbar flex items-center gap-[10px] p-[4px_8px] border-b border-b-lab-border text-[11px] text-lab-text-muted flex-[0_0_auto] flex-wrap"
+			class="dependencies-toolbar flex items-center gap-[10px] p-[4px_8px] border-b border-b-lab-border text-[11px] text-lab-text-muted flex-none flex-wrap"
 		>
 			<!-- View Switcher (Relations | Graph) -->
 			<div
@@ -237,7 +237,7 @@ const statusLabel = computed(() => {
 					:disabled="flow === null"
 					:aria-label="i18n.t(direction === 'in' ? 'Zoom in' : 'Zoom out')"
 					:title="i18n.t(direction === 'in' ? 'Zoom in' : 'Zoom out')"
-					class="min-w-[24px] min-h-[24px] text-[14px] leading-[1] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+					class="min-w-[24px] min-h-[24px] text-[14px] leading-none rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 					@click="onZoomClick(direction)"
 				>
 					<span aria-hidden="true">{{ direction === 'in' ? '+' : '−' }}</span>
@@ -263,7 +263,7 @@ const statusLabel = computed(() => {
 				<GraphLegend />
 				<span
 					v-if="statusLabel"
-					class="ml-[auto]"
+					class="ml-auto"
 				>{{ statusLabel }}</span>
 			</template>
 		</div>

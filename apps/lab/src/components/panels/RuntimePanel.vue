@@ -32,7 +32,7 @@ function selectNode(nodeId: number): void {
 		storageKey="widget-lab:panel-desc:runtime"
 		text="Live State, Properties, Methods, and Diagnostics of the running widgets"
 	>
-		<div class="flex items-center gap-[8px] p-[4px_8px] border-b border-b-lab-border text-[11px] flex-[0_0_auto]">
+		<div class="flex items-center gap-[8px] p-[4px_8px] border-b border-b-lab-border text-[11px] flex-none">
 			<strong>{{ i18n.t(source.previewRevision === null ? 'Preview unavailable' : 'Preview r{revision}', { revision: source.previewRevision ?? '' }) }}</strong>
 			<span :style="{ color: source.isDiverged ? 'var(--lab-color-warning)' : 'var(--lab-color-text-muted)' }">
 				{{ i18n.t(source.previewRevision === null ? 'Unlinked' : source.isDiverged ? 'Diverged / Unlinked' : 'Linked / Synced') }}

@@ -19,7 +19,9 @@
  * The Events tab also carries a small count of Events recorded while it was not the visible tab (issue #230, audit
  * U09): drawn, not announced (a tab is not a live region, so nothing is read out per Event), with the same count as
  * text for assistive technology in the tab's name, and `data-recording` says whether the log is subscribed. Read without subscribing
- * to anything.
+ * to anything. While there is a count, the name comes from one visually hidden text ("Events, 1 new") and the drawn title
+ * and badge are hidden from assistive technology: a name built from the title plus a separate hidden span reads
+ * "Events , 1 new" in Chromium, which puts a space before an absolutely positioned (`sr-only`) element.
  */
 import type { DockviewPanelApi } from 'dockview-vue'
 import { computed, inject, onBeforeUnmount, ref } from 'vue'
@@ -59,9 +61,12 @@ const unseenLabel = computed(() => {
 	<span
 		:data-recording="eventsTab === null ? undefined : String(eventsTab.recording.value)"
 		class="relative flex items-center h-full w-full whitespace-nowrap overflow-hidden text-ellipsis"
-	>{{ title }}<template v-if="unseen !== null && unseen > 0"><span
+	><template v-if="unseen !== null && unseen > 0"><span aria-hidden="true">{{ title }}</span><span
 		data-testid="events-unseen"
 		aria-hidden="true"
 		class="ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] leading-4 font-semibold text-inverted"
-	>{{ unseenText }}</span><span class="sr-only">, {{ unseenLabel }}</span></template></span>
+	>{{ unseenText }}</span><span
+		data-testid="events-tab-name"
+		class="sr-only"
+	>{{ title }}, {{ unseenLabel }}</span></template><template v-else>{{ title }}</template></span>
 </template>

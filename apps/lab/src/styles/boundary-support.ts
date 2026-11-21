@@ -60,8 +60,9 @@ export function referencesOf(source: string): References {
 	const specifiers: string[] = []
 	const opaque: string[] = []
 
-	// `from`/`import` as a keyword only: not the tail of a member or attribute value (`transfer.from"`, `data-from`).
-	for (const match of source.matchAll(/(?:(?<![.$\w-])from\s*|(?<![.$\w-])import\s*)(['"])([^'"]+)\1/g))
+	// `from`/`import` as a keyword only: not the tail of a member or attribute value (`transfer.from"`, `data-from`), and
+	// not a bare identifier that opens a quoted attribute value or string (`:x="from"`, `'from'`): a keyword never follows a quote.
+	for (const match of source.matchAll(/(?:(?<![.$\w'"-])from\s*|(?<![.$\w'"-])import\s*)(['"])([^'"]+)\1/g))
 		specifiers.push(match[2]!)
 
 	// `import(...)`: literal specifiers only (a template without `${` counts as a literal); every other `import(` is opaque.

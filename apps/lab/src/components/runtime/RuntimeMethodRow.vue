@@ -21,7 +21,9 @@ import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useRemoteRuntimeMember } from '../../composables/use-remote-runtime-member'
 import MethodDiagnosticList from './MethodDiagnosticList.vue'
 
-const props = defineProps<{
+// `transitivelyEmits` defaults to `undefined`, not Vue's `false` for an absent boolean prop: a peer below protocol 0.4 reports no
+// emits fact, and the row must not call that Method read-only.
+const props = withDefaults(defineProps<{
 	name: string
 	transitivelyWrites: boolean
 	transitivelyEmits?: boolean
@@ -30,7 +32,7 @@ const props = defineProps<{
 	widgetRef?: WidgetRef
 	/** The Method's snapshot from the widget's Runtime snapshot; omitted when the peer reports none. */
 	initial?: InspectorRuntimeMethodSnapshot | null
-}>()
+}>(), { transitivelyEmits: undefined })
 
 const emit = defineEmits<{
 	select: []
@@ -87,6 +89,13 @@ const failed = computed(() => diagnostics.value !== null && diagnostics.value.le
 				@click="emit('select')"
 			>
 				<span class="shrink-0">{{ name }}()</span>
+				<!-- Said, not left to the absence of the two badges. A peer below protocol 0.4 has no emits fact: nothing is claimed then. -->
+				<span
+					v-if="!transitivelyWrites && transitivelyEmits === false"
+					data-testid="method-read-only"
+					class="rounded-full bg-elevated px-1.5 text-[11px] text-muted"
+					:title="i18n.t('Writes no State and emits no Event, itself or through the Methods it invokes, so a Property may depend on it')"
+				>read-only</span>
 				<span
 					v-if="transitivelyWrites || transitivelyEmits"
 					class="flex gap-1"

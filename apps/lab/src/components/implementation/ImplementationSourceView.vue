@@ -77,7 +77,7 @@ async function copy(): Promise<void> {
 
 <template>
 	<div class="implementation-source-view">
-		<div class="flex justify-end p-[4px_8px] border-b border-b-lab-border flex-[0_0_auto]">
+		<div class="flex justify-end p-[4px_8px] border-b border-b-lab-border flex-none">
 			<button
 				type="button"
 				class="p-[2px_8px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
