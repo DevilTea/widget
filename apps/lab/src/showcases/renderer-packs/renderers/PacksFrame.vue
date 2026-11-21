@@ -13,9 +13,10 @@
  */
 import type { packsMessages } from '../messages'
 import type { PacksRuntime } from '../system'
-import { computed, defineAsyncComponent, defineComponent, h, useId } from 'vue'
+import { computed, defineAsyncComponent, useId } from 'vue'
 import { useShowcaseHost } from '../../../showcase-host'
 import { HandWrittenRenderer } from './handwritten'
+import { FailedPane, LoadingPane } from './pack-panes'
 import { isPackChoice, PACK_CHOICES } from './packs-host'
 import { requirePacksHost, usePacksText } from './use-packs-text'
 
@@ -34,17 +35,10 @@ const CHOICE_KEYS = { hand: 'packHand', nui: 'packNui', both: 'packBoth' } as co
 const showHand = computed(() => packs.visible.value.includes('hand'))
 const showNui = computed(() => packs.visible.value.includes('nui'))
 
-/** What a pane shows while the Nuxt UI chunk loads. Not a live region: the page has one status, the Notifier's. */
-const LoadingPane = defineComponent({
-	name: 'NuxtUiPackLoading',
-	// The async wrapper hands its props (the Runtime) to the placeholder too; they are not attributes.
-	inheritAttrs: false,
-	setup: () => () => h('p', { 'class': 'packs-loading', 'data-testid': 'packs-nui-loading' }, t('paneLoading')),
-})
-
 const NuxtUiPack = defineAsyncComponent({
 	loader: async () => (await import('./nuxt-ui/NuxtUiPack')).NuxtUiPack,
 	loadingComponent: LoadingPane,
+	errorComponent: FailedPane,
 	delay: 0,
 })
 
