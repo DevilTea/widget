@@ -20,10 +20,10 @@ Private, never-published workspace application with two roles:
    `@deviltea/widget-vue`.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
    `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default, and `Trip budget splitter`
-   (`trip-budget`), `Quote rules shared by browser and backend` (`quote-rules`) and `Onboarding wizard with an Events log` (`onboarding`) are listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
+   (`trip-budget`), `Quote rules shared by browser and backend` (`quote-rules`), `Onboarding wizard with an Events log` (`onboarding`) and `Legacy document repair` (`document-repair`) are listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
    test-only fixture (see "Showcase selection" below). The former `Product Prototype` (`crm`) and
    `Vuetify Task Workspace` (`vuetify-tasks`) showcases, and the CRM tour, were removed (tracking issue
-   `DevilTea/widget#230`); the new showcases of that issue are added one PR at a time (`trip-budget`, `quote-rules` and `onboarding` are the first three).
+   `DevilTea/widget#230`); the new showcases of that issue are added one PR at a time (`trip-budget`, `quote-rules`, `onboarding` and `document-repair` are the first four).
 
 ### Showcase selection (`?showcase=<id>`)
 
@@ -325,6 +325,72 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       step id (`plugins/reads.ts`) and looks them up in the Blueprint's order (`stepChildren`), because a dependency container may hold only dependency
       expressions (a plain id string in it throws), and an object would sort an integer-like id first. Once the wizard is finished
       `requestSlot` and `cancelBooking` are refused (`already-finished`): the booking is part of what was completed; Start over (`resetState`) reopens it.
+  - `document-repair/` — Legacy document repair (issue #230, showcase 4), the notice board app that opens drafts older versions saved.
+    **Migration and repair are the application's policy, written in the showcase's own domain code: Core does not migrate, version, repair
+    or quarantine anything, and nothing is persisted** (the drafts are in-memory fixtures in `fixtures.ts`; the Lab shell gains no
+    persistence or migration, see "Package boundaries"). There are two Systems in the directory. The **outer** `repairSystem` (`system.ts`) is
+    the one the Lab registers, so it is the Lab Document: `RepairDesk` (root `desk`, config `appVersion`, slot `drafts`) and `SavedDraft`
+    (config `title`, `savedWith` `1.x`/`2.x`/`3.x` and `source`, any JSON: the stored legacy document, kept exactly as saved; Properties `title`,
+    `savedWith`, `source`, `findings` and `plan`; State `revision`, `appRevision` and `repaired`, written by the host to mirror its session, `-1` and
+    `false` while none is open). The **inner** `boardSystem` (`board/`, not registered as a showcase) is the app's document format v3: `Board`
+    (root, config `title` per language, slot `notices`) and `Notice` (config `title`, `body`, `until` as a `YYYY-MM-DD` date, `tone` `info`/`warning`).
+    It exists to show, with a real Runtime and real Documents:
+    - **What Core says about a stored document.** `SavedDraft.findings` (`plugins/findings.ts`) compiles `source` with the inner system inside
+      the Property's `compute` (an ordinary synchronous call: `createBlueprint` is not a Runtime callback, and `plugins/saved-draft.unit.test.ts`
+      pins that Core accepts it) and projects plain JSON: `status`, `sourceJsonCompatible`, the diagnostics as `{ code, message, sourcePath,
+      reason? }` (`sourcePath` is `blueprint.getSourcePath(location.node)`, or the diagnostic's own path for a source-level one such as
+      `json-incompatible-value`) and a node summary from `inspectBlueprint(...).nodes[]` (resolved or unresolved with the authored `id` and `type`
+      as hints, and `sourceSlots` placements: an undeclared slot is `raw-slot`).
+    - **The application's plan.** `planRepair(source, savedWith)` (`domain.ts`, pure, never throws) returns ordered steps `{ id, title, why, patch }`
+      (`title` and `why` are `{ en, zh-TW }`), each patch applying to the source as it is after the steps before it and starting with `test`
+      guards for the value it was planned against (a guard that no longer holds fails the whole step atomically: `test-failed` with the
+      `operationIndex`). `1.x`: `rename-slot` (`items` to `notices`, a raw-slot placement), `rename-type` (`Banner` to `Notice`, an unresolved node
+      with hints), `rename-config-text` (`text` to `body`), `move-style` (a widget-level `style` is `unexpected-widget-field`; it moves into `meta.style`,
+      which Core preserves and never interprets), `fix-duplicate-ids` (`duplicate-widget-id`) and `rewrite-no-id` (a node without an `id` is unresolved and
+      nothing addresses it, so the whole array element is replaced: the repair floor); `1.x` and `2.x`: `convert-until` (an epoch-milliseconds
+      `until` is a config diagnostic); `3.x`: no step. The `draft-poll` fixture (saved with `2.x`) has a `Poll` the application has no rule for: after its
+      one step it is still invalid and Core creates no Runtime for it (all-or-nothing validity, no quarantine, no partial Runtime).
+    - **The editing session at the host** (`renderers/repair-host.ts`, created per desk Runtime by `DocumentRepairRenderer` in `renderers/index.ts` and provided
+      through `RepairHostKey`). "Open in the app" is `createWidgetDocument({ system: boardSystem, source: structuredClone(stored) })` (Core never mutates a source,
+      since `applyPatch` is copy-on-write, but it retains the object it is given by reference as revision 0 and every later revision shares its untouched parts. The
+      stored draft is the application's own model and may keep being edited, and an object changed after it was handed to Core corrupts every revision, so the host
+      hands over a copy and the two share nothing; `renderers/repair-host.unit.test.ts` mutates the stored object after `open()` and asserts that the document and the plan
+      do not move, and that test fails without the `structuredClone`). The plan is computed from the snapshot the app last read (`appRevision`); "Apply next step" is
+      `applyPatch(step.patch, { expectedRevision: appRevision })`, shown as `{ ok, changed }` or as `failure.code` with `operationIndex` (a `changed: false` no-op leaves the
+      revision alone and notifies nobody); a document listener logs every commit `(snapshot, { previous, patch })` (previous to new revision, number of
+      operations, who saved it) and is read after `applyPatch` returns, never from inside the listener. "Another editor saves" applies a small valid edit
+      (the board title) without an expected revision and without the app reading it, so the app's next step meets `document-revision-conflict` with
+      `expectedRevision` and `actualRevision` and applies nothing; "Re-read and re-plan" reads the current snapshot and plans from it. When the document is valid,
+      "Preview the repaired board" creates a Runtime from the valid Blueprint (an invalid one has no `createRuntime`) and renders it with the inner
+      system's plain components (`renderers/board/`, a nested `@deviltea/widget-vue` root), and "Export" shows the repaired JSON text. Sessions and preview Runtimes
+      are released on close, on "Close every draft" (`resetAll`), on unmount and on dispose of the host, and the host is a no-op once the desk's Runtime is disposed.
+    - **Isolation:** it follows "Showcase isolation" below. It reads `useShowcaseHost().locale` and `.theme` and `useInspectAnchor()` (on `RepairDesk` and every
+      `SavedDraft` renderer; the inner board renderers stamp none, because their widgets belong to the preview Runtime and not to the Runtime the Lab inspects, and
+      a pointer on the board selects the draft that contains it), owns its colours as `--repair-*` custom properties on the root renderer and registers its renderer
+      loader in `preview-frame-renderers.ts`. Its own chrome text is `messages.ts` (en and zh-TW); the plan's titles and reasons are `{ en, zh-TW }` in `domain.ts`, and the
+      drafts' board content is the stored document's own text. The page explains a refused patch in the viewer's language from Core's failure `code`
+      (`ALERT_MESSAGE_KEYS`) and shows the `code`, the operation index and Core's English `message` untranslated. No `allowed-packages.json`: it needs only Vue and Widget.
+    - **Announcements:** one `role="alert"` at a time (the latest refused patch, owned by the host and shown by the root renderer; a success or a re-read clears it)
+      and one `role="status"` (what the last action did); buttons are at least 24px high with a visible focus ring; no `aria-live` is used. Focus is moved by hand
+      when a control removes or disables itself (`renderers/focus.ts`, the pattern of the onboarding showcase): opening a draft focuses the session heading and closing it
+      focuses "Open in the app", applying the last step focuses "Preview the repaired board" (or "Re-read and re-plan" while the document stays invalid) and closing the
+      preview focuses the button that opened it. The headings never skip a level: the desk title `h1`, "Saved drafts" `h2`, a draft `h3`, its session `h4`, a session block `h5`
+      and the preview board's title `h6`.
+    - **Tests:** the plan against real Core (`domain.unit.test.ts`: every step applies to its fixture, v1 and v2 end valid, v3 has no step, the poll draft stays invalid,
+      guards fail atomically), the Properties against real Runtimes (`plugins/saved-draft.unit.test.ts`), the host against real Documents
+      (`renderers/repair-host.unit.test.ts`), renderers with a plain-ref `ShowcaseHost` (`renderers/test-harness.ts`, `renderers/repair-renderers.unit.test.ts`), `presets.unit.test.ts`
+      and `e2e/document-repair.spec.ts`. The Lab-side zh-TW text is in `i18n/document-repair-messages.unit.test.ts` and `tutorial/document-repair-script.unit.test.ts`.
+      Presets: `repair-default` (drafts `draft-v1`, `draft-v2`, `draft-v3` and `draft-poll`) and `repair-invalid` (four located `invalid-widget-config` diagnostics in the OUTER
+      document: an `appVersion` that is not a version, a draft without `source`, an unknown `savedWith` and a draft without a title; pinned by `presets.unit.test.ts`).
+      The tutorial (`tutorial/document-repair-script.ts`) is authored against `repair-default`; its `data-tutorial-target` is `repair-<widget id>` on every renderer root, plus
+      `repair-plan`, `-diagnostics`, `-log`, `-result`, `-preview` and `-alert`. It is gated on the State the host mirrors (open the draft, apply a step, the app falls behind, the app
+      catches up, the document is valid, the poll draft took its step); the steps whose "do" leaves nothing behind (reading the plan, previewing) are narrated.
+    - Known limits: nothing is persisted and nothing is migrated by Core, by design; the stored drafts are fixtures, so the Lab's own Apply on the desk replaces the desk (and
+      its sessions), not a stored document; the plan is one fixed policy, so a stored shape outside it is not repaired; `fix-duplicate-ids` keeps the first node and renames the later ones;
+      "Another editor" is simulated by the host, in the same realm, not by a second client; structured `'-'` append is not used and widgets are never patched by id (the paths are structural: `planRepair`
+      builds them from its own walk of the source, and `domain.unit.test.ts` checks that they agree with `blueprint.getSourcePath` of the nodes Core reports); a source that is not JSON
+      gets no plan, because Core would refuse every operand with `json-incompatible-value`, and a legacy notice without a `config` is replaced without one (the app does not invent
+      content), so it stays invalid.
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.
@@ -426,12 +492,15 @@ Intentional, not incidental (`DevilTea/deviltea-labs#30` Scope B) — the produc
 building this app in isolation:
 
 ```text
-main app JS (lab-*.js + the chunk it shares with the frame, tutorial-theme-*.js) ~1127 KB + ~410 KB raw / ~301 KB + ~128 KB gzip — eager
+main app JS (lab-*.js + the chunk it shares with the frame, tutorial-theme-*.js) ~1139 KB + ~522 KB raw / ~305 KB + ~160 KB gzip — eager
                                          (the figures of this entry and of the Quote Web Worker were re-measured with `pnpm build` at the quote-rules commit; the older
                                          ~847 KB + ~288 KB and ~230 KB + ~94 KB had gone stale before that commit, so the difference to them is not
                                          this showcase's. Its own share is the shared chunk only: ~362 KB / ~116 KB gzip on main without it, ~410 KB /
                                          ~128 KB with it, about +48 KB / +12 KB (Valibot, its JSON Schema converter, the six plugins and the presets);
-                                         lab-*.js is the same 1126.86 KB both ways. Zod 4 classic instead of Valibot measured +116 KB raw)
+                                         lab-*.js is the same 1126.86 KB both ways. Zod 4 classic instead of Valibot measured +116 KB raw.
+                                         Re-measured with `pnpm build` at the document-repair commit: the shared chunk was ~500 KB / ~154 KB gzip without that showcase and
+                                         ~522 KB / ~160 KB with it, about +22 KB / +6 KB (the two Systems, their plugins, `planRepair`, the fixtures and presets;
+                                         the renderers are lazy); lab-*.js is 1139.16 KB both ways. The ~410 KB above had already drifted before it)
 Nuxt UI Toast (Toast-*.js)               ~30 KB raw / ~9 KB gzip   — loaded on first toast (none is shown yet)
 modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
@@ -698,7 +767,7 @@ live source workflow, and the showcases. It must not own, and must not gain:
   exclusively through its public subpaths (`/agent`, `/anchor`, `/channel`, `/client`, `/frame-bootstrap`,
   `/protocol`, `/transport`, `/value`), never its root entry or an internal module; `@deviltea/widget-vue`
   stamps no DOM attributes, so the Lab projects identity onto renderers only through `/anchor`;
-- persistence/versioning/migration of any kind — `LabSession`'s `draftSourceText`/`documentState` and
+- persistence/versioning/migration of any kind (the `document-repair` showcase's repair rules are that showcase's own domain code and persist nothing; the shell gains none of it) — `LabSession`'s `draftSourceText`/`documentState` and
   `preview` snapshots are in-memory only, and Monaco's own workspace/IndexedDB machinery is deliberately not used (see
   `use-monaco-editor.ts`) so it can never become a second, competing source of truth;
 - an editor-command/undo architecture — Source text editing plus explicit Apply is the whole model.
@@ -1161,7 +1230,7 @@ Dockview groups or the Preview frame (the survey's own Language select). With th
 Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used by, the focus, Depends on) and scrolls vertically below 680px of **pane** width
 (a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
 
-**One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`, `onboarding`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts`, `i18n/quote-rules-messages.ts` and `i18n/onboarding-messages.ts` are the models).
+**One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`, `onboarding`, `document-repair`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts`, `i18n/quote-rules-messages.ts`, `i18n/onboarding-messages.ts` and `i18n/document-repair-messages.ts` are the models).
 
 **Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview
@@ -1326,7 +1395,7 @@ happy-dom unit tests.
 
 Browser specs reach the header's menus only through the helpers in `e2e/fixtures.ts` (`selectShowcase`, `loadPreset`,
 `setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, `openStatusDetails`,
-`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey, trip, quote and onboarding examples), and the `expectShowcase` /
+`openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey, trip, quote, onboarding and repair examples), and the `expectShowcase` /
 `expectDocumentStatus` / `expectPreviewStatus` assertions), never with ad-hoc menu clicks, so a future header change touches one
 file. Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
 Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a

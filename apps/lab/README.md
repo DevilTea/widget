@@ -47,9 +47,9 @@ pnpm --filter widget-lab test:pages
 the last demonstrating a cross-widget `registerDeps` dependency) with three preset source texts: a
 fully valid interactive one, one that is intentionally semantically invalid (to demo diagnostics), and
 one that exercises Blueprint recovery (an unresolved node and a raw-slot placement). These are
-test-only fixtures for this shell, hidden from the Examples menu. Four showcases are listed, all registered in
+test-only fixtures for this shell, hidden from the Examples menu. Five showcases are listed, all registered in
 `src/showcases/registry.ts` (which also registers the hidden `sandbox`): "Interactive Survey" (the default),
-"Trip budget splitter", "Quote rules shared by browser and backend" and "Onboarding wizard with an Events log". Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
+"Trip budget splitter", "Quote rules shared by browser and backend", "Onboarding wizard with an Events log" and "Legacy document repair". Open a hidden fixture with the `?showcase=<id>` URL parameter, e.g. `?showcase=sandbox`; a
 missing or unknown id falls back to the default. The parameter follows the active showcase (the Lab rewrites it with
 `history.replaceState`), so reloading restores it.
 
@@ -126,6 +126,26 @@ The presets are `onboarding-default`, `onboarding-ready-to-book` (opens on the i
 The showcase follows the showcase host contract (it reads the host's locale and light/dark theme and the Inspect anchor) and styles
 itself with its own `--onboarding-*` tokens. The booking office is not a network request: its answer is a function of the slot and
 its timing is a `Scheduler` the host is given (timers in the Preview, a hand-fired one in tests, so no test sleeps).
+
+### Legacy document repair
+
+A notice-board app (now at format v3) opens drafts that older versions saved. **Core does not migrate, version, repair or quarantine a stored document:
+the repair is the application's policy, written in the showcase's own code, and nothing is persisted** (the drafts are in-memory fixtures; the Lab shell
+gains no persistence or migration). There are two Systems in `src/showcases/document-repair/`: the repair desk (`RepairDesk` and `SavedDraft`, the Lab's own
+document) and the notice board (`Board` and `Notice`, the app's format, compiled from each draft's stored source). What it shows, and where in the Lab:
+
+| Core feature | In the showcase | Where to see it |
+|---|---|---|
+| Diagnostics located in a stored document | `SavedDraft.findings` compiles the stored source with the notice board System inside a Property and lists each diagnostic with `blueprint.getSourcePath(node)` (a valid `SourcePatch` path), plus the recovered nodes: unresolved ones keep their `id` and `type` as hints and an undeclared slot is a `raw-slot` placement | Preview: "The stored draft, as Core sees it"; Selected widget: the `findings` Property |
+| Recovery of an invalid document | an unknown type, an undeclared slot, an unexpected widget field, a repeated id and a node without an id are all reported, and the tree stays navigable | Blueprint and Preview (stored draft details) |
+| The application's repair plan | `planRepair(source, savedWith)` returns ordered steps, each a `SourcePatch` that starts with `test` guards; it is policy, computed again from the current snapshot after every commit | Preview: the plan of an open draft; Selected widget: the `plan` Property |
+| `WidgetDocument` and `SourcePatch` | "Open in the app" is `createWidgetDocument` on a copy of the stored source (Core never mutates a source, but it keeps the object it is given by reference, so the app's own model must not be handed over); "Apply next step" is `applyPatch(step.patch, { expectedRevision })`, shown as `{ ok, changed }` or the failure code and operation index; a listener logs every commit | Preview: the revision, the last result and the listener log |
+| `document-revision-conflict` | "Another editor saves" changes the same document without the app reading it, so the app's next step carries a stale `expectedRevision`: Core applies nothing and says `expectedRevision` and `actualRevision`; "Re-read and re-plan" continues | Preview: the page's one alert and the result line |
+| All-or-nothing validity | only a valid Blueprint has `createRuntime`: the repaired `draft-v1` previews as a board (a Runtime of the notice board System in a nested widget-vue root) and exports as JSON, the `draft-poll` draft (an unknown `Poll` the app has no rule for) stays invalid and never gets a Runtime | Preview: "Preview the repaired board", "Export" |
+
+The presets are `repair-default` (four drafts: saved with 1.x, 2.x, 3.x, and 2.x with a `Poll`) and `repair-invalid` (four located config diagnostics in the desk's own
+document). The tutorial rail has a tour for the showcase (en and zh-TW). The showcase follows the showcase host contract (it reads the host's locale and light/dark
+theme and the Inspect anchor) and styles itself with its own `--repair-*` tokens.
 
 ## Header, editing feedback and Undo
 

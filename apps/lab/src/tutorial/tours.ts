@@ -9,6 +9,7 @@
  */
 
 import type { TutorialScript } from './types'
+import { DOCUMENT_REPAIR_TOUR_ID, documentRepairTourScript } from './document-repair-script'
 import { ONBOARDING_TOUR_ID, onboardingTourScript } from './onboarding-script'
 import { QUOTE_RULES_TOUR_ID, quoteRulesTourScript } from './quote-rules-script'
 import { SURVEY_TOUR_ID, surveyTourScript } from './survey-script'
@@ -54,6 +55,12 @@ export const tours: readonly TourEntry[] = [
 		script: onboardingTourScript,
 		defaultPresetId: 'onboarding-default',
 		startConfirmMessage: 'Starting the tutorial will load the Onboarding teaching example and replace your unapplied changes.',
+	},
+	{
+		id: DOCUMENT_REPAIR_TOUR_ID,
+		script: documentRepairTourScript,
+		defaultPresetId: 'repair-default',
+		startConfirmMessage: 'Starting the tutorial will load the Legacy document repair teaching example and replace your unapplied changes.',
 	},
 ]
 

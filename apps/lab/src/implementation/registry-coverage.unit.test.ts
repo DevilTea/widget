@@ -10,6 +10,8 @@ import type { SourcesRegistry } from '../showcase-host'
 import { describe, expect, it } from 'vitest'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
+import { repairSources } from '../showcases/document-repair/sources'
+import { repairSystem } from '../showcases/document-repair/system'
 import { onboardingSources } from '../showcases/onboarding/sources'
 import { onboardingSystem } from '../showcases/onboarding/system'
 import { quoteSources } from '../showcases/quote-rules/sources'
@@ -26,6 +28,7 @@ const showcases: readonly { readonly label: string, readonly system: WidgetSyste
 	{ label: 'trip-budget', system: tripBudgetSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: tripBudgetSources },
 	{ label: 'quote-rules', system: quoteSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: quoteSources },
 	{ label: 'onboarding', system: onboardingSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: onboardingSources },
+	{ label: 'document-repair', system: repairSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: repairSources },
 ]
 
 const fixtureEntry: SourcesRegistry[string] = {

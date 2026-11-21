@@ -215,7 +215,7 @@ test.describe('[data-slot]-scoped preflight', () => {
 test.describe('Preview frame isolation', () => {
 	// Every showcase, not only the minimal Sandbox: each loads its own renderer chunk (and its styles) into the frame. The
 	// list is the registry's, in its order (`showcases/registry.unit.test.ts` checks it).
-	for (const showcase of ['survey', 'trip-budget', 'quote-rules', 'onboarding', 'sandbox'] as const) {
+	for (const showcase of ['survey', 'trip-budget', 'quote-rules', 'onboarding', 'document-repair', 'sandbox'] as const) {
 		test(`the ${showcase} frame document loads no Tailwind or Nuxt UI CSS and receives no dark class`, async ({ context, page }) => {
 			await seedTheme(context, 'dark')
 			await page.goto(`/?showcase=${showcase}`)

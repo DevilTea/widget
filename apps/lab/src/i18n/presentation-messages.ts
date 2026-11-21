@@ -1,4 +1,5 @@
 import type { LabLocale } from './locale'
+import { translateDocumentRepairMessage } from './document-repair-messages'
 import { translateMessage } from './messages'
 import { translateOnboardingMessage } from './onboarding-messages'
 import { translateQuoteRulesMessage } from './quote-rules-messages'
@@ -457,6 +458,9 @@ export function translatePresentationMessage(locale: LabLocale, source: string):
 		const onboarding = translateOnboardingMessage(locale, source)
 		if (onboarding !== undefined)
 			return onboarding
+		const repair = translateDocumentRepairMessage(locale, source)
+		if (repair !== undefined)
+			return repair
 	}
 	return translateMessage(locale, source)
 }
