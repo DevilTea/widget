@@ -50,6 +50,29 @@ describe('protocol 1.0 and the 0.x major', () => {
 		}
 	})
 
+	it('answers an older major unsupported-version even when the method is unknown or the params are invalid', () => {
+		const { agent, request } = createRawFixture()
+		try {
+			const old = { major: 0, minor: 5 }
+			// Rejected while the request is classified (no handler runs), so the major is checked before the method and params are.
+			expect(request('old-unknown', old, 'runtime.noSuchMethod', {}))
+				.toMatchObject({ ok: false, protocol: INSPECTOR_PROTOCOL_VERSION, error: { code: 'unsupported-version' } })
+			expect(request('old-invalid', old, 'blueprint.getSnapshot', { runtimeId: 42 }))
+				.toMatchObject({ ok: false, protocol: INSPECTOR_PROTOCOL_VERSION, error: { code: 'unsupported-version' } })
+			expect(request('old-no-params', old, 'runtime.getWidgetSnapshot', null))
+				.toMatchObject({ ok: false, error: { code: 'unsupported-version' } })
+
+			// The same requests at the current major get their own errors, so the answers above are the major's doing.
+			expect(request('new-unknown', INSPECTOR_PROTOCOL_VERSION, 'runtime.noSuchMethod', {}))
+				.toMatchObject({ ok: false, error: { code: 'unknown-method' } })
+			expect(request('new-invalid', INSPECTOR_PROTOCOL_VERSION, 'blueprint.getSnapshot', { runtimeId: 42 }))
+				.toMatchObject({ ok: false, error: { code: 'invalid-params' } })
+		}
+		finally {
+			agent.dispose()
+		}
+	})
+
 	it('answers every request of an older major unsupported-version, not served, and leaves the session usable', () => {
 		const { agent, request } = createRawFixture()
 		try {
