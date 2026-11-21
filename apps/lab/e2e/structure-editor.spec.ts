@@ -396,7 +396,7 @@ test.describe('focus and triggers while a commit runs', () => {
 	})
 })
 
-test.describe('a commit that is refused leaves the controls showing the Document', () => {
+test.describe('a commit that is refused: switches and lists show the Document, typed text and add choices are kept', () => {
 	test('a list and a switch snap back when the JSON draft is dirty', async ({ page }) => {
 		const editor = await openStructure(page, /phone : ShortAnswer/)
 		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
@@ -426,7 +426,7 @@ test.describe('a commit that is refused leaves the controls showing the Document
 			.toBeFocused()
 	})
 
-	test('only the control of the refused edit is reset: text typed into another field is still there', async ({ page }) => {
+	test('a refused text keeps what was typed and says why; another field keeps its text; the Document value comes back on request', async ({ page }) => {
 		const editor = await openStructure(page, /guests : Numeric/)
 		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
 		const max = field(editor, 'max')
@@ -438,11 +438,47 @@ test.describe('a commit that is refused leaves the controls showing the Document
 		await min.press('Enter')
 		await expect(page.getByTestId('author-command-outcome'))
 			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
-		// The refused one shows the Document again; the one never committed keeps what was typed.
+		// Nothing typed is lost: the refused box keeps its input and says it was not applied.
 		await expect(min)
-			.toHaveValue('0')
+			.toHaveValue('7')
+		await expect(field(editor, 'min')
+			.getByTestId('not-applied'))
+			.toContainText('Not applied: Apply or Revert the JSON draft before using Structure commands.')
 		await expect(max)
 			.toHaveValue('42')
+		await expect(field(editor, 'max')
+			.getByTestId('not-applied'))
+			.toHaveCount(0)
+		expect(configOf(await documentSource(page), 'guests').min)
+			.toBe(0)
+
+		await field(editor, 'min')
+			.getByRole('button', { name: 'Use the Document value: min' })
+			.click()
+		await expect(min)
+			.toHaveValue('0')
+		await expect(field(editor, 'min')
+			.getByTestId('not-applied'))
+			.toHaveCount(0)
+	})
+
+	test('a refused add keeps the field that was chosen', async ({ page }) => {
+		const editor = await openStructure(page, /guests : Numeric/)
+		await editor.getByRole('button', { name: 'Remove max' })
+			.click()
+		await expect(field(editor, 'max'))
+			.toHaveCount(0)
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
+		const optional = editor.getByRole('combobox', { name: 'Optional field to add to config' })
+		await optional.selectOption('max')
+		await editor.getByRole('button', { name: 'Add field' })
+			.click()
+		await expect(page.getByTestId('author-command-outcome'))
+			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
+		await expect(optional)
+			.toHaveValue('max')
+		await expect(field(editor, 'max'))
+			.toHaveCount(0)
 	})
 })
 

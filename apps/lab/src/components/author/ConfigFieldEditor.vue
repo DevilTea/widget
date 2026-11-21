@@ -33,8 +33,12 @@ const props = defineProps<{
 	busy: boolean
 	/** Edit the value as its JSON text whatever it is (the config of a widget whose config is not an object). */
 	asJson?: boolean
-	/** A commit at this path (config-relative, joined with `.`) was not applied: that control shows the Document's value again. `tick` makes a repeat count. */
-	resync?: { readonly path: string, readonly tick: number } | null
+	/**
+	 * A commit at this path (config-relative, joined with `.`) was not applied, with why (`message`). A text, number or JSON box
+	 * keeps what was typed and says it was not applied; a switch or a list shows the Document's value again. `tick` makes a
+	 * repeat count.
+	 */
+	resync?: { readonly path: string, readonly tick: number, readonly message?: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -62,24 +66,37 @@ function toText(value: unknown): string {
 /** What is typed into a text, number or JSON box; follows the Document when the value changes under it. */
 const text = ref(toText(props.value))
 const invalid = ref(false)
+/** Why the text in the box was not applied, while it is still there; `null` when nothing was refused. */
+const notApplied = ref<string | null>(null)
 watch(() => props.value, (value) => {
 	text.value = toText(value)
 	invalid.value = false
+	notApplied.value = null
 })
 
 /**
- * Re-creates this field's own control (and nothing else, so other fields keep what has been typed into them but not
- * committed) when a commit at its path was refused: a switch or list the user already moved, and a text still holding the
- * rejected input, show what the Document holds.
+ * A commit at this field's path was refused (a dirty JSON draft, a patch error, a stale selection). A text, number or JSON
+ * box keeps the rejected input, so nothing typed is lost, and says it was not applied, with a way back to the Document's
+ * value. A switch or a list, which the user only moved, is re-created (`controlKey`) so it shows what the Document holds.
+ * Other fields are untouched either way.
  */
 const controlKey = ref(0)
 watch(() => props.resync, (resync) => {
 	if (resync === null || resync === undefined || resync.path !== props.path.join('.'))
 		return
-	text.value = toText(props.value)
-	invalid.value = false
+	const kind = field.value.kind
+	if (kind === 'string' || kind === 'number' || kind === 'json') {
+		notApplied.value = resync.message ?? i18n.t('The change was not applied.')
+		return
+	}
 	controlKey.value++
 })
+
+function useDocumentValue(): void {
+	text.value = toText(props.value)
+	invalid.value = false
+	notApplied.value = null
+}
 
 /**
  * While a command runs the controls stay in the page and stay focusable (a disabled control would hand keyboard focus to
@@ -147,8 +164,7 @@ function addField(): void {
 	const current = field.value
 	if (current.kind !== 'object' || newField.value === '')
 		return
-	if (emitEdit([...props.path, newField.value], { op: 'add', value: defaultValueFor(props.root, current.properties[newField.value] ?? null) as never }))
-		newField.value = ''
+	emitEdit([...props.path, newField.value], { op: 'add', value: defaultValueFor(props.root, current.properties[newField.value] ?? null) as never })
 }
 
 function addKey(): void {
@@ -156,9 +172,16 @@ function addKey(): void {
 	const key = newKey.value.trim()
 	if (current.kind !== 'object' || current.additional === null || key === '' || Object.hasOwn(objectValue.value, key))
 		return
-	if (emitEdit([...props.path, key], { op: 'add', value: defaultValueFor(props.root, current.additional) as never }))
-		newKey.value = ''
+	emitEdit([...props.path, key], { op: 'add', value: defaultValueFor(props.root, current.additional) as never })
 }
+
+// The add controls are cleared only once the Document holds what they added: a refused add keeps the choice or the typed key.
+watch(objectValue, (value) => {
+	if (newField.value !== '' && Object.hasOwn(value, newField.value))
+		newField.value = ''
+	if (newKey.value.trim() !== '' && Object.hasOwn(value, newKey.value.trim()))
+		newKey.value = ''
+})
 
 function addItem(): void {
 	const current = field.value
@@ -260,6 +283,24 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						@click="commitText"
 					>
 						{{ i18n.t('Set value') }}
+					</UButton>
+				</div>
+				<div
+					v-if="notApplied !== null"
+					data-testid="not-applied"
+					class="flex flex-wrap items-center gap-1.5 text-xs text-warning"
+				>
+					<span>{{ i18n.t('Not applied: {reason}', { reason: notApplied }) }}</span>
+					<UButton
+						type="button"
+						color="neutral"
+						variant="outline"
+						size="xs"
+						class="min-h-6"
+						:aria-label="`${i18n.t('Use the Document value')}: ${label}`"
+						@click="useDocumentValue"
+					>
+						{{ i18n.t('Use the Document value') }}
 					</UButton>
 				</div>
 				<p

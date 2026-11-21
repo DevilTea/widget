@@ -19,7 +19,7 @@ const busy = ref(false)
 const outcomeMessage = ref<string | null>(null)
 const editorEl = useTemplateRef<HTMLElement>('editorEl')
 /** Set when a commit did not go through: the control at that path shows what the Document holds again (a switch or list the user already moved would not), the others keep their uncommitted text. */
-const resync = ref<{ readonly path: string, readonly tick: number } | null>(null)
+const resync = ref<{ readonly path: string, readonly tick: number, readonly message?: string } | null>(null)
 let resyncTick = 0
 
 /** The plugin's public config metadata for the selected widget: `null` when it has no config capability. */
@@ -120,7 +120,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 		busy.value = false
 	}
 	if (!applied && edit.op === 'replace')
-		resync.value = { path: path.join('.'), tick: ++resyncTick }
+		resync.value = { path: path.join('.'), tick: ++resyncTick, ...(outcomeMessage.value === null ? {} : { message: outcomeMessage.value }) }
 	await keepFocus(path, edit)
 }
 </script>
