@@ -1,9 +1,9 @@
 ---
-name: onboarding-system-renderer-implementation
-description: "Implement Vue renderers for the onboardingSystem widget types with @deviltea/widget-vue: registration, the useWidget() surface, and each type's State, Properties, Methods, Events and slots."
+name: survey-system-renderer-implementation
+description: "Implement Vue renderers for the surveySystem widget types with @deviltea/widget-vue: registration, the useWidget() surface, and each type's State, Properties, Methods, Events and slots."
 ---
 
-# Implementing onboardingSystem renderers
+# Implementing surveySystem renderers
 
 Everything here comes from the public exports of `@deviltea/widget-vue`: `createWidgetVueRenderer`,
 `useWidget`, `WidgetVueIntegrationError` and the `UseWidget*` / `WidgetSlot*` types.
@@ -16,11 +16,10 @@ One Vue component per widget type, registered once for the System:
 import { createWidgetVueRenderer } from '@deviltea/widget-vue'
 
 export const SystemRenderer = createWidgetVueRenderer(system, renderers => renderers
-	.Onboarding(OnboardingRenderer)
-	.AccountStep(AccountStepRenderer)
-	.InterestsStep(InterestsStepRenderer)
-	.SafetyStep(SafetyStepRenderer)
-	.InductionStep(InductionStepRenderer))
+	.Survey(SurveyRenderer)
+	.Rating(RatingRenderer)
+	.Choice(ChoiceRenderer)
+	.Note(NoteRenderer))
 ```
 
 - The registry is exhaustive: the chain names every plugin type of the System exactly once.
@@ -52,7 +51,8 @@ accessors of the capabilities the plugin declares are present.
 - Handle `null`: every State and Property ref may be `null`, and so may every Method call's return value.
 - To learn why a Method call failed, read `useMethodDiagnostics().<method>.value` after the call: each
   diagnostic has a `code` (`invalid-method-arguments`, `invalid-method-result`), a `message` and, when the
-  plugin gave one, a `reason`. A `null` return is the only signal on the call itself, so a Method whose
+  plugin gave one, a `reason` and its `details` (typed by the plugin's declared reasons: see each type's
+  reference). A `null` return is the only signal on the call itself, so a Method whose
   successful value could be `null` must be told apart through its diagnostics.
 - A failed Method call is not rolled back: State it wrote and Events it emitted before failing stay. Render
   from State and Properties after the call rather than assuming nothing changed.
@@ -60,13 +60,13 @@ accessors of the capabilities the plugin declares are present.
 - `authorWritable` State is meant to be set by an author or editor; other State is changed through Methods.
 - Methods are synchronous. Async work belongs to the host: listen to the Event, wait, then call a Method.
 - Render a slot with `<WidgetSlot name="slotName">`; its default scoped slot is called once per child with
-  `{ Child, id, type, index }`. Render `<Child />` (it takes no props) inside whatever wrapper you need, or
-  leave a child out.
+  `{ Child, id, type, index }`, where `type` is narrowed to the types the slot expects. Render `<Child />` (it
+  takes no props) inside whatever wrapper you need, or leave a child out. The expectation is not checked at run
+  time: a child of another type is possible when the plugin does not refuse it.
 
 ## Types
 
-- `Onboarding`: `references/onboarding.md`
-- `AccountStep`: `references/account-step.md`
-- `InterestsStep`: `references/interests-step.md`
-- `SafetyStep`: `references/safety-step.md`
-- `InductionStep`: `references/induction-step.md`
+- `Survey`: `references/survey.md`
+- `Rating`: `references/rating.md`
+- `Choice`: `references/choice.md`
+- `Note`: `references/note.md`

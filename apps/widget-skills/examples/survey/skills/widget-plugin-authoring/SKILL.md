@@ -6,33 +6,56 @@ description: "Write a @deviltea/widget-core plugin: the Interfaces type, builder
 # Writing a Widget plugin
 
 A plugin is built with `createWidgetPlugin(type)` from `@deviltea/widget-core` and describes one widget type:
-its config, slots, State, Properties, Methods and Events. Core compiles authored JSON against the registered
-plugins into a Blueprint (with diagnostics) and runs a Runtime from a valid Blueprint.
+its config, slots, State, Properties, Methods, Events and diagnostic reasons. Core compiles authored JSON against
+the registered plugins into a Blueprint (with diagnostics) and runs a Runtime from a valid Blueprint.
 
-This skill describes the API of the `@deviltea/widget-core` version it was generated against. Check the
-package's own documentation when the installed version differs.
+This skill describes the API of the `@deviltea/widget-core` 0.3 line. Check the package's own documentation when
+the installed version differs.
 
-## 1. Declare the Interfaces first
+## 1. Declare the Interfaces first, with JSDoc
+
+The `Interfaces` type and its JSDoc are the single source of the plugin's shape and documentation. Core stores no
+descriptions and no schema: documentation and JSON Schema are generated from the types.
 
 ```text
-export interface CounterInterfaces extends WidgetInterfaces {
-	config: { raw: CounterRawConfig | null, resolved: CounterConfig }
-	slots: 'items'
+/** A counter. */
+export interface CounterInterfaces {
+	/** How the counter counts. */
+	config: {
+		raw: {
+			/**
+			 * How much one step adds.
+			 * @minimum 1
+			 * @default 1
+			 */
+			step?: number
+		} | null
+		resolved: { step: number }
+	}
+	slots: {
+		/** Labels shown next to the count. */
+		labels: 'Label' | 'Icon'
+	}
 	state: {
 		/** The current count. */
 		count: number
 	}
 	methods: {
 		/**
-		 * Adds to the count.
-		 * @param by - How much to add.
+		 * Adds one step.
 		 * @returns The new count.
 		 */
-		increment: (by: number) => number
+		increment: () => number
 	}
 	events: {
 		/** The count changed. */
 		changed: [count: number]
+	}
+	reasons: {
+		/** The step is not a positive number. */
+		'invalid-step': { received: unknown }
+		/** The count reached its limit. */
+		'at-limit': void
 	}
 }
 ```
@@ -41,28 +64,36 @@ export interface CounterInterfaces extends WidgetInterfaces {
   have the capability; `slots: never` is the explicit "declared, empty" spelling.
 - `config.raw` is what the author writes; include `null` when the config may be left out (an omitted config is
   validated as `null`). `config.resolved` is what the plugin and its renderer read.
-- `slots` is a union of slot names.
+- `slots` is a record: each key is a slot name and each value what the slot expects of its children: a union of
+  plugin `type` literals (`'Label' | 'Icon'`), `WidgetContract<Shape>` (any widget that has the members of
+  `Shape`), `WidgetContract<Shape, 'Label' | 'Icon'>` (the named types, each of which must have them), or
+  `WidgetChild` (any widget). The expectation is type-level only: Core checks nothing at run time, so enforce it in
+  the slot's `validateStructure` when it matters.
+- `reasons` lists the diagnostic reasons the plugin reports. Each value is the type of the diagnostic's
+  `details` (`void` for none); `details` must be a JSON value.
 - Label Event payload tuples (`[count: number]`) and name Method parameters: the names are documentation.
 
 ## 2. Builder phases, in this order
 
-`description → interfaces → config? → slots? → structure? → state? → properties? → methods? → events? → done`
+`interfaces → config? → slots? → structure? → state? → properties? → methods? → events? → done`
 
 - A phase can be skipped but not reordered. Section builders are sealed and capture definitions by value; a
   malformed declaration throws a `TypeError` naming plugin, section, member and field when the plugin is built.
-- `.description(text)`: required, the plugin's description for catalogs.
-- `.config({ description, validate, resolve, schema? })`: `description` is required. `validate` always runs and
-  reports problems with `ctx.addDiagnostic({ message, path, reason })`; `resolve` turns the raw config into the
-  resolved one (and is called with `null` when validation failed).
-- `.slots({ name: { description, validateStructure? } })`: one complete map, every declared slot present, each with
-  a required `description`.
+- `.config({ validate, resolve })`: `validate` always runs and reports problems with
+  `ctx.addDiagnostic({ message, path, reason, details })`; `resolve` turns the raw config into the resolved one
+  (and is called with `null` when validation failed).
+- `.slots({ name: { validateStructure? } })`: one complete map, every declared slot present (`{}` when it has no
+  validator).
 - `.structure(validateStructure)`: the plugin-level structure check. It is not a capability.
 - `.state`: each member has `validate` and `default`. `authorWritable: true` is passive metadata telling editors
   the value may be set by an author.
-- `.properties`: `registerDeps` declares what `compute` reads; `compute` is pure.
+- `.properties`: `registerDeps` declares what `compute` reads; `compute` is pure. In a plugin with slots,
+  `registerDeps` gets `slot(name)`: the resolved children of the widget's own slot, each a dependency target. A
+  `WidgetContract` slot types their reads by its `Shape`; other slots give untyped reads (refine with
+  `.validate()`).
 - `.methods`: `validateArgs`, `registerDeps`, `emits` (the Events it may emit, required when it emits), `execute`.
-- `.events`: each Event has a required `description`. Events are declared after the Methods; `emits` names are
-  validated against them in `done()`.
+- `.events(['changed'])`: the list of every Event name of the Interfaces, each exactly once. Events are declared
+  after the Methods; `emits` names are validated against them in `done()`.
 
 ## 3. Every callback is synchronous
 
@@ -79,8 +110,10 @@ as State (`pending`, `confirmed`, `declined`) so the renderer can show it.
 
 ## 5. Failure is a diagnostic, not an exception
 
-- Config and structure problems are Blueprint diagnostics with a `path` and a machine-readable `reason`.
-- A Method reports a refusal with `addDiagnostic({ message, reason })`. Its result is then a failure
+- Config and structure problems are Blueprint diagnostics with a `path`, and, when the plugin gave them, a
+  `reason` and its `details`. Once `reasons` is declared, a `reason` outside it, a missing payload, a payload on
+  a `void` reason and `details` without a `reason` are type errors.
+- A Method reports a refusal with `addDiagnostic({ message, reason, details })`. Its result is then a failure
   (`invalid-method-arguments` from `validateArgs`, `invalid-method-result` from `execute`), and the value it
   returned is diagnostic context only.
 - **A failing Method is not rolled back.** Core batches a Method's writes so subscribers are notified once, but
@@ -103,15 +136,9 @@ A widget node's recognized keys are `id`, `type`, `config`, `slots` and `meta`; 
 ## 8. Register and check
 
 `createWidgetSystem({ plugins: [A, B] as const })`: keep the tuple `as const` so the System's type lists every
-plugin. An application loads exactly one Core instance; a plugin library declares Core as a peer dependency.
-Run `widget-skills --check` on the System: it fails on a member without documentation, an unknown tag, or a name
-the types and the runtime disagree on.
-
-## Upcoming in 0.3.0 (not in the version this skill describes)
-
-The accepted design makes the Interfaces type and its JSDoc the single source of a plugin's documentation:
-`slots` becomes a record `{ /** doc */ name: Expected }`, diagnostic reasons are declared as
-`reasons: { reasonName: Payload }`, and the runtime `description` fields go away. Do not write either form until
-the installed Core has it.
+plugin. It is a type error when a slot names an unregistered plugin type, or when a plugin named by a
+`WidgetContract<Shape, Types>` lacks a member of `Shape`. An application loads exactly one Core instance; a
+plugin library declares Core as a peer dependency. Check the documentation of the System with the generator's
+`--check`: it fails on a member without JSDoc, an unknown tag, or a name the types and the runtime disagree on.
 
 See `references/jsdoc-tags.md` for the tag set and `references/example-interfaces.md` for this System's Interfaces.

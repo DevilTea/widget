@@ -1,0 +1,294 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "surveySystem document",
+	"description": "A widget document of surveySystem: one root widget and its slot children. Structure only; compile the Blueprint for the authoritative diagnostics.",
+	"$ref": "#/$defs/widget",
+	"$defs": {
+		"widget": {
+			"anyOf": [
+				{
+					"$ref": "#/$defs/widget_Survey"
+				},
+				{
+					"$ref": "#/$defs/widget_Rating"
+				},
+				{
+					"$ref": "#/$defs/widget_Choice"
+				},
+				{
+					"$ref": "#/$defs/widget_Note"
+				}
+			]
+		},
+		"widget_Survey": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document."
+				},
+				"type": {
+					"const": "Survey"
+				},
+				"meta": {
+					"description": "Reserved for tools: any JSON value, never interpreted by Core."
+				},
+				"config": {
+					"$ref": "#/$defs/type_SurveyRawConfig",
+					"description": "How the survey is titled and where it is sent."
+				},
+				"slots": {
+					"type": "object",
+					"properties": {
+						"header": {
+							"type": "array",
+							"items": {
+								"$ref": "#/$defs/widget"
+							},
+							"description": "Anything shown above the questions. Expects any widget."
+						},
+						"questions": {
+							"type": "array",
+							"items": {
+								"anyOf": [
+									{
+										"$ref": "#/$defs/widget_Rating"
+									},
+									{
+										"$ref": "#/$defs/widget_Choice"
+									}
+								]
+							},
+							"description": "The questions, in order. Every question exposes whether it was answered. Expects Rating or Choice with the members { properties: { answered: boolean; }; }."
+						},
+						"footer": {
+							"type": "array",
+							"items": {
+								"$ref": "#/$defs/widget_Note"
+							},
+							"description": "Closing notes shown under the questions. Expects Note."
+						}
+					},
+					"additionalProperties": false
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "A survey: a header, the questions in order, and a footer note. The root of a survey document. It counts the answered questions through the `questions` contract."
+		},
+		"widget_Rating": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document."
+				},
+				"type": {
+					"const": "Rating"
+				},
+				"meta": {
+					"description": "Reserved for tools: any JSON value, never interpreted by Core."
+				},
+				"config": {
+					"type": "object",
+					"properties": {
+						"question": {
+							"$ref": "#/$defs/type_I18nText",
+							"description": "The question asked."
+						},
+						"scale": {
+							"type": "number",
+							"minimum": 3,
+							"maximum": 10,
+							"default": 5,
+							"description": "The highest value of the scale; the lowest is 1."
+						}
+					},
+					"required": [
+						"question"
+					],
+					"additionalProperties": false,
+					"description": "The question and its scale."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "A rating question: pick a number on a scale."
+		},
+		"widget_Choice": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document."
+				},
+				"type": {
+					"const": "Choice"
+				},
+				"meta": {
+					"description": "Reserved for tools: any JSON value, never interpreted by Core."
+				},
+				"config": {
+					"type": "object",
+					"properties": {
+						"question": {
+							"$ref": "#/$defs/type_I18nText",
+							"description": "The question asked."
+						},
+						"options": {
+							"type": "array",
+							"items": {
+								"$ref": "#/$defs/type_ChoiceOption"
+							},
+							"minItems": 2,
+							"description": "The options, in the order shown."
+						},
+						"multiple": {
+							"type": "boolean",
+							"description": "Whether more than one option may be chosen."
+						},
+						"followUp": {
+							"type": "string",
+							"description": "A question shown once this one is answered. Must be the id of a widget of type Rating | Choice in the same document."
+						}
+					},
+					"required": [
+						"question",
+						"options"
+					],
+					"additionalProperties": false,
+					"description": "The question and its options."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "A choice question: pick one or more options."
+		},
+		"widget_Note": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document."
+				},
+				"type": {
+					"const": "Note"
+				},
+				"meta": {
+					"description": "Reserved for tools: any JSON value, never interpreted by Core."
+				},
+				"config": {
+					"anyOf": [
+						{
+							"type": "object",
+							"properties": {
+								"text": {
+									"$ref": "#/$defs/type_I18nText",
+									"description": "The text shown."
+								}
+							},
+							"required": [
+								"text"
+							],
+							"additionalProperties": false
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The text of the note. Leave the config out for an empty note."
+				}
+			},
+			"required": [
+				"id",
+				"type"
+			],
+			"additionalProperties": false,
+			"description": "A short text."
+		},
+		"type_ChoiceOption": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"pattern": "^[a-z][a-z0-9-]*$",
+					"description": "The option's identifier, unique within the question."
+				},
+				"label": {
+					"$ref": "#/$defs/type_I18nText",
+					"description": "The label shown for the option."
+				}
+			},
+			"required": [
+				"id",
+				"label"
+			],
+			"additionalProperties": false,
+			"description": "One option of a choice question."
+		},
+		"type_I18nText": {
+			"type": "object",
+			"additionalProperties": {
+				"type": "string"
+			},
+			"description": "Text per language, keyed by language tag (`en`, `zh-TW`). At least one language should be present; the renderer falls back to the first one."
+		},
+		"type_SubmitSummary": {
+			"type": "object",
+			"properties": {
+				"answered": {
+					"type": "number",
+					"description": "How many questions were answered."
+				},
+				"total": {
+					"type": "number",
+					"description": "How many questions the survey has."
+				}
+			},
+			"required": [
+				"answered",
+				"total"
+			],
+			"additionalProperties": false,
+			"description": "What `Survey.submit()` reports when the survey is sent."
+		},
+		"type_SurveyRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText",
+					"description": "The survey's title."
+				},
+				"maxQuestions": {
+					"type": "number",
+					"minimum": 1,
+					"maximum": 20,
+					"default": 10,
+					"description": "The most questions the survey may hold."
+				},
+				"submitUrl": {
+					"type": "string",
+					"format": "uri",
+					"description": "Where the answers are sent."
+				}
+			},
+			"required": [
+				"title"
+			],
+			"additionalProperties": false,
+			"description": "The raw config of a survey."
+		}
+	}
+}

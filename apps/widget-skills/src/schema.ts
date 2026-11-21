@@ -13,7 +13,7 @@
  * The schema only gets the structure roughly right: compiling the Blueprint and reading its diagnostics decides.
  */
 
-import type { Doc, PluginIr, Shape, SystemIr } from './ir'
+import type { Doc, PluginIr, Shape, SlotIr, SystemIr } from './ir'
 import { createValueEncoding, recursiveTypeNames } from './encoding'
 
 export { recursiveTypeNames }
@@ -118,18 +118,26 @@ function jsonTypeOf(value: string | number | boolean): string {
 }
 
 function pluginDescription(plugin: PluginIr): string {
-	return describeDoc(plugin.doc, false) || plugin.runtimeDescription || ''
+	return describeDoc(plugin.doc, false)
+}
+
+/** What a slot expects, in words: the plugin types it names (or any widget) and the members a contract asks for. */
+export function describeExpectation(slot: SlotIr): string {
+	const types = slot.expected === null ? 'any widget' : slot.expected.join(' or ')
+	return slot.contract === null ? `Expects ${types}.` : `Expects ${types} with the members ${slot.contract}.`
+}
+
+function slotDescription(slot: SlotIr): string {
+	return [describeDoc(slot.doc, false), describeExpectation(slot)].filter(part => part !== '')
+		.join(' ')
 }
 
 // -------------------------------------------------------------------------------------------------
 // Full schema
 // -------------------------------------------------------------------------------------------------
 
-export function emitFullSchema(ir: SystemIr): JsonSchema {
-	const key = createDefKeys()
-	const ref = (prefix: string, name: string): JsonSchema => ({ $ref: `#/$defs/${key(prefix, name)}` })
-	const anyWidget: JsonSchema = { $ref: '#/$defs/widget' }
-
+/** The full-profile schema of a value shape: constraint tags as keywords, named types as `$ref`s into `#/$defs/type_<Name>`. */
+function createFullShapeEmitter(ir: SystemIr, ref: (prefix: string, name: string) => JsonSchema): (shape: Shape) => JsonSchema {
 	const fullShape = (shape: Shape): JsonSchema => {
 		switch (shape.kind) {
 			case 'string':
@@ -161,6 +169,66 @@ export function emitFullSchema(ir: SystemIr): JsonSchema {
 				}
 		}
 	}
+	return fullShape
+}
+
+/** The named types `shape` mentions, transitively, in a stable order. */
+export function namedTypesOf(ir: SystemIr, shape: Shape): string[] {
+	const seen = new Set<string>()
+	const visit = (node: Shape): void => {
+		if (node.kind === 'ref') {
+			if (seen.has(node.name) || ir.types[node.name] === undefined)
+				return
+			seen.add(node.name)
+			visit(ir.types[node.name]!.shape)
+		}
+		else if (node.kind === 'array') {
+			visit(node.items)
+		}
+		else if (node.kind === 'record') {
+			visit(node.value)
+		}
+		else if (node.kind === 'union') {
+			node.members.forEach(visit)
+		}
+		else if (node.kind === 'object') {
+			node.properties.forEach(property => visit(property.shape))
+		}
+	}
+	visit(shape)
+	return [...seen]
+}
+
+/**
+ * The JSON Schema (Draft 2020-12, full profile) of one plugin's authored config (`config.raw`): field descriptions
+ * from JSDoc, constraint tags as keywords, a `null` alternative when the config may be left out, and a `$defs`
+ * entry for each named type it reaches. `null` when the plugin has no config.
+ */
+export function emitConfigSchema(ir: SystemIr, plugin: PluginIr): JsonSchema | null {
+	if (plugin.config === null)
+		return null
+	const key = createDefKeys()
+	const fullShape = createFullShapeEmitter(ir, (prefix, name) => ({ $ref: `#/$defs/${key(prefix, name)}` }))
+	const value = fullShape(plugin.config.rawShape)
+	const defs: Record<string, JsonSchema> = {}
+	for (const name of namedTypesOf(ir, plugin.config.rawShape)) {
+		const type = ir.types[name]!
+		defs[key('type', name)] = describe({ ...fullShape(type.shape), ...constraintKeywords(type.doc) }, describeDoc(type.doc, false))
+	}
+	const body = plugin.config.omittable ? { anyOf: [value, { type: 'null' }] } : value
+	return {
+		$schema: DIALECT,
+		title: `${plugin.type} config`,
+		...describe(body, describeDoc(plugin.config.doc, false)),
+		...(Object.keys(defs).length === 0 ? {} : { $defs: defs }),
+	}
+}
+
+export function emitFullSchema(ir: SystemIr): JsonSchema {
+	const key = createDefKeys()
+	const ref = (prefix: string, name: string): JsonSchema => ({ $ref: `#/$defs/${key(prefix, name)}` })
+	const anyWidget: JsonSchema = { $ref: '#/$defs/widget' }
+	const fullShape = createFullShapeEmitter(ir, ref)
 	const children = (expected: readonly string[] | null): JsonSchema => {
 		const known = expected?.filter(type => ir.plugins.some(plugin => plugin.type === type)) ?? []
 		return known.length === 0 ? anyWidget : known.length === 1 ? ref('widget', known[0]!) : { anyOf: known.map(type => ref('widget', type)) }
@@ -178,16 +246,16 @@ export function emitFullSchema(ir: SystemIr): JsonSchema {
 		const required = ['id', 'type']
 		if (plugin.config !== null) {
 			const config = fullShape(plugin.config.rawShape)
-			properties.config = describe(plugin.config.omittable ? { anyOf: [config, { type: 'null' }] } : config, plugin.config.runtimeDescription ?? '')
+			properties.config = describe(plugin.config.omittable ? { anyOf: [config, { type: 'null' }] } : config, describeDoc(plugin.config.doc, false))
 			if (!plugin.config.omittable)
 				required.push('config')
 		}
 		// A declared but empty slot set (`slots: never`) still accepts `slots: {}`.
-		if (plugin.slotForm !== null) {
+		if (plugin.capabilities.slots) {
 			properties.slots = {
 				type: 'object',
-				properties: Object.fromEntries(plugin.slots.map(slot => [slot.name, describe({ type: 'array', items: children(slot.expected) }, describeDoc(slot.doc, false) || slot.runtimeDescription || '')])),
-				additionalProperties: plugin.slotsOpen ? { type: 'array', items: anyWidget } : false,
+				properties: Object.fromEntries(plugin.slots.map(slot => [slot.name, describe({ type: 'array', items: children(slot.expected) }, slotDescription(slot))])),
+				additionalProperties: false,
 			}
 		}
 		defs[key('widget', plugin.type)] = describe({ type: 'object', properties, required, additionalProperties: false }, pluginDescription(plugin))
@@ -272,48 +340,45 @@ export function emitLlmSchema(ir: SystemIr): JsonSchema {
 	}
 
 	const slotNames = [...new Set(ir.plugins.flatMap(plugin => plugin.slots.map(slot => slot.name)))]
-	const anyOpen = ir.plugins.some(plugin => plugin.slotsOpen)
-	const allSlots = ir.plugins.flatMap(parent => parent.slots.map(slot => `${parent.type}.${slot.name}`))
 	const defs: Record<string, JsonSchema> = {}
 	for (const plugin of ir.plugins) {
-		// Only a slot that names its expected children says where a type may go. The 0.2 string-union form does
-		// not, so nothing is claimed per type (the root type, for one, goes into no slot at all).
-		const explicit = ir.plugins.flatMap(parent => parent.slots
-			.filter(slot => slot.expected?.includes(plugin.type) === true)
+		// A slot that names no plugin type (`WidgetChild`, a contract without `Types`) takes any widget.
+		const accepting = ir.plugins.flatMap(parent => parent.slots
+			.filter(slot => slot.expected === null || slot.expected.includes(plugin.type))
 			.map(slot => `${parent.type}.${slot.name}`))
-		const placement = explicit.length > 0
-			? ` A ${plugin.type} may go into: ${explicit.join(', ')}.`
-			: allSlots.length > 0 ? ` The slots of this System: ${allSlots.join(', ')}; each slot's description says which types it takes.` : ''
+		const placement = accepting.length > 0
+			? ` A ${plugin.type} may go into: ${accepting.join(', ')}.`
+			: ` No slot takes a ${plugin.type}: it can only be the root.`
 		const properties: Record<string, JsonSchema> = {
 			id: { type: 'string', description: 'Unique within the document. Other nodes name it in "parent".' },
 			type: { type: 'string', const: plugin.type },
 			parent: { type: 'string', description: 'The id of the parent node. Leave the key out on the one root node.' },
 			slot: {
 				type: 'string',
-				...(slotNames.length === 0 || anyOpen ? {} : { enum: slotNames }),
+				...(slotNames.length === 0 ? {} : { enum: slotNames }),
 				description: `The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in "nodes".${placement}`,
 			},
 		}
 		const required = ['id', 'type']
 		if (plugin.config !== null) {
-			properties.config = describe(llmShape(plugin.config.rawShape), [plugin.config.runtimeDescription ?? '', plugin.config.omittable ? 'Optional: leave the key out when unused.' : ''].filter(part => part !== '')
+			properties.config = describe(llmShape(plugin.config.rawShape), [describeDoc(plugin.config.doc, false), plugin.config.omittable ? 'Optional: leave the key out when unused.' : ''].filter(part => part !== '')
 				.join(' '))
 			if (!plugin.config.omittable)
 				required.push('config')
 		}
-		if (plugin.slotForm !== null && (plugin.slots.length > 0 || plugin.slotsOpen)) {
+		if (plugin.slots.length > 0) {
 			properties.slots = {
 				type: 'array',
-				items: { type: 'string', ...(plugin.slotsOpen ? {} : { enum: plugin.slots.map(slot => slot.name) }) },
+				items: { type: 'string', enum: plugin.slots.map(slot => slot.name) },
 				description: 'Only needed to declare a slot that has no children; otherwise leave the key out. The slot names of this node, in order.',
 			}
 		}
 		// `meta` is deliberately absent: a model never writes it (the converters still carry it), and every optional
 		// property counts against the provider's optional-parameter limit.
 		const slotText = plugin.slots.length > 0
-			? `Slots: ${plugin.slots.map(slot => `${slot.name}${slot.expected === null ? '' : ` (expects ${slot.expected.join(', ')})`}${(slot.doc.summary || slot.runtimeDescription) ? `: ${slot.doc.summary || slot.runtimeDescription}` : ''}`)
+			? `Slots: ${plugin.slots.map(slot => `${slot.name} (${slot.expected === null ? 'any widget' : slot.expected.join(', ')})${slot.doc.summary === '' ? '' : `: ${slot.doc.summary}`}`)
 				.join('; ')}`
-			: plugin.slotsOpen ? 'Slots: any name.' : 'No slots: it cannot be a parent.'
+			: 'No slots: it cannot be a parent.'
 		defs[key('node', plugin.type)] = describe({ type: 'object', properties, required, additionalProperties: false }, [pluginDescription(plugin), slotText].filter(part => part !== '')
 			.join(' '))
 	}

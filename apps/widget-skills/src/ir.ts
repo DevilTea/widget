@@ -91,57 +91,66 @@ export interface EventIr {
 	name: string
 	payload: { label: string | null, typeText: string, shape: Shape }[]
 	doc: Doc
-	runtimeDescription: string | null
 }
 
 export interface SlotIr {
 	name: string
 	doc: Doc
-	/** The widget types the slot expects, or `null` when the type does not say (the 0.2 string-union form). */
+	/**
+	 * The plugin types the slot expects: the members of a plain union, or the `Types` of a
+	 * `WidgetContract<Shape, Types>`. `null` when it names none (`WidgetChild`, a contract without `Types`): any widget.
+	 */
 	expected: string[] | null
-	runtimeDescription: string | null
+	/** The printed `Shape` of a `WidgetContract` expectation (the members a child must have), or `null`. */
+	contract: string | null
+	/** The expectation as written in the types, for example `'Note'` or `WidgetChild`. */
+	expectationText: string
 }
 
 export interface ReasonIr {
 	name: string
-	payloadText: string
-	shape: Shape
+	/** The `details` a diagnostic with this reason carries; `null` for a `void` reason (no `details`). */
+	payload: { typeText: string, shape: Shape } | null
 	doc: Doc
 }
 
 export interface ConfigIr {
+	/** The JSDoc on the `config` member of the Interfaces. */
+	doc: Doc
 	rawText: string
 	resolvedText: string
 	/** The raw config without `null`/`undefined`. */
 	rawShape: Shape
 	/** Whether `raw` admits `null`, which is how a plugin says the config may be omitted. */
 	omittable: boolean
-	runtimeDescription: string | null
 }
+
+/** The capability names of `plugin.capabilities`. */
+export const CAPABILITIES = ['config', 'slots', 'state', 'properties', 'methods', 'events'] as const
+
+export type Capability = typeof CAPABILITIES[number]
 
 export interface PluginIr {
 	type: string
 	/** The name of the `XxxInterfaces` type, when it has one. */
 	interfacesName: string | null
 	doc: Doc
-	runtimeDescription: string | null
+	/** Declaration presence read from the types: a capability exists when its key is a required member of the Interfaces. */
+	capabilities: Record<Capability, boolean>
 	config: ConfigIr | null
-	/** `union` is the 0.2 form (`slots: 'a' | 'b'`), `record` the 0.3 form (`slots: { a: Expected }`). */
-	slotForm: 'union' | 'record' | null
-	/** `slots: string`: any slot name is accepted, so `slots` lists only what the runtime declares. */
-	slotsOpen: boolean
 	slots: SlotIr[]
 	state: StateIr[]
 	properties: MemberIr[]
 	methods: MethodIr[]
 	events: EventIr[]
+	/** `null` when the Interfaces declare no `reasons`. */
 	reasons: ReasonIr[] | null
 	/** Names of the `SystemIr.types` entries this plugin's members mention, transitively. */
 	typeNames: string[]
 }
 
 export interface SystemIr {
-	irVersion: 1
+	irVersion: 2
 	system: string
 	module: string
 	plugins: PluginIr[]
@@ -154,14 +163,13 @@ export interface SystemIr {
 export interface RuntimeFacts {
 	plugins: {
 		type: string
-		description: string
-		configDescription: string | null
-		hasConfig: boolean
-		hasMethods: boolean
-		slots: { name: string, description: string }[] | null
+		/** `plugin.capabilities`, as the catalog reports it. */
+		capabilities: Record<Capability, boolean>
+		/** The slot names from the catalog, `null` without the capability. */
+		slots: string[] | null
 		state: { name: string, authorWritable: boolean }[] | null
 		properties: string[] | null
-		events: { name: string, description: string }[] | null
+		events: string[] | null
 	}[]
 }
 

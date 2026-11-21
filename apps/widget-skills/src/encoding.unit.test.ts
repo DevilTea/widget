@@ -12,11 +12,9 @@ function plugin(type: string, rawShape: Shape | null, slots: string[] = []): Plu
 		type,
 		interfacesName: null,
 		doc: doc(`The ${type} widget.`),
-		runtimeDescription: null,
-		config: rawShape === null ? null : { rawText: 'Config', resolvedText: 'Config', rawShape, omittable: false, runtimeDescription: null },
-		slotForm: slots.length === 0 ? null : 'union',
-		slotsOpen: false,
-		slots: slots.map(name => ({ name, doc: doc(), expected: null, runtimeDescription: null })),
+		capabilities: { config: rawShape !== null, slots: slots.length > 0, state: false, properties: false, methods: false, events: false },
+		config: rawShape === null ? null : { doc: doc('The config.'), rawText: 'Config', resolvedText: 'Config', rawShape, omittable: false },
+		slots: slots.map(name => ({ name, doc: doc(), expected: null, contract: null, expectationText: 'WidgetChild' })),
 		state: [],
 		properties: [],
 		methods: [],
@@ -27,7 +25,7 @@ function plugin(type: string, rawShape: Shape | null, slots: string[] = []): Plu
 }
 
 function system(plugins: PluginIr[], types: SystemIr['types'] = {}): SystemIr {
-	return { irVersion: 1, system: 'testSystem', module: 'test.ts', plugins, types, mismatches: [] }
+	return { irVersion: 2, system: 'testSystem', module: 'test.ts', plugins, types, mismatches: [] }
 }
 
 /** `{ kind: 'text', labels: Record } | { kind: 'image', labels: string[], alt?: Record }`: both members are objects. */

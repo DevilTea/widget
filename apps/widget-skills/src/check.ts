@@ -2,8 +2,9 @@
  * `--check`: the documentation gate.
  *
  * Errors (the check fails):
- * - `missing-doc` on a plugin, an Interfaces member (slot, State, Property, Method, Method parameter, Event,
- *   reason), a field of an inline object type one of them uses, or a field reachable from `config.raw`;
+ * - `missing-doc` on a plugin, its `config`, an Interfaces member (slot, State, Property, Method, Method parameter,
+ *   Event, reason), a field of an inline object type one of them uses (a reason's payload included), or a field
+ *   reachable from `config.raw` or a reason's payload;
  * - `unknown-tag`: a JSDoc tag outside the tag set (`tsdoc.json`);
  * - `name-mismatch`: a name the types and the runtime disagree on.
  *
@@ -11,8 +12,7 @@
  * a State or Property value, a Method signature or an Event payload. Those are read by renderer authors, not
  * written by document authors.
  *
- * Until 0.3.0 the runtime still carries descriptions, so a plugin, an Event and a slot of the string-union form
- * (which has no place for JSDoc) count as documented when the runtime description is non-empty.
+ * JSDoc is the only documentation: Core 0.3 carries no description at run time.
  */
 
 import type { Doc, Shape, SystemIr } from './ir'
@@ -42,13 +42,13 @@ export function checkIr(ir: SystemIr): CheckResult {
 	let members = 0
 	let documented = 0
 
-	const visit = (where: string, doc: Doc, severity: Severity, fallback: string | null = null): void => {
+	const visit = (where: string, doc: Doc, severity: Severity): void => {
 		// A union lists the same field once per member that declares it.
 		if (seen.has(where))
 			return
 		seen.add(where)
 		members++
-		if (doc.summary === '' && (fallback === null || fallback.trim() === ''))
+		if (doc.summary === '')
 			problems.push({ kind: 'missing-doc', severity, where, message: `${where} has no JSDoc.` })
 		else
 			documented++
@@ -97,13 +97,14 @@ export function checkIr(ir: SystemIr): CheckResult {
 	}
 
 	for (const plugin of ir.plugins) {
-		visit(plugin.type, plugin.doc, 'error', plugin.runtimeDescription)
+		visit(plugin.type, plugin.doc, 'error')
 		if (plugin.config !== null) {
+			visit(`${plugin.type}.config`, plugin.config.doc, 'error')
 			reach(plugin.config.rawShape)
 			visitShape(`${plugin.type}.config.raw`, plugin.config.rawShape, 'error')
 		}
 		for (const slot of plugin.slots)
-			visit(`${plugin.type}.slots.${slot.name}`, slot.doc, 'error', plugin.slotForm === 'union' ? slot.runtimeDescription : null)
+			visit(`${plugin.type}.slots.${slot.name}`, slot.doc, 'error')
 		for (const member of plugin.state) {
 			visit(`${plugin.type}.state.${member.name}`, member.doc, 'error')
 			visitShape(`${plugin.type}.state.${member.name}`, member.shape, 'error')
@@ -126,12 +127,16 @@ export function checkIr(ir: SystemIr): CheckResult {
 			visitShape(`${where}()`, method.returnShape, 'error')
 		}
 		for (const event of plugin.events) {
-			visit(`${plugin.type}.events.${event.name}`, event.doc, 'error', event.runtimeDescription)
+			visit(`${plugin.type}.events.${event.name}`, event.doc, 'error')
 			event.payload.forEach((item, index) => visitShape(`${plugin.type}.events.${event.name}[${item.label ?? index}]`, item.shape, 'error'))
 		}
 		for (const reason of plugin.reasons ?? []) {
 			visit(`${plugin.type}.reasons.${reason.name}`, reason.doc, 'error')
-			visitShape(`${plugin.type}.reasons.${reason.name}`, reason.shape, 'error')
+			if (reason.payload !== null) {
+				// A repair loop reads the payload: a named type it uses is held to the same rule as `config.raw`.
+				reach(reason.payload.shape)
+				visitShape(`${plugin.type}.reasons.${reason.name}`, reason.payload.shape, 'error')
+			}
 		}
 	}
 	for (const [name, type] of Object.entries(ir.types)) {

@@ -1,16 +1,17 @@
 /**
  * IR extraction: walks `typeof <system>` -> `WidgetSystem<[...plugins]>` -> each `WidgetPlugin<Type, Interfaces>`
- * with the TypeScript checker and reads the Interfaces members and their JSDoc.
+ * with the TypeScript checker and reads the Interfaces members and their JSDoc (Core 0.3: the JSDoc is the only
+ * documentation; Core carries no prose at run time).
  *
- * Both slot forms are read: the 0.2 string-literal union (`slots: 'a' | 'b'`, no per-slot doc in the types) and
- * the 0.3 record (`slots: { /** doc *\/ a: Expected }`).
+ * Slots are the 0.3 record `{ /** doc *\/ name: Expected }`, where `Expected` is a union of plugin types, a
+ * `WidgetContract<Shape, Types>` or `WidgetChild`.
  */
 
-import type { ConstraintTag, Doc, EventIr, MemberIr, MethodIr, NamedType, PluginIr, ReasonIr, RuntimeFacts, Shape, ShapeProperty, SlotIr, StateIr, SystemIr } from './ir'
+import type { Capability, ConstraintTag, Doc, EventIr, MemberIr, MethodIr, NamedType, PluginIr, ReasonIr, RuntimeFacts, Shape, ShapeProperty, SlotIr, StateIr, SystemIr } from './ir'
 import { dirname, relative, resolve } from 'node:path'
 import process from 'node:process'
 import ts from 'typescript'
-import { CONSTRAINT_TAGS, emptyDoc, PROSE_TAGS } from './ir'
+import { CAPABILITIES, CONSTRAINT_TAGS, emptyDoc, PROSE_TAGS } from './ir'
 
 export interface ExtractOptions {
 	/** The module that exports the System. */
@@ -25,6 +26,8 @@ export interface ExtractOptions {
 	runtime?: RuntimeFacts
 	/** Paths in the IR are relative to this directory. Defaults to the working directory. */
 	cwd?: string
+	/** Creates the TypeScript program (a seam for tests that count programs). Defaults to `ts.createProgram`. */
+	createProgram?: (options: ts.CreateProgramOptions) => ts.Program
 }
 
 const TYPE_FORMAT = ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope
@@ -40,27 +43,48 @@ function readPaths(tsconfigPath: string): Record<string, string[]> {
 		.map(([key, targets]) => [key, targets.map(target => resolve(base, target))]))
 }
 
-function createProgram(options: ExtractOptions): ts.Program {
+/** The tsconfig files a program's options come from: `tsconfigPath` (or the one found), the files it extends, and `sourceTsconfigPath`. */
+export interface ProgramConfig {
+	compilerOptions: ts.CompilerOptions
+	configFiles: string[]
+}
+
+export function readProgramConfig(options: Pick<ExtractOptions, 'modulePath' | 'tsconfigPath' | 'sourceTsconfigPath'>): ProgramConfig {
 	const modulePath = resolve(options.modulePath)
 	const tsconfigPath = options.tsconfigPath !== undefined
 		? resolve(options.tsconfigPath)
 		: ts.findConfigFile(dirname(modulePath), ts.sys.fileExists)
 	let compilerOptions: ts.CompilerOptions = { strict: true, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, target: ts.ScriptTarget.ESNext }
+	const configFiles: string[] = []
 	if (tsconfigPath !== undefined) {
 		const parsed = ts.getParsedCommandLineOfConfigFile(tsconfigPath, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} })
 		if (parsed === undefined)
 			throw new Error(`Cannot parse ${tsconfigPath}.`)
 		compilerOptions = parsed.options
+		configFiles.push(tsconfigPath, ...((compilerOptions.configFile as ts.TsConfigSourceFile | undefined)?.extendedSourceFiles ?? []))
 	}
-	if (options.sourceTsconfigPath !== undefined)
-		compilerOptions = { ...compilerOptions, paths: { ...compilerOptions.paths, ...readPaths(resolve(options.sourceTsconfigPath)) } }
-	return ts.createProgram({ rootNames: [modulePath], options: { ...compilerOptions, noEmit: true } })
+	if (options.sourceTsconfigPath !== undefined) {
+		const sourceTsconfigPath = resolve(options.sourceTsconfigPath)
+		configFiles.push(sourceTsconfigPath)
+		compilerOptions = { ...compilerOptions, paths: { ...compilerOptions.paths, ...readPaths(sourceTsconfigPath) } }
+	}
+	return { compilerOptions, configFiles: [...new Set(configFiles.map(file => resolve(file)))] }
+}
+
+/** Builds the TypeScript program over the System's module. This is the expensive step a cache hit skips. */
+export function createExtractionProgram(options: ExtractOptions, config: ProgramConfig = readProgramConfig(options)): ts.Program {
+	const create = options.createProgram ?? ts.createProgram
+	return create({ rootNames: [resolve(options.modulePath)], options: { ...config.compilerOptions, noEmit: true } })
 }
 
 export function extractIr(options: ExtractOptions): SystemIr {
+	return extractIrFromProgram(createExtractionProgram(options), options)
+}
+
+/** Reads the IR from a program built by `createExtractionProgram`. */
+export function extractIrFromProgram(program: ts.Program, options: ExtractOptions): SystemIr {
 	const cwd = options.cwd ?? process.cwd()
 	const modulePath = resolve(options.modulePath)
-	const program = createProgram(options)
 	const checker = program.getTypeChecker()
 	const sourceFile = program.getSourceFile(modulePath)
 	if (sourceFile === undefined)
@@ -239,23 +263,53 @@ export function extractIr(options: ExtractOptions): SystemIr {
 			.map(symbol => ({ symbol, type: checker.getTypeOfSymbol(symbol) }))
 	}
 
-	function expectedTypesOf(type: ts.Type): string[] | null {
+	/** The string literal values of `type` (a literal or a union of literals), or `null` when it is anything else. */
+	function literalNames(type: ts.Type): string[] | null {
 		const members = type.isUnion() ? type.types : [type]
-		const names: string[] = []
-		for (const member of members) {
-			if (member.flags & ts.TypeFlags.StringLiteral) {
-				names.push((member as ts.StringLiteralType).value)
-				continue
-			}
-			// A plugin (or any object) type that carries a literal `type`.
-			const typeProperty = member.getProperty('type')
-			const literal = typeProperty === undefined ? undefined : checker.getTypeOfSymbol(typeProperty)
-			if (literal !== undefined && (literal.flags & ts.TypeFlags.StringLiteral) !== 0)
-				names.push((literal as ts.StringLiteralType).value)
-			else
-				return null
+		if (!members.every(member => (member.flags & ts.TypeFlags.StringLiteral) !== 0))
+			return null
+		return members.map(member => (member as ts.StringLiteralType).value)
+	}
+
+	/** `[Shape, Types]` when `type` is a `WidgetContract<Shape, Types>` (`WidgetChild` included), otherwise `null`. */
+	function contractArguments(type: ts.Type): readonly [ts.Type, ts.Type] | null {
+		const symbol = type.getSymbol()
+		if (symbol?.name !== 'WidgetContract' || !(type.flags & ts.TypeFlags.Object) || !((type as ts.ObjectType).objectFlags & ts.ObjectFlags.Reference))
+			return null
+		const [shape, types] = checker.getTypeArguments(type as ts.TypeReference)
+		return shape === undefined || types === undefined ? null : [shape, types]
+	}
+
+	function slotOf(pluginType: string, symbol: ts.Symbol): SlotIr {
+		const type = checker.getTypeOfSymbol(symbol)
+		const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0]
+		const expectationText = declaration !== undefined && ts.isPropertySignature(declaration) && declaration.type !== undefined
+			? declaration.type.getText()
+			: textOf(type)
+		const slot: SlotIr = { name: symbol.name, doc: docOf(symbol), expected: null, contract: null, expectationText }
+		const names = literalNames(type)
+		if (names !== null) {
+			slot.expected = names
+			return slot
 		}
-		return names.length === 0 ? null : names
+		const contract = contractArguments(type)
+		if (contract === null)
+			throw new Error(`${pluginType}.slots.${symbol.name}: expected a union of plugin types, a WidgetContract or WidgetChild, got ${textOf(type)}.`)
+		const [shape, types] = contract
+		if (!(types.flags & ts.TypeFlags.Never)) {
+			const expected = literalNames(types)
+			if (expected === null)
+				throw new Error(`${pluginType}.slots.${symbol.name}: the Types of the WidgetContract must be plugin type literals, got ${textOf(types)}.`)
+			slot.expected = expected
+		}
+		if (checker.getPropertiesOfType(shape).length > 0)
+			slot.contract = textOf(shape)
+		return slot
+	}
+
+	function hasCapability(interfaces: ts.Type, capability: Capability): boolean {
+		const property = interfaces.getProperty(capability)
+		return property !== undefined && (property.flags & ts.SymbolFlags.Optional) === 0
 	}
 
 	function extractPlugin(pluginType: ts.Type): PluginIr {
@@ -274,10 +328,8 @@ export function extractIr(options: ExtractOptions): SystemIr {
 			type,
 			interfacesName: interfacesSymbol === undefined || interfacesSymbol.name.startsWith('__') ? null : interfacesSymbol.name,
 			doc: docOf(interfacesSymbol),
-			runtimeDescription: null,
+			capabilities: Object.fromEntries(CAPABILITIES.map(capability => [capability, hasCapability(interfaces, capability)])) as Record<Capability, boolean>,
 			config: null,
-			slotForm: null,
-			slotsOpen: false,
 			slots: [],
 			state: [],
 			properties: [],
@@ -299,34 +351,24 @@ export function extractIr(options: ExtractOptions): SystemIr {
 			const { type: rawValue, hadNull } = nonNullable(rawType)
 			track(resolvedType)
 			plugin.config = {
+				doc: docOf(configProperty),
 				rawText: textOf(rawType),
 				resolvedText: textOf(resolvedType),
 				rawShape: track(rawValue),
 				omittable: hadNull,
-				runtimeDescription: null,
 			}
 		}
 
 		const slotsProperty = interfaces.getProperty('slots')
 		if (slotsProperty !== undefined && !(slotsProperty.flags & ts.SymbolFlags.Optional)) {
 			const slotsType = checker.getTypeOfSymbol(slotsProperty)
-			const literals = (slotsType.isUnion() ? slotsType.types : [slotsType])
-			if (literals.some(member => (member.flags & ts.TypeFlags.String) !== 0)) {
-				// `slots: string` (or a union that widens to it): an open slot set. The names come from the runtime.
-				plugin.slotForm = 'union'
-				plugin.slotsOpen = true
-			}
-			else if (literals.every(member => (member.flags & (ts.TypeFlags.StringLiteral | ts.TypeFlags.Never)) !== 0)) {
-				plugin.slotForm = 'union'
-				plugin.slots = literals
-					.filter(member => (member.flags & ts.TypeFlags.StringLiteral) !== 0)
-					.map((member): SlotIr => ({ name: (member as ts.StringLiteralType).value, doc: emptyDoc(), expected: null, runtimeDescription: null }))
-			}
-			else {
-				plugin.slotForm = 'record'
-				plugin.slots = checker.getPropertiesOfType(slotsType)
-					.map((symbol): SlotIr => ({ name: symbol.name, doc: docOf(symbol), expected: expectedTypesOf(checker.getTypeOfSymbol(symbol)), runtimeDescription: null }))
-			}
+			// `slots: never` is the explicit-empty spelling: no properties. A string type is the 0.2 union form.
+			if (!(slotsType.flags & ts.TypeFlags.Never) && (slotsType.flags & ts.TypeFlags.StringLike || (slotsType.isUnion() && slotsType.types.some(member => member.flags & ts.TypeFlags.StringLike))))
+				throw new Error(`${type}.slots is a union of names (${textOf(slotsType)}); Core 0.3 declares slots as a record { name: Expected }.`)
+			plugin.slots = (slotsType.flags & ts.TypeFlags.Never)
+				? []
+				: checker.getPropertiesOfType(slotsType)
+						.map(symbol => slotOf(type, symbol))
 		}
 
 		plugin.state = (membersOf(interfaces, 'state') ?? []).map(({ symbol, type: memberType }): StateIr => {
@@ -391,13 +433,13 @@ export function extractIr(options: ExtractOptions): SystemIr {
 					return { label: label === undefined ? null : label.name.getText(), typeText: textOf(element), shape: track(element) }
 				}),
 				doc: docOf(symbol),
-				runtimeDescription: null,
 			}
 		})
 		const reasons = membersOf(interfaces, 'reasons')
 		if (reasons !== null) {
 			plugin.reasons = reasons.map(({ symbol, type: memberType }): ReasonIr => {
-				return { name: symbol.name, payloadText: textOf(memberType), shape: track(memberType), doc: docOf(symbol) }
+				const payload = (memberType.flags & ts.TypeFlags.Void) !== 0 ? null : { typeText: textOf(memberType), shape: track(memberType) }
+				return { name: symbol.name, payload, doc: docOf(symbol) }
 			})
 		}
 		plugin.typeNames = [...refs].sort()
@@ -417,7 +459,7 @@ export function extractIr(options: ExtractOptions): SystemIr {
 		.map(extractPlugin)
 
 	const ir: SystemIr = {
-		irVersion: 1,
+		irVersion: 2,
 		system: options.exportName,
 		module: relative(cwd, modulePath),
 		plugins,
@@ -430,12 +472,7 @@ export function extractIr(options: ExtractOptions): SystemIr {
 	return ir
 }
 
-function compareNames(label: string, fromTypes: readonly string[] | null, fromRuntime: readonly string[] | null, mismatches: string[]): void {
-	if (fromRuntime === null || fromTypes === null) {
-		if ((fromTypes?.length ?? 0) > 0 || (fromRuntime?.length ?? 0) > 0)
-			mismatches.push(`${label}: the types declare [${(fromTypes ?? []).join(', ')}] but the runtime declares [${(fromRuntime ?? []).join(', ')}].`)
-		return
-	}
+function compareNames(label: string, fromTypes: readonly string[], fromRuntime: readonly string[], mismatches: string[]): void {
 	const missing = fromTypes.filter(name => !fromRuntime.includes(name))
 	const extra = fromRuntime.filter(name => !fromTypes.includes(name))
 	if (missing.length > 0)
@@ -444,7 +481,11 @@ function compareNames(label: string, fromTypes: readonly string[] | null, fromRu
 		mismatches.push(`${label}: declared at runtime but not in the types: ${extra.join(', ')}.`)
 }
 
-/** Fills the runtime-only facts (descriptions, `authorWritable`) and records every name difference in `ir.mismatches`. */
+/**
+ * Fills the runtime-only fact (`authorWritable`) and records every difference between the types and the runtime in
+ * `ir.mismatches`: capability presence (all six), and the names of slots, State, Properties and Events. Method
+ * names are not compared: neither the catalog nor `inspectPlugin` has a Method inventory.
+ */
 export function applyRuntimeFacts(ir: SystemIr, runtime: RuntimeFacts): void {
 	const mismatches = ir.mismatches
 	compareNames('plugin types', ir.plugins.map(plugin => plugin.type), runtime.plugins.map(plugin => plugin.type), mismatches)
@@ -452,30 +493,19 @@ export function applyRuntimeFacts(ir: SystemIr, runtime: RuntimeFacts): void {
 		const facts = runtime.plugins.find(candidate => candidate.type === plugin.type)
 		if (facts === undefined)
 			continue
-		plugin.runtimeDescription = facts.description
-		if ((plugin.config !== null) !== facts.hasConfig)
-			mismatches.push(`${plugin.type}.config: the types ${plugin.config === null ? 'do not declare' : 'declare'} a config but the runtime ${facts.hasConfig ? 'does' : 'does not'}.`)
-		if (plugin.config !== null)
-			plugin.config.runtimeDescription = facts.configDescription
-		if ((plugin.methods.length > 0) !== facts.hasMethods && plugin.methods.length > 0)
-			mismatches.push(`${plugin.type}.methods: declared in the types but the runtime has no Methods capability.`)
-		if (plugin.slotsOpen) {
-			// An open slot set (`slots: string`) has no names in the types: the runtime's declarations are the list.
-			if (facts.slots === null)
-				mismatches.push(`${plugin.type}.slots: declared in the types but the runtime has no Slots capability.`)
-			plugin.slots = (facts.slots ?? []).map(slot => ({ name: slot.name, doc: emptyDoc(), expected: null, runtimeDescription: slot.description }))
+		for (const capability of CAPABILITIES) {
+			if (plugin.capabilities[capability] !== facts.capabilities[capability])
+				mismatches.push(`${plugin.type}.${capability}: the types ${plugin.capabilities[capability] ? 'declare' : 'do not declare'} the capability but the runtime ${facts.capabilities[capability] ? 'does' : 'does not'}.`)
 		}
-		else {
-			compareNames(`${plugin.type}.slots`, plugin.slotForm === null ? null : plugin.slots.map(slot => slot.name), facts.slots?.map(slot => slot.name) ?? null, mismatches)
-		}
-		compareNames(`${plugin.type}.state`, plugin.state.map(member => member.name), facts.state?.map(member => member.name) ?? null, mismatches)
-		compareNames(`${plugin.type}.properties`, plugin.properties.map(member => member.name), facts.properties, mismatches)
-		compareNames(`${plugin.type}.events`, plugin.events.map(member => member.name), facts.events?.map(member => member.name) ?? null, mismatches)
-		for (const slot of plugin.slots)
-			slot.runtimeDescription = facts.slots?.find(candidate => candidate.name === slot.name)?.description ?? null
+		if (plugin.capabilities.slots && facts.slots !== null)
+			compareNames(`${plugin.type}.slots`, plugin.slots.map(slot => slot.name), facts.slots, mismatches)
+		if (plugin.capabilities.state && facts.state !== null)
+			compareNames(`${plugin.type}.state`, plugin.state.map(member => member.name), facts.state.map(member => member.name), mismatches)
+		if (plugin.capabilities.properties && facts.properties !== null)
+			compareNames(`${plugin.type}.properties`, plugin.properties.map(member => member.name), facts.properties, mismatches)
+		if (plugin.capabilities.events && facts.events !== null)
+			compareNames(`${plugin.type}.events`, plugin.events.map(member => member.name), facts.events, mismatches)
 		for (const member of plugin.state)
 			member.authorWritable = facts.state?.find(candidate => candidate.name === member.name)?.authorWritable ?? null
-		for (const event of plugin.events)
-			event.runtimeDescription = facts.events?.find(candidate => candidate.name === event.name)?.description ?? null
 	}
 }

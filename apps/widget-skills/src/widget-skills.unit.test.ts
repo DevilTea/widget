@@ -4,152 +4,218 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inspectPlugin } from '@deviltea/widget-core/inspection'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { onboardingPresets } from '../../lab/src/showcases/onboarding/presets'
-import { onboardingSystem } from '../../lab/src/showcases/onboarding/system'
+import { surveySystem } from '../fixtures/survey-system'
 import { undocumentedSystem } from './fixtures/undocumented-system'
-import { applyRuntimeFacts, checkIr, collectRuntimeFacts, createFlatConverter, emitFullSchema, emitLlmSchema, extractIr, FlatConversionError, generateFiles, validateSchema } from './index'
+import { applyRuntimeFacts, checkIr, collectRuntimeFacts, createFlatConverter, emitConfigSchema, emitFullSchema, emitLlmSchema, extractIr, FlatConversionError, generateFiles, validateSchema } from './index'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '../../..')
-const sourceTsconfigPath = resolve(here, '../tsconfig.source.json')
+const tsconfigPath = resolve(here, '../tsconfig.json')
+const example = JSON.parse(readFileSync(resolve(here, '../fixtures/survey-example.json'), 'utf8')) as Record<string, unknown>
 
-// Building a TypeScript program over the Lab is slow; every test shares the two extractions.
+// Building a TypeScript program is the slow part; every test shares the two extractions.
 let ir: SystemIr
 let fixtureIr: SystemIr
 
 beforeAll(() => {
+	// The same options as `pnpm generate:example`, so the committed example can be compared.
 	ir = extractIr({
-		modulePath: resolve(root, 'apps/lab/src/showcases/onboarding/system.ts'),
-		exportName: 'onboardingSystem',
-		tsconfigPath: resolve(root, 'apps/lab/tsconfig.app.json'),
-		sourceTsconfigPath,
-		runtime: collectRuntimeFacts(onboardingSystem, inspectPlugin as never),
+		modulePath: resolve(here, '../fixtures/survey-system.ts'),
+		exportName: 'surveySystem',
+		tsconfigPath,
+		runtime: collectRuntimeFacts(surveySystem, inspectPlugin as never),
 		cwd: root,
 	})
 	fixtureIr = extractIr({
 		modulePath: resolve(here, 'fixtures/undocumented-system.ts'),
 		exportName: 'undocumentedSystem',
-		tsconfigPath: resolve(here, '../tsconfig.json'),
-		sourceTsconfigPath,
+		tsconfigPath,
 		runtime: collectRuntimeFacts(undocumentedSystem, inspectPlugin as never),
 		cwd: root,
 	})
 }, 180_000)
 
-describe('extractIr on the onboarding System', () => {
+/** Invalid variants of the example, each with the reason it is invalid. */
+function invalidSources(): [string, unknown][] {
+	const slots = example.slots as Record<string, unknown[]>
+	return [
+		['an unrecognized widget key', { ...example, extra: 1 }],
+		['a title that is not per language', { ...example, config: { title: 'not per language' } }],
+		['an unregistered type in a slot', { ...example, slots: { ...slots, questions: [{ id: 'x', type: 'Nope' }] } }],
+		['an undeclared slot', { ...example, slots: { ...slots, other: [] } }],
+		['a Rating in the footer, which expects Note', { ...example, slots: { ...slots, footer: [{ id: 'r', type: 'Rating', config: { question: { en: 'Q' } } }] } }],
+		['a Note in the questions, which expect Rating or Choice', { ...example, slots: { ...slots, questions: [{ id: 'n', type: 'Note' }] } }],
+	]
+}
+
+describe('extractIr on the fixture System', () => {
 	it('lists the plugin types in registration order and agrees with the runtime', () => {
+		expect(ir.irVersion)
+			.toBe(2)
 		expect(ir.plugins.map(plugin => plugin.type))
-			.toEqual(['Onboarding', 'AccountStep', 'InterestsStep', 'SafetyStep', 'InductionStep'])
+			.toEqual(['Survey', 'Rating', 'Choice', 'Note'])
 		expect(ir.plugins.map(plugin => plugin.type))
-			.toEqual(onboardingSystem.catalog.widgets.map(widget => widget.type))
+			.toEqual(surveySystem.catalog.widgets.map(widget => widget.type))
 		expect(ir.mismatches)
 			.toEqual([])
+		expect(ir.plugins.map(plugin => plugin.capabilities))
+			.toEqual(surveySystem.catalog.widgets.map(widget => ({ ...widget.capabilities })))
 	})
 
-	it('reads the root plugin\'s members, signatures and labeled payloads', () => {
-		const onboarding = ir.plugins[0]!
-		expect(onboarding.interfacesName)
-			.toBe('OnboardingInterfaces')
-		expect(onboarding.slotForm)
-			.toBe('union')
-		expect(onboarding.slots.map(slot => slot.name))
-			.toEqual(['steps'])
-		expect(onboarding.slots[0]!.expected)
-			.toBeNull()
-		expect(onboarding.slots[0]!.runtimeDescription)
-			.toContain('The steps in order')
-		expect(onboarding.state.map(member => [member.name, member.typeText, member.authorWritable]))
-			.toEqual([['current', 'number', false], ['finished', 'boolean', false]])
-		expect(onboarding.properties.map(member => member.name))
-			.toEqual(['title', 'steps', 'progress', 'answers'])
-		expect(onboarding.methods.map(method => method.signature))
-			.toEqual([
-				'canEnter(index: number): boolean',
-				'next(): number',
-				'back(): number',
-				'goTo(index: number): number',
-				'finish(): boolean',
-			])
-		expect(onboarding.events.map(event => [event.name, event.payload]))
-			.toEqual([
-				['stepChanged', [{ label: 'change', typeText: 'StepChange' }]],
-				['completed', [{ label: 'completion', typeText: 'Completion' }]],
-			])
-		expect(onboarding.reasons)
-			.toBeNull()
-	})
-
-	it('expands the raw config to named types with their declarations and JSDoc', () => {
-		const onboarding = ir.plugins[0]!
-		expect(onboarding.config)
-			.toMatchObject({ rawText: 'OnboardingRawConfig', resolvedText: 'OnboardingConfig', rawShape: { kind: 'ref', name: 'OnboardingRawConfig' }, omittable: false })
-		const raw = ir.types.OnboardingRawConfig!
-		expect(raw.file)
-			.toBe('apps/lab/src/showcases/onboarding/config.ts')
-		expect(raw.text)
-			.toContain('export interface OnboardingRawConfig')
-		expect(raw.shape)
+	it('reads the plugin summary and remarks from the JSDoc of the Interfaces type', () => {
+		expect(ir.plugins[0]!)
 			.toMatchObject({
-				kind: 'object',
-				properties: [
-					{ name: 'title', optional: false, shape: { kind: 'ref', name: 'I18nText' } },
-					{ name: 'startStep', optional: true, shape: { kind: 'number' }, doc: { summary: 'The index of the step the wizard opens on (0 = the first).' } },
-				],
+				interfacesName: 'SurveyInterfaces',
+				doc: { summary: 'A survey: a header, the questions in order, and a footer note.', remarks: 'The root of a survey document. It counts the answered questions through the `questions` contract.' },
 			})
-		expect(ir.types.I18nText!.shape)
-			.toEqual({ kind: 'record', value: { kind: 'string' } })
-		expect(ir.types.I18nText!.text.startsWith('/** Text per language'))
-			.toBe(true)
 	})
 
-	it('records a name the types and the runtime disagree on', () => {
+	it('reads slot records in all three forms, with their JSDoc', () => {
+		expect(ir.plugins[0]!.slots)
+			.toEqual([
+				{ name: 'header', doc: { summary: 'Anything shown above the questions.', remarks: '', tags: {}, unknownTags: [] }, expected: null, contract: null, expectationText: 'WidgetChild' },
+				{
+					name: 'questions',
+					doc: { summary: 'The questions, in order.', remarks: 'Every question exposes whether it was answered.', tags: {}, unknownTags: [] },
+					expected: ['Rating', 'Choice'],
+					contract: '{ properties: { answered: boolean; }; }',
+					expectationText: 'WidgetContract<{ properties: { answered: boolean } }, \'Rating\' | \'Choice\'>',
+				},
+				{ name: 'footer', doc: { summary: 'Closing notes shown under the questions.', remarks: '', tags: {}, unknownTags: [] }, expected: ['Note'], contract: null, expectationText: '\'Note\'' },
+			])
+		// A contract without `Types` names no plugin type: any widget with the members.
+		expect(fixtureIr.plugins[0]!.slots.map(slot => [slot.name, slot.expected, slot.contract]))
+			.toEqual([['items', null, null], ['labelled', null, '{ properties: { label: string; }; }']])
+		// No slots capability: no slots, and the capability says so.
+		expect(ir.plugins[1]!)
+			.toMatchObject({ slots: [], capabilities: { slots: false } })
+	})
+
+	it('reads each reason with its payload type and JSDoc; a void reason has no payload', () => {
+		const survey = ir.plugins[0]!
+		expect(survey.reasons!.map(reason => [reason.name, reason.payload?.typeText ?? null, reason.doc.summary]))
+			.toEqual([
+				['empty-title', null, 'The title has no language.'],
+				['too-many-questions', '{ max: number; count: number; }', 'The `questions` slot holds more questions than `maxQuestions` allows.'],
+			])
+		expect(survey.reasons![1]!.payload!.shape)
+			.toMatchObject({ kind: 'object', properties: [{ name: 'max', doc: { summary: 'The configured maximum.' } }, { name: 'count', doc: { summary: 'How many questions the slot holds.' } }] })
+		expect(ir.plugins[3]!.reasons)
+			.toBeNull()
+	})
+
+	it('reads config JSDoc, omittability, members, signatures and labelled payloads', () => {
+		const [survey, rating, choice, note] = ir.plugins
+		expect(survey!.config)
+			.toMatchObject({ doc: { summary: 'How the survey is titled and where it is sent.' }, rawText: 'SurveyRawConfig', rawShape: { kind: 'ref', name: 'SurveyRawConfig' }, omittable: false })
+		expect(note!.config)
+			.toMatchObject({ doc: { summary: 'The text of the note.', remarks: 'Leave the config out for an empty note.' }, omittable: true })
+		expect(rating!.state.map(member => [member.name, member.typeText, member.authorWritable]))
+			.toEqual([['value', 'number | null', true]])
+		expect(choice!.state.map(member => [member.name, member.authorWritable]))
+			.toEqual([['selected', false]])
+		expect(rating!.methods[0]!)
+			.toMatchObject({ signature: 'rate(value: number): number', params: [{ name: 'value', doc: 'The value, from 1 to the scale.' }], returnsDoc: 'The chosen value.' })
+		expect(survey!.events.map(event => [event.name, event.payload.map(item => [item.label, item.typeText])]))
+			.toEqual([['submitted', [['summary', 'SubmitSummary']]]])
+		expect(ir.types.SurveyRawConfig!.shape)
+			.toMatchObject({ kind: 'object', properties: [{ name: 'title' }, { name: 'maxQuestions', optional: true, doc: { tags: { minimum: '1', maximum: '20', default: '10' } } }, { name: 'submitUrl', doc: { tags: { format: 'uri' } } }] })
+		expect(ir.types.I18nText!)
+			.toMatchObject({ file: 'apps/widget-skills/fixtures/survey-system.ts', shape: { kind: 'record', value: { kind: 'string' } } })
+	})
+
+	it('records every name and capability the types and the runtime disagree on', () => {
 		const copy = structuredClone(ir)
-		const facts = collectRuntimeFacts(onboardingSystem, inspectPlugin as never)
-		facts.plugins[0]!.state = [{ name: 'current', authorWritable: false }, { name: 'extra', authorWritable: false }]
+		const facts = collectRuntimeFacts(surveySystem, inspectPlugin as never)
+		facts.plugins[1]!.state = [{ name: 'value', authorWritable: true }, { name: 'extra', authorWritable: false }]
+		facts.plugins[0]!.slots = ['header', 'questions']
+		facts.plugins[3]!.capabilities = { ...facts.plugins[3]!.capabilities, methods: true }
 		copy.mismatches = []
 		applyRuntimeFacts(copy, facts)
 		expect(copy.mismatches)
 			.toEqual([
-				'Onboarding.state: declared in the types but not at runtime: finished.',
-				'Onboarding.state: declared at runtime but not in the types: extra.',
+				'Survey.slots: declared in the types but not at runtime: footer.',
+				'Rating.state: declared at runtime but not in the types: extra.',
+				'Note.methods: the types do not declare the capability but the runtime does.',
 			])
 		expect(checkIr(copy).problems.filter(problem => problem.kind === 'name-mismatch'))
-			.toHaveLength(2)
+			.toHaveLength(3)
 	})
 })
 
 describe('emitFullSchema', () => {
-	it('validates every onboarding preset source', () => {
+	it('accepts the example and rejects each invalid variant, slot expectations included', () => {
 		const schema = emitFullSchema(ir)
 		expect(schema.$schema)
 			.toBe('https://json-schema.org/draft/2020-12/schema')
-		for (const preset of onboardingPresets) {
-			expect(validateSchema(schema, JSON.parse(preset.sourceText)), preset.id)
+		expect(validateSchema(schema, example))
+			.toEqual([])
+		for (const [label, source] of invalidSources())
+			expect(validateSchema(schema, source), label).not.toEqual([])
+	})
+
+	it('describes each slot with its JSDoc and expectation', () => {
+		const defs = emitFullSchema(ir).$defs as Record<string, JsonSchema>
+		const slots = (defs.widget_Survey!.properties as Record<string, JsonSchema>).slots!.properties as Record<string, JsonSchema>
+		expect(slots.questions)
+			.toEqual({
+				type: 'array',
+				items: { anyOf: [{ $ref: '#/$defs/widget_Rating' }, { $ref: '#/$defs/widget_Choice' }] },
+				description: 'The questions, in order. Every question exposes whether it was answered. Expects Rating or Choice with the members { properties: { answered: boolean; }; }.',
+			})
+		expect(slots.header)
+			.toEqual({ type: 'array', items: { $ref: '#/$defs/widget' }, description: 'Anything shown above the questions. Expects any widget.' })
+	})
+})
+
+describe('emitConfigSchema', () => {
+	it('is the full-profile schema of config.raw, with field descriptions and only the named types it reaches', () => {
+		const schema = emitConfigSchema(ir, ir.plugins[0]!)!
+		expect(schema)
+			.toMatchObject({
+				$schema: 'https://json-schema.org/draft/2020-12/schema',
+				title: 'Survey config',
+				description: 'How the survey is titled and where it is sent.',
+				$ref: '#/$defs/type_SurveyRawConfig',
+			})
+		const raw = (schema.$defs as Record<string, JsonSchema>).type_SurveyRawConfig!
+		expect((raw.properties as Record<string, JsonSchema>).maxQuestions)
+			.toEqual({ type: 'number', minimum: 1, maximum: 20, default: 10, description: 'The most questions the survey may hold.' })
+		expect((raw.properties as Record<string, JsonSchema>).submitUrl)
+			.toEqual({ type: 'string', format: 'uri', description: 'Where the answers are sent.' })
+		expect(Object.keys(schema.$defs as object))
+			.toEqual(['type_SurveyRawConfig', 'type_I18nText'])
+	})
+
+	it('allows null for an omittable config, writes @widgetRef as prose, and is null without a config', () => {
+		expect(emitConfigSchema(ir, ir.plugins[3]!)!.anyOf)
+			.toEqual([expect.objectContaining({ type: 'object' }), { type: 'null' }])
+		const choice = emitConfigSchema(ir, ir.plugins[2]!)!
+		const properties = choice.properties as Record<string, JsonSchema>
+		expect(properties.followUp!.description)
+			.toBe('A question shown once this one is answered. Must be the id of a widget of type Rating | Choice in the same document.')
+		expect(properties.options)
+			.toMatchObject({ type: 'array', minItems: 2 })
+		expect(emitConfigSchema(ir, { ...ir.plugins[3]!, config: null }))
+			.toBeNull()
+	})
+
+	it('accepts the configs of the example and rejects a wrong one', () => {
+		const configOf = (id: string): unknown => {
+			const visit = (node: Record<string, unknown>): unknown => node.id === id
+				? node.config ?? null
+				: Object.values((node.slots ?? {}) as Record<string, Record<string, unknown>[]>)
+						.flat()
+						.map(visit)
+						.find(found => found !== undefined)
+			return visit(example)
+		}
+		const byType: Record<string, string> = { Survey: 'survey', Rating: 'overall', Choice: 'topics', Note: 'thanks' }
+		for (const plugin of ir.plugins) {
+			expect(validateSchema(emitConfigSchema(ir, plugin)!, configOf(byType[plugin.type]!)), plugin.type)
 				.toEqual([])
 		}
-	})
-
-	it('rejects a wrong structure', () => {
-		const schema = emitFullSchema(ir)
-		const source = JSON.parse(onboardingPresets[0]!.sourceText)
-		expect(validateSchema(schema, { ...source, extra: 1 })).not.toEqual([])
-		expect(validateSchema(schema, { ...source, config: { title: 'not per language' } })).not.toEqual([])
-		expect(validateSchema(schema, { ...source, slots: { steps: [{ id: 'x', type: 'Nope' }] } })).not.toEqual([])
-		expect(validateSchema(schema, { ...source, slots: { other: [] } })).not.toEqual([])
-	})
-
-	it('has one $defs entry per widget type', () => {
-		const defs = emitFullSchema(ir).$defs as Record<string, JsonSchema>
-		for (const plugin of ir.plugins) {
-			expect(defs[`widget_${plugin.type}`])
-				.toMatchObject({ type: 'object', additionalProperties: false, properties: { type: { const: plugin.type } } })
-		}
-	})
-
-	it('writes constraint tags as keywords', () => {
-		const defs = emitFullSchema(fixtureIr).$defs as Record<string, JsonSchema>
-		expect(defs.widget_Counter)
-			.toMatchObject({ required: ['id', 'type'] })
+		expect(validateSchema(emitConfigSchema(ir, ir.plugins[1]!)!, { question: { en: 'Q' }, scale: 'five' })).not.toEqual([])
 	})
 })
 
@@ -298,91 +364,92 @@ describe('emitLlmSchema', () => {
 			.toEqual(['#/$defs/a: recursive'])
 	})
 
-	it('validates the flat form of every preset, with dictionaries as entry lists', () => {
+	it('validates the flat form of the example, with dictionaries as entry lists', () => {
 		const schema = emitLlmSchema(ir)
 		const { treeToFlat } = createFlatConverter(ir)
-		for (const preset of onboardingPresets) {
-			const flat = treeToFlat(JSON.parse(preset.sourceText))
-			expect(validateSchema(schema, flat), preset.id)
-				.toEqual([])
-		}
-		const flat = treeToFlat(JSON.parse(onboardingPresets[0]!.sourceText))
+		const flat = treeToFlat(structuredClone(example))
+		expect(validateSchema(schema, flat))
+			.toEqual([])
 		expect(flat.nodes[0])
 			.toEqual({
-				id: 'onboarding',
-				type: 'Onboarding',
-				config: { title: [{ key: 'en', value: 'Welcome to Tidepool Makers' }, { key: 'zh-TW', value: '歡迎加入潮池工坊' }] },
-				slots: ['steps'],
+				id: 'survey',
+				type: 'Survey',
+				config: { title: [{ key: 'en', value: 'How was the workshop?' }, { key: 'zh-TW', value: '工作坊體驗如何？' }], maxQuestions: 5 },
+				slots: ['header', 'questions', 'footer'],
 			})
 		expect(flat.nodes.slice(1)
 			.map(node => [node.id, node.parent, node.slot]))
 			.toEqual([
-				['account', 'onboarding', 'steps'],
-				['interests', 'onboarding', 'steps'],
-				['safety', 'onboarding', 'steps'],
-				['induction', 'onboarding', 'steps'],
+				['intro', 'survey', 'header'],
+				['overall', 'survey', 'questions'],
+				['topics', 'survey', 'questions'],
+				['thanks', 'survey', 'footer'],
 			])
 	})
 
-	it('puts constraints into descriptions, not keywords', () => {
-		const schema = emitLlmSchema(ir)
-		const startStep = ((schema.$defs as Record<string, JsonSchema>).type_OnboardingRawConfig!.properties as Record<string, JsonSchema>).startStep!
-		expect(startStep.description)
-			.toContain('The index of the step the wizard opens on')
-		expect(startStep.description)
-			.toContain('Optional: leave the key out when unused.')
-		expect(startStep.type)
-			.toBe('number')
-		expect((schema.$defs as Record<string, JsonSchema>).type_OnboardingRawConfig!.required)
-			.toEqual(['title'])
-		expect((schema.$defs as Record<string, JsonSchema>).node_Onboarding!.required)
+	it('states where each type may go, from the slot expectations', () => {
+		const defs = emitLlmSchema(ir).$defs as Record<string, JsonSchema>
+		const placement = (type: string): string => ((defs[`node_${type}`]!.properties as Record<string, JsonSchema>).slot!.description as string)
+		expect(placement('Rating'))
+			.toContain('A Rating may go into: Survey.header, Survey.questions.')
+		expect(placement('Note'))
+			.toContain('A Note may go into: Survey.header, Survey.footer.')
+		expect(placement('Survey'))
+			.toContain('A Survey may go into: Survey.header.')
+		expect(defs.node_Survey!.description)
+			.toBe('A survey: a header, the questions in order, and a footer note. The root of a survey document. It counts the answered questions through the `questions` contract. Slots: header (any widget): Anything shown above the questions.; questions (Rating, Choice): The questions, in order.; footer (Note): Closing notes shown under the questions.')
+	})
+
+	it('puts constraints and the config JSDoc into descriptions, not keywords', () => {
+		const defs = emitLlmSchema(ir).$defs as Record<string, JsonSchema>
+		const maxQuestions = (defs.type_SurveyRawConfig!.properties as Record<string, JsonSchema>).maxQuestions!
+		expect(maxQuestions)
+			.toEqual({ type: 'number', description: 'The most questions the survey may hold. Constraints: minimum: 1. maximum: 20. default: 10. Optional: leave the key out when unused.' })
+		expect(((defs.node_Survey!.properties as Record<string, JsonSchema>).config!).description)
+			.toBe('How the survey is titled and where it is sent.')
+		expect(defs.node_Survey!.required)
 			.toEqual(['id', 'type', 'config'])
+		expect(defs.node_Note!.required)
+			.toEqual(['id', 'type'])
 	})
 })
 
 describe('flat and tree converters', () => {
-	it('round-trips every onboarding preset to exactly the same source and the same compile result', () => {
+	it('round-trips valid and invalid sources to exactly the same source and the same compile result', () => {
 		const { treeToFlat, flatToTree } = createFlatConverter(ir)
-		for (const preset of onboardingPresets) {
-			const original = JSON.parse(preset.sourceText)
+		const sources: [string, unknown][] = [['the example', example], ...invalidSources()]
+		for (const [label, source] of sources) {
 			// The flat form is JSON: it must survive serialization on its way through a model.
-			const roundTripped = flatToTree(JSON.parse(JSON.stringify(treeToFlat(original))))
-			expect(roundTripped, preset.id)
-				.toStrictEqual(JSON.parse(preset.sourceText))
-			// Key order too: the nodes are written as id, type, config, slots, like the presets.
-			expect(JSON.stringify(roundTripped), preset.id)
-				.toBe(JSON.stringify(JSON.parse(preset.sourceText)))
-			const expected = onboardingSystem.createBlueprint(original)
-			const actual = onboardingSystem.createBlueprint(roundTripped)
-			expect(actual.status, preset.id)
+			const roundTripped = flatToTree(JSON.parse(JSON.stringify(treeToFlat(structuredClone(source)))))
+			expect(roundTripped, label)
+				.toStrictEqual(source)
+			// Key order too, for a node of the recognized keys only (an unrecognized key moves behind them).
+			if (label === 'the example') {
+				expect(JSON.stringify(roundTripped), label)
+					.toBe(JSON.stringify(source))
+			}
+			const expected = surveySystem.createBlueprint(structuredClone(source))
+			const actual = surveySystem.createBlueprint(roundTripped)
+			expect(actual.status, label)
 				.toBe(expected.status)
-			expect(actual.diagnostics.map(diagnostic => diagnostic.code), preset.id)
+			expect(actual.diagnostics.map(diagnostic => diagnostic.code), label)
 				.toEqual(expected.diagnostics.map(diagnostic => diagnostic.code))
 		}
-		// The presets cover both outcomes, so the comparison above is not vacuous.
-		expect(new Set(onboardingPresets.map(preset => onboardingSystem.createBlueprint(JSON.parse(preset.sourceText)).status)))
+		// Both outcomes occur, so the comparison above is not vacuous.
+		expect(new Set(sources.map(([, source]) => surveySystem.createBlueprint(structuredClone(source)).status)))
 			.toEqual(new Set(['valid', 'invalid']))
-	})
-
-	it('is stable from the flat side', () => {
-		const { treeToFlat, flatToTree } = createFlatConverter(ir)
-		for (const preset of onboardingPresets) {
-			const flat = treeToFlat(JSON.parse(preset.sourceText))
-			expect(treeToFlat(flatToTree(flat)), preset.id)
-				.toEqual(flat)
-		}
 	})
 
 	it('keeps meta, empty slots, an explicit null config and unrecognized keys', () => {
 		const { treeToFlat, flatToTree } = createFlatConverter(ir)
 		const tree = {
 			id: 'root',
-			type: 'Onboarding',
-			config: { title: { en: 'T' }, startStep: null, unknownKey: { a: 1 } },
+			type: 'Survey',
+			config: { title: { en: 'T' }, maxQuestions: null, unknownKey: { a: 1 } },
 			slots: {
-				empty: [],
-				steps: [
-					{ id: 'a', type: 'AccountStep', config: null, meta: { note: [1, null] } },
+				header: [],
+				questions: [
+					{ id: 'a', type: 'Rating', config: null, meta: { note: [1, null] } },
 					{ id: 'b', type: 'Unregistered', config: { title: { en: 'kept as written' } }, slots: {}, extra: true },
 				],
 			},
@@ -391,19 +458,17 @@ describe('flat and tree converters', () => {
 		const flat = treeToFlat(structuredClone(tree))
 		expect(flat.nodes)
 			.toEqual([
-				{ id: 'root', type: 'Onboarding', config: { title: [{ key: 'en', value: 'T' }], startStep: null, unknownKey: { a: 1 } }, slots: ['empty', 'steps'], meta: null },
-				{ id: 'a', type: 'AccountStep', parent: 'root', slot: 'steps', config: null, meta: { note: [1, null] } },
-				{ id: 'b', type: 'Unregistered', parent: 'root', slot: 'steps', config: { title: { en: 'kept as written' } }, slots: [], extra: true },
+				{ id: 'root', type: 'Survey', config: { title: [{ key: 'en', value: 'T' }], maxQuestions: null, unknownKey: { a: 1 } }, slots: ['header', 'questions'], meta: null },
+				{ id: 'a', type: 'Rating', parent: 'root', slot: 'questions', config: null, meta: { note: [1, null] } },
+				{ id: 'b', type: 'Unregistered', parent: 'root', slot: 'questions', config: { title: { en: 'kept as written' } }, slots: [], extra: true },
 			])
 		expect(flatToTree(JSON.parse(JSON.stringify(flat))))
 			.toStrictEqual(tree)
-		expect(validateSchema(emitFullSchema(ir), { id: 'x', type: 'AccountStep', config: { title: { en: 'T' } }, meta: { any: ['json', 1, null] } }))
-			.toEqual([])
 	})
 
 	it('refuses lists that are not one tree', () => {
 		const { flatToTree } = createFlatConverter(ir)
-		const node = (id: string, parent: string | null) => (parent === null ? { id, type: 'AccountStep' } : { id, type: 'AccountStep', parent, slot: 'steps' })
+		const node = (id: string, parent: string | null) => (parent === null ? { id, type: 'Note' } : { id, type: 'Note', parent, slot: 'footer' })
 		expect(() => flatToTree({ nodes: [] }))
 			.toThrow(FlatConversionError)
 		expect(() => flatToTree({ nodes: [node('a', null), node('b', null)] }))
@@ -418,77 +483,49 @@ describe('flat and tree converters', () => {
 })
 
 describe('--check', () => {
-	it('fails on the undocumented fixture plugin, naming the member and the unknown tag', () => {
+	it('passes on the fully documented fixture System', () => {
+		const result = checkIr(ir)
+		expect(result)
+			.toMatchObject({ ok: true, problems: [] })
+		expect(result.documented)
+			.toBe(result.members)
+	})
+
+	it('fails on the undocumented fixture plugin, naming the member, the config, the slot, the reason and the unknown tag', () => {
 		const result = checkIr(fixtureIr)
 		expect(result.ok)
 			.toBe(false)
 		expect(result.problems)
 			.toEqual([
+				{ kind: 'missing-doc', severity: 'error', where: 'Counter.config', message: 'Counter.config has no JSDoc.' },
+				{ kind: 'missing-doc', severity: 'error', where: 'Counter.slots.items', message: 'Counter.slots.items has no JSDoc.' },
 				{ kind: 'missing-doc', severity: 'error', where: 'Counter.state.step', message: 'Counter.state.step has no JSDoc.' },
 				{ kind: 'unknown-tag', severity: 'error', where: 'Counter.state.limit', message: 'Counter.state.limit uses the unknown tag @madeUpTag.' },
 				{ kind: 'missing-doc', severity: 'error', where: 'Counter.methods.add(by)', message: 'Counter.methods.add has no @param for "by".' },
 				{ kind: 'missing-doc', severity: 'error', where: 'Counter.methods.add(options).silent', message: 'Counter.methods.add(options).silent has no JSDoc.' },
+				{ kind: 'missing-doc', severity: 'error', where: 'Counter.reasons.too-large', message: 'Counter.reasons.too-large has no JSDoc.' },
+				{ kind: 'missing-doc', severity: 'error', where: 'Counter.reasons.too-large.limit', message: 'Counter.reasons.too-large.limit has no JSDoc.' },
 			])
 		expect(fixtureIr.plugins[0]!.state[0]!.doc)
 			.toEqual({ summary: 'The current count.', remarks: '', tags: { minimum: '0' }, unknownTags: [] })
-		expect(fixtureIr.plugins[0]!.doc.summary)
-			.toBe('A counter.')
 	})
 
-	it('counts the onboarding members that still lack JSDoc', () => {
-		const result = checkIr(ir)
-		expect(result.ok)
-			.toBe(false)
-		expect(result.problems.every(problem => problem.kind === 'missing-doc'))
-			.toBe(true)
-		expect(result.members)
-			.toBe(result.documented + result.problems.length)
-		// Until 0.3.0 the runtime description documents a plugin, an Event and a slot of the string-union form.
-		const flagged = result.problems.map(problem => problem.where)
-		expect(flagged.filter(where => where.includes('.slots.') || where.includes('.events.') || (!where.includes('.') && !where.startsWith('type '))))
-			.toEqual([])
-		// A type only renderer authors read is a warning; a field a document author writes is an error.
-		expect(result.problems.find(problem => problem.where === 'type StepSummary.id')?.severity)
-			.toBe('warning')
-		expect(result.problems.find(problem => problem.where === 'type OnboardingRawConfig.title')?.severity)
-			.toBe('error')
-	})
-
-	it('passes once every error is gone, warnings or not', () => {
-		const copy = structuredClone(fixtureIr)
-		const counter = copy.plugins[0]!
-		counter.state[1]!.doc.summary = 'How much one step adds.'
-		counter.state[2]!.doc.unknownTags = []
-		counter.methods[0]!.params[0]!.doc = 'How much to add.'
-		const options = counter.methods[0]!.params[1]!.shape
-		if (options.kind !== 'object')
-			throw new Error('Expected the inline options object.')
-		options.properties[0]!.doc.summary = 'Skips the Event.'
-		expect(checkIr(copy))
-			.toMatchObject({ ok: true, problems: [] })
-	})
-})
-
-describe('an open slot set (slots: string)', () => {
-	it('takes its slot names from the runtime instead of reading String members as names', () => {
-		const open = fixtureIr.plugins[1]!
-		expect(open)
-			.toMatchObject({ type: 'Open', slotForm: 'union', slotsOpen: true })
-		expect(open.slots.map(slot => [slot.name, slot.runtimeDescription]))
-			.toEqual([['anything', 'Any children.']])
-		expect(fixtureIr.mismatches)
-			.toEqual([])
-		const defs = emitFullSchema(fixtureIr).$defs as Record<string, JsonSchema>
-		expect((defs.widget_Open!.properties as Record<string, JsonSchema>).slots!.additionalProperties)
-			.toEqual({ type: 'array', items: { $ref: '#/$defs/widget' } })
+	it('treats a named type a reason payload uses like one config.raw uses', () => {
+		const copy = structuredClone(ir)
+		copy.types.SubmitSummary!.doc.summary = ''
+		// Only an Event payload uses SubmitSummary: a warning.
+		expect(checkIr(copy).problems)
+			.toEqual([{ kind: 'missing-doc', severity: 'warning', where: 'type SubmitSummary', message: 'type SubmitSummary has no JSDoc.' }])
+		copy.plugins[1]!.reasons![0]!.payload = { typeText: 'SubmitSummary', shape: { kind: 'ref', name: 'SubmitSummary' } }
+		expect(checkIr(copy).problems.map(problem => problem.severity))
+			.toEqual(['error'])
 	})
 })
 
 describe('the committed example output', () => {
 	it('is what the generator writes today', () => {
-		const example = JSON.parse(readFileSync(resolve(here, '../fixtures/onboarding-example.json'), 'utf8'))
 		const files = generateFiles(ir, { example })
-		const directory = resolve(here, '../examples/onboarding')
+		const directory = resolve(here, '../examples/survey')
 		for (const [path, content] of Object.entries(files)) {
 			expect(readFileSync(resolve(directory, path), 'utf8'), path)
 				.toBe(content)
@@ -510,30 +547,41 @@ describe('the committed example output', () => {
 				.sort())
 	})
 
-	it('shows an example document that is the default preset and compiles without diagnostics', () => {
-		const example = JSON.parse(readFileSync(resolve(here, '../fixtures/onboarding-example.json'), 'utf8'))
-		expect(example)
-			.toStrictEqual(JSON.parse(onboardingPresets[0]!.sourceText))
-		expect(onboardingSystem.createBlueprint(structuredClone(example)))
+	it('shows an example document that compiles without diagnostics', () => {
+		expect(surveySystem.createBlueprint(structuredClone(example)))
 			.toMatchObject({ status: 'valid', diagnostics: [] })
-		expect(generateFiles(ir, { example })['skills/onboarding-system-source-json-authoring/SKILL.md'])
+		expect(generateFiles(ir, { example })['skills/survey-system-source-json-authoring/SKILL.md'])
 			.toContain(JSON.stringify(example, null, 2))
 	})
 
-	it('does not send readers to the private package or claim placements the types do not state', () => {
+	it('does not send readers to the private package, and describes the 0.3 API only', () => {
 		const files = generateFiles(ir)
-		const authoring = files['skills/onboarding-system-source-json-authoring/SKILL.md']!
+		const authoring = files['skills/survey-system-source-json-authoring/SKILL.md']!
 		expect(authoring).not.toContain('@deviltea/widget-skills')
 		expect(authoring).not.toContain('flatToTree')
-		expect(JSON.stringify(emitLlmSchema(ir))).not.toContain('may go into')
-		const renderer = files['skills/onboarding-system-renderer-implementation/SKILL.md']!
+		const renderer = files['skills/survey-system-renderer-implementation/SKILL.md']!
 		expect(renderer)
 			.toContain('createWidgetVueRenderer(system, renderers => renderers')
 		expect(renderer)
 			.toContain('returns the Method\'s value on success and `null` on failure')
 		expect(renderer).not.toContain('packages/vue/src')
+		const plugin = files['skills/widget-plugin-authoring/SKILL.md']!
+		expect(plugin).not.toContain('.description(')
+		expect(plugin).not.toContain('Upcoming')
+		expect(plugin)
+			.toContain('`interfaces → config? → slots? → structure? → state? → properties? → methods? → events? → done`')
 		for (const content of Object.values(files))
 			expect(content).not.toContain('writes nothing and emits nothing')
+	})
+
+	it('documents the reasons and their details for repair and for renderers', () => {
+		const files = generateFiles(ir)
+		expect(files['skills/survey-system-source-json-authoring/references/survey.md'])
+			.toContain('- `too-many-questions` (`details: { max: number; count: number; }`): The `questions` slot holds more questions than `maxQuestions` allows.')
+		expect(files['skills/survey-system-renderer-implementation/references/rating.md'])
+			.toContain('- `out-of-range` (`details: { min: number; max: number; received: number; }`): The value is outside the scale.')
+		expect(files['skills/survey-system-source-json-authoring/references/survey.md'])
+			.toContain('- `empty-title` (no `details`): The title has no language.')
 	})
 
 	it('keeps the type documentation and the entry-list note on a dictionary', () => {
@@ -552,8 +600,8 @@ describe('generateFiles', () => {
 			.filter(path => path.endsWith('/SKILL.md'))
 		expect(skills)
 			.toEqual([
-				'skills/onboarding-system-source-json-authoring/SKILL.md',
-				'skills/onboarding-system-renderer-implementation/SKILL.md',
+				'skills/survey-system-source-json-authoring/SKILL.md',
+				'skills/survey-system-renderer-implementation/SKILL.md',
 				'skills/widget-plugin-authoring/SKILL.md',
 			])
 		for (const path of skills) {
@@ -562,7 +610,7 @@ describe('generateFiles', () => {
 		}
 		expect(JSON.parse(files['ir.json']!))
 			.toEqual(ir)
-		expect(files['skills/onboarding-system-renderer-implementation/references/onboarding.md'])
-			.toContain('### `goTo(index: number): number`')
+		expect(files['skills/survey-system-renderer-implementation/references/choice.md'])
+			.toContain('### `select(id: string): readonly string[]`')
 	})
 })

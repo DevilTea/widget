@@ -1,6 +1,8 @@
 {
 	"extends": "@deviltea/tsconfig/tooling",
 	"include": [
-		"./src/**/*.ts"
+		"./src/**/*.ts",
+		"./fixtures/**/*.ts",
+		"./*.ts"
 	]
 }

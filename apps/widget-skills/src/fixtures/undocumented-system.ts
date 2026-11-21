@@ -1,16 +1,27 @@
 /**
- * Test fixture for `--check` and the extractor's edge cases:
- *
- * - `Counter`: one documented State member, one without JSDoc, one with a tag outside the tag set, and a Method
- *   with an undocumented parameter and an inline object parameter with an undocumented field.
- * - `Open`: `slots: string`, an open slot set whose names only the runtime knows.
+ * Test fixture for `--check`: `Counter` has one documented State member, one without JSDoc, one with a tag outside
+ * the tag set, a Method with an undocumented parameter and an inline object parameter with an undocumented field,
+ * a config without JSDoc on `config`, a slot without JSDoc and a reason without JSDoc. Its `labelled` slot is a
+ * `WidgetContract` without `Types`.
  */
 
-import type { WidgetInterfaces, WidgetPlugin } from '@deviltea/widget-core'
+import type { WidgetChild, WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 
 /** A counter. */
 export interface CounterInterfaces extends WidgetInterfaces {
+	config: {
+		raw: {
+			/** The first count. */
+			start?: number
+		} | null
+		resolved: { start: number }
+	}
+	slots: {
+		items: WidgetChild
+		/** Children that expose a label; any plugin type. */
+		labelled: WidgetContract<{ properties: { label: string } }>
+	}
 	state: {
 		/**
 		 * The current count.
@@ -32,13 +43,20 @@ export interface CounterInterfaces extends WidgetInterfaces {
 		 */
 		add: (by: number, options: { silent: boolean }) => number
 	}
+	reasons: {
+		'too-large': { limit: number }
+	}
 }
 
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 export const CounterPlugin = createWidgetPlugin('Counter')
-	.description('A counter.')
 	.interfaces<CounterInterfaces>()
+	.config({
+		validate: (input): input is { start?: number } | null => input === null || typeof input === 'object',
+		resolve: raw => ({ start: raw?.start ?? 0 }),
+	})
+	.slots({ items: {}, labelled: {} })
 	.state(state => state
 		.count({ validate: isNumber, default: () => 0 })
 		.step({ validate: isNumber, default: () => 1 })
@@ -50,17 +68,4 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 		}))
 	.done()
 
-/** A container that accepts any slot name. */
-export interface OpenInterfaces extends WidgetInterfaces {
-	slots: string
-}
-
-// Core's builder refuses `slots: string` (it wants a finite union), so the wide type is put on by a cast: this is the
-// shape a loosely typed plugin library hands out.
-export const OpenPlugin = createWidgetPlugin('Open')
-	.description('A container that accepts any slot name.')
-	.interfaces<{ slots: 'anything' }>()
-	.slots({ anything: { description: 'Any children.' } })
-	.done() as unknown as WidgetPlugin<'Open', OpenInterfaces>
-
-export const undocumentedSystem = createWidgetSystem({ plugins: [CounterPlugin, OpenPlugin] as const })
+export const undocumentedSystem = createWidgetSystem({ plugins: [CounterPlugin] as const })

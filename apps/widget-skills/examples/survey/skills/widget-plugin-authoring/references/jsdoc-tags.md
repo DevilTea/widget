@@ -2,8 +2,10 @@
 
 ## JSDoc tag set
 
-Document every member of the `XxxInterfaces` type (config property, State, Property, Method and its parameters,
-Event) with JSDoc. The tags are TSDoc-compatible; the custom ones are declared in `tsdoc.json`.
+Document the `XxxInterfaces` type itself and every member of it with JSDoc: `config` and each field of its `raw`
+type, each slot, State member, Property, Method and its parameters, Event and reason (and each field of a reason's
+payload). The JSDoc is the only documentation: Core carries no descriptions at run time. The tags are
+TSDoc-compatible; the custom ones are declared in `tsdoc.json`.
 
 | Tag | Applies to | Meaning |
 | --- | --- | --- |
