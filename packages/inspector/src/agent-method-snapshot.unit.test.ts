@@ -171,7 +171,7 @@ function createFixture(agentOptions: Partial<CreateInspectorAgentOptions> = {}) 
 		client.dispose()
 		agent.dispose()
 	}
-	return { runtime, probe, pair, agent, client, events, memberChanged, refOf, raw, rawEvents, dispose }
+	return { runtime, probe, pair, agent, client, events, memberChanged, refOf, raw, rawEvents, responses: () => responses, dispose }
 }
 
 type Fixture = ReturnType<typeof createFixture>
@@ -588,6 +588,36 @@ describe('method members and the negotiated minor', () => {
 				.toMatchObject({ ok: false, error: { code: 'invalid-params' } })
 			expect(fixture.raw(4, 'runtime.subscribeMember', { ref, member: { type: 'state', name: 'count' } }))
 				.toMatchObject({ ok: true })
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
+	it('answers a request rejected while it is classified in the lower of the negotiated and the envelope minor', async () => {
+		const fixture = createFixture()
+		try {
+			const ref = await fixture.refOf('probe')
+			// Never handshaken: the negotiated minor is the Agent's own, so the envelope minor decides.
+			expect(fixture.raw(3, 'runtime.subscribeMember', { ref, member: { type: 'bogus', name: 'x' } }))
+				.toMatchObject({ ok: false, protocol: { major: 0, minor: 3 }, error: { code: 'invalid-params' } })
+			expect(fixture.raw(2, 'runtime.noSuchMethod', {}))
+				.toMatchObject({ ok: false, protocol: { major: 0, minor: 2 }, error: { code: 'unknown-method' } })
+			// An invalid message whose envelope still carries a valid version (the method is not a string).
+			expect(fixture.raw(2, 1 as unknown as string, {}))
+				.toMatchObject({ ok: false, protocol: { major: 0, minor: 2 }, error: { code: 'invalid-message' } })
+			// An incompatible major is answered as before, at the negotiated minor.
+			fixture.pair.client.send({ protocol: { major: 9, minor: 0 }, kind: 'request', requestId: 'major-9', method: 'runtime.list', params: {} })
+			expect(fixture.responses()
+				.find(response => response.requestId === 'major-9'))
+				.toMatchObject({ ok: false, protocol: { major: 0, minor: 5 }, error: { code: 'unsupported-version' } })
+			// After a handshake at 0.4, a 0.5 envelope is still answered at 0.4.
+			fixture.raw(4, 'handshake', { protocol: { major: 0, minor: 4 } })
+			expect(fixture.raw(5, 'runtime.subscribeMember', { ref, member: { type: 'bogus', name: 'x' } }))
+				.toMatchObject({ ok: false, protocol: { major: 0, minor: 4 }, error: { code: 'invalid-params' } })
+			// A later well-formed request is unaffected.
+			expect(fixture.raw(5, 'runtime.list', {}))
+				.toMatchObject({ ok: true, protocol: { major: 0, minor: 4 } })
 		}
 		finally {
 			fixture.dispose()

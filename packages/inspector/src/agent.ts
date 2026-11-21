@@ -876,15 +876,22 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			requestId = classified.requestId
 			if (classified.protocol !== null && !isCompatibleProtocolVersion(classified.protocol)) {
 				sendError(requestId, protocolError('unsupported-version', `Unsupported Inspector protocol major ${classified.protocol.major}.`))
+				return
 			}
-			else if (classified.code === 'unknown-method') {
-				sendError(requestId, protocolError('unknown-method', 'The requested method is not defined by this Inspector protocol.'))
+			// Like an answer to a well-formed request: the lower of the negotiated minor and the request's own envelope
+			// minor, so a peer that never handshook is not answered in a minor it may not speak.
+			if (classified.protocol !== null)
+				requestMinor = Math.min(negotiatedMinor, classified.protocol.minor)
+			try {
+				if (classified.code === 'unknown-method')
+					sendError(requestId, protocolError('unknown-method', 'The requested method is not defined by this Inspector protocol.'))
+				else if (classified.code === 'invalid-params')
+					sendError(requestId, protocolError('invalid-params', INVALID_PARAMS_MESSAGE))
+				else
+					sendError(requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
 			}
-			else if (classified.code === 'invalid-params') {
-				sendError(requestId, protocolError('invalid-params', INVALID_PARAMS_MESSAGE))
-			}
-			else {
-				sendError(requestId, protocolError('invalid-message', 'Invalid Inspector protocol request.'))
+			finally {
+				requestMinor = null
 			}
 		}
 		catch (error) {
@@ -899,11 +906,20 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					&& 'requestId' in raw && typeof raw.requestId === 'string') {
 					requestId = raw.requestId
 				}
+				// Answered in the same minor as any other answer to this request: the lower of the negotiated minor and
+				// the request envelope's own, when the envelope carries a compatible version.
+				const classified = classifyInspectorRequest(raw)
+				const protocol = classified.ok ? classified.request.protocol : classified.protocol
+				if (protocol !== null && isCompatibleProtocolVersion(protocol))
+					requestMinor = Math.min(negotiatedMinor, protocol.minor)
 				if (requestId !== null)
 					sendError(requestId, protocolError('internal-error', 'The Inspector Agent failed to handle the request.'))
 			}
 			catch {
 				// The transport itself is unusable; its close notification owns cleanup.
+			}
+			finally {
+				requestMinor = null
 			}
 		}
 	})
