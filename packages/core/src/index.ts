@@ -138,6 +138,8 @@ export type {
 	WidgetSystemBlueprint,
 	WidgetSystemBlueprintStatus,
 	WidgetSystemRuntime,
+	WidgetTypedSource,
+	WidgetTypedSourceFor,
 } from './internal/contract'
 
 export { isJsonValue, MAX_JSON_DEPTH } from './json'
@@ -154,6 +156,7 @@ export type {
 	WidgetConfigValidateContext,
 	WidgetEventEmitter,
 	WidgetEventEmitterContext,
+	WidgetEventNamesTupleViolation,
 	WidgetEventNamesViolation,
 	WidgetInterfacesOf,
 	WidgetInterfacesViolation,

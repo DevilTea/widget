@@ -22,6 +22,7 @@ import type {
 	WidgetRegisterDepsContext,
 	WidgetSlotExpectedOf,
 	WidgetSlotNameOf,
+	WidgetSource,
 	WidgetSourceOf,
 } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
@@ -180,6 +181,29 @@ describe('the slots record', () => {
 			.toBeTypeOf('function')
 		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: string } }>>()
 			.toEqualTypeOf<'\'slots\' values must be a finite union of plugin type literals, a WidgetContract or WidgetChild'>()
+	})
+
+	it('rejects a pattern, a mix of plugin types and a contract, a union of contracts and an `any` shape', () => {
+		type Kind = '\'slots\' values must be a finite union of plugin type literals, a WidgetContract or WidgetChild'
+		type Contract = '\'slots\' values must name one WidgetContract with a declared shape, not a union of contracts or WidgetContract<any>'
+
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: `x-${string}` } }>>()
+			.toEqualTypeOf<Kind>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: 'note' | `x-${string}` } }>>()
+			.toEqualTypeOf<Kind>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: 'note' | WidgetChild } }>>()
+			.toEqualTypeOf<Kind>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: any } }>>()
+			.toEqualTypeOf<Kind>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: WidgetContract<{ state: { v: number } }> | WidgetContract<{ state: { w: string } }> } }>>()
+			.toEqualTypeOf<Contract>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: WidgetContract<any> } }>>()
+			.toEqualTypeOf<Contract>()
+		// One bad slot is enough, and the supported forms stay valid side by side.
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { ok: 'note' | 'step', body: WidgetContract<any> } }>>()
+			.toEqualTypeOf<Contract>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { a: 'note' | 'step', b: WidgetChild, c: StepContract } }>>()
+			.toEqualTypeOf<never>()
 	})
 
 	it('keeps `slots: never` as the explicit-empty declaration', () => {
@@ -495,6 +519,40 @@ describe('widgetSourceOf types TypeScript-authored sources', () => {
 			.toHaveLength(5)
 		expect(system.createBlueprint(source).status)
 			.toBe('valid')
+	})
+
+	it('leaves a compiled Blueprint\'s `source` on the unnarrowed shape, since no expectation is checked', () => {
+		const { system } = createFixture()
+		type Plugins = typeof system.plugins
+		type Authored = WidgetSourceOf<typeof system>
+		type NoteChildType<Source> = Extract<Source, { readonly type: 'wizard' }> extends { readonly slots?: infer Slots }
+			? NonNullable<Slots> extends { readonly notes?: infer Children }
+				? NonNullable<Children> extends readonly (infer Child)[]
+					? Child extends { readonly type: infer Type } ? Type : never
+					: never
+				: never
+			: never
+
+		// Authoring narrows `notes` to 'note'; what a valid Blueprint holds may be any registered type.
+		expectTypeOf<NoteChildType<Authored>>()
+			.toEqualTypeOf<'note'>()
+		expectTypeOf<NoteChildType<WidgetSource<Plugins>>>()
+			.toEqualTypeOf<'wizard' | 'step' | 'note'>()
+		expectTypeOf<Authored>()
+			.toMatchTypeOf<WidgetSource<Plugins>>()
+
+		const blueprint = system.createBlueprint({ id: 'w', type: 'wizard', slots: { notes: [stepSource('s', 'S')] } })
+		if (blueprint.status !== 'valid')
+			throw new Error('expected a valid Blueprint')
+		expectTypeOf(blueprint.source)
+			.toEqualTypeOf<WidgetSource<Plugins>>()
+		const root = blueprint.source
+		if (root.type !== 'wizard')
+			throw new Error('expected the wizard source')
+		expectTypeOf(root.slots!.notes![0]!.type)
+			.toEqualTypeOf<'wizard' | 'step' | 'note'>()
+		expect(root.slots!.notes![0]!.type)
+			.toBe('step')
 	})
 
 	it('is the source type of the System\'s plugin tuple', () => {

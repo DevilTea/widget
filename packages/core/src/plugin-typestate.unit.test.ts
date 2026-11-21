@@ -513,6 +513,9 @@ describe('events capability typestate and tuple contract', () => {
 			phase.events(['press', 'change', 'tap'])
 			// @ts-expect-error the phase takes the list of names, not a build callback
 			phase.events(() => ['press', 'change'])
+			const widened: ('press' | 'change')[] = ['press']
+			// @ts-expect-error a widened array may hold only some of the names: a tuple is required
+			phase.events(widened)
 		}
 		expect(typeOnly)
 			.toBeTypeOf('function')

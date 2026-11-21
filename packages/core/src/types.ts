@@ -251,16 +251,50 @@ type EventArgsDomainViolation<Interfaces extends WidgetInterfaces> = WidgetEvent
 				}[keyof Events]
 	: never
 
+type IsUnion<T, Whole = T> = [T] extends [never]
+	? false
+	: T extends unknown
+		? [Whole] extends [T] ? false : true
+		: never
+
 /**
- * A slot's expectation must be a finite union of plugin `type` literals or a `WidgetContract`; a broad
- * `string` names no plugin. (Slot names are checked like every other member key.)
+ * Whether some member of a string union is not a literal (a broad `string` or a template pattern):
+ * `{} extends Record<Member, 1>` holds only for a member that has no literal key to require.
  */
+type HasNonLiteralMember<Members extends string> = true extends (Members extends unknown ? (Record<never, never> extends Record<Members, 1> ? true : false) : never)
+	? true
+	: false
+
+type SlotExpectationKindViolation = '\'slots\' values must be a finite union of plugin type literals, a WidgetContract or WidgetChild'
+
+type SlotExpectationContractViolation = '\'slots\' values must name one WidgetContract with a declared shape, not a union of contracts or WidgetContract<any>'
+
+/**
+ * Why one slot's expectation is unsupported, or `never`. An expectation is either a finite union of plugin
+ * `type` literals or exactly one `WidgetContract` (`WidgetChild` included):
+ *
+ * - `any`, a broad `string`, a pattern such as `\`x-${string}\`` (it names no registrable plugin type), and a
+ *   mix of plugin types and a contract are not an expectation;
+ * - a union of contracts, or a contract whose shape is `any`, has no single shape to type the reads of
+ *   `slot(name)` by.
+ */
+type SlotExpectationViolation<Expected> = IsAny<Expected> extends true
+	? SlotExpectationKindViolation
+	: [Expected] extends [string]
+			? HasNonLiteralMember<Extract<Expected, string>> extends true ? SlotExpectationKindViolation : never
+			: [Extract<Expected, string>] extends [never]
+					? IsUnion<Expected> extends true
+						? SlotExpectationContractViolation
+						: Expected extends WidgetContract<infer Shape>
+							? IsAny<Shape> extends true ? SlotExpectationContractViolation : never
+							: SlotExpectationKindViolation
+					: SlotExpectationKindViolation
+
+/** Slot names are checked like every other member key; this checks each slot's expectation. */
 type SlotDomainViolation<Interfaces extends WidgetInterfaces> = WidgetSlotsOf<Interfaces> extends infer Slots
 	? [Slots] extends [never]
 			? never
-			: true extends { [Name in keyof Slots]-?: IsAny<Slots[Name]> extends true ? true : string extends Slots[Name] ? true : false }[keyof Slots]
-				? `'slots' values must be a finite union of plugin type literals, a WidgetContract or WidgetChild`
-				: never
+			: { [Name in keyof Slots]-?: SlotExpectationViolation<Slots[Name]> }[keyof Slots]
 	: never
 
 type ReasonsDomainViolation<Interfaces extends WidgetInterfaces> = WidgetReasonsOf<Interfaces> extends infer Reasons

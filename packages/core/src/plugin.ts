@@ -484,13 +484,24 @@ export interface WidgetEventNamesViolation<Missing extends string> {
 }
 
 /**
- * `unknown` (an intersection identity) when `Names` lists every Event the interfaces declare, a
- * {@link WidgetEventNamesViolation} otherwise. A name the interfaces do not declare is already rejected by
- * the list's element type.
+ * What a `.events()` list whose length is not known statically is checked against: a widened array such as
+ * `('a' | 'b')[]` may hold only some of the names, which neither the types nor the builder can see.
  */
-export type ExactWidgetEventNames<Interfaces extends WidgetInterfaces, Names extends readonly WidgetMemberKey[]> = [WidgetEventKeyOf<Interfaces>] extends [Names[number]]
-	? unknown
-	: WidgetEventNamesViolation<Exclude<WidgetEventKeyOf<Interfaces>, Names[number]>>
+export interface WidgetEventNamesTupleViolation {
+	readonly 'widget-core: .events() takes a tuple of Event names (a list literal or an `as const` array), not a widened array': never
+}
+
+/**
+ * `unknown` (an intersection identity) when `Names` is a tuple that lists every Event the interfaces
+ * declare; a {@link WidgetEventNamesTupleViolation} for a widened array, a {@link WidgetEventNamesViolation}
+ * for a tuple that leaves Events out. A name the interfaces do not declare is already rejected by the list's
+ * element type.
+ */
+export type ExactWidgetEventNames<Interfaces extends WidgetInterfaces, Names extends readonly WidgetMemberKey[]> = number extends Names['length']
+	? WidgetEventNamesTupleViolation
+	: [WidgetEventKeyOf<Interfaces>] extends [Names[number]]
+			? unknown
+			: WidgetEventNamesViolation<Exclude<WidgetEventKeyOf<Interfaces>, Names[number]>>
 
 // -------------------------------------------------------------------------------------------------
 // Section keyed-chain typestate

@@ -108,12 +108,12 @@ describe('section builders register only real member declarations', () => {
 	})
 
 	it('captures the events list by value', () => {
-		const names: ('a' | 'b')[] = ['a', 'b']
+		const names: ['a', 'b'] = ['a', 'b']
 		const plugin = createWidgetPlugin('events-captured')
 			.interfaces<{ events: { a: [], b: [] } }>()
 			.events(names)
 			.done()
-		names.length = 0
+		;(names as string[]).length = 0
 
 		expect([...inspectPlugin(plugin).events!.keys()])
 			.toEqual(['a', 'b'])
