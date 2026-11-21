@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from '@playwright/test'
-import { expect, previewFrame, setTheme, test } from './fixtures'
+import { expect, previewFrame, selectShowcase, setTheme, test } from './fixtures'
 
 /**
  * Nuxt UI + Tailwind v4 foundation contract (issue #230 PR 2): the Lab shell uses them, the Preview frame
@@ -215,13 +215,108 @@ test.describe('[data-slot]-scoped preflight', () => {
 test.describe('Preview frame isolation', () => {
 	// Every showcase, not only the minimal Sandbox: each loads its own renderer chunk (and its styles) into the frame. The
 	// list is the registry's, in its order (`showcases/registry.unit.test.ts` checks it).
-	for (const showcase of ['survey', 'trip-budget', 'quote-rules', 'onboarding', 'document-repair', 'sandbox'] as const) {
+	for (const showcase of ['survey', 'trip-budget', 'quote-rules', 'onboarding', 'document-repair', 'renderer-packs', 'sandbox'] as const) {
+		// The renderer-packs showcase is the one that legitimately brings its own Tailwind and Nuxt UI into the frame (in a nested
+		// app of its own, loaded lazily by its Nuxt UI pack), so its isolation is asserted the other way round, below.
+		if (showcase === 'renderer-packs')
+			continue
 		test(`the ${showcase} frame document loads no Tailwind or Nuxt UI CSS and receives no dark class`, async ({ context, page }) => {
 			await seedTheme(context, 'dark')
 			await page.goto(`/?showcase=${showcase}`)
 			await expectFrameIsolated(page, showcase)
 		})
 	}
+
+	test('the renderer-packs frame loads no Tailwind or Nuxt UI CSS until the Nuxt UI pack is chosen, and then nothing of the chrome\'s pipeline', async ({ context, page }) => {
+		await seedTheme(context, 'dark')
+		await page.goto('/?showcase=renderer-packs')
+		// The default pack is hand-written: the lazy Nuxt UI chunk (and its stylesheet) is not in the frame yet.
+		await expectFrameIsolated(page, 'renderer-packs')
+
+		const frame = previewFrame(page)
+		await frame.getByTestId('packs-choice-nui')
+			.check()
+		await expect(frame.getByTestId('nui-page'))
+			.toBeVisible({ timeout: 15_000 })
+		const handle = await page.locator('[data-testid="preview-frame"]')
+			.elementHandle()
+		const report = await (await handle!.contentFrame())!.evaluate(() => {
+			const root = document.documentElement
+			const rules = [...document.styleSheets]
+				.flatMap(sheet => [...sheet.cssRules].flatMap(function flatten(rule): CSSRule[] {
+					return 'cssRules' in rule ? [rule, ...[...(rule as CSSGroupingRule).cssRules].flatMap(flatten)] : [rule]
+				}))
+			const cssText = rules.map(rule => rule.cssText)
+				.join('\n')
+			const pack = document.querySelector('[data-testid="nui-page"]')!
+			const read = (element: Element, property: string) => getComputedStyle(element)
+				.getPropertyValue(property)
+				.trim()
+			return {
+				htmlClass: root.className,
+				darkElements: [...document.querySelectorAll('.dark')].map(element => element.getAttribute('data-testid')),
+				hasNuxtUiCss: /--ui-/.test(cssText),
+				// The chrome's mapping of the Nuxt UI tokens to the Lab palette: `--ui-*: var(--lab-color-*)`. It must not be here.
+				chromeMapping: /--ui-[\w-]+:\s*var\(--lab-color/.test(cssText),
+				// The pack's own accent, not the Lab's: neither the pack root nor the document root has `--ui-primary` mapped to the Lab accent.
+				packPrimary: read(pack, '--ui-primary'),
+				packPrimaryIsLabs: read(pack, '--ui-primary') === read(root, '--lab-color-accent'),
+				rootPrimaryIsLabs: read(root, '--ui-primary') === read(root, '--lab-color-accent'),
+			}
+		})
+		expect(report)
+			.toEqual({
+				htmlClass: '',
+				darkElements: ['nui-page'],
+				hasNuxtUiCss: true,
+				chromeMapping: false,
+				packPrimary: '#5eead4',
+				packPrimaryIsLabs: false,
+				rootPrimaryIsLabs: false,
+			})
+	})
+
+	// The Preview reuses its frame document across showcase switches, and a stylesheet a lazy chunk loaded stays in a document: the
+	// Nuxt UI pack takes its own out when it unmounts and puts it back before it mounts again (`pack-styles.ts`). What is checked is
+	// the frame document, not the pack: Tailwind utilities, the `:root` Nuxt UI tokens and its base rules would otherwise stay.
+	test('after the Nuxt UI pack was chosen, switching to another showcase leaves a frame document with no Tailwind or Nuxt UI CSS', async ({ context, page }) => {
+		await seedTheme(context, 'dark')
+		await page.goto('/?showcase=renderer-packs')
+		const preview = previewFrame(page)
+		await preview.getByTestId('packs-choice-nui')
+			.check()
+		await expect(preview.getByTestId('nui-page'))
+			.toBeVisible({ timeout: 15_000 })
+
+		await selectShowcase(page, 'survey')
+		await expectFrameIsolated(page, 'survey')
+	})
+
+	test('choosing Nuxt UI and then the hand-written pack leaves no Nuxt UI CSS in the frame, and choosing Nuxt UI again brings the pack\'s styles back', async ({ context, page }) => {
+		await seedTheme(context, 'dark')
+		await page.goto('/?showcase=renderer-packs')
+		const preview = previewFrame(page)
+		const packPrimary = (): Promise<string> => preview.getByTestId('nui-page')
+			.evaluate(element => getComputedStyle(element)
+				.getPropertyValue('--ui-primary')
+				.trim())
+
+		for (let round = 0; round < 2; round++) {
+			await preview.getByTestId('packs-choice-nui')
+				.check()
+			await expect(preview.getByTestId('nui-page'))
+				.toBeVisible({ timeout: 15_000 })
+			// The pack is styled (its own token resolves), also the second time, when the preload helper does not add the stylesheet again.
+			await expect.poll(packPrimary)
+				.toBe('#5eead4')
+
+			await preview.getByTestId('packs-choice-hand')
+				.check()
+			await expect(preview.getByTestId('nui-page'))
+				.toHaveCount(0)
+			await expectFrameIsolated(page, 'renderer-packs')
+		}
+	})
 })
 
 async function expectFrameIsolated(page: Page, showcase: string): Promise<void> {
@@ -233,25 +328,29 @@ async function expectFrameIsolated(page: Page, showcase: string): Promise<void> 
 				.locator('[data-widget-id]')
 				.first())
 		.toBeVisible({ timeout: 15_000 })
-	const frameHandle = await page.locator('[data-testid="preview-frame"]')
-		.elementHandle()
-	const frame = await frameHandle!.contentFrame()
-	const report = await frame!.evaluate(() => {
-		const root = document.documentElement
-		const style = getComputedStyle(root)
-		const cssText = [...document.styleSheets]
-			.flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText))
-			.join('\n')
-		return {
-			htmlClass: root.className,
-			labTheme: root.dataset.labTheme,
-			uiToken: style.getPropertyValue('--ui-bg'),
-			twToken: style.getPropertyValue('--color-red-500'),
-			hasTailwindCss: /--tw-|@layer (?:theme|properties)|--ui-/.test(cssText),
-			lineHeight: style.lineHeight,
-		}
-	})
-	expect(report)
+	// Polled: a showcase switch or a pack switch leaves the frame in a moment, not at once (for one, `unhead` removes the Nuxt UI
+	// colour block with a debounced timer after the pack unmounted), and the frame element is read again each time.
+	const readFrame = async () => {
+		const frameHandle = await page.locator('[data-testid="preview-frame"]')
+			.elementHandle()
+		const frame = await frameHandle!.contentFrame()
+		return frame!.evaluate(() => {
+			const root = document.documentElement
+			const style = getComputedStyle(root)
+			const cssText = [...document.styleSheets]
+				.flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText))
+				.join('\n')
+			return {
+				htmlClass: root.className,
+				labTheme: root.dataset.labTheme,
+				uiToken: style.getPropertyValue('--ui-bg'),
+				twToken: style.getPropertyValue('--color-red-500'),
+				hasTailwindCss: /--tw-|@layer (?:theme|properties)|--ui-/.test(cssText),
+				lineHeight: style.lineHeight,
+			}
+		})
+	}
+	await expect.poll(readFrame, { message: 'the frame document carries no Tailwind or Nuxt UI CSS and no dark class' })
 		.toEqual({
 			htmlClass: '',
 			labTheme: 'dark',

@@ -114,15 +114,37 @@ function staticClosure(manifest: Manifest, roots: readonly string[]): Map<string
 }
 
 /**
+ * The chunks reachable from `roots` through static `imports` AND through `dynamicImports` other than `?raw` source texts, roots
+ * included: a renderer may have lazy chunks of its own behind it (the renderer-packs showcase loads its Nuxt UI pack that way), and
+ * those carry its code and styles just as much as the renderer entry. This is deliberately strict: a lazy chunk a renderer
+ * reaches that the shell ALSO loads (the Nuxt UI runtime chunk `_Switch`, the chrome's `Toast.vue` chunk) is counted as
+ * renderer-owned too, so its stylesheets are checked against index.html as well; that may report a chunk that is shared on purpose
+ * (a false positive), and then the chunk or its styles are what to look at, not this rule.
+ */
+function lazyClosure(manifest: Manifest, roots: readonly string[]): Map<string, ManifestChunk> {
+	const closure = new Map<string, ManifestChunk>()
+	const queue = [...roots]
+	while (queue.length > 0) {
+		const key = queue.shift()!
+		const chunk = manifest[key]
+		if (chunk === undefined || closure.has(key))
+			continue
+		closure.set(key, chunk)
+		queue.push(...chunk.imports ?? [], ...(chunk.dynamicImports ?? []).filter(dynamic => !dynamic.endsWith('?raw')))
+	}
+	return closure
+}
+
+/**
  * The chunks that exist only for a showcase renderer: what the Preview frame imports lazily (its dynamic imports other than
- * `?raw` source texts, which are `preview-frame-renderers.ts`'s loaders) and what those load statically, minus whatever the
- * frame loads at once anyway. Derived from the manifest, so any showcase the frame can load is covered.
+ * `?raw` source texts, which are `preview-frame-renderers.ts`'s loaders), what those load statically and the lazy chunks behind
+ * them, minus whatever the frame loads at once anyway. Derived from the manifest, so any showcase the frame can load is covered.
  */
 function rendererChunks(manifest: Manifest): Map<string, ManifestChunk> {
 	const frame = manifest['preview-frame.html']
 	if (frame === undefined)
 		throw new Error('the manifest has no preview-frame.html entry')
-	const owned = staticClosure(manifest, rendererEntries(manifest))
+	const owned = lazyClosure(manifest, rendererEntries(manifest))
 	for (const key of staticClosure(manifest, ['preview-frame.html'])
 		.keys())
 		owned.delete(key)
@@ -200,6 +222,28 @@ describe('the Lab shell does not load showcase renderers', () => {
 			expect(shellLeaks(manifest))
 				.toEqual([])
 
+			// A lazy chunk behind a renderer (its own `import()`) is the renderer's too, with its styles; a `?raw` source text is not.
+			const nested = synthetic({
+				...manifest,
+				'src/showcases/x/renderers/index.ts': { file: 'assets/x-renderers.js', isDynamicEntry: true, imports: ['_shared.js', '_lib.js'], dynamicImports: ['src/showcases/x/renderers/Pack.ts', 'src/showcases/x/renderers/Page.vue?raw'], css: ['assets/x.css'] },
+				'src/showcases/x/renderers/Pack.ts': { file: 'assets/x-pack.js', isDynamicEntry: true, imports: ['_shared.js', '_pack-lib.js'], css: ['assets/x-pack.css'] },
+				'_pack-lib.js': { file: 'assets/pack-lib.js' },
+				'src/showcases/x/renderers/Page.vue?raw': { file: 'assets/page-source.js', isDynamicEntry: true },
+			})
+			expect([...rendererChunks(nested)
+				.keys()].sort())
+				.toEqual(['_lib.js', '_pack-lib.js', 'src/showcases/x/renderers/Pack.ts', 'src/showcases/x/renderers/index.ts'])
+			expect([...rendererChunks(nested)
+				.values()].flatMap(chunk => chunk.css ?? [])
+				.sort())
+				.toEqual(['assets/x-pack.css', 'assets/x.css'])
+			const nestedLeak = synthetic({
+				...nested,
+				'_shared.js': { file: 'assets/shared.js', css: ['assets/shared.css', 'assets/x-pack.css'] },
+			})
+			expect(shellLeaks(nestedLeak))
+				.toEqual(['assets/x-pack.css is linked by index.html but belongs to a showcase renderer'])
+
 			// A renderer pulled into the shell's static graph, or the stylesheet of one, is reported; a shared helper is not.
 			const shared = synthetic({
 				...manifest,
@@ -219,6 +263,19 @@ describe('the Lab shell does not load showcase renderers', () => {
 			})
 			expect(shellLeaks(entry))
 				.toEqual(['assets/x-renderers.js is a showcase renderer, loaded by index.html', 'assets/x.css is linked by index.html but belongs to a showcase renderer'])
+		})
+
+		it('keeps the Nuxt UI pack\'s marker rule in the built stylesheet of its chunk (`pack-styles.ts` finds the stylesheet by it)', () => {
+			expect(existsSync(join(dist, '.vite', 'manifest.json')), 'apps/lab/dist/.vite/manifest.json is missing: run `pnpm build` first')
+				.toBe(true)
+			const manifest = JSON.parse(readFileSync(join(dist, '.vite', 'manifest.json'), 'utf8')) as Manifest
+			const key = 'src/showcases/renderer-packs/renderers/nuxt-ui/NuxtUiPack.ts'
+			expect(manifest[key], `${key} is a chunk of its own`)
+				.toBeDefined()
+			const holders = (manifest[key]?.css ?? []).filter(css => readFileSync(join(dist, css), 'utf8')
+				.includes('.packs-ui-pack-marker'))
+			expect(holders, 'exactly one stylesheet of the Nuxt UI pack holds the marker rule')
+				.toHaveLength(1)
 		})
 
 		it('has every showcase renderer and its styles out of the shell: index.html links no renderer stylesheet and loads no renderer chunk', () => {
