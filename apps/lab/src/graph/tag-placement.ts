@@ -7,10 +7,17 @@
  * together: each takes the first spot along its edge, going away from the card, where its box lies inside the content (the
  * cards and curves, which Fit always shows: a tag is not part of what Fit fits, so one outside it would be cut off by the pane),
  * meets no card, no arrowhead of an edge and no tag placed before it (the tag stays centred on its edge: a tag shifted aside
- * would not be read as that edge's). The two directions take turns, the rarer one first, so each gets a tag when any fits. A tag
- * with no such spot is not drawn: on a dense graph at a low zoom (the Trip budget's Expense has a dozen edges) text of 11 screen px
- * simply does not fit, and the accent colour, the dimming and the arrowheads still say which edges are the focus's, while the
- * Relations view lists them all. Pure geometry in canvas px, so the tests can measure the result on the real layouts.
+ * would not be read as that edge's). The two directions take turns, the rarer one first, so each gets a tag when any fits.
+ *
+ * A tag with no such spot on its edge gets a second chance beside it (issue #230 follow-up): its box is set a short way off the
+ * edge, across the edge's direction (left or right of an edge that runs down, above or below one that runs across), and a
+ * leader line joins the box to the point of the edge it is about (`leader`). The same rules hold for the box (inside the
+ * content, on no card, no arrowhead and no other tag), the leader crosses no card, no arrowhead and no tag, and no later
+ * tag is set on an earlier leader. Every tag is tried on its edge first, so a leader never takes a spot an on-edge tag could
+ * have had. A tag with no spot either way is not drawn: on a dense graph at a low zoom (the Trip budget's Expense has a dozen
+ * edges) text of 11 screen px simply does not fit, and the accent colour, the dimming and the arrowheads still say which edges
+ * are the focus's, while the Relations view lists them all. Pure geometry in canvas px, so the tests can measure the result on
+ * the real layouts.
  */
 
 import type { GraphEdgeRoute, GraphPoint } from './edge-geometry'
@@ -34,6 +41,11 @@ export interface TagRect {
 export interface TagPlacement extends TagRect {
 	readonly text: string
 	readonly relation: TagInput['relation']
+	/**
+	 * Set when the tag found no room on its edge and sits beside it: the line from the point of the edge the tag is about
+	 * (`from`) to the middle of the side of the box that faces the edge (`to`).
+	 */
+	readonly leader?: { readonly from: GraphPoint, readonly to: GraphPoint }
 }
 
 /** What the placement needs of the zoom bucket: the text size, and the length of an arrowhead (both in canvas px). */
@@ -52,6 +64,12 @@ const ARROW_HALF_WIDTH = 0.4
 
 /** Share of the edge, from the focused card, a tag may be at: never past the middle, so it is nearer to the focus than to the other end. */
 const FRACTIONS = [0.08, 0.12, 0.16, 0.2, 0.24, 0.28, 0.32, 0.36, 0.4, 0.44, 0.5]
+
+/** How far beside its edge a tag with a leader may sit, as multiples of the font size (nearest first): the leader stays short. */
+export const LEADER_LENGTHS = [1.5, 2.5, 4]
+
+/** The width of the band a leader line occupies, as a multiple of the font size (the line itself is thinner). */
+const LEADER_BAND = 0.2
 
 export function tagSize(text: string, font: number): { width: number, height: number } {
 	return { width: text.length * GLYPH_WIDTH * font + 2 * BOX_PADDING_X * font, height: BOX_HEIGHT * font }
@@ -143,6 +161,53 @@ export function placeTags(tags: readonly TagInput[], obstacles: readonly TagRect
 			continue
 		placed.set(tag.id, { ...best.rect, text: tag.text, relation: tag.relation })
 		placedRects.push(best.rect)
+	}
+
+	// Second chance, after every tag had its try on its own edge: beside the edge, joined to it by a short leader line.
+	const leaders: TagRect[] = []
+	const meets = (rect: TagRect, others: readonly TagRect[]): boolean => others.some(other => overlapArea(rect, other) > 0)
+	for (const tag of ordered) {
+		if (placed.has(tag.id))
+			continue
+		const size = tagSize(tag.text, scale.font)
+		const length = routeLength(tag.route)
+		const from = tag.relation === 'depends-on' ? 'start' : 'end'
+		const spot = (): TagPlacement | undefined => {
+			for (const fraction of FRACTIONS) {
+				const anchor = routePointAtDistance(tag.route, fraction * length, from)
+				// The edge's direction at the anchor decides the side: across it, so the leader does not run along the edge.
+				const ahead = routePointAtDistance(tag.route, Math.min(length, fraction * length + Math.max(1, length * 0.02)), from)
+				const runsDown = Math.abs(ahead.y - anchor.y) >= Math.abs(ahead.x - anchor.x)
+				for (const multiple of LEADER_LENGTHS) {
+					const lead = multiple * scale.font
+					for (const sign of [1, -1]) {
+						const to: GraphPoint = runsDown ? { x: anchor.x + sign * lead, y: anchor.y } : { x: anchor.x, y: anchor.y + sign * lead }
+						const rect: TagRect = runsDown
+							? { x: to.x + sign * size.width / 2, y: anchor.y, ...size }
+							: { x: anchor.x, y: to.y + sign * size.height / 2, ...size }
+						if (!isInside(rect) || meets(rect, fixed) || meets(rect, placedRects) || meets(rect, leaders))
+							continue
+						const band = LEADER_BAND * scale.font
+						const leader: TagRect = {
+							x: (anchor.x + to.x) / 2,
+							y: (anchor.y + to.y) / 2,
+							width: Math.max(Math.abs(to.x - anchor.x), band),
+							height: Math.max(Math.abs(to.y - anchor.y), band),
+						}
+						if (meets(leader, fixed) || meets(leader, placedRects))
+							continue
+						leaders.push(leader)
+						return { ...rect, text: tag.text, relation: tag.relation, leader: { from: anchor, to } }
+					}
+				}
+			}
+			return undefined
+		}
+		const found = spot()
+		if (found === undefined)
+			continue
+		placed.set(tag.id, found)
+		placedRects.push({ x: found.x, y: found.y, width: found.width, height: found.height })
 	}
 	return placed
 }

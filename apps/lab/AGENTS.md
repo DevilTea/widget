@@ -984,7 +984,12 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   each tag sits on its own edge in the half nearer the focused card, so it reads as being about that card, and takes the first
   spot (going away from the card) where its box lies inside the content bounds (the box around the cards and curves, which is what Fit
   fits: a tag is no part of that, so one outside would be cut off by the pane) and covers no card, no arrowhead of any edge (its own
-  included, the dimmed edges' too) and no other tag; the two directions take turns, the rarer first. A tag with no such spot is not drawn (the Trip budget's Expense has
+  included, the dimmed edges' too) and no other tag; the two directions take turns, the rarer first. A tag with no such spot gets a second chance beside its edge (issue #230 follow-up), after
+  every tag had its try on its own edge: its box is set 1.5, 2.5 or 4 font sizes off the edge, across the edge's direction (left or right of an edge
+  that runs down, above or below one that runs across), at the same shares of the edge (so still in the half nearer the focus), and a **leader line**
+  with a dot on the edge joins it to the point it is about (`TagPlacement.leader`, drawn by `GraphCanvas.vue` as `.graph-tag-leader`; the group is
+  `.graph-tag--leader`). The box obeys the same rules (inside the content bounds, on no card, no arrowhead, no other tag), the leader crosses no
+  card, no arrowhead and no tag, and no later tag sits on an earlier leader. A tag with no spot either way is not drawn (the Trip budget's Expense has
   a dozen edges; the Legend says so), the accent colour, the dimming and the arrowheads still mark the focus's edges and
   Relations lists them all. `GraphDependencyEdge.vue` draws its labels itself (a rect and a text sized by `tagSize()`, the function
   the placement used) because Vue Flow's `EdgeText` measures its box once at mount and so boxes 11px text around text of any other size.
@@ -1041,7 +1046,8 @@ expanded Trip budget (about 0.06); afterwards the manual zoom floor (wheel, pinc
 (the Survey fits at 0.99, so about 0.25) cannot be wheeled down to a dot. The collapsed card text is 13px (type) and 12px (id, S/P/M counts).
 `src/graph/graph-readability.unit.test.ts` (real ELK on both showcases) and `e2e/graph-readability.spec.ts` pin the spacing, the
 Bezier paths, the arrowheads and "no edge behind a card"; the arrowhead size, the 0.95 Fit floor of the default Survey (card text 11px or more at 1440 x 900, near 11px at 1280 x 800), the dimming and
-the tags (on no card, no arrowhead and no other tag, nearer the focus, 11px or more, above every edge) are measured in the browser as well.
+the tags (on no card, no arrowhead and no other tag, nearer the focus, 11px or more, above every edge; a leader starts on its own edge, is short,
+ends on its tag and crosses no card) are measured in the browser as well. `src/graph/tag-placement.unit.test.ts` pins the placement, leaders included, on hand-made geometry.
 
 ## Layout worker boundary
 

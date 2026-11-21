@@ -58,7 +58,8 @@ const { addSelectedEdges, findEdge, fitBounds, fitView, getNodes, getSelectedEdg
 
 /**
  * The tags of the edges around the focus ("Depends on #sessions", "Used by #phone"), placed together so that none covers a card,
- * an arrowhead or another tag; one that does not fit is left out (see `graph/tag-placement.ts`). They are re-placed only when
+ * an arrowhead or another tag; one with no room on its own edge is set beside it with a short leader line, and one that fits
+ * nowhere is left out (see `graph/tag-placement.ts`). They are re-placed only when
  * the graph, the focus or the zoom bucket changes, not on every wheel tick or pan step (see `composables/use-graph-tags.ts`).
  * They are drawn in one layer above every edge and card (the `zoom-pane` slot of Vue Flow), so no edge is drawn across their text.
  */
@@ -374,10 +375,27 @@ function memberKindShort(kind: string): string {
 						v-for="[edgeId, tag] in tagPlacements"
 						:key="edgeId"
 						class="graph-tag"
-						:class="{ 'graph-tag--hidden': tagIsHidden(edgeId) }"
+						:class="{ 'graph-tag--hidden': tagIsHidden(edgeId), 'graph-tag--leader': tag.leader !== undefined }"
 						:data-edge-id="edgeId"
 						:data-relation="tag.relation"
 					>
+						<!-- A tag beside its edge: the leader line back to the point of the edge it is about, ending in a dot on the edge. -->
+						<template v-if="tag.leader !== undefined">
+							<line
+								class="graph-tag-leader"
+								:x1="tag.leader.from.x"
+								:y1="tag.leader.from.y"
+								:x2="tag.leader.to.x"
+								:y2="tag.leader.to.y"
+								:style="{ strokeWidth: `${1.2 * bucket.font / 11}px` }"
+							/>
+							<circle
+								class="graph-tag-leader-dot"
+								:cx="tag.leader.from.x"
+								:cy="tag.leader.from.y"
+								:r="2.5 * bucket.font / 11"
+							/>
+						</template>
 						<rect
 							class="graph-tag-bg"
 							:x="tagBox(tag).x"
@@ -1103,6 +1121,15 @@ function memberKindShort(kind: string): string {
 	fill: var(--lab-color-text);
 	font-family: var(--lab-font-mono);
 	font-weight: 700;
+}
+
+.graph-tag-leader {
+	stroke: var(--lab-color-accent);
+	fill: none;
+}
+
+.graph-tag-leader-dot {
+	fill: var(--lab-color-accent);
 }
 
 .graph-tag--hidden {

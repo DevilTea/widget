@@ -30,7 +30,8 @@ interface RenderedGraph {
 		opacity: number
 		stroke: string
 		/** The focus tag: its text, its box on screen, and its font size on screen. */
-		relationTag: { text: string, rect: Rect, fontPx: number } | null
+		/** `leader` is set for a tag beside its edge: where its leader line starts (on the edge) and ends (on the tag's box), on screen. */
+		relationTag: { text: string, rect: Rect, fontPx: number, leader: { from: Point, to: Point } | null } | null
 	}[]
 }
 
@@ -90,6 +91,13 @@ async function readGraph(page: Page): Promise<RenderedGraph> {
 			const tagRect = tag?.querySelector('.graph-tag-bg')
 				?.getBoundingClientRect()
 			const tagText = tag?.querySelector('.graph-tag-text')
+			const leaderLine = tag?.querySelector<SVGLineElement>('.graph-tag-leader') ?? null
+			const leaderMatrix = leaderLine?.getScreenCTM() ?? null
+			const leaderEnd = (x: string, y: string): { x: number, y: number } => {
+				const point = new DOMPoint(Number(leaderLine!.getAttribute(x)), Number(leaderLine!.getAttribute(y)))
+					.matrixTransform(leaderMatrix!)
+				return { x: point.x, y: point.y }
+			}
 			return {
 				id: edge.dataset.id!,
 				d: path.getAttribute('d') ?? '',
@@ -102,7 +110,7 @@ async function readGraph(page: Page): Promise<RenderedGraph> {
 				stroke: getComputedStyle(path).stroke,
 				relationTag: tag === null || tagRect === undefined || tagText === null || tagText === undefined
 					? null
-					: { text: tagText.textContent?.trim() ?? '', rect: { x: tagRect.x, y: tagRect.y, width: tagRect.width, height: tagRect.height }, fontPx: Number.parseFloat(getComputedStyle(tagText).fontSize) * scaleNow },
+					: { text: tagText.textContent?.trim() ?? '', rect: { x: tagRect.x, y: tagRect.y, width: tagRect.width, height: tagRect.height }, fontPx: Number.parseFloat(getComputedStyle(tagText).fontSize) * scaleNow, leader: leaderLine === null || leaderMatrix === null ? null : { from: leaderEnd('x1', 'y1'), to: leaderEnd('x2', 'y2') } },
 			}
 		})
 		const title = document.querySelector('.graph-cluster-type')
@@ -408,7 +416,24 @@ for (const focus of focusCases) {
 			expect(onBorder(focused, near, 3), `${edge.id} touches the focused widget at its ${leavesFocus ? 'start' : 'end'}`)
 				.toBe(true)
 			const rect = edge.relationTag!.rect
-			const centre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+			const leader = edge.relationTag!.leader
+			// A tag beside its edge (no room on it) is about the point its leader line starts from: that point is what is measured.
+			const centre = leader?.from ?? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+			if (leader !== null) {
+				// The leader starts on the tag's own edge (the samples are about 10px apart), is short, ends on the tag's box and crosses no card.
+				expect(Math.min(...edge.points.map(point => Math.hypot(point.x - leader.from.x, point.y - leader.from.y))), `${edge.id} leader starts on its edge`)
+					.toBeLessThan(8)
+				expect(Math.hypot(leader.to.x - leader.from.x, leader.to.y - leader.from.y), `${edge.id} leader length`)
+					.toBeLessThanOrEqual(4 * edge.relationTag!.fontPx * 1.3 + 1)
+				expect(leader.to.x >= rect.x - 1 && leader.to.x <= rect.x + rect.width + 1 && leader.to.y >= rect.y - 1 && leader.to.y <= rect.y + rect.height + 1, `${edge.id} leader ends on its tag`)
+					.toBe(true)
+				for (const card of cards) {
+					const crosses = Array.from({ length: 21 }, (_, index) => ({ x: leader.from.x + (leader.to.x - leader.from.x) * index / 20, y: leader.from.y + (leader.to.y - leader.from.y) * index / 20 }))
+						.some(point => inside(card.rect, point))
+					expect(crosses, `${edge.id} leader crosses ${card.id}`)
+						.toBe(false)
+				}
+			}
 			// On its edge, in the half nearer the focused card: measured along the curve, at the sample nearest the tag.
 			const along = [0]
 			for (let index = 1; index < edge.points.length; index++)
