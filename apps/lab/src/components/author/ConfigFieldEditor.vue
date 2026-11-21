@@ -15,7 +15,7 @@ import type { ConfigPath, JsonSchema } from '../../lab/config-schema'
 import type { ConfigEdit } from '../../lab/types'
 import UButton from '@nuxt/ui/components/Button.vue'
 import USwitch from '@nuxt/ui/components/Switch.vue'
-import { computed, ref, useId, watch } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { canAddItem, canRemoveItem, canRemoveKey, defaultValueFor, describeField, objectFieldKeys, parseNumberText } from '../../lab/config-schema'
 
@@ -68,10 +68,18 @@ const text = ref(toText(props.value))
 const invalid = ref(false)
 /** Why the text in the box was not applied, while it is still there; `null` when nothing was refused. */
 const notApplied = ref<string | null>(null)
-watch(() => props.value, (value) => {
+watch(() => props.value, (value, previous) => {
+	// A JSON box compares by content: an equal value that is a new object (the same config re-read) changes nothing typed.
+	if (field.value.kind === 'json' && JSON.stringify(value) === JSON.stringify(previous))
+		return
 	text.value = toText(value)
 	invalid.value = false
 	notApplied.value = null
+})
+// Typed back to what the Document holds: nothing is pending any more.
+watch(text, (value) => {
+	if (notApplied.value !== null && value === toText(props.value))
+		notApplied.value = null
 })
 
 /**
@@ -92,10 +100,14 @@ watch(() => props.resync, (resync) => {
 	controlKey.value++
 })
 
-function useDocumentValue(): void {
+async function useDocumentValue(): Promise<void> {
 	text.value = toText(props.value)
 	invalid.value = false
 	notApplied.value = null
+	// The button goes away with the note: keyboard focus goes back to the box instead of the page.
+	await nextTick()
+	document.getElementById(`${id}-control`)
+		?.focus()
 }
 
 /**
@@ -255,6 +267,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						v-model="text"
 						:aria-disabled="busy ? 'true' : undefined"
 						:aria-invalid="invalid"
+						:aria-describedby="notApplied !== null ? `${id}-not-applied` : undefined"
 						rows="3"
 						class="h-auto flex-1 py-1"
 						:class="[controlClass]"
@@ -270,6 +283,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:inputmode="field.kind === 'number' ? 'decimal' : undefined"
 						:aria-disabled="busy ? 'true' : undefined"
 						:aria-invalid="invalid"
+						:aria-describedby="notApplied !== null ? `${id}-not-applied` : undefined"
 						class="flex-1"
 						:class="[controlClass]"
 						@keydown.enter.prevent="commitText"
@@ -287,6 +301,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 				</div>
 				<div
 					v-if="notApplied !== null"
+					:id="`${id}-not-applied`"
 					data-testid="not-applied"
 					class="flex flex-wrap items-center gap-1.5 text-xs text-warning"
 				>

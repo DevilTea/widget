@@ -1043,8 +1043,11 @@ control while the command ran stays where they put it. `onEdit` drops a second t
 controls' own `busy` prop only follows with the next render). The add controls keep what was chosen or typed until the Document holds the new key (issue #230):
 an add that is not reported, or is reported and refused, keeps the choice for another try. A commit that is not applied (a dirty JSON draft, a patch error, a stale
 selection) reaches only the control at the edit's path (`resync`, passed down the tree, with the outcome message): a list or a switch the user only moved is re-created and
-shows what the Document holds again; a text, number or JSON box keeps the rejected input (nothing typed is lost) and says "Not applied: <why>" (`data-testid="not-applied"`),
-with **Use the Document value** to go back. A later change of the Document's value at that path replaces the text and clears the note. Text typed into other fields is kept.
+shows what the Document holds again; a text, number or JSON box keeps the rejected input (nothing typed is lost) and says "Not applied: <why>" (`data-testid="not-applied"`,
+the box's `aria-describedby`; the reason alone, the outcome line above is the live announcement), with **Use the Document value** to go back (focus returns to the box).
+A later change of the Document's value at that path replaces the text and clears the note (a JSON box compares by content, so the same config re-read as a new
+object changes nothing), and so does typing the Document's value back. Text typed into other fields is kept, and the root editor is keyed by the selected
+widget, so nothing typed or refused for one widget is shown for another.
 
 `EditConfigCommand` (`{ nodeId, documentRevision, configPath, edit: replace | add | remove }`; `ReplaceConfigScalarCommand` still exists for
 the scalar case) carries both the current Document `InspectionNodeId` and Document revision; `src/lab/author.ts` resolves that exact

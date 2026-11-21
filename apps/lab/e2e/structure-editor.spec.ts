@@ -462,6 +462,30 @@ test.describe('a commit that is refused: switches and lists show the Document, t
 			.toHaveCount(0)
 	})
 
+	test('a refused text belongs to its widget: selecting another widget shows that widget\'s value and no note', async ({ page }) => {
+		const editor = await openStructure(page, /guests : Numeric/)
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
+		const min = field(editor, 'min')
+			.getByRole('textbox')
+		await min.fill('7')
+		await min.press('Enter')
+		await expect(field(editor, 'min')
+			.getByTestId('not-applied'))
+			.toBeVisible()
+
+		await page.getByRole('button', { name: /phone : ShortAnswer/ })
+			.click()
+		await expect(editor.getByTestId('not-applied'))
+			.toHaveCount(0)
+		await page.getByRole('button', { name: /guests : Numeric/ })
+			.click()
+		await expect(field(editor, 'min')
+			.getByRole('textbox'))
+			.toHaveValue('0')
+		await expect(editor.getByTestId('not-applied'))
+			.toHaveCount(0)
+	})
+
 	test('a refused add keeps the field that was chosen', async ({ page }) => {
 		const editor = await openStructure(page, /guests : Numeric/)
 		await editor.getByRole('button', { name: 'Remove max' })

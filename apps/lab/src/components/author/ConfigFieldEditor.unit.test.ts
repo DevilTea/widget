@@ -145,6 +145,80 @@ describe('configFieldEditor after a refused commit', () => {
 			.toBe(false)
 	})
 
+	it('ties the note to the box, returns focus to the box from the button, and drops the note when the Document value is typed back', async () => {
+		const editor = mountEditor({}, { title: 'T', note: 'N' }, schema)
+		editor.element.ownerDocument.body.append(editor.element)
+		const box = () => textInputs(editor)[0]!
+		await box()
+			.setValue('rejected')
+		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'why' } })
+		const note = editor.get('[data-testid="not-applied"]')
+		expect(box()
+			.attributes('aria-describedby'))
+			.toBe(note.attributes('id'))
+
+		await editor.findAll('button')
+			.find(button => button.text() === 'Use the Document value')!
+			.trigger('click')
+		await new Promise(resolve => setTimeout(resolve, 0))
+		expect(editor.element.ownerDocument.activeElement)
+			.toBe(box().element)
+		expect(box()
+			.attributes('aria-describedby'))
+			.toBeUndefined()
+
+		await box()
+			.setValue('rejected again')
+		await editor.setProps({ resync: { path: 'title', tick: 2 } })
+		await box()
+			.setValue('T')
+		expect(editor.find('[data-testid="not-applied"]')
+			.exists())
+			.toBe(false)
+		editor.unmount()
+	})
+
+	it('keeps a refused number too, but re-creates a switch so it shows the Document', async () => {
+		const mixed: JsonSchema = { type: 'object', properties: { count: { type: 'number' }, on: { type: 'boolean' } }, additionalProperties: false }
+		const editor = mountEditor({}, { count: 1, on: true }, mixed)
+		await textInputs(editor)[0]!.setValue('5')
+		await editor.setProps({ resync: { path: 'count', tick: 1 } })
+		expect((textInputs(editor)[0]!.element as HTMLInputElement).value)
+			.toBe('5')
+		expect(editor.find('[data-config-path="count"] [data-testid="not-applied"]')
+			.exists())
+			.toBe(true)
+
+		const switchBefore = editor.get('[data-config-path="on"] [role="switch"]').element
+		await editor.setProps({ resync: { path: 'on', tick: 2 } })
+		expect(editor.get('[data-config-path="on"] [role="switch"]').element)
+			.not
+			.toBe(switchBefore)
+		expect(editor.find('[data-config-path="on"] [data-testid="not-applied"]')
+			.exists())
+			.toBe(false)
+	})
+
+	it('keeps a refused JSON text when the config is re-read as an equal new object, and replaces it when the content changes', async () => {
+		const editor = mountEditor({ asJson: true }, { a: 1 }, null)
+		const area = () => editor.get('textarea')
+		await area()
+			.setValue('{ "a": 2 }')
+		await editor.setProps({ resync: { path: '', tick: 1 } })
+		await editor.setProps({ value: { a: 1 } })
+		expect((area().element as HTMLTextAreaElement).value)
+			.toBe('{ "a": 2 }')
+		expect(editor.find('[data-testid="not-applied"]')
+			.exists())
+			.toBe(true)
+		await editor.setProps({ value: { a: 3 } })
+		expect(JSON.parse((area().element as HTMLTextAreaElement).value))
+			.toEqual({ a: 3 })
+		expect(editor.find('[data-testid="not-applied"]')
+			.exists())
+			.toBe(false)
+	})
+
 	it('does nothing for a path it does not own', async () => {
 		const editor = mountEditor({}, { title: 'T', note: 'N' })
 		await textInputs(editor)[1]!.setValue('typed')
