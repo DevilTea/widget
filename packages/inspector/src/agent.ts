@@ -29,7 +29,7 @@ import {
 	isCompatibleProtocolVersion,
 } from './protocol'
 
-const PROTOCOL_0_1_METHODS = Object.freeze([
+const BASE_METHODS = Object.freeze([
 	'handshake',
 	'runtime.list',
 	'blueprint.getSnapshot',
@@ -39,47 +39,41 @@ const PROTOCOL_0_1_METHODS = Object.freeze([
 ] satisfies InspectorRequestMethod[])
 
 /** Present only when the Agent has an inspected DOM root: without one they cannot do anything. */
-const PROTOCOL_0_1_DOM_METHODS = Object.freeze([
+const DOM_METHODS = Object.freeze([
 	'inspect.enable',
 	'inspect.disable',
 	'highlight.show',
 	'highlight.clear',
 ] satisfies InspectorRequestMethod[])
 
-const PROTOCOL_0_2_METHODS = Object.freeze([
+const EVENT_METHODS = Object.freeze([
 	'runtime.subscribeEvent',
 	'runtime.unsubscribeEvent',
 ] satisfies InspectorRequestMethod[])
 
-const PROTOCOL_0_2_GEOMETRY_METHODS = Object.freeze([
+const GEOMETRY_METHODS = Object.freeze([
 	'inspect.hitTest',
 	'geometry.resolve',
 ] satisfies InspectorRequestMethod[])
 
-const PROTOCOL_0_1_EVENTS = Object.freeze([
+const BASE_EVENTS = Object.freeze([
 	'runtime.memberChanged',
 	'inspect.hovered',
 	'inspect.selected',
 	'agent.status',
 ] satisfies InspectorEventName[])
 
-const PROTOCOL_0_2_EVENTS = Object.freeze([
+const EVENT_OCCURRED_EVENTS = Object.freeze([
 	'runtime.eventOccurred',
 ] satisfies InspectorEventName[])
 
-const PROTOCOL_0_2_GEOMETRY_EVENTS = Object.freeze([
+const GEOMETRY_EVENTS = Object.freeze([
 	'geometry.invalidated',
 ] satisfies InspectorEventName[])
 
-const PROTOCOL_0_4_EVENTS = Object.freeze([
+const LIFECYCLE_EVENTS = Object.freeze([
 	'runtime.disposed',
 ] satisfies InspectorEventName[])
-
-/** `runtime.disposed` and the `runtime-disposed` error code exist from this protocol minor on. */
-const RUNTIME_LIFECYCLE_PROTOCOL_MINOR = 4
-
-/** Method members (`diagnostics`), Method `runtime.subscribeMember` and their `runtime.memberChanged` exist from this protocol minor on. */
-const METHOD_SNAPSHOT_PROTOCOL_MINOR = 5
 
 /**
  * The only parts of a public `RuntimeMethod` the Agent touches. It never calls the Method itself: a Method
@@ -90,7 +84,7 @@ interface MethodDiagnosticsSource {
 	readonly subscribeDiagnostics: (listener: (diagnostics: readonly RuntimeMethodDiagnostic[]) => void) => () => void
 }
 
-/** The `invalid-params` message of every protocol minor; a 0.4 peer must see this exact text. */
+/** The `invalid-params` message. */
 const INVALID_PARAMS_MESSAGE = 'Invalid parameters for the requested Inspector method.'
 
 let runtimeSequence = 1
@@ -132,8 +126,7 @@ export interface CreateInspectorAgentOptions {
 	/**
 	 * Optional cap on this Agent's live Runtime member and event subscriptions, counted together.
 	 * There is no default: unlimited unless configured. Once the cap is reached, further subscribe
-	 * requests fail with `subscription-limit` (protocol 0.3+; an older-minor peer receives
-	 * `internal-error` instead). Must be a positive safe integer.
+	 * requests fail with `subscription-limit`. Must be a positive safe integer.
 	 */
 	readonly maxSubscriptions?: number
 	/**
@@ -172,34 +165,26 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	const memberSubscriptions = new Map<string, () => void>()
 	const eventSubscriptions = new Map<string, () => void>()
 	// One Inspector transport has one peer. Only a handshake sets (or re-sets) the negotiated minor;
-	// standalone requests remain valid before the first handshake.
+	// standalone requests remain valid before the first handshake. Protocol 1.0 is the lowest version this
+	// Agent serves, so no capability is gated on the minor yet; the minor is still negotiated and echoed so
+	// that a later minor can add one.
 	let negotiatedMinor: number = INSPECTOR_PROTOCOL_VERSION.minor
 	// While one request is handled, answers use the lower of the negotiated minor and the request's own
 	// envelope minor, so a peer that never handshakes still sees the shapes of the minor it speaks. This
 	// never changes `negotiatedMinor`, which event delivery uses.
 	let requestMinor: number | null = null
-	const currentMinor = () => requestMinor ?? negotiatedMinor
-	const envelopeVersion = () => ({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: currentMinor() })
-	// Peers negotiated below 0.4 predate the truncated-key marker, so they never receive it.
-	const valueEncoding = (): InspectableValueEncodingOptions => ({ ...valueLimits, markTruncatedKeys: currentMinor() >= 4 })
-	function capabilitiesForMinor(minor: number): { readonly methods: readonly InspectorRequestMethod[], readonly events: readonly InspectorEventName[] } {
-		if (minor < 2) {
-			return {
-				methods: dom === undefined ? PROTOCOL_0_1_METHODS : Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_1_DOM_METHODS]),
-				events: PROTOCOL_0_1_EVENTS,
-			}
-		}
-		return {
-			methods: dom === undefined
-				? Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_2_METHODS])
-				: Object.freeze([...PROTOCOL_0_1_METHODS, ...PROTOCOL_0_1_DOM_METHODS, ...PROTOCOL_0_2_METHODS, ...PROTOCOL_0_2_GEOMETRY_METHODS]),
-			events: Object.freeze([
-				...PROTOCOL_0_1_EVENTS,
-				...PROTOCOL_0_2_EVENTS,
-				...(dom === undefined ? [] : PROTOCOL_0_2_GEOMETRY_EVENTS),
-				...(minor < RUNTIME_LIFECYCLE_PROTOCOL_MINOR ? [] : PROTOCOL_0_4_EVENTS),
-			]),
-		}
+	const envelopeVersion = () => ({ major: INSPECTOR_PROTOCOL_VERSION.major, minor: requestMinor ?? negotiatedMinor })
+	const encoding: InspectableValueEncodingOptions = valueLimits
+	const capabilities: { readonly methods: readonly InspectorRequestMethod[], readonly events: readonly InspectorEventName[] } = {
+		methods: dom === undefined
+			? Object.freeze([...BASE_METHODS, ...EVENT_METHODS])
+			: Object.freeze([...BASE_METHODS, ...DOM_METHODS, ...EVENT_METHODS, ...GEOMETRY_METHODS]),
+		events: Object.freeze([
+			...BASE_EVENTS,
+			...EVENT_OCCURRED_EVENTS,
+			...(dom === undefined ? [] : GEOMETRY_EVENTS),
+			...LIFECYCLE_EVENTS,
+		]),
 	}
 	let inspectEnabled = false
 	let disposed = false
@@ -214,7 +199,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 	function emit<Event extends InspectorEventName>(event: Event, payload: InspectorEventMap[Event]): void {
 		if (event !== 'runtime.disposed')
 			observeRuntimeDisposal()
-		if (disposed || options.transport.closed || !capabilitiesForMinor(negotiatedMinor).events.includes(event))
+		if (disposed || options.transport.closed || !capabilities.events.includes(event))
 			return
 		try {
 			options.transport.send({
@@ -542,8 +527,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		if (maxSubscriptions === undefined || memberSubscriptions.size + eventSubscriptions.size < maxSubscriptions)
 			return false
 		const message = `This Inspector Agent allows at most ${maxSubscriptions} live subscriptions.`
-		// A peer negotiated below protocol 0.3 cannot parse the new code; keep it within its vocabulary.
-		sendError(request.requestId, protocolError(currentMinor() >= 3 ? 'subscription-limit' : 'internal-error', message))
+		sendError(request.requestId, protocolError('subscription-limit', message))
 		return true
 	}
 
@@ -563,21 +547,19 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 		if (member.type === 'method') {
 			const method = resolveMethodDiagnostics(widget, member.name)
 			if (method !== null) {
-				projected = projectRuntimeMethodSnapshot(member.name, method.getDiagnostics(), valueEncoding())
+				projected = projectRuntimeMethodSnapshot(member.name, method.getDiagnostics(), encoding)
 				subscribeToMember = notify => method.subscribeDiagnostics((diagnostics) => {
-					// A peer re-negotiated below 0.5 must not receive a member shape it does not know.
-					if (negotiatedMinor >= METHOD_SNAPSHOT_PROTOCOL_MINOR)
-						notify(projectRuntimeMethodSnapshot(member.name, diagnostics, valueEncoding()))
+					notify(projectRuntimeMethodSnapshot(member.name, diagnostics, encoding))
 				})
 			}
 		}
 		else {
 			const observable = member.type === 'state' ? widget.getState(member.name) : widget.getProperty(member.name)
 			const stateOrProperty = { type: member.type, name: member.name }
-			projected = observable === null ? null : projectRuntimeMemberSnapshot(widget, stateOrProperty, valueEncoding())
+			projected = observable === null ? null : projectRuntimeMemberSnapshot(widget, stateOrProperty, encoding)
 			if (observable !== null) {
 				subscribeToMember = notify => observable.subscribe(() => {
-					const next = projectRuntimeMemberSnapshot(widget, stateOrProperty, valueEncoding())
+					const next = projectRuntimeMemberSnapshot(widget, stateOrProperty, encoding)
 					if (next !== null)
 						notify(next)
 				})
@@ -639,7 +621,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					subscriptionId,
 					ref: request.params.ref,
 					event: request.params.event,
-					args: projectEventArgs(args, valueEncoding()),
+					args: projectEventArgs(args, encoding),
 				})
 			})
 		}
@@ -695,30 +677,18 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			return
 		}
 
-		// A peer below 0.5 does not know the Method member type, so a 0.4 Agent rejected it while classifying the
-		// request: before any addressing, capability or disposal check, and without observing the Runtime. The
-		// answer, its message and its envelope minor are the same here, whatever else would have been wrong.
-		if (request.method === 'runtime.subscribeMember' && request.params.member.type === 'method') {
-			const minor = Math.min(negotiatedMinor, request.protocol.minor)
-			if (minor < METHOD_SNAPSHOT_PROTOCOL_MINOR) {
-				requestMinor = minor
-				sendError(request.requestId, protocolError('invalid-params', INVALID_PARAMS_MESSAGE))
-				return
-			}
-		}
-
 		const runtimeDisposed = observeRuntimeDisposal()
 
 		if (request.method !== 'handshake') {
 			requestMinor = Math.min(negotiatedMinor, request.protocol.minor)
-			if (!capabilitiesForMinor(requestMinor).methods.includes(request.method)) {
+			if (!capabilities.methods.includes(request.method)) {
 				sendError(request.requestId, protocolError('unknown-method', 'Method unavailable in this Inspector protocol session.'))
 				return
 			}
-			// From 0.4 a disposed Runtime is no longer addressable and the methods that act on the live Runtime
-			// (hit testing, inspect mode, highlight) stop answering; older peers keep the earlier behavior.
+			// A disposed Runtime is no longer addressable and the methods that act on the live Runtime
+			// (hit testing, inspect mode, highlight) stop answering.
 			// Releasing things the peer holds (`unsubscribe*`, `inspect.disable`) stays answerable.
-			if (runtimeDisposed && requestMinor >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR
+			if (runtimeDisposed
 				&& (addressedRuntimeId(request) === runtimeId || dependsOnLiveRuntime(request))) {
 				sendError(request.requestId, protocolError('runtime-disposed', 'The requested Runtime has been disposed.'))
 				return
@@ -732,7 +702,6 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					return
 				}
 				negotiatedMinor = Math.min(INSPECTOR_PROTOCOL_VERSION.minor, request.protocol.minor, request.params.protocol.minor)
-				const capabilities = capabilitiesForMinor(negotiatedMinor)
 				sendSuccess(request, {
 					protocol: envelopeVersion(),
 					capabilities,
@@ -741,7 +710,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 			}
 			case 'runtime.list':
 				sendSuccess(request, {
-					runtimes: runtimeDisposed && currentMinor() >= RUNTIME_LIFECYCLE_PROTOCOL_MINOR
+					runtimes: runtimeDisposed
 						? []
 						: [{ runtimeId, rootNodeId: runtimeInspection.blueprint.rootNodeId }],
 				})
@@ -751,7 +720,7 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					sendError(request.requestId, protocolError('runtime-not-found', 'The requested Runtime is not registered.'))
 					return
 				}
-				sendSuccess(request, projectBlueprintSnapshot(runtimeId, runtimeInspection.blueprint, currentMinor()))
+				sendSuccess(request, projectBlueprintSnapshot(runtimeId, runtimeInspection.blueprint, encoding))
 				return
 			case 'runtime.getWidgetSnapshot': {
 				if (request.params.ref.runtimeId !== runtimeId) {
@@ -765,10 +734,8 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 							runtimeId,
 							runtimeInspection,
 							nodeId,
-							valueEncoding(),
-							currentMinor() < METHOD_SNAPSHOT_PROTOCOL_MINOR
-								? null
-								: name => readMethodDiagnostics(nodeId, name),
+							encoding,
+							name => readMethodDiagnostics(nodeId, name),
 						)
 				if (snapshot === null) {
 					sendError(request.requestId, protocolError('widget-not-found', 'The requested widget does not exist in this Runtime snapshot.'))

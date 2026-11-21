@@ -1,6 +1,7 @@
 import type { InspectorTransport } from './transport'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInspectorClient } from './client'
+import { INSPECTOR_PROTOCOL_VERSION } from './protocol'
 
 /** A transport that hands messages over by reference, so the test controls exactly what the client sees. */
 function createScriptedTransport() {
@@ -50,7 +51,7 @@ const memberResult = { subscriptionId: 'subscription-9', member: { type: 'state'
 const eventResult = { subscriptionId: 'event-subscription-9', event: 'changed' }
 
 function success(requestId: unknown, result: unknown) {
-	return { protocol: { major: 0, minor: 4 }, kind: 'response', requestId, ok: true, result }
+	return { protocol: INSPECTOR_PROTOCOL_VERSION, kind: 'response', requestId, ok: true, result }
 }
 
 afterEach(() => {
@@ -124,7 +125,7 @@ describe('a subscribe request that timed out', () => {
 		await vi.advanceTimersByTimeAsync(50)
 		await Promise.all(outcomes)
 
-		deliver({ protocol: { major: 0, minor: 4 }, kind: 'response', requestId: sent[0]!.requestId, ok: false, error: { code: 'event-not-found', message: 'No.' } })
+		deliver({ protocol: INSPECTOR_PROTOCOL_VERSION, kind: 'response', requestId: sent[0]!.requestId, ok: false, error: { code: 'event-not-found', message: 'No.' } })
 		deliver(success(sent[1]!.requestId, { subscriptionId: 42 }))
 		deliver(success(sent[2]!.requestId, { runtimes: [] }))
 

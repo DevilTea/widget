@@ -1,6 +1,7 @@
 import type { InspectorTransport } from './transport'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInspectorClient, InspectorClientError } from './client'
+import { INSPECTOR_PROTOCOL_VERSION } from './protocol'
 import { createInProcessInspectorTransportPair } from './transport'
 
 /** A transport that hands messages over by reference, so the test controls exactly what the client sees. */
@@ -40,18 +41,20 @@ function createScriptedTransport() {
 	}
 }
 
-function deepSchema(depth: number): Record<string, unknown> {
-	const root: Record<string, unknown> = {}
+/** An InspectableValue of nested single-item arrays, `depth` levels deep. */
+function deepValue(depth: number): Record<string, unknown> {
+	const root: Record<string, unknown> = { type: 'array', id: 1, items: [], truncated: false }
 	let current = root
 	for (let index = 0; index < depth; index++) {
-		const next: Record<string, unknown> = {}
-		current.a = next
+		const next: Record<string, unknown> = { type: 'array', id: index + 2, items: [], truncated: false }
+		;(current.items as unknown[]).push(next)
 		current = next
 	}
 	return root
 }
 
-function snapshotWithSchema(schema: unknown) {
+/** A Blueprint snapshot whose one diagnostic carries `details`. */
+function snapshotWithDetails(details: unknown) {
 	return {
 		runtimeId: 'r',
 		rootNodeId: 0,
@@ -62,9 +65,8 @@ function snapshotWithSchema(schema: unknown) {
 			widgetId: 'a',
 			widgetType: 't',
 			sourceSlots: [],
-			diagnostics: [],
+			diagnostics: [{ code: 'invalid-widget-config', message: 'bad', location: { type: 'widget', nodeId: 0 }, reason: 'why', details }],
 			capabilities: { config: true, slots: false, state: false, properties: false, methods: false, events: false },
-			config: { description: '', schema },
 			semanticSlots: [],
 			state: [],
 			properties: [],
@@ -80,34 +82,34 @@ afterEach(() => {
 })
 
 describe('inspectorClient robustness', () => {
-	it.each([5000, 100_000])('validates a response whose config schema is nested %i levels deep without overflowing the stack', async (depth) => {
+	it.each([5000, 100_000])('validates a response whose diagnostic details are nested %i levels deep without overflowing the stack', async (depth) => {
 		const { transport, sent, deliver } = createScriptedTransport()
 		const client = createInspectorClient(transport)
 		const pending = client.request('blueprint.getSnapshot', { runtimeId: 'r' })
 		deliver({
-			protocol: { major: 0, minor: 3 },
+			protocol: INSPECTOR_PROTOCOL_VERSION,
 			kind: 'response',
 			requestId: sent[0]!.requestId,
 			ok: true,
-			result: snapshotWithSchema(deepSchema(depth)),
+			result: snapshotWithDetails(deepValue(depth)),
 		})
 		await expect(pending)
 			.resolves.toMatchObject({ runtimeId: 'r' })
 		client.close()
 	})
 
-	it('still rejects a cyclic config schema without recursing on it', async () => {
+	it('still rejects cyclic diagnostic details without recursing on them', async () => {
 		const { transport, sent, deliver } = createScriptedTransport()
 		const client = createInspectorClient(transport)
 		const pending = client.request('blueprint.getSnapshot', { runtimeId: 'r' })
-		const cyclic: Record<string, unknown> = {}
-		cyclic.self = cyclic
+		const cyclic = deepValue(1)
+		;(cyclic.items as unknown[])[0] = cyclic
 		deliver({
-			protocol: { major: 0, minor: 3 },
+			protocol: INSPECTOR_PROTOCOL_VERSION,
 			kind: 'response',
 			requestId: sent[0]!.requestId,
 			ok: true,
-			result: snapshotWithSchema(cyclic),
+			result: snapshotWithDetails(cyclic),
 		})
 		await expect(pending)
 			.rejects.toMatchObject({ code: 'invalid-message' })
@@ -119,7 +121,7 @@ describe('inspectorClient robustness', () => {
 		const client = createInspectorClient(transport)
 		const pending = client.request('runtime.list', {})
 		const hostile = {
-			protocol: { major: 0, minor: 3 },
+			protocol: INSPECTOR_PROTOCOL_VERSION,
 			kind: 'response',
 			requestId: sent[0]!.requestId,
 			ok: true,
@@ -159,7 +161,7 @@ describe('inspectorClient robustness', () => {
 			.toMatchObject({ code: 'timeout' })
 		// A response that arrives after the timeout has no pending entry left and is dropped silently.
 		expect(() => deliver({
-			protocol: { major: 0, minor: 3 },
+			protocol: INSPECTOR_PROTOCOL_VERSION,
 			kind: 'response',
 			requestId: sent[0]!.requestId,
 			ok: true,
@@ -176,7 +178,7 @@ describe('inspectorClient robustness', () => {
 		const client = createInspectorClient(transport, { requestTimeoutMs: 50 })
 		const pending = client.request('runtime.list', {})
 		deliver({
-			protocol: { major: 0, minor: 3 },
+			protocol: INSPECTOR_PROTOCOL_VERSION,
 			kind: 'response',
 			requestId: sent[0]!.requestId,
 			ok: true,
@@ -205,7 +207,7 @@ describe('inspectorClient robustness', () => {
 		const client = createInspectorClient(transport)
 		const pending = client.request('runtime.list', {})
 		deliver({
-			protocol: { major: 0, minor: 9 },
+			protocol: { major: 1, minor: 9 },
 			kind: 'response',
 			requestId: sent[0]!.requestId,
 			ok: false,
@@ -219,19 +221,19 @@ describe('inspectorClient robustness', () => {
 		client.close()
 	})
 
-	it('treats a code the envelope minor predates as an unknown code too', async () => {
+	it('maps the codes of an older major to unsupported-version rather than reading them', async () => {
 		const { transport, sent, deliver } = createScriptedTransport()
 		const client = createInspectorClient(transport)
 		const pending = client.request('runtime.list', {})
 		deliver({
-			protocol: { major: 0, minor: 2 },
+			protocol: { major: 0, minor: 5 },
 			kind: 'response',
 			requestId: sent[0]!.requestId,
 			ok: false,
 			error: { code: 'subscription-limit', message: 'Cap.' },
 		})
 		await expect(pending)
-			.rejects.toMatchObject({ code: 'unknown-error', peerCode: 'subscription-limit', message: 'Cap.' })
+			.rejects.toMatchObject({ code: 'unsupported-version' })
 		client.close()
 	})
 
@@ -253,7 +255,7 @@ describe('inspectorClient robustness', () => {
 		client.on('agent.status', () => seen.push('on-2'))
 
 		expect(() => pair.agent.send({
-			protocol: { major: 0, minor: 3 },
+			protocol: INSPECTOR_PROTOCOL_VERSION,
 			kind: 'event',
 			event: 'agent.status',
 			payload: { inspectEnabled: true },

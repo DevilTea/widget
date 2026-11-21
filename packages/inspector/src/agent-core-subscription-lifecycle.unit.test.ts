@@ -99,7 +99,6 @@ interface SubscriptionFixtureInterfaces extends WidgetInterfaces {
 }
 
 const SubscriptionFixturePlugin = createWidgetPlugin('SubscriptionFixture')
-	.description('Agent subscription lifecycle fixture')
 	.interfaces<SubscriptionFixtureInterfaces>()
 	.state(state => state.count({
 		validate: (input): input is number => typeof input === 'number',
@@ -112,7 +111,7 @@ const SubscriptionFixturePlugin = createWidgetPlugin('SubscriptionFixture')
 			emit.change(value)
 		},
 	}))
-	.events(events => events.change({ description: 'Changed' }))
+	.events(['change'])
 	.done()
 
 const SubscriptionFixtureSystem = createWidgetSystem({ plugins: [SubscriptionFixturePlugin] })

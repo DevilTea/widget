@@ -98,13 +98,13 @@ describe('inspectorAgent request catch-all', () => {
 			originalSend(message)
 		}
 		try {
-			pair.client.send({ protocol: { major: 0, minor: 3 }, kind: 'request', requestId: 'a', method: 'runtime.list', params: {} })
-			pair.client.send({ protocol: { major: 0, minor: 3 }, kind: 'request', requestId: 'b', method: 'runtime.list', params: {} })
-			// Never handshaken: both answers use the request envelope's minor, the internal-error one included.
+			pair.client.send({ protocol: { major: 1, minor: 0 }, kind: 'request', requestId: 'a', method: 'runtime.list', params: {} })
+			pair.client.send({ protocol: { major: 1, minor: 0 }, kind: 'request', requestId: 'b', method: 'runtime.list', params: {} })
+			// Never handshaken: both answers use the request envelope's version, the internal-error one included.
 			expect(responses)
 				.toMatchObject([
-					{ requestId: 'a', ok: false, protocol: { major: 0, minor: 3 }, error: { code: 'internal-error' } },
-					{ requestId: 'b', ok: true, protocol: { major: 0, minor: 3 } },
+					{ requestId: 'a', ok: false, protocol: { major: 1, minor: 0 }, error: { code: 'internal-error' } },
+					{ requestId: 'b', ok: true, protocol: { major: 1, minor: 0 } },
 				])
 		}
 		finally {

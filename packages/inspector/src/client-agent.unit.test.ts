@@ -94,9 +94,9 @@ describe('inspectorClient + InspectorAgent', () => {
 	it('handshakes, correlates requests, and exposes only the explicit read-only capability vocabulary', async () => {
 		const { agent, client } = createConnectedFixture()
 		try {
-			const handshake = await client.request('handshake', { protocol: { major: 0, minor: 1 } })
+			const handshake = await client.handshake()
 			expect(handshake.protocol)
-				.toEqual({ major: 0, minor: 1 })
+				.toEqual(INSPECTOR_PROTOCOL_VERSION)
 			expect(handshake.capabilities.methods)
 				.toEqual([
 					'handshake',
@@ -105,9 +105,11 @@ describe('inspectorClient + InspectorAgent', () => {
 					'runtime.getWidgetSnapshot',
 					'runtime.subscribeMember',
 					'runtime.unsubscribeMember',
+					'runtime.subscribeEvent',
+					'runtime.unsubscribeEvent',
 				])
 			expect(handshake.capabilities.events)
-				.toEqual(['runtime.memberChanged', 'inspect.hovered', 'inspect.selected', 'agent.status'])
+				.toEqual(['runtime.memberChanged', 'inspect.hovered', 'inspect.selected', 'agent.status', 'runtime.eventOccurred', 'runtime.disposed'])
 			expect(handshake.capabilities.methods).not.toContain('method.invoke')
 			expect(handshake.capabilities.methods).not.toContain('state.set')
 
@@ -126,41 +128,21 @@ describe('inspectorClient + InspectorAgent', () => {
 		}
 	})
 
-	it('keeps legacy Blueprint and method capabilities at 0.1 until an explicit 0.2 re-handshake', async () => {
+	it('serves the Event capability and the Event list of every resolved node from the first request', async () => {
 		const { agent, client } = createConnectedFixture()
 		try {
-			const legacy = await client.request('handshake', { protocol: { major: 0, minor: 1 } })
-			expect(legacy.protocol)
-				.toEqual({ major: 0, minor: 1 })
-			expect(legacy.capabilities.methods)
-				.not.toContain('runtime.subscribeEvent')
+			// No handshake needed: protocol 1.0 has no older shape to fall back to.
 			const snapshot = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-test' })
 			const root = snapshot.nodes.find(node => node.widgetId === 'root')!
 			expect(root.capabilities)
-				.not.toHaveProperty('events')
-			expect(root).not.toHaveProperty('config')
-			expect(root).not.toHaveProperty('events')
+				.toHaveProperty('events', false)
+			expect(root)
+				.toHaveProperty('events', [])
+			expect(root)
+				.not
+				.toHaveProperty('config')
 			await expect(client.request('runtime.subscribeEvent', {
 				ref: { runtimeId: 'runtime-test', nodeId: root.nodeId },
-				event: 'anything',
-			}))
-				.rejects.toMatchObject({ code: 'unknown-method' })
-
-			const upgraded = await client.handshake()
-			expect(upgraded.protocol)
-				.toEqual(INSPECTOR_PROTOCOL_VERSION)
-			expect(upgraded.capabilities.methods)
-				.toContain('runtime.subscribeEvent')
-			const modern = await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-test' })
-			const modernRoot = modern.nodes.find(node => node.widgetId === 'root')!
-			expect(modernRoot.capabilities)
-				.toHaveProperty('events', false)
-			expect(modernRoot)
-				.toHaveProperty('config')
-			expect(modernRoot)
-				.toHaveProperty('events')
-			await expect(client.request('runtime.subscribeEvent', {
-				ref: { runtimeId: 'runtime-test', nodeId: modernRoot.nodeId },
 				event: 'anything',
 			}))
 				.rejects.toMatchObject({ code: 'event-not-found' })
@@ -171,7 +153,7 @@ describe('inspectorClient + InspectorAgent', () => {
 		}
 	})
 
-	it('uses the lower handshake envelope minor when the params minor is newer', () => {
+	it('negotiates the lower minor when the envelope or the params name a newer one', () => {
 		const { runtime } = createInspectorTestFixture()
 		const pair = createInProcessInspectorTransportPair()
 		const agent = createInspectorAgent({ runtime, transport: pair.agent, runtimeId: 'runtime-test' })
@@ -181,30 +163,22 @@ describe('inspectorClient + InspectorAgent', () => {
 			if (response !== null)
 				responses.push(response)
 		})
+		const newer = { major: INSPECTOR_PROTOCOL_VERSION.major, minor: INSPECTOR_PROTOCOL_VERSION.minor + 2 }
 
 		try {
-			pair.client.send({
-				protocol: { major: 0, minor: 1 },
-				kind: 'request',
-				requestId: 'legacy-envelope-handshake',
-				method: 'handshake',
-				params: { protocol: { major: 0, minor: 2 } },
-			})
+			pair.client.send({ protocol: INSPECTOR_PROTOCOL_VERSION, kind: 'request', requestId: 'params-newer', method: 'handshake', params: { protocol: newer } })
+			pair.client.send({ protocol: newer, kind: 'request', requestId: 'envelope-newer', method: 'handshake', params: { protocol: INSPECTOR_PROTOCOL_VERSION } })
 
 			expect(responses)
-				.toHaveLength(1)
-			expect(responses[0])
-				.toMatchObject({
-					protocol: { major: 0, minor: 1 },
-					ok: true,
-					result: {
-						protocol: { major: 0, minor: 1 },
-						capabilities: {
-							methods: expect.not.arrayContaining(['runtime.subscribeEvent', 'inspect.hitTest', 'geometry.resolve']),
-							events: expect.not.arrayContaining(['runtime.eventOccurred', 'geometry.invalidated']),
-						},
-					},
-				})
+				.toHaveLength(2)
+			for (const response of responses) {
+				expect(response)
+					.toMatchObject({
+						protocol: INSPECTOR_PROTOCOL_VERSION,
+						ok: true,
+						result: { protocol: INSPECTOR_PROTOCOL_VERSION },
+					})
+			}
 		}
 		finally {
 			stopListening()
@@ -324,7 +298,6 @@ describe('core inspection projection', () => {
 			}
 		}
 		const plugin = createWidgetPlugin('DevtoolsDiagnostic')
-			.description('DevTools diagnostic fixture')
 			.interfaces<DiagnosticInterfaces>()
 			.properties(properties => properties
 				.flaky({
@@ -403,7 +376,7 @@ describe('core inspection projection', () => {
 		if (coreDependency === undefined)
 			throw new Error('Expected doubled dependency inspection.')
 
-		const projected = projectBlueprintSnapshot('runtime-dependency-fixture', inspection)
+		const projected = projectBlueprintSnapshot('runtime-dependency-fixture', inspection, {})
 		const wireCounter = projected.nodes.find(node => node.widgetId === 'counter')
 		const wireDependency = wireCounter?.properties?.find(property => property.name === 'doubled')?.dependencies[0]
 		if (wireDependency === undefined)
@@ -430,7 +403,7 @@ describe('core inspection projection', () => {
 		expect(invalid.status)
 			.toBe('invalid')
 		const inspection = inspectBlueprint(invalid)
-		const projected = projectBlueprintSnapshot('runtime-diagnostic-fixture', inspection)
+		const projected = projectBlueprintSnapshot('runtime-diagnostic-fixture', inspection, {})
 
 		expect(projected.nodes.some(node => node.diagnostics.length > 0))
 			.toBe(true)

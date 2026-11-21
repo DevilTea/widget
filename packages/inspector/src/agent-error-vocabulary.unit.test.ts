@@ -107,23 +107,19 @@ describe('inspector error vocabulary', () => {
 		agent.dispose()
 	})
 
-	it('lets only the handshake set the negotiated minor', async () => {
+	it('answers at the lower of its own and the request envelope minor, whatever a peer claims', async () => {
 		const { agent, request, responseFor, received } = createRawFixture()
-		// A stray older-minor request is answered at its own minor but does not lower the session.
-		request('stray', 'runtime.list', {}, { major: 0, minor: 1 })
+		// A request from a newer minor is answered at this Agent's minor, and so is the handshake itself.
+		const newer = { major: INSPECTOR_PROTOCOL_VERSION.major, minor: INSPECTOR_PROTOCOL_VERSION.minor + 3 }
+		request('stray', 'runtime.list', {}, newer)
 		expect(responseFor('stray'))
-			.toMatchObject({ protocol: { major: 0, minor: 1 }, ok: true })
-		request('later', 'runtime.subscribeEvent', { ref: { runtimeId: 'runtime-x', nodeId: 1 }, event: 'nope' })
-		expect(responseFor('later'))
-			.toMatchObject({ protocol: INSPECTOR_PROTOCOL_VERSION, ok: false, error: { code: expect.not.stringMatching(/^unknown-method$/) } })
-
-		// A handshake does negotiate, and the negotiated minor survives later newer-minor requests.
-		request('hs', 'handshake', { protocol: { major: 0, minor: 1 } })
+			.toMatchObject({ protocol: INSPECTOR_PROTOCOL_VERSION, ok: true })
+		request('hs', 'handshake', { protocol: newer }, newer)
 		expect(responseFor('hs'))
-			.toMatchObject({ ok: true, result: { protocol: { major: 0, minor: 1 } } })
+			.toMatchObject({ protocol: INSPECTOR_PROTOCOL_VERSION, ok: true, result: { protocol: INSPECTOR_PROTOCOL_VERSION } })
 		request('after', 'runtime.subscribeEvent', { ref: { runtimeId: 'runtime-x', nodeId: 1 }, event: 'nope' })
 		expect(responseFor('after'))
-			.toMatchObject({ protocol: { major: 0, minor: 1 }, ok: false, error: { code: 'unknown-method' } })
+			.toMatchObject({ protocol: INSPECTOR_PROTOCOL_VERSION, ok: false, error: { code: expect.not.stringMatching(/^unknown-method$/) } })
 		expect(received.length)
 			.toBeGreaterThan(0)
 		agent.dispose()

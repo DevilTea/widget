@@ -16,7 +16,6 @@ interface EventWireInterfaces extends WidgetInterfaces {
 }
 
 const EventWirePlugin = createWidgetPlugin('EventWireFixture')
-	.description('Event wire fixture')
 	.interfaces<EventWireInterfaces>()
 	.methods(methods => methods.fire({
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
@@ -25,7 +24,7 @@ const EventWirePlugin = createWidgetPlugin('EventWireFixture')
 			emit.change({ value, callback: () => {} })
 		},
 	}))
-	.events(events => events.change({ description: 'Changed payload' }))
+	.events(['change'])
 	.done()
 
 function createFixture() {
@@ -55,7 +54,7 @@ describe('serialized Runtime event inspection', () => {
 			expect(root?.capabilities?.events)
 				.toBe(true)
 			expect(root?.events)
-				.toEqual([{ type: 'event', name: 'change', description: 'Changed payload' }])
+				.toEqual([{ type: 'event', name: 'change' }])
 
 			const ref = { runtimeId: 'runtime-events', nodeId: node.nodeId }
 			const occurrences = vi.fn()

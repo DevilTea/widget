@@ -263,6 +263,15 @@ describe('inspector protocol validation', () => {
 		expect(isCompatibleProtocolVersion({ major: INSPECTOR_PROTOCOL_VERSION.major + 1, minor: 0 }))
 			.toBe(false)
 	})
+
+	it('declares protocol 1.0 and treats every 0.x peer as a different major', () => {
+		expect(INSPECTOR_PROTOCOL_VERSION)
+			.toEqual({ major: 1, minor: 0 })
+		for (const minor of [0, 1, 2, 3, 4, 5]) {
+			expect(isCompatibleProtocolVersion({ major: 0, minor }))
+				.toBe(false)
+		}
+	})
 })
 
 describe('deep wire DTO validation', () => {
@@ -276,7 +285,6 @@ describe('deep wire DTO validation', () => {
 				widgetId: 'root',
 				widgetType: 'fixture',
 				capabilities: { config: false, slots: false, state: false, properties: false, methods: false, events: false },
-				config: null,
 				sourceSlots: [],
 				semanticSlots: [],
 				state: [],
@@ -290,13 +298,14 @@ describe('deep wire DTO validation', () => {
 		expect(isInspectorRequestResult('blueprint.getSnapshot', base))
 			.toBe(true)
 
-		const legacy = structuredClone(base)
-		Reflect.deleteProperty(legacy.nodes[0]!, 'config')
-		Reflect.deleteProperty(legacy.nodes[0]!, 'events')
-		Reflect.deleteProperty(legacy.nodes[0]!.capabilities, 'events')
-		expect(isInspectorRequestResult('blueprint.getSnapshot', legacy, 1))
-			.toBe(true)
-		expect(isInspectorRequestResult('blueprint.getSnapshot', legacy, INSPECTOR_PROTOCOL_VERSION.minor))
+		// Protocol 1.0 requires the Event list and the `events` capability that 0.1 snapshots lacked.
+		const withoutEvents = structuredClone(base)
+		Reflect.deleteProperty(withoutEvents.nodes[0]!, 'events')
+		expect(isInspectorRequestResult('blueprint.getSnapshot', withoutEvents))
+			.toBe(false)
+		const withoutEventsCapability = structuredClone(base)
+		Reflect.deleteProperty(withoutEventsCapability.nodes[0]!.capabilities, 'events')
+		expect(isInspectorRequestResult('blueprint.getSnapshot', withoutEventsCapability))
 			.toBe(false)
 
 		expect(isInspectorRequestResult('blueprint.getSnapshot', {

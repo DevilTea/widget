@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isBlueprintNode, isInspectableValue } from './validation'
+import { isInspectableValue } from './validation'
 
 const LEVELS = 60
 
@@ -8,80 +8,27 @@ const LEVELS = 60
  * preserves shared references. Walking it as a tree takes 2^levels steps, so the test counts how often
  * each distinct object's children are read instead of timing anything.
  */
-function createDiamond(levels: number, leaf: object, key: 'l' | 'entries', read: () => void): object {
+function createDiamond(levels: number, leaf: object, read: () => void): object {
 	let node: object = leaf
 	for (let level = 0; level < levels; level++) {
 		const below = node
-		node = key === 'l'
-			? {
-					get l() {
-						read()
-						return below
-					},
-					get r() {
-						read()
-						return below
-					},
-				}
-			: {
-					type: 'object',
-					id: level,
-					truncated: false,
-					get entries() {
-						read()
-						return [{ key: 'l', value: below }, { key: 'r', value: below }]
-					},
-				}
+		node = {
+			type: 'object',
+			id: level,
+			truncated: false,
+			get entries() {
+				read()
+				return [{ key: 'l', value: below }, { key: 'r', value: below }]
+			},
+		}
 	}
 	return node
 }
 
-function blueprintNodeWithSchema(schema: object) {
-	return {
-		nodeId: 0,
-		resolved: true,
-		widgetId: 'w',
-		widgetType: 't',
-		capabilities: { config: true, slots: false, state: false, properties: false, methods: false, events: false },
-		config: { description: 'd', schema },
-		sourceSlots: [],
-		semanticSlots: [],
-		state: [],
-		properties: [],
-		methods: [],
-		events: [],
-		diagnostics: [],
-	}
-}
-
 describe('validation of shared references', () => {
-	it('validates each distinct JSON object of a config schema once, however often it is shared', () => {
-		let reads = 0
-		const schema = createDiamond(LEVELS, { type: 'string' }, 'l', () => reads++)
-
-		expect(isBlueprintNode(blueprintNodeWithSchema(schema), 4))
-			.toBe(true)
-		// Two child reads per distinct object (Object.values reads both once), never 2^LEVELS.
-		expect(reads)
-			.toBeLessThanOrEqual(2 * LEVELS)
-	})
-
-	it('still rejects a cycle and a bad value reachable through shared references', () => {
-		const cyclic: Record<string, unknown> = { a: 1 }
-		cyclic.self = cyclic
-		expect(isBlueprintNode(blueprintNodeWithSchema(cyclic), 4))
-			.toBe(false)
-
-		const shared = { bad: Number.NaN }
-		expect(isBlueprintNode(blueprintNodeWithSchema({ l: shared, r: shared }), 4))
-			.toBe(false)
-		expect(isBlueprintNode(blueprintNodeWithSchema({ l: { ok: 1 }, r: { ok: 1 } }), 4))
-			.toBe(true)
-	})
-
 	it('validates each distinct InspectableValue node once, however often it is shared', () => {
 		let reads = 0
-		const value = createDiamond(LEVELS, { type: 'null' }, 'entries', () => reads++)
+		const value = createDiamond(LEVELS, { type: 'null' }, () => reads++)
 
 		expect(isInspectableValue(value))
 			.toBe(true)

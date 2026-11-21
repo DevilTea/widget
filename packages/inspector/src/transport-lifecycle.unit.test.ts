@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createMessagePortChannelHub } from './channel'
 import { createInspectorClient } from './client'
+import { INSPECTOR_PROTOCOL_VERSION } from './protocol'
 import { createInProcessInspectorTransportPair, createMessagePortInspectorTransport } from './transport'
 
 describe('in-process Inspector transport subscriptions', () => {
@@ -174,7 +175,7 @@ describe('inspectorClient raw message subscription', () => {
 		const received: unknown[] = []
 		const unsubscribe = client.subscribe(message => received.push(message))
 		const event = {
-			protocol: { major: 0, minor: 3 },
+			protocol: INSPECTOR_PROTOCOL_VERSION,
 			kind: 'event',
 			event: 'agent.status',
 			payload: { inspectEnabled: true },

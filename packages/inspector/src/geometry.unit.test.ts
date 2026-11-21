@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
+import { INSPECTOR_PROTOCOL_VERSION } from './protocol'
 import { createInspectorTestFixture } from './test-fixture'
 import { createInProcessInspectorTransportPair } from './transport'
 
@@ -129,28 +130,20 @@ describe('semantic geometry Inspector protocol', () => {
 		}
 	})
 
-	it('does not leak 0.2-only geometry notifications or methods into a 0.1 session', async () => {
+	it('sends geometry notifications only after the first geometry use, to a peer at the Agent\'s version', async () => {
 		const fixture = createGeometryFixture()
 		try {
-			const handshake = await fixture.client.request('handshake', { protocol: { major: 0, minor: 1 } })
+			const handshake = await fixture.client.handshake()
 			expect(handshake.protocol)
-				.toEqual({ major: 0, minor: 1 })
-			expect(handshake.capabilities.events).not.toContain('geometry.invalidated')
+				.toEqual(INSPECTOR_PROTOCOL_VERSION)
+			expect(handshake.capabilities.events)
+				.toContain('geometry.invalidated')
 			const notifications = vi.fn()
 			fixture.client.on('geometry.invalidated', notifications)
-			await expect(fixture.client.request('inspect.hitTest', {
-				coordinateSpace: 'preview-viewport',
-				x: 15,
-				y: 25,
-			}))
-				.rejects.toMatchObject({ code: 'unknown-method' })
 			document.dispatchEvent(new Event('scroll'))
 			await nextAnimationFrame()
 			expect(notifications).not.toHaveBeenCalled()
 
-			const upgraded = await fixture.client.handshake()
-			expect(upgraded.capabilities.events)
-				.toContain('geometry.invalidated')
 			await fixture.client.request('inspect.hitTest', { coordinateSpace: 'preview-viewport', x: 15, y: 25 })
 			document.dispatchEvent(new Event('scroll'))
 			await nextAnimationFrame()

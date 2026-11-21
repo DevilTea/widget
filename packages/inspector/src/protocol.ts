@@ -12,7 +12,7 @@ export interface InspectorProtocolVersion {
 	readonly minor: number
 }
 
-export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 0, minor: 5 }) satisfies InspectorProtocolVersion
+export const INSPECTOR_PROTOCOL_VERSION = Object.freeze({ major: 1, minor: 0 }) satisfies InspectorProtocolVersion
 
 export interface InspectorCapabilities {
 	readonly methods: readonly InspectorRequestMethod[]
@@ -57,29 +57,8 @@ export type InspectorHitTestResult
 		| { readonly target: InspectorSemanticTarget, readonly geometry: InspectorGeometrySnapshot }
 
 export interface InspectorMemberRef {
-	/** `'method'` was added in protocol 0.5; a peer negotiated below 0.5 receives `invalid-params` for it, as before. */
 	readonly type: 'state' | 'property' | 'method'
 	readonly name: string
-}
-
-/** Any JSON value; the wire carries config schemas as plain JSON documents. */
-export type InspectorJsonValue
-	= | null
-		| boolean
-		| number
-		| string
-		| readonly InspectorJsonValue[]
-		| { readonly [key: string]: InspectorJsonValue }
-
-/**
- * A JSON Schema Draft 2020-12 document (an object or a boolean schema), typed only as plain JSON so that
- * this protocol needs nothing from Core. Keyword and metaschema validity stay the plugin author's concern.
- */
-export type InspectorConfigSchema = boolean | { readonly [key: string]: InspectorJsonValue }
-
-export interface InspectorConfigMetadata {
-	readonly description: string
-	readonly schema: InspectorConfigSchema | null
 }
 
 export interface InspectorBlueprintCapabilities {
@@ -88,8 +67,7 @@ export interface InspectorBlueprintCapabilities {
 	readonly state: boolean
 	readonly properties: boolean
 	readonly methods: boolean
-	/** Added in protocol 0.2. Absence on a 0.1 snapshot means the capability is unavailable to that peer. */
-	readonly events?: boolean
+	readonly events: boolean
 }
 
 export interface InspectorSlot {
@@ -136,30 +114,29 @@ export type InspectorDependency
 export interface InspectorStateMember {
 	readonly type: 'state'
 	readonly name: string
-	/** Added in protocol 0.4: whether Blueprint authors may write this State. Absent below 0.4. */
-	readonly authorWritable?: boolean
+	/** Whether Blueprint authors may write this State. */
+	readonly authorWritable: boolean
 }
 
 export interface InspectorPropertyMember {
 	readonly type: 'property'
 	readonly name: string
-	/** Added in protocol 0.4: the declared value-contract id, or `null`. Absent below 0.4. */
-	readonly valueContractId?: string | null
+	/** The declared value-contract id, or `null`. */
+	readonly valueContractId: string | null
 	readonly dependencies: readonly InspectorDependency[]
 }
 
 export interface InspectorEventMember {
 	readonly type: 'event'
 	readonly name: string
-	readonly description: string
 }
 
 export interface InspectorMethodMember {
 	readonly type: 'method'
 	readonly name: string
 	readonly transitivelyWrites: boolean
-	/** Added in protocol 0.4: the Method emits an Event, itself or through the Methods it invokes. Absent below 0.4. */
-	readonly transitivelyEmits?: boolean
+	/** The Method emits an Event, itself or through the Methods it invokes. */
+	readonly transitivelyEmits: boolean
 	readonly dependencies: readonly InspectorDependency[]
 }
 
@@ -178,6 +155,11 @@ export interface InspectorDiagnostic {
 	readonly related?: readonly InspectorDiagnosticLocation[]
 	readonly path?: readonly (string | number)[]
 	readonly reason?: string
+	/**
+	 * The `details` the plugin reported with the diagnostic (a JSON value in Core), encoded like every other
+	 * value and within the Agent's `valueLimits`. Absent when the diagnostic has none.
+	 */
+	readonly details?: InspectableValue
 	readonly dependency?: InspectorDependencyReference
 }
 
@@ -187,7 +169,6 @@ export interface InspectorBlueprintNode {
 	readonly widgetId?: string
 	readonly widgetType?: string
 	readonly capabilities?: InspectorBlueprintCapabilities
-	readonly config?: InspectorConfigMetadata | null
 	readonly sourceSlots: readonly InspectorSlot[]
 	readonly semanticSlots?: readonly InspectorSlot[]
 	readonly state?: readonly InspectorStateMember[]
@@ -236,6 +217,8 @@ export interface InspectorRuntimeDiagnostic {
 	readonly location: InspectorRuntimeDiagnosticLocation
 	readonly path?: readonly (string | number)[]
 	readonly reason?: string
+	/** The `details` the plugin reported with the diagnostic, encoded as `InspectorDiagnostic.details` is. */
+	readonly details?: InspectableValue
 	readonly dependency?: InspectorDependencyReference
 	readonly candidate?: InspectableValue
 	readonly received?: InspectableValue
@@ -254,7 +237,7 @@ export interface InspectorRuntimePropertySnapshot {
 }
 
 /**
- * Added in protocol 0.5. A Method's current diagnostic snapshot (Core `RuntimeMethod.getDiagnostics()`): the
+ * A Method's current diagnostic snapshot (Core `RuntimeMethod.getDiagnostics()`): the
  * diagnostics of its latest invocation that returned a result. It is empty before any invocation has returned
  * and after one that succeeded, and an invocation that threw leaves it unchanged, so it is a current fact and
  * not a call log. The Agent never invokes the Method.
@@ -427,7 +410,7 @@ export interface InspectorEventMap {
 		readonly inspectEnabled: boolean
 	}
 	/**
-	 * Added in protocol 0.4. The Runtime this Agent inspects is gone: either the Agent observed it being
+	 * The Runtime this Agent inspects is gone: either the Agent observed it being
 	 * disposed, or the Agent itself was disposed while the transport stays open. Sent at most once per Agent:
 	 * inside `runtime.dispose()` when the Agent has already received a request from its peer; otherwise on the
 	 * peer's first request, or when the Agent is disposed.
@@ -565,20 +548,15 @@ export function parseInspectorRequestMessage(value: unknown): InspectorRequestMe
 	return classified.ok ? classified.request : null
 }
 
-function isProtocolErrorCode(value: unknown, protocolMinor: number): value is InspectorProtocolError['code'] {
-	// `subscription-limit` was added in protocol 0.3 and `runtime-disposed` in 0.4; an older-minor
-	// envelope cannot carry them.
-	if (value === 'subscription-limit')
-		return protocolMinor >= 3
-	if (value === 'runtime-disposed')
-		return protocolMinor >= 4
+function isProtocolErrorCode(value: unknown): value is InspectorProtocolError['code'] {
 	return value === 'invalid-message' || value === 'unsupported-version' || value === 'unknown-method'
 		|| value === 'invalid-params' || value === 'runtime-not-found' || value === 'widget-not-found'
-		|| value === 'member-not-found' || value === 'event-not-found' || value === 'disconnected' || value === 'internal-error'
+		|| value === 'member-not-found' || value === 'event-not-found' || value === 'disconnected'
+		|| value === 'subscription-limit' || value === 'runtime-disposed' || value === 'internal-error'
 }
 
-function isProtocolError(value: unknown, protocolMinor: number): value is InspectorProtocolError {
-	return isRecord(value) && isProtocolErrorCode(value.code, protocolMinor) && typeof value.message === 'string'
+function isProtocolError(value: unknown): value is InspectorProtocolError {
+	return isRecord(value) && isProtocolErrorCode(value.code) && typeof value.message === 'string'
 }
 
 export function parseInspectorResponseMessage(value: unknown): InspectorResponseMessage | null {
@@ -592,7 +570,7 @@ export function parseInspectorResponseMessage(value: unknown): InspectorResponse
 
 	if (value.ok)
 		return 'result' in value ? value as InspectorResponseMessage : null
-	return isProtocolError(value.error, value.protocol.minor) ? value as InspectorResponseMessage : null
+	return isProtocolError(value.error) ? value as InspectorResponseMessage : null
 }
 
 export interface InspectorUnrecognizedErrorResponse {
@@ -616,7 +594,7 @@ export function parseInspectorUnrecognizedErrorResponse(value: unknown): Inspect
 		|| !isRecord(value.error)
 		|| typeof value.error.code !== 'string'
 		|| typeof value.error.message !== 'string'
-		|| isProtocolErrorCode(value.error.code, value.protocol.minor)) {
+		|| isProtocolErrorCode(value.error.code)) {
 		return null
 	}
 	return {
@@ -625,10 +603,6 @@ export function parseInspectorUnrecognizedErrorResponse(value: unknown): Inspect
 		code: value.error.code,
 		message: value.error.message,
 	}
-}
-
-function isRuntimeMemberSnapshot(value: unknown, protocolMinor: number): value is InspectorRuntimeMemberSnapshot {
-	return isWireRuntimeMemberSnapshot(value, protocolMinor)
 }
 
 function isGeometryRect(value: unknown): value is InspectorGeometryRect {
@@ -668,15 +642,12 @@ function isRuntimeSummary(value: unknown): value is InspectorRuntimeSummary {
 		&& isWireNodeId(value.rootNodeId)
 }
 
-function isBlueprintSnapshot(
-	value: unknown,
-	protocolMinor: number = INSPECTOR_PROTOCOL_VERSION.minor,
-): value is InspectorBlueprintSnapshot {
+function isBlueprintSnapshot(value: unknown): value is InspectorBlueprintSnapshot {
 	return isRecord(value)
 		&& typeof value.runtimeId === 'string'
 		&& isWireNodeId(value.rootNodeId)
 		&& Array.isArray(value.nodes)
-		&& value.nodes.every(node => isWireBlueprintNode(node, protocolMinor))
+		&& value.nodes.every(node => isWireBlueprintNode(node))
 		&& Array.isArray(value.invalidCycles)
 		&& value.invalidCycles.every(isWireEvaluationCycle)
 }
@@ -684,7 +655,6 @@ function isBlueprintSnapshot(
 export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 	method: Method,
 	value: unknown,
-	protocolMinor: number = INSPECTOR_PROTOCOL_VERSION.minor,
 ): value is InspectorRequestResult<Method> {
 	switch (method) {
 		case 'handshake':
@@ -698,18 +668,18 @@ export function isInspectorRequestResult<Method extends InspectorRequestMethod>(
 		case 'runtime.list':
 			return isRecord(value) && Array.isArray(value.runtimes) && value.runtimes.every(isRuntimeSummary)
 		case 'blueprint.getSnapshot':
-			return isBlueprintSnapshot(value, protocolMinor)
+			return isBlueprintSnapshot(value)
 		case 'runtime.getWidgetSnapshot':
 			return isRecord(value)
 				&& isWidgetRef(value.ref)
 				&& typeof value.widgetId === 'string'
 				&& typeof value.widgetType === 'string'
 				&& Array.isArray(value.members)
-				&& value.members.every(member => isRuntimeMemberSnapshot(member, protocolMinor))
+				&& value.members.every(member => isWireRuntimeMemberSnapshot(member))
 		case 'runtime.subscribeMember':
 			return isRecord(value)
 				&& typeof value.subscriptionId === 'string'
-				&& isRuntimeMemberSnapshot(value.member, protocolMinor)
+				&& isWireRuntimeMemberSnapshot(value.member)
 		case 'runtime.subscribeEvent':
 			return isRecord(value)
 				&& typeof value.subscriptionId === 'string'
@@ -769,7 +739,7 @@ export function parseInspectorEventMessage(value: unknown): InspectorEventMessag
 		case 'runtime.memberChanged':
 			return typeof value.payload.subscriptionId === 'string'
 				&& isWidgetRef(value.payload.ref)
-				&& isRuntimeMemberSnapshot(value.payload.member, value.protocol.minor)
+				&& isWireRuntimeMemberSnapshot(value.payload.member)
 				? value as InspectorEventMessage
 				: null
 		case 'inspect.hovered':
