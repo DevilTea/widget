@@ -22,6 +22,7 @@ and this package never reimplements or reinterprets it. These bare `#N` numbers 
 - `src/types.ts` — the public `useWidget()` return-type surface (see the 0.3 typing rules under "Implementation rules").
 - `src/errors.ts` — `WidgetVueIntegrationError` and `WidgetVueIntegrationErrorCode`, the single programmer/configuration exception class. Consumers discriminate by class and `code` (never `message`); the codes are `invalid-renderer-registry` (with frozen `missingTypes`/`unknownTypes`/`duplicateTypes`/`invalidTypes`, `null` for every other code). It is an ordinary exported `class WidgetVueIntegrationError extends Error` (stable `constructor.name` under every transform, subclassable); the instance type is deliberately not a union discriminated by `code`, so the lists are typed `readonly string[] | null` and consumers handle `null`, `invalid-runtime`, `foreign-runtime`, `unknown-widget`, `runtime-system-mismatch`, `outside-widget-renderer`, `widget-plugin-mismatch`, and `readonly-projection-write`. Only caller-reachable misuse gets a code; states made impossible by exact-plugin, registry and System-identity validation are internal invariants and throw a plain `Error`. Add a code only for a materially different caller-reachable problem.
 - `src/use-widget-jsdoc.unit.test.ts`, `src/use-widget-slot-types.unit.test.ts` and `src/use-widget-diagnostic-reasons.unit.test.ts` pin the 0.3 typing above (JSDoc through a TypeScript program over the test file with a key-union control; slot name and scope narrowing; typed `details`). The JSDoc test imports `typescript`, which resolves from the workspace root.
+- `type-fixtures/` — `WidgetSlotNarrowing.vue` and its plugin, type-checked by `pnpm typecheck:vue` (vue-tsc, `strictTemplates`, `tsconfig.vue-fixtures.json`): the scoped `type` of each `<WidgetSlot name="…">` in a template is its slot's own union, and an unknown `name` is rejected. Never run or published.
 - `src/test-fixtures.ts` — real `@deviltea/widget-core` plugins/system/runtime fixtures shared by the colocated tests. Not part of the public contract; excluded from `tsconfig.package.json`.
 - `src/**/*.unit.test.ts` — colocated Vitest unit tests (run by the root config too).
 
@@ -32,7 +33,7 @@ The published entries are exactly `.` (`src/index.ts`) and `./testing` (`src/tes
 
 ```bash
 pnpm test        # vitest run for this package
-pnpm typecheck   # package + tests tsconfig
+pnpm typecheck   # package + tests tsconfig + the vue-tsc template fixtures
 pnpm build       # tsdown (includes publint)
 ```
 
@@ -103,8 +104,10 @@ or to the widgets it hosts, never to this package.
   `useMethodDiagnostics`/`useDiagnostics`) are publicly typed `ReadonlyRef<T>` (`Readonly<Ref<T>>`), never `ComputedRef<T>`: they
   are backed by `customRef()`, a plain `Ref`, and `ComputedRef` would over-promise computed-only public
   surface (e.g. `.effect`) that does not exist at runtime. `WidgetSlot`'s public type is a non-callable
-  generic component/constructor shape (`new <Name>() => { $props, $slots }`), never `FunctionalComponent`, because the shared
-  runtime value is a `defineComponent()` output, not a plain callable function.
+  generic component/constructor shape (`new <Name>(props: { readonly name: Name }) => { $props, $slots }`), never `FunctionalComponent`, because the shared
+  runtime value is a `defineComponent()` output, not a plain callable function. The constructor must take the props: vue-tsc checks
+  `<WidgetSlot name="header">` as `new WidgetSlot({ name: 'header' })`, and only a parameter infers `Name` (a parameterless
+  constructor widens the scoped `type` to every slot's types). `type-fixtures/` holds the vue-tsc check of this.
 - The keyed surfaces (`useState()`, `useProperties()`, `useMethods()`, `emit`, the diagnostics surfaces) map homomorphically over
   `keyof` the Interfaces section (so hover shows the member's JSDoc) and always with `-?`: every declared member has its accessor
   at run time, so an optional member is never an optional key.

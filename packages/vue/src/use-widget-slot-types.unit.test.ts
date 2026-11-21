@@ -40,8 +40,21 @@ const HostPlugin = createWidgetPlugin('Host')
 type HostResult = UseWidgetResult<typeof HostPlugin>
 
 // A type-level witness of the `WidgetSlot` constructor, so that `typeof HostSlot<'header'>` can instantiate its generic.
-// eslint-disable-next-line unused-imports/no-unused-vars
 declare const HostSlot: HostResult['WidgetSlot']
+
+/**
+ * What vue-tsc checks `<WidgetSlot name="...">` as: `new WidgetSlot({ name: '...' })`, with `Name` inferred from the
+ * props argument rather than given. Never called (`HostSlot` exists only as a type).
+ */
+const fromTemplate = {
+	header: () => new HostSlot({ name: 'header' }),
+	body: () => new HostSlot({ name: 'body' }),
+	leaves: () => new HostSlot({ name: 'leaves' }),
+	free: () => new HostSlot({ name: 'free' }),
+}
+
+/** The scope of the default slot of `fromTemplate[Name]`. */
+type InferredScopeOf<Name extends keyof typeof fromTemplate> = Parameters<NonNullable<ReturnType<(typeof fromTemplate)[Name]>['$slots']['default']>>[0]
 
 /** The scope a `WidgetSlot` default slot receives for the slot `Name`. */
 type ScopeOf<Name extends keyof HostInterfaces['slots'] & string> = Parameters<NonNullable<InstanceType<typeof HostSlot<Name>>['$slots']['default']>>[0]
@@ -65,6 +78,30 @@ describe('widgetSlot slot typing', () => {
 		// A contract's `Types` narrows exactly as a plain union does.
 		expectTypeOf<ScopeOf<'leaves'>['type']>()
 			.toEqualTypeOf<'Leaf'>()
+	})
+
+	it('infers the slot name from the props of a constructor call, as vue-tsc does for a template', () => {
+		expectTypeOf<InferredScopeOf<'header'>['type']>()
+			.toEqualTypeOf<'Label'>()
+		expectTypeOf<InferredScopeOf<'body'>['type']>()
+			.toEqualTypeOf<'Label' | 'Counter'>()
+		expectTypeOf<InferredScopeOf<'leaves'>['type']>()
+			.toEqualTypeOf<'Leaf'>()
+		expectTypeOf<InferredScopeOf<'free'>['type']>()
+			.toEqualTypeOf<string>()
+		expectTypeOf(fromTemplate.header)
+			.returns
+			.toEqualTypeOf<InstanceType<typeof HostSlot<'header'>>>()
+
+		// Never called: only the type errors matter.
+		const _rejected = [
+			// @ts-expect-error `nope` is not a declared slot
+			() => new HostSlot({ name: 'nope' }),
+			// @ts-expect-error `h()` checks the props against the slot names too
+			() => h(HostSlot, { name: 'nope' }),
+		]
+		expect(_rejected)
+			.toHaveLength(2)
 	})
 
 	it('keeps the plain `string` for a slot that accepts any widget or names no plugin type', () => {

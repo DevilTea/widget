@@ -377,6 +377,9 @@ importers:
       vue:
         specifier: 'catalog:'
         version: 3.5.42(typescript@6.0.3)
+      vue-tsc:
+        specifier: 'catalog:'
+        version: 3.3.11(typescript@6.0.3)
 
 packages:
 

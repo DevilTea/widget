@@ -281,8 +281,15 @@ export interface UseWidgetIdentityAccessor<Plugin extends AnyWidgetPlugin> {
  * mirroring `WidgetVueRenderer` in `renderer.ts` — rather than `FunctionalComponent`: the actual shared
  * value is a `defineComponent()` output, which is not safely invocable as a plain function the way a real
  * `FunctionalComponent` value is.
+ *
+ * The constructor takes the props so that a call infers `Name` from them: vue-tsc checks
+ * `<WidgetSlot name="header">` as `new WidgetSlot({ name: 'header' })`, and a constructor without parameters
+ * would leave `Name` at its constraint (every slot name), widening the scope's `type` to all slots' types.
+ * `h(WidgetSlot, props, slots)` checks `props` the same way, but Vue's `RawSlots` does not check the slot
+ * function, so a scope annotation there (`default: (scope: WidgetSlotScope<'Label'>) => ...`) is an unchecked
+ * assertion.
  */
-export type WidgetSlotComponent<Slots extends Readonly<Record<string, string>>> = new <Name extends keyof Slots & string>() => {
+export type WidgetSlotComponent<Slots extends Readonly<Record<string, string>>> = new <Name extends keyof Slots & string>(props: { readonly name: Name }) => {
 	$props: { readonly name: Name }
 	$slots: { default?: Slot<WidgetSlotScope<Slots[Name]>> }
 }

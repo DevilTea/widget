@@ -378,14 +378,18 @@ each child:
 - `Child` is a component that renders that child widget through the normal
   host, so its registered renderer, its own `useWidget()` context, its
   subscriptions and its nested slots behave exactly as in the unscoped form.
-- `id` is the child's widget id, `type` its plugin type (both `string`), and
+- `id` is the child's widget id (a `string`), `type` its plugin type, and
   `index` its position in the slot; `index` counts children the renderer
   skips. No Runtime handle is exposed.
 - `type` is narrowed to what the named slot expects: the members of a plain
   union of plugin types (`'notice' | 'link'`) or a `WidgetContract`'s `Types`,
   and plain `string` for a slot that accepts any widget (`WidgetChild`) or a
-  contract that names no type. The narrowing follows the `name` you pass, so
-  in a `<template>` (checked by `vue-tsc`) `type` has the slot's own union. The
+  contract that names no type. The narrowing follows the `name` you pass: `vue-tsc`
+  checks `<WidgetSlot name="header">` as a constructor call with the props, which
+  infers the slot name, so in a `<template>` `type` has the slot's own union. In a
+  render function, `h(WidgetSlot, { name }, …)` checks `name`, but Vue's
+  `RawSlots` does not check the slot function, so a scope annotation such as
+  `default: (scope: WidgetSlotScope<'Label'>) => …` is an unchecked assertion. The
   expectation is type-level only: Core checks nothing at run time, so `type` is
   exactly as trustworthy as the plugin's `validateStructure`.
 - The renderer decides the wrapping markup and whether to render a child at

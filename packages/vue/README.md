@@ -218,8 +218,11 @@ and plugin type, `index` its position in the slot. No Runtime handle is exposed;
 nothing for a child to skip it. Without a default slot `WidgetSlot` is unchanged.
 
 The scoped `type` is narrowed to what the named slot expects: the members of a plain union of
-plugin types, a `WidgetContract`'s `Types`, or `string` for a slot that accepts any widget. The
-expectation is type-level only (Core checks nothing at run time).
+plugin types, a `WidgetContract`'s `Types`, or `string` for a slot that accepts any widget. In a
+`<template>`, `vue-tsc` infers the slot from `name` and narrows each `<WidgetSlot name="…">` on its own.
+In a render function, `h(WidgetSlot, { name }, …)` checks `name` but not the slot function (Vue's
+`RawSlots`), so a scope annotation such as `default: (scope: WidgetSlotScope<'Label'>) => …` is an
+unchecked assertion. The expectation is type-level only (Core checks nothing at run time).
 
 ### Root lifecycle
 
