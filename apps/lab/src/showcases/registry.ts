@@ -17,6 +17,9 @@ import type { SourcesRegistry } from '../showcase-host'
 import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
+import { defaultRepairPreset, repairPresets } from './document-repair/presets'
+import { repairSources } from './document-repair/sources'
+import { repairSystem } from './document-repair/system'
 import { defaultOnboardingPreset, onboardingPresets } from './onboarding/presets'
 import { onboardingSources } from './onboarding/sources'
 import { onboardingSystem } from './onboarding/system'
@@ -63,7 +66,7 @@ export interface ShowcaseEntry {
  * consumer (`LabSession`, `createWidgetVueRenderer`'s own `runtime.blueprint.system === system`
  * identity check) only ever needs object identity, never the precise literal-type union.
  *
- * `survey` is the default; `trip-budget`, `quote-rules` and `onboarding` are listed after it in the Examples menu. `sandbox` is a hidden, test-only
+ * `survey` is the default; `trip-budget`, `quote-rules`, `onboarding` and `document-repair` are listed after it in the Examples menu. `sandbox` is a hidden, test-only
  * fixture (minimal Counter/Text/... widgets plus the invalid/raw-slot recovery presets): it is not listed
  * in the Examples menu and is reachable only through `?showcase=sandbox` (see `resolveInitialShowcase`).
  */
@@ -99,6 +102,14 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: onboardingPresets,
 		defaultPreset: defaultOnboardingPreset,
 		sources: onboardingSources,
+	},
+	{
+		id: 'document-repair',
+		label: 'Legacy document repair',
+		system: repairSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>,
+		presets: repairPresets,
+		defaultPreset: defaultRepairPreset,
+		sources: repairSources,
 	},
 	{
 		id: 'sandbox',
