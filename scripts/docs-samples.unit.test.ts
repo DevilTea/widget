@@ -25,8 +25,9 @@ function fence(code: string, indent = '') {
  * one. The migration guide is already complete, so it is held at zero.
  */
 const expectations: Record<string, DocumentExpectation> = {
-	// 17 samples written against the published 0.0.6 and 19 against the workspace packages.
-	'docs/site/migration/0.1.md': { before: 17, after: 11, run: 8, unmarked: 0 },
+	// 17 samples written against the published 0.0.6. The 20 that were compiled against the workspace packages are
+	// historical since 0.3 (written against 0.1) and are marked `skip`.
+	'docs/site/migration/0.1.md': { before: 17, after: 0, run: 0, unmarked: 0 },
 	// The Core section of the 0.3 guide; the Inspector and Vue sections are added by their own changes.
 	'docs/site/migration/0.3.md': { before: 6, after: 6, run: 0, unmarked: 0 },
 	'docs/site/packages/widget-core.md': { before: 0, after: 1, run: 27, unmarked: 28 },
