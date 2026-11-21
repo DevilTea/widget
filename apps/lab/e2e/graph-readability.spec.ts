@@ -520,67 +520,110 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 /**
- * Keyboard access to the edges (issue #230 follow-up). They are one Tab stop: the arrow keys walk them, a focused edge shows
- * what a hovered one shows plus a focus band, Enter or Space selects it as a click does (its details open), Escape clears.
+ * Keyboard access to the edges (issue #230 follow-up). They are one roving Tab stop: the arrow keys walk them, Tab and Shift+Tab
+ * leave the group from whichever edge has focus, a focused edge shows what a hovered one shows plus a focus band, Enter or
+ * Space selects it as a click does (its details open), Escape clears.
  */
-test('the edges are one Tab stop: arrows walk them, focus shows the label, Enter opens the details, Escape clears', async ({ page }) => {
+function focusedEdgeId(page: Page): Promise<string | null> {
+	return page.evaluate(() => document.activeElement?.classList.contains('vue-flow__edge') === true ? document.activeElement.getAttribute('data-id') : null)
+}
+
+function edgeTabStops(page: Page): Promise<(string | null)[]> {
+	return page.locator('.vue-flow__edge[tabindex="0"]')
+		.evaluateAll(elements => elements.map(element => element.getAttribute('data-id')))
+}
+
+test('the edges are one roving Tab stop: arrows walk them, Tab and Shift+Tab leave the group, Enter opens the details, Escape clears', async ({ page }) => {
 	await openGraph(page, 'survey')
 	const edges = page.locator('.vue-flow__edge')
 	const count = await edges.count()
 	expect(count)
 		.toBeGreaterThan(2)
 	// One edge is in the Tab order, the others are focusable only from it.
-	const tabStop = page.locator('.vue-flow__edge[tabindex="0"]')
-	await expect(tabStop)
+	const initialStop = page.locator('.vue-flow__edge[tabindex="0"]')
+	await expect(initialStop)
 		.toHaveCount(1)
 	await expect(page.locator('.vue-flow__edge[tabindex="-1"]'))
 		.toHaveCount(count - 1)
-	// Named by what it is and by its two ends, in the direction of the arrow.
-	await expect(tabStop)
-		.toHaveAttribute('aria-label', /^\d+ deps?: #\S+ → #\S+$/)
+	// Named as a sentence about its two ends, with what it stands for; described by what the keys do, not by Vue Flow's
+	// English "press delete to remove it".
+	await expect(initialStop)
+		.toHaveAttribute('aria-label', /^#\S+ depends on #\S+ \(\d+ deps?\)$/)
+	await expect(initialStop)
+		.toHaveAttribute('aria-roledescription', 'dependency')
+	const describedBy = await initialStop.getAttribute('aria-describedby')
+	expect(describedBy)
+		.toBeTruthy()
+	expect(await page.evaluate(id => document.getElementById(id)?.textContent ?? '', describedBy!))
+		.toContain('Arrow keys move between the dependencies, Enter or Space shows the details, Escape clears the selection.')
+	const firstId = await initialStop.getAttribute('data-id')
 
 	// The edges come before the cards in the document, so Shift+Tab from the first card lands on the edges' Tab stop.
 	await page.locator('.vue-flow__node')
 		.first()
 		.focus()
 	await page.keyboard.press('Shift+Tab')
-	await expect(tabStop)
-		.toBeFocused()
-	// Focus shows the focus band and the label a hover shows.
-	await expect(tabStop.locator('.graph-edge-focus-ring'))
-		.toHaveCSS('opacity', '1')
-	await expect(tabStop.locator('.vue-flow__edge-text'))
-		.toHaveCSS('opacity', '1')
-	const firstId = await tabStop.getAttribute('data-id')
-
-	// The arrow keys walk the edges and wrap around.
-	await page.keyboard.press('ArrowDown')
+	expect(await focusedEdgeId(page))
+		.toBe(firstId)
+	// Focus shows the label a hover shows and the focus band, which is 7 screen px wide at any zoom.
 	const focused = page.locator('.vue-flow__edge:focus')
-	await expect(focused)
-		.toHaveCount(1)
-	const secondId = await focused.getAttribute('data-id')
-	expect(secondId)
-		.not.toBe(firstId)
 	await expect(focused.locator('.graph-edge-focus-ring'))
 		.toHaveCSS('opacity', '1')
-	await expect(tabStop.locator('.graph-edge-focus-ring'))
-		.toHaveCSS('opacity', '0')
-	await page.keyboard.press('ArrowUp')
-	await expect(tabStop)
-		.toBeFocused()
-	await page.keyboard.press('ArrowUp')
-	expect(await focused.getAttribute('data-id'))
+	await expect(focused.locator('.graph-edge-focus-ring'))
+		.toHaveCSS('stroke-width', '7px')
+	await expect(focused.locator('.graph-edge-focus-ring'))
+		.toHaveCSS('vector-effect', 'non-scaling-stroke')
+	await expect(focused.locator('.vue-flow__edge-text'))
+		.toHaveCSS('opacity', '1')
+
+	// The arrow keys walk the edges, and the Tab stop goes with them: still exactly one.
+	await page.keyboard.press('ArrowDown')
+	const secondId = await focusedEdgeId(page)
+	expect(secondId)
+		.not.toBeNull()
+	expect(secondId)
 		.not.toBe(firstId)
+	expect(await edgeTabStops(page))
+		.toEqual([secondId])
+	await page.keyboard.press('ArrowDown')
+	const thirdId = await focusedEdgeId(page)
+	expect([firstId, secondId])
+		.not.toContain(thirdId)
+	expect(await edgeTabStops(page))
+		.toEqual([thirdId])
+
+	// From an edge in the middle, Shift+Tab leaves the group (it does not jump to another edge), and Tab comes back to the
+	// edge that was left.
+	await page.keyboard.press('Shift+Tab')
+	expect(await focusedEdgeId(page))
+		.toBeNull()
+	await page.keyboard.press('Tab')
+	expect(await focusedEdgeId(page))
+		.toBe(thirdId)
+	// Tab leaves the group forwards, and Shift+Tab comes back to the same edge.
+	await page.keyboard.press('Tab')
+	expect(await focusedEdgeId(page))
+		.toBeNull()
+	await page.keyboard.press('Shift+Tab')
+	expect(await focusedEdgeId(page))
+		.toBe(thirdId)
+
+	// Up goes back, Home goes to the first edge of the order.
+	await page.keyboard.press('ArrowUp')
+	expect(await focusedEdgeId(page))
+		.toBe(secondId)
 	await page.keyboard.press('Home')
-	await expect(tabStop)
-		.toBeFocused()
+	expect(await focusedEdgeId(page))
+		.toBe(firstId)
+	expect(await edgeTabStops(page))
+		.toEqual([firstId])
 
 	// Enter selects like a click: the edge is selected and its details open under the canvas.
 	const details = page.locator('[data-graph-edge-details]')
 	await expect(details)
 		.toHaveCount(0)
 	await page.keyboard.press('Enter')
-	await expect(tabStop)
+	await expect(focused)
 		.toHaveClass(/\bselected\b/)
 	await expect(details)
 		.toBeVisible()
@@ -589,16 +632,16 @@ test('the edges are one Tab stop: arrows walk them, focus shows the label, Enter
 
 	// Escape clears the selection and the details; focus stays on the edge.
 	await page.keyboard.press('Escape')
-	await expect(tabStop)
-		.not.toHaveClass(/\bselected\b/)
+	await expect(page.locator('.vue-flow__edge.selected'))
+		.toHaveCount(0)
 	await expect(details)
 		.toHaveCount(0)
-	await expect(tabStop)
-		.toBeFocused()
+	expect(await focusedEdgeId(page))
+		.toBe(firstId)
 
 	// Space selects as well.
 	await page.keyboard.press('Space')
-	await expect(tabStop)
+	await expect(focused)
 		.toHaveClass(/\bselected\b/)
 	await expect(details)
 		.toBeVisible()
@@ -617,10 +660,91 @@ test('with a widget selected, the edges\' Tab stop is one of its own edges, and 
 		.toHaveCount(1)
 	await expect(tabStop)
 		.toHaveClass(/graph-edge--(depends-on|used-by)/)
+	// Told from the selected widget: it depends on the other end, or is used by it.
 	await expect(tabStop)
-		.toHaveAttribute('aria-label', /^\d+ deps?: #\S+ → #\S+$/)
+		.toHaveAttribute('aria-label', /^#\S+ (depends on|is used by) #\S+ \(\d+ deps?\)$/)
 
 	await setLocale(page, 'zh-TW')
 	await expect(tabStop)
-		.toHaveAttribute('aria-label', /^\d+ 個依賴：#\S+ → #\S+$/)
+		.toHaveAttribute('aria-label', /^#\S+ (依賴於 #\S+|被 #\S+ 使用)（\d+ 個依賴）$/)
+	await expect(tabStop)
+		.toHaveAttribute('aria-roledescription', '依賴')
+	const describedBy = await tabStop.getAttribute('aria-describedby')
+	expect(await page.evaluate(id => document.getElementById(id)?.textContent ?? '', describedBy!))
+		.toContain('用方向鍵在各個依賴之間移動')
+})
+
+/**
+ * The Graph is a readonly inspector. Vue Flow's default `deleteKeyCode` removes the selected cards and edges on Backspace
+ * (a listener on the document), so the canvas turns it off; Delete is checked as well.
+ */
+test('Backspace and Delete remove nothing from the Graph, with an edge or a card selected', async ({ page }) => {
+	await openGraph(page, 'survey')
+	const cardCount = await page.locator('.vue-flow__node')
+		.count()
+	const edgeCount = await page.locator('.vue-flow__edge')
+		.count()
+	const settle = (): Promise<unknown> => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+	const expectNothingRemoved = async (): Promise<void> => {
+		for (const key of ['Backspace', 'Delete']) {
+			await page.keyboard.press(key)
+			await settle()
+			await expect(page.locator('.vue-flow__node'), `cards after ${key}`)
+				.toHaveCount(cardCount)
+			await expect(page.locator('.vue-flow__edge'), `edges after ${key}`)
+				.toHaveCount(edgeCount)
+		}
+	}
+
+	// An edge, selected with the keyboard.
+	await page.locator('.vue-flow__edge[tabindex="0"]')
+		.focus()
+	await page.keyboard.press('Enter')
+	await expect(page.locator('.vue-flow__edge.selected'))
+		.toHaveCount(1)
+	await expectNothingRemoved()
+
+	// A card, selected with the keyboard (Vue Flow selects a focused node on Enter).
+	const card = page.locator('.vue-flow__node')
+		.first()
+	await card.focus()
+	await page.keyboard.press('Enter')
+	await expect(card)
+		.toHaveClass(/\bselected\b/)
+	await expectNothingRemoved()
+})
+
+/**
+ * A tag beside its edge is really drawn somewhere: a line from the edge and a dot on it. The Trip budget's widgets have many
+ * edges each, so at the default Fit some tag of some widget has no room on its own edge.
+ *
+ * NOT YET OBSERVED: which widget needs a leader was not measured when this was written (the suite could not be run). Once it
+ * has been, name that widget here instead of trying every one.
+ */
+test('some focused Trip budget widget has a tag beside its edge, joined to it by a leader line with a dot', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'trip-budget')
+	const identities = page.locator('.graph-cluster-identity')
+	const widgets = await identities.count()
+	let withLeader = 0
+	for (let index = 0; index < widgets; index++) {
+		await identities.nth(index)
+			.click()
+		await expect(page.locator('.graph-node--focused'))
+			.toHaveCount(1)
+		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+		const leaders = page.locator('.graph-tag-layer .graph-tag--leader')
+		const found = await leaders.count()
+		withLeader += found
+		for (let leader = 0; leader < found; leader++) {
+			await expect(leaders.nth(leader)
+				.locator('line.graph-tag-leader'))
+				.toHaveCount(1)
+			await expect(leaders.nth(leader)
+				.locator('circle.graph-tag-leader-dot'))
+				.toHaveCount(1)
+		}
+	}
+	expect(withLeader, 'tags beside their edge, over every widget of the Trip budget')
+		.toBeGreaterThan(0)
 })

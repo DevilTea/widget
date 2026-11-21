@@ -988,8 +988,9 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   every tag had its try on its own edge: its box is set 1.5, 2.5 or 4 font sizes off the edge, across the edge's direction (left or right of an edge
   that runs down, above or below one that runs across), at the same shares of the edge (so still in the half nearer the focus), and a **leader line**
   with a dot on the edge joins it to the point it is about (`TagPlacement.leader`, drawn by `GraphCanvas.vue` as `.graph-tag-leader`; the group is
-  `.graph-tag--leader`). The box obeys the same rules (inside the content bounds, on no card, no arrowhead, no other tag), the leader crosses no
-  card, no arrowhead and no tag, and no later tag sits on an earlier leader. A tag with no spot either way is not drawn (the Trip budget's Expense has
+  `.graph-tag--leader`). The box obeys the same rules (inside the content bounds, on no card, no arrowhead, no other tag) and covers no curve of
+  an edge around the focus (it would read as that edge's); the leader crosses no card, no arrowhead, no tag and no other leader (it may cross a
+  curve), and no later tag sits on an earlier leader. A tag with no spot either way is not drawn (the Trip budget's Expense has
   a dozen edges; the Legend says so), the accent colour, the dimming and the arrowheads still mark the focus's edges and
   Relations lists them all. `GraphDependencyEdge.vue` draws its labels itself (a rect and a text sized by `tagSize()`, the function
   the placement used) because Vue Flow's `EdgeText` measures its box once at mount and so boxes 11px text around text of any other size.
@@ -999,20 +1000,32 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   `<marker>`s defined in `GraphCanvas.vue` (one per colour family and bucket; Vue Flow's own `arrowclosed` draws at a quarter of
   its nominal size) and `GraphDependencyEdge.vue` picks the one for the current bucket, so a wheel tick inside a bucket
   re-renders nothing. Edge strokes are solid mixes of the muted text colour and the canvas (3.7:1 in the light theme).
-  **Keyboard access to the edges** (issue #230 follow-up): the edges are one Tab stop. Vue Flow means edges to be focusable but writes
+  **Keyboard access to the edges** (issue #230 follow-up): the edges are one roving Tab stop. Vue Flow means edges to be focusable but writes
   `tabIndex` (capital I) on the edge's SVG `<g>`, which SVG ignores, and binds its key handler as `onKeyDown`, which Vue registers for an
   event named `key-down` that never fires. Neither is patched in Vue Flow: `GraphCanvas.vue` gives every edge a real lowercase `tabindex`
-  through Vue Flow's own per-edge `domAttributes` and handles the keys itself, delegated on the canvas. A roving-style single stop was chosen
+  through Vue Flow's own per-edge `domAttributes` and handles the keys itself, delegated on the canvas. One stop was chosen
   over "every edge is a Tab stop" (the expanded Trip budget has hundreds of edges) and over "edges only reachable from their focused card"
-  (an edge would then have no route when nothing is selected, and a card's own keys are already taken by select/expand): `graph/edge-a11y.ts`
-  (pure, unit-tested) orders the edges with the ones around the focused widget or member first, the first of that order has `tabindex="0"`
-  and the rest `-1`, and Arrow Down/Right, Arrow Up/Left (wrapping), Home and End move DOM focus between them. The Tab stop is derived from the
-  graph and the focus, not from the last edge visited, so moving with the arrows re-renders nothing and "select a card, then Tab to the edges"
-  lands on that card's edges. A focused edge shows what a hovered one shows (its label; its focus tag gives way) and a wide accent band along the
-  curve (`.graph-edge-focus-ring`, `Highlight` in forced colours) at full opacity even when the selection dims it; Enter or Space selects it as a
-  click does and opens `GraphEdgeDetails`, Escape clears the selection (`edgeClear`) and is only consumed when there is one. The accessible name is
-  the label and both ends in the direction of the arrow (`reads: #form.valid → #name.value`, `3 deps: #form → #name`; zh-TW `3 個依賴：#form → #name`),
-  built from `data.sourceName`/`data.targetName`. `e2e/graph-readability.spec.ts` drives it with the real keyboard.
+  (an edge would then have no route when nothing is selected, and a card's own keys are already taken by select/expand). `graph/edge-a11y.ts`
+  (pure, unit-tested) orders the edges with the ones around the focused widget or member first; Arrow Down/Right, Arrow Up/Left (wrapping), Home
+  and End move DOM focus along that order. Exactly one edge has `tabindex="0"`: the first of the order to begin with (the rendered attribute, so
+  "select a card, then Tab to the edges" lands on that card's edges), and from then on the edge that has or last had focus. `focusin` rewrites the
+  `tabindex` attributes in the DOM directly (old stop `-1`, new stop `0`), so Tab and Shift+Tab leave the group from whichever edge the arrows
+  reached, moving re-renders nothing, and Vue Flow is not given a new edge list per key press; a watcher puts the stop back on the first edge of
+  the order when the graph, the focus or the language changes, unless an edge has focus. A focused edge shows what a hovered one shows (its label;
+  its focus tag gives way) and a solid accent band along the curve (`.graph-edge-focus-ring`, 7 screen px at any zoom through
+  `vector-effect: non-scaling-stroke`, `Highlight` in forced colours), at full opacity even when the selection dims the edge; Enter or Space selects
+  it as a click does and opens `GraphEdgeDetails`, Escape clears the selection (`edgeClear`) and is only consumed when there is one. The accessible
+  name is a sentence, not an arrow (a screen reader reads "→" as "right arrow"): `#form.valid depends on #name.value (reads)`,
+  `#form depends on #name (3 deps)`, told from the focus for an edge that arrives at it (`#name is used by #form (3 deps)`), with
+  `, invalid cycle` appended, and a stub edge says `#a.p has an invalid dependency (reads)` / `... depends on a target that is absent (...)`; zh-TW
+  `#form 依賴於 #name（3 個依賴）`. It is built from `data.sourceName`/`data.targetName` by `edgeName()`. Vue Flow's own `aria-describedby` text
+  (English, "press delete to remove it") and `aria-roledescription="edge"` are replaced through `domAttributes` by a localized description of the
+  keys and by "dependency". The edge keeps Vue Flow's `role="group"`: a composite role (`listbox`/`option`) would have to be set on Vue Flow's own
+  `<svg>` containers (one per z-level, re-created by it), so it is not; a screen reader in browse mode may therefore keep the arrow keys to itself,
+  and Relations stays the screen-reader route to the same facts. `e2e/graph-readability.spec.ts` drives all of it with the real keyboard.
+  **Readonly keys**: `deleteKeyCode`, `selectionKeyCode` and `multiSelectionKeyCode` are `null`. Vue Flow's default `deleteKeyCode` (Backspace, a
+  document-level listener) removed the selected cards and edges from this inspector; there is no Shift-drag selection box and no Ctrl/Cmd
+  multi-selection either, since the details show one edge.
   The handles Vue Flow requires are invisible (an edge does not attach to them) and the canvas uses only a subtle dot
   grid: these cues must never imply that the readonly inspector is an editable node editor.
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container

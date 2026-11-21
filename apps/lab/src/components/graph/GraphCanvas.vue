@@ -17,10 +17,10 @@
 import type { NodeMouseEvent } from '@vue-flow/core'
 import type { GraphFlowEdge, GraphFlowNode } from '../../graph/vue-flow'
 import { Handle, Position, useVueFlow, VueFlow } from '@vue-flow/core'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useGraphTags } from '../../composables/use-graph-tags'
 import { useLabI18n } from '../../composables/use-lab-i18n'
-import { edgeKeyboardOrder, edgeNameParts, edgeTabStop, isEdgeNavigationKey, nextEdgeId } from '../../graph/edge-a11y'
+import { edgeKeyboardOrder, edgeName, edgeTabStop, isEdgeNavigationKey, nextEdgeId } from '../../graph/edge-a11y'
 import { tagSize } from '../../graph/tag-placement'
 import { GRAPH_EDGE_TYPE } from '../../graph/vue-flow'
 import { ARROW_KINDS, arrowMarkerId, ZOOM_BUCKETS, zoomBucket } from '../../graph/zoom-scale'
@@ -229,19 +229,63 @@ function onEdgeClick({ edge }: { edge: GraphFlowEdge }): void {
  * repaired from outside, without a fork: every edge gets a real lowercase `tabindex` through Vue Flow's own `domAttributes`
  * escape hatch, and the keys are handled here, delegated on the canvas.
  *
- * The edges are one Tab stop (`tabindex="0"` on the first edge of the keyboard order, `-1` on the rest) and the arrow keys
- * move between them, so a graph with dozens of edges costs one Tab press. Enter or Space selects the edge as a click does
- * (which opens its details under the canvas), Escape clears the selection.
+ * The edges are one roving Tab stop: exactly one edge has `tabindex="0"`, the rest `-1`, and the arrow keys move between
+ * them, so a graph with dozens of edges costs one Tab press and Tab or Shift+Tab leaves the group from whichever edge the
+ * arrows reached. The stop starts on the first edge of the keyboard order (the rendered attribute) and follows focus after
+ * that: `focusin` rewrites the two `tabindex` attributes in the DOM directly, so moving does not rebuild the edges and Vue
+ * Flow is not handed a new edge list per key press (Vue leaves the attribute alone while the rendered value is unchanged).
+ * When the graph, the focused widget or member, or the language changes, the stop goes back to the first edge of the new
+ * order, unless an edge has focus. Enter or Space selects the edge as a click does (which opens its details under the
+ * canvas), Escape clears the selection.
+ *
+ * Vue Flow's own description of an edge ("Press enter or space to select an edge... press delete to remove it", English
+ * only, and wrong for a readonly inspector) and its role description ("edge") are replaced through the same `domAttributes`.
+ * The edge keeps Vue Flow's `role="group"`: a composite role (a `listbox` of `option`s) would need the role on Vue Flow's own
+ * `<svg>` containers, of which there is one per z-level and which it re-creates, so it is not set from outside.
  */
+const edgeKeysId = useId()
 const keyboardOrder = computed(() => edgeKeyboardOrder(props.edges))
+
+function edgeAccessibleName(edge: GraphFlowEdge): string {
+	const { kind, source, target, label, invalidCycle } = edgeName(edge)
+	let name: string
+	if (kind === 'absent')
+		name = i18n.t('{source} depends on a target that is absent ({label})', { source, label })
+	else if (kind === 'invalid')
+		name = i18n.t('{source} has an invalid dependency ({label})', { source, label })
+	else if (kind === 'used-by')
+		name = i18n.t('{target} is used by {source} ({label})', { source, target, label })
+	else
+		name = i18n.t('{source} depends on {target} ({label})', { source, target, label })
+	return invalidCycle ? i18n.t('{name}, invalid cycle', { name }) : name
+}
+
 const flowEdges = computed<GraphFlowEdge[]>(() => {
 	const tabStop = edgeTabStop(props.edges)
+	const roleDescription = i18n.t('dependency')
 	return props.edges.map(edge => ({
 		...edge,
-		ariaLabel: i18n.t('{label}: {source} → {target}', edgeNameParts(edge)),
-		domAttributes: { tabindex: edge.id === tabStop ? 0 : -1 },
+		ariaLabel: edgeAccessibleName(edge),
+		domAttributes: {
+			'tabindex': edge.id === tabStop ? 0 : -1,
+			'aria-describedby': edgeKeysId,
+			'aria-roledescription': roleDescription,
+		},
 	}))
 })
+
+/** Makes `edgeId` the one edge in the Tab order, in the DOM only (see above). */
+function setEdgeTabStop(edgeId: string | null): void {
+	for (const element of vueFlowContainer.value?.querySelectorAll<SVGGElement>('.vue-flow__edge') ?? [])
+		element.setAttribute('tabindex', edgeId !== null && element.getAttribute('data-id') === edgeId ? '0' : '-1')
+}
+
+// A new graph, focus or language: back to the first edge of the new order, unless an edge has focus (then it stays the stop).
+watch(flowEdges, async () => {
+	await nextTick()
+	const focused = edgeIdOfTarget(document.activeElement)
+	setEdgeTabStop(focused !== null && keyboardOrder.value.includes(focused) ? focused : edgeTabStop(props.edges))
+}, { flush: 'post' })
 
 /** The id of the edge an event happened on, when its target is the edge element itself (not something inside or outside it). */
 function edgeIdOfTarget(target: EventTarget | null): string | null {
@@ -287,7 +331,11 @@ function onCanvasKeydown(event: KeyboardEvent): void {
 }
 
 function onCanvasFocusin(event: FocusEvent): void {
-	focusedEdgeId.value = edgeIdOfTarget(event.target)
+	const edgeId = edgeIdOfTarget(event.target)
+	focusedEdgeId.value = edgeId
+	// The roving Tab stop follows focus, however the edge was reached (Tab, an arrow key, a click).
+	if (edgeId !== null)
+		setEdgeTabStop(edgeId)
 }
 
 function onCanvasFocusout(): void {
@@ -313,6 +361,12 @@ function memberKindShort(kind: string): string {
 		@focusin="onCanvasFocusin"
 		@focusout="onCanvasFocusout"
 	>
+		<!-- What the keys do on an edge, for a screen reader: every edge points here with aria-describedby. -->
+		<span
+			:id="edgeKeysId"
+			class="graph-edge-keys"
+			hidden
+		>{{ i18n.t('Arrow keys move between the dependencies, Enter or Space shows the details, Escape clears the selection.') }}</span>
 		<!--
 			The arrowheads: one marker per colour family and zoom bucket (graph/zoom-scale.ts), a triangle whose tip is the end of the
 			edge. Vue Flow's own `arrowclosed` marker draws at a quarter of its nominal size (a 7 x 11px triangle at 28), so these are
@@ -350,6 +404,11 @@ function memberKindShort(kind: string): string {
 				</template>
 			</defs>
 		</svg>
+		<!--
+			deleteKeyCode: Vue Flow's default deletes the selected cards and edges on Backspace (a document-level listener), which a
+			readonly inspector must never do. selectionKeyCode / multiSelectionKeyCode: no Shift-drag selection box and no
+			Ctrl/Cmd multi-selection either; one card or one edge is selected at a time and the details show that one.
+		-->
 		<VueFlow
 			:nodes="nodes"
 			:edges="flowEdges"
@@ -359,6 +418,9 @@ function memberKindShort(kind: string): string {
 			:elementsSelectable="true"
 			:zoomOnDoubleClick="false"
 			:minZoom="0.05"
+			:deleteKeyCode="null"
+			:selectionKeyCode="null"
+			:multiSelectionKeyCode="null"
 			class="graph-canvas-flow w-full h-full"
 			@nodeClick="onNodeClick"
 			@edgeClick="onEdgeClick"
@@ -985,7 +1047,7 @@ function memberKindShort(kind: string): string {
 }
 
 /*
- * The focus indicator of an edge reached with the keyboard: a wide accent band along the whole curve, under the line
+ * The focus indicator of an edge reached with the keyboard: a solid accent band, 7 screen px wide at any zoom, along the whole curve, under the line
  * (`GraphDependencyEdge.vue` draws the path), instead of the browser's outline, which would be the box around the curve. The
  * focused edge is also drawn at full opacity, so focus is visible on an edge the current selection dims.
  */
@@ -996,9 +1058,10 @@ function memberKindShort(kind: string): string {
 :deep(.graph-edge-focus-ring) {
 	fill: none;
 	stroke: var(--lab-color-accent);
-	stroke-width: 9;
+	/* Screen px at any zoom: in flow units a band is a hairline once Fit has zoomed a large graph out. */
+	stroke-width: 7px;
+	vector-effect: non-scaling-stroke;
 	stroke-linecap: round;
-	stroke-opacity: 0.4;
 	opacity: 0;
 	pointer-events: none;
 }
@@ -1014,7 +1077,6 @@ function memberKindShort(kind: string): string {
 @media (forced-colors: active) {
 	:deep(.graph-edge-focus-ring) {
 		stroke: Highlight;
-		stroke-opacity: 1;
 	}
 }
 
