@@ -12,8 +12,9 @@
  * A tag with no such spot on its edge gets a second chance beside it (issue #230 follow-up): its box is set a short way off the
  * edge, across the edge's direction (left or right of an edge that runs down, above or below one that runs across), and a
  * leader line joins the box to the point of the edge it is about (`leader`). The same rules hold for the box (inside the
- * content, on no card, no arrowhead and no other tag), the leader crosses no card, no arrowhead and no tag, and no later
- * tag is set on an earlier leader. Every tag is tried on its edge first, so a leader never takes a spot an on-edge tag could
+ * content, on no card, no arrowhead and no other tag), and one more: it covers no curve of an edge around the focus (a box
+ * beside its edge would otherwise sit on the neighbouring edge and read as that one's). The leader crosses no card, no
+ * arrowhead, no tag and no other leader, and no later tag is set on an earlier leader. A leader may cross a curve. Every tag is tried on its edge first, so a leader never takes a spot an on-edge tag could
  * have had. A tag with no spot either way is not drawn: on a dense graph at a low zoom (the Trip budget's Expense has a dozen
  * edges) text of 11 screen px simply does not fit, and the accent colour, the dimming and the arrowheads still say which edges
  * are the focus's, while the Relations view lists them all. Pure geometry in canvas px, so the tests can measure the result on
@@ -21,7 +22,7 @@
  */
 
 import type { GraphEdgeRoute, GraphPoint } from './edge-geometry'
-import { routeLength, routePointAtDistance } from './edge-geometry'
+import { routeLength, routePointAtDistance, sampleRoute } from './edge-geometry'
 
 export interface TagInput {
 	readonly id: string
@@ -166,6 +167,11 @@ export function placeTags(tags: readonly TagInput[], obstacles: readonly TagRect
 	// Second chance, after every tag had its try on its own edge: beside the edge, joined to it by a short leader line.
 	const leaders: TagRect[] = []
 	const meets = (rect: TagRect, others: readonly TagRect[]): boolean => others.some(other => overlapArea(rect, other) > 0)
+	// The curves of the edges around the focus, as points close enough together (half a font size) that a box cannot sit
+	// between two of them.
+	const curvePoints: GraphPoint[] = tags.filter(tag => tag.route.length >= 2)
+		.flatMap(tag => sampleRoute(tag.route, Math.min(400, Math.max(24, Math.ceil(routeLength(tag.route) / (scale.font * 0.5))))))
+	const coversCurve = (rect: TagRect): boolean => curvePoints.some(point => Math.abs(point.x - rect.x) < rect.width / 2 && Math.abs(point.y - rect.y) < rect.height / 2)
 	for (const tag of ordered) {
 		if (placed.has(tag.id))
 			continue
@@ -185,7 +191,7 @@ export function placeTags(tags: readonly TagInput[], obstacles: readonly TagRect
 						const rect: TagRect = runsDown
 							? { x: to.x + sign * size.width / 2, y: anchor.y, ...size }
 							: { x: anchor.x, y: to.y + sign * size.height / 2, ...size }
-						if (!isInside(rect) || meets(rect, fixed) || meets(rect, placedRects) || meets(rect, leaders))
+						if (!isInside(rect) || meets(rect, fixed) || meets(rect, placedRects) || meets(rect, leaders) || coversCurve(rect))
 							continue
 						const band = LEADER_BAND * scale.font
 						const leader: TagRect = {
@@ -194,7 +200,7 @@ export function placeTags(tags: readonly TagInput[], obstacles: readonly TagRect
 							width: Math.max(Math.abs(to.x - anchor.x), band),
 							height: Math.max(Math.abs(to.y - anchor.y), band),
 						}
-						if (meets(leader, fixed) || meets(leader, placedRects))
+						if (meets(leader, fixed) || meets(leader, placedRects) || meets(leader, leaders))
 							continue
 						leaders.push(leader)
 						return { ...rect, text: tag.text, relation: tag.relation, leader: { from: anchor, to } }

@@ -135,23 +135,57 @@ describe('a tag with no room on its edge', () => {
 	})
 
 	it('runs its leader up or down from an edge that runs across', () => {
-		// An edge from left to right (drawn with vertical tangents, so it runs across only around its middle) and a thin card along
-		// its whole length just below it.
-		const across: GraphEdgeRoute = [{ x: 0, y: 0 }, { x: 600, y: 4 }]
-		const below: TagRect = { x: 0, y: 6, width: 600, height: 4 }
-		const placed = placeTags([tag('a', across)], [below], { font: 10, arrow: 2 })
-		const a = placed.get('a')
-		// Wherever it found room, the tag covers neither the card nor its own arrowhead, and a leader leaves the edge across its direction.
-		if (a !== undefined) {
-			expect(overlap(a, centred(below)))
+		// A level edge from left to right (drawn as the straight line itself) with a card along its whole length 2px below it: a
+		// box centred on the edge (8.75px to each side) covers the card, and so does a box below the edge.
+		const across: GraphEdgeRoute = [{ x: 0, y: 0 }, { x: 600, y: 0 }]
+		const below: TagRect = { x: 0, y: 2, width: 600, height: 20 }
+		const a = placeTags([tag('a', across)], [below], SCALE)
+			.get('a')
+		expect(a, 'the tag is drawn')
+			.toBeDefined()
+		expect(a!.leader, 'beside its edge')
+			.toBeDefined()
+		// The leader starts on the edge at the first spot (8% of 600) and runs straight up, away from the card.
+		expect(a!.leader!.from.x)
+			.toBeCloseTo(48, 4)
+		expect(a!.leader!.from.y)
+			.toBeCloseTo(0, 6)
+		expect(a!.leader!.to.x)
+			.toBeCloseTo(48, 4)
+		expect(a!.leader!.to.y)
+			.toBeCloseTo(-LEADER_LENGTHS[0]! * SCALE.font, 6)
+		// The box sits on the leader's end: its bottom side there, its middle above the anchor.
+		expect(a!.y + a!.height / 2)
+			.toBeCloseTo(a!.leader!.to.y, 6)
+		expect(a!.x)
+			.toBeCloseTo(48, 4)
+		expect(overlap(a!, centred(below)))
+			.toBe(false)
+		expect(overlap(a!, arrowheadBox(across, SCALE.arrow)))
+			.toBe(false)
+		for (const point of leaderPoints(a!)) {
+			expect(strictlyInside(point, centred(below)))
 				.toBe(false)
-			expect(overlap(a, arrowheadBox(across, 2)))
-				.toBe(false)
-			for (const point of a.leader === undefined ? [] : leaderPoints(a)) {
-				expect(strictlyInside(point, centred(below)))
-					.toBe(false)
-			}
 		}
+	})
+
+	it('is not set on the curve of another edge around the focus', () => {
+		// The same card on the right of edge "a", and a second edge "b" 60px to its left, as long as "a". "b" has room on itself.
+		// Every box to the left of "a" (15 to 136px from it) would cover the line of "b"; from 16% of the edge on, such a box
+		// would be clear of the tag of "b", so only the curve keeps it away.
+		const tags = [tag('a', down(0, 400)), tag('b', down(-60, 400))]
+		const placed = placeTags(tags, [card], SCALE)
+		expect(placed.get('b')?.leader, '"b" sits on its own edge')
+			.toBeUndefined()
+		expect(placed.get('b')?.x)
+			.toBeCloseTo(-60, 6)
+		expect(placed.has('a'), '"a" is not drawn over the line of "b"')
+			.toBe(false)
+		// Without "b" the same tag is drawn to the left (the test above), so it is the curve that decides here.
+		expect(placeTags([tags[0]!], [card], SCALE)
+			.get('a')
+			?.leader)
+			.toBeDefined()
 	})
 })
 
@@ -226,6 +260,36 @@ describe('a fan of edges that leave one card side by side', () => {
 					.some(point => strictlyInside(point, other))) {
 					crossing.push(`${id} leader through ${otherId}`)
 				}
+			}
+		}
+		expect(crossing)
+			.toEqual([])
+	})
+
+	it('sets no tag beside its edge on the curve of another edge, and crosses no leader with another', () => {
+		const beside = all.filter(([, candidate]) => candidate.leader !== undefined)
+		const onCurve: string[] = []
+		for (const [id, placement] of beside) {
+			for (const route of routes) {
+				// The edges are vertical lines: one is under the box when its x is inside the box and the box is level with it.
+				const x = route[0]!.x
+				if (Math.abs(x - placement.x) < placement.width / 2 - 0.001 && placement.y + placement.height / 2 > 0 && placement.y - placement.height / 2 < 120)
+					onCurve.push(`${id} on the edge at x=${x}`)
+			}
+		}
+		expect(onCurve)
+			.toEqual([])
+
+		const crossing: string[] = []
+		for (const [id, placement] of beside) {
+			for (const [otherId, other] of beside) {
+				if (id >= otherId)
+					continue
+				// Both leaders are level lines here: they meet when they are at the same height and their spans overlap.
+				const [a0, a1] = [placement.leader!.from.x, placement.leader!.to.x].sort((first, second) => first - second) as [number, number]
+				const [b0, b1] = [other.leader!.from.x, other.leader!.to.x].sort((first, second) => first - second) as [number, number]
+				if (Math.abs(placement.leader!.from.y - other.leader!.from.y) < 1 && Math.min(a1, b1) - Math.max(a0, b0) > 0.001)
+					crossing.push(`${id} and ${otherId}`)
 			}
 		}
 		expect(crossing)
