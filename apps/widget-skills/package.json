@@ -11,6 +11,7 @@
 	"scripts": {
 		"generate:onboarding": "tsx --tsconfig ./tsconfig.source.json ./src/cli.ts --module ../lab/src/showcases/onboarding/system.ts --export onboardingSystem --tsconfig ../lab/tsconfig.app.json --source-tsconfig ./tsconfig.source.json --root ../.. --out ./examples/onboarding",
 		"check:onboarding": "tsx --tsconfig ./tsconfig.source.json ./src/cli.ts --check --module ../lab/src/showcases/onboarding/system.ts --export onboardingSystem --tsconfig ../lab/tsconfig.app.json --source-tsconfig ./tsconfig.source.json",
+		"test": "vitest run --config vitest.config.ts",
 		"typecheck": "tsc --project ./tsconfig.json --noEmit"
 	},
 	"devDependencies": {
@@ -19,6 +20,7 @@
 		"@types/node": "catalog:",
 		"tsx": "catalog:",
 		"typescript": "catalog:",
+		"vite": "catalog:",
 		"vitest": "catalog:"
 	}
 }

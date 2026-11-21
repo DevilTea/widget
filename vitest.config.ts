@@ -7,10 +7,17 @@ export default defineConfig({
 	test: {
 		// The retention tests observe garbage collection, which needs the collector exposed to the workers.
 		execArgv: ['--expose-gc'],
-		// Two projects share everything above and below (plugins, `execArgv`, coverage, typecheck). Only the Lab's
+		// Three projects share everything above and below (plugins, `execArgv`, coverage, typecheck). Only the Lab's
 		// realm loads its Nuxt UI plugin and offline-icons setup, so a Lab or Iconify break cannot fail the
-		// package tests at setup.
+		// package tests or the widget-skills tests at setup.
 		projects: [
+			{
+				extends: true,
+				test: {
+					name: 'widget-skills',
+					include: ['apps/widget-skills/src/**/*.unit.test.ts'],
+				},
+			},
 			{
 				extends: true,
 				test: {
@@ -23,7 +30,7 @@ export default defineConfig({
 				plugins: [labNuxtUi()],
 				test: {
 					name: 'lab',
-					include: ['apps/**/src/**/*.unit.test.ts'],
+					include: ['apps/lab/src/**/*.unit.test.ts'],
 					// Icons stay offline even where a test does not import `test-support-ui.ts`.
 					setupFiles: ['./apps/lab/src/test-setup.ts'],
 				},
