@@ -335,9 +335,11 @@ describe.skipIf(missingBuild !== null)('documentation samples', () => {
 			.join('\n'))
 			.toBe('')
 		// The samples state their output in comments; they were compared, not skipped. Raise this when comments are
-		// added; a drop means output stopped being compared.
+		// added; a drop means output stopped being compared. The floor is the measured count (74). It was 90 until the
+		// 0.1 migration guide's samples became historical (written against 0.1, no longer compiled, marked `skip`),
+		// which removed their compared output.
 		expect(result.compared.length)
-			.toBeGreaterThanOrEqual(90)
+			.toBeGreaterThanOrEqual(74)
 		// An exemption that is no longer needed has to be removed.
 		const used = new Set(result.exempted.map(claim => `${claim.document}\n${claim.sample}\n${claim.text}`))
 		expect(exemptComments.filter(entry => !used.has(`${entry.document}\n${entry.sample}\n${entry.comment}`)))
