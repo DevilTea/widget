@@ -22,7 +22,7 @@
  */
 
 import type { GraphEdgeRoute, GraphPoint } from './edge-geometry'
-import { routeLength, routePointAtDistance, sampleRoute } from './edge-geometry'
+import { routeLength, routePointAtDistance, routeSegments, sampleRoute } from './edge-geometry'
 
 export interface TagInput {
 	readonly id: string
@@ -170,7 +170,11 @@ export function placeTags(tags: readonly TagInput[], obstacles: readonly TagRect
 	// The curves of the edges around the focus, as points close enough together (half a font size) that a box cannot sit
 	// between two of them.
 	const curvePoints: GraphPoint[] = tags.filter(tag => tag.route.length >= 2)
-		.flatMap(tag => sampleRoute(tag.route, Math.min(400, Math.max(24, Math.ceil(routeLength(tag.route) / (scale.font * 0.5))))))
+		.flatMap((tag) => {
+			// `sampleRoute` takes a count per cubic segment, so the total wanted for the whole curve is shared out among them.
+			const total = Math.min(400, Math.max(24, Math.ceil(routeLength(tag.route) / (scale.font * 0.5))))
+			return sampleRoute(tag.route, Math.max(1, Math.ceil(total / routeSegments(tag.route).length)))
+		})
 	const coversCurve = (rect: TagRect): boolean => curvePoints.some(point => Math.abs(point.x - rect.x) < rect.width / 2 && Math.abs(point.y - rect.y) < rect.height / 2)
 	for (const tag of ordered) {
 		if (placed.has(tag.id))

@@ -652,7 +652,7 @@ test('with a widget selected, the edges\' Tab stop is one of its own edges, and 
 	// #mode is related to some widgets and not to others, so the edges it is not part of are dimmed (the first widget in the
 	// document, #open-day, has an edge to every other widget and dims none).
 	await page.locator('.graph-cluster-identity--collapsed')
-		.filter({ hasText: '#mode' })
+		.filter({ hasText: /#mode(?![\w-])/ })
 		.click()
 	await expect(page.locator('.graph-edge--dimmed')
 		.first())
@@ -726,7 +726,7 @@ test('focusing #dev in the Trip budget puts a tag beside its edge, joined to it 
 	await page.setViewportSize({ width: 1440, height: 900 })
 	await openGraph(page, 'trip-budget')
 	await page.locator('.graph-cluster-identity--collapsed')
-		.filter({ hasText: '#dev' })
+		.filter({ hasText: /#dev(?![\w-])/ })
 		.click()
 	await expect(page.locator('.graph-node--focused'))
 		.toContainText('#dev')

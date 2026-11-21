@@ -1002,7 +1002,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   re-renders nothing. Edge strokes are solid mixes of the muted text colour and the canvas (3.7:1 in the light theme).
   **Keyboard access to the edges** (issue #230 follow-up): the edges are one roving Tab stop. A Vue Flow edge with `focusable` on
   (which `graph/vue-flow.ts` sets) gets `tabIndex: 0` as a DOM property, which Vue applies to the SVG `<g>` as `tabindex="0"` on every edge
-  (verified: twelve Tab stops in the Survey), and the property beats a `tabindex` attribute from `domAttributes`; it also binds its key handler
+  (verified: twelve Tab stops in the Survey), which a `tabindex` in `domAttributes` did not reliably replace; it also binds its key handler
   as `onKeyDown`, which Vue registers for an event named `key-down` that never fires. Nothing is patched in Vue Flow: `GraphCanvas.vue`
   overrides `focusable: false` on every edge it hands Vue Flow, gives back `role="group"` and a real lowercase `tabindex` through the
   per-edge `domAttributes`, and handles the keys itself, delegated on the canvas. Selection (click, Enter, Space) does not depend on `focusable`. One stop was chosen
