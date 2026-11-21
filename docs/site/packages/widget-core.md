@@ -617,9 +617,16 @@ what the plugin expects of that slot's children.
 
 | Expectation | Meaning |
 |---|---|
-| `'notice' \| 'link'` | a union of plugin `type` literals |
-| `WidgetContract<{ state?, properties?, methods?, events? }>` | any widget that has these members |
+| `'notice' \| 'link'` | a union of plugin `type` literals; the parent's reads of the children are untyped |
+| `WidgetContract<Shape>` | any widget that has the members of `Shape` (`{ state?, properties?, methods?, events? }`); the reads are typed by `Shape` |
+| `WidgetContract<Shape, 'notice' \| 'link'>` | the named plugin types, each of which must have the members of `Shape`; the reads are typed by `Shape` |
 | `WidgetChild` | any widget |
+
+A plugin is typed when `.interfaces<I>()` is called, before any System exists,
+so a plugin type name is only a string to it: it cannot type the children's
+members from `'notice' | 'link'`. A `WidgetContract` states what the parent
+reads (`Shape`), and its optional second argument states which plugin types
+are expected (`Types`); `createWidgetSystem` then checks that the two agree.
 
 An expectation is **type-level only**. Core adds no runtime check for it: a
 child that breaks it compiles without a diagnostic, exactly as a State type is
@@ -628,14 +635,23 @@ responsible for enforcing it in `validateStructure`. What the expectation does:
 
 - it types the reads of `slot(name)` in `registerDeps` when it is a
   `WidgetContract` (see [Dependency grammar](#dependency-grammar));
-- it is checked by `createWidgetSystem`: a slot that expects a plugin type the
-  System does not register is a type error on `plugins`;
-- it narrows the children of that slot in a TypeScript-authored source typed
-  with `WidgetSourceOf<typeof system>` (see [Authored source](#authored-source)).
+- it is checked by `createWidgetSystem`. Every plugin type a slot names (in a
+  plain union or in a contract's `Types`) must be registered, and every plugin
+  a contract names must satisfy its `Shape`: each member exists, and its type
+  is assignable to the contract's. A violation is a type error on `plugins`
+  that names the plugin and the member. A contract without `Types` names no
+  plugin, so nothing is checked against it, and a loosely typed System (a
+  plugin typed with a broad `string`) is not checked;
+- it narrows the children of that slot, to the plugin types it names, in a
+  TypeScript-authored source typed with `WidgetSourceOf<typeof system>` (see
+  [Authored source](#authored-source)). `WidgetSlotPluginTypeOf<Interfaces, Name>`
+  is that union (`never` when the slot accepts any widget), for renderers and
+  tools.
 
-A broad `string`, a pattern such as `\`x-${string}\``, a mix of plugin types and a
-contract, a union of contracts and `WidgetContract<any>` are rejected at
-`.interfaces()`.
+A broad `string` or a pattern such as `\`x-${string}\`` (as a union member or in
+a contract's `Types`), a mix of a plugin type and a contract in one slot
+(`'notice' | WidgetChild`; name the types in the contract instead), a union of
+contracts and `WidgetContract<any>` are rejected at `.interfaces()`.
 
 Unlike `state` / `properties` / `methods`, the slot definitions are supplied as
 one complete object map — every declared slot key must be present, each with
@@ -1143,9 +1159,12 @@ export const wizardPlugin = createWidgetPlugin('wizard')
   it declares like `dep.self` (a State read is `T | null`, and `state.set` is
   available to Method consumers only); the sections it leaves out, and every
   section of a `WidgetChild` slot, keep the unknown grammar. A slot that
-  expects a union of plugin types gives **untyped reads** for now (the unknown
-  grammar): a plugin cannot see the interfaces of the plugins a System
-  registers under those names.
+  expects a plain union of plugin types gives untyped reads (the unknown
+  grammar, as with `dep.widget(id)`): a plugin cannot see the interfaces of the
+  plugins a System registers under those names. To have both, name the types
+  in the contract, `WidgetContract<Shape, 'notice' | 'link'>`: the reads are
+  typed by `Shape`, and `createWidgetSystem` checks every named plugin against
+  it.
 - The types are the declaration's word only. Nothing checks at run time that a
   child has the expected member or that its value has the expected type, so
   `.validate()` stays available on every read; a child without the member is

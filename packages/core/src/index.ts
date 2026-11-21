@@ -228,6 +228,7 @@ export { createWidgetSystem, WidgetSystemConfigurationError } from './system'
 
 export type {
 	CreateWidgetSystemOptions,
+	SlotContractViolationOf,
 	UnregisteredSlotPluginTypeOf,
 	WidgetCatalog,
 	WidgetCatalogEntry,
@@ -235,6 +236,7 @@ export type {
 	WidgetSystem,
 	WidgetSystemConfigurationErrorCode,
 	WidgetSystemPluginsCheck,
+	WidgetSystemSlotContractViolation,
 	WidgetSystemSlotTypeViolation,
 	WidgetSystemValidateStructure,
 	WidgetSystemValidateStructureContext,
@@ -250,6 +252,7 @@ export type {
 	WidgetEventArgsOf,
 	WidgetEventKeyOf,
 	WidgetEventsOf,
+	WidgetExpectedPluginTypeOf,
 	WidgetId,
 	WidgetInterfaces,
 	WidgetInterfacesViolationOf,
@@ -271,6 +274,7 @@ export type {
 	WidgetSlotExpectation,
 	WidgetSlotExpectedOf,
 	WidgetSlotNameOf,
+	WidgetSlotPluginTypeOf,
 	WidgetSlotsOf,
 	WidgetStateKeyOf,
 	WidgetStateOf,

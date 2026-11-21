@@ -283,7 +283,7 @@ export type SlotChildDependencyTarget<Expected, Consumer extends DependencyConsu
 	? UnknownTargetDependencyOperations<Consumer, false>
 	: [Expected] extends [string]
 			? UnknownTargetDependencyOperations<Consumer, false>
-			: [Expected] extends [WidgetContract<infer Shape extends WidgetContractShape>]
+			: [Expected] extends [WidgetContract<infer Shape extends WidgetContractShape, any>]
 					? ContractDependencyTarget<Shape, Consumer>
 					: UnknownTargetDependencyOperations<Consumer, false>
 

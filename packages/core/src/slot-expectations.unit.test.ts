@@ -22,8 +22,12 @@ import type {
 	WidgetRegisterDepsContext,
 	WidgetSlotExpectedOf,
 	WidgetSlotNameOf,
+	WidgetSlotPluginTypeOf,
 	WidgetSource,
 	WidgetSourceOf,
+	WidgetSystemPluginsCheck,
+	WidgetSystemSlotContractViolation,
+	WidgetSystemSlotTypeViolation,
 } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from './index'
@@ -561,5 +565,287 @@ describe('widgetSourceOf types TypeScript-authored sources', () => {
 			.toEqualTypeOf<'wizard' | 'step' | 'note'>()
 		expect(system.plugins.map(plugin => plugin.type))
 			.toEqual(['wizard', 'step', 'note'])
+	})
+})
+
+// -------------------------------------------------------------------------------------------------
+// Contracts that name plugin types: `WidgetContract<Shape, Types>` (Discussion #12 amendment "typed child
+// reads for plugin-type slots")
+// -------------------------------------------------------------------------------------------------
+
+describe('a WidgetContract that names the expected plugin types', () => {
+	type CardContract = WidgetContract<{
+		state: { open: boolean }
+		properties: { title: string }
+		methods: { toggle: () => void }
+		events: { toggled: [open: boolean] }
+	}, 'card' | 'tile'>
+
+	interface DeckInterfaces {
+		slots: {
+			/** The cards, in order. */
+			cards: CardContract
+			/** Anything else. */
+			extras: WidgetChild
+		}
+		properties: { titles: readonly string[] }
+	}
+
+	interface CardInterfaces {
+		state: { open: boolean }
+		properties: { title: string }
+		methods: { toggle: () => void }
+		events: { toggled: [open: boolean] }
+	}
+
+	const isBoolean = (input: unknown): input is boolean => typeof input === 'boolean'
+
+	function createDeck() {
+		return createWidgetPlugin('deck')
+			.interfaces<DeckInterfaces>()
+			.slots({ cards: {}, extras: {} })
+			.properties(properties => properties.titles({
+				registerDeps: ({ slot }) => slot('cards')
+					.map(card => card.properties.get('title')),
+				compute: ({ deps }) => deps.map((read) => {
+					const title = read()
+					return title.ok ? title.value : '?'
+				}),
+			}))
+			.done()
+	}
+
+	function createCardLike<const Type extends string>(type: Type) {
+		return createWidgetPlugin(type)
+			.interfaces<CardInterfaces>()
+			.state(state => state.open({ validate: isBoolean, default: () => false }))
+			.properties(properties => properties.title({ compute: () => type }))
+			.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
+			.events(['toggled'])
+			.done()
+	}
+
+	/** A 'tile' that lacks the `title` Property and the `toggle` Method the contract reads. */
+	function createBareTile() {
+		return createWidgetPlugin('tile')
+			.interfaces<{ state: { open: boolean }, events: { toggled: [open: boolean] } }>()
+			.state(state => state.open({ validate: isBoolean, default: () => false }))
+			.events(['toggled'])
+			.done()
+	}
+
+	/** A 'tile' whose `title` is a number and whose `open` State is a string. */
+	function createWrongTile() {
+		return createWidgetPlugin('tile')
+			.interfaces<{
+			state: { open: string }
+			properties: { title: number }
+			methods: { toggle: () => void }
+			events: { toggled: [open: boolean] }
+		}>()
+			.state(state => state.open({ validate: (input): input is string => typeof input === 'string', default: () => '' }))
+			.properties(properties => properties.title({ compute: () => 0 }))
+			.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
+			.events(['toggled'])
+			.done()
+	}
+
+	type ContractReason<Check> = Check extends { readonly plugins: WidgetSystemSlotContractViolation<infer Reason> } ? Reason : never
+	type UnregisteredType<Check> = Check extends { readonly plugins: WidgetSystemSlotTypeViolation<infer Type> } ? Type : never
+
+	it('names the plugin types of a slot, for a contract and for a plain union alike', () => {
+		expectTypeOf<WidgetSlotPluginTypeOf<DeckInterfaces, 'cards'>>()
+			.toEqualTypeOf<'card' | 'tile'>()
+		expectTypeOf<WidgetSlotPluginTypeOf<DeckInterfaces, 'extras'>>()
+			.toEqualTypeOf<never>()
+		expectTypeOf<WidgetSlotPluginTypeOf<WizardInterfaces, 'notes'>>()
+			.toEqualTypeOf<'note'>()
+		expectTypeOf<WidgetSlotPluginTypeOf<WizardInterfaces, 'steps'>>()
+			.toEqualTypeOf<never>()
+		expectTypeOf<WidgetInterfacesViolationOf<DeckInterfaces>>()
+			.toEqualTypeOf<never>()
+	})
+
+	it('types the reads of `slot(name)` by the Shape, whatever Types names', () => {
+		const typeOnly = (property: WidgetRegisterDepsContext<DeckInterfaces, 'property'>, method: WidgetRegisterDepsContext<DeckInterfaces, 'method'>) => {
+			const card = property.slot('cards')[0]!
+			expectTypeOf(card.properties.get('title'))
+				.toEqualTypeOf<PropertyGetDepExpression<string, false>>()
+			expectTypeOf(card.state.get('open'))
+				.toEqualTypeOf<StateGetDepExpression<boolean | null, false>>()
+			expectTypeOf(card.methods.invoke('toggle'))
+				.toEqualTypeOf<MethodInvokeDepExpression<[], void, false>>()
+			// @ts-expect-error the contract declares no such Property
+			card.properties.get('subtitle')
+			expectTypeOf(method.slot('cards')[0]!.state.set('open'))
+				.toEqualTypeOf<StateSetDepExpression<boolean, false>>()
+		}
+		expect(typeOnly)
+			.toBeTypeOf('function')
+		expectTypeOf<SlotChildDependencyTarget<CardContract, 'property'>>()
+			.toEqualTypeOf<ContractDependencyTarget<{
+			state: { open: boolean }
+			properties: { title: string }
+			methods: { toggle: () => void }
+			events: { toggled: [open: boolean] }
+		}, 'property'>>()
+	})
+
+	it('accepts a System whose listed plugins all satisfy the Shape', () => {
+		const deck = createDeck()
+		const card = createCardLike('card')
+		const tile = createCardLike('tile')
+
+		expectTypeOf<WidgetSystemPluginsCheck<readonly [typeof deck, typeof card, typeof tile]>>()
+			.toEqualTypeOf<unknown>()
+		const system = createWidgetSystem({ plugins: [deck, card, tile] })
+		const blueprint = system.createBlueprint({
+			id: 'deck',
+			type: 'deck',
+			slots: { cards: [{ id: 't', type: 'tile' }, { id: 'c', type: 'card' }] },
+		})
+		if (blueprint.status !== 'valid')
+			throw new Error('expected a valid Blueprint')
+		const root = blueprint.createRuntime()
+			.getWidget('deck')
+		if (root === null || root.type !== 'deck')
+			throw new Error('expected the deck')
+
+		expect(root.properties.titles.get())
+			.toEqual({ ok: true, value: ['tile', 'card'] })
+	})
+
+	it('rejects a name in Types that is not a registered plugin type', () => {
+		const deck = createDeck()
+		const card = createCardLike('card')
+
+		expectTypeOf<UnregisteredType<WidgetSystemPluginsCheck<readonly [typeof deck, typeof card]>>>()
+			.toEqualTypeOf<'tile'>()
+		// @ts-expect-error the deck's `cards` contract names 'tile', which is not registered
+		const system = createWidgetSystem({ plugins: [deck, card] })
+
+		// Type-level only.
+		expect(system.plugins)
+			.toHaveLength(2)
+	})
+
+	it('rejects a listed plugin that lacks a member of the Shape, naming the plugin and the member', () => {
+		const deck = createDeck()
+		const card = createCardLike('card')
+		const tile = createBareTile()
+		type Reason = ContractReason<WidgetSystemPluginsCheck<readonly [typeof deck, typeof card, typeof tile]>>
+
+		// One message per missing member, each naming the plugin, the section and the member; the valid 'card'
+		// and the members the tile does have are not mentioned.
+		expectTypeOf<Extract<Reason, `${string}"tile"${string}properties member "title"${string}`>>().not.toBeNever()
+		expectTypeOf<Extract<Reason, `${string}"tile"${string}methods member "toggle"${string}`>>().not.toBeNever()
+		expectTypeOf<Extract<Reason, `plugin "card"${string}`>>()
+			.toBeNever()
+		expectTypeOf<Extract<Reason, `${string}member "open"${string}`>>()
+			.toBeNever()
+		expectTypeOf<Extract<Reason, `${string}member "toggled"${string}`>>()
+			.toBeNever()
+
+		// @ts-expect-error the tile has neither the `title` Property nor the `toggle` Method
+		const system = createWidgetSystem({ plugins: [deck, card, tile] })
+		expect(system.plugins)
+			.toHaveLength(3)
+	})
+
+	it('rejects a listed plugin whose member type is not assignable to the Shape, naming both', () => {
+		const deck = createDeck()
+		const card = createCardLike('card')
+		const tile = createWrongTile()
+		type Reason = ContractReason<WidgetSystemPluginsCheck<readonly [typeof deck, typeof card, typeof tile]>>
+
+		expectTypeOf<Extract<Reason, `${string}"tile"${string}properties member "title"${string}`>>().not.toBeNever()
+		expectTypeOf<Extract<Reason, `${string}"tile"${string}state member "open"${string}`>>().not.toBeNever()
+		expectTypeOf<Extract<Reason, `${string}member "toggle"${string}`>>()
+			.toBeNever()
+
+		// @ts-expect-error the tile's `title` is a number and its `open` a string
+		const system = createWidgetSystem({ plugins: [deck, card, tile] })
+		expect(system.plugins)
+			.toHaveLength(3)
+	})
+
+	it('accepts a listed plugin whose member is narrower than the Shape, and extra members', () => {
+		const deck = createDeck()
+		const card = createCardLike('card')
+		const tile = createWidgetPlugin('tile')
+			.interfaces<{
+			state: { open: true, pinned: boolean }
+			properties: { title: 'Tile' }
+			methods: { toggle: () => void }
+			events: { toggled: [open: boolean] }
+		}>()
+			.state(state => state
+				.open({ validate: (input): input is true => input === true, default: () => true })
+				.pinned({ validate: isBoolean, default: () => false }))
+			.properties(properties => properties.title({ compute: () => 'Tile' }))
+			.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
+			.events(['toggled'])
+			.done()
+
+		expectTypeOf<WidgetSystemPluginsCheck<readonly [typeof deck, typeof card, typeof tile]>>()
+			.toEqualTypeOf<unknown>()
+		expect(createWidgetSystem({ plugins: [deck, card, tile] }).plugins)
+			.toHaveLength(3)
+	})
+
+	it('does not check a contract without Types against any plugin, nor a loosely typed System', () => {
+		const { wizard, note } = createFixture()
+		// The wizard's `steps` contract names no plugin: a System without any step-like plugin is fine.
+		expectTypeOf<WidgetSystemPluginsCheck<readonly [typeof wizard, typeof note]>>()
+			.toEqualTypeOf<unknown>()
+
+		const loose: AnyWidgetPluginTuple = [createDeck(), createBareTile()]
+		expect(createWidgetSystem({ plugins: [wizard, note] }).plugins)
+			.toHaveLength(2)
+		expect(createWidgetSystem({ plugins: loose }).plugins)
+			.toHaveLength(2)
+	})
+
+	it('narrows the children of the slot in WidgetSourceOf to Types', () => {
+		const deck = createDeck()
+		const card = createCardLike('card')
+		const tile = createCardLike('tile')
+		const other = createWidgetPlugin('other')
+			.interfaces<Record<never, never>>()
+			.done()
+		const system = createWidgetSystem({ plugins: [deck, card, tile, other] })
+		type Source = WidgetSourceOf<typeof system>
+
+		const source: Source = {
+			id: 'deck',
+			type: 'deck',
+			slots: {
+				cards: [{ id: 'c', type: 'card' }, { id: 't', type: 'tile' }],
+				extras: [{ id: 'o', type: 'other' }, { id: 'c2', type: 'card' }],
+			},
+		}
+		// @ts-expect-error `cards` takes only 'card' and 'tile' sources
+		const wrongChild: Source = { id: 'deck', type: 'deck', slots: { cards: [{ id: 'o', type: 'other' }] } }
+
+		expect(wrongChild.id)
+			.toBe('deck')
+		expect(system.createBlueprint(source).status)
+			.toBe('valid')
+	})
+
+	it('still rejects a non-literal name in Types, a union of contracts and a mix with a plugin type', () => {
+		type Kind = '\'slots\' values must be a finite union of plugin type literals, a WidgetContract or WidgetChild'
+		type Contract = '\'slots\' values must name one WidgetContract with a declared shape, not a union of contracts or WidgetContract<any>'
+
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: WidgetContract<{ properties: { title: string } }, string> } }>>()
+			.toEqualTypeOf<Kind>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: WidgetContract<{ properties: { title: string } }, 'card' | `x-${string}`> } }>>()
+			.toEqualTypeOf<Kind>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: CardContract | 'note' } }>>()
+			.toEqualTypeOf<Kind>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: WidgetContract<{ properties: { title: string } }, 'card'> | WidgetContract<{ properties: { title: string } }, 'tile'> } }>>()
+			.toEqualTypeOf<Contract>()
+		expectTypeOf<WidgetInterfacesViolationOf<{ slots: { body: WidgetContract<any, 'card'> } }>>()
+			.toEqualTypeOf<Contract>()
 	})
 })

@@ -56,6 +56,7 @@ export interface WidgetInterfaces {
 }
 
 declare const widgetContractShape: unique symbol
+declare const widgetContractTypes: unique symbol
 
 /** The members a {@link WidgetContract} expects of a widget. Every section is optional. */
 export interface WidgetContractShape {
@@ -66,19 +67,37 @@ export interface WidgetContractShape {
 }
 
 /**
- * A structural, type-only expectation of a slot's children: the State, Properties, Methods and Events a
- * child is expected to have. It has no runtime form (no value of this type exists), and Core never checks
- * it. The brand is required, so an ordinary object type is not mistaken for a contract.
+ * A structural, type-only expectation of a slot's children. It has no runtime form (no value of this type
+ * exists), and Core never checks it at run time. The brands are required, so an ordinary object type is not
+ * mistaken for a contract.
+ *
+ * - `Shape`: the State, Properties, Methods and Events a child is expected to have. It types the reads of
+ *   `slot(name)`.
+ * - `Types` (optional): the plugin types expected in the slot. Like a plain union of plugin types it narrows
+ *   `WidgetSourceOf` and what a renderer offers for the slot, and `createWidgetSystem` checks, at the type
+ *   level, that each of them is registered and that its interfaces satisfy `Shape`. Left out (`never`), the
+ *   contract names no plugin: any widget is accepted, and nothing checks `Shape` against a plugin.
  */
-export interface WidgetContract<Shape extends WidgetContractShape = WidgetContractShape> {
+export interface WidgetContract<Shape extends WidgetContractShape = WidgetContractShape, Types extends string = never> {
 	readonly [widgetContractShape]: Shape
+	readonly [widgetContractTypes]: Types
 }
 
 /** The slot expectation that accepts any widget. */
 export type WidgetChild = WidgetContract<Record<never, never>>
 
 /** What a slot may declare about its children; see `WidgetInterfaces['slots']`. */
-export type WidgetSlotExpectation = string | WidgetContract<any>
+export type WidgetSlotExpectation = string | WidgetContract<any, any>
+
+/**
+ * The plugin types an expectation names: the members of a plain union, or the `Types` of a `WidgetContract`.
+ * `never` when it names none (`WidgetChild`, a contract without `Types`), which means any widget.
+ */
+export type WidgetExpectedPluginTypeOf<Expected> = [Expected] extends [never]
+	? never
+	: [Expected] extends [string]
+			? Expected
+			: Expected extends WidgetContract<any, infer Types> ? Types : never
 
 /**
  * A readonly array that is non-empty when present. Used by every optional `related` collection.
@@ -168,6 +187,12 @@ export type WidgetSlotExpectedOf<
 	Interfaces extends WidgetInterfaces,
 	Name extends WidgetMemberKey,
 > = WidgetMemberValueOf<WidgetSlotsOf<Interfaces>, Name>
+
+/** The plugin types the slot `Name` expects, or `never` when it accepts any widget. */
+export type WidgetSlotPluginTypeOf<
+	Interfaces extends WidgetInterfaces,
+	Name extends WidgetMemberKey,
+> = WidgetExpectedPluginTypeOf<WidgetSlotExpectedOf<Interfaces, Name>>
 
 export type WidgetReasonKeyOf<Interfaces extends WidgetInterfaces> = WidgetMemberKeysOf<WidgetReasonsOf<Interfaces>>
 
@@ -273,8 +298,9 @@ type SlotExpectationContractViolation = '\'slots\' values must name one WidgetCo
  * Why one slot's expectation is unsupported, or `never`. An expectation is either a finite union of plugin
  * `type` literals or exactly one `WidgetContract` (`WidgetChild` included):
  *
- * - `any`, a broad `string`, a pattern such as `\`x-${string}\`` (it names no registrable plugin type), and a
- *   mix of plugin types and a contract are not an expectation;
+ * - `any`, a broad `string`, a pattern such as `\`x-${string}\`` (it names no registrable plugin type), as a
+ *   plain union member or as a contract's `Types`, and a mix of plugin types and a contract are not an
+ *   expectation;
  * - a union of contracts, or a contract whose shape is `any`, has no single shape to type the reads of
  *   `slot(name)` by.
  */
@@ -285,8 +311,12 @@ type SlotExpectationViolation<Expected> = IsAny<Expected> extends true
 			: [Extract<Expected, string>] extends [never]
 					? IsUnion<Expected> extends true
 						? SlotExpectationContractViolation
-						: Expected extends WidgetContract<infer Shape>
-							? IsAny<Shape> extends true ? SlotExpectationContractViolation : never
+						: Expected extends WidgetContract<infer Shape, infer Types>
+							? IsAny<Shape> extends true
+								? SlotExpectationContractViolation
+								: IsAny<Types> extends true
+									? SlotExpectationKindViolation
+									: HasNonLiteralMember<Types> extends true ? SlotExpectationKindViolation : never
 							: SlotExpectationKindViolation
 					: SlotExpectationKindViolation
 

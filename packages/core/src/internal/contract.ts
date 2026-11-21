@@ -41,6 +41,7 @@ import type {
 	HasWidgetCapability,
 	WidgetEventArgsOf,
 	WidgetEventKeyOf,
+	WidgetExpectedPluginTypeOf,
 	WidgetId,
 	WidgetInterfaces,
 	WidgetMemberKey,
@@ -357,24 +358,22 @@ export type WidgetTypedSource<Plugins extends AnyWidgetPluginTuple> = Plugins[nu
 	: never
 
 /**
- * The authored source a slot accepts for one child in a TypeScript-authored source. A slot that expects a
- * union of plugin types takes the sources of exactly those registered plugins; a `WidgetContract` /
- * `WidgetChild` slot, and every slot of a loosely typed System (a plugin typed with a broad `string`), takes
- * any registered plugin's source. It is an authoring aid only: the compiler input stays `unknown`, Core
+ * The authored source a slot accepts for one child in a TypeScript-authored source. A slot that names plugin
+ * types (a plain union, or the `Types` of a `WidgetContract`) takes the sources of exactly those registered
+ * plugins; a slot that names none (`WidgetChild`, a contract without `Types`), and every slot of a loosely
+ * typed System (a plugin typed with a broad `string`), takes any registered plugin's source. It is an authoring aid only: the compiler input stays `unknown`, Core
  * checks no slot expectation at run time, and a compiled Blueprint's `source` is typed by the unnarrowed
  * {@link WidgetSource}.
  */
 export type WidgetSlotChildSource<Plugins extends AnyWidgetPluginTuple, Expected> = string extends WidgetPluginTypeOf<Plugins[number]>
 	? WidgetTypedSource<Plugins>
-	: [Expected] extends [never]
+	: [WidgetExpectedPluginTypeOf<Expected>] extends [never]
 			? WidgetTypedSource<Plugins>
-			: [Expected] extends [string]
-					? Extract<Plugins[number], { readonly type: Expected }> extends infer Plugin
-						? Plugin extends AnyWidgetPlugin
-							? WidgetTypedSourceFor<Plugin, Plugins>
-							: never
-						: never
-					: WidgetTypedSource<Plugins>
+			: Extract<Plugins[number], { readonly type: WidgetExpectedPluginTypeOf<Expected> }> extends infer Plugin
+				? Plugin extends AnyWidgetPlugin
+					? WidgetTypedSourceFor<Plugin, Plugins>
+					: never
+				: never
 
 /**
  * The typed source of one widget of `System`, for sources written in TypeScript: the node grammar (`id`,
