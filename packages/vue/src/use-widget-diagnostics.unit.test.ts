@@ -34,7 +34,6 @@ interface AggregateLabelInterfaces extends WidgetInterfaces {
 }
 
 const AggregateLabelPlugin = createWidgetPlugin('Label')
-	.description('All-capability Label aggregate fixture')
 	.interfaces<AggregateLabelInterfaces>()
 	.state(state => state.count({
 		validate: (input): input is number => typeof input === 'number' && input >= 0,

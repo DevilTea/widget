@@ -382,7 +382,6 @@ describe('widgetVueIntegrationError codes', () => {
 
 		it('is thrown for a distinct plugin instance that has the same type string', () => {
 			const impostor = createWidgetPlugin('Counter')
-				.description('Impostor counter widget')
 				.interfaces<Record<never, never>>()
 				.done()
 			const runtime = createFixtureRuntime({ id: 'impostor', type: 'Counter' })

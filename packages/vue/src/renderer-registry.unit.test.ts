@@ -185,11 +185,9 @@ describe('renderer registry — runtime construction validation', () => {
 
 	it('mounts the distinct registered components for arbitrary string-literal keys, including "__proto__" and "constructor"', () => {
 		const weirdPlugin = createWidgetPlugin('__proto__')
-			.description('Prototype-key widget')
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const ctorPlugin = createWidgetPlugin('constructor')
-			.description('Constructor-key widget')
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const weirdSystem = createWidgetSystem({ plugins: [weirdPlugin, ctorPlugin] })

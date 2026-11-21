@@ -21,10 +21,8 @@ interface ConfiguredInterfaces extends WidgetInterfaces {
 }
 
 const ConfiguredPlugin = createWidgetPlugin('Configured')
-	.description('Configured widget')
 	.interfaces<ConfiguredInterfaces>()
 	.config({
-		description: 'Title and tags',
 		validate: (input): input is ConfiguredInterfaces['config']['raw'] => input === null || (typeof input === 'object' && 'title' in input),
 		resolve: raw => ({ title: raw?.title ?? 'untitled', tags: raw?.tags ?? [], nested: { depth: 1 } }),
 	})

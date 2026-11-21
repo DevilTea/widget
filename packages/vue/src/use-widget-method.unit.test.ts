@@ -111,7 +111,6 @@ describe('method conformance', () => {
 	it('materializes method wrappers without invoking, reading, or subscribing to the Runtime primitive', () => {
 		const invocationSpy = vi.fn((args: readonly unknown[]) => args.length === 1 && typeof args[0] === 'number')
 		const invocationPlugin = createWidgetPlugin('InvocationProbe')
-			.description('Runtime method invocation probe')
 			.interfaces<{ methods: { increment: (step: number) => number } }>()
 			.methods(methods => methods.increment({
 				validateArgs: (args): args is [number] => invocationSpy(args),
