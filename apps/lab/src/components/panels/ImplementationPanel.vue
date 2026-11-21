@@ -99,7 +99,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 			text="Inspect the focused widget instance or browse the current showcase's registered plugin implementations — readonly and curated"
 		/>
 
-		<div class="flex gap-[6px] p-[6px_10px] border-b border-b-lab-border flex-[0_0_auto]">
+		<div class="flex gap-[6px] p-[6px_10px] border-b border-b-lab-border flex-none">
 			<button
 				type="button"
 				:aria-pressed="mode === 'focused'"
@@ -162,16 +162,16 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 			</nav>
 
 			<div class="flex flex-col flex-auto min-h-0 min-w-0">
-				<div class="p-[6px_10px] text-[11px] text-lab-text-muted border-b border-b-lab-border flex-[0_0_auto]">
+				<div class="p-[6px_10px] text-[11px] text-lab-text-muted border-b border-b-lab-border flex-none">
 					<strong class="text-lab-text">{{ displayedType }}</strong>
 					— {{ showcase === undefined ? '' : i18n.t(showcase.label) }}
 				</div>
-				<div class="flex border-b border-b-lab-border flex-[0_0_auto] overflow-x-auto">
+				<div class="flex border-b border-b-lab-border flex-none overflow-x-auto">
 					<button
 						v-for="file in entry.files"
 						:key="file.path"
 						type="button"
-						class="flex-[0_0_auto] p-[6px_10px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer whitespace-nowrap"
+						class="flex-none p-[6px_10px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer whitespace-nowrap"
 						:style="{ fontWeight: selectedTabId === file.path ? '600' : 'normal', borderBottom: selectedTabId === file.path ? '2px solid var(--lab-color-accent)' : '2px solid transparent' }"
 						@click="selectedTabId = file.path"
 					>
@@ -180,7 +180,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 					<button
 						v-if="mode === 'focused'"
 						type="button"
-						class="flex-[0_0_auto] p-[6px_10px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer whitespace-nowrap"
+						class="flex-none p-[6px_10px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer whitespace-nowrap"
 						:style="{ fontWeight: selectedTabId === APPLIED_INSTANCE_TAB ? '600' : 'normal', borderBottom: selectedTabId === APPLIED_INSTANCE_TAB ? '2px solid var(--lab-color-accent)' : '2px solid transparent' }"
 						@click="selectedTabId = APPLIED_INSTANCE_TAB"
 					>
@@ -191,7 +191,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 					v-if="selectedFile !== null"
 					class="flex flex-col flex-auto min-h-0 min-w-0"
 				>
-					<div class="p-[4px_10px] text-[11px] text-lab-text-muted font-lab-mono overflow-x-auto flex-[0_0_auto]">
+					<div class="p-[4px_10px] text-[11px] text-lab-text-muted font-lab-mono overflow-x-auto flex-none">
 						{{ selectedFile.path }}
 					</div>
 					<div class="flex-auto min-h-0 min-w-0">

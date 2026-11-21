@@ -155,8 +155,9 @@ export const onboardingTourScript: TutorialScript = {
 			target: 'onboarding-office',
 			onEnter: actions => actions.setFocus('induction', { type: 'state', name: 'status' }),
 			stages: [{
-				prompt: 'Try it: cancel the booking.',
-				// The previous step ends with a confirmed booking: cancelling it is what leaves that status.
+				prompt: 'Try it: cancel the booking. If the office declined your last request (17:00), there is nothing to cancel: request 10:00 again first.',
+				// The previous step ends with a confirmed booking: cancelling it is what leaves that status. Its reveal invites a
+				// 17:00 request, which ends declined, where no Cancel button is shown; the prompt says how to get back.
 				isComplete: reader => reader.readState('induction', 'status') === 'idle',
 				reveal: 'Cancelling emitted slotCancelled. Every request has a ticket, kept in State, and settleBooking applies an answer only if its ticket is still the newest. Cancelling a request that is still waiting makes the host recall it, so no answer comes. If the office cannot recall a request, the answer still arrives later, and settleBooking returns false and changes nothing. Switch off "The office can recall a cancelled request", request a slot, cancel it, request another and let the office answer: the page\'s activity list says the first answer was ignored. Core\'s guide calls this the guard for work that cannot be cancelled.',
 			}],

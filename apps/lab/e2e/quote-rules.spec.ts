@@ -196,6 +196,14 @@ test.describe('the same rules in the page and in a Web Worker', () => {
 		await openQuote(page)
 		const error = widget(page, 'flyers')
 			.getByTestId('quote-quantity-error')
+		// The polite live region is rendered (not display: none) before any message arrives, so it is announced.
+		const region = widget(page, 'flyers')
+			.locator('[aria-live="polite"]')
+		await expect(region)
+			.toBeEmpty()
+		expect(await region.evaluate(element => getComputedStyle(element).display))
+			.not
+			.toBe('none')
 		await quantity(page, 'flyers')
 			.fill('0')
 		await expect(error)

@@ -1,4 +1,4 @@
-import type { BrowserContext } from '@playwright/test'
+import type { BrowserContext, Page } from '@playwright/test'
 import { expect, previewFrame, setTheme, test } from './fixtures'
 
 /**
@@ -213,42 +213,55 @@ test.describe('[data-slot]-scoped preflight', () => {
 })
 
 test.describe('Preview frame isolation', () => {
-	test('the frame document loads no Tailwind or Nuxt UI CSS and receives no dark class', async ({ context, page }) => {
-		await seedTheme(context, 'dark')
-		await page.goto('/?showcase=sandbox')
-		await expect(previewFrame(page)
-			.getByRole('button', { name: '+1', exact: true }))
-			.toBeVisible()
-		const frameHandle = await page.locator('[data-testid="preview-frame"]')
-			.elementHandle()
-		const frame = await frameHandle!.contentFrame()
-		const report = await frame!.evaluate(() => {
-			const root = document.documentElement
-			const style = getComputedStyle(root)
-			const cssText = [...document.styleSheets]
-				.flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText))
-				.join('\n')
-			return {
-				htmlClass: root.className,
-				labTheme: root.dataset.labTheme,
-				uiToken: style.getPropertyValue('--ui-bg'),
-				twToken: style.getPropertyValue('--color-red-500'),
-				hasTailwindCss: /--tw-|@layer (?:theme|properties)|--ui-/.test(cssText),
-				lineHeight: style.lineHeight,
-			}
+	// Every showcase, not only the minimal Sandbox: each loads its own renderer chunk (and its styles) into the frame. The
+	// list is the registry's, in its order (`showcases/registry.unit.test.ts` checks it).
+	for (const showcase of ['survey', 'trip-budget', 'quote-rules', 'onboarding', 'sandbox'] as const) {
+		test(`the ${showcase} frame document loads no Tailwind or Nuxt UI CSS and receives no dark class`, async ({ context, page }) => {
+			await seedTheme(context, 'dark')
+			await page.goto(`/?showcase=${showcase}`)
+			await expectFrameIsolated(page, showcase)
 		})
-		expect(report)
-			.toEqual({
-				htmlClass: '',
-				labTheme: 'dark',
-				uiToken: '',
-				twToken: '',
-				hasTailwindCss: false,
-				// `styles/preview-frame.css` owns the frame's own base rules.
-				lineHeight: '24px',
-			})
-	})
+	}
 })
+
+async function expectFrameIsolated(page: Page, showcase: string): Promise<void> {
+	// The renderers have mounted: the Sandbox's counter, or a showcase renderer root (its inspect anchor).
+	await expect(showcase === 'sandbox'
+		? previewFrame(page)
+				.getByRole('button', { name: '+1', exact: true })
+		: previewFrame(page)
+				.locator('[data-widget-id]')
+				.first())
+		.toBeVisible({ timeout: 15_000 })
+	const frameHandle = await page.locator('[data-testid="preview-frame"]')
+		.elementHandle()
+	const frame = await frameHandle!.contentFrame()
+	const report = await frame!.evaluate(() => {
+		const root = document.documentElement
+		const style = getComputedStyle(root)
+		const cssText = [...document.styleSheets]
+			.flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText))
+			.join('\n')
+		return {
+			htmlClass: root.className,
+			labTheme: root.dataset.labTheme,
+			uiToken: style.getPropertyValue('--ui-bg'),
+			twToken: style.getPropertyValue('--color-red-500'),
+			hasTailwindCss: /--tw-|@layer (?:theme|properties)|--ui-/.test(cssText),
+			lineHeight: style.lineHeight,
+		}
+	})
+	expect(report)
+		.toEqual({
+			htmlClass: '',
+			labTheme: 'dark',
+			uiToken: '',
+			twToken: '',
+			hasTailwindCss: false,
+			// `styles/preview-frame.css` owns the frame's own base rules.
+			lineHeight: '24px',
+		})
+}
 
 test.describe('migrated surface: panel description bar dismiss button', () => {
 	test('is a Nuxt UI button with a locally bundled icon, a >=24px target and a focus indicator, and works offline', async ({ page, offOriginRequestUrls }) => {

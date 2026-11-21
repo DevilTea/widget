@@ -34,13 +34,13 @@ const label = computed(() => {
 			@click="emit('select', nodeId)"
 		>
 			<span
-				class="w-[7px] h-[7px] rounded-[999px] flex-[0_0_auto]"
+				class="w-[7px] h-[7px] rounded-[999px] flex-none"
 				:style="{ background: node?.resolved ? 'var(--lab-color-ok)' : 'var(--lab-color-danger)' }"
 			/>
 			<span class="overflow-hidden text-ellipsis whitespace-nowrap">{{ label }}</span>
 			<span
 				v-if="(node?.diagnostics.length ?? 0) > 0"
-				class="ml-[auto] text-[11px] text-lab-danger flex-[0_0_auto]"
+				class="ml-auto text-[11px] text-lab-danger flex-none"
 			>{{ node?.diagnostics.length }}</span>
 		</button>
 

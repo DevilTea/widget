@@ -6,9 +6,9 @@ import type { EventLogKindFilter, WidgetIdentity } from '../../events/event-log'
  * U08, protocol 0.5) every Method failure, listed next to them and labelled as such because it is not an Event. The
  * data plane is the Inspector protocol alone (`runtime.subscribeEvent` / `runtime.eventOccurred`, and a Method member's
  * `runtime.subscribeMember` / `runtime.memberChanged`, see `composables/use-event-log.ts`); this panel never receives a Core
- * Runtime and cannot emit or invoke. It listens only while
- * its tab is the visible one: the log is recorded while the panel is mounted (see `composables/use-event-log.ts`), so what
- * happened while another tab was open is here when this one is opened.
+ * Runtime and cannot emit or invoke. It listens whenever a Preview connection exists, whether or not its tab is the
+ * visible one: the log is recorded while the panel is mounted (see `composables/use-event-log.ts`), so what happened while
+ * another tab was open is here when this one is opened, and the tab counts it.
  */
 import UButton from '@nuxt/ui/components/Button.vue'
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
@@ -123,6 +123,7 @@ const listeningText = computed(() => {
 		case 'no-preview': return i18n.t('No valid preview to listen to: fix the problems and Apply, and Events will be recorded from the new preview.')
 		case 'loading': return i18n.t('Waiting for the preview to load. Events are recorded once it is running.')
 		case 'lost': return i18n.t('The preview is not connected, so no Events are being recorded. Use Try again in the preview, or Apply again.')
+		case 'previous-showcase': return i18n.t('The preview still runs the previous showcase, so no Events are being recorded. Use Try again in the preview.')
 		case 'no-events': return log.watchingMethods.value.methods > 0
 			? i18n.t('The widgets in this preview declare no Events. Failed Method calls are still recorded.')
 			: i18n.t('The widgets in this preview declare no Events, so there is nothing to record.')

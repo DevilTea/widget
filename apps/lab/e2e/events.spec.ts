@@ -52,9 +52,9 @@ async function submit(page: Page): Promise<void> {
 		.click()
 }
 
-/** The Events tab: its accessible name gains " , N new" while entries arrived since it was last visible. */
+/** The Events tab: its accessible name gains ", N new" while entries arrived since it was last visible. */
 function eventsTab(page: Page): Locator {
-	return page.getByRole('tab', { name: /^Events( , \d+ new)?$/ })
+	return page.getByRole('tab', { name: /^Events(, \d+ new)?$/ })
 }
 
 const entries = (page: Page): Locator => page.getByTestId('event-entry')
@@ -267,7 +267,7 @@ test.describe('events log', () => {
 		await expect(page.getByTestId('events-unseen'))
 			.toHaveText('1')
 		await expect(eventsTab(page))
-			.toHaveAccessibleName('Events , 1 new')
+			.toHaveAccessibleName('Events, 1 new')
 
 		await eventsTab(page)
 			.click()
@@ -372,7 +372,7 @@ test.describe('events log', () => {
 		await expect(panel.getByTestId('events-pause'))
 			.toHaveText('暫停')
 		await expect(panel.getByTestId('events-count'))
-			.toHaveText('已記錄 1 筆 Events')
+			.toHaveText('已記錄 1 筆 Event')
 		// Runtime data is verbatim.
 		await expect(entries(page)
 			.first()

@@ -53,6 +53,28 @@ describe('events strings', () => {
 			.toBe('Events')
 	})
 
+	it('translates the read-only Method tag and its explanation', () => {
+		expect(translatePresentationMessage('zh-TW', 'read-only'))
+			.toBe('唯讀')
+		expect(translatePresentationMessage('zh-TW', 'Writes no State and emits no Event, itself or through the Methods it invokes, so a Property may depend on it'))
+			.toContain('Property 可以依賴它')
+	})
+
+	it('keeps a singular English Event singular in zh-TW', () => {
+		const singular = [
+			'{count} Event recorded',
+			'{total} recorded Event',
+			'{shown} of {total} recorded Event shown',
+			'Paused: {count} Event was not recorded.',
+			'{count} Event was not recorded while the log was paused.',
+			'{count} declared Event',
+			'Could not subscribe to {count} Event.',
+		]
+		const plural = singular.filter(message => /\bEvents\b/.test(translatePresentationMessage('zh-TW', message)))
+		expect(plural)
+			.toEqual([])
+	})
+
 	it('leaves the strings verbatim in English', () => {
 		expect(translatePresentationMessage('en', 'Only the selected widget'))
 			.toBe('Only the selected widget')

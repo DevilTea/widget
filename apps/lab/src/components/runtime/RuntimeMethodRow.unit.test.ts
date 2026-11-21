@@ -36,6 +36,21 @@ describe('runtimeMethodRow effect markers', () => {
 			.toContain('emits')
 	})
 
+	it('says read-only for a Method that neither writes nor emits, and claims nothing when the peer did not report emits', () => {
+		const readOnly = (props: { transitivelyWrites: boolean, transitivelyEmits?: boolean }): boolean => mountRow(props)
+			.find('[data-testid="method-read-only"]')
+			.exists()
+		expect(readOnly({ transitivelyWrites: false, transitivelyEmits: false }))
+			.toBe(true)
+		expect(readOnly({ transitivelyWrites: true, transitivelyEmits: false }))
+			.toBe(false)
+		expect(readOnly({ transitivelyWrites: false, transitivelyEmits: true }))
+			.toBe(false)
+		// Protocol below 0.4: no emits fact, so the Method may emit.
+		expect(readOnly({ transitivelyWrites: false }))
+			.toBe(false)
+	})
+
 	it('shows only the emits marker, with its tooltip, for a Method that emits', () => {
 		const wrapper = mountRow({ transitivelyWrites: false, transitivelyEmits: true })
 		expect(wrapper.text())

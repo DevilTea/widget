@@ -51,6 +51,18 @@ describe('referencesOf: text that only looks like an import', () => {
 			.toEqual([])
 	})
 
+	it('does not take a bare identifier that is a whole attribute value or string for one', () => {
+		expect(specifiers('<Row :x="from" :y="to" />'))
+			.toEqual([])
+		expect(specifiers('<Row :x=\'import\' :y=\'to\' />'))
+			.toEqual([])
+		expect(specifiers('const keys = ["from", "to"]'))
+			.toEqual([])
+		// The keyword itself still counts, with or without a space before the quote.
+		expect(specifiers('import a from"./a"\nimport b from \'./b\'\nimport \'./c.css\''))
+			.toEqual(['./a', './b', './c.css'])
+	})
+
 	it('does not take a `data-from` attribute for one', () => {
 		expect(specifiers('<li data-from="a" data-to="b">'))
 			.toEqual([])

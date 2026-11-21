@@ -415,7 +415,7 @@ describe('eventsPanel', () => {
 			.toBe('暫停')
 		expect(wrapper.get('[data-testid="events-count"]')
 			.text())
-			.toBe('已記錄 1 筆 Events')
+			.toBe('已記錄 1 筆 Event')
 		const row = rows(wrapper)[0]!
 		expect(row.get('[data-testid="event-name"]')
 			.text())

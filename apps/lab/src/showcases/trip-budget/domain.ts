@@ -96,7 +96,7 @@ const EN_TEXT = {
 	whoPaysWhom: 'Who pays whom',
 	transfer: '{from} pays {to}',
 	allSettled: 'Everyone is settled up.',
-	roundedAway: 'Every payment is smaller than the rounding step, so none is due.',
+	roundedAway: 'Every payment is smaller than half the rounding step, so none is due.',
 	roundingGap: 'Rounded transfers differ from the exact balances by {amount} in total.',
 	// Expense errors
 	errorAmountMissing: 'Enter an amount.',
@@ -156,7 +156,7 @@ const ZH_TW_TEXT: TripText = {
 	whoPaysWhom: '誰付給誰',
 	transfer: '{from} 付給 {to}',
 	allSettled: '大家都已結清。',
-	roundedAway: '每一筆金額都小於四捨五入的單位，所以不需要轉帳。',
+	roundedAway: '每一筆金額都不到四捨五入單位的一半，所以不需要轉帳。',
 	roundingGap: '四捨五入後的轉帳合計，與精確結餘相差 {amount}。',
 	errorAmountMissing: '請輸入金額。',
 	errorAmountNegative: '金額不能是負數。',

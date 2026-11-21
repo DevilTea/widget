@@ -33,7 +33,7 @@ export interface VolumeDiscountInterfaces extends WidgetInterfaces {
 }
 
 export const VolumeDiscountPlugin = createWidgetPlugin('VolumeDiscount')
-	.description('A percentage off the subtotal by the total number of pieces. Config: `label` and the ascending `tiers` (`minQuantity`, `percent`). Property `adjustment`: the (negative) amount. Tiers may be in any order and the tier with the largest `minQuantity` that the total quantity reaches applies. Known defect: it assumes the smallest tier starts at 1, so a quantity below every tier makes `adjustment` throw instead of reporting a diagnostic.')
+	.description('A percentage off the subtotal by the total number of pieces. Config: `label` and the `tiers` (`minQuantity`, `percent`). Property `adjustment`: the (negative) amount. Tiers may be in any order and the tier with the largest `minQuantity` that the total quantity reaches applies. Known defect: it assumes the smallest tier starts at 1, so a quantity below every tier makes `adjustment` throw instead of reporting a diagnostic.')
 	.interfaces<VolumeDiscountInterfaces>()
 	.config({
 		description: 'The label and the volume tiers (in any order; percentages count to two decimals). Validated by a Valibot schema through Standard Schema; the schema does not say that the smallest tier must start at 1.',

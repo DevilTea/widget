@@ -51,7 +51,7 @@ function selectNode(nodeId: InspectionNodeId): void {
 				/>
 			</template>
 			<template #details>
-				<div class="flex border-b border-b-lab-border flex-[0_0_auto]">
+				<div class="flex border-b border-b-lab-border flex-none">
 					<button
 						type="button"
 						class="flex-auto p-[6px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer"

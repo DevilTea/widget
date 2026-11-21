@@ -180,7 +180,8 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     disclosure is open: the Runtime panel says `Never evaluated` until then, keeps the last result after the disclosure
     is closed, and cannot show who is subscribed); and **`resetState`**, which `useWidget()` does not expose, so the
     host component `TripBudgetRenderer` (`renderers/index.ts`) provides `resetWidget(id)` and `resetAll()` to the
-    renderers (`renderers/reset-host.ts`). A failed dependency fails the consumer, so an expense in a currency with no
+    renderers (`renderers/reset-host.ts`). "Start over" is `TripRootRenderer.vue`'s `onStartOver()`: it calls `resetAll()` and then
+    writes the `language` State back when the reset changed it, so the page keeps the language the visitor chose (the host does not). A failed dependency fails the consumer, so an expense in a currency with no
     rate fails `amountBase`, `shares`, the payer's `paid`, every person's `owed`/`balance` and the settlement (`Failed` in
     Selected widget). A consumer fails only when it calls the failing read, so every consumer checks `Expense.counted` first and an
     expense that is not counted (nobody shares it, nobody paid) is left out before its amount is read: it never takes the settlement
@@ -515,7 +516,7 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
 
 Issue `DevilTea/widget#230` (Lab redesign) adopts Nuxt UI 4 (Tailwind v4) for the Lab chrome through its **Vite
 plugin**, not Nuxt. It is the Lab chrome's only styling system: PikaCSS was removed from the Lab by the PR that
-ported its ~340 style calls to Tailwind utilities with no visual change (the Lab palette is exposed as
+ported its ~375 style calls to Tailwind utilities with no visual change (the Lab palette is exposed as
 `text-lab-*`, `bg-lab-*`, `border-lab-*`, `accent-lab-*`, `rounded-lab` and `font-lab-*` utilities).
 
 - **Tooltips have no exit animation** (`nuxt-ui.ts`, `ui.tooltip.slots.content`). Reka keeps a closed tooltip's content mounted until its
@@ -736,7 +737,7 @@ State members render the remote member snapshot only — nothing in the inspecto
 `status: 'completed'` — the latest result some *real* Runtime consumer (Preview) naturally produced — and
 never `fresh`/`dirty`/`active`/`stale` labels. Methods show their name, the compiler's
 `transitivelyWrites` and `transitivelyEmits` facts (read from the Inspector snapshot, where `transitivelyEmits` exists only from protocol 0.4 and
-can be absent) and, from protocol 0.5 (audit U08), their latest diagnostics: `RuntimeMethodRow.vue` subscribes to its Method member
+can be absent; a Method with both facts `false` is tagged `read-only`, and one without the emits fact is not) and, from protocol 0.5 (audit U08), their latest diagnostics: `RuntimeMethodRow.vue` subscribes to its Method member
 (`runtime.subscribeMember` with `{ type: 'method' }`, through `useRemoteRuntimeMember` like State and Property rows, so only while its panel is visible)
 and `MethodDiagnosticList.vue` renders each diagnostic's `code`, `message` (verbatim, never parsed), `reason`, `path`, `dependency`, `related`, `cause` and
 `args` / `result` / `received` (the same value tree and truncation marking as Runtime values). The snapshot is the diagnostics of the Method's latest call that
@@ -760,7 +761,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
 ```
 
 - `relations.ts` — pure `projectRelations()`: `SemanticGraph + InspectorFocus + rootNodeId` -> a framework-agnostic Relations view model. It imports neither Vue Flow nor ELK. Root/no usable focus yields an explicit empty state; member focus exposes exact incoming **Used by** and outgoing **Depends on** facts grouped by remote widget; widget focus treats all members as the selected set, keeps cross-widget incoming/outgoing separate, and lists same-widget dependencies in an internal section. Every row retains the original semantic edge/reference/path/operation; unresolved stubs remain unresolved and non-focusable. Relations shares `graphShowAbsent`, but deliberately projects with isolated members present so the Graph-only `graphShowIsolatedMembers` presentation preference can never erase a focused member from this inspector. Resolved member/widget clicks write through the existing Document-scoped focus API; they do not request ELK layout.
-- `src/components/dependencies/DependenciesPanel.vue` owns the internal `Relations | Graph` switcher and view-specific toolbar. The switcher follows the WAI-ARIA tabs pattern (roving tab stop plus Arrow/Home/End keyboard navigation and labelled tabpanels). The Graph DOM stays mounted with `v-show`, preserving pan/zoom across view changes. Shared focus changes never mutate Graph expansion state or request layout/refit; cluster identity selection and the explicit expand/collapse toggle are separate actions. `RelationsView.vue` renders the dense three-column inspector and the widget/internal-dependency mode without a canvas layout engine; same-widget unresolved stubs stay in the internal section rather than leaking into cross-widget outgoing dependencies.
+- `src/components/dependencies/DependenciesPanel.vue` owns the internal `Relations | Graph` switcher and view-specific toolbar. The switcher follows the WAI-ARIA tabs pattern (roving tab stop plus Arrow/Home/End keyboard navigation and labelled tabpanels). The Graph DOM stays mounted with `v-show`, preserving pan/zoom across view changes. Shared focus changes never mutate Graph expansion state or request layout/refit; cluster identity selection and the explicit expand/collapse toggle are separate actions. `RelationsView.vue` renders the dense three-column inspector and the widget/internal-dependency mode without a canvas layout engine; same-widget unresolved stubs stay in the internal section rather than leaking into cross-widget outgoing dependencies. A selected Method whose `transitivelyWrites` and `transitivelyEmits` are both `false` is tagged "read-only" next to where W and E would be (issue #230: it used to be told only by the missing badges); the compact member chips keep W and E only.
 - `types.ts` / `projection.ts` — the Lab's semantic graph shape and its pure, deterministic projection.
   Widgets are visual clusters (`GraphCluster`); State/Property/Method members are the semantic vertices
   (`GraphVertex`). Edge direction is owner -> declared dependency target; `state-get`/`property-get`

@@ -86,7 +86,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 				v-if="curatedEntryAvailable"
 				type="button"
 				data-testid="blueprint-view-implementation"
-				class="flex-[0_0_auto] p-[3px_10px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
+				class="flex-none p-[3px_10px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
 				@click="implementationExplorer.open()"
 			>
 				{{ i18n.t('View implementation') }}

@@ -41,7 +41,7 @@ async function submit(page: Page, name = 'Submit'): Promise<void> {
 
 /** The Events tab is mounted from the start and records while another tab is open; this opens it. */
 async function openEvents(page: Page): Promise<void> {
-	await page.getByRole('tab', { name: /^Events( , \d+ new)?$/ })
+	await page.getByRole('tab', { name: /^Events(, \d+ new)?$/ })
 		.click()
 	await expect(page.getByTestId('events-listening'))
 		.toHaveText('Listening to 1 declared Event on 1 widget.')

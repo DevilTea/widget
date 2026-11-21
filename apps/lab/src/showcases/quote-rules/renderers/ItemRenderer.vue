@@ -146,6 +146,7 @@ function onWheel(event: Event): void {
 
 <style scoped>
 .item {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
@@ -213,8 +214,16 @@ function onWheel(event: Event): void {
 	font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The live region stays rendered while it is empty: a region that is `display: none` when a message arrives is not
+ * announced by every screen reader. Out of the flex flow, so the empty region adds no gap.
+ */
 .item-errors:empty {
-	display: none;
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
 }
 
 .item-error {

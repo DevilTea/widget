@@ -467,6 +467,39 @@ test.describe('tutorial rail is a docked column (U13)', () => {
 			.toBeCloseTo(1440, 0)
 	})
 
+	test('the rail\'s primary button is drawn in the accent colour and its close button is a 24px target', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 })
+		await openLab(page)
+		await chooseTutorialMenuItem(page)
+		const rail = page.getByRole('complementary', { name: 'Tutorial' })
+		await expect(rail)
+			.toBeVisible()
+
+		const colours = await rail.evaluate((element) => {
+			const probe = document.createElement('span')
+			probe.style.backgroundColor = 'var(--lab-color-accent)'
+			probe.style.color = 'var(--lab-color-surface-alt)'
+			element.append(probe)
+			const accent = getComputedStyle(probe).backgroundColor
+			const surface = getComputedStyle(probe).color
+			probe.remove()
+			const background = (name: string): string => getComputedStyle([...element.querySelectorAll('footer button')]
+				.find(button => button.textContent?.trim() === name)!).backgroundColor
+			return { accent, surface, next: background('Next'), skip: background('Skip tour') }
+		})
+		expect(colours.next)
+			.toBe(colours.accent)
+		expect(colours.skip)
+			.toBe(colours.surface)
+
+		const close = (await rail.getByRole('button', { name: 'Close tutorial' })
+			.boundingBox())!
+		expect(close.width)
+			.toBeGreaterThanOrEqual(24)
+		expect(close.height)
+			.toBeGreaterThanOrEqual(24)
+	})
+
 	test('the proportions the user chose survive opening the tour', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 })
 		await openLab(page)

@@ -52,8 +52,13 @@ describe('nonClosableTab unseen Events', () => {
 			.toBe('2')
 		expect(badge.attributes('aria-hidden'))
 			.toBe('true')
-		expect(events.text())
-			.toBe('Events2, 2 new')
+		// One hidden text names the tab; the drawn title and badge are hidden from assistive technology.
+		expect(events.get('[data-testid="events-tab-name"]')
+			.text())
+			.toBe('Events, 2 new')
+		expect(events.findAll('[aria-hidden="true"]')
+			.map(node => node.text()))
+			.toEqual(['Events', '2'])
 		// Another tab has no count.
 		expect(runtime.text())
 			.toBe('Runtime')

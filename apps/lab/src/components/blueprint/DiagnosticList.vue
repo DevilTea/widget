@@ -148,7 +148,7 @@ function onNavigateToLocation(location: BlueprintDiagnosticLocation, inspection:
 					v-if="nodeIdOfLocation(diagnostic.location, inspection) !== null"
 					type="button"
 					:data-testid="`blueprint-diagnostic-navigate-${index}`"
-					class="ml-[auto] text-[11px] text-lab-accent bg-transparent [border:none] cursor-pointer p-0"
+					class="ml-auto text-[11px] text-lab-accent bg-transparent [border:none] cursor-pointer p-0"
 					@click="emit('navigate', nodeIdOfLocation(diagnostic.location, inspection)!)"
 				>
 					{{ i18n.t('jump to node') }}
