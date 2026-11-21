@@ -107,6 +107,7 @@ export function buildStateValidationDiagnostic(widgetId: WidgetId, key: WidgetMe
 		message: input.message,
 		...(input.path === undefined ? {} : { path: input.path }),
 		...(input.reason === undefined ? {} : { reason: input.reason }),
+		...(input.details === undefined ? {} : { details: input.details }),
 	}
 }
 
@@ -122,6 +123,7 @@ export function buildPropertyResultDiagnostic(widgetId: WidgetId, name: WidgetMe
 		message: input.message,
 		...(input.path === undefined ? {} : { path: input.path }),
 		...(input.reason === undefined ? {} : { reason: input.reason }),
+		...(input.details === undefined ? {} : { details: input.details }),
 	}
 }
 
@@ -133,6 +135,7 @@ export function buildMethodArgsDiagnostic(widgetId: WidgetId, name: WidgetMember
 		message: input.message,
 		...(input.path === undefined ? {} : { path: input.path }),
 		...(input.reason === undefined ? {} : { reason: input.reason }),
+		...(input.details === undefined ? {} : { details: input.details }),
 	}
 }
 
@@ -148,6 +151,7 @@ export function buildMethodResultDiagnostic(widgetId: WidgetId, name: WidgetMemb
 		message: input.message,
 		...(input.path === undefined ? {} : { path: input.path }),
 		...(input.reason === undefined ? {} : { reason: input.reason }),
+		...(input.details === undefined ? {} : { details: input.details }),
 	}
 }
 

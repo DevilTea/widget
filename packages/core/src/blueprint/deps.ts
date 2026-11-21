@@ -18,7 +18,7 @@ import type { AnyWidgetPluginTuple, WidgetPluginDefinition } from '../plugin'
 import type { WidgetId } from '../types'
 import type { WorkingNode } from './recovery'
 import type { CompileFacade } from './view'
-import { createDependencyBuilder, isDepExpression, readDepExpression } from '../dep'
+import { createDependencyBuilder, createWidgetDependencyTarget, isDepExpression, readDepExpression } from '../dep'
 import { compiledDependencyBrand } from '../internal/contract'
 import { readWidgetPluginDefinition } from '../plugin'
 import { assertSyncValue } from '../runtime/sync'
@@ -280,6 +280,25 @@ function resolveLeaf(
 	}
 }
 
+/**
+ * `slot(name)` of a `registerDeps` context: one `dep.widget(child.id)` target per resolved child of the
+ * widget's own slot, in Blueprint order. An unresolved child has no widget to depend on and is left out. A
+ * name the plugin does not declare is a contract violation.
+ */
+function slotChildTargets(nodes: readonly WorkingNode[], node: WorkingNode, scope: string, slotName: unknown): readonly unknown[] {
+	const children = typeof slotName === 'string' ? node.semanticSlots.get(slotName) : undefined
+	if (children === undefined)
+		throw new TypeError(`${scope}: slot(${typeof slotName === 'string' ? JSON.stringify(slotName) : typeof slotName}) names a slot that plugin "${node.type}" does not declare. This is a plugin implementation bug.`)
+
+	const targets: unknown[] = []
+	for (const childNodeId of children) {
+		const child = nodes[childNodeId]!
+		if (child.resolved && child.id !== null)
+			targets.push(createWidgetDependencyTarget(child.id))
+	}
+	return Object.freeze(targets)
+}
+
 export function resolveDependencies(
 	nodes: readonly WorkingNode[],
 	semanticOrder: readonly InternalNodeId[],
@@ -319,6 +338,7 @@ export function resolveDependencies(
 					widget: compileFacade.facadeForNodeId(nodeId),
 					blueprint: compileFacade.view,
 					dep: createDependencyBuilder<never, 'property'>(),
+					slot: (slotName: unknown) => slotChildTargets(nodes, node, `Property "${name}"'s registerDeps`, slotName),
 					...configFrag,
 				})
 				assertSyncValue(rawDeps, `Property "${name}"'s registerDeps`)
@@ -348,6 +368,7 @@ export function resolveDependencies(
 					widget: compileFacade.facadeForNodeId(nodeId),
 					blueprint: compileFacade.view,
 					dep: createDependencyBuilder<never, 'method'>(),
+					slot: (slotName: unknown) => slotChildTargets(nodes, node, `Method "${name}"'s registerDeps`, slotName),
 					...configFrag,
 				})
 				assertSyncValue(rawDeps, `Method "${name}"'s registerDeps`)

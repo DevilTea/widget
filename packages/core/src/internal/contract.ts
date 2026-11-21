@@ -50,6 +50,7 @@ import type {
 	WidgetPropertyValueOf,
 	WidgetRawConfigOf,
 	WidgetResolvedConfigOf,
+	WidgetSlotExpectedOf,
 	WidgetSlotNameOf,
 	WidgetStateKeyOf,
 	WidgetStateValueOf,
@@ -315,7 +316,7 @@ export type WidgetSourceFor<
 				// `{}` (zero valid names) — present but only satisfiable by an empty object, distinct from a
 				// plugin without slots capability, which has no `slots` field on its authored source at all.
 				readonly slots?: {
-					readonly [Name in WidgetSlotNameOf<WidgetInterfacesOf<Plugin>>]?: readonly WidgetSource<Plugins>[]
+					readonly [Name in WidgetSlotNameOf<WidgetInterfacesOf<Plugin>>]?: readonly WidgetSlotChildSource<Plugins, WidgetSlotExpectedOf<WidgetInterfacesOf<Plugin>, Name>>[]
 				}
 			}
 		: unknown)
@@ -324,6 +325,34 @@ export type WidgetSource<Plugins extends AnyWidgetPluginTuple> = Plugins[number]
 	? Plugin extends AnyWidgetPlugin
 		? WidgetSourceFor<Plugin, Plugins>
 		: never
+	: never
+
+/**
+ * The authored source a slot accepts for one child. A slot that expects a union of plugin types takes the
+ * sources of exactly those registered plugins; a `WidgetContract` / `WidgetChild` slot, and every slot of a
+ * loosely typed System (a plugin typed with a broad `string`), takes any registered plugin's source. This
+ * narrows TypeScript-authored sources only: the compiler input stays `unknown`, and Core checks no slot
+ * expectation at run time.
+ */
+export type WidgetSlotChildSource<Plugins extends AnyWidgetPluginTuple, Expected> = string extends WidgetPluginTypeOf<Plugins[number]>
+	? WidgetSource<Plugins>
+	: [Expected] extends [never]
+			? WidgetSource<Plugins>
+			: [Expected] extends [string]
+					? Extract<Plugins[number], { readonly type: Expected }> extends infer Plugin
+						? Plugin extends AnyWidgetPlugin
+							? WidgetSourceFor<Plugin, Plugins>
+							: never
+						: never
+					: WidgetSource<Plugins>
+
+/**
+ * The typed source of one widget of `System`, for sources written in TypeScript: the node grammar (`id`,
+ * `type`, `config`, `slots`, `meta`) with `config` typed per plugin `type` (its `raw` config) and the
+ * children of each slot typed by what the slot expects.
+ */
+export type WidgetSourceOf<System extends WidgetSystem<any>> = System extends WidgetSystem<infer Plugins extends AnyWidgetPluginTuple>
+	? WidgetSource<Plugins>
 	: never
 
 export interface WidgetSystemBlueprintBase<Plugins extends AnyWidgetPluginTuple, Source = unknown> {

@@ -16,6 +16,8 @@ import type {
 import type { ExecutionResult } from './execution-result'
 import type {
 	HasWidgetCapability,
+	WidgetContract,
+	WidgetContractShape,
 	WidgetId,
 	WidgetInterfaces,
 	WidgetMemberKey,
@@ -254,6 +256,38 @@ export type SelfDependencyTarget<Interfaces extends WidgetInterfaces, Consumer e
 		: unknown)
 
 /**
+ * A target whose members a {@link WidgetContract} describes: a section the contract declares is typed like
+ * the same section of `dep.self`, and a section it leaves out keeps the unknown-target grammar. The target
+ * always exists (never optional). The types are the contract's word only: nothing checks at run time that
+ * the widget has these members or that their values have these types, so `.validate()` stays available.
+ */
+export interface ContractDependencyTarget<Shape extends WidgetContractShape, Consumer extends DependencyConsumer> {
+	readonly state: HasWidgetCapability<Shape, 'state'> extends true
+		? SelfStateDependencyOperations<Shape, Consumer>
+		: UnknownTargetStateDependencyOperations<Consumer, false>
+	readonly properties: HasWidgetCapability<Shape, 'properties'> extends true
+		? SelfPropertyDependencyOperations<Shape>
+		: UnknownTargetDependencyOperations<Consumer, false>['properties']
+	readonly methods: HasWidgetCapability<Shape, 'methods'> extends true
+		? SelfMethodDependencyOperations<Shape>
+		: UnknownTargetDependencyOperations<Consumer, false>['methods']
+}
+
+/**
+ * The dependency target of one child of a slot, typed by what the slot expects: a `WidgetContract` (or
+ * `WidgetChild`, the empty contract) gives a {@link ContractDependencyTarget}; a union of plugin types
+ * gives the unknown-target grammar, because a plugin cannot see the interfaces of the plugins a System
+ * registers under those names.
+ */
+export type SlotChildDependencyTarget<Expected, Consumer extends DependencyConsumer> = [Expected] extends [never]
+	? UnknownTargetDependencyOperations<Consumer, false>
+	: [Expected] extends [string]
+			? UnknownTargetDependencyOperations<Consumer, false>
+			: [Expected] extends [WidgetContract<infer Shape extends WidgetContractShape>]
+					? ContractDependencyTarget<Shape, Consumer>
+					: UnknownTargetDependencyOperations<Consumer, false>
+
+/**
  * The `dep` grammar supplied to `registerDeps`.
  *
  * `dep.root` and `dep.widget(id)` stay unknown-typed even when they happen to designate the current
@@ -338,6 +372,14 @@ function createOptionalizableTarget(target: (optional: boolean) => BlueprintDepe
 		...createTargetOperations(target(false)) as object,
 		optional: () => createTargetOperations(target(true)),
 	}
+}
+
+/**
+ * The target `dep.widget(widgetId)` designates, without `optional()`: what `slot(name)` returns for each
+ * resolved child.
+ */
+export function createWidgetDependencyTarget(widgetId: WidgetId): unknown {
+	return createTargetOperations({ type: 'widget', widgetId, optional: false })
 }
 
 /**

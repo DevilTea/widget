@@ -8,6 +8,7 @@
 
 export type {
 	AnyDepExpression,
+	ContractDependencyTarget,
 	DependencyBuilder,
 	DependencyConsumer,
 	EmptyRegisteredDeps,
@@ -20,6 +21,7 @@ export type {
 	SelfMethodDependencyOperations,
 	SelfPropertyDependencyOperations,
 	SelfStateDependencyOperations,
+	SlotChildDependencyTarget,
 	StateGetDepExpression,
 	StateSetDepExpression,
 	ToExecutedDep,
@@ -54,6 +56,7 @@ export type {
 	DiagnosticBase,
 	DiagnosticCollector,
 	DiagnosticPath,
+	DiagnosticReasonFields,
 	JsonCompatibilityDiagnostic,
 	JsonCompatibilityReason,
 	RelativePluginStructureDiagnosticInput,
@@ -128,8 +131,10 @@ export type {
 	ValidWidgetSystemBlueprint,
 	WidgetLocation,
 	WidgetLocationView,
+	WidgetSlotChildSource,
 	WidgetSource,
 	WidgetSourceFor,
+	WidgetSourceOf,
 	WidgetSystemBlueprint,
 	WidgetSystemBlueprintStatus,
 	WidgetSystemRuntime,
@@ -139,18 +144,17 @@ export { isJsonValue, MAX_JSON_DEPTH } from './json'
 
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from './json'
 
-export { createWidgetPlugin, createWidgetValueContract, WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from './plugin'
+export { createWidgetPlugin, createWidgetValueContract } from './plugin'
 
 export type {
 	AnyWidgetPlugin,
 	AnyWidgetPluginTuple,
+	ExactWidgetEventNames,
 	WidgetConfigDefinition,
-	WidgetConfigJsonSchema,
 	WidgetConfigValidateContext,
-	WidgetEventDefinition,
 	WidgetEventEmitter,
 	WidgetEventEmitterContext,
-	WidgetEventsSection,
+	WidgetEventNamesViolation,
 	WidgetInterfacesOf,
 	WidgetInterfacesViolation,
 	WidgetMethodDefinition,
@@ -160,9 +164,7 @@ export type {
 	WidgetMethodValidateArgsContext,
 	WidgetPlugin,
 	WidgetPluginCapabilities,
-	WidgetPluginConfigMetadata,
 	WidgetPluginConfigPhase,
-	WidgetPluginDescriptionPhase,
 	WidgetPluginDonePhase,
 	WidgetPluginEventsPhase,
 	WidgetPluginInterfacesPhase,
@@ -179,6 +181,7 @@ export type {
 	WidgetPropertyComputeContext,
 	WidgetPropertyDefinition,
 	WidgetRegisterDepsContext,
+	WidgetRegisterDepsSlotContext,
 	WidgetResolvedConfigContext,
 	WidgetSlotDefinition,
 	WidgetSlotDefinitions,
@@ -222,11 +225,14 @@ export { createWidgetSystem, WidgetSystemConfigurationError } from './system'
 
 export type {
 	CreateWidgetSystemOptions,
+	UnregisteredSlotPluginTypeOf,
 	WidgetCatalog,
 	WidgetCatalogEntry,
 	WidgetPluginOf,
 	WidgetSystem,
 	WidgetSystemConfigurationErrorCode,
+	WidgetSystemPluginsCheck,
+	WidgetSystemSlotTypeViolation,
 	WidgetSystemValidateStructure,
 	WidgetSystemValidateStructureContext,
 } from './system'
@@ -235,6 +241,9 @@ export type {
 	HasWidgetCapability,
 	NonEmptyReadonlyArray,
 	WidgetCapabilityOf,
+	WidgetChild,
+	WidgetContract,
+	WidgetContractShape,
 	WidgetEventArgsOf,
 	WidgetEventKeyOf,
 	WidgetEventsOf,
@@ -253,8 +262,13 @@ export type {
 	WidgetPropertyKeyOf,
 	WidgetPropertyValueOf,
 	WidgetRawConfigOf,
+	WidgetReasonKeyOf,
+	WidgetReasonsOf,
 	WidgetResolvedConfigOf,
+	WidgetSlotExpectation,
+	WidgetSlotExpectedOf,
 	WidgetSlotNameOf,
+	WidgetSlotsOf,
 	WidgetStateKeyOf,
 	WidgetStateOf,
 	WidgetStateValueOf,

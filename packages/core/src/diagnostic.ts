@@ -7,8 +7,9 @@
  */
 
 import type { BlueprintWidgetNode, BlueprintWidgetNodeView, ResolvedBlueprintWidgetNode, ResolvedBlueprintWidgetNodeView } from './internal/contract'
+import type { JsonValue } from './json'
 import type { AnyWidgetPluginTuple } from './plugin'
-import type { NonEmptyReadonlyArray, WidgetId, WidgetMemberKey } from './types'
+import type { HasWidgetCapability, NonEmptyReadonlyArray, WidgetId, WidgetInterfaces, WidgetMemberKey, WidgetReasonsOf } from './types'
 
 export type DiagnosticPath = readonly PropertyKey[]
 
@@ -46,22 +47,47 @@ export class WidgetSystemRuntimeReentrancyError extends RangeError {
 
 // Callback-authored relative inputs --------------------------------------------------------------
 
-export interface RelativeValueDiagnosticInput {
-	readonly message: string
-	readonly path?: DiagnosticPath
-	readonly reason?: string
-}
+type DeclaredDiagnosticReasonFields<Reasons>
+	= | { readonly reason?: undefined, readonly details?: undefined }
+		| ([Reasons] extends [never]
+			? never
+			: {
+					[Reason in Extract<keyof Reasons, string>]: [Reasons[Reason]] extends [void]
+						? { readonly reason: Reason, readonly details?: undefined }
+						: { readonly reason: Reason, readonly details: Reasons[Reason] }
+				}[Extract<keyof Reasons, string>])
 
-export interface RelativeSlotStructureDiagnosticInput {
-	readonly message: string
-	readonly index?: number
-	readonly reason?: string
-}
+/**
+ * The `reason` and `details` of a plugin-authored diagnostic input.
+ *
+ * When the plugin's interfaces declare `reasons`, `reason` is one of its keys (or omitted) and `details`
+ * is that reason's payload: required when the payload is not `void`, forbidden when it is, and forbidden
+ * without a `reason`. Without a `reasons` declaration (and for the System-level validator) `reason` is any
+ * string and `details` any JSON value.
+ *
+ * At run time `details` must be a JSON value whatever the types say: `addDiagnostic` throws a `TypeError`
+ * for anything else (a contract violation, not a diagnostic). It is kept by reference and carried unchanged
+ * on the resulting diagnostic.
+ */
+export type DiagnosticReasonFields<Interfaces extends WidgetInterfaces = WidgetInterfaces> = HasWidgetCapability<Interfaces, 'reasons'> extends true
+	? DeclaredDiagnosticReasonFields<WidgetReasonsOf<Interfaces>>
+	: { readonly reason?: string, readonly details?: JsonValue }
 
-export type RelativePluginStructureDiagnosticInput<SlotName extends WidgetMemberKey = WidgetMemberKey>
-	= | { readonly message: string, readonly reason?: string }
-		| { readonly message: string, readonly slot: SlotName, readonly reason?: string }
-		| { readonly message: string, readonly slot: SlotName, readonly index: number, readonly reason?: string }
+export type RelativeValueDiagnosticInput<Interfaces extends WidgetInterfaces = WidgetInterfaces>
+	= & { readonly message: string, readonly path?: DiagnosticPath }
+		& DiagnosticReasonFields<Interfaces>
+
+export type RelativeSlotStructureDiagnosticInput<Interfaces extends WidgetInterfaces = WidgetInterfaces>
+	= & { readonly message: string, readonly index?: number }
+		& DiagnosticReasonFields<Interfaces>
+
+export type RelativePluginStructureDiagnosticInput<SlotName extends WidgetMemberKey = WidgetMemberKey, Interfaces extends WidgetInterfaces = WidgetInterfaces>
+	= & (
+		| { readonly message: string }
+		| { readonly message: string, readonly slot: SlotName }
+		| { readonly message: string, readonly slot: SlotName, readonly index: number }
+	)
+	& DiagnosticReasonFields<Interfaces>
 
 export type RelativeStructureDiagnosticLocation<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
 	= | { readonly type: 'widget', readonly node: BlueprintWidgetNodeView<Plugins> }
@@ -73,6 +99,8 @@ export interface RelativeSystemStructureDiagnosticInput<Plugins extends AnyWidge
 	readonly location: RelativeStructureDiagnosticLocation<Plugins>
 	readonly related?: NonEmptyReadonlyArray<RelativeStructureDiagnosticLocation<Plugins>>
 	readonly reason?: string
+	/** A JSON value; anything else is a contract violation (`TypeError`). */
+	readonly details?: JsonValue
 }
 
 export interface DiagnosticCollector<Input> {
@@ -175,12 +203,16 @@ export type BlueprintDefinitionDiagnostic<Plugins extends AnyWidgetPluginTuple =
 export type BlueprintConfigDiagnostic<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> = DiagnosticBase<'invalid-widget-config', BlueprintWidgetDiagnosticLocation<Plugins>> & {
 	readonly path?: DiagnosticPath
 	readonly reason?: string
+	/** The `details` the plugin reported with the diagnostic: a JSON value, by reference. */
+	readonly details?: JsonValue
 }
 
 export type BlueprintStructureDiagnostic<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
 	= DiagnosticBase<'invalid-widget-structure', BlueprintStructureDiagnosticLocation<Plugins>> & {
 		readonly related?: NonEmptyReadonlyArray<BlueprintStructureDiagnosticLocation<Plugins>>
 		readonly reason?: string
+		/** The `details` the validator reported with the diagnostic: a JSON value, by reference. */
+		readonly details?: JsonValue
 	}
 
 export type BlueprintDependencyDiagnostic<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple>
@@ -249,24 +281,28 @@ export type RuntimeStateDiagnostic = DiagnosticBase<'invalid-state-value', Extra
 	readonly candidate: unknown
 	readonly path?: DiagnosticPath
 	readonly reason?: string
+	readonly details?: JsonValue
 }
 
 export type RuntimePropertyResultDiagnostic = DiagnosticBase<'invalid-property-result', Extract<RuntimePrimitiveDiagnosticLocation, { type: 'property' }>> & {
 	readonly result: unknown
 	readonly path?: DiagnosticPath
 	readonly reason?: string
+	readonly details?: JsonValue
 }
 
 export type RuntimeMethodArgsDiagnostic = DiagnosticBase<'invalid-method-arguments', Extract<RuntimePrimitiveDiagnosticLocation, { type: 'method' }>> & {
 	readonly args: readonly unknown[]
 	readonly path?: DiagnosticPath
 	readonly reason?: string
+	readonly details?: JsonValue
 }
 
 export type RuntimeMethodResultDiagnostic = DiagnosticBase<'invalid-method-result', Extract<RuntimePrimitiveDiagnosticLocation, { type: 'method' }>> & {
 	readonly result: unknown
 	readonly path?: DiagnosticPath
 	readonly reason?: string
+	readonly details?: JsonValue
 }
 
 export type RuntimeDependencyTargetFailedDiagnostic = DiagnosticBase<'dependency-target-failed', RuntimePrimitiveDiagnosticLocation> & {

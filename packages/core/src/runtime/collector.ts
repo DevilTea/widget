@@ -24,7 +24,7 @@
 import type { DiagnosticCollector } from '../diagnostic'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { freezeDiagnosticSnapshot } from './diagnostics'
-import { throwClosedCollector } from './sync'
+import { assertDiagnosticDetails, throwClosedCollector } from './sync'
 
 type CollectorEntry<RelativeInput, FinalDiagnostic>
 	= | { readonly kind: 'relative', readonly input: RelativeInput }
@@ -77,6 +77,7 @@ export function createOperationCollector<RelativeInput, FinalDiagnostic>(): Oper
 		addDiagnostic(input: RelativeInput) {
 			if (closed)
 				throwClosedCollector('addDiagnostic')
+			assertDiagnosticDetails(input)
 			;(entries ??= []).push({ kind: 'relative', input })
 		},
 		addFinalizedDiagnostic(diagnostic: FinalDiagnostic, dedupe?: DedupeDescriptor) {

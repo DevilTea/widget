@@ -10,6 +10,9 @@
  * Checking `typeof value === 'object'` alone misses that callable case, so both representations are
  * treated as thenable candidates before inspecting `.then`.
  */
+
+import { isJsonValue } from '../json'
+
 export function assertSyncValue(value: unknown, description: string): void
 /**
  * The same check for the description `${kind} "${name}"'s ${what}`, which is only built when the check
@@ -32,6 +35,19 @@ export function assertSyncValue(value: unknown, description: string, name?: stri
  * synchronous call that received them. Calling one after that callback returned or threw is an
  * implementation-contract violation (the operation's diagnostics are already final), so it throws.
  */
+/**
+ * The `details` of a callback-authored diagnostic input must be a JSON value. Anything else is a contract
+ * violation, thrown from the `addDiagnostic` call that carried it. A malformed input (not an object) is
+ * left to whatever reads it.
+ */
+export function assertDiagnosticDetails(input: unknown): void {
+	if (typeof input !== 'object' || input === null)
+		return
+	const details = (input as { readonly details?: unknown }).details
+	if (details !== undefined && !isJsonValue(details))
+		throw new TypeError('widget-core: a diagnostic\'s "details" must be a JSON value. This is a plugin implementation bug.')
+}
+
 export function throwClosedCollector(method: 'addDiagnostic' | 'hasAnyDiagnostic'): never {
 	throw new TypeError(`${method} was called after its callback returned. Diagnostics must be reported synchronously while the callback runs.`)
 }

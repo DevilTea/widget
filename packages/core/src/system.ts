@@ -7,20 +7,21 @@
 
 import type { DiagnosticCollector, RelativeSystemStructureDiagnosticInput } from './diagnostic'
 import type { BlueprintCompileView, WidgetSystemBlueprint } from './internal/contract'
-import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetPluginConfigMetadata, WidgetPluginTypeOf, WidgetSynchronousResult } from './plugin'
+import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetInterfacesOf, WidgetPluginCapabilities, WidgetPluginTypeOf, WidgetSynchronousResult } from './plugin'
+import type { WidgetInterfaces, WidgetMemberKey, WidgetSlotsOf } from './types'
 import { compileBlueprint } from './blueprint/index'
-import { isCoreWidgetPlugin } from './plugin'
-import { createReadonlyMap } from './readonly-map'
+import { isCoreWidgetPlugin, readWidgetPluginDefinition } from './plugin'
 
+/**
+ * The semantic facts of one registered plugin. Prose and schema are not carried by Core: they are generated
+ * from the plugin's `Interfaces` type by tooling.
+ */
 export interface WidgetCatalogEntry {
 	readonly type: string
-	readonly description: string
-	/** Null means no config capability; otherwise schema may itself be null. */
-	readonly config: WidgetPluginConfigMetadata | null
-	readonly descriptions: {
-		readonly config: string | null
-		readonly slots: ReadonlyMap<string, string> | null
-	}
+	/** Declaration presence; the same object as `plugin.capabilities`. */
+	readonly capabilities: WidgetPluginCapabilities
+	/** The declared slot names in declaration order. Null means no slots capability; empty means explicitly empty. */
+	readonly slots: readonly WidgetMemberKey[] | null
 }
 
 export interface WidgetCatalog {
@@ -40,6 +41,37 @@ export interface CreateWidgetSystemOptions<Plugins extends AnyWidgetPluginTuple,
 	readonly plugins: Plugins
 	readonly validateStructure?: WidgetSystemValidateStructure<Plugins, Result>
 }
+
+/** The plugin types the slots of `Interfaces` expect (the string-literal members of every slot's expectation). */
+type WidgetSlotPluginTypeOf<Interfaces extends WidgetInterfaces> = WidgetSlotsOf<Interfaces> extends infer Slots
+	? [Slots] extends [never]
+			? never
+			: { [Name in keyof Slots]-?: Extract<Slots[Name], string> }[keyof Slots]
+	: never
+
+/**
+ * The plugin types some registered plugin's slot expects but `Plugins` does not register. `never` for a
+ * loosely typed System (a plugin typed with a broad `string` may be any of them).
+ */
+export type UnregisteredSlotPluginTypeOf<Plugins extends AnyWidgetPluginTuple> = Exclude<
+	Plugins[number] extends infer Plugin
+		? Plugin extends AnyWidgetPlugin ? WidgetSlotPluginTypeOf<WidgetInterfacesOf<Plugin>> : never
+		: never,
+	WidgetPluginTypeOf<Plugins[number]>
+>
+
+/**
+ * What `plugins` is checked against when a slot expects a plugin type the System does not register;
+ * `Type` names it. Type-level only: nothing is checked at run time.
+ */
+export interface WidgetSystemSlotTypeViolation<Type extends string> {
+	readonly 'widget-core: a slot expects a plugin type that is not registered in this System': Type
+}
+
+/** `unknown` (an intersection identity) when every plugin type a slot expects is registered. */
+export type WidgetSystemPluginsCheck<Plugins extends AnyWidgetPluginTuple> = [UnregisteredSlotPluginTypeOf<Plugins>] extends [never]
+	? unknown
+	: { readonly plugins: WidgetSystemSlotTypeViolation<UnregisteredSlotPluginTypeOf<Plugins>> }
 
 /**
  * Selects one registered plugin by its `type` discriminator.
@@ -170,10 +202,11 @@ function readForeignPluginType(entry: unknown): string | null {
 
 /**
  * Creates an instance-scoped, immutable widget system. Malformed options, foreign plugins and duplicate
- * `plugin.type` are rejected with a `WidgetSystemConfigurationError`.
+ * `plugin.type` are rejected with a `WidgetSystemConfigurationError`. A slot that expects a plugin type the
+ * System does not register is a type error on `plugins` (type-level only).
  */
 export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple, Result = unknown>(
-	options: CreateWidgetSystemOptions<Plugins, Result>,
+	options: CreateWidgetSystemOptions<Plugins, Result> & WidgetSystemPluginsCheck<Plugins>,
 ): WidgetSystem<Plugins> {
 	assertWidgetSystemOptions(options)
 
@@ -196,17 +229,14 @@ export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple, R
 	}
 
 	const catalog: WidgetCatalog = Object.freeze({
-		widgets: Object.freeze(plugins.map(plugin => Object.freeze({
-			type: plugin.type,
-			description: plugin.description,
-			config: plugin.config,
-			descriptions: Object.freeze({
-				config: plugin.descriptions.config,
-				slots: plugin.descriptions.slots === null
-					? null
-					: createReadonlyMap(plugin.descriptions.slots),
-			}),
-		}))),
+		widgets: Object.freeze(plugins.map((plugin) => {
+			const slots = readWidgetPluginDefinition(plugin).slots
+			return Object.freeze({
+				type: plugin.type,
+				capabilities: plugin.capabilities,
+				slots: slots === null ? null : Object.freeze([...slots.keys()]),
+			})
+		})),
 	})
 
 	const system: WidgetSystem<Plugins> = {

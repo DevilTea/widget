@@ -27,7 +27,7 @@ import type {
 } from '../internal/contract'
 import type { AnyWidgetPlugin, AnyWidgetPluginTuple } from '../plugin'
 import type { WidgetSystem } from '../system'
-import type { WidgetId, WidgetMemberKey } from '../types'
+import type { JsonValue, WidgetId, WidgetMemberKey } from '../types'
 import { EMPTY_DIAGNOSTICS } from '../diagnostic'
 import { MAX_JSON_DEPTH } from '../json'
 import { readWidgetPluginDefinition } from '../plugin'
@@ -294,7 +294,7 @@ function buildNode(
 				// An omitted config is the candidate `null`: required-ness is expressed by the plugin's raw
 				// config type and validator, not by presence.
 				const rawConfigValue = configProperty.found ? configProperty.value : null
-				const { collector, items, close } = createCollector<{ message: string, path?: readonly PropertyKey[], reason?: string }>()
+				const { collector, items, close } = createCollector<{ message: string, path?: readonly PropertyKey[], reason?: string, details?: JsonValue }>()
 				let ok = false
 				try {
 					const rawValidateResult: unknown = definition.config.validate(rawConfigValue, collector)
@@ -321,7 +321,7 @@ function buildNode(
 						items.push({ message: 'Invalid config.' })
 
 					for (const item of items)
-						localDiagnostics.push(configDiagnostic(publicNode as ResolvedBlueprintWidgetNode, item.message, item.path, item.reason))
+						localDiagnostics.push(configDiagnostic(publicNode as ResolvedBlueprintWidgetNode, item.message, item.path, item.reason, item.details))
 
 					const resolved = definition.config.resolve(null)
 					assertSyncValue(resolved, 'config.resolve')

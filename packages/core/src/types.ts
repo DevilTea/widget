@@ -36,12 +36,48 @@ export interface WidgetInterfaces {
 		resolved: Record<any, any>
 	}
 
-	slots?: string
+	/**
+	 * The slots, keyed by name. Each value is what the plugin expects of the slot's children: a union of
+	 * plugin `type` literals, a {@link WidgetContract}, or {@link WidgetChild} (any widget). The expectation is
+	 * type-level only: Core checks nothing at run time, and a plugin that declares one enforces it in
+	 * `validateStructure`. `slots: never` is the explicit-empty spelling.
+	 */
+	slots?: Record<any, WidgetSlotExpectation>
+	state?: Record<any, any>
+	properties?: Record<any, any>
+	methods?: Record<any, (...args: any[]) => any>
+	events?: Record<any, readonly any[]>
+	/**
+	 * The diagnostic reasons the plugin reports, keyed by reason. Each value is the type of the `details`
+	 * a diagnostic with that reason carries (`void` when it carries none); a payload must be a JSON value.
+	 * Not a capability: it has no builder phase and no entry in `plugin.capabilities`.
+	 */
+	reasons?: Record<any, any>
+}
+
+declare const widgetContractShape: unique symbol
+
+/** The members a {@link WidgetContract} expects of a widget. Every section is optional. */
+export interface WidgetContractShape {
 	state?: Record<any, any>
 	properties?: Record<any, any>
 	methods?: Record<any, (...args: any[]) => any>
 	events?: Record<any, readonly any[]>
 }
+
+/**
+ * A structural, type-only expectation of a slot's children: the State, Properties, Methods and Events a
+ * child is expected to have. It has no runtime form, and Core never checks it.
+ */
+export interface WidgetContract<Shape extends WidgetContractShape = WidgetContractShape> {
+	readonly [widgetContractShape]?: Shape
+}
+
+/** The slot expectation that accepts any widget. */
+export type WidgetChild = WidgetContract<Record<never, never>>
+
+/** What a slot may declare about its children; see `WidgetInterfaces['slots']`. */
+export type WidgetSlotExpectation = string | WidgetContract<any>
 
 /**
  * A readonly array that is non-empty when present. Used by every optional `related` collection.
@@ -98,7 +134,11 @@ export type WidgetResolvedConfigOf<Interfaces extends WidgetInterfaces> = Widget
 	? Resolved
 	: never
 
-export type WidgetSlotNameOf<Interfaces extends WidgetInterfaces> = Extract<WidgetCapabilityOf<Interfaces, 'slots'>, WidgetMemberKey>
+/** The declared slots record, or `never` when the capability is absent or explicitly empty (`slots: never`). */
+export type WidgetSlotsOf<Interfaces extends WidgetInterfaces> = WidgetCapabilityOf<Interfaces, 'slots'>
+
+/** The declared diagnostic reasons record, or `never` when `reasons` is not declared. */
+export type WidgetReasonsOf<Interfaces extends WidgetInterfaces> = WidgetCapabilityOf<Interfaces, 'reasons'>
 
 export type WidgetStateOf<Interfaces extends WidgetInterfaces> = WidgetCapabilityOf<Interfaces, 'state'>
 
@@ -118,6 +158,17 @@ export type WidgetEventsOf<Interfaces extends WidgetInterfaces> = WidgetCapabili
 export type WidgetMemberKeysOf<Members> = [Members] extends [never]
 	? never
 	: Extract<keyof Members, WidgetMemberKey>
+
+/** The declared slot names: the keys of the `slots` record. */
+export type WidgetSlotNameOf<Interfaces extends WidgetInterfaces> = WidgetMemberKeysOf<WidgetSlotsOf<Interfaces>>
+
+/** What the slot `Name` expects of its children. */
+export type WidgetSlotExpectedOf<
+	Interfaces extends WidgetInterfaces,
+	Name extends WidgetMemberKey,
+> = WidgetMemberValueOf<WidgetSlotsOf<Interfaces>, Name>
+
+export type WidgetReasonKeyOf<Interfaces extends WidgetInterfaces> = WidgetMemberKeysOf<WidgetReasonsOf<Interfaces>>
 
 export type WidgetStateKeyOf<Interfaces extends WidgetInterfaces> = WidgetMemberKeysOf<WidgetStateOf<Interfaces>>
 
@@ -199,11 +250,29 @@ type EventArgsDomainViolation<Interfaces extends WidgetInterfaces> = WidgetEvent
 				}[keyof Events]
 	: never
 
-type SlotDomainViolation<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'slots'> extends false
-	? never
-	: WidgetMemberKey extends WidgetCapabilityOf<Interfaces, 'slots'>
-		? `'slots' must be a finite union of string literals`
-		: never
+/**
+ * A slot's expectation must be a finite union of plugin `type` literals or a `WidgetContract`; a broad
+ * `string` names no plugin. (Slot names are checked like every other member key.)
+ */
+type SlotDomainViolation<Interfaces extends WidgetInterfaces> = WidgetSlotsOf<Interfaces> extends infer Slots
+	? [Slots] extends [never]
+			? never
+			: true extends { [Name in keyof Slots]-?: IsAny<Slots[Name]> extends true ? true : string extends Slots[Name] ? true : false }[keyof Slots]
+				? `'slots' values must be a finite union of plugin type literals, a WidgetContract or WidgetChild`
+				: never
+	: never
+
+type ReasonsDomainViolation<Interfaces extends WidgetInterfaces> = WidgetReasonsOf<Interfaces> extends infer Reasons
+	? [Reasons] extends [never]
+			? never
+			: {
+					[Reason in keyof Reasons]-?: IsAny<Reasons[Reason]> extends true
+						? '\'reasons\' payloads cannot be any'
+						: [Reasons[Reason]] extends [void]
+								? never
+								: [JsonDomainViolation<Reasons[Reason]>] extends [never] ? never : '\'reasons\' payloads must be JSON values (or void for none)'
+				}[keyof Reasons]
+	: never
 
 type RawConfigDomainViolation<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'config'> extends true
 	? JsonDomainViolation<WidgetRawConfigOf<Interfaces>>
@@ -221,7 +290,10 @@ export type WidgetInterfacesViolationOf<Interfaces extends WidgetInterfaces>
 		| MemberKeyDomainViolation<'methods', WidgetMethodsOf<Interfaces>>
 		| MemberKeyDomainViolation<'events', WidgetEventsOf<Interfaces>>
 		| EventArgsDomainViolation<Interfaces>
+		| MemberKeyDomainViolation<'slots', WidgetSlotsOf<Interfaces>>
 		| SlotDomainViolation<Interfaces>
+		| MemberKeyDomainViolation<'reasons', WidgetReasonsOf<Interfaces>>
+		| ReasonsDomainViolation<Interfaces>
 		| RawConfigDomainViolation<Interfaces>
 		| SyncValueDomainViolation<'state', WidgetStateOf<Interfaces>>
 		| SyncValueDomainViolation<'properties', WidgetPropertiesOf<Interfaces>>

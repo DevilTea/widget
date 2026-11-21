@@ -230,7 +230,7 @@ export function runStructureValidation(
 				for (const item of items) {
 					if (item.index !== undefined)
 						assertSlotIndex(`Slot "${slotName}"'s validateStructure`, 'index', item.index, children.length)
-					finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slotName, item.index, undefined, item.reason))
+					finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slotName, item.index, undefined, item.reason, item.details))
 				}
 			}
 		}
@@ -263,7 +263,7 @@ export function runStructureValidation(
 				else if (index !== undefined) {
 					throw structureLocationViolation(scope, 'index', 'has no slot to be an index of')
 				}
-				finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slot, index, undefined, item.reason))
+				finalDiagnostics.push(structureDiagnostic(publicNode, item.message, slot, index, undefined, item.reason, item.details))
 			}
 		}
 	}
@@ -299,6 +299,7 @@ export function runStructureValidation(
 				location.type === 'slot-child' ? location.index : undefined,
 				normalizeRelated(nodes, semanticOrderIndex, compileFacade.resolveNodeId, related),
 				item.reason,
+				item.details,
 			))
 		}
 	}
