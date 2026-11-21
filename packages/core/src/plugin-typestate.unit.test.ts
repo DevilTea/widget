@@ -504,18 +504,15 @@ describe('events capability typestate and tuple contract', () => {
 			.interfaces<EventInterfaces>()
 		// Never called: the lists below are type errors, and some of them also throw.
 		const typeOnly = () => {
+			const phase = beforeEvents()
 			// @ts-expect-error 'change' is missing
-			beforeEvents()
-				.events(['press'])
+			phase.events(['press'])
 			// @ts-expect-error an empty list misses both
-			beforeEvents()
-				.events([])
+			phase.events([])
 			// @ts-expect-error 'tap' is not a declared Event
-			beforeEvents()
-				.events(['press', 'change', 'tap'])
+			phase.events(['press', 'change', 'tap'])
 			// @ts-expect-error the phase takes the list of names, not a build callback
-			beforeEvents()
-				.events(() => ['press', 'change'])
+			phase.events(() => ['press', 'change'])
 		}
 		expect(typeOnly)
 			.toBeTypeOf('function')
