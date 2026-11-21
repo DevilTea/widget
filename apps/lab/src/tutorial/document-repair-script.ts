@@ -54,8 +54,8 @@ export const documentRepairTourScript: TutorialScript = {
 			target: 'repair-draft-v1',
 			onEnter: actions => actions.setFocus('draft-v1', { type: 'property', name: 'findings' }),
 			stages: [{
-				prompt: 'Open the "Stored draft, as Core sees it" details of the draft saved with 1.x, and read its diagnostics and nodes.',
-				reveal: 'The findings Property compiles the stored source with the notice board System, and the page lists what Core reported: each diagnostic has a code and the path of its node inside the source, from blueprint.getSourcePath(node), which is also a valid SourcePatch path. The old slot "items" is a raw-slot placement: Core keeps its children as recovered nodes, but they stay invalid. The Banner nodes are unresolved (unknown type), and they keep their id and type as hints; the one without an id has no hint at all.',
+				prompt: 'Open the "The stored draft, as Core sees it" details of the draft saved with 1.x, and read its diagnostics and nodes.',
+				reveal: 'The findings Property compiles the stored source with the notice board System, and the page lists what Core reported: each diagnostic has a code and the path of its node inside the source, from blueprint.getSourcePath(node), which is also a valid SourcePatch path. The old slot "items" is a raw-slot placement: Core keeps its children as recovered nodes, but they stay invalid. The Banner nodes are unresolved (unknown type), and they keep their id and type as hints; the one without an id has only its type as a hint.',
 			}],
 			links: [
 				{ id: 'see-findings', label: 'See findings in Selected widget', run: (actions) => {
@@ -73,7 +73,7 @@ export const documentRepairTourScript: TutorialScript = {
 			stages: [{
 				prompt: 'Press "Open in the app" on the draft saved with 1.x.',
 				isComplete: reader => numberOf(reader.readState('draft-v1', 'revision')) >= 0,
-				reveal: 'The app called createWidgetDocument with a structuredClone of the stored source: the document is at revision 0, and the page says the stored draft is untouched. Core keeps the source it is given by reference and shares untouched parts with every later revision, so a host that wants its stored copy unchanged hands over a copy. The draft\'s State revision, appRevision and repaired mirror the session: Selected widget and Runtime show them.',
+				reveal: 'The app called createWidgetDocument with a structuredClone of the stored source: the document is at revision 0. Core never mutates a source, but it keeps the object it is given by reference as revision 0, and every later revision shares its untouched parts, so an object that is changed after it was handed over would corrupt every revision. The stored draft is the app\'s own model and the app may keep editing it, so the host hands over a copy and the two share nothing. The draft\'s State revision, appRevision and repaired mirror the session: Selected widget and Runtime show them.',
 			}],
 			links: [
 				{ id: 'see-session-state', label: 'See the draft State in Selected widget', run: (actions) => {
@@ -106,7 +106,7 @@ export const documentRepairTourScript: TutorialScript = {
 			stages: [{
 				prompt: 'Press "Apply next step" once.',
 				isComplete: reader => numberOf(reader.readState('draft-v1', 'revision')) >= 1,
-				reveal: 'The app called applyPatch(step.patch, { expectedRevision: 0 }) and Core answered { ok: true, changed: true }: revision 1. The document listener, which hears every commit as (snapshot, { previous, patch }), logged it with its number of operations. The app then read the new snapshot and planned again, so the diagnostics and the plan changed: the slot is "notices" now and the plan has one step fewer. Patches are copy-on-write, so the stored draft is still what it was.',
+				reveal: 'The app called applyPatch(step.patch, { expectedRevision: 0 }) and Core answered { ok: true, changed: true }: revision 1. The document listener, which hears every commit as (snapshot, { previous, patch }), logged it with its number of operations. The app then read the new snapshot and planned again, so the diagnostics and the plan changed: the slot is "notices" now and the plan has one step fewer. applyPatch is copy-on-write: Core built revision 1 and left revision 0 as it was, and the document is a copy of the stored draft anyway.',
 			}],
 		},
 		{

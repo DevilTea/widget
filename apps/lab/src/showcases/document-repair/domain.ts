@@ -12,6 +12,7 @@
  */
 
 import type { SourcePatch, SourcePatchOperation } from '@deviltea/widget-core'
+import { isJsonValue } from '@deviltea/widget-core'
 
 // -------------------------------------------------------------------------------------------------
 // Text
@@ -217,10 +218,11 @@ export function migrateNoticeConfig(config: unknown): unknown {
  * - `3.x`: the current format, nothing to repair.
  *
  * Anything the application has no rule for (an unknown type such as `Poll`, say) gets no step: the repaired document is
- * still invalid, and Core still creates no Runtime for it.
+ * still invalid, and Core still creates no Runtime for it. A source that is not JSON has no step either: a patch operand must
+ * be a JSON value, and Core would refuse every step with `json-incompatible-value`, so planning it would never converge.
  */
 export function planRepair(source: unknown, savedWith: SavedWith): readonly RepairStep[] {
-	if (savedWith === '3.x' || !isRecord(source) || !isRecord(source.slots))
+	if (savedWith === '3.x' || !isJsonValue(source) || !isRecord(source) || !isRecord(source.slots))
 		return []
 	const slots = source.slots
 	const legacy = savedWith === '1.x'
@@ -322,7 +324,11 @@ export function planRepair(source: unknown, savedWith: SavedWith): readonly Repa
 						counter++
 					const id = `notice-${counter}`
 					everyId.add(id)
-					const next: Record<string, unknown> = { id, type: 'Notice', config: migrateNoticeConfig(child.node.config) }
+					// A legacy notice without a `config` gets none: there is nothing to carry over and the application does not invent
+					// a headline, a text or a date, so the notice stays invalid (and has an id now, so no step plans it again).
+					const next: Record<string, unknown> = { id, type: 'Notice' }
+					if (child.node.config !== undefined)
+						next.config = migrateNoticeConfig(child.node.config)
 					if (isRecord(child.node.meta) || child.node.style !== undefined)
 						next.meta = { ...(isRecord(child.node.meta) ? child.node.meta : {}), ...(child.node.style === undefined ? {} : { style: child.node.style }) }
 					return [guard(at(child.index), child.node), { op: 'replace', path: at(child.index), value: next as never }]

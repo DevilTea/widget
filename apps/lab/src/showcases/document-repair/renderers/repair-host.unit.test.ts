@@ -6,8 +6,9 @@
 
 import type { RepairStep } from '../domain'
 import { describe, expect, it } from 'vitest'
+import { planRepair } from '../domain'
 import { legacyPoll, legacyV1, legacyV3 } from '../fixtures'
-import { createRepairRuntime, widgetsOf } from '../test-support'
+import { createRepairRuntime, valueOf, widgetsOf } from '../test-support'
 import { createRepairHost, MAX_LOG, otherEditorPatch } from './repair-host'
 
 function setup() {
@@ -26,13 +27,13 @@ function view(host: ReturnType<typeof setup>['host'], id: string) {
 }
 
 describe('open', () => {
-	it('opens a session on a copy: revision 0, the plan computed from the snapshot, the stored draft untouched', () => {
+	it('opens a session: revision 0 and the plan computed from the snapshot', () => {
 		const { host, widgets } = setup()
 		expect(host.open('draft-v1'))
 			.toBe(true)
 		const session = view(host, 'draft-v1')
 		expect(session)
-			.toMatchObject({ revision: 0, appRevision: 0, status: 'invalid', stale: false, storedUntouched: true, preview: null, exported: null, lastOutcome: null, log: [] })
+			.toMatchObject({ revision: 0, appRevision: 0, status: 'invalid', stale: false, preview: null, exported: null, lastOutcome: null, log: [] })
 		expect(session.plan.map(step => step.id))
 			.toEqual(['rename-slot', 'rename-type', 'rename-config-text', 'move-style', 'fix-duplicate-ids', 'rewrite-no-id'])
 		expect(session.findings.diagnostics.map(diagnostic => diagnostic.code))
@@ -65,6 +66,57 @@ describe('open', () => {
 	})
 })
 
+describe('ownership of the stored draft', () => {
+	it('hands Core a copy: changing the stored draft object after open() changes neither the document nor what the app plans from it', () => {
+		const { host, runtime } = setup()
+		const widget = runtime.getWidget('draft-v1')
+		if (widget?.type !== 'SavedDraft')
+			throw new Error('no draft-v1')
+		// The application's own model of the stored draft is the very object the Property hands out (it is the Blueprint's config,
+		// and it stays editable). Core retains the object it is given by reference, as revision 0, so handing it over would make
+		// this edit part of every revision.
+		const stored = valueOf(widget.properties.source.get()) as { config: { title: { en: string } }, slots: { items: { id?: string, type: string }[] } }
+		host.open('draft-v1')
+		const pristinePlan = planRepair(legacyV1, '1.x')
+		const pristineDiagnostics = view(host, 'draft-v1').findings.diagnostics.length
+
+		stored.slots.items.splice(1)
+		stored.slots.items[0]!.type = 'Mutated'
+		stored.config.title.en = 'Edited in the app'
+
+		// Re-reading plans from, and compiles, Core's current snapshot: it must not have seen the edit.
+		host.reread('draft-v1')
+		const session = view(host, 'draft-v1')
+		expect(session.plan)
+			.toEqual(pristinePlan)
+		expect(session.findings.diagnostics.length)
+			.toBe(pristineDiagnostics)
+		for (let count = 0; count < 6; count++)
+			host.applyNext('draft-v1')
+		host.exportJson('draft-v1')
+		const exported = view(host, 'draft-v1').exported!
+		expect(view(host, 'draft-v1').status)
+			.toBe('valid')
+		expect(exported)
+			.not
+			.toContain('Mutated')
+		expect(exported)
+			.not
+			.toContain('Edited in the app')
+		expect(JSON.parse(exported).slots.notices)
+			.toHaveLength(4)
+	})
+
+	it('is the stored draft itself that the host never writes: it is unchanged after a whole repair', () => {
+		const { host, widgets } = setup()
+		host.open('draft-v1')
+		for (let count = 0; count < 6; count++)
+			host.applyNext('draft-v1')
+		expect(JSON.stringify(valueOf(widgets.v1.properties.source.get())))
+			.toBe(JSON.stringify(legacyV1))
+	})
+})
+
 describe('apply next step', () => {
 	it('applies the first step with the revision it was planned at, reads the new snapshot and plans again', () => {
 		const { host, widgets } = setup()
@@ -88,7 +140,7 @@ describe('apply next step', () => {
 			.toBeNull()
 	})
 
-	it('repairs v1 step by step to a valid document, the stored draft untouched all along', () => {
+	it('repairs v1 step by step to a valid document, and the stored draft is what it was', () => {
 		const { host, widgets } = setup()
 		host.open('draft-v1')
 		const before = JSON.stringify(legacyV1)
@@ -98,7 +150,7 @@ describe('apply next step', () => {
 		}
 		const session = view(host, 'draft-v1')
 		expect(session)
-			.toMatchObject({ revision: 6, status: 'valid', plan: [], storedUntouched: true })
+			.toMatchObject({ revision: 6, status: 'valid', plan: [] })
 		expect(host.applyNext('draft-v1'))
 			.toBeNull()
 		expect(widgets.v1.state.repaired.get())
@@ -249,14 +301,12 @@ describe('preview and export', () => {
 			.toEqual(['unknown-widget-type'])
 	})
 
-	it('exports the document\'s current source as JSON text, and the stored draft is still what it was', () => {
+	it('exports the document\'s current source as JSON text', () => {
 		const { host } = setup()
 		host.open('draft-v2')
 		host.applyNext('draft-v2')
 		host.exportJson('draft-v2')
-		const { exported, storedUntouched } = view(host, 'draft-v2')
-		expect(storedUntouched)
-			.toBe(true)
+		const { exported } = view(host, 'draft-v2')
 		expect(JSON.parse(exported!).slots.notices[0].config.until)
 			.toBe('2026-12-31')
 		host.otherEditorSaves('draft-v2')

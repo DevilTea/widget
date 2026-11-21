@@ -4,10 +4,12 @@
  * the renderers below it.
  *
  * **The host plays the notice-board application.** For each draft it can open an editing session:
- * - **Open in the app**: `createWidgetDocument({ system: boardSystem, source: structuredClone(stored) })`. Core retains the
- *   source it is given by reference and never mutates it, but patches share untouched subtrees with the input, so the host
- *   hands over a copy: the stored draft (the `SavedDraft` config) is untouched by everything below, and the session says so
- *   by comparing it with the text it had when the session opened.
+ * - **Open in the app**: `createWidgetDocument({ system: boardSystem, source: structuredClone(stored) })`. Core never mutates a
+ *   source (`applyPatch` is copy-on-write), but it retains the object it is given by reference, as revision 0, and every later
+ *   revision shares its untouched parts. The stored draft (the `SavedDraft` config) is the application's own model, which it may
+ *   keep editing, and an object that is changed after it was handed to Core corrupts every revision. So the host hands over a
+ *   copy: the document and the stored draft share nothing (`repair-host.unit.test.ts` mutates the stored object after
+ *   `open()` and asserts that the document does not move).
  * - **The plan** is `planRepair(snapshot.blueprint.source, savedWith)` (`../domain.ts`), computed from the snapshot the app
  *   last read (`appRevision`). It is the application's policy; Core knows nothing of versions or migrations.
  * - **Apply next step**: `document.applyPatch(step.patch, { expectedRevision: appRevision })`. The host reports `{ ok, changed }`
@@ -69,8 +71,6 @@ export interface SessionView {
 	readonly stale: boolean
 	readonly lastOutcome: Outcome | null
 	readonly log: readonly LogEntry[]
-	/** The stored draft is exactly the text it was when the session opened. */
-	readonly storedUntouched: boolean
 	/** A Runtime of the notice board system created from the valid document, or `null`. */
 	readonly preview: BoardRuntime | null
 	/** The repaired source as JSON text once exported, or `null`. */
@@ -101,7 +101,7 @@ export interface RepairHost {
 	readonly sessions: Readonly<Ref<ReadonlyMap<string, SessionView>>>
 	readonly status: Readonly<Ref<StatusNote | null>>
 	readonly alert: Readonly<Ref<AlertNote | null>>
-	/** Opens an editing session on a copy of the stored draft; `false` when there is no such draft or it is already open. */
+	/** Opens an editing session on a copy of the stored draft (the document shares nothing with it); `false` when there is no such draft or it is already open. */
 	open: (draftId: string) => boolean
 	/** Applies the first step of the app's plan with the revision it was planned at. `null` when there is no session or no step. */
 	applyNext: (draftId: string) => Outcome | null
@@ -115,7 +115,7 @@ export interface RepairHost {
 	preview: (draftId: string) => boolean
 	closePreview: (draftId: string) => void
 	exportJson: (draftId: string) => void
-	/** Ends the session: unsubscribes and disposes the preview. The stored draft was never changed. */
+	/** Ends the session: unsubscribes and disposes the preview. The host never writes the stored draft. */
 	close: (draftId: string) => void
 	/** Closes every session and clears the page's messages. */
 	resetAll: () => void
@@ -134,7 +134,6 @@ export const MAX_LOG = 30
 interface Session {
 	readonly draftId: string
 	readonly savedWith: SavedWith
-	readonly storedText: string
 	readonly document: WidgetDocument<BoardPlugins>
 	unsubscribe: () => void
 	appRevision: number
@@ -199,7 +198,6 @@ export function createRepairHost(runtime: RepairRuntime): RepairHostHandle {
 
 	function viewOf(session: Session): SessionView {
 		const snapshot = session.document.getSnapshot()
-		const stored = readDraft(session.draftId)
 		return {
 			draftId: session.draftId,
 			savedWith: session.savedWith,
@@ -211,7 +209,6 @@ export function createRepairHost(runtime: RepairRuntime): RepairHostHandle {
 			stale: session.appRevision !== snapshot.revision,
 			lastOutcome: session.lastOutcome,
 			log: session.log,
-			storedUntouched: stored !== null && JSON.stringify(stored.source) === session.storedText,
 			preview: session.preview,
 			exported: session.exported,
 		}
@@ -276,7 +273,6 @@ export function createRepairHost(runtime: RepairRuntime): RepairHostHandle {
 		const session: Session = {
 			draftId,
 			savedWith: draft.savedWith,
-			storedText: JSON.stringify(draft.source),
 			document,
 			unsubscribe: () => {},
 			appRevision: 0,

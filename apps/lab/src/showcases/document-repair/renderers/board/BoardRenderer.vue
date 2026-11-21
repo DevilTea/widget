@@ -19,9 +19,9 @@ const { text } = useRepairText()
 		class="board"
 		data-testid="repair-board"
 	>
-		<h4 class="board-title">
+		<h6 class="board-title">
 			{{ title === null ? widgetId : text(title) }}
-		</h4>
+		</h6>
 		<ul class="board-notices">
 			<WidgetSlot name="notices">
 				<template #default="{ Child }">

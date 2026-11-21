@@ -6,6 +6,7 @@
  */
 
 import type { VueWrapper } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
 import { legacyV1 } from '../fixtures'
@@ -88,7 +89,7 @@ describe('the desk', () => {
 })
 
 describe('repairing the v1 draft by clicks', () => {
-	it('opens it, applies every step, and previews and exports the repaired board while the stored draft stays untouched', async () => {
+	it('opens it, applies every step, and previews and exports the repaired board', async () => {
 		const { wrapper } = await setup()
 		await click(wrapper, 'repair-open-draft-v1')
 		expect(text(wrapper, 'repair-revision-draft-v1'))
@@ -135,9 +136,6 @@ describe('repairing the v1 draft by clicks', () => {
 		const exported = JSON.parse(text(wrapper, 'repair-export-text-draft-v1'))
 		expect(exported.slots.notices)
 			.toHaveLength(4)
-		expect(wrapper.get('[data-testid="repair-stored-draft-v1"]')
-			.attributes('data-untouched'))
-			.toBe('true')
 		wrapper.unmount()
 	})
 
@@ -267,6 +265,105 @@ describe('close, reset and unmount', () => {
 			.toHaveLength(0)
 		expect(text(wrapper, 'repair-status'))
 			.toBe('Every draft is closed.')
+		wrapper.unmount()
+	})
+})
+
+describe('keyboard focus', () => {
+	const active = (): string | null => document.activeElement?.getAttribute('data-testid') ?? null
+
+	it('goes to the session heading when a draft is opened and back to "Open in the app" when it is closed', async () => {
+		const { wrapper } = await setup({ attachTo: document.body })
+		await click(wrapper, 'repair-open-draft-v1')
+		await flushPromises()
+		expect(active())
+			.toBe('repair-session-heading-draft-v1')
+		await click(wrapper, 'repair-close-draft-v1')
+		await flushPromises()
+		expect(active())
+			.toBe('repair-open-draft-v1')
+		wrapper.unmount()
+	})
+
+	it('goes to "Preview the repaired board" when the last step disables "Apply next step", and back there when the preview is closed', async () => {
+		const { wrapper } = await setup({ attachTo: document.body })
+		await click(wrapper, 'repair-open-draft-v1')
+		for (let count = 0; count < 5; count++) {
+			await click(wrapper, 'repair-apply-draft-v1')
+			await flushPromises()
+			expect(wrapper.get('[data-testid="repair-apply-draft-v1"]')
+				.attributes('disabled'))
+				.toBeUndefined()
+		}
+		await click(wrapper, 'repair-apply-draft-v1')
+		await flushPromises()
+		expect(wrapper.get('[data-testid="repair-apply-draft-v1"]')
+			.attributes('disabled'))
+			.toBeDefined()
+		expect(active())
+			.toBe('repair-preview-draft-v1')
+		await click(wrapper, 'repair-preview-draft-v1')
+		await click(wrapper, 'repair-preview-close-draft-v1')
+		await flushPromises()
+		expect(active())
+			.toBe('repair-preview-draft-v1')
+		wrapper.unmount()
+	})
+
+	it('goes to "Re-read and re-plan" when the last step of a draft that stays invalid is applied', async () => {
+		const { wrapper } = await setup({ attachTo: document.body })
+		await click(wrapper, 'repair-open-draft-poll')
+		await click(wrapper, 'repair-apply-draft-poll')
+		await flushPromises()
+		expect(wrapper.get('[data-testid="repair-apply-draft-poll"]')
+			.attributes('disabled'))
+			.toBeDefined()
+		expect(active())
+			.toBe('repair-reread-draft-poll')
+		wrapper.unmount()
+	})
+
+	it('stays on "Apply next step" while there are steps left', async () => {
+		const { wrapper } = await setup({ attachTo: document.body })
+		await click(wrapper, 'repair-open-draft-v1')
+		const apply = wrapper.get('[data-testid="repair-apply-draft-v1"]').element as HTMLElement
+		apply.focus()
+		await click(wrapper, 'repair-apply-draft-v1')
+		await flushPromises()
+		expect(document.activeElement)
+			.toBe(apply)
+		wrapper.unmount()
+	})
+})
+
+describe('heading hierarchy', () => {
+	it('never skips a level, from the desk title down to the board title of the repaired preview', async () => {
+		const { wrapper } = await setup()
+		await click(wrapper, 'repair-open-draft-v3')
+		await click(wrapper, 'repair-preview-draft-v3')
+		await click(wrapper, 'repair-export-draft-v3')
+		const levels = wrapper.findAll('h1, h2, h3, h4, h5, h6')
+			.map(heading => Number(heading.element.tagName.slice(1)))
+		expect(levels[0])
+			.toBe(1)
+		for (let index = 1; index < levels.length; index++) {
+			expect(levels[index]! - levels[index - 1]!, `heading ${index}`)
+				.toBeLessThanOrEqual(1)
+		}
+		expect(levels.filter(level => level === 1))
+			.toHaveLength(1)
+		// The desk title, the "Saved drafts" list, a draft, its session and a session block, then the board's own title.
+		expect(new Set(levels))
+			.toEqual(new Set([1, 2, 3, 4, 5, 6]))
+		const titleOf = (selector: string): number => Number(wrapper.get(selector).element.tagName.slice(1))
+		expect(titleOf('.repair-drafts-title'))
+			.toBeLessThan(titleOf('.draft-title'))
+		expect(titleOf('.draft-title'))
+			.toBeLessThan(titleOf('.session-heading'))
+		expect(titleOf('.session-heading'))
+			.toBeLessThan(titleOf('.session-block-title'))
+		expect(titleOf('.session-block-title'))
+			.toBeLessThan(titleOf('.board-title'))
 		wrapper.unmount()
 	})
 })

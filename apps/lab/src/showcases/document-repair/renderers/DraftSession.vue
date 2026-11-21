@@ -9,10 +9,11 @@
  * is refused by Core, which is what the visitor sees.
  */
 import type { Outcome, SessionView } from './repair-host'
-import { computed, inject } from 'vue'
+import { computed, inject, ref } from 'vue'
 import { BoardWidgetRenderer } from './board'
 import { BUTTON_STYLE, PRIMARY_BUTTON_STYLE } from './control-style'
 import DiagnosticList from './DiagnosticList.vue'
+import { focusWhenRendered } from './focus'
 import PlanList from './PlanList.vue'
 import { RepairHostKey } from './repair-host'
 import { useRepairText } from './use-repair-text'
@@ -21,6 +22,8 @@ const props = defineProps<{ session: SessionView }>()
 
 const host = inject(RepairHostKey, null)
 const { t, tf } = useRepairText()
+
+const root = ref<HTMLElement | null>(null)
 
 const id = computed(() => props.session.draftId)
 const hasStep = computed(() => props.session.plan.length > 0)
@@ -47,6 +50,26 @@ const noChange = computed(() => {
 	return outcome?.kind === 'applied' && !outcome.changed
 })
 
+/** The control with this test id inside this session. */
+function control(testId: string): HTMLElement | null {
+	return root.value?.querySelector<HTMLElement>(`[data-testid="${testId}"]`) ?? null
+}
+
+/**
+ * "Apply next step" disables itself when the last step is applied, and a disabled button cannot keep the focus: it goes to
+ * the control the visitor needs next (the preview once the document is valid, else the re-read button).
+ */
+function onApply(): void {
+	host?.applyNext(id.value)
+	void focusWhenRendered(() => props.session.plan.length === 0 ? control(valid.value ? `repair-preview-${id.value}` : `repair-reread-${id.value}`) : null)
+}
+
+/** "Close preview" removes itself: the focus goes back to the button that opened the preview. */
+function onClosePreview(): void {
+	host?.closePreview(id.value)
+	void focusWhenRendered(() => control(`repair-preview-${id.value}`))
+}
+
 function by(writer: 'app' | 'other-editor'): string {
 	return writer === 'app' ? t('byApp') : t('byOther')
 }
@@ -54,12 +77,17 @@ function by(writer: 'app' | 'other-editor'): string {
 
 <template>
 	<div
+		ref="root"
 		class="session"
 		:data-testid="`repair-session-${id}`"
 	>
-		<h3 class="session-heading">
+		<h4
+			tabindex="-1"
+			class="session-heading"
+			:data-testid="`repair-session-heading-${id}`"
+		>
 			{{ t('sessionHeading') }}
-		</h3>
+		</h4>
 
 		<dl class="session-facts">
 			<div class="session-fact">
@@ -106,7 +134,7 @@ function by(writer: 'app' | 'other-editor'): string {
 				:style="PRIMARY_BUTTON_STYLE"
 				:disabled="!hasStep"
 				:data-testid="`repair-apply-${id}`"
-				@click="host?.applyNext(id)"
+				@click="onApply"
 			>
 				{{ hasStep ? t('applyNext') : t('noStepsLeft') }}
 			</button>
@@ -136,9 +164,9 @@ function by(writer: 'app' | 'other-editor'): string {
 			class="session-block"
 			data-tutorial-target="repair-result"
 		>
-			<h4 class="session-block-title">
+			<h5 class="session-block-title">
 				{{ t('resultHeading') }}
-			</h4>
+			</h5>
 			<p
 				class="session-result"
 				:data-testid="`repair-result-${id}`"
@@ -167,9 +195,9 @@ function by(writer: 'app' | 'other-editor'): string {
 			class="session-block"
 			data-tutorial-target="repair-diagnostics"
 		>
-			<h4 class="session-block-title">
+			<h5 class="session-block-title">
 				{{ t('diagnosticsHeading') }}
-			</h4>
+			</h5>
 			<DiagnosticList :diagnostics="session.findings.diagnostics" />
 		</section>
 
@@ -177,9 +205,9 @@ function by(writer: 'app' | 'other-editor'): string {
 			class="session-block"
 			data-tutorial-target="repair-plan"
 		>
-			<h4 class="session-block-title">
+			<h5 class="session-block-title">
 				{{ t('planHeading') }}
-			</h4>
+			</h5>
 			<p class="session-note">
 				{{ tf('planNote', { version: session.savedWith, revision: session.appRevision }) }}
 			</p>
@@ -193,9 +221,9 @@ function by(writer: 'app' | 'other-editor'): string {
 			class="session-block"
 			data-tutorial-target="repair-log"
 		>
-			<h4 class="session-block-title">
+			<h5 class="session-block-title">
 				{{ t('logHeading') }}
-			</h4>
+			</h5>
 			<p
 				v-if="session.log.length === 0"
 				class="session-note"
@@ -219,15 +247,6 @@ function by(writer: 'app' | 'other-editor'): string {
 				</li>
 			</ol>
 		</section>
-
-		<p
-			class="session-stored"
-			:class="{ 'session-stored--changed': !session.storedUntouched }"
-			:data-testid="`repair-stored-${id}`"
-			:data-untouched="session.storedUntouched"
-		>
-			{{ session.storedUntouched ? t('storedUntouched') : t('storedChanged') }}
-		</p>
 
 		<section
 			v-if="valid"
@@ -253,7 +272,7 @@ function by(writer: 'app' | 'other-editor'): string {
 					class="repair-button"
 					:style="BUTTON_STYLE"
 					:data-testid="`repair-preview-close-${id}`"
-					@click="host?.closePreview(id)"
+					@click="onClosePreview"
 				>
 					{{ t('closePreview') }}
 				</button>
@@ -272,18 +291,18 @@ function by(writer: 'app' | 'other-editor'): string {
 				class="session-preview"
 				:data-testid="`repair-board-${id}`"
 			>
-				<h4 class="session-block-title">
+				<h5 class="session-block-title">
 					{{ t('previewHeading') }}
-				</h4>
+				</h5>
 				<BoardWidgetRenderer :runtime="session.preview" />
 			</div>
 			<div
 				v-if="session.exported !== null"
 				class="session-export"
 			>
-				<h4 class="session-block-title">
+				<h5 class="session-block-title">
 					{{ t('exportHeading') }}
-				</h4>
+				</h5>
 				<pre
 					class="session-json"
 					tabindex="0"
@@ -393,13 +412,11 @@ function by(writer: 'app' | 'other-editor'): string {
 .session-note,
 .session-valid,
 .session-result,
-.session-result-detail,
-.session-stored {
+.session-result-detail {
 	margin: 0;
 }
 
-.session-note,
-.session-stored {
+.session-note {
 	font-size: 13px;
 	color: var(--repair-text-muted);
 }
@@ -408,8 +425,9 @@ function by(writer: 'app' | 'other-editor'): string {
 	color: var(--repair-ok);
 }
 
-.session-stored--changed {
-	color: var(--repair-danger);
+.session-heading:focus-visible {
+	outline: 2px solid var(--repair-accent);
+	outline-offset: 2px;
 }
 
 .session-result {

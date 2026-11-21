@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { repairMessages } from '../showcases/document-repair/messages'
+import { ALERT_MESSAGE_KEYS, repairMessages } from '../showcases/document-repair/messages'
 import { repairPresets } from '../showcases/document-repair/presets'
 import { documentRepairTourScript } from '../tutorial/document-repair-script'
 import { zhTWDocumentRepairMessages } from './document-repair-messages'
@@ -51,6 +51,31 @@ describe('document repair Examples menu text', () => {
 		expect(Object.keys(zhTWDocumentRepairMessages)
 			.filter(source => !used.has(source)))
 			.toEqual([])
+	})
+})
+
+describe('the messages that explain a refused patch', () => {
+	it('map every Core failure code the page knows (reentrant-apply included) to a message in both locales', () => {
+		for (const code of ['document-revision-conflict', 'reentrant-apply', 'test-failed', 'path-not-found', 'invalid-operation']) {
+			expect(Object.hasOwn(ALERT_MESSAGE_KEYS, code), code)
+				.toBe(true)
+		}
+		for (const [code, key] of Object.entries(ALERT_MESSAGE_KEYS)) {
+			expect(repairMessages.en[key], code)
+				.toBeTruthy()
+			expect(repairMessages['zh-TW'][key], code)
+				.toBeTruthy()
+		}
+	})
+
+	it('has no message that nothing uses', () => {
+		const used = new Set<string>(Object.values(ALERT_MESSAGE_KEYS))
+		expect(used.has('alertConflict'))
+			.toBe(true)
+		expect(Object.hasOwn(repairMessages.en, 'alertGeneric'))
+			.toBe(false)
+		expect(Object.hasOwn(repairMessages.en, 'storedUntouched'))
+			.toBe(false)
 	})
 })
 

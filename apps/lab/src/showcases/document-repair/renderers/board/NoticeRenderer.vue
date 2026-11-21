@@ -18,10 +18,10 @@ const { t, tf, date } = useRepairText()
 		:class="`notice--${tone ?? 'info'}`"
 		:data-testid="`repair-notice-${widgetId}`"
 	>
-		<h5 class="notice-title">
+		<p class="notice-title">
 			<span class="notice-tone">{{ tone === 'warning' ? t('toneWarning') : t('toneInfo') }}</span>
 			{{ title }}
-		</h5>
+		</p>
 		<p class="notice-body">
 			{{ body }}
 		</p>
@@ -47,6 +47,7 @@ const { t, tf, date } = useRepairText()
 .notice-title {
 	margin: 0 0 4px;
 	font-size: 15px;
+	font-weight: 600;
 }
 
 .notice-tone {

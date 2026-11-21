@@ -351,9 +351,11 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       `until` is a config diagnostic); `3.x`: no step. The `draft-poll` fixture (saved with `2.x`) has a `Poll` the application has no rule for: after its
       one step it is still invalid and Core creates no Runtime for it (all-or-nothing validity, no quarantine, no partial Runtime).
     - **The editing session at the host** (`renderers/repair-host.ts`, created per desk Runtime by `DocumentRepairRenderer` in `renderers/index.ts` and provided
-      through `RepairHostKey`). "Open in the app" is `createWidgetDocument({ system: boardSystem, source: structuredClone(stored) })` (Core retains the
-      source by reference and patches share untouched subtrees with it, so the host hands over a copy; the page says the stored draft is untouched by
-      comparing it with the text it had at open). The plan is computed from the snapshot the app last read (`appRevision`); "Apply next step" is
+      through `RepairHostKey`). "Open in the app" is `createWidgetDocument({ system: boardSystem, source: structuredClone(stored) })` (Core never mutates a source,
+      since `applyPatch` is copy-on-write, but it retains the object it is given by reference as revision 0 and every later revision shares its untouched parts. The
+      stored draft is the application's own model and may keep being edited, and an object changed after it was handed to Core corrupts every revision, so the host
+      hands over a copy and the two share nothing; `renderers/repair-host.unit.test.ts` mutates the stored object after `open()` and asserts that the document and the plan
+      do not move, and that test fails without the `structuredClone`). The plan is computed from the snapshot the app last read (`appRevision`); "Apply next step" is
       `applyPatch(step.patch, { expectedRevision: appRevision })`, shown as `{ ok, changed }` or as `failure.code` with `operationIndex` (a `changed: false` no-op leaves the
       revision alone and notifies nobody); a document listener logs every commit `(snapshot, { previous, patch })` (previous to new revision, number of
       operations, who saved it) and is read after `applyPatch` returns, never from inside the listener. "Another editor saves" applies a small valid edit
@@ -369,7 +371,11 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       drafts' board content is the stored document's own text. The page explains a refused patch in the viewer's language from Core's failure `code`
       (`ALERT_MESSAGE_KEYS`) and shows the `code`, the operation index and Core's English `message` untranslated. No `allowed-packages.json`: it needs only Vue and Widget.
     - **Announcements:** one `role="alert"` at a time (the latest refused patch, owned by the host and shown by the root renderer; a success or a re-read clears it)
-      and one `role="status"` (what the last action did); buttons are at least 24px high with a visible focus ring; no `aria-live` is used.
+      and one `role="status"` (what the last action did); buttons are at least 24px high with a visible focus ring; no `aria-live` is used. Focus is moved by hand
+      when a control removes or disables itself (`renderers/focus.ts`, the pattern of the onboarding showcase): opening a draft focuses the session heading and closing it
+      focuses "Open in the app", applying the last step focuses "Preview the repaired board" (or "Re-read and re-plan" while the document stays invalid) and closing the
+      preview focuses the button that opened it. The headings never skip a level: the desk title `h1`, "Saved drafts" `h2`, a draft `h3`, its session `h4`, a session block `h5`
+      and the preview board's title `h6`.
     - **Tests:** the plan against real Core (`domain.unit.test.ts`: every step applies to its fixture, v1 and v2 end valid, v3 has no step, the poll draft stays invalid,
       guards fail atomically), the Properties against real Runtimes (`plugins/saved-draft.unit.test.ts`), the host against real Documents
       (`renderers/repair-host.unit.test.ts`), renderers with a plain-ref `ShowcaseHost` (`renderers/test-harness.ts`, `renderers/repair-renderers.unit.test.ts`), `presets.unit.test.ts`
@@ -381,8 +387,10 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       catches up, the document is valid, the poll draft took its step); the steps whose "do" leaves nothing behind (reading the plan, previewing) are narrated.
     - Known limits: nothing is persisted and nothing is migrated by Core, by design; the stored drafts are fixtures, so the Lab's own Apply on the desk replaces the desk (and
       its sessions), not a stored document; the plan is one fixed policy, so a stored shape outside it is not repaired; `fix-duplicate-ids` keeps the first node and renames the later ones;
-      "Another editor" is simulated by the host, in the same realm, not by a second client; structured `'-'` append is not used and widgets are never patched by id (the paths are structural,
-      found through `getSourcePath`).
+      "Another editor" is simulated by the host, in the same realm, not by a second client; structured `'-'` append is not used and widgets are never patched by id (the paths are structural: `planRepair`
+      builds them from its own walk of the source, and `domain.unit.test.ts` checks that they agree with `blueprint.getSourcePath` of the nodes Core reports); a source that is not JSON
+      gets no plan, because Core would refuse every operand with `json-incompatible-value`, and a legacy notice without a `config` is replaced without one (the app does not invent
+      content), so it stays invalid.
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
     not compute them.

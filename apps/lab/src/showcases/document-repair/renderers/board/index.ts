@@ -1,6 +1,6 @@
 /**
  * Vue renderers of the INNER notice board system, registered through the public `@deviltea/widget-vue` contract only. They
- * are plain components used by `../BoardPreview.vue` to show a repaired draft; the Lab never mounts this system itself.
+ * are plain components that `../DraftSession.vue` mounts to show a repaired draft; the Lab never mounts this system itself.
  */
 
 import { createWidgetVueRenderer } from '@deviltea/widget-vue'

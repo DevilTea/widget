@@ -165,21 +165,51 @@ describe('applying the plan', () => {
 			.toEqual(['2026-12-31', '2026-12-04', '2027-01-31'])
 	})
 
-	it('leaves the stored fixture untouched: the document works on a copy', () => {
-		const before = JSON.stringify(legacyV1)
-		repairByPlan(legacyV1, '1.x')
-		expect(JSON.stringify(legacyV1))
-			.toBe(before)
-	})
-
-	it('addresses each step\'s targets with paths that match what Core says (the diagnostics\' node paths)', () => {
-		const blueprint = boardSystem.createBlueprint(structuredClone(legacyV1))
-		const paths = blueprint.diagnostics.flatMap(diagnostic => 'node' in diagnostic.location ? [blueprint.getSourcePath(diagnostic.location.node)] : [])
-		// The undeclared slot is reported on the root; the Banner nodes are the children of the raw slot `items`.
-		expect(paths)
-			.toContainEqual([])
-		expect(paths)
-			.toContainEqual(['slots', 'items', 3])
+	it('addresses each step\'s targets with the paths Core reports: its guarded nodes are the nodes of the diagnostics, by blueprint.getSourcePath', () => {
+		// Which diagnostic code points at the nodes each step edits, at the moment that step is the next one to apply.
+		const codeOf: Record<string, string> = {
+			'rename-slot': 'undeclared-widget-slot',
+			'rename-type': 'unknown-widget-type',
+			'rename-config-text': 'invalid-widget-config',
+			'move-style': 'unexpected-widget-field',
+			'fix-duplicate-ids': 'duplicate-widget-id',
+			'rewrite-no-id': 'invalid-widget-id',
+			'convert-until': 'invalid-widget-config',
+		}
+		for (const [source, savedWith] of [[legacyV1, '1.x'], [legacyV2, '2.x'], [legacyPoll, '2.x']] as const) {
+			const document = createWidgetDocument({ system: boardSystem, source: structuredClone(source) })
+			for (let pass = 0; pass < 20; pass++) {
+				const { blueprint, revision } = document.getSnapshot()
+				const [step] = planRepair(blueprint.source, savedWith)
+				if (step === undefined)
+					break
+				const reported = blueprint.diagnostics.filter(diagnostic => diagnostic.code === codeOf[step.id])
+				const reportedPaths = new Set(reported.flatMap(diagnostic => 'node' in diagnostic.location ? [JSON.stringify(blueprint.getSourcePath(diagnostic.location.node))] : []))
+				expect(reportedPaths.size, step.id)
+					.toBeGreaterThan(0)
+				// The nodes the step edits: the first three segments of a path into the slot (`slots/<slot>/<index>`), or the root for the slot move.
+				const guarded = step.patch.flatMap(operation => operation.op === 'test' ? [operation.path as readonly (string | number)[]] : [])
+				expect(guarded.length, step.id)
+					.toBeGreaterThan(0)
+				for (const path of guarded) {
+					if (step.id === 'rename-slot') {
+						// The guard names the raw slot under the root: the root's source path plus the diagnostic's own `path`.
+						const slotDiagnostic = reported.find(diagnostic => 'path' in diagnostic)!
+						expect(path, step.id)
+							.toEqual([...blueprint.getSourcePath(blueprint.root)!, ...(slotDiagnostic as { path: readonly (string | number)[] }).path])
+						continue
+					}
+					expect(reportedPaths.has(JSON.stringify(path.slice(0, 3))), `${step.id} ${JSON.stringify(path)}`)
+						.toBe(true)
+					// And the path resolves to a node Core recovered, at exactly that place.
+					const node = blueprint.getChildren(blueprint.root)[Number(path[2])]
+					expect(JSON.stringify(blueprint.getSourcePath(node!)), step.id)
+						.toBe(JSON.stringify(path.slice(0, 3)))
+				}
+				expect(document.applyPatch(step.patch, { expectedRevision: revision }).ok, step.id)
+					.toBe(true)
+			}
+		}
 	})
 
 	it('the draft the app has no rule for stays invalid after its only step: Core still creates no Runtime for it', () => {
@@ -196,6 +226,62 @@ describe('applying the plan', () => {
 		expect('createRuntime' in blueprint && typeof (blueprint as { createRuntime?: unknown }).createRuntime)
 			.not
 			.toBe('function')
+	})
+})
+
+describe('input the plan has no rule for', () => {
+	it('plans nothing for a source that is not JSON, because every operand would be refused', () => {
+		const notJson = { id: 'board', type: 'Board', slots: { items: [{ type: 'Banner', config: undefined }] } }
+		expect(planRepair(notJson, '1.x'))
+			.toEqual([])
+		expect(planRepair({ id: 'board', type: 'Board', slots: { notices: [{ id: 'a', type: 'Notice', config: { until: Number.NaN } }] } }, '2.x'))
+			.toEqual([])
+	})
+
+	it('replaces a legacy notice that has no id and no config without a config operand, and the plan then ends', () => {
+		const source = { slots: { items: [{ type: 'Banner' }] } }
+		const document = createWidgetDocument({ system: boardSystem, source: structuredClone(source) })
+		const applied: string[] = []
+		for (let pass = 0; pass < 20; pass++) {
+			const { blueprint, revision } = document.getSnapshot()
+			const [step] = planRepair(blueprint.source, '1.x')
+			if (step === undefined)
+				break
+			const result = document.applyPatch(step.patch, { expectedRevision: revision })
+			expect(result.ok, JSON.stringify(result))
+				.toBe(true)
+			applied.push(step.id)
+		}
+		expect(applied)
+			.toEqual(['rename-slot', 'rewrite-no-id'])
+		expect(document.getSnapshot().blueprint.source)
+			.toEqual({ slots: { notices: [{ id: 'notice-1', type: 'Notice' }] } })
+		// The root has no id, type or config either, and the app has no rule for those: the document stays invalid, as it must.
+		expect(document.getSnapshot().blueprint.status)
+			.toBe('invalid')
+	})
+
+	it('repairs the same notice to a valid document when the rest of the board is sound and the notice has a config', () => {
+		const source = { id: 'board', type: 'Board', config: { title: { en: 'Notices' } }, slots: { items: [{ type: 'Banner', config: { title: 'Lost', text: 'A scarf', until: '2026-12-18', tone: 'info' } }] } }
+		const { document, applied } = repairByPlan(source, '1.x')
+		expect(applied)
+			.toEqual(['rename-slot', 'rewrite-no-id'])
+		expect(document.getSnapshot().blueprint.status)
+			.toBe('valid')
+	})
+
+	it('never plans the same step twice for a notice it has already given an id', () => {
+		const source = { id: 'board', type: 'Board', config: { title: { en: 'Notices' } }, slots: { notices: [{ id: 'notice-1', type: 'Notice' }, { type: 'Banner' }] } }
+		const document = createWidgetDocument({ system: boardSystem, source })
+		const [first] = planRepair(document.getSnapshot().blueprint.source, '1.x')
+		expect(first?.id)
+			.toBe('rewrite-no-id')
+		expect(first?.patch.at(-1))
+			.toEqual({ op: 'replace', path: ['slots', 'notices', 1], value: { id: 'notice-2', type: 'Notice' } })
+		expect(document.applyPatch(first!.patch).ok)
+			.toBe(true)
+		expect(planRepair(document.getSnapshot().blueprint.source, '1.x'))
+			.toEqual([])
 	})
 })
 

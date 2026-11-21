@@ -31,7 +31,7 @@ export const repairMessages = defineShowcaseMessages({
 		alertConflict: 'Another editor saved first. The app planned this step at revision {expected}, but the document is at revision {actual}. Core applied nothing; re-read the document and plan again.',
 		alertTestFailed: 'A test guard of the step does not hold (operation {index}): the document is no longer what the step was planned against. Core applied none of the step.',
 		alertOperation: 'Core refused operation {index} of the step; none of the step was applied.',
-		alertGeneric: 'Core refused the patch; nothing was applied.',
+		alertReentrant: 'The document was still busy with another patch, so Core refused this one; nothing was applied.',
 		savedWith: 'Saved with {version}',
 		stateValid: 'Valid',
 		stateInvalid: 'Invalid',
@@ -78,8 +78,6 @@ export const repairMessages = defineShowcaseMessages({
 		resultAfterNoChange: 'A patch that leaves the source equal does not advance the revision.',
 		resultOperationIndex: 'operation {index}',
 		resultRevisions: 'expected revision {expected}, actual revision {actual}',
-		storedUntouched: 'The stored draft is untouched: the document works on a copy.',
-		storedChanged: 'The stored draft changed!',
 		logHeading: 'Document listener log',
 		logEmpty: 'No commit yet.',
 		logEntry: '#{n}: revision {from} to {to}, {ops} operation(s), saved by {by}',
@@ -116,7 +114,7 @@ export const repairMessages = defineShowcaseMessages({
 		alertConflict: '另一位編輯者先儲存了。應用程式是依 revision {expected} 規劃這個步驟，但文件現在在 revision {actual}。Core 什麼都沒有套用；請重新讀取文件再規劃。',
 		alertTestFailed: '步驟的 test 檢查不成立（第 {index} 個操作）：文件已經不是規劃這個步驟時的樣子。Core 沒有套用這個步驟的任何部分。',
 		alertOperation: 'Core 拒絕了這個步驟的第 {index} 個操作；步驟的任何部分都沒有套用。',
-		alertGeneric: 'Core 拒絕了這個 patch；什麼都沒有套用。',
+		alertReentrant: '文件還在處理另一個 patch，所以 Core 拒絕了這一個；什麼都沒有套用。',
 		savedWith: '以 {version} 儲存',
 		stateValid: '有效',
 		stateInvalid: '無效',
@@ -163,8 +161,6 @@ export const repairMessages = defineShowcaseMessages({
 		resultAfterNoChange: '讓來源維持不變的 patch 不會推進 revision。',
 		resultOperationIndex: '第 {index} 個操作',
 		resultRevisions: 'expected revision {expected}，actual revision {actual}',
-		storedUntouched: '原本儲存的草稿沒有被改動：文件是在副本上作業。',
-		storedChanged: '原本儲存的草稿被改動了！',
 		logHeading: '文件 listener 紀錄',
 		logEmpty: '還沒有任何 commit。',
 		logEntry: '#{n}：revision {from} 到 {to}，{ops} 個操作，由{by}儲存',
@@ -185,9 +181,10 @@ export const repairMessages = defineShowcaseMessages({
 
 type Key = keyof typeof repairMessages['en']
 
-/** The message that explains a refused patch by Core's machine-readable failure `code`; `null` for a code this page does not know. */
+/** The message that explains a refused patch by Core's machine-readable failure `code`; a code this page does not know has no entry (the page then shows Core's own English message). */
 export const ALERT_MESSAGE_KEYS: Readonly<Record<string, Key>> = {
 	'document-revision-conflict': 'alertConflict',
+	'reentrant-apply': 'alertReentrant',
 	'test-failed': 'alertTestFailed',
 	'path-not-found': 'alertOperation',
 	'path-not-traversable': 'alertOperation',

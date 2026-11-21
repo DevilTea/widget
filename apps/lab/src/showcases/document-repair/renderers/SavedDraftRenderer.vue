@@ -7,13 +7,14 @@
  * Reads: Properties `title`, `savedWith`, `findings`, `plan`. Nothing is computed here, and the stored document is never changed.
  */
 import { useWidget } from '@deviltea/widget-vue'
-import { computed, inject } from 'vue'
+import { computed, inject, ref } from 'vue'
 import { useInspectAnchor } from '../../../showcase-host'
 import { formatPointer } from '../domain'
 import { SavedDraftPlugin } from '../plugins/saved-draft'
 import { BUTTON_STYLE, PRIMARY_BUTTON_STYLE } from './control-style'
 import DiagnosticList from './DiagnosticList.vue'
 import DraftSession from './DraftSession.vue'
+import { focusWhenRendered } from './focus'
 import PlanList from './PlanList.vue'
 import { RepairHostKey } from './repair-host'
 import { useRepairText } from './use-repair-text'
@@ -24,6 +25,25 @@ const host = inject(RepairHostKey, null)
 const { t, tf } = useRepairText()
 const anchor = useInspectAnchor(widgetId, widgetType)
 
+const root = ref<HTMLElement | null>(null)
+
+/** The control of this draft with this test id. */
+function control(testId: string): HTMLElement | null {
+	return root.value?.querySelector<HTMLElement>(`[data-testid="${testId}"]`) ?? null
+}
+
+/** "Open in the app" is replaced by "Close draft": the focus goes to the new session's heading. */
+function onOpen(): void {
+	host?.open(widgetId)
+	void focusWhenRendered(() => control(`repair-session-heading-${widgetId}`))
+}
+
+/** "Close draft" is replaced by "Open in the app": the focus goes to that button. */
+function onClose(): void {
+	host?.close(widgetId)
+	void focusWhenRendered(() => control(`repair-open-${widgetId}`))
+}
+
 const session = computed(() => host?.sessions.value.get(widgetId) ?? null)
 const diagnosticCount = computed(() => findings.value?.diagnostics.length ?? 0)
 const valid = computed(() => findings.value?.status === 'valid')
@@ -31,6 +51,7 @@ const valid = computed(() => findings.value?.status === 'valid')
 
 <template>
 	<section
+		ref="root"
 		v-bind="anchor"
 		:data-tutorial-target="`repair-${widgetId}`"
 		class="draft"
@@ -38,9 +59,9 @@ const valid = computed(() => findings.value?.status === 'valid')
 		:data-open="session !== null"
 	>
 		<header class="draft-header">
-			<h2 class="draft-title">
+			<h3 class="draft-title">
 				{{ title ?? widgetId }}
-			</h2>
+			</h3>
 			<span class="draft-version">{{ tf('savedWith', { version: savedWith ?? '' }) }}</span>
 			<span
 				class="draft-state"
@@ -55,7 +76,7 @@ const valid = computed(() => findings.value?.status === 'valid')
 					class="repair-button"
 					:style="PRIMARY_BUTTON_STYLE"
 					:data-testid="`repair-open-${widgetId}`"
-					@click="host?.open(widgetId)"
+					@click="onOpen"
 				>
 					{{ t('openInApp') }}
 				</button>
@@ -65,7 +86,7 @@ const valid = computed(() => findings.value?.status === 'valid')
 					class="repair-button"
 					:style="BUTTON_STYLE"
 					:data-testid="`repair-close-${widgetId}`"
-					@click="host?.close(widgetId)"
+					@click="onClose"
 				>
 					{{ t('closeDraft') }}
 				</button>
@@ -90,13 +111,13 @@ const valid = computed(() => findings.value?.status === 'valid')
 				<p class="draft-note">
 					{{ findings.sourceJsonCompatible ? t('jsonCompatible') : t('notJsonCompatible') }}
 				</p>
-				<h3 class="draft-block-title">
+				<h4 class="draft-block-title">
 					{{ t('diagnosticsHeading') }}
-				</h3>
+				</h4>
 				<DiagnosticList :diagnostics="findings.diagnostics" />
-				<h3 class="draft-block-title">
+				<h4 class="draft-block-title">
 					{{ t('nodesHeading') }}
-				</h3>
+				</h4>
 				<ul
 					class="draft-nodes"
 					:data-testid="`repair-nodes-${widgetId}`"
@@ -120,9 +141,9 @@ const valid = computed(() => findings.value?.status === 'valid')
 					</li>
 				</ul>
 			</template>
-			<h3 class="draft-block-title">
+			<h4 class="draft-block-title">
 				{{ t('planHeading') }}
-			</h3>
+			</h4>
 			<PlanList
 				:steps="plan ?? []"
 				:testId="`repair-stored-plan-${widgetId}`"

@@ -110,6 +110,9 @@ test.describe('repairing the 1.x draft', () => {
 		await openRepair(page)
 		const preview = previewFrame(page)
 		await openV1(page)
+		// Opening replaced the button that was pressed: the focus is on the session heading, not on body.
+		await expect(preview.getByTestId('repair-session-heading-draft-v1'))
+			.toBeFocused()
 		await expect(preview.getByTestId('repair-doc-status-draft-v1'))
 			.toHaveAttribute('data-state', 'invalid')
 		await expect(preview.getByTestId('repair-plan-draft-v1')
@@ -130,6 +133,9 @@ test.describe('repairing the 1.x draft', () => {
 		}
 		await expect(preview.getByTestId('repair-result-draft-v1'))
 			.toHaveText('applyPatch returned { ok: true, changed: true }: revision 5 to 6.')
+		// The last step disabled the button that was pressed: the focus moved to the preview button.
+		await expect(preview.getByTestId('repair-preview-draft-v1'))
+			.toBeFocused()
 		await expect(preview.getByTestId('repair-doc-status-draft-v1'))
 			.toHaveAttribute('data-state', 'valid')
 		await expect(preview.getByTestId('repair-apply-draft-v1'))
@@ -137,8 +143,6 @@ test.describe('repairing the 1.x draft', () => {
 		await expect(preview.getByTestId('repair-log-draft-v1')
 			.locator('[data-testid="repair-log-entry"]'))
 			.toHaveCount(6)
-		await expect(preview.getByTestId('repair-stored-draft-v1'))
-			.toHaveAttribute('data-untouched', 'true')
 
 		await preview.getByTestId('repair-preview-draft-v1')
 			.click()
@@ -150,6 +154,14 @@ test.describe('repairing the 1.x draft', () => {
 		await expect(board.getByTestId('repair-notice-notice-1'))
 			.toContainText('A grey scarf is waiting at the desk.')
 
+		await preview.getByTestId('repair-preview-close-draft-v1')
+			.click()
+		await expect(preview.getByTestId('repair-preview-draft-v1'))
+			.toBeFocused()
+		await expect(board)
+			.toHaveCount(0)
+		await preview.getByTestId('repair-preview-draft-v1')
+			.click()
 		await preview.getByTestId('repair-export-draft-v1')
 			.click()
 		const exported = preview.getByTestId('repair-export-text-draft-v1')
