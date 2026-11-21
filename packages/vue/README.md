@@ -132,9 +132,15 @@ const { value: valueDiagnostics } = useStateDiagnostics()
   `(...args: Parameters<Fn>) => ReturnType<Fn> | null`. Semantic failure
   projects to `null`; implementation-contract/disposed-runtime exceptions
   propagate unchanged.
+- The keyed surfaces are mapped over `keyof` the plugin's Interfaces sections, so hovering
+  a member (`useState().count`, `useMethods().increment`, `emit.pressed`) shows the JSDoc
+  written on it in the Interfaces.
 - `useStateDiagnostics()` / `usePropertyDiagnostics()` / `useMethodDiagnostics()` mirror the
   corresponding Runtime primitive's `getDiagnostics()`/`subscribeDiagnostics()` as a
-  separate reactive channel, keyed the same way as their value counterpart.
+  separate reactive channel, keyed the same way as their value counterpart. When the
+  plugin declares `Interfaces['reasons']`, a diagnostic's `reason` and `details` are typed by
+  it (checking `diagnostic.reason` narrows `details`); without it they keep Core's
+  `reason?: string` and `details?: JsonValue`.
 - `emit` (only when the plugin declares `events`) exposes one `void`-returning
   callable per declared event, typed from its arguments. Looking up a member is
   passive; the first call acquires the Core event emitter and forwards the
@@ -163,8 +169,8 @@ const { value: valueDiagnostics } = useStateDiagnostics()
 
 ### Slots
 
-A widget with a `slots` capability exposes `WidgetSlot` from `useWidget()`,
-typed to its exact declared slot-name union:
+A widget with a `slots` capability exposes `WidgetSlot` from `useWidget()`, whose `name` is
+typed to the keys of the plugin's `Interfaces['slots']` record:
 
 ```vue
 <!-- SectionRenderer.vue -->
@@ -210,6 +216,10 @@ Vue component, changing the wrapper element/component type, or skipping a child 
 remounts it. `id` and `type` are the child's widget id
 and plugin type, `index` its position in the slot. No Runtime handle is exposed; render
 nothing for a child to skip it. Without a default slot `WidgetSlot` is unchanged.
+
+The scoped `type` is narrowed to what the named slot expects: the members of a plain union of
+plugin types, a `WidgetContract`'s `Types`, or `string` for a slot that accepts any widget. The
+expectation is type-level only (Core checks nothing at run time).
 
 ### Root lifecycle
 

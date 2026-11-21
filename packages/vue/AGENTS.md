@@ -19,8 +19,9 @@ and this package never reimplements or reinterprets it. These bare `#N` numbers 
 - `src/runtime-guard.ts` — passive validation of a supplied Runtime (`invalid-runtime`, `foreign-runtime`), shared by the root renderer and the testing host.
 - `src/testing.ts` — the public `./testing` subpath entry (`createWidgetTestHost`). It provides the widget context through `provideCurrentWidgetContext()` in `context.ts`, the same construction the real host uses, and never exports the injection key.
 - `src/use-widget.ts` — `useWidget(Plugin)`.
-- `src/types.ts` — the public `useWidget()` return-type surface.
+- `src/types.ts` — the public `useWidget()` return-type surface (see the 0.3 typing rules under "Implementation rules").
 - `src/errors.ts` — `WidgetVueIntegrationError` and `WidgetVueIntegrationErrorCode`, the single programmer/configuration exception class. Consumers discriminate by class and `code` (never `message`); the codes are `invalid-renderer-registry` (with frozen `missingTypes`/`unknownTypes`/`duplicateTypes`/`invalidTypes`, `null` for every other code). It is an ordinary exported `class WidgetVueIntegrationError extends Error` (stable `constructor.name` under every transform, subclassable); the instance type is deliberately not a union discriminated by `code`, so the lists are typed `readonly string[] | null` and consumers handle `null`, `invalid-runtime`, `foreign-runtime`, `unknown-widget`, `runtime-system-mismatch`, `outside-widget-renderer`, `widget-plugin-mismatch`, and `readonly-projection-write`. Only caller-reachable misuse gets a code; states made impossible by exact-plugin, registry and System-identity validation are internal invariants and throw a plain `Error`. Add a code only for a materially different caller-reachable problem.
+- `src/use-widget-jsdoc.unit.test.ts`, `src/use-widget-slot-types.unit.test.ts` and `src/use-widget-diagnostic-reasons.unit.test.ts` pin the 0.3 typing above (JSDoc through a TypeScript program over the test file with a key-union control; slot name and scope narrowing; typed `details`). The JSDoc test imports `typescript`, which resolves from the workspace root.
 - `src/test-fixtures.ts` — real `@deviltea/widget-core` plugins/system/runtime fixtures shared by the colocated tests. Not part of the public contract; excluded from `tsconfig.package.json`.
 - `src/**/*.unit.test.ts` — colocated Vitest unit tests (run by the root config too).
 
@@ -55,6 +56,7 @@ or to the widgets it hosts, never to this package.
 - The Runtime is the sole source of truth. Every value bridge is a `customRef` (or equivalent) with
   no authoritative mirrored cache and no optimistic local writes; Runtime subscriptions only ever
   `trigger()` Vue invalidation, they never carry a value payload the adapter caches.
+- 0.3 typing rules (Discussion #12, "Interfaces are the single source of a plugin's shape and documentation (0.3.0)"). The Interfaces type, with its JSDoc, is the one place a plugin is documented, so the public surface types in `src/types.ts` must keep that JSDoc on hover: every keyed surface (State, Property, Method, Event, and the three member-diagnostics surfaces) is a homomorphic mapped type over `keyof` the Interfaces section (key remapping with `as` keeps the `WidgetMemberKey` filter and the documentation), never a mapping over a key union such as `WidgetStateKeyOf<Interfaces>`, and `emit` is `UseWidgetEventEmitter`, not Core's `WidgetEventEmitter`. `use-widget-jsdoc.unit.test.ts` reads the documentation through the TypeScript checker; `expectTypeOf` cannot see it. Slots are a record: `WidgetSlot`'s `name` is the record's keys and the scoped slot's `type` is `WidgetSlotChildTypeOf<Interfaces, Name>` (the plain union's members or a contract's `Types` from Core's `WidgetSlotPluginTypeOf`, resolved per slot name, `string` when it is `never`, i.e. for any widget). The expectation is type-level only; this package adds no run-time check and does not read it. Diagnostics surfaces are typed with `ReasonedDiagnostic<Diagnostic, Interfaces>`: by `Interfaces['reasons']` when declared (a union discriminated by `reason`, `details` the reason's payload), Core's own shape otherwise; diagnostics without a `reason` field (dependency diagnostics) are never rewritten. The run-time value is always Core's diagnostic object, untouched.
 - Keyed surfaces (`createLazyKeyedSurface(members, materialize)`) reflect exactly the Runtime's declared members through `get`, `in`, `Object.keys` and spread; listing keys materializes nothing. A surface is an ordinary frozen null-prototype object with one lazy caching accessor per declared member, never a Proxy (Proxy invariants break `Object.freeze`/`preventExtensions`), and it is keyed by the Runtime's own member object. `toRefs()` is deliberately unsupported: members are already refs and destructuring the surface is the idiom.
 - Every `useXxx()` accessor and every member surface is lazy: obtaining a capability accessor must
   never read or subscribe the Runtime, and materializing a member wrapper must not either — only the
@@ -84,7 +86,7 @@ or to the widgets it hosts, never to this package.
   privately through `CurrentWidgetContext`; renderer code only ever calls `useWidget(Plugin)`.
 - `WidgetSlot` is always the one shared internal component identity (`SharedWidgetSlotComponent` in
   `renderer.ts`) — never allocate a fresh component definition per widget or per `useWidget()` call.
-  Its optional default scoped slot receives `{ Child, id, type, index }` (publicly typed as `WidgetSlotScope`)
+  Its optional default scoped slot receives `{ Child, id, type, index }` (publicly typed as `WidgetSlotScope<Type>`, `Type` defaulting to `string`)
   and exposes no Runtime handle; each `Child` is created once per child and reused across renders so wrapping
   it never remounts the child widget.
 - Collision-safety matters the same way it does in `@deviltea/widget-core`: arbitrary plugin-type and
@@ -101,7 +103,7 @@ or to the widgets it hosts, never to this package.
   `useMethodDiagnostics`/`useDiagnostics`) are publicly typed `ReadonlyRef<T>` (`Readonly<Ref<T>>`), never `ComputedRef<T>`: they
   are backed by `customRef()`, a plain `Ref`, and `ComputedRef` would over-promise computed-only public
   surface (e.g. `.effect`) that does not exist at runtime. `WidgetSlot`'s public type is a non-callable
-  component/constructor shape (`new () => { $props }`), never `FunctionalComponent`, because the shared
+  generic component/constructor shape (`new <Name>() => { $props, $slots }`), never `FunctionalComponent`, because the shared
   runtime value is a `defineComponent()` output, not a plain callable function.
 - `createWidgetVueRenderer` validates exactly-once renderer coverage (and that every registered value is a component) against the actual bound
   `WidgetSystem` instance at construction time, and the returned component validates the `runtime` prop (object, same core copy,

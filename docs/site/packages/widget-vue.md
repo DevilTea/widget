@@ -4,7 +4,8 @@ title: '@deviltea/widget-vue'
 
 # @deviltea/widget-vue
 
-> **Upgrading from 0.0.x?** Follow the [migration guide to 0.1](../migration/0.1).
+> **Upgrading?** From 0.2, follow the [migration guide to 0.3](../migration/0.3#vue-adapter). From 0.0.x, follow the
+> [migration guide to 0.1](../migration/0.1).
 
 `@deviltea/widget-vue` is a thin Vue 3 integration over
 [`@deviltea/widget-core`](./widget-core) Runtime semantics. It owns exactly
@@ -197,6 +198,18 @@ already refs, so destructure the surface (`const { count } = useState()`);
 `toRefs(surface)` is not supported because the surface is not a reactive
 object (Vue logs a dev warning).
 
+Every keyed surface type (`UseWidgetStateSurface`, `UseWidgetPropertiesSurface`,
+`UseWidgetMethodsSurface`, `UseWidgetEventEmitter` and the three
+member-diagnostics surfaces) is a homomorphic mapped type over `keyof` the
+matching section of the plugin's `Interfaces`. TypeScript carries a property's
+JSDoc through such a mapping, so hovering `count` in `useState().count`, or
+`increment` in `useMethods().increment`, shows the text written on that member
+in the Interfaces; the same holds for the diagnostics surfaces and for `emit`.
+This is the one place the documentation of a plugin lives (see
+[Interfaces are the single source](../migration/0.3)). A test reads the JSDoc
+through the TypeScript checker so a regression to a mapping over a key union,
+which drops it, fails the build.
+
 Because a failed Property or Method projects to `null` (see below), a member
 whose own type includes `null` cannot distinguish "failed" from a legitimate
 `null` result through its value alone; read that member's diagnostics ref
@@ -290,6 +303,22 @@ lazy per member. `useDiagnostics()` mirrors the widget-level aggregate —
 core snapshot objects and order exactly: no message parsing, no
 reclassification, no invented aggregation.
 
+#### Typed `reason` and `details`
+
+A diagnostic a plugin reports may carry a `reason` and a JSON `details` payload.
+When the plugin declares `Interfaces['reasons']`, the diagnostics of its own
+State, Property and Method (and the widget-level aggregate) are typed by it
+(`ReasonedDiagnostic<Diagnostic, Interfaces>`): the diagnostic is a union
+discriminated by `reason`, and `details` is that reason's payload, always
+present when the payload is not `void`, with neither field on a diagnostic that
+has no plugin-authored `reason` (Core's default validation message, for one).
+Checking `diagnostic.reason === 'too-large'` therefore narrows `details`.
+Without a `reasons` declaration the diagnostic keeps Core's shape
+(`reason?: string`, `details?: JsonValue`). The dependency diagnostics
+(`dependency-target-failed`, `dependency-value-rejected`) carry no `reason` and
+are unchanged. `details` is the object the plugin reported, by reference; the
+typing is a declaration, and Core does not re-check it on the way out.
+
 ### Events
 
 ```ts
@@ -321,7 +350,8 @@ onto its own markup.
 ```
 
 Present on the `useWidget()` surface only when the plugin declares a `slots`
-capability, typed to its exact declared slot-name union. `WidgetSlot` is
+capability. Its `name` prop is typed to the keys of the `Interfaces['slots']`
+record. `WidgetSlot` is
 syntactic sugar over one shared internal component identity — obtaining it
 repeatedly, across widgets or `useWidget()` calls, never allocates a new
 component definition. It renders the current widget's semantic slot children
@@ -351,14 +381,24 @@ each child:
 - `id` is the child's widget id, `type` its plugin type (both `string`), and
   `index` its position in the slot; `index` counts children the renderer
   skips. No Runtime handle is exposed.
+- `type` is narrowed to what the named slot expects: the members of a plain
+  union of plugin types (`'notice' | 'link'`) or a `WidgetContract`'s `Types`,
+  and plain `string` for a slot that accepts any widget (`WidgetChild`) or a
+  contract that names no type. The narrowing follows the `name` you pass, so
+  in a `<template>` (checked by `vue-tsc`) `type` has the slot's own union. The
+  expectation is type-level only: Core checks nothing at run time, so `type` is
+  exactly as trustworthy as the plugin's `validateStructure`.
 - The renderer decides the wrapping markup and whether to render a child at
   all (render nothing to skip it). An empty slot never calls the slot.
 - `Child` is the same component for a given child on every re-render, so
   re-rendering the surrounding markup with a stable wrapper, or skipping a
   sibling, never remounts the child widget. As with any Vue component,
   changing the wrapper element/component type, or skipping a child and showing
-  it again, unmounts and remounts it. The slot props are typed publicly as `WidgetSlotScope`
-  (`Child: WidgetSlotChildComponent`).
+  it again, unmounts and remounts it. The slot props are typed publicly as `WidgetSlotScope<Type>`
+  (`Child: WidgetSlotChildComponent`; `Type` defaults to `string`). `WidgetSlotComponent<Slots>`
+  is the public type of `WidgetSlot`: `Slots` maps each slot name to its expected plugin types
+  (`WidgetSlotChildTypesOf<Interfaces>` builds it, `WidgetSlotChildTypeOf<Interfaces, Name>`
+  resolves one slot, `string` when the slot accepts any widget).
 
 ### What `useWidget()` deliberately does not expose
 
