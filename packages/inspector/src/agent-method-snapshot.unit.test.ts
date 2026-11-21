@@ -594,6 +594,28 @@ describe('method members and the negotiated minor', () => {
 		}
 	})
 
+	it('answers a request rejected while it is classified in the lower of the negotiated and the envelope minor', async () => {
+		const fixture = createFixture()
+		try {
+			const ref = await fixture.refOf('probe')
+			// Never handshaken: the negotiated minor is the Agent's own, so the envelope minor decides.
+			expect(fixture.raw(3, 'runtime.subscribeMember', { ref, member: { type: 'bogus', name: 'x' } }))
+				.toMatchObject({ ok: false, protocol: { major: 0, minor: 3 }, error: { code: 'invalid-params' } })
+			expect(fixture.raw(2, 'runtime.noSuchMethod', {}))
+				.toMatchObject({ ok: false, protocol: { major: 0, minor: 2 }, error: { code: 'unknown-method' } })
+			// After a handshake at 0.4, a 0.5 envelope is still answered at 0.4.
+			fixture.raw(4, 'handshake', { protocol: { major: 0, minor: 4 } })
+			expect(fixture.raw(5, 'runtime.subscribeMember', { ref, member: { type: 'bogus', name: 'x' } }))
+				.toMatchObject({ ok: false, protocol: { major: 0, minor: 4 }, error: { code: 'invalid-params' } })
+			// A later well-formed request is unaffected.
+			expect(fixture.raw(5, 'runtime.list', {}))
+				.toMatchObject({ ok: true, protocol: { major: 0, minor: 4 } })
+		}
+		finally {
+			fixture.dispose()
+		}
+	})
+
 	it('answers a 0.4-envelope request on a 0.5 session with the 0.4 shapes', async () => {
 		const fixture = createFixture()
 		try {
