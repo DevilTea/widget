@@ -1,6 +1,7 @@
 import Vue from 'unplugin-vue/vite'
 import { defineConfig } from 'vitest/config'
 import { labNuxtUi } from './apps/lab/nuxt-ui'
+import { widgetDocs } from './apps/widget-skills/src/vite'
 
 export default defineConfig({
 	plugins: [Vue()],
@@ -13,6 +14,8 @@ export default defineConfig({
 		projects: [
 			{
 				extends: true,
+				// The generator's tests import `virtual:widget-docs/survey` (see apps/widget-skills/vitest.config.ts).
+				plugins: [widgetDocs({ systems: { survey: { module: 'apps/widget-skills/fixtures/survey-system.ts', export: 'surveySystem', tsconfig: 'apps/widget-skills/tsconfig.json' } } })],
 				test: {
 					name: 'widget-skills',
 					include: ['apps/widget-skills/src/**/*.unit.test.ts'],

@@ -1,0 +1,53 @@
+/**
+ * `emitDocs(ir)`: the JSON documentation object the Vite plugin serves as `virtual:widget-docs/<name>`.
+ */
+
+import type { WidgetDocs, WidgetDocsJsonSchema, WidgetDocsText, WidgetPluginDocs } from './docs-types'
+import type { Doc, PluginIr, SystemIr } from './ir'
+import { WIDGET_DOCS_VERSION } from './docs-types'
+import { emitConfigSchema } from './schema'
+
+function text(doc: Doc): WidgetDocsText {
+	return { summary: doc.summary, remarks: doc.remarks, tags: { ...doc.tags } }
+}
+
+function section<T extends { name: string }, R>(present: boolean, members: readonly T[], map: (member: T) => R): Record<string, R> | null {
+	return present ? Object.fromEntries(members.map(member => [member.name, map(member)])) : null
+}
+
+function pluginDocs(ir: SystemIr, plugin: PluginIr): WidgetPluginDocs {
+	const schema = emitConfigSchema(ir, plugin)
+	return {
+		type: plugin.type,
+		interfacesName: plugin.interfacesName,
+		...text(plugin.doc),
+		config: plugin.config === null
+			? null
+			: {
+					...text(plugin.config.doc),
+					omittable: plugin.config.omittable,
+					rawType: plugin.config.rawText,
+					resolvedType: plugin.config.resolvedText,
+					schema: schema as WidgetDocsJsonSchema,
+				},
+		slots: section(plugin.capabilities.slots, plugin.slots, slot => ({ ...text(slot.doc), expectedTypes: slot.expected, contract: slot.contract, expectation: slot.expectationText })),
+		state: section(plugin.capabilities.state, plugin.state, member => ({ ...text(member.doc), type: member.typeText, authorWritable: member.authorWritable })),
+		properties: section(plugin.capabilities.properties, plugin.properties, member => ({ ...text(member.doc), type: member.typeText })),
+		methods: section(plugin.capabilities.methods, plugin.methods, method => ({
+			...text(method.doc),
+			signature: method.signature,
+			params: method.params.map(param => ({ name: param.name, type: param.typeText, optional: param.optional, summary: param.doc })),
+			returns: { type: method.returnText, summary: method.returnsDoc },
+		})),
+		events: section(plugin.capabilities.events, plugin.events, event => ({ ...text(event.doc), payload: event.payload.map(item => ({ label: item.label, type: item.typeText })) })),
+		reasons: plugin.reasons === null ? null : section(true, plugin.reasons, reason => ({ ...text(reason.doc), details: reason.payload?.typeText ?? null })),
+	}
+}
+
+export function emitDocs(ir: SystemIr): WidgetDocs {
+	return {
+		docsVersion: WIDGET_DOCS_VERSION,
+		system: ir.system,
+		plugins: Object.fromEntries(ir.plugins.map(plugin => [plugin.type, pluginDocs(ir, plugin)])),
+	}
+}

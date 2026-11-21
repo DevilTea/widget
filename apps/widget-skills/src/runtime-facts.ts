@@ -125,3 +125,30 @@ export async function compileWithSystem(modulePath: string, exportName: string, 
 	const blueprint = system.createBlueprint(structuredClone(source))
 	return { status: blueprint.status, diagnostics: blueprint.diagnostics.map(({ code, message }) => ({ code, message })) }
 }
+
+let namespaceCount = 0
+
+/**
+ * Like `loadRuntimeFacts`, but works in a process without a TypeScript loader (Vite, Vitest): the System's module is
+ * imported through tsx in a fresh namespace, so a later call sees edited files, and `@deviltea/widget-core/inspection`
+ * is imported in the same namespace as the System's module would import it, so both come from one Core instance.
+ * Importing the module executes it, and everything it imports. Node keeps every namespace's modules for the life of
+ * the process.
+ */
+export async function importRuntimeFacts(modulePath: string, exportName: string, tsconfigPath?: string): Promise<RuntimeFacts> {
+	const { register } = await import('tsx/esm/api')
+	namespaceCount++
+	const api = register({ namespace: `widget-docs-${String(namespaceCount)}`, ...(tsconfigPath === undefined ? {} : { tsconfig: tsconfigPath }) })
+	try {
+		const moduleUrl = pathToFileURL(modulePath).href
+		const module = await api.import(moduleUrl, import.meta.url) as Record<string, unknown>
+		const system = module[exportName]
+		if (system === undefined || system === null)
+			throw new Error(`${modulePath} has no export "${exportName}".`)
+		const { inspectPlugin } = await api.import('@deviltea/widget-core/inspection', moduleUrl) as { inspectPlugin: InspectPlugin }
+		return collectRuntimeFacts(system, inspectPlugin)
+	}
+	finally {
+		await api.unregister()
+	}
+}

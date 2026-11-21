@@ -6,7 +6,7 @@ import { inspectPlugin } from '@deviltea/widget-core/inspection'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { surveySystem } from '../fixtures/survey-system'
 import { undocumentedSystem } from './fixtures/undocumented-system'
-import { applyRuntimeFacts, checkIr, collectRuntimeFacts, createFlatConverter, emitConfigSchema, emitFullSchema, emitLlmSchema, extractIr, FlatConversionError, generateFiles, validateSchema } from './index'
+import { applyRuntimeFacts, checkIr, collectRuntimeFacts, createFlatConverter, emitConfigSchema, emitDocs, emitFullSchema, emitLlmSchema, extractIr, FlatConversionError, generateFiles, validateSchema } from './index'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '../../..')
@@ -519,6 +519,40 @@ describe('--check', () => {
 		copy.plugins[1]!.reasons![0]!.payload = { typeText: 'SubmitSummary', shape: { kind: 'ref', name: 'SubmitSummary' } }
 		expect(checkIr(copy).problems.map(problem => problem.severity))
 			.toEqual(['error'])
+	})
+})
+
+describe('emitDocs', () => {
+	it('is plain JSON with every section of a plugin', () => {
+		const docs = emitDocs(ir)
+		expect(JSON.parse(JSON.stringify(docs)))
+			.toStrictEqual(docs)
+		expect(Object.keys(docs.plugins))
+			.toEqual(['Survey', 'Rating', 'Choice', 'Note'])
+		const survey = docs.plugins.Survey!
+		expect(survey)
+			.toMatchObject({
+				type: 'Survey',
+				summary: 'A survey: a header, the questions in order, and a footer note.',
+				config: { summary: 'How the survey is titled and where it is sent.', omittable: false, rawType: 'SurveyRawConfig', schema: emitConfigSchema(ir, ir.plugins[0]!) },
+				slots: {
+					header: { expectedTypes: null, contract: null, expectation: 'WidgetChild' },
+					questions: { expectedTypes: ['Rating', 'Choice'], contract: '{ properties: { answered: boolean; }; }' },
+					footer: { summary: 'Closing notes shown under the questions.', expectedTypes: ['Note'] },
+				},
+				state: { submitted: { summary: 'Whether the survey was sent.', type: 'boolean', authorWritable: false } },
+				properties: { progress: { type: 'number', tags: { minimum: '0', maximum: '1' } } },
+				methods: { submit: { signature: 'submit(): boolean', params: [], returns: { type: 'boolean', summary: 'Whether the survey was sent by this call.' } } },
+				events: { submitted: { summary: 'The survey was sent.', payload: [{ label: 'summary', type: 'SubmitSummary' }] } },
+				reasons: { 'empty-title': { details: null }, 'too-many-questions': { details: '{ max: number; count: number; }' } },
+			})
+		expect(docs.plugins.Rating!.methods!.rate!.params)
+			.toEqual([{ name: 'value', type: 'number', optional: false, summary: 'The value, from 1 to the scale.' }])
+	})
+
+	it('writes null for an undeclared capability', () => {
+		expect(emitDocs(ir).plugins.Note)
+			.toMatchObject({ slots: null, state: null, properties: null, methods: null, events: null, reasons: null })
 	})
 })
 
