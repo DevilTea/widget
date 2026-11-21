@@ -428,19 +428,30 @@ test.describe('the modal is local to the Preview', () => {
 			await expect(dialog)
 				.toBeVisible()
 
-			// Keyboard focus is trapped in the modal: every Tab (and Shift+Tab) lands inside it.
-			await preview.getByTestId(`${pack}-cancel-archive-workspace`)
-				.focus()
+			// Keyboard focus is trapped in the modal: every Tab (and Shift+Tab) lands inside it. Keys go to the document that has focus,
+			// and the Lab's menu has just taken it (and a closing Reka menu hands focus back to its trigger a moment later), so first
+			// give focus to the frame with a click on the dialog's own padding, then to the control, and wait for both. Then every step
+			// is waited for as well: a key press is handled asynchronously, so the focused element is read until it is where the step
+			// puts it, never once right after the press.
+			const cancel = preview.getByTestId(`${pack}-cancel-archive-workspace`)
+			const confirm = preview.getByTestId(`${pack}-confirm-archive-workspace`)
+			await dialog.click({ position: { x: 4, y: 4 } })
+			await cancel.focus()
+			await expect(cancel)
+				.toBeFocused()
 			for (let step = 0; step < 6; step++) {
 				await page.keyboard.press(step % 2 === 0 ? 'Tab' : 'Shift+Tab')
-				expect(await preview.locator('body')
-					.evaluate(() => document.activeElement?.closest('dialog, [role="dialog"]') !== null), `step ${step}`)
+				await expect(step % 2 === 0 ? confirm : cancel, `step ${step}`)
+					.toBeFocused()
+				await expect.poll(() => preview.locator('body')
+					.evaluate(() => document.activeElement?.closest('dialog, [role="dialog"]') !== null), { message: `step ${step}: focus is inside the modal` })
 					.toBe(true)
 			}
 
 			// Esc is Cancel: State says the question is over and nothing was notified.
-			await preview.getByTestId(`${pack}-cancel-archive-workspace`)
-				.focus()
+			await cancel.focus()
+			await expect(cancel)
+				.toBeFocused()
 			await page.keyboard.press('Escape')
 			await expect(dialog)
 				.toBeHidden()
