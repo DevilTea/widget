@@ -42,7 +42,7 @@ function createHarness() {
 }
 
 describe('event inventory and readonly Runtime inspection', () => {
-	it('projects event capability, names and descriptions without inventing parameter metadata', () => {
+	it('projects event capability and names without prose or invented parameter metadata', () => {
 		const { blueprint } = createHarness()
 		const inspection = inspectBlueprint(blueprint)
 		const root = inspection.getNode(inspection.rootNodeId)
@@ -57,6 +57,7 @@ describe('event inventory and readonly Runtime inspection', () => {
 			])
 		expect(root.events[0]).not.toHaveProperty('args')
 		expect(root.events[0]).not.toHaveProperty('schema')
+		expect(root.events[0]).not.toHaveProperty('description')
 	})
 
 	it('projects no Events declaration as an empty event inventory', () => {

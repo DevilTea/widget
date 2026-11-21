@@ -60,13 +60,7 @@ const eventPlugin = createWidgetPlugin('event-widget')
 				capturedEmitter = emit
 			},
 		}))
-	.events((events) => {
-		const beforeProto = events
-			.ping({})
-			.change({})
-			.chain({})
-		return beforeProto[PROTO_KEY]({})
-	})
+	.events(['ping', 'change', 'chain', PROTO_KEY])
 	.done()
 
 function createRuntime() {

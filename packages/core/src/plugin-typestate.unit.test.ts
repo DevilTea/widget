@@ -18,7 +18,6 @@ import type {
 	EmptyRegisteredDeps,
 	WidgetConfigDefinition,
 	WidgetEventArgsOf,
-	WidgetEventsSection,
 	WidgetInterfaces,
 	WidgetInterfacesViolation,
 	WidgetInterfacesViolationOf,
@@ -163,7 +162,11 @@ interface SymbolStateKeyInterfaces extends WidgetInterfaces {
 }
 
 interface BroadSlotsInterfaces extends WidgetInterfaces {
-	slots: string
+	slots: Record<string, WidgetChild>
+}
+
+interface BroadSlotExpectationInterfaces extends WidgetInterfaces {
+	slots: { body: string }
 }
 
 interface BroadEventsIndexInterfaces extends WidgetInterfaces {
@@ -474,19 +477,14 @@ describe('section keyed-chain typestate (state section, representative of proper
 })
 
 describe('events capability typestate and tuple contract', () => {
-	it('exposes an independent events phase with named tuple declarations and description metadata', () => {
+	it('exposes an independent events phase declared by the list of Event names', () => {
 		const afterInterfaces = createWidgetPlugin('events-only')
 			.interfaces<EventInterfaces>()
 		expectTypeOf(afterInterfaces)
 			.toHaveProperty('events')
 		expectTypeOf(afterInterfaces).not.toHaveProperty('done')
 
-		const afterEvents = afterInterfaces.events((events) => {
-			const afterPress = events.press({})
-			expectTypeOf(afterPress)
-				.toEqualTypeOf<WidgetEventsSection<EventInterfaces, 'change'>>()
-			return afterPress.change({})
-		})
+		const afterEvents = afterInterfaces.events(['press', 'change'])
 		expectTypeOf(afterEvents)
 			.toHaveProperty('done')
 		expectTypeOf<WidgetEventArgsOf<EventInterfaces, 'press'>>()
@@ -497,15 +495,37 @@ describe('events capability typestate and tuple contract', () => {
 		const plugin = afterEvents.done()
 		expect(plugin.capabilities.events)
 			.toBe(true)
-		expect(plugin.descriptions)
-			.not.toHaveProperty('events')
+		expect(plugin).not.toHaveProperty('description')
+		expect(plugin).not.toHaveProperty('descriptions')
 	})
 
-	it('requires every declared event member to be consumed before done', () => {
-		const beforeEvents = createWidgetPlugin('events-incomplete')
+	it('requires the list to name every declared Event and nothing else', () => {
+		const beforeEvents = () => createWidgetPlugin('events-incomplete')
 			.interfaces<EventInterfaces>()
-		// @ts-expect-error 'change' is still unconsumed, so the event section cannot complete
-		beforeEvents.events(['press'])
+		// Never called: the lists below are type errors, and some of them also throw.
+		const typeOnly = () => {
+			// @ts-expect-error 'change' is missing
+			beforeEvents()
+				.events(['press'])
+			// @ts-expect-error an empty list misses both
+			beforeEvents()
+				.events([])
+			// @ts-expect-error 'tap' is not a declared Event
+			beforeEvents()
+				.events(['press', 'change', 'tap'])
+			// @ts-expect-error the phase takes the list of names, not a build callback
+			beforeEvents()
+				.events(() => ['press', 'change'])
+		}
+		expect(typeOnly)
+			.toBeTypeOf('function')
+
+		// Any order is accepted, and a typed constant works like a literal.
+		const names = ['change', 'press'] as const
+		expect(beforeEvents()
+			.events(names)
+			.done().capabilities.events)
+			.toBe(true)
 	})
 
 	it('keeps an explicitly empty events capability distinct from an absent capability', () => {
@@ -515,16 +535,12 @@ describe('events capability typestate and tuple contract', () => {
 			.done()
 		expect(present.capabilities.events)
 			.toBe(true)
-		expect(present.descriptions)
-			.not.toHaveProperty('events')
 
 		const absent = createWidgetPlugin('events-absent')
 			.interfaces<EmptyInterfaces>()
 			.done()
 		expect(absent.capabilities.events)
 			.toBe(false)
-		expect(absent.descriptions)
-			.not.toHaveProperty('events')
 	})
 })
 
@@ -674,9 +690,14 @@ describe('widgetInterfaces domain rejection (types.ts type layer)', () => {
 			.toEqualTypeOf<'\'state\' member keys must be finite string literals'>()
 	})
 
-	it('rejects a broad slots capability that is not a finite string literal union', () => {
+	it('rejects a slots record with a broad string index signature', () => {
 		expectTypeOf<WidgetInterfacesViolationOf<BroadSlotsInterfaces>>()
-			.toEqualTypeOf<'\'slots\' must be a finite union of string literals'>()
+			.toEqualTypeOf<'\'slots\' must not be declared with a broad string index signature'>()
+	})
+
+	it('rejects a slot whose expectation is a broad string', () => {
+		expectTypeOf<WidgetInterfacesViolationOf<BroadSlotExpectationInterfaces>>()
+			.toEqualTypeOf<'\'slots\' values must be a finite union of plugin type literals, a WidgetContract or WidgetChild'>()
 	})
 
 	it('rejects a broad string index signature on events', () => {

@@ -486,7 +486,7 @@ describe('deterministic diagnostic ordering', () => {
 	it('orders independent whole-node diagnostics as id -> type -> slots', () => {
 		const blueprint = system.createBlueprint({
 			type: 'nonexistent-plugin',
-			slots: { 'not-an-object': WidgetChild },
+			slots: 'not-an-object',
 		})
 		const diagnostics = blueprint.root.diagnostics
 			.filter(isDefinitionDiagnostic)
@@ -499,7 +499,7 @@ describe('deterministic diagnostic ordering', () => {
 			id: 'x',
 			type: 'container',
 			config: { foo: 1 },
-			slots: { 'not-an-object': WidgetChild },
+			slots: 'not-an-object',
 		})
 		const diagnostics = blueprint.root.diagnostics
 			.filter(isDefinitionDiagnostic)
@@ -510,7 +510,7 @@ describe('deterministic diagnostic ordering', () => {
 
 describe('definition diagnostic codes do not depend on message text', () => {
 	interface KeywordSlotInterfaces {
-		slots: 'not declared'
+		slots: { 'not declared': WidgetChild }
 	}
 
 	const keywordSlotPlugin = createWidgetPlugin('keyword-slot')

@@ -207,10 +207,7 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 					emit[PROTO_KEY](args[0])
 				},
 			}))
-			.events((events) => {
-				const beforeProto = events.change({})
-				return beforeProto[PROTO_KEY]({})
-			})
+			.events(['change', PROTO_KEY])
 			.done()
 		expect(plugin.type)
 			.toBe('notifier')

@@ -53,7 +53,7 @@ describe('createWidgetSystem plugin registration errors', () => {
 		expect(nullError)
 			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 0, pluginType: null })
 
-		const lookAlike = { type: 'X', capabilities: {}, config: null, descriptions: { config: null, slots: null } }
+		const lookAlike = { type: 'X', capabilities: {} }
 		const lookAlikeError = capture(() => createWidgetSystem({ plugins: [plain('ok'), lookAlike] as never }))
 		expect(lookAlikeError)
 			.toBeInstanceOf(WidgetSystemConfigurationError)
@@ -210,7 +210,7 @@ describe('widgetSystem catalog', () => {
 			.toBeInstanceOf(WidgetSystemConfigurationError)
 	})
 
-	it('projects intrinsic plugin, config, and slot descriptions in registration order', () => {
+	it('projects the type, capability presence and slot names in registration order', () => {
 		interface CardInterfaces {
 			config: {
 				raw: { readonly label?: string }
@@ -239,20 +239,25 @@ describe('widgetSystem catalog', () => {
 
 		expect(system.catalog.widgets.map(widget => widget.type))
 			.toEqual(['card', 'label'])
+		// Semantic facts only: type, capability presence and slot names.
 		expect(system.catalog.widgets[0])
-			.toMatchObject({
+			.toEqual({
 				type: 'card',
-				descriptions: { config: 'Card configuration' },
+				capabilities: { config: true, slots: true, state: false, properties: false, methods: false, events: true },
+				slots: ['content'],
 			})
-		expect(system.catalog.widgets[0]?.descriptions.slots?.get('content'))
-			.toBe('Card content')
-		expect(system.catalog.widgets[0]!.descriptions)
-			.not.toHaveProperty('events')
+		expect(system.catalog.widgets[0]!.capabilities)
+			.toBe(card.capabilities)
 		expect(system.catalog.widgets[1])
-			.toMatchObject({
+			.toEqual({
 				type: 'label',
-				descriptions: { config: null, slots: null },
+				capabilities: { config: false, slots: false, state: false, properties: false, methods: false, events: false },
+				slots: null,
 			})
+		expect(Object.isFrozen(system.catalog.widgets[0]))
+			.toBe(true)
+		expect(Object.isFrozen(system.catalog.widgets[0]!.slots))
+			.toBe(true)
 		expect(Object.isFrozen(system.catalog))
 			.toBe(true)
 		expect(Object.isFrozen(system.catalog.widgets))

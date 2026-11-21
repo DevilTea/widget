@@ -326,17 +326,14 @@ describe('plugin build with `emits`', () => {
 	it('throws a malformed value from the member call inside `.methods()`, and an unknown or repeated name only from `done()`', () => {
 		const phase = () => createWidgetPlugin('js')
 			.interfaces<FireInterfaces>()
-		let reachedEvents = false
+		let reachedOther = false
 		expectTypeErrorNaming(() => phase()
-			.methods(methods => methods
-				.fire({ validateArgs: noArgs, emits: 'fired', execute } as never)
-				.other({ validateArgs: noArgs, execute: () => {} }))
-			.events((events) => {
-				reachedEvents = true
-				return events.fired({})
-					.other({})
+			.methods((methods) => {
+				const afterFire = methods.fire({ validateArgs: noArgs, emits: 'fired', execute } as never)
+				reachedOther = true
+				return afterFire.other({ validateArgs: noArgs, execute: () => {} })
 			}), 'js', 'fire')
-		expect(reachedEvents)
+		expect(reachedOther)
 			.toBe(false)
 
 		for (const emits of [['fierd'], ['fired', 'fired']]) {
@@ -356,14 +353,13 @@ describe('plugin build with `emits`', () => {
 	})
 
 	it('checks only the Methods that declare `emits`, and names the first invalid one in declaration order', () => {
-		const events = (section: { fired: (definition: object) => { other: (definition: object) => unknown } }) => section.fired({})
-			.other({})
+		const events = ['fired', 'other'] as const
 		const build = (first: Record<string, unknown>, second: Record<string, unknown>) => createWidgetPlugin('js')
 			.interfaces<FireInterfaces>()
 			.methods(methods => methods
 				.fire(first as never)
 				.other(second as never))
-			.events(events as never)
+			.events(events)
 			.done()
 		// Methods without `emits` are never an error, wherever they sit.
 		expect(() => build({ validateArgs: noArgs, execute }, { validateArgs: noArgs, execute }))
@@ -380,7 +376,7 @@ describe('plugin build with `emits`', () => {
 				section.other!({ validateArgs: noArgs, execute })
 				return methods as never
 			})
-			.events(events as never)
+			.events(events)
 		expect(() => redeclared.done())
 			.not.toThrow()
 	})

@@ -67,10 +67,11 @@ export interface WidgetContractShape {
 
 /**
  * A structural, type-only expectation of a slot's children: the State, Properties, Methods and Events a
- * child is expected to have. It has no runtime form, and Core never checks it.
+ * child is expected to have. It has no runtime form (no value of this type exists), and Core never checks
+ * it. The brand is required, so an ordinary object type is not mistaken for a contract.
  */
 export interface WidgetContract<Shape extends WidgetContractShape = WidgetContractShape> {
-	readonly [widgetContractShape]?: Shape
+	readonly [widgetContractShape]: Shape
 }
 
 /** The slot expectation that accepts any widget. */

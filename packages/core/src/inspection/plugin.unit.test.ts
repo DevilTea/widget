@@ -162,8 +162,7 @@ describe('plugin inspection', () => {
 				.constructor({ validate: (input): input is number => typeof input === 'number' }))
 			.properties(properties => properties[PROTO_KEY]({ valueContract: stringContract, compute: () => '__proto__' })
 				.constructor({ valueContract: stringContract, compute: () => 'constructor' }))
-			.events(events => events[PROTO_KEY]({})
-				.constructor({}))
+			.events([PROTO_KEY, 'constructor'])
 			.done()
 		const inspection = inspectPlugin(special)
 
@@ -188,7 +187,6 @@ describe('plugin inspection', () => {
 		const card = createWidgetPlugin('inspection-card')
 			.interfaces<CardInterfaces>()
 			.config({
-				schema: { type: 'object', properties: { label: { type: 'string' } } },
 				validate: (input): input is { readonly label?: string } | null => input === null || typeof input === 'object',
 				resolve: raw => ({ label: raw?.label ?? 'Card' }),
 			})
@@ -200,12 +198,12 @@ describe('plugin inspection', () => {
 
 		expect(inspection.type)
 			.toBe('inspection-card')
-		expect(inspection.description)
-			.toBe('Card widget')
 		expect(inspection.capabilities)
 			.toEqual({ config: true, slots: true, state: true, properties: false, methods: false, events: false })
-		expect(inspection.config)
-			.toEqual({ schema: { type: 'object', properties: { label: { type: 'string' } } } })
+		// Semantic facts only: no prose and no schema.
+		expect(inspection).not.toHaveProperty('description')
+		expect(inspection).not.toHaveProperty('config')
+		expect(inspection.slots!.get('header')).not.toHaveProperty('description')
 		expect([...inspection.slots!.values()])
 			.toEqual([
 				{ type: 'slot', name: 'header' },
@@ -215,14 +213,10 @@ describe('plugin inspection', () => {
 		// Every catalog fact is available from the inspection.
 		expect(inspection.type)
 			.toBe(entry.type)
-		expect(inspection.description)
-			.toBe(entry.description)
-		expect(inspection.config)
-			.toEqual(entry.config)
-		expect(inspection.config?.description ?? null)
-			.toBe(entry.descriptions.config)
-		expect([...inspection.slots!].map(([name, slot]) => [name, slot.description]))
-			.toEqual([...entry.descriptions.slots!])
+		expect(inspection.capabilities)
+			.toBe(entry.capabilities)
+		expect([...inspection.slots!.keys()])
+			.toEqual(entry.slots)
 		expect(Object.isFrozen(inspection.capabilities))
 			.toBe(true)
 		expect(Object.isFrozen(inspection.slots))
@@ -240,8 +234,6 @@ describe('plugin inspection', () => {
 			.slots({})
 			.done()
 
-		expect(inspectPlugin(absent).config)
-			.toBeNull()
 		expect(inspectPlugin(absent).slots)
 			.toBeNull()
 		expect(inspectPlugin(absent).capabilities)

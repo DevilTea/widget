@@ -108,7 +108,7 @@ describe('malformed declared slot', () => {
 	})
 
 	it('a malformed slots container also resolves every declared slot to [] and reports a definition diagnostic at [\'slots\']', () => {
-		const { blueprint, root } = getContainerRoot({ id: 'root', type: 'container', slots: { 'not-an-object': WidgetChild } })
+		const { blueprint, root } = getContainerRoot({ id: 'root', type: 'container', slots: 'not-an-object' })
 
 		expect(Object.keys(root.slots))
 			.toEqual(['header', 'content'])
