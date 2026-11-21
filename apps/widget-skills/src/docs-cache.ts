@@ -18,6 +18,10 @@
  * - `<key>.json`: `{ key, docs }`.
  * Both are written atomically (temporary file and rename). An unreadable, corrupt or mismatching entry or manifest
  * is a miss: the System is generated again and both files are rewritten. Delete the directory to clear the cache.
+ *
+ * Writing is best effort: when the cache cannot be written (a read-only or missing file system, no permission, any
+ * other error), the generated docs are still returned and one warning is emitted per cache object. The environment
+ * variable `WIDGET_DOCS_CACHE=off` bypasses the cache entirely: nothing is read from or written to it.
  */
 
 import type ts from 'typescript'
@@ -48,8 +52,13 @@ export interface DocsSystem {
 }
 
 export interface DocsCacheOptions {
-	/** The directory of the cache files; `null` disables the disk cache (every load generates). */
+	/**
+	 * The directory of the cache files; `null` disables the disk cache (every load generates), and so does the environment
+	 * variable `WIDGET_DOCS_CACHE=off`.
+	 */
 	cacheDir: string | null
+	/** Receives the one warning about a cache that cannot be written. Defaults to `console.warn`. */
+	warn?: (message: string) => void
 	/** Where the lockfile search starts, and what the IR's paths are relative to. */
 	root: string
 	/**
@@ -171,7 +180,16 @@ export interface DocsCache {
 	load: (name: string, system: DocsSystem) => Promise<DocsResult>
 }
 
+/** `true` when `WIDGET_DOCS_CACHE=off` asks to bypass the disk cache. */
+export function isCacheDisabledByEnvironment(): boolean {
+	return process.env.WIDGET_DOCS_CACHE?.trim()
+		.toLowerCase() === 'off'
+}
+
 export function createDocsCache(options: DocsCacheOptions): DocsCache {
+	const cacheDir = isCacheDisabledByEnvironment() ? null : options.cacheDir
+	const warn = options.warn ?? ((message: string) => console.warn(message))
+	let warnedAboutWrite = false
 	const runtime = options.runtime ?? true
 	const loadRuntime = options.loadRuntime ?? importRuntimeFacts
 	const lockHash = lockfileHash(options.root)
@@ -185,9 +203,9 @@ export function createDocsCache(options: DocsCacheOptions): DocsCache {
 	}))
 
 	function tryHit(name: string, fixed: string): DocsResult | null {
-		if (options.cacheDir === null)
+		if (cacheDir === null)
 			return null
-		const manifest = readJson(join(options.cacheDir, `${name}.manifest.json`)) as Partial<Manifest> | undefined
+		const manifest = readJson(join(cacheDir, `${name}.manifest.json`)) as Partial<Manifest> | undefined
 		if (typeof manifest !== 'object' || manifest === null || manifest.fixed !== fixed || typeof manifest.key !== 'string' || !Array.isArray(manifest.files) || !manifest.files.every(file => typeof file === 'string'))
 			return null
 		let key: string
@@ -200,7 +218,7 @@ export function createDocsCache(options: DocsCacheOptions): DocsCache {
 		}
 		if (key !== manifest.key || !NAME.test(key))
 			return null
-		const entry = readJson(join(options.cacheDir, `${key}.json`)) as { key?: unknown, docs?: WidgetDocs } | undefined
+		const entry = readJson(join(cacheDir, `${key}.json`)) as { key?: unknown, docs?: WidgetDocs } | undefined
 		if (typeof entry !== 'object' || entry === null || entry.key !== key || typeof entry.docs !== 'object' || entry.docs === null || entry.docs.docsVersion !== WIDGET_DOCS_VERSION)
 			return null
 		return { docs: entry.docs, files: manifest.files, key, hit: true, check: null }
@@ -241,15 +259,25 @@ export function createDocsCache(options: DocsCacheOptions): DocsCache {
 		const files = [...contents.keys()].sort()
 		const key = sha256(fixed, hashFiles(files, file => contents.get(file)!))
 
-		if (options.cacheDir !== null) {
-			mkdirSync(options.cacheDir, { recursive: true })
-			const manifestPath = join(options.cacheDir, `${name}.manifest.json`)
-			const previous = readJson(manifestPath) as Partial<Manifest> | undefined
-			writeAtomically(join(options.cacheDir, `${key}.json`), JSON.stringify({ key, docs }))
-			writeAtomically(manifestPath, `${JSON.stringify({ key, fixed, files } satisfies Manifest, null, '\t')}\n`)
-			// The entry the manifest pointed at before belongs to no manifest any more.
-			if (typeof previous?.key === 'string' && previous.key !== key && NAME.test(previous.key))
-				rmSync(join(options.cacheDir, `${previous.key}.json`), { force: true })
+		if (cacheDir !== null) {
+			try {
+				mkdirSync(cacheDir, { recursive: true })
+				const manifestPath = join(cacheDir, `${name}.manifest.json`)
+				const previous = readJson(manifestPath) as Partial<Manifest> | undefined
+				writeAtomically(join(cacheDir, `${key}.json`), JSON.stringify({ key, docs }))
+				writeAtomically(manifestPath, `${JSON.stringify({ key, fixed, files } satisfies Manifest, null, '\t')}\n`)
+				// The entry the manifest pointed at before belongs to no manifest any more.
+				if (typeof previous?.key === 'string' && previous.key !== key && NAME.test(previous.key))
+					rmSync(join(cacheDir, `${previous.key}.json`), { force: true })
+			}
+			catch (error) {
+				// Best effort: the docs are correct without the cache.
+				if (!warnedAboutWrite) {
+					warnedAboutWrite = true
+					const reason = (error as NodeJS.ErrnoException).code ?? (error instanceof Error ? error.message : String(error))
+					warn(`widget-docs: cannot write the cache in ${cacheDir} (${reason}); the docs are generated on every load. Set WIDGET_DOCS_CACHE=off to skip the cache.`)
+				}
+			}
 		}
 		return { docs, files, key, hit: false, check: checkIr(ir) }
 	}

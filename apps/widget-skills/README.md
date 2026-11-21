@@ -33,7 +33,7 @@ Generating **imports the System's module and runs its top-level code** to cross-
 `system.catalog` and `inspectPlugin` (`runtime: false` turns that off). The result is cached in
 `node_modules/.cache/widget-docs/`; a hit builds no TypeScript program. The key covers every source file the
 program read outside `node_modules`, the tsconfig files, the lockfile and the generator itself. Delete the directory
-to clear the cache. See `AGENTS.md` for the details.
+to clear the cache; `WIDGET_DOCS_CACHE=off` bypasses it, and a cache that cannot be written only logs a warning. See `AGENTS.md` for the details.
 
 ## Command line
 

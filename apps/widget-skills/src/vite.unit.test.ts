@@ -1,14 +1,15 @@
 import type { HmrContext, Plugin, ViteDevServer } from 'vite'
 import type { DocsSystem, RuntimeFacts, WidgetDocs } from './index'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { inspectPlugin } from '@deviltea/widget-core/inspection'
 import ts from 'typescript'
 import docsFromVitest from 'virtual:widget-docs/survey'
 import { build, createServer } from 'vite'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { surveySystem } from '../fixtures/survey-system'
 import { collectRuntimeFacts, createDocsCache, emitDocs, extractIr } from './index'
 import { widgetDocs } from './vite'
@@ -203,6 +204,76 @@ describe('createDocsCache', () => {
 			.toBe(true)
 		expect(factory.count())
 			.toBe(6)
+	}, 120_000)
+
+	it('returns the docs and warns once when the cache cannot be written', async () => {
+		const { system } = writableSystem()
+		// A regular file where the cache directory's parent should be: every write fails with ENOTDIR.
+		const blocker = join(mkdtempSync(join(scratch, 'blocked-')), 'file')
+		writeFileSync(blocker, '')
+		const warnings: string[] = []
+		const factory = countingFactory()
+		const cache = createDocsCache({ cacheDir: join(blocker, 'cache'), root: scratch, runtime: false, createProgram: factory.createProgram, warn: message => warnings.push(message) })
+		const first = await cache.load('badge', system)
+		const second = await cache.load('badge', system)
+		expect([first.hit, second.hit, factory.count()])
+			.toEqual([false, false, 2])
+		expect(second.docs)
+			.toStrictEqual(first.docs)
+		expect(first.docs.plugins.Badge!.summary)
+			.toBe('A badge.')
+		expect(warnings)
+			.toHaveLength(1)
+		expect(warnings[0])
+			.toMatch(/cannot write the cache in .*\(ENOTDIR\)/)
+	}, 120_000)
+
+	it.skipIf(process.getuid?.() === 0)('returns the docs when the cache directory is read-only (EACCES)', async () => {
+		const { system } = writableSystem()
+		const cacheDir = mkdtempSync(join(scratch, 'read-only-'))
+		chmodSync(cacheDir, 0o555)
+		const warnings: string[] = []
+		try {
+			const result = await createDocsCache({ cacheDir, root: scratch, runtime: false, warn: message => warnings.push(message) })
+				.load('badge', system)
+			expect(result.docs.plugins.Badge!.summary)
+				.toBe('A badge.')
+			expect(warnings)
+				.toEqual([expect.stringContaining('(EACCES)')])
+			expect(readdirSync(cacheDir))
+				.toEqual([])
+		}
+		finally {
+			chmodSync(cacheDir, 0o755)
+		}
+	}, 120_000)
+
+	it('reads and writes nothing with WIDGET_DOCS_CACHE=off', async () => {
+		const { system } = writableSystem()
+		const populated = mkdtempSync(join(scratch, 'cache-'))
+		const factory = countingFactory()
+		const load = (cacheDir: string) => createDocsCache({ cacheDir, root: scratch, runtime: false, createProgram: factory.createProgram })
+			.load('badge', system)
+		await load(populated)
+		expect((await load(populated)).hit)
+			.toBe(true)
+		vi.stubEnv('WIDGET_DOCS_CACHE', 'off')
+		try {
+			// A valid entry is not read...
+			expect((await load(populated)).hit)
+				.toBe(false)
+			// ...and nothing is written.
+			const empty = mkdtempSync(join(scratch, 'cache-'))
+			expect((await load(empty)).hit)
+				.toBe(false)
+			expect(readdirSync(empty))
+				.toEqual([])
+			expect(factory.count())
+				.toBe(3)
+		}
+		finally {
+			vi.unstubAllEnvs()
+		}
 	}, 120_000)
 
 	it('refuses a System whose types and runtime disagree, and a name that is not a file name', async () => {

@@ -15,7 +15,7 @@
  * does not accept the update). A change to any other file regenerates nothing.
  */
 
-import type { HmrContext, ModuleNode, Plugin, ViteDevServer } from 'vite'
+import type { HmrContext, Logger, ModuleNode, Plugin, ViteDevServer } from 'vite'
 import type { DocsCache, DocsCacheOptions, DocsResult } from './docs-cache'
 import { resolve } from 'node:path'
 import process from 'node:process'
@@ -40,7 +40,10 @@ export interface WidgetDocsSystemOptions {
 export interface WidgetDocsOptions {
 	/** Each key `<name>` is served as `virtual:widget-docs/<name>`. A name matches `[\w.-]+`. */
 	systems: Record<string, WidgetDocsSystemOptions>
-	/** The cache directory, relative to `root`; `false` disables the disk cache. Default `node_modules/.cache/widget-docs`. */
+	/**
+	 * The cache directory, relative to `root`; `false` disables the disk cache. Default `node_modules/.cache/widget-docs`.
+	 * The environment variable `WIDGET_DOCS_CACHE=off` disables it too.
+	 */
 	cacheDir?: string | false
 	/** Import the System's module for the runtime cross-check (runs its top-level code). Default `true`. */
 	runtime?: boolean
@@ -54,6 +57,7 @@ const RESOLVED_PREFIX = `\0${WIDGET_DOCS_PREFIX}`
 
 export function widgetDocs(options: WidgetDocsOptions): Plugin {
 	let root = process.cwd()
+	let logger: Logger | undefined
 	let cache: DocsCache | undefined
 	let serving = false
 	/** Vite's dev watcher; the input files of a System are added to it when the System is loaded. */
@@ -73,6 +77,7 @@ export function widgetDocs(options: WidgetDocsOptions): Plugin {
 			cacheDir: options.cacheDir === false ? null : options.cacheDir === undefined ? defaultCacheDir(root) : resolve(root, options.cacheDir),
 			root,
 			runtime: options.runtime,
+			warn: message => logger === undefined ? console.warn(message) : logger.warn(message),
 			createProgram: options.createProgram,
 			loadRuntime: options.loadRuntime,
 		})
@@ -96,6 +101,7 @@ export function widgetDocs(options: WidgetDocsOptions): Plugin {
 		name: 'widget-docs',
 		configResolved(config) {
 			root = config.root
+			logger = config.logger
 			serving = config.command === 'serve' && !config.isProduction && config.server.watch !== null
 		},
 		resolveId(id) {
