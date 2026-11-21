@@ -10,7 +10,7 @@ import type { VueWrapper } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPacksRuntime, widgetsOf } from '../test-support'
 import { createdNuxtUiApps, liveNuxtUiApps } from './nuxt-ui/nested-app'
-import { restorePackStyles } from './nuxt-ui/pack-styles'
+import { forgetPackStyles } from './nuxt-ui/pack-styles'
 import { createTestHost, mountPacks, settle, waitForNuxtUi, widgetSelector } from './test-harness'
 
 vi.setConfig({ testTimeout: 30_000 })
@@ -138,7 +138,7 @@ describe('switching the pack keeps one Runtime', () => {
 				.toBe(false)
 		}
 		finally {
-			await restorePackStyles()
+			forgetPackStyles()
 			style.remove()
 		}
 	})

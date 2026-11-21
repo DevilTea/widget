@@ -265,6 +265,19 @@ describe('the Lab shell does not load showcase renderers', () => {
 				.toEqual(['assets/x-renderers.js is a showcase renderer, loaded by index.html', 'assets/x.css is linked by index.html but belongs to a showcase renderer'])
 		})
 
+		it('keeps the Nuxt UI pack\'s marker rule in the built stylesheet of its chunk (`pack-styles.ts` finds the stylesheet by it)', () => {
+			expect(existsSync(join(dist, '.vite', 'manifest.json')), 'apps/lab/dist/.vite/manifest.json is missing: run `pnpm build` first')
+				.toBe(true)
+			const manifest = JSON.parse(readFileSync(join(dist, '.vite', 'manifest.json'), 'utf8')) as Manifest
+			const key = 'src/showcases/renderer-packs/renderers/nuxt-ui/NuxtUiPack.ts'
+			expect(manifest[key], `${key} is a chunk of its own`)
+				.toBeDefined()
+			const holders = (manifest[key]?.css ?? []).filter(css => readFileSync(join(dist, css), 'utf8')
+				.includes('.packs-ui-pack-marker'))
+			expect(holders, 'exactly one stylesheet of the Nuxt UI pack holds the marker rule')
+				.toHaveLength(1)
+		})
+
 		it('has every showcase renderer and its styles out of the shell: index.html links no renderer stylesheet and loads no renderer chunk', () => {
 			expect(existsSync(join(dist, '.vite', 'manifest.json')), 'apps/lab/dist/.vite/manifest.json is missing: run `pnpm build` first')
 				.toBe(true)

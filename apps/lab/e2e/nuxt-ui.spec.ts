@@ -328,25 +328,29 @@ async function expectFrameIsolated(page: Page, showcase: string): Promise<void> 
 				.locator('[data-widget-id]')
 				.first())
 		.toBeVisible({ timeout: 15_000 })
-	const frameHandle = await page.locator('[data-testid="preview-frame"]')
-		.elementHandle()
-	const frame = await frameHandle!.contentFrame()
-	const report = await frame!.evaluate(() => {
-		const root = document.documentElement
-		const style = getComputedStyle(root)
-		const cssText = [...document.styleSheets]
-			.flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText))
-			.join('\n')
-		return {
-			htmlClass: root.className,
-			labTheme: root.dataset.labTheme,
-			uiToken: style.getPropertyValue('--ui-bg'),
-			twToken: style.getPropertyValue('--color-red-500'),
-			hasTailwindCss: /--tw-|@layer (?:theme|properties)|--ui-/.test(cssText),
-			lineHeight: style.lineHeight,
-		}
-	})
-	expect(report)
+	// Polled: a showcase switch or a pack switch leaves the frame in a moment, not at once (for one, `unhead` removes the Nuxt UI
+	// colour block with a debounced timer after the pack unmounted), and the frame element is read again each time.
+	const readFrame = async () => {
+		const frameHandle = await page.locator('[data-testid="preview-frame"]')
+			.elementHandle()
+		const frame = await frameHandle!.contentFrame()
+		return frame!.evaluate(() => {
+			const root = document.documentElement
+			const style = getComputedStyle(root)
+			const cssText = [...document.styleSheets]
+				.flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText))
+				.join('\n')
+			return {
+				htmlClass: root.className,
+				labTheme: root.dataset.labTheme,
+				uiToken: style.getPropertyValue('--ui-bg'),
+				twToken: style.getPropertyValue('--color-red-500'),
+				hasTailwindCss: /--tw-|@layer (?:theme|properties)|--ui-/.test(cssText),
+				lineHeight: style.lineHeight,
+			}
+		})
+	}
+	await expect.poll(readFrame, { message: 'the frame document carries no Tailwind or Nuxt UI CSS and no dark class' })
 		.toEqual({
 			htmlClass: '',
 			labTheme: 'dark',

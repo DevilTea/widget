@@ -422,36 +422,87 @@ test.describe('the modal is local to the Preview', () => {
 			await page.keyboard.press('Escape')
 			await expect(page.getByTestId('examples-menu'))
 				.toHaveAttribute('aria-expanded', 'false')
+			// The menu closes with an exit animation, and Reka hands focus back to its trigger only after the content has unmounted:
+			// wait for both before anything is focused in the frame, or focus would jump back to the Lab afterwards.
+			await expect(page.getByRole('menu'))
+				.toHaveCount(0)
+			await expect(page.getByTestId('examples-menu'))
+				.toBeFocused()
 			// Nothing in the Lab was made inert for the iframe's sake, and the modal is still open.
 			expect(await page.evaluate(() => document.querySelectorAll('[inert]').length))
 				.toBe(0)
 			await expect(dialog)
 				.toBeVisible()
 
-			// Keyboard focus is trapped in the modal: every Tab (and Shift+Tab) lands inside it. Keys go to the document that has focus,
-			// and the Lab's menu has just taken it (and a closing Reka menu hands focus back to its trigger a moment later), so first
-			// give focus to the frame with a click on the dialog's own padding, then to the control, and wait for both. Then every step
-			// is waited for as well: a key press is handled asynchronously, so the focused element is read until it is where the step
-			// puts it, never once right after the press.
+			// Keyboard focus and the modal. Keys go to the document that has focus, so each check first gives focus to the frame (a click on
+			// the dialog's own padding), then to the control, and waits for it.
+			//
+			// The expected behaviour, stated per modal:
+			// - UModal (Reka's focus scope, `loop`): Tab on the last control wraps to the first (the close button), Shift+Tab on the
+			//   first wraps to the last. Focus never leaves the modal.
+			// - the native <dialog> in the iframe: everything else in the frame document is inert, so Tab on the last control and
+			//   Shift+Tab on the first must never land on the page behind the dialog. They MAY leave the frame document (to the Lab
+			//   shell, the browser's own behaviour for any iframe), so that is allowed and only "behind the dialog" is a failure.
 			const cancel = preview.getByTestId(`${pack}-cancel-archive-workspace`)
 			const confirm = preview.getByTestId(`${pack}-confirm-archive-workspace`)
-			await dialog.click({ position: { x: 4, y: 4 } })
-			await cancel.focus()
+			const first = pack === 'nui' ? dialog.locator('[data-slot="close"]') : cancel
+			const last = confirm
+			const give = async (target: Locator): Promise<void> => {
+				await dialog.click({ position: { x: 4, y: 4 } })
+				await target.focus()
+				await expect(target)
+					.toBeFocused()
+			}
+			/** Where the frame's focus is: in the modal, on the frame's body (focus is not in the frame), or on the page behind the modal. */
+			const place = (): Promise<string> => preview.locator('body')
+				.evaluate(() => {
+					const active = document.activeElement
+					if (active !== null && active.closest('dialog, [role="dialog"]') !== null)
+						return 'modal'
+					return active === null || active === document.body ? 'body' : 'behind'
+				})
+			// A key's default action is applied before the next frame, so wait two frames of the frame document, then read once.
+			const afterKey = async (key: string): Promise<void> => {
+				await page.keyboard.press(key)
+				await preview.locator('body')
+					.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+			}
+
+			// Between neighbours focus moves as the document order says.
+			await give(cancel)
+			await afterKey('Tab')
+			await expect(confirm)
+				.toBeFocused()
+			await afterKey('Shift+Tab')
 			await expect(cancel)
 				.toBeFocused()
-			for (let step = 0; step < 6; step++) {
-				await page.keyboard.press(step % 2 === 0 ? 'Tab' : 'Shift+Tab')
-				await expect(step % 2 === 0 ? confirm : cancel, `step ${step}`)
+
+			// At the edges: the trap.
+			await give(last)
+			await afterKey('Tab')
+			if (pack === 'nui') {
+				await expect(first)
 					.toBeFocused()
-				await expect.poll(() => preview.locator('body')
-					.evaluate(() => document.activeElement?.closest('dialog, [role="dialog"]') !== null), { message: `step ${step}: focus is inside the modal` })
-					.toBe(true)
+			}
+			else {
+				expect(await place())
+					.not
+					.toBe('behind')
+			}
+			await give(first)
+			await afterKey('Shift+Tab')
+			if (pack === 'nui') {
+				await expect(last)
+					.toBeFocused()
+			}
+			else {
+				expect(await place())
+					.not
+					.toBe('behind')
 			}
 
 			// Esc is Cancel: State says the question is over and nothing was notified.
-			await cancel.focus()
-			await expect(cancel)
-				.toBeFocused()
+			await give(cancel)
 			await page.keyboard.press('Escape')
 			await expect(dialog)
 				.toBeHidden()

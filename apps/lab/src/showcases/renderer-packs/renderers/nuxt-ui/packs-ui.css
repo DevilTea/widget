@@ -149,7 +149,9 @@
 }
 
 /*
- * The marker `pack-styles.ts` finds this stylesheet by. Keep it a rule of its own at the top level, last in the file.
+ * The marker `pack-styles.ts` finds this stylesheet by. Keep it a rule of its own at the top level. It is not the last rule of
+ * the built file (Tailwind appends `@property` and `@keyframes` after it), so the finder reads the whole list;
+ * `shell-isolation.unit.test.ts` checks that it survives the build.
  */
 .packs-ui-pack-marker {
 	--packs-ui-pack: 1;
