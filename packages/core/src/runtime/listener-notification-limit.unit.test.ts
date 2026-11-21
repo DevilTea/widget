@@ -16,6 +16,7 @@
  */
 
 import type { RuntimeState } from '../index'
+import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectRuntime } from '../inspection'
@@ -31,7 +32,6 @@ const isNumber = (input: unknown): input is number => typeof input === 'number'
 const isAnything = (input: unknown): input is unknown => input !== undefined
 
 const nodePlugin = createWidgetPlugin('node')
-	.description('Test widget')
 	.interfaces<NodeInterfaces>()
 	.state(state => state
 		.n({ validate: isNumber, default: () => 1 })
@@ -79,9 +79,8 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const graphPlugin = createWidgetPlugin('graph')
-	.description('Test widget')
-	.interfaces<{ slots: 'nodes' }>()
-	.slots({ nodes: { description: 'Nodes' } })
+	.interfaces<{ slots: { nodes: WidgetChild } }>()
+	.slots({ nodes: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, graphPlugin] })
@@ -916,7 +915,6 @@ describe('no batch level is left behind', () => {
 
 	it('by a nested write whose validation throws', () => {
 		const throwing = createWidgetPlugin('throwing')
-			.description('Test widget')
 			.interfaces<{ state: { n: number } }>()
 			.state(state => state.n({
 				validate: (input): input is number => {

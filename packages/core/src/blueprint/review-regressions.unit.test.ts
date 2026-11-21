@@ -65,6 +65,7 @@
  */
 
 import type { JsonValue, StateSetDepExpression } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -93,7 +94,6 @@ describe('property-owned state-set dependency escape (finding 3773310829)', () =
 	}
 
 	const plugin = createWidgetPlugin('property-state-set-escape')
-		.description('Test widget')
 		.interfaces<EscapeInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -129,15 +129,13 @@ describe('property-owned state-set dependency escape (finding 3773310829)', () =
 describe('synchronous semantic-boundary guard, Blueprint side (finding 3773310833)', () => {
 	it('an async slot-level validateStructure throws instead of silently starting async work', () => {
 		interface ListInterfaces {
-			slots: 'items'
+			slots: { items: WidgetChild }
 		}
 
 		const plugin = createWidgetPlugin('async-slot-validate-structure')
-			.description('Test widget')
 			.interfaces<ListInterfaces>()
 			.slots({
 				items: {
-					description: 'Test slot',
 					// The type rejects this async function; the sync-boundary guard must still catch it at
 					// runtime for untyped callers.
 					// @ts-expect-error an async structure validator is a type error
@@ -160,13 +158,12 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 
 	it('an async plugin-level validateStructure throws instead of silently starting async work', () => {
 		interface ListInterfaces {
-			slots: 'items'
+			slots: { items: WidgetChild }
 		}
 
 		const plugin = createWidgetPlugin('async-plugin-validate-structure')
-			.description('Test widget')
 			.interfaces<ListInterfaces>()
-			.slots({ items: { description: 'Test slot' } })
+			.slots({ items: {} })
 			// @ts-expect-error an async structure validator is a type error; the runtime guard covers untyped callers
 			.structure(async () => {})
 			.done()
@@ -187,7 +184,6 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 		interface LeafInterfaces {}
 
 		const plugin = createWidgetPlugin('async-system-validate-structure-leaf')
-			.description('Test widget')
 			.interfaces<LeafInterfaces>()
 			.done()
 
@@ -215,7 +211,6 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 		}
 
 		const plugin = createWidgetPlugin('async-register-deps')
-			.description('Test widget')
 			.interfaces<AsyncDepsInterfaces>()
 			.properties(section => section.value({
 				// Deliberately lies about its declared synchronous return type to simulate a
@@ -246,10 +241,8 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 		}
 
 		const plugin = createWidgetPlugin('async-config-validate')
-			.description('Test widget')
 			.interfaces<AsyncConfigInterfaces>()
 			.config({
-				description: 'Test config',
 				validate: (_input): _input is Record<string, JsonValue> => (Promise.resolve(true) as unknown as boolean),
 				resolve: raw => raw ?? {},
 			})
@@ -276,10 +269,8 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 		}
 
 		const plugin = createWidgetPlugin('async-config-resolve')
-			.description('Test widget')
 			.interfaces<AsyncConfigInterfaces>()
 			.config({
-				description: 'Test config',
 				validate: (input): input is Record<string, JsonValue> => typeof input === 'object' && input !== null,
 				resolve: raw => Promise.resolve(raw ?? {}) as unknown as Record<string, unknown>,
 			})
@@ -305,13 +296,12 @@ describe('synchronous semantic-boundary guard, Blueprint side (finding 377331083
 
 describe('slot dual diagnostics: not-declared and malformed coexist independently (finding 3773363784)', () => {
 	interface ContainerInterfaces {
-		slots: 'content'
+		slots: { content: WidgetChild }
 	}
 
 	const containerPlugin = createWidgetPlugin('dual-diag-container')
-		.description('Test widget')
 		.interfaces<ContainerInterfaces>()
-		.slots({ content: { description: 'Test slot' } })
+		.slots({ content: {} })
 		.done()
 
 	const system = createWidgetSystem({ plugins: [containerPlugin] })
@@ -350,18 +340,16 @@ describe('system-level related normalization (finding 3773363797)', () => {
 	interface LeafInterfaces {}
 
 	const leafPlugin = createWidgetPlugin('related-normalize-leaf')
-		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.done()
 
 	interface ListInterfaces {
-		slots: 'items'
+		slots: { items: WidgetChild }
 	}
 
 	const listPlugin = createWidgetPlugin('related-normalize-list')
-		.description('Test widget')
 		.interfaces<ListInterfaces>()
-		.slots({ items: { description: 'Test slot' } })
+		.slots({ items: {} })
 		.done()
 
 	const system = createWidgetSystem({
@@ -468,7 +456,6 @@ describe('registerDeps container keyed by a special JavaScript name stays protot
 	}
 
 	const plugin = createWidgetPlugin('proto-safe-register-deps')
-		.description('Test widget')
 		.interfaces<ProtoSafeInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -544,7 +531,6 @@ describe('edge identity collision across delimiter-rich member names (finding 37
 	}
 
 	const plugin = createWidgetPlugin('edge-key-collision')
-		.description('Test widget')
 		.interfaces<CollisionInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -665,7 +651,6 @@ describe('registerDeps: present-but-malformed output vs an omitted callback (fin
 		}
 
 		const plugin = createWidgetPlugin('malformed-register-deps-property')
-			.description('Test widget')
 			.interfaces<MalformedInterfaces>()
 			.properties(section => section.value({
 
@@ -692,7 +677,6 @@ describe('registerDeps: present-but-malformed output vs an omitted callback (fin
 		}
 
 		const plugin = createWidgetPlugin('malformed-register-deps-method')
-			.description('Test widget')
 			.interfaces<MalformedInterfaces>()
 			.methods(section => section.run({
 
@@ -720,7 +704,6 @@ describe('registerDeps: present-but-malformed output vs an omitted callback (fin
 		}
 
 		const plugin = createWidgetPlugin('omitted-register-deps')
-			.description('Test widget')
 			.interfaces<OmittedInterfaces>()
 			.properties(section => section.value({
 				compute: () => 0,
@@ -746,20 +729,17 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 		interface LeafInterfaces {}
 
 		const leafPlugin = createWidgetPlugin('facade-leaf')
-			.description('Test widget')
 			.interfaces<LeafInterfaces>()
 			.done()
 
 		interface ListInterfaces {
-			slots: 'items'
+			slots: { items: WidgetChild }
 		}
 
 		const listPlugin = createWidgetPlugin('facade-list')
-			.description('Test widget')
 			.interfaces<ListInterfaces>()
 			.slots({
 				items: {
-					description: 'Test slot',
 					validateStructure: (ctx) => {
 						checks.slotWidgetHasNoGetDiagnostics = (ctx.widget as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined
 						checks.slotChildrenHaveNoGetDiagnostics = ctx.children.every(child => (child as unknown as { getDiagnostics?: unknown }).getDiagnostics === undefined)
@@ -804,13 +784,12 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 		let laterCallbackSawWorkingGetWidget: boolean | undefined
 
 		interface ContainerInterfaces {
-			slots: 'child'
+			slots: { child: WidgetChild }
 		}
 
 		const containerPlugin = createWidgetPlugin('facade-freeze-container')
-			.description('Test widget')
 			.interfaces<ContainerInterfaces>()
-			.slots({ child: { description: 'Test slot' } })
+			.slots({ child: {} })
 			.structure((ctx) => {
 				try {
 					// Only reachable through a JS/`any` contract escape: the type is `readonly`.
@@ -829,7 +808,6 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 		}
 
 		const leafPlugin = createWidgetPlugin('facade-freeze-leaf')
-			.description('Test widget')
 			.interfaces<LeafInterfaces>()
 			.properties(section => section.probe({
 				// `registerDeps` runs in a later compile pipeline stage than structure validation, but
@@ -862,19 +840,17 @@ describe('the compile-time facade is genuinely restricted and frozen at runtime,
 
 describe('widgetLocation records are frozen (finding 3773890344)', () => {
 	interface ContainerInterfaces {
-		slots: 'child'
+		slots: { child: WidgetChild }
 	}
 
 	interface LeafInterfaces {}
 
 	const containerPlugin = createWidgetPlugin('location-freeze-container')
-		.description('Test widget')
 		.interfaces<ContainerInterfaces>()
-		.slots({ child: { description: 'Test slot' } })
+		.slots({ child: {} })
 		.done()
 
 	const leafPlugin = createWidgetPlugin('location-freeze-leaf')
-		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.done()
 
@@ -915,7 +891,6 @@ describe('blueprint diagnostic/source structures are immutable (finding 37738903
 	interface LeafInterfaces {}
 
 	const leafPlugin = createWidgetPlugin('diagnostic-freeze-leaf')
-		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.done()
 

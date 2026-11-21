@@ -40,7 +40,6 @@ interface CounterInterfaces {
 
 function createCounterPlugin() {
 	return createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<CounterInterfaces>()
 		.state(section => section
 			.count({

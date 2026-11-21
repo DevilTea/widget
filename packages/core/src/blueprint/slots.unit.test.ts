@@ -4,26 +4,25 @@
  */
 
 import type { BlueprintDefinitionDiagnostic, WidgetInterfaces } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
 interface LeafInterfaces extends WidgetInterfaces {}
 
 const leafPlugin = createWidgetPlugin('leaf')
-	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.done()
 
 interface ContainerInterfaces extends WidgetInterfaces {
-	slots: 'content' | 'header'
+	slots: { content: WidgetChild, header: WidgetChild }
 }
 
 const containerPlugin = createWidgetPlugin('container')
-	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		header: { description: 'Test slot' },
-		content: { description: 'Test slot' },
+		header: {},
+		content: {},
 	})
 	.done()
 
@@ -38,7 +37,6 @@ interface EmptySlotsInterfaces extends WidgetInterfaces {
  * all.
  */
 const emptySlotsPlugin = createWidgetPlugin('empty-slots')
-	.description('Test widget')
 	.interfaces<EmptySlotsInterfaces>()
 	.slots({})
 	.done()
@@ -110,7 +108,7 @@ describe('malformed declared slot', () => {
 	})
 
 	it('a malformed slots container also resolves every declared slot to [] and reports a definition diagnostic at [\'slots\']', () => {
-		const { blueprint, root } = getContainerRoot({ id: 'root', type: 'container', slots: 'not-an-object' })
+		const { blueprint, root } = getContainerRoot({ id: 'root', type: 'container', slots: { 'not-an-object': WidgetChild } })
 
 		expect(Object.keys(root.slots))
 			.toEqual(['header', 'content'])

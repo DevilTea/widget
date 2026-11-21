@@ -10,6 +10,7 @@
  */
 
 import type { ExecutionResult, RuntimeWidgetDiagnostic } from '../index'
+import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectRuntime } from '../inspection'
@@ -66,10 +67,8 @@ interface LinkInterfaces {
 const linkStats = { computeCalls: [] as number[], fallbacks: 0, onCompute: null as ((index: number) => void) | null }
 
 const linkPlugin = createWidgetPlugin('link')
-	.description('Test widget')
 	.interfaces<LinkInterfaces>()
 	.config({
-		description: 'Link',
 		validate: (input): input is LinkConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
@@ -112,9 +111,8 @@ const linkPlugin = createWidgetPlugin('link')
 	.done()
 
 const listPlugin = createWidgetPlugin('list')
-	.description('Test widget')
-	.interfaces<{ slots: 'items' }>()
-	.slots({ items: { description: 'Items' } })
+	.interfaces<{ slots: { items: WidgetChild } }>()
+	.slots({ items: {} })
 	.done()
 
 const linkSystem = createWidgetSystem({ plugins: [linkPlugin, listPlugin] })
@@ -183,7 +181,6 @@ describe('a cold read of the head of a long chain', () => {
 		const length = LONG
 		let computeCalls = 0
 		const widePlugin = createWidgetPlugin('wide')
-			.description('Test widget')
 			.interfaces<{ state: { seed: number }, properties: Record<`p${number}`, number> }>()
 			.state(state => state.seed({ validate: isNumber, default: () => 1 }))
 			// Ten thousand members cannot be spelled out: register them through the section's string keys.
@@ -243,10 +240,8 @@ interface QuestionInterfaces {
 }
 
 const questionPlugin = createWidgetPlugin('question')
-	.description('Test widget')
 	.interfaces<QuestionInterfaces>()
 	.config({
-		description: 'Question',
 		validate: (input): input is QuestionConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
@@ -444,10 +439,8 @@ interface ReaderInterfaces {
 }
 
 const readerPlugin = createWidgetPlugin('reader')
-	.description('Test widget')
 	.interfaces<ReaderInterfaces>()
 	.config({
-		description: 'Reader',
 		validate: (input): input is ReaderConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
@@ -673,10 +666,8 @@ interface SumInterfaces {
 const sumStats = { computeCalls: 0 }
 
 const sumPlugin = createWidgetPlugin('sum')
-	.description('Test widget')
 	.interfaces<SumInterfaces>()
 	.config({
-		description: 'Sum',
 		validate: (input): input is SumConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
@@ -817,7 +808,6 @@ describe('two Runtimes in one realm', () => {
 		const other = createChain(LONG)
 		const otherHead = other.link(LONG - 1)
 		const bridgePlugin = createWidgetPlugin('bridge')
-			.description('Test widget')
 			.interfaces<{ properties: { foreign: number } }>()
 			.properties(properties => properties.foreign({
 				registerDeps: () => ({}),

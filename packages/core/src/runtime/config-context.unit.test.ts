@@ -28,10 +28,8 @@ function record(site: string, ctx: unknown): void {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const configured = createWidgetPlugin('configured')
-	.description('Test widget')
 	.interfaces<ConfiguredInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input): input is { factor: number } => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { factor: 1 },
 	})
@@ -64,7 +62,6 @@ const configured = createWidgetPlugin('configured')
 	.done()
 
 const bare = createWidgetPlugin('bare')
-	.description('Test widget')
 	.interfaces<BareInterfaces>()
 	.state(state => state.value({
 		validate: (input, ctx): input is number => {

@@ -17,7 +17,6 @@ interface DepsInterfaces extends WidgetInterfaces {
 const seen: Record<string, unknown[]> = { doubled: [], bump: [], constant: [] }
 
 const plugin = createWidgetPlugin('deps')
-	.description('Test widget')
 	.interfaces<DepsInterfaces>()
 	.state(state => state.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 	.properties(properties => properties

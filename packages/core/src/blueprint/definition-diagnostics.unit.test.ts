@@ -15,6 +15,7 @@ import type {
 	BlueprintDiagnostic,
 	JsonValue,
 } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -25,19 +26,17 @@ import { createWidgetPlugin, createWidgetSystem } from '../index'
 interface LeafInterfaces {}
 
 const leafPlugin = createWidgetPlugin('leaf')
-	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.done()
 
 interface ContainerInterfaces {
-	slots: 'children'
+	slots: { children: WidgetChild }
 }
 
 const containerPlugin = createWidgetPlugin('container')
-	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		children: { description: 'Test slot' },
+		children: {},
 	})
 	.done()
 
@@ -49,10 +48,8 @@ interface ConfiguredInterfaces {
 }
 
 const configuredPlugin = createWidgetPlugin('configured')
-	.description('Test widget')
 	.interfaces<ConfiguredInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input, ctx): input is { label?: JsonValue } => {
 			if (typeof input !== 'object' || input === null || Array.isArray(input)) {
 				ctx.addDiagnostic({ message: 'Config must be an object.' })
@@ -489,7 +486,7 @@ describe('deterministic diagnostic ordering', () => {
 	it('orders independent whole-node diagnostics as id -> type -> slots', () => {
 		const blueprint = system.createBlueprint({
 			type: 'nonexistent-plugin',
-			slots: 'not-an-object',
+			slots: { 'not-an-object': WidgetChild },
 		})
 		const diagnostics = blueprint.root.diagnostics
 			.filter(isDefinitionDiagnostic)
@@ -502,7 +499,7 @@ describe('deterministic diagnostic ordering', () => {
 			id: 'x',
 			type: 'container',
 			config: { foo: 1 },
-			slots: 'not-an-object',
+			slots: { 'not-an-object': WidgetChild },
 		})
 		const diagnostics = blueprint.root.diagnostics
 			.filter(isDefinitionDiagnostic)
@@ -517,9 +514,8 @@ describe('definition diagnostic codes do not depend on message text', () => {
 	}
 
 	const keywordSlotPlugin = createWidgetPlugin('keyword-slot')
-		.description('Test widget')
 		.interfaces<KeywordSlotInterfaces>()
-		.slots({ 'not declared': { description: 'Test slot' } })
+		.slots({ 'not declared': {} })
 		.done()
 
 	const keywordSystem = createWidgetSystem({ plugins: [keywordSlotPlugin] })

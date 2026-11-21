@@ -6,6 +6,7 @@
  */
 
 import type { WidgetInterfaces } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectRuntime } from '../inspection'
@@ -19,7 +20,6 @@ interface CellInterfaces extends WidgetInterfaces {
 }
 
 const cell = createWidgetPlugin('cell')
-	.description('Test widget')
 	.interfaces<CellInterfaces>()
 	.state(state => state
 		.a({ validate: (input): input is number => typeof input === 'number', default: () => 1 })
@@ -32,15 +32,13 @@ interface NanInterfaces extends WidgetInterfaces {
 }
 
 const nan = createWidgetPlugin('nan')
-	.description('Test widget')
 	.interfaces<NanInterfaces>()
 	.state(state => state.value({ validate: (input): input is number => typeof input === 'number', default: () => Number.NaN }))
 	.done()
 
 const group = createWidgetPlugin('group')
-	.description('Test widget')
-	.interfaces<{ slots: 'children' }>()
-	.slots({ children: { description: 'Children' } })
+	.interfaces<{ slots: { children: WidgetChild } }>()
+	.slots({ children: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [cell, nan, group] })

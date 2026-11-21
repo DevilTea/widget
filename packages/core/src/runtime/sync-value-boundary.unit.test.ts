@@ -51,7 +51,6 @@ describe('state.validate returning a thenable (async validator) is a sync-bounda
 
 	function createRuntime() {
 		const plugin = createWidgetPlugin('async-validate')
-			.description('Test widget')
 			.interfaces<AsyncValidateInterfaces>()
 			.state(state => state.count({
 				// `validate()`'s return type is `boolean`, but nothing stops a misbehaving async
@@ -102,7 +101,6 @@ describe('method.validateArgs returning a thenable (async validator) is a sync-b
 		let executeCount = 0
 
 		const plugin = createWidgetPlugin('async-args')
-			.description('Test widget')
 			.interfaces<AsyncArgsInterfaces>()
 			.methods(methods => methods.run({
 				validateArgs: (args): args is [number] => {
@@ -151,7 +149,6 @@ describe('state.default returning a thenable is a sync-boundary violation at Run
 
 	it('makes blueprint.createRuntime() itself throw synchronously', () => {
 		const plugin = createWidgetPlugin('default-thenable')
-			.description('Test widget')
 			.interfaces<DefaultThenableInterfaces>()
 			.state(state => state.count({
 				validate: (input): input is number => typeof input === 'number',
@@ -181,7 +178,6 @@ describe('an accepted thenable candidate must not become the live State value', 
 
 	function createRuntime() {
 		const plugin = createWidgetPlugin('accepts-anything')
-			.description('Test widget')
 			.interfaces<AcceptsAnythingInterfaces>()
 			.state(state => state.anything({
 				// Accepts every candidate — including a thenable — so acceptance alone cannot be relied
@@ -227,7 +223,6 @@ describe('an accepted thenable candidate must not become the live State value', 
 			typeof input === 'object' && input !== null && typeof (input as { then?: unknown }).then === 'function'
 
 		const plugin = createWidgetPlugin('rejects-thenable')
-			.description('Test widget')
 			.interfaces<RejectsThenableInterfaces>()
 			.state(state => state.value({
 				validate: (input): input is unknown => !isThenable(input),
@@ -298,7 +293,6 @@ describe('a function-valued thenable is a sync-boundary violation too (round-2 f
 
 	it('an accepted callable-thenable candidate must not become the live State value', () => {
 		const plugin = createWidgetPlugin('accepts-anything-fn')
-			.description('Test widget')
 			.interfaces<AcceptsAnythingInterfaces>()
 			.state(state => state.anything({
 				validate: (_input): _input is unknown => true,
@@ -333,7 +327,6 @@ describe('a function-valued thenable is a sync-boundary violation too (round-2 f
 		}
 
 		const plugin = createWidgetPlugin('callable-thenable-execute')
-			.description('Test widget')
 			.interfaces<CallableThenableMethodInterfaces>()
 			.methods(methods => methods.run({
 				validateArgs: (args): args is [] => args.length === 0,
@@ -371,7 +364,6 @@ describe('a dependency .validate() refinement returning a thenable is a sync-bou
 
 	it('throws synchronously via the consuming Property\'s .get(), instead of treating the truthy Promise as an accepted refinement', () => {
 		const plugin = createWidgetPlugin('async-refinement')
-			.description('Test widget')
 			.interfaces<RefinementInterfaces>()
 			.state(state => state.count({
 				validate: (input): input is number => typeof input === 'number',

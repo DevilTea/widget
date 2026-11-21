@@ -21,7 +21,6 @@ let thenableValue = false
 const thenable = { then: () => {} }
 
 const path = createWidgetPlugin('path')
-	.description('Test widget')
 	.interfaces<PathInterfaces>()
 	.state(state => state.count({
 		validate: (input): input is number => thenableValue ? (thenable as never) : typeof input === 'number',

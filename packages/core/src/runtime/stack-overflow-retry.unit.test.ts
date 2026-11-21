@@ -13,6 +13,7 @@
  */
 
 import type { ExecutionResult } from '../index'
+import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -47,7 +48,6 @@ function numberOf(result: ExecutionResult<number | null, unknown>): number {
 function createHarness() {
 	const control = { throwing: null as unknown, computeRuns: 0 }
 	const plugin = createWidgetPlugin('host')
-		.description('Test widget')
 		.interfaces<HostInterfaces>()
 		.state(state => state.n({ validate: (input): input is number => typeof input === 'number', default: () => 1 }))
 		.properties(properties => properties
@@ -192,10 +192,8 @@ describe('a chain of Properties far longer than the engine could nest', () => {
 	}
 
 	const rowPlugin = createWidgetPlugin('row')
-		.description('Test widget')
 		.interfaces<RowInterfaces>()
 		.config({
-			description: 'The previous row',
 			validate: (input): input is { prev: string | null } => typeof input === 'object' && input !== null,
 			resolve: raw => raw ?? { prev: null },
 		})
@@ -214,9 +212,8 @@ describe('a chain of Properties far longer than the engine could nest', () => {
 		}))
 		.done()
 	const tablePlugin = createWidgetPlugin('table')
-		.description('Test widget')
-		.interfaces<{ slots: 'rows' }>()
-		.slots({ rows: { description: 'Rows' } })
+		.interfaces<{ slots: { rows: WidgetChild } }>()
+		.slots({ rows: {} })
 		.done()
 	const chainSystem = createWidgetSystem({ plugins: [rowPlugin, tablePlugin] })
 

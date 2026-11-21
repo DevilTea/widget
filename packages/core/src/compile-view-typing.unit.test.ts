@@ -35,10 +35,11 @@ import type {
 	WidgetRegisterDepsContext,
 	WidgetSlotValidateStructureContext,
 } from './index'
+import type { WidgetChild } from './types'
 import { describe, expectTypeOf, it } from 'vitest'
 
 interface SampleInterfaces extends WidgetInterfaces {
-	slots: 'items'
+	slots: { items: WidgetChild }
 	state: {
 		count: number
 	}

@@ -34,7 +34,6 @@ describe('widget value contracts', () => {
 		}
 
 		createWidgetPlugin('value-contract-types')
-			.description('Value-contract type fixture')
 			.interfaces<Interfaces>()
 			.properties(properties => properties
 				.text({
@@ -48,7 +47,6 @@ describe('widget value contracts', () => {
 			.done()
 
 		createWidgetPlugin('value-contract-type-mismatch')
-			.description('Value-contract mismatch fixture')
 			.interfaces<Interfaces>()
 			.properties(properties => properties
 				.text({
@@ -73,7 +71,6 @@ describe('widget value contracts', () => {
 		}
 
 		const plugin = createWidgetPlugin('value-contract-narrower')
-			.description('Value-contract narrowing fixture')
 			.interfaces<Interfaces>()
 			.properties(properties => properties
 				.size({ valueContract: stringContract, compute: () => 'small' as const })
@@ -98,7 +95,6 @@ describe('widget value contracts', () => {
 		const smallContract = createWidgetValueContract<'small'>('example/small')
 
 		createWidgetPlugin('value-contract-wider')
-			.description('Value-contract widening fixture')
 			.interfaces<Interfaces>()
 			.properties(properties => properties
 				.label({

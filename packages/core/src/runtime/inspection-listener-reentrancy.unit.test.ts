@@ -10,6 +10,7 @@
  */
 
 import type { ExecutionResult } from '../index'
+import type { WidgetChild } from '../types'
 import { effect as alienEffect } from 'alien-signals'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
@@ -33,9 +34,8 @@ const isNumber = (input: unknown): input is number => typeof input === 'number'
 const numberOf = (result: ExecutionResult<unknown, unknown>): number => (result.ok && typeof result.value === 'number' ? result.value : 0)
 
 const linkPlugin = createWidgetPlugin('link')
-	.description('One link of a chain')
 	.interfaces<LinkInterfaces>()
-	.config({ description: 'The previous link', validate: (input): input is LinkConfig => typeof input === 'object' && input !== null, resolve: raw => raw! })
+	.config({ validate: (input): input is LinkConfig => typeof input === 'object' && input !== null, resolve: raw => raw! })
 	.state(state => state.n({ validate: isNumber, default: () => 1 }))
 	.properties(properties => properties.total({
 		registerDeps: ({ dep, config }) => ({
@@ -75,9 +75,8 @@ const linkPlugin = createWidgetPlugin('link')
 		}))
 	.done()
 const listPlugin = createWidgetPlugin('list')
-	.description('A list')
-	.interfaces<{ slots: 'items' }>()
-	.slots({ items: { description: 'Links' } })
+	.interfaces<{ slots: { items: WidgetChild } }>()
+	.slots({ items: {} })
 	.done()
 const system = createWidgetSystem({ plugins: [linkPlugin, listPlugin] })
 

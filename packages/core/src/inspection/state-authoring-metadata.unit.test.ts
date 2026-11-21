@@ -11,7 +11,6 @@ interface FixtureInterfaces {
 }
 
 const plugin = createWidgetPlugin('state-authoring-metadata')
-	.description('State authoring metadata fixture')
 	.interfaces<FixtureInterfaces>()
 	.state(state => state
 		.authorVisible({

@@ -7,6 +7,7 @@
  */
 
 import type { ExecutionResult, WidgetInterfaces } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectBlueprint } from '../inspection'
@@ -37,10 +38,8 @@ interface NodeInterfaces extends WidgetInterfaces {
 /** A node of a chain whose Property `out` depends on the Method named by `target`. */
 function nodePlugin(target: Target) {
 	return createWidgetPlugin('node')
-		.description('A node of the chain')
 		.interfaces<NodeInterfaces>()
 		.config({
-			description: 'Where the node reads from',
 			validate: (input): input is { prev?: string } | null => input === null || typeof input === 'object',
 			resolve: raw => ({ prev: raw?.prev ?? null }),
 		})
@@ -125,14 +124,13 @@ function nodePlugin(target: Target) {
 				registerDeps: ({ dep }) => ({ peek: dep.self.methods.invoke('peek') }),
 				execute: ({ deps }) => numberOf(deps.peek()),
 			}))
-		.events(events => events.pinged({ description: 'The Method ran' }))
+		.events(['pinged'])
 		.done()
 }
 
 const chainPlugin = createWidgetPlugin('chain')
-	.description('A chain')
-	.interfaces<{ slots: 'nodes' }>()
-	.slots({ nodes: { description: 'Nodes' } })
+	.interfaces<{ slots: { nodes: WidgetChild } }>()
+	.slots({ nodes: {} })
 	.done()
 
 function chainSource(length: number) {
@@ -232,7 +230,7 @@ describe('a Property that depends on a Method with side effects', () => {
 
 	it('is rejected across widgets, like a State write', () => {
 		interface ReaderInterfaces extends WidgetInterfaces {
-			slots: 'children'
+			slots: { children: WidgetChild }
 			properties: { reader: number }
 			methods: { outer: () => void }
 		}
@@ -241,9 +239,8 @@ describe('a Property that depends on a Method with side effects', () => {
 			events: { fired: [] }
 		}
 		const reader = createWidgetPlugin('reader')
-			.description('Reader')
 			.interfaces<ReaderInterfaces>()
-			.slots({ children: { description: 'Children' } })
+			.slots({ children: {} })
 			.properties(properties => properties.reader({
 				registerDeps: ({ dep }) => ({ outer: dep.self.methods.invoke('outer') }),
 				compute: ({ deps }) => numberOf(deps.outer()),
@@ -257,10 +254,9 @@ describe('a Property that depends on a Method with side effects', () => {
 			}))
 			.done()
 		const emitter = createWidgetPlugin('emitter')
-			.description('Emitter')
 			.interfaces<EmitterInterfaces>()
 			.methods(methods => methods.fire({ validateArgs: noArgs, emits: ['fired'], execute: ({ emit }) => emit.fired() }))
-			.events(events => events.fired({ description: 'Fired' }))
+			.events(['fired'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [reader, emitter] })
 			.createBlueprint({ id: 'root', type: 'reader', slots: { children: [{ id: 'emitter', type: 'emitter' }] } })
@@ -296,7 +292,6 @@ describe('a Property that depends on a read-only Method', () => {
 			events: { fired: [] }
 		}
 		const host = createWidgetPlugin('host')
-			.description('Host')
 			.interfaces<HostInterfaces>()
 			.methods(methods => methods
 				.outer({
@@ -308,7 +303,7 @@ describe('a Property that depends on a read-only Method', () => {
 					},
 				})
 				.fire({ validateArgs: noArgs, emits: ['fired'], execute: ({ emit }) => emit.fired() }))
-			.events(events => events.fired({ description: 'Fired' }))
+			.events(['fired'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [host] })
 			.createBlueprint({ id: 'h', type: 'host' })
@@ -337,7 +332,6 @@ describe('blueprint inspection of the effects of a Method', () => {
 			events: { fired: [] }
 		}
 		const host = createWidgetPlugin('host')
-			.description('Host')
 			.interfaces<HostInterfaces>()
 			.state(state => state.s({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 			.methods(methods => methods
@@ -385,7 +379,7 @@ describe('blueprint inspection of the effects of a Method', () => {
 					},
 				})
 				.silent({ validateArgs: noArgs, emits: [], execute: () => {} }))
-			.events(events => events.fired({ description: 'Fired' }))
+			.events(['fired'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [host] })
 			.createBlueprint({ id: 'h', type: 'host' })
@@ -417,7 +411,6 @@ describe('the effects of Methods in the compiler', () => {
 			events: { fired: [] }
 		}
 		const cycle = createWidgetPlugin('cycle')
-			.description('A cycle of Methods')
 			.interfaces<CycleInterfaces>()
 			.properties(properties => properties.out({
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('a') }),
@@ -435,7 +428,7 @@ describe('the effects of Methods in the compiler', () => {
 					execute: () => {},
 				})
 				.c({ validateArgs: noArgs, emits: ['fired'], execute: ({ emit }) => emit.fired() }))
-			.events(events => events.fired({ description: 'Fired' }))
+			.events(['fired'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [cycle] })
 			.createBlueprint({ id: 'c', type: 'cycle' })
@@ -452,7 +445,7 @@ describe('the effects of Methods in the compiler', () => {
 
 	it('rejects a Property that depends, through `dep.parent`, on a Method of its parent that emits', () => {
 		interface ParentInterfaces extends WidgetInterfaces {
-			slots: 'children'
+			slots: { children: WidgetChild }
 			methods: { ping: () => void }
 			events: { pinged: [] }
 		}
@@ -460,14 +453,12 @@ describe('the effects of Methods in the compiler', () => {
 			properties: { out: number }
 		}
 		const parent = createWidgetPlugin('parent')
-			.description('Parent')
 			.interfaces<ParentInterfaces>()
-			.slots({ children: { description: 'Children' } })
+			.slots({ children: {} })
 			.methods(methods => methods.ping({ validateArgs: noArgs, emits: ['pinged'], execute: ({ emit }) => emit.pinged() }))
-			.events(events => events.pinged({ description: 'Pinged' }))
+			.events(['pinged'])
 			.done()
 		const child = createWidgetPlugin('child')
-			.description('Child')
 			.interfaces<ChildInterfaces>()
 			.properties(properties => properties.out({
 				registerDeps: ({ dep }) => ({ ping: dep.parent.methods.invoke('ping') }),
@@ -487,7 +478,6 @@ describe('the effects of Methods in the compiler', () => {
 			properties: { out: number }
 		}
 		const reader = createWidgetPlugin('reader')
-			.description('Reader')
 			.interfaces<ReaderInterfaces>()
 			.properties(properties => properties.out({
 				registerDeps: ({ dep }) => ({ ping: dep.widget('nobody')
@@ -510,14 +500,13 @@ describe('the effects of Methods in the compiler', () => {
 			events: { pinged: [] }
 		}
 		const twice = createWidgetPlugin('twice')
-			.description('Twice')
 			.interfaces<TwiceInterfaces>()
 			.properties(properties => properties.out({
 				registerDeps: ({ dep }) => ({ first: dep.self.methods.invoke('ping'), second: dep.self.methods.invoke('ping') }),
 				compute: () => 1,
 			}))
 			.methods(methods => methods.ping({ validateArgs: noArgs, emits: ['pinged'], execute: ({ emit }) => emit.pinged() }))
-			.events(events => events.pinged({ description: 'Pinged' }))
+			.events(['pinged'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [twice] })
 			.createBlueprint({ id: 't', type: 'twice' })
@@ -532,7 +521,6 @@ describe('the effects of Methods in the compiler', () => {
 			events: { pinged: [] }
 		}
 		const quiet = createWidgetPlugin('quiet')
-			.description('Quiet')
 			.interfaces<QuietInterfaces>()
 			.properties(properties => properties.out({
 				registerDeps: ({ dep }) => ({ ping: dep.self.methods.invoke('ping') }),
@@ -546,7 +534,7 @@ describe('the effects of Methods in the compiler', () => {
 				// No `emits`: the type of `emit` has no member, so a cast reaches the Event the way untyped code would.
 				execute: ({ emit }) => (emit as unknown as Record<string, () => void>).pinged!(),
 			}))
-			.events(events => events.pinged({ description: 'Pinged' }))
+			.events(['pinged'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [quiet] })
 			.createBlueprint({ id: 'q', type: 'quiet' })

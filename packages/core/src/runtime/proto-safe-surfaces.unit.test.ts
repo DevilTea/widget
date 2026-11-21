@@ -34,7 +34,6 @@ interface ProtoInterfaces {
 }
 
 const plugin = createWidgetPlugin('proto-widget')
-	.description('Test widget')
 	.interfaces<ProtoInterfaces>()
 	.state(state => state[PROTO_KEY]({
 		validate: (input): input is number => typeof input === 'number',

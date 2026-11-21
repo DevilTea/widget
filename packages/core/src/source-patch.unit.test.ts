@@ -565,7 +565,6 @@ describe('sourcePatch SameValueZero numbers', () => {
 
 	it('keeps Document revision and source unchanged for a +0/-0-only replace', () => {
 		const plugin = createWidgetPlugin('panel')
-			.description('A panel')
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
@@ -770,7 +769,6 @@ describe('sourcePatch non-JSON operands', () => {
 		it('does not advance a Document revision for a no-op patch on a null-prototype source', () => {
 			const system = createWidgetSystem({
 				plugins: [createWidgetPlugin('leaf')
-					.description('Test widget')
 					.interfaces<Record<never, never>>()
 					.done()],
 			})

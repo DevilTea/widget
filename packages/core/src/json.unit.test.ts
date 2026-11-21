@@ -66,7 +66,6 @@ describe('authored JSON runtime domain', () => {
 
 	it('keeps the Blueprint source proof false for forged symbol and named-array material', () => {
 		const plugin = createWidgetPlugin('leaf')
-			.description('Leaf widget')
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
@@ -184,7 +183,6 @@ describe('authored JSON runtime domain', () => {
 
 	it('retains source-level JSON facts only on the Blueprint aggregate', () => {
 		const plugin = createWidgetPlugin('leaf')
-			.description('Leaf widget')
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
@@ -218,7 +216,6 @@ describe('authored JSON runtime domain', () => {
 
 	it('publishes source-access-failed on a Blueprint when exact-source inspection is unproven', () => {
 		const plugin = createWidgetPlugin('leaf')
-			.description('Leaf widget')
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })

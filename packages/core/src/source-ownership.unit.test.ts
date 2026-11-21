@@ -5,19 +5,18 @@
  * Only the observable by-reference contract is pinned. Behavior after an external mutation of an
  * accepted source graph is unspecified and deliberately not tested.
  */
+import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from './index'
 import { inspectBlueprint } from './inspection'
 
 const leafPlugin = createWidgetPlugin('leaf')
-	.description('Leaf')
 	.interfaces<Record<never, never>>()
 	.done()
 
 const containerPlugin = createWidgetPlugin('container')
-	.description('Container')
-	.interfaces<{ slots: 'children' }>()
-	.slots({ children: { description: 'Children' } })
+	.interfaces<{ slots: { children: WidgetChild } }>()
+	.slots({ children: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [leafPlugin, containerPlugin] })

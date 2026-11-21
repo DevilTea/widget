@@ -29,7 +29,6 @@ function createHarness() {
 	let flakyShouldFail = false
 
 	const plugin = createWidgetPlugin('probe')
-		.description('Test widget')
 		.interfaces<ReceivedInterfaces>()
 		.properties(properties => properties
 			// Always reads back as `undefined`.

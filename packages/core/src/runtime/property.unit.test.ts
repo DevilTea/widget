@@ -30,7 +30,6 @@ function createHarness() {
 	let flakyShouldFail = false
 
 	const plugin = createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<CounterInterfaces>()
 		.state(state => state
 			.count({

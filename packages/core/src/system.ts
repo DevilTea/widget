@@ -71,7 +71,10 @@ export interface WidgetSystemSlotTypeViolation<Type extends string> {
 /** `unknown` (an intersection identity) when every plugin type a slot expects is registered. */
 export type WidgetSystemPluginsCheck<Plugins extends AnyWidgetPluginTuple> = [UnregisteredSlotPluginTypeOf<Plugins>] extends [never]
 	? unknown
-	: { readonly plugins: WidgetSystemSlotTypeViolation<UnregisteredSlotPluginTypeOf<Plugins>> }
+	// An `any`-typed plugin entry makes the unregistered set `any`; it is left unchecked.
+	: 0 extends 1 & UnregisteredSlotPluginTypeOf<Plugins>
+		? unknown
+		: { readonly plugins: WidgetSystemSlotTypeViolation<UnregisteredSlotPluginTypeOf<Plugins>> }
 
 /**
  * Selects one registered plugin by its `type` discriminator.

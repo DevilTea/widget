@@ -13,6 +13,7 @@
  * Every case below would previously throw `resolved ... target is missing` inside `createRuntime()`.
  */
 
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -32,7 +33,6 @@ interface OrderingInterfaces {
 }
 
 const orderingPlugin = createWidgetPlugin('ordering')
-	.description('Test widget')
 	.interfaces<OrderingInterfaces>()
 	.properties(properties => properties
 		// Declared first, but depends on `second`, declared after it.
@@ -72,7 +72,6 @@ interface LeafBInterfaces {
 }
 
 const leafBPlugin = createWidgetPlugin('leaf-b')
-	.description('Test widget')
 	.interfaces<LeafBInterfaces>()
 	.properties(properties => properties.value({
 		compute: () => 5,
@@ -86,7 +85,6 @@ interface LeafAInterfaces {
 }
 
 const leafAPlugin = createWidgetPlugin('leaf-a')
-	.description('Test widget')
 	.interfaces<LeafAInterfaces>()
 	.properties(properties => properties.viaB({
 		registerDeps: ({ dep }) => ({ value: dep.widget('b').properties.get('value') }),
@@ -98,13 +96,12 @@ const leafAPlugin = createWidgetPlugin('leaf-a')
 	.done()
 
 interface ContainerInterfaces {
-	slots: 'children'
+	slots: { children: WidgetChild }
 }
 
 const containerPlugin = createWidgetPlugin('container')
-	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
-	.slots({ children: { description: 'Test slot' } })
+	.slots({ children: {} })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -119,7 +116,6 @@ interface CycleInterfaces {
 }
 
 const cyclePlugin = createWidgetPlugin('cycle')
-	.description('Test widget')
 	.interfaces<CycleInterfaces>()
 	.methods(methods => methods
 		.a({

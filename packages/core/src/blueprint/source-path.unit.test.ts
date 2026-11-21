@@ -4,25 +4,24 @@
  */
 
 import type { BlueprintWidgetNode, SourcePath } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectBlueprint } from '../inspection'
 
 const leafPlugin = createWidgetPlugin('leaf')
-	.description('Test widget')
 	.interfaces<Record<never, never>>()
 	.done()
 
 interface ContainerInterfaces {
-	slots: 'children' | 'footer'
+	slots: { children: WidgetChild, footer: WidgetChild }
 }
 
 const containerPlugin = createWidgetPlugin('container')
-	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		children: { description: 'Test slot' },
-		footer: { description: 'Test slot' },
+		children: {},
+		footer: {},
 	})
 	.done()
 

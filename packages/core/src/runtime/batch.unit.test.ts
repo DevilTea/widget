@@ -31,7 +31,6 @@ interface BatchInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<BatchInterfaces>()
 		.state(state => state
 			.count({

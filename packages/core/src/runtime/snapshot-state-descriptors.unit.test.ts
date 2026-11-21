@@ -3,11 +3,12 @@
  * data properties, for ordinary keys and for keys that also exist on `Object.prototype` alike.
  */
 
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
 interface KeyedInterfaces {
-	slots: 'children'
+	slots: { children: WidgetChild }
 	state: {
 		ordinary: number
 		constructor: number
@@ -19,9 +20,8 @@ interface KeyedInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const keyed = createWidgetPlugin('keyed')
-	.description('Test widget')
 	.interfaces<KeyedInterfaces>()
-	.slots({ children: { description: 'Children' } })
+	.slots({ children: {} })
 	.state(state => state
 		.ordinary({ validate: isNumber, default: () => 1 })
 		.constructor({ validate: isNumber, default: () => 2 })

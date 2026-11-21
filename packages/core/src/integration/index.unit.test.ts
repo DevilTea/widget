@@ -14,18 +14,16 @@ interface EventInterfaces {
 }
 
 const eventPlugin = createWidgetPlugin('eventful')
-	.description('Eventful')
 	.interfaces<EventInterfaces>()
 	.methods(methods => methods.fire({
 		validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 		emits: ['change'],
 		execute: ({ args, emit }) => emit.change(args[0]),
 	}))
-	.events(events => events.change({ description: 'Changed' }))
+	.events(['change'])
 	.done()
 
 const plainPlugin = createWidgetPlugin('plain')
-	.description('Plain')
 	.interfaces<Record<never, never>>()
 	.done()
 
@@ -34,9 +32,8 @@ interface EmptyEventsInterfaces {
 }
 
 const emptyEventsPlugin = createWidgetPlugin('empty-events')
-	.description('Empty events')
 	.interfaces<EmptyEventsInterfaces>()
-	.events(events => events)
+	.events([])
 	.done()
 
 function createSingleRuntime(plugin: typeof eventPlugin | typeof plainPlugin | typeof emptyEventsPlugin) {
@@ -126,7 +123,6 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 		vi.resetModules()
 		const foreignCore = await import('../index')
 		const foreignPlugin = foreignCore.createWidgetPlugin('plain')
-			.description('Plain')
 			.interfaces<Record<never, never>>()
 			.done()
 		const foreignSystem = foreignCore.createWidgetSystem({ plugins: [foreignPlugin] as const })
@@ -247,7 +243,6 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 			const foreignCore = await import('../index')
 			const foreignSystem = foreignCore.createWidgetSystem({
 				plugins: [foreignCore.createWidgetPlugin('plain')
-					.description('Plain')
 					.interfaces<Record<never, never>>()
 					.done()] as const,
 			})

@@ -47,7 +47,6 @@ interface Retained { a?: (value: number) => void, b?: () => void }
 function createPair() {
 	const retained: { fromA: Retained | null, fromB: Retained | null, plain: Readonly<Record<string, unknown>> | null } = { fromA: null, fromB: null, plain: null }
 	const plugin = createWidgetPlugin('pair')
-		.description('Pair')
 		.interfaces<PairInterfaces>()
 		.methods(methods => methods
 			.captureA({
@@ -96,10 +95,7 @@ function createPair() {
 					retained.plain = emit
 				},
 			}))
-		.events(events => events
-			.a({ description: 'A' })
-			.b({ description: 'B' })
-			.c({ description: 'C' }))
+		.events(['a', 'b', 'c'])
 		.done()
 	const blueprint = createWidgetSystem({ plugins: [plugin] })
 		.createBlueprint({ id: 'p', type: 'pair' })
@@ -167,7 +163,6 @@ describe('the `emit` of a Method', () => {
 			events: { a: [value: number], b: [] }
 		}
 		const plugin = createWidgetPlugin('nested')
-			.description('Nested')
 			.interfaces<NestedInterfaces>()
 			.methods(methods => methods
 				.outer({
@@ -186,9 +181,7 @@ describe('the `emit` of a Method', () => {
 						retained.outer!.a!(1)
 					},
 				}))
-			.events(events => events
-				.a({ description: 'A' })
-				.b({ description: 'B' }))
+			.events(['a', 'b'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [plugin] })
 			.createBlueprint({ id: 'n', type: 'nested' })
@@ -211,7 +204,6 @@ describe('the `emit` of a Method', () => {
 			events: { a: [], b: [] }
 		}
 		const plugin = createWidgetPlugin('js')
-			.description('Untyped')
 			.interfaces<OtherInterfaces>()
 			.methods(methods => methods
 				.declared({
@@ -237,9 +229,7 @@ describe('the `emit` of a Method', () => {
 						;(emit as unknown as Record<string, () => void>).a!()
 					},
 				}))
-			.events(events => events
-				.a({ description: 'A' })
-				.b({ description: 'B' }))
+			.events(['a', 'b'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [plugin] })
 			.createBlueprint({ id: 'j', type: 'js' })
@@ -270,7 +260,6 @@ describe('the `emit` of a Method', () => {
 	it('is absent from a Method of a plugin without Events', () => {
 		const seen: unknown[] = []
 		const plugin = createWidgetPlugin('quiet')
-			.description('Quiet')
 			.interfaces<{ methods: { run: () => void } }>()
 			.methods(methods => methods.run({
 				validateArgs: noArgs,
@@ -301,14 +290,12 @@ describe('plugin build with `emits`', () => {
 	/** Builds a plugin from an untyped Method definition, as a JavaScript author would. */
 	function buildUntyped(fire: Record<string, unknown>, withEvents = true) {
 		const methodsPhase = createWidgetPlugin('js')
-			.description('Untyped')
 			.interfaces<FireInterfaces>()
 			.methods(methods => methods
 				.fire(fire as never)
 				.other({ validateArgs: noArgs, execute: () => {} }))
 		return withEvents
-			? methodsPhase.events(events => events.fired({ description: 'Fired' })
-					.other({ description: 'Other' }))
+			? methodsPhase.events(['fired', 'other'])
 					.done()
 			: (methodsPhase as unknown as { done: () => unknown }).done()
 	}
@@ -338,7 +325,6 @@ describe('plugin build with `emits`', () => {
 
 	it('throws a malformed value from the member call inside `.methods()`, and an unknown or repeated name only from `done()`', () => {
 		const phase = () => createWidgetPlugin('js')
-			.description('Untyped')
 			.interfaces<FireInterfaces>()
 		let reachedEvents = false
 		expectTypeErrorNaming(() => phase()
@@ -347,8 +333,8 @@ describe('plugin build with `emits`', () => {
 				.other({ validateArgs: noArgs, execute: () => {} }))
 			.events((events) => {
 				reachedEvents = true
-				return events.fired({ description: 'Fired' })
-					.other({ description: 'Other' })
+				return events.fired({})
+					.other({})
 			}), 'js', 'fire')
 		expect(reachedEvents)
 			.toBe(false)
@@ -358,8 +344,7 @@ describe('plugin build with `emits`', () => {
 				.methods(methods => methods
 					.fire({ validateArgs: noArgs, emits, execute } as never)
 					.other({ validateArgs: noArgs, execute: () => {} }))
-				.events(section => section.fired({ description: 'Fired' })
-					.other({ description: 'Other' }))
+				.events(['fired', 'other'])
 			expectTypeErrorNaming(() => events.done(), 'js', 'fire')
 		}
 	})
@@ -371,10 +356,9 @@ describe('plugin build with `emits`', () => {
 	})
 
 	it('checks only the Methods that declare `emits`, and names the first invalid one in declaration order', () => {
-		const events = (section: { fired: (definition: { description: string }) => { other: (definition: { description: string }) => unknown } }) => section.fired({ description: 'Fired' })
-			.other({ description: 'Other' })
+		const events = (section: { fired: (definition: object) => { other: (definition: object) => unknown } }) => section.fired({})
+			.other({})
 		const build = (first: Record<string, unknown>, second: Record<string, unknown>) => createWidgetPlugin('js')
-			.description('Untyped')
 			.interfaces<FireInterfaces>()
 			.methods(methods => methods
 				.fire(first as never)
@@ -388,7 +372,6 @@ describe('plugin build with `emits`', () => {
 		expectTypeErrorNaming(() => build({ validateArgs: noArgs, emits: ['nope'], execute }, { validateArgs: noArgs, emits: ['nada'], execute }), 'js', 'fire', 'nope')
 		// A name declared again without `emits` (untyped code) leaves nothing to check.
 		const redeclared = createWidgetPlugin('js')
-			.description('Untyped')
 			.interfaces<FireInterfaces>()
 			.methods((methods) => {
 				const section = methods as unknown as Record<string, (definition: unknown) => unknown>
@@ -417,14 +400,13 @@ describe('plugin build with `emits`', () => {
 		]
 		for (const attempt of attempts) {
 			const builder = createWidgetPlugin('js')
-				.description('Untyped')
 				.interfaces<FireInterfaces>()
 			expect(() => builder.methods(methods => attempt(methods as unknown as Record<string, (definition: unknown) => unknown>) as never))
 				.toThrow()
 			const resumed = builder as unknown as { events: (build: (section: Record<string, (definition: unknown) => unknown>) => unknown) => { done: () => unknown } }
 			const events = resumed.events((section) => {
-				section.fired!({ description: 'Fired' })
-				section.other!({ description: 'Other' })
+				section.fired!({})
+				section.other!({})
 			})
 			expectTypeErrorNaming(() => events.done(), 'js', 'a', 'zz')
 		}
@@ -463,7 +445,6 @@ const kept: { declared: { x: () => void } | null, undeclaredY: (() => void) | nu
 /** Methods that retain their `emit`, and Methods that try to use it. `quiet` declares nothing; `user` declares `x`. */
 function createRetainer() {
 	const plugin = createWidgetPlugin('retain')
-		.description('Retain')
 		.interfaces<RetainInterfaces>()
 		.methods(methods => methods
 			.keep({
@@ -518,9 +499,7 @@ function createRetainer() {
 					kept.undeclaredY!()
 				},
 			}))
-		.events(events => events
-			.x({ description: 'X' })
-			.y({ description: 'Y' }))
+		.events(['x', 'y'])
 		.done()
 	const blueprint = createWidgetSystem({ plugins: [plugin] })
 		.createBlueprint({ id: 'r', type: 'retain' })
@@ -593,10 +572,9 @@ describe('a retained `emit` callable', () => {
 		}
 		const announce = (emit: { x: () => void }): void => emit.x()
 		const plugin = createWidgetPlugin('helper')
-			.description('Helper')
 			.interfaces<HelperInterfaces>()
 			.methods(methods => methods.run({ validateArgs: noArgs, emits: ['x'], execute: ({ emit }) => announce(emit) }))
-			.events(events => events.x({ description: 'X' }))
+			.events(['x'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [plugin] })
 			.createBlueprint({ id: 'h', type: 'helper' })

@@ -11,6 +11,7 @@
  * invocation already did (issue #199).
  */
 
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -23,7 +24,6 @@ interface NodeInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const nodePlugin = createWidgetPlugin('node')
-	.description('Test widget')
 	.interfaces<NodeInterfaces>()
 	.state(state => state.s({ validate: isNumber, default: () => 1 }))
 	.properties(properties => properties.out({
@@ -44,9 +44,8 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const graphPlugin = createWidgetPlugin('graph')
-	.description('Test widget')
-	.interfaces<{ slots: 'nodes' }>()
-	.slots({ nodes: { description: 'Nodes' } })
+	.interfaces<{ slots: { nodes: WidgetChild } }>()
+	.slots({ nodes: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, graphPlugin] })

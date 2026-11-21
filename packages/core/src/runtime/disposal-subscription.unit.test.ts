@@ -33,7 +33,6 @@ interface CounterInterfaces extends WidgetInterfaces {
 
 function createCounterPlugin() {
 	return createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<CounterInterfaces>()
 		.state(section => section
 			.count({
@@ -71,8 +70,7 @@ function createCounterPlugin() {
 					emit.bumped()
 				},
 			}))
-		.events(events => events
-			.bumped({ description: 'Emitted by bump' }))
+		.events(['bumped'])
 		.done()
 }
 
@@ -338,7 +336,6 @@ describe('runtime.subscribeDisposal(): the Runtime is already disposed inside a 
 		// disposed error whatever the callback scope says, so this checks the post-dispose surface only.
 		const captured: { deps?: { setCount: (value: number) => unknown }, emit?: { done: () => void } } = {}
 		const plugin = createWidgetPlugin('host')
-			.description('Test widget')
 			.interfaces<{ state: { count: number }, methods: { run: () => void }, events: { done: [] } }>()
 			.state(section => section
 				.count({
@@ -355,8 +352,7 @@ describe('runtime.subscribeDisposal(): the Runtime is already disposed inside a 
 						captured.emit = emit
 					},
 				}))
-			.events(events => events
-				.done({ description: 'Done' }))
+			.events(['done'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [plugin] })
 			.createBlueprint({ id: 'root', type: 'host' })

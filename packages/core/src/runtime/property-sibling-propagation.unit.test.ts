@@ -65,7 +65,6 @@ interface HostInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('host')
-		.description('Test widget')
 		.interfaces<HostInterfaces>()
 		.state(state => state
 			.answer({

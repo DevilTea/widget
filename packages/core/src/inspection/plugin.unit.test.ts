@@ -1,3 +1,4 @@
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, createWidgetValueContract } from '../index'
 import { inspectBlueprint, inspectPlugin } from './index'
@@ -30,7 +31,6 @@ interface FixtureInterfaces {
 let computeCalls = 0
 
 const plugin = createWidgetPlugin('plugin-inspection')
-	.description('Plugin inspection fixture')
 	.interfaces<FixtureInterfaces>()
 	.state(state => state
 		.authorVisible({
@@ -61,7 +61,7 @@ const plugin = createWidgetPlugin('plugin-inspection')
 				return 1
 			},
 		}))
-	.events(events => events.changed({ description: 'Value changed' }))
+	.events(['changed'])
 	.done()
 
 describe('plugin inspection', () => {
@@ -82,7 +82,7 @@ describe('plugin inspection', () => {
 		expect(first.properties?.get('untyped'))
 			.toEqual({ type: 'property', name: 'untyped', valueContractId: null })
 		expect(first.events?.get('changed'))
-			.toEqual({ type: 'event', name: 'changed', description: 'Value changed' })
+			.toEqual({ type: 'event', name: 'changed' })
 		expect(Object.keys(first.properties?.get('text') ?? {}))
 			.toEqual(['type', 'name', 'valueContractId'])
 		expect(computeCalls)
@@ -113,11 +113,9 @@ describe('plugin inspection', () => {
 
 	it('distinguishes absent capabilities from explicitly declared empty capabilities', () => {
 		const absent = createWidgetPlugin('inspection-absent-members')
-			.description('Absent members')
 			.interfaces<Record<never, never>>()
 			.done()
 		const empty = createWidgetPlugin('inspection-empty-members')
-			.description('Empty members')
 			.interfaces<{
 			state: Record<never, never>
 			properties: Record<never, never>
@@ -125,7 +123,7 @@ describe('plugin inspection', () => {
 		}>()
 			.state(state => state)
 			.properties(properties => properties)
-			.events(events => events)
+			.events([])
 			.done()
 
 		expect(inspectPlugin(absent).state)
@@ -159,14 +157,13 @@ describe('plugin inspection', () => {
 		}
 
 		const special = createWidgetPlugin('inspection-special-names')
-			.description('Special-name fixture')
 			.interfaces<SpecialInterfaces>()
 			.state(state => state[PROTO_KEY]({ validate: (input): input is number => typeof input === 'number' })
 				.constructor({ validate: (input): input is number => typeof input === 'number' }))
 			.properties(properties => properties[PROTO_KEY]({ valueContract: stringContract, compute: () => '__proto__' })
 				.constructor({ valueContract: stringContract, compute: () => 'constructor' }))
-			.events(events => events[PROTO_KEY]({ description: 'Prototype event' })
-				.constructor({ description: 'Constructor event' }))
+			.events(events => events[PROTO_KEY]({})
+				.constructor({}))
 			.done()
 		const inspection = inspectPlugin(special)
 
@@ -184,20 +181,18 @@ describe('plugin inspection', () => {
 				raw: { readonly label?: string } | null
 				resolved: { readonly label: string }
 			}
-			slots: 'header' | 'body'
+			slots: { header: WidgetChild, body: WidgetChild }
 			state: { open: boolean }
 		}
 
 		const card = createWidgetPlugin('inspection-card')
-			.description('Card widget')
 			.interfaces<CardInterfaces>()
 			.config({
-				description: 'Card configuration',
 				schema: { type: 'object', properties: { label: { type: 'string' } } },
 				validate: (input): input is { readonly label?: string } | null => input === null || typeof input === 'object',
 				resolve: raw => ({ label: raw?.label ?? 'Card' }),
 			})
-			.slots({ header: { description: 'Card header' }, body: { description: 'Card body' } })
+			.slots({ header: {}, body: {} })
 			.state(state => state.open({ validate: (input): input is boolean => typeof input === 'boolean' }))
 			.done()
 		const inspection = inspectPlugin(card)
@@ -210,11 +205,11 @@ describe('plugin inspection', () => {
 		expect(inspection.capabilities)
 			.toEqual({ config: true, slots: true, state: true, properties: false, methods: false, events: false })
 		expect(inspection.config)
-			.toEqual({ description: 'Card configuration', schema: { type: 'object', properties: { label: { type: 'string' } } } })
+			.toEqual({ schema: { type: 'object', properties: { label: { type: 'string' } } } })
 		expect([...inspection.slots!.values()])
 			.toEqual([
-				{ type: 'slot', name: 'header', description: 'Card header' },
-				{ type: 'slot', name: 'body', description: 'Card body' },
+				{ type: 'slot', name: 'header' },
+				{ type: 'slot', name: 'body' },
 			])
 
 		// Every catalog fact is available from the inspection.
@@ -238,11 +233,9 @@ describe('plugin inspection', () => {
 
 	it('follows the catalog convention for absent and explicitly empty config and slots', () => {
 		const absent = createWidgetPlugin('inspection-absent-config-slots')
-			.description('Absent')
 			.interfaces<Record<never, never>>()
 			.done()
 		const emptySlots = createWidgetPlugin('inspection-empty-slots')
-			.description('Empty slots')
 			.interfaces<{ slots: never }>()
 			.slots({})
 			.done()
@@ -280,7 +273,7 @@ describe('plugin inspection', () => {
 				{ type: 'property', name: 'untyped', valueContractId: null },
 			])
 		expect(root.events)
-			.toEqual([{ type: 'event', name: 'changed', description: 'Value changed' }])
+			.toEqual([{ type: 'event', name: 'changed' }])
 		expect(computeCalls)
 			.toBe(0)
 	})

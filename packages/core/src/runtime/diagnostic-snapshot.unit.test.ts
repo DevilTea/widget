@@ -31,7 +31,6 @@ function createHarness() {
 	let methodFailNow = false
 
 	const plugin = createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<SnapshotInterfaces>()
 		.state(state => state
 			.count({

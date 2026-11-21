@@ -41,7 +41,6 @@ function createHarness() {
 	let controlledValue = 1
 
 	const plugin = createWidgetPlugin('runtime-facade-harness')
-		.description('Test widget')
 		.interfaces<HarnessInterfaces>()
 		.state(state => state.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -165,7 +164,6 @@ describe('property inspection subscribe truth table', () => {
 			nested: { count: 0 },
 		}
 		const plugin = createWidgetPlugin('mutable-property-payload')
-			.description('Test widget')
 			.interfaces<MutablePropertyInterfaces>()
 			.state(state => state.count({
 				validate: (input): input is number => typeof input === 'number',

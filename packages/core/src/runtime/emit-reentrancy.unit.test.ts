@@ -26,7 +26,6 @@ interface LoopInterfaces {
 }
 
 const loopPlugin = createWidgetPlugin('loop')
-	.description('Test widget')
 	.interfaces<LoopInterfaces>()
 	.methods(methods => methods.fire({
 		validateArgs: (args): args is [] => args.length === 0,
@@ -36,7 +35,7 @@ const loopPlugin = createWidgetPlugin('loop')
 			return null
 		},
 	}))
-	.events(events => events.ev({ description: 'Fired' }))
+	.events(['ev'])
 	.done()
 
 const system = createWidgetSystem({ plugins: [loopPlugin] })

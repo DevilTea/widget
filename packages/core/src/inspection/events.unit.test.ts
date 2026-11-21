@@ -13,20 +13,16 @@ interface EventInspectionInterfaces {
 }
 
 const plugin = createWidgetPlugin('inspection-events')
-	.description('Inspection event fixture')
 	.interfaces<EventInspectionInterfaces>()
 	.methods(methods => methods.fire({
 		validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 		emits: ['change'],
 		execute: ({ args, emit }) => emit.change(args[0]),
 	}))
-	.events(events => events
-		.change({ description: 'Changed value' })
-		.ping({ description: 'Ping occurrence' }))
+	.events(['change', 'ping'])
 	.done()
 
 const noEventsPlugin = createWidgetPlugin('inspection-no-events')
-	.description('Inspection event-less fixture')
 	.interfaces<{ state: { value: number } }>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -56,8 +52,8 @@ describe('event inventory and readonly Runtime inspection', () => {
 			.toBe(true)
 		expect(root.events)
 			.toEqual([
-				{ type: 'event', name: 'change', description: 'Changed value' },
-				{ type: 'event', name: 'ping', description: 'Ping occurrence' },
+				{ type: 'event', name: 'change' },
+				{ type: 'event', name: 'ping' },
 			])
 		expect(root.events[0]).not.toHaveProperty('args')
 		expect(root.events[0]).not.toHaveProperty('schema')

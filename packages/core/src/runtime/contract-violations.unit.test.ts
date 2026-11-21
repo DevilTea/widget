@@ -39,7 +39,6 @@ interface ContractInterfaces {
 
 function createContractPlugin() {
 	return createWidgetPlugin('contract')
-		.description('Test widget')
 		.interfaces<ContractInterfaces>()
 		.state(section => section
 			.count({
@@ -225,10 +224,8 @@ describe('blueprint creation-time callback throw', () => {
 		}
 
 		const plugin = createWidgetPlugin('config-throws')
-			.description('Test widget')
 			.interfaces<ConfigThrowInterfaces>()
 			.config({
-				description: 'Test config',
 				validate: (input): input is Record<string, JsonValue> => {
 					if (typeof input === 'object' && input !== null && (input as Record<string, JsonValue>).mode === 'THROW')
 						throw new Error('config.validate boom')
@@ -259,7 +256,6 @@ describe('runtime creation-time callback throw', () => {
 		}
 
 		const plugin = createWidgetPlugin('default-throws')
-			.description('Test widget')
 			.interfaces<DefaultThrowInterfaces>()
 			.state(section => section.count({
 				validate: (input): input is number => typeof input === 'number',
@@ -294,7 +290,6 @@ describe('semantic callback returning a thenable is an implementation contract v
 		}
 
 		const plugin = createWidgetPlugin('async-method-violation')
-			.description('Test widget')
 			.interfaces<AsyncMethodInterfaces>()
 			.methods(section => section.run({
 				validateArgs: (args): args is [] => args.length === 0,
@@ -336,7 +331,6 @@ describe('semantic callback returning a thenable is an implementation contract v
 		}
 
 		const plugin = createWidgetPlugin('async-property-violation')
-			.description('Test widget')
 			.interfaces<AsyncPropertyInterfaces>()
 			.properties(section => section.value({
 				// Same deliberate lie as above, on a Property's `compute` this time.

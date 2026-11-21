@@ -6,6 +6,7 @@
  * context only, not a degraded ok value").
  */
 
+import type { WidgetChild } from '../types'
 import { describe, expect, it, vi } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -32,7 +33,6 @@ function createHarness() {
 	let flakyShouldFail = false
 
 	const plugin = createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<MethodInterfaces>()
 		.state(state => state
 			.count({
@@ -257,7 +257,6 @@ describe('runtimeMethod', () => {
 			properties: { doubled: number }
 		}
 		const targetPlugin = createWidgetPlugin('cross-widget-state-target')
-			.description('Target widget')
 			.interfaces<TargetInterfaces>()
 			.state(state => state.value({
 				validate: (input): input is number => typeof input === 'number',
@@ -273,14 +272,13 @@ describe('runtimeMethod', () => {
 			.done()
 
 		interface CallerInterfaces {
-			slots: 'children'
+			slots: { children: WidgetChild }
 			state: { value: number }
 			methods: { writeTarget: (value: number) => number | null }
 		}
 		const callerPlugin = createWidgetPlugin('cross-widget-state-caller')
-			.description('Caller widget')
 			.interfaces<CallerInterfaces>()
-			.slots({ children: { description: 'Target widgets' } })
+			.slots({ children: {} })
 			.state(state => state.value({
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 10,
@@ -335,7 +333,6 @@ describe('runtimeMethod', () => {
 			}
 		}
 		const plugin = createWidgetPlugin('nested-method-failures')
-			.description('Nested Method failures')
 			.interfaces<NestedMethodInterfaces>()
 			.methods(methods => methods
 				.outer({

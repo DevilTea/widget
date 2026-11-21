@@ -64,10 +64,8 @@ interface HostInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const plugin = createWidgetPlugin('host')
-	.description('Test widget')
 	.interfaces<HostInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (_input): _input is Record<string, JsonValue> | null => {
 			hooks.configValidate?.()
 			return true
@@ -118,7 +116,7 @@ const plugin = createWidgetPlugin('host')
 			},
 			execute: () => 'helper',
 		}))
-	.events(events => events.changed({ description: 'Changed' }))
+	.events(['changed'])
 	.done()
 
 const system = createWidgetSystem({ plugins: [plugin] })

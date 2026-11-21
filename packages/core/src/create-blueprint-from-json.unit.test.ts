@@ -4,6 +4,7 @@
  */
 
 import type { WidgetInterfaces } from './index'
+import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from './index'
 
@@ -12,19 +13,17 @@ interface NoteInterfaces extends WidgetInterfaces {
 		raw: { readonly text: string }
 		resolved: { readonly text: string }
 	}
-	slots: 'children'
+	slots: { children: WidgetChild }
 	state: { count: number }
 }
 
 const notePlugin = createWidgetPlugin('note')
-	.description('Test widget')
 	.interfaces<NoteInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input): input is { text: string } => typeof input === 'object' && input !== null && typeof (input as { text?: unknown }).text === 'string',
 		resolve: raw => ({ text: raw?.text ?? '' }),
 	})
-	.slots({ children: { description: 'Test slot' } })
+	.slots({ children: {} })
 	.state(state => state.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 	.done()
 

@@ -4,6 +4,7 @@
  * plugin cannot change after `done()`.
  */
 
+import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from './index'
 import { inspectPlugin } from './inspection/index'
@@ -43,7 +44,6 @@ function runtimeStateKeys(plugin: ReturnType<typeof countPlugin>): string[] {
 
 function countPlugin(type: string, probe: (section: unknown) => void = () => {}) {
 	return createWidgetPlugin(type)
-		.description('Count widget')
 		.interfaces<CountInterfaces>()
 		.state((state) => {
 			probe(state)
@@ -82,19 +82,15 @@ describe('section builders register only real member declarations', () => {
 
 		for (const value of notObjects) {
 			expectContractViolation(capture(() => createWidgetPlugin('state-arg')
-				.description('d')
 				.interfaces<{ state: { a: number } }>()
 				.state(state => state.a(value as never))), ['state-arg', 'state', '"a"'])
 			expectContractViolation(capture(() => createWidgetPlugin('properties-arg')
-				.description('d')
 				.interfaces<{ properties: { a: number } }>()
 				.properties(properties => properties.a(value as never))), ['properties-arg', 'properties', '"a"'])
 			expectContractViolation(capture(() => createWidgetPlugin('methods-arg')
-				.description('d')
 				.interfaces<{ methods: { a: () => void } }>()
 				.methods(methods => methods.a(value as never))), ['methods-arg', 'methods', '"a"'])
 			expectContractViolation(capture(() => createWidgetPlugin('events-arg')
-				.description('d')
 				.interfaces<{ events: { a: [] } }>()
 				.events(events => events.a(value as never))), ['events-arg', 'events', '"a"'])
 		}
@@ -107,7 +103,6 @@ describe('section builders register only real member declarations', () => {
 		const validate = (input: unknown): input is number => typeof input === 'number'
 
 		const plugin = createWidgetPlugin('special-names')
-			.description('d')
 			.interfaces<SpecialInterfaces>()
 			.state(state => state
 				.then({ validate })
@@ -155,7 +150,6 @@ describe('a section is sealed once its build callback returns', () => {
 	it('seals the section even when the build callback throws', () => {
 		let retained: any
 		const builder = createWidgetPlugin('throwing-build')
-			.description('d')
 			.interfaces<CountInterfaces>()
 
 		expect(capture(() => builder.state((state) => {
@@ -170,14 +164,13 @@ describe('a section is sealed once its build callback returns', () => {
 describe('member definitions are captured by value at registration', () => {
 	it('ignores later mutation of the author\'s member and slot definition objects', () => {
 		interface Interfaces {
-			slots: 'body'
+			slots: { body: WidgetChild }
 			state: { count: number }
 		}
 		const countDefinition = { validate: (input: unknown): input is number => typeof input === 'number', default: () => 1 }
-		const bodyDefinition = { description: 'Body slot' }
+		const bodyDefinition = {}
 
 		const plugin = createWidgetPlugin('captured')
-			.description('d')
 			.interfaces<Interfaces>()
 			.slots({ body: bodyDefinition })
 			.state(state => state.count(countDefinition))
@@ -205,7 +198,6 @@ describe('declared member shapes are validated before done() returns', () => {
 	/** The builder as an untyped (JavaScript / dynamically loaded) author sees it. */
 	function untyped(type: string): any {
 		return createWidgetPlugin(type)
-			.description('d')
 			.interfaces()
 	}
 	const fn = () => true
@@ -227,9 +219,9 @@ describe('declared member shapes are validated before done() returns', () => {
 			[() => untyped('u7')
 				.config({ validate: fn, resolve: fn }), ['u7', 'config', 'description']],
 			[() => untyped('u8')
-				.config({ description: 'c', resolve: fn }), ['u8', 'config', 'validate']],
+				.config({ resolve: fn }), ['u8', 'config', 'validate']],
 			[() => untyped('u9')
-				.config({ description: 'c', validate: fn }), ['u9', 'config', 'resolve']],
+				.config({ validate: fn }), ['u9', 'config', 'resolve']],
 		]
 
 		for (const [run, names] of cases)
@@ -251,19 +243,19 @@ describe('declared member shapes are validated before done() returns', () => {
 			[() => untyped('o6')
 				.methods((m: any) => m.run({ validateArgs: fn, execute: fn, registerDeps: 1 })), ['o6', 'methods', 'run', 'registerDeps']],
 			[() => untyped('o7')
-				.slots({ body: { description: 'b', validateStructure: 1 } }), ['o7', 'slots', 'body', 'validateStructure']],
+				.slots({ body: { validateStructure: 1 } }), ['o7', 'slots', 'body', 'validateStructure']],
 			[() => untyped('o8')
-				.config({ description: 'c', validate: fn, resolve: fn, schema: 'x' }), ['o8', 'config', 'schema']],
+				.config({ validate: fn, resolve: fn, schema: 'x' }), ['o8', 'config', 'schema']],
 			[() => untyped('o9')
-				.events((e: any) => e.changed({ description: 1 })), ['o9', 'events', 'changed', 'description']],
+				.events((e: any) => e.changed({})), ['o9', 'events', 'changed', 'description']],
 		]
 
 		for (const [run, names] of cases)
 			expectContractViolation(capture(run), names)
 
 		const plugin = untyped('optional-undefined')
-			.config({ description: 'c', validate: fn, resolve: () => ({}), schema: undefined })
-			.slots({ body: { description: 'b', validateStructure: undefined } })
+			.config({ validate: fn, resolve: () => ({}), schema: undefined })
+			.slots({ body: { validateStructure: undefined } })
 			.state((s: any) => s.count({ validate: fn, default: undefined, authorWritable: undefined }))
 			.properties((p: any) => p.label({ compute: fn, registerDeps: undefined, valueContract: undefined }))
 			.methods((m: any) => m.run({ validateArgs: fn, execute: fn, registerDeps: undefined }))
@@ -299,7 +291,6 @@ describe('declared member shapes are validated before done() returns', () => {
 describe('the optional `.structure()` phase', () => {
 	function leafPlugin(type: string, withStructure: boolean) {
 		const afterInterfaces = createWidgetPlugin(type)
-			.description('Leaf widget')
 			.interfaces<CountInterfaces>()
 		const afterStructure = withStructure
 			? afterInterfaces.structure((ctx) => {
@@ -340,10 +331,9 @@ describe('the optional `.structure()` phase', () => {
 
 	it('rejects a non-function validator, and a validator still passed to `.slots()`, with a TypeError', () => {
 		const untyped: any = createWidgetPlugin('structure-arg')
-			.description('d')
 			.interfaces()
 
 		expectContractViolation(capture(() => untyped.structure(42)), ['structure-arg', 'structure'])
-		expectContractViolation(capture(() => untyped.slots({ body: { description: 'b' } }, () => {})), ['structure-arg', 'slots', 'structure'])
+		expectContractViolation(capture(() => untyped.slots({ body: {} }, () => {})), ['structure-arg', 'slots', 'structure'])
 	})
 })

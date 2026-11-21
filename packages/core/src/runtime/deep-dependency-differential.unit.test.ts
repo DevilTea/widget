@@ -14,6 +14,7 @@
  */
 
 import type { ExecutionResult, WidgetSystemRuntime } from '../index'
+import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -37,10 +38,8 @@ interface NodeInterfaces {
 }
 
 const nodePlugin = createWidgetPlugin('node')
-	.description('Test widget')
 	.interfaces<NodeInterfaces>()
 	.config({
-		description: 'Node',
 		validate: (input): input is NodeConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
@@ -86,9 +85,8 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const graphPlugin = createWidgetPlugin('graph')
-	.description('Test widget')
-	.interfaces<{ slots: 'nodes' }>()
-	.slots({ nodes: { description: 'Nodes' } })
+	.interfaces<{ slots: { nodes: WidgetChild } }>()
+	.slots({ nodes: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, graphPlugin] })

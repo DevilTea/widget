@@ -31,10 +31,8 @@ function isConfigRaw(value: unknown): value is ConfigRaw {
 const configProbeCalls: unknown[] = []
 
 const configProbePlugin = createWidgetPlugin('config-probe')
-	.description('Test widget')
 	.interfaces<ConfigProbeInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input, ctx): input is ConfigRaw => {
 			configProbeCalls.push(input)
 
@@ -73,10 +71,8 @@ const optionalConfigCalls: unknown[] = []
 
 // Accepts omission: its raw config type admits `null` and its validator accepts it.
 const optionalConfigPlugin = createWidgetPlugin('optional-config')
-	.description('Test widget')
 	.interfaces<OptionalConfigInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input): input is OptionalConfigRaw | null => {
 			optionalConfigCalls.push(input)
 			return input === null || (typeof input === 'object' && typeof (input as { label?: unknown }).label === 'string')
@@ -94,10 +90,8 @@ interface RequiredConfigInterfaces extends WidgetInterfaces {
 
 // Requires config and reports its own diagnostic for the `null` candidate.
 const requiredConfigPlugin = createWidgetPlugin('required-config')
-	.description('Test widget')
 	.interfaces<RequiredConfigInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input, ctx): input is { title: string } => {
 			if (input === null) {
 				ctx.addDiagnostic({ message: 'A title is required.', path: ['title'], reason: 'required' })
@@ -112,7 +106,6 @@ const requiredConfigPlugin = createWidgetPlugin('required-config')
 interface BareInterfaces extends WidgetInterfaces {}
 
 const barePlugin = createWidgetPlugin('bare')
-	.description('Test widget')
 	.interfaces<BareInterfaces>()
 	.done()
 
@@ -400,7 +393,6 @@ describe('config.validate finalization (COMMENT 2 predicate + collector table)',
 describe('config raw type expresses required-ness', () => {
 	it('a raw config type that admits null is accepted by .interfaces()', () => {
 		expectTypeOf(createWidgetPlugin('optional')
-			.description('Test widget')
 			.interfaces<OptionalConfigInterfaces>())
 			.toHaveProperty('config')
 	})

@@ -17,7 +17,6 @@ interface OrderedInterfaces extends WidgetInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const ordered = createWidgetPlugin('ordered')
-	.description('Test widget')
 	.interfaces<OrderedInterfaces>()
 	.state(state => state
 		.zeta({ validate: isNumber, default: () => 1 })
@@ -33,9 +32,7 @@ const ordered = createWidgetPlugin('ordered')
 			return null
 		} })
 		.ma({ validateArgs: (args): args is [] => args.length === 0, execute: () => null }))
-	.events(events => events
-		.ez({ description: 'First event' })
-		.ea({ description: 'Second event' }))
+	.events(['ez', 'ea'])
 	.done()
 
 const system = createWidgetSystem({ plugins: [ordered] })
