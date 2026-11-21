@@ -31,11 +31,15 @@ export const MAX_CENTS = 100_000_000
  * `percent` percent of `cents`, rounded half-up (half away from zero) to a whole minor unit. A percentage counts to two
  * decimals (hundredths of a percent, `9.2` is 920): the arithmetic is then on integers only, so a result that is exactly
  * half a unit (375 x 9.2% = 34.5) rounds up as it says, which `Math.round(cents * percent / 100)` does not (it gets 34).
+ * The product is a BigInt: a large subtotal times a percentage in hundredths (up to 300% is 30000) passes 2^53, where
+ * a Number product would already be rounded before the division.
  */
 export function percentOf(cents: number, percent: number): number {
-	const product = cents * Math.round(percent * 100)
+	const product = BigInt(cents) * BigInt(Math.round(percent * 100))
+	const magnitude = (product < 0n ? -product : product) + 5000n
+	const rounded = Number(magnitude / 10000n)
 	// `+ 0` turns a -0 into 0.
-	return Math.sign(product) * Math.floor((Math.abs(product) + 5000) / 10000) + 0
+	return (product < 0n ? -rounded : rounded) + 0
 }
 
 export type RuleKind = 'discount' | 'surcharge' | 'fee' | 'tax'

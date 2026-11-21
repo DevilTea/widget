@@ -22,6 +22,21 @@ describe('percentOf (half-up on integers)', () => {
 			.toBe(0)
 		expect(percentOf(-1, 49.99))
 			.toBe(0)
+		expect(percentOf(-375, 9.2))
+			.toBe(-35)
+	})
+
+	it('stays exact when the product passes 2^53 (a large subtotal with a percentage multiplier)', () => {
+		// 20_692_906_949_961 x 150% = 31_039_360_424_941.5 -> 31_039_360_424_942 (half-up). As a Number the product
+		// (about 3.1e17, past 2^53) was already rounded and gave ...941; the same for the other two.
+		expect(percentOf(20_692_906_949_961, 150))
+			.toBe(31_039_360_424_942)
+		expect(percentOf(101_343_456_945_247, 299.99))
+			.toBe(304_020_236_490_046)
+		expect(percentOf(59_651_647_545_650, 21))
+			.toBe(12_526_845_984_587)
+		expect(percentOf(-20_692_906_949_961, 150))
+			.toBe(-31_039_360_424_942)
 	})
 
 	it('counts a percentage to two decimals', () => {
