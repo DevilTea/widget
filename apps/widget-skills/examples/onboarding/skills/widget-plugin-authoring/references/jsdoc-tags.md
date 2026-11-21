@@ -2,9 +2,8 @@
 
 ## JSDoc tag set
 
-The `XxxInterfaces` type and its JSDoc are the single source of a plugin's shape and documentation. Every member
-(config property, State, Property, Method, Event, slot, reason) needs a summary. The tags are TSDoc-compatible;
-the custom ones are declared in `tsdoc.json`.
+Document every member of the `XxxInterfaces` type (config property, State, Property, Method and its parameters,
+Event) with JSDoc. The tags are TSDoc-compatible; the custom ones are declared in `tsdoc.json`.
 
 | Tag | Applies to | Meaning |
 | --- | --- | --- |
@@ -18,8 +17,9 @@ the custom ones are declared in `tsdoc.json`.
 | `@default` | config properties | The value used when it is left out, as JSON. |
 | `@examples` | any value | A JSON array of example values. |
 | `@widgetRef A | B` | strings | The value is the id of a widget of one of these types. |
-| `@param name - text`, `@returns` | Methods | Argument and result documentation. |
+| `@param name - text`, `@returns` | Methods | Argument and result documentation. Every parameter needs one. |
 
 Constraint tags (`@format`, `@pattern`, `@minimum`, `@maximum`, `@exclusiveMinimum`, `@exclusiveMaximum`, `@multipleOf`, `@minLength`, `@maxLength`, `@minItems`, `@maxItems`, `@default`, `@examples`, `@widgetRef`) become keywords in the full JSON Schema and prose
-in the LLM schema. They document; `config.validate` and the State/Method validators enforce. Any other tag fails
-`widget-skills --check`.
+in the LLM schema. They document; `config.validate` and the State and Method validators enforce. The standard
+TSDoc tags (`@see`, `@example`, `@deprecated`, `@throws`, `@defaultValue`, `@typeParam`, `@internal`, `@beta`, ...)
+are accepted and not interpreted. Any other tag fails `widget-skills --check`.

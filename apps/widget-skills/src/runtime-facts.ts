@@ -7,6 +7,8 @@
  */
 
 import type { RuntimeFacts } from './ir'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 interface InspectionLike {
@@ -47,12 +49,83 @@ export function collectRuntimeFacts(system: unknown, inspectPlugin: (plugin: nev
 	}
 }
 
-/** Imports `modulePath` (absolute) and reads the facts of its export `exportName`. Needs a TypeScript loader (tsx). */
-export async function loadRuntimeFacts(modulePath: string, exportName: string): Promise<RuntimeFacts> {
+type InspectPlugin = (plugin: never) => unknown
+
+/**
+ * The file of `@deviltea/widget-core/inspection` as the module at `modulePath` would import it: the nearest
+ * `node_modules/@deviltea/widget-core` above the module, through its `exports`. (`require.resolve` cannot do
+ * this: Core exports only the `import` condition.)
+ */
+function resolveInspectionEntry(modulePath: string): string {
+	for (let directory = dirname(modulePath); ; directory = dirname(directory)) {
+		const packageRoot = join(directory, 'node_modules', '@deviltea', 'widget-core')
+		const manifestPath = join(packageRoot, 'package.json')
+		if (existsSync(manifestPath)) {
+			const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { exports?: Record<string, { import?: string } | string> }
+			const entry = manifest.exports?.['./inspection']
+			const target = typeof entry === 'string' ? entry : entry?.import
+			if (target === undefined)
+				throw new Error(`${manifestPath} does not export "./inspection".`)
+			return join(packageRoot, target)
+		}
+		if (dirname(directory) === directory)
+			throw new Error(`No node_modules/@deviltea/widget-core above ${modulePath}.`)
+	}
+}
+
+/**
+ * Core's `inspectPlugin` from the Core instance that built `system`'s plugins.
+ *
+ * Core brands its plugins per module instance, so an `inspectPlugin` from another copy of Core throws
+ * `foreign-plugin`. The System's module decides which copy that is, not this package: the entry is resolved from
+ * the module's own location first, then as this package sees it (which is what a `paths` alias to source yields),
+ * and the first one that accepts the System's first plugin is used.
+ */
+async function inspectPluginFor(modulePath: string, system: SystemLike): Promise<InspectPlugin> {
+	const specifier = '@deviltea/widget-core/inspection'
+	const candidates: (() => Promise<unknown>)[] = [
+		async () => import(pathToFileURL(resolveInspectionEntry(modulePath)).href),
+		async () => import(specifier),
+	]
+	const failures: string[] = []
+	for (const candidate of candidates) {
+		try {
+			const { inspectPlugin } = await candidate() as { inspectPlugin: InspectPlugin }
+			const first = system.plugins[0]
+			if (first !== undefined)
+				inspectPlugin(first as never)
+			return inspectPlugin
+		}
+		catch (error) {
+			failures.push(error instanceof Error ? error.message : String(error))
+		}
+	}
+	throw new Error(`Cannot load an inspectPlugin that accepts the plugins of ${modulePath} (one Core instance must serve both): ${failures.join(' | ')}`)
+}
+
+/** The System a module exports. Importing the module executes it, and everything it imports. */
+async function importSystem(modulePath: string, exportName: string): Promise<SystemLike> {
 	const module = await import(pathToFileURL(modulePath).href) as Record<string, unknown>
 	const system = module[exportName]
 	if (system === undefined || system === null)
 		throw new Error(`${modulePath} has no export "${exportName}".`)
-	const inspection = await import('@deviltea/widget-core/inspection') as { inspectPlugin: (plugin: never) => unknown }
-	return collectRuntimeFacts(system, inspection.inspectPlugin)
+	return system as SystemLike
+}
+
+/** Imports `modulePath` (absolute) and reads the facts of its export `exportName`. Needs a TypeScript loader (tsx). */
+export async function loadRuntimeFacts(modulePath: string, exportName: string): Promise<RuntimeFacts> {
+	const system = await importSystem(modulePath, exportName)
+	return collectRuntimeFacts(system, await inspectPluginFor(modulePath, system))
+}
+
+export interface CompileOutcome {
+	status: string
+	diagnostics: { code: string, message: string }[]
+}
+
+/** Compiles `source` with the System `modulePath` exports, so an example document can be proven valid before it is published. */
+export async function compileWithSystem(modulePath: string, exportName: string, source: unknown): Promise<CompileOutcome> {
+	const system = await importSystem(modulePath, exportName) as unknown as { createBlueprint: (source: unknown) => { status: string, diagnostics: readonly { code: string, message: string }[] } }
+	const blueprint = system.createBlueprint(structuredClone(source))
+	return { status: blueprint.status, diagnostics: blueprint.diagnostics.map(({ code, message }) => ({ code, message })) }
 }

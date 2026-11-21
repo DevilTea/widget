@@ -24,6 +24,7 @@
 				"runtimeDescription": "The wizard title per language and, optionally, the index of the step it opens on."
 			},
 			"slotForm": "union",
+			"slotsOpen": false,
 			"slots": [
 				{
 					"name": "steps",
@@ -41,6 +42,9 @@
 				{
 					"name": "current",
 					"typeText": "number",
+					"shape": {
+						"kind": "number"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -52,6 +56,9 @@
 				{
 					"name": "finished",
 					"typeText": "boolean",
+					"shape": {
+						"kind": "boolean"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -65,6 +72,10 @@
 				{
 					"name": "title",
 					"typeText": "I18nText",
+					"shape": {
+						"kind": "ref",
+						"name": "I18nText"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -75,6 +86,13 @@
 				{
 					"name": "steps",
 					"typeText": "readonly StepSummary[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "ref",
+							"name": "StepSummary"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -85,6 +103,10 @@
 				{
 					"name": "progress",
 					"typeText": "Progress",
+					"shape": {
+						"kind": "ref",
+						"name": "Progress"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -95,6 +117,12 @@
 				{
 					"name": "answers",
 					"typeText": "{ readonly [stepId: string]: unknown; }",
+					"shape": {
+						"kind": "record",
+						"value": {
+							"kind": "unknown"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -112,10 +140,16 @@
 							"name": "index",
 							"typeText": "number",
 							"optional": false,
-							"doc": ""
+							"doc": "",
+							"shape": {
+								"kind": "number"
+							}
 						}
 					],
 					"returnText": "boolean",
+					"returnShape": {
+						"kind": "boolean"
+					},
 					"returnsDoc": "",
 					"doc": {
 						"summary": "",
@@ -129,6 +163,9 @@
 					"signature": "next(): number",
 					"params": [],
 					"returnText": "number",
+					"returnShape": {
+						"kind": "number"
+					},
 					"returnsDoc": "",
 					"doc": {
 						"summary": "",
@@ -142,6 +179,9 @@
 					"signature": "back(): number",
 					"params": [],
 					"returnText": "number",
+					"returnShape": {
+						"kind": "number"
+					},
 					"returnsDoc": "",
 					"doc": {
 						"summary": "",
@@ -158,10 +198,16 @@
 							"name": "index",
 							"typeText": "number",
 							"optional": false,
-							"doc": ""
+							"doc": "",
+							"shape": {
+								"kind": "number"
+							}
 						}
 					],
 					"returnText": "number",
+					"returnShape": {
+						"kind": "number"
+					},
 					"returnsDoc": "",
 					"doc": {
 						"summary": "",
@@ -175,6 +221,9 @@
 					"signature": "finish(): boolean",
 					"params": [],
 					"returnText": "boolean",
+					"returnShape": {
+						"kind": "boolean"
+					},
 					"returnsDoc": "",
 					"doc": {
 						"summary": "",
@@ -190,7 +239,11 @@
 					"payload": [
 						{
 							"label": "change",
-							"typeText": "StepChange"
+							"typeText": "StepChange",
+							"shape": {
+								"kind": "ref",
+								"name": "StepChange"
+							}
 						}
 					],
 					"doc": {
@@ -206,7 +259,11 @@
 					"payload": [
 						{
 							"label": "completion",
-							"typeText": "Completion"
+							"typeText": "Completion",
+							"shape": {
+								"kind": "ref",
+								"name": "Completion"
+							}
 						}
 					],
 					"doc": {
@@ -251,11 +308,15 @@
 				"runtimeDescription": "The step title per language and, optionally, the name and e-mail address filled in at the start."
 			},
 			"slotForm": null,
+			"slotsOpen": false,
 			"slots": [],
 			"state": [
 				{
 					"name": "name",
 					"typeText": "string",
+					"shape": {
+						"kind": "string"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -267,6 +328,9 @@
 				{
 					"name": "email",
 					"typeText": "string",
+					"shape": {
+						"kind": "string"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -280,6 +344,10 @@
 				{
 					"name": "title",
 					"typeText": "I18nText",
+					"shape": {
+						"kind": "ref",
+						"name": "I18nText"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -290,6 +358,12 @@
 				{
 					"name": "missing",
 					"typeText": "readonly string[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "string"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -300,6 +374,9 @@
 				{
 					"name": "complete",
 					"typeText": "boolean",
+					"shape": {
+						"kind": "boolean"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -310,6 +387,10 @@
 				{
 					"name": "answers",
 					"typeText": "AccountAnswers",
+					"shape": {
+						"kind": "ref",
+						"name": "AccountAnswers"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -349,11 +430,18 @@
 				"runtimeDescription": "The step title, the options (an id and a label per language), how many must be picked and which are picked at the start."
 			},
 			"slotForm": null,
+			"slotsOpen": false,
 			"slots": [],
 			"state": [
 				{
 					"name": "selected",
 					"typeText": "readonly string[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "string"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -367,6 +455,10 @@
 				{
 					"name": "title",
 					"typeText": "I18nText",
+					"shape": {
+						"kind": "ref",
+						"name": "I18nText"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -377,6 +469,13 @@
 				{
 					"name": "options",
 					"typeText": "readonly InterestOptionRaw[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "ref",
+							"name": "InterestOptionRaw"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -387,6 +486,12 @@
 				{
 					"name": "missing",
 					"typeText": "readonly string[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "string"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -397,6 +502,9 @@
 				{
 					"name": "complete",
 					"typeText": "boolean",
+					"shape": {
+						"kind": "boolean"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -407,6 +515,12 @@
 				{
 					"name": "answers",
 					"typeText": "readonly string[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "string"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -446,11 +560,18 @@
 				"runtimeDescription": "The step title, the safety rules (an id and a text per language) and which are acknowledged at the start."
 			},
 			"slotForm": null,
+			"slotsOpen": false,
 			"slots": [],
 			"state": [
 				{
 					"name": "acknowledged",
 					"typeText": "readonly string[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "string"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -464,6 +585,10 @@
 				{
 					"name": "title",
 					"typeText": "I18nText",
+					"shape": {
+						"kind": "ref",
+						"name": "I18nText"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -474,6 +599,13 @@
 				{
 					"name": "rules",
 					"typeText": "readonly SafetyRuleRaw[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "ref",
+							"name": "SafetyRuleRaw"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -484,6 +616,12 @@
 				{
 					"name": "missing",
 					"typeText": "readonly string[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "string"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -494,6 +632,9 @@
 				{
 					"name": "complete",
 					"typeText": "boolean",
+					"shape": {
+						"kind": "boolean"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -504,6 +645,12 @@
 				{
 					"name": "answers",
 					"typeText": "readonly string[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "string"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -543,11 +690,33 @@
 				"runtimeDescription": "The step title and the days and start times offered. Whether the booking office still has room is not known here: the host asks it."
 			},
 			"slotForm": null,
+			"slotsOpen": false,
 			"slots": [],
 			"state": [
 				{
 					"name": "status",
 					"typeText": "\"idle\" | \"requesting\" | \"confirmed\" | \"declined\"",
+					"shape": {
+						"kind": "union",
+						"members": [
+							{
+								"kind": "literal",
+								"value": "idle"
+							},
+							{
+								"kind": "literal",
+								"value": "requesting"
+							},
+							{
+								"kind": "literal",
+								"value": "confirmed"
+							},
+							{
+								"kind": "literal",
+								"value": "declined"
+							}
+						]
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -559,6 +728,9 @@
 				{
 					"name": "ticket",
 					"typeText": "number",
+					"shape": {
+						"kind": "number"
+					},
 					"doc": {
 						"summary": "The ticket of the newest request; 0 before any.",
 						"remarks": "",
@@ -570,6 +742,18 @@
 				{
 					"name": "slot",
 					"typeText": "Slot | null",
+					"shape": {
+						"kind": "union",
+						"members": [
+							{
+								"kind": "null"
+							},
+							{
+								"kind": "ref",
+								"name": "Slot"
+							}
+						]
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -581,6 +765,17 @@
 				{
 					"name": "reference",
 					"typeText": "string | null",
+					"shape": {
+						"kind": "union",
+						"members": [
+							{
+								"kind": "null"
+							},
+							{
+								"kind": "string"
+							}
+						]
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -592,6 +787,17 @@
 				{
 					"name": "reason",
 					"typeText": "string | null",
+					"shape": {
+						"kind": "union",
+						"members": [
+							{
+								"kind": "null"
+							},
+							{
+								"kind": "string"
+							}
+						]
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -605,6 +811,10 @@
 				{
 					"name": "title",
 					"typeText": "I18nText",
+					"shape": {
+						"kind": "ref",
+						"name": "I18nText"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -615,6 +825,43 @@
 				{
 					"name": "offered",
 					"typeText": "{ readonly days: readonly string[]; readonly times: readonly string[]; }",
+					"shape": {
+						"kind": "object",
+						"properties": [
+							{
+								"name": "days",
+								"optional": false,
+								"shape": {
+									"kind": "array",
+									"items": {
+										"kind": "string"
+									}
+								},
+								"doc": {
+									"summary": "",
+									"remarks": "",
+									"tags": {},
+									"unknownTags": []
+								}
+							},
+							{
+								"name": "times",
+								"optional": false,
+								"shape": {
+									"kind": "array",
+									"items": {
+										"kind": "string"
+									}
+								},
+								"doc": {
+									"summary": "",
+									"remarks": "",
+									"tags": {},
+									"unknownTags": []
+								}
+							}
+						]
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -625,6 +872,12 @@
 				{
 					"name": "missing",
 					"typeText": "readonly string[]",
+					"shape": {
+						"kind": "array",
+						"items": {
+							"kind": "string"
+						}
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -635,6 +888,9 @@
 				{
 					"name": "complete",
 					"typeText": "boolean",
+					"shape": {
+						"kind": "boolean"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -645,6 +901,10 @@
 				{
 					"name": "answers",
 					"typeText": "InductionAnswers",
+					"shape": {
+						"kind": "ref",
+						"name": "InductionAnswers"
+					},
 					"doc": {
 						"summary": "",
 						"remarks": "",
@@ -662,16 +922,25 @@
 							"name": "date",
 							"typeText": "string",
 							"optional": false,
-							"doc": ""
+							"doc": "",
+							"shape": {
+								"kind": "string"
+							}
 						},
 						{
 							"name": "time",
 							"typeText": "string",
 							"optional": false,
-							"doc": ""
+							"doc": "",
+							"shape": {
+								"kind": "string"
+							}
 						}
 					],
 					"returnText": "number",
+					"returnShape": {
+						"kind": "number"
+					},
 					"returnsDoc": "",
 					"doc": {
 						"summary": "",
@@ -688,16 +957,26 @@
 							"name": "ticket",
 							"typeText": "number",
 							"optional": false,
-							"doc": ""
+							"doc": "",
+							"shape": {
+								"kind": "number"
+							}
 						},
 						{
 							"name": "outcome",
 							"typeText": "BookingOutcome",
 							"optional": false,
-							"doc": ""
+							"doc": "",
+							"shape": {
+								"kind": "ref",
+								"name": "BookingOutcome"
+							}
 						}
 					],
 					"returnText": "boolean",
+					"returnShape": {
+						"kind": "boolean"
+					},
 					"returnsDoc": "",
 					"doc": {
 						"summary": "",
@@ -711,6 +990,9 @@
 					"signature": "cancelBooking(): number",
 					"params": [],
 					"returnText": "number",
+					"returnShape": {
+						"kind": "number"
+					},
 					"returnsDoc": "",
 					"doc": {
 						"summary": "",
@@ -726,7 +1008,11 @@
 					"payload": [
 						{
 							"label": "request",
-							"typeText": "SlotRequest"
+							"typeText": "SlotRequest",
+							"shape": {
+								"kind": "ref",
+								"name": "SlotRequest"
+							}
 						}
 					],
 					"doc": {
@@ -742,7 +1028,11 @@
 					"payload": [
 						{
 							"label": "confirmation",
-							"typeText": "SlotConfirmation"
+							"typeText": "SlotConfirmation",
+							"shape": {
+								"kind": "ref",
+								"name": "SlotConfirmation"
+							}
 						}
 					],
 					"doc": {
@@ -758,7 +1048,11 @@
 					"payload": [
 						{
 							"label": "declined",
-							"typeText": "SlotDeclined"
+							"typeText": "SlotDeclined",
+							"shape": {
+								"kind": "ref",
+								"name": "SlotDeclined"
+							}
 						}
 					],
 					"doc": {
@@ -774,7 +1068,11 @@
 					"payload": [
 						{
 							"label": "cancelled",
-							"typeText": "SlotCancelled"
+							"typeText": "SlotCancelled",
+							"shape": {
+								"kind": "ref",
+								"name": "SlotCancelled"
+							}
 						}
 					],
 					"doc": {

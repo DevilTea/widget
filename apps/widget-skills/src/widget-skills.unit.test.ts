@@ -1,4 +1,5 @@
 import type { JsonSchema, SystemIr } from './index'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inspectPlugin } from '@deviltea/widget-core/inspection'
@@ -423,8 +424,10 @@ describe('--check', () => {
 			.toBe(false)
 		expect(result.problems)
 			.toEqual([
-				{ kind: 'missing-doc', where: 'Counter.state.step', message: 'Counter.state.step has no JSDoc.' },
-				{ kind: 'unknown-tag', where: 'Counter.state.limit', message: 'Counter.state.limit uses the unknown tag @madeUpTag.' },
+				{ kind: 'missing-doc', severity: 'error', where: 'Counter.state.step', message: 'Counter.state.step has no JSDoc.' },
+				{ kind: 'unknown-tag', severity: 'error', where: 'Counter.state.limit', message: 'Counter.state.limit uses the unknown tag @madeUpTag.' },
+				{ kind: 'missing-doc', severity: 'error', where: 'Counter.methods.add(by)', message: 'Counter.methods.add has no @param for "by".' },
+				{ kind: 'missing-doc', severity: 'error', where: 'Counter.methods.add(options).silent', message: 'Counter.methods.add(options).silent has no JSDoc.' },
 			])
 		expect(fixtureIr.plugins[0]!.state[0]!.doc)
 			.toEqual({ summary: 'The current count.', remarks: '', tags: { minimum: '0' }, unknownTags: [] })
@@ -440,6 +443,105 @@ describe('--check', () => {
 			.toBe(true)
 		expect(result.members)
 			.toBe(result.documented + result.problems.length)
+		// Until 0.3.0 the runtime description documents a plugin, an Event and a slot of the string-union form.
+		const flagged = result.problems.map(problem => problem.where)
+		expect(flagged.filter(where => where.includes('.slots.') || where.includes('.events.') || (!where.includes('.') && !where.startsWith('type '))))
+			.toEqual([])
+		// A type only renderer authors read is a warning; a field a document author writes is an error.
+		expect(result.problems.find(problem => problem.where === 'type StepSummary.id')?.severity)
+			.toBe('warning')
+		expect(result.problems.find(problem => problem.where === 'type OnboardingRawConfig.title')?.severity)
+			.toBe('error')
+	})
+
+	it('passes once every error is gone, warnings or not', () => {
+		const copy = structuredClone(fixtureIr)
+		const counter = copy.plugins[0]!
+		counter.state[1]!.doc.summary = 'How much one step adds.'
+		counter.state[2]!.doc.unknownTags = []
+		counter.methods[0]!.params[0]!.doc = 'How much to add.'
+		const options = counter.methods[0]!.params[1]!.shape
+		if (options.kind !== 'object')
+			throw new Error('Expected the inline options object.')
+		options.properties[0]!.doc.summary = 'Skips the Event.'
+		expect(checkIr(copy))
+			.toMatchObject({ ok: true, problems: [] })
+	})
+})
+
+describe('an open slot set (slots: string)', () => {
+	it('takes its slot names from the runtime instead of reading String members as names', () => {
+		const open = fixtureIr.plugins[1]!
+		expect(open)
+			.toMatchObject({ type: 'Open', slotForm: 'union', slotsOpen: true })
+		expect(open.slots.map(slot => [slot.name, slot.runtimeDescription]))
+			.toEqual([['anything', 'Any children.']])
+		expect(fixtureIr.mismatches)
+			.toEqual([])
+		const defs = emitFullSchema(fixtureIr).$defs as Record<string, JsonSchema>
+		expect((defs.widget_Open!.properties as Record<string, JsonSchema>).slots!.additionalProperties)
+			.toEqual({ type: 'array', items: { $ref: '#/$defs/widget' } })
+	})
+})
+
+describe('the committed example output', () => {
+	it('is what the generator writes today', () => {
+		const example = JSON.parse(readFileSync(resolve(here, '../fixtures/onboarding-example.json'), 'utf8'))
+		const files = generateFiles(ir, { example })
+		const directory = resolve(here, '../examples/onboarding')
+		for (const [path, content] of Object.entries(files)) {
+			expect(readFileSync(resolve(directory, path), 'utf8'), path)
+				.toBe(content)
+		}
+		// Nothing stale is left behind: the manifest is the complete list.
+		const onDisk: string[] = []
+		const walk = (relative: string): void => {
+			for (const entry of readdirSync(resolve(directory, relative), { withFileTypes: true })) {
+				const path = relative === '' ? entry.name : `${relative}/${entry.name}`
+				if (entry.isDirectory())
+					walk(path)
+				else
+					onDisk.push(path)
+			}
+		}
+		walk('')
+		expect(onDisk.sort())
+			.toEqual(Object.keys(files)
+				.sort())
+	})
+
+	it('shows an example document that is the default preset and compiles without diagnostics', () => {
+		const example = JSON.parse(readFileSync(resolve(here, '../fixtures/onboarding-example.json'), 'utf8'))
+		expect(example)
+			.toStrictEqual(JSON.parse(onboardingPresets[0]!.sourceText))
+		expect(onboardingSystem.createBlueprint(structuredClone(example)))
+			.toMatchObject({ status: 'valid', diagnostics: [] })
+		expect(generateFiles(ir, { example })['skills/onboarding-system-source-json-authoring/SKILL.md'])
+			.toContain(JSON.stringify(example, null, 2))
+	})
+
+	it('does not send readers to the private package or claim placements the types do not state', () => {
+		const files = generateFiles(ir)
+		const authoring = files['skills/onboarding-system-source-json-authoring/SKILL.md']!
+		expect(authoring).not.toContain('@deviltea/widget-skills')
+		expect(authoring).not.toContain('flatToTree')
+		expect(JSON.stringify(emitLlmSchema(ir))).not.toContain('may go into')
+		const renderer = files['skills/onboarding-system-renderer-implementation/SKILL.md']!
+		expect(renderer)
+			.toContain('createWidgetVueRenderer(system, renderers => renderers')
+		expect(renderer)
+			.toContain('returns the Method\'s value on success and `null` on failure')
+		expect(renderer).not.toContain('packages/vue/src')
+		for (const content of Object.values(files))
+			expect(content).not.toContain('writes nothing and emits nothing')
+	})
+
+	it('keeps the type documentation and the entry-list note on a dictionary', () => {
+		const description = (emitLlmSchema(ir).$defs as Record<string, JsonSchema>).type_I18nText!.description as string
+		expect(description)
+			.toContain('Text per language')
+		expect(description)
+			.toContain('written as a list of { "key", "value" } entries')
 	})
 })
 

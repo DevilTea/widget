@@ -33,19 +33,19 @@ Step 4 of the onboarding wizard: booking an induction slot, with the work kept a
 _Not documented._
 - `date: string`
 - `time: string`
-- Returns `number`
+- Returns `number`. Through `useMethods()` the call returns `number | null`: `null` when it failed (read `useMethodDiagnostics().requestSlot`).
 
 ### `settleBooking(ticket: number, outcome: BookingOutcome): boolean`
 
 _Not documented._
 - `ticket: number`
 - `outcome: BookingOutcome`
-- Returns `boolean`
+- Returns `boolean`. Through `useMethods()` the call returns `boolean | null`: `null` when it failed (read `useMethodDiagnostics().settleBooking`).
 
 ### `cancelBooking(): number`
 
 _Not documented._
-- Returns `number`
+- Returns `number`. Through `useMethods()` the call returns `number | null`: `null` when it failed (read `useMethodDiagnostics().cancelBooking`).
 
 ## Events
 

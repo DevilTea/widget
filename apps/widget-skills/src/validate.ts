@@ -1,11 +1,19 @@
 /**
- * A small JSON Schema validator for the keywords the emitters produce (`type`, `properties`, `required`,
- * `additionalProperties`, `items`, `enum`, `const`, `anyOf`, `$ref` into `$defs`, and the numeric/length bounds).
- * The repository has no Draft 2020-12 validator; this one exists so the generated schemas can be exercised in
- * tests and by a host that wants a cheap structural pre-check. `format` and `pattern` are not evaluated.
+ * A small JSON Schema validator for the keywords the emitters produce. The repository has no Draft 2020-12
+ * validator; this one exists so the generated schemas can be exercised in tests and by a host that wants a cheap
+ * structural pre-check.
+ *
+ * Implemented: `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `const`, `anyOf`,
+ * `$ref` (a JSON Pointer into the same document), `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`,
+ * `multipleOf`, `minLength`, `maxLength`, `minItems`, `maxItems`. Annotations are ignored. `format` and `pattern`
+ * are annotations here: they are not evaluated. Any other keyword throws, so a schema this validator cannot judge
+ * is never reported as passing.
  */
 
 import type { JsonSchema } from './schema'
+
+const ANNOTATIONS = new Set(['$schema', '$id', '$defs', '$comment', 'title', 'description', 'default', 'examples', 'format', 'pattern'])
+const IMPLEMENTED = new Set(['type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const', 'anyOf', '$ref', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'minItems', 'maxItems'])
 
 function typeOf(value: unknown): string {
 	if (value === null)
@@ -15,8 +23,42 @@ function typeOf(value: unknown): string {
 	return typeof value
 }
 
+/** JSON equality: object key order does not matter. */
 function sameJson(a: unknown, b: unknown): boolean {
-	return JSON.stringify(a) === JSON.stringify(b)
+	if (a === b)
+		return true
+	const type = typeOf(a)
+	if (type !== typeOf(b))
+		return false
+	if (type === 'array') {
+		const [left, right] = [a as unknown[], b as unknown[]]
+		return left.length === right.length && left.every((item, index) => sameJson(item, right[index]))
+	}
+	if (type === 'object') {
+		const [left, right] = [a as Record<string, unknown>, b as Record<string, unknown>]
+		const keys = Object.keys(left)
+		return keys.length === Object.keys(right).length && keys.every(key => Object.hasOwn(right, key) && sameJson(left[key], right[key]))
+	}
+	return false
+}
+
+/** Resolves a same-document JSON Pointer reference (`#/a/b`, with `~0` and `~1` escapes). */
+function resolveRef(root: JsonSchema, ref: string): unknown {
+	if (ref === '#')
+		return root
+	if (!ref.startsWith('#/'))
+		throw new Error(`Unsupported $ref "${ref}": only references into the same document are resolved.`)
+	let current: unknown = root
+	for (const token of ref.slice(2)
+		.split('/')) {
+		const key = decodeURIComponent(token)
+			.replaceAll('~1', '/')
+			.replaceAll('~0', '~')
+		if (typeof current !== 'object' || current === null || !Object.hasOwn(current, key))
+			return undefined
+		current = (current as Record<string, unknown>)[key]
+	}
+	return current
 }
 
 /** The errors of `value` against `schema`, as `path: message` lines. Empty when it validates. */
@@ -29,11 +71,14 @@ export function validateSchema(root: JsonSchema, value: unknown): string[] {
 			return
 		}
 		if (typeof schema !== 'object' || schema === null)
-			return
+			throw new Error(`${path}: a schema must be an object or a boolean.`)
 		const node = schema as JsonSchema
+		for (const keyword of Object.keys(node)) {
+			if (!IMPLEMENTED.has(keyword) && !ANNOTATIONS.has(keyword))
+				throw new Error(`The keyword "${keyword}" is not implemented by this validator.`)
+		}
 		if (typeof node.$ref === 'string') {
-			const name = node.$ref.replace('#/$defs/', '')
-			const target = (root.$defs as Record<string, unknown> | undefined)?.[name]
+			const target = resolveRef(root, node.$ref)
 			if (target === undefined)
 				into.push(`${path}: unresolved $ref ${node.$ref}`)
 			else
@@ -70,6 +115,12 @@ export function validateSchema(root: JsonSchema, value: unknown): string[] {
 				into.push(`${path}: not above ${node.exclusiveMinimum}`)
 			if (typeof node.exclusiveMaximum === 'number' && number >= node.exclusiveMaximum)
 				into.push(`${path}: not below ${node.exclusiveMaximum}`)
+			if (typeof node.multipleOf === 'number' && node.multipleOf > 0) {
+				const quotient = number / node.multipleOf
+				// Tolerates binary rounding (0.3 / 0.1), as validators conventionally do.
+				if (Math.abs(quotient - Math.round(quotient)) > 1e-9 * Math.max(1, Math.abs(quotient)))
+					into.push(`${path}: not a multiple of ${node.multipleOf}`)
+			}
 		}
 		if (actual === 'string') {
 			const length = [...(current as string)].length

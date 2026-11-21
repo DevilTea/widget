@@ -1,7 +1,7 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "onboardingSystem document (flat node list)",
-	"description": "A widget document as a flat list of nodes. Exactly one node has no parent (the root). Convert it to the tree with flatToTree, compile the Blueprint, and repair from its diagnostics.",
+	"description": "A widget document as a flat list of nodes. Exactly one node has no parent (the root). Convert it to the tree, compile the Blueprint, and repair from its diagnostics.",
 	"type": "object",
 	"properties": {
 		"nodes": {
@@ -53,7 +53,7 @@
 					"enum": [
 						"steps"
 					],
-					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". A Onboarding may go into: Onboarding.steps."
+					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". The slots of this System: Onboarding.steps; each slot's description says which types it takes."
 				},
 				"config": {
 					"$ref": "#/$defs/type_OnboardingRawConfig",
@@ -98,7 +98,7 @@
 					"enum": [
 						"steps"
 					],
-					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". A AccountStep may go into: Onboarding.steps."
+					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". The slots of this System: Onboarding.steps; each slot's description says which types it takes."
 				},
 				"config": {
 					"$ref": "#/$defs/type_AccountRawConfig",
@@ -133,7 +133,7 @@
 					"enum": [
 						"steps"
 					],
-					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". A InterestsStep may go into: Onboarding.steps."
+					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". The slots of this System: Onboarding.steps; each slot's description says which types it takes."
 				},
 				"config": {
 					"$ref": "#/$defs/type_InterestsRawConfig",
@@ -168,7 +168,7 @@
 					"enum": [
 						"steps"
 					],
-					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". A SafetyStep may go into: Onboarding.steps."
+					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". The slots of this System: Onboarding.steps; each slot's description says which types it takes."
 				},
 				"config": {
 					"$ref": "#/$defs/type_SafetyRawConfig",
@@ -203,7 +203,7 @@
 					"enum": [
 						"steps"
 					],
-					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". A InductionStep may go into: Onboarding.steps."
+					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". The slots of this System: Onboarding.steps; each slot's description says which types it takes."
 				},
 				"config": {
 					"$ref": "#/$defs/type_InductionRawConfig",
@@ -248,7 +248,7 @@
 		},
 		"type_I18nText": {
 			"type": "array",
-			"description": "Text per language, `{ \"en\": \"...\", \"zh-TW\": \"...\" }`. `en` is required; a missing language falls back to it.",
+			"description": "Text per language, `{ \"en\": \"...\", \"zh-TW\": \"...\" }`. `en` is required; a missing language falls back to it. A dictionary: in this schema it is written as a list of { \"key\", \"value\" } entries with unique keys, for example [{ \"key\": \"a\", \"value\": ... }], not as an object. Where the text above shows the object form, write the entry list instead.",
 			"items": {
 				"type": "object",
 				"properties": {

@@ -1,0 +1,125 @@
+{
+	"id": "onboarding",
+	"type": "Onboarding",
+	"config": {
+		"title": {
+			"en": "Welcome to Tidepool Makers",
+			"zh-TW": "歡迎加入潮池工坊"
+		}
+	},
+	"slots": {
+		"steps": [
+			{
+				"id": "account",
+				"type": "AccountStep",
+				"config": {
+					"title": {
+						"en": "Your details",
+						"zh-TW": "你的資料"
+					}
+				}
+			},
+			{
+				"id": "interests",
+				"type": "InterestsStep",
+				"config": {
+					"title": {
+						"en": "What do you want to make?",
+						"zh-TW": "你想做什麼？"
+					},
+					"options": [
+						{
+							"id": "woodwork",
+							"label": {
+								"en": "Woodworking",
+								"zh-TW": "木工"
+							}
+						},
+						{
+							"id": "printing",
+							"label": {
+								"en": "3D printing",
+								"zh-TW": "3D 列印"
+							}
+						},
+						{
+							"id": "textiles",
+							"label": {
+								"en": "Textiles and sewing",
+								"zh-TW": "布料與縫紉"
+							}
+						},
+						{
+							"id": "electronics",
+							"label": {
+								"en": "Electronics",
+								"zh-TW": "電子"
+							}
+						},
+						{
+							"id": "ceramics",
+							"label": {
+								"en": "Ceramics",
+								"zh-TW": "陶藝"
+							}
+						}
+					],
+					"minimum": 1
+				}
+			},
+			{
+				"id": "safety",
+				"type": "SafetyStep",
+				"config": {
+					"title": {
+						"en": "Safety briefing",
+						"zh-TW": "安全說明"
+					},
+					"rules": [
+						{
+							"id": "shoes",
+							"text": {
+								"en": "I wear closed shoes whenever I am in the workshop.",
+								"zh-TW": "進入工作區時，我一定穿包鞋。"
+							}
+						},
+						{
+							"id": "machines",
+							"text": {
+								"en": "I ask a steward before I use a machine for the first time.",
+								"zh-TW": "第一次使用機台前，我會先請管理員確認。"
+							}
+						},
+						{
+							"id": "exits",
+							"text": {
+								"en": "I know where the fire exit and the first-aid kit are.",
+								"zh-TW": "我知道逃生出口和急救箱在哪裡。"
+							}
+						}
+					]
+				}
+			},
+			{
+				"id": "induction",
+				"type": "InductionStep",
+				"config": {
+					"title": {
+						"en": "Book your induction",
+						"zh-TW": "預約新手導覽"
+					},
+					"days": [
+						"2026-12-05",
+						"2026-12-12",
+						"2026-12-19"
+					],
+					"times": [
+						"10:00",
+						"14:00",
+						"17:00"
+					]
+				}
+			}
+		]
+	}
+}

@@ -24,7 +24,7 @@ export const CONSTRAINT_TAGS = [
 export type ConstraintTag = typeof CONSTRAINT_TAGS[number]
 
 /** Tags that carry prose or structure rather than a value constraint. */
-export const PROSE_TAGS = ['remarks', 'param', 'returns', 'see', 'example', 'deprecated', 'throws'] as const
+export const PROSE_TAGS = ['remarks', 'param', 'returns', 'see', 'example', 'deprecated', 'throws', 'defaultValue', 'typeParam', 'privateRemarks', 'internal', 'alpha', 'beta', 'public', 'experimental'] as const
 
 export interface Doc {
 	/** The text before the first block tag. Empty when the member has no JSDoc. */
@@ -66,6 +66,8 @@ export interface NamedType {
 export interface MemberIr {
 	name: string
 	typeText: string
+	/** The value's shape, so `--check` can visit the fields of an inline object type. */
+	shape: Shape
 	doc: Doc
 }
 
@@ -78,15 +80,16 @@ export interface MethodIr {
 	name: string
 	/** `name(a: A, b?: B): R` */
 	signature: string
-	params: { name: string, typeText: string, optional: boolean, doc: string }[]
+	params: { name: string, typeText: string, optional: boolean, doc: string, shape: Shape }[]
 	returnText: string
+	returnShape: Shape
 	returnsDoc: string
 	doc: Doc
 }
 
 export interface EventIr {
 	name: string
-	payload: { label: string | null, typeText: string }[]
+	payload: { label: string | null, typeText: string, shape: Shape }[]
 	doc: Doc
 	runtimeDescription: string | null
 }
@@ -102,6 +105,7 @@ export interface SlotIr {
 export interface ReasonIr {
 	name: string
 	payloadText: string
+	shape: Shape
 	doc: Doc
 }
 
@@ -124,6 +128,8 @@ export interface PluginIr {
 	config: ConfigIr | null
 	/** `union` is the 0.2 form (`slots: 'a' | 'b'`), `record` the 0.3 form (`slots: { a: Expected }`). */
 	slotForm: 'union' | 'record' | null
+	/** `slots: string`: any slot name is accepted, so `slots` lists only what the runtime declares. */
+	slotsOpen: boolean
 	slots: SlotIr[]
 	state: StateIr[]
 	properties: MemberIr[]

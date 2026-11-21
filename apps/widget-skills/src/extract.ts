@@ -277,6 +277,7 @@ export function extractIr(options: ExtractOptions): SystemIr {
 			runtimeDescription: null,
 			config: null,
 			slotForm: null,
+			slotsOpen: false,
 			slots: [],
 			state: [],
 			properties: [],
@@ -310,7 +311,12 @@ export function extractIr(options: ExtractOptions): SystemIr {
 		if (slotsProperty !== undefined && !(slotsProperty.flags & ts.SymbolFlags.Optional)) {
 			const slotsType = checker.getTypeOfSymbol(slotsProperty)
 			const literals = (slotsType.isUnion() ? slotsType.types : [slotsType])
-			if (literals.every(member => (member.flags & (ts.TypeFlags.StringLiteral | ts.TypeFlags.Never)) !== 0)) {
+			if (literals.some(member => (member.flags & ts.TypeFlags.String) !== 0)) {
+				// `slots: string` (or a union that widens to it): an open slot set. The names come from the runtime.
+				plugin.slotForm = 'union'
+				plugin.slotsOpen = true
+			}
+			else if (literals.every(member => (member.flags & (ts.TypeFlags.StringLiteral | ts.TypeFlags.Never)) !== 0)) {
 				plugin.slotForm = 'union'
 				plugin.slots = literals
 					.filter(member => (member.flags & ts.TypeFlags.StringLiteral) !== 0)
@@ -324,12 +330,10 @@ export function extractIr(options: ExtractOptions): SystemIr {
 		}
 
 		plugin.state = (membersOf(interfaces, 'state') ?? []).map(({ symbol, type: memberType }): StateIr => {
-			track(memberType)
-			return { name: symbol.name, typeText: textOf(memberType), doc: docOf(symbol), authorWritable: null }
+			return { name: symbol.name, typeText: textOf(memberType), shape: track(memberType), doc: docOf(symbol), authorWritable: null }
 		})
 		plugin.properties = (membersOf(interfaces, 'properties') ?? []).map(({ symbol, type: memberType }): MemberIr => {
-			track(memberType)
-			return { name: symbol.name, typeText: textOf(memberType), doc: docOf(symbol) }
+			return { name: symbol.name, typeText: textOf(memberType), shape: track(memberType), doc: docOf(symbol) }
 		})
 		plugin.methods = (membersOf(interfaces, 'methods') ?? []).map(({ symbol, type: memberType }): MethodIr => {
 			const signature = checker.getSignaturesOfType(memberType, ts.SignatureKind.Call)[0]
@@ -359,13 +363,12 @@ export function extractIr(options: ExtractOptions): SystemIr {
 			const params = signature.getParameters()
 				.map((parameter) => {
 					const parameterType = checker.getTypeOfSymbol(parameter)
-					track(parameterType)
 					const declaration = parameter.valueDeclaration
 					const optional = declaration !== undefined && ts.isParameter(declaration) && checker.isOptionalParameter(declaration)
-					return { name: parameter.name, typeText: textOf(parameterType), optional, doc: paramDocs.get(parameter.name) ?? '' }
+					return { name: parameter.name, typeText: textOf(parameterType), optional, doc: paramDocs.get(parameter.name) ?? '', shape: track(parameterType) }
 				})
 			const returnType = signature.getReturnType()
-			track(returnType)
+			const returnShape = track(returnType)
 			const returnText = textOf(returnType)
 			return {
 				name: symbol.name,
@@ -373,6 +376,7 @@ export function extractIr(options: ExtractOptions): SystemIr {
 					.join(', ')}): ${returnText}`,
 				params,
 				returnText,
+				returnShape,
 				returnsDoc,
 				doc: docOf(symbol),
 			}
@@ -383,9 +387,8 @@ export function extractIr(options: ExtractOptions): SystemIr {
 			return {
 				name: symbol.name,
 				payload: elements.map((element, index) => {
-					track(element)
 					const label = labels?.[index]
-					return { label: label === undefined ? null : label.name.getText(), typeText: textOf(element) }
+					return { label: label === undefined ? null : label.name.getText(), typeText: textOf(element), shape: track(element) }
 				}),
 				doc: docOf(symbol),
 				runtimeDescription: null,
@@ -394,8 +397,7 @@ export function extractIr(options: ExtractOptions): SystemIr {
 		const reasons = membersOf(interfaces, 'reasons')
 		if (reasons !== null) {
 			plugin.reasons = reasons.map(({ symbol, type: memberType }): ReasonIr => {
-				track(memberType)
-				return { name: symbol.name, payloadText: textOf(memberType), doc: docOf(symbol) }
+				return { name: symbol.name, payloadText: textOf(memberType), shape: track(memberType), doc: docOf(symbol) }
 			})
 		}
 		plugin.typeNames = [...refs].sort()
@@ -457,7 +459,15 @@ export function applyRuntimeFacts(ir: SystemIr, runtime: RuntimeFacts): void {
 			plugin.config.runtimeDescription = facts.configDescription
 		if ((plugin.methods.length > 0) !== facts.hasMethods && plugin.methods.length > 0)
 			mismatches.push(`${plugin.type}.methods: declared in the types but the runtime has no Methods capability.`)
-		compareNames(`${plugin.type}.slots`, plugin.slotForm === null ? null : plugin.slots.map(slot => slot.name), facts.slots?.map(slot => slot.name) ?? null, mismatches)
+		if (plugin.slotsOpen) {
+			// An open slot set (`slots: string`) has no names in the types: the runtime's declarations are the list.
+			if (facts.slots === null)
+				mismatches.push(`${plugin.type}.slots: declared in the types but the runtime has no Slots capability.`)
+			plugin.slots = (facts.slots ?? []).map(slot => ({ name: slot.name, doc: emptyDoc(), expected: null, runtimeDescription: slot.description }))
+		}
+		else {
+			compareNames(`${plugin.type}.slots`, plugin.slotForm === null ? null : plugin.slots.map(slot => slot.name), facts.slots?.map(slot => slot.name) ?? null, mismatches)
+		}
 		compareNames(`${plugin.type}.state`, plugin.state.map(member => member.name), facts.state?.map(member => member.name) ?? null, mismatches)
 		compareNames(`${plugin.type}.properties`, plugin.properties.map(member => member.name), facts.properties, mismatches)
 		compareNames(`${plugin.type}.events`, plugin.events.map(member => member.name), facts.events?.map(member => member.name) ?? null, mismatches)

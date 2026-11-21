@@ -1,6 +1,6 @@
 ---
 name: widget-plugin-authoring
-description: "Write a @deviltea/widget-core plugin: Interfaces as the single source of shape and documentation, builder phases, synchronous callbacks, diagnostics, read-only Methods, async at the host, and the JSDoc tag set."
+description: "Write a @deviltea/widget-core plugin: the Interfaces type, builder phases, synchronous callbacks, diagnostics, why a failing Method is not rolled back, read-only Methods, async at the host, and the JSDoc tag set."
 ---
 
 # Writing a Widget plugin
@@ -9,11 +9,15 @@ A plugin is built with `createWidgetPlugin(type)` from `@deviltea/widget-core` a
 its config, slots, State, Properties, Methods and Events. Core compiles authored JSON against the registered
 plugins into a Blueprint (with diagnostics) and runs a Runtime from a valid Blueprint.
 
+This skill describes the API of the `@deviltea/widget-core` version it was generated against. Check the
+package's own documentation when the installed version differs.
+
 ## 1. Declare the Interfaces first
 
 ```text
 export interface CounterInterfaces extends WidgetInterfaces {
 	config: { raw: CounterRawConfig | null, resolved: CounterConfig }
+	slots: 'items'
 	state: {
 		/** The current count. */
 		count: number
@@ -35,8 +39,9 @@ export interface CounterInterfaces extends WidgetInterfaces {
 
 - A capability exists only when its key is a required property of the Interfaces type. Leave a key out to not
   have the capability; `slots: never` is the explicit "declared, empty" spelling.
-- `config.raw` is what the author writes; include `null` when the config may be left out. `config.resolved`
-  is what the plugin and its renderer read.
+- `config.raw` is what the author writes; include `null` when the config may be left out (an omitted config is
+  validated as `null`). `config.resolved` is what the plugin and its renderer read.
+- `slots` is a union of slot names.
 - Label Event payload tuples (`[count: number]`) and name Method parameters: the names are documentation.
 
 ## 2. Builder phases, in this order
@@ -45,15 +50,19 @@ export interface CounterInterfaces extends WidgetInterfaces {
 
 - A phase can be skipped but not reordered. Section builders are sealed and capture definitions by value; a
   malformed declaration throws a `TypeError` naming plugin, section, member and field when the plugin is built.
-- `.config({ validate, resolve, schema?, description? })`: `validate` always runs (an omitted config is
-  validated as `null`) and reports problems with `ctx.addDiagnostic({ message, path, reason })`.
-- `.slots({ name: { validateStructure? } })` and `.structure(validateStructure)` check children and placement.
-  `.structure` is not a capability.
+- `.description(text)`: required, the plugin's description for catalogs.
+- `.config({ description, validate, resolve, schema? })`: `description` is required. `validate` always runs and
+  reports problems with `ctx.addDiagnostic({ message, path, reason })`; `resolve` turns the raw config into the
+  resolved one (and is called with `null` when validation failed).
+- `.slots({ name: { description, validateStructure? } })`: one complete map, every declared slot present, each with
+  a required `description`.
+- `.structure(validateStructure)`: the plugin-level structure check. It is not a capability.
 - `.state`: each member has `validate` and `default`. `authorWritable: true` is passive metadata telling editors
   the value may be set by an author.
 - `.properties`: `registerDeps` declares what `compute` reads; `compute` is pure.
 - `.methods`: `validateArgs`, `registerDeps`, `emits` (the Events it may emit, required when it emits), `execute`.
-- `.events`: declared after the Methods; `emits` names are validated against them in `done()`.
+- `.events`: each Event has a required `description`. Events are declared after the Methods; `emits` names are
+  validated against them in `done()`.
 
 ## 3. Every callback is synchronous
 
@@ -71,9 +80,13 @@ as State (`pending`, `confirmed`, `declined`) so the renderer can show it.
 ## 5. Failure is a diagnostic, not an exception
 
 - Config and structure problems are Blueprint diagnostics with a `path` and a machine-readable `reason`.
-- A refused Method call adds a diagnostic with `addDiagnostic({ message, reason })`, writes nothing and emits
-  nothing. Refused input is ordinary, not exceptional.
-- When 0.3.0 lands, declare the reasons in the Interfaces as `reasons: { reasonName: Payload }` with JSDoc.
+- A Method reports a refusal with `addDiagnostic({ message, reason })`. Its result is then a failure
+  (`invalid-method-arguments` from `validateArgs`, `invalid-method-result` from `execute`), and the value it
+  returned is diagnostic context only.
+- **A failing Method is not rolled back.** Core batches a Method's writes so subscribers are notified once, but
+  that is propagation atomicity, not a transaction: a State write or an emitted Event that happened before a
+  later failure stays. So refuse first: reject bad arguments in `validateArgs` (then `execute` never runs), and
+  in `execute` check every condition and `return` before the first `deps.set...()` or `emit`.
 
 ## 6. Read-only Methods
 
@@ -91,7 +104,14 @@ A widget node's recognized keys are `id`, `type`, `config`, `slots` and `meta`; 
 
 `createWidgetSystem({ plugins: [A, B] as const })`: keep the tuple `as const` so the System's type lists every
 plugin. An application loads exactly one Core instance; a plugin library declares Core as a peer dependency.
-Run `widget-skills --check` on the System: it fails on a member without JSDoc, an unknown tag, or a name the
-types and the runtime disagree on.
+Run `widget-skills --check` on the System: it fails on a member without documentation, an unknown tag, or a name
+the types and the runtime disagree on.
+
+## Upcoming in 0.3.0 (not in the version this skill describes)
+
+The accepted design makes the Interfaces type and its JSDoc the single source of a plugin's documentation:
+`slots` becomes a record `{ /** doc */ name: Expected }`, diagnostic reasons are declared as
+`reasons: { reasonName: Payload }`, and the runtime `description` fields go away. Do not write either form until
+the installed Core has it.
 
 See `references/jsdoc-tags.md` for the tag set and `references/example-interfaces.md` for this System's Interfaces.

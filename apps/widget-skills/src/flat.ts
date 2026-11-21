@@ -12,7 +12,7 @@
  */
 
 import type { Shape, SystemIr } from './ir'
-import { recursiveTypeNames } from './schema'
+import { createValueEncoding, isPlainObject, setOwn } from './encoding'
 
 export interface FlatNode {
 	id: string
@@ -42,15 +42,6 @@ export class FlatConversionError extends Error {
 	override name = 'FlatConversionError'
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function setOwn(target: Record<string, unknown>, key: string, value: unknown): void {
-	// `__proto__` must become an own property, never the prototype.
-	Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
-}
-
 export interface FlatConverter {
 	/** Tree -> flat. Throws `FlatConversionError` when a node is not an object with string `id` and `type`, or ids repeat. */
 	treeToFlat: (tree: unknown) => FlatDocument
@@ -59,123 +50,7 @@ export interface FlatConverter {
 }
 
 export function createFlatConverter(ir: SystemIr): FlatConverter {
-	const recursive = recursiveTypeNames(ir)
-
-	function matches(value: unknown, shape: Shape, flat: boolean): boolean {
-		switch (shape.kind) {
-			case 'string':
-				return typeof value === 'string'
-			case 'number':
-				return typeof value === 'number'
-			case 'boolean':
-				return typeof value === 'boolean'
-			case 'null':
-				return value === null
-			case 'literal':
-				return value === shape.value
-			case 'unknown':
-				return flat ? typeof value === 'string' : true
-			case 'array':
-				return Array.isArray(value)
-			case 'record':
-				return flat ? Array.isArray(value) : isPlainObject(value)
-			case 'object':
-				return isPlainObject(value)
-			case 'union':
-				return shape.members.some(member => matches(value, member, flat))
-			case 'ref':
-				if (recursive.has(shape.name) || ir.types[shape.name] === undefined)
-					return flat ? typeof value === 'string' : true
-				return matches(value, ir.types[shape.name]!.shape, flat)
-		}
-	}
-
-	function encode(value: unknown, shape: Shape): unknown {
-		switch (shape.kind) {
-			case 'unknown':
-				return JSON.stringify(value)
-			case 'ref':
-				if (recursive.has(shape.name) || ir.types[shape.name] === undefined)
-					return JSON.stringify(value)
-				return encode(value, ir.types[shape.name]!.shape)
-			case 'array':
-				return Array.isArray(value) ? value.map(item => encode(item, shape.items)) : value
-			case 'record':
-				return isPlainObject(value)
-					? Object.entries(value)
-							.map(([key, entry]) => ({ key, value: encode(entry, shape.value) }))
-					: value
-			case 'union': {
-				const member = shape.members.find(candidate => matches(value, candidate, false))
-				return member === undefined ? value : encode(value, member)
-			}
-			case 'object': {
-				if (!isPlainObject(value))
-					return value
-				const declared = new Map(shape.properties.map(property => [property.name, property]))
-				const result: Record<string, unknown> = {}
-				// Key order is kept, a missing optional property stays missing, and an undeclared key passes through.
-				for (const [key, entry] of Object.entries(value)) {
-					const property = declared.get(key)
-					setOwn(result, key, property === undefined ? entry : encode(entry, property.shape))
-				}
-				return result
-			}
-			default:
-				return value
-		}
-	}
-
-	function decodeJsonText(value: unknown): unknown {
-		if (typeof value !== 'string')
-			return value
-		try {
-			return JSON.parse(value)
-		}
-		catch {
-			return value
-		}
-	}
-
-	function decode(value: unknown, shape: Shape): unknown {
-		switch (shape.kind) {
-			case 'unknown':
-				return decodeJsonText(value)
-			case 'ref':
-				if (recursive.has(shape.name) || ir.types[shape.name] === undefined)
-					return decodeJsonText(value)
-				return decode(value, ir.types[shape.name]!.shape)
-			case 'array':
-				return Array.isArray(value) ? value.map(item => decode(item, shape.items)) : value
-			case 'record': {
-				if (!Array.isArray(value) || !value.every(entry => isPlainObject(entry) && typeof entry.key === 'string' && Object.hasOwn(entry, 'value')))
-					return value
-				const result: Record<string, unknown> = {}
-				for (const entry of value as { key: string, value: unknown }[])
-					setOwn(result, entry.key, decode(entry.value, shape.value))
-				return result
-			}
-			case 'union': {
-				const member = shape.members.find(candidate => matches(value, candidate, true))
-				return member === undefined ? value : decode(value, member)
-			}
-			case 'object': {
-				if (!isPlainObject(value))
-					return value
-				const declared = new Map(shape.properties.map(property => [property.name, property]))
-				const result: Record<string, unknown> = {}
-				for (const [key, entry] of Object.entries(value)) {
-					const property = declared.get(key)
-					// An explicit null is kept: leaving an optional property out is how it is omitted.
-					setOwn(result, key, property === undefined ? entry : decode(entry, property.shape))
-				}
-				return result
-			}
-			default:
-				return value
-		}
-	}
-
+	const { encode, decode } = createValueEncoding(ir)
 	const configShapeOf = (type: string): Shape | null => ir.plugins.find(plugin => plugin.type === type)?.config?.rawShape ?? null
 
 	function treeToFlat(tree: unknown): FlatDocument {
@@ -250,6 +125,8 @@ export function createFlatConverter(ir: SystemIr): FlatConverter {
 		for (const node of flat.nodes) {
 			const own = built.get(node.id)!
 			if (node.parent === null || node.parent === undefined) {
+				if (node.slot !== null && node.slot !== undefined)
+					throw new FlatConversionError(`"${node.id}" has the slot "${String(node.slot)}" but no parent.`)
 				if (root !== null)
 					throw new FlatConversionError(`More than one node has parent null: "${String(root.id)}" and "${node.id}".`)
 				root = own.tree

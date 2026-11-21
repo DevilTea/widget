@@ -13,15 +13,134 @@ A document is one root widget. A widget is a JSON object with these keys and no 
 - `type` (string): one of the types below.
 - `config` (object): the type's raw config. Required unless the type's reference says it may be left out.
 - `slots` (object): slot name to an array of child widgets, in order. Only the slots the type declares.
-- `meta`: reserved for tools; do not write it.
+- `meta`: reserved for tools; do not write it, and keep it unchanged when editing a document that has it.
+
+A complete document that compiles without diagnostics:
 
 ```json
 {
-  "id": "root",
+  "id": "onboarding",
   "type": "Onboarding",
-  "config": {},
+  "config": {
+    "title": {
+      "en": "Welcome to Tidepool Makers",
+      "zh-TW": "歡迎加入潮池工坊"
+    }
+  },
   "slots": {
-    "steps": []
+    "steps": [
+      {
+        "id": "account",
+        "type": "AccountStep",
+        "config": {
+          "title": {
+            "en": "Your details",
+            "zh-TW": "你的資料"
+          }
+        }
+      },
+      {
+        "id": "interests",
+        "type": "InterestsStep",
+        "config": {
+          "title": {
+            "en": "What do you want to make?",
+            "zh-TW": "你想做什麼？"
+          },
+          "options": [
+            {
+              "id": "woodwork",
+              "label": {
+                "en": "Woodworking",
+                "zh-TW": "木工"
+              }
+            },
+            {
+              "id": "printing",
+              "label": {
+                "en": "3D printing",
+                "zh-TW": "3D 列印"
+              }
+            },
+            {
+              "id": "textiles",
+              "label": {
+                "en": "Textiles and sewing",
+                "zh-TW": "布料與縫紉"
+              }
+            },
+            {
+              "id": "electronics",
+              "label": {
+                "en": "Electronics",
+                "zh-TW": "電子"
+              }
+            },
+            {
+              "id": "ceramics",
+              "label": {
+                "en": "Ceramics",
+                "zh-TW": "陶藝"
+              }
+            }
+          ],
+          "minimum": 1
+        }
+      },
+      {
+        "id": "safety",
+        "type": "SafetyStep",
+        "config": {
+          "title": {
+            "en": "Safety briefing",
+            "zh-TW": "安全說明"
+          },
+          "rules": [
+            {
+              "id": "shoes",
+              "text": {
+                "en": "I wear closed shoes whenever I am in the workshop.",
+                "zh-TW": "進入工作區時，我一定穿包鞋。"
+              }
+            },
+            {
+              "id": "machines",
+              "text": {
+                "en": "I ask a steward before I use a machine for the first time.",
+                "zh-TW": "第一次使用機台前，我會先請管理員確認。"
+              }
+            },
+            {
+              "id": "exits",
+              "text": {
+                "en": "I know where the fire exit and the first-aid kit are.",
+                "zh-TW": "我知道逃生出口和急救箱在哪裡。"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "induction",
+        "type": "InductionStep",
+        "config": {
+          "title": {
+            "en": "Book your induction",
+            "zh-TW": "預約新手導覽"
+          },
+          "days": [
+            "2026-12-05",
+            "2026-12-12",
+            "2026-12-19"
+          ],
+          "times": [
+            "10:00",
+            "14:00",
+            "17:00"
+          ]
+        }
+      }
+    ]
   }
 }
 ```
@@ -34,6 +153,7 @@ A document is one root widget. A widget is a JSON object with these keys and no 
 - `SafetyStep`: Step 3 of the onboarding wizard: the safety briefing. The visitor acknowledges each configured rule (State `acknowledged`: the ids acknowledged so far). Properties: `title`, `rules`, `missing` (one `rule:<id>` per rule not yet acknowledged), `complete` and `answers` (the acknowledged ids). See `references/safety-step.md`.
 - `InductionStep`: Step 4 of the onboarding wizard: booking an induction slot, with the work kept at the host. Methods: `requestSlot(date, time)` (validated against the config; writes the request into State and emits `slotRequested` with a ticket), `settleBooking(ticket, outcome)` (the host's answer; applied only if the ticket is still the newest, otherwise ignored) and `cancelBooking()` (emits `slotCancelled`); `requestSlot` and `cancelBooking` are refused once the wizard is finished. Events: `slotRequested`, `slotConfirmed`, `slotDeclined`, `slotCancelled`. State: `status`, `ticket`, `slot`, `reference`, `reason`. See `references/induction-step.md`.
 
+Which types a slot accepts, and which type may be the root, is stated in each slot's description and enforced by the compiler, not by the schemas.
 
 ## References between widgets
 
@@ -43,19 +163,32 @@ reference). The id must exist in the same document and be of a listed type.
 ## Structured output: the flat node list
 
 When the output must follow a JSON Schema (tool input, structured output), use
-`references/document.llm.schema.json` instead of the tree:
+`references/document.llm.schema.json` instead of the tree. It is sized for non-strict structured output and
+only gets the structure roughly right.
 
 - `{ "nodes": [{ "id", "type", "parent", "slot", "config" }] }`; exactly one node has no `parent` and no
   `slot` (the root).
 - Children of one slot keep the order they have in `nodes`; list parents before children.
 - Leave an optional key out; do not write `null` for it. Leave `config` out when the type takes none.
 - `slots` (a list of slot names) is only needed to declare a slot that has no children.
-- The schema is meant for non-strict structured output: it gets the structure roughly right, no more.
 - A dictionary (for example text per language) is a list of `{ "key", "value" }` entries.
 - Limits (ranges, lengths, formats) are in the descriptions, not in schema keywords: read them.
 
-`flatToTree` from `@deviltea/widget-skills` converts the list back to the tree deterministically (`treeToFlat`
-is the inverse). `references/document.schema.json` is the full schema of the tree form.
+### Converting the flat list to the tree
+
+The conversion is mechanical. Do it in code, or by hand, exactly like this:
+
+1. For every node create a widget `{ "id", "type" }`. Copy `config` if the node has the key, after rewriting it
+   (step 4). Copy `meta` unchanged if present.
+2. The one node without `parent` is the root. Zero or several such nodes, a `parent` that is not a node's id, a
+   repeated id, or a node that cannot be reached from the root is an error: fix the list, do not guess.
+3. For every other node, in list order, append its widget to `slots[slot]` of its parent's widget. If a node
+   lists `slots`, create those slot arrays first, in that order, so a slot without children still exists.
+4. In a config, wherever the type's reference shows a dictionary type, turn the entry list
+   `[{ "key": "en", "value": "Hello" }]` into the object `{ "en": "Hello" }`. Leave everything else as it is.
+
+The inverse (tree to flat) walks the tree depth-first, slot by slot, and applies step 4 in reverse.
+`references/document.schema.json` is the full schema of the tree form.
 
 ## Validate and repair
 

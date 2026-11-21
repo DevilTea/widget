@@ -28,28 +28,28 @@ The root of the onboarding wizard. State: `current` (the index of the current st
 
 _Not documented._
 - `index: number`
-- Returns `boolean`
+- Returns `boolean`. Through `useMethods()` the call returns `boolean | null`: `null` when it failed (read `useMethodDiagnostics().canEnter`).
 
 ### `next(): number`
 
 _Not documented._
-- Returns `number`
+- Returns `number`. Through `useMethods()` the call returns `number | null`: `null` when it failed (read `useMethodDiagnostics().next`).
 
 ### `back(): number`
 
 _Not documented._
-- Returns `number`
+- Returns `number`. Through `useMethods()` the call returns `number | null`: `null` when it failed (read `useMethodDiagnostics().back`).
 
 ### `goTo(index: number): number`
 
 _Not documented._
 - `index: number`
-- Returns `number`
+- Returns `number`. Through `useMethods()` the call returns `number | null`: `null` when it failed (read `useMethodDiagnostics().goTo`).
 
 ### `finish(): boolean`
 
 _Not documented._
-- Returns `boolean`
+- Returns `boolean`. Through `useMethods()` the call returns `boolean | null`: `null` when it failed (read `useMethodDiagnostics().finish`).
 
 ## Events
 
