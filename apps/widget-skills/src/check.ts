@@ -62,6 +62,8 @@ export function checkIr(ir: SystemIr): CheckResult {
 				visit(`${where}.${property.name}`, property.doc, severity)
 				visitShape(`${where}.${property.name}`, property.shape, severity)
 			}
+			if (shape.additional !== undefined)
+				visitShape(`${where}{}`, shape.additional, severity)
 		}
 		else if (shape.kind === 'array') {
 			visitShape(`${where}[]`, shape.items, severity)
@@ -93,6 +95,8 @@ export function checkIr(ir: SystemIr): CheckResult {
 		}
 		else if (shape.kind === 'object') {
 			shape.properties.forEach(property => reach(property.shape))
+			if (shape.additional !== undefined)
+				reach(shape.additional)
 		}
 	}
 

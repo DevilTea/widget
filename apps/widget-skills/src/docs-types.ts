@@ -7,7 +7,7 @@
  */
 
 /** Bumped when the shape of `WidgetDocs` changes. */
-export const WIDGET_DOCS_VERSION = 1
+export const WIDGET_DOCS_VERSION = 2
 
 /** Any JSON value. */
 export type WidgetDocsJson = null | boolean | number | string | WidgetDocsJson[] | { [key: string]: WidgetDocsJson }
@@ -22,6 +22,14 @@ export interface WidgetDocsText {
 	remarks: string
 	/** The constraint tags (`minimum`, `format`, `widgetRef`, ...) by name without `@`, with their raw text. */
 	tags: Record<string, string>
+	/** The `@example` blocks, in order (their raw text, code fences included). */
+	example: string[]
+	/** The `@deprecated` text (empty when the tag has none); `null` when not deprecated. */
+	deprecated: string | null
+	/** The `@see` references, in order. */
+	see: string[]
+	/** The `@defaultValue` text; `null` when absent. When it is valid JSON it is also the schema's `default`. */
+	defaultValue: string | null
 }
 
 export interface WidgetDocsConfig extends WidgetDocsText {
@@ -72,6 +80,8 @@ export interface WidgetDocsReason extends WidgetDocsText {
 
 export interface WidgetPluginDocs extends WidgetDocsText {
 	type: string
+	/** The named types (keys of `WidgetDocs.types`) this plugin's members mention, transitively. */
+	typeNames: string[]
 	/** The name of the plugin's `Interfaces` type, when it has one. */
 	interfacesName: string | null
 	config: WidgetDocsConfig | null
@@ -84,10 +94,25 @@ export interface WidgetPluginDocs extends WidgetDocsText {
 	reasons: Record<string, WidgetDocsReason> | null
 }
 
+/** A field of a named object type. */
+export interface WidgetDocsField extends WidgetDocsText {
+	optional: boolean
+}
+
+/** A named type (interface or type alias) a plugin's members mention. */
+export interface WidgetDocsNamedType extends WidgetDocsText {
+	/** The declaration as written, with its leading JSDoc. */
+	declaration: string
+	/** The fields of an object type, by name; `null` for any other type. */
+	fields: Record<string, WidgetDocsField> | null
+}
+
 export interface WidgetDocs {
 	docsVersion: typeof WIDGET_DOCS_VERSION
 	/** The System's export name. */
 	system: string
 	/** Per plugin type, in registration order. */
 	plugins: Record<string, WidgetPluginDocs>
+	/** Every named type a plugin mentions, by name (as in `WidgetPluginDocs.typeNames` and the schemas' `type_<Name>`). */
+	types: Record<string, WidgetDocsNamedType>
 }

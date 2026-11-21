@@ -28,7 +28,7 @@ export function recursiveTypeNames(ir: SystemIr): Set<string> {
 			case 'union':
 				return shape.members.some(member => reaches(member, target, seen))
 			case 'object':
-				return shape.properties.some(property => reaches(property.shape, target, seen))
+				return shape.properties.some(property => reaches(property.shape, target, seen)) || (shape.additional !== undefined && reaches(shape.additional, target, seen))
 			default:
 				return false
 		}
@@ -174,11 +174,12 @@ export function createValueEncoding(ir: SystemIr): ValueEncoding {
 					return value
 				const declared = new Map(resolved.properties.map(property => [property.name, property]))
 				const result: Record<string, unknown> = {}
-				// Key order is kept, a missing optional property stays missing, an explicit null stays null, and an
-				// undeclared key passes through.
+				// Key order is kept, a missing optional property stays missing, an explicit null stays null, an
+				// undeclared key takes the index signature's shape when there is one and passes through otherwise.
+				const additional = resolved.additional
 				for (const [key, entry] of Object.entries(value)) {
 					const property = declared.get(key)
-					setOwn(result, key, property === undefined ? entry : convert(entry, property.shape, flat))
+					setOwn(result, key, property !== undefined ? convert(entry, property.shape, flat) : additional !== undefined ? convert(entry, additional, flat) : entry)
 				}
 				return result
 			}

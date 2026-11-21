@@ -22,6 +22,9 @@ export interface JsonSchema { [key: string]: unknown }
 
 const DIALECT = 'https://json-schema.org/draft/2020-12/schema'
 
+/** The LLM profile closes every object, so the other keys an index signature admits cannot be written there. */
+const INDEX_SIGNATURE_NOTE = 'The type also allows keys not listed here, which this form cannot express: leave them out.'
+
 const NUMERIC_TAGS = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'minItems', 'maxItems'] as const
 
 function parseJson(text: string): unknown {
@@ -56,11 +59,27 @@ function createDefKeys(): (prefix: string, name: string) => string {
 	}
 }
 
+/**
+ * The constraint tags of `doc`, with a `@defaultValue` that is valid JSON standing in for a missing `@default` (TSDoc's
+ * standard spelling of the same thing).
+ */
+export function constraintTagsOf(doc: Doc): Doc['tags'] {
+	if (doc.tags.default !== undefined || doc.defaultValue === undefined)
+		return doc.tags
+	try {
+		JSON.parse(doc.defaultValue)
+	}
+	catch {
+		return doc.tags
+	}
+	return { ...doc.tags, default: doc.defaultValue }
+}
+
 /** The summary and remarks of `doc`, then its constraint tags as prose. `formatValue` rewrites `@default`/`@examples` values. */
 export function describeDoc(doc: Doc, withConstraints: boolean, formatValue: (jsonText: string, isList: boolean) => string = text => text): string {
 	const parts = [doc.summary, doc.remarks].filter(part => part !== '')
 	if (withConstraints) {
-		const constraints = Object.entries(doc.tags)
+		const constraints = Object.entries(constraintTagsOf(doc))
 			.map(([tag, value]) => {
 				if (tag === 'widgetRef')
 					return `Must be the id of a widget of type ${value} in the same document.`
@@ -85,19 +104,20 @@ function describe(schema: JsonSchema, text: string): JsonSchema {
 
 function constraintKeywords(doc: Doc): JsonSchema {
 	const keywords: JsonSchema = {}
+	const tags = constraintTagsOf(doc)
 	for (const tag of NUMERIC_TAGS) {
-		const value = doc.tags[tag]
+		const value = tags[tag]
 		if (value !== undefined && value.trim() !== '' && Number.isFinite(Number(value)))
 			keywords[tag] = Number(value)
 	}
-	if (doc.tags.format !== undefined)
-		keywords.format = doc.tags.format
-	if (doc.tags.pattern !== undefined)
-		keywords.pattern = doc.tags.pattern
-	if (doc.tags.default !== undefined)
-		keywords.default = parseJson(doc.tags.default)
-	if (doc.tags.examples !== undefined) {
-		const examples = parseJson(doc.tags.examples)
+	if (tags.format !== undefined)
+		keywords.format = tags.format
+	if (tags.pattern !== undefined)
+		keywords.pattern = tags.pattern
+	if (tags.default !== undefined)
+		keywords.default = parseJson(tags.default)
+	if (tags.examples !== undefined) {
+		const examples = parseJson(tags.examples)
 		keywords.examples = Array.isArray(examples) ? examples : [examples]
 	}
 	return keywords
@@ -165,7 +185,8 @@ function createFullShapeEmitter(ir: SystemIr, ref: (prefix: string, name: string
 					properties: Object.fromEntries(shape.properties.map(property => [property.name, describe({ ...fullShape(property.shape), ...constraintKeywords(property.doc) }, describeDoc(property.doc, false))])),
 					required: shape.properties.filter(property => !property.optional)
 						.map(property => property.name),
-					additionalProperties: false,
+					// An index signature next to named properties types the other keys.
+					additionalProperties: shape.additional === undefined ? false : fullShape(shape.additional),
 				}
 		}
 	}
@@ -193,6 +214,8 @@ export function namedTypesOf(ir: SystemIr, shape: Shape): string[] {
 		}
 		else if (node.kind === 'object') {
 			node.properties.forEach(property => visit(property.shape))
+			if (node.additional !== undefined)
+				visit(node.additional)
 		}
 	}
 	visit(shape)
@@ -325,7 +348,7 @@ export function emitLlmSchema(ir: SystemIr): JsonSchema {
 				return { anyOf: shape.members.map(llmShape) }
 			}
 			case 'object':
-				return {
+				return describe({
 					type: 'object',
 					properties: Object.fromEntries(shape.properties.map((property) => {
 						const own = [describeDoc(property.doc, true, formatter(property.shape)), property.optional ? 'Optional: leave the key out when unused.' : ''].filter(part => part !== '')
@@ -335,7 +358,7 @@ export function emitLlmSchema(ir: SystemIr): JsonSchema {
 					required: shape.properties.filter(property => !property.optional)
 						.map(property => property.name),
 					additionalProperties: false,
-				}
+				}, shape.additional === undefined ? '' : INDEX_SIGNATURE_NOTE)
 		}
 	}
 
@@ -402,6 +425,8 @@ export function emitLlmSchema(ir: SystemIr): JsonSchema {
 		}
 		else if (shape.kind === 'object') {
 			shape.properties.forEach(property => reach(property.shape))
+			if (shape.additional !== undefined)
+				reach(shape.additional)
 		}
 	}
 	for (const plugin of ir.plugins) {

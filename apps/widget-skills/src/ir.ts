@@ -34,6 +34,14 @@ export interface Doc {
 	tags: Partial<Record<ConstraintTag, string>>
 	/** Tag names (without `@`) outside `CONSTRAINT_TAGS` and `PROSE_TAGS`. */
 	unknownTags: string[]
+	/** The `@example` blocks, in order. Absent when there is none. */
+	example?: string[]
+	/** The `@deprecated` text (empty when the tag has none). Absent when the member is not deprecated. */
+	deprecated?: string
+	/** The `@see` references, in order. Absent when there is none. */
+	see?: string[]
+	/** The `@defaultValue` text. Absent when there is none. */
+	defaultValue?: string
 }
 
 export type Shape
@@ -41,7 +49,7 @@ export type Shape
 		| { kind: 'literal', value: string | number | boolean }
 		| { kind: 'array', items: Shape }
 		| { kind: 'record', value: Shape }
-		| { kind: 'object', properties: ShapeProperty[] }
+		| { kind: 'object', properties: ShapeProperty[], additional?: Shape }
 		| { kind: 'union', members: Shape[] }
 		| { kind: 'ref', name: string }
 

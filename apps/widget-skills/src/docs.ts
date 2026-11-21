@@ -2,13 +2,31 @@
  * `emitDocs(ir)`: the JSON documentation object the Vite plugin serves as `virtual:widget-docs/<name>`.
  */
 
-import type { WidgetDocs, WidgetDocsJsonSchema, WidgetDocsText, WidgetPluginDocs } from './docs-types'
-import type { Doc, PluginIr, SystemIr } from './ir'
+import type { WidgetDocs, WidgetDocsJsonSchema, WidgetDocsNamedType, WidgetDocsText, WidgetPluginDocs } from './docs-types'
+import type { Doc, NamedType, PluginIr, SystemIr } from './ir'
 import { WIDGET_DOCS_VERSION } from './docs-types'
 import { emitConfigSchema } from './schema'
 
 function text(doc: Doc): WidgetDocsText {
-	return { summary: doc.summary, remarks: doc.remarks, tags: { ...doc.tags } }
+	return {
+		summary: doc.summary,
+		remarks: doc.remarks,
+		tags: { ...doc.tags },
+		example: [...(doc.example ?? [])],
+		deprecated: doc.deprecated ?? null,
+		see: [...(doc.see ?? [])],
+		defaultValue: doc.defaultValue ?? null,
+	}
+}
+
+function namedType(type: NamedType): WidgetDocsNamedType {
+	return {
+		...text(type.doc),
+		declaration: type.text,
+		fields: type.shape.kind === 'object'
+			? Object.fromEntries(type.shape.properties.map(property => [property.name, { ...text(property.doc), optional: property.optional }]))
+			: null,
+	}
 }
 
 function section<T extends { name: string }, R>(present: boolean, members: readonly T[], map: (member: T) => R): Record<string, R> | null {
@@ -19,6 +37,7 @@ function pluginDocs(ir: SystemIr, plugin: PluginIr): WidgetPluginDocs {
 	const schema = emitConfigSchema(ir, plugin)
 	return {
 		type: plugin.type,
+		typeNames: [...plugin.typeNames],
 		interfacesName: plugin.interfacesName,
 		...text(plugin.doc),
 		config: plugin.config === null
@@ -49,5 +68,7 @@ export function emitDocs(ir: SystemIr): WidgetDocs {
 		docsVersion: WIDGET_DOCS_VERSION,
 		system: ir.system,
 		plugins: Object.fromEntries(ir.plugins.map(plugin => [plugin.type, pluginDocs(ir, plugin)])),
+		types: Object.fromEntries(Object.values(ir.types)
+			.map(type => [type.name, namedType(type)])),
 	}
 }

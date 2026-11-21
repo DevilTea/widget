@@ -129,6 +129,14 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 				.trim()
 			if (tag.name === 'remarks')
 				doc.remarks = text
+			else if (tag.name === 'example')
+				(doc.example ??= []).push(text)
+			else if (tag.name === 'see')
+				(doc.see ??= []).push(text)
+			else if (tag.name === 'deprecated')
+				doc.deprecated = text
+			else if (tag.name === 'defaultValue')
+				doc.defaultValue = text
 			else if ((CONSTRAINT_TAGS as readonly string[]).includes(tag.name))
 				doc.tags[tag.name as ConstraintTag] = text
 			else if (!(PROSE_TAGS as readonly string[]).includes(tag.name))
@@ -206,7 +214,11 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 			const index = checker.getIndexInfoOfType(type, ts.IndexKind.String)
 			if (properties.length === 0 && index !== undefined)
 				return { kind: 'record', value: shapeOf(index.type, depth + 1) }
-			return { kind: 'object', properties: properties.map(property => propertyOf(property, depth)) }
+			const object: Shape = { kind: 'object', properties: properties.map(property => propertyOf(property, depth)) }
+			// Named properties and a string index signature: the other keys take the index signature's values.
+			if (index !== undefined)
+				object.additional = shapeOf(index.type, depth + 1)
+			return object
 		}
 		return { kind: 'unknown' }
 	}
@@ -263,6 +275,8 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 		}
 		else if (shape.kind === 'object') {
 			shape.properties.forEach(property => refsOf(property.shape, into))
+			if (shape.additional !== undefined)
+				refsOf(shape.additional, into)
 		}
 	}
 
