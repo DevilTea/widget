@@ -984,7 +984,13 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   each tag sits on its own edge in the half nearer the focused card, so it reads as being about that card, and takes the first
   spot (going away from the card) where its box lies inside the content bounds (the box around the cards and curves, which is what Fit
   fits: a tag is no part of that, so one outside would be cut off by the pane) and covers no card, no arrowhead of any edge (its own
-  included, the dimmed edges' too) and no other tag; the two directions take turns, the rarer first. A tag with no such spot is not drawn (the Trip budget's Expense has
+  included, the dimmed edges' too) and no other tag; the two directions take turns, the rarer first. A tag with no such spot gets a second chance beside its edge (issue #230 follow-up), after
+  every tag had its try on its own edge: its box is set 1.5, 2.5 or 4 font sizes off the edge, across the edge's direction (left or right of an edge
+  that runs down, above or below one that runs across), at the same shares of the edge (so still in the half nearer the focus), and a **leader line**
+  with a dot on the edge joins it to the point it is about (`TagPlacement.leader`, drawn by `GraphCanvas.vue` as `.graph-tag-leader`; the group is
+  `.graph-tag--leader`). The box obeys the same rules (inside the content bounds, on no card, no arrowhead, no other tag) and covers no curve of
+  an edge around the focus (it would read as that edge's); the leader crosses no card, no arrowhead, no tag and no other leader (it may cross a
+  curve), and no later tag sits on an earlier leader. A tag with no spot either way is not drawn (the Trip budget's Expense has
   a dozen edges; the Legend says so), the accent colour, the dimming and the arrowheads still mark the focus's edges and
   Relations lists them all. `GraphDependencyEdge.vue` draws its labels itself (a rect and a text sized by `tagSize()`, the function
   the placement used) because Vue Flow's `EdgeText` measures its box once at mount and so boxes 11px text around text of any other size.
@@ -994,6 +1000,34 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   `<marker>`s defined in `GraphCanvas.vue` (one per colour family and bucket; Vue Flow's own `arrowclosed` draws at a quarter of
   its nominal size) and `GraphDependencyEdge.vue` picks the one for the current bucket, so a wheel tick inside a bucket
   re-renders nothing. Edge strokes are solid mixes of the muted text colour and the canvas (3.7:1 in the light theme).
+  **Keyboard access to the edges** (issue #230 follow-up): the edges are one roving Tab stop. A Vue Flow edge with `focusable` on
+  (which `graph/vue-flow.ts` sets) gets `tabIndex: 0` as a DOM property, which Vue applies to the SVG `<g>` as `tabindex="0"` on every edge
+  (verified: twelve Tab stops in the Survey), which a `tabindex` in `domAttributes` did not reliably replace; it also binds its key handler
+  as `onKeyDown`, which Vue registers for an event named `key-down` that never fires. Nothing is patched in Vue Flow: `GraphCanvas.vue`
+  overrides `focusable: false` on every edge it hands Vue Flow, gives back `role="group"` and a real lowercase `tabindex` through the
+  per-edge `domAttributes`, and handles the keys itself, delegated on the canvas. Selection (click, Enter, Space) does not depend on `focusable`. One stop was chosen
+  over "every edge is a Tab stop" (the expanded Trip budget has hundreds of edges) and over "edges only reachable from their focused card"
+  (an edge would then have no route when nothing is selected, and a card's own keys are already taken by select/expand). `graph/edge-a11y.ts`
+  (pure, unit-tested) orders the edges with the ones around the focused widget or member first; Arrow Down/Right, Arrow Up/Left (wrapping), Home
+  and End move DOM focus along that order. Exactly one edge has `tabindex="0"`: the first of the order to begin with (the rendered attribute, so
+  "select a card, then Tab to the edges" lands on that card's edges), and from then on the edge that has or last had focus. `focusin` rewrites the
+  `tabindex` attributes in the DOM directly (old stop `-1`, new stop `0`), so Tab and Shift+Tab leave the group from whichever edge the arrows
+  reached, moving re-renders nothing, and Vue Flow is not given a new edge list per key press; a watcher puts the stop back on the first edge of
+  the order when the graph, the focus or the language changes, unless an edge has focus. A focused edge shows what a hovered one shows (its label;
+  its focus tag gives way) and a solid accent band along the curve (`.graph-edge-focus-ring`, 7 screen px at any zoom through
+  `vector-effect: non-scaling-stroke`, `Highlight` in forced colours), at full opacity even when the selection dims the edge; Enter or Space selects
+  it as a click does and opens `GraphEdgeDetails`, Escape clears the selection (`edgeClear`) and is only consumed when there is one. The accessible
+  name is a sentence, not an arrow (a screen reader reads "→" as "right arrow"): `#form.valid depends on #name.value (reads)`,
+  `#form depends on #name (3 deps)`, told from the focus for an edge that arrives at it (`#name is used by #form (3 deps)`), with
+  `, invalid cycle` appended, and a stub edge says `#a.p has an invalid dependency (reads)` / `... depends on a target that is absent (...)`; zh-TW
+  `#form 依賴於 #name（3 個依賴）`. It is built from `data.sourceName`/`data.targetName` by `edgeName()`. Vue Flow's own `aria-describedby` text
+  (English, "press delete to remove it") and `aria-roledescription="edge"` are replaced through `domAttributes` by a localized description of the
+  keys and by "dependency". The edge keeps Vue Flow's `role="group"`: a composite role (`listbox`/`option`) would have to be set on Vue Flow's own
+  `<svg>` containers (one per z-level, re-created by it), so it is not; a screen reader in browse mode may therefore keep the arrow keys to itself,
+  and Relations stays the screen-reader route to the same facts. `e2e/graph-readability.spec.ts` drives all of it with the real keyboard.
+  **Readonly keys**: `deleteKeyCode`, `selectionKeyCode` and `multiSelectionKeyCode` are `null`. Vue Flow's default `deleteKeyCode` (Backspace, a
+  document-level listener) removed the selected cards and edges from this inspector; there is no Shift-drag selection box and no Ctrl/Cmd
+  multi-selection either, since the details show one edge.
   The handles Vue Flow requires are invisible (an edge does not attach to them) and the canvas uses only a subtle dot
   grid: these cues must never imply that the readonly inspector is an editable node editor.
 - `src/components/graph/GraphEdgeDetails.vue` — panel-local edge-selection details (dependency-container
@@ -1022,12 +1056,13 @@ automatically refits on semantic graph replacements and cluster expansion/collap
 Runtime activity and focus deemphasis never trigger a refit. `DependenciesPanel.vue`'s Graph view also exposes an explicit
 **Fit graph** button along with **Zoom in** / **Zoom out** and **Expand all** / **Collapse all** controls in the toolbar. Fit leaves 4% around the graph (it used to
 leave 20%, then 8%) and fits the curves as well as the cards (`fitBounds` over both),
-because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.27 zoom) and is read by zooming. Fit may reach 0.05 so it shows the whole
+because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.27 zoom) and is read by zooming. Different ELK options for expanded widgets do not change that (issue #230, measured with the real ELK at a 691 x 681 canvas: `COFFMAN_GRAHAM` layering with `layerBound` 2 to 5, a tighter root, `BRANDES_KOEPF` placement; the best expanded Survey Fit was 0.306, member text about 3.7px, and the expanded Trip budget stayed between 0.047 and 0.076): 37 or 112 member cards cannot be shown at a readable size at once, so a readable expanded view needs a different interaction (expanding one widget at a time, or a semantic zoom), not layout options. Fit may reach 0.05 so it shows the whole
 expanded Trip budget (about 0.06); afterwards the manual zoom floor (wheel, pinch, **Zoom out**) is `min(fit, max(0.1, fit / 4))`, so a small graph
 (the Survey fits at 0.99, so about 0.25) cannot be wheeled down to a dot. The collapsed card text is 13px (type) and 12px (id, S/P/M counts).
 `src/graph/graph-readability.unit.test.ts` (real ELK on both showcases) and `e2e/graph-readability.spec.ts` pin the spacing, the
 Bezier paths, the arrowheads and "no edge behind a card"; the arrowhead size, the 0.95 Fit floor of the default Survey (card text 11px or more at 1440 x 900, near 11px at 1280 x 800), the dimming and
-the tags (on no card, no arrowhead and no other tag, nearer the focus, 11px or more, above every edge) are measured in the browser as well.
+the tags (on no card, no arrowhead and no other tag, nearer the focus, 11px or more, above every edge; a leader starts on its own edge, is short,
+ends on its tag and crosses no card) are measured in the browser as well. `src/graph/tag-placement.unit.test.ts` pins the placement, leaders included, on hand-made geometry.
 
 ## Layout worker boundary
 
@@ -1412,8 +1447,8 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
   `e2e/polish.spec.ts` pins the Graph's sizes.
 - **Focus.** `dockview-theme.css` draws a 2px accent ring (inside the tab) on a Dockview tab or tab action reached with the keyboard (`:focus-visible`; Dockview's own
   1px divider-colour outline is `!important`, so the Lab's rule is too, and more specific). The Graph's expand/collapse toggles, cluster buttons and member
-  cards have a 2px accent outline. Graph **edges** cannot take focus: Vue Flow writes their `tabIndex` attribute with a capital I, which SVG ignores; Relations
-  is the keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
+  cards have a 2px accent outline. Graph **edges** are one Tab stop walked with the arrow keys, with an accent band as
+  the focus indicator (see "Dependencies inspector"); Relations remains the dense keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
 - **Language.** Navigation names are Taiwan Chinese: Author is 編寫, Dependencies 相依性, Relations 關聯, Graph 關係圖, Catalog 目錄, Structure 結構 (tab titles
   follow a language switch). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source) and so do
   the developer panels **Implementation** and **Document Tools** (they name features of the docs and Core, and the specs reach them by those names), `JSON` and the

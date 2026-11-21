@@ -44,6 +44,6 @@ describe('graphLegend Method badges', () => {
 			.toContain('"Used by"')
 		// Tags that do not fit are left out, and the Legend says so.
 		expect(wrapper.text())
-			.toContain('A tag is left out where there is no room for it: the Relations view has the full list.')
+			.toContain('A tag with no room on its own edge is set beside it and joined to it by a short line, or left out where there is no room at all: the Relations view has the full list.')
 	})
 })

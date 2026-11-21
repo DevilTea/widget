@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, openDependenciesGraph, test } from './fixtures'
+import { expect, openDependenciesGraph, setLocale, test } from './fixtures'
 
 /**
  * Issue #230, "the Graph is hard to read": what a person sees in the real browser. The cards are spread out, every dependency
@@ -30,7 +30,8 @@ interface RenderedGraph {
 		opacity: number
 		stroke: string
 		/** The focus tag: its text, its box on screen, and its font size on screen. */
-		relationTag: { text: string, rect: Rect, fontPx: number } | null
+		/** `leader` is set for a tag beside its edge: where its leader line starts (on the edge) and ends (on the tag's box), on screen. */
+		relationTag: { text: string, rect: Rect, fontPx: number, leader: { from: Point, to: Point } | null } | null
 	}[]
 }
 
@@ -90,6 +91,13 @@ async function readGraph(page: Page): Promise<RenderedGraph> {
 			const tagRect = tag?.querySelector('.graph-tag-bg')
 				?.getBoundingClientRect()
 			const tagText = tag?.querySelector('.graph-tag-text')
+			const leaderLine = tag?.querySelector<SVGLineElement>('.graph-tag-leader') ?? null
+			const leaderMatrix = leaderLine?.getScreenCTM() ?? null
+			const leaderEnd = (x: string, y: string): { x: number, y: number } => {
+				const point = new DOMPoint(Number(leaderLine!.getAttribute(x)), Number(leaderLine!.getAttribute(y)))
+					.matrixTransform(leaderMatrix!)
+				return { x: point.x, y: point.y }
+			}
 			return {
 				id: edge.dataset.id!,
 				d: path.getAttribute('d') ?? '',
@@ -102,7 +110,7 @@ async function readGraph(page: Page): Promise<RenderedGraph> {
 				stroke: getComputedStyle(path).stroke,
 				relationTag: tag === null || tagRect === undefined || tagText === null || tagText === undefined
 					? null
-					: { text: tagText.textContent?.trim() ?? '', rect: { x: tagRect.x, y: tagRect.y, width: tagRect.width, height: tagRect.height }, fontPx: Number.parseFloat(getComputedStyle(tagText).fontSize) * scaleNow },
+					: { text: tagText.textContent?.trim() ?? '', rect: { x: tagRect.x, y: tagRect.y, width: tagRect.width, height: tagRect.height }, fontPx: Number.parseFloat(getComputedStyle(tagText).fontSize) * scaleNow, leader: leaderLine === null || leaderMatrix === null ? null : { from: leaderEnd('x1', 'y1'), to: leaderEnd('x2', 'y2') } },
 			}
 		})
 		const title = document.querySelector('.graph-cluster-type')
@@ -408,7 +416,24 @@ for (const focus of focusCases) {
 			expect(onBorder(focused, near, 3), `${edge.id} touches the focused widget at its ${leavesFocus ? 'start' : 'end'}`)
 				.toBe(true)
 			const rect = edge.relationTag!.rect
-			const centre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+			const leader = edge.relationTag!.leader
+			// A tag beside its edge (no room on it) is about the point its leader line starts from: that point is what is measured.
+			const centre = leader?.from ?? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+			if (leader !== null) {
+				// The leader starts on the tag's own edge (the samples are about 10px apart), is short, ends on the tag's box and crosses no card.
+				expect(Math.min(...edge.points.map(point => Math.hypot(point.x - leader.from.x, point.y - leader.from.y))), `${edge.id} leader starts on its edge`)
+					.toBeLessThan(8)
+				expect(Math.hypot(leader.to.x - leader.from.x, leader.to.y - leader.from.y), `${edge.id} leader length`)
+					.toBeLessThanOrEqual(4 * edge.relationTag!.fontPx * 1.3 + 1)
+				expect(leader.to.x >= rect.x - 1 && leader.to.x <= rect.x + rect.width + 1 && leader.to.y >= rect.y - 1 && leader.to.y <= rect.y + rect.height + 1, `${edge.id} leader ends on its tag`)
+					.toBe(true)
+				for (const card of cards) {
+					const crosses = Array.from({ length: 21 }, (_, index) => ({ x: leader.from.x + (leader.to.x - leader.from.x) * index / 20, y: leader.from.y + (leader.to.y - leader.from.y) * index / 20 }))
+						.some(point => inside(card.rect, point))
+					expect(crosses, `${edge.id} leader crosses ${card.id}`)
+						.toBe(false)
+				}
+			}
 			// On its edge, in the half nearer the focused card: measured along the curve, at the sample nearest the tag.
 			const along = [0]
 			for (let index = 1; index < edge.points.length; index++)
@@ -493,3 +518,233 @@ for (const theme of ['light', 'dark'] as const) {
 			.toBe(reads.stroke)
 	})
 }
+
+/**
+ * Keyboard access to the edges (issue #230 follow-up). They are one roving Tab stop: the arrow keys walk them, Tab and Shift+Tab
+ * leave the group from whichever edge has focus, a focused edge shows what a hovered one shows plus a focus band, Enter or
+ * Space selects it as a click does (its details open), Escape clears.
+ */
+function focusedEdgeId(page: Page): Promise<string | null> {
+	return page.evaluate(() => document.activeElement?.classList.contains('vue-flow__edge') === true ? document.activeElement.getAttribute('data-id') : null)
+}
+
+function edgeTabStops(page: Page): Promise<(string | null)[]> {
+	return page.locator('.vue-flow__edge[tabindex="0"]')
+		.evaluateAll(elements => elements.map(element => element.getAttribute('data-id')))
+}
+
+test('the edges are one roving Tab stop: arrows walk them, Tab and Shift+Tab leave the group, Enter opens the details, Escape clears', async ({ page }) => {
+	await openGraph(page, 'survey')
+	const edges = page.locator('.vue-flow__edge')
+	const count = await edges.count()
+	expect(count)
+		.toBeGreaterThan(2)
+	// One edge is in the Tab order, the others are focusable only from it.
+	const initialStop = page.locator('.vue-flow__edge[tabindex="0"]')
+	await expect(initialStop)
+		.toHaveCount(1)
+	await expect(page.locator('.vue-flow__edge[tabindex="-1"]'))
+		.toHaveCount(count - 1)
+	// Named as a sentence about its two ends, with what it stands for; described by what the keys do, not by Vue Flow's
+	// English "press delete to remove it".
+	await expect(initialStop)
+		.toHaveAttribute('aria-label', /^#\S+ depends on #\S+ \(\d+ deps?\)$/)
+	await expect(initialStop)
+		.toHaveAttribute('aria-roledescription', 'dependency')
+	const describedBy = await initialStop.getAttribute('aria-describedby')
+	expect(describedBy)
+		.toBeTruthy()
+	expect(await page.evaluate(id => document.getElementById(id)?.textContent ?? '', describedBy!))
+		.toContain('Arrow keys move between the dependencies, Enter or Space shows the details, Escape clears the selection.')
+	const firstId = await initialStop.getAttribute('data-id')
+
+	// The edges come before the cards in the document, so Shift+Tab from the first card lands on the edges' Tab stop.
+	await page.locator('.vue-flow__node')
+		.first()
+		.focus()
+	await page.keyboard.press('Shift+Tab')
+	expect(await focusedEdgeId(page))
+		.toBe(firstId)
+	// Focus shows the label a hover shows and the focus band, which is 7 screen px wide at any zoom.
+	const focused = page.locator('.vue-flow__edge:focus')
+	await expect(focused.locator('.graph-edge-focus-ring'))
+		.toHaveCSS('opacity', '1')
+	await expect(focused.locator('.graph-edge-focus-ring'))
+		.toHaveCSS('stroke-width', '7px')
+	await expect(focused.locator('.graph-edge-focus-ring'))
+		.toHaveCSS('vector-effect', 'non-scaling-stroke')
+	await expect(focused.locator('.vue-flow__edge-text'))
+		.toHaveCSS('opacity', '1')
+
+	// The arrow keys walk the edges, and the Tab stop goes with them: still exactly one.
+	await page.keyboard.press('ArrowDown')
+	const secondId = await focusedEdgeId(page)
+	expect(secondId)
+		.not.toBeNull()
+	expect(secondId)
+		.not.toBe(firstId)
+	expect(await edgeTabStops(page))
+		.toEqual([secondId])
+	await page.keyboard.press('ArrowDown')
+	const thirdId = await focusedEdgeId(page)
+	expect([firstId, secondId])
+		.not.toContain(thirdId)
+	expect(await edgeTabStops(page))
+		.toEqual([thirdId])
+
+	// From an edge in the middle, Shift+Tab leaves the group (it does not jump to another edge), and Tab comes back to the
+	// edge that was left.
+	await page.keyboard.press('Shift+Tab')
+	expect(await focusedEdgeId(page))
+		.toBeNull()
+	await page.keyboard.press('Tab')
+	expect(await focusedEdgeId(page))
+		.toBe(thirdId)
+	// Tab leaves the group forwards, and Shift+Tab comes back to the same edge.
+	await page.keyboard.press('Tab')
+	expect(await focusedEdgeId(page))
+		.toBeNull()
+	await page.keyboard.press('Shift+Tab')
+	expect(await focusedEdgeId(page))
+		.toBe(thirdId)
+
+	// Up goes back, Home goes to the first edge of the order.
+	await page.keyboard.press('ArrowUp')
+	expect(await focusedEdgeId(page))
+		.toBe(secondId)
+	await page.keyboard.press('Home')
+	expect(await focusedEdgeId(page))
+		.toBe(firstId)
+	expect(await edgeTabStops(page))
+		.toEqual([firstId])
+
+	// Enter selects like a click: the edge is selected and its details open under the canvas.
+	const details = page.locator('[data-graph-edge-details]')
+	await expect(details)
+		.toHaveCount(0)
+	await page.keyboard.press('Enter')
+	await expect(focused)
+		.toHaveClass(/\bselected\b/)
+	await expect(details)
+		.toBeVisible()
+	await expect(details)
+		.toContainText('target:')
+
+	// Escape clears the selection and the details; focus stays on the edge.
+	await page.keyboard.press('Escape')
+	await expect(page.locator('.vue-flow__edge.selected'))
+		.toHaveCount(0)
+	await expect(details)
+		.toHaveCount(0)
+	expect(await focusedEdgeId(page))
+		.toBe(firstId)
+
+	// Space selects as well.
+	await page.keyboard.press('Space')
+	await expect(focused)
+		.toHaveClass(/\bselected\b/)
+	await expect(details)
+		.toBeVisible()
+})
+
+test('with a widget selected, the edges\' Tab stop is one of its own edges, and zh-TW names the edge', async ({ page }) => {
+	await openGraph(page, 'survey')
+	// #mode is related to some widgets and not to others, so the edges it is not part of are dimmed (the first widget in the
+	// document, #open-day, has an edge to every other widget and dims none).
+	await page.locator('.graph-cluster-identity--collapsed')
+		.filter({ hasText: /#mode(?![\w-])/ })
+		.click()
+	await expect(page.locator('.graph-edge--dimmed')
+		.first())
+		.toBeVisible()
+	const tabStop = page.locator('.vue-flow__edge[tabindex="0"]')
+	await expect(tabStop)
+		.toHaveCount(1)
+	await expect(tabStop)
+		.toHaveClass(/graph-edge--(depends-on|used-by)/)
+	// Told from the selected widget: it depends on the other end, or is used by it.
+	await expect(tabStop)
+		.toHaveAttribute('aria-label', /^#\S+ (depends on|is used by) #\S+ \(\d+ deps?\)$/)
+
+	await setLocale(page, 'zh-TW')
+	await expect(tabStop)
+		.toHaveAttribute('aria-label', /^#\S+ (依賴於 #\S+|被 #\S+ 使用)（\d+ 個依賴）$/)
+	await expect(tabStop)
+		.toHaveAttribute('aria-roledescription', '依賴')
+	const describedBy = await tabStop.getAttribute('aria-describedby')
+	expect(await page.evaluate(id => document.getElementById(id)?.textContent ?? '', describedBy!))
+		.toContain('用方向鍵在各個依賴之間移動')
+})
+
+/**
+ * The Graph is a readonly inspector. Vue Flow's default `deleteKeyCode` removes the selected cards and edges on Backspace
+ * (a listener on the document), so the canvas turns it off; Delete is checked as well.
+ */
+test('Backspace and Delete remove nothing from the Graph, with an edge or a card selected', async ({ page }) => {
+	await openGraph(page, 'survey')
+	const cardCount = await page.locator('.vue-flow__node')
+		.count()
+	const edgeCount = await page.locator('.vue-flow__edge')
+		.count()
+	const settle = (): Promise<unknown> => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+	const expectNothingRemoved = async (): Promise<void> => {
+		for (const key of ['Backspace', 'Delete']) {
+			await page.keyboard.press(key)
+			await settle()
+			await expect(page.locator('.vue-flow__node'), `cards after ${key}`)
+				.toHaveCount(cardCount)
+			await expect(page.locator('.vue-flow__edge'), `edges after ${key}`)
+				.toHaveCount(edgeCount)
+		}
+	}
+
+	// An edge, selected with the keyboard.
+	await page.locator('.vue-flow__edge[tabindex="0"]')
+		.focus()
+	await page.keyboard.press('Enter')
+	await expect(page.locator('.vue-flow__edge.selected'))
+		.toHaveCount(1)
+	await expectNothingRemoved()
+
+	// A card, selected with the keyboard (Vue Flow selects a focused node on Enter).
+	const card = page.locator('.vue-flow__node')
+		.first()
+	await card.focus()
+	await page.keyboard.press('Enter')
+	await expect(card)
+		.toHaveClass(/\bselected\b/)
+	await expectNothingRemoved()
+})
+
+/**
+ * A tag beside its edge is really drawn somewhere: a line from the edge and a dot on it. The Trip budget's widgets have many
+ * edges each, so at the default Fit some tag has no room on its own edge. Measured with the real ELK at 1440 x 900 (Fit at 0.386,
+ * the Trip budget's font bucket of 32): the focused #settlement, #dev, #ana, #currency and #dinner each have one tag with a
+ * leader, #hotel has none. #dev is the one named here.
+ */
+test('focusing #dev in the Trip budget puts a tag beside its edge, joined to it by a leader line with a dot', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'trip-budget')
+	await page.locator('.graph-cluster-identity--collapsed')
+		.filter({ hasText: /#dev(?![\w-])/ })
+		.click()
+	await expect(page.locator('.graph-node--focused'))
+		.toContainText('#dev')
+	const leaders = page.locator('.graph-tag-layer .graph-tag--leader')
+	await expect(leaders)
+		.not
+		.toHaveCount(0)
+	const leader = leaders.first()
+	await expect(leader.locator('line.graph-tag-leader'))
+		.toHaveCount(1)
+	await expect(leader.locator('circle.graph-tag-leader-dot'))
+		.toHaveCount(1)
+	// The leader belongs to a tag of one of the edges that is drawn.
+	const edgeId = await leader.getAttribute('data-edge-id')
+	expect(edgeId)
+		.toBeTruthy()
+	const edgeIds = await page.locator('.vue-flow__edge')
+		.evaluateAll(elements => elements.map(element => element.getAttribute('data-id')))
+	expect(edgeIds)
+		.toContain(edgeId)
+})

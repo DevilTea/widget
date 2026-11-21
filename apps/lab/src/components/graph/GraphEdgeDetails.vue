@@ -44,7 +44,10 @@ const semanticEdges = computed<readonly DisplaySubEdge[]>(() => {
 </script>
 
 <template>
-	<div class="flex flex-col gap-[8px] p-[8px_10px] text-[11px] font-lab-mono border-t border-t-lab-border bg-lab-surface max-h-[160px] overflow-y-auto">
+	<div
+		data-graph-edge-details
+		class="flex flex-col gap-[8px] p-[8px_10px] text-[11px] font-lab-mono border-t border-t-lab-border bg-lab-surface max-h-[160px] overflow-y-auto"
+	>
 		<div
 			v-if="semanticEdges.length > 1"
 			class="text-[11px] font-bold text-lab-text"
