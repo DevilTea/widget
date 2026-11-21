@@ -906,11 +906,20 @@ export function createInspectorAgent(options: CreateInspectorAgentOptions): Insp
 					&& 'requestId' in raw && typeof raw.requestId === 'string') {
 					requestId = raw.requestId
 				}
+				// Answered in the same minor as any other answer to this request: the lower of the negotiated minor and
+				// the request envelope's own, when the envelope carries a compatible version.
+				const classified = classifyInspectorRequest(raw)
+				const protocol = classified.ok ? classified.request.protocol : classified.protocol
+				if (protocol !== null && isCompatibleProtocolVersion(protocol))
+					requestMinor = Math.min(negotiatedMinor, protocol.minor)
 				if (requestId !== null)
 					sendError(requestId, protocolError('internal-error', 'The Inspector Agent failed to handle the request.'))
 			}
 			catch {
 				// The transport itself is unusable; its close notification owns cleanup.
+			}
+			finally {
+				requestMinor = null
 			}
 		}
 	})
