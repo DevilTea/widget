@@ -34,6 +34,7 @@
 import type { CheckResult } from './check'
 import type { WidgetDocs } from './docs-types'
 import type { RuntimeFacts } from './ir'
+import type { RuntimeImportOptions } from './runtime-facts'
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -75,8 +76,8 @@ export interface DocsCacheOptions {
 	runtime?: boolean
 	/** Seam: creates the TypeScript program. Defaults to `ts.createProgram`. */
 	createProgram?: (options: ts.CreateProgramOptions) => ts.Program
-	/** Seam: reads the runtime facts. Defaults to `importRuntimeFacts`. */
-	loadRuntime?: (modulePath: string, exportName: string, tsconfigPath?: string) => Promise<RuntimeFacts>
+	/** Seam: reads the runtime facts. Defaults to `importRuntimeFacts` (a worker thread per call). */
+	loadRuntime?: (modulePath: string, exportName: string, options: RuntimeImportOptions) => Promise<RuntimeFacts>
 }
 
 export interface DocsResult {
@@ -264,6 +265,13 @@ export function unresolvedImportLocations(program: ts.Program, compilerOptions: 
 	return [...locations].sort()
 }
 
+/** The `paths` of `compilerOptions` with absolute targets (relative to `baseUrl`, or to the tsconfig that declared them). */
+function absolutePaths(compilerOptions: ts.CompilerOptions): Record<string, string[]> {
+	const base = compilerOptions.baseUrl ?? (compilerOptions as { pathsBasePath?: string }).pathsBasePath ?? process.cwd()
+	return Object.fromEntries(Object.entries(compilerOptions.paths ?? {})
+		.map(([key, targets]) => [key, targets.map(target => resolve(base, target))]))
+}
+
 function hashFiles(files: readonly string[], contentOf: (file: string) => string): string {
 	return sha256(...[...files].sort()
 		.flatMap(file => [file, sha256(contentOf(file))]))
@@ -332,7 +340,13 @@ export function createDocsCache(options: DocsCacheOptions): DocsCache {
 		}
 		const config = readProgramConfig(extractOptions)
 		const program = createExtractionProgram(extractOptions, config)
-		const facts = runtime ? await loadRuntime(modulePath, system.export, system.tsconfig) : undefined
+		// With a source tsconfig, tsx gets the same `paths` the type checker used, so both read the same files.
+		const facts = runtime
+			? await loadRuntime(modulePath, system.export, {
+					...(config.tsconfigPath === undefined ? {} : { tsconfig: config.tsconfigPath }),
+					...(system.sourceTsconfig === undefined ? {} : { paths: absolutePaths(config.compilerOptions) }),
+				})
+			: undefined
 		const ir = extractIrFromProgram(program, { ...extractOptions, runtime: facts })
 		if (ir.mismatches.length > 0) {
 			throw new Error(`widget-docs: the types and the runtime of "${name}" disagree:\n${ir.mismatches.map(line => `- ${line}`)

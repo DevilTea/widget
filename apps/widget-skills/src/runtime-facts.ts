@@ -10,6 +10,7 @@ import type { Capability, RuntimeFacts } from './ir'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { Worker } from 'node:worker_threads'
 import { CAPABILITIES } from './ir'
 
 interface InspectionLike {
@@ -126,29 +127,46 @@ export async function compileWithSystem(modulePath: string, exportName: string, 
 	return { status: blueprint.status, diagnostics: blueprint.diagnostics.map(({ code, message }) => ({ code, message })) }
 }
 
-let namespaceCount = 0
+export interface RuntimeImportOptions {
+	/** The tsconfig tsx compiles the module with. */
+	tsconfig?: string
+	/** Extra `paths` aliases with absolute targets (a source tsconfig's), added on top of the tsconfig's. */
+	paths?: Record<string, string[]>
+}
+
+interface WorkerReply {
+	ok: boolean
+	facts?: RuntimeFacts
+	message?: string
+	stack?: string
+}
 
 /**
  * Like `loadRuntimeFacts`, but works in a process without a TypeScript loader (Vite, Vitest): the System's module is
- * imported through tsx in a fresh namespace, so a later call sees edited files, and `@deviltea/widget-core/inspection`
- * is imported in the same namespace as the System's module would import it, so both come from one Core instance.
- * Importing the module executes it, and everything it imports. Node keeps every namespace's modules for the life of
- * the process.
+ * imported through tsx in a worker thread (`runtime-worker.mjs`) that is terminated after the run, so a later call sees
+ * edited files and nothing the module loaded stays in this process. `@deviltea/widget-core/inspection` is imported in
+ * the worker as the System's module would import it, so both come from one Core instance. Importing the module
+ * executes it, and everything it imports, in the worker.
  */
-export async function importRuntimeFacts(modulePath: string, exportName: string, tsconfigPath?: string): Promise<RuntimeFacts> {
-	const { register } = await import('tsx/esm/api')
-	namespaceCount++
-	const api = register({ namespace: `widget-docs-${String(namespaceCount)}`, ...(tsconfigPath === undefined ? {} : { tsconfig: tsconfigPath }) })
+export async function importRuntimeFacts(modulePath: string, exportName: string, options: RuntimeImportOptions = {}): Promise<RuntimeFacts> {
+	const worker = new Worker(new URL('./runtime-worker.mjs', import.meta.url), {
+		workerData: { modulePath, exportName, tsconfig: options.tsconfig, paths: options.paths },
+	})
 	try {
-		const moduleUrl = pathToFileURL(modulePath).href
-		const module = await api.import(moduleUrl, import.meta.url) as Record<string, unknown>
-		const system = module[exportName]
-		if (system === undefined || system === null)
-			throw new Error(`${modulePath} has no export "${exportName}".`)
-		const { inspectPlugin } = await api.import('@deviltea/widget-core/inspection', moduleUrl) as { inspectPlugin: InspectPlugin }
-		return collectRuntimeFacts(system, inspectPlugin)
+		const reply = await new Promise<WorkerReply>((resolveReply, reject) => {
+			worker.once('message', resolveReply)
+			worker.once('error', reject)
+			worker.once('exit', code => reject(new Error(`The runtime worker for ${modulePath} exited with code ${String(code)} before it answered.`)))
+		})
+		if (!reply.ok || reply.facts === undefined) {
+			const error = new Error(reply.message ?? `The runtime worker for ${modulePath} failed.`)
+			if (reply.stack !== undefined)
+				error.stack = reply.stack
+			throw error
+		}
+		return reply.facts
 	}
 	finally {
-		await api.unregister()
+		await worker.terminate()
 	}
 }
