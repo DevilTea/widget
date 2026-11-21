@@ -413,13 +413,21 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       per mount, unmounted on unmount or pack switch, counted by `liveNuxtUiApps()`/`createdNuxtUiApps()` for the tests): it installs `@nuxt/ui/vue-plugin`, wraps the pack in `UApp` with
       `portal` set to `[data-packs-portal]`, an empty element `NuiSettingsPage.vue` renders inside the pack's root, so every overlay (`UModal`, the `USelect` menu) is teleported inside the
       pack, never to the frame's `<body>`; it provides the `ShowcaseHost` and the `PacksHost` it injected from its parent, renders the pack with the same Runtime, sets its own
-      `app.config.idPrefix` (two Vue apps in one document would both hand out `v-0`, `v-1`...: the duplicate ids broke every `<label for>`, found by the e2e label check) and disposes the
-      `unhead` instance the plugin creates (its generated colour `<style>` leaves the head with the pack). Icons are the build-time bundle (`icon.clientBundle.scan` already covers `src/**`)
+      `app.config.idPrefix` (two Vue apps in one document would both hand out `v-0`, `v-1`...: the duplicate ids broke every `<label for>`, found by the e2e label check) and installs the plugin inside a
+      detached `effectScope()` that `unmount()` stops: the plugin's generated colour block (`<style id="nuxt-ui-colors">`) is an `unhead` `useHead` entry, which is tied to the component being set up or else
+      to the current effect scope, and to nothing when neither exists, so an app mounted from a timer or after an `await` would leave the `<style>` and its `watchEffect` behind on every pack
+      switch (`nested-app.unit.test.ts` mounts outside any component and asserts the head is empty after unmount; the unhead 3.4 head has no `dispose`, so there is no hook to call). Icons are the build-time bundle (`icon.clientBundle.scan` already covers `src/**`)
       and `renderers/nuxt-ui/offline-icons.ts` is that approach's copy (a showcase may not import `src/ui/`): no Iconify fetch. The stylesheet `renderers/nuxt-ui/packs-ui.css` is the
       showcase's own Tailwind v4 entry: `tailwindcss/theme.css` and `utilities.css` with `source(none)` plus one `@source` of the pack's directory, `@import "@nuxt/ui"`, a preflight
       scoped to `.packs-ui` (a global preflight would restyle the hand-written pack next to it), and the pack's own `--ui-*` values on `.packs-ui` (light) and `.packs-ui.dark` (dark; a class
       of the pack's root only, driven by `Appearance.mode`, with `auto` following the host theme, never on the frame `<html>`). Only `nested-app.ts` imports it, so it is part of the lazy chunk
-      of this pack: the default frame (hand-written) loads no Tailwind and no Nuxt UI CSS.
+      of this pack: the default frame (hand-written) loads no Tailwind and no Nuxt UI CSS. **The frame document outlives the showcase** (the frame driver reuses it across showcase switches) and Vite's
+      preload helper adds a lazy chunk's stylesheet `<link>` once and never again, so the stylesheet would stay and Tailwind utilities, `:root` Nuxt UI tokens and Nuxt UI's base rules (`color-scheme`,
+      a focus rule on `a`) would reach the hand-written pack and every other showcase. Removing the link is not enough either (the helper remembers it and would not add it back), so
+      `renderers/nuxt-ui/pack-styles.ts` owns the element: the nested app's `unmount()` takes the pack's stylesheet element out of the document and keeps it, and `NuxtUiPack.ts` puts the same
+      element back and waits for it to load before the next mount (the first mount mounts at once). The element is found by its content, the marker rule `.packs-ui-pack-marker` at the end of
+      `packs-ui.css` (a `<link>` in a build, a `<style>` in the dev server). The alternative, discarding the frame when a showcase that loaded the pack is left, would need a shell protocol
+      change for one showcase. `e2e/nuxt-ui.spec.ts` pins it: Nuxt UI, then another showcase, then `expectFrameIsolated`; and Nuxt UI, hand-written, Nuxt UI again, hand-written.
     - **Lazy chunks.** `renderers/index.ts` is a thin facade (`loadRendererPacksRenderer()`, called by `preview-frame-renderers.ts`) behind which `renderers/page.ts` (the page, the hand-written
       pack, what the packs share) and, behind that, `NuxtUiPack.ts` are lazy chunks. The facade exists because the pack shares modules with the page: the bundler puts them in the parent
       chunk and the child imports them from there, so the parent chunk stops being the chunk of its entry module and the shell-isolation guard (which finds a renderer's chunk by its entry in the
@@ -448,7 +456,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       density, the mode, `confirming`, the Notifier's items); the pack choice is the host's, not State, so the step about it is narrated.
     - Known limits: the pack choice is not kept when Apply replaces the Runtime (a new host); a `Notifier` keeps at most `limit` notifications and only the newest alert and status are drawn
       (older ones are State, visible in Runtime); both packs draw the confirmation of an action from one State, so which pane draws it is a host rule (the pane that asked); the Nuxt UI pack
-      is not tested for contrast by a tool (there is no axe in the suite), only for target size, labels and focus; the generated colour block of Nuxt UI (`--ui-color-*` on `:root`) does
+      has no axe check of its own (only target size, labels and focus are asserted); the generated colour block of Nuxt UI (`--ui-color-*` on `:root`) does
       reach the frame document while the pack is mounted, which the isolation spec accepts and asserts has none of the chrome's mapping.
   - Business/semantic rules (scoring, staging, validation, derived read models) belong in each
     showcase's `plugins/`/`domain.ts`, never in renderer glue — renderers present semantics, they do
@@ -590,7 +598,7 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
                                          frame loads lazily, see "Showcase isolation")
 ```
 
-- **Eager**: the main app chunk and its CSS — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
+- **Eager**: the main app chunk and its CSS, and since the renderer-packs showcase the Nuxt UI runtime chunk `Switch-*.js` (~252 KB raw / ~79 KB gzip: Nuxt UI, Reka UI and Iconify code the shell and the lazy Nuxt UI pack share, so the bundler split it out of `lab-*.js`; it holds no chrome code and the shell preloads it with the entry) — `App.vue`, `Workbench.vue`, `LabStore`/`LabSession`,
   every panel *shell* (not necessarily every panel's heavy dependency, see below), the Survey, Trip budget, Quote rules, Onboarding, Legacy document repair and renderer-packs showcases (their systems, presets and sources, not their renderers) and the hidden Sandbox fixture,
   `dockview-vue`. This is unavoidable critical-path weight for a workbench app whose
   shell has to exist before any panel can render.

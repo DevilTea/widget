@@ -14,6 +14,9 @@
  * - The Nuxt UI tokens (`--ui-*`) of the pack are this file's own, set on the pack root (light) and on the same element when
  *   it carries `.dark` (dark). `.dark` is a class on the pack root, driven by the page's Appearance mode (where `auto` follows
  *   the host theme); it is never put on the frame `<html>`.
+ * - The pack takes this stylesheet out of the frame document when it unmounts (`pack-styles.ts`), because the frame document is reused
+ *   across showcases and the Tailwind theme, the Nuxt UI `:root` tokens and its base rules would otherwise stay. It finds the sheet by
+ *   the marker rule at the end of this file.
  */
 @layer properties, theme, base, components, utilities;
 
@@ -143,4 +146,11 @@
 	--ui-warning: #f5b84b;
 	--ui-error: #ff7a80;
 	color-scheme: dark;
+}
+
+/*
+ * The marker `pack-styles.ts` finds this stylesheet by. Keep it a rule of its own at the top level, last in the file.
+ */
+.packs-ui-pack-marker {
+	--packs-ui-pack: 1;
 }

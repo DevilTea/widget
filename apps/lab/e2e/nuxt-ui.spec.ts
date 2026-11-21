@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from '@playwright/test'
-import { expect, previewFrame, setTheme, test } from './fixtures'
+import { expect, previewFrame, selectShowcase, setTheme, test } from './fixtures'
 
 /**
  * Nuxt UI + Tailwind v4 foundation contract (issue #230 PR 2): the Lab shell uses them, the Preview frame
@@ -274,6 +274,48 @@ test.describe('Preview frame isolation', () => {
 				packPrimaryIsLabs: false,
 				rootPrimaryIsLabs: false,
 			})
+	})
+
+	// The Preview reuses its frame document across showcase switches, and a stylesheet a lazy chunk loaded stays in a document: the
+	// Nuxt UI pack takes its own out when it unmounts and puts it back before it mounts again (`pack-styles.ts`). What is checked is
+	// the frame document, not the pack: Tailwind utilities, the `:root` Nuxt UI tokens and its base rules would otherwise stay.
+	test('after the Nuxt UI pack was chosen, switching to another showcase leaves a frame document with no Tailwind or Nuxt UI CSS', async ({ context, page }) => {
+		await seedTheme(context, 'dark')
+		await page.goto('/?showcase=renderer-packs')
+		const preview = previewFrame(page)
+		await preview.getByTestId('packs-choice-nui')
+			.check()
+		await expect(preview.getByTestId('nui-page'))
+			.toBeVisible({ timeout: 15_000 })
+
+		await selectShowcase(page, 'survey')
+		await expectFrameIsolated(page, 'survey')
+	})
+
+	test('choosing Nuxt UI and then the hand-written pack leaves no Nuxt UI CSS in the frame, and choosing Nuxt UI again brings the pack\'s styles back', async ({ context, page }) => {
+		await seedTheme(context, 'dark')
+		await page.goto('/?showcase=renderer-packs')
+		const preview = previewFrame(page)
+		const packPrimary = (): Promise<string> => preview.getByTestId('nui-page')
+			.evaluate(element => getComputedStyle(element)
+				.getPropertyValue('--ui-primary')
+				.trim())
+
+		for (let round = 0; round < 2; round++) {
+			await preview.getByTestId('packs-choice-nui')
+				.check()
+			await expect(preview.getByTestId('nui-page'))
+				.toBeVisible({ timeout: 15_000 })
+			// The pack is styled (its own token resolves), also the second time, when the preload helper does not add the stylesheet again.
+			await expect.poll(packPrimary)
+				.toBe('#5eead4')
+
+			await preview.getByTestId('packs-choice-hand')
+				.check()
+			await expect(preview.getByTestId('nui-page'))
+				.toHaveCount(0)
+			await expectFrameIsolated(page, 'renderer-packs')
+		}
 	})
 })
 

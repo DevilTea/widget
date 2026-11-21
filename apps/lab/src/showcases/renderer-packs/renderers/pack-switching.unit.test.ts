@@ -10,6 +10,7 @@ import type { VueWrapper } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPacksRuntime, widgetsOf } from '../test-support'
 import { createdNuxtUiApps, liveNuxtUiApps } from './nuxt-ui/nested-app'
+import { restorePackStyles } from './nuxt-ui/pack-styles'
 import { createTestHost, mountPacks, settle, waitForNuxtUi, widgetSelector } from './test-harness'
 
 vi.setConfig({ testTimeout: 30_000 })
@@ -109,6 +110,37 @@ describe('switching the pack keeps one Runtime', () => {
 			.toBe(liveBefore)
 		expect(document.querySelectorAll('[data-widget-id]'))
 			.toHaveLength(0)
+	})
+
+	it('takes the pack\'s stylesheet out of the document when the pack goes away and puts the same element back before it mounts again', async () => {
+		// Stands for the `<link>` (build) or `<style>` (dev server) of `packs-ui.css`: found by its marker rule.
+		const style = document.createElement('style')
+		style.textContent = '.packs-ui { color: red }\n.packs-ui-pack-marker { --packs-ui-pack: 1 }'
+		document.head.append(style)
+		try {
+			const { wrapper } = await mountPage('nui')
+			expect(style.isConnected)
+				.toBe(true)
+
+			await choose('hand')
+			expect(style.isConnected)
+				.toBe(false)
+
+			await choose('nui')
+			expect(style.isConnected)
+				.toBe(true)
+			expect(wrapper.find('[data-testid="nui-page"]')
+				.exists())
+				.toBe(true)
+
+			wrapper.unmount()
+			expect(style.isConnected)
+				.toBe(false)
+		}
+		finally {
+			await restorePackStyles()
+			style.remove()
+		}
 	})
 
 	it('leaves nothing of the nested app behind in the document head after the pack is gone', async () => {
