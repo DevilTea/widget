@@ -19,7 +19,7 @@ const busy = ref(false)
 const outcomeMessage = ref<string | null>(null)
 const editorEl = useTemplateRef<HTMLElement>('editorEl')
 /** Set when a commit did not go through: the control at that path shows what the Document holds again (a switch or list the user already moved would not), the others keep their uncommitted text. */
-const resync = ref<{ readonly path: string, readonly tick: number } | null>(null)
+const resync = ref<{ readonly path: string, readonly tick: number, readonly message?: string } | null>(null)
 let resyncTick = 0
 
 /** The plugin's public config metadata for the selected widget: `null` when it has no config capability. */
@@ -102,25 +102,34 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 	busy.value = true
 	outcomeMessage.value = null
 	let applied = false
+	// Why the edit was not applied, for the control at its path: the reason alone, without the outcome line's own preamble.
+	let refusal: string | null = null
 	try {
 		const outcome = await store.author(editConfig(store.documentState.value.revision, nodeId, path, edit))
 		applied = outcome.status === 'applied'
-		if (outcome.status === 'applied')
+		if (outcome.status === 'applied') {
 			outcomeMessage.value = i18n.t('Author command applied to Document r{revision}.', { revision: store.documentState.value.revision })
-		else if (outcome.status === 'draft-dirty')
+		}
+		else if (outcome.status === 'draft-dirty') {
 			outcomeMessage.value = i18n.t('Apply or Revert the JSON draft before using Structure commands.')
-		else if (outcome.status === 'patch-error')
+		}
+		else if (outcome.status === 'patch-error') {
 			outcomeMessage.value = i18n.t('The author command could not be applied: {message}', { message: outcome.failure.message })
-		else if (outcome.status === 'unsupported')
+			refusal = outcome.failure.message
+		}
+		else if (outcome.status === 'unsupported') {
 			outcomeMessage.value = unsupportedMessage(outcome.reason)
-		else
+		}
+		else {
 			outcomeMessage.value = i18n.t('The author command is unavailable while another lifecycle command is running.')
+		}
 	}
 	finally {
 		busy.value = false
 	}
+	refusal ??= outcomeMessage.value
 	if (!applied && edit.op === 'replace')
-		resync.value = { path: path.join('.'), tick: ++resyncTick }
+		resync.value = { path: path.join('.'), tick: ++resyncTick, ...(refusal === null ? {} : { message: refusal }) }
 	await keepFocus(path, edit)
 }
 </script>
@@ -167,6 +176,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 							{{ i18n.t(configSchema === null ? 'This plugin publishes no config schema, so values are typed by what they hold and nothing can be added or removed here. Use JSON for that.' : 'Each change is applied to the Document at once and restarts the preview (its answers start over). Use Undo to take a change back.') }}
 						</p>
 						<ConfigFieldEditor
+							:key="selectedNodeId ?? 'none'"
 							bare
 							:resync="resync"
 							:asJson="configAsJson"
