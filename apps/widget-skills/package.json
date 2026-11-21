@@ -1,0 +1,24 @@
+{
+	"name": "@deviltea/widget-skills",
+	"type": "module",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Private prototype: turns a Widget System's TypeScript types and JSDoc into AI-facing artifacts (IR, JSON Schemas, flat/tree converters, Agent Skills).",
+	"license": "MIT",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"generate:onboarding": "tsx --tsconfig ./tsconfig.source.json ./src/cli.ts --module ../lab/src/showcases/onboarding/system.ts --export onboardingSystem --tsconfig ../lab/tsconfig.app.json --source-tsconfig ./tsconfig.source.json --root ../.. --out ./examples/onboarding",
+		"check:onboarding": "tsx --tsconfig ./tsconfig.source.json ./src/cli.ts --check --module ../lab/src/showcases/onboarding/system.ts --export onboardingSystem --tsconfig ../lab/tsconfig.app.json --source-tsconfig ./tsconfig.source.json",
+		"typecheck": "tsc --project ./tsconfig.json --noEmit"
+	},
+	"devDependencies": {
+		"@deviltea/tsconfig": "catalog:",
+		"@deviltea/widget-core": "workspace:*",
+		"@types/node": "catalog:",
+		"tsx": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

@@ -1,0 +1,793 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "onboardingSystem document",
+	"description": "A widget document of onboardingSystem: one root widget and its slot children. Structure only; compile the Blueprint for the authoritative diagnostics.",
+	"$ref": "#/$defs/widget",
+	"$defs": {
+		"widget": {
+			"anyOf": [
+				{
+					"$ref": "#/$defs/widget_Onboarding"
+				},
+				{
+					"$ref": "#/$defs/widget_AccountStep"
+				},
+				{
+					"$ref": "#/$defs/widget_InterestsStep"
+				},
+				{
+					"$ref": "#/$defs/widget_SafetyStep"
+				},
+				{
+					"$ref": "#/$defs/widget_InductionStep"
+				}
+			]
+		},
+		"widget_Onboarding": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document."
+				},
+				"type": {
+					"const": "Onboarding"
+				},
+				"config": {
+					"$ref": "#/$defs/type_OnboardingRawConfig",
+					"description": "The wizard title per language and, optionally, the index of the step it opens on."
+				},
+				"slots": {
+					"type": "object",
+					"properties": {
+						"steps": {
+							"type": "array",
+							"items": {
+								"$ref": "#/$defs/widget"
+							},
+							"description": "The steps in order: AccountStep, InterestsStep, SafetyStep or InductionStep. At least one."
+						}
+					},
+					"additionalProperties": false
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "The root of the onboarding wizard. State: `current` (the index of the current step) and `finished`. Properties: `title`, `steps` (each step's title, `complete` and `missing`), `progress` and `answers`. Methods: `canEnter(index)` (read-only), `next()`, `back()`, `goTo(index)` (each writes `current` and emits `stepChanged`) and `finish()` (emits `completed`). A refused move is a Method diagnostic and changes nothing."
+		},
+		"widget_AccountStep": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document."
+				},
+				"type": {
+					"const": "AccountStep"
+				},
+				"config": {
+					"$ref": "#/$defs/type_AccountRawConfig",
+					"description": "The step title per language and, optionally, the name and e-mail address filled in at the start."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "Step 1 of the onboarding wizard: the visitor's name and e-mail address (State `name` and `email`, filled in as they type). Properties: `title`, `missing` (`name` and/or `email` while they are empty or not an address), `complete` and `answers`."
+		},
+		"widget_InterestsStep": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document."
+				},
+				"type": {
+					"const": "InterestsStep"
+				},
+				"config": {
+					"$ref": "#/$defs/type_InterestsRawConfig",
+					"description": "The step title, the options (an id and a label per language), how many must be picked and which are picked at the start."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "Step 2 of the onboarding wizard: the interests the new member picks from the configured options (State `selected`: the picked ids). Properties: `title`, `options`, `missing` (`interests:<n>` while `n` more must be picked to reach `minimum`), `complete` and `answers` (the picked ids)."
+		},
+		"widget_SafetyStep": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document."
+				},
+				"type": {
+					"const": "SafetyStep"
+				},
+				"config": {
+					"$ref": "#/$defs/type_SafetyRawConfig",
+					"description": "The step title, the safety rules (an id and a text per language) and which are acknowledged at the start."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "Step 3 of the onboarding wizard: the safety briefing. The visitor acknowledges each configured rule (State `acknowledged`: the ids acknowledged so far). Properties: `title`, `rules`, `missing` (one `rule:<id>` per rule not yet acknowledged), `complete` and `answers` (the acknowledged ids)."
+		},
+		"widget_InductionStep": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document."
+				},
+				"type": {
+					"const": "InductionStep"
+				},
+				"config": {
+					"$ref": "#/$defs/type_InductionRawConfig",
+					"description": "The step title and the days and start times offered. Whether the booking office still has room is not known here: the host asks it."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "Step 4 of the onboarding wizard: booking an induction slot, with the work kept at the host. Methods: `requestSlot(date, time)` (validated against the config; writes the request into State and emits `slotRequested` with a ticket), `settleBooking(ticket, outcome)` (the host's answer; applied only if the ticket is still the newest, otherwise ignored) and `cancelBooking()` (emits `slotCancelled`); `requestSlot` and `cancelBooking` are refused once the wizard is finished. Events: `slotRequested`, `slotConfirmed`, `slotDeclined`, `slotCancelled`. State: `status`, `ticket`, `slot`, `reference`, `reason`."
+		},
+		"type_AccountAnswers": {
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string"
+				},
+				"email": {
+					"type": "string"
+				}
+			},
+			"required": [
+				"name",
+				"email"
+			],
+			"additionalProperties": false,
+			"description": "What the account step contributes."
+		},
+		"type_AccountConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"name": {
+					"type": "string"
+				},
+				"email": {
+					"type": "string"
+				},
+				"recovered": {
+					"type": "boolean"
+				}
+			},
+			"required": [
+				"title",
+				"name",
+				"email",
+				"recovered"
+			],
+			"additionalProperties": false
+		},
+		"type_AccountRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"prefill": {
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"email": {
+							"type": "string"
+						}
+					},
+					"required": [],
+					"additionalProperties": false
+				}
+			},
+			"required": [
+				"title"
+			],
+			"additionalProperties": false
+		},
+		"type_BookingOutcome": {
+			"anyOf": [
+				{
+					"type": "object",
+					"properties": {
+						"status": {
+							"const": "confirmed"
+						},
+						"reference": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"status",
+						"reference"
+					],
+					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"status": {
+							"const": "declined"
+						},
+						"reason": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"status",
+						"reason"
+					],
+					"additionalProperties": false
+				}
+			],
+			"description": "What the booking office answers for a request."
+		},
+		"type_Completion": {
+			"type": "object",
+			"properties": {
+				"answers": {
+					"type": "object",
+					"additionalProperties": {}
+				}
+			},
+			"required": [
+				"answers"
+			],
+			"additionalProperties": false,
+			"description": "The payload of the root's `completed` Event: every step's own `answers`, by step id."
+		},
+		"type_I18nText": {
+			"type": "object",
+			"additionalProperties": {
+				"type": "string"
+			},
+			"description": "Text per language, `{ \"en\": \"...\", \"zh-TW\": \"...\" }`. `en` is required; a missing language falls back to it."
+		},
+		"type_InductionAnswers": {
+			"type": "object",
+			"properties": {
+				"slot": {
+					"anyOf": [
+						{
+							"type": "null"
+						},
+						{
+							"$ref": "#/$defs/type_Slot"
+						}
+					]
+				},
+				"reference": {
+					"anyOf": [
+						{
+							"type": "null"
+						},
+						{
+							"type": "string"
+						}
+					]
+				}
+			},
+			"required": [
+				"slot",
+				"reference"
+			],
+			"additionalProperties": false,
+			"description": "What the induction step contributes to the `completed` Event."
+		},
+		"type_InductionConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"days": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"times": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"recovered": {
+					"type": "boolean"
+				}
+			},
+			"required": [
+				"title",
+				"days",
+				"times",
+				"recovered"
+			],
+			"additionalProperties": false
+		},
+		"type_InductionRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"days": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The days an induction can be booked, `YYYY-MM-DD`."
+				},
+				"times": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The start times offered on each day, `HH:MM`."
+				}
+			},
+			"required": [
+				"title",
+				"days",
+				"times"
+			],
+			"additionalProperties": false
+		},
+		"type_InterestOptionRaw": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"$ref": "#/$defs/type_I18nText"
+				}
+			},
+			"required": [
+				"id",
+				"label"
+			],
+			"additionalProperties": false
+		},
+		"type_InterestsConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"options": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/type_InterestOptionRaw"
+					}
+				},
+				"minimum": {
+					"type": "number"
+				},
+				"preselected": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"recovered": {
+					"type": "boolean"
+				}
+			},
+			"required": [
+				"title",
+				"options",
+				"minimum",
+				"preselected",
+				"recovered"
+			],
+			"additionalProperties": false
+		},
+		"type_InterestsRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"options": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/type_InterestOptionRaw"
+					}
+				},
+				"minimum": {
+					"type": "number",
+					"description": "How many interests the visitor must pick (default 1)."
+				},
+				"preselected": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The ids picked at the start."
+				}
+			},
+			"required": [
+				"title",
+				"options"
+			],
+			"additionalProperties": false
+		},
+		"type_OnboardingConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"startStep": {
+					"type": "number"
+				},
+				"recovered": {
+					"type": "boolean"
+				}
+			},
+			"required": [
+				"title",
+				"startStep",
+				"recovered"
+			],
+			"additionalProperties": false
+		},
+		"type_OnboardingRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"startStep": {
+					"type": "number",
+					"description": "The index of the step the wizard opens on (0 = the first)."
+				}
+			},
+			"required": [
+				"title"
+			],
+			"additionalProperties": false
+		},
+		"type_Progress": {
+			"type": "object",
+			"properties": {
+				"count": {
+					"type": "number"
+				},
+				"current": {
+					"type": "number",
+					"description": "The index of the current step."
+				},
+				"currentId": {
+					"anyOf": [
+						{
+							"type": "null"
+						},
+						{
+							"type": "string"
+						}
+					]
+				},
+				"stepIds": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"firstIncomplete": {
+					"type": "number",
+					"description": "The first step that is not complete, or -1 when every step is."
+				},
+				"furthest": {
+					"type": "number",
+					"description": "The furthest step the visitor may enter: the first incomplete one (or the last when all are complete)."
+				},
+				"allComplete": {
+					"type": "boolean"
+				}
+			},
+			"required": [
+				"count",
+				"current",
+				"currentId",
+				"stepIds",
+				"firstIncomplete",
+				"furthest",
+				"allComplete"
+			],
+			"additionalProperties": false,
+			"description": "Where the wizard is, and how far the visitor may go."
+		},
+		"type_SafetyConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"rules": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/type_SafetyRuleRaw"
+					}
+				},
+				"acknowledged": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"recovered": {
+					"type": "boolean"
+				}
+			},
+			"required": [
+				"title",
+				"rules",
+				"acknowledged",
+				"recovered"
+			],
+			"additionalProperties": false
+		},
+		"type_SafetyRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"rules": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/type_SafetyRuleRaw"
+					}
+				},
+				"acknowledged": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The ids of the rules acknowledged at the start."
+				}
+			},
+			"required": [
+				"title",
+				"rules"
+			],
+			"additionalProperties": false
+		},
+		"type_SafetyRuleRaw": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"text": {
+					"$ref": "#/$defs/type_I18nText"
+				}
+			},
+			"required": [
+				"id",
+				"text"
+			],
+			"additionalProperties": false
+		},
+		"type_Slot": {
+			"type": "object",
+			"properties": {
+				"date": {
+					"type": "string"
+				},
+				"time": {
+					"type": "string"
+				}
+			},
+			"required": [
+				"date",
+				"time"
+			],
+			"additionalProperties": false
+		},
+		"type_SlotCancelled": {
+			"type": "object",
+			"properties": {
+				"wasConfirmed": {
+					"type": "boolean",
+					"description": "`true` when the booking had been confirmed already, `false` when the request was still waiting for an answer."
+				},
+				"ticket": {
+					"type": "number",
+					"description": "The ticket of this request: an answer is applied only while it is still the newest."
+				},
+				"date": {
+					"type": "string"
+				},
+				"time": {
+					"type": "string"
+				}
+			},
+			"required": [
+				"wasConfirmed",
+				"ticket",
+				"date",
+				"time"
+			],
+			"additionalProperties": false,
+			"description": "The payload of `slotCancelled`: the request or booking the visitor gave up."
+		},
+		"type_SlotConfirmation": {
+			"type": "object",
+			"properties": {
+				"reference": {
+					"type": "string"
+				},
+				"ticket": {
+					"type": "number",
+					"description": "The ticket of this request: an answer is applied only while it is still the newest."
+				},
+				"date": {
+					"type": "string"
+				},
+				"time": {
+					"type": "string"
+				}
+			},
+			"required": [
+				"reference",
+				"ticket",
+				"date",
+				"time"
+			],
+			"additionalProperties": false,
+			"description": "The payload of `slotConfirmed`."
+		},
+		"type_SlotDeclined": {
+			"type": "object",
+			"properties": {
+				"reason": {
+					"type": "string"
+				},
+				"ticket": {
+					"type": "number",
+					"description": "The ticket of this request: an answer is applied only while it is still the newest."
+				},
+				"date": {
+					"type": "string"
+				},
+				"time": {
+					"type": "string"
+				}
+			},
+			"required": [
+				"reason",
+				"ticket",
+				"date",
+				"time"
+			],
+			"additionalProperties": false,
+			"description": "The payload of `slotDeclined`."
+		},
+		"type_SlotRequest": {
+			"type": "object",
+			"properties": {
+				"ticket": {
+					"type": "number",
+					"description": "The ticket of this request: an answer is applied only while it is still the newest."
+				},
+				"date": {
+					"type": "string"
+				},
+				"time": {
+					"type": "string"
+				}
+			},
+			"required": [
+				"ticket",
+				"date",
+				"time"
+			],
+			"additionalProperties": false,
+			"description": "The payload of the induction's `slotRequested` Event: what the host is asked to book."
+		},
+		"type_StepChange": {
+			"type": "object",
+			"properties": {
+				"from": {
+					"type": "string"
+				},
+				"to": {
+					"type": "string"
+				},
+				"fromIndex": {
+					"type": "number"
+				},
+				"toIndex": {
+					"type": "number"
+				},
+				"by": {
+					"$ref": "#/$defs/type_StepChangeBy"
+				}
+			},
+			"required": [
+				"from",
+				"to",
+				"fromIndex",
+				"toIndex",
+				"by"
+			],
+			"additionalProperties": false,
+			"description": "The payload of the root's `stepChanged` Event."
+		},
+		"type_StepChangeBy": {
+			"enum": [
+				"next",
+				"back",
+				"jump"
+			],
+			"description": "How the visitor changed step."
+		},
+		"type_StepSummary": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"type": {
+					"type": "string"
+				},
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"complete": {
+					"type": "boolean"
+				},
+				"missing": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "What is still missing, as machine-readable codes (`name`, `email`, `interests`, `rule:<id>`, `booking`, ...)."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"title",
+				"complete",
+				"missing"
+			],
+			"additionalProperties": false,
+			"description": "What the root knows of one step: read from the step's own Properties."
+		}
+	}
+}

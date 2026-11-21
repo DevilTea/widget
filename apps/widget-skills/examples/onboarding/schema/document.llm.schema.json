@@ -1,0 +1,529 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "onboardingSystem document (flat node list)",
+	"description": "A widget document as a flat list of nodes. Exactly one node has parent null (the root). Convert it to the tree with flatToTree, compile the Blueprint, and repair from its diagnostics.",
+	"type": "object",
+	"properties": {
+		"nodes": {
+			"type": "array",
+			"description": "Every widget of the document, parents before their children.",
+			"items": {
+				"anyOf": [
+					{
+						"$ref": "#/$defs/node_Onboarding"
+					},
+					{
+						"$ref": "#/$defs/node_AccountStep"
+					},
+					{
+						"$ref": "#/$defs/node_InterestsStep"
+					},
+					{
+						"$ref": "#/$defs/node_SafetyStep"
+					},
+					{
+						"$ref": "#/$defs/node_InductionStep"
+					}
+				]
+			}
+		}
+	},
+	"required": [
+		"nodes"
+	],
+	"additionalProperties": false,
+	"$defs": {
+		"node_Onboarding": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document. Other nodes name it in \"parent\"."
+				},
+				"type": {
+					"type": "string",
+					"const": "Onboarding"
+				},
+				"parent": {
+					"anyOf": [
+						{
+							"type": "string"
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The id of the parent node, or null for the one root node."
+				},
+				"slot": {
+					"anyOf": [
+						{
+							"type": "string",
+							"enum": [
+								"steps"
+							]
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The parent's slot this node goes into, or null for the root. Children of one slot keep the order they have in \"nodes\". A Onboarding may go into: Onboarding.steps."
+				},
+				"config": {
+					"$ref": "#/$defs/type_OnboardingRawConfig",
+					"description": "The wizard title per language and, optionally, the index of the step it opens on."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"parent",
+				"slot",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "The root of the onboarding wizard. State: `current` (the index of the current step) and `finished`. Properties: `title`, `steps` (each step's title, `complete` and `missing`), `progress` and `answers`. Methods: `canEnter(index)` (read-only), `next()`, `back()`, `goTo(index)` (each writes `current` and emits `stepChanged`) and `finish()` (emits `completed`). A refused move is a Method diagnostic and changes nothing. Slots: steps: The steps in order: AccountStep, InterestsStep, SafetyStep or InductionStep. At least one."
+		},
+		"node_AccountStep": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document. Other nodes name it in \"parent\"."
+				},
+				"type": {
+					"type": "string",
+					"const": "AccountStep"
+				},
+				"parent": {
+					"anyOf": [
+						{
+							"type": "string"
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The id of the parent node, or null for the one root node."
+				},
+				"slot": {
+					"anyOf": [
+						{
+							"type": "string",
+							"enum": [
+								"steps"
+							]
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The parent's slot this node goes into, or null for the root. Children of one slot keep the order they have in \"nodes\". A AccountStep may go into: Onboarding.steps."
+				},
+				"config": {
+					"$ref": "#/$defs/type_AccountRawConfig",
+					"description": "The step title per language and, optionally, the name and e-mail address filled in at the start."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"parent",
+				"slot",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "Step 1 of the onboarding wizard: the visitor's name and e-mail address (State `name` and `email`, filled in as they type). Properties: `title`, `missing` (`name` and/or `email` while they are empty or not an address), `complete` and `answers`. No slots: it cannot be a parent."
+		},
+		"node_InterestsStep": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document. Other nodes name it in \"parent\"."
+				},
+				"type": {
+					"type": "string",
+					"const": "InterestsStep"
+				},
+				"parent": {
+					"anyOf": [
+						{
+							"type": "string"
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The id of the parent node, or null for the one root node."
+				},
+				"slot": {
+					"anyOf": [
+						{
+							"type": "string",
+							"enum": [
+								"steps"
+							]
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The parent's slot this node goes into, or null for the root. Children of one slot keep the order they have in \"nodes\". A InterestsStep may go into: Onboarding.steps."
+				},
+				"config": {
+					"$ref": "#/$defs/type_InterestsRawConfig",
+					"description": "The step title, the options (an id and a label per language), how many must be picked and which are picked at the start."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"parent",
+				"slot",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "Step 2 of the onboarding wizard: the interests the new member picks from the configured options (State `selected`: the picked ids). Properties: `title`, `options`, `missing` (`interests:<n>` while `n` more must be picked to reach `minimum`), `complete` and `answers` (the picked ids). No slots: it cannot be a parent."
+		},
+		"node_SafetyStep": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document. Other nodes name it in \"parent\"."
+				},
+				"type": {
+					"type": "string",
+					"const": "SafetyStep"
+				},
+				"parent": {
+					"anyOf": [
+						{
+							"type": "string"
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The id of the parent node, or null for the one root node."
+				},
+				"slot": {
+					"anyOf": [
+						{
+							"type": "string",
+							"enum": [
+								"steps"
+							]
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The parent's slot this node goes into, or null for the root. Children of one slot keep the order they have in \"nodes\". A SafetyStep may go into: Onboarding.steps."
+				},
+				"config": {
+					"$ref": "#/$defs/type_SafetyRawConfig",
+					"description": "The step title, the safety rules (an id and a text per language) and which are acknowledged at the start."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"parent",
+				"slot",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "Step 3 of the onboarding wizard: the safety briefing. The visitor acknowledges each configured rule (State `acknowledged`: the ids acknowledged so far). Properties: `title`, `rules`, `missing` (one `rule:<id>` per rule not yet acknowledged), `complete` and `answers` (the acknowledged ids). No slots: it cannot be a parent."
+		},
+		"node_InductionStep": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document. Other nodes name it in \"parent\"."
+				},
+				"type": {
+					"type": "string",
+					"const": "InductionStep"
+				},
+				"parent": {
+					"anyOf": [
+						{
+							"type": "string"
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The id of the parent node, or null for the one root node."
+				},
+				"slot": {
+					"anyOf": [
+						{
+							"type": "string",
+							"enum": [
+								"steps"
+							]
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The parent's slot this node goes into, or null for the root. Children of one slot keep the order they have in \"nodes\". A InductionStep may go into: Onboarding.steps."
+				},
+				"config": {
+					"$ref": "#/$defs/type_InductionRawConfig",
+					"description": "The step title and the days and start times offered. Whether the booking office still has room is not known here: the host asks it."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"parent",
+				"slot",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "Step 4 of the onboarding wizard: booking an induction slot, with the work kept at the host. Methods: `requestSlot(date, time)` (validated against the config; writes the request into State and emits `slotRequested` with a ticket), `settleBooking(ticket, outcome)` (the host's answer; applied only if the ticket is still the newest, otherwise ignored) and `cancelBooking()` (emits `slotCancelled`); `requestSlot` and `cancelBooking` are refused once the wizard is finished. Events: `slotRequested`, `slotConfirmed`, `slotDeclined`, `slotCancelled`. State: `status`, `ticket`, `slot`, `reference`, `reason`. No slots: it cannot be a parent."
+		},
+		"type_AccountRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"prefill": {
+					"anyOf": [
+						{
+							"type": "object",
+							"properties": {
+								"name": {
+									"anyOf": [
+										{
+											"type": "string"
+										},
+										{
+											"type": "null"
+										}
+									],
+									"description": "Optional: use null to leave it out."
+								},
+								"email": {
+									"anyOf": [
+										{
+											"type": "string"
+										},
+										{
+											"type": "null"
+										}
+									],
+									"description": "Optional: use null to leave it out."
+								}
+							},
+							"required": [
+								"name",
+								"email"
+							],
+							"additionalProperties": false
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "Optional: use null to leave it out."
+				}
+			},
+			"required": [
+				"title",
+				"prefill"
+			],
+			"additionalProperties": false
+		},
+		"type_I18nText": {
+			"type": "array",
+			"description": "Text per language, `{ \"en\": \"...\", \"zh-TW\": \"...\" }`. `en` is required; a missing language falls back to it.",
+			"items": {
+				"type": "object",
+				"properties": {
+					"key": {
+						"type": "string"
+					},
+					"value": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"key",
+					"value"
+				],
+				"additionalProperties": false
+			}
+		},
+		"type_InductionRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"days": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The days an induction can be booked, `YYYY-MM-DD`."
+				},
+				"times": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The start times offered on each day, `HH:MM`."
+				}
+			},
+			"required": [
+				"title",
+				"days",
+				"times"
+			],
+			"additionalProperties": false
+		},
+		"type_InterestOptionRaw": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"$ref": "#/$defs/type_I18nText"
+				}
+			},
+			"required": [
+				"id",
+				"label"
+			],
+			"additionalProperties": false
+		},
+		"type_InterestsRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"options": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/type_InterestOptionRaw"
+					}
+				},
+				"minimum": {
+					"anyOf": [
+						{
+							"type": "number"
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "How many interests the visitor must pick (default 1). Optional: use null to leave it out."
+				},
+				"preselected": {
+					"anyOf": [
+						{
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The ids picked at the start. Optional: use null to leave it out."
+				}
+			},
+			"required": [
+				"title",
+				"options",
+				"minimum",
+				"preselected"
+			],
+			"additionalProperties": false
+		},
+		"type_OnboardingRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"startStep": {
+					"anyOf": [
+						{
+							"type": "number"
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The index of the step the wizard opens on (0 = the first). Optional: use null to leave it out."
+				}
+			},
+			"required": [
+				"title",
+				"startStep"
+			],
+			"additionalProperties": false
+		},
+		"type_SafetyRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText"
+				},
+				"rules": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/type_SafetyRuleRaw"
+					}
+				},
+				"acknowledged": {
+					"anyOf": [
+						{
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						{
+							"type": "null"
+						}
+					],
+					"description": "The ids of the rules acknowledged at the start. Optional: use null to leave it out."
+				}
+			},
+			"required": [
+				"title",
+				"rules",
+				"acknowledged"
+			],
+			"additionalProperties": false
+		},
+		"type_SafetyRuleRaw": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"text": {
+					"$ref": "#/$defs/type_I18nText"
+				}
+			},
+			"required": [
+				"id",
+				"text"
+			],
+			"additionalProperties": false
+		}
+	}
+}

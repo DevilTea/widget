@@ -1,0 +1,10 @@
+{
+	"compilerOptions": {
+		"paths": {
+			"@deviltea/widget-core": ["../../packages/core/src/index.ts"],
+			"@deviltea/widget-core/inspection": ["../../packages/core/src/inspection/index.ts"],
+			"@deviltea/widget-core/integration": ["../../packages/core/src/integration/index.ts"],
+			"@deviltea/widget-vue": ["../../packages/vue/src/index.ts"]
+		}
+	}
+}
