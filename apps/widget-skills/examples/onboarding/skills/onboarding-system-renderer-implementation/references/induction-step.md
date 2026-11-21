@@ -60,7 +60,7 @@ No slots: `WidgetSlot` is not on the surface.
 
 ## Referenced types
 
-```ts
+```text
 // apps/lab/src/showcases/onboarding/domain.ts
 /** What the booking office answers for a request. */
 export type BookingOutcome

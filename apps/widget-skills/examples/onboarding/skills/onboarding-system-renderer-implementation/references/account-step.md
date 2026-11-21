@@ -35,7 +35,7 @@ No slots: `WidgetSlot` is not on the surface.
 
 ## Referenced types
 
-```ts
+```text
 // apps/lab/src/showcases/onboarding/domain.ts
 /** What the account step contributes. */
 export interface AccountAnswers {

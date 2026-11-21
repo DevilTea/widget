@@ -10,7 +10,7 @@ The step title, the safety rules (an id and a text per language) and which are a
 
 Raw config type: `SafetyRawConfig`
 
-```ts
+```text
 // apps/lab/src/showcases/onboarding/config.ts
 export interface SafetyRawConfig {
 	readonly title: I18nText

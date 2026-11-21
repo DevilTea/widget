@@ -11,7 +11,7 @@ plugins into a Blueprint (with diagnostics) and runs a Runtime from a valid Blue
 
 ## 1. Declare the Interfaces first
 
-```ts
+```text
 export interface CounterInterfaces extends WidgetInterfaces {
 	config: { raw: CounterRawConfig | null, resolved: CounterConfig }
 	state: {

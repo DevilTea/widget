@@ -45,10 +45,12 @@ reference). The id must exist in the same document and be of a listed type.
 When the output must follow a JSON Schema (tool input, structured output), use
 `references/document.llm.schema.json` instead of the tree:
 
-- `{ "nodes": [{ "id", "type", "parent", "slot", "config" }] }`; exactly one node has `parent: null` (the root).
+- `{ "nodes": [{ "id", "type", "parent", "slot", "config" }] }`; exactly one node has no `parent` and no
+  `slot` (the root).
 - Children of one slot keep the order they have in `nodes`; list parents before children.
-- Every property is required: write `null` for an optional one you leave out, and for `config` when the type
-  takes none.
+- Leave an optional key out; do not write `null` for it. Leave `config` out when the type takes none.
+- `slots` (a list of slot names) is only needed to declare a slot that has no children.
+- The schema is meant for non-strict structured output: it gets the structure roughly right, no more.
 - A dictionary (for example text per language) is a list of `{ "key", "value" }` entries.
 - Limits (ranges, lengths, formats) are in the descriptions, not in schema keywords: read them.
 

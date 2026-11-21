@@ -10,7 +10,7 @@ The step title and the days and start times offered. Whether the booking office 
 
 Raw config type: `InductionRawConfig`
 
-```ts
+```text
 // apps/lab/src/showcases/onboarding/config.ts
 export interface InductionRawConfig {
 	readonly title: I18nText

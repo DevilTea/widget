@@ -4,7 +4,7 @@ Read from the types; the member documentation is whatever JSDoc the Interfaces c
 
 ## Onboarding (`OnboardingInterfaces`)
 
-```ts
+```text
 config: { raw: OnboardingRawConfig, resolved: OnboardingConfig }
 slots: 'steps'
 state.current: number
@@ -24,7 +24,7 @@ events.completed: [completion: Completion]
 
 ## AccountStep (`AccountInterfaces`)
 
-```ts
+```text
 config: { raw: AccountRawConfig, resolved: AccountConfig }
 state.name: string
 state.email: string
@@ -36,7 +36,7 @@ properties.answers: AccountAnswers
 
 ## InterestsStep (`InterestsInterfaces`)
 
-```ts
+```text
 config: { raw: InterestsRawConfig, resolved: InterestsConfig }
 state.selected: readonly string[]
 properties.title: I18nText
@@ -48,7 +48,7 @@ properties.answers: readonly string[]
 
 ## SafetyStep (`SafetyInterfaces`)
 
-```ts
+```text
 config: { raw: SafetyRawConfig, resolved: SafetyConfig }
 state.acknowledged: readonly string[]
 properties.title: I18nText
@@ -60,7 +60,7 @@ properties.answers: readonly string[]
 
 ## InductionStep (`InductionInterfaces`)
 
-```ts
+```text
 config: { raw: InductionRawConfig, resolved: InductionConfig }
 state.status: "idle" | "requesting" | "confirmed" | "declined"
 state.ticket: number

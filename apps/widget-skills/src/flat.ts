@@ -1,10 +1,14 @@
 /**
  * Deterministic converters between the authored document tree (`{ id, type, config?, slots? }`) and the flat node
- * list of the LLM profile (`{ nodes: [{ id, type, parent, slot, config }] }`).
+ * list of the LLM profile (`{ nodes: [{ id, type, parent?, slot?, config?, slots?, meta? }] }`).
  *
- * Config values follow the same re-encoding as `emitLlmSchema`: a dictionary is a list of `{ key, value }`, an
- * optional property that is left out is `null`, and an untyped (or recursive) value is JSON text. Values that do
- * not fit the declared shape pass through unchanged, so a wrong document stays wrong and Core diagnoses it.
+ * The conversion is lossless both ways for a well-formed tree: `flatToTree(treeToFlat(tree))` deep-equals `tree`.
+ * A key the tree leaves out is left out of the node (never written as `null`), `slots` lists the node's slot names
+ * in order so an empty slot survives, and `meta` and any unrecognized widget key are carried unchanged.
+ *
+ * Config values follow the same re-encoding as `emitLlmSchema`: a dictionary is a list of `{ key, value }` and an
+ * untyped (or recursive) value is JSON text. Values that do not fit the declared shape pass through unchanged, so
+ * a wrong document stays wrong and Core diagnoses it.
  */
 
 import type { Shape, SystemIr } from './ir'
@@ -13,10 +17,22 @@ import { recursiveTypeNames } from './schema'
 export interface FlatNode {
 	id: string
 	type: string
-	parent: string | null
-	slot: string | null
-	config: unknown
+	/** The parent's id. Left out (or `null`) on the one root node. */
+	parent?: string | null
+	/** The parent's slot. Left out (or `null`) on the root node. */
+	slot?: string | null
+	/** Left out when the widget has no `config` key. */
+	config?: unknown
+	/** The widget's slot names in order. Only needed for a slot without children; left out when the widget has no `slots` key. */
+	slots?: string[]
+	/** The reserved `meta` value, carried unchanged. */
+	meta?: unknown
+	/** Unrecognized widget keys are carried unchanged, so Core still reports them. */
+	[key: string]: unknown
 }
+
+/** The keys of a flat node that are not copied to the tree as they are. */
+const FLAT_KEYS = new Set(['id', 'type', 'parent', 'slot', 'config', 'slots'])
 
 export interface FlatDocument {
 	nodes: FlatNode[]
@@ -44,9 +60,6 @@ export interface FlatConverter {
 
 export function createFlatConverter(ir: SystemIr): FlatConverter {
 	const recursive = recursiveTypeNames(ir)
-	const admitsNull = (shape: Shape): boolean => shape.kind === 'null'
-		|| (shape.kind === 'union' && shape.members.some(admitsNull))
-		|| (shape.kind === 'ref' && !recursive.has(shape.name) && ir.types[shape.name] !== undefined && admitsNull(ir.types[shape.name]!.shape))
 
 	function matches(value: unknown, shape: Shape, flat: boolean): boolean {
 		switch (shape.kind) {
@@ -99,16 +112,12 @@ export function createFlatConverter(ir: SystemIr): FlatConverter {
 			case 'object': {
 				if (!isPlainObject(value))
 					return value
+				const declared = new Map(shape.properties.map(property => [property.name, property]))
 				const result: Record<string, unknown> = {}
-				for (const property of shape.properties) {
-					if (Object.hasOwn(value, property.name))
-						setOwn(result, property.name, encode(value[property.name], property.shape))
-					else if (property.optional)
-						setOwn(result, property.name, null)
-				}
+				// Key order is kept, a missing optional property stays missing, and an undeclared key passes through.
 				for (const [key, entry] of Object.entries(value)) {
-					if (!Object.hasOwn(result, key))
-						setOwn(result, key, entry)
+					const property = declared.get(key)
+					setOwn(result, key, property === undefined ? entry : encode(entry, property.shape))
 				}
 				return result
 			}
@@ -157,10 +166,8 @@ export function createFlatConverter(ir: SystemIr): FlatConverter {
 				const result: Record<string, unknown> = {}
 				for (const [key, entry] of Object.entries(value)) {
 					const property = declared.get(key)
-					if (property === undefined)
-						setOwn(result, key, entry)
-					else if (!(entry === null && property.optional && !admitsNull(property.shape)))
-						setOwn(result, key, decode(entry, property.shape))
+					// An explicit null is kept: leaving an optional property out is how it is omitted.
+					setOwn(result, key, property === undefined ? entry : decode(entry, property.shape))
 				}
 				return result
 			}
@@ -180,14 +187,28 @@ export function createFlatConverter(ir: SystemIr): FlatConverter {
 			if (seen.has(node.id))
 				throw new FlatConversionError(`The id "${node.id}" is used more than once; the flat form names parents by id.`)
 			seen.add(node.id)
-			const shape = configShapeOf(node.type)
-			const config = node.config === undefined || node.config === null ? null : shape === null ? node.config : encode(node.config, shape)
-			nodes.push({ id: node.id, type: node.type, parent, slot, config })
-			if (node.slots === undefined)
-				return
-			if (!isPlainObject(node.slots))
+			const flat: FlatNode = { id: node.id, type: node.type }
+			if (parent !== null) {
+				flat.parent = parent
+				flat.slot = slot
+			}
+			if (Object.hasOwn(node, 'config')) {
+				const shape = configShapeOf(node.type)
+				flat.config = node.config === null || shape === null ? node.config : encode(node.config, shape)
+			}
+			const slots = Object.hasOwn(node, 'slots') ? node.slots : undefined
+			if (slots !== undefined && !isPlainObject(slots))
 				throw new FlatConversionError(`The "slots" of "${node.id}" is not an object.`)
-			for (const [name, children] of Object.entries(node.slots)) {
+			if (slots !== undefined)
+				flat.slots = Object.keys(slots)
+			for (const [key, value] of Object.entries(node)) {
+				if (key === 'parent' || key === 'slot')
+					throw new FlatConversionError(`"${node.id}" has the key "${key}", which the flat form reserves.`)
+				if (!FLAT_KEYS.has(key))
+					setOwn(flat, key, value)
+			}
+			nodes.push(flat)
+			for (const [name, children] of Object.entries(slots ?? {})) {
 				if (!Array.isArray(children))
 					throw new FlatConversionError(`The slot "${name}" of "${node.id}" is not an array.`)
 				for (const child of children)
@@ -201,18 +222,29 @@ export function createFlatConverter(ir: SystemIr): FlatConverter {
 	function flatToTree(flat: FlatDocument): Record<string, unknown> {
 		if (!isPlainObject(flat) || !Array.isArray(flat.nodes))
 			throw new FlatConversionError('Expected { nodes: [...] }.')
-		const built = new Map<string, { tree: Record<string, unknown>, slots: Record<string, unknown[]> }>()
+		const built = new Map<string, { tree: Record<string, unknown>, slots: Record<string, unknown[]>, declaresSlots: boolean }>()
 		for (const node of flat.nodes) {
 			if (!isPlainObject(node) || typeof node.id !== 'string' || typeof node.type !== 'string')
 				throw new FlatConversionError('A node is not an object with a string "id" and "type".')
 			if (built.has(node.id))
 				throw new FlatConversionError(`The id "${node.id}" is used more than once.`)
 			const tree: Record<string, unknown> = { id: node.id, type: node.type }
-			if (node.config !== null && node.config !== undefined) {
+			if (Object.hasOwn(node, 'config')) {
 				const shape = configShapeOf(node.type)
-				tree.config = shape === null ? node.config : decode(node.config, shape)
+				tree.config = node.config === null || shape === null ? node.config : decode(node.config, shape)
 			}
-			built.set(node.id, { tree, slots: {} })
+			const slots: Record<string, unknown[]> = {}
+			if (node.slots !== undefined && node.slots !== null) {
+				if (!Array.isArray(node.slots) || !node.slots.every(name => typeof name === 'string'))
+					throw new FlatConversionError(`The "slots" of "${node.id}" is not a list of slot names.`)
+				for (const name of node.slots as string[])
+					setOwn(slots, name, [])
+			}
+			for (const [key, value] of Object.entries(node)) {
+				if (!FLAT_KEYS.has(key))
+					setOwn(tree, key, value)
+			}
+			built.set(node.id, { tree, slots, declaresSlots: Array.isArray(node.slots) })
 		}
 		let root: Record<string, unknown> | null = null
 		for (const node of flat.nodes) {
@@ -234,8 +266,8 @@ export function createFlatConverter(ir: SystemIr): FlatConverter {
 		}
 		if (root === null)
 			throw new FlatConversionError('No node has parent null: the document needs exactly one root.')
-		for (const { tree, slots } of built.values()) {
-			if (Object.keys(slots).length > 0)
+		for (const { tree, slots, declaresSlots } of built.values()) {
+			if (declaresSlots || Object.keys(slots).length > 0)
 				tree.slots = slots
 		}
 		// Every node hangs under a parent, so a node the root does not reach is on a cycle.

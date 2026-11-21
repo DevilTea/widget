@@ -10,7 +10,7 @@ The step title, the options (an id and a label per language), how many must be p
 
 Raw config type: `InterestsRawConfig`
 
-```ts
+```text
 // apps/lab/src/showcases/onboarding/config.ts
 export interface InterestsRawConfig {
 	readonly title: I18nText

@@ -181,9 +181,15 @@ function profileViolations(schema: JsonSchema): string[] {
 			if (object.additionalProperties !== false)
 				violations.push(`${path}: object without additionalProperties: false`)
 			const required = (object.required ?? []) as string[]
-			for (const key of Object.keys((object.properties ?? {}) as object)) {
-				if (!required.includes(key))
-					violations.push(`${path}: property ${key} is not required`)
+			const properties = (object.properties ?? {}) as Record<string, JsonSchema>
+			for (const key of required) {
+				if (!Object.hasOwn(properties, key))
+					violations.push(`${path}: required names the unknown property ${key}`)
+			}
+			// Optional means "not in required"; a null union on top of that is the strict-mode spelling the profile avoids.
+			for (const [key, property] of Object.entries(properties)) {
+				if (!required.includes(key) && Array.isArray(property.anyOf) && property.anyOf.some(member => (member as JsonSchema).type === 'null'))
+					violations.push(`${path}: optional property ${key} is a null union`)
 			}
 		}
 		if (Array.isArray(object.type))
@@ -245,7 +251,42 @@ describe('emitLlmSchema', () => {
 			.toEqual([])
 	})
 
+	it('stays within the optional and union parameter limits the profile is sized for', () => {
+		// The limits the owner cited for non-strict structured output: at most 24 optional and 16 union-typed parameters.
+		let optional = 0
+		let unions = 0
+		const count = (node: unknown): void => {
+			if (typeof node !== 'object' || node === null)
+				return
+			if (Array.isArray(node)) {
+				node.forEach(count)
+				return
+			}
+			const object = node as JsonSchema
+			if (Array.isArray(object.anyOf) && !object.anyOf.every(member => typeof (member as JsonSchema).$ref === 'string' && String((member as JsonSchema).$ref)
+				.startsWith('#/$defs/node_'))) {
+				unions++
+			}
+			if (object.type === 'object' && typeof object.properties === 'object' && object.properties !== null) {
+				optional += Object.keys(object.properties)
+					.filter(key => !((object.required ?? []) as string[]).includes(key)).length
+			}
+			Object.values(object)
+				.forEach(count)
+		}
+		count(emitLlmSchema(ir))
+		expect(optional)
+			.toBeLessThanOrEqual(24)
+		expect(unions)
+			.toBeLessThanOrEqual(16)
+		expect(JSON.stringify(emitLlmSchema(ir))).not.toContain('"type":"null"')
+	})
+
 	it('the profile walker catches each rule', () => {
+		expect(profileViolations({ type: 'object', properties: { a: { anyOf: [{ type: 'string' }, { type: 'null' }] } }, required: [], additionalProperties: false }))
+			.toEqual(['#: optional property a is a null union'])
+		expect(profileViolations({ type: 'object', properties: {}, required: ['a'], additionalProperties: false }))
+			.toEqual(['#: required names the unknown property a'])
 		expect(profileViolations({ type: 'object', properties: { a: { type: 'string', minLength: 1 } }, required: ['a'], additionalProperties: false }))
 			.toEqual(['#/properties/a: forbidden keyword minLength'])
 		expect(profileViolations({ type: 'object', properties: {}, required: [] }))
@@ -269,9 +310,8 @@ describe('emitLlmSchema', () => {
 			.toEqual({
 				id: 'onboarding',
 				type: 'Onboarding',
-				parent: null,
-				slot: null,
-				config: { title: [{ key: 'en', value: 'Welcome to Tidepool Makers' }, { key: 'zh-TW', value: '歡迎加入潮池工坊' }], startStep: null },
+				config: { title: [{ key: 'en', value: 'Welcome to Tidepool Makers' }, { key: 'zh-TW', value: '歡迎加入潮池工坊' }] },
+				slots: ['steps'],
 			})
 		expect(flat.nodes.slice(1)
 			.map(node => [node.id, node.parent, node.slot]))
@@ -289,20 +329,28 @@ describe('emitLlmSchema', () => {
 		expect(startStep.description)
 			.toContain('The index of the step the wizard opens on')
 		expect(startStep.description)
-			.toContain('Optional: use null to leave it out.')
-		expect(startStep.anyOf)
-			.toEqual([{ type: 'number' }, { type: 'null' }])
+			.toContain('Optional: leave the key out when unused.')
+		expect(startStep.type)
+			.toBe('number')
+		expect((schema.$defs as Record<string, JsonSchema>).type_OnboardingRawConfig!.required)
+			.toEqual(['title'])
+		expect((schema.$defs as Record<string, JsonSchema>).node_Onboarding!.required)
+			.toEqual(['id', 'type', 'config'])
 	})
 })
 
 describe('flat and tree converters', () => {
-	it('round-trips every onboarding preset to the same tree and the same compile result', () => {
+	it('round-trips every onboarding preset to exactly the same source and the same compile result', () => {
 		const { treeToFlat, flatToTree } = createFlatConverter(ir)
 		for (const preset of onboardingPresets) {
 			const original = JSON.parse(preset.sourceText)
-			const roundTripped = flatToTree(treeToFlat(original))
+			// The flat form is JSON: it must survive serialization on its way through a model.
+			const roundTripped = flatToTree(JSON.parse(JSON.stringify(treeToFlat(original))))
 			expect(roundTripped, preset.id)
-				.toEqual(original)
+				.toStrictEqual(JSON.parse(preset.sourceText))
+			// Key order too: the nodes are written as id, type, config, slots, like the presets.
+			expect(JSON.stringify(roundTripped), preset.id)
+				.toBe(JSON.stringify(JSON.parse(preset.sourceText)))
 			const expected = onboardingSystem.createBlueprint(original)
 			const actual = onboardingSystem.createBlueprint(roundTripped)
 			expect(actual.status, preset.id)
@@ -324,9 +372,37 @@ describe('flat and tree converters', () => {
 		}
 	})
 
+	it('keeps meta, empty slots, an explicit null config and unrecognized keys', () => {
+		const { treeToFlat, flatToTree } = createFlatConverter(ir)
+		const tree = {
+			id: 'root',
+			type: 'Onboarding',
+			config: { title: { en: 'T' }, startStep: null, unknownKey: { a: 1 } },
+			slots: {
+				empty: [],
+				steps: [
+					{ id: 'a', type: 'AccountStep', config: null, meta: { note: [1, null] } },
+					{ id: 'b', type: 'Unregistered', config: { title: { en: 'kept as written' } }, slots: {}, extra: true },
+				],
+			},
+			meta: null,
+		}
+		const flat = treeToFlat(structuredClone(tree))
+		expect(flat.nodes)
+			.toEqual([
+				{ id: 'root', type: 'Onboarding', config: { title: [{ key: 'en', value: 'T' }], startStep: null, unknownKey: { a: 1 } }, slots: ['empty', 'steps'], meta: null },
+				{ id: 'a', type: 'AccountStep', parent: 'root', slot: 'steps', config: null, meta: { note: [1, null] } },
+				{ id: 'b', type: 'Unregistered', parent: 'root', slot: 'steps', config: { title: { en: 'kept as written' } }, slots: [], extra: true },
+			])
+		expect(flatToTree(JSON.parse(JSON.stringify(flat))))
+			.toStrictEqual(tree)
+		expect(validateSchema(emitFullSchema(ir), { id: 'x', type: 'AccountStep', config: { title: { en: 'T' } }, meta: { any: ['json', 1, null] } }))
+			.toEqual([])
+	})
+
 	it('refuses lists that are not one tree', () => {
 		const { flatToTree } = createFlatConverter(ir)
-		const node = (id: string, parent: string | null) => ({ id, type: 'AccountStep', parent, slot: parent === null ? null : 'steps', config: null })
+		const node = (id: string, parent: string | null) => (parent === null ? { id, type: 'AccountStep' } : { id, type: 'AccountStep', parent, slot: 'steps' })
 		expect(() => flatToTree({ nodes: [] }))
 			.toThrow(FlatConversionError)
 		expect(() => flatToTree({ nodes: [node('a', null), node('b', null)] }))

@@ -10,7 +10,7 @@ The step title per language and, optionally, the name and e-mail address filled 
 
 Raw config type: `AccountRawConfig`
 
-```ts
+```text
 // apps/lab/src/showcases/onboarding/config.ts
 export interface AccountRawConfig {
 	readonly title: I18nText

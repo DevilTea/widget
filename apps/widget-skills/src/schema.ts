@@ -4,9 +4,11 @@
  * - `emitFullSchema`: the document as authored (a recursive tree), with one `$defs` entry per widget type and per
  *   named config type. JSDoc constraint tags become keywords.
  * - `emitLlmSchema`: the conservative LLM profile. The tree is a flat node list, records are arrays of
- *   `{ key, value }`, every object closes with `additionalProperties: false` and lists every property as required
- *   (an optional one admits `null`), and every constraint is prose in `description`. Only `type`, `properties`,
- *   `required`, `items`, `enum`, `const`, `anyOf`, `$defs`/`$ref`, `additionalProperties` and `description` appear.
+ *   `{ key, value }`, every object closes with `additionalProperties: false`, and every constraint is prose in
+ *   `description`. Only `type`, `properties`, `required`, `items`, `enum`, `const`, `anyOf`, `$defs`/`$ref`,
+ *   `additionalProperties` and `description` appear. An optional property is simply left out of `required`: there
+ *   is no `null` union for optionality, which keeps the count of union-typed parameters low. The profile is meant
+ *   for non-strict structured output.
  *
  * The schema only gets the structure roughly right: compiling the Blueprint and reading its diagnostics decides.
  */
@@ -167,6 +169,7 @@ export function emitFullSchema(ir: SystemIr): JsonSchema {
 		const properties: Record<string, JsonSchema> = {
 			id: { type: 'string', description: 'Unique within the document.' },
 			type: { const: plugin.type },
+			meta: { description: 'Reserved for tools: any JSON value, never interpreted by Core.' },
 		}
 		const required = ['id', 'type']
 		if (plugin.config !== null) {
@@ -198,16 +201,6 @@ export function emitFullSchema(ir: SystemIr): JsonSchema {
 // -------------------------------------------------------------------------------------------------
 // LLM profile
 // -------------------------------------------------------------------------------------------------
-
-const NULL_SCHEMA: JsonSchema = { type: 'null' }
-
-function nullable(schema: JsonSchema): JsonSchema {
-	// A description stays outside the `anyOf` members so `anyOf` never shares an object with `type`.
-	const { description, ...rest } = schema
-	const members = Array.isArray(rest.anyOf) && Object.keys(rest).length === 1 ? rest.anyOf as JsonSchema[] : [rest]
-	const result: JsonSchema = { anyOf: [...members, NULL_SCHEMA] }
-	return typeof description === 'string' ? { ...result, description } : result
-}
 
 function llmShape(shape: Shape, recursive: ReadonlySet<string>): JsonSchema {
 	switch (shape.kind) {
@@ -249,12 +242,12 @@ function llmShape(shape: Shape, recursive: ReadonlySet<string>): JsonSchema {
 				properties: Object.fromEntries(shape.properties.map((property) => {
 					const schema = llmShape(property.shape, recursive)
 					const own = describeDoc(property.doc, true)
-					const description = [own, property.optional ? 'Optional: use null to leave it out.' : '', typeof schema.description === 'string' ? schema.description : ''].filter(part => part !== '')
+					const description = [own, property.optional ? 'Optional: leave the key out when unused.' : '', typeof schema.description === 'string' ? schema.description : ''].filter(part => part !== '')
 						.join(' ')
-					const described = withDescription({ ...schema }, description)
-					return [property.name, property.optional ? nullable(described) : described]
+					return [property.name, withDescription({ ...schema }, description)]
 				})),
-				required: shape.properties.map(property => property.name),
+				required: shape.properties.filter(property => !property.optional)
+					.map(property => property.name),
 				additionalProperties: false,
 			}
 	}
@@ -268,22 +261,36 @@ export function emitLlmSchema(ir: SystemIr): JsonSchema {
 		const slotLines = ir.plugins.flatMap(parent => parent.slots
 			.filter(slot => slot.expected === null || slot.expected.includes(plugin.type))
 			.map(slot => `${parent.type}.${slot.name}`))
-		const config: JsonSchema = plugin.config === null
-			? { type: 'null', description: 'This widget type takes no config.' }
-			: withDescription(plugin.config.omittable ? nullable(llmShape(plugin.config.rawShape, recursive)) : llmShape(plugin.config.rawShape, recursive), plugin.config.runtimeDescription ?? '')
+		const properties: Record<string, JsonSchema> = {
+			id: { type: 'string', description: 'Unique within the document. Other nodes name it in "parent".' },
+			type: { type: 'string', const: plugin.type },
+			parent: { type: 'string', description: 'The id of the parent node. Leave the key out on the one root node.' },
+			slot: {
+				type: 'string',
+				...(slotNames.length === 0 ? {} : { enum: slotNames }),
+				description: `The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in "nodes".${slotLines.length > 0 ? ` A ${plugin.type} may go into: ${slotLines.join(', ')}.` : ''}`,
+			},
+		}
+		const required = ['id', 'type']
+		if (plugin.config !== null) {
+			properties.config = withDescription(llmShape(plugin.config.rawShape, recursive), [plugin.config.runtimeDescription ?? '', plugin.config.omittable ? 'Optional: leave the key out when unused.' : ''].filter(part => part !== '')
+				.join(' '))
+			if (!plugin.config.omittable)
+				required.push('config')
+		}
+		if (plugin.slots.length > 0) {
+			properties.slots = {
+				type: 'array',
+				items: { type: 'string', enum: plugin.slots.map(slot => slot.name) },
+				description: 'Only needed to declare a slot that has no children; otherwise leave the key out. The slot names of this node, in order.',
+			}
+		}
+		// `meta` is deliberately absent: a model never writes it (the converters still carry it), and every optional
+		// property counts against the provider's optional-parameter limit.
 		defs[`node_${plugin.type}`] = withDescription({
 			type: 'object',
-			properties: {
-				id: { type: 'string', description: 'Unique within the document. Other nodes name it in "parent".' },
-				type: { type: 'string', const: plugin.type },
-				parent: { anyOf: [{ type: 'string' }, NULL_SCHEMA], description: 'The id of the parent node, or null for the one root node.' },
-				slot: {
-					anyOf: slotNames.length === 0 ? [NULL_SCHEMA] : [{ type: 'string', enum: slotNames }, NULL_SCHEMA],
-					description: `The parent's slot this node goes into, or null for the root. Children of one slot keep the order they have in "nodes".${slotLines.length > 0 ? ` A ${plugin.type} may go into: ${slotLines.join(', ')}.` : ''}`,
-				},
-				config,
-			},
-			required: ['id', 'type', 'parent', 'slot', 'config'],
+			properties,
+			required,
 			additionalProperties: false,
 		}, [pluginDescription(plugin), plugin.slots.length > 0
 			? `Slots: ${plugin.slots.map(slot => `${slot.name}${slot.expected === null ? '' : ` (expects ${slot.expected.join(', ')})`}${(slot.doc.summary || slot.runtimeDescription) ? `: ${slot.doc.summary || slot.runtimeDescription}` : ''}`)
@@ -298,7 +305,7 @@ export function emitLlmSchema(ir: SystemIr): JsonSchema {
 	return {
 		$schema: DIALECT,
 		title: `${ir.system} document (flat node list)`,
-		description: 'A widget document as a flat list of nodes. Exactly one node has parent null (the root). Convert it to the tree with flatToTree, compile the Blueprint, and repair from its diagnostics.',
+		description: 'A widget document as a flat list of nodes. Exactly one node has no parent (the root). Convert it to the tree with flatToTree, compile the Blueprint, and repair from its diagnostics.',
 		type: 'object',
 		properties: {
 			nodes: {

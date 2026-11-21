@@ -64,7 +64,7 @@ Render each with `<WidgetSlot name="...">` from this widget's `useWidget()` resu
 
 ## Referenced types
 
-```ts
+```text
 // apps/lab/src/showcases/onboarding/domain.ts
 /** The payload of the root's `completed` Event: every step's own `answers`, by step id. */
 export interface Completion {

@@ -31,6 +31,12 @@ function tagLines(doc: Doc): string {
 			.join(', ')})`
 }
 
+/**
+ * The info string of generated TypeScript excerpts. Not `ts`: `scripts/docs-samples.unit.test.ts` walks every Markdown
+ * file of the repository, the committed examples included, and requires a sample marker on each `ts` fence.
+ */
+const TYPE_FENCE = 'text'
+
 function fence(language: string, text: string): string {
 	return `\`\`\`${language}\n${text.trimEnd()}\n\`\`\``
 }
@@ -86,7 +92,7 @@ function authoringReference(ir: SystemIr, plugin: PluginIr): string {
 		lines.push('This type takes no config. Leave `config` out.')
 	}
 	else {
-		lines.push(plugin.config.runtimeDescription ?? '', '', plugin.config.omittable ? '`config` may be left out.' : '`config` is required.', '', `Raw config type: \`${plugin.config.rawText}\``, '', fence('ts', typeExcerpt(ir, configTypeNames(ir, plugin)) || `type Config = ${plugin.config.rawText}`))
+		lines.push(plugin.config.runtimeDescription ?? '', '', plugin.config.omittable ? '`config` may be left out.' : '`config` is required.', '', `Raw config type: \`${plugin.config.rawText}\``, '', fence(TYPE_FENCE, typeExcerpt(ir, configTypeNames(ir, plugin)) || `type Config = ${plugin.config.rawText}`))
 	}
 	lines.push('', '## Slots', '', slotList(plugin))
 	if (plugin.reasons !== null && plugin.reasons.length > 0)
@@ -122,7 +128,7 @@ function rendererReference(ir: SystemIr, plugin: PluginIr): string {
 	lines.push('## Slots', '', plugin.slots.length === 0 ? 'No slots: `WidgetSlot` is not on the surface.' : `${slotList(plugin)}\n\nRender each with \`<WidgetSlot name="...">\` from this widget's \`useWidget()\` result.`, '')
 	const excerpt = typeExcerpt(ir, plugin.typeNames)
 	if (excerpt !== '')
-		lines.push('## Referenced types', '', fence('ts', excerpt), '')
+		lines.push('## Referenced types', '', fence(TYPE_FENCE, excerpt), '')
 	return lines.join('\n')
 }
 
@@ -160,7 +166,7 @@ plugins into a Blueprint (with diagnostics) and runs a Runtime from a valid Blue
 
 ## 1. Declare the Interfaces first
 
-\`\`\`ts
+\`\`\`text
 export interface CounterInterfaces extends WidgetInterfaces {
 	config: { raw: CounterRawConfig | null, resolved: CounterConfig }
 	state: {
@@ -289,10 +295,12 @@ reference). The id must exist in the same document and be of a listed type.
 When the output must follow a JSON Schema (tool input, structured output), use
 \`references/document.llm.schema.json\` instead of the tree:
 
-- \`{ "nodes": [{ "id", "type", "parent", "slot", "config" }] }\`; exactly one node has \`parent: null\` (the root).
+- \`{ "nodes": [{ "id", "type", "parent", "slot", "config" }] }\`; exactly one node has no \`parent\` and no
+  \`slot\` (the root).
 - Children of one slot keep the order they have in \`nodes\`; list parents before children.
-- Every property is required: write \`null\` for an optional one you leave out, and for \`config\` when the type
-  takes none.
+- Leave an optional key out; do not write \`null\` for it. Leave \`config\` out when the type takes none.
+- \`slots\` (a list of slot names) is only needed to declare a slot that has no children.
+- The schema is meant for non-strict structured output: it gets the structure roughly right, no more.
 - A dictionary (for example text per language) is a list of \`{ "key", "value" }\` entries.
 - Limits (ranges, lengths, formats) are in the descriptions, not in schema keywords: read them.
 
@@ -364,7 +372,7 @@ ${ir.plugins.map(plugin => `- \`${plugin.type}\`: \`references/${kebab(plugin.ty
 	const authoringPlugin = 'skills/widget-plugin-authoring'
 	files[`${authoringPlugin}/SKILL.md`] = `${frontmatter('widget-plugin-authoring', 'Write a @deviltea/widget-core plugin: Interfaces as the single source of shape and documentation, builder phases, synchronous callbacks, diagnostics, read-only Methods, async at the host, and the JSDoc tag set.')}\n${PLUGIN_AUTHORING}`
 	files[`${authoringPlugin}/references/jsdoc-tags.md`] = `# JSDoc tags\n\n${TAG_SPEC}`
-	files[`${authoringPlugin}/references/example-interfaces.md`] = `# Interfaces of ${ir.system}\n\nRead from the types; the member documentation is whatever JSDoc the Interfaces carry today.\n\n${ir.plugins.map(plugin => `## ${plugin.type}${plugin.interfacesName === null ? '' : ` (\`${plugin.interfacesName}\`)`}\n\n${fence('ts', [
+	files[`${authoringPlugin}/references/example-interfaces.md`] = `# Interfaces of ${ir.system}\n\nRead from the types; the member documentation is whatever JSDoc the Interfaces carry today.\n\n${ir.plugins.map(plugin => `## ${plugin.type}${plugin.interfacesName === null ? '' : ` (\`${plugin.interfacesName}\`)`}\n\n${fence(TYPE_FENCE, [
 		plugin.config === null ? '' : `config: { raw: ${plugin.config.rawText}, resolved: ${plugin.config.resolvedText} }`,
 		plugin.slots.length === 0
 			? ''

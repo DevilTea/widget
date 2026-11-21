@@ -10,7 +10,7 @@ The wizard title per language and, optionally, the index of the step it opens on
 
 Raw config type: `OnboardingRawConfig`
 
-```ts
+```text
 // apps/lab/src/showcases/onboarding/config.ts
 export interface OnboardingRawConfig {
 	readonly title: I18nText
