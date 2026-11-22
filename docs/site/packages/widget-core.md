@@ -660,7 +660,7 @@ How a named plugin's member is compared with the contract's:
 
 A plugin may declare more members than the contract lists.
 
-A broad `string` or a pattern such as `\`x-${string}\`` (as a union member or in
+A broad `string` or a pattern such as `` `x-${string}` `` (as a union member or in
 a contract's `Types`), a mix of a plugin type and a contract in one slot
 (`'notice' | WidgetChild`; name the types in the contract instead), a union of
 contracts and `WidgetContract<any>` are rejected at `.interfaces()`.
