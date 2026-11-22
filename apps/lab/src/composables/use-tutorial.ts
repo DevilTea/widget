@@ -77,6 +77,12 @@ export interface TutorialStore {
 export const TutorialStoreKey: InjectionKey<TutorialStore> = Symbol('widget-lab:tutorial-store')
 
 /**
+ * The start confirmation when starting a tour switches showcase away from committed edits (only reachable from a showcase
+ * without a tour of its own, such as the hidden Sandbox): a switch starts a new session, so Undo cannot bring them back.
+ */
+export const START_DISCARDS_EDITS_MESSAGE = 'Starting the tutorial opens its teaching example in another showcase. Your edits to this document will be discarded, and Undo cannot bring them back.'
+
+/**
  * Loads a tour's known default preset through the exact same Apply pipeline every other Source mutation
  * uses (diagnostic #25 OWNER decision) — switching showcase when not already on the target one already
  * applies its `defaultPreset` (which IS the tour's own default; see `showcases/registry.ts`), so only the
@@ -118,7 +124,11 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		return activeEngine()
 			.getSnapshot()
 	})
-	const confirmMessage = computed(() => getTour(activeTourId.value)?.startConfirmMessage ?? tourForShowcase(DEFAULT_TOUR_ID).startConfirmMessage)
+	/** The pending start also discards committed edits Undo cannot restore (it switches showcase): the message says so. */
+	const confirmDiscardsEdits = shallowRef(false)
+	const confirmMessage = computed(() => confirmDiscardsEdits.value
+		? START_DISCARDS_EDITS_MESSAGE
+		: getTour(activeTourId.value)?.startConfirmMessage ?? tourForShowcase(DEFAULT_TOUR_ID).startConfirmMessage)
 
 	const welcomeVisible = shallowRef(!isWelcomeDismissed())
 	const confirmVisible = shallowRef(false)
@@ -231,14 +241,19 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	 * confirmation dialog or a second `loadTourDefault()` round trip.
 	 */
 	function requestStartOrRestart(isRestart: boolean): void {
-		const decision = decideDeterministicStart({ isDirty: store.isDirty.value })
+		const tourId = activeTourId.value
+		const decision = decideDeterministicStart({
+			isDirty: store.isDirty.value,
+			hasCommittedEdits: store.hasCommittedEdits.value,
+			switchesShowcase: store.showcaseId.value !== tourId,
+		})
 		const accepted = startRequestGuard.request(decision.needsConfirmation)
 		syncPending()
 		if (!accepted)
 			return
 
-		const tourId = activeTourId.value
 		if (decision.needsConfirmation) {
+			confirmDiscardsEdits.value = decision.discardsEdits
 			pendingConfirmAction = () => beginTour(tourId, isRestart)
 			confirmVisible.value = true
 			return
@@ -311,6 +326,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		// is accepted afterward, and the draft is left completely untouched.
 		cancelStart: () => {
 			confirmVisible.value = false
+			confirmDiscardsEdits.value = false
 			pendingConfirmAction = null
 			startRequestGuard.cancel()
 			syncPending()

@@ -190,3 +190,58 @@ describe('createTutorialStore() Preview recheck ordering', () => {
 		store.dispose()
 	})
 })
+
+describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)', () => {
+	/** Commits an edit of the survey's mode label, so the Document equals no preset. */
+	async function commitEdit(store: ReturnType<typeof createLabStore>): Promise<string> {
+		const edited = store.documentState.value.sourceText.replace('How will you join?', 'Where will you be?')
+		store.setDraftSourceText(edited)
+		await store.apply()
+		return edited
+	}
+
+	it('starting on the tour\'s own showcase over committed edits asks nothing and offers Undo afterwards', async () => {
+		const store = createLabStore(getShowcase('survey')!)
+		const edited = await commitEdit(store)
+		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+
+		tutorial.requestStart()
+		expect(tutorial.confirmVisible.value)
+			.toBe(false)
+		await flush()
+		expect(tutorial.snapshot.value.status)
+			.toBe('active')
+		expect(store.hasCommittedEdits.value)
+			.toBe(false)
+		expect(store.replacedNoticeVisible.value)
+			.toBe(true)
+		expect(store.replacedNotice.value?.subject)
+			.toBe('Default — open day sign-up')
+
+		await store.undoLastApply()
+		expect(store.documentState.value.sourceText)
+			.toBe(edited)
+		store.dispose()
+	})
+
+	it('starting from a showcase without a tour over committed edits asks first, naming that Undo cannot bring them back', async () => {
+		const store = createLabStore(getShowcase('sandbox')!)
+		store.setDraftSourceText('{ "id": "root", "type": "Text", "config": { "text": "mine" } }\n')
+		await store.apply()
+		const switchShowcase = vi.fn(async () => {})
+		store.switchShowcase = switchShowcase
+		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+
+		tutorial.requestStart()
+		expect(tutorial.confirmVisible.value)
+			.toBe(true)
+		expect(tutorial.confirmMessage.value)
+			.toBe('Starting the tutorial opens its teaching example in another showcase. Your edits to this document will be discarded, and Undo cannot bring them back.')
+		expect(switchShowcase).not.toHaveBeenCalled()
+
+		tutorial.cancelStart()
+		expect(tutorial.confirmMessage.value)
+			.toBe('Starting the tutorial will load the Survey teaching example and replace your unapplied changes.')
+		store.dispose()
+	})
+})

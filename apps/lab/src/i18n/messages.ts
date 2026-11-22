@@ -89,6 +89,7 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Map the views': '理解各個檢視',
 	'Each of these views is a real navigation shortcut — try one.': '這些檢視都是實際可用的導覽捷徑——選一個試試看。',
 	'Author = the declarative definition and structure you edit · Blueprint = what the applied Author source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Dependencies = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.': '編寫 = 你編輯的 declarative definition 與結構 · Blueprint = 已套用的編寫內容 source 編譯後的結果 · Runtime = live State / Properties / Methods / Diagnostics · 相依性 = 已宣告 dependencies · Preview = Vue 呈現層 · Implementation = 這個 widget type 背後的 plugin + renderer 程式碼。',
+	'Starting the tutorial opens its teaching example in another showcase. Your edits to this document will be discarded, and Undo cannot bring them back.': '開始教學會在另一個展示範例中開啟教學內容。你對這份文件的修改會被捨棄，而且無法用「復原上一步」找回。',
 	'Source': 'Source',
 	'Graph': '關係圖',
 	'Preview': 'Preview',

@@ -181,6 +181,10 @@ Developer submenu (Implementation, Document Tools).
   *new* Document revision (through the same commit path as Apply, up to 20 steps back); it is unavailable while an
   unapplied draft exists, and a tooltip says why for every disabled action.
 - Loading a preset or switching showcase over an unapplied draft asks first (Keep editing / Discard changes).
+- Switching showcase away from an edited document (one that equals none of the showcase's presets) asks first too, because Undo
+  cannot bring it back; with an unapplied draft as well, one dialog names both. Loading a preset or starting the tutorial over an
+  edited document does not ask: it can be undone, and a notice above the preview says "Loaded “…”. Undo to get your edits back."
+  with an **Undo** button.
 - After an Apply that leaves problems, the Author JSON view lists them under the editor (Core's code and message verbatim,
   or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. The preview shows a
   plain-language notice with **Show problems** while it still shows the last working version.

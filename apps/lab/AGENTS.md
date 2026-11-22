@@ -1348,6 +1348,22 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   Monaco, onto the other header menu; tracked with `onInteractOutside`, as Reka's own handler does for non-modal menus) focus is left
   where the user put it: refocusing the trigger there swallowed typing and closed the menu that click had just opened. A chosen item's
   action runs in both cases. e2e (`menu focus handling`) pins both, and the menu helpers click a menu path once, with no retry.
+- *Committed-edit protection* (Lab UX phase 2, report item 10). **"The document differs from what was loaded"** means: the committed
+  Document's applied source text equals no preset of the open showcase, compared as exact text (`hasCommittedEdits()` in
+  `lab/draft-guard.ts`, `LabStore.hasCommittedEdits`; the same rule that makes the Examples menu say "edited", without the draft). A
+  document that equals a preset again, for example after Undo, has nothing a preset load could not bring back; revision numbers are not
+  used because they only grow. What happens then depends on whether the replacement can be undone (`replacementLoss()`):
+  - A **showcase switch** starts a new session with an empty Undo stack, so it asks first: the same `DraftGuardDialog` with "Discard your
+    edits?" and "You edited this document. Opening “…” replaces it, and Undo cannot bring your edits back." (Keep editing / Discard
+    changes are the Cancel / Continue of the dialog pattern). With an unapplied draft as well, **one** dialog names both
+    ("Discard your changes?", `data-loss="draft-and-edits"` on the body; `draft` and `edits` otherwise).
+  - A **preset load** (the Examples menu) and a **tutorial start** on the tour's own showcase are ordinary commits that Undo takes back, so
+    committed edits alone do not ask (a draft still does). `LabStore.applyPreset()` records, before the load, whether it replaces committed
+    edits, and after a load that advanced the revision sets `replacedNotice` (`{ subject: preset label, revision }`). `ReplacedDocumentNotice.vue`,
+    above the Preview next to the stale-preview notice, then says "Loaded “<preset>”. Undo to get your edits back." with **Undo** (the header's
+    Undo, `aria-disabled` while it is unavailable) and **Dismiss notice**. It is inline and has no timer; it applies only while the Document is still at
+    that revision (`replacedNoticeVisible`), so Undo or any later commit ends it, and a showcase switch clears it. Its wrapper is a `role="status"`
+    region that stays in the page, so the message is announced. `e2e/committed-edit-protection.spec.ts` pins every case.
 - `LabStore.authorView` (Catalog / Structure / JSON) starts on **Structure** (Lab UX phase 1; it was JSON) and then keeps what the user
   chose, also across showcase switches; it is not saved across reloads. Specs that need Monaco or the Problems list open it with
   `openAuthorJson()` (`e2e/fixtures.ts`). It lives in the store, not in `AuthorPanel`, so other surfaces can

@@ -162,6 +162,13 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'The JSON editor has changes that were not applied. Loading “{subject}” will discard them.': 'JSON 編輯器中有尚未套用的變更。載入「{subject}」會捨棄這些變更。',
 	'Keep editing': '繼續編輯',
 	'Discard changes': '捨棄變更',
+	// Lab UX phase 2: committed edits that a showcase switch would drop, and the Undo offer after a preset load replaced them.
+	'Discard your edits?': '要捨棄你的修改嗎？',
+	'Discard your changes?': '要捨棄你的變更嗎？',
+	'You edited this document. Opening “{subject}” replaces it, and Undo cannot bring your edits back.': '你修改過這份文件。開啟「{subject}」會取代它，而且無法用「復原上一步」找回你的修改。',
+	'The JSON editor has changes that were not applied, and you edited this document. Opening “{subject}” discards both, and Undo cannot bring them back.': 'JSON 編輯器中有尚未套用的變更，你也修改過這份文件。開啟「{subject}」會把兩者都捨棄，而且無法用「復原上一步」找回。',
+	'Loaded “{subject}”. Undo to get your edits back.': '已載入「{subject}」。按「復原上一步」可以找回你的修改。',
+	'Dismiss notice': '關閉提示',
 	'Problems': '問題',
 	'No problems': '沒有問題',
 	'From the last change': '來自上次變更',

@@ -6,7 +6,7 @@
  *
  * - The Examples menu combines showcase and preset and always names what is open: the showcase plus the last
  *   loaded preset, or "edited" once the source no longer matches it. Loading either with an unapplied editor
- *   draft first asks (`DraftGuardDialog`).
+ *   draft first asks (`DraftGuardDialog`), and so does switching showcase away from committed edits (Lab UX phase 2).
  * - Two plain-language chips replace the internal-vocabulary ones: is the Document valid, and does the
  *   Preview show it. With problems, the validity chip is a button that opens the Problems list. A third chip,
  *   "Unapplied changes", is shown while the JSON draft differs from the Document, and the Preview chip then names the
@@ -125,11 +125,13 @@ const overflowFocus = createMenuFocusHandling('end', overflowTrigger)
 function chooseShowcase(id: string, label: string): void {
 	if (id === store.showcaseId.value)
 		return
-	afterMenuClose = () => draftGuard.request(label, () => void store.switchShowcase(id))
+	// A switch starts a new session with an empty Undo stack: it asks about committed edits as well as a draft.
+	afterMenuClose = () => draftGuard.request({ subject: label, undoable: false, run: () => void store.switchShowcase(id) })
 }
 
 function choosePreset(preset: ShowcasePreset): void {
-	afterMenuClose = () => draftGuard.request(i18n.t(preset.label), () => void store.applyPreset(preset.id))
+	// A preset load is an ordinary commit: it asks only about a draft, and the store offers Undo for replaced edits.
+	afterMenuClose = () => draftGuard.request({ subject: i18n.t(preset.label), undoable: true, run: () => void store.applyPreset(preset.id) })
 }
 
 const exampleItems = computed<DropdownMenuItem[][]>(() => [

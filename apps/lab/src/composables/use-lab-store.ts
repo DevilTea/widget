@@ -78,6 +78,7 @@ import type { PreviewHostCoordinator } from '../preview-host/coordinator'
 import type { ShowcaseEntry, ShowcasePreset } from '../showcases/registry'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, inject, shallowRef, watch } from 'vue'
+import { hasCommittedEdits } from '../lab/draft-guard'
 import { deriveExampleState } from '../lab/example'
 import { createInspectorFocusStore } from '../lab/focus'
 import { collectProblems } from '../lab/problems'
@@ -136,6 +137,20 @@ export interface LabStore {
 	readonly loadedPresetId: Readonly<Ref<string | null>>
 	/** What the Examples menu names: the loaded preset, or "edited" once the source no longer matches it. */
 	readonly example: Readonly<Ref<ExampleState<ShowcasePreset>>>
+	/**
+	 * The committed Document differs from what was loaded: its applied source text equals no preset of the open showcase
+	 * (`lab/draft-guard.ts`'s `hasCommittedEdits()`; the unapplied draft is not part of it). A showcase switch asks before it
+	 * drops such a document; a preset load (an ordinary commit) offers Undo afterwards through `replacedNotice`.
+	 */
+	readonly hasCommittedEdits: Readonly<Ref<boolean>>
+	/**
+	 * Set when a preset load (from the Examples menu or a tutorial start) replaced committed edits: the preset's label (an
+	 * English message id) and the Document revision the load produced. The notice applies only while the Document is still at
+	 * that revision (`replacedNoticeVisible`); Undo, any later commit or a showcase switch ends it.
+	 */
+	readonly replacedNotice: Readonly<Ref<{ readonly subject: string, readonly revision: number } | null>>
+	readonly replacedNoticeVisible: Readonly<Ref<boolean>>
+	dismissReplacedNotice: () => void
 	/**
 	 * Which Author view is open: Structure on first load (Lab UX phase 1; it was JSON), then whatever the user chose. Not
 	 * saved across reloads. Lives here (not in `AuthorPanel`) so other surfaces can open the JSON view.
@@ -395,6 +410,12 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			isDirty: session.isDirty,
 		})
 	})
+	const hasCommittedEditsRef = computed(() => {
+		void sessionTick.value
+		return hasCommittedEdits(session.documentState.sourceText, presets.value)
+	})
+	const replacedNotice = shallowRef<{ readonly subject: string, readonly revision: number } | null>(null)
+	const replacedNoticeVisible = computed(() => replacedNotice.value !== null && replacedNotice.value.revision === documentState.value.revision)
 	const lastAppliedSourcePatch = computed(() => {
 		void sessionTick.value
 		return session.lastAppliedSourcePatch
@@ -474,6 +495,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		showcaseId.value = target.id
 		presets.value = target.presets
 		loadedPresetId.value = target.defaultPreset.id
+		replacedNotice.value = null
 		graphExpandedClusterIds.value = new Set()
 		sessionTick.value++
 		documentTick.value++
@@ -517,6 +539,12 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		problems,
 		loadedPresetId,
 		example,
+		hasCommittedEdits: hasCommittedEditsRef,
+		replacedNotice,
+		replacedNoticeVisible,
+		dismissReplacedNotice: () => {
+			replacedNotice.value = null
+		},
 		authorView,
 		problemsFocusPending,
 		focus,
@@ -582,13 +610,20 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			// and synchronously starts `session.apply()` (capture + concurrency guard) before this line
 			// returns. `enqueue()` only barriers a concurrent `switchShowcase()`/`apply()` behind it.
 			const targetSession = session
+			// Read before the load: whether this preset replaces committed edits that only Undo can bring back now.
+			const replacesEdits = hasCommittedEdits(session.documentState.sourceText, currentShowcase.presets)
+			const revisionBefore = session.documentState.revision
 			const outcome = session.applyPreset(preset.sourceText)
 			return enqueue(async () => {
 				const result = await outcome
 				// A switch queued behind this preset replaces the session only after it settled, so the check
 				// is a guard rather than an expected case: never name a preset in a showcase it does not belong to.
-				if (result.status === 'applied' && session === targetSession)
+				if (result.status === 'applied' && session === targetSession) {
 					loadedPresetId.value = presetId
+					const revision = session.documentState.revision
+					if (replacesEdits && revision !== revisionBefore)
+						replacedNotice.value = { subject: preset.label, revision }
+				}
 				return result
 			})
 		},
