@@ -24,11 +24,20 @@ export function pluginDocsOf(docs: WidgetDocs | undefined, type: string): Widget
 	return docs !== undefined && Object.hasOwn(docs.plugins, type) ? docs.plugins[type] : undefined
 }
 
+/**
+ * Joins the source line wraps of one JSDoc paragraph: the generated docs keep the comment's line breaks, and the views
+ * render text with `white-space: pre-line`. Blank lines (paragraph breaks) and lines that start a list item stay.
+ */
+function unwrapLines(text: string): string {
+	return text.replace(/(?<!\n)[ \t]*\n(?!\n|[ \t]*(?:[-*+]|\d+\.)[ \t])[ \t]*/g, ' ')
+}
+
 /** The prose of one documented member: its summary, then its `@remarks` after a blank line; `''` when it has none. */
 export function docText(text: WidgetDocsText | null | undefined): string {
 	if (text === null || text === undefined)
 		return ''
 	return [text.summary, text.remarks].filter(part => part !== '')
+		.map(unwrapLines)
 		.join('\n\n')
 }
 

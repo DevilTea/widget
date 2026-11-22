@@ -48,6 +48,35 @@ describe('the documentation each showcase carries (Core 0.3 has no descriptions 
 			}
 		}
 	})
+
+	it('hands the Lab a config JSON Schema for every plugin with a config in every listed showcase', () => {
+		for (const showcase of listedShowcases) {
+			const configured = showcase.system.catalog.widgets
+				.filter(widget => widget.capabilities.config)
+				.map(widget => widget.type)
+			expect(Object.keys(showcase.configSchemas)
+				.sort(), showcase.id)
+				.toEqual([...configured].sort())
+		}
+	})
+
+	it('maps each Survey and document-repair plugin type to its own schema', async () => {
+		const survey = await import('./survey/schemas')
+		expect(getShowcase('survey')?.configSchemas)
+			.toStrictEqual({
+				Survey: survey.surveyConfigSchema,
+				SingleChoice: survey.singleChoiceConfigSchema,
+				MultipleChoice: survey.multipleChoiceConfigSchema,
+				Numeric: survey.numericConfigSchema,
+				ShortAnswer: survey.shortAnswerConfigSchema,
+			})
+		const repair = await import('./document-repair/schemas')
+		expect(getShowcase('document-repair')?.configSchemas)
+			.toStrictEqual({
+				RepairDesk: repair.repairDeskConfigSchema,
+				SavedDraft: repair.savedDraftConfigSchema,
+			})
+	})
 })
 
 describe('showcase registry listing and ?showcase= selection', () => {

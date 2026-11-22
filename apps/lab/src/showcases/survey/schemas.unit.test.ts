@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
 /**
  * Schema agreement. Part 1: the schemas' shape matches the exported key and operator lists. Part 2 (at the
  * end): every real preset config satisfies its schema, through a small test-only checker.
  */
+
+import { describe, expect, it } from 'vitest'
 import { CONFIG_JSON_SCHEMA_DIALECT } from '../../showcase-host'
 import {
 	MULTIPLE_CHOICE_CONFIG_KEYS,
