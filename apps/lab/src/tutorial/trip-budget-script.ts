@@ -178,7 +178,7 @@ export const tripBudgetTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You have seen a Property chain, read-only Methods, laziness and resetState.',
-				reveal: 'Edit the JSON (add an expense, a person or a rate) and press Apply, or open the Implementation of any widget type.',
+				reveal: 'Edit the JSON (add an expense, a person or a rate) and watch the Preview update, or open the Implementation of any widget type.',
 			}],
 		},
 	],

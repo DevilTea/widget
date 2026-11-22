@@ -2,19 +2,17 @@ import { expect, setLocale, test } from './fixtures'
 
 interface LabTestWindow {
 	__WIDGET_LAB_TEST__?: {
-		setDraftSourceText: (text: string) => void
+		editJson: (text: string) => void
 	}
 }
 
 test('core diagnostic text is not localized when presentation locale changes (issue #43)', async ({ page }) => {
 	await page.goto('/?lab-test&lang=en')
-	await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+	await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
 	await page.evaluate(() => {
 		const seam = (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__
-		seam?.setDraftSourceText(JSON.stringify({ id: 'root', type: 'UnknownForI18nContract' }, null, 2))
+		seam?.editJson(JSON.stringify({ id: 'root', type: 'UnknownForI18nContract' }, null, 2))
 	})
-	await page.getByRole('button', { name: 'Apply', exact: true })
-		.click()
 	await page.getByRole('tab', { name: 'Blueprint' })
 		.click()
 	await page.getByRole('button', { name: /All diagnostics/ })

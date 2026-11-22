@@ -4,25 +4,27 @@
  * tutorial's deterministic-start confirmation (`tutorial/deterministic-start.ts`), which stays separate because it also
  * gates the tour's own state machine.
  *
- * Two things can be lost (Lab UX phase 2, report item 10):
- * - an **unapplied JSON draft** (`LabSession.isDirty`): nothing can bring it back, whatever the action;
+ * Two things can be lost (Lab UX phase 2, report item 10; Lab UX phase 3 narrowed the first one):
+ * - **JSON text that does not parse** (`LabSession.parseError`): it was never committed, so nothing can bring it back,
+ *   whatever the action. Text that parses is committed before the action runs (`LabStore.flushJson()`), so it is a
+ *   committed edit like any other; the loss names this case `draft`, the only "draft" left in the Lab;
  * - **committed edits**: the Document's applied source equals no preset of the open showcase (`hasCommittedEdits()`).
  *   Loading a preset keeps them on the Undo stack (it is an ordinary commit), so the action runs without asking and the
  *   Lab offers Undo afterwards; a showcase switch starts a fresh session with an empty Undo stack, so it asks first.
  *
- * `replacementLoss()` is that rule; one dialog names everything an action would lose, so a draft and committed edits
+ * `replacementLoss()` is that rule; one dialog names everything an action would lose, so the JSON text and committed edits
  * never ask twice. One request at a time: while one waits, further requests are ignored (the confirmation dialog is
  * modal, so a second one can only come from a double activation).
  */
 
 import { sameJsonDocument } from './json-equal'
 
-/** What confirming would discard: nothing, the unapplied draft, committed edits that Undo cannot restore, or both. */
+/** What confirming would discard: nothing, JSON text that does not parse, committed edits that Undo cannot restore, or both. */
 export type ReplacementLoss = 'none' | 'draft' | 'edits' | 'draft-and-edits'
 
 export interface ReplacementLossInput {
-	/** An unapplied JSON draft exists (`LabSession.isDirty`). */
-	readonly isDirty: boolean
+	/** The JSON view's text does not parse (`LabSession.parseError`), so it was never committed. */
+	readonly jsonBlocked: boolean
 	/** The committed Document differs from every preset of the open showcase (`hasCommittedEdits()`). */
 	readonly hasCommittedEdits: boolean
 	/**
@@ -33,18 +35,18 @@ export interface ReplacementLossInput {
 }
 
 /** What an action would lose for good, i.e. what the user must confirm. Committed edits are lost only when the action cannot be undone. */
-export function replacementLoss({ isDirty, hasCommittedEdits, undoable }: ReplacementLossInput): ReplacementLoss {
+export function replacementLoss({ jsonBlocked, hasCommittedEdits, undoable }: ReplacementLossInput): ReplacementLoss {
 	const edits = hasCommittedEdits && !undoable
-	if (isDirty)
+	if (jsonBlocked)
 		return edits ? 'draft-and-edits' : 'draft'
 	return edits ? 'edits' : 'none'
 }
 
 /**
  * "The current document differs from what was loaded": its applied source is the same document as no preset of the open
- * showcase, compared as JSON values (`sameJsonDocument()`: whitespace and key order do not count, so Format + Apply on an
- * untouched preset is not an edit). The Examples menu uses the same rule to say "edited" (`example.ts`, which also counts the
- * draft). A document that equals a preset, including one reached with Undo, has nothing a preset load could not bring back.
+ * showcase, compared as JSON values (`sameJsonDocument()`: whitespace and key order do not count, so a formatted copy of an
+ * untouched preset is not an edit). The Examples menu uses the same rule to say "edited" (`example.ts`, which also counts JSON
+ * text not committed yet). A document that equals a preset, including one reached with Undo, has nothing a preset load could not bring back.
  * Revision numbers are not used: they only grow, so an edit undone back to the preset would still count.
  */
 export function hasCommittedEdits(appliedSourceText: string, presets: readonly { readonly sourceText: string }[]): boolean {

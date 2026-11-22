@@ -10,7 +10,7 @@ test.describe('lab localization (issue #43)', () => {
 
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'zh-TW')
-		await expect(page.getByRole('button', { name: '套用', exact: true }))
+		await expect(page.getByRole('button', { name: '復原上一步', exact: true }))
 			.toBeVisible()
 		expect(await page.evaluate(key => localStorage.getItem(key), LOCALE_STORAGE_KEY))
 			.toBe('zh-TW')
@@ -20,7 +20,7 @@ test.describe('lab localization (issue #43)', () => {
 		await setLocale(page, 'en')
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'en')
-		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
+		await expect(page.getByRole('button', { name: 'Undo last change', exact: true }))
 			.toBeVisible()
 		expect(await page.evaluate(key => localStorage.getItem(key), LOCALE_STORAGE_KEY))
 			.toBe('en')
@@ -38,7 +38,7 @@ test.describe('lab localization (issue #43)', () => {
 
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', 'en')
-		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
+		await expect(page.getByRole('button', { name: 'Undo last change', exact: true }))
 			.toBeVisible()
 		expect(await page.evaluate(key => localStorage.getItem(key), LOCALE_STORAGE_KEY))
 			.toBe('en')

@@ -17,8 +17,12 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
 	'update:modelValue': [value: string]
-	/** Cmd/Ctrl+Enter inside the editor. */
-	'apply': []
+	/** Cmd/Ctrl+Enter inside the editor: commit the text now. */
+	'commit': []
+	/** The editor got keyboard focus (an editing session starts). */
+	'focus': []
+	/** The editor lost keyboard focus, or went away while it had it (the editing session ends). */
+	'blur': []
 }>()
 
 const container = ref<HTMLElement | null>(null)
@@ -32,15 +36,17 @@ watch(() => props.modelValue, (next) => {
 
 const markersRef = computed(() => props.markers)
 const i18n = useLabI18n()
-// The command-palette name of the Apply action, in the Lab language.
-const applyLabel = computed(() => i18n.t('Apply'))
+// The command-palette name of the commit action, in the Lab language.
+const commitLabel = computed(() => i18n.t('Apply the JSON now'))
 
 const { revealRange } = useMonacoJsonEditor(container, {
 	modelValue: modelValueRef,
 	onChange: text => emit('update:modelValue', text),
 	markers: markersRef,
-	onApply: () => emit('apply'),
-	applyLabel,
+	onCommit: () => emit('commit'),
+	commitLabel,
+	onFocus: () => emit('focus'),
+	onBlur: () => emit('blur'),
 })
 
 defineExpose({ revealRange })

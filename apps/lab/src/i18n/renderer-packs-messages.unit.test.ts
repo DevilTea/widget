@@ -34,7 +34,7 @@ describe('renderer packs Examples menu text', () => {
 	})
 
 	it('translates nothing the showcase or its tour does not use (no stale entries)', () => {
-		const used = new Set<string>(['One document, two renderer packs', 'Starting the tutorial will load the Renderer packs teaching example and replace your unapplied changes.'])
+		const used = new Set<string>(['One document, two renderer packs', 'Starting the tutorial will load the Renderer packs teaching example and discard the JSON that can\'t be applied yet.'])
 		for (const preset of packsPresets) {
 			used.add(preset.label)
 			used.add(preset.description)

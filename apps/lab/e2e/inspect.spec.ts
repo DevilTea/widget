@@ -24,13 +24,13 @@ function inspectToggle(page: Page) {
 
 interface LabTestWindow {
 	__WIDGET_LAB_TEST__?: {
-		setDraftSourceText: (text: string) => void
+		editJson: (text: string) => void
 	}
 }
 
-async function setDraftSourceText(page: Page, text: string): Promise<void> {
+async function commitJson(page: Page, text: string): Promise<void> {
 	await page.evaluate((source) => {
-		(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)
+		(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson(source)
 	}, text)
 }
 
@@ -157,8 +157,8 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 
 		// An invalid Document leaves the Preview on the last valid revision: only the Runtime panel knows its widgets.
 		await loadPreset(page, 'invalid-semantic')
-		await expect(page.getByTestId('preview-status'))
-			.toHaveAttribute('data-state', 'stale')
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-preview', 'stale')
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'true')
 		await expect(hint)
@@ -275,9 +275,9 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 	 * below exercise that against the Counter widget (`counter-1`) from the `valid-interactive` preset of
 	 * the hidden Sandbox test fixture (`?showcase=sandbox`).
 	 */
-	test('restores requested Inspect state after Apply replaces the Preview Runtime', async ({ page }) => {
+	test('restores requested Inspect state after a JSON commit replaces the Preview Runtime', async ({ page }) => {
 		await page.goto('/?lab-test&showcase=sandbox')
-		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
 
 		await inspectToggle(page)
 			.click()
@@ -285,9 +285,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.toHaveAttribute('aria-pressed', 'true')
 
 		const draft = defaultSandboxPreset.sourceText.replace('Widget Lab sandbox', 'Widget Lab sandbox INSPECT REPLACED')
-		await setDraftSourceText(page, draft)
-		await page.getByRole('button', { name: 'Apply', exact: true })
-			.click()
+		await commitJson(page, draft)
 
 		await expect(previewFrame(page)
 			.getByText('Widget Lab sandbox INSPECT REPLACED', { exact: true }))

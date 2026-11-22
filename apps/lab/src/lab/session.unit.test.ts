@@ -46,7 +46,7 @@ describe('labSession', () => {
 			.toMatchObject({ origin: 'structure', revision: 1, patch: expect.any(Array) })
 
 		session.setDraftSourceText(secondValidSource)
-		await session.apply()
+		await session.commitJson()
 		expect(session.lastAppliedSourcePatch)
 			.toMatchObject({ origin: 'json', revision: 2, patch: [{ op: 'replace', path: '', value: JSON.parse(secondValidSource) }] })
 	})
@@ -70,6 +70,55 @@ describe('labSession', () => {
 			.toBe(beforePreview)
 	})
 
+	// Phase 3A review: JSON that parses but that Core refuses used to look like a pending commit (and was never retried or
+	// discardable). It is now a block of its own, as visible as a syntax error, until the text changes.
+	describe('jSON text that parses but cannot be applied (jsonBlock)', () => {
+		it('blocks a number outside the JSON domain (1e400) until the text changes', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			const infinite = validSource.replace('"Widget Lab sandbox"', '1e400')
+			session.setDraftSourceText(infinite)
+			expect(session.jsonBlock)
+				.toBeNull()
+			expect(await session.commitJson())
+				.toMatchObject({ status: 'patch-error', failure: { code: 'json-incompatible-value', reason: 'non-finite-number' } })
+			expect(session.jsonBlock)
+				.toMatchObject({ kind: 'commit', sourceText: infinite, failure: { reason: 'non-finite-number', path: ['slots', 'items', 0, 'config', 'text'] } })
+			expect(session.parseError)
+				.toBeNull()
+			expect(session.documentState.revision)
+				.toBe(0)
+
+			session.setDraftSourceText(validSource.replace('"Widget Lab sandbox"', '1'))
+			expect(session.jsonBlock)
+				.toBeNull()
+			// Back to the refused text: it is tried again, and blocked again.
+			session.setDraftSourceText(infinite)
+			expect(session.jsonBlock)
+				.toBeNull()
+			await session.commitJson()
+			expect(session.jsonBlock?.kind)
+				.toBe('commit')
+			session.revert()
+			expect(session.jsonBlock)
+				.toBeNull()
+		})
+
+		it('blocks a document nested deeper than Core accepts, and reports a syntax error as a block too', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			let deep: unknown = 0
+			for (let level = 0; level < 300; level++)
+				deep = [deep]
+			session.setDraftSourceText(JSON.stringify(deep))
+			await session.commitJson()
+			expect(session.jsonBlock)
+				.toMatchObject({ kind: 'commit', failure: { code: 'json-incompatible-value', reason: 'max-depth-exceeded' } })
+
+			session.setDraftSourceText('{ nope')
+			expect(session.jsonBlock)
+				.toMatchObject({ kind: 'syntax', error: { sourceText: '{ nope' } })
+		})
+	})
+
 	it('reports a too-deeply-nested JSON draft as a json-incompatible-value patch failure with operand path and reason', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		let deep: unknown = 0
@@ -77,7 +126,7 @@ describe('labSession', () => {
 			deep = [deep]
 		session.setDraftSourceText(JSON.stringify(deep))
 
-		const outcome = await session.apply()
+		const outcome = await session.commitJson()
 
 		expect(outcome)
 			.toMatchObject({ status: 'patch-error', failure: { code: 'json-incompatible-value', reason: 'max-depth-exceeded' } })
@@ -87,7 +136,7 @@ describe('labSession', () => {
 			.toMatchObject({ kind: 'patch-error', revision: 0, code: 'json-incompatible-value', reason: 'max-depth-exceeded', path: expect.any(Array) })
 	})
 
-	describe('undo last apply', () => {
+	describe('undo last change', () => {
 		const thirdValidSource = '{ "id": "root", "type": "Text", "config": { "text": "third snapshot" } }\n'
 
 		it('restores the previously applied source as a new Document revision and promotes it to Preview', async () => {
@@ -100,11 +149,11 @@ describe('labSession', () => {
 			expect(session.undoDepth)
 				.toBe(0)
 			session.setDraftSourceText(secondValidSource)
-			await session.apply()
+			await session.commitJson()
 			expect(session.undoDepth)
 				.toBe(1)
 
-			const outcome = await session.undoLastApply()
+			const outcome = await session.undo()
 
 			expect(outcome)
 				.toEqual({ status: 'undone', blueprintStatus: 'valid' })
@@ -131,18 +180,18 @@ describe('labSession', () => {
 			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 			for (const text of [secondValidSource, thirdValidSource]) {
 				session.setDraftSourceText(text)
-				await session.apply()
+				await session.commitJson()
 			}
 			expect(session.undoDepth)
 				.toBe(2)
 
-			await session.undoLastApply()
+			await session.undo()
 			expect(session.documentState.sourceText)
 				.toBe(secondValidSource)
-			await session.undoLastApply()
+			await session.undo()
 			expect(session.documentState.sourceText)
 				.toBe(validSource)
-			expect(await session.undoLastApply())
+			expect(await session.undo())
 				.toEqual({ status: 'nothing-to-undo' })
 			expect(session.documentState.revision)
 				.toBe(4)
@@ -151,13 +200,13 @@ describe('labSession', () => {
 		it('can undo an invalid apply while the old Preview was still running, and an applied invalid source back again', async () => {
 			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 			session.setDraftSourceText(invalidSource)
-			await session.apply()
+			await session.commitJson()
 			expect(session.documentState.blueprint.status)
 				.toBe('invalid')
 			expect(session.preview?.revision)
 				.toBe(0)
 
-			expect(await session.undoLastApply())
+			expect(await session.undo())
 				.toEqual({ status: 'undone', blueprintStatus: 'valid' })
 			expect(session.documentState.blueprint.status)
 				.toBe('valid')
@@ -168,10 +217,10 @@ describe('labSession', () => {
 		it('is unavailable while an unapplied draft exists and never discards it', async () => {
 			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 			session.setDraftSourceText(secondValidSource)
-			await session.apply()
+			await session.commitJson()
 			session.setDraftSourceText(thirdValidSource)
 
-			expect(await session.undoLastApply())
+			expect(await session.undo())
 				.toEqual({ status: 'draft-dirty' })
 			expect(session.draftSourceText)
 				.toBe(thirdValidSource)
@@ -179,24 +228,24 @@ describe('labSession', () => {
 				.toBe(1)
 
 			session.revert()
-			expect(await session.undoLastApply())
+			expect(await session.undo())
 				.toMatchObject({ status: 'undone' })
 		})
 
 		it('does not record a structural no-op apply, a failed parse, or the undo itself', async () => {
 			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 			session.setDraftSourceText(JSON.stringify(JSON.parse(validSource)))
-			await session.apply()
+			await session.commitJson()
 			session.setDraftSourceText('{ nope')
-			await session.apply()
+			await session.commitJson()
 			expect(session.undoDepth)
 				.toBe(0)
 
 			session.setDraftSourceText(secondValidSource)
-			await session.apply()
+			await session.commitJson()
 			expect(session.undoDepth)
 				.toBe(1)
-			await session.undoLastApply()
+			await session.undo()
 			expect(session.undoDepth)
 				.toBe(0)
 		})
@@ -207,13 +256,13 @@ describe('labSession', () => {
 			await session.author(replaceConfigScalar(0, nodeId, 'text', 'changed through Structure'))
 			expect(session.undoDepth)
 				.toBe(1)
-			await session.undoLastApply()
+			await session.undo()
 			expect(session.documentState.sourceText)
 				.toBe(validSource)
 
 			for (let index = 0; index < 30; index++) {
 				session.setDraftSourceText(`{ "id": "root", "type": "Text", "config": { "text": "n${index}" } }`)
-				await session.apply()
+				await session.commitJson()
 			}
 			expect(session.undoDepth)
 				.toBe(LAB_UNDO_LIMIT)
@@ -227,11 +276,136 @@ describe('labSession', () => {
 				hooks: { replacePreview: () => gate.promise },
 			})
 			session.setDraftSourceText(secondValidSource)
-			const applying = session.apply()
-			expect(await session.undoLastApply())
+			const applying = session.commitJson()
+			expect(await session.undo())
 				.toEqual({ status: 'skipped-concurrent' })
 			gate.resolve()
 			await applying
+		})
+	})
+
+	describe('coalesced JSON commits (Lab UX phase 3)', () => {
+		const textSource = (text: string): string => `{ "id": "root", "type": "Text", "config": { "text": "${text}" } }`
+
+		it('shares one Undo entry between JSON commits with the same key, so one Undo restores the source before the burst', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			for (const text of ['a', 'ab', 'abc']) {
+				session.setDraftSourceText(textSource(text))
+				expect(await session.commitJson({ coalesceKey: 1 }))
+					.toEqual({ status: 'applied', blueprintStatus: 'valid' })
+			}
+			// Every commit is a real Document revision (the Preview follows each one), but only one Undo entry.
+			expect(session.documentState.revision)
+				.toBe(3)
+			expect(session.undoDepth)
+				.toBe(1)
+
+			await session.undo()
+			expect(session.documentState.sourceText)
+				.toBe(validSource)
+			expect(session.undoDepth)
+				.toBe(0)
+		})
+
+		it('starts a new entry for a new key, and after any other commit or an Undo even with the same key', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			session.setDraftSourceText(textSource('first session'))
+			await session.commitJson({ coalesceKey: 1 })
+			session.setDraftSourceText(textSource('second session'))
+			await session.commitJson({ coalesceKey: 2 })
+			expect(session.undoDepth)
+				.toBe(2)
+
+			// A commit without a key (a preset, Format) never coalesces, and the next keyed commit pushes again.
+			session.setDraftSourceText(textSource('no key'))
+			await session.commitJson()
+			session.setDraftSourceText(textSource('key 2 again'))
+			await session.commitJson({ coalesceKey: 2 })
+			expect(session.undoDepth)
+				.toBe(4)
+
+			// After Undo the same key no longer owns the top entry.
+			await session.undo()
+			session.setDraftSourceText(textSource('after undo'))
+			await session.commitJson({ coalesceKey: 2 })
+			expect(session.undoDepth)
+				.toBe(4)
+			await session.undo()
+			expect(session.documentState.sourceText)
+				.toBe(textSource('no key'))
+		})
+
+		it('a Structure commit in between ends the burst', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			const nodeId = inspectBlueprint(session.documentState.blueprint).nodes.find(node => node.resolved && node.node.id === 'title')!.nodeId
+			await session.author(replaceConfigScalar(0, nodeId, 'text', 'through Structure'))
+			const afterStructure = session.documentState.sourceText
+			session.setDraftSourceText(afterStructure.replace('through Structure', 'then JSON'))
+			await session.commitJson({ coalesceKey: 7 })
+			expect(session.undoDepth)
+				.toBe(2)
+			await session.undo()
+			expect(session.documentState.sourceText)
+				.toBe(afterStructure)
+		})
+
+		it('drops the entry when the burst lands back on the source before it, and ignores a structural no-op', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			session.setDraftSourceText(textSource('typed'))
+			await session.commitJson({ coalesceKey: 1 })
+			// The same document in another layout is a structural no-op: no revision, no entry change.
+			session.setDraftSourceText(JSON.stringify(JSON.parse(textSource('typed')), null, 4))
+			await session.commitJson({ coalesceKey: 1 })
+			expect(session.undoDepth)
+				.toBe(1)
+
+			session.setDraftSourceText(JSON.stringify(JSON.parse(validSource)))
+			await session.commitJson({ coalesceKey: 1 })
+			expect(session.undoDepth)
+				.toBe(0)
+			expect(session.documentState.revision)
+				.toBe(2)
+		})
+
+		it('a burst that drops its entry at the Undo limit gives back the history its push evicted', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			for (let index = 0; index < LAB_UNDO_LIMIT; index++) {
+				session.setDraftSourceText(textSource(`n${index}`))
+				await session.commitJson()
+			}
+			expect(session.undoDepth)
+				.toBe(LAB_UNDO_LIMIT)
+			const start = session.documentState.sourceText
+			// The burst's first commit pushes one more entry and evicts the oldest (the initial source)...
+			session.setDraftSourceText(textSource('typed'))
+			await session.commitJson({ coalesceKey: 9 })
+			expect(session.undoDepth)
+				.toBe(LAB_UNDO_LIMIT)
+			// ...and landing back on where it started drops that entry and restores the evicted one.
+			session.setDraftSourceText(start)
+			await session.commitJson({ coalesceKey: 9 })
+			expect(session.undoDepth)
+				.toBe(LAB_UNDO_LIMIT)
+			for (let index = 0; index < LAB_UNDO_LIMIT; index++)
+				await session.undo()
+			expect(session.documentState.sourceText)
+				.toBe(validSource)
+		})
+
+		it('coalesces invalid commits too, and keeps the last valid Preview through them', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			session.setDraftSourceText('{ "id": "root", "type": "NoSuchWidget" }')
+			expect(await session.commitJson({ coalesceKey: 1 }))
+				.toEqual({ status: 'applied', blueprintStatus: 'invalid' })
+			session.setDraftSourceText('{ "id": "root", "type": "NoSuchWidgetEither" }')
+			await session.commitJson({ coalesceKey: 1 })
+			expect(session.preview?.revision)
+				.toBe(0)
+			expect(session.undoDepth)
+				.toBe(1)
+			await session.undo()
+			expect(session.documentState.sourceText)
+				.toBe(validSource)
 		})
 	})
 
@@ -239,7 +413,7 @@ describe('labSession', () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 
 		for (let index = 0; index < LAB_DOCUMENT_TRACE_LIMIT + 3; index++)
-			await session.apply()
+			await session.commitJson()
 		expect(session.documentTrace)
 			.toHaveLength(LAB_DOCUMENT_TRACE_LIMIT)
 		expect(session.documentTrace.every(event => event.kind === 'commit'))
@@ -374,30 +548,37 @@ describe('labSession', () => {
 			.toBe(false)
 	})
 
-	it('setDraftSourceText() updates isDirty and clears a stale parse error', async () => {
+	// Lab UX phase 3: the syntax state is live. It used to be "the parse error of the last Apply", cleared by the next edit.
+	it('setDraftSourceText() updates isDirty and the syntax error of the current text, without committing', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 
 		session.setDraftSourceText('{ this is not JSON')
-		const outcome = await session.apply()
-		expect(outcome.status)
-			.toBe('parse-error')
-		expect(session.parseError).not.toBeNull()
+		expect(session.parseError?.sourceText)
+			.toBe('{ this is not JSON')
+		expect(session.isDirty)
+			.toBe(true)
 
 		session.setDraftSourceText('{ still not JSON')
+		expect(session.parseError?.sourceText)
+			.toBe('{ still not JSON')
+
+		session.setDraftSourceText(secondValidSource)
 		expect(session.parseError)
 			.toBeNull()
 		expect(session.isDirty)
 			.toBe(true)
+		expect(session.documentState.revision)
+			.toBe(0)
 	})
 
-	it('apply() on a JSON syntax failure leaves the active snapshot untouched and sets a Lab-only SourceParseError', async () => {
+	it('commitJson() on a JSON syntax failure leaves the active snapshot untouched and sets a Lab-only SourceParseError', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		const activeBefore = session.documentState
 		const previewBefore = session.preview
 		const invalidDraft = 'not json at all'
 
 		session.setDraftSourceText(invalidDraft)
-		const outcome = await session.apply()
+		const outcome = await session.commitJson()
 
 		expect(outcome.status)
 			.toBe('parse-error')
@@ -418,12 +599,12 @@ describe('labSession', () => {
 			.toBe(previewBefore)
 	})
 
-	it('apply() never injects a JSON syntax failure into core Blueprint diagnostics', async () => {
+	it('commitJson() never injects a JSON syntax failure into core Blueprint diagnostics', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: invalidSource })
 		const diagnosticsBefore = session.documentState.blueprint.diagnostics
 
 		session.setDraftSourceText('{ broken')
-		await session.apply()
+		await session.commitJson()
 
 		// Same frozen array by identity: the syntax failure never touched the active Blueprint's
 		// own (already non-empty) diagnostics.
@@ -441,7 +622,7 @@ describe('labSession', () => {
 		const previewBefore = session.preview!
 
 		session.setDraftSourceText(invalidSource)
-		const outcome = await session.apply()
+		const outcome = await session.commitJson()
 
 		expect(outcome)
 			.toEqual({ status: 'applied', blueprintStatus: 'invalid' })
@@ -512,7 +693,7 @@ describe('labSession', () => {
 		events.length = 0 // Ignore revision-0 compile from construction.
 
 		session.setDraftSourceText(equivalentSource)
-		const outcome = await session.apply()
+		const outcome = await session.commitJson()
 
 		expect(outcome)
 			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
@@ -530,7 +711,7 @@ describe('labSession', () => {
 			.toBe(false)
 	})
 
-	it('apply() captures the draft at command start; edits made while it is in flight are not applied', async () => {
+	it('commitJson() captures the draft at command start; edits made while it is in flight are not applied', async () => {
 		const detach = createDeferred<void>()
 		const session = new LabSession({
 			system: sandboxSystem,
@@ -539,7 +720,7 @@ describe('labSession', () => {
 		})
 
 		session.setDraftSourceText(secondValidSource)
-		const applyPromise = session.apply()
+		const applyPromise = session.commitJson()
 		expect(session.isApplying)
 			.toBe(true)
 
@@ -559,7 +740,7 @@ describe('labSession', () => {
 			.toBe(true)
 	})
 
-	it('disables concurrent Apply: a second apply() call while one is in flight is a no-op', async () => {
+	it('disables concurrent Apply: a second commitJson() call while one is in flight is a no-op', async () => {
 		const detach = createDeferred<void>()
 		const session = new LabSession({
 			system: sandboxSystem,
@@ -568,8 +749,8 @@ describe('labSession', () => {
 		})
 
 		session.setDraftSourceText(secondValidSource)
-		const first = session.apply()
-		const second = await session.apply()
+		const first = session.commitJson()
+		const second = await session.commitJson()
 
 		expect(second)
 			.toEqual({ status: 'skipped-concurrent' })
@@ -600,7 +781,7 @@ describe('labSession', () => {
 		events.length = 0
 
 		session.setDraftSourceText(secondValidSource)
-		const applyPromise = session.apply()
+		const applyPromise = session.commitJson()
 
 		// `WidgetDocument.applyPatch()` is synchronous: compilation/commit finishes before remote replacement is awaited.
 		expect(events)
@@ -628,7 +809,7 @@ describe('labSession', () => {
 		})
 
 		session.setDraftSourceText(invalidSource.replace('does-not-exist', 'still-does-not-exist'))
-		const outcome = await session.apply()
+		const outcome = await session.commitJson()
 
 		expect(outcome)
 			.toEqual({ status: 'applied', blueprintStatus: 'invalid' })
@@ -668,7 +849,6 @@ describe('labSession', () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 
 		session.setDraftSourceText('garbled')
-		await session.apply()
 		expect(session.parseError).not.toBeNull()
 		const activeBefore = session.documentState
 
@@ -769,7 +949,7 @@ describe('labSession', () => {
 		expect(calls)
 			.toBe(1)
 
-		await session.apply()
+		await session.commitJson()
 		expect(calls)
 			.toBe(3) // apply-start emit + apply-end emit
 
@@ -808,7 +988,7 @@ describe('labSession', () => {
 			})
 			failNext = true
 			session.setDraftSourceText(secondValidSource)
-			await expect(session.apply())
+			await expect(session.commitJson())
 				.rejects
 				.toThrow('did not become ready')
 			// The Document committed; the Preview is still the older one.

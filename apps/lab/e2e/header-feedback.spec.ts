@@ -1,32 +1,28 @@
 import type { Page } from '@playwright/test'
-import { answerDraftGuard, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, openStatusDetails, previewFrame, selectShowcase, setLocale, test } from './fixtures'
+import { answerDraftGuard, editJson, expect, expectDocumentStatus, expectLabStatus, expectPreviewStatus, expectShowcase, labStatus, loadPreset, openAuthorJson, openStatusDetails, previewFrame, selectShowcase, setLocale, test, waitForLabTestSeam } from './fixtures'
 
 /**
- * Issue #230 PR 3a (audit U01-U07, U24): the grouped header, unapplied-draft protection, Undo last change,
- * Cmd/Ctrl+Enter, the plain-language status chips, the Problems list with jump + squiggles, and the
- * stale-preview notice. The draft is dirtied through the `?lab-test` seam (`src/lab-test-seam.ts`) except where
- * the point is the real Monaco editor.
+ * Issue #230 PR 3a (audit U01-U07, U24), rewritten for Lab UX phase 3 (one commit model): the grouped header, the protection of
+ * JSON text that does not parse, Undo last change, Cmd/Ctrl+Enter in the editor, the one status chip, the Problems list with
+ * jump + squiggles, and the stale-preview notice. JSON is edited through the `?lab-test` seam (`src/lab-test-seam.ts`, which
+ * commits text that parses as the editor's blur does) except where the point is the real Monaco editor;
+ * `e2e/json-commit.spec.ts` covers the commit timing itself.
  */
-
-interface LabTestWindow {
-	__WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void }
-}
 
 async function openLab(page: Page, query: string): Promise<void> {
 	await page.goto(`/?lab-test&${query}`)
-	await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+	await waitForLabTestSeam(page)
 	// Author opens on Structure; most of this file is about the JSON view, its Problems list and Monaco (imported lazily:
 	// interact with it only once it is up).
 	await openAuthorJson(page)
 }
 
-async function setDraft(page: Page, text: string): Promise<void> {
-	await page.evaluate((source) => {
-		(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)
-	}, text)
-}
-
 const textDocument = (text: string): string => JSON.stringify({ id: 'root', type: 'Text', config: { text } }, null, 2)
+/** The same document with its closing brace cut off: it does not parse, so it is never committed (the only "draft" left). */
+function brokenDocument(text: string): string {
+	return textDocument(text)
+		.slice(0, -1)
+}
 
 /**
  * Edits the real Monaco editor: double-clicks the word inside the root widget's `"root"` id string (a short
@@ -54,9 +50,9 @@ test.describe('header layout (U01)', () => {
 			await openLab(page, 'showcase=survey')
 
 			const header = page.locator('header')
-			await expect(page.getByTestId('document-status'))
+			await expect(labStatus(page))
 				.toBeVisible()
-			const boxes = await Promise.all(['examples-menu', 'document-status', 'preview-status', 'apply-button', 'revert-button', 'undo-button', 'format-button', 'overflow-menu']
+			const boxes = await Promise.all(['examples-menu', 'lab-status', 'status-details', 'undo-button', 'overflow-menu']
 				.map(async id => ({ id, box: (await page.getByTestId(id)
 					.boundingBox())! })))
 			const headerBox = (await header.boundingBox())!
@@ -157,9 +153,7 @@ test.describe('menu focus handling', () => {
 			.toHaveClass(/focused/)
 		await page.keyboard.insertText('typed while the menu was open')
 
-		// The typing landed in the editor (the draft is dirty) and focus did not jump back to the menu button.
-		await expect(page.getByTestId('apply-button'))
-			.toHaveAttribute('aria-disabled', 'false')
+		// The typing landed in the editor and focus did not jump back to the menu button.
 		await expect(trigger)
 			.not
 			.toBeFocused()
@@ -244,14 +238,13 @@ test.describe('Examples menu and the showcase URL (U01, U03)', () => {
 			.toHaveAttribute('aria-checked', 'true')
 		await page.keyboard.press('Escape')
 
-		// Any applied change makes it "edited"; an unapplied edit does too.
-		await setDraft(page, '{ "id": "x", "type": "Survey" }')
+		// Any committed change makes it "edited"; JSON text that does not parse does too.
+		await editJson(page, '{ "id": "x", "type": ')
 		await expect(page.getByTestId('examples-preset'))
 			.toContainText('edited')
 		await expect(page.getByTestId('examples-preset'))
 			.toHaveAttribute('data-example-kind', 'edited')
-		await page.getByRole('button', { name: 'Apply', exact: true })
-			.click()
+		await editJson(page, '{ "id": "x", "type": "Survey" }')
 		await expect(page.getByTestId('examples-preset'))
 			.toHaveAttribute('data-example-kind', 'edited')
 	})
@@ -277,12 +270,15 @@ test.describe('Examples menu and the showcase URL (U01, U03)', () => {
 	})
 })
 
-test.describe('unapplied draft protection (U03)', () => {
-	test('loading a preset over an unapplied draft asks first: Keep editing preserves it, Discard loads the preset', async ({ page }) => {
+// Lab UX phase 3: JSON text that parses is committed, so the only thing a replacement can lose without Undo is JSON text that
+// does not parse. It used to be any unapplied draft.
+test.describe('protection of JSON text that does not parse (U03)', () => {
+	test('loading a preset over JSON with a syntax error asks first: Keep editing preserves it, Discard loads the preset', async ({ page }) => {
 		await openLab(page, 'showcase=sandbox')
-		await setDraft(page, textDocument('my unapplied edit'))
+		await editJson(page, brokenDocument('my unfinished edit'))
 		await expect(page.locator('.view-lines'))
-			.toContainText('my unapplied edit')
+			.toContainText('my unfinished edit')
+		await expectLabStatus(page, 'json-not-applied')
 
 		await page.getByTestId('examples-menu')
 			.click()
@@ -292,14 +288,14 @@ test.describe('unapplied draft protection (U03)', () => {
 		await expect(dialog)
 			.toBeVisible()
 		await expect(dialog)
-			.toContainText('Loading “Invalid — semantic” will discard them.')
+			.toContainText('Loading “Invalid — semantic” will discard it.')
 		// The safe choice has the initial focus.
 		await expect(page.getByTestId('draft-guard-keep'))
 			.toBeFocused()
 
 		await answerDraftGuard(page, 'keep')
 		await expect(page.locator('.view-lines'))
-			.toContainText('my unapplied edit')
+			.toContainText('my unfinished edit')
 		await expectDocumentStatus(page, { valid: true })
 		await expect(page.getByTestId('examples-menu'))
 			.toBeFocused()
@@ -315,20 +311,37 @@ test.describe('unapplied draft protection (U03)', () => {
 		await expect(dialog)
 			.toHaveCount(0)
 		await expect(page.locator('.view-lines'))
-			.toContainText('my unapplied edit')
+			.toContainText('my unfinished edit')
 
 		await loadPreset(page, 'invalid-semantic', { discardDraft: true })
 		await expectDocumentStatus(page, { problems: 1 })
 		await expect(page.locator('.view-lines'))
 			.not
-			.toContainText('my unapplied edit')
+			.toContainText('my unfinished edit')
 		await expect(page.getByTestId('examples-menu'))
 			.toHaveAttribute('data-preset-id', 'invalid-semantic')
 	})
 
-	test('switching showcase over an unapplied draft asks first, and a clean draft switches without asking', async ({ page }) => {
+	test('JSON that parses is committed, so a preset load asks nothing and Undo brings the edit back', async ({ page }) => {
 		await openLab(page, 'showcase=sandbox')
-		await setDraft(page, textDocument('my unapplied edit'))
+		await editJson(page, textDocument('my committed edit'))
+		await expect(previewFrame(page)
+			.getByText('my committed edit', { exact: true }))
+			.toBeVisible()
+		await loadPreset(page, 'invalid-semantic')
+		await expect(page.getByRole('alertdialog'))
+			.toHaveCount(0)
+		await expect(page.getByTestId('replaced-document-notice'))
+			.toBeVisible()
+		await page.getByTestId('undo-button')
+			.click()
+		await expect(page.locator('.view-lines'))
+			.toContainText('my committed edit')
+	})
+
+	test('switching showcase over JSON with a syntax error asks first, and switches without asking once it is gone', async ({ page }) => {
+		await openLab(page, 'showcase=sandbox')
+		await editJson(page, brokenDocument('my unfinished edit'))
 
 		await selectShowcase(page, 'survey')
 		await expect(page.getByRole('alertdialog'))
@@ -336,7 +349,7 @@ test.describe('unapplied draft protection (U03)', () => {
 		await answerDraftGuard(page, 'keep')
 		await expectShowcase(page, 'sandbox')
 		await expect(page.locator('.view-lines'))
-			.toContainText('my unapplied edit')
+			.toContainText('my unfinished edit')
 
 		await selectShowcase(page, 'survey', { discardDraft: true })
 		await expectShowcase(page, 'survey')
@@ -344,7 +357,7 @@ test.describe('unapplied draft protection (U03)', () => {
 			.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 			.toBeVisible()
 
-		// No draft now: switching back asks nothing.
+		// Nothing to lose now: switching back asks nothing.
 		await page.getByTestId('examples-menu')
 			.click()
 		await page.getByRole('menuitemcheckbox', { name: 'Interactive Survey' })
@@ -352,62 +365,72 @@ test.describe('unapplied draft protection (U03)', () => {
 		await expect(page.getByRole('alertdialog'))
 			.toHaveCount(0)
 	})
+
+	test('"Discard JSON changes" appears only while the JSON does not parse, and brings the document back', async ({ page }) => {
+		await openLab(page, 'showcase=sandbox')
+		const discard = page.getByTestId('discard-json-button')
+		await expect(discard)
+			.toHaveCount(0)
+		await editJson(page, brokenDocument('half typed'))
+		await expect(discard)
+			.toBeVisible()
+		await expect(discard)
+			.toHaveText('Discard JSON changes')
+		await discard.click()
+		await expect(discard)
+			.toHaveCount(0)
+		await expect(page.locator('.view-lines'))
+			.toContainText('Widget Lab sandbox')
+		await expectLabStatus(page, 'up-to-date')
+	})
 })
 
 test.describe('Undo last change (U04)', () => {
-	test('restores the previously applied source as a new revision and explains its disabled states', async ({ page }) => {
+	test('restores the previously committed source as a new revision and explains its disabled states', async ({ page }) => {
 		await openLab(page, 'showcase=sandbox')
 		const undo = page.getByTestId('undo-button')
-		const revert = page.getByTestId('revert-button')
-		const apply = page.getByTestId('apply-button')
 
-		// The visible text is "Undo"; the accessible name says what it does, and does not collide with Apply's name.
+		// The visible text is "Undo"; the accessible name says what it does.
 		await expect(page.getByRole('button', { name: 'Undo last change', exact: true }))
 			.toBeVisible()
-		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
-			.toHaveCount(1)
 		await expect(undo)
 			.toHaveText('Undo')
 
-		// Nothing applied yet: disabled, and the tooltip says why (the button stays focusable).
+		// Nothing committed yet: disabled, and the tooltip says why (the button stays focusable).
 		await expect(undo)
 			.toHaveAttribute('aria-disabled', 'true')
 		await undo.focus()
 		await expect(page.getByRole('tooltip', { name: 'Nothing to undo yet' }))
 			.toBeAttached()
-		await expect(revert)
-			.toHaveAttribute('aria-disabled', 'true')
 
-		await setDraft(page, textDocument('second version'))
-		await expect(revert)
-			.toHaveAttribute('aria-disabled', 'false')
-		await apply.click()
+		await editJson(page, textDocument('second version'))
 		await expect(previewFrame(page)
 			.getByText('second version', { exact: true }))
 			.toBeVisible()
-		// Revert only discards the unapplied draft: nothing to revert after Apply, Undo is available.
-		await expect(revert)
-			.toHaveAttribute('aria-disabled', 'true')
 		await expect(undo)
 			.toHaveAttribute('aria-disabled', 'false')
 
-		// An unapplied draft makes Undo unavailable (it would silently discard typing) and says so.
-		await setDraft(page, textDocument('typing in progress'))
+		// JSON that does not parse makes Undo unavailable (it would replace text that was never committed) and says so.
+		await editJson(page, brokenDocument('typing in progress'))
 		await expect(undo)
 			.toHaveAttribute('aria-disabled', 'true')
 		// The tooltip opens for keyboard focus only (Reka's `ignoreNonKeyboardFocus`), and a script `focus()` counts as
-		// keyboard focus only when the user's last input was a key (Chromium's :focus-visible heuristic), but the last
-		// input here was the mouse click on Apply: press a key first. (Nothing waits for other tooltips to go away: a
-		// closed tooltip unmounts at once, see `nuxt-ui.ts`, and `e2e/tooltips.spec.ts` pins real Tab navigation.)
+		// keyboard focus only when the user's last input was a key (Chromium's :focus-visible heuristic): press a key first.
+		// (Nothing waits for other tooltips to go away: a closed tooltip unmounts at once, see `nuxt-ui.ts`, and
+		// `e2e/tooltips.spec.ts` pins real Tab navigation.) Undo still has focus from above: move it away first, so focusing
+		// Undo again is a new focus.
+		await page.getByTestId('examples-menu')
+			.focus()
 		await page.keyboard.press('Escape')
 		await undo.focus()
-		await expect(page.getByRole('tooltip', { name: 'Apply or revert your unapplied edits before undoing' }))
+		await expect(page.getByRole('tooltip', { name: 'Fix or discard the JSON that can\'t be applied before undoing' }))
 			.toBeAttached()
 		// Activating it anyway does nothing (the button stays focusable, so the click is forced through).
 		await undo.click({ force: true })
 		await expect(page.locator('.view-lines'))
 			.toContainText('typing in progress')
-		await revert.click()
+		await page.getByTestId('discard-json-button')
+			.click()
 
 		await undo.click()
 		await expect(previewFrame(page)
@@ -428,7 +451,7 @@ test.describe('Undo last change (U04)', () => {
 			.toHaveText('Linked / Synced')
 	})
 
-	test('undoes a bad apply: the previous working document and a valid status come back', async ({ page }) => {
+	test('undoes a bad change: the previous working document and a valid status come back', async ({ page }) => {
 		await openLab(page, 'showcase=sandbox')
 		await loadPreset(page, 'invalid-semantic')
 		await expectDocumentStatus(page, { problems: 1 })
@@ -443,16 +466,16 @@ test.describe('Undo last change (U04)', () => {
 	})
 })
 
-test.describe('Apply shortcut (U05)', () => {
-	test('Cmd/Ctrl+Enter inside the Monaco editor applies instead of inserting a line', async ({ page }) => {
+// Lab UX phase 3: Cmd/Ctrl+Enter was Apply. Inside the JSON editor it now commits the text at once (instead of waiting for
+// the typing pause); the window-wide shortcut is gone, since nothing else is waiting to be applied.
+test.describe('Cmd/Ctrl+Enter in the JSON editor (U05)', () => {
+	test('commits the text at once instead of inserting a line', async ({ page }) => {
 		await openLab(page, 'showcase=sandbox')
 		const lines = page.locator('.view-lines .view-line')
 		await expect(lines.first())
 			.toBeVisible()
 		const lineCount = await lines.count()
 		await renameRootIdInMonaco(page, 'renamed')
-		await expect(page.getByTestId('apply-button'))
-			.toHaveAttribute('aria-disabled', 'false')
 		await expect(page.locator('.view-lines'))
 			.toContainText('"id": "renamed"')
 
@@ -460,8 +483,6 @@ test.describe('Apply shortcut (U05)', () => {
 		// host OS is (`ControlOrMeta` would press Meta on a Mac host).
 		await page.keyboard.press('Control+Enter')
 
-		await expect(page.getByTestId('apply-button'))
-			.toHaveAttribute('aria-disabled', 'true')
 		await expectDocumentStatus(page, { valid: true })
 		await page.getByTestId('status-details')
 			.click()
@@ -474,43 +495,24 @@ test.describe('Apply shortcut (U05)', () => {
 			.toHaveCount(lineCount)
 	})
 
-	test('Cmd/Ctrl+Enter applies from a focused Dockview tab, where Enter was already claimed by the tab', async ({ page }) => {
+	test('does nothing outside the editor: a focused Dockview tab keeps Enter, and nothing is committed', async ({ page }) => {
 		await openLab(page, 'showcase=sandbox')
-		await setDraft(page, textDocument('applied from a tab'))
 		await page.getByRole('tab', { name: 'Runtime' })
 			.focus()
-
 		await page.keyboard.press('ControlOrMeta+Enter')
-
-		await expect(previewFrame(page)
-			.getByText('applied from a tab', { exact: true }))
-			.toBeVisible()
-	})
-
-	test('the Apply tooltip shows the shortcut', async ({ page }) => {
-		await openLab(page, 'showcase=sandbox')
-		await setDraft(page, textDocument('tooltip check'))
-		await page.getByTestId('apply-button')
-			.hover()
-		await expect(page.getByRole('tooltip', { name: /Apply your edits to the document and preview/ }))
-			.toBeAttached()
-		// The shortcut is shown as two key caps (Cmd/Ctrl, Enter), not just described in words.
-		await expect(page.locator('[data-slot="kbds"] kbd'))
-			.toHaveCount(2)
-		await expect(page.locator('[data-slot="kbds"]'))
-			.toContainText('↵')
+		await openStatusDetails(page)
+		await expect(page.getByTestId('status-document-revision'))
+			.toHaveText('r0')
 	})
 })
 
-test.describe('status chips and details (U02)', () => {
-	test('two plain-language chips; revisions and linkage live in the details popover', async ({ page }) => {
+test.describe('the status chip and details (U02)', () => {
+	test('one plain-language chip; revisions and linkage live in the details popover', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
 		await expect(page.locator('header [data-testid$="-status"]'))
-			.toHaveCount(2)
-		await expect(page.getByTestId('document-status'))
-			.toHaveText('Valid')
-		await expect(page.getByTestId('preview-status'))
-			.toHaveText('Preview up to date')
+			.toHaveCount(1)
+		await expect(labStatus(page))
+			.toHaveText('Up to date')
 		await expect(page.locator('header'))
 			.not
 			.toContainText('Blueprint')
@@ -519,10 +521,8 @@ test.describe('status chips and details (U02)', () => {
 			.toContainText('Linked')
 
 		await loadPreset(page, 'survey-ai-draft')
-		await expect(page.getByTestId('document-status'))
-			.toHaveText('5 problems')
-		await expect(page.getByTestId('preview-status'))
-			.toHaveText('Preview shows the last valid version')
+		await expect(labStatus(page))
+			.toHaveText('5 problems · Preview shows the last working version')
 
 		await page.getByTestId('status-details')
 			.click()
@@ -537,72 +537,53 @@ test.describe('status chips and details (U02)', () => {
 			.toHaveText('Diverged / Unlinked')
 	})
 
-	test('an unapplied draft is named, and the Preview chip stops calling itself up to date until Apply or Revert', async ({ page }) => {
+	test('says "JSON syntax error — not applied" while the JSON does not parse, and the Preview keeps the Document', async ({ page }) => {
 		await openLab(page, 'showcase=sandbox')
-		const draftChip = page.getByTestId('draft-status')
-		const previewChip = page.getByTestId('preview-status')
-		await expect(draftChip)
-			.toHaveCount(0)
-		await expect(previewChip)
-			.toHaveText('Preview up to date')
-
-		await setDraft(page, textDocument('typing in progress'))
-		await expect(draftChip)
-			.toHaveText('Unapplied changes')
-		// Not a live region: the chips announce nothing in this phase (phase 3 replaces them with one status chip).
-		await expect(draftChip)
-			.not
-			.toHaveAttribute('role')
-		await expect(previewChip)
-			.toHaveText('Preview shows the last applied version')
-		// The Preview still shows the committed Document: the state is a fact about it and does not change while typing.
-		await expect(previewChip)
-			.toHaveAttribute('data-state', 'current')
-		await expect(previewChip)
-			.toHaveAttribute('data-behind-draft', 'true')
-
-		await page.getByTestId('revert-button')
+		await editJson(page, brokenDocument('typing in progress'))
+		await expect(labStatus(page))
+			.toHaveText('JSON syntax error — not applied')
+		await expectPreviewStatus(page, 'current')
+		await expectDocumentStatus(page, { valid: true })
+		await page.getByTestId('discard-json-button')
 			.click()
-		await expect(draftChip)
-			.toHaveCount(0)
-		await expect(previewChip)
-			.toHaveText('Preview up to date')
-
-		await setDraft(page, textDocument('applied now'))
-		await expect(draftChip)
-			.toBeVisible()
-		await page.getByTestId('apply-button')
-			.click()
-		await expect(previewFrame(page)
-			.getByText('applied now', { exact: true }))
-			.toBeVisible()
-		await expect(draftChip)
-			.toHaveCount(0)
-		await expect(previewChip)
-			.toHaveText('Preview up to date')
-		await expect(previewChip)
-			.toHaveAttribute('data-behind-draft', 'false')
+		await expectLabStatus(page, 'up-to-date')
 	})
 
-	// The widest header: zh-TW with the problems button, the draft chip and the stale Preview label all shown at once.
+	test('says "Preview restarted" for a moment after a commit replaced the Runtime, then "Up to date"', async ({ page }) => {
+		await openLab(page, 'showcase=sandbox')
+		await editJson(page, textDocument('restart me'))
+		await expect(labStatus(page))
+			.toHaveText('Preview restarted')
+		await expect(previewFrame(page)
+			.getByText('restart me', { exact: true }))
+			.toBeVisible()
+		// `PREVIEW_RESTARTED_MS` (2.5 s) later it settles.
+		await expect(labStatus(page))
+			.toHaveText('Up to date', { timeout: 6000 })
+		// The polite announcement repeats the settled states that need saying, not "Up to date".
+		await expect(page.getByTestId('lab-status-announcement'))
+			.toHaveAttribute('role', 'status')
+	})
+
+	// The widest header: zh-TW with the problems label and the Discard button shown at once.
 	for (const [lang, withProblems] of [['en', false], ['zh-TW', false], ['zh-TW', true]] as const) {
-		test(`with the draft chip shown the header stays on one row at 1280x800 (${lang}${withProblems ? ', problems and a stale preview too' : ''})`, async ({ page }) => {
+		test(`with Discard JSON changes shown the header stays on one row at 1280x800 (${lang}${withProblems ? ', problems too' : ''})`, async ({ page }) => {
 			await page.setViewportSize({ width: 1280, height: 800 })
 			await openLab(page, `showcase=survey&lang=${lang}`)
 			if (withProblems) {
 				await loadPreset(page, 'survey-ai-draft')
 				await expectPreviewStatus(page, 'stale')
-				await expect(page.getByTestId('document-status'))
+				await expect(labStatus(page))
 					.toHaveRole('button')
 			}
-			await setDraft(page, '{ "id": "x", "type": "Survey" }')
-			await expect(page.getByTestId('draft-status'))
+			await editJson(page, '{ "id": "x", "type": ')
+			await expect(page.getByTestId('discard-json-button'))
 				.toBeVisible()
 			const header = page.locator('header')
 			const headerBox = (await header.boundingBox())!
 			expect(headerBox.height, 'one row')
 				.toBeLessThan(56)
-			for (const id of ['examples-menu', 'document-status', 'draft-status', 'preview-status', 'apply-button', 'overflow-menu']) {
+			for (const id of ['examples-menu', 'lab-status', 'discard-json-button', 'undo-button', 'overflow-menu']) {
 				const box = (await page.getByTestId(id)
 					.boundingBox())!
 				expect(box.y + box.height, id)
@@ -623,7 +604,7 @@ test.describe('status chips and details (U02)', () => {
 		await expect(page.locator('header')
 			.getByRole('button', { name: /show them$/ }))
 			.toHaveCount(0)
-		await expect(page.getByTestId('document-status'))
+		await expect(labStatus(page))
 			.not
 			.toHaveAttribute('role')
 
@@ -633,9 +614,9 @@ test.describe('status chips and details (U02)', () => {
 			.click()
 		await page.getByRole('tab', { name: 'Runtime' })
 			.click()
-		const chip = page.getByRole('button', { name: '5 problems: show them', exact: true })
+		const chip = page.getByRole('button', { name: '5 problems · Preview shows the last working version: show them', exact: true })
 		await expect(chip)
-			.toHaveText('5 problems')
+			.toHaveText('5 problems · Preview shows the last working version')
 		await chip.click()
 		await expect(page.getByRole('tab', { name: 'Author' }))
 			.toHaveAttribute('aria-selected', 'true')
@@ -667,7 +648,7 @@ test.describe('status chips and details (U02)', () => {
 })
 
 test.describe('Problems list, jump and squiggles (U06)', () => {
-	test('lists the last Apply\'s diagnostics under the editor, with code and message verbatim', async ({ page }) => {
+	test('lists the Document\'s diagnostics under the editor, with code and message verbatim', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
 		await loadPreset(page, 'survey-ai-draft')
 
@@ -763,10 +744,8 @@ test.describe('Problems list, jump and squiggles (U06)', () => {
 		await expect(page.locator('.squiggly-error'))
 			.toHaveCount(0)
 
-		// A JSON syntax error: short text so the failing token is on screen.
-		await setDraft(page, '{ "id": "x", nope }')
-		await page.getByTestId('apply-button')
-			.click()
+		// A JSON syntax error: short text so the failing token is on screen. The squiggle and the row are live: no commit is tried.
+		await editJson(page, '{ "id": "x", nope }')
 		await expect(editor)
 			.toHaveAttribute('data-marker-count', '1')
 		await expect(page.locator('.squiggly-error'))
@@ -779,12 +758,14 @@ test.describe('Problems list, jump and squiggles (U06)', () => {
 			.toContainText('SyntaxError:')
 		await expect(row)
 			.toHaveAttribute('data-problem-code', 'syntax-error')
-		await expectDocumentStatus(page, { problems: 1 })
+		await expectLabStatus(page, 'json-not-applied')
 		// The committed Document and the Preview are untouched by a syntax error.
+		await expectDocumentStatus(page, { valid: true })
 		await expectPreviewStatus(page, 'current')
 
-		// Editing clears it (the Lab-only error describes text that no longer exists).
-		await setDraft(page, '{ "id": "x", "type": "Text" }')
+		// Discarding the text clears it (the Lab-only error describes text that no longer exists): the default survey is back.
+		await page.getByTestId('discard-json-button')
+			.click()
 		await expect(page.getByTestId('author-problems'))
 			.toHaveAttribute('data-problem-count', '0')
 		await expect(page.locator('.squiggly-error'))
@@ -863,14 +844,12 @@ test.describe('stale-preview notice (U07)', () => {
 test.describe('plain-language wording follows the locale', () => {
 	test('zh-TW translates the new chrome while Core diagnostic text stays verbatim', async ({ page }) => {
 		await openLab(page, 'showcase=survey&lang=zh-TW')
-		await expect(page.getByTestId('document-status'))
-			.toHaveText('有效')
-		await expect(page.getByTestId('preview-status'))
-			.toHaveText('預覽已是最新')
+		await expect(labStatus(page))
+			.toHaveText('已是最新')
 
 		await loadPreset(page, 'survey-ai-draft')
-		await expect(page.getByTestId('document-status'))
-			.toHaveText('5 個問題')
+		await expect(labStatus(page))
+			.toHaveText('5 個問題 · 預覽顯示最後一個可運作的版本')
 		await expect(page.getByTestId('preview-diverged-status'))
 			.toContainText('你上次的變更有 5 個問題')
 		const first = page.getByTestId('author-problems')
@@ -921,12 +900,12 @@ test.describe('status details popover (the former Author status box, folded in)'
 			.toHaveCount(1)
 	})
 
-	test('follows the document: an unapplied draft, then an invalid apply that leaves the preview behind', async ({ page }) => {
+	test('follows the document: JSON with a syntax error, then an invalid commit that leaves the preview behind', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
-		await setDraft(page, '{ "id": "x", "type": "Survey" }')
+		await editJson(page, '{ "id": "x", "type": ')
 		let panel = await openStatusDetails(page)
 		await expect(panel.getByTestId('status-json-draft'))
-			.toHaveText('Unapplied draft')
+			.toHaveText('Syntax error, not applied (Lab-only)')
 		await page.keyboard.press('Escape')
 		await expect(page.getByTestId('status-details-panel'))
 			.toHaveCount(0)

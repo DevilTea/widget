@@ -82,8 +82,8 @@ export const TutorialStoreKey: InjectionKey<TutorialStore> = Symbol('widget-lab:
  * without a tour of its own, such as the hidden Sandbox): a switch starts a new session, so Undo cannot bring them back.
  */
 export const START_DISCARDS_EDITS_MESSAGE = 'Starting the tutorial opens its teaching example in another showcase. Your edits to this document will be discarded, and Undo cannot bring them back.'
-/** The same start with an unapplied JSON draft as well: one message names both, as `DraftGuardDialog` does. */
-export const START_DISCARDS_DRAFT_AND_EDITS_MESSAGE = 'Starting the tutorial opens its teaching example in another showcase. The JSON editor\'s unapplied changes and your edits to this document will be discarded, and Undo cannot bring them back.'
+/** The same start with JSON that cannot be applied yet as well: one message names both, as `DraftGuardDialog` does. */
+export const START_DISCARDS_DRAFT_AND_EDITS_MESSAGE = 'Starting the tutorial opens its teaching example in another showcase. The JSON that can\'t be applied yet and your edits to this document will be discarded, and Undo cannot bring them back.'
 
 /**
  * Loads a tour's known default preset through the exact same Apply pipeline every other Source mutation
@@ -310,7 +310,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	function requestStartOrRestart(isRestart: boolean): void {
 		const tourId = activeTourId.value
 		const decision = decideDeterministicStart({
-			isDirty: store.isDirty.value,
+			jsonBlocked: store.jsonBlocked.value,
 			hasCommittedEdits: store.hasCommittedEdits.value,
 			switchesShowcase: store.showcaseId.value !== tourId,
 		})

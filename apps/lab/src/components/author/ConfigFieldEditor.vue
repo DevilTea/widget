@@ -8,15 +8,16 @@
  *
  * It only reports what the user asked for (`edit`, with the config-relative path); `AuthorStructureView.vue` turns
  * that into a command that goes through the Document, so nothing here writes source or validates semantics. Switches
- * and lists apply at once; text and number boxes apply with Enter or the "Set value" button, so half-typed text is
- * never committed.
+ * and lists apply at once; text and number boxes apply on Enter or when they lose focus (Lab UX phase 3: there is no
+ * "Set value" button), and Esc puts the Document's value back, so half-typed text is never committed by accident. A JSON
+ * box applies on Cmd/Ctrl+Enter (Enter is a new line there) or on blur.
  */
 import type { ConfigPath, JsonSchema } from '../../lab/config-schema'
 import type { LabProblem } from '../../lab/problems'
 import type { ConfigEdit } from '../../lab/types'
 import UButton from '@nuxt/ui/components/Button.vue'
 import USwitch from '@nuxt/ui/components/Switch.vue'
-import { computed, nextTick, ref, useId, watch } from 'vue'
+import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { canAddItem, canRemoveItem, canRemoveKey, defaultValueFor, describeField, objectFieldKeys, parseNumberText } from '../../lab/config-schema'
 import { claimsFieldProblem } from '../../lab/problems'
@@ -32,10 +33,12 @@ const props = defineProps<{
 	bare?: boolean
 	/** May be removed from its parent (an optional object key, or an array item above the minimum). */
 	removable?: boolean
+	/** Nothing may be sent (the controls stay focusable, carry `aria-disabled` and report no edit). */
 	busy: boolean
 	/**
-	 * Locked by an unapplied JSON draft (`busy` is set too, so nothing is sent): the text, number and JSON boxes are `readonly`,
-	 * so they stay focusable and readable but take no typing, and when the lock lifts they show the Document's value again.
+	 * Locked while the JSON text does not parse (`busy` is set too, so nothing is sent): the text, number and JSON boxes are
+	 * `readonly`, so they stay focusable and readable but take no typing, and when the lock lifts they show the Document's value
+	 * again.
 	 */
 	locked?: boolean
 	/** Edit the value as its JSON text whatever it is (the config of a widget whose config is not an object). */
@@ -81,6 +84,8 @@ const text = ref(toText(props.value))
 const invalid = ref(false)
 /** Why the text in the box was not applied, while it is still there; `null` when nothing was refused. */
 const notApplied = ref<string | null>(null)
+/** The text that was refused, while the note about it is shown: leaving the box with that same text does not send it again. */
+let refusedText: string | null = null
 watch(() => props.value, (value, previous) => {
 	// A JSON box compares by content: an equal value that is a new object (the same config re-read) changes nothing typed.
 	if (field.value.kind === 'json' && JSON.stringify(value) === JSON.stringify(previous))
@@ -108,6 +113,7 @@ watch(() => props.resync, (resync) => {
 	const kind = field.value.kind
 	if (kind === 'string' || kind === 'number' || kind === 'json') {
 		notApplied.value = resync.message ?? i18n.t('The change was not applied.')
+		refusedText = text.value
 		return
 	}
 	controlKey.value++
@@ -166,6 +172,37 @@ function commitText(): void {
 	catch {
 		invalid.value = true
 	}
+}
+
+const fieldEl = useTemplateRef<HTMLElement>('fieldEl')
+
+/**
+ * Leaving a box commits what was typed (Lab UX phase 3). Only text the user changed is sent, so tabbing through the boxes
+ * commits nothing, and text that was just refused (its "Not applied" note is shown) is not sent again by leaving: that is what
+ * makes "Use the Document value" safe even where clicking a button does not focus it (macOS Safari and Firefox leave
+ * `relatedTarget` empty). Moving to that button is not leaving either. (The Remove button is leaving: the value is committed,
+ * then removed, both in order; skipping the commit there would leave the text unsent once focus moves on from the button.)
+ */
+function onBlur(event: FocusEvent): void {
+	if (props.locked === true || text.value === toText(props.value))
+		return
+	if (notApplied.value !== null && text.value === refusedText)
+		return
+	const next = event.relatedTarget
+	if (next instanceof Element && fieldEl.value?.contains(next) === true && next.closest('[data-use-document-value]') !== null)
+		return
+	commitText()
+}
+
+/** Esc puts the Document's value back in the box (and clears a refusal note); with nothing to undo it does nothing, so Esc keeps its other meanings. */
+function onEscape(event: KeyboardEvent): void {
+	if (text.value === toText(props.value) && notApplied.value === null && !invalid.value)
+		return
+	event.preventDefault()
+	event.stopPropagation()
+	text.value = toText(props.value)
+	invalid.value = false
+	notApplied.value = null
 }
 
 function onChoice(event: Event): void {
@@ -250,10 +287,11 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 		class="@container min-w-0"
 	>
 		<!-- Leaf: switch, list, number, text or JSON. Narrow (the tutorial rail open at 1280px, report item 15): below 20rem of
-			its own width the label goes on its own line above the control, and the box keeps at least 120px, with Set value
-			wrapping below it, so nothing is squeezed or covered. -->
+			its own width the label goes on its own line above the control, and the box keeps at least 120px, so nothing is
+			squeezed or covered. -->
 		<div
 			v-if="field.kind !== 'object' && field.kind !== 'array'"
+			ref="fieldEl"
 			class="mb-1.5 flex min-w-0 flex-wrap items-start gap-1.5"
 		>
 			<label
@@ -318,6 +356,8 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:class="[controlClass]"
 						@keydown.meta.enter.prevent="commitText"
 						@keydown.ctrl.enter.prevent="commitText"
+						@keydown.esc="onEscape"
+						@blur="onBlur"
 					/>
 					<input
 						v-else
@@ -333,18 +373,9 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						class="min-w-30 flex-[1_1_7.5rem]"
 						:class="[controlClass]"
 						@keydown.enter.prevent="commitText"
+						@keydown.esc="onEscape"
+						@blur="onBlur"
 					>
-					<UButton
-						type="button"
-						color="primary"
-						size="sm"
-						class="shrink-0"
-						:aria-disabled="busy ? 'true' : undefined"
-						:aria-label="`${i18n.t('Set value')}: ${label}`"
-						@click="commitText"
-					>
-						{{ i18n.t('Set value') }}
-					</UButton>
 				</div>
 				<div
 					v-if="notApplied !== null"
@@ -355,6 +386,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					<span>{{ i18n.t('Not applied: {reason}', { reason: notApplied }) }}</span>
 					<UButton
 						type="button"
+						data-use-document-value
 						color="neutral"
 						variant="outline"
 						size="xs"

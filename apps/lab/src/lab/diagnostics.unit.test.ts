@@ -83,7 +83,7 @@ describe('lab-owned syntax state versus Core Blueprint state', () => {
 	it('keeps JSON.parse syntax errors separate from semantic diagnostics and Core JSON compatibility', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		session.setDraftSourceText('{')
-		const parseOutcome = await session.apply()
+		const parseOutcome = await session.commitJson()
 
 		expect(parseOutcome.status)
 			.toBe('parse-error')

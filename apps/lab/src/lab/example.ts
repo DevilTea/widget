@@ -22,7 +22,7 @@ export interface ExampleStateInput<Preset extends ExamplePresetRef> {
 	readonly presets: readonly Preset[]
 	/** The applied source text (`LabDocumentState.sourceText`). */
 	readonly appliedSourceText: string
-	/** Whether the editor holds an unapplied draft. An unapplied edit is already "edited". */
+	/** Whether the JSON text differs from the Document (not committed yet, or it cannot be applied): that is already "edited". */
 	readonly isDirty: boolean
 }
 

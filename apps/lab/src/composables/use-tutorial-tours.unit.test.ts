@@ -47,13 +47,13 @@ describe('createTutorialStore() with two tours', () => {
 		const store = createLabStore()
 		const tutorial = createTutorialStore(store, explorer())
 		expect(tutorial.confirmMessage.value)
-			.toBe('Starting the tutorial will load the Survey teaching example and replace your unapplied changes.')
+			.toBe('Starting the tutorial will load the Survey teaching example and discard the JSON that can\'t be applied yet.')
 
 		await store.switchShowcase('trip-budget')
 		expect(tutorial.activeTourId.value)
 			.toBe('trip-budget')
 		expect(tutorial.confirmMessage.value)
-			.toBe('Starting the tutorial will load the Trip budget teaching example and replace your unapplied changes.')
+			.toBe('Starting the tutorial will load the Trip budget teaching example and discard the JSON that can\'t be applied yet.')
 		store.dispose()
 	})
 

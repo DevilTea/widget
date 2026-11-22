@@ -18,7 +18,7 @@ export const zhTWRendererPacksMessages: Readonly<Record<string, string>> = {
 	'The settings document is invalid: a text field with a limit of 0, a field that reads an Appearance that does not exist, a field that names a Notifier as its Appearance, and a dangerous action that reports to a Notifier that does not exist. Each is a located diagnostic.': '這份設定文件是無效的：上限為 0 的文字欄位、讀取不存在之 Appearance 的欄位、把 Notifier 當成 Appearance 的欄位，以及回報給不存在之 Notifier 的危險動作。每一個都是有位置的診斷。',
 
 	// Tutorial confirmation
-	'Starting the tutorial will load the Renderer packs teaching example and replace your unapplied changes.': '開始教學會載入 renderer pack 教學範例，並取代你尚未套用的變更。',
+	'Starting the tutorial will load the Renderer packs teaching example and discard the JSON that can\'t be applied yet.': '開始教學會載入 renderer pack 教學範例，並捨棄目前還無法套用的 JSON。',
 
 	// Tutorial script
 	'This is the renderer packs showcase': '這是 renderer pack 範例',
@@ -54,7 +54,7 @@ export const zhTWRendererPacksMessages: Readonly<Record<string, string>> = {
 	'Blueprint = the settings document and its diagnostics · Selected widget = a widget\'s State, Properties and Methods · Runtime = every widget\'s State and Properties, and no renderer pack: that is the host\'s · Dependencies = the reads and Method calls between widgets, which are the named providers · Implementation = the plugin and both renderers of a widget type, side by side.': 'Blueprint = 設定文件與它的診斷 · Selected widget = 某個 widget 的 State、Properties 與 Methods · Runtime = 每個 widget 的 State 與 Properties，不含 renderer pack，因為那是 host 的 · Dependencies = widget 之間的讀取與 Method 呼叫，也就是被指名的 provider · Implementation = 某個 widget 類型的 plugin 與兩個 renderer，並排呈現。',
 	'Try it yourself': '換你試試',
 	'You have seen one Runtime drawn by two renderer packs, providers that are named instead of found, a Method that calls another widget\'s Method and a confirmation that stays inside the Preview.': '你已經看過同一個 Runtime 由兩組 renderer pack 繪製、被指名而不是被找到的 provider、呼叫另一個 widget 之 Method 的 Method，以及停留在 Preview 之內的確認。',
-	'Edit the JSON (change a field\'s appearance or the Notifier\'s limit) and press Apply, load "Draft with mistakes" to see the structure diagnostics for a name that matches no widget, or open the Implementation of TextField to read its plugin next to both of its renderers.': '編輯 JSON（改某個欄位的 appearance 或 Notifier 的 limit）並按「套用」，載入「有錯誤的草稿」看名稱對不到任何 widget 的結構診斷，或打開 TextField 的 Implementation，把它的 plugin 與兩個 renderer 放在一起閱讀。',
+	'Edit the JSON (change a field\'s appearance or the Notifier\'s limit) and watch the Preview update, load "Draft with mistakes" to see the structure diagnostics for a name that matches no widget, or open the Implementation of TextField to read its plugin next to both of its renderers.': '編輯 JSON（改某個欄位的 appearance 或 Notifier 的 limit），看 Preview 跟著更新，載入「有錯誤的草稿」看名稱對不到任何 widget 的結構診斷，或打開 TextField 的 Implementation，把它的 plugin 與兩個 renderer 放在一起閱讀。',
 }
 
 export function translateRendererPacksMessage(locale: LabLocale, source: string): string | undefined {

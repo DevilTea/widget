@@ -32,12 +32,7 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'invalid': '無效',
 	'diagnostic': '問題',
 	'diagnostics': '問題',
-	// Revert discards the unapplied draft and Undo goes back one committed change: two different actions, so the zh-TW
-	// labels are not near-synonyms (還原 / 復原 were).
-	'Revert': '捨棄草稿',
 	'Format': '格式化',
-	'Apply': '套用',
-	'Applying…': '套用中…',
 	'Language': '語言',
 	// The overflow menu's language entry sets the Lab's own language, not a showcase's (the survey has its own select).
 	'Lab language': 'Lab 介面語言',
@@ -50,7 +45,7 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Start with one small interaction; we\'ll show what changed and why.': '先從一個小互動開始；我們會帶你看發生了什麼變化，以及原因。',
 	'Start the tour': '開始教學',
 	'Explore on my own': '自行探索',
-	'Starting the tutorial will load the Survey teaching example and replace your unapplied changes.': '開始教學會載入問卷教學範例，並取代你尚未套用的變更。',
+	'Starting the tutorial will load the Survey teaching example and discard the JSON that can\'t be applied yet.': '開始教學會載入問卷教學範例，並捨棄目前還無法套用的 JSON。',
 	'Start tour': '開始教學',
 	'Cancel': '取消',
 
@@ -95,7 +90,7 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Now press Undo in the header.': '現在按頁首的「復原上一步」。',
 	'The label is back. Undo restores the previous version of the definition, whether the change came from Structure, the JSON view or a preset.': 'label 回來了。「復原上一步」會還原定義的上一個版本，不論變更來自結構、JSON 檢視或預設範例。',
 	'Starting the tutorial opens its teaching example in another showcase. Your edits to this document will be discarded, and Undo cannot bring them back.': '開始教學會在另一個展示範例中開啟教學內容。你對這份文件的修改會被捨棄，而且無法用「復原上一步」找回。',
-	'Starting the tutorial opens its teaching example in another showcase. The JSON editor\'s unapplied changes and your edits to this document will be discarded, and Undo cannot bring them back.': '開始教學會在另一個展示範例中開啟教學內容。JSON 編輯器中尚未套用的變更，以及你對這份文件的修改都會被捨棄，而且無法用「復原上一步」找回。',
+	'Starting the tutorial opens its teaching example in another showcase. The JSON that can\'t be applied yet and your edits to this document will be discarded, and Undo cannot bring them back.': '開始教學會在另一個展示範例中開啟教學內容。目前還無法套用的 JSON，以及你對這份文件的修改都會被捨棄，而且無法用「復原上一步」找回。',
 	'Source': 'Source',
 	'Graph': '關係圖',
 	'Preview': 'Preview',

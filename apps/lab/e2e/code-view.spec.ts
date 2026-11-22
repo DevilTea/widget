@@ -3,15 +3,15 @@ import { expect, openAuthorJson, test } from './fixtures'
 /** Issue #46: literal U+0009 tabs have one four-column presentation contract in both code surfaces. */
 test.describe('code-view tab width (issue #46)', () => {
 	test('Source Monaco renders one literal tab at the same visual indent as four spaces', async ({ page }) => {
-		interface LabTestWindow { __WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void } }
+		interface LabTestWindow { __WIDGET_LAB_TEST__?: { editJson: (text: string) => void } }
 
 		await page.goto('/?lab-test')
 		await openAuthorJson(page)
-		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
 
 		const source = '{\n\t"tabbed": true,\n    "spaced": true\n}'
 		await page.evaluate((text) => {
-			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(text)
+			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson(text)
 		}, source)
 
 		const viewLines = page.locator('.view-lines')

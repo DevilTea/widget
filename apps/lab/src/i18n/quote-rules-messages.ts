@@ -21,7 +21,7 @@ export const zhTWQuoteRulesMessages: Readonly<Record<string, string>> = {
 	'A valid document whose volume tiers start at 100. The rule\'s code assumes the first tier starts at 1, so lowering the total quantity below 100 makes it throw: Core isolates the exception and the Preview reports it instead of crashing.': '一份有效的文件，但數量折扣的級距從 100 起算。規則的程式碼假設第一級從 1 開始，所以把總數量降到 100 以下就會拋出例外：Core 會隔離這個例外，Preview 會回報而不是當掉。',
 
 	// Tutorial confirmation
-	'Starting the tutorial will load the Quote rules teaching example and replace your unapplied changes.': '開始教學會載入報價規則教學範例，並取代你尚未套用的變更。',
+	'Starting the tutorial will load the Quote rules teaching example and discard the JSON that can\'t be applied yet.': '開始教學會載入報價規則教學範例，並捨棄目前還無法套用的 JSON。',
 
 	// Tutorial script
 	'This is the Quote rules showcase': '這是報價規則範例',
@@ -47,7 +47,7 @@ export const zhTWQuoteRulesMessages: Readonly<Record<string, string>> = {
 	'See volume in Selected widget': '在 Selected widget 查看 volume',
 	'Dependencies (Relations, Graph) = the declared chain between widgets · Selected widget = one widget\'s declaration and Runtime values · Runtime = every widget\'s State and Properties · Events = Method failures and Events as they happen · Implementation = the plugin, schema and renderer code behind this widget type.': '相依性（Relations、關係圖）= widget 之間已宣告的鏈 · Selected widget = 一個 widget 的宣告與 Runtime 的值 · Runtime = 每個 widget 的 State 與 Properties · Events = 即時的 Method failure 與 Events · Implementation = 這個 widget type 背後的 plugin、schema 與 renderer 程式碼。',
 	'You have seen the same rules in a page and a Web Worker, a schema library through Standard Schema and an isolated exception.': '你已經看過同一組規則在頁面和 Web Worker 裡執行、透過 Standard Schema 使用的 schema 函式庫，以及被隔離的例外。',
-	'Edit the JSON (change a tier, add a paper, set a tax rate) and press Apply, or open the Implementation of any widget type.': '可以編輯 JSON（改一個級距、新增一種紙張、設定稅率）後按「套用」，或打開任一 widget type 的 Implementation。',
+	'Edit the JSON (change a tier, add a paper, set a tax rate) and watch the Preview update, or open the Implementation of any widget type.': '可以編輯 JSON（改一個級距、新增一種紙張、設定稅率），看 Preview 跟著更新，或打開任一 widget type 的 Implementation。',
 }
 
 export function translateQuoteRulesMessage(locale: LabLocale, source: string): string | undefined {

@@ -120,9 +120,9 @@ onScopeDispose(() => {
 const listeningText = computed(() => {
 	const listening = log.listening.value
 	switch (listening.state) {
-		case 'no-preview': return i18n.t('No valid preview to listen to: fix the problems and Apply, and Events will be recorded from the new preview.')
+		case 'no-preview': return i18n.t('No valid preview to listen to: fix the problems, and Events will be recorded from the new preview.')
 		case 'loading': return i18n.t('Waiting for the preview to load. Events are recorded once it is running.')
-		case 'lost': return i18n.t('The preview is not connected, so no Events are being recorded. Use Try again in the preview, or Apply again.')
+		case 'lost': return i18n.t('The preview is not connected, so no Events are being recorded. Use Try again in the preview, or make another change.')
 		case 'previous-showcase': return i18n.t('The preview still runs the previous showcase, so no Events are being recorded. Use Try again in the preview.')
 		case 'no-events': return log.watchingMethods.value.methods > 0
 			? i18n.t('The widgets in this preview declare no Events. Failed Method calls are still recorded.')

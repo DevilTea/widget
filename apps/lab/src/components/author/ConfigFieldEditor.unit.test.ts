@@ -91,6 +91,134 @@ describe('configFieldEditor while a command runs', () => {
 	})
 })
 
+describe('configFieldEditor commits on Enter or blur, and Esc restores (Lab UX phase 3)', () => {
+	const box = (editor: ReturnType<typeof mountEditor>, index = 0) => editor.findAll('input[type="text"]')
+		.filter(input => input.attributes('id') !== undefined)[index]!
+
+	it('has no "Set value" button any more', () => {
+		const editor = mountEditor({}, { title: 'T', note: 'N' })
+		expect(editor.findAll('button')
+			.filter(button => button.text() === 'Set value'))
+			.toHaveLength(0)
+	})
+
+	it('commits a changed text box when it loses focus, and nothing when it was not changed', async () => {
+		const editor = mountEditor({}, { title: 'T', note: 'N' })
+		await box(editor)
+			.trigger('blur')
+		expect(editor.emitted('edit'))
+			.toBeUndefined()
+
+		await box(editor)
+			.setValue('New title')
+		await box(editor)
+			.trigger('blur')
+		expect(editor.emitted('edit'))
+			.toEqual([[['title'], { op: 'replace', value: 'New title' }]])
+	})
+
+	it('commits a number on blur and refuses what is not a number there too', async () => {
+		const numbers: JsonSchema = { type: 'object', properties: { count: { type: 'number' } } }
+		const editor = mountEditor({}, { count: 3 }, numbers)
+		await box(editor)
+			.setValue('abc')
+		await box(editor)
+			.trigger('blur')
+		expect(editor.emitted('edit'))
+			.toBeUndefined()
+		expect(editor.get('[role="alert"]')
+			.text())
+			.toBe('Enter a number, such as 12 or 2.5.')
+
+		await box(editor)
+			.setValue('12')
+		await box(editor)
+			.trigger('blur')
+		expect(editor.emitted('edit'))
+			.toEqual([[['count'], { op: 'replace', value: 12 }]])
+	})
+
+	it('does not commit when focus moves to a control of the same field (its "Use the Document value" button)', async () => {
+		const editor = mountEditor({}, { title: 'T', note: 'N' }, schema)
+		await box(editor)
+			.setValue('refused')
+		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'nope' } })
+		const useDocument = editor.findAll('button')
+			.find(button => button.text() === 'Use the Document value')!
+		await box(editor)
+			.trigger('blur', { relatedTarget: useDocument.element })
+		expect(editor.emitted('edit'))
+			.toBeUndefined()
+	})
+
+	// Phase 3A review: macOS Safari and Firefox do not focus a clicked button, so `relatedTarget` is empty on the way to "Use the
+	// Document value". The refused text must not be sent again by that blur anyway; once it is edited, leaving commits it.
+	it('does not resend a refused text on blur, even without a relatedTarget, but commits it once edited', async () => {
+		const editor = mountEditor({}, { title: 'T', note: 'N' }, schema)
+		await box(editor)
+			.setValue('refused')
+		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'nope' } })
+		await box(editor)
+			.trigger('blur')
+		expect(editor.emitted('edit'))
+			.toBeUndefined()
+
+		await box(editor)
+			.setValue('refused, then fixed')
+		await box(editor)
+			.trigger('blur')
+		expect(editor.emitted('edit'))
+			.toEqual([[['title'], { op: 'replace', value: 'refused, then fixed' }]])
+	})
+
+	it('commits when focus moves to the field\'s own Remove button: the text is not left unsent once focus moves on', async () => {
+		const editor = mountEditor({}, { title: 'T', note: 'N' }, schema)
+		await box(editor)
+			.setValue('kept')
+		const remove = editor.get('button[aria-label="Remove title"]')
+		await box(editor)
+			.trigger('blur', { relatedTarget: remove.element })
+		expect(editor.emitted('edit'))
+			.toEqual([[['title'], { op: 'replace', value: 'kept' }]])
+	})
+
+	it('esc puts the Document value back and clears the note, and leaves the key alone when there is nothing to restore', async () => {
+		const editor = mountEditor({}, { title: 'T', note: 'N' })
+		await box(editor)
+			.setValue('typed')
+		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'nope' } })
+		const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+		box(editor).element.dispatchEvent(escape)
+		await editor.vm.$nextTick()
+		expect((box(editor).element as HTMLInputElement).value)
+			.toBe('T')
+		expect(editor.find('[data-testid="not-applied"]')
+			.exists())
+			.toBe(false)
+		expect(escape.defaultPrevented)
+			.toBe(true)
+
+		const idle = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+		box(editor).element.dispatchEvent(idle)
+		expect(idle.defaultPrevented)
+			.toBe(false)
+		// Nothing was committed by Esc.
+		expect(editor.emitted('edit'))
+			.toBeUndefined()
+	})
+
+	it('sends nothing on blur while locked', async () => {
+		const editor = mountEditor({ busy: true, locked: true }, { title: 'T', note: 'N' })
+		;(box(editor).element as HTMLInputElement).value = 'x'
+		await box(editor)
+			.trigger('input')
+		await box(editor)
+			.trigger('blur')
+		expect(editor.emitted('edit'))
+			.toBeUndefined()
+	})
+})
+
 describe('configFieldEditor after a refused commit', () => {
 	const textInputs = (editor: ReturnType<typeof mountEditor>) => editor.findAll('input[type="text"]')
 		.filter(input => input.attributes('id') !== undefined)
@@ -101,7 +229,7 @@ describe('configFieldEditor after a refused commit', () => {
 		await title!.setValue('rejected title')
 		await note!.setValue('still being typed')
 
-		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'Apply or Revert the JSON draft first.' } })
+		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'Fix or discard the JSON first.' } })
 
 		const inputs = textInputs(editor)
 		expect((inputs[0]!.element as HTMLInputElement).value)
@@ -112,7 +240,7 @@ describe('configFieldEditor after a refused commit', () => {
 		expect(notes)
 			.toHaveLength(1)
 		expect(notes[0]!.text())
-			.toContain('Not applied: Apply or Revert the JSON draft first.')
+			.toContain('Not applied: Fix or discard the JSON first.')
 	})
 
 	it('goes back to the Document value on request, and forgets the refusal once the Document changes', async () => {

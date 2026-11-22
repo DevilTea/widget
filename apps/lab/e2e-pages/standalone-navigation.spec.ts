@@ -75,7 +75,7 @@ test('VitePress opens Widget Lab as a standalone document and preserves the pers
 	await expect(page.locator('html'))
 		.toHaveAttribute('lang', 'zh-TW')
 	// The Lab chrome follows the persisted locale (the Apply button is its machine-independent probe).
-	await expect(page.getByRole('button', { name: '套用', exact: true }))
+	await expect(page.getByRole('button', { name: '復原上一步', exact: true }))
 		.toBeVisible()
 	const documentLoadsAfterClick = Number(await page.evaluate(key => sessionStorage.getItem(key), DOCUMENT_LOAD_COUNT_KEY))
 	expect(documentLoadsAfterClick)
@@ -232,7 +232,7 @@ for (const [explicitLocale, storedLocale] of [['en', 'zh-TW'], ['zh-TW', 'en']] 
 			.toBe('/widget/lab/')
 		await expect(page.locator('html'))
 			.toHaveAttribute('lang', explicitLocale)
-		await expect(page.getByRole('button', { name: explicitLocale === 'zh-TW' ? '套用' : 'Apply', exact: true }))
+		await expect(page.getByRole('button', { name: explicitLocale === 'zh-TW' ? '復原上一步' : 'Undo last change', exact: true }))
 			.toBeVisible()
 		expect(await page.evaluate(key => localStorage.getItem(key), LOCALE_STORAGE_KEY))
 			.toBe(explicitLocale)

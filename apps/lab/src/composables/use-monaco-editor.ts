@@ -45,10 +45,14 @@ export interface UseMonacoJsonEditorOptions {
 	readonly onChange: (text: string) => void
 	/** Error markers to show; offsets refer to `modelValue`'s text. */
 	readonly markers?: Readonly<Ref<readonly EditorMarker[]>>
-	/** Invoked by the editor's Cmd/Ctrl+Enter command (Monaco otherwise inserts a line there). */
-	readonly onApply?: () => void
-	/** The Apply action's name in the command palette, in the Lab language (it follows a language switch). */
-	readonly applyLabel?: Readonly<Ref<string>>
+	/** Invoked by the editor's Cmd/Ctrl+Enter command (Monaco otherwise inserts a line there): commit the text now. */
+	readonly onCommit?: () => void
+	/** The commit action's name in the command palette, in the Lab language (it follows a language switch). */
+	readonly commitLabel?: Readonly<Ref<string>>
+	/** The editor (its text or one of its own widgets, such as Find) got keyboard focus. */
+	readonly onFocus?: () => void
+	/** Keyboard focus left the editor and its widgets, or the editor went away while it had focus. */
+	readonly onBlur?: () => void
 }
 
 export interface UseMonacoJsonEditorResult {
@@ -57,7 +61,7 @@ export interface UseMonacoJsonEditorResult {
 	revealRange: (start: number, end: number) => void
 }
 
-const APPLY_ACTION_ID = 'widget-lab.apply'
+const COMMIT_ACTION_ID = 'widget-lab.commit-json'
 const ERROR_RULER_COLOR = '#e5484d'
 
 /** Hover text is Markdown; diagnostic messages are plain text, so escape every Markdown control character. */
@@ -72,7 +76,7 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 	let editor: MonacoEditor | null = null
 	let model: MonacoModel | null = null
 	let applyingExternalChange = false
-	let applyAction: { dispose: () => void } | null = null
+	let commitAction: { dispose: () => void } | null = null
 	let markerCollection: ReturnType<MonacoEditor['createDecorationsCollection']> | null = null
 
 	/**
@@ -120,20 +124,21 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 	}
 
 	/**
-	 * Monaco binds Cmd/Ctrl+Enter to "insert line below"; Apply takes it instead (audit U05). An action rather than
+	 * Monaco binds Cmd/Ctrl+Enter to "insert line below"; committing the text now takes it instead (audit U05 gave the key to
+	 * Apply; Lab UX phase 3 has no Apply, and the key keeps its "make it take effect now" meaning). An action rather than
 	 * `addCommand()`: a command registers a global dynamic keybinding whose disposable is discarded, so every remount
 	 * of the editor would leak one; the action's keybinding is released with the action (disposed below, and here
 	 * when the label changes with the Lab language, which re-registers it under the new name).
 	 */
-	function registerApplyAction(): void {
+	function registerCommitAction(): void {
 		if (editor === null || monaco === null)
 			return
-		applyAction?.dispose()
-		applyAction = editor.addAction({
-			id: APPLY_ACTION_ID,
-			label: options.applyLabel?.value ?? 'Apply',
+		commitAction?.dispose()
+		commitAction = editor.addAction({
+			id: COMMIT_ACTION_ID,
+			label: options.commitLabel?.value ?? 'Apply the JSON now',
 			keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-			run: () => options.onApply?.(),
+			run: () => options.onCommit?.(),
 		})
 	}
 
@@ -158,7 +163,16 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 				return
 			options.onChange(model.getValue())
 		})
-		registerApplyAction()
+		// The editor widget, not only its text area: Find and the other editor widgets belong to the same editing session.
+		editor.onDidFocusEditorWidget(() => options.onFocus?.())
+		// The window or tab losing focus blurs the editor too, but the user has not left it (alt-tab and back is one editing
+		// session, one Undo entry): only a blur within a focused document counts. Focus coming back reports a focus again,
+		// which continues the open session (`LabStore.beginJsonEdit()`).
+		editor.onDidBlurEditorWidget(() => {
+			if (document.hasFocus())
+				options.onBlur?.()
+		})
+		registerCommitAction()
 		syncMarkers()
 		ready.value = true
 		if (pendingReveal !== null) {
@@ -170,8 +184,8 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 	if (options.markers !== undefined)
 		watch(options.markers, syncMarkers, { flush: 'post' })
 
-	if (options.applyLabel !== undefined)
-		watch(options.applyLabel, registerApplyAction)
+	if (options.commitLabel !== undefined)
+		watch(options.commitLabel, registerCommitAction)
 
 	watch(theme.theme, (next) => {
 		monaco?.editor.setTheme(syntaxThemeForLabTheme(next))
@@ -187,8 +201,11 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 	})
 
 	onBeforeUnmount(() => {
-		applyAction?.dispose()
-		applyAction = null
+		// The view went away while the user was editing (no blur reaches a disposed editor): end the editing session anyway.
+		if (editor?.hasWidgetFocus() === true)
+			options.onBlur?.()
+		commitAction?.dispose()
+		commitAction = null
 		editor?.dispose()
 		model?.dispose()
 	})

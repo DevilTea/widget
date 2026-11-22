@@ -55,7 +55,7 @@ export function useSelectedWidgetRuntime(visible: Readonly<Ref<boolean>>): Selec
 		switch (runtimeState.value) {
 			case 'unresolved': return i18n.t('This widget did not resolve, so it has no Runtime.')
 			case 'no-preview': return i18n.t('No Runtime values yet: there is no valid preview to read them from.')
-			case 'diverged': return i18n.t('The preview shows the last valid version (r{preview}), not the current document (r{document}). Runtime values come from the preview: fix the problems and Apply to see this widget\'s values.', { preview: source.value.previewRevision ?? '', document: store.documentState.value.revision })
+			case 'diverged': return i18n.t('The preview shows the last valid version (r{preview}), not the current document (r{document}). Runtime values come from the preview: fix the problems to see this widget\'s values.', { preview: source.value.previewRevision ?? '', document: store.documentState.value.revision })
 			case 'unavailable': return i18n.t('This widget is not in the running preview.')
 			case 'loading': return i18n.t('Loading Runtime values…')
 			default: return ''

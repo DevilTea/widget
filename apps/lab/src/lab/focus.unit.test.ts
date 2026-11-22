@@ -152,7 +152,7 @@ describe('createInspectorFocusStore', () => {
 		store.setFocus(custom)
 
 		session.setDraftSourceText(JSON.stringify(JSON.parse(validSource)))
-		await session.apply()
+		await session.commitJson()
 
 		expect(session.documentSnapshot.revision)
 			.toBe(0)
@@ -167,7 +167,7 @@ describe('createInspectorFocusStore', () => {
 		store.setFocus(custom)
 
 		session.setDraftSourceText('not json')
-		await session.apply()
+		await session.commitJson()
 
 		expect(store.getFocus())
 			.toEqual(custom)
@@ -201,7 +201,7 @@ describe('createInspectorFocusStore', () => {
 		const edited = JSON.parse(validSource) as { slots: { items: { id: string, config?: Record<string, unknown> }[] } }
 		edited.slots.items.find(item => item.id === 'title')!.config = { text: 'edited in JSON' }
 		session.setDraftSourceText(JSON.stringify(edited, null, 2))
-		const outcome = await session.apply()
+		const outcome = await session.commitJson()
 
 		expect(outcome.status)
 			.toBe('applied')
@@ -221,7 +221,7 @@ describe('createInspectorFocusStore', () => {
 		const edited = JSON.parse(validSource) as { slots: { items: { id: string }[] } }
 		edited.slots.items = edited.slots.items.filter(item => item.id !== 'title')
 		session.setDraftSourceText(JSON.stringify(edited, null, 2))
-		await session.apply()
+		await session.commitJson()
 
 		expect(store.getFocus())
 			.toEqual({ nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId })
@@ -242,14 +242,14 @@ describe('createInspectorFocusStore', () => {
 		const edited = JSON.parse(validSource) as { slots: { items: { id: string, config?: Record<string, unknown> }[] } }
 		edited.slots.items.find(item => item.id === 'title')!.config = { text: 'edited in JSON' }
 		session.setDraftSourceText(JSON.stringify(edited, null, 2))
-		await session.apply()
+		await session.commitJson()
 		expect(store.isDocumentFocusChosen())
 			.toBe(true)
 
 		// A commit that removes it falls back to the root, which nobody chose.
 		edited.slots.items = edited.slots.items.filter(item => item.id !== 'title')
 		session.setDraftSourceText(JSON.stringify(edited, null, 2))
-		await session.apply()
+		await session.commitJson()
 		expect(store.getFocus())
 			.toEqual({ nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId })
 		expect(store.isDocumentFocusChosen())
@@ -298,7 +298,7 @@ describe('createInspectorFocusStore', () => {
 		store.setFocus({ nodeId: second.nodeId })
 
 		session.setDraftSourceText(JSON.stringify({ ...duplicated, slots: { items: [duplicated.slots.items[0]] } }))
-		const outcome = await session.apply()
+		const outcome = await session.commitJson()
 
 		expect(outcome.status)
 			.toBe('applied')

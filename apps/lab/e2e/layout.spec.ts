@@ -220,10 +220,10 @@ test.describe('saved layout', () => {
 
 	test('the restored active tab is the store\'s active tab too: a request for Author from outside Dockview still switches to it', async ({ page }) => {
 		// Nothing in Dockview is clicked after the reload and no menu is opened: the Examples menu and a panel click
-		// both hand focus to Dockview, which reports its own activation. Only the header's Apply (outside Dockview)
+		// both hand focus to Dockview, which reports its own activation. Only a JSON commit through the test seam (outside Dockview)
 		// and the notice's button are used, so the only thing that can know Runtime is the open tab is the store.
 		await page.goto('/?showcase=survey&lab-test')
-		await page.waitForFunction(() => typeof (window as any).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+		await page.waitForFunction(() => typeof (window as any).__WIDGET_LAB_TEST__?.editJson === 'function')
 		await page.getByRole('tab', { name: 'Runtime', exact: true })
 			.click()
 		await expect.poll(() => page.evaluate(key => localStorage.getItem(key)
@@ -231,13 +231,11 @@ test.describe('saved layout', () => {
 			.toBe(true)
 
 		await page.reload()
-		await page.waitForFunction(() => typeof (window as any).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+		await page.waitForFunction(() => typeof (window as any).__WIDGET_LAB_TEST__?.editJson === 'function')
 		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
 			.toHaveAttribute('aria-selected', 'true')
-		// An invalid apply leaves the preview behind; its notice asks for the Author tab.
-		await page.evaluate(() => (window as any).__WIDGET_LAB_TEST__.setDraftSourceText('{ "id": "x", "type": "NotAWidget" }'))
-		await page.getByRole('button', { name: 'Apply', exact: true })
-			.click()
+		// An invalid commit leaves the preview behind; its notice asks for the Author tab.
+		await page.evaluate(() => (window as any).__WIDGET_LAB_TEST__.editJson('{ "id": "x", "type": "NotAWidget" }'))
 		await page.getByRole('button', { name: 'Show problems' })
 			.click()
 		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
@@ -418,7 +416,7 @@ test.describe('tutorial rail is a docked column (U13)', () => {
 				.toBeCloseTo(vw, 0)
 			expect(intersects(railBox, headerBox), 'header')
 				.toBe(false)
-			for (const id of ['overflow-menu', 'document-status', 'preview-status', 'apply-button']) {
+			for (const id of ['overflow-menu', 'lab-status', 'undo-button']) {
 				const box = (await page.getByTestId(id)
 					.boundingBox())!
 				expect(intersects(railBox, box), id)

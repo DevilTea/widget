@@ -17,12 +17,17 @@ test('app loads with header controls and all six panel tabs', async ({ page }) =
 		.toBeVisible()
 	await expect(page.getByTestId('overflow-menu'))
 		.toBeVisible()
-	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
+	// Lab UX phase 3: every edit commits when it is made, so the header has Undo and no Apply, Revert or Format (Format is in
+	// the JSON view's toolbar; "Discard JSON changes" shows only while the JSON does not parse).
+	await expect(page.getByRole('button', { name: 'Undo last change', exact: true }))
 		.toBeVisible()
-	await expect(page.getByRole('button', { name: 'Revert' }))
-		.toBeVisible()
-	await expect(page.getByRole('button', { name: 'Format' }))
-		.toBeVisible()
+	await expect(page.getByTestId('lab-status'))
+		.toHaveAttribute('data-state', 'up-to-date')
+	for (const retired of ['Apply', 'Revert', 'Format', 'Discard JSON changes']) {
+		await expect(page.getByRole('banner')
+			.getByRole('button', { name: retired, exact: true }))
+			.toHaveCount(0)
+	}
 
 	for (const name of ['Author', 'Explain', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 		const tab = page.getByRole('tab', { name })

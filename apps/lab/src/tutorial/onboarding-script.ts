@@ -191,7 +191,7 @@ export const onboardingTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You have seen Events with a host listener, refused moves as Method failures, argument validation and async work kept at the host.',
-				reveal: 'Edit the JSON (add a safety rule, change the offered days) and press Apply, load "Draft with mistakes" to see config diagnostics, or open the Implementation of InductionStep to read the host that does the waiting.',
+				reveal: 'Edit the JSON (add a safety rule, change the offered days) and watch the Preview update, load "Draft with mistakes" to see config diagnostics, or open the Implementation of InductionStep to read the host that does the waiting.',
 			}],
 		},
 	],

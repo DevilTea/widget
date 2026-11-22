@@ -18,7 +18,7 @@ export const zhTWDocumentRepairMessages: Readonly<Record<string, string>> = {
 	'The repair desk itself is invalid, in its own document: an app version that is not a version, a draft without a stored document, a draft saved with an unknown format version and a draft without a title. Each is a located diagnostic.': '修復桌本身就是無效的，問題出在它自己的文件裡：不是版本號的應用程式版本、沒有儲存文件的草稿、以未知格式版本儲存的草稿，以及沒有標題的草稿。每一個都是有位置的診斷。',
 
 	// Tutorial confirmation
-	'Starting the tutorial will load the Legacy document repair teaching example and replace your unapplied changes.': '開始教學會載入舊版文件修復教學範例，並取代你尚未套用的變更。',
+	'Starting the tutorial will load the Legacy document repair teaching example and discard the JSON that can\'t be applied yet.': '開始教學會載入舊版文件修復教學範例，並捨棄目前還無法套用的 JSON。',
 
 	// Tutorial script
 	'This is the Legacy document repair showcase': '這是舊版文件修復範例',
@@ -60,7 +60,7 @@ export const zhTWDocumentRepairMessages: Readonly<Record<string, string>> = {
 	'This draft holds a Poll widget that the application knows no rule for, so its plan has only the date step and the document stays invalid: the diagnostics list still has unknown-widget-type, and no preview is offered. Validity is all-or-nothing: Core creates no Runtime for an invalid document, runs no valid part of it and quarantines nothing. What to do with a draft nobody can repair is the application\'s decision.': '這份草稿含有應用程式沒有任何規則的 Poll widget，所以它的計畫只有日期那一步，文件仍然無效：診斷清單裡還有 unknown-widget-type，也不會提供預覽。有效性是全有或全無：Core 不會為無效的文件建立 Runtime，不會執行其中有效的部分，也不會隔離任何東西。沒有人能修復的草稿要怎麼處理，是應用程式的決定。',
 	'Blueprint = the repair desk\'s own widgets and diagnostics, not the notice board\'s · Selected widget = a draft\'s Properties findings and plan, and the State that mirrors the session · Runtime = every draft\'s State and Properties · Dependencies = this showcase has none between widgets: each draft is independent · Implementation = the plan, the host\'s session code and the notice board plugins behind these widgets.': 'Blueprint = 修復桌自己的 widget 與診斷，不是公告欄的 · Selected widget = 草稿的 Properties findings 與 plan，以及反映 session 的 State · Runtime = 每份草稿的 State 與 Properties · Dependencies = 這個範例的 widget 之間沒有依賴：每份草稿各自獨立 · Implementation = 這些 widget 背後的計畫、host 的 session 程式碼與公告欄 plugin。',
 	'You have seen diagnostics located in a stored document, a repair plan written by the application, patches guarded by test operations, a stale revision refused by Core and a draft that never gets a Runtime.': '你已經看過定位在儲存文件裡的診斷、由應用程式撰寫的修復計畫、以 test 操作把關的 patch、被 Core 拒絕的過期 revision，以及一份永遠得不到 Runtime 的草稿。',
-	'Edit the JSON (change a draft\'s savedWith, or its stored source) and press Apply, load "Draft with mistakes" to see config diagnostics in the desk itself, or open the Implementation of SavedDraft to read planRepair and the session code.': '編輯 JSON（改某份草稿的 savedWith 或它儲存的 source）並按「套用」，載入「有錯誤的草稿」看修復桌自己的 config 診斷，或打開 SavedDraft 的 Implementation 閱讀 planRepair 與 session 的程式碼。',
+	'Edit the JSON (change a draft\'s savedWith, or its stored source) and watch the Preview update, load "Draft with mistakes" to see config diagnostics in the desk itself, or open the Implementation of SavedDraft to read planRepair and the session code.': '編輯 JSON（改某份草稿的 savedWith 或它儲存的 source），看 Preview 跟著更新，載入「有錯誤的草稿」看修復桌自己的 config 診斷，或打開 SavedDraft 的 Implementation 閱讀 planRepair 與 session 的程式碼。',
 }
 
 export function translateDocumentRepairMessage(locale: LabLocale, source: string): string | undefined {

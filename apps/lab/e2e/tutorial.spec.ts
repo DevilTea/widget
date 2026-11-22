@@ -17,7 +17,7 @@ import { chooseTutorialMenuItem, expect, expectShowcase, openAuthorJson, preview
 
 const RAIL_LABEL = 'Tutorial'
 const WELCOME_TITLE = 'Widget Lab lets you change a real app, then see where that behavior comes from.'
-const CONFIRM_TITLE = 'Starting the tutorial will load the Survey teaching example and replace your unapplied changes.'
+const CONFIRM_TITLE = 'Starting the tutorial will load the Survey teaching example and discard the JSON that can\'t be applied yet.'
 
 async function startTourFromHeader(page: Page): Promise<void> {
 	await chooseTutorialMenuItem(page)
@@ -204,7 +204,7 @@ test('skipping the tour leaves the Lab fully usable', async ({ page }) => {
 		.click()
 	await expect(page.getByRole('tab', { name: 'Runtime' }))
 		.toHaveAttribute('aria-selected', 'true')
-	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
+	await expect(page.getByRole('button', { name: 'Undo last change', exact: true }))
 		.toBeVisible()
 })
 
@@ -274,19 +274,20 @@ test('starting the tour over committed edits loads its example without asking, a
 })
 
 test.describe('dirty-draft confirmation dialog', () => {
-	interface LabTestWindow { __WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void } }
+	interface LabTestWindow { __WIDGET_LAB_TEST__?: { editJson: (text: string) => void } }
 
 	async function dirtyTheDraft(page: Page): Promise<void> {
 		await page.goto('/?lab-test&showcase=sandbox')
-		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
 		// These tests read the preserved draft in Monaco, which mounts with the JSON view (Author opens on Structure).
 		await openAuthorJson(page)
-		// Dirty the (hidden Sandbox fixture) draft via the issue #28 interaction seam — never touches Monaco.
+		// Dirty the (hidden Sandbox fixture) JSON via the issue #28 interaction seam — never touches Monaco. Since Lab UX phase 3
+		// only text that does not parse is a draft (text that parses is committed), so the text is left unfinished.
 		await page.evaluate((source) => {
-			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)
-		}, '{ "id": "root", "type": "Text", "config": { "text": "dirtied by test" } }')
-		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
-			.toBeEnabled()
+			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson(source)
+		}, '{ "id": "root", "type": "Text", "config": { "text": "dirtied by test" }')
+		await expect(page.getByTestId('discard-json-button'))
+			.toBeVisible()
 	}
 
 	test('appears before starting, moves focus in, keeps the background out of the keyboard focus order, and Cancel preserves the draft while restoring focus to the header button', async ({ page }) => {
@@ -318,8 +319,8 @@ test.describe('dirty-draft confirmation dialog', () => {
 			.toBeFocused()
 
 		// Cancel touched nothing: the draft is still dirty and no tour started.
-		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
-			.toBeEnabled()
+		await expect(page.getByTestId('discard-json-button'))
+			.toBeVisible()
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toHaveCount(0)
 		await expect(previewFrame(page)
@@ -354,8 +355,8 @@ test.describe('dirty-draft confirmation dialog', () => {
 		await expect(initiator)
 			.toBeFocused()
 
-		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
-			.toBeEnabled()
+		await expect(page.getByTestId('discard-json-button'))
+			.toBeVisible()
 		await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 			.toHaveCount(0)
 		// Same Preview-scoped assertion as the Cancel-button test above (see the comment there): the

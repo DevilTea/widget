@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, onUnmounted } from 'vue'
 import { replaceConfigScalar } from '../lab/author'
 import { getShowcase } from '../showcases/registry'
-import { createLabStore } from './use-lab-store'
+import { createLabStore, JSON_COMMIT_DELAY_MS, PREVIEW_RESTARTED_MS } from './use-lab-store'
 
 /** Most lifecycle tests drive the minimal Sandbox fixture, which is hidden and no longer the default. */
 function createSandboxStore(): LabStore {
@@ -164,8 +164,8 @@ describe('createLabStore() Preview source forwarding', () => {
 		expect(initialMount.sourceText)
 			.toBe(initialDocument.sourceText)
 
-		store.setDraftSourceText(capturedText)
-		const applyOutcome = await store.apply()
+		store.editJson(capturedText)
+		const applyOutcome = await store.flushJson()
 		expect(applyOutcome)
 			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
 
@@ -237,8 +237,8 @@ describe('createLabStore() committed Document bridge', () => {
 			.toBe(store.documentState.value.blueprint)
 
 		const equivalentText = JSON.stringify(store.documentState.value.definition)
-		store.setDraftSourceText(equivalentText)
-		await store.apply()
+		store.editJson(equivalentText)
+		await store.flushJson()
 
 		expect(store.documentSnapshot.value)
 			.toBe(committed)
@@ -279,8 +279,8 @@ describe('createLabStore() graph filter preferences', () => {
 		const previousDocument = store.documentState.value
 		const previousPreview = store.preview.value!
 
-		store.setDraftSourceText(capturedText)
-		const outcome = await store.apply()
+		store.editJson(capturedText)
+		const outcome = await store.flushJson()
 
 		expect(outcome)
 			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
@@ -430,8 +430,8 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 		await attachDriver(store, recorded.driver)
 		const preSwitchSession = store.session
 
-		store.setDraftSourceText(capturedText)
-		const applyPromise = store.apply()
+		store.editJson(capturedText)
+		const applyPromise = store.flushJson()
 		await vi.waitFor(() => expect(recorded.mount)
 			.toHaveBeenCalledTimes(2))
 		const switchPromise = store.switchShowcase('survey')
@@ -495,9 +495,9 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 		})
 		await attachDriver(store, recorded.driver)
 
-		store.setDraftSourceText(capturedText)
-		const applyPromise = store.apply()
-		store.setDraftSourceText(laterText)
+		store.editJson(capturedText)
+		const applyPromise = store.flushJson()
+		store.editJson(laterText)
 		await vi.waitFor(() => expect(recorded.mount)
 			.toHaveBeenCalledTimes(2))
 		gate.resolve()
@@ -514,30 +514,34 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 		store.dispose()
 	})
 
-	it('rejects a second same-turn Apply while the first one is in flight', async () => {
+	// Lab UX phase 3: a second commit in the same turn used to be refused (`skipped-concurrent`); the first one has already
+	// taken the text into the Document synchronously, so the second has nothing left to commit.
+	it('commits once when the JSON text is flushed twice in the same turn', async () => {
 		const gate = createDeferred()
 		const store = createSandboxStore()
 		const recorded = createRecordingDriver({
 			beforeMount: descriptor => descriptor.revision === 1 ? gate.promise : undefined,
 		})
 		await attachDriver(store, recorded.driver)
-		store.setDraftSourceText(capturedText)
+		store.editJson(capturedText)
 
-		const firstPromise = store.apply()
-		const secondPromise = store.apply()
+		const firstPromise = store.flushJson()
+		const secondPromise = store.flushJson()
 		await vi.waitFor(() => expect(recorded.mount)
 			.toHaveBeenCalledTimes(2))
 
 		gate.resolve()
 		const [firstOutcome, secondOutcome] = await Promise.all([firstPromise, secondPromise])
-		expect(firstOutcome.status)
+		expect(firstOutcome?.status)
 			.toBe('applied')
 		expect(secondOutcome)
-			.toEqual({ status: 'skipped-concurrent' })
+			.toBeNull()
+		expect(store.documentState.value.revision)
+			.toBe(1)
 		store.dispose()
 	})
 
-	it('blocks a new apply() while a showcase switch occupies the lifecycle boundary', async () => {
+	it('blocks a new JSON commit while a showcase switch occupies the lifecycle boundary', async () => {
 		const gate = createDeferred()
 		const store = createSandboxStore()
 		const recorded = createRecordingDriver({
@@ -547,7 +551,8 @@ describe('createLabStore() lifecycle transaction serialization', () => {
 		const preSwitchSession = store.session
 
 		const switchPromise = store.switchShowcase('survey')
-		const applyOutcome = await store.apply()
+		store.editJson(capturedText)
+		const applyOutcome = await store.flushJson()
 		expect(applyOutcome)
 			.toEqual({ status: 'skipped-concurrent' })
 		expect(preSwitchSession.documentState.revision)
@@ -721,33 +726,40 @@ describe('createLabStore() graph cluster expansion', () => {
 describe('createLabStore() header and feedback state', () => {
 	const secondText = '{ "id": "root", "type": "Text", "config": { "text": "second" } }\n'
 
-	it('derives Apply/Undo availability from the draft and the applied history', async () => {
+	// Lab UX phase 3: there is no Apply. Undo is unavailable only while the JSON text does not parse (it would replace text
+	// that was never committed); pending text that parses is committed first, and a running command is waited for.
+	it('derives Undo availability from the JSON text and the committed history', async () => {
 		const store = createSandboxStore()
-		expect(store.canApply.value)
-			.toBe(false)
 		expect(store.canUndo.value)
 			.toBe(false)
 
-		store.setDraftSourceText(secondText)
-		expect(store.canApply.value)
+		// Pending text that parses can be undone: Undo commits it first.
+		store.editJson(secondText)
+		expect(store.canUndo.value)
 			.toBe(true)
-		const applying = store.apply()
-		expect(store.canApply.value)
-			.toBe(false)
-		await applying
+		const committing = store.flushJson()
+		expect(store.isApplying.value)
+			.toBe(true)
+		expect(store.canUndo.value)
+			.toBe(true)
+		await committing
 		expect(store.undoDepth.value)
 			.toBe(1)
-		expect(store.canUndo.value)
-			.toBe(true)
 
-		store.setDraftSourceText(`${secondText} `)
+		store.editJson(`${secondText} {`)
+		expect(store.jsonBlocked.value)
+			.toBe(true)
 		expect(store.canUndo.value)
 			.toBe(false)
-		store.revert()
+		expect(await store.undo())
+			.toEqual({ status: 'draft-dirty' })
+		store.discardJsonChanges()
+		expect(store.jsonBlocked.value)
+			.toBe(false)
 		expect(store.canUndo.value)
 			.toBe(true)
 
-		expect(await store.undoLastApply())
+		expect(await store.undo())
 			.toMatchObject({ status: 'undone' })
 		expect(store.documentState.value.revision)
 			.toBe(2)
@@ -755,6 +767,44 @@ describe('createLabStore() header and feedback state', () => {
 			.toBe(store.documentState.value.sourceText)
 		expect(store.canUndo.value)
 			.toBe(false)
+		store.dispose()
+	})
+
+	it('undo commits pending JSON text first, so it takes back that text and not the change before it', async () => {
+		const store = createSandboxStore()
+		const initial = store.documentState.value.sourceText
+		store.editJson(secondText)
+		expect(await store.undo())
+			.toMatchObject({ status: 'undone' })
+		expect(store.documentState.value.sourceText)
+			.toBe(initial)
+		// r1 committed the text, r2 is the Undo.
+		expect(store.documentState.value.revision)
+			.toBe(2)
+		store.dispose()
+	})
+
+	it('a command that arrives while another runs waits for it instead of being refused', async () => {
+		const gate = createDeferred()
+		const store = createSandboxStore()
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.revision === 1 ? gate.promise : undefined,
+		})
+		await attachDriver(store, recorded.driver)
+
+		store.editJson(capturedText)
+		const committing = store.flushJson()
+		// The click on Undo lands while the blur commit is still promoting the Preview.
+		const undoing = store.undo()
+		expect(store.documentState.value.revision)
+			.toBe(1)
+		gate.resolve()
+		expect(await committing)
+			.toEqual({ status: 'applied', blueprintStatus: 'valid' })
+		expect(await undoing)
+			.toEqual({ status: 'undone', blueprintStatus: 'valid' })
+		expect(store.documentState.value.revision)
+			.toBe(2)
 		store.dispose()
 	})
 
@@ -771,14 +821,14 @@ describe('createLabStore() header and feedback state', () => {
 		expect(store.example.value)
 			.toMatchObject({ kind: 'preset', preset: { id: 'invalid-semantic' } })
 
-		store.setDraftSourceText(secondText)
+		store.editJson(secondText)
 		expect(store.example.value.kind)
 			.toBe('edited')
-		await store.apply()
+		await store.flushJson()
 		expect(store.example.value.kind)
 			.toBe('edited')
 
-		await store.undoLastApply()
+		await store.undo()
 		expect(store.example.value)
 			.toMatchObject({ kind: 'preset', preset: { id: 'invalid-semantic' } })
 
@@ -792,8 +842,8 @@ describe('createLabStore() header and feedback state', () => {
 
 	it('starts a fresh undo history in a switched showcase', async () => {
 		const store = createSandboxStore()
-		store.setDraftSourceText(secondText)
-		await store.apply()
+		store.editJson(secondText)
+		await store.flushJson()
 		expect(store.canUndo.value)
 			.toBe(true)
 
@@ -806,54 +856,51 @@ describe('createLabStore() header and feedback state', () => {
 		store.dispose()
 	})
 
-	it('derives plain-language status and the Problems list from the last Apply', async () => {
+	it('derives the status chip and the Problems list from the Document and the live JSON syntax state', async () => {
 		const store = createSandboxStore()
 		expect(store.status.value)
-			.toEqual({ validity: { kind: 'valid' }, preview: 'current', draft: 'clean' })
+			.toEqual({ validity: { kind: 'valid' }, preview: 'current', json: 'ok', chip: { kind: 'up-to-date' } })
 		expect(store.problems.value)
 			.toEqual([])
 
-		// A draft is reported as such; what the chips say about the committed Document and the Preview does not move.
-		store.setDraftSourceText(secondText)
-		expect(store.status.value)
-			.toEqual({ validity: { kind: 'valid' }, preview: 'current', draft: 'unapplied' })
-		store.revert()
-		expect(store.status.value.draft)
-			.toBe('clean')
-
 		await store.applyPreset('invalid-semantic')
 		expect(store.status.value)
-			.toEqual({ validity: { kind: 'problems', count: 1 }, preview: 'stale', draft: 'clean' })
+			.toEqual({ validity: { kind: 'problems', count: 1 }, preview: 'stale', json: 'ok', chip: { kind: 'problems', count: 1, previewShown: true } })
 		expect(store.problems.value)
 			.toHaveLength(1)
 		expect(store.problems.value[0])
 			.toMatchObject({ kind: 'diagnostic', code: 'missing-dependency-target' })
 
-		store.setDraftSourceText('{ broken')
-		await store.apply()
+		// A syntax error is live: it shows while the text does not parse, before and without any commit.
+		store.editJson('{ broken')
+		expect(store.status.value.chip)
+			.toEqual({ kind: 'json-not-applied', reason: 'syntax' })
 		expect(store.status.value.validity)
-			.toEqual({ kind: 'problems', count: 2 })
+			.toEqual({ kind: 'problems', count: 1 })
 		expect(store.problems.value.map(problem => problem.kind))
 			.toEqual(['syntax', 'diagnostic'])
+		expect(await store.flushJson())
+			.toBeNull()
+		expect(store.documentState.value.revision)
+			.toBe(1)
 
-		// Editing clears the Lab-only syntax error, as before.
-		store.setDraftSourceText(secondText)
+		store.editJson(secondText)
 		expect(store.problems.value.map(problem => problem.kind))
 			.toEqual(['diagnostic'])
 		store.dispose()
 	})
 
-	it('does not recompute the Problems list while the draft is edited (only a commit or the parse error changes it)', async () => {
+	it('does not recompute the Problems list while JSON text that parses is edited (only a commit or the syntax state changes it)', async () => {
 		const store = createSandboxStore()
 		await store.applyPreset('invalid-semantic')
 		const listed = store.problems.value
 
-		store.setDraftSourceText(secondText)
-		store.setDraftSourceText(`${secondText} `)
+		store.editJson(secondText)
+		store.editJson(`${secondText} `)
 		expect(store.problems.value)
 			.toBe(listed)
 
-		await store.apply()
+		await store.flushJson()
 		expect(store.problems.value).not.toBe(listed)
 		expect(store.problems.value)
 			.toEqual([])
@@ -903,15 +950,19 @@ describe('createLabStore() committed edits and the replaced-document notice (Lab
 		expect(store.hasCommittedEdits.value)
 			.toBe(false)
 
-		store.setDraftSourceText(store.documentState.value.sourceText.replace('How will you join?', 'Where will you be?'))
-		// The draft alone is not a committed edit.
+		// Lab UX phase 3: JSON text that parses is an edit already (it is committed before any replacement runs); text that
+		// does not parse is not (that is `jsonBlocked`, which asks on its own).
+		store.editJson('{ broken')
 		expect(store.hasCommittedEdits.value)
 			.toBe(false)
-		await store.apply()
+		store.editJson(store.documentState.value.sourceText.replace('How will you join?', 'Where will you be?'))
+		expect(store.hasCommittedEdits.value)
+			.toBe(true)
+		await store.flushJson()
 		expect(store.hasCommittedEdits.value)
 			.toBe(true)
 
-		await store.undoLastApply()
+		await store.undo()
 		expect(store.hasCommittedEdits.value)
 			.toBe(false)
 		store.dispose()
@@ -925,8 +976,8 @@ describe('createLabStore() committed edits and the replaced-document notice (Lab
 			.toBeNull()
 
 		const edited = store.documentState.value.sourceText.replace('How will you join?', 'Where will you be?')
-		store.setDraftSourceText(edited)
-		await store.apply()
+		store.editJson(edited)
+		await store.flushJson()
 		await store.applyPreset('survey-default')
 		expect(store.replacedNotice.value)
 			.toEqual({ subject: 'Default — open day sign-up', revision: store.documentState.value.revision })
@@ -934,7 +985,7 @@ describe('createLabStore() committed edits and the replaced-document notice (Lab
 			.toBe(true)
 
 		// Undo brings the edits back and ends the notice.
-		await store.undoLastApply()
+		await store.undo()
 		expect(store.documentState.value.sourceText)
 			.toBe(edited)
 		expect(store.replacedNoticeVisible.value)
@@ -947,13 +998,369 @@ describe('createLabStore() committed edits and the replaced-document notice (Lab
 		expect(store.replacedNoticeVisible.value)
 			.toBe(false)
 
-		await store.undoLastApply()
+		await store.undo()
 		await store.applyPreset('survey-default')
 		expect(store.replacedNoticeVisible.value)
 			.toBe(true)
 		await store.switchShowcase('trip-budget')
 		expect(store.replacedNotice.value)
 			.toBeNull()
+		store.dispose()
+	})
+})
+
+describe('createLabStore() JSON auto-commit (Lab UX phase 3)', () => {
+	const textSource = (text: string): string => `{ "id": "root", "type": "Text", "config": { "text": "${text}" } }`
+
+	it('commits JSON text that parses once typing pauses for JSON_COMMIT_DELAY_MS, and not before', async () => {
+		vi.useFakeTimers()
+		try {
+			const store = createSandboxStore()
+			store.beginJsonEdit()
+			store.editJson(textSource('a'))
+			await vi.advanceTimersByTimeAsync(JSON_COMMIT_DELAY_MS - 100)
+			store.editJson(textSource('ab'))
+			// Each edit restarts the pause: nothing is committed while typing goes on.
+			await vi.advanceTimersByTimeAsync(JSON_COMMIT_DELAY_MS - 100)
+			expect(store.documentState.value.revision)
+				.toBe(0)
+			await vi.advanceTimersByTimeAsync(100)
+			expect(store.documentState.value.revision)
+				.toBe(1)
+			expect(store.documentState.value.sourceText)
+				.toBe(textSource('ab'))
+			expect(store.isDirty.value)
+				.toBe(false)
+			store.dispose()
+		}
+		finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it('commits at once on blur, and the pending timer then has nothing left to do', async () => {
+		vi.useFakeTimers()
+		try {
+			const store = createSandboxStore()
+			store.beginJsonEdit()
+			store.editJson(textSource('blurred'))
+			const outcome = store.endJsonEdit()
+			expect(store.documentState.value.revision)
+				.toBe(1)
+			expect(await outcome)
+				.toEqual({ status: 'applied', blueprintStatus: 'valid' })
+			await vi.advanceTimersByTimeAsync(JSON_COMMIT_DELAY_MS * 2)
+			expect(store.documentState.value.revision)
+				.toBe(1)
+			store.dispose()
+		}
+		finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it('never commits text that does not parse, by timer or blur, and keeps the Document and Preview', async () => {
+		vi.useFakeTimers()
+		try {
+			const store = createSandboxStore()
+			const preview = store.preview.value
+			store.beginJsonEdit()
+			store.editJson('{ "id": "root", ')
+			await vi.advanceTimersByTimeAsync(JSON_COMMIT_DELAY_MS * 2)
+			expect(await store.endJsonEdit())
+				.toBeNull()
+			expect(store.documentState.value.revision)
+				.toBe(0)
+			expect(store.preview.value)
+				.toBe(preview)
+			expect(store.jsonBlocked.value)
+				.toBe(true)
+			expect(store.status.value.chip)
+				.toEqual({ kind: 'json-not-applied', reason: 'syntax' })
+
+			store.discardJsonChanges()
+			expect(store.jsonBlocked.value)
+				.toBe(false)
+			expect(store.isDirty.value)
+				.toBe(false)
+			store.dispose()
+		}
+		finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it('coalesces the commits of one focus session into one Undo entry; a new focus session is a new entry', async () => {
+		vi.useFakeTimers()
+		try {
+			const store = createSandboxStore()
+			const initial = store.documentState.value.sourceText
+			store.beginJsonEdit()
+			for (const text of ['a', 'ab', 'abc']) {
+				store.editJson(textSource(text))
+				await vi.advanceTimersByTimeAsync(JSON_COMMIT_DELAY_MS)
+			}
+			store.editJson(textSource('abcd'))
+			await store.endJsonEdit()
+			// Four commits (the Preview followed each one), one Undo entry.
+			expect(store.documentState.value.revision)
+				.toBe(4)
+			expect(store.undoDepth.value)
+				.toBe(1)
+
+			store.beginJsonEdit()
+			store.editJson(textSource('second session'))
+			await store.endJsonEdit()
+			expect(store.undoDepth.value)
+				.toBe(2)
+
+			await store.undo()
+			expect(store.documentState.value.sourceText)
+				.toBe(textSource('abcd'))
+			await store.undo()
+			expect(store.documentState.value.sourceText)
+				.toBe(initial)
+			store.dispose()
+		}
+		finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it('format commits the formatted text as its own change, outside the typing burst', async () => {
+		const store = createSandboxStore()
+		store.editJson(JSON.stringify(JSON.parse(textSource('compact'))))
+		await store.flushJson()
+		await store.format()
+		expect(store.documentState.value.sourceText)
+			.toBe(JSON.stringify(JSON.parse(textSource('compact')), null, 2))
+		// Same document, other layout: a structural no-op, so no revision and no Undo entry.
+		expect(store.documentState.value.revision)
+			.toBe(1)
+		expect(store.undoDepth.value)
+			.toBe(1)
+		store.dispose()
+	})
+
+	it('a preset load commits pending JSON text first, so Undo brings that text back', async () => {
+		const store = createSandboxStore()
+		store.editJson(textSource('pending'))
+		await store.applyPreset('invalid-semantic')
+		expect(store.loadedPresetId.value)
+			.toBe('invalid-semantic')
+		await store.undo()
+		expect(store.documentState.value.sourceText)
+			.toBe(textSource('pending'))
+		store.dispose()
+	})
+
+	it('a showcase switch drops pending text and its timer', async () => {
+		vi.useFakeTimers()
+		try {
+			const store = createSandboxStore()
+			store.editJson(textSource('pending'))
+			await store.switchShowcase('survey')
+			await vi.advanceTimersByTimeAsync(JSON_COMMIT_DELAY_MS * 2)
+			expect(store.showcaseId.value)
+				.toBe('survey')
+			expect(store.documentState.value.revision)
+				.toBe(0)
+			expect(store.isDirty.value)
+				.toBe(false)
+			store.dispose()
+		}
+		finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
+describe('createLabStore() "Preview restarted" (Lab UX phase 3)', () => {
+	it('is set for PREVIEW_RESTARTED_MS after a commit replaced the Runtime, not by an invalid commit or a showcase switch', async () => {
+		vi.useFakeTimers()
+		try {
+			const store = createSandboxStore()
+			expect(store.previewRestarted.value)
+				.toBe(false)
+
+			store.editJson('{ "id": "root", "type": "Text", "config": { "text": "restart" } }')
+			await store.flushJson()
+			expect(store.previewRestarted.value)
+				.toBe(true)
+			expect(store.status.value.chip)
+				.toEqual({ kind: 'restarted' })
+			await vi.advanceTimersByTimeAsync(PREVIEW_RESTARTED_MS)
+			expect(store.previewRestarted.value)
+				.toBe(false)
+			expect(store.status.value.chip)
+				.toEqual({ kind: 'up-to-date' })
+
+			// An invalid commit keeps the last valid Preview: nothing restarted.
+			await store.applyPreset('invalid-semantic')
+			expect(store.previewRestarted.value)
+				.toBe(false)
+
+			// A showcase switch mounts another session's Preview: not "restarted" by a commit.
+			await store.switchShowcase('survey')
+			expect(store.previewRestarted.value)
+				.toBe(false)
+			store.dispose()
+		}
+		finally {
+			vi.useRealTimers()
+		}
+	})
+
+	// Phase 3A review: a switch right after a commit used to keep "Preview restarted" (and its timer) from the old session.
+	it('is cleared, with its timer, by a showcase switch', async () => {
+		vi.useFakeTimers()
+		try {
+			const store = createSandboxStore()
+			store.editJson('{ "id": "root", "type": "Text", "config": { "text": "restart" } }')
+			await store.flushJson()
+			expect(store.previewRestarted.value)
+				.toBe(true)
+			await store.switchShowcase('survey')
+			expect(store.previewRestarted.value)
+				.toBe(false)
+			expect(store.status.value.chip)
+				.toEqual({ kind: 'up-to-date' })
+			expect(vi.getTimerCount())
+				.toBe(0)
+			store.dispose()
+		}
+		finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
+// Phase 3A review fixes.
+describe('createLabStore() JSON that parses but cannot be applied', () => {
+	it('1e400 is blocked on blur: the chip names the reason, Discard and Undo behave as for a syntax error, and a new text clears it', async () => {
+		const store = createSandboxStore()
+		const initial = store.documentState.value.sourceText
+		const infinite = initial.replace('"Widget Lab sandbox"', '1e400')
+		store.beginJsonEdit()
+		store.editJson(infinite)
+		expect(await store.endJsonEdit())
+			.toMatchObject({ status: 'patch-error', failure: { reason: 'non-finite-number' } })
+		expect(store.jsonBlocked.value)
+			.toBe(true)
+		expect(store.status.value.chip)
+			.toEqual({ kind: 'json-not-applied', reason: 'commit', detail: 'non-finite-number' })
+		expect(store.problems.value[0])
+			.toMatchObject({ kind: 'commit', code: 'json-incompatible-value' })
+		expect(store.canUndo.value)
+			.toBe(false)
+		expect(await store.undo())
+			.toEqual({ status: 'draft-dirty' })
+		// Not retried by flushing again: the same text stays refused.
+		expect(await store.flushJson())
+			.toBeNull()
+		expect(store.documentState.value.revision)
+			.toBe(0)
+
+		store.editJson(initial.replace('"Widget Lab sandbox"', '"fixed"'))
+		expect(store.jsonBlocked.value)
+			.toBe(false)
+		expect(store.status.value.chip.kind)
+			.not
+			.toBe('json-not-applied')
+
+		store.editJson(infinite)
+		await store.flushJson()
+		store.discardJsonChanges()
+		expect(store.jsonBlocked.value)
+			.toBe(false)
+		expect(store.isDirty.value)
+			.toBe(false)
+		store.dispose()
+	})
+
+	it('a document nested deeper than Core accepts is blocked the same way', async () => {
+		const store = createSandboxStore()
+		let deep: unknown = 0
+		for (let level = 0; level < 300; level++)
+			deep = [deep]
+		store.editJson(JSON.stringify(deep))
+		await store.flushJson()
+		expect(store.status.value.chip)
+			.toEqual({ kind: 'json-not-applied', reason: 'commit', detail: 'max-depth-exceeded' })
+		expect(store.hasCommittedEdits.value)
+			.toBe(false)
+		store.dispose()
+	})
+})
+
+describe('createLabStore() commands that wait', () => {
+	function gatedStore(gatedRevision: number) {
+		const gate = createDeferred()
+		const store = createSandboxStore()
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.revision === gatedRevision ? gate.promise : undefined,
+		})
+		return { gate, store, recorded }
+	}
+	const titleNodeId = (store: LabStore) => inspectBlueprint(store.documentState.value.blueprint).nodes.find(node => node.resolved && node.node.id === 'title')!.nodeId
+
+	it('a Structure command built when it starts takes the revision current then, not the one it was asked against', async () => {
+		const { gate, store, recorded } = gatedStore(1)
+		await attachDriver(store, recorded.driver)
+		const first = store.author(replaceConfigScalar(0, titleNodeId(store), 'text', 'one'))
+		const undoing = store.undo()
+		// Asked while r1 is still promoting and Undo waits: built later, against r2.
+		const second = store.author(() => replaceConfigScalar(store.documentState.value.revision, titleNodeId(store), 'text', 'two'))
+		gate.resolve()
+		expect(await first)
+			.toMatchObject({ status: 'applied' })
+		expect(await undoing)
+			.toMatchObject({ status: 'undone' })
+		expect(await second)
+			.toMatchObject({ status: 'applied' })
+		expect(store.documentState.value.revision)
+			.toBe(3)
+		expect(store.documentState.value.sourceText)
+			.toContain('"text": "two"')
+		store.dispose()
+	})
+
+	it('undo requests while an Undo is on its way are that same Undo; a request after it finished undoes the next step', async () => {
+		const store = createSandboxStore()
+		for (const text of ['a', 'b']) {
+			store.editJson(`{ "id": "root", "type": "Text", "config": { "text": "${text}" } }`)
+			await store.flushJson()
+		}
+		const firstClick = store.undo()
+		const doubleClick = store.undo()
+		expect(doubleClick)
+			.toBe(firstClick)
+		expect(await firstClick)
+			.toMatchObject({ status: 'undone' })
+		expect(store.documentState.value.sourceText)
+			.toContain('"text": "a"')
+		expect(await store.undo())
+			.toMatchObject({ status: 'undone' })
+		expect(store.undoDepth.value)
+			.toBe(0)
+		store.dispose()
+	})
+
+	it('a focus that comes back to an open editing session (the window was away) continues its burst', async () => {
+		const store = createSandboxStore()
+		const initial = store.documentState.value.sourceText
+		store.beginJsonEdit()
+		store.editJson('{ "id": "root", "type": "Text", "config": { "text": "before alt-tab" } }')
+		await store.flushJson()
+		// The window blur is ignored by the editor (no endJsonEdit); its focus comes back.
+		store.beginJsonEdit()
+		store.editJson('{ "id": "root", "type": "Text", "config": { "text": "after alt-tab" } }')
+		await store.endJsonEdit()
+		expect(store.undoDepth.value)
+			.toBe(1)
+		await store.undo()
+		expect(store.documentState.value.sourceText)
+			.toBe(initial)
 		store.dispose()
 	})
 })

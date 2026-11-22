@@ -56,7 +56,7 @@ describe('useGraphEdgeSelection', () => {
 			.toEqual(fakeEdge)
 
 		session.setDraftSourceText(invalidSource)
-		await session.apply()
+		await session.commitJson()
 		await nextTick()
 
 		expect(selection.selected.value)
@@ -97,7 +97,7 @@ describe('useGraphEdgeSelection', () => {
 
 		selection.select(fakeEdge)
 		session.setDraftSourceText(JSON.stringify(JSON.parse(validSource)))
-		await session.apply()
+		await session.commitJson()
 		await nextTick()
 
 		expect(session.documentSnapshot.revision)
@@ -112,7 +112,7 @@ describe('useGraphEdgeSelection', () => {
 
 		selection.select(fakeEdge)
 		session.setDraftSourceText('not json')
-		await session.apply()
+		await session.commitJson()
 		await nextTick()
 
 		expect(selection.selected.value)

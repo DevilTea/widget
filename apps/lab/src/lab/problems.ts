@@ -1,9 +1,10 @@
 /**
- * The Author "Problems" list: the last Apply's failures as plain rows, each with a source range for jumping
- * and for editor markers.
+ * The Author "Problems" list: why the JSON text cannot be applied, and the committed Document's diagnostics, as plain rows,
+ * each with a source range for jumping and for editor markers.
  *
- * A row is either the Lab-only JSON `SyntaxError` of the last Apply (`SourceParseError`) or one Core Blueprint
- * diagnostic of the committed Document. Core's `code` and `message` pass through verbatim; the only thing
+ * A row is the Lab-only JSON `SyntaxError` of the current text (`SourceParseError`), Core's refusal of a commit of the
+ * current text (`LabJsonBlock` of kind `commit`: its failure code and message, located by its operand path), or one Core
+ * Blueprint diagnostic of the committed Document. Core's `code` and `message` pass through verbatim; the only thing
  * derived here is *where* the diagnostic points in the source text. Core locates a diagnostic through a
  * Blueprint node (and a member name or a node-relative `path`), and `blueprint.getSourcePath(node)` is the
  * node's absolute source path, so the range is `getSourcePath(node)` plus the diagnostic's own relative
@@ -14,13 +15,14 @@
 import type { BlueprintDiagnostic, BlueprintDiagnosticLocation, WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { BlueprintInspection, InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { JsonPath, JsonPathSegment, JsonSpan } from './json-locate'
-import type { SourceParseError } from './types'
+import type { LabJsonBlock } from './types'
 import { endOfLine, jsonSyntaxErrorSpan, locateJsonMember, locateJsonPath } from './json-locate'
 
 export interface LabProblem {
 	/** Stable within one list: the position in `collectProblems()`'s result. */
 	readonly key: string
-	readonly kind: 'syntax' | 'diagnostic'
+	/** `commit`: Core refused committing the current JSON text (a `json-incompatible-value` patch failure, for example). */
+	readonly kind: 'syntax' | 'commit' | 'diagnostic'
 	/** Core's diagnostic code, verbatim; `null` for a JSON syntax error (Lab-owned, no Core code). */
 	readonly code: string | null
 	/** Core's (or the JavaScript engine's) message, verbatim. */
@@ -128,9 +130,28 @@ function isWidgetLevel(diagnostic: BlueprintDiagnostic): boolean {
 export function collectProblems(
 	blueprint: WidgetSystemBlueprint,
 	inspection: BlueprintInspection,
-	parseError: SourceParseError | null,
+	jsonBlock: LabJsonBlock | null,
 ): readonly LabProblem[] {
 	const problems: LabProblem[] = []
+	if (jsonBlock?.kind === 'commit') {
+		const failure = jsonBlock.failure
+		const reason = 'reason' in failure && failure.reason !== undefined ? String(failure.reason) : null
+		problems.push({
+			key: 'commit',
+			kind: 'commit',
+			code: failure.code,
+			message: failure.message,
+			locationLabel: reason,
+			nodeId: null,
+			// The commit is one root replacement, so the operand-relative path is the absolute source path.
+			sourcePath: 'path' in failure && failure.path !== undefined ? jsonSegments(failure.path) : [],
+			configPath: null,
+			widgetLevel: false,
+			syntaxSourceText: null,
+			cycle: null,
+		})
+	}
+	const parseError = jsonBlock?.kind === 'syntax' ? jsonBlock.error : null
 	if (parseError !== null) {
 		problems.push({
 			key: 'syntax',

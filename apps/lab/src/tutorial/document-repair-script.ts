@@ -202,7 +202,7 @@ export const documentRepairTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You have seen diagnostics located in a stored document, a repair plan written by the application, patches guarded by test operations, a stale revision refused by Core and a draft that never gets a Runtime.',
-				reveal: 'Edit the JSON (change a draft\'s savedWith, or its stored source) and press Apply, load "Draft with mistakes" to see config diagnostics in the desk itself, or open the Implementation of SavedDraft to read planRepair and the session code.',
+				reveal: 'Edit the JSON (change a draft\'s savedWith, or its stored source) and watch the Preview update, load "Draft with mistakes" to see config diagnostics in the desk itself, or open the Implementation of SavedDraft to read planRepair and the session code.',
 			}],
 		},
 	],

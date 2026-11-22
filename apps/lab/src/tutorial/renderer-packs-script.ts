@@ -166,7 +166,7 @@ export const rendererPacksTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You have seen one Runtime drawn by two renderer packs, providers that are named instead of found, a Method that calls another widget\'s Method and a confirmation that stays inside the Preview.',
-				reveal: 'Edit the JSON (change a field\'s appearance or the Notifier\'s limit) and press Apply, load "Draft with mistakes" to see the structure diagnostics for a name that matches no widget, or open the Implementation of TextField to read its plugin next to both of its renderers.',
+				reveal: 'Edit the JSON (change a field\'s appearance or the Notifier\'s limit) and watch the Preview update, load "Draft with mistakes" to see the structure diagnostics for a name that matches no widget, or open the Implementation of TextField to read its plugin next to both of its renderers.',
 			}],
 		},
 	],

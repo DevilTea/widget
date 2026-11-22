@@ -194,8 +194,8 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 	/** Commits an edit of the survey's mode label, so the Document equals no preset. */
 	async function commitEdit(store: ReturnType<typeof createLabStore>): Promise<string> {
 		const edited = store.documentState.value.sourceText.replace('How will you join?', 'Where will you be?')
-		store.setDraftSourceText(edited)
-		await store.apply()
+		store.editJson(edited)
+		await store.flushJson()
 		return edited
 	}
 
@@ -217,7 +217,7 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 		expect(store.replacedNotice.value?.subject)
 			.toBe('Default — open day sign-up')
 
-		await store.undoLastApply()
+		await store.undo()
 		expect(store.documentState.value.sourceText)
 			.toBe(edited)
 		store.dispose()
@@ -225,8 +225,8 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 
 	it('starting from a showcase without a tour over committed edits asks first, naming that Undo cannot bring them back', async () => {
 		const store = createLabStore(getShowcase('sandbox')!)
-		store.setDraftSourceText('{ "id": "root", "type": "Text", "config": { "text": "mine" } }\n')
-		await store.apply()
+		store.editJson('{ "id": "root", "type": "Text", "config": { "text": "mine" } }\n')
+		await store.flushJson()
 		const switchShowcase = vi.fn(async () => {})
 		store.switchShowcase = switchShowcase
 		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
@@ -240,13 +240,13 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 
 		tutorial.cancelStart()
 		expect(tutorial.confirmMessage.value)
-			.toBe('Starting the tutorial will load the Survey teaching example and replace your unapplied changes.')
+			.toBe('Starting the tutorial will load the Survey teaching example and discard the JSON that can\'t be applied yet.')
 
-		// With an unapplied draft as well, one message names both.
-		store.setDraftSourceText('{ "unapplied": true }')
+		// With JSON text that does not parse as well, one message names both.
+		store.editJson('{ "unapplied": ')
 		tutorial.requestStart()
 		expect(tutorial.confirmMessage.value)
-			.toBe('Starting the tutorial opens its teaching example in another showcase. The JSON editor\'s unapplied changes and your edits to this document will be discarded, and Undo cannot bring them back.')
+			.toBe('Starting the tutorial opens its teaching example in another showcase. The JSON that can\'t be applied yet and your edits to this document will be discarded, and Undo cannot bring them back.')
 		tutorial.cancelStart()
 		store.dispose()
 	})

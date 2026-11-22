@@ -50,15 +50,26 @@ export type AuthorOutcome
 		| { readonly status: 'patch-error', readonly failure: ApplyPatchFailure }
 
 /**
- * A `JSON.parse()` syntax failure at Apply time. Lab-only: never injected into core Blueprint
- * diagnostics, and never surfaced when the active snapshot itself is untouched by a failed Apply.
+ * A `JSON.parse()` syntax failure of the current JSON text (Lab UX phase 3: live, while the text does not parse). Lab-only:
+ * never injected into core Blueprint diagnostics, and nothing is committed from such a text.
  */
 export interface SourceParseError {
 	/** The native `SyntaxError` message, kept verbatim (never re-parsed for a machine taxonomy). */
 	readonly message: string
-	/** The exact draft text that failed to parse, captured at the start of the Apply command. */
+	/** The exact JSON text that failed to parse. */
 	readonly sourceText: string
 }
+
+/**
+ * Why the JSON view's text cannot be applied (Lab UX phase 3 review): it does not parse (`syntax`), or it parses but its commit
+ * failed mechanically for this very text (`commit`: Core refused the root `SourcePatch`, e.g. a number outside the JSON domain
+ * such as `1e400`, or nesting deeper than Core accepts). Either way nothing from the text is in the Document, and the Lab treats
+ * both alike: the status chip, the Problems row, "Discard JSON changes", the Structure lock and Undo's refusal. A `commit` block
+ * lasts only while the text is exactly the one that failed; any edit clears it (and is tried again).
+ */
+export type LabJsonBlock
+	= | { readonly kind: 'syntax', readonly error: SourceParseError }
+		| { readonly kind: 'commit', readonly sourceText: string, readonly failure: ApplyPatchFailure }
 
 /**
  * The last successfully parsed-and-applied source snapshot.
@@ -101,7 +112,7 @@ export type ApplyOutcome
 		| { readonly status: 'applied', readonly blueprintStatus: 'valid' | 'invalid' }
 
 /**
- * Result of `LabSession.undoLastApply()`. `nothing-to-undo` and `draft-dirty` are the two "not available"
+ * Result of `LabSession.undo()`. `nothing-to-undo` and `draft-dirty` are the two "not available"
  * states the header explains in its tooltip; the others mirror `ApplyOutcome`.
  */
 export type UndoOutcome
@@ -157,7 +168,7 @@ export interface RevisionConflictDemoResult {
 }
 
 /**
- * Fired after every state-observable Lab mutation (draft edits, Apply start/end, revert, format).
+ * Fired after every state-observable Lab mutation (JSON text edits, commit start/end, revert, format).
  * Carries no payload — listeners re-read whatever `LabSession` fields they care about, mirroring the
  * plain-getter, framework-agnostic shape the rest of this module keeps.
  */

@@ -1,7 +1,7 @@
 /**
  * Applied-instance extraction (diagnostic #25 P3 Scope B). Given the APPLIED Document Blueprint — always
- * `LabStore.documentState.value.blueprint`, never the unapplied draft (the P1 gate review's "Applied
- * instance ... always derives from the applied snapshot — never the unapplied draft — so the two
+ * `LabStore.documentState.value.blueprint`, never the JSON text that is not in the Document (the P1 gate review's "Applied
+ * instance ... always derives from the applied snapshot — never the JSON text that is not in the Document — so the two
  * identities cannot blur") — and the focused inspection node, returns that widget's own authored JSON
  * fragment pretty-printed.
  *
