@@ -1236,7 +1236,13 @@ an add that is not reported, or is reported and refused, keeps the choice for an
 selection) reaches only the control at the edit's path (`resync`, passed down the tree, with the outcome message): a list or a switch the user only moved is re-created and
 shows what the Document holds again; a text, number or JSON box keeps the rejected input (nothing typed is lost) and says "Not applied: <why>" (`data-testid="not-applied"`,
 the box's `aria-describedby`; the reason alone, the outcome line above is the live announcement), with **Use the Document value** to go back (focus returns to the box).
-A command that went through says so in plain language ("Change applied. Use Undo to take it back."; it said "Author command applied to Document rN"); the
+**While a JSON draft exists** (`isDirty`) a Structure commit would be refused (`draft-dirty`: it would discard the draft), so since Lab UX phase 1
+Structure says so before anything is clicked: a notice above the editor ("The JSON view has unapplied changes. Apply or discard the JSON draft
+to edit here.", `structure-draft-notice`, `role="note"`, with **Open the JSON view**) and the fields are locked (`structure-fields`
+`data-locked="true"`, dimmed; `ConfigFieldEditor` gets `busy`, so the controls keep focus and readability, carry `aria-disabled` and send
+nothing). The tree stays usable. The `draft-dirty` refusal and the resync/"Not applied" handling stay for a draft that appears while a
+command is being sent (and serve patch errors and stale selections); `e2e/structure-editor.spec.ts` reaches them by setting the draft and
+acting in the same task (`actWithDraftAppearing`). A command that went through says so in plain language ("Change applied. Use Undo to take it back."; it said "Author command applied to Document rN"); the
 revision it produced is the outcome line's `data-revision`, for specs.
 A later change of the Document's value at that path replaces the text and clears the note (a JSON box compares by content, so the same config re-read as a new
 object changes nothing), and so does typing the Document's value back. Text typed into other fields is kept, and the root editor is keyed by the selected

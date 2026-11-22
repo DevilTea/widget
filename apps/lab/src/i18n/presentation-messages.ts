@@ -49,6 +49,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Enter a valid value of the same scalar type.': '請輸入相同 scalar 型別的有效值。',
 	'Change applied. Use Undo to take it back.': '已套用變更。可用「復原上一步」撤回。',
 	'Apply or Revert the JSON draft before using Structure commands.': '使用結構編輯前，請先套用或捨棄 JSON 草稿。',
+	'The JSON view has unapplied changes. Apply or discard the JSON draft to edit here.': 'JSON 檢視中有尚未套用的變更。請先套用或捨棄 JSON 草稿，才能在這裡編輯。',
+	'Open the JSON view': '開啟 JSON 檢視',
 	'The author command could not be applied: {message}': 'Author command 無法套用：{message}',
 	'This selected value is no longer available in the current Document.': '目前 Document 已找不到這個選取的值。',
 	'The author command is unavailable while another lifecycle command is running.': '其他 lifecycle command 執行期間無法使用 Author command。',

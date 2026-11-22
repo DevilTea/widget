@@ -17,6 +17,8 @@ const documentInspection = computed(() => inspectBlueprint(store.documentState.v
 const selectedNodeId = computed<InspectionNodeId | null>(() => store.documentFocus.value?.nodeId ?? null)
 const selectedNode = computed(() => selectedNodeId.value === null ? null : documentInspection.value.getNode(selectedNodeId.value))
 const busy = ref(false)
+/** An unapplied JSON draft exists: a Structure commit would be refused (`draft-dirty`), so the editor says so up front and sends nothing. */
+const draftLocked = computed(() => store.isDirty.value)
 const outcomeMessage = ref<string | null>(null)
 /** The Document revision a successful command produced (`data-revision` of the outcome line, for specs). */
 const outcomeRevision = ref<number | null>(null)
@@ -164,6 +166,24 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 			tabindex="-1"
 			class="min-w-0 overflow-auto p-2.5"
 		>
+			<!-- The JSON draft and Structure both edit the Document, and a Structure commit is refused while a draft exists
+				(it would be lost). Say so before anything is clicked, and lock the controls. -->
+			<div
+				v-if="draftLocked"
+				data-testid="structure-draft-notice"
+				role="note"
+				class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-(--lab-radius) border border-(--lab-color-warning) bg-(--lab-color-surface-alt) px-2 py-1.5 text-xs text-(--lab-color-text)"
+			>
+				<span class="min-w-0 flex-1">{{ i18n.t('The JSON view has unapplied changes. Apply or discard the JSON draft to edit here.') }}</span>
+				<button
+					type="button"
+					data-testid="structure-open-json"
+					class="min-h-6 cursor-pointer rounded-(--lab-radius) border border-default bg-default px-2 text-xs text-default focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+					@click="store.authorView.value = 'json'"
+				>
+					{{ i18n.t('Open the JSON view') }}
+				</button>
+			</div>
 			<div
 				v-if="selectedNode === null"
 				class="text-xs text-muted"
@@ -191,19 +211,27 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 						<p class="m-0 mb-2 text-xs text-muted">
 							{{ i18n.t(configSchema === null ? 'This plugin publishes no config schema, so values are typed by what they hold and nothing can be added or removed here. Use JSON for that.' : 'Each change is applied to the Document at once and restarts the preview (its answers start over). Use Undo to take a change back.') }}
 						</p>
-						<ConfigFieldEditor
-							:key="selectedNodeId ?? 'none'"
-							bare
-							:resync="resync"
-							:asJson="configAsJson"
-							:root="configSchema"
-							:schema="configSchema"
-							:value="configValue"
-							:path="[]"
-							label="config"
-							:busy="busy"
-							@edit="onEdit"
-						/>
+						<!-- Locked by a JSON draft: the controls stay focusable and readable (as while a command runs: `aria-disabled`)
+							but send nothing, and look dimmed; the notice above says why. -->
+						<div
+							data-testid="structure-fields"
+							:data-locked="draftLocked ? 'true' : 'false'"
+							:class="draftLocked ? 'opacity-60' : undefined"
+						>
+							<ConfigFieldEditor
+								:key="selectedNodeId ?? 'none'"
+								bare
+								:resync="resync"
+								:asJson="configAsJson"
+								:root="configSchema"
+								:schema="configSchema"
+								:value="configValue"
+								:path="[]"
+								label="config"
+								:busy="busy || draftLocked"
+								@edit="onEdit"
+							/>
+						</div>
 					</template>
 				</section>
 				<p
