@@ -1,6 +1,7 @@
 /**
- * What the Structure editor knows about one config value, read from the plugin's passive config JSON Schema
- * (`WidgetCatalogEntry.config.schema`, Draft 2020-12) and from the value itself (audit U15).
+ * What the Structure editor knows about one config value, read from the plugin's passive config JSON Schema (Draft
+ * 2020-12; generated from the plugin's `Interfaces` by `widgetDocs()`, see `ShowcaseEntry.configSchemas`) and from the value
+ * itself (audit U15).
  *
  * This is presentation only. It picks the control for a value (a switch, a number box, a choice list, a text box, a
  * list with Add and Remove) and what may be added or removed where the schema allows it. It never validates:
@@ -9,7 +10,8 @@
  * module does not read, such as an unmatched `oneOf`) a value is typed by what it is, and anything that is not a
  * scalar falls back to editing its JSON text.
  *
- * Understood keywords: `$ref` into `$defs`/`definitions`, `type` (single or list), `enum`, `const`, `oneOf`/`anyOf`,
+ * Understood keywords: `$ref` into `$defs`/`definitions`, `type` (single or list), `enum`, `const`, `oneOf`/`anyOf` (a union of
+ * one schema and `null`, how a generated schema says a value may be `null`, is read as that schema for a value that is not),
  * `properties`, `required`, `additionalProperties`, `items`, `minItems`, `maxItems`, `minimum`, `maximum`,
  * `minLength`, `maxLength`, `default`, `description`. Everything else is ignored.
  */
@@ -183,6 +185,28 @@ export function looksLike(root: JsonSchema | null, schema: JsonSchema | null, va
 	return true
 }
 
+/** Whether `schema` admits `null` only: `type: "null"` or `type: ["null"]`. */
+function isNullSchema(root: JsonSchema | null, schema: unknown): boolean {
+	const resolved = resolveSchema(root, asSchema(schema))
+	if (resolved === null)
+		return false
+	const types = typeList(resolved)
+	return types.length === 1 && types[0] === 'null'
+}
+
+/**
+ * The one other branch of a union with `null` (`anyOf: [X, { type: "null" }]`, how a generated schema says that a config or a
+ * field may be `null`), or `null` when `schema` is not such a union. A value that is not `null` is edited as that branch,
+ * without the "other forms" hint: `null` is not a form the editor would offer.
+ */
+function nullableBranch(root: JsonSchema | null, schema: JsonSchema): JsonSchema | null {
+	const branches = Array.isArray(schema.oneOf) ? schema.oneOf : Array.isArray(schema.anyOf) ? schema.anyOf : null
+	if (branches === null || branches.length < 2)
+		return null
+	const others = branches.filter(branch => !isNullSchema(root, branch))
+	return others.length === 1 ? asSchema(others[0]) : null
+}
+
 /** The branch of a union the value is edited as, or `null` when the schema is a union and no branch fits. */
 function selectBranch(root: JsonSchema | null, schema: JsonSchema, value: unknown): JsonSchema | null | 'none' {
 	const branches = Array.isArray(schema.oneOf) ? schema.oneOf : Array.isArray(schema.anyOf) ? schema.anyOf : null
@@ -216,6 +240,9 @@ export function describeField(root: JsonSchema | null, schema: JsonSchema | null
 	if (resolved === null || depth > MAX_DEPTH)
 		return { field: schema === null ? inferFromValue(value) : { kind: 'json' }, description: null, schema: null }
 	const description = typeof resolved.description === 'string' ? resolved.description : null
+	const nullable = value === null ? null : nullableBranch(root, resolved)
+	if (nullable !== null)
+		return describeField(root, { ...nullable, ...(description === null ? {} : { description }) }, value, depth + 1)
 	const branch = selectBranch(root, resolved, value)
 	if (branch === 'none')
 		return { field: { kind: 'json' }, description, schema: resolved }
@@ -294,7 +321,7 @@ export function defaultValueFor(root: JsonSchema | null, schema: JsonSchema | nu
 		return resolved.enum[0]
 	const branches = Array.isArray(resolved.oneOf) ? resolved.oneOf : Array.isArray(resolved.anyOf) ? resolved.anyOf : null
 	if (branches !== null)
-		return defaultValueFor(root, asSchema(branches[0]), depth + 1)
+		return defaultValueFor(root, asSchema(branches.find(branch => !isNullSchema(root, branch)) ?? branches[0]), depth + 1)
 	const type = typeList(resolved)[0]
 	switch (type) {
 		case 'boolean': return false

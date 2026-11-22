@@ -60,34 +60,39 @@ describe('the documentation each showcase carries (Core 0.3 has no descriptions 
 		}
 	})
 
-	it('maps each Survey, document-repair and renderer-packs plugin type to its own schema', async () => {
-		const survey = await import('./survey/schemas')
-		expect(getShowcase('survey')?.configSchemas)
-			.toStrictEqual({
-				Survey: survey.surveyConfigSchema,
-				SingleChoice: survey.singleChoiceConfigSchema,
-				MultipleChoice: survey.multipleChoiceConfigSchema,
-				Numeric: survey.numericConfigSchema,
-				ShortAnswer: survey.shortAnswerConfigSchema,
-			})
-		const repair = await import('./document-repair/schemas')
-		expect(getShowcase('document-repair')?.configSchemas)
-			.toStrictEqual({
-				RepairDesk: repair.repairDeskConfigSchema,
-				SavedDraft: repair.savedDraftConfigSchema,
-			})
-		const packs = await import('./renderer-packs/schemas')
-		expect(getShowcase('renderer-packs')?.configSchemas)
-			.toStrictEqual({
-				SettingsPage: packs.settingsPageConfigSchema,
-				Appearance: packs.appearanceConfigSchema,
-				Notifier: packs.notifierConfigSchema,
-				Section: packs.sectionConfigSchema,
-				TextField: packs.textFieldConfigSchema,
-				Toggle: packs.toggleConfigSchema,
-				Choice: packs.choiceConfigSchema,
-				DangerAction: packs.dangerActionConfigSchema,
-			})
+	it('hands the Lab the generated config schema of each plugin, except quote-rules, which keeps its Valibot schemas', async () => {
+		// Per showcase: the plugin types with a config, and for one of them a named type its schema must define.
+		const expected: Record<string, { readonly types: readonly string[], readonly type: string, readonly def: string }> = {
+			'survey': { types: ['Survey', 'SingleChoice', 'MultipleChoice', 'Numeric', 'ShortAnswer'], type: 'Numeric', def: 'type_Condition' },
+			'trip-budget': { types: ['Trip', 'Currency', 'Person', 'Expense'], type: 'Expense', def: 'type_PercentSplitRaw' },
+			'onboarding': { types: ['Onboarding', 'AccountStep', 'InterestsStep', 'SafetyStep', 'InductionStep'], type: 'InterestsStep', def: 'type_InterestOptionRaw' },
+			'document-repair': { types: ['RepairDesk', 'SavedDraft'], type: 'SavedDraft', def: 'type_SavedDraftRawConfig' },
+			'renderer-packs': { types: ['SettingsPage', 'Appearance', 'Notifier', 'Section', 'TextField', 'Toggle', 'Choice', 'DangerAction'], type: 'Choice', def: 'type_ChoiceOption' },
+		}
+		expect(showcases.filter(entry => !['quote-rules', 'sandbox'].includes(entry.id))
+			.map(entry => entry.id))
+			.toEqual(Object.keys(expected))
+		for (const [id, { types, type, def }] of Object.entries(expected)) {
+			const showcase = getShowcase(id)!
+			expect(Object.keys(showcase.configSchemas), id)
+				.toEqual(types)
+			for (const [name, schema] of Object.entries(showcase.configSchemas)) {
+				// The very object `widgetDocs()` generated, a Draft 2020-12 document of its own.
+				expect(schema, `${id} ${name}`)
+					.toBe(showcase.docs.plugins[name]!.config!.schema)
+				expect(schema, `${id} ${name}`)
+					.toMatchObject({ $schema: 'https://json-schema.org/draft/2020-12/schema', title: `${name} config` })
+			}
+			expect(Object.keys(showcase.configSchemas[type]!.$defs as object), `${id} ${type}`)
+				.toContain(def)
+		}
+		expect(getShowcase('document-repair')!.configSchemas.SavedDraft)
+			.toMatchObject({ $ref: '#/$defs/type_SavedDraftRawConfig', $defs: { type_SavedDraftRawConfig: { required: ['title', 'savedWith', 'source'] } } })
+		const quote = await import('./quote-rules/schemas')
+		expect(getShowcase('quote-rules')?.configSchemas)
+			.toBe(quote.quoteConfigSchemas)
+		expect(getShowcase('sandbox')?.configSchemas)
+			.toEqual({})
 	})
 })
 

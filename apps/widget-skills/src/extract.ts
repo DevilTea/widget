@@ -224,19 +224,76 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 	}
 
 	function propertyOf(property: ts.Symbol, depth: number): ShapeProperty {
+		const type = checker.getTypeOfSymbol(property)
 		return {
 			name: property.name,
 			optional: (property.flags & ts.SymbolFlags.Optional) !== 0,
-			shape: shapeOf(checker.getTypeOfSymbol(property), depth + 1),
+			shape: writtenShape(property, type, depth + 1) ?? shapeOf(type, depth + 1),
 			doc: docOf(property),
 		}
 	}
 
+	function withoutUndefined(type: ts.Type): ts.Type[] {
+		return (type.isUnion() ? type.types : [type]).filter(member => !(member.flags & ts.TypeFlags.Undefined))
+	}
+
+	/**
+	 * The shape of a property written as a union (`boolean | Condition`) or declared optional (`visibleWhen?: Condition`),
+	 * read from its type annotation. The checker flattens such a union (and adds `undefined` to an optional property), so
+	 * the property's type no longer names `Condition` and it would be expanded inline; the annotation keeps the name.
+	 * `null` when the annotation is not the property's type (an instantiated generic member, for example).
+	 */
+	function writtenShape(property: ts.Symbol, type: ts.Type, depth: number): Shape | null {
+		const declaration = property.valueDeclaration
+		if (declaration === undefined || !(ts.isPropertySignature(declaration) || ts.isPropertyDeclaration(declaration)) || declaration.type === undefined)
+			return null
+		let node: ts.TypeNode = declaration.type
+		while (ts.isParenthesizedTypeNode(node))
+			node = node.type
+		if (!ts.isUnionTypeNode(node) && !(property.flags & ts.SymbolFlags.Optional))
+			return null
+		const written = withoutUndefined(checker.getTypeFromTypeNode(node))
+		const actual = withoutUndefined(type)
+		if (written.length !== actual.length || !written.every(member => actual.includes(member)))
+			return null
+		return shapeOfNode(node, depth)
+	}
+
+	function shapeOfNode(node: ts.TypeNode, depth: number): Shape {
+		while (ts.isParenthesizedTypeNode(node))
+			node = node.type
+		if (!ts.isUnionTypeNode(node))
+			return shapeOf(checker.getTypeFromTypeNode(node), depth)
+		const members = node.types.filter(member => member.kind !== ts.SyntaxKind.UndefinedKeyword)
+			.map(member => shapeOfNode(member, depth + 1))
+			.flatMap(shape => shape.kind === 'union' ? shape.members : [shape])
+		const hasTrue = members.some(member => member.kind === 'literal' && member.value === true)
+		const hasFalse = members.some(member => member.kind === 'literal' && member.value === false)
+		const merged = hasTrue && hasFalse
+			? [...members.filter(member => !(member.kind === 'literal' && typeof member.value === 'boolean')), { kind: 'boolean' } as Shape]
+			: members
+		return merged.length === 1 ? merged[0]! : { kind: 'union', members: merged }
+	}
+
+	/** The types whose structural walk is in progress, and those of them the walk reached again (a recursive type). */
+	const walking = new Set<ts.Type>()
+	const recursive = new Set<ts.Type>()
+
 	/** The shape of `type`; a user-declared named type is registered in `types` and referenced by name. */
 	function shapeOf(type: ts.Type, depth = 0): Shape {
 		const named = namedDeclarationOf(type)
-		if (named === null)
-			return structuralShape(type, depth)
+		if (named === null) {
+			// A recursive type without a name of its own (one from a dependency, such as Core's `JsonValue`) cannot be
+			// referenced: the whole type is untyped instead of being expanded to the depth limit.
+			if (walking.has(type)) {
+				recursive.add(type)
+				return { kind: 'unknown' }
+			}
+			walking.add(type)
+			const shape = structuralShape(type, depth)
+			walking.delete(type)
+			return recursive.delete(type) ? { kind: 'unknown' } : shape
+		}
 		const existing = namedByDeclaration.get(named.declaration)
 		if (existing !== undefined)
 			return { kind: 'ref', name: existing }

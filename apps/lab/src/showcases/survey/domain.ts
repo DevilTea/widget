@@ -24,6 +24,7 @@
 
 /** The languages the built-in messages cover. A survey's `languages` must be a subset, first = default. */
 export const SUPPORTED_LANGUAGES = ['en', 'zh-TW'] as const
+/** A language a survey can be offered in. */
 export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]
 
 /** The language's name in that language, for a language switch. */
@@ -53,7 +54,12 @@ export function isSupportedLanguage(input: unknown): input is SupportedLanguage 
 // has optional properties; it is only ever used as a property type inside a raw config, where Core
 // handles optional keys itself.
 
-/** Text per language: `{ "en": "...", "zh-TW": "..." }`. Must contain every language of the survey. */
+/**
+ * Text per language: `{ "en": "...", "zh-TW": "..." }`. Must contain every language of the survey.
+ *
+ * @minProperties 1
+ * @minLength 1
+ */
 export interface I18nText { readonly [language: string]: string }
 
 /** A condition on one question's effective answer. A hidden question has no value: every condition reads it as unanswered. */
@@ -61,7 +67,10 @@ export type LeafCondition
 	= | {
 		/**
 		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
+		 * the question itself, but its `required` and `rules` may.
+		 *
+		 * @minLength 1
 		 */
 		readonly question: string
 		/** `answered` holds when the question has an effective answer, `unanswered` when it has none (or is hidden). */
@@ -70,7 +79,10 @@ export type LeafCondition
 	| {
 		/**
 		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
+		 * the question itself, but its `required` and `rules` may.
+		 *
+		 * @minLength 1
 		 */
 		readonly question: string
 		/** `equals` is true only for an identical answer; `notEquals` is also true for an unanswered or hidden question. */
@@ -81,10 +93,16 @@ export type LeafCondition
 	| {
 		/**
 		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
+		 * the question itself, but its `required` and `rules` may.
+		 *
+		 * @minLength 1
 		 */
 		readonly question: string
-		/** Compares a numeric answer; false for a hidden or unanswered question. */
+		/**
+		 * Compares a numeric answer: only a Numeric question can satisfy `greaterThan` or `lessThan`; false for a hidden or
+		 * unanswered question.
+		 */
 		readonly op: 'greaterThan' | 'lessThan'
 		/** The number the answer is compared with. */
 		readonly value: number
@@ -92,7 +110,10 @@ export type LeafCondition
 	| {
 		/**
 		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
+		 * the question itself, but its `required` and `rules` may.
+		 *
+		 * @minLength 1
 		 */
 		readonly question: string
 		/** Whether a MultipleChoice answer contains `value`; `excludes` is also true for an unanswered or hidden question. */
@@ -108,11 +129,19 @@ export type LeafCondition
 export type Condition
 	= | LeafCondition
 		| {
-			/** Holds when every listed condition holds. */
+			/**
+			 * Holds when every listed condition holds.
+			 *
+			 * @minItems 1
+			 */
 			readonly all: readonly Condition[]
 		}
 		| {
-			/** Holds when at least one listed condition holds. */
+			/**
+			 * Holds when at least one listed condition holds.
+			 *
+			 * @minItems 1
+			 */
 			readonly any: readonly Condition[]
 		}
 		| {

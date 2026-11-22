@@ -1,7 +1,7 @@
 /**
  * `widgetDocs(options)`: a Vite plugin that serves the documentation of a Widget System, generated from its
  * TypeScript types and JSDoc at build time, as `virtual:widget-docs/<name>` (a default export of type `WidgetDocs`,
- * see `docs-types.ts` and `virtual-widget-docs.d.ts`).
+ * see `docs-types.ts` and `virtual-widget-docs.d.ts`; with `slim: true`, `WidgetDocsSlim` and `virtual-widget-docs-slim.d.ts`).
  *
  * It works the same in `vite dev`, `vite build` and Vitest. Generation goes through the disk cache of
  * `docs-cache.ts`: a hit builds no TypeScript program and imports nothing.
@@ -22,6 +22,7 @@ import type { DocsCache, DocsCacheOptions, DocsResult } from './docs-cache'
 import { resolve } from 'node:path'
 import process from 'node:process'
 import { formatCheck } from './check'
+import { slimDocs } from './docs'
 import { createDocsCache, defaultCacheDir } from './docs-cache'
 
 export interface WidgetDocsSystemOptions {
@@ -49,6 +50,14 @@ export interface WidgetDocsOptions {
 	cacheDir?: string | false
 	/** Import the System's module for the runtime cross-check (runs its top-level code). Default `true`. */
 	runtime?: boolean
+	/**
+	 * Serve the slim docs (`WidgetDocsSlim`): the summary and `@remarks` of each plugin, its config, slots and Events, and the
+	 * config schema; no `types`, printed types, tags, State, Properties, Methods or reasons. Default `false`: the full
+	 * `WidgetDocs`. The disk cache always holds the full docs and the slim object is projected from them when the module
+	 * is loaded, so switching the option regenerates nothing. Declare the module with
+	 * `@deviltea/widget-skills/virtual-widget-docs-slim` instead of `virtual-widget-docs`.
+	 */
+	slim?: boolean
 	/** Seams for tests. */
 	createProgram?: DocsCacheOptions['createProgram']
 	loadRuntime?: DocsCacheOptions['loadRuntime']
@@ -129,7 +138,8 @@ export function widgetDocs(options: WidgetDocsOptions): Plugin {
 			}
 			if (!result.check.ok)
 				this.warn(`widget-docs: "${name}" has documentation problems:\n${formatCheck(result.check)}`)
-			return `export default JSON.parse(${JSON.stringify(JSON.stringify(result.docs))})\n`
+			const docs = options.slim === true ? slimDocs(result.docs) : result.docs
+			return `export default JSON.parse(${JSON.stringify(JSON.stringify(docs))})\n`
 		},
 		configureServer(devServer) {
 			server = devServer

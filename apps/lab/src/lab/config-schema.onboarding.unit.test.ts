@@ -1,12 +1,18 @@
 /**
- * What the Structure editor makes of the onboarding plugins' config JSON Schemas (`describeField`, the reader behind its
- * controls): option and rule lists with Add and Remove, a whole-number box, text-per-language objects and day and time
+ * What the Structure editor makes of the onboarding plugins' config JSON Schemas, generated from their `Interfaces` by
+ * `widgetDocs()` (`describeField`, the reader behind its controls): option and rule lists with Add and Remove, a whole-number box, text-per-language objects and day and time
  * lists. It lives with the Lab's code, not in the showcase, because a showcase test may not import the Lab.
  */
 
 import { describe, expect, it } from 'vitest'
-import { inductionConfigSchema, interestsConfigSchema, onboardingConfigSchema, safetyConfigSchema } from '../showcases/onboarding/schemas'
+import { getShowcase } from '../showcases/registry'
 import { describeField } from './config-schema'
+
+const schemas = getShowcase('onboarding')!.configSchemas
+const onboardingConfigSchema = schemas.Onboarding!
+const interestsConfigSchema = schemas.InterestsStep!
+const safetyConfigSchema = schemas.SafetyStep!
+const inductionConfigSchema = schemas.InductionStep!
 
 function propertiesOf(schema: Record<string, unknown>, value: unknown): Record<string, Record<string, unknown>> {
 	return (describeField(schema, schema, value).field as { properties: Record<string, Record<string, unknown>> }).properties

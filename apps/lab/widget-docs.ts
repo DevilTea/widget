@@ -31,5 +31,8 @@ export function labWidgetDocs() {
 		systems: Object.fromEntries(Object.entries(SYSTEMS)
 			.map(([name, [module, exportName]]) => [name, { module: labPath(`./${module}`), export: exportName, tsconfig }])),
 		cacheDir: labPath('./node_modules/.cache/widget-docs'),
+		// The Lab reads the prose of plugins, configs, slots and Events and the config schemas: the slim docs carry exactly that,
+		// and they sit in the eager shell chunk.
+		slim: true,
 	})
 }

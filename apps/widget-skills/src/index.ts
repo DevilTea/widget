@@ -1,6 +1,6 @@
 export type { CheckProblem, CheckResult } from './check'
 export { checkIr, formatCheck } from './check'
-export { emitDocs } from './docs'
+export { emitDocs, slimDocs } from './docs'
 export type { DocsCache, DocsCacheOptions, DocsResult, DocsSystem } from './docs-cache'
 export { createDocsCache, defaultCacheDir } from './docs-cache'
 export type * from './docs-types'

@@ -119,6 +119,7 @@ export interface NotifierRawConfig {
 	/**
 	 * How many notifications are kept; the oldest is dropped first. Defaults to 4.
 	 *
+	 * @integer
 	 * @minimum 1
 	 * @maximum 10
 	 */
@@ -145,6 +146,7 @@ export interface TextFieldRawConfig {
 	 * How many characters are acceptable. A longer value is stored and gets a validation message; the widget does not
 	 * truncate it.
 	 *
+	 * @integer
 	 * @minimum 1
 	 */
 	readonly maxLength: number

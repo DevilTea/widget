@@ -35,7 +35,11 @@ export function isTripLanguage(input: unknown): input is TripLanguage {
 }
 
 /** Text per language, `{ "en": "...", "zh-TW": "..." }`. `en` is required; a missing language falls back to it. */
-export interface I18nText { readonly [language: string]: string }
+export interface I18nText {
+	/** The English text, which a missing language falls back to. */
+	readonly en: string
+	readonly [language: string]: string
+}
 
 /** The text in `language`, or the English text when that language is missing. */
 export function localize(text: I18nText, language: string): string {
@@ -184,6 +188,7 @@ export function fill(template: string, values: Readonly<Record<string, string | 
 
 /** What "round transfers to" can be, in minor units: the cent, a whole unit, the nearest 5 units. */
 export const ROUND_STEPS = [1, 100, 500] as const
+/** A "round transfers to" step in minor units: 1 = the cent, 100 = a whole unit, 500 = the nearest 5 units. */
 export type RoundStep = typeof ROUND_STEPS[number]
 export const DEFAULT_ROUND_STEP: RoundStep = 1
 

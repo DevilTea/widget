@@ -11,6 +11,9 @@
 		"./vite": "./src/vite.ts",
 		"./virtual-widget-docs": {
 			"types": "./virtual-widget-docs.d.ts"
+		},
+		"./virtual-widget-docs-slim": {
+			"types": "./virtual-widget-docs-slim.d.ts"
 		}
 	},
 	"scripts": {

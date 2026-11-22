@@ -32,6 +32,10 @@ which cannot load the plugin's TypeScript sources (`ERR_MODULE_NOT_FOUND ... src
 
 For the module's type, add `@deviltea/widget-skills/virtual-widget-docs` to `compilerOptions.types`.
 
+`widgetDocs({ slim: true, ... })` serves `WidgetDocsSlim` instead: the summary and `@remarks` of each plugin, its config, slots
+and Events, and the config schema, without the `types` section, printed types or tags (for an app that bundles the docs).
+Its module type is `@deviltea/widget-skills/virtual-widget-docs-slim`.
+
 Generating **imports the System's module and runs its top-level code** to cross-check the types against
 `system.catalog` and `inspectPlugin` (`runtime: false` turns that off). The result is cached in
 `node_modules/.cache/widget-docs/`; a hit builds no TypeScript program. The key covers every source file the

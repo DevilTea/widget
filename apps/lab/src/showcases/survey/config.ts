@@ -16,7 +16,7 @@
  * That marker is unambiguous because a question's raw config never admits `null`.
  */
 
-import type { Condition, ConditionLeaf, ConfigPath, I18nText, OptionConfig, Rule } from './domain'
+import type { Condition, ConditionLeaf, ConfigPath, I18nText, OptionConfig, Rule, SupportedLanguage } from './domain'
 import {
 	ANSWER_OPS,
 	conditionLeaves,
@@ -58,6 +58,7 @@ export type ShortAnswerRawConfig = QuestionRawBase & {
 	/**
 	 * Maximum number of characters after trimming surrounding whitespace. Longer answers get a max-length error.
 	 *
+	 * @integer
 	 * @minimum 1
 	 */
 	readonly maxLength?: number
@@ -82,12 +83,14 @@ export type MultipleChoiceRawConfig = QuestionRawBase & {
 	/**
 	 * Fewest options that must be selected once the question is answered; at most `maxSelected` and the number of options.
 	 *
+	 * @integer
 	 * @minimum 0
 	 */
 	readonly minSelected?: number
 	/**
 	 * Most options that may be selected; at least `minSelected` and at most the number of options.
 	 *
+	 * @integer
 	 * @minimum 1
 	 */
 	readonly maxSelected?: number
@@ -110,8 +113,9 @@ export interface SurveyRawConfig {
 	 * of them.
 	 *
 	 * @minItems 1
+	 * @uniqueItems
 	 */
-	readonly languages: readonly string[]
+	readonly languages: readonly SupportedLanguage[]
 }
 
 /** An option with its conditions normalized: `null` means "always". */

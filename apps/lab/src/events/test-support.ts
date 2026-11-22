@@ -84,15 +84,15 @@ export const PlainPlugin = createWidgetPlugin('Plain')
 	.interfaces<WidgetInterfaces>()
 	.done()
 
-/** The prose fields of a documented member, the way `widgetDocs()` emits them. */
+/** The prose fields of a documented member, the way `widgetDocs({ slim: true })` emits them. */
 function docText(summary: string) {
-	return { summary, remarks: '', tags: {}, example: [], deprecated: null, see: [], defaultValue: null }
+	return { summary, remarks: '' }
 }
 
 /**
  * A stand-in showcase for the fixture plugins, for views that read the documentation of the current showcase
- * (`getShowcase(showcaseId).docs`): its `docs` is what `widgetDocs()` would generate from the JSDoc above, reduced to the
- * fields the Lab reads. A test swaps it in with `vi.mock('…/showcases/registry')` and selects it by `id`.
+ * (`getShowcase(showcaseId).docs`): its `docs` is what `widgetDocs({ slim: true })` would generate from the JSDoc above. A
+ * test swaps it in with `vi.mock('…/showcases/registry')` and selects it by `id`.
  */
 export const eventsFixtureShowcase = {
 	id: 'events-fixture',
@@ -101,7 +101,6 @@ export const eventsFixtureShowcase = {
 	docs: {
 		docsVersion: 2,
 		system: 'eventsFixtureSystem',
-		types: {},
 		plugins: {
 			Notifier: {
 				...docText('Event log fixture.'),

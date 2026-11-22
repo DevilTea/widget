@@ -6,6 +6,8 @@
  *   Event, reason), a field of an inline object type one of them uses (a reason's payload included), or a field
  *   reachable from `config.raw` or a reason's payload;
  * - `unknown-tag`: a JSDoc tag outside the tag set (`tsdoc.json`);
+ * - `misplaced-tag`: a constraint tag that constrains nothing on the value it documents (a `@pattern` on a number or on a list
+ *   of objects, `@uniqueItems` on a string; see `placeConstraints`), so no schema states it;
  * - `name-mismatch`: a name the types and the runtime disagree on.
  *
  * Warnings (reported, never failing): `missing-doc` on a named type that is only reachable from a resolved config,
@@ -16,9 +18,10 @@
  */
 
 import type { Doc, Shape, SystemIr } from './ir'
+import { misplacedConstraintTags } from './schema'
 
 export interface CheckProblem {
-	kind: 'missing-doc' | 'unknown-tag' | 'name-mismatch'
+	kind: 'missing-doc' | 'unknown-tag' | 'misplaced-tag' | 'name-mismatch'
 	severity: 'error' | 'warning'
 	/** For example `Onboarding.state.current` or `type InterestOptionRaw.label`. */
 	where: string
@@ -42,7 +45,8 @@ export function checkIr(ir: SystemIr): CheckResult {
 	let members = 0
 	let documented = 0
 
-	const visit = (where: string, doc: Doc, severity: Severity): void => {
+	/** `shape`: the value the documented member holds, when it has one, so its constraint tags can be placed. */
+	const visit = (where: string, doc: Doc, severity: Severity, shape?: Shape): void => {
 		// A union lists the same field once per member that declares it.
 		if (seen.has(where))
 			return
@@ -54,12 +58,16 @@ export function checkIr(ir: SystemIr): CheckResult {
 			documented++
 		for (const tag of doc.unknownTags)
 			problems.push({ kind: 'unknown-tag', severity: 'error', where, message: `${where} uses the unknown tag @${tag}.` })
+		if (shape !== undefined) {
+			for (const tag of misplacedConstraintTags(ir, shape, doc))
+				problems.push({ kind: 'misplaced-tag', severity, where, message: `${where}: @${tag} constrains nothing on this value, so no schema states it.` })
+		}
 	}
 	/** Visits the fields of the inline object types in `shape`. A named type is checked once, under its own name. */
 	const visitShape = (where: string, shape: Shape, severity: Severity): void => {
 		if (shape.kind === 'object') {
 			for (const property of shape.properties) {
-				visit(`${where}.${property.name}`, property.doc, severity)
+				visit(`${where}.${property.name}`, property.doc, severity, property.shape)
 				visitShape(`${where}.${property.name}`, property.shape, severity)
 			}
 			if (shape.additional !== undefined)
@@ -110,11 +118,11 @@ export function checkIr(ir: SystemIr): CheckResult {
 		for (const slot of plugin.slots)
 			visit(`${plugin.type}.slots.${slot.name}`, slot.doc, 'error')
 		for (const member of plugin.state) {
-			visit(`${plugin.type}.state.${member.name}`, member.doc, 'error')
+			visit(`${plugin.type}.state.${member.name}`, member.doc, 'error', member.shape)
 			visitShape(`${plugin.type}.state.${member.name}`, member.shape, 'error')
 		}
 		for (const member of plugin.properties) {
-			visit(`${plugin.type}.properties.${member.name}`, member.doc, 'error')
+			visit(`${plugin.type}.properties.${member.name}`, member.doc, 'error', member.shape)
 			visitShape(`${plugin.type}.properties.${member.name}`, member.shape, 'error')
 		}
 		for (const method of plugin.methods) {
@@ -145,7 +153,7 @@ export function checkIr(ir: SystemIr): CheckResult {
 	}
 	for (const [name, type] of Object.entries(ir.types)) {
 		const severity: Severity = authored.has(name) ? 'error' : 'warning'
-		visit(`type ${name}`, type.doc, severity)
+		visit(`type ${name}`, type.doc, severity, type.shape)
 		visitShape(`type ${name}`, type.shape, severity)
 	}
 	for (const mismatch of ir.mismatches)

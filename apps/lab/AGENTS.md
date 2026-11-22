@@ -69,8 +69,8 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
 - `src/showcase-host/` — the showcase host contract (see "Showcase isolation" below): the one module outside its own
   directory a showcase may import. `host.ts` (`ShowcaseHost`: locale and theme), `messages.ts` (showcase-local messages
   selected by the host locale), `sources.ts` (the curated Implementation registry types), `config-schemas.ts`
-  (`ConfigJsonSchema`, `ConfigSchemaMap`, `CONFIG_JSON_SCHEMA_DIALECT`: the types of the config schema map a showcase hands
-  the Lab) and `inspect-anchor.ts`
+  (`ConfigJsonSchema`, `ConfigSchemaMap`, `CONFIG_JSON_SCHEMA_DIALECT`: the types of a config schema map; the Lab generates
+  it, and a showcase may hand its own, as quote-rules does) and `inspect-anchor.ts`
   (`useInspectAnchor`), the one-line-per-renderer projection of `useWidget()` identity onto a
   renderer's root element. It only wraps `inspectAnchorAttributes` from `@deviltea/widget-inspector/anchor`, which owns
   the attribute contract (names, identity-only shape, nesting/multi-fragment semantics); `@deviltea/widget-vue` itself
@@ -160,8 +160,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     from one JSON definition; five plugin types `Survey`, `SingleChoice`, `MultipleChoice`, `Numeric`,
     `ShortAnswer`; root widget `open-day`; languages `en` and `zh-TW`). `domain.ts` (pure types,
     condition evaluation, built-in messages), `config.ts` (config checkers reporting located diagnostics),
-    `schemas.ts` (Draft 2020-12 config schemas the Author Catalog shows and copies, handed to the Lab as `surveyConfigSchemas`), `plugins/` (semantic
-    plugins, unit-tested; a condition in the JSON becomes a declared dependency, so Core reports an
+    `plugins/` (semantic plugins, unit-tested; a condition in the JSON becomes a declared dependency, so Core reports an
     evaluation cycle instead of the plugin guessing), `presets.ts` (`survey-default`, `survey-ai-draft`
     with one located diagnostic per widget, `survey-cycle`), `evaluate.ts` (the JSON-in/JSON-out
     function a backend runs), `cycle-safe-targets.ts` (test-only classification of which condition targets
@@ -861,17 +860,28 @@ Inspector snapshot (protocol 1.0) carry names and capabilities only (`docs/site/
   plugin for the seven showcase Systems with `tsconfig.app.json`; `vite.config.ts`, `vitest.config.ts` and the root
   `vitest.config.ts` (project `lab`) all load it, importing the plugin by relative path (`../widget-skills/src/vite`): Vite hands
   a bare `@deviltea/widget-skills/vite` to Node, which cannot load its TypeScript sources. `virtual:widget-docs/<showcase id>`
-  is that showcase's `WidgetDocs`, imported by `showcases/registry.ts` as `ShowcaseEntry.docs`; `src/virtual-widget-docs.d.ts`
-  declares the modules (the Lab has no dependency on the private package; `author/widget-docs.ts` takes the types from the
+  is that showcase's docs, imported by `showcases/registry.ts` as `ShowcaseEntry.docs`. The Lab loads them with `slim: true`
+  (`WidgetDocsSlim`: the summary and `@remarks` of each plugin, its config, slots and Events, and the config schema; no `types`
+  section, printed types or tags), because they sit in the eager shell chunk (`tutorial-theme-*.js`: 877 KB, gzip 200 KB with the
+  full docs and the hand-written schema maps; 615 KB, gzip 176 KB with the slim docs, measured with `pnpm build`). `src/virtual-widget-docs.d.ts`
+  declares the modules as `WidgetDocsSlim` (the Lab has no dependency on the private package; `author/widget-docs.ts` takes the types from the
   virtual module, because importing the generator's `docs-types.ts` from a Lab source is TS6307 in this composite project).
   Generating imports each System module in a worker thread; the result is cached in `node_modules/.cache/widget-docs/` of
   this app (delete it to clear it). Documentation gaps are Vite warnings, a name mismatch between types and runtime fails the
   load. A showcase file never imports a virtual module (`showcase-isolation.unit.test.ts`); the Lab side reads `docs` through
   `author/widget-docs.ts` (`pluginDocsOf`, `docText`, `memberDocText`), which read an undocumented member as `''`.
-- **The config schemas stay Lab data.** Each showcase hands the Lab a map from plugin type to its Draft 2020-12 config JSON
-  Schema (`<showcase>ConfigSchemas` in its `schemas.ts`, typed by the host contract's `ConfigSchemaMap`; the quote-rules files,
-  which the Web Worker bundles, use their own structurally equal type), registered as `ShowcaseEntry.configSchemas`. The
-  Structure editor and the Catalog read it; Core never sees it.
+- **The config schemas are generated too.** `ShowcaseEntry.configSchemas` maps each plugin type with a config to its Draft
+  2020-12 config JSON Schema: `generatedConfigSchemas(docs)` (`showcases/registry.ts`) takes `docs.plugins[type].config.schema`,
+  the full-profile schema `widgetDocs()` generates from the `config.raw` type (a `$ref` root with `$defs`, object unions as
+  `anyOf`, an `anyOf` with `null` when the config may be left out). A constraint the type cannot say is a JSDoc tag on the raw
+  config type (`@pattern`, `@minItems`, `@uniqueItems`, `@propertyNames`, `@integer`, ...; a string or number tag on an array or
+  a dictionary applies to its items or values), and one the validator already enforces may narrow the type itself (survey
+  `languages: SupportedLanguage[]`, trip-budget `roundTransfersTo: RoundStep`, the `I18nText` with a required `en`). quote-rules
+  overrides the map with the JSON Schemas of its Valibot validators (`quoteConfigSchemas`; its files, which the Web Worker
+  bundles, use their own structurally equal type); the sandbox has none. `lab/showcase-config-schemas.unit.test.ts` holds the
+  generated schemas to the showcases' code: their properties are exactly the config checkers' key lists (`*_CONFIG_KEYS`), the
+  tagged constraints are there as keywords, and every config of each default preset conforms. The Structure editor and the
+  Catalog read the map; Core never sees it.
 
 ## Package boundaries
 
@@ -1194,7 +1204,8 @@ when the showcase has a schema for the plugin, the schema in a collapsed `<detai
 "Copy catalog JSON" copies the whole catalog as plain JSON (`{ widgets: [{ type, description, config: { description, schema } | null,
 slots: { name: description } | null, events: { name: description } | null }] }`: `config` is `null` without the config capability and
 `schema` `null` without a schema, `events` `null` without the Events capability, an undocumented description `''`) so the plugin
-definitions can be handed to an AI as authoring context.
+definitions can be handed to an AI as authoring context. A generated `schema` is self-contained: it carries the `$defs` its `$ref`s
+point into.
 The view must not invent state/property/method schemas or member definitions that Core does not publish
 through the catalog contracts; config schema metadata is authoring guidance, not Runtime validation truth.
 
@@ -1204,11 +1215,12 @@ Since issue #230 PR 3c (audit U15) it edits the selected widget's whole authored
 notation only; `integer`/`minimum`/`maximum` are Core's to check), a list for an `enum`, a text box for a string, an object with its optional keys (add from a list, remove with
 a button; free keys of an `additionalProperties` object are added by name) and an array with Add and Remove. The controls
 come from the plugin's passive config JSON Schema (the showcase's `ShowcaseEntry.configSchemas[type]`, read by `src/lab/config-schema.ts`: `$ref`,
-`type`, `enum`/`const`, `oneOf`/`anyOf` by a shallow "does the value look like this branch" test, `properties`, `required`,
+`type`, `enum`/`const`, `oneOf`/`anyOf` by a shallow "does the value look like this branch" test (a union of one schema and `null`, a
+generated optional config or field, is read as that schema for a value that is not `null`, without the hint), `properties`, `required`,
 `additionalProperties`, `items`, `minItems`/`maxItems`, `default`, `description`; `$ref` is any local JSON Pointer, with `~0`, `~1` and percent escapes decoded). That reading chooses a
 control and what may be added or removed and never validates (the numeric limits are not checked in the editor, so the schema and the compiler cannot
 disagree): Core's compiler stays the authority, and an edit that makes the Document
-invalid shows up as Core diagnostics in Problems. A value read as one branch of a `oneOf` offers that branch's values only and says so (`union-hint`: other forms are
+invalid shows up as Core diagnostics in Problems. A value read as one branch of a `oneOf`/`anyOf` offers that branch's values only and says so (`union-hint`: other forms are
 edited in the JSON view). Without a schema (or inside a shape the module does not read, such as a `oneOf` no
 branch of which fits) values are typed by what they hold; scalars still get switch/number/text controls, objects and arrays offer no add or
 remove, and anything else is edited as its JSON text (Set value / Cmd or Ctrl+Enter). Switches and lists apply at once; text and number boxes apply
