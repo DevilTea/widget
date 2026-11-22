@@ -62,7 +62,7 @@ interface CollectorDiagnostic {
 }
 
 function collectFinalized(entries: readonly { readonly leafId: number, readonly message: string, readonly anchor: unknown }[]): readonly CollectorDiagnostic[] {
-	const collector = createOperationCollector<never, CollectorDiagnostic>()
+	const collector = createOperationCollector<never, CollectorDiagnostic>('test', 'Property', 'value', 'compute')
 	for (const entry of entries) {
 		collector.addFinalizedDiagnostic({
 			code: 'test-diagnostic',

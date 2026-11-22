@@ -21,8 +21,12 @@ import { assertDiagnosticDetails, throwClosedCollector } from '../runtime/sync'
 /**
  * A compile-time callback's collector. `close()` ends its plugin-facing lifetime once the callback has
  * returned or thrown; a later `addDiagnostic` / `hasAnyDiagnostic` call then throws.
+ *
+ * `pluginType` (`null` for the System-level validator), `description` and the optional `name` / `what`
+ * name the callback for the error a non-JSON `details` throws, formatted only then (see
+ * `assertDiagnosticDetails`).
  */
-export function createCollector<Input>(): { readonly collector: DiagnosticCollector<Input>, readonly items: Input[], readonly close: () => void } {
+export function createCollector<Input>(pluginType: string | null, description: string, name?: string, what?: string): { readonly collector: DiagnosticCollector<Input>, readonly items: Input[], readonly close: () => void } {
 	const items: Input[] = []
 	let closed = false
 	return {
@@ -31,7 +35,7 @@ export function createCollector<Input>(): { readonly collector: DiagnosticCollec
 			addDiagnostic: (diagnostic) => {
 				if (closed)
 					throwClosedCollector('addDiagnostic')
-				assertDiagnosticDetails(diagnostic)
+				assertDiagnosticDetails(diagnostic, pluginType, description, name, what)
 				items.push(diagnostic)
 			},
 			hasAnyDiagnostic: () => {

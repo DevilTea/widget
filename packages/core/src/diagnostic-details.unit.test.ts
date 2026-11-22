@@ -411,13 +411,14 @@ describe('a non-JSON `details` is a contract violation', () => {
 	cyclic.self = cyclic
 	const notJson: readonly unknown[] = [() => 1, Number.NaN, 1n, Symbol('details'), new Date(0), { nested: undefined }, [undefined], cyclic]
 
-	function createUntypedSystem(details: unknown, where: 'config' | 'slot' | 'plugin' | 'system' | 'state' | 'args') {
+	function createUntypedSystem(details: unknown, where: 'config' | 'slot' | 'plugin' | 'system' | 'state' | 'compute' | 'args' | 'execute') {
 		const report = (ctx: { addDiagnostic: (diagnostic: never) => void }, extra: Record<string, unknown> = {}) => ctx.addDiagnostic({ message: 'reported', reason: 'any', details, ...extra } as never)
 		const plugin = createWidgetPlugin('untyped')
 			.interfaces<{
 			config: { raw: null, resolved: Record<never, never> }
 			slots: { items: WidgetChild }
 			state: { count: number }
+			properties: { total: number }
 			methods: { run: () => void }
 		}>()
 			.config({
@@ -449,13 +450,23 @@ describe('a non-JSON `details` is a contract violation', () => {
 				},
 				default: () => 0,
 			}))
+			.properties(properties => properties.total({
+				compute: (ctx) => {
+					if (where === 'compute')
+						report(ctx)
+					return 0
+				},
+			}))
 			.methods(methods => methods.run({
 				validateArgs: (args, ctx): args is [] => {
 					if (where === 'args')
 						report(ctx)
 					return args.length === 0
 				},
-				execute: () => {},
+				execute: (ctx) => {
+					if (where === 'execute')
+						report(ctx)
+				},
 			}))
 			.done()
 
@@ -502,6 +513,38 @@ describe('a non-JSON `details` is a contract violation', () => {
 			expect(argsWidget.methods.run.getDiagnostics())
 				.toEqual([])
 		}
+	})
+
+	it('names the plugin, the member and the callback that called addDiagnostic', () => {
+		const details = () => 1
+		const compileTime = [
+			['config', /plugin "untyped".*config\.validate/],
+			['slot', /plugin "untyped".*Slot "items".*validateStructure/],
+			['plugin', /plugin "untyped".*plugin-level validateStructure/],
+			['system', /^System-level validateStructure/],
+		] as const
+		for (const [where, offender] of compileTime) {
+			expect(() => createUntypedSystem(details, where)
+				.createBlueprint(source))
+				.toThrow(offender)
+		}
+
+		function createWidget(where: 'state' | 'compute' | 'args' | 'execute') {
+			const blueprint = createUntypedSystem(details, where)
+				.createBlueprint(source)
+			if (blueprint.status !== 'valid')
+				throw new Error('expected a valid Blueprint')
+			return blueprint.createRuntime()
+				.getWidget('root')!
+		}
+		expect(() => createWidget('state').state.count.set(1))
+			.toThrow(/plugin "untyped".*State "count".*validate/)
+		expect(() => createWidget('compute').properties.total.get())
+			.toThrow(/plugin "untyped".*Property "total".*compute/)
+		expect(() => createWidget('args').methods.run())
+			.toThrow(/plugin "untyped".*Method "run".*validateArgs/)
+		expect(() => createWidget('execute').methods.run())
+			.toThrow(/plugin "untyped".*Method "run".*execute/)
 	})
 
 	it('accepts every JSON value, `null` included, and treats `undefined` as no details', () => {

@@ -210,7 +210,7 @@ export function runStructureValidation(
 					continue
 
 				const children = (node.semanticSlots.get(slotName) ?? []).map(id => compileFacade.facadeForNodeId(id))
-				const { collector, items, close } = createCollector<RelativeSlotStructureDiagnosticInput>()
+				const { collector, items, close } = createCollector<RelativeSlotStructureDiagnosticInput>(node.type, 'Slot', slotName, 'validateStructure')
 
 				try {
 					const result: unknown = slotDefinition.validateStructure({
@@ -236,7 +236,7 @@ export function runStructureValidation(
 		}
 
 		if (definition.validateStructure !== null) {
-			const { collector, items, close } = createCollector<RelativePluginStructureDiagnosticInput>()
+			const { collector, items, close } = createCollector<RelativePluginStructureDiagnosticInput>(node.type, 'plugin-level validateStructure')
 
 			try {
 				const result: unknown = definition.validateStructure({
@@ -269,7 +269,7 @@ export function runStructureValidation(
 	}
 
 	if (system.validateStructure !== null) {
-		const { collector, items, close } = createCollector<RelativeSystemStructureDiagnosticInput>()
+		const { collector, items, close } = createCollector<RelativeSystemStructureDiagnosticInput>(null, 'System-level validateStructure')
 
 		try {
 			const result: unknown = system.validateStructure({

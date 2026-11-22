@@ -34,13 +34,21 @@ export function assertSyncValue(value: unknown, description: string, name?: stri
  * The `details` of a callback-authored diagnostic input must be a JSON value. Anything else is a contract
  * violation, thrown from the `addDiagnostic` call that carried it. A malformed input (not an object) is
  * left to whatever reads it.
+ *
+ * The error names the callback that called `addDiagnostic`: `pluginType` is the plugin that owns it
+ * (`null` for the System-level validator), and the callback is `description`, or
+ * `${kind} "${name}"'s ${what}` when `name` is given. Like {@link assertSyncValue}, the parts are only
+ * formatted when the check throws, so a collector keeps them instead of building a label per operation.
  */
-export function assertDiagnosticDetails(input: unknown): void {
+export function assertDiagnosticDetails(input: unknown, pluginType: string | null, description: string, name?: string, what?: string): void {
 	if (typeof input !== 'object' || input === null)
 		return
 	const details = (input as { readonly details?: unknown }).details
-	if (details !== undefined && !isJsonValue(details))
-		throw new TypeError('widget-core: a diagnostic\'s "details" must be a JSON value. This is a plugin implementation bug.')
+	if (details !== undefined && !isJsonValue(details)) {
+		const callback = name === undefined ? description : `${description} "${name}"'s ${what}`
+		const subject = pluginType === null ? callback : `Widget plugin "${pluginType}": ${callback}`
+		throw new TypeError(`${subject} called addDiagnostic with a "details" that is not a JSON value. This is a plugin implementation bug.`)
+	}
 }
 
 /**
