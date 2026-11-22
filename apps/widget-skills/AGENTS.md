@@ -14,10 +14,10 @@ It implements the tooling side of `DevilTea/widget` Discussion #12, "Interfaces 
 | `src/ir.ts` | The IR types and the tag lists. The IR is plain JSON; emitters never touch the compiler. |
 | `src/encoding.ts` | The config value re-encoding of the LLM profile (dictionary to entry list, opaque values to JSON text), shared by the schema emitter and the converters. |
 | `src/schema.ts` | `emitFullSchema` (tree), `emitLlmSchema` (flat, LLM profile) and `emitConfigSchema` (one plugin's `config.raw`, full profile). |
-| `src/docs-types.ts`, `src/docs.ts` | The `WidgetDocs` object type (no imports; exported as `@deviltea/widget-skills/docs`) and `emitDocs(ir)`. |
+| `src/docs-types.ts`, `src/docs.ts` | The `WidgetDocs` and `WidgetDocsSlim` object types (no imports; exported as `@deviltea/widget-skills/docs`), `emitDocs(ir)` and `slimDocs(docs)`. |
 | `src/docs-cache.ts` | `createDocsCache`: generate a System's docs, or read them from the disk cache. |
 | `src/vite.ts` | `widgetDocs(options)`. A Vite or Vitest config imports it by relative path (see "The Vite plugin"); the `./vite` export only serves code Vite transforms. |
-| `virtual-widget-docs.d.ts` | `declare module 'virtual:widget-docs/*'`, exported as `@deviltea/widget-skills/virtual-widget-docs`. |
+| `virtual-widget-docs.d.ts`, `virtual-widget-docs-slim.d.ts` | `declare module 'virtual:widget-docs/*'` as `WidgetDocs` or `WidgetDocsSlim`, exported as `@deviltea/widget-skills/virtual-widget-docs` and `/virtual-widget-docs-slim`. |
 | `src/flat.ts` | `createFlatConverter(ir)`: `treeToFlat` and `flatToTree`. |
 | `src/skills.ts` | The three Markdown skills. |
 | `src/check.ts` | `--check`. |
@@ -26,6 +26,7 @@ It implements the tooling side of `DevilTea/widget` Discussion #12, "Interfaces 
 | `fixtures/survey-system.ts` | The 0.3 fixture System: fully documented, and it exercises every feature (config `raw` with JSDoc tags and a `@widgetRef`, an omittable config, record slots in all three forms, reasons with and without payload, State with `authorWritable`, Properties, Methods, Events). |
 | `fixtures/survey-example.json` | The example document of the fixture's authoring skill, compiled by the CLI before it is published. |
 | `src/fixtures/undocumented-system.ts` | The `--check` fixture: members without JSDoc, an unknown tag, and a `WidgetContract` slot without `Types`. |
+| `src/fixtures/constraints-system.ts` | The schema fixture for what the survey fixture does not reach: the array and dictionary tags, a string or number tag on an array or a dictionary, a named type behind an optional property and inside a written union, and Core's recursive `JsonValue`. |
 | `examples/survey/` | Generated output for the fixture System. Never hand-edit; regenerate. A test compares it with what the generator writes. |
 
 The Lab's showcases are migrated to 0.3 and load their documentation through this plugin (`apps/lab/widget-docs.ts`); the fixture System stays the example and the test subject.
@@ -59,6 +60,7 @@ widgetDocs({
 	},
 	// cacheDir: 'node_modules/.cache/widget-docs' (default, relative to Vite's root); false disables the disk cache
 	// runtime: true (default): import the System for the cross-check
+	// slim: false (default): true serves WidgetDocsSlim
 })
 
 import docs from 'virtual:widget-docs/onboarding' // WidgetDocs
@@ -70,7 +72,8 @@ import docs from 'virtual:widget-docs/onboarding' // WidgetDocs
 - Generating **imports the System's module, which runs its top-level code** and that of everything it imports, through tsx in a worker thread that is terminated after the run. With `sourceTsconfig`, tsx gets the same `paths` as the type checker (a temporary tsconfig extends `tsconfig` and adds them), so types and runtime read the same files. `runtime: false` skips the import, the cross-check and `authorWritable`.
 - A name mismatch between the types and the runtime fails the load with the list. Documentation problems (what `--check` reports) are a Vite warning, on a fresh generation and on a cache hit, never an error.
 - It works in `vite dev`, `vite build` and Vitest. In dev the System's input files and missing import locations are added to Vite's watcher; a change to one (an edit, a created or deleted file) invalidates only the virtual modules of the Systems that read it (`watchChange`, also without HMR), and on an edit `handleHotUpdate` returns them to Vite, which updates or reloads their importers. Any other file regenerates nothing. In a build, the inputs are Rollup watch files.
-- Types: add `@deviltea/widget-skills/virtual-widget-docs` to `compilerOptions.types` (or a `/// <reference types>`).
+- `slim: true` serves `WidgetDocsSlim` instead (`slimDocs`): per plugin the summary and `@remarks` of the plugin, its config, slots and Events, and the config schema; no `types`, printed types, tags, State, Properties, Methods or reasons. It is for an authoring UI that bundles the docs (the Lab: the eager shell chunk). The disk cache always holds the full docs and the projection happens when the module is loaded, so the option is not part of the cache key and switching it regenerates nothing.
+- Types: add `@deviltea/widget-skills/virtual-widget-docs` (or, with `slim: true`, `@deviltea/widget-skills/virtual-widget-docs-slim`) to `compilerOptions.types` (or a `/// <reference types>`).
 
 ### Cache
 
@@ -118,7 +121,10 @@ TSDoc-compatible; the custom tags are declared in `tsdoc.json`. `CONSTRAINT_TAGS
 - Summary (first paragraph) and `@remarks`: the Interfaces type and every member.
 - `@format`, `@pattern`, `@minLength`, `@maxLength`: strings.
 - `@minimum`, `@maximum`, `@exclusiveMinimum`, `@exclusiveMaximum`, `@multipleOf`: numbers.
-- `@minItems`, `@maxItems`: arrays.
+- `@integer` (bare): the number is a whole number (the full profile's `type: "integer"`).
+- `@minItems`, `@maxItems`, `@uniqueItems` (bare): arrays.
+- `@minProperties`, `@maxProperties`, `@propertyNames <pattern>` (every key matches): dictionaries.
+- A string or number tag (`@format`, `@pattern`, the length and numeric bounds, `@integer`) written on an array or a dictionary applies to each item or value, since it cannot apply to the container: `@pattern` on a `readonly string[]` constrains every item, `@exclusiveMinimum 0` on a `Record<string, number>` every value.
 - `@default`, `@examples`: JSON values.
 - `@widgetRef A | B`: the string is the id of a widget of one of these types.
 - `@param name - text`, `@returns`: Methods.
@@ -149,6 +155,8 @@ Generating (the CLI without `--check`, and the Vite plugin) refuses only on a na
 
 - A slot expectation is read structurally: string literals are plugin types, and `WidgetContract` is recognized by its symbol name and type arguments. Any other expectation (which Core rejects at `.interfaces()`) is an extraction error, and so is the 0.2 union-of-names form.
 - Named types with type arguments are expanded inline, not named. Two different declarations with one name get a numeric suffix.
+- A property written as a union (`boolean | Condition`) or declared optional (`visibleWhen?: Condition`) is read from its type annotation, so the named types in it stay `$ref`s (the checker flattens such a union and would lose the names); an annotation that is not the property's type (an instantiated generic member) falls back to the checker's type. A union alias nested in another union (`Condition = LeafCondition | ...`) is still flattened into its members.
+- A recursive type without a name of its own (a type from a dependency, such as Core's `JsonValue`) is untyped (`{}` in the full profile, JSON text in the flat form) instead of being expanded.
 - An untyped or recursive config value is JSON text in the flat form.
 - Method effects (State written, Events emitted) are not in the IR: Core's inspection does not expose `emits`.
 - `validate.ts` does not evaluate `format` or `pattern`, and throws on any keyword it does not implement.
