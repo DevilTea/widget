@@ -107,6 +107,39 @@ export interface WidgetDocsNamedType extends WidgetDocsText {
 	fields: Record<string, WidgetDocsField> | null
 }
 
+/** The prose of one member in the slim docs: the summary and `@remarks` only. */
+export interface WidgetDocsSlimText {
+	/** The first paragraph of the JSDoc; empty when the member has none. */
+	summary: string
+	/** The `@remarks` block; empty when absent. */
+	remarks: string
+}
+
+export interface WidgetDocsSlimConfig extends WidgetDocsSlimText {
+	/** As `WidgetDocsConfig.schema`. */
+	schema: WidgetDocsJsonSchema
+}
+
+/** One plugin in the slim docs: what a document author reads (the plugin, its config, its slots and its Events). */
+export interface WidgetPluginDocsSlim extends WidgetDocsSlimText {
+	config: WidgetDocsSlimConfig | null
+	slots: Record<string, WidgetDocsSlimText> | null
+	events: Record<string, WidgetDocsSlimText> | null
+}
+
+/**
+ * The slim docs object (`widgetDocs({ slim: true })`): per plugin the summary and `@remarks` of the plugin, its config,
+ * its slots and its Events, and the config schema. No `types` section, no printed types, no tags, State, Properties,
+ * Methods or reasons.
+ */
+export interface WidgetDocsSlim {
+	docsVersion: typeof WIDGET_DOCS_VERSION
+	/** The System's export name. */
+	system: string
+	/** Per plugin type, in registration order. */
+	plugins: Record<string, WidgetPluginDocsSlim>
+}
+
 export interface WidgetDocs {
 	docsVersion: typeof WIDGET_DOCS_VERSION
 	/** The System's export name. */

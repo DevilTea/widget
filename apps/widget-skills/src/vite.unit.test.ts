@@ -1,5 +1,5 @@
 import type { HmrContext, Plugin, ViteDevServer } from 'vite'
-import type { DocsSystem, RuntimeFacts, WidgetDocs } from './index'
+import type { DocsSystem, RuntimeFacts, WidgetDocs, WidgetDocsSlim } from './index'
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -12,7 +12,7 @@ import { build, createServer } from 'vite'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { surveySystem } from '../fixtures/survey-system'
 import { generatorHashOf, getGeneratorHash } from './docs-cache'
-import { collectRuntimeFacts, createDocsCache, emitDocs, extractIr } from './index'
+import { collectRuntimeFacts, createDocsCache, emitDocs, extractIr, slimDocs } from './index'
 import { widgetDocs } from './vite'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -527,6 +527,53 @@ describe('widgetDocs in a dev server with its real watcher', () => {
 		finally {
 			await server.close()
 		}
+	}, 120_000)
+})
+
+describe('widgetDocs({ slim: true })', () => {
+	it('serves the slim projection of the docs from the cache the full docs filled', async () => {
+		const cacheDir = mkdtempSync(join(scratch, 'cache-'))
+		const serve = async (slim: boolean, createProgram: (options: ts.CreateProgramOptions) => ts.Program): Promise<unknown> => {
+			const server = await createServer({
+				configFile: false,
+				root: packageRoot,
+				logLevel: 'silent',
+				appType: 'custom',
+				server: { middlewareMode: true, hmr: false },
+				plugins: [widgetDocs({ systems: { survey }, cacheDir, slim, createProgram, loadRuntime: surveyFacts })],
+			})
+			try {
+				return ((await server.ssrLoadModule('virtual:widget-docs/survey')) as { default: unknown }).default
+			}
+			finally {
+				await server.close()
+			}
+		}
+		const cold = countingFactory()
+		expect(await serve(false, cold.createProgram))
+			.toStrictEqual(expected)
+		const warm = countingFactory()
+		const slim = await serve(true, warm.createProgram) as WidgetDocsSlim
+		expect(warm.count())
+			.toBe(0)
+		expect(slim)
+			.toStrictEqual(slimDocs(expected))
+		expect(Object.keys(slim))
+			.toEqual(['docsVersion', 'system', 'plugins'])
+		expect(slim.plugins.Survey)
+			.toStrictEqual({
+				summary: 'A survey: a header, the questions in order, and a footer note.',
+				remarks: 'The root of a survey document. It counts the answered questions through the `questions` contract.',
+				config: { summary: 'How the survey is titled and where it is sent.', remarks: '', schema: expected.plugins.Survey!.config!.schema },
+				slots: {
+					header: { summary: 'Anything shown above the questions.', remarks: '' },
+					questions: { summary: 'The questions, in order.', remarks: 'Every question exposes whether it was answered.' },
+					footer: { summary: 'Closing notes shown under the questions.', remarks: '' },
+				},
+				events: { submitted: { summary: 'The survey was sent.', remarks: '' } },
+			})
+		expect(JSON.stringify(slim).length)
+			.toBeLessThan(JSON.stringify(expected).length / 2)
 	}, 120_000)
 })
 

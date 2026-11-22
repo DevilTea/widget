@@ -1,8 +1,9 @@
 /**
- * `emitDocs(ir)`: the JSON documentation object the Vite plugin serves as `virtual:widget-docs/<name>`.
+ * `emitDocs(ir)`: the JSON documentation object the Vite plugin serves as `virtual:widget-docs/<name>`, and `slimDocs(docs)`, its
+ * slim projection (`widgetDocs({ slim: true })`).
  */
 
-import type { WidgetDocs, WidgetDocsJsonSchema, WidgetDocsNamedType, WidgetDocsText, WidgetPluginDocs } from './docs-types'
+import type { WidgetDocs, WidgetDocsJsonSchema, WidgetDocsNamedType, WidgetDocsSlim, WidgetDocsSlimText, WidgetDocsText, WidgetPluginDocs, WidgetPluginDocsSlim } from './docs-types'
 import type { Doc, NamedType, PluginIr, SystemIr } from './ir'
 import { WIDGET_DOCS_VERSION } from './docs-types'
 import { emitConfigSchema } from './schema'
@@ -60,6 +61,32 @@ function pluginDocs(ir: SystemIr, plugin: PluginIr): WidgetPluginDocs {
 		})),
 		events: section(plugin.capabilities.events, plugin.events, event => ({ ...text(event.doc), payload: event.payload.map(item => ({ label: item.label, type: item.typeText })) })),
 		reasons: plugin.reasons === null ? null : section(true, plugin.reasons, reason => ({ ...text(reason.doc), details: reason.payload?.typeText ?? null })),
+	}
+}
+
+function slimText(text: WidgetDocsText): WidgetDocsSlimText {
+	return { summary: text.summary, remarks: text.remarks }
+}
+
+function slimSection(section: Readonly<Record<string, WidgetDocsText>> | null): Record<string, WidgetDocsSlimText> | null {
+	return section === null
+		? null
+		: Object.fromEntries(Object.entries(section)
+				.map(([name, text]) => [name, slimText(text)]))
+}
+
+/** The slim projection of a docs object (`widgetDocs({ slim: true })`, see `WidgetDocsSlim`). */
+export function slimDocs(docs: WidgetDocs): WidgetDocsSlim {
+	return {
+		docsVersion: docs.docsVersion,
+		system: docs.system,
+		plugins: Object.fromEntries(Object.entries(docs.plugins)
+			.map(([type, plugin]): [string, WidgetPluginDocsSlim] => [type, {
+				...slimText(plugin),
+				config: plugin.config === null ? null : { ...slimText(plugin.config), schema: plugin.config.schema },
+				slots: slimSection(plugin.slots),
+				events: slimSection(plugin.events),
+			}])),
 	}
 }
 
