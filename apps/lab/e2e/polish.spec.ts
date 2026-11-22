@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { expandGraphWidget, expect, loadPreset, openDependenciesGraph, openDeveloperTool, previewFrame, setLocale, test } from './fixtures'
+import { expandGraphWidget, expect, loadPreset, openAuthorJson, openDependenciesGraph, openDeveloperTool, previewFrame, setLocale, test } from './fixtures'
 
 /**
  * Issue #230 PR 3c: Graph readability (U11), grouped cycle problems (U16), target size and text size (U19), visible
@@ -206,6 +206,8 @@ test.describe('grouped cycle problems (U16)', () => {
 	test('four diagnostics of one cycle are one collapsed entry; opening it lists Core\'s four, verbatim', async ({ page }) => {
 		await openLab(page)
 		await loadPreset(page, 'survey-cycle')
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)
 			.toBeVisible()
@@ -259,6 +261,8 @@ test.describe('grouped cycle problems (U16)', () => {
 	test('a new list of problems starts collapsed again, and the members are listed without a direction', async ({ page }) => {
 		await openLab(page)
 		await loadPreset(page, 'survey-cycle')
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const group = page.getByTestId('author-problems')
 			.getByTestId('problem-group')
 		await group.click()
@@ -298,6 +302,8 @@ test.describe('grouped cycle problems (U16)', () => {
 	test('other diagnostics are never grouped', async ({ page }) => {
 		await openLab(page)
 		await loadPreset(page, 'survey-ai-draft')
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems.getByTestId('problem-row'))
 			.toHaveCount(5)
@@ -347,7 +353,7 @@ test.describe('visible keyboard focus (U20)', () => {
 
 test.describe('inspector values stay inside their panel (Lab UX phase 1)', () => {
 	/** Every visible value summary of `panel` lies within the panel's box and has room to show something. */
-	async function expectValuesInside(page: Page, panel: ReturnType<Page['locator']>): Promise<number> {
+	async function expectValuesInside(panel: ReturnType<Page['locator']>): Promise<number> {
 		const panelBox = (await panel.boundingBox())!
 		const summaries = panel.getByTestId('value-summary')
 		const count = await summaries.count()
@@ -383,7 +389,7 @@ test.describe('inspector values stay inside their panel (Lab UX phase 1)', () =>
 			await expect(runtime.getByTestId('runtime-value-row')
 				.first())
 				.toBeVisible()
-			expect(await expectValuesInside(page, runtime))
+			expect(await expectValuesInside(runtime))
 				.toBeGreaterThan(3)
 			expect(await runtime.evaluate(element => element.scrollWidth <= element.clientWidth), 'the Runtime grid does not grow past its panel')
 				.toBe(true)
@@ -394,7 +400,7 @@ test.describe('inspector values stay inside their panel (Lab UX phase 1)', () =>
 			await expect(selected.getByTestId('runtime-value-row')
 				.first())
 				.toBeVisible()
-			expect(await expectValuesInside(page, selected))
+			expect(await expectValuesInside(selected))
 				.toBeGreaterThan(3)
 
 			await page.getByRole('tab', { name: 'Blueprint', exact: true })

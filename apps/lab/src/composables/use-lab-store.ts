@@ -136,7 +136,10 @@ export interface LabStore {
 	readonly loadedPresetId: Readonly<Ref<string | null>>
 	/** What the Examples menu names: the loaded preset, or "edited" once the source no longer matches it. */
 	readonly example: Readonly<Ref<ExampleState<ShowcasePreset>>>
-	/** Which Author view is open. Lives here (not in `AuthorPanel`) so other surfaces can open the JSON view. */
+	/**
+	 * Which Author view is open: Structure on first load (Lab UX phase 1; it was JSON), then whatever the user chose. Not
+	 * saved across reloads. Lives here (not in `AuthorPanel`) so other surfaces can open the JSON view.
+	 */
 	readonly authorView: Ref<'catalog' | 'structure' | 'json'>
 	/**
 	 * Set by `showProblems()`: `AuthorJsonView` moves focus to its Problems list (when it is already mounted, or
@@ -200,7 +203,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	const showcaseId = shallowRef(initialShowcase.id)
 	const presets = shallowRef<readonly ShowcasePreset[]>(initialShowcase.presets)
 	const loadedPresetId = shallowRef<string | null>(initialShowcase.defaultPreset.id)
-	const authorView = shallowRef<'catalog' | 'structure' | 'json'>('json')
+	const authorView = shallowRef<'catalog' | 'structure' | 'json'>('structure')
 	const problemsFocusPending = shallowRef(false)
 
 	const sessionTick = shallowRef(0)

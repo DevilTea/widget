@@ -586,8 +586,8 @@ Renderer packs page (page-*.js + page-*.css)
 Renderer packs Nuxt UI pack (NuxtUiPack-*.js + NuxtUiPack-*.css)
                                          ~100.1 KB raw / ~23.9 KB gzip JS + ~197.7 KB / ~25.3 KB CSS — loaded the first time the Nuxt UI pack is chosen (its own
                                          nested Vue app, the eight Nuxt UI renderers, Tailwind utilities and the Nuxt UI component themes); the default frame never loads it
-modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
-vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
+modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON is first opened
+vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON is first opened
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
 Implementation panel + Shiki (ImplementationPanel-*.js)
@@ -614,19 +614,12 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
   force-enabled `useBuiltinLSP` and carried ~740 KB of unused LSP/grammar code is deliberately not
   imported anywhere), and
   `editor-core.mjs` is never in Vite's module graph at all (loaded by `modern-monaco` itself via the
-  importmap-resolved dynamic `import()` described in "Deployment" above). Both are still fetched
-  **during initial load today**, though: `AuthorJsonView.vue` renders `MonacoJsonEditor` when the JSON view is active,
-  Dockview mounts every one of the seven canonical panels' Vue components as soon as `Workbench.vue`'s
-  `onReady()` calls `addPanel()` for it (`inactive: true` only controls which tab is initially
-  *selected*, not whether Dockview mounts the panel's content — verified: dockview-vue keeps every
-  panel's rendered content in the DOM, not just the active one), and Author is the panel added first /
-  made the active tab. So `MonacoJsonEditor`'s `onMounted` runs immediately on app load regardless of
-  which tab a user looks at. This is an accepted, documented trade-off, not an oversight: Author JSON is
-  the Lab's default and most-used surface, so paying its cost immediately is preferable to adding a
-  mount-gate (`v-if` on tab activity) whose only benefit is deferring, never avoiding, that cost for the
-  overwhelmingly common path where a user opens Author JSON anyway. If onboarding/information-architecture
-  ever makes Author not the default active panel, revisit gating `MonacoJsonEditor`'s mount on the view
-  actually being active rather than merely present.
+  importmap-resolved dynamic `import()` described in "Deployment" above). Both are fetched **when the Author JSON view is
+  first opened**: `AuthorPanel.vue` renders only the active view (`v-if`), and since Lab UX phase 1 the view Author opens on is
+  Structure, not JSON. (Before, JSON was the default and Dockview mounts every canonical panel's content at load, so
+  `MonacoJsonEditor` mounted, and both files were fetched, on every load whichever tab the user looked at; that was an accepted
+  trade-off while JSON was the default surface.) The JSON tab, the problems chip and "Show problems" are the ways in; `e2e/shell.spec.ts` asserts no `.monaco-editor` before JSON is opened and the Pages spec asserts
+  `editor-core.mjs` is requested once it is.
 - **ELK layout worker**: same eager-on-load shape as Monaco, for the same underlying reason, and this
   predates this issue's change — verified by loading the built app fresh (no tab interaction) and
   observing `layout.worker-*.js` requested immediately. `layout-client.ts`'s `ensureElk()` still only
@@ -1350,7 +1343,9 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   Monaco, onto the other header menu; tracked with `onInteractOutside`, as Reka's own handler does for non-modal menus) focus is left
   where the user put it: refocusing the trigger there swallowed typing and closed the menu that click had just opened. A chosen item's
   action runs in both cases. e2e (`menu focus handling`) pins both, and the menu helpers click a menu path once, with no retry.
-- `LabStore.authorView` (Catalog / Structure / JSON) lives in the store, not in `AuthorPanel`, so other surfaces can
+- `LabStore.authorView` (Catalog / Structure / JSON) starts on **Structure** (Lab UX phase 1; it was JSON) and then keeps what the user
+  chose, also across showcase switches; it is not saved across reloads. Specs that need Monaco or the Problems list open it with
+  `openAuthorJson()` (`e2e/fixtures.ts`). It lives in the store, not in `AuthorPanel`, so other surfaces can
   open the JSON view; `showProblems()` sets `activeTab`, `authorView` and `problemsFocusPending`. `Workbench.vue` now also feeds
   Dockview's active panel back into `activeTab` (and never re-activates the panel already active, which moves DOM focus out of
   Monaco), so asking for a tab that is "already" `activeTab` in the store but no longer on screen still switches.

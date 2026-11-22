@@ -1,5 +1,5 @@
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { chooseTutorialMenuItem, expect, openDeveloperTool, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, openAuthorJson, openDeveloperTool, test } from './fixtures'
 
 const GATE_TEXT = 'Widget Lab is designed for a desktop-sized viewport. Widen the window to continue.'
 
@@ -41,6 +41,8 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 	test('the dirty-draft confirmation survives shrink/widen without applying, losing the draft, or losing its focus-return target', async ({ page }) => {
 		await page.goto('/?lab-test&showcase=sandbox')
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+		// The end of this test reads the draft in Monaco; Author opens on Structure.
+		await openAuthorJson(page)
 
 		// Use a known-valid Source fixture through the same LabStore seam as the Apply contracts. Reading
 		// Monaco's tokenized DOM to reconstruct Source would couple this viewport test to editor painting

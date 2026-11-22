@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { expect, expectDocumentStatus, expectPreviewStatus, openStatusDetails, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectPreviewStatus, openAuthorJson, openStatusDetails, previewFrame, test } from './fixtures'
 
 /**
  * Issue #28 Source/Apply lifecycle contract, deliberately not involving Monaco at all — it uses the
@@ -53,6 +53,8 @@ test('draft source does not affect Preview until Apply, then Apply updates it', 
 })
 
 test('an invalid draft preserves the prior active snapshot and surfaces a visible parse error', async ({ page }) => {
+	// Author opens on Structure: this test reads Monaco and the Problems list under it.
+	await openAuthorJson(page)
 	const draft = defaultSandboxPreset.sourceText.replace('Widget Lab sandbox', 'Widget Lab sandbox DRAFT')
 	await setDraftSourceText(page, draft)
 	await page.getByRole('button', { name: 'Apply', exact: true })

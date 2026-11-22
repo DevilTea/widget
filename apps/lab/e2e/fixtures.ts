@@ -259,6 +259,21 @@ export async function openDeveloperTool(page: Page, tool: 'implementation' | 'do
 		.toHaveAttribute('aria-selected', 'true')
 }
 
+/**
+ * Opens Author > JSON and waits for Monaco. Author opens on Structure since Lab UX phase 1, and Monaco is only mounted
+ * (and loaded) once the JSON view is open. Works in either Lab language.
+ */
+export async function openAuthorJson(page: Page): Promise<void> {
+	await page.getByRole('tab', { name: /^(?:Author|編寫)$/ })
+		.click()
+	await page.getByRole('tablist', { name: /^(?:Author views|編寫檢視)$/ })
+		.getByRole('tab', { name: 'JSON', exact: true })
+		.click()
+	await expect(page.getByTestId('json-editor')
+		.locator('.monaco-editor'))
+		.toBeVisible()
+}
+
 /** The tutorial entry of the overflow menu (its label follows the tutorial state: Tutorial, Pause, Resume, Restart). */
 export async function chooseTutorialMenuItem(page: Page, name = 'Tutorial'): Promise<void> {
 	await chooseFromMenu(page, 'overflow-menu', [() => page.getByRole('menuitem', { name, exact: true })])

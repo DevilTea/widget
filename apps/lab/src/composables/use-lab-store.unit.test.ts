@@ -860,6 +860,20 @@ describe('createLabStore() header and feedback state', () => {
 		store.dispose()
 	})
 
+	it('opens Author on the Structure view by default, for a fresh store and after a showcase switch (Lab UX phase 1)', async () => {
+		const store = createSandboxStore()
+		expect(store.activeTab.value)
+			.toBe('author')
+		expect(store.authorView.value)
+			.toBe('structure')
+		// A view the user chose stays when the showcase changes: only the first load picks the default.
+		store.authorView.value = 'json'
+		await store.switchShowcase('survey')
+		expect(store.authorView.value)
+			.toBe('json')
+		store.dispose()
+	})
+
 	it('showProblems() opens Author > JSON and flags the Problems list for focus', () => {
 		const store = createSandboxStore()
 		store.activeTab.value = 'runtime'

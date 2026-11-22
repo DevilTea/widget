@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
 
 /**
  * Quote rules acceptance contract (issue #230, showcase 2): the Corner Press print job quote
@@ -238,6 +238,8 @@ test.describe('the schema library\'s own messages', () => {
 
 		await expectDocumentStatus(page, { problems: 6 })
 		await expectPreviewStatus(page, 'stale')
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)
 			.toHaveAttribute('data-problem-count', '6')

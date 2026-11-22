@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { answerDraftGuard, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openStatusDetails, previewFrame, selectShowcase, setLocale, test } from './fixtures'
+import { answerDraftGuard, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, openStatusDetails, previewFrame, selectShowcase, setLocale, test } from './fixtures'
 
 /**
  * Issue #230 PR 3a (audit U01-U07, U24): the grouped header, unapplied-draft protection, Undo last change,
@@ -15,10 +15,9 @@ interface LabTestWindow {
 async function openLab(page: Page, query: string): Promise<void> {
 	await page.goto(`/?lab-test&${query}`)
 	await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
-	// Monaco is imported lazily; interact with it only once it is up.
-	await expect(page.getByTestId('json-editor')
-		.locator('.monaco-editor'))
-		.toBeVisible()
+	// Author opens on Structure; most of this file is about the JSON view, its Problems list and Monaco (imported lazily:
+	// interact with it only once it is up).
+	await openAuthorJson(page)
 }
 
 async function setDraft(page: Page, text: string): Promise<void> {

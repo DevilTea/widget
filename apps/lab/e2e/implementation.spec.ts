@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, previewFrame, test } from './fixtures'
+import { expect, openAuthorJson, previewFrame, test } from './fixtures'
 
 /**
  * Issue #25 P3 "curated Implementation source explorer" contract.
@@ -186,9 +186,8 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 			}))
 		}, marker)
 
-		// The Source editor (Monaco) shows the dirtied draft.
-		await page.getByRole('tab', { name: 'Author' })
-			.click()
+		// The Source editor (Monaco, in Author > JSON) shows the dirtied draft.
+		await openAuthorJson(page)
 		await expect(page.locator('.view-lines')
 			.getByText(marker, { exact: false }))
 			.toBeVisible()
