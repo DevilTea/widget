@@ -128,7 +128,7 @@ export interface LabStore {
 	readonly canUndo: Readonly<Ref<boolean>>
 	/** How many applied sources "Undo last apply" can step back through (bounded by `LAB_UNDO_LIMIT`). */
 	readonly undoDepth: Readonly<Ref<number>>
-	/** Plain-language header status: Document validity and whether Preview shows it. */
+	/** Plain-language header status: Document validity, whether Preview shows it, and whether an unapplied draft exists. */
 	readonly status: Readonly<Ref<LabStatus>>
 	/** The Problems list: the last Apply's JSON syntax error and the Document's Core diagnostics. */
 	readonly problems: Readonly<Ref<readonly LabProblem[]>>
@@ -375,6 +375,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			hasParseError: session.parseError !== null,
 			revisions: getLabRevisionStatus(session.documentState.revision, session.preview?.revision ?? null),
 			previewFailed: previewHost.error.value !== null && !previewHost.runtimeSurvives.value,
+			hasUnappliedDraft: session.isDirty,
 		})
 	})
 	// Depends on the committed Blueprint and the Lab-only parse error, both reference-stable computeds, rather than

@@ -1307,6 +1307,13 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   from that text) and preview (`data-state` `current` | `stale` | `unavailable`: "Preview up to date" / "Preview shows the
   last valid version" / "No preview yet"). `data-testid` stays `document-status` / `preview-status`. Revision numbers, the Blueprint
   status and Linked / Diverged are developer details in the info popover (`status-details`; `revision-link-status` lives there).
+  Both stay facts about the **committed** Document. A third fact, the **draft** (`LabStatus.draft`: `clean` | `unapplied`, from
+  `LabSession.isDirty`), adds the chip "Unapplied changes" (`draft-status`) while the JSON draft differs from the Document, and the
+  Preview chip, while `current`, then says "Preview shows the last applied version" instead of "Preview up to date"
+  (`data-behind-draft="true"`; `data-state` stays `current`), so nothing claims the Preview shows what the user is typing. The chips
+  that are not buttons carry `role="status"`. With problems, the validity chip is a **button** (`UButton`, same test id and data
+  attributes) that runs `store.showProblems()`; its accessible name is "N problems: show them in the JSON view" (the visible text is
+  part of it). `e2e/header-feedback.spec.ts` pins the draft chip, the one-row header with it at 1280px (en and zh-TW) and the button.
 - *Edit actions*: a disabled action keeps `aria-disabled="true"` instead of `disabled` so it stays focusable and its tooltip
   can say why (nothing to apply / revert / undo, or "apply or revert your unapplied edits before undoing"); the click
   handler also refuses. Apply's tooltip shows the shortcut as key caps. Undo shows "Undo" and is

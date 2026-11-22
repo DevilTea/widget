@@ -136,6 +136,10 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Preview up to date': '預覽已是最新',
 	'Preview shows the last valid version': '預覽顯示最後一個有效版本',
 	'No preview yet': '尚無預覽',
+	// Draft state and the clickable problems chip (Lab UX phase 1).
+	'Unapplied changes': '有尚未套用的變更',
+	'Preview shows the last applied version': '預覽顯示上次套用的版本',
+	'{problems}: show them in the JSON view': '{problems}：在 JSON 檢視中顯示',
 	'Document and preview details': 'Document 與預覽詳細資訊',
 	'Document': 'Document',
 	'Revisions': 'Revisions',

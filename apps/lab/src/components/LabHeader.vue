@@ -8,8 +8,10 @@
  *   loaded preset, or "edited" once the source no longer matches it. Loading either with an unapplied editor
  *   draft first asks (`DraftGuardDialog`).
  * - Two plain-language chips replace the internal-vocabulary ones: is the Document valid, and does the
- *   Preview show it. Revision numbers, Linked/Diverged and the draft/recovery facts that the Author panel used to show in its own
- *   box are developer details in a popover (`StatusDetails.vue`).
+ *   Preview show it. With problems, the validity chip is a button that opens the Problems list. A third chip,
+ *   "Unapplied changes", is shown while the JSON draft differs from the Document, and the Preview chip then names the
+ *   version it shows instead of "up to date". Revision numbers, Linked/Diverged and the draft/recovery facts that the
+ *   Author panel used to show in its own box are developer details in a popover (`StatusDetails.vue`).
  * - Apply, Revert, Undo (the previously applied source, as a new revision) and Format are the edit actions.
  *   A disabled one stays focusable (`aria-disabled`) so its tooltip can say why.
  * - The overflow menu holds the tutorial, theme, language, Reset layout (the Dockview layout is remembered across
@@ -163,15 +165,35 @@ const validityLabel = computed(() => {
 		return i18n.t('Valid')
 	return i18n.t(value.count === 1 ? '{count} problem' : '{count} problems', { count: value.count })
 })
+const hasDraft = computed(() => store.status.value.draft === 'unapplied')
+// While an unapplied draft exists, a Preview that shows the committed Document is not "up to date" with what the user
+// is looking at: it says which version it shows instead (the state itself stays `current`, a fact about the Document).
+const previewBehindDraft = computed(() => hasDraft.value && previewState.value === 'current')
 const previewLabel = computed(() => {
 	switch (previewState.value) {
-		case 'current': return i18n.t('Preview up to date')
+		case 'current': return i18n.t(previewBehindDraft.value ? 'Preview shows the last applied version' : 'Preview up to date')
 		case 'stale': return i18n.t('Preview shows the last valid version')
 		case 'failed': return i18n.t('Preview failed to load')
 		default: return i18n.t('No preview yet')
 	}
 })
-const previewColor = computed(() => previewState.value === 'current' ? 'success' : previewState.value === 'stale' ? 'warning' : previewState.value === 'failed' ? 'error' : 'neutral')
+const previewColor = computed(() => previewState.value === 'current'
+	? previewBehindDraft.value ? 'neutral' : 'success'
+	: previewState.value === 'stale' ? 'warning' : previewState.value === 'failed' ? 'error' : 'neutral')
+const previewIcon = computed(() => {
+	switch (previewState.value) {
+		case 'current': return previewBehindDraft.value ? 'i-lucide-circle-dot' : 'i-lucide-circle-check'
+		case 'stale': return 'i-lucide-triangle-alert'
+		case 'failed': return 'i-lucide-circle-x'
+		default: return 'i-lucide-circle-dashed'
+	}
+})
+/** The problems chip is a button that opens the Problems list; its name says so (the visible count is part of it). */
+const showProblemsLabel = computed(() => i18n.t('{problems}: show them in the JSON view', { problems: validityLabel.value }))
+
+function onShowProblems(): void {
+	store.showProblems()
+}
 
 // ---------------------------------------------------------------------------------------------------------
 // Edit actions. Disabled buttons use `aria-disabled` (not `disabled`) so they stay focusable and keep their
@@ -348,25 +370,63 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 
 		<span class="flex-1" />
 
+		<!-- With problems the validity chip is a button that opens the Problems list (the action of the stale-preview
+			notice's "Show problems"); a valid Document has nothing to show, so it stays a status chip. -->
+		<UTooltip
+			v-if="validity.kind === 'problems'"
+			:text="i18n.t('Show problems')"
+		>
+			<UButton
+				data-testid="document-status"
+				data-state="problems"
+				:data-problem-count="validity.count"
+				color="error"
+				variant="subtle"
+				size="sm"
+				icon="i-lucide-circle-alert"
+				:label="validityLabel"
+				:aria-label="showProblemsLabel"
+				:ui="{ label: 'text-default' }"
+				class="whitespace-nowrap"
+				@click="onShowProblems"
+			/>
+		</UTooltip>
 		<UBadge
+			v-else
 			data-testid="document-status"
-			:data-state="validity.kind"
-			:data-problem-count="validity.kind === 'problems' ? validity.count : 0"
-			:color="validity.kind === 'valid' ? 'success' : 'error'"
+			data-state="valid"
+			:data-problem-count="0"
+			role="status"
+			color="success"
 			variant="subtle"
 			size="md"
-			:icon="validity.kind === 'valid' ? 'i-lucide-circle-check' : 'i-lucide-circle-alert'"
+			icon="i-lucide-circle-check"
 			:label="validityLabel"
+			:ui="{ label: 'text-default' }"
+			class="whitespace-nowrap"
+		/>
+		<UBadge
+			v-if="hasDraft"
+			data-testid="draft-status"
+			data-state="unapplied"
+			role="status"
+			color="info"
+			variant="subtle"
+			size="md"
+			icon="i-lucide-pencil"
+			:label="i18n.t('Unapplied changes')"
 			:ui="{ label: 'text-default' }"
 			class="whitespace-nowrap"
 		/>
 		<UBadge
 			data-testid="preview-status"
 			:data-state="previewState"
+			:data-behind-draft="previewBehindDraft ? 'true' : 'false'"
+			role="status"
 			:color="previewColor"
 			variant="subtle"
 			size="md"
-			:icon="previewState === 'current' ? 'i-lucide-circle-check' : previewState === 'stale' ? 'i-lucide-triangle-alert' : previewState === 'failed' ? 'i-lucide-circle-x' : 'i-lucide-circle-dashed'"
+			:icon="previewIcon"
 			:label="previewLabel"
 			:ui="{ label: 'text-default' }"
 			class="whitespace-nowrap"

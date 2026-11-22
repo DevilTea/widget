@@ -537,6 +537,113 @@ test.describe('status chips and details (U02)', () => {
 		await expect(page.getByTestId('revision-link-status'))
 			.toHaveText('Diverged / Unlinked')
 	})
+
+	test('an unapplied draft is named, and the Preview chip stops calling itself up to date until Apply or Revert', async ({ page }) => {
+		await openLab(page, 'showcase=sandbox')
+		const draftChip = page.getByTestId('draft-status')
+		const previewChip = page.getByTestId('preview-status')
+		await expect(draftChip)
+			.toHaveCount(0)
+		await expect(previewChip)
+			.toHaveText('Preview up to date')
+
+		await setDraft(page, textDocument('typing in progress'))
+		await expect(draftChip)
+			.toHaveText('Unapplied changes')
+		await expect(draftChip)
+			.toHaveAttribute('role', 'status')
+		await expect(previewChip)
+			.toHaveText('Preview shows the last applied version')
+		// The Preview still shows the committed Document: the state is a fact about it and does not change while typing.
+		await expect(previewChip)
+			.toHaveAttribute('data-state', 'current')
+		await expect(previewChip)
+			.toHaveAttribute('data-behind-draft', 'true')
+
+		await page.getByTestId('revert-button')
+			.click()
+		await expect(draftChip)
+			.toHaveCount(0)
+		await expect(previewChip)
+			.toHaveText('Preview up to date')
+
+		await setDraft(page, textDocument('applied now'))
+		await expect(draftChip)
+			.toBeVisible()
+		await page.getByTestId('apply-button')
+			.click()
+		await expect(previewFrame(page)
+			.getByText('applied now', { exact: true }))
+			.toBeVisible()
+		await expect(draftChip)
+			.toHaveCount(0)
+		await expect(previewChip)
+			.toHaveText('Preview up to date')
+		await expect(previewChip)
+			.toHaveAttribute('data-behind-draft', 'false')
+	})
+
+	for (const lang of ['en', 'zh-TW'] as const) {
+		test(`with the draft chip shown the header stays on one row at 1280x800 (${lang})`, async ({ page }) => {
+			await page.setViewportSize({ width: 1280, height: 800 })
+			await openLab(page, `showcase=survey&lang=${lang}`)
+			await setDraft(page, '{ "id": "x", "type": "Survey" }')
+			await expect(page.getByTestId('draft-status'))
+				.toBeVisible()
+			const header = page.locator('header')
+			const headerBox = (await header.boundingBox())!
+			expect(headerBox.height, 'one row')
+				.toBeLessThan(56)
+			for (const id of ['examples-menu', 'document-status', 'draft-status', 'preview-status', 'apply-button', 'overflow-menu']) {
+				const box = (await page.getByTestId(id)
+					.boundingBox())!
+				expect(box.y + box.height, id)
+					.toBeLessThanOrEqual(headerBox.y + headerBox.height + 1)
+				expect(box.x + box.width, `${id} inside the viewport`)
+					.toBeLessThanOrEqual(1280)
+			}
+			expect(await header.evaluate(element => element.scrollWidth <= element.clientWidth))
+				.toBe(true)
+		})
+	}
+
+	test('the problems chip is a named button that opens the Problems list', async ({ page }) => {
+		await openLab(page, 'showcase=survey')
+		// A valid Document has nothing to show: the chip is a status, not a button.
+		await expect(page.locator('header')
+			.getByRole('button', { name: /show them in the JSON view/ }))
+			.toHaveCount(0)
+		await expect(page.getByTestId('document-status'))
+			.toHaveAttribute('role', 'status')
+
+		await loadPreset(page, 'survey-ai-draft')
+		await page.getByRole('tab', { name: 'Runtime' })
+			.click()
+		const chip = page.getByRole('button', { name: '5 problems: show them in the JSON view', exact: true })
+		await expect(chip)
+			.toHaveText('5 problems')
+		await chip.click()
+		await expect(page.getByRole('tab', { name: 'Author' }))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByRole('tab', { name: 'JSON' }))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('author-problems')
+			.getByTestId('problem-row')
+			.first())
+			.toBeFocused()
+
+		// From the keyboard too.
+		await page.getByRole('tab', { name: 'Structure' })
+			.click()
+		await chip.focus()
+		await page.keyboard.press('Enter')
+		await expect(page.getByRole('tab', { name: 'JSON' }))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('author-problems')
+			.getByTestId('problem-row')
+			.first())
+			.toBeFocused()
+	})
 })
 
 test.describe('Problems list, jump and squiggles (U06)', () => {

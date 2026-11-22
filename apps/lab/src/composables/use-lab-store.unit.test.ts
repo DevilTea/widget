@@ -809,13 +809,21 @@ describe('createLabStore() header and feedback state', () => {
 	it('derives plain-language status and the Problems list from the last Apply', async () => {
 		const store = createSandboxStore()
 		expect(store.status.value)
-			.toEqual({ validity: { kind: 'valid' }, preview: 'current' })
+			.toEqual({ validity: { kind: 'valid' }, preview: 'current', draft: 'clean' })
 		expect(store.problems.value)
 			.toEqual([])
 
+		// A draft is reported as such; what the chips say about the committed Document and the Preview does not move.
+		store.setDraftSourceText(secondText)
+		expect(store.status.value)
+			.toEqual({ validity: { kind: 'valid' }, preview: 'current', draft: 'unapplied' })
+		store.revert()
+		expect(store.status.value.draft)
+			.toBe('clean')
+
 		await store.applyPreset('invalid-semantic')
 		expect(store.status.value)
-			.toEqual({ validity: { kind: 'problems', count: 1 }, preview: 'stale' })
+			.toEqual({ validity: { kind: 'problems', count: 1 }, preview: 'stale', draft: 'clean' })
 		expect(store.problems.value)
 			.toHaveLength(1)
 		expect(store.problems.value[0])
