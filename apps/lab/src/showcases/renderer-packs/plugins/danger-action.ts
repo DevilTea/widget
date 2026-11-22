@@ -20,7 +20,6 @@ import type { Density, I18nText, Tone } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkDangerActionConfig, resolveDangerActionConfig } from '../config'
 import { isBoolean, isDensity, isNumber } from '../domain'
-import { dangerActionConfigSchema } from '../schemas'
 import { checkInsideSection, checkProvider, densityReads, providerId } from './structure'
 
 export interface ConfirmedAction {
@@ -28,32 +27,65 @@ export interface ConfirmedAction {
 	readonly message: I18nText
 }
 
+/**
+ * A button that needs a confirmation. State `confirming`. Methods: `ask()` and `cancel()` (write State), `confirm()` (invokes
+ * the `notify` Method of the Notifier named in the `notifier` config through dep.widget(id), closes the question and emits
+ * `confirmed`). Refusals (`already-asking`, `not-asking`, `notifier-refused`) are Method diagnostics and change nothing.
+ * Properties: `label`, `confirmText`, `message`, `tone` and `density` (read from the Appearance named in the `appearance`
+ * config).
+ */
 export interface DangerActionInterfaces extends WidgetInterfaces {
+	/**
+	 * The button label, the question, the notification a confirmed action leaves and its tone, the Notifier it reports to and
+	 * the Appearance it reads.
+	 */
 	config: { raw: DangerActionRawConfig, resolved: DangerActionConfig }
-	state: { confirming: boolean }
+	state: {
+		/** Whether the confirmation question is open. */
+		confirming: boolean
+	}
 	properties: {
+		/** The button label per language. */
 		label: I18nText
+		/** The confirmation question per language. */
 		confirmText: I18nText
+		/** The notification a confirmed action leaves, per language. */
 		message: I18nText
+		/** The tone of that notification. */
 		tone: Tone
+		/** `comfortable` or `compact`: the `density` State of the Appearance named in the `appearance` config, read through `dep.widget(id)`; `comfortable` when it cannot be read. */
 		density: Density
 	}
 	methods: {
+		/**
+		 * Opens the confirmation question. Refused (`already-asking`) while it is open.
+		 *
+		 * @returns Whether the question was opened.
+		 */
 		ask: () => boolean
+		/**
+		 * Closes the confirmation question. Refused (`not-asking`) while none is open.
+		 *
+		 * @returns Whether the question was closed.
+		 */
 		cancel: () => boolean
+		/**
+		 * The action: tells the Notifier (its `notify` Method), closes the question and emits `confirmed`. Refused (`not-asking`)
+		 * unless the question is open, and (`notifier-refused`) when the Notifier refuses or is missing.
+		 *
+		 * @returns Whether the action was confirmed.
+		 */
 		confirm: () => boolean
 	}
 	events: {
+		/** The action was confirmed and the Notifier was told. Carries the tone and the text of the notification. */
 		confirmed: [action: ConfirmedAction]
 	}
 }
 
 export const DangerActionPlugin = createWidgetPlugin('DangerAction')
-	.description('A button that needs a confirmation. State `confirming`. Methods: `ask()` and `cancel()` (write State), `confirm()` (invokes the `notify` Method of the Notifier named in the `notifier` config through dep.widget(id), closes the question and emits `confirmed`). Refusals (`already-asking`, `not-asking`, `notifier-refused`) are Method diagnostics and change nothing. Properties: `label`, `confirmText`, `message`, `tone` and `density` (read from the Appearance named in the `appearance` config).')
 	.interfaces<DangerActionInterfaces>()
 	.config({
-		description: 'The button label, the question, the notification a confirmed action leaves and its tone, the Notifier it reports to and the Appearance it reads.',
-		schema: dangerActionConfigSchema,
 		validate: (input, ctx): input is DangerActionRawConfig => {
 			checkDangerActionConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -165,6 +197,5 @@ export const DangerActionPlugin = createWidgetPlugin('DangerAction')
 				return true
 			},
 		}))
-	.events(events => events
-		.confirmed({ description: 'The action was confirmed and the Notifier was told. Carries the tone and the text of the notification.' }))
+	.events(['confirmed'])
 	.done()

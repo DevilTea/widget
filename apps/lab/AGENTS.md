@@ -856,7 +856,7 @@ Inspector snapshot (protocol 1.0) carry names and capabilities only (`docs/site/
   every showcase except `quote-rules`, whose raw config types are inferred from Valibot (`InferInput`) and keep their field
   prose in `v.description()`.
 - **The docs reach the Lab through `widgetDocs()`.** `widget-docs.ts` (`labWidgetDocs()`) configures the widget-skills Vite
-  plugin for the six showcase Systems with `tsconfig.app.json`; `vite.config.ts`, `vitest.config.ts` and the root
+  plugin for the seven showcase Systems with `tsconfig.app.json`; `vite.config.ts`, `vitest.config.ts` and the root
   `vitest.config.ts` (project `lab`) all load it, importing the plugin by relative path (`../widget-skills/src/vite`): Vite hands
   a bare `@deviltea/widget-skills/vite` to Node, which cannot load its TypeScript sources. `virtual:widget-docs/<showcase id>`
   is that showcase's `WidgetDocs`, imported by `showcases/registry.ts` as `ShowcaseEntry.docs`; `src/virtual-widget-docs.d.ts`

@@ -13,7 +13,6 @@ import type { Density, I18nText, Mode } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkSettingsPageConfig, resolveSettingsPageConfig } from '../config'
 import { isDensity, isMode } from '../domain'
-import { settingsPageConfigSchema } from '../schemas'
 import { isProviderType, rootAppearanceId } from './structure'
 
 export interface PageAppearance {
@@ -21,21 +20,31 @@ export interface PageAppearance {
 	readonly density: Density
 }
 
+/**
+ * The root of the workspace settings page. Slot `providers`: the capability widgets (Appearance, Notifier). Slot `sections`:
+ * Sections of fields. Property `title` is its config; `appearance` is the colour `mode` and `density` of the first Appearance
+ * in `providers` (`auto` / `comfortable` when there is none).
+ */
 export interface SettingsPageInterfaces extends WidgetInterfaces {
+	/** The title of the page per language. */
 	config: { raw: SettingsPageRawConfig, resolved: SettingsPageConfig }
-	slots: 'providers' | 'sections'
+	slots: {
+		/** The capability widgets: Appearance and Notifier. */
+		providers: 'Appearance' | 'Notifier'
+		/** The Sections of the page, in order. */
+		sections: 'Section'
+	}
 	properties: {
+		/** The title of the page per language. */
 		title: I18nText
+		/** The colour `mode` and `density` of the first Appearance in `providers`; `auto` / `comfortable` when there is none. */
 		appearance: PageAppearance
 	}
 }
 
 export const SettingsPagePlugin = createWidgetPlugin('SettingsPage')
-	.description('The root of the workspace settings page. Slot `providers`: the capability widgets (Appearance, Notifier). Slot `sections`: Sections of fields. Property `title` is its config; `appearance` is the colour `mode` and `density` of the first Appearance in `providers` (`auto` / `comfortable` when there is none).')
 	.interfaces<SettingsPageInterfaces>()
 	.config({
-		description: 'The title of the page per language.',
-		schema: settingsPageConfigSchema,
 		validate: (input, ctx): input is SettingsPageRawConfig => {
 			checkSettingsPageConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -44,7 +53,6 @@ export const SettingsPagePlugin = createWidgetPlugin('SettingsPage')
 	})
 	.slots({
 		providers: {
-			description: 'The capability widgets: Appearance and Notifier.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && !isProviderType(child.type))
@@ -53,7 +61,6 @@ export const SettingsPagePlugin = createWidgetPlugin('SettingsPage')
 			},
 		},
 		sections: {
-			description: 'The Sections of the page, in order.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'Section')

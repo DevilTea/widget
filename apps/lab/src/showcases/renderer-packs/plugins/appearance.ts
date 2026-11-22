@@ -11,20 +11,27 @@ import type { Density, Mode } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkAppearanceConfig, resolveAppearanceConfig } from '../config'
 import { isDensity, isMode } from '../domain'
-import { appearanceConfigSchema } from '../schemas'
 import { checkAtMostOneAppearance } from './structure'
 
+/**
+ * A capability widget: how dense the settings page is (State `density`: `comfortable` or `compact`) and which colour mode it
+ * wants (State `mode`: `auto`, `light` or `dark`; `auto` follows the host theme). Fields read `density` by naming this widget
+ * in their `appearance` config; there is no nearest-ancestor lookup.
+ */
 export interface AppearanceInterfaces extends WidgetInterfaces {
+	/** The density and the colour mode at the start. */
 	config: { raw: AppearanceRawConfig, resolved: AppearanceConfig }
-	state: { density: Density, mode: Mode }
+	state: {
+		/** How dense the page is: `comfortable` or `compact`. */
+		density: Density
+		/** The colour mode: `auto` (follow the host theme), `light` or `dark`. */
+		mode: Mode
+	}
 }
 
 export const AppearancePlugin = createWidgetPlugin('Appearance')
-	.description('A capability widget: how dense the settings page is (State `density`: `comfortable` or `compact`) and which colour mode it wants (State `mode`: `auto`, `light` or `dark`; `auto` follows the host theme). Fields read `density` by naming this widget in their `appearance` config; there is no nearest-ancestor lookup.')
 	.interfaces<AppearanceInterfaces>()
 	.config({
-		description: 'The density and the colour mode at the start.',
-		schema: appearanceConfigSchema,
 		validate: (input, ctx): input is AppearanceRawConfig => {
 			checkAppearanceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

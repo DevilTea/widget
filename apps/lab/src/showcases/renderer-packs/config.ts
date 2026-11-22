@@ -98,23 +98,65 @@ function checkOneOf(input: unknown, values: readonly string[], reason: ConfigRea
 // Raw and resolved configs
 // -------------------------------------------------------------------------------------------------
 
-export interface SettingsPageRawConfig { readonly title: I18nText }
+/** The authored config of a SettingsPage. */
+export interface SettingsPageRawConfig {
+	/** The title of the settings page. */
+	readonly title: I18nText
+}
 export interface SettingsPageConfig { readonly title: I18nText, readonly recovered: boolean }
 
-export interface AppearanceRawConfig { readonly density?: Density, readonly mode?: Mode }
+/** The authored config of an Appearance. */
+export interface AppearanceRawConfig {
+	/** The density at the start. Defaults to "comfortable". */
+	readonly density?: Density
+	/** The colour mode at the start: "auto" follows the host theme. Defaults to "auto". */
+	readonly mode?: Mode
+}
 export interface AppearanceConfig { readonly density: Density, readonly mode: Mode, readonly recovered: boolean }
 
-export interface NotifierRawConfig { readonly limit?: number }
+/** The authored config of a Notifier. */
+export interface NotifierRawConfig {
+	/**
+	 * How many notifications are kept; the oldest is dropped first. Defaults to 4.
+	 *
+	 * @minimum 1
+	 * @maximum 10
+	 */
+	readonly limit?: number
+}
 export interface NotifierConfig { readonly limit: number, readonly recovered: boolean }
 
-export interface SectionRawConfig { readonly title: I18nText, readonly description?: I18nText }
+/** The authored config of a Section. */
+export interface SectionRawConfig {
+	/** The heading of the section. */
+	readonly title: I18nText
+	/** A sentence under the heading. */
+	readonly description?: I18nText
+}
 export interface SectionConfig { readonly title: I18nText, readonly description: I18nText | null, readonly recovered: boolean }
 
+/** The authored config of a TextField. */
 export interface TextFieldRawConfig {
+	/** The label of the field. */
 	readonly label: I18nText
+	/** The hint shown while the field is empty. */
 	readonly placeholder?: I18nText
+	/**
+	 * How many characters are acceptable. A longer value is stored and gets a validation message; the widget does not
+	 * truncate it.
+	 *
+	 * @minimum 1
+	 */
 	readonly maxLength: number
+	/**
+	 * The id of the Appearance widget this one reads its density from. Core has no nearest-ancestor lookup: the provider is
+	 * named, and the dependency is declared with dep.widget(id).
+	 *
+	 * @minLength 1
+	 * @widgetRef Appearance
+	 */
 	readonly appearance: string
+	/** The value at the start. Defaults to the empty string. */
 	readonly value?: string
 }
 export interface TextFieldConfig {
@@ -126,13 +168,42 @@ export interface TextFieldConfig {
 	readonly recovered: boolean
 }
 
-export interface ToggleRawConfig { readonly label: I18nText, readonly appearance: string, readonly on?: boolean }
+/** The authored config of a Toggle. */
+export interface ToggleRawConfig {
+	/** The label of the switch. */
+	readonly label: I18nText
+	/**
+	 * The id of the Appearance widget this one reads its density from. Core has no nearest-ancestor lookup: the provider is
+	 * named, and the dependency is declared with dep.widget(id).
+	 *
+	 * @minLength 1
+	 * @widgetRef Appearance
+	 */
+	readonly appearance: string
+	/** Whether the switch is on at the start. Defaults to false. */
+	readonly on?: boolean
+}
 export interface ToggleConfig { readonly label: I18nText, readonly appearance: string, readonly on: boolean, readonly recovered: boolean }
 
+/** The authored config of a Choice. */
 export interface ChoiceRawConfig {
+	/** The label of the choice. */
 	readonly label: I18nText
+	/**
+	 * The id of the Appearance widget this one reads its density from. Core has no nearest-ancestor lookup: the provider is
+	 * named, and the dependency is declared with dep.widget(id).
+	 *
+	 * @minLength 1
+	 * @widgetRef Appearance
+	 */
 	readonly appearance: string
+	/**
+	 * The options to choose between, at least two.
+	 *
+	 * @minItems 2
+	 */
 	readonly options: readonly ChoiceOption[]
+	/** The value of the option chosen at the start. Defaults to the first option. */
 	readonly value?: string
 }
 export interface ChoiceConfig {
@@ -143,12 +214,31 @@ export interface ChoiceConfig {
 	readonly recovered: boolean
 }
 
+/** The authored config of a DangerAction. */
 export interface DangerActionRawConfig {
+	/** The label of the button that asks for confirmation. */
 	readonly label: I18nText
+	/** The question the confirmation shows. */
 	readonly confirmText: I18nText
+	/** The notification a confirmed action leaves with the Notifier. */
 	readonly message: I18nText
+	/** The tone of that notification. Defaults to "danger", which the page announces as an alert. */
 	readonly tone?: Tone
+	/**
+	 * The id of the Notifier widget a confirmed action reports to. Core has no nearest-ancestor lookup: the provider is named,
+	 * and confirm() invokes its notify Method through dep.widget(id).
+	 *
+	 * @minLength 1
+	 * @widgetRef Notifier
+	 */
 	readonly notifier: string
+	/**
+	 * The id of the Appearance widget this one reads its density from. Core has no nearest-ancestor lookup: the provider is
+	 * named, and the dependency is declared with dep.widget(id).
+	 *
+	 * @minLength 1
+	 * @widgetRef Appearance
+	 */
 	readonly appearance: string
 }
 export interface DangerActionConfig {

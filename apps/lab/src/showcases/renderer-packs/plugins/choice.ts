@@ -9,21 +9,32 @@ import type { ChoiceOption, Density, I18nText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkChoiceConfig, resolveChoiceConfig } from '../config'
 import { isDensity, isString } from '../domain'
-import { choiceConfigSchema } from '../schemas'
 import { checkInsideSection, checkProvider, densityReads } from './structure'
 
+/**
+ * A labelled choice between options. State `value` (the value of the chosen option; anything else is refused). Properties:
+ * `label`, `options` and `density` (read from the Appearance named in the `appearance` config, through dep.widget(id)).
+ */
 export interface ChoiceInterfaces extends WidgetInterfaces {
+	/** The label, the Appearance it reads, the options (at least two) and the value chosen at the start. */
 	config: { raw: ChoiceRawConfig, resolved: ChoiceConfig }
-	state: { value: string }
-	properties: { label: I18nText, options: readonly ChoiceOption[], density: Density }
+	state: {
+		/** The value of the chosen option; a value that is not one of the options is refused. */
+		value: string
+	}
+	properties: {
+		/** The label per language. */
+		label: I18nText
+		/** The configured options: a value and a label per language each. */
+		options: readonly ChoiceOption[]
+		/** `comfortable` or `compact`: the `density` State of the Appearance named in the `appearance` config, read through `dep.widget(id)`; `comfortable` when it cannot be read. */
+		density: Density
+	}
 }
 
 export const ChoicePlugin = createWidgetPlugin('Choice')
-	.description('A labelled choice between options. State `value` (the value of the chosen option; anything else is refused). Properties: `label`, `options` and `density` (read from the Appearance named in the `appearance` config, through dep.widget(id)).')
 	.interfaces<ChoiceInterfaces>()
 	.config({
-		description: 'The label, the Appearance it reads, the options (at least two) and the value chosen at the start.',
-		schema: choiceConfigSchema,
 		validate: (input, ctx): input is ChoiceRawConfig => {
 			checkChoiceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

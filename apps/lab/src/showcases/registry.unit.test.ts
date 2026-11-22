@@ -60,7 +60,7 @@ describe('the documentation each showcase carries (Core 0.3 has no descriptions 
 		}
 	})
 
-	it('maps each Survey and document-repair plugin type to its own schema', async () => {
+	it('maps each Survey, document-repair and renderer-packs plugin type to its own schema', async () => {
 		const survey = await import('./survey/schemas')
 		expect(getShowcase('survey')?.configSchemas)
 			.toStrictEqual({
@@ -75,6 +75,18 @@ describe('the documentation each showcase carries (Core 0.3 has no descriptions 
 			.toStrictEqual({
 				RepairDesk: repair.repairDeskConfigSchema,
 				SavedDraft: repair.savedDraftConfigSchema,
+			})
+		const packs = await import('./renderer-packs/schemas')
+		expect(getShowcase('renderer-packs')?.configSchemas)
+			.toStrictEqual({
+				SettingsPage: packs.settingsPageConfigSchema,
+				Appearance: packs.appearanceConfigSchema,
+				Notifier: packs.notifierConfigSchema,
+				Section: packs.sectionConfigSchema,
+				TextField: packs.textFieldConfigSchema,
+				Toggle: packs.toggleConfigSchema,
+				Choice: packs.choiceConfigSchema,
+				DangerAction: packs.dangerActionConfigSchema,
 			})
 	})
 })

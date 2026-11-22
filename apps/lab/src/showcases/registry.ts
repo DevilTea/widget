@@ -22,6 +22,7 @@ import type { ConfigSchemaMap, SourcesRegistry } from '../showcase-host'
 import documentRepairDocs from 'virtual:widget-docs/document-repair'
 import onboardingDocs from 'virtual:widget-docs/onboarding'
 import quoteRulesDocs from 'virtual:widget-docs/quote-rules'
+import rendererPacksDocs from 'virtual:widget-docs/renderer-packs'
 import sandboxDocs from 'virtual:widget-docs/sandbox'
 import surveyDocs from 'virtual:widget-docs/survey'
 import tripBudgetDocs from 'virtual:widget-docs/trip-budget'
@@ -41,6 +42,7 @@ import { quoteConfigSchemas } from './quote-rules/schemas'
 import { quoteSources } from './quote-rules/sources'
 import { quoteSystem } from './quote-rules/system'
 import { defaultPacksPreset, packsPresets } from './renderer-packs/presets'
+import { rendererPacksConfigSchemas } from './renderer-packs/schemas'
 import { packsSources } from './renderer-packs/sources'
 import { packsSystem } from './renderer-packs/system'
 import { defaultSurveyPreset, surveyPresets } from './survey/presets'
@@ -151,6 +153,8 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: packsPresets,
 		defaultPreset: defaultPacksPreset,
 		sources: packsSources,
+		docs: rendererPacksDocs,
+		configSchemas: rendererPacksConfigSchemas,
 	},
 	{
 		id: 'sandbox',

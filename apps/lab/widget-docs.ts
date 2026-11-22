@@ -10,6 +10,7 @@ const SYSTEMS = {
 	'quote-rules': ['src/showcases/quote-rules/system.ts', 'quoteSystem'],
 	'onboarding': ['src/showcases/onboarding/system.ts', 'onboardingSystem'],
 	'document-repair': ['src/showcases/document-repair/system.ts', 'repairSystem'],
+	'renderer-packs': ['src/showcases/renderer-packs/system.ts', 'packsSystem'],
 	'sandbox': ['src/sandbox/system.ts', 'sandboxSystem'],
 } as const
 
