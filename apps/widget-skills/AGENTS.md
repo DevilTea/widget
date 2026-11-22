@@ -28,7 +28,7 @@ It implements the tooling side of `DevilTea/widget` Discussion #12, "Interfaces 
 | `src/fixtures/undocumented-system.ts` | The `--check` fixture: members without JSDoc, an unknown tag, and a `WidgetContract` slot without `Types`. |
 | `examples/survey/` | Generated output for the fixture System. Never hand-edit; regenerate. A test compares it with what the generator writes. |
 
-The Lab's onboarding showcase is not migrated to 0.3 yet; until it is, the fixture System is the example and the test subject.
+The Lab's showcases are migrated to 0.3 and load their documentation through this plugin (`apps/lab/widget-docs.ts`); the fixture System stays the example and the test subject.
 
 ## Commands
 
