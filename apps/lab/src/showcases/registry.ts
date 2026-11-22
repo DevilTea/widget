@@ -9,8 +9,9 @@
  * presets }` lookup table consumed by `use-lab-store.ts`'s `switchShowcase`.
  *
  * Each entry also carries what Core 0.3 no longer publishes: the plugin documentation generated from the System's
- * `Interfaces` JSDoc (`virtual:widget-docs/<id>`, served by `widgetDocs()`, see `../../widget-docs.ts`) and the config JSON
- * Schemas the showcase hands to the Lab (`configSchemas`, by plugin type).
+ * `Interfaces` JSDoc (`virtual:widget-docs/<id>`, served by `widgetDocs({ slim: true })`, see `../../widget-docs.ts`) and the
+ * config JSON Schemas (`configSchemas`, by plugin type), which are the generated ones (`docs.plugins[type].config.schema`)
+ * unless the entry overrides them.
  *
  * Shell-safe by construction: it imports no renderer, so no showcase component or stylesheet reaches the Lab shell
  * document. A showcase's renderer is loaded only inside the Preview frame, through `preview-frame-renderers.ts`.
@@ -30,11 +31,9 @@ import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
 import { defaultRepairPreset, repairPresets } from './document-repair/presets'
-import { repairConfigSchemas } from './document-repair/schemas'
 import { repairSources } from './document-repair/sources'
 import { repairSystem } from './document-repair/system'
 import { defaultOnboardingPreset, onboardingPresets } from './onboarding/presets'
-import { onboardingConfigSchemas } from './onboarding/schemas'
 import { onboardingSources } from './onboarding/sources'
 import { onboardingSystem } from './onboarding/system'
 import { defaultQuotePreset, quotePresets } from './quote-rules/presets'
@@ -42,15 +41,12 @@ import { quoteConfigSchemas } from './quote-rules/schemas'
 import { quoteSources } from './quote-rules/sources'
 import { quoteSystem } from './quote-rules/system'
 import { defaultPacksPreset, packsPresets } from './renderer-packs/presets'
-import { rendererPacksConfigSchemas } from './renderer-packs/schemas'
 import { packsSources } from './renderer-packs/sources'
 import { packsSystem } from './renderer-packs/system'
 import { defaultSurveyPreset, surveyPresets } from './survey/presets'
-import { surveyConfigSchemas } from './survey/schemas'
 import { surveySources } from './survey/sources'
 import { surveySystem } from './survey/system'
 import { defaultTripBudgetPreset, tripBudgetPresets } from './trip-budget/presets'
-import { tripBudgetConfigSchemas } from './trip-budget/schemas'
 import { tripBudgetSources } from './trip-budget/sources'
 import { tripBudgetSystem } from './trip-budget/system'
 
@@ -81,8 +77,18 @@ export interface ShowcaseEntry {
 	readonly sources: SourcesRegistry
 	/** The documentation generated from the plugins' `Interfaces` JSDoc (`virtual:widget-docs/<id>`). */
 	readonly docs: WidgetDocs
-	/** The config JSON Schema of each plugin that has one, by plugin type (Core 0.3 carries no config schema). */
+	/**
+	 * The config JSON Schema of each plugin that has one, by plugin type (Core 0.3 carries no config schema): the schemas
+	 * `widgetDocs()` generates from the plugins' `Interfaces` (`generatedConfigSchemas(docs)`), or the showcase's own map
+	 * where it has one (quote-rules: the Valibot schemas its validators are built from).
+	 */
 	readonly configSchemas: ConfigSchemaMap
+}
+
+/** The generated config JSON Schema (Draft 2020-12, `$ref`/`$defs`) of each plugin with a config, by plugin type. */
+export function generatedConfigSchemas(docs: WidgetDocs): ConfigSchemaMap {
+	return Object.fromEntries(Object.entries(docs.plugins)
+		.flatMap(([type, plugin]) => plugin.config === null ? [] : [[type, plugin.config.schema] as const]))
 }
 
 /**
@@ -104,7 +110,7 @@ export const showcases: readonly ShowcaseEntry[] = [
 		defaultPreset: defaultSurveyPreset,
 		sources: surveySources,
 		docs: surveyDocs,
-		configSchemas: surveyConfigSchemas,
+		configSchemas: generatedConfigSchemas(surveyDocs),
 	},
 	{
 		id: 'trip-budget',
@@ -114,7 +120,7 @@ export const showcases: readonly ShowcaseEntry[] = [
 		defaultPreset: defaultTripBudgetPreset,
 		sources: tripBudgetSources,
 		docs: tripBudgetDocs,
-		configSchemas: tripBudgetConfigSchemas,
+		configSchemas: generatedConfigSchemas(tripBudgetDocs),
 	},
 	{
 		id: 'quote-rules',
@@ -124,6 +130,7 @@ export const showcases: readonly ShowcaseEntry[] = [
 		defaultPreset: defaultQuotePreset,
 		sources: quoteSources,
 		docs: quoteRulesDocs,
+		// quote-rules keeps the JSON Schemas of its Valibot validators (`quote-rules/schemas.ts`).
 		configSchemas: quoteConfigSchemas,
 	},
 	{
@@ -134,7 +141,7 @@ export const showcases: readonly ShowcaseEntry[] = [
 		defaultPreset: defaultOnboardingPreset,
 		sources: onboardingSources,
 		docs: onboardingDocs,
-		configSchemas: onboardingConfigSchemas,
+		configSchemas: generatedConfigSchemas(onboardingDocs),
 	},
 	{
 		id: 'document-repair',
@@ -144,7 +151,7 @@ export const showcases: readonly ShowcaseEntry[] = [
 		defaultPreset: defaultRepairPreset,
 		sources: repairSources,
 		docs: documentRepairDocs,
-		configSchemas: repairConfigSchemas,
+		configSchemas: generatedConfigSchemas(documentRepairDocs),
 	},
 	{
 		id: 'renderer-packs',
@@ -154,7 +161,7 @@ export const showcases: readonly ShowcaseEntry[] = [
 		defaultPreset: defaultPacksPreset,
 		sources: packsSources,
 		docs: rendererPacksDocs,
-		configSchemas: rendererPacksConfigSchemas,
+		configSchemas: generatedConfigSchemas(rendererPacksDocs),
 	},
 	{
 		id: 'sandbox',

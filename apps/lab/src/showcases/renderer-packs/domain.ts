@@ -9,7 +9,11 @@
 // -------------------------------------------------------------------------------------------------
 
 /** Text per language, `{ "en": "...", "zh-TW": "..." }`. `en` is required; a missing language falls back to it. */
-export interface I18nText { readonly [language: string]: string }
+export interface I18nText {
+	/** The English text, which a missing language falls back to. */
+	readonly en: string
+	readonly [language: string]: string
+}
 
 /** The text in `language`, or the English text when that language is missing. */
 export function localize(text: I18nText, language: string): string {

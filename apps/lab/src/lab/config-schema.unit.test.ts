@@ -1,13 +1,16 @@
 import type { JsonSchema } from './config-schema'
 import { describe, expect, it } from 'vitest'
-import { multipleChoiceConfigSchema, numericConfigSchema, shortAnswerConfigSchema, surveyConfigSchema } from '../showcases/survey/schemas'
+import { getShowcase } from '../showcases/registry'
 import { canAddItem, canRemoveItem, canRemoveKey, defaultValueFor, describeField, looksLike, objectFieldKeys, parseNumberText, resolveSchema } from './config-schema'
 
-const numeric = numericConfigSchema as unknown as JsonSchema
-const multiple = multipleChoiceConfigSchema as unknown as JsonSchema
-const shortAnswer = shortAnswerConfigSchema as unknown as JsonSchema
-const survey = surveyConfigSchema as unknown as JsonSchema
-const property = (root: JsonSchema, key: string): JsonSchema => (root.properties as Record<string, JsonSchema>)[key]!
+// The Survey plugins' config schemas as the Lab gets them: generated from their `Interfaces` by `widgetDocs()`.
+const surveySchemas = getShowcase('survey')!.configSchemas
+const numeric = surveySchemas.Numeric as JsonSchema
+const multiple = surveySchemas.MultipleChoice as JsonSchema
+const shortAnswer = surveySchemas.ShortAnswer as JsonSchema
+const survey = surveySchemas.Survey as JsonSchema
+/** The schema of property `key` of the config `root` describes (a generated root is a `$ref` into its `$defs`). */
+const property = (root: JsonSchema, key: string): JsonSchema => (resolveSchema(root, root)!.properties as Record<string, JsonSchema>)[key]!
 
 describe('describeField', () => {
 	it('reads scalar controls from the schema type; the numeric limits stay Core\'s to check', () => {
@@ -141,7 +144,7 @@ describe('helpers', () => {
 	})
 
 	it('matches a value against a schema shallowly', () => {
-		const condition = { $ref: '#/$defs/Condition' }
+		const condition = { $ref: '#/$defs/type_Condition' }
 		expect(looksLike(multiple, condition, { question: 'a', op: 'answered' }))
 			.toBe(true)
 		expect(looksLike(multiple, condition, { question: 'a', op: 'bogus' }))

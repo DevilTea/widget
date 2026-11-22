@@ -60,34 +60,23 @@ describe('the documentation each showcase carries (Core 0.3 has no descriptions 
 		}
 	})
 
-	it('maps each Survey, document-repair and renderer-packs plugin type to its own schema', async () => {
-		const survey = await import('./survey/schemas')
-		expect(getShowcase('survey')?.configSchemas)
-			.toStrictEqual({
-				Survey: survey.surveyConfigSchema,
-				SingleChoice: survey.singleChoiceConfigSchema,
-				MultipleChoice: survey.multipleChoiceConfigSchema,
-				Numeric: survey.numericConfigSchema,
-				ShortAnswer: survey.shortAnswerConfigSchema,
-			})
-		const repair = await import('./document-repair/schemas')
-		expect(getShowcase('document-repair')?.configSchemas)
-			.toStrictEqual({
-				RepairDesk: repair.repairDeskConfigSchema,
-				SavedDraft: repair.savedDraftConfigSchema,
-			})
-		const packs = await import('./renderer-packs/schemas')
-		expect(getShowcase('renderer-packs')?.configSchemas)
-			.toStrictEqual({
-				SettingsPage: packs.settingsPageConfigSchema,
-				Appearance: packs.appearanceConfigSchema,
-				Notifier: packs.notifierConfigSchema,
-				Section: packs.sectionConfigSchema,
-				TextField: packs.textFieldConfigSchema,
-				Toggle: packs.toggleConfigSchema,
-				Choice: packs.choiceConfigSchema,
-				DangerAction: packs.dangerActionConfigSchema,
-			})
+	it('hands the Lab the generated config schema of each plugin, except quote-rules, which keeps its Valibot schemas', async () => {
+		for (const showcase of showcases.filter(entry => !['quote-rules', 'sandbox'].includes(entry.id))) {
+			const generated = Object.fromEntries(Object.entries(showcase.docs.plugins)
+				.flatMap(([type, plugin]) => plugin.config === null ? [] : [[type, plugin.config.schema]]))
+			expect(Object.keys(generated), showcase.id).not.toHaveLength(0)
+			expect(showcase.configSchemas, showcase.id)
+				.toStrictEqual(generated)
+			for (const [type, schema] of Object.entries(showcase.configSchemas)) {
+				expect(schema, `${showcase.id} ${type}`)
+					.toBe(showcase.docs.plugins[type]!.config!.schema)
+				expect(schema, `${showcase.id} ${type}`)
+					.toMatchObject({ $schema: 'https://json-schema.org/draft/2020-12/schema', title: `${type} config` })
+			}
+		}
+		const quote = await import('./quote-rules/schemas')
+		expect(getShowcase('quote-rules')?.configSchemas)
+			.toBe(quote.quoteConfigSchemas)
 	})
 })
 

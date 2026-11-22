@@ -32,19 +32,24 @@ export interface CurrencyRawConfig {
 	/**
 	 * The currency the settlement is computed and shown in, a three-letter capital code such as `"EUR"`. It is always worth 1
 	 * and must not appear in `rates`.
+	 *
+	 * @pattern ^[A-Z]{3}$
 	 */
 	readonly base: string
 	/**
 	 * How many base-currency units one unit of each other currency is worth, such as `{ "USD": 0.92 }`. An expense in a
 	 * currency that is neither the base nor listed here cannot be converted: the conversion Method fails and the settlement
 	 * fails with it.
+	 *
+	 * @propertyNames ^[A-Z]{3}$
+	 * @exclusiveMinimum 0
 	 */
 	readonly rates: { readonly [code: string]: number }
 	/**
 	 * The starting "round transfers to" step in minor units: 1 = the cent, 100 = a whole unit, 500 = the nearest 5 units. A
 	 * viewer can change it; Start over restores this value. Defaults to 1.
 	 */
-	readonly roundTransfersTo?: number
+	readonly roundTransfersTo?: RoundStep
 }
 
 /** The authored config of a Person. */
@@ -61,7 +66,13 @@ export interface PersonRawConfig {
 export interface EqualSplitRaw {
 	/** `equal`. */
 	readonly mode: 'equal'
-	/** The ids of the Persons sharing the expense at the start (a viewer can tick and untick them). */
+	/**
+	 * The ids of the Persons sharing the expense at the start (a viewer can tick and untick them).
+	 *
+	 * @minItems 1
+	 * @uniqueItems
+	 * @pattern ^[a-z][a-z0-9-]*$
+	 */
 	readonly among: readonly string[]
 }
 
@@ -69,7 +80,13 @@ export interface EqualSplitRaw {
 export interface PercentSplitRaw {
 	/** `percent`. */
 	readonly mode: 'percent'
-	/** Person id -> percentage. The percentages must add up to 100 (the compiler reports a located diagnostic otherwise). */
+	/**
+	 * Person id -> percentage. The percentages must add up to 100 (the compiler reports a located diagnostic otherwise).
+	 *
+	 * @propertyNames ^[a-z][a-z0-9-]*$
+	 * @minimum 0
+	 * @maximum 100
+	 */
 	readonly percents: { readonly [personId: string]: number }
 }
 
@@ -84,11 +101,16 @@ export interface ExpenseRawConfig {
 	 * @minimum 0
 	 */
 	readonly amount: number
-	/** The currency of the amount: the Currency widget's base or one of its rates. */
+	/**
+	 * The currency of the amount: the Currency widget's base or one of its rates.
+	 *
+	 * @pattern ^[A-Z]{3}$
+	 */
 	readonly currency: string
 	/**
 	 * The id of the Person who paid at the start. It must exist in the same trip.
 	 *
+	 * @pattern ^[a-z][a-z0-9-]*$
 	 * @widgetRef Person
 	 */
 	readonly paidBy: string
