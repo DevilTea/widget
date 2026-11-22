@@ -643,7 +643,7 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
   map through `defineAsyncComponent(() => import('./panels/ImplementationPanel.vue'))`, and the panel
   itself is only ever added to Dockview (`api.addPanel({ id: 'implementation', ... })`) the first time
   `ImplementationExplorerStore.open()` is called — from Preview's "View implementation" button,
-  Blueprint's selected-node detail, or the Survey tour's step 8 link — never at `onReady()` time the way
+  Blueprint's selected-node detail, or the Survey tour's map-of-the-views link (step 2) — never at `onReady()` time the way
   the seven canonical panels are. Verified by loading the built app fresh and driving each of those three
   entry points: no request for `ImplementationPanel-*.js` (which statically bundles
   `src/implementation/shiki-highlighter.ts` — `@shikijs/core`, `@shikijs/engine-javascript`, and the
@@ -1466,6 +1466,21 @@ Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used b
 (a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
 
 **One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`, `onboarding`, `document-repair`, `renderer-packs`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts`, `i18n/quote-rules-messages.ts`, `i18n/onboarding-messages.ts` and `i18n/document-repair-messages.ts` are the models).
+
+**A tour gives the user's place and work back (Lab UX phase 2, report item 14).** `beginTour()` records the tool tab and the Author view
+(`LabStore.activeTab`, `authorView`) and the tour's **Finish** or **Skip tour** restores both (`restorePlaceBeforeTour()`); pausing keeps the
+tour's place, and a tour that ends because its showcase was left restores nothing (the user chose where to go). A start reloads the tour's
+default preset: on the tour's own showcase that is an ordinary preset commit, so committed edits are not asked about and the store's
+replaced-document notice offers Undo (see "Header, status chips and draft protection"); `decideDeterministicStart()` asks only about an
+unapplied draft, or, when the start switches showcase (from the hidden Sandbox, which has no tour), about committed edits too, with its own
+message (`START_DISCARDS_EDITS_MESSAGE`). `TutorialActions.activateTab(tab, authorView?)` can also open an Author view.
+
+**The Survey tour teaches editing.** `survey-script.ts` has ten steps: the map of the views comes second (Author, Preview, Selected widget,
+Events, Blueprint, Runtime, Dependencies, Implementation, each a link), and `edit-and-undo` comes after the answer steps (a committed edit
+restarts the Preview, so the answers those steps build on would start over). It opens Author > Structure on `mode` (`data-tutorial-target`
+`author-structure` is the Structure editor pane) and is gated on `mode.text`, the label the Preview renders in the survey language: the first
+stage completes when it is neither default label (en or zh-TW), the second when it is a default again (Undo). The Explain tab (built in
+parallel) is not named yet; the map step carries a TODO for phase 3.
 
 **Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview

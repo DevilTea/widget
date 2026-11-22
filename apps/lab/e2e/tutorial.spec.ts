@@ -208,6 +208,61 @@ test('skipping the tour leaves the Lab fully usable', async ({ page }) => {
 		.toBeVisible()
 })
 
+test('skipping or finishing the tour puts the user back on the tab and Author view they had before it (Lab UX phase 2)', async ({ page }) => {
+	await page.goto('/')
+	await openAuthorJson(page)
+	await page.getByRole('tab', { name: 'Events', exact: true })
+		.click()
+	await startTourFromHeader(page)
+	const rail = page.getByRole('complementary', { name: RAIL_LABEL })
+
+	// The map step's links move the user around.
+	await rail.getByRole('button', { name: 'Next', exact: true })
+		.click()
+	await rail.getByRole('button', { name: 'Runtime', exact: true })
+		.click()
+	await expect(page.getByRole('tab', { name: 'Runtime' }))
+		.toHaveAttribute('aria-selected', 'true')
+
+	await rail.getByRole('button', { name: 'Skip tour' })
+		.click()
+	await expect(rail)
+		.toHaveCount(0)
+	await expect(page.getByRole('tab', { name: 'Events', exact: true }))
+		.toHaveAttribute('aria-selected', 'true')
+	await page.getByRole('tab', { name: 'Author' })
+		.click()
+	await expect(page.getByTestId('author-view-json'))
+		.toHaveAttribute('aria-selected', 'true')
+})
+
+test('starting the tour over committed edits loads its example without asking, and offers Undo to get the edits back (Lab UX phase 2)', async ({ page }) => {
+	await page.goto('/')
+	const preview = previewFrame(page)
+	const titleBox = page.getByTestId('structure-editor')
+		.locator('[data-config-path="title.en"] input')
+	await titleBox.fill('My open day')
+	await titleBox.press('Enter')
+	await expect(preview.getByRole('heading', { name: 'My open day' }))
+		.toBeVisible()
+
+	await startTourFromHeader(page)
+	await expect(page.getByRole('alertdialog'))
+		.toHaveCount(0)
+	await expect(preview.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
+		.toBeVisible()
+	const notice = page.getByTestId('replaced-document-notice')
+	await expect(notice)
+		.toHaveText(/Loaded “Default — open day sign-up”\. Undo to get your edits back\./)
+
+	await notice.getByRole('button', { name: 'Undo last change' })
+		.click()
+	await expect(preview.getByRole('heading', { name: 'My open day' }))
+		.toBeVisible()
+	await expect(notice)
+		.toHaveCount(0)
+})
+
 test.describe('dirty-draft confirmation dialog', () => {
 	interface LabTestWindow { __WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void } }
 
@@ -333,22 +388,22 @@ test('rapid double-click on the header Tutorial button starts the tour exactly o
 	await expect(rail)
 		.toBeVisible()
 	await expectShowcase(page, 'survey')
-	await expect(rail.getByText('Step 1 of 9'))
+	await expect(rail.getByText('Step 1 of 10'))
 		.toBeVisible()
 
 	const nextButton = page.getByRole('button', { name: 'Next', exact: true })
 	await expect(nextButton)
 		.toBeEnabled()
 	await nextButton.click()
-	await expect(rail.getByText('Step 2 of 9'))
+	await expect(rail.getByText('Step 2 of 10'))
 		.toBeVisible()
 
 	// Give a (coalesced, and therefore nonexistent) second start() call every chance to have landed —
 	// the step must never be silently reset back to step 1 by a later-completing duplicate request.
 	await page.waitForTimeout(500)
-	await expect(rail.getByText('Step 2 of 9'))
+	await expect(rail.getByText('Step 2 of 10'))
 		.toBeVisible()
-	await expect(rail.getByText('Step 1 of 9'))
+	await expect(rail.getByText('Step 1 of 10'))
 		.toHaveCount(0)
 })
 
@@ -397,7 +452,8 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	 * the rail's left edge.
 	 */
 	const nextButton = page.getByRole('button', { name: 'Next', exact: true })
-	await nextButton.click() // step 1 -> 2
+	await nextButton.click() // step 1 -> 2 (the map of the views, Lab UX phase 2)
+	await nextButton.click() // step 2 -> 3
 
 	const preview = previewFrame(page)
 	await clickBesideRail(page, preview.getByLabel('On site', { exact: true }))
@@ -405,8 +461,8 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
-	await nextButton.click() // step 2 -> 3
 	await nextButton.click() // step 3 -> 4
+	await nextButton.click() // step 4 -> 5
 
 	const guests = preview.getByLabel('Guests coming with you')
 	await clickBesideRail(page, guests)
@@ -418,7 +474,7 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
-	await nextButton.click() // step 4 -> 5
+	await nextButton.click() // step 5 -> 6
 
 	await clickBesideRail(page, preview.getByLabel('Online', { exact: true }))
 	await expect(preview.getByText('Guests coming with you'))
@@ -428,7 +484,7 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
-	await nextButton.click() // step 5 -> 6
+	await nextButton.click() // step 6 -> 7
 
 	await clickBesideRail(page, preview.getByLabel('3D printing basics'))
 	const phone = preview.getByLabel('Phone number')
@@ -457,7 +513,41 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 2 — State: observation must NOT be visible before the real action. Also confirms the spotlight
+	// Step 2 — map the views (moved up by Lab UX phase 2, and naming Selected widget and Events): each name is a real
+	// navigation affordance.
+	await expect(rail.getByText('Selected widget = the widget you clicked', { exact: false }))
+		.toBeVisible()
+	await rail.getByRole('button', { name: 'Selected widget', exact: true })
+		.click()
+	await expect(page.getByRole('tab', { name: 'Selected widget' }))
+		.toHaveAttribute('aria-selected', 'true')
+	await rail.getByRole('button', { name: 'Events', exact: true })
+		.click()
+	await expect(page.getByRole('tab', { name: 'Events', exact: true }))
+		.toHaveAttribute('aria-selected', 'true')
+	await rail.getByRole('button', { name: 'Runtime', exact: true })
+		.click()
+	await expect(page.getByRole('tab', { name: 'Runtime' }))
+		.toHaveAttribute('aria-selected', 'true')
+	await rail.getByRole('button', { name: 'Author', exact: true })
+		.click()
+	await expect(page.getByRole('tab', { name: 'Author' }))
+		.toHaveAttribute('aria-selected', 'true')
+	// "Implementation" is a real affordance (issue #25 P3): opens the closable Implementation panel for whichever widget
+	// is currently held in shared focus — `open-day` (a `Survey`), from step 1's `onEnter`. The locator is scoped to the
+	// Implementation panel on purpose: the plain word "Survey" also appears elsewhere on the page.
+	await rail.getByRole('button', { name: 'Implementation', exact: true })
+		.click()
+	await expect(page.getByRole('tab', { name: 'Implementation' }))
+		.toHaveAttribute('aria-selected', 'true')
+	const implementationPanel = page.getByRole('tabpanel', { name: 'Implementation' })
+	await expect(implementationPanel.getByText('Survey', { exact: true }))
+		.toBeVisible()
+	await expect(implementationPanel.getByRole('button', { name: 'SurveyRootRenderer.vue', exact: true }))
+		.toBeVisible()
+	await nextButton.click()
+
+	// Step 3 — State: observation must NOT be visible before the real action. Also confirms the spotlight
 	// mechanism (CSS class toggling onto the step's `data-tutorial-target` element, never a
 	// position-cloned overlay) actually reaches the real Preview DOM, not just the rail's own copy.
 	const stateObservation = rail.getByText('Guests and Phone reacted.', { exact: false })
@@ -489,14 +579,14 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toHaveAttribute('aria-selected', 'true')
 	await nextButton.click()
 
-	// Step 3 — Property: no new action, reveals immediately on entry.
+	// Step 4 — Property: no new action, reveals immediately on entry.
 	await expect(rail.getByText('The required message under "How will you join?" disappeared, and Phone now says it is required.', { exact: false }))
 		.toBeVisible()
 	await expect(nextButton)
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 4 — an answer error, then recovery, inside the same step.
+	// Step 5 — an answer error, then recovery, inside the same step.
 	const errorObservation = rail.getByText('Guests reports an error, yet your number is still stored', { exact: false })
 	await expect(errorObservation)
 		.toHaveCount(0)
@@ -524,7 +614,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 5 — dependency: disappear, then come back still holding 2 (keeps the script submittable at step 6).
+	// Step 6 — dependency: disappear, then come back still holding 2 (keeps the script submittable at step 7).
 	const guestsQuestion = preview.getByText('Guests coming with you')
 	await expect(guestsQuestion)
 		.toBeVisible()
@@ -555,7 +645,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 6 — a direct State write vs. a Method: the answers, then Submit.
+	// Step 7 — a direct State write vs. a Method: the answers, then Submit.
 	const methodObservation = rail.getByText('Submit invokes a named Method', { exact: false })
 	await expect(methodObservation)
 		.toHaveCount(0)
@@ -566,7 +656,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.check()
 	await preview.getByLabel('Phone number')
 		.fill('0912 345 678')
-	// `exact: true` on purpose: the Runtime tab (activated via step 2's "See it in Runtime" link, and
+	// `exact: true` on purpose: the Runtime tab (activated via step 3's "See it in Runtime" link, and
 	// still mounted though inactive) has its own "submit() writes ..." Method-row text, which a
 	// non-exact substring match on "Submit" would ambiguously also match.
 	await preview.getByRole('button', { name: 'Submit', exact: true })
@@ -580,7 +670,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 7 — snapshot vs. live: mutating an answer after Submit is the real interaction. The rail's own
+	// Step 8 — snapshot vs. live: mutating an answer after Submit is the real interaction. The rail's own
 	// reveal text mentions the marker too (in a longer sentence), so the Preview check is scoped to its
 	// test id.
 	const staleObservation = rail.getByText('gained the "Answers changed since you submitted" marker', { exact: false })
@@ -599,34 +689,45 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 8 — map the views: each name is a real navigation affordance.
-	await expect(rail.getByText('Author = the declarative definition and structure you edit', { exact: false }))
-		.toBeVisible()
-	await rail.getByRole('button', { name: 'Runtime', exact: true })
-		.click()
-	await expect(page.getByRole('tab', { name: 'Runtime' }))
-		.toHaveAttribute('aria-selected', 'true')
-	await rail.getByRole('button', { name: 'Author', exact: true })
-		.click()
+	// Step 9 — change the definition, then Undo (Lab UX phase 2): the step opens Author > Structure on `mode`.
 	await expect(page.getByRole('tab', { name: 'Author' }))
 		.toHaveAttribute('aria-selected', 'true')
-	// "Implementation" is a real affordance now (issue #25 P3): opens the closable Implementation panel
-	// for whichever widget is currently held in shared focus — `open-day` (a `Survey`), from step 7's
-	// `onEnter`. The locator is scoped to the Implementation panel on purpose: the plain word "Survey"
-	// also appears elsewhere on the page.
-	await rail.getByRole('button', { name: 'Implementation', exact: true })
-		.click()
-	await expect(page.getByRole('tab', { name: 'Implementation' }))
+	await expect(page.getByTestId('author-view-structure'))
 		.toHaveAttribute('aria-selected', 'true')
-	const implementationPanel = page.getByRole('tabpanel', { name: 'Implementation' })
-	await expect(implementationPanel.getByText('Survey', { exact: true }))
+	const structure = page.getByTestId('structure-editor')
+	await expect(structure)
+		.toHaveClass(/tutorial-spotlight/)
+	await expect(structure.getByRole('heading', { name: 'mode : SingleChoice' }))
 		.toBeVisible()
-	await expect(implementationPanel.getByRole('button', { name: 'SurveyRootRenderer.vue', exact: true }))
+	const editObservation = rail.getByText('The Preview shows your new label.', { exact: false })
+	await expect(editObservation)
+		.toHaveCount(0)
+	await expect(nextButton)
+		.toBeDisabled()
+	const labelBox = structure.locator('[data-config-path="label.en"] input')
+	await labelBox.fill('Where will you be?')
+	await labelBox.press('Enter')
+	await expect(preview.getByText('Where will you be?'))
 		.toBeVisible()
+	await expect(editObservation)
+		.toBeVisible()
+	await expect(nextButton)
+		.toBeDisabled()
+	const undoObservation = rail.getByText('The label is back.', { exact: false })
+	await expect(undoObservation)
+		.toHaveCount(0)
+	await page.getByTestId('undo-button')
+		.click()
+	await expect(preview.getByText('How will you join?'))
+		.toBeVisible()
+	await expect(undoObservation)
+		.toBeVisible()
+	await expect(nextButton)
+		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 9 — hand-back: "Finish" replaces "Next" on the last step.
-	await expect(rail.getByText('Open any inspector, or edit the Author JSON and press Apply.'))
+	// Step 10 — hand-back: "Finish" replaces "Next" on the last step.
+	await expect(rail.getByText('Open any inspector, or keep editing in Author: Structure applies each change at once, and Undo takes it back.'))
 		.toBeVisible()
 	await expect(finishButton)
 		.toBeEnabled()
@@ -646,6 +747,6 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeVisible()
 	await expect(rail.getByText('This is the Interactive Survey — a sign-up form rendered from one JSON definition.'))
 		.toBeVisible()
-	await expect(rail.getByText('Step 1 of 9'))
+	await expect(rail.getByText('Step 1 of 10'))
 		.toBeVisible()
 })

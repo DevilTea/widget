@@ -1,18 +1,22 @@
 /**
- * The Survey tour's 9-step script (diagnostic #25 P1 Scope D "Revised Survey step script", Proposal v2),
+ * The Survey tour's 10-step script (diagnostic #25 P1 Scope D "Revised Survey step script", Proposal v2),
  * authored against the Maker Space open-day sign-up survey.
  *
  * What is kept from Proposal v2 is the structure and the do -> observe -> name pairing, the direct-State-
- * write-vs-Method contrast (step 6), staleness-as-an-interaction (step 7) and the six-view map (step 8).
- * Step 4 is the one lesson that changed: the sign-up form keeps answer errors as values (a Numeric answer
+ * write-vs-Method contrast, staleness-as-an-interaction and the map of the views. Lab UX phase 2 (report item 14)
+ * moved the map to step 2 (it names Selected widget and Events too) and added `edit-and-undo` near the end: the
+ * earlier steps only change Preview answers (Runtime State), and this one changes the definition itself (a label in
+ * Author > Structure), shows the Preview rebuilt from it, and takes it back with Undo. It comes after the answer steps
+ * because a committed edit restarts the Preview, so the answers those steps build on start over.
+ * The error step's lesson changed from Proposal v2: the sign-up form keeps answer errors as values (a Numeric answer
  * above its `max` is stored and reported through the `errors` Property), so it teaches "an answer error,
  * and recovery" instead of failure propagation. Every widget id/member name below is `survey-default`'s
  * (`showcases/survey/presets.ts`) — the OWNER-locked deterministic starting state this tour is authored
  * against, not an adaptive script over arbitrary Runtime state.
  *
  * Property predicates see only values the Preview has already evaluated (`inspection-reader.ts` never
- * forces evaluation), so the survey renderers always read `guests.visible`, `guests.errors` while visible
- * and `open-day.changedSinceSubmit`.
+ * forces evaluation), so the survey renderers always read `guests.visible`, `guests.errors` while visible,
+ * `open-day.changedSinceSubmit` and `mode.text` (the label the edit step watches; `mode` is always visible).
  */
 
 import type { TutorialRuntimeReader, TutorialScript } from './types'
@@ -33,6 +37,18 @@ function guestsErrors(reader: TutorialRuntimeReader): readonly { readonly code?:
 	return errors.result.value as readonly { readonly code?: unknown }[]
 }
 
+/** `mode`'s label in `survey-default`, in each survey language: the edit step compares against both. */
+export const MODE_DEFAULT_LABELS: readonly string[] = ['How will you join?', '您會如何參加？']
+
+/** The label the Preview shows for `mode` (its `text` Property, which the renderer always reads), else `undefined`. */
+function modeLabel(reader: TutorialRuntimeReader): string | undefined {
+	const text = reader.readProperty('mode', 'text')
+	if (text?.status !== 'completed' || !text.result.ok)
+		return undefined
+	const label = (text.result.value as { readonly label?: unknown } | null)?.label
+	return typeof label === 'string' ? label : undefined
+}
+
 /** The successful `guests.visible` value, else `undefined`. */
 function guestsVisible(reader: TutorialRuntimeReader): unknown {
 	const visible = reader.readProperty('guests', 'visible')
@@ -47,6 +63,7 @@ export const surveyTourScript: TutorialScript = {
 		{ widgetId: 'guests', member: { type: 'property', key: 'visible' } },
 		{ widgetId: 'open-day', member: { type: 'state', key: 'submitted' } },
 		{ widgetId: 'open-day', member: { type: 'property', key: 'changedSinceSubmit' } },
+		{ widgetId: 'mode', member: { type: 'property', key: 'text' } },
 	],
 	steps: [
 		{
@@ -58,6 +75,29 @@ export const surveyTourScript: TutorialScript = {
 				prompt: 'This is the Interactive Survey — a sign-up form rendered from one JSON definition.',
 				reveal: 'This is the Interactive Survey — a sign-up form rendered from one JSON definition.',
 			}],
+		},
+		{
+			// Early (Lab UX phase 2): the visitor knows where things are before the steps send them there.
+			// TODO(phase 3): name the Explain tab here once it is on main, and drop the views the IA moves into Tools.
+			id: 'map-the-views',
+			title: 'Map the views',
+			target: null,
+			stages: [{
+				prompt: 'Each of these views is a real navigation shortcut — try one.',
+				reveal: 'Author = the definition you edit (Structure, or the JSON) · Preview = the running app · Selected widget = the widget you clicked: its config and live values · Events = what the widgets announced · Blueprint = what the definition compiled into · Runtime = live State, Properties and Methods · Dependencies = which widget reads which · Implementation = the plugin and renderer code behind a widget type.',
+			}],
+			links: [
+				{ id: 'view-author', label: 'Author', run: actions => actions.activateTab('author') },
+				{ id: 'view-preview', label: 'Preview', run: actions => actions.activateTab('preview') },
+				{ id: 'view-widget', label: 'Selected widget', run: actions => actions.activateTab('widget') },
+				{ id: 'view-events', label: 'Events', run: actions => actions.activateTab('events') },
+				{ id: 'view-blueprint', label: 'Blueprint', run: actions => actions.activateTab('blueprint') },
+				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
+				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.activateTab('dependencies') },
+				// diagnostic #25 P3: opens the Implementation panel for whichever widget is currently held in shared focus
+				// (this step never changes focus itself, matching every other link in this step).
+				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
+			],
 		},
 		{
 			id: 'state',
@@ -154,23 +194,33 @@ export const surveyTourScript: TutorialScript = {
 			}],
 		},
 		{
-			id: 'map-the-views',
-			title: 'Map the views',
-			target: null,
-			stages: [{
-				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Author = the declarative definition and structure you edit · Blueprint = what the applied Author source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Dependencies = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.',
-			}],
-			links: [
-				{ id: 'view-author', label: 'Author', run: actions => actions.activateTab('author') },
-				{ id: 'view-blueprint', label: 'Blueprint', run: actions => actions.activateTab('blueprint') },
-				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
-				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.activateTab('dependencies') },
-				{ id: 'view-preview', label: 'Preview', run: actions => actions.activateTab('preview') },
-				// diagnostic #25 P3: a real affordance now — opens the Implementation panel for whichever widget
-				// is currently held in shared focus (this step never changes focus itself, matching every
-				// other link in this step).
-				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
+			// Lab UX phase 2 (report item 14): every step above changes answers; this one changes the definition. A Structure
+			// edit is a Document commit, so the Preview is rebuilt from it (its answers start over), and Undo takes it back as a
+			// new revision. Gated on what the Preview shows: `mode.text` is the label the renderer reads, in the survey language.
+			id: 'edit-and-undo',
+			title: 'Change the definition, then undo',
+			target: 'author-structure',
+			onEnter: (actions) => {
+				actions.setFocus('mode')
+				actions.activateTab('author', 'structure')
+			},
+			stages: [
+				{
+					prompt: 'Try it: in Author > Structure, change the label of "How will you join?" (its en text, or zh-TW if the survey shows Chinese), then press Enter.',
+					isComplete: (reader) => {
+						const label = modeLabel(reader)
+						return label !== undefined && !MODE_DEFAULT_LABELS.includes(label)
+					},
+					reveal: 'The Preview shows your new label. You changed the definition, not an answer: the change was committed to the Document at once and the Preview was rebuilt from it, which is why its answers started over.',
+				},
+				{
+					prompt: 'Now press Undo in the header.',
+					isComplete: (reader) => {
+						const label = modeLabel(reader)
+						return label !== undefined && MODE_DEFAULT_LABELS.includes(label)
+					},
+					reveal: 'The label is back. Undo restores the previous version of the definition, whether the change came from Structure, the JSON view or a preset.',
+				},
 			],
 		},
 		{
@@ -180,7 +230,7 @@ export const surveyTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You now know State, Property, Method, and dependency.',
-				reveal: 'Open any inspector, or edit the Author JSON and press Apply.',
+				reveal: 'Open any inspector, or keep editing in Author: Structure applies each change at once, and Undo takes it back.',
 			}],
 		},
 	],

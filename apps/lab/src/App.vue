@@ -76,17 +76,28 @@ const tutorialRailVisible = computed(() => tutorial.snapshot.value.status === 'a
 // current step's `data-tutorial-target` attribute — no position-cloned overlay. This lives in App.vue
 // (rather than a per-panel component) because it is the one place with an unobstructed `document`-wide
 // view across Preview renderers, panels, and the rail itself.
-watchEffect(() => {
-	const target = tutorialRailVisible.value ? (tutorial.snapshot.value.step?.target ?? null) : null
+function applySpotlight(target: string | null): void {
 	for (const el of document.querySelectorAll('.tutorial-spotlight'))
 		el.classList.remove('tutorial-spotlight')
 	if (target !== null) {
 		const el = document.querySelector(`[data-tutorial-target="${CSS.escape(target)}"]`)
 		el?.classList.add('tutorial-spotlight')
 	}
+}
+// After the render (`flush: 'post'`), and once more in the next frame: a step whose target is in a workbench panel (the survey tour's
+// Structure step, Lab UX phase 2) also activates that panel in its `onEnter`, and Dockview attaches an inactive panel's element to the
+// document only once it is active, so the element may not be in the page when the step changes.
+watchEffect(() => {
+	const target = tutorialRailVisible.value ? (tutorial.snapshot.value.step?.target ?? null) : null
+	applySpotlight(target)
+	requestAnimationFrame(() => {
+		const current = tutorialRailVisible.value ? (tutorial.snapshot.value.step?.target ?? null) : null
+		if (current === target)
+			applySpotlight(target)
+	})
 	// Preview lives in a separate document; project the same semantic target through the host.
 	store.previewHost.setTutorialSpotlight(target)
-})
+}, { flush: 'post' })
 
 // Presentation mirror of the CSS narrow-viewport gate: while unsupported, the still-mounted workbench is
 // made `inert` so it cannot be focused or tabbed to behind the overlay (it stays mounted, per #27).

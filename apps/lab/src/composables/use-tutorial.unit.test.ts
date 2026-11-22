@@ -190,7 +190,6 @@ describe('createTutorialStore() Preview recheck ordering', () => {
 		store.dispose()
 	})
 })
-
 describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)', () => {
 	/** Commits an edit of the survey's mode label, so the Document equals no preset. */
 	async function commitEdit(store: ReturnType<typeof createLabStore>): Promise<string> {
@@ -244,4 +243,36 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 			.toBe('Starting the tutorial will load the Survey teaching example and replace your unapplied changes.')
 		store.dispose()
 	})
+})
+
+it('puts the user back on the tab and Author view they had when the tour ends with Finish or is skipped', async () => {
+	const store = createLabStore(getShowcase('survey')!)
+	store.activeTab.value = 'events'
+	store.authorView.value = 'json'
+	const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+	tutorial.requestStart()
+	await flush()
+	// A step moves the user around.
+	store.activeTab.value = 'author'
+	store.authorView.value = 'structure'
+
+	tutorial.skip()
+	expect(store.activeTab.value)
+		.toBe('events')
+	expect(store.authorView.value)
+		.toBe('json')
+
+	// Pausing keeps the tour's place; a later end still restores what the user had before the tour.
+	store.activeTab.value = 'runtime'
+	tutorial.requestStart()
+	await flush()
+	store.activeTab.value = 'blueprint'
+	tutorial.pause()
+	expect(store.activeTab.value)
+		.toBe('blueprint')
+	tutorial.requestResume()
+	tutorial.skip()
+	expect(store.activeTab.value)
+		.toBe('runtime')
+	store.dispose()
 })

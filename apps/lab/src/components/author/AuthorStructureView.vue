@@ -174,6 +174,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 		<div
 			ref="editorEl"
 			data-testid="structure-editor"
+			data-tutorial-target="author-structure"
 			tabindex="-1"
 			class="min-w-0 overflow-auto p-2.5"
 		>

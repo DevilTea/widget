@@ -18,9 +18,9 @@
  */
 
 import type { InjectionKey, Ref } from 'vue'
-import type { TutorialActions, TutorialEngine, TutorialEngineSnapshot, TutorialTabId } from '../tutorial/types'
+import type { TutorialActions, TutorialAuthorView, TutorialEngine, TutorialEngineSnapshot, TutorialTabId } from '../tutorial/types'
 import type { ImplementationExplorerStore } from './use-implementation-explorer'
-import type { LabStore } from './use-lab-store'
+import type { LabStore, LabToolTab } from './use-lab-store'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, inject, onUnmounted, shallowRef, watch } from 'vue'
 import { decideDeterministicStart } from '../tutorial/deterministic-start'
@@ -130,6 +130,20 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		? START_DISCARDS_EDITS_MESSAGE
 		: getTour(activeTourId.value)?.startConfirmMessage ?? tourForShowcase(DEFAULT_TOUR_ID).startConfirmMessage)
 
+	/**
+	 * Where the user was before the tour started (the tool tab and the Author view), restored when the tour ends with Finish or
+	 * is skipped (Lab UX phase 2, report item 14): the tour's own steps move both around. Pausing keeps the tour's place.
+	 */
+	let placeBeforeTour: { readonly tab: LabToolTab, readonly authorView: LabStore['authorView']['value'] } | null = null
+	function restorePlaceBeforeTour(): void {
+		const place = placeBeforeTour
+		placeBeforeTour = null
+		if (place === null)
+			return
+		store.authorView.value = place.authorView
+		store.activeTab.value = place.tab
+	}
+
 	const welcomeVisible = shallowRef(!isWelcomeDismissed())
 	const confirmVisible = shallowRef(false)
 	let pendingConfirmAction: (() => void) | null = null
@@ -169,6 +183,8 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 				return
 			engineOf(current)
 				.skip()
+			// Ended by leaving its showcase: the user chose where to go, so nothing is restored.
+			placeBeforeTour = null
 		}
 		activeTourId.value = target
 	}
@@ -180,7 +196,9 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 				if (nodeId !== null)
 					store.setFocus('document', { nodeId, member })
 			},
-			activateTab: (tab: TutorialTabId) => {
+			activateTab: (tab: TutorialTabId, authorView?: TutorialAuthorView) => {
+				if (tab === 'author' && authorView !== undefined)
+					store.authorView.value = authorView
 				store.activeTab.value = tab
 			},
 			openImplementation: () => {
@@ -215,6 +233,8 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	}
 
 	function beginTour(tourId: string, isRestart: boolean): void {
+		// A restart from a completed tour or a start over a running one keeps the place recorded first.
+		placeBeforeTour ??= { tab: store.activeTab.value, authorView: store.authorView.value }
 		void loadTourDefault(store, tourId)
 			.then(() => {
 				activeTourId.value = tourId
@@ -342,6 +362,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			if (activeEngine()
 				.getSnapshot().status === 'completed') {
 				markTourCompleted(activeTourId.value)
+				restorePlaceBeforeTour()
 			}
 		},
 		back: () => {
@@ -349,8 +370,11 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 				.back(actions())
 			recheckNow()
 		},
-		skip: () => activeEngine()
-			.skip(),
+		skip: () => {
+			activeEngine()
+				.skip()
+			restorePlaceBeforeTour()
+		},
 		pause: () => activeEngine()
 			.pause(),
 		runLink: linkId => activeEngine()

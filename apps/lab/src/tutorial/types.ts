@@ -59,9 +59,13 @@ export type TutorialTabId = 'author' | 'widget' | 'blueprint' | 'runtime' | 'eve
  * the shared `InspectorFocusStore.setFocus()`; `activateTab` assigns `LabStore.activeTab`, which
  * `Workbench.vue`'s bridge watch turns into a real `DockviewApi` panel activation.
  */
+/** The Author panel's views (`LabStore.authorView`), mirrored here for the same reason as `TutorialTabId`. */
+export type TutorialAuthorView = 'catalog' | 'structure' | 'json'
+
 export interface TutorialActions {
 	setFocus: (widgetId: string, member?: TutorialFocusMember) => void
-	activateTab: (tab: TutorialTabId) => void
+	/** Activates a tool tab; for `'author'`, `authorView` also opens that Author view (the survey tour's edit step opens Structure). */
+	activateTab: (tab: TutorialTabId, authorView?: TutorialAuthorView) => void
 	/**
 	 * Opens (or activates) the Implementation panel for the currently-focused widget (diagnostic #25 P3
 	 * Scope D, tutorial entry point 3). Deliberately narrower than `activateTab`: the Implementation
