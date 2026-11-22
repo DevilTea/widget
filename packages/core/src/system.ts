@@ -116,7 +116,9 @@ type ContractMemberMismatch<Section extends ContractSectionName> = Section exten
  * the plugin does not declare, or one whose type breaks the section's variance rule.
  */
 type ContractSectionViolation<Shape, Target, Section extends ContractSectionName, Subject extends string> = Shape extends Record<Section, infer Expected>
-	? (Target extends Record<Section, infer Declared> ? Declared : Record<never, never>) extends infer Actual
+	// An explicit-empty section (`never`, the canonical spelling, or an empty record) declares no member: `keyof never` would
+	// otherwise cover every member name.
+	? (Target extends Record<Section, infer Declared> ? [Declared] extends [never] ? Record<never, never> : Declared : Record<never, never>) extends infer Actual
 			? {
 					[Member in Extract<keyof Expected, string>]: Member extends keyof Actual
 						? ContractMemberSatisfied<Section, Actual[Member], Expected[Member]> extends true

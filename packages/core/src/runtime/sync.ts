@@ -31,11 +31,6 @@ export function assertSyncValue(value: unknown, description: string, name?: stri
 }
 
 /**
- * Callback-context lifetime guard: a callback's `addDiagnostic` / `hasAnyDiagnostic` belong to the
- * synchronous call that received them. Calling one after that callback returned or threw is an
- * implementation-contract violation (the operation's diagnostics are already final), so it throws.
- */
-/**
  * The `details` of a callback-authored diagnostic input must be a JSON value. Anything else is a contract
  * violation, thrown from the `addDiagnostic` call that carried it. A malformed input (not an object) is
  * left to whatever reads it.
@@ -48,6 +43,11 @@ export function assertDiagnosticDetails(input: unknown): void {
 		throw new TypeError('widget-core: a diagnostic\'s "details" must be a JSON value. This is a plugin implementation bug.')
 }
 
+/**
+ * Callback-context lifetime guard: a callback's `addDiagnostic` / `hasAnyDiagnostic` belong to the
+ * synchronous call that received them. Calling one after that callback returned or threw is an
+ * implementation-contract violation (the operation's diagnostics are already final), so it throws.
+ */
 export function throwClosedCollector(method: 'addDiagnostic' | 'hasAnyDiagnostic'): never {
 	throw new TypeError(`${method} was called after its callback returned. Diagnostics must be reported synchronously while the callback runs.`)
 }

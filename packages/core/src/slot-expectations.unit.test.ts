@@ -873,6 +873,31 @@ describe('a WidgetContract that names the expected plugin types', () => {
 				.toBeNever()
 			expectTypeOf<Mentions<TileReason<Omit<CardInterfaces, 'events'>>, 'events', 'toggled'>>().not.toBeNever()
 		})
+
+		it('treats an explicit-empty section (`never` or an empty record) as declaring no member, in every section', () => {
+			type Empty<Section extends 'state' | 'properties' | 'methods' | 'events', Payload> = Omit<CardInterfaces, Section> & Record<Section, Payload>
+			type NoMember<Section extends string, Member extends string> = `plugin "tile"${string}declares no ${Section} member "${Member}"${string}`
+			expectTypeOf<Extract<TileReason<Empty<'state', never>>, NoMember<'state', 'open'>>>().not.toBeNever()
+			expectTypeOf<Extract<TileReason<Empty<'properties', never>>, NoMember<'properties', 'title'>>>().not.toBeNever()
+			expectTypeOf<Extract<TileReason<Empty<'methods', never>>, NoMember<'methods', 'toggle'>>>().not.toBeNever()
+			expectTypeOf<Extract<TileReason<Empty<'events', never>>, NoMember<'events', 'toggled'>>>().not.toBeNever()
+			expectTypeOf<Extract<TileReason<Empty<'properties', Record<never, never>>>, NoMember<'properties', 'title'>>>().not.toBeNever()
+			expectTypeOf<Extract<TileReason<Empty<'events', Record<never, never>>>, NoMember<'events', 'toggled'>>>().not.toBeNever()
+
+			const deck = createDeck()
+			const card = createCardLike('card')
+			const tile = createWidgetPlugin('tile')
+				.interfaces<Empty<'properties', never>>()
+				.state(state => state.open({ validate: (input): input is boolean => typeof input === 'boolean', default: () => false }))
+				.properties(properties => properties)
+				.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
+				.events(['toggled'])
+				.done()
+			// @ts-expect-error the tile's Properties are explicit-empty: it has no `title`
+			const system = createWidgetSystem({ plugins: [deck, card, tile] })
+			expect(system.plugins)
+				.toHaveLength(3)
+		})
 	})
 
 	it('does not check a contract without Types against any plugin, nor a loosely typed System', () => {
