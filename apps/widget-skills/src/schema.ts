@@ -25,7 +25,10 @@ const DIALECT = 'https://json-schema.org/draft/2020-12/schema'
 /** The LLM profile closes every object, so the other keys an index signature admits cannot be written there. */
 const INDEX_SIGNATURE_NOTE = 'The type also allows keys not listed here, which this form cannot express: leave them out.'
 
-const NUMERIC_TAGS = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'minItems', 'maxItems'] as const
+const NUMERIC_TAGS = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'minItems', 'maxItems', 'minProperties', 'maxProperties'] as const
+
+/** The numeric tags about a string or number value; on an array or a dictionary they apply to its items or values. */
+const VALUE_TAGS = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength'] as const
 
 function parseJson(text: string): unknown {
 	try {
@@ -85,8 +88,11 @@ export function describeDoc(doc: Doc, withConstraints: boolean, formatValue: (js
 					return `Must be the id of a widget of type ${value} in the same document.`
 				if (tag === 'default' || tag === 'examples')
 					return `${tag}: ${formatValue(value, tag === 'examples')}.`
+				if (tag === 'uniqueItems' || tag === 'integer')
+					return flagIsSet(value) ? `${tag}.` : ''
 				return `${tag}: ${value}.`
 			})
+			.filter(text => text !== '')
 		if (constraints.length > 0)
 			parts.push(`Constraints: ${constraints.join(' ')}`)
 	}
@@ -102,25 +108,50 @@ function describe(schema: JsonSchema, text: string): JsonSchema {
 	return parts.length === 0 ? schema : { ...schema, description: parts.join(' ') }
 }
 
-function constraintKeywords(doc: Doc): JsonSchema {
-	const keywords: JsonSchema = {}
+/** Whether a flag tag (`@uniqueItems`, `@integer`) is set: written bare or as `true`. */
+export function flagIsSet(text: string | undefined): boolean {
+	return text !== undefined && (text.trim() === '' || text.trim() === 'true')
+}
+
+/**
+ * `schema` with the constraint tags of `doc` as keywords. A tag about a string or number value (`VALUE_TAGS`, `@integer`)
+ * written on an array or a dictionary applies to its items or values, since it cannot apply to the container itself: so
+ * `@pattern` on a `string[]` constrains every item, and `@minimum` on a `Record<string, number>` every value.
+ */
+function withConstraints(schema: JsonSchema, shape: Shape, doc: Doc): JsonSchema {
 	const tags = constraintTagsOf(doc)
+	const own: JsonSchema = {}
+	const value: JsonSchema = {}
 	for (const tag of NUMERIC_TAGS) {
-		const value = tags[tag]
-		if (value !== undefined && value.trim() !== '' && Number.isFinite(Number(value)))
-			keywords[tag] = Number(value)
+		const text = tags[tag]
+		if (text !== undefined && text.trim() !== '' && Number.isFinite(Number(text)))
+			((VALUE_TAGS as readonly string[]).includes(tag) ? value : own)[tag] = Number(text)
 	}
 	if (tags.format !== undefined)
-		keywords.format = tags.format
+		value.format = tags.format
 	if (tags.pattern !== undefined)
-		keywords.pattern = tags.pattern
+		value.pattern = tags.pattern
+	if (flagIsSet(tags.uniqueItems))
+		own.uniqueItems = true
+	if (tags.propertyNames !== undefined && tags.propertyNames.trim() !== '')
+		own.propertyNames = { pattern: tags.propertyNames.trim() }
 	if (tags.default !== undefined)
-		keywords.default = parseJson(tags.default)
+		own.default = parseJson(tags.default)
 	if (tags.examples !== undefined) {
 		const examples = parseJson(tags.examples)
-		keywords.examples = Array.isArray(examples) ? examples : [examples]
+		own.examples = Array.isArray(examples) ? examples : [examples]
 	}
-	return keywords
+	const integer = flagIsSet(tags.integer)
+	const applyValue = (target: JsonSchema): JsonSchema => {
+		const next = { ...target, ...value }
+		if (integer && next.type === 'number')
+			next.type = 'integer'
+		return next
+	}
+	const inner = shape.kind === 'array' ? 'items' : shape.kind === 'record' ? 'additionalProperties' : null
+	if (inner !== null && typeof schema[inner] === 'object' && schema[inner] !== null)
+		return { ...schema, [inner]: applyValue(schema[inner] as JsonSchema), ...own }
+	return { ...applyValue(schema), ...own }
 }
 
 function literalEnum(members: readonly Shape[]): (string | number | boolean)[] | null {
@@ -182,7 +213,7 @@ function createFullShapeEmitter(ir: SystemIr, ref: (prefix: string, name: string
 			case 'object':
 				return {
 					type: 'object',
-					properties: Object.fromEntries(shape.properties.map(property => [property.name, describe({ ...fullShape(property.shape), ...constraintKeywords(property.doc) }, describeDoc(property.doc, false))])),
+					properties: Object.fromEntries(shape.properties.map(property => [property.name, describe(withConstraints(fullShape(property.shape), property.shape, property.doc), describeDoc(property.doc, false))])),
 					required: shape.properties.filter(property => !property.optional)
 						.map(property => property.name),
 					// An index signature next to named properties types the other keys.
@@ -236,7 +267,7 @@ export function emitConfigSchema(ir: SystemIr, plugin: PluginIr): JsonSchema | n
 	const defs: Record<string, JsonSchema> = {}
 	for (const name of namedTypesOf(ir, plugin.config.rawShape)) {
 		const type = ir.types[name]!
-		defs[key('type', name)] = describe({ ...fullShape(type.shape), ...constraintKeywords(type.doc) }, describeDoc(type.doc, false))
+		defs[key('type', name)] = describe(withConstraints(fullShape(type.shape), type.shape, type.doc), describeDoc(type.doc, false))
 	}
 	const body = plugin.config.omittable ? { anyOf: [value, { type: 'null' }] } : value
 	return {
@@ -284,7 +315,7 @@ export function emitFullSchema(ir: SystemIr): JsonSchema {
 		defs[key('widget', plugin.type)] = describe({ type: 'object', properties, required, additionalProperties: false }, pluginDescription(plugin))
 	}
 	for (const [name, type] of Object.entries(ir.types))
-		defs[key('type', name)] = describe({ ...fullShape(type.shape), ...constraintKeywords(type.doc) }, describeDoc(type.doc, false))
+		defs[key('type', name)] = describe(withConstraints(fullShape(type.shape), type.shape, type.doc), describeDoc(type.doc, false))
 	return {
 		$schema: DIALECT,
 		title: `${ir.system} document`,

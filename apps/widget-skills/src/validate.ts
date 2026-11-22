@@ -5,7 +5,8 @@
  *
  * Implemented: `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `const`, `anyOf`,
  * `$ref` (a JSON Pointer into the same document), `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`,
- * `multipleOf`, `minLength`, `maxLength`, `minItems`, `maxItems`. Annotations are ignored. `format` and `pattern`
+ * `multipleOf`, `minLength`, `maxLength`, `minItems`, `maxItems`, `uniqueItems`, `minProperties`, `maxProperties`,
+ * `propertyNames`. Annotations are ignored. `format` and `pattern`
  * are annotations here: they are not evaluated. Any other keyword throws, so a schema this validator cannot judge
  * is never reported as passing.
  */
@@ -13,7 +14,7 @@
 import type { JsonSchema } from './schema'
 
 const ANNOTATIONS = new Set(['$schema', '$id', '$defs', '$comment', 'title', 'description', 'default', 'examples', 'format', 'pattern'])
-const IMPLEMENTED = new Set(['type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const', 'anyOf', '$ref', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'minItems', 'maxItems'])
+const IMPLEMENTED = new Set(['type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const', 'anyOf', '$ref', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'minItems', 'maxItems', 'uniqueItems', 'minProperties', 'maxProperties', 'propertyNames'])
 
 function typeOf(value: unknown): string {
 	if (value === null)
@@ -135,6 +136,8 @@ export function validateSchema(root: JsonSchema, value: unknown): string[] {
 				into.push(`${path}: fewer than ${node.minItems} items`)
 			if (typeof node.maxItems === 'number' && items.length > node.maxItems)
 				into.push(`${path}: more than ${node.maxItems} items`)
+			if (node.uniqueItems === true && items.some((item, index) => items.findIndex(other => sameJson(other, item)) !== index))
+				into.push(`${path}: items are not unique`)
 			if (node.items !== undefined)
 				items.forEach((item, index) => visit(node.items, item, `${path}/${index}`, into))
 		}
@@ -145,6 +148,13 @@ export function validateSchema(root: JsonSchema, value: unknown): string[] {
 				if (!Object.hasOwn(object, name))
 					into.push(`${path}: missing "${name}"`)
 			}
+			const keys = Object.keys(object)
+			if (typeof node.minProperties === 'number' && keys.length < node.minProperties)
+				into.push(`${path}: fewer than ${node.minProperties} properties`)
+			if (typeof node.maxProperties === 'number' && keys.length > node.maxProperties)
+				into.push(`${path}: more than ${node.maxProperties} properties`)
+			if (node.propertyNames !== undefined)
+				keys.forEach(key => visit(node.propertyNames, key, `${path}/${key}`, into))
 			for (const [key, entry] of Object.entries(object)) {
 				if (Object.hasOwn(properties, key))
 					visit(properties[key], entry, `${path}/${key}`, into)
