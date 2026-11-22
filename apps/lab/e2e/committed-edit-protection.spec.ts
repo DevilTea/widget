@@ -73,7 +73,7 @@ test.describe('committed edits are protected (report item 10)', () => {
 		await editSurveyTitle(page, 'My open day')
 		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.editJson('{ "unapplied": '))
 		await expect(page.getByTestId('lab-status'))
-			.toHaveAttribute('data-state', 'syntax-error')
+			.toHaveAttribute('data-state', 'json-not-applied')
 
 		await selectShowcase(page, 'trip-budget')
 		await expect(page.getByTestId('draft-guard-dialog')
@@ -142,7 +142,7 @@ test.describe('committed edits are protected (report item 10)', () => {
 		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.editJson('{ "unapplied": '))
 		const reason = notice.getByTestId('replaced-document-undo-reason')
 		await expect(reason)
-			.toHaveText('Fix or discard the JSON syntax error before undoing')
+			.toHaveText('Fix or discard the JSON that can\'t be applied before undoing')
 		const undo = notice.getByRole('button', { name: 'Undo last change' })
 		await expect(undo)
 			.toHaveAttribute('aria-disabled', 'true')

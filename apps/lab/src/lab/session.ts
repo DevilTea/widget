@@ -11,8 +11,8 @@
  * promotion intent remains Lab-owned while Runtime execution is owned exclusively by the iframe Preview host.
  */
 
-import type { AnyWidgetPluginTuple, JsonValue, SourcePatch, WidgetDocument, WidgetDocumentSnapshot, WidgetSystem } from '@deviltea/widget-core'
-import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentState, LabDocumentTraceEvent, LabPatchOrigin, LabPreviewSnapshot, LabSessionHooks, LabSessionListener, RevisionConflictDemoResult, SourceParseError, UndoOutcome } from './types'
+import type { AnyWidgetPluginTuple, ApplyPatchFailure, JsonValue, SourcePatch, WidgetDocument, WidgetDocumentSnapshot, WidgetSystem } from '@deviltea/widget-core'
+import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentState, LabDocumentTraceEvent, LabJsonBlock, LabPatchOrigin, LabPreviewSnapshot, LabSessionHooks, LabSessionListener, RevisionConflictDemoResult, SourceParseError, UndoOutcome } from './types'
 import { createWidgetDocument } from '@deviltea/widget-core'
 import { createAuthorPatch } from './author'
 import { sameJsonDocument } from './json-equal'
@@ -78,6 +78,8 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	private draftText: string
 	/** The current JSON text, parsed once (Lab UX phase 3: the syntax state is live, and the commit reuses this value). */
 	private draftParse: DraftParse
+	/** The last JSON commit that failed mechanically, with the text it tried; it blocks only while the text is that one. */
+	private commitFailureValue: { readonly sourceText: string, readonly failure: ApplyPatchFailure } | null = null
 	private documentStateValue: LabDocumentState<Plugins>
 	private previewSnapshotValue: LabPreviewSnapshot<Plugins> | null
 	private lastAppliedSourcePatchValue: LabAppliedSourcePatch | null = null
@@ -90,6 +92,8 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	private readonly undoStack: string[] = []
 	/** The coalesce key of the JSON commit that pushed the top Undo entry; `null` when another kind of commit did, or after Undo. */
 	private topUndoKey: LabCoalesceKey = null
+	/** Entries the top entry's push evicted (`LAB_UNDO_LIMIT`), kept while its burst may still drop that entry (`recordUndo()`). */
+	private evictedByTop: string[] = []
 	private applying = false
 
 	constructor(options: LabSessionOptions<Plugins>) {
@@ -126,6 +130,29 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	get parseError(): SourceParseError | null {
 		return this.draftParse.ok ? null : this.draftParse.error
 	}
+
+	/**
+	 * Why the current JSON text cannot be applied, or `null` when it can (or equals the Document): a syntax error, or a commit of
+	 * exactly this text that Core refused (`LabJsonBlock`). Nothing is committed from a blocked text until it changes.
+	 */
+	get jsonBlock(): LabJsonBlock | null {
+		const failed = this.commitFailureValue !== null && this.commitFailureValue.sourceText === this.draftText && this.isDirty
+			? this.commitFailureValue
+			: null
+		const cache = this.jsonBlockCache
+		// The same object while nothing it depends on changed, so reactive readers (the Problems list) do not recompute.
+		if (cache !== null && cache.parse === this.draftParse && cache.failed === failed)
+			return cache.block
+		let block: LabJsonBlock | null = null
+		if (!this.draftParse.ok)
+			block = { kind: 'syntax', error: this.draftParse.error }
+		else if (failed !== null)
+			block = { kind: 'commit', sourceText: failed.sourceText, failure: failed.failure }
+		this.jsonBlockCache = { parse: this.draftParse, failed, block }
+		return block
+	}
+
+	private jsonBlockCache: { readonly parse: DraftParse, readonly failed: unknown, readonly block: LabJsonBlock | null } | null = null
 
 	/** Current Lab-owned representation of the authoritative Document revision. */
 	get documentState(): LabDocumentState<Plugins> {
@@ -180,11 +207,13 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 
 	/**
 	 * Editing the JSON text never recompiles; it only parses the text (once, and the commit reuses the value), so the syntax
-	 * state (`parseError`) always describes the current text. Committing is the caller's decision (`commitJson()`).
+	 * state (`parseError`) always describes the current text. Committing is the caller's decision (`commitJson()`). A new
+	 * text also clears a commit failure of the old one (`jsonBlock`): the new text gets its own try.
 	 */
 	setDraftSourceText(text: string): void {
 		if (text !== this.draftText) {
 			this.draftText = text
+			this.commitFailureValue = null
 			this.draftParse = text === this.documentStateValue.sourceText
 				? { ok: true, value: this.documentStateValue.definition as JsonValue }
 				: parseDraft(text)
@@ -240,13 +269,17 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 				return { status: 'parse-error', error: parsed.error }
 			}
 
-			return await this.commitPatch(
+			const outcome = await this.commitPatch(
 				[{ op: 'replace', path: '', value: parsed.value }],
 				capturedText,
 				parsed.value,
 				'json',
 				options.coalesceKey ?? null,
 			)
+			// Core refused this exact text (a number outside the JSON domain, nesting too deep): it stays blocked, visibly, until
+			// it changes, instead of looking like a commit that is merely pending (`jsonBlock`).
+			this.commitFailureValue = outcome.status === 'patch-error' ? { sourceText: capturedText, failure: outcome.failure } : null
+			return outcome
 		}
 		finally {
 			this.applying = false
@@ -322,6 +355,7 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 				return { status: 'skipped-concurrent' }
 			this.undoStack.pop()
 			this.topUndoKey = null
+			this.evictedByTop = []
 			if (this.draftText === capturedDraftText)
 				this.setDraftSourceText(this.documentStateValue.sourceText)
 			return { status: 'undone', blueprintStatus: outcome.blueprintStatus }
@@ -465,18 +499,24 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	 * Pushes the source a revision-advancing commit replaced. A JSON commit whose coalesce key is the one that pushed the top
 	 * entry pushes nothing: that entry already holds the source from before the burst (Lab UX phase 3), so one Undo takes the
 	 * whole burst back. If such a commit lands back on that source, the entry has nothing left to undo and is dropped.
+	 *
+	 * `LAB_UNDO_LIMIT`: the entry a burst pushes may evict the oldest one. While the burst goes on, that evicted entry is kept
+	 * aside (`evictedByTop`); if the burst drops its entry, the evicted one comes back at the bottom, so a burst that changed
+	 * nothing costs no history. Once anything else happens (another push, Undo) the eviction is final.
 	 */
 	private recordUndo(previousSourceText: string, nextSourceText: string, coalesceKey: LabCoalesceKey): void {
 		if (coalesceKey !== null && coalesceKey === this.topUndoKey && this.undoStack.length > 0) {
 			if (sameJsonDocument(this.undoStack.at(-1)!, nextSourceText)) {
 				this.undoStack.pop()
+				this.undoStack.unshift(...this.evictedByTop)
+				this.evictedByTop = []
 				this.topUndoKey = null
 			}
 			return
 		}
 		this.undoStack.push(previousSourceText)
-		if (this.undoStack.length > LAB_UNDO_LIMIT)
-			this.undoStack.splice(0, this.undoStack.length - LAB_UNDO_LIMIT)
+		const evicted = this.undoStack.length > LAB_UNDO_LIMIT ? this.undoStack.splice(0, this.undoStack.length - LAB_UNDO_LIMIT) : []
+		this.evictedByTop = coalesceKey === null ? [] : evicted
 		this.topUndoKey = coalesceKey
 	}
 

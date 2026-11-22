@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * The Problems list next to the JSON editor (audit U06): the last Apply's JSON syntax error and Core's
+ * The Problems list next to the JSON editor (audit U06): why the JSON text cannot be applied (its syntax error, or Core's
+ * refusal of its commit) and Core's
  * Blueprint diagnostics, each a button that jumps the editor to the source range it points at. Code and
  * message are Core's, verbatim (never translated or parsed); only the surrounding chrome is i18n'd. It owns
  * no Document state: `AuthorJsonView.vue` hands it the rows and performs the jump.
@@ -18,8 +19,8 @@ import { groupProblems } from '../../lab/problems'
 
 const props = defineProps<{
 	problems: readonly LabProblem[]
-	/** The editor holds an unapplied draft: rows still describe the last Apply, and say so. */
-	draftIsDirty: boolean
+	/** The JSON text differs from the Document (not committed yet, or it cannot be applied): Core's rows describe the Document, and say so. */
+	textDiffers: boolean
 }>()
 
 const emit = defineEmits<{
@@ -73,7 +74,7 @@ defineExpose({ focusList })
 				v-if="problems.length > 0"
 				class="ml-auto truncate text-muted"
 			>
-				{{ i18n.t(draftIsDirty ? 'From the last change. Locations follow your current text.' : 'From the last change') }}
+				{{ i18n.t(textDiffers ? 'From the last change. Locations follow your current text.' : 'From the last change') }}
 			</span>
 		</div>
 		<ul

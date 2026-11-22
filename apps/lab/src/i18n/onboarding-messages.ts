@@ -23,7 +23,7 @@ export const zhTWOnboardingMessages: Readonly<Record<string, string>> = {
 	'The default with four deliberate mistakes in four widgets: a minimum above the number of options, an acknowledged rule that does not exist, an induction day that is not a real date and a start step beyond the last. Each is a located diagnostic.': '預設範例，但四個 widget 各有一個刻意的錯誤：最少選取數超過選項數量、一條不存在的規則被設為已確認、一個不是真實日期的導覽日，以及超出最後一步的起始步驟。每一個都是有位置的 diagnostic。',
 
 	// Tutorial confirmation
-	'Starting the tutorial will load the Onboarding teaching example and replace your unapplied changes.': '開始教學會載入引導精靈教學範例，並取代你尚未套用的變更。',
+	'Starting the tutorial will load the Onboarding teaching example and discard the JSON that can\'t be applied yet.': '開始教學會載入引導精靈教學範例，並捨棄目前還無法套用的 JSON。',
 
 	// Tutorial script
 	'This is the Onboarding showcase': '這是新成員引導精靈範例',

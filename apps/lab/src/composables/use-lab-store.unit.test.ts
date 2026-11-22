@@ -747,14 +747,14 @@ describe('createLabStore() header and feedback state', () => {
 			.toBe(1)
 
 		store.editJson(`${secondText} {`)
-		expect(store.hasJsonSyntaxError.value)
+		expect(store.jsonBlocked.value)
 			.toBe(true)
 		expect(store.canUndo.value)
 			.toBe(false)
 		expect(await store.undo())
 			.toEqual({ status: 'draft-dirty' })
 		store.discardJsonChanges()
-		expect(store.hasJsonSyntaxError.value)
+		expect(store.jsonBlocked.value)
 			.toBe(false)
 		expect(store.canUndo.value)
 			.toBe(true)
@@ -859,13 +859,13 @@ describe('createLabStore() header and feedback state', () => {
 	it('derives the status chip and the Problems list from the Document and the live JSON syntax state', async () => {
 		const store = createSandboxStore()
 		expect(store.status.value)
-			.toEqual({ validity: { kind: 'valid' }, preview: 'current', json: 'parses', chip: { kind: 'up-to-date' } })
+			.toEqual({ validity: { kind: 'valid' }, preview: 'current', json: 'ok', chip: { kind: 'up-to-date' } })
 		expect(store.problems.value)
 			.toEqual([])
 
 		await store.applyPreset('invalid-semantic')
 		expect(store.status.value)
-			.toEqual({ validity: { kind: 'problems', count: 1 }, preview: 'stale', json: 'parses', chip: { kind: 'problems', count: 1, previewShown: true } })
+			.toEqual({ validity: { kind: 'problems', count: 1 }, preview: 'stale', json: 'ok', chip: { kind: 'problems', count: 1, previewShown: true } })
 		expect(store.problems.value)
 			.toHaveLength(1)
 		expect(store.problems.value[0])
@@ -874,7 +874,7 @@ describe('createLabStore() header and feedback state', () => {
 		// A syntax error is live: it shows while the text does not parse, before and without any commit.
 		store.editJson('{ broken')
 		expect(store.status.value.chip)
-			.toEqual({ kind: 'syntax-error' })
+			.toEqual({ kind: 'json-not-applied', reason: 'syntax' })
 		expect(store.status.value.validity)
 			.toEqual({ kind: 'problems', count: 1 })
 		expect(store.problems.value.map(problem => problem.kind))
@@ -951,7 +951,7 @@ describe('createLabStore() committed edits and the replaced-document notice (Lab
 			.toBe(false)
 
 		// Lab UX phase 3: JSON text that parses is an edit already (it is committed before any replacement runs); text that
-		// does not parse is not (that is `hasJsonSyntaxError`, which asks on its own).
+		// does not parse is not (that is `jsonBlocked`, which asks on its own).
 		store.editJson('{ broken')
 		expect(store.hasCommittedEdits.value)
 			.toBe(false)
@@ -1073,13 +1073,13 @@ describe('createLabStore() JSON auto-commit (Lab UX phase 3)', () => {
 				.toBe(0)
 			expect(store.preview.value)
 				.toBe(preview)
-			expect(store.hasJsonSyntaxError.value)
+			expect(store.jsonBlocked.value)
 				.toBe(true)
 			expect(store.status.value.chip)
-				.toEqual({ kind: 'syntax-error' })
+				.toEqual({ kind: 'json-not-applied', reason: 'syntax' })
 
 			store.discardJsonChanges()
-			expect(store.hasJsonSyntaxError.value)
+			expect(store.jsonBlocked.value)
 				.toBe(false)
 			expect(store.isDirty.value)
 				.toBe(false)
@@ -1209,5 +1209,158 @@ describe('createLabStore() "Preview restarted" (Lab UX phase 3)', () => {
 		finally {
 			vi.useRealTimers()
 		}
+	})
+
+	// Phase 3A review: a switch right after a commit used to keep "Preview restarted" (and its timer) from the old session.
+	it('is cleared, with its timer, by a showcase switch', async () => {
+		vi.useFakeTimers()
+		try {
+			const store = createSandboxStore()
+			store.editJson('{ "id": "root", "type": "Text", "config": { "text": "restart" } }')
+			await store.flushJson()
+			expect(store.previewRestarted.value)
+				.toBe(true)
+			await store.switchShowcase('survey')
+			expect(store.previewRestarted.value)
+				.toBe(false)
+			expect(store.status.value.chip)
+				.toEqual({ kind: 'up-to-date' })
+			expect(vi.getTimerCount())
+				.toBe(0)
+			store.dispose()
+		}
+		finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
+// Phase 3A review fixes.
+describe('createLabStore() JSON that parses but cannot be applied', () => {
+	it('1e400 is blocked on blur: the chip names the reason, Discard and Undo behave as for a syntax error, and a new text clears it', async () => {
+		const store = createSandboxStore()
+		const initial = store.documentState.value.sourceText
+		const infinite = initial.replace('"Widget Lab sandbox"', '1e400')
+		store.beginJsonEdit()
+		store.editJson(infinite)
+		expect(await store.endJsonEdit())
+			.toMatchObject({ status: 'patch-error', failure: { reason: 'non-finite-number' } })
+		expect(store.jsonBlocked.value)
+			.toBe(true)
+		expect(store.status.value.chip)
+			.toEqual({ kind: 'json-not-applied', reason: 'commit', detail: 'non-finite-number' })
+		expect(store.problems.value[0])
+			.toMatchObject({ kind: 'commit', code: 'json-incompatible-value' })
+		expect(store.canUndo.value)
+			.toBe(false)
+		expect(await store.undo())
+			.toEqual({ status: 'draft-dirty' })
+		// Not retried by flushing again: the same text stays refused.
+		expect(await store.flushJson())
+			.toBeNull()
+		expect(store.documentState.value.revision)
+			.toBe(0)
+
+		store.editJson(initial.replace('"Widget Lab sandbox"', '"fixed"'))
+		expect(store.jsonBlocked.value)
+			.toBe(false)
+		expect(store.status.value.chip.kind)
+			.not
+			.toBe('json-not-applied')
+
+		store.editJson(infinite)
+		await store.flushJson()
+		store.discardJsonChanges()
+		expect(store.jsonBlocked.value)
+			.toBe(false)
+		expect(store.isDirty.value)
+			.toBe(false)
+		store.dispose()
+	})
+
+	it('a document nested deeper than Core accepts is blocked the same way', async () => {
+		const store = createSandboxStore()
+		let deep: unknown = 0
+		for (let level = 0; level < 300; level++)
+			deep = [deep]
+		store.editJson(JSON.stringify(deep))
+		await store.flushJson()
+		expect(store.status.value.chip)
+			.toEqual({ kind: 'json-not-applied', reason: 'commit', detail: 'max-depth-exceeded' })
+		expect(store.hasCommittedEdits.value)
+			.toBe(false)
+		store.dispose()
+	})
+})
+
+describe('createLabStore() commands that wait', () => {
+	function gatedStore(gatedRevision: number) {
+		const gate = createDeferred()
+		const store = createSandboxStore()
+		const recorded = createRecordingDriver({
+			beforeMount: descriptor => descriptor.revision === gatedRevision ? gate.promise : undefined,
+		})
+		return { gate, store, recorded }
+	}
+	const titleNodeId = (store: LabStore) => inspectBlueprint(store.documentState.value.blueprint).nodes.find(node => node.resolved && node.node.id === 'title')!.nodeId
+
+	it('a Structure command built when it starts takes the revision current then, not the one it was asked against', async () => {
+		const { gate, store, recorded } = gatedStore(1)
+		await attachDriver(store, recorded.driver)
+		const first = store.author(replaceConfigScalar(0, titleNodeId(store), 'text', 'one'))
+		const undoing = store.undo()
+		// Asked while r1 is still promoting and Undo waits: built later, against r2.
+		const second = store.author(() => replaceConfigScalar(store.documentState.value.revision, titleNodeId(store), 'text', 'two'))
+		gate.resolve()
+		expect(await first)
+			.toMatchObject({ status: 'applied' })
+		expect(await undoing)
+			.toMatchObject({ status: 'undone' })
+		expect(await second)
+			.toMatchObject({ status: 'applied' })
+		expect(store.documentState.value.revision)
+			.toBe(3)
+		expect(store.documentState.value.sourceText)
+			.toContain('"text": "two"')
+		store.dispose()
+	})
+
+	it('undo requests while an Undo is on its way are that same Undo; a request after it finished undoes the next step', async () => {
+		const store = createSandboxStore()
+		for (const text of ['a', 'b']) {
+			store.editJson(`{ "id": "root", "type": "Text", "config": { "text": "${text}" } }`)
+			await store.flushJson()
+		}
+		const firstClick = store.undo()
+		const doubleClick = store.undo()
+		expect(doubleClick)
+			.toBe(firstClick)
+		expect(await firstClick)
+			.toMatchObject({ status: 'undone' })
+		expect(store.documentState.value.sourceText)
+			.toContain('"text": "a"')
+		expect(await store.undo())
+			.toMatchObject({ status: 'undone' })
+		expect(store.undoDepth.value)
+			.toBe(0)
+		store.dispose()
+	})
+
+	it('a focus that comes back to an open editing session (the window was away) continues its burst', async () => {
+		const store = createSandboxStore()
+		const initial = store.documentState.value.sourceText
+		store.beginJsonEdit()
+		store.editJson('{ "id": "root", "type": "Text", "config": { "text": "before alt-tab" } }')
+		await store.flushJson()
+		// The window blur is ignored by the editor (no endJsonEdit); its focus comes back.
+		store.beginJsonEdit()
+		store.editJson('{ "id": "root", "type": "Text", "config": { "text": "after alt-tab" } }')
+		await store.endJsonEdit()
+		expect(store.undoDepth.value)
+			.toBe(1)
+		await store.undo()
+		expect(store.documentState.value.sourceText)
+			.toBe(initial)
+		store.dispose()
 	})
 })

@@ -44,9 +44,21 @@ function jumpTo(problem: LabProblem): void {
 }
 
 function onFormat(): void {
-	if (!store.hasJsonSyntaxError.value)
+	if (store.parseError.value === null)
 		void store.format()
 }
+
+/** What the toolbar says about the text: it applies as you go, or why it cannot be applied (a syntax error, or Core's refusal). */
+const commitStateText = computed(() => {
+	const block = store.jsonBlock.value
+	if (block === null)
+		return i18n.t('Changes apply when you pause typing or leave the editor. JSON is applied as one root SourcePatch.')
+	if (block.kind === 'syntax')
+		return i18n.t('JSON has a syntax error — not applied. Fix it, or use Discard JSON changes in the header.')
+	const failure = block.failure
+	const reason = 'reason' in failure && failure.reason !== undefined ? String(failure.reason) : failure.code
+	return i18n.t('JSON can\'t be applied ({reason}) — Core refused it. Fix it, or use Discard JSON changes in the header.', { reason })
+})
 
 // "Show problems" elsewhere (the stale-preview notice) opens this view and asks for focus on the list.
 async function focusProblemsIfRequested(): Promise<void> {
@@ -70,19 +82,17 @@ onMounted(focusProblemsIfRequested)
 		>
 			<span
 				data-testid="json-commit-state"
-				:data-state="store.hasJsonSyntaxError.value ? 'syntax-error' : 'parses'"
+				:data-state="store.status.value.json"
 				class="flex min-w-0 flex-1 items-center gap-1.5"
-				:class="store.hasJsonSyntaxError.value ? 'font-semibold text-error' : 'text-muted'"
+				:class="store.jsonBlocked.value ? 'font-semibold text-error' : 'text-muted'"
 			>
 				<UIcon
-					v-if="store.hasJsonSyntaxError.value"
+					v-if="store.jsonBlocked.value"
 					name="i-lucide-circle-x"
 					class="size-3.5 shrink-0"
 					aria-hidden="true"
 				/>
-				<span class="min-w-0">{{ store.hasJsonSyntaxError.value
-					? i18n.t('JSON has a syntax error — not applied. Fix it, or use Discard JSON changes in the header.')
-					: i18n.t('Changes apply when you pause typing or leave the editor. JSON is applied as one root SourcePatch.') }}</span>
+				<span class="min-w-0">{{ commitStateText }}</span>
 			</span>
 			<UButton
 				data-testid="format-button"
@@ -91,8 +101,8 @@ onMounted(focusProblemsIfRequested)
 				size="xs"
 				icon="i-lucide-align-left"
 				:label="i18n.t('Format')"
-				:aria-disabled="store.hasJsonSyntaxError.value ? 'true' : undefined"
-				:title="store.hasJsonSyntaxError.value ? i18n.t('Fix the syntax error to format the JSON') : i18n.t('Format the JSON')"
+				:aria-disabled="store.parseError.value !== null ? 'true' : undefined"
+				:title="store.parseError.value !== null ? i18n.t('Fix the syntax error to format the JSON') : i18n.t('Format the JSON')"
 				class="aria-disabled:opacity-50"
 				@click="onFormat"
 			/>
@@ -111,7 +121,7 @@ onMounted(focusProblemsIfRequested)
 		<AuthorProblems
 			ref="problemsList"
 			:problems="store.problems.value"
-			:draftIsDirty="store.isDirty.value"
+			:textDiffers="store.isDirty.value"
 			@jump="jumpTo"
 		/>
 	</div>

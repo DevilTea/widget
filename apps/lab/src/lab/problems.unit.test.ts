@@ -11,7 +11,7 @@ function problemsOf(showcaseId: string, presetId: string, parseError: SourcePars
 	const blueprint = createWidgetDocument({ system: showcase.system, source: JSON.parse(preset.sourceText) })
 		.getSnapshot()
 		.blueprint
-	const problems = collectProblems(blueprint, inspectBlueprint(blueprint), parseError)
+	const problems = collectProblems(blueprint, inspectBlueprint(blueprint), parseError === null ? null : { kind: 'syntax', error: parseError })
 	return { problems, text: preset.sourceText }
 }
 
@@ -51,6 +51,25 @@ describe('collectProblems', () => {
 		expect(problems)
 			.toHaveLength(2)
 	})
+
+	it('lists a commit Core refused for the current text first, with its code and message, and locates its operand path', () => {
+		const showcase = getShowcase('sandbox')!
+		const blueprint = createWidgetDocument({ system: showcase.system, source: JSON.parse(showcase.defaultPreset.sourceText) })
+			.getSnapshot()
+			.blueprint
+		const text = showcase.defaultPreset.sourceText.replace('"Widget Lab sandbox"', '1e400')
+		const problems = collectProblems(blueprint, inspectBlueprint(blueprint), {
+			kind: 'commit',
+			sourceText: text,
+			failure: { code: 'json-incompatible-value', operationIndex: 0, message: 'The SourcePatch operand is outside the JSON value domain.', path: ['slots', 'items', 0, 'config', 'text'], reason: 'non-finite-number' },
+		})
+		expect(problems)
+			.toHaveLength(1)
+		expect(problems[0])
+			.toMatchObject({ kind: 'commit', code: 'json-incompatible-value', message: 'The SourcePatch operand is outside the JSON value domain.', locationLabel: 'non-finite-number', nodeId: null, configPath: null })
+		expect(textOf(text, problemSpan(problems[0]!, text)))
+			.toBe('1e400')
+	})
 })
 
 describe('configPath and where Structure shows a problem (Lab UX phase 2)', () => {
@@ -89,7 +108,7 @@ describe('configPath and where Structure shows a problem (Lab UX phase 2)', () =
 		const blueprint = createWidgetDocument({ system: showcase.system, source: JSON.parse(preset.sourceText) })
 			.getSnapshot()
 			.blueprint
-		const problems = collectProblems(blueprint, inspectBlueprint(blueprint), parseError)
+		const problems = collectProblems(blueprint, inspectBlueprint(blueprint), parseError === null ? null : { kind: 'syntax', error: parseError })
 		const configProblem = problems.find(problem => problem.configPath !== null)!
 		const placed = placeStructureProblems(problems, configProblem.nodeId)
 		expect(placed.atFields)

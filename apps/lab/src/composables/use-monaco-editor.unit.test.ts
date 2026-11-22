@@ -154,6 +154,21 @@ describe('monaco focus and blur (Lab UX phase 3)', () => {
 			.toHaveBeenCalledTimes(1)
 	})
 
+	// Phase 3A review: the window or tab losing focus blurs the editor too, but the user did not leave it (alt-tab and back).
+	it('ignores the blur of the window or tab losing focus', async () => {
+		const { blurred } = mountEditor('en')
+		await flushPromises()
+		const hasFocus = vi.spyOn(document, 'hasFocus')
+			.mockReturnValue(false)
+		blurListeners.forEach(listener => listener())
+		expect(blurred).not.toHaveBeenCalled()
+		hasFocus.mockReturnValue(true)
+		blurListeners.forEach(listener => listener())
+		expect(blurred)
+			.toHaveBeenCalledTimes(1)
+		hasFocus.mockRestore()
+	})
+
 	it('reports a blur when it goes away while focused, and none when it was not focused', async () => {
 		const first = mountEditor('en')
 		await flushPromises()

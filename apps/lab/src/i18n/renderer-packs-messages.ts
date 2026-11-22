@@ -18,7 +18,7 @@ export const zhTWRendererPacksMessages: Readonly<Record<string, string>> = {
 	'The settings document is invalid: a text field with a limit of 0, a field that reads an Appearance that does not exist, a field that names a Notifier as its Appearance, and a dangerous action that reports to a Notifier that does not exist. Each is a located diagnostic.': '這份設定文件是無效的：上限為 0 的文字欄位、讀取不存在之 Appearance 的欄位、把 Notifier 當成 Appearance 的欄位，以及回報給不存在之 Notifier 的危險動作。每一個都是有位置的診斷。',
 
 	// Tutorial confirmation
-	'Starting the tutorial will load the Renderer packs teaching example and replace your unapplied changes.': '開始教學會載入 renderer pack 教學範例，並取代你尚未套用的變更。',
+	'Starting the tutorial will load the Renderer packs teaching example and discard the JSON that can\'t be applied yet.': '開始教學會載入 renderer pack 教學範例，並捨棄目前還無法套用的 JSON。',
 
 	// Tutorial script
 	'This is the renderer packs showcase': '這是 renderer pack 範例',

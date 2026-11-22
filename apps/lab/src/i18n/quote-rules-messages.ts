@@ -21,7 +21,7 @@ export const zhTWQuoteRulesMessages: Readonly<Record<string, string>> = {
 	'A valid document whose volume tiers start at 100. The rule\'s code assumes the first tier starts at 1, so lowering the total quantity below 100 makes it throw: Core isolates the exception and the Preview reports it instead of crashing.': '一份有效的文件，但數量折扣的級距從 100 起算。規則的程式碼假設第一級從 1 開始，所以把總數量降到 100 以下就會拋出例外：Core 會隔離這個例外，Preview 會回報而不是當掉。',
 
 	// Tutorial confirmation
-	'Starting the tutorial will load the Quote rules teaching example and replace your unapplied changes.': '開始教學會載入報價規則教學範例，並取代你尚未套用的變更。',
+	'Starting the tutorial will load the Quote rules teaching example and discard the JSON that can\'t be applied yet.': '開始教學會載入報價規則教學範例，並捨棄目前還無法套用的 JSON。',
 
 	// Tutorial script
 	'This is the Quote rules showcase': '這是報價規則範例',

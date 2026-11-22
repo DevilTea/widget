@@ -24,7 +24,7 @@ export type ReplacementLoss = 'none' | 'draft' | 'edits' | 'draft-and-edits'
 
 export interface ReplacementLossInput {
 	/** The JSON view's text does not parse (`LabSession.parseError`), so it was never committed. */
-	readonly jsonSyntaxError: boolean
+	readonly jsonBlocked: boolean
 	/** The committed Document differs from every preset of the open showcase (`hasCommittedEdits()`). */
 	readonly hasCommittedEdits: boolean
 	/**
@@ -35,9 +35,9 @@ export interface ReplacementLossInput {
 }
 
 /** What an action would lose for good, i.e. what the user must confirm. Committed edits are lost only when the action cannot be undone. */
-export function replacementLoss({ jsonSyntaxError, hasCommittedEdits, undoable }: ReplacementLossInput): ReplacementLoss {
+export function replacementLoss({ jsonBlocked, hasCommittedEdits, undoable }: ReplacementLossInput): ReplacementLoss {
 	const edits = hasCommittedEdits && !undoable
-	if (jsonSyntaxError)
+	if (jsonBlocked)
 		return edits ? 'draft-and-edits' : 'draft'
 	return edits ? 'edits' : 'none'
 }

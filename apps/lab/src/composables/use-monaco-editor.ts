@@ -165,7 +165,13 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		})
 		// The editor widget, not only its text area: Find and the other editor widgets belong to the same editing session.
 		editor.onDidFocusEditorWidget(() => options.onFocus?.())
-		editor.onDidBlurEditorWidget(() => options.onBlur?.())
+		// The window or tab losing focus blurs the editor too, but the user has not left it (alt-tab and back is one editing
+		// session, one Undo entry): only a blur within a focused document counts. Focus coming back reports a focus again,
+		// which continues the open session (`LabStore.beginJsonEdit()`).
+		editor.onDidBlurEditorWidget(() => {
+			if (document.hasFocus())
+				options.onBlur?.()
+		})
 		registerCommitAction()
 		syncMarkers()
 		ready.value = true

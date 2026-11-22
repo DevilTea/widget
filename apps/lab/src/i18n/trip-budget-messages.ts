@@ -21,7 +21,7 @@ export const zhTWTripBudgetMessages: Readonly<Record<string, string>> = {
 	'The default where the museum tickets are in Swiss francs, which the Currency has no rate for. The Blueprint is valid, but the conversion Method fails when it runs, and every Property that depends on it fails too.': '預設範例中，博物館門票以瑞士法郎計價，而 Currency 沒有這個幣別的匯率。Blueprint 有效，但換算的 Method 在執行時失敗，所有依賴它的 Property 也跟著失敗。',
 
 	// Tutorial confirmation
-	'Starting the tutorial will load the Trip budget teaching example and replace your unapplied changes.': '開始教學會載入旅行分帳教學範例，並取代你尚未套用的變更。',
+	'Starting the tutorial will load the Trip budget teaching example and discard the JSON that can\'t be applied yet.': '開始教學會載入旅行分帳教學範例，並捨棄目前還無法套用的 JSON。',
 
 	// Tutorial script
 	'This is the Trip budget splitter': '這是旅行分帳',

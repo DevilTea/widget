@@ -61,6 +61,17 @@ export interface SourceParseError {
 }
 
 /**
+ * Why the JSON view's text cannot be applied (Lab UX phase 3 review): it does not parse (`syntax`), or it parses but its commit
+ * failed mechanically for this very text (`commit`: Core refused the root `SourcePatch`, e.g. a number outside the JSON domain
+ * such as `1e400`, or nesting deeper than Core accepts). Either way nothing from the text is in the Document, and the Lab treats
+ * both alike: the status chip, the Problems row, "Discard JSON changes", the Structure lock and Undo's refusal. A `commit` block
+ * lasts only while the text is exactly the one that failed; any edit clears it (and is tried again).
+ */
+export type LabJsonBlock
+	= | { readonly kind: 'syntax', readonly error: SourceParseError }
+		| { readonly kind: 'commit', readonly sourceText: string, readonly failure: ApplyPatchFailure }
+
+/**
  * The last successfully parsed-and-applied source snapshot.
  *
  * `definition` is the exact Lab-local `JSON.parse(sourceText)` value accepted by Apply. Core's

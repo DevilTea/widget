@@ -17,8 +17,8 @@ import { editJson, expect, test, waitForLabTestSeam } from './fixtures'
  */
 
 const BUTTONS = [
-	{ id: 'discard-json-button', tooltip: 'Throw away the JSON text that does not parse and show the document again' },
-	{ id: 'undo-button', tooltip: 'Fix or discard the JSON syntax error before undoing' },
+	{ id: 'discard-json-button', tooltip: 'Throw away the JSON text that can\'t be applied and show the document again' },
+	{ id: 'undo-button', tooltip: 'Fix or discard the JSON that can\'t be applied before undoing' },
 ] as const
 
 const OPEN_TOOLTIP = '[data-slot="content"][data-state="delayed-open"], [data-slot="content"][data-state="instant-open"]'

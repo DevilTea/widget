@@ -34,7 +34,7 @@ describe('document repair Examples menu text', () => {
 	})
 
 	it('translates nothing the showcase or its tour does not use (no stale entries)', () => {
-		const used = new Set<string>(['Legacy document repair', 'Starting the tutorial will load the Legacy document repair teaching example and replace your unapplied changes.'])
+		const used = new Set<string>(['Legacy document repair', 'Starting the tutorial will load the Legacy document repair teaching example and discard the JSON that can\'t be applied yet.'])
 		for (const preset of repairPresets) {
 			used.add(preset.label)
 			used.add(preset.description)

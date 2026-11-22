@@ -17,7 +17,7 @@ import { chooseTutorialMenuItem, expect, expectShowcase, openAuthorJson, preview
 
 const RAIL_LABEL = 'Tutorial'
 const WELCOME_TITLE = 'Widget Lab lets you change a real app, then see where that behavior comes from.'
-const CONFIRM_TITLE = 'Starting the tutorial will load the Survey teaching example and replace your unapplied changes.'
+const CONFIRM_TITLE = 'Starting the tutorial will load the Survey teaching example and discard the JSON that can\'t be applied yet.'
 
 async function startTourFromHeader(page: Page): Promise<void> {
 	await chooseTutorialMenuItem(page)

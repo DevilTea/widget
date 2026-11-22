@@ -24,8 +24,8 @@ const reasonId = useId()
 const undoUnavailableReason = computed(() => {
 	if (store.canUndo.value)
 		return null
-	if (store.hasJsonSyntaxError.value)
-		return i18n.t('Fix or discard the JSON syntax error before undoing')
+	if (store.jsonBlocked.value)
+		return i18n.t('Fix or discard the JSON that can\'t be applied before undoing')
 	return i18n.t('Nothing to undo yet')
 })
 

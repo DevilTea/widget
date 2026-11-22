@@ -120,7 +120,7 @@ describe('app.vue narrow-viewport gate and the retired Apply shortcut', () => {
 				documentState: shallowRef({ revision: 0 }),
 				authorView: shallowRef('structure'),
 				isDirty: shallowRef(true),
-				hasJsonSyntaxError: computed(() => false),
+				jsonBlocked: computed(() => false),
 				flushJson,
 				dispose: vi.fn(),
 			} as unknown as LabStore)

@@ -211,7 +211,7 @@ export function labStatus(page: Page): Locator {
 	return page.getByTestId('lab-status')
 }
 
-export type LabStatusState = 'up-to-date' | 'restarted' | 'updating' | 'problems' | 'syntax-error' | 'preview-unavailable' | 'stale'
+export type LabStatusState = 'up-to-date' | 'restarted' | 'updating' | 'problems' | 'json-not-applied' | 'preview-unavailable' | 'stale'
 
 /** What the status chip says. "Preview restarted" is the brief state after a commit that replaced the Runtime; pass both when either may show. */
 export async function expectLabStatus(page: Page, expected: LabStatusState | readonly LabStatusState[]): Promise<void> {

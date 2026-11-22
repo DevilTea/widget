@@ -1,5 +1,5 @@
 /**
- * Vue bridge over `lab/draft-guard.ts`: the one place that decides, from `LabStore.hasJsonSyntaxError` and
+ * Vue bridge over `lab/draft-guard.ts`: the one place that decides, from `LabStore.jsonBlocked` and
  * `LabStore.hasCommittedEdits`, whether loading a preset or switching showcase must first ask the user
  * (`DraftGuardDialog.vue` renders the question, naming what would be lost). It owns no Document, draft or Runtime
  * state; it only calls the action it was handed once the user has agreed (or when nothing would be lost).
@@ -39,7 +39,7 @@ export interface DraftGuardStore {
 
 export const DraftGuardKey: InjectionKey<DraftGuardStore> = Symbol('widget-lab:draft-guard')
 
-export function createDraftGuardStore(store: Pick<LabStore, 'hasJsonSyntaxError' | 'hasCommittedEdits'>): DraftGuardStore {
+export function createDraftGuardStore(store: Pick<LabStore, 'jsonBlocked' | 'hasCommittedEdits'>): DraftGuardStore {
 	const confirmVisible = shallowRef(false)
 	const subject = shallowRef('')
 	const loss = shallowRef<ReplacementLoss>('none')
@@ -57,7 +57,7 @@ export function createDraftGuardStore(store: Pick<LabStore, 'hasJsonSyntaxError'
 		loss,
 		request: ({ subject: nextSubject, undoable, run }) => {
 			guard.request({
-				loss: replacementLoss({ jsonSyntaxError: store.hasJsonSyntaxError.value, hasCommittedEdits: store.hasCommittedEdits.value, undoable }),
+				loss: replacementLoss({ jsonBlocked: store.jsonBlocked.value, hasCommittedEdits: store.hasCommittedEdits.value, undoable }),
 				subject: nextSubject,
 				run,
 			})

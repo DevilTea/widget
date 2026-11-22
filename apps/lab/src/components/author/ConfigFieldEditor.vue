@@ -84,6 +84,8 @@ const text = ref(toText(props.value))
 const invalid = ref(false)
 /** Why the text in the box was not applied, while it is still there; `null` when nothing was refused. */
 const notApplied = ref<string | null>(null)
+/** The text that was refused, while the note about it is shown: leaving the box with that same text does not send it again. */
+let refusedText: string | null = null
 watch(() => props.value, (value, previous) => {
 	// A JSON box compares by content: an equal value that is a new object (the same config re-read) changes nothing typed.
 	if (field.value.kind === 'json' && JSON.stringify(value) === JSON.stringify(previous))
@@ -111,6 +113,7 @@ watch(() => props.resync, (resync) => {
 	const kind = field.value.kind
 	if (kind === 'string' || kind === 'number' || kind === 'json') {
 		notApplied.value = resync.message ?? i18n.t('The change was not applied.')
+		refusedText = text.value
 		return
 	}
 	controlKey.value++
@@ -175,12 +178,15 @@ const fieldEl = useTemplateRef<HTMLElement>('fieldEl')
 
 /**
  * Leaving a box commits what was typed (Lab UX phase 3). Only text the user changed is sent, so tabbing through the boxes
- * commits nothing. Moving to this field's "Use the Document value" button is not leaving it: that button is about to throw the
- * refused text away, so sending it again first would be wrong. (Its Remove button is leaving: the value is committed, then
- * removed, both in order; skipping the commit there would leave the text unsent once focus moves on from the button.)
+ * commits nothing, and text that was just refused (its "Not applied" note is shown) is not sent again by leaving: that is what
+ * makes "Use the Document value" safe even where clicking a button does not focus it (macOS Safari and Firefox leave
+ * `relatedTarget` empty). Moving to that button is not leaving either. (The Remove button is leaving: the value is committed,
+ * then removed, both in order; skipping the commit there would leave the text unsent once focus moves on from the button.)
  */
 function onBlur(event: FocusEvent): void {
 	if (props.locked === true || text.value === toText(props.value))
+		return
+	if (notApplied.value !== null && text.value === refusedText)
 		return
 	const next = event.relatedTarget
 	if (next instanceof Element && fieldEl.value?.contains(next) === true && next.closest('[data-use-document-value]') !== null)

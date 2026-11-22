@@ -206,7 +206,7 @@ const selectedFile = computed(() => entry.value?.files.find(file => file.path ==
 						v-if="appliedInstance === null || appliedInstance.status === 'not-found'"
 						class="p-[10px] text-[12px] text-lab-text-muted"
 					>
-						{{ i18n.t("This widget's declaration was not found in the applied Source — it may only exist in the unapplied draft, or the applied Blueprint changed since this focus was set.") }}
+						{{ i18n.t("This widget's declaration was not found in the applied Source — it may exist only in JSON that is not in the Document yet, or the applied Blueprint changed since this focus was set.") }}
 					</p>
 					<ImplementationSourceView
 						v-else

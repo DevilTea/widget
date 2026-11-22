@@ -278,7 +278,7 @@ test.describe('protection of JSON text that does not parse (U03)', () => {
 		await editJson(page, brokenDocument('my unfinished edit'))
 		await expect(page.locator('.view-lines'))
 			.toContainText('my unfinished edit')
-		await expectLabStatus(page, 'syntax-error')
+		await expectLabStatus(page, 'json-not-applied')
 
 		await page.getByTestId('examples-menu')
 			.click()
@@ -288,7 +288,7 @@ test.describe('protection of JSON text that does not parse (U03)', () => {
 		await expect(dialog)
 			.toBeVisible()
 		await expect(dialog)
-			.toContainText('Loading “Invalid — semantic” will discard them.')
+			.toContainText('Loading “Invalid — semantic” will discard it.')
 		// The safe choice has the initial focus.
 		await expect(page.getByTestId('draft-guard-keep'))
 			.toBeFocused()
@@ -423,7 +423,7 @@ test.describe('Undo last change (U04)', () => {
 			.focus()
 		await page.keyboard.press('Escape')
 		await undo.focus()
-		await expect(page.getByRole('tooltip', { name: 'Fix or discard the JSON syntax error before undoing' }))
+		await expect(page.getByRole('tooltip', { name: 'Fix or discard the JSON that can\'t be applied before undoing' }))
 			.toBeAttached()
 		// Activating it anyway does nothing (the button stays focusable, so the click is forced through).
 		await undo.click({ force: true })
@@ -758,7 +758,7 @@ test.describe('Problems list, jump and squiggles (U06)', () => {
 			.toContainText('SyntaxError:')
 		await expect(row)
 			.toHaveAttribute('data-problem-code', 'syntax-error')
-		await expectLabStatus(page, 'syntax-error')
+		await expectLabStatus(page, 'json-not-applied')
 		// The committed Document and the Preview are untouched by a syntax error.
 		await expectDocumentStatus(page, { valid: true })
 		await expectPreviewStatus(page, 'current')

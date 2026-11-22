@@ -240,13 +240,13 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 
 		tutorial.cancelStart()
 		expect(tutorial.confirmMessage.value)
-			.toBe('Starting the tutorial will load the Survey teaching example and replace your unapplied changes.')
+			.toBe('Starting the tutorial will load the Survey teaching example and discard the JSON that can\'t be applied yet.')
 
 		// With JSON text that does not parse as well, one message names both.
 		store.editJson('{ "unapplied": ')
 		tutorial.requestStart()
 		expect(tutorial.confirmMessage.value)
-			.toBe('Starting the tutorial opens its teaching example in another showcase. The JSON editor\'s unapplied changes and your edits to this document will be discarded, and Undo cannot bring them back.')
+			.toBe('Starting the tutorial opens its teaching example in another showcase. The JSON that can\'t be applied yet and your edits to this document will be discarded, and Undo cannot bring them back.')
 		tutorial.cancelStart()
 		store.dispose()
 	})

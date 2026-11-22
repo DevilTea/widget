@@ -144,7 +144,7 @@ test('text that does not parse commits nothing: a syntax marker, the chip, Struc
 		.toHaveAttribute('data-state', 'syntax-error')
 	await expect(page.getByTestId('json-commit-state'))
 		.toContainText('JSON has a syntax error — not applied.')
-	await expectLabStatus(page, 'syntax-error')
+	await expectLabStatus(page, 'json-not-applied')
 	await expect(page.getByTestId('lab-status'))
 		.toHaveText('JSON syntax error — not applied')
 	// Well past the pause, nothing was committed: the Document and the Preview are as they were.
@@ -172,6 +172,42 @@ test('text that does not parse commits nothing: a syntax marker, the chip, Struc
 		.toHaveCount(0)
 	await expect(page.getByTestId('discard-json-button'))
 		.toHaveCount(0)
+	await expectLabStatus(page, 'up-to-date')
+})
+
+// Phase 3A review: JSON that parses but that Core refuses (here a number outside the JSON domain) used to sit uncommitted
+// under an "Up to date" chip, with nothing to discard. It is blocked as visibly as a syntax error.
+test('JSON that parses but cannot be applied (1e400) is named in the chip, listed, locks Structure, and Discard clears it', async ({ page }) => {
+	await openAuthorJson(page)
+	await editJson(page, defaultSandboxPreset.sourceText.replace('"Widget Lab sandbox"', '1e400'))
+	await expectLabStatus(page, 'json-not-applied')
+	await expect(page.getByTestId('lab-status'))
+		.toHaveText('JSON can\'t be applied — non-finite-number')
+	await expect(page.getByTestId('json-commit-state'))
+		.toHaveAttribute('data-state', 'commit-refused')
+	const row = page.getByTestId('author-problems')
+		.getByTestId('problem-row')
+		.first()
+	await expect(row)
+		.toHaveAttribute('data-problem-code', 'json-incompatible-value')
+	await expect(row)
+		.toContainText('non-finite-number')
+	await expect(page.getByTestId('undo-button'))
+		.toHaveAttribute('aria-disabled', 'true')
+	expect(await documentSourceText(page))
+		.toBe(defaultSandboxPreset.sourceText)
+
+	await page.getByTestId('author-view-structure')
+		.click()
+	await page.getByRole('button', { name: 'title : Text' })
+		.click()
+	await expect(page.getByTestId('structure-fields'))
+		.toHaveAttribute('data-locked', 'true')
+
+	await page.getByTestId('discard-json-button')
+		.click()
+	await expect(page.getByTestId('structure-fields'))
+		.toHaveAttribute('data-locked', 'false')
 	await expectLabStatus(page, 'up-to-date')
 })
 

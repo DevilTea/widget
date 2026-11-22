@@ -23,7 +23,7 @@ export interface TourEntry {
 	/** The preset a start or restart reloads: the showcase's default. */
 	readonly defaultPresetId: string
 	/**
-	 * Shown when starting would replace an unapplied draft. English message id: the dialog translates it, and a
+	 * Shown when starting would replace JSON text that cannot be applied yet. English message id: the dialog translates it, and a
 	 * tour with its own wording needs its own entry in `i18n/`.
 	 */
 	readonly startConfirmMessage: string
@@ -37,37 +37,37 @@ export const tours: readonly TourEntry[] = [
 		id: SURVEY_TOUR_ID,
 		script: surveyTourScript,
 		defaultPresetId: 'survey-default',
-		startConfirmMessage: 'Starting the tutorial will load the Survey teaching example and replace your unapplied changes.',
+		startConfirmMessage: 'Starting the tutorial will load the Survey teaching example and discard the JSON that can\'t be applied yet.',
 	},
 	{
 		id: TRIP_BUDGET_TOUR_ID,
 		script: tripBudgetTourScript,
 		defaultPresetId: 'trip-default',
-		startConfirmMessage: 'Starting the tutorial will load the Trip budget teaching example and replace your unapplied changes.',
+		startConfirmMessage: 'Starting the tutorial will load the Trip budget teaching example and discard the JSON that can\'t be applied yet.',
 	},
 	{
 		id: QUOTE_RULES_TOUR_ID,
 		script: quoteRulesTourScript,
 		defaultPresetId: 'quote-default',
-		startConfirmMessage: 'Starting the tutorial will load the Quote rules teaching example and replace your unapplied changes.',
+		startConfirmMessage: 'Starting the tutorial will load the Quote rules teaching example and discard the JSON that can\'t be applied yet.',
 	},
 	{
 		id: ONBOARDING_TOUR_ID,
 		script: onboardingTourScript,
 		defaultPresetId: 'onboarding-default',
-		startConfirmMessage: 'Starting the tutorial will load the Onboarding teaching example and replace your unapplied changes.',
+		startConfirmMessage: 'Starting the tutorial will load the Onboarding teaching example and discard the JSON that can\'t be applied yet.',
 	},
 	{
 		id: DOCUMENT_REPAIR_TOUR_ID,
 		script: documentRepairTourScript,
 		defaultPresetId: 'repair-default',
-		startConfirmMessage: 'Starting the tutorial will load the Legacy document repair teaching example and replace your unapplied changes.',
+		startConfirmMessage: 'Starting the tutorial will load the Legacy document repair teaching example and discard the JSON that can\'t be applied yet.',
 	},
 	{
 		id: RENDERER_PACKS_TOUR_ID,
 		script: rendererPacksTourScript,
 		defaultPresetId: 'packs-default',
-		startConfirmMessage: 'Starting the tutorial will load the Renderer packs teaching example and replace your unapplied changes.',
+		startConfirmMessage: 'Starting the tutorial will load the Renderer packs teaching example and discard the JSON that can\'t be applied yet.',
 	},
 ]
 

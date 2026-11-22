@@ -18,7 +18,7 @@ export const zhTWDocumentRepairMessages: Readonly<Record<string, string>> = {
 	'The repair desk itself is invalid, in its own document: an app version that is not a version, a draft without a stored document, a draft saved with an unknown format version and a draft without a title. Each is a located diagnostic.': '修復桌本身就是無效的，問題出在它自己的文件裡：不是版本號的應用程式版本、沒有儲存文件的草稿、以未知格式版本儲存的草稿，以及沒有標題的草稿。每一個都是有位置的診斷。',
 
 	// Tutorial confirmation
-	'Starting the tutorial will load the Legacy document repair teaching example and replace your unapplied changes.': '開始教學會載入舊版文件修復教學範例，並取代你尚未套用的變更。',
+	'Starting the tutorial will load the Legacy document repair teaching example and discard the JSON that can\'t be applied yet.': '開始教學會載入舊版文件修復教學範例，並捨棄目前還無法套用的 JSON。',
 
 	// Tutorial script
 	'This is the Legacy document repair showcase': '這是舊版文件修復範例',

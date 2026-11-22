@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Confirmation shown when loading a preset or switching showcase would replace an unapplied editor draft
+ * Confirmation shown when loading a preset or switching showcase would replace JSON text that cannot be applied yet
  * (audit U03), or when a showcase switch would drop committed edits that Undo cannot restore (Lab UX phase 2). Same native-`<dialog>` modal pattern as the tutorial's dirty-draft confirmation
  * (`tutorial/TutorialConfirmDialog.vue`, `useModalDialog`): the store's `confirmVisible` is the single source
  * of truth, Escape/backdrop-less close means "keep editing", and focus returns to the control that asked.
@@ -18,13 +18,13 @@ const i18n = useLabI18n()
 const supportedViewport = useSupportedWorkbenchViewport()
 
 /** One dialog names everything the action discards (Lab UX phase 2): the draft, committed edits Undo cannot restore, or both. */
-const title = computed(() => i18n.t(guard.loss.value === 'draft' ? 'Discard unapplied changes?' : guard.loss.value === 'edits' ? 'Discard your edits?' : 'Discard your changes?'))
+const title = computed(() => i18n.t(guard.loss.value === 'draft' ? 'Discard the JSON that can\'t be applied?' : guard.loss.value === 'edits' ? 'Discard your edits?' : 'Discard your changes?'))
 const body = computed(() => {
 	const subject = i18n.t(guard.subject.value)
 	switch (guard.loss.value) {
 		case 'edits': return i18n.t('You edited this document. Opening “{subject}” replaces it, and Undo cannot bring your edits back.', { subject })
-		case 'draft-and-edits': return i18n.t('The JSON editor has changes that were not applied, and you edited this document. Opening “{subject}” discards both, and Undo cannot bring them back.', { subject })
-		default: return i18n.t('The JSON editor has changes that were not applied. Loading “{subject}” will discard them.', { subject })
+		case 'draft-and-edits': return i18n.t('The JSON view has text that can\'t be applied yet, and you edited this document. Opening “{subject}” discards both, and Undo cannot bring them back.', { subject })
+		default: return i18n.t('The JSON view has text that can\'t be applied yet. Loading “{subject}” will discard it.', { subject })
 	}
 })
 

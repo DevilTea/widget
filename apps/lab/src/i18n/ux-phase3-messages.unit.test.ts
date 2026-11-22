@@ -80,6 +80,11 @@ describe('lab UX phase 3 wording', () => {
 			'The JSON view has unapplied changes. Apply or discard the JSON draft to edit here.',
 			'Expert JSON view: edit the draft, then use Apply. JSON is parsed into one root SourcePatch.',
 			'Format the JSON draft',
+			// Phase 3A review: what is protected now is JSON that can't be applied, not an "unapplied draft".
+			'Discard unapplied changes?',
+			'The JSON editor has changes that were not applied. Loading “{subject}” will discard them.',
+			'JSON draft parse error observed',
+			'Fix or discard the JSON syntax error before undoing',
 		]
 		const offenders = sourceFiles(SRC)
 			.flatMap(path => literalsPassedToT(readFileSync(path, 'utf8'))
@@ -92,6 +97,11 @@ describe('lab UX phase 3 wording', () => {
 			.filter(path => readFileSync(path, 'utf8')
 				.includes('press Apply'))
 		expect(pressApply)
+			.toEqual([])
+		// Nor does any message the Lab can show (the translation tables list them all) still speak of unapplied changes.
+		const unapplied = sourceFiles(join(SRC, 'i18n'))
+			.filter(path => /unapplied/i.test(readFileSync(path, 'utf8')))
+		expect(unapplied)
 			.toEqual([])
 	})
 })

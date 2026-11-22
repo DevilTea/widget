@@ -316,7 +316,7 @@ test.describe('the Document stays the authority', () => {
 
 		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.editJson('{ "unapplied": '))
 		await expect(notice)
-			.toHaveText(/The JSON has a syntax error, so nothing from it is applied\. Fix it in the JSON view, or use Discard JSON changes, to edit here\./)
+			.toHaveText(/The JSON can.t be applied, so nothing from it is in the document\. Fix it in the JSON view, or use Discard JSON changes, to edit here\./)
 		await expect(notice)
 			.toHaveAttribute('role', 'note')
 		await expect(editor.getByTestId('structure-fields'))

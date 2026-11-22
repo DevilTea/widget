@@ -229,7 +229,7 @@ function runConflictDemo(): void {
 							{{ i18n.t(event.origin === 'json' ? 'JSON commit observed' : event.origin === 'undo' ? 'Undo commit observed' : 'Structure commit observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }} · {{ i18n.t(event.changed ? 'changed' : 'no-op') }}
 						</template>
 						<template v-else-if="event.kind === 'parse-error'">
-							{{ i18n.t('JSON draft parse error observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }}
+							{{ i18n.t('JSON parse error observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }}
 						</template>
 						<template v-else-if="event.kind === 'patch-error'">
 							{{ i18n.t('SourcePatch failure observed') }} · {{ i18n.t('Document r{revision}', { revision: event.revision }) }} · <code>{{ event.code }}</code><template v-if="event.reason !== undefined">

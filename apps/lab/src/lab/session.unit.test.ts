@@ -70,6 +70,55 @@ describe('labSession', () => {
 			.toBe(beforePreview)
 	})
 
+	// Phase 3A review: JSON that parses but that Core refuses used to look like a pending commit (and was never retried or
+	// discardable). It is now a block of its own, as visible as a syntax error, until the text changes.
+	describe('jSON text that parses but cannot be applied (jsonBlock)', () => {
+		it('blocks a number outside the JSON domain (1e400) until the text changes', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			const infinite = validSource.replace('"Widget Lab sandbox"', '1e400')
+			session.setDraftSourceText(infinite)
+			expect(session.jsonBlock)
+				.toBeNull()
+			expect(await session.commitJson())
+				.toMatchObject({ status: 'patch-error', failure: { code: 'json-incompatible-value', reason: 'non-finite-number' } })
+			expect(session.jsonBlock)
+				.toMatchObject({ kind: 'commit', sourceText: infinite, failure: { reason: 'non-finite-number', path: ['slots', 'items', 0, 'config', 'text'] } })
+			expect(session.parseError)
+				.toBeNull()
+			expect(session.documentState.revision)
+				.toBe(0)
+
+			session.setDraftSourceText(validSource.replace('"Widget Lab sandbox"', '1'))
+			expect(session.jsonBlock)
+				.toBeNull()
+			// Back to the refused text: it is tried again, and blocked again.
+			session.setDraftSourceText(infinite)
+			expect(session.jsonBlock)
+				.toBeNull()
+			await session.commitJson()
+			expect(session.jsonBlock?.kind)
+				.toBe('commit')
+			session.revert()
+			expect(session.jsonBlock)
+				.toBeNull()
+		})
+
+		it('blocks a document nested deeper than Core accepts, and reports a syntax error as a block too', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			let deep: unknown = 0
+			for (let level = 0; level < 300; level++)
+				deep = [deep]
+			session.setDraftSourceText(JSON.stringify(deep))
+			await session.commitJson()
+			expect(session.jsonBlock)
+				.toMatchObject({ kind: 'commit', failure: { code: 'json-incompatible-value', reason: 'max-depth-exceeded' } })
+
+			session.setDraftSourceText('{ nope')
+			expect(session.jsonBlock)
+				.toMatchObject({ kind: 'syntax', error: { sourceText: '{ nope' } })
+		})
+	})
+
 	it('reports a too-deeply-nested JSON draft as a json-incompatible-value patch failure with operand path and reason', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		let deep: unknown = 0
@@ -316,6 +365,31 @@ describe('labSession', () => {
 				.toBe(0)
 			expect(session.documentState.revision)
 				.toBe(2)
+		})
+
+		it('a burst that drops its entry at the Undo limit gives back the history its push evicted', async () => {
+			const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+			for (let index = 0; index < LAB_UNDO_LIMIT; index++) {
+				session.setDraftSourceText(textSource(`n${index}`))
+				await session.commitJson()
+			}
+			expect(session.undoDepth)
+				.toBe(LAB_UNDO_LIMIT)
+			const start = session.documentState.sourceText
+			// The burst's first commit pushes one more entry and evicts the oldest (the initial source)...
+			session.setDraftSourceText(textSource('typed'))
+			await session.commitJson({ coalesceKey: 9 })
+			expect(session.undoDepth)
+				.toBe(LAB_UNDO_LIMIT)
+			// ...and landing back on where it started drops that entry and restores the evicted one.
+			session.setDraftSourceText(start)
+			await session.commitJson({ coalesceKey: 9 })
+			expect(session.undoDepth)
+				.toBe(LAB_UNDO_LIMIT)
+			for (let index = 0; index < LAB_UNDO_LIMIT; index++)
+				await session.undo()
+			expect(session.documentState.sourceText)
+				.toBe(validSource)
 		})
 
 		it('coalesces invalid commits too, and keeps the last valid Preview through them', async () => {

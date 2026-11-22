@@ -151,6 +151,26 @@ describe('configFieldEditor commits on Enter or blur, and Esc restores (Lab UX p
 			.toBeUndefined()
 	})
 
+	// Phase 3A review: macOS Safari and Firefox do not focus a clicked button, so `relatedTarget` is empty on the way to "Use the
+	// Document value". The refused text must not be sent again by that blur anyway; once it is edited, leaving commits it.
+	it('does not resend a refused text on blur, even without a relatedTarget, but commits it once edited', async () => {
+		const editor = mountEditor({}, { title: 'T', note: 'N' }, schema)
+		await box(editor)
+			.setValue('refused')
+		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'nope' } })
+		await box(editor)
+			.trigger('blur')
+		expect(editor.emitted('edit'))
+			.toBeUndefined()
+
+		await box(editor)
+			.setValue('refused, then fixed')
+		await box(editor)
+			.trigger('blur')
+		expect(editor.emitted('edit'))
+			.toEqual([[['title'], { op: 'replace', value: 'refused, then fixed' }]])
+	})
+
 	it('commits when focus moves to the field\'s own Remove button: the text is not left unsent once focus moves on', async () => {
 		const editor = mountEditor({}, { title: 'T', note: 'N' }, schema)
 		await box(editor)

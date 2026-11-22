@@ -24,7 +24,7 @@ const busy = ref(false)
  * The JSON view's text does not parse (Lab UX phase 3: the only "draft"): a Structure commit would be refused (`draft-dirty`),
  * since it would replace that text, so the editor says so up front and sends nothing until the JSON parses or is discarded.
  */
-const draftLocked = computed(() => store.hasJsonSyntaxError.value)
+const draftLocked = computed(() => store.jsonBlocked.value)
 const outcomeMessage = ref<string | null>(null)
 /** The Document revision a successful command produced (`data-revision` of the outcome line, for specs). */
 const outcomeRevision = ref<number | null>(null)
@@ -215,7 +215,7 @@ async function runQueuedEdits(): Promise<void> {
 				continue
 			runningSignature = next.signature
 			try {
-				await runEdit(next.path, next.edit)
+				await runEdit(next.path, next.edit, next.widget)
 			}
 			finally {
 				runningSignature = null
@@ -227,15 +227,19 @@ async function runQueuedEdits(): Promise<void> {
 	}
 }
 
-async function runEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
-	const nodeId = selectedNodeId.value
-	if (nodeId === null || selectedNode.value?.resolved !== true)
+async function runEdit(path: ConfigPath, edit: ConfigEdit, widget: string): Promise<void> {
+	if (selectedNodeId.value === null || selectedNode.value?.resolved !== true)
 		return
 	outcomeMessage.value = null
 	outcomeRevision.value = null
 	// Why the edit was not applied, for the control at its path: the reason alone, without the outcome line's own preamble.
 	let refusal: string | null = null
-	const outcome = await store.author(editConfig(store.documentState.value.revision, nodeId, path, edit))
+	// Built when the command starts: it may wait behind a running command (a blur commit, an Undo), and must then take the
+	// revision and the node of that moment. The widget must still be the one the edit was made on.
+	const outcome = await store.author(() => {
+		const nodeId = selectedNodeId.value
+		return nodeId === null || widgetKey() !== widget ? null : editConfig(store.documentState.value.revision, nodeId, path, edit)
+	})
 	const applied = outcome.status === 'applied'
 	if (outcome.status === 'applied') {
 		// Plain language: the revision is a developer detail (the header's details popover), kept here only as a
@@ -288,7 +292,7 @@ async function runEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 				role="note"
 				class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-(--lab-radius) border border-(--lab-color-warning) bg-(--lab-color-surface-alt) px-2 py-1.5 text-xs text-(--lab-color-text)"
 			>
-				<span class="min-w-0 flex-1">{{ i18n.t('The JSON has a syntax error, so nothing from it is applied. Fix it in the JSON view, or use Discard JSON changes, to edit here.') }}</span>
+				<span class="min-w-0 flex-1">{{ i18n.t('The JSON can\'t be applied, so nothing from it is in the document. Fix it in the JSON view, or use Discard JSON changes, to edit here.') }}</span>
 				<button
 					type="button"
 					data-testid="structure-open-json"

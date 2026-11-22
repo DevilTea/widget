@@ -108,6 +108,8 @@ export interface LabStore {
 	readonly previewHost: PreviewHostCoordinator
 	readonly draftSourceText: Readonly<Ref<string>>
 	readonly parseError: Readonly<Ref<LabSession['parseError']>>
+	/** Why the JSON view's text cannot be applied (a syntax error, or a commit Core refused for this text), or `null`. */
+	readonly jsonBlock: Readonly<Ref<LabSession['jsonBlock']>>
 	/** Direct reactive view of Core's committed authored-state snapshot. */
 	readonly documentSnapshot: Readonly<Ref<WidgetDocumentSnapshot>>
 	/** Current applied authored representation + Document revision/Blueprint. */
@@ -133,7 +135,7 @@ export interface LabStore {
 	 * The JSON view's text does not parse (Lab UX phase 3: the only "draft" left). Nothing is committed from it; Structure is
 	 * inert and Undo unavailable until it parses again or is discarded (`discardJsonChanges()`).
 	 */
-	readonly hasJsonSyntaxError: Readonly<Ref<boolean>>
+	readonly jsonBlocked: Readonly<Ref<boolean>>
 	/**
 	 * "Undo last change" is available: something can be undone (a committed source, or JSON text that parses and is committed
 	 * first) and the JSON text parses (Undo never discards typing). A running command does not make it unavailable: Undo
@@ -158,7 +160,7 @@ export interface LabStore {
 	/**
 	 * The document differs from what was loaded: its source text equals no preset of the open showcase (`lab/draft-guard.ts`'s
 	 * `hasCommittedEdits()`). The source is the committed one, or the JSON text when it parses but its commit is still pending
-	 * (it is committed before any replacement runs); text that does not parse is `hasJsonSyntaxError`. A showcase switch asks
+	 * (it is committed before any replacement runs); text that does not parse is `jsonBlocked`. A showcase switch asks
 	 * before it drops such a document; a preset load (an ordinary commit) offers Undo afterwards through `replacedNotice`.
 	 */
 	readonly hasCommittedEdits: Readonly<Ref<boolean>>
@@ -214,11 +216,13 @@ export interface LabStore {
 	collapseAllGraphClusters: () => void
 	/**
 	 * The JSON view's text changed (typing). Text that parses is committed after `JSON_COMMIT_DELAY_MS` without further edits;
-	 * text that does not parse is never committed (`hasJsonSyntaxError`).
+	 * text that does not parse is never committed (`jsonBlocked`).
 	 */
 	editJson: (text: string) => void
 	/** The JSON editor got focus: a new burst of JSON commits starts, which shares one Undo entry. */
 	beginJsonEdit: () => void
+	/** The JSON editor has keyboard focus: an editing session (one Undo burst) is open. */
+	readonly jsonEditorFocused: Readonly<Ref<boolean>>
 	/** The JSON editor lost focus: commits pending text at once and ends the burst. */
 	endJsonEdit: () => Promise<ApplyOutcome | null>
 	/**
@@ -228,7 +232,11 @@ export interface LabStore {
 	flushJson: () => Promise<ApplyOutcome | null>
 	/** Discards the JSON text (the committed Document is untouched): the header's "Discard JSON changes". */
 	discardJsonChanges: () => void
-	author: (command: AuthorCommand) => Promise<AuthorOutcome>
+	/**
+	 * Runs a Structure command. Pass a builder to have the command built when it starts (it may wait behind a running command, so
+	 * it must read the revision and the node then); `null` from the builder means its widget is gone (`stale-selection`).
+	 */
+	author: (command: AuthorCommand | (() => AuthorCommand | null)) => Promise<AuthorOutcome>
 	/** Formats the JSON text and commits it (a structural no-op when nothing else changed). Nothing happens while it does not parse. */
 	format: () => Promise<ApplyOutcome | null>
 	/**
@@ -350,6 +358,10 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	let jsonEditCount = 0
 	/** The coalesce key of the current focus session of the JSON editor; `null` outside one (seam edits, Format, a preset). */
 	let jsonEditKey: number | null = null
+	/** The JSON editor has keyboard focus (an editing session is open); the status announcement waits while it does. */
+	const jsonEditorFocused = shallowRef(false)
+	/** The Undo that was asked for and has not finished yet; further requests until it does are the same Undo. */
+	let undoInFlight: Promise<UndoOutcome> | null = null
 
 	function cancelJsonCommit(): void {
 		if (jsonCommitTimer !== null) {
@@ -358,8 +370,9 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		}
 	}
 
+	/** JSON text that differs from the Document and can still be tried: not blocked (`LabSession.jsonBlock`). */
 	function hasPendingJson(): boolean {
-		return session.isDirty && session.parseError === null
+		return session.isDirty && session.jsonBlock === null
 	}
 
 	/** Commits the JSON text if it parses and differs from the Document; within the burst `key`. Call only inside a command. */
@@ -476,14 +489,24 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		void sessionTick.value
 		return session.isDirty
 	})
-	const hasJsonSyntaxError = computed(() => parseError.value !== null)
+	const jsonBlock = computed(() => {
+		void sessionTick.value
+		return session.jsonBlock
+	})
+	const jsonBlocked = computed(() => jsonBlock.value !== null)
 	const undoDepth = computed(() => {
 		void sessionTick.value
 		return session.undoDepth
 	})
-	const canUndo = computed(() => !hasJsonSyntaxError.value && (undoDepth.value > 0 || isDirty.value))
+	const canUndo = computed(() => !jsonBlocked.value && (undoDepth.value > 0 || isDirty.value))
 	const previewRestarted = shallowRef(false)
 	let previewRestartedTimer: ReturnType<typeof setTimeout> | null = null
+	function clearPreviewRestarted(): void {
+		if (previewRestartedTimer !== null)
+			clearTimeout(previewRestartedTimer)
+		previewRestartedTimer = null
+		previewRestarted.value = false
+	}
 	// What the watcher below saw last: a new Preview snapshot of the SAME session is a commit (or a retry) that replaced the
 	// Runtime; the first snapshot of a new session (a showcase switch) is not.
 	let previewSeen: { readonly session: LabSession, readonly preview: LabSession['preview'] } | null = null
@@ -526,7 +549,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		return deriveLabStatus({
 			blueprintStatus: blueprint.status,
 			diagnosticCount: blueprint.diagnostics.length,
-			hasParseError: session.parseError !== null,
+			jsonBlock: session.jsonBlock,
 			revisions: getLabRevisionStatus(session.documentState.revision, session.preview?.revision ?? null),
 			previewFailed: previewHost.error.value !== null && !previewHost.runtimeSurvives.value,
 			isApplying: session.isApplying,
@@ -539,7 +562,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	// collection runs again; the inspection is its own computed and follows commits only.
 	const committedBlueprint = computed(() => documentState.value.blueprint)
 	const committedInspection = computed(() => inspectBlueprint(committedBlueprint.value))
-	const problems = computed(() => collectProblems(committedBlueprint.value, committedInspection.value, parseError.value))
+	const problems = computed(() => collectProblems(committedBlueprint.value, committedInspection.value, jsonBlock.value))
 	const example = computed(() => {
 		void sessionTick.value
 		return deriveExampleState({
@@ -551,7 +574,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	})
 	/** The source a replacement would drop: the JSON text when it parses (it is committed first), else the committed one. */
 	function effectiveSourceText(): string {
-		return session.isDirty && session.parseError === null ? session.draftSourceText : session.documentState.sourceText
+		return hasPendingJson() ? session.draftSourceText : session.documentState.sourceText
 	}
 	const hasCommittedEditsRef = computed(() => {
 		void sessionTick.value
@@ -617,8 +640,11 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		unsubscribeDocument()
 		unsubscribeFocus()
 		focusStore.dispose()
-		// Pending JSON text belongs to the old session (the switch asked first if it was an edit); no burst carries over.
+		// Pending JSON text belongs to the old session (the switch asked first if it was an edit); no burst carries over, and
+		// "Preview restarted" of the old session does not carry over either.
 		cancelJsonCommit()
+		jsonEditKey = null
+		clearPreviewRestarted()
 
 		// 2. Switch authored showcase context to a fresh revision-0 Document. No parent Runtime is created.
 		currentShowcase = target
@@ -668,6 +694,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		previewHost,
 		draftSourceText,
 		parseError,
+		jsonBlock,
 		documentSnapshot,
 		documentState,
 		preview,
@@ -679,7 +706,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		documentTrace,
 		isApplying,
 		isDirty,
-		hasJsonSyntaxError,
+		jsonBlocked,
 		canUndo,
 		undoDepth,
 		previewRestarted,
@@ -712,15 +739,20 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			session.setDraftSourceText(text)
 			scheduleJsonCommit()
 		},
+		// A focus that comes back to an editing session that never ended (the editor stayed focused while the window or tab was
+		// away: `use-monaco-editor.ts` ignores that blur) continues the session, so alt-tab keeps one Undo entry.
 		beginJsonEdit: () => {
-			jsonEditKey = ++jsonEditCount
+			jsonEditKey ??= ++jsonEditCount
+			jsonEditorFocused.value = true
 		},
 		endJsonEdit: () => {
 			// `flushJson()` reads the burst's key synchronously, so the blur commit still belongs to the burst it ends.
 			const outcome = flushJson()
 			jsonEditKey = null
+			jsonEditorFocused.value = false
 			return outcome
 		},
+		jsonEditorFocused,
 		flushJson,
 		discardJsonChanges: () => {
 			cancelJsonCommit()
@@ -730,7 +762,12 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		// the session's own concurrency guard fire in this turn, as the Apply lifecycle of diagnostic #13 comment 5289958311
 		// requires), waits for a running command otherwise, and is refused while a showcase switch occupies the lifecycle
 		// boundary (PR #19 review 4940839975). `enqueue()` stays the mutual-exclusion barrier against a concurrent switch.
-		author: command => runCommand(() => session.author(command), { status: 'skipped-concurrent' }),
+		// A command builder runs when the command starts, so a command that waited (behind a blur commit, an Undo) is built against
+		// the revision current then, not the one it was asked against (that would be `stale-selection`).
+		author: command => runCommand(async () => {
+			const built = typeof command === 'function' ? command() : command
+			return built === null ? { status: 'unsupported', reason: 'stale-selection' } : session.author(built)
+		}, { status: 'skipped-concurrent' }),
 		format: () => {
 			cancelJsonCommit()
 			session.format()
@@ -739,17 +776,27 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		},
 		retryPreview: () => enqueue(() => session.retryPreview()),
 		undo: () => {
+			// A request while an Undo is already on its way (a double-click, or Undo pressed again before the Preview caught up) is
+			// that same Undo: one step. Once it has finished, the next request undoes the next step.
+			if (undoInFlight !== null)
+				return undoInFlight
 			cancelJsonCommit()
-			// Undo would replace the text, and text that does not parse was never committed: nothing could bring it back.
-			if (session.parseError !== null)
+			// Undo would replace the text, and text that cannot be applied was never committed: nothing could bring it back.
+			if (session.jsonBlock !== null)
 				return Promise.resolve({ status: 'draft-dirty' })
 			const key = jsonEditKey
-			return runCommand(async () => {
+			const outcome = runCommand(async () => {
 				// Pending text is committed first, within its burst, so this Undo takes the whole burst back.
 				if (hasPendingJson())
 					await session.commitJson({ coalesceKey: key })
 				return session.undo()
 			}, { status: 'skipped-concurrent' })
+			const settled = outcome.finally(() => {
+				if (undoInFlight === settled)
+					undoInFlight = null
+			})
+			undoInFlight = settled
+			return settled
 		},
 		// Stays in the open Author view (Lab UX phase 2): Structure shows the problems at their fields and JSON in its list; the
 		// Catalog shows none, so it opens Structure. The view that is mounted consumes `problemsFocusPending`.

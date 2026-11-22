@@ -41,6 +41,7 @@ import { useLabStore } from '../composables/use-lab-store'
 import { useLabTheme } from '../composables/use-lab-theme'
 import { useTutorialStore } from '../composables/use-tutorial'
 import { useWorkbenchLayout } from '../composables/use-workbench-layout'
+import { announcementDelay } from '../lab/status'
 import { getShowcase } from '../showcases/registry'
 import StatusDetails from './StatusDetails.vue'
 
@@ -165,7 +166,9 @@ const chip = computed(() => store.status.value.chip)
 const chipLabel = computed(() => {
 	const value = chip.value
 	switch (value.kind) {
-		case 'syntax-error': return i18n.t('JSON syntax error — not applied')
+		case 'json-not-applied': return value.reason === 'syntax'
+			? i18n.t('JSON syntax error — not applied')
+			: i18n.t('JSON can\'t be applied — {reason}', { reason: value.detail })
 		case 'problems':
 			if (value.previewShown)
 				return i18n.t(value.count === 1 ? '{count} problem · Preview shows the last working version' : '{count} problems · Preview shows the last working version', { count: value.count })
@@ -179,7 +182,7 @@ const chipLabel = computed(() => {
 })
 const chipColor = computed(() => {
 	switch (chip.value.kind) {
-		case 'syntax-error': return 'error' as const
+		case 'json-not-applied': return 'error' as const
 		case 'problems': return 'error' as const
 		case 'preview-unavailable': return 'warning' as const
 		case 'stale': return 'warning' as const
@@ -189,7 +192,7 @@ const chipColor = computed(() => {
 })
 const chipIcon = computed(() => {
 	switch (chip.value.kind) {
-		case 'syntax-error': return 'i-lucide-braces'
+		case 'json-not-applied': return 'i-lucide-braces'
 		case 'problems': return 'i-lucide-circle-alert'
 		case 'preview-unavailable': return 'i-lucide-circle-x'
 		case 'updating': return 'i-lucide-loader-circle'
@@ -199,7 +202,7 @@ const chipIcon = computed(() => {
 	}
 })
 /** With problems or a syntax error the chip is a button that shows them in the current view; its name says so. */
-const chipIsButton = computed(() => chip.value.kind === 'problems' || chip.value.kind === 'syntax-error')
+const chipIsButton = computed(() => chip.value.kind === 'problems' || chip.value.kind === 'json-not-applied')
 /** The committed Document's problem count (`data-problem-count`, also while a syntax error is what the chip says). */
 const problemCount = computed(() => {
 	const validity = store.status.value.validity
@@ -207,21 +210,23 @@ const problemCount = computed(() => {
 })
 const showProblemsLabel = computed(() => i18n.t('{problems}: show them', { problems: chipLabel.value }))
 
-/**
- * What the polite live region announces: the chip's text once it has held for a moment, so typing in the JSON view (whose text
- * often stops parsing for a keystroke or two) does not announce every flip. "Up to date" is not announced; it is the quiet
- * state after the others.
- */
-const ANNOUNCE_AFTER_MS = 1000
+/** What the polite live region announces, and when: `announcementDelay()` (`lab/status.ts`) decides. */
 const announcement = shallowRef('')
 let announceTimer: ReturnType<typeof setTimeout> | null = null
-watch(chipLabel, (label) => {
+watch([chipLabel, () => store.draftSourceText.value, () => store.jsonEditorFocused.value], () => {
 	if (announceTimer !== null)
 		clearTimeout(announceTimer)
+	announceTimer = null
+	const delay = announcementDelay(chip.value, store.jsonEditorFocused.value)
+	if (delay === null) {
+		announcement.value = ''
+		return
+	}
+	const label = chipLabel.value
 	announceTimer = setTimeout(() => {
 		announceTimer = null
-		announcement.value = chip.value.kind === 'up-to-date' ? '' : label
-	}, ANNOUNCE_AFTER_MS)
+		announcement.value = label
+	}, delay)
 })
 onBeforeUnmount(() => {
 	if (announceTimer !== null)
@@ -239,13 +244,13 @@ function onShowProblems(): void {
 const undoTooltip = computed(() => {
 	if (store.canUndo.value)
 		return i18n.t('Undo last change: restore the previous version as a new revision')
-	if (store.hasJsonSyntaxError.value)
-		return i18n.t('Fix or discard the JSON syntax error before undoing')
+	if (store.jsonBlocked.value)
+		return i18n.t('Fix or discard the JSON that can\'t be applied before undoing')
 	return i18n.t('Nothing to undo yet')
 })
 
 function onDiscardJson(): void {
-	if (store.hasJsonSyntaxError.value)
+	if (store.jsonBlocked.value)
 		store.discardJsonChanges()
 }
 
@@ -455,8 +460,8 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 
 		<UFieldGroup size="sm">
 			<UTooltip
-				v-if="store.hasJsonSyntaxError.value"
-				:text="i18n.t('Throw away the JSON text that does not parse and show the document again')"
+				v-if="store.jsonBlocked.value"
+				:text="i18n.t('Throw away the JSON text that can\'t be applied and show the document again')"
 			>
 				<UButton
 					data-testid="discard-json-button"
