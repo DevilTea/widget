@@ -119,6 +119,91 @@ describe('the generated config schemas declare exactly the keys the config check
 	})
 })
 
+describe('the generated config schemas require what the checkers require, close every object and describe every property', () => {
+	const required: Record<typeof GENERATED[number], Record<string, readonly string[]>> = {
+		'survey': { Survey: ['title', 'languages'], SingleChoice: ['label', 'options'], MultipleChoice: ['label', 'options'], Numeric: ['label'], ShortAnswer: ['label'] },
+		'trip-budget': { Trip: ['title'], Currency: ['base', 'rates'], Person: ['name'], Expense: ['title', 'amount', 'currency', 'paidBy', 'split'] },
+		'onboarding': { Onboarding: ['title'], AccountStep: ['title'], InterestsStep: ['title', 'options'], SafetyStep: ['title', 'rules'], InductionStep: ['title', 'days', 'times'] },
+		'document-repair': { RepairDesk: ['appVersion'], SavedDraft: ['title', 'savedWith', 'source'] },
+		'renderer-packs': { SettingsPage: ['title'], Appearance: [], Notifier: [], Section: ['title'], TextField: ['label', 'maxLength', 'appearance'], Toggle: ['label', 'appearance'], Choice: ['label', 'appearance', 'options'], DangerAction: ['label', 'confirmText', 'message', 'notifier', 'appearance'] },
+	}
+
+	it.each(GENERATED)('%s: each config requires exactly the keys its checker requires', (id) => {
+		expect(Object.keys(required[id]))
+			.toEqual(Object.keys(getShowcase(id)!.configSchemas))
+		for (const [type, keys] of Object.entries(required[id])) {
+			const schema = schemaOf(id, type)
+			expect([...(resolved(schema, schema).required as string[])].sort(), `${id} ${type}`)
+				.toEqual([...keys].sort())
+		}
+	})
+
+	it('each union branch and nested object requires what its checker requires', () => {
+		const numeric = schemaOf('survey', 'Numeric')
+		const condition = resolved(numeric, { $ref: '#/$defs/type_Condition' }).anyOf as Json[]
+		expect(condition.map(branch => resolved(numeric, branch).required))
+			.toEqual([['question', 'op'], ['question', 'op', 'value'], ['question', 'op', 'value'], ['question', 'op', 'value'], ['all'], ['any'], ['not']])
+		const multiple = schemaOf('survey', 'MultipleChoice')
+		expect([resolved(multiple, propertiesOf(multiple).options!.items).required, resolved(multiple, propertiesOf(multiple).rules!.items).required])
+			.toEqual([['value', 'label'], ['when', 'message']])
+		const expense = schemaOf('trip-budget', 'Expense')
+		expect((propertiesOf(expense).split!.anyOf as Json[]).map(branch => resolved(expense, branch).required))
+			.toEqual([['mode', 'among'], ['mode', 'percents']])
+		const interests = schemaOf('onboarding', 'InterestsStep')
+		const safety = schemaOf('onboarding', 'SafetyStep')
+		const account = schemaOf('onboarding', 'AccountStep')
+		expect([resolved(interests, propertiesOf(interests).options!.items).required, resolved(safety, propertiesOf(safety).rules!.items).required, resolved(account, propertiesOf(account).prefill).required])
+			.toEqual([['id', 'label'], ['id', 'text'], []])
+		const choice = schemaOf('renderer-packs', 'Choice')
+		expect(resolved(choice, propertiesOf(choice).options!.items).required)
+			.toEqual(['value', 'label'])
+	})
+
+	/** Every object schema with named properties in `schema` (its `$defs` included), with where it is. */
+	function objectsOf(schema: Json): [string, Json][] {
+		const found: [string, Json][] = []
+		const visit = (node: unknown, path: string): void => {
+			if (Array.isArray(node)) {
+				node.forEach((item, index) => visit(item, `${path}/${index}`))
+				return
+			}
+			if (typeof node !== 'object' || node === null)
+				return
+			const object = node as Json
+			if (object.properties !== undefined)
+				found.push([path, object])
+			for (const [key, value] of Object.entries(object))
+				visit(value, `${path}/${key}`)
+		}
+		visit(schema, '#')
+		return found
+	}
+
+	it.each(GENERATED)('%s: every object with named properties rejects other keys, except the text per language', (id) => {
+		for (const [type, schema] of Object.entries(getShowcase(id)!.configSchemas)) {
+			expect(objectsOf(schema).length, `${id} ${type}`)
+				.toBeGreaterThan(0)
+			for (const [path, object] of objectsOf(schema)) {
+				// The text per language declares its required `en` and takes any other language as a string.
+				const expected = path.endsWith('/type_I18nText') ? { type: 'string' } : false
+				expect(object.additionalProperties, `${id} ${type} ${path}`)
+					.toEqual(expected)
+			}
+		}
+	})
+
+	it.each(GENERATED)('%s: every property has a description', (id) => {
+		for (const [type, schema] of Object.entries(getShowcase(id)!.configSchemas)) {
+			for (const [path, object] of objectsOf(schema)) {
+				for (const [name, property] of Object.entries(object.properties as Record<string, Json>)) {
+					expect(typeof property.description === 'string' && property.description !== '', `${id} ${type} ${path}/properties/${name}`)
+						.toBe(true)
+				}
+			}
+		}
+	})
+})
+
 describe('the generated config schemas carry the constraints of the JSDoc tags', () => {
 	it('survey: the languages, the texts per language, whole numbers, non-empty condition lists', () => {
 		const surveySchema = schemaOf('survey', 'Survey')
@@ -324,11 +409,19 @@ describe('the survey schemas reject what the config checkers reject', () => {
 			.toEqual([])
 	})
 
-	it('the survey-ai-draft mode config fails on minItems', () => {
+	it('survey-ai-draft: the mode config fails on minItems, and the other configs with a schema still conform', () => {
 		const draft = getShowcase('survey')!.presets.find(preset => preset.id === 'survey-ai-draft')!
-		const mode = widgetsOf(JSON.parse(draft.sourceText) as PresetWidget)
-			.find(widget => widget.id === 'mode')!
+		const widgets = widgetsOf(JSON.parse(draft.sourceText) as PresetWidget)
+		const mode = widgets.find(widget => widget.id === 'mode')!
 		expect(conforms(schemaOf('survey', mode.type), mode.config))
 			.toEqual(['/options minItems'])
+		// `phone` has a type mismatch the schema cannot see (shape only), and a type the survey does not register has no schema.
+		const others = widgets.filter(widget => widget.id !== 'mode' && Object.hasOwn(getShowcase('survey')!.configSchemas, widget.type))
+		expect(others.map(widget => widget.id))
+			.toContain('phone')
+		for (const widget of others) {
+			expect(conforms(schemaOf('survey', widget.type), widget.config ?? null), widget.id)
+				.toEqual([])
+		}
 	})
 })

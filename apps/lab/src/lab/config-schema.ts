@@ -185,9 +185,13 @@ export function looksLike(root: JsonSchema | null, schema: JsonSchema | null, va
 	return true
 }
 
+/** Whether `schema` admits `null` only: `type: "null"` or `type: ["null"]`. */
 function isNullSchema(root: JsonSchema | null, schema: unknown): boolean {
 	const resolved = resolveSchema(root, asSchema(schema))
-	return resolved !== null && resolved.type === 'null'
+	if (resolved === null)
+		return false
+	const types = typeList(resolved)
+	return types.length === 1 && types[0] === 'null'
 }
 
 /**

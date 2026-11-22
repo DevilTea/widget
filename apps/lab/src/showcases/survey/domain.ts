@@ -67,7 +67,8 @@ export type LeafCondition
 	= | {
 		/**
 		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
+		 * the question itself, but its `required` and `rules` may.
 		 *
 		 * @minLength 1
 		 */
@@ -78,7 +79,8 @@ export type LeafCondition
 	| {
 		/**
 		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
+		 * the question itself, but its `required` and `rules` may.
 		 *
 		 * @minLength 1
 		 */
@@ -91,12 +93,16 @@ export type LeafCondition
 	| {
 		/**
 		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
+		 * the question itself, but its `required` and `rules` may.
 		 *
 		 * @minLength 1
 		 */
 		readonly question: string
-		/** Compares a numeric answer; false for a hidden or unanswered question. */
+		/**
+		 * Compares a numeric answer: only a Numeric question can satisfy `greaterThan` or `lessThan`; false for a hidden or
+		 * unanswered question.
+		 */
 		readonly op: 'greaterThan' | 'lessThan'
 		/** The number the answer is compared with. */
 		readonly value: number
@@ -104,7 +110,8 @@ export type LeafCondition
 	| {
 		/**
 		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
+		 * the question itself, but its `required` and `rules` may.
 		 *
 		 * @minLength 1
 		 */

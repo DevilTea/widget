@@ -261,6 +261,12 @@ describe('generated schemas: $ref roots, anyOf and anyOf with null', () => {
 	it('starts a new value from the branch that is not null', () => {
 		expect(defaultValueFor(omittable, { anyOf: [{ type: 'null' }, { type: 'string' }] }))
 			.toBe('')
+		// `type: ["null"]` is the same null branch.
+		expect(defaultValueFor(omittable, { anyOf: [{ type: ['null'] }, { type: 'string' }] }))
+			.toBe('')
+		const listed = describeField(omittable, { anyOf: [{ type: 'string' }, { type: ['null'] }] }, 'x')
+		expect([listed.field, listed.viaUnion])
+			.toEqual([{ kind: 'string', maxLength: null }, undefined])
 		expect(defaultValueFor(omittable, omittable))
 			.toEqual({ title: '' })
 	})

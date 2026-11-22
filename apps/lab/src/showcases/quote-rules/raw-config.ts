@@ -65,6 +65,8 @@ export interface ItemRawConfig {
 	/**
 	 * The papers a customer can choose, by code (lowercase letters, digits and "-", starting with a letter:
 	 * `^[a-z][a-z0-9-]*$`). The option the customer picks is State `paper`; a code that is not listed here makes `line` fail.
+	 *
+	 * @propertyNames ^[a-z][a-z0-9-]*$
 	 */
 	readonly papers: Readonly<Record<string, PaperRawConfig>>
 	/**
