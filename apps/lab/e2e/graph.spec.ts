@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, expectShowcase, openDependenciesGraph, selectShowcase, test } from './fixtures'
+import { expandGraphWidget, expect, expectShowcase, graphWidgetCard, openDependenciesGraph, selectShowcase, setLocale, test } from './fixtures'
 
 /**
  * Issue #28 Dependency Graph contract. Uses the Survey showcase (a richer topology than the default
@@ -194,7 +194,7 @@ test('"Fit graph" contains every expected Survey node (issues #27, #104)', async
 		.toPass({ timeout: 10_000 })
 })
 
-test('progressive disclosure collapses clusters initially, expands on click, and supports Expand/Collapse all', async ({ page }) => {
+test('progressive disclosure collapses clusters initially, expands one widget at a time on click, and supports Collapse all', async ({ page }) => {
 	await page.goto('/')
 	await openDependenciesGraph(page)
 
@@ -206,16 +206,14 @@ test('progressive disclosure collapses clusters initially, expands on click, and
 	// Initially, clusters are collapsed, so member nodes are not rendered
 	await expect(canvas.locator('.graph-node--member'))
 		.toHaveCount(0)
-
-	// Expand all
-	await page.getByRole('button', { name: 'Expand all' })
-		.click()
+	// Issue #254: one widget is expanded at a time, so there is no "Expand all".
+	await expect(page.getByRole('button', { name: 'Expand all' }))
+		.toHaveCount(0)
 
 	const members = canvas.locator('.graph-node--member')
-	await expect(members.first())
-		.toBeVisible({ timeout: 15_000 })
 	// Widget order in the default preset: 0 open-day (Survey), 1 mode (SingleChoice), 2 guests (Numeric),
-	// 3 sessions (MultipleChoice), 4 phone (ShortAnswer). Every member has a relation, so all 37 show.
+	// 3 sessions (MultipleChoice), 4 phone (ShortAnswer). Every member has a relation, so all 37 show, one widget at a time.
+	const widgetIds = ['open-day', 'mode', 'guests', 'sessions', 'phone']
 	const expectedMemberIds = [
 		'0:method:submit',
 		'0:property:canSubmit',
@@ -255,15 +253,26 @@ test('progressive disclosure collapses clusters initially, expands on click, and
 		'4:property:visible',
 		'4:state:answer',
 	]
-	await expect(members)
-		.toHaveCount(expectedMemberIds.length)
-	const memberIds = await members.evaluateAll(elements => elements
-		.map(element => element.closest<HTMLElement>('[data-id]')?.dataset.id ?? '')
-		.sort())
-	expect(memberIds)
+	const seen: string[] = []
+	for (const [index, widgetId] of widgetIds.entries()) {
+		// Clicking a collapsed card's Expand button expands it and collapses the widget expanded before.
+		await expandGraphWidget(page, widgetId)
+		const own = expectedMemberIds.filter(id => id.startsWith(`${index}:`))
+		await expect(members)
+			.toHaveCount(own.length)
+		const memberIds = await members.evaluateAll(elements => elements
+			.map(element => element.closest<HTMLElement>('[data-id]')?.dataset.id ?? '')
+			.sort())
+		expect(memberIds, `only #${widgetId}'s members are drawn`)
+			.toEqual(own)
+		seen.push(...memberIds)
+		await expect(canvas.getByRole('button', { name: 'Collapse', exact: true }))
+			.toHaveCount(1)
+		await expect(canvas.getByRole('button', { name: 'Expand', exact: true }))
+			.toHaveCount(widgetIds.length - 1)
+	}
+	expect(seen.sort())
 		.toEqual(expectedMemberIds)
-	await expect(canvas.getByRole('button', { name: 'Expand', exact: true }))
-		.toHaveCount(0)
 
 	// Expansion triggers a fresh ELK layout. Automatic fit must recover only after the new generation's
 	// nodes have all been measured; this assertion intentionally does not use the manual Fit button.
@@ -317,15 +326,97 @@ test('progressive disclosure collapses clusters initially, expands on click, and
 	await expect(canvas.locator('.graph-node--member')
 		.first())
 		.toBeVisible({ timeout: 15_000 })
+
+	// Collapsing the expanded widget with its own button leaves none expanded.
+	await canvas.getByRole('button', { name: 'Collapse', exact: true })
+		.click()
+	await expect(canvas.locator('.graph-node--member'))
+		.toHaveCount(0)
+	await expect(canvas.getByRole('button', { name: 'Expand', exact: true }))
+		.toHaveCount(widgetIds.length)
+})
+
+test('one widget at a time from the keyboard: expanding B collapses A, aria-expanded follows, focus stays on the toggled card', async ({ page }) => {
+	await page.goto('/')
+	await openDependenciesGraph(page)
+	const members = page.locator('.vue-flow .graph-node--member')
+	const memberIds = (): Promise<string[]> => members.evaluateAll(elements => elements
+		.map(element => element.closest<HTMLElement>('[data-id]')?.dataset.id ?? ''))
+
+	// A: #mode (node 1), from the keyboard.
+	const modeExpand = graphWidgetCard(page, 'mode')
+		.getByRole('button', { name: 'Expand', exact: true })
+	await expect(modeExpand)
+		.toBeVisible({ timeout: 15_000 })
+	await expect(modeExpand)
+		.toHaveAttribute('aria-expanded', 'false')
+	await modeExpand.focus()
+	await page.keyboard.press('Enter')
+	// The layout is redrawn, so the pressed button is replaced by the card's Collapse button, which takes the focus.
+	const modeCollapse = graphWidgetCard(page, 'mode')
+		.getByRole('button', { name: 'Collapse', exact: true })
+	await expect(modeCollapse)
+		.toBeFocused({ timeout: 15_000 })
+	await expect(modeCollapse)
+		.toHaveAttribute('aria-expanded', 'true')
+	await expect(members)
+		.toHaveCount(8)
+	expect((await memberIds()).every(id => id.startsWith('1:')))
+		.toBe(true)
+
+	// B: #phone (node 4). Expanding it collapses #mode; focus follows #phone.
+	await graphWidgetCard(page, 'phone')
+		.getByRole('button', { name: 'Expand', exact: true })
+		.focus()
+	await page.keyboard.press('Space')
+	const phoneCollapse = graphWidgetCard(page, 'phone')
+		.getByRole('button', { name: 'Collapse', exact: true })
+	await expect(phoneCollapse)
+		.toBeFocused({ timeout: 15_000 })
+	await expect(phoneCollapse)
+		.toHaveAttribute('aria-expanded', 'true')
+	await expect(graphWidgetCard(page, 'mode')
+		.getByRole('button', { name: 'Expand', exact: true }))
+		.toHaveAttribute('aria-expanded', 'false')
+	await expect(page.locator('.graph-cluster-toggle[aria-expanded="true"]'))
+		.toHaveCount(1)
+	await expect(members)
+		.toHaveCount(7)
+	expect((await memberIds()).every(id => id.startsWith('4:')))
+		.toBe(true)
+
+	// Collapsing the expanded one leaves none expanded, and the focus stays on its card.
+	await page.keyboard.press('Enter')
+	const phoneExpand = graphWidgetCard(page, 'phone')
+		.getByRole('button', { name: 'Expand', exact: true })
+	await expect(phoneExpand)
+		.toBeFocused({ timeout: 15_000 })
+	await expect(phoneExpand)
+		.toHaveAttribute('aria-expanded', 'false')
+	await expect(members)
+		.toHaveCount(0)
+	await expect(page.locator('.graph-cluster-toggle[aria-expanded="true"]'))
+		.toHaveCount(0)
+
+	// The toggles are named in the Lab language.
+	await setLocale(page, 'zh-TW')
+	await expect(graphWidgetCard(page, 'phone')
+		.getByRole('button', { name: '展開', exact: true }))
+		.toHaveAttribute('aria-expanded', 'false')
+	await graphWidgetCard(page, 'phone')
+		.getByRole('button', { name: '展開', exact: true })
+		.click()
+	await expect(graphWidgetCard(page, 'phone')
+		.getByRole('button', { name: '收合', exact: true }))
+		.toHaveAttribute('aria-expanded', 'true', { timeout: 15_000 })
 })
 
 test('focusing a member highlights subgraph and dims unrelated nodes', async ({ page }) => {
 	await page.goto('/')
 	await openDependenciesGraph(page)
 
-	// Expand all so members are visible
-	await page.getByRole('button', { name: 'Expand all' })
-		.click()
+	// Expand #phone so its members are visible (one widget is expanded at a time).
+	await expandGraphWidget(page, 'phone')
 
 	// `phone.required` reads `mode.value`: a member with a known cross-widget dependency.
 	const member = page.locator('.vue-flow__node[data-id="4:property:required"] .graph-node--member')
@@ -338,8 +429,8 @@ test('focusing a member highlights subgraph and dims unrelated nodes', async ({ 
 	await expect(page.locator('.graph-node--focused'))
 		.toContainText('required')
 
-	// The connected `mode` question's member lives inside an expanded cluster. Its owning
-	// cluster must remain fully visible rather than inheriting unrelated-node deemphasis.
+	// The connected `mode` question's widget is a collapsed card (its `value` member is drawn as the card). It
+	// must remain fully visible rather than inheriting unrelated-node deemphasis.
 	const relatedCluster = page.locator('.graph-node--cluster')
 		.filter({ hasText: 'SingleChoice' })
 		.first()
@@ -355,8 +446,7 @@ test('focusing a member highlights subgraph and dims unrelated nodes', async ({ 
 test('expanded member nodes can be focused from the keyboard', async ({ page }) => {
 	await page.goto('/')
 	await openDependenciesGraph(page)
-	await page.getByRole('button', { name: 'Expand all' })
-		.click()
+	await expandGraphWidget(page, 'phone')
 
 	const member = page.locator('.vue-flow__node[data-id="4:property:required"] .graph-node--member')
 	await expect(member)

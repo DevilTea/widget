@@ -68,17 +68,36 @@ vi.setConfig({ testTimeout: 60_000 })
 
 const drawings = new Map<string, Promise<DrawnGraph>>()
 
-function draw(name: ShowcaseName, expanded: boolean): Promise<DrawnGraph> {
+/**
+ * Which widgets are expanded: none (`false`, the default), one widget alone (its id, or `'largest'` for the showcase's largest:
+ * what the Lab offers, one widget at a time, issue #254), or every widget at once (`true`: no longer offered, since #230 measured
+ * it unreadable; kept as a stress test of the layout).
+ */
+type Expansion = boolean | string
+
+/** The widget whose expanded layout fits at the lowest zoom (the "fitted size" test checks that it is). */
+const LARGEST_WIDGET: Record<ShowcaseName, string> = { 'survey': 'sessions', 'trip-budget': 'hotel' }
+
+function expandedClusterIds(name: ShowcaseName, graph: SemanticGraph, expanded: Expansion): Set<string> {
+	if (expanded === false)
+		return new Set()
+	if (expanded === true)
+		return new Set(graph.clusters.map(cluster => cluster.id))
+	const widgetId = expanded === 'largest' ? LARGEST_WIDGET[name] : expanded
+	return new Set([graph.clusters.find(cluster => cluster.widgetId === widgetId)!.id])
+}
+
+function draw(name: ShowcaseName, expanded: Expansion): Promise<DrawnGraph> {
 	const key = `${name}:${expanded}`
 	if (!drawings.has(key))
 		drawings.set(key, drawLayout(name, expanded))
 	return drawings.get(key)!
 }
 
-async function drawLayout(name: ShowcaseName, expanded: boolean): Promise<DrawnGraph> {
+async function drawLayout(name: ShowcaseName, expanded: Expansion): Promise<DrawnGraph> {
 	const blueprint = SHOWCASES[name]()
 	const graph = projectSemanticGraph(inspectBlueprint(blueprint as never))
-	const options = { expandedClusterIds: expanded ? new Set(graph.clusters.map(cluster => cluster.id)) : new Set<string>() }
+	const options = { expandedClusterIds: expandedClusterIds(name, graph, expanded) }
 	const result = await elk.layout(toElkGraph(graph, options))
 	const { nodes, edges } = toVueFlow(graph, fromElkResult(result, graph, options), options)
 
@@ -150,12 +169,15 @@ const MIN_GAP_EXPANDED = 24
 // The Graph canvas of a 1440 x 900 window, as measured in the browser: 691 x 681 after the toolbar and the key row.
 const CANVAS_1440 = { width: 691, height: 681 }
 
+/** At least this many cards and edges are drawn in each view (so the assertions below are about something). */
+const AT_LEAST: Record<string, number> = { false: 4, largest: 10, true: 20 }
+
 describe.each(Object.keys(SHOWCASES) as ShowcaseName[])('%s Graph', (name) => {
-	describe.each([false, true])('with expanded clusters = %s', (expanded) => {
+	describe.each([false, 'largest', true] as const)('with expanded clusters = %s', (expanded) => {
 		it('gives every card clear room: at least 64px between two widgets (21px on main), 24px between two members', async () => {
 			const { cards } = await draw(name, expanded)
 			expect(cards.length)
-				.toBeGreaterThan(expanded ? 20 : 4)
+				.toBeGreaterThan(AT_LEAST[`${expanded}`]!)
 			expect(smallestGap(cards))
 				.toBeGreaterThanOrEqual((expanded ? MIN_GAP_EXPANDED : MIN_GAP_COLLAPSED) - 0.01)
 		})
@@ -164,7 +186,7 @@ describe.each(Object.keys(SHOWCASES) as ShowcaseName[])('%s Graph', (name) => {
 			const { edges, cards } = await draw(name, expanded)
 			const cardById = new Map(cards.map(card => [card.id, card]))
 			expect(edges.length)
-				.toBeGreaterThan(expanded ? 20 : 4)
+				.toBeGreaterThan(AT_LEAST[`${expanded}`]!)
 
 			for (const edge of edges) {
 				const route = edge.data?.route
@@ -192,8 +214,8 @@ describe.each(Object.keys(SHOWCASES) as ShowcaseName[])('%s Graph', (name) => {
 		})
 	})
 
-	// Edges never hidden behind cards, in every view: also the expanded Trip budget (112 members, 370 dependencies).
-	describe.each([false, true])('with expanded clusters = %s', (expanded) => {
+	// Edges never hidden behind cards, in every view: also the fully expanded Trip budget (112 members, 370 dependencies).
+	describe.each([false, 'largest', true] as const)('with expanded clusters = %s', (expanded) => {
 		it('passes no edge through a card that is not one of its two ends', async () => {
 			const { edges, cards } = await draw(name, expanded)
 			const hidden: string[] = []
@@ -362,6 +384,28 @@ describe('fitted size', () => {
 			.toBeGreaterThan(0.34)
 		expect(fitZoom(await draw('survey', true), CANVAS_1440))
 			.toBeGreaterThan(0.25)
+	})
+
+	// Issue #254: one widget is expanded at a time, and Fit shows the whole layout (the other widgets as cards). Measured here with
+	// the real ELK at 1440 x 900, the largest widget is the lowest Fit: the Survey's #sessions (8 members) 0.415, member text
+	// (12px) about 5.0px on screen; the Trip budget's #hotel (15 members) 0.196, about 2.4px. The smallest widgets reach 0.65
+	// (#mode) and 0.39 (#settlement). Fully expanded they were 0.27 and about 0.06.
+	it.each([
+		['survey', 0.4],
+		['trip-budget', 0.18],
+	] as const)('fits the %s with its largest widget expanded at %s or more, and no other single widget fits lower', async (name, floor) => {
+		const graph = projectSemanticGraph(inspectBlueprint(SHOWCASES[name]() as never))
+		const fits = new Map<string, number>()
+		for (const cluster of graph.clusters)
+			fits.set(cluster.widgetId, fitZoom(await draw(name, cluster.widgetId), CANVAS_1440))
+		const lowest = Math.min(...fits.values())
+		expect(fits.get(LARGEST_WIDGET[name]))
+			.toBe(lowest)
+		expect(lowest)
+			.toBeGreaterThan(floor)
+		// Expanding one widget still fits closer than expanding them all.
+		expect(lowest)
+			.toBeGreaterThan(fitZoom(await draw(name, true), CANVAS_1440))
 	})
 })
 

@@ -272,6 +272,25 @@ export async function openDependenciesGraph(page: Page): Promise<void> {
 		.click()
 }
 
+/** The Graph card of the widget `#widgetId` (its Vue Flow node), collapsed or expanded. */
+export function graphWidgetCard(page: Page, widgetId: string): Locator {
+	return page.locator('.vue-flow__node-cluster')
+		.filter({ has: page.locator('.graph-cluster-id', { hasText: new RegExp(`^#${widgetId}$`) }) })
+}
+
+/**
+ * Expands the widget `#widgetId` in the Graph with its card's Expand button and waits until the new layout shows it expanded.
+ * One widget is expanded at a time (issue #254): this collapses the widget that was expanded before.
+ */
+export async function expandGraphWidget(page: Page, widgetId: string): Promise<void> {
+	await graphWidgetCard(page, widgetId)
+		.getByRole('button', { name: 'Expand', exact: true })
+		.click()
+	await expect(graphWidgetCard(page, widgetId)
+		.getByRole('button', { name: 'Collapse', exact: true }))
+		.toBeVisible({ timeout: 15_000 })
+}
+
 /**
  * Opens the header's "Document and preview details" popover and returns its content. The popover holds the
  * developer-vocabulary status (revisions, Linked/Diverged, JSON draft, Blueprint status, recovery topology);

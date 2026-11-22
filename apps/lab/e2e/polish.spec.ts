@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { expect, loadPreset, openDependenciesGraph, previewFrame, setLocale, test } from './fixtures'
+import { expandGraphWidget, expect, loadPreset, openDependenciesGraph, previewFrame, setLocale, test } from './fixtures'
 
 /**
  * Issue #230 PR 3c: Graph readability (U11), grouped cycle problems (U16), target size and text size (U19), visible
@@ -66,8 +66,7 @@ test.describe('Graph readability (U11)', () => {
 		await expect(page.locator('.vue-flow__node')
 			.first())
 			.toBeVisible({ timeout: 15_000 })
-		await page.getByRole('button', { name: 'Expand all' })
-			.click()
+		await expandGraphWidget(page, 'sessions')
 		await expect(page.locator('.graph-member-card')
 			.first())
 			.toBeVisible({ timeout: 15_000 })
@@ -94,7 +93,7 @@ test.describe('Graph readability (U11)', () => {
 		expect(measured.small)
 			.toEqual([])
 		// The toolbar above it as well.
-		for (const name of ['Fit graph', 'Zoom in', 'Zoom out', 'Expand all', 'Collapse all', 'Legend']) {
+		for (const name of ['Fit graph', 'Zoom in', 'Zoom out', 'Collapse all', 'Legend']) {
 			const box = (await page.getByRole('button', { name, exact: true })
 				.boundingBox())!
 			expect(box.height, `${name} is at least 24px high`)
@@ -175,14 +174,13 @@ test.describe('Graph readability (U11)', () => {
 			.toBeLessThan(zoomedIn)
 	})
 
-	test('Fit uses the canvas: after Expand all and Fit the graph fills most of it, not 40%', async ({ page }) => {
+	test('Fit uses the canvas: after expanding a widget and Fit the graph fills most of it, not 40%', async ({ page }) => {
 		await page.goto('/')
 		await openDependenciesGraph(page)
 		await expect(page.locator('.vue-flow__node')
 			.first())
 			.toBeVisible({ timeout: 15_000 })
-		await page.getByRole('button', { name: 'Expand all' })
-			.click()
+		await expandGraphWidget(page, 'sessions')
 		await expect(page.locator('.graph-member-card')
 			.first())
 			.toBeVisible({ timeout: 15_000 })

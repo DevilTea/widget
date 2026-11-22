@@ -982,12 +982,18 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   Supports hierarchical progressive disclosure:
   - Widget clusters are the top-level view by default (collapsed), preventing visual overload on
     dense topologies (the Survey is 5 clusters / 37 members).
-  - Expanding a cluster reveals its internal member vertices and stubs as child nodes.
+  - Expanding a cluster reveals its internal member vertices and stubs as child nodes. The Lab expands **one widget at a time**
+    (issue #254, an owner decision): the store's `graphExpandedClusterIds` holds at most one id, `expandGraphCluster()` replaces it
+    (so expanding B collapses A), collapsing the expanded widget leaves none, and there is no "Expand all" (the toolbar keeps
+    **Collapse all**, which collapses that one). The accepted cost: no member-level view across two expanded widgets (Relations
+    lists a member's dependencies on any widget). `toVueFlow()`/`toElkGraph()` still accept any set; only the Lab limits it.
   - Inter-cluster edges between collapsed clusters aggregate into single presentation edges. The
     canvas deliberately labels these with only a compact dependency count (`1 dep` / `N deps`);
     `semanticEdges` retains every exact member-level operation/path/reference for the details surface.
   - Selecting/focusing a widget or member highlights the connected subgraph and deemphasizes
-    unrelated nodes and edges (`isDimmed` / `graph-node--dimmed` / `graph-edge--dimmed`).
+    unrelated nodes and edges (`isDimmed` / `graph-node--dimmed` / `graph-edge--dimmed`). A focused member of a collapsed widget is
+    not drawn, so that widget's card is marked focused instead (`isFocused`; issue #254: with one widget expanded, a member focused
+    from Relations or elsewhere is usually in a collapsed one). Focus never expands or collapses a widget.
   - **Direction** (issue #230): an edge runs from the member that declares a dependency to the member it depends on
     (owner -> target, as above) and its arrowhead is on the target: `A → B` means "A depends on B", the Relations view's
     "Depends on" for A and "Used by" for B. `data.arrow` names the colour family of the arrowhead (the operation's, `danger`
@@ -1001,7 +1007,12 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
     is `updatable`.
 - `src/components/graph/GraphCanvas.vue` — the only place in this app that imports `@vue-flow/core`
   (and its structural `dist/style.css`); custom node templates for `cluster`, `member`, and `stub`,
-  themed through the Lab palette tokens. Collapsed and expanded cluster identities and expanded member cards are keyboard-focusable/selectable without changing expansion state. The collapsed cluster card makes widget type primary, widget id
+  themed through the Lab palette tokens. Collapsed and expanded cluster identities and expanded member cards are keyboard-focusable/selectable without changing expansion state. The expand/collapse button of a card carries `aria-expanded`
+  (localized names "Expand"/"Collapse", 展開/收合). A toggle requests a new layout and the canvas is not drawn while the worker lays it out
+  (`flow` is null), so the pressed button leaves the DOM; `DependenciesPanel.vue` remembers the toggled card and, once the next layout is
+  drawn (`layoutVersion`), focuses that card's button in its new state (`GraphCanvas.focusClusterToggle()`, retried for about a second while
+  Vue Flow still hides the unmeasured card), unless focus moved outside the Graph view meanwhile; expanding B therefore leaves focus on B's
+  Collapse button (`e2e/graph.spec.ts`). The collapsed cluster card makes widget type primary, widget id
   secondary, and summarizes member inventory as S/P/M counts; the expanded cluster becomes a subdued
   compound inspector shell rather than a dashed debug boundary. Member nodes keep State/Property/Method
   distinguishable by a small letter badge plus restrained accent, so kind is not encoded by color alone.
@@ -1042,7 +1053,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   as `onKeyDown`, which Vue registers for an event named `key-down` that never fires. Nothing is patched in Vue Flow: `GraphCanvas.vue`
   overrides `focusable: false` on every edge it hands Vue Flow, gives back `role="group"` and a real lowercase `tabindex` through the
   per-edge `domAttributes`, and handles the keys itself, delegated on the canvas. Selection (click, Enter, Space) does not depend on `focusable`. One stop was chosen
-  over "every edge is a Tab stop" (the expanded Trip budget has hundreds of edges) and over "edges only reachable from their focused card"
+  over "every edge is a Tab stop" (the Trip budget draws 71 edges, 111 with #hotel expanded) and over "edges only reachable from their focused card"
   (an edge would then have no route when nothing is selected, and a card's own keys are already taken by select/expand). `graph/edge-a11y.ts`
   (pure, unit-tested) orders the edges with the ones around the focused widget or member first; Arrow Down/Right, Arrow Up/Left (wrapping), Home
   and End move DOM focus along that order. Exactly one edge has `tabindex="0"`: the first of the order to begin with (the rendered attribute, so
@@ -1090,11 +1101,22 @@ partially measured subset and then incorrectly marking that generation fitted. `
 `layoutVersion` (incremented only when ELK layout succeeds), which resets fit tracking so the graph
 automatically refits on semantic graph replacements and cluster expansion/collapse, while ordinary
 Runtime activity and focus deemphasis never trigger a refit. `DependenciesPanel.vue`'s Graph view also exposes an explicit
-**Fit graph** button along with **Zoom in** / **Zoom out** and **Expand all** / **Collapse all** controls in the toolbar. Fit leaves 4% around the graph (it used to
-leave 20%, then 8%) and fits the curves as well as the cards (`fitBounds` over both),
-because a long edge runs in a corridor beside the cards; an expanded Survey is still larger than the pane (about 0.27 zoom) and is read by zooming. Different ELK options for expanded widgets do not change that (issue #230, measured with the real ELK at a 691 x 681 canvas: `COFFMAN_GRAHAM` layering with `layerBound` 2 to 5, a tighter root, `BRANDES_KOEPF` placement; the best expanded Survey Fit was 0.306, member text about 3.7px, and the expanded Trip budget stayed between 0.047 and 0.076): 37 or 112 member cards cannot be shown at a readable size at once, so a readable expanded view needs a different interaction (expanding one widget at a time, or a semantic zoom), not layout options. Fit may reach 0.05 so it shows the whole
-expanded Trip budget (about 0.06); afterwards the manual zoom floor (wheel, pinch, **Zoom out**) is `min(fit, max(0.1, fit / 4))`, so a small graph
-(the Survey fits at 0.99, so about 0.25) cannot be wheeled down to a dot. The collapsed card text is 13px (type) and 12px (id, S/P/M counts).
+**Fit graph** button along with **Zoom in** / **Zoom out** and **Collapse all** controls in the toolbar (no **Expand all**: one widget is expanded at a
+time, issue #254). Fit leaves 4% around the graph (it used to leave 20%, then 8%) and fits the curves as well as the cards (`fitBounds` over both),
+because a long edge runs in a corridor beside the cards. Expanding or collapsing a widget refits the whole new layout (the expanded widget and the
+other widgets as cards), as **Fit graph** does. Expanding every widget at once could not be made readable by layout options (issue #230, measured
+with the real ELK at a 691 x 681 canvas: `COFFMAN_GRAHAM` layering with `layerBound` 2 to 5, a tighter root, `BRANDES_KOEPF` placement; the best
+expanded Survey Fit was 0.306, member text about 3.7px, and the expanded Trip budget stayed between 0.047 and 0.076: 37 or 112 member cards at
+once), so the Lab expands one widget at a time (issue #254). Measured the same way (real ELK, the 691 x 681 canvas of a 1440 x 900 window;
+`graph-readability.unit.test.ts` "fitted size" pins the floors and that the largest widget is the lowest Fit, `e2e/graph-readability.spec.ts` reads
+the same zoom in the browser: 0.416 and 0.197 for the two largest), one expanded widget fits the Survey at 0.415 to 0.651 (the largest, #sessions with 8 members, is 0.415: member text,
+12px, about 5.0px on screen; #mode 0.651, about 7.8px) and the Trip budget at 0.196 to 0.389 (the largest, the Expense #hotel with 15 members, is
+0.196: about 2.4px; a Person about 0.31, #settlement 0.389), against 0.27 and about 0.06 fully expanded. Fitting only the expanded widget's own box
+would give #sessions 0.575 (about 6.9px) and #hotel 0.363 (about 4.4px), so member text reaches 11px only by zooming in (above about 0.92) either
+way; Fit keeps the whole layout so the expanded widget's dependencies on the other cards stay in view. Fit may reach 0.05 (for a Document larger
+than the showcases); afterwards the manual zoom floor (wheel, pinch, **Zoom out**) is `min(fit, max(0.1, fit / 4))`, so a small graph (the Survey
+fits at 0.99, so about 0.25) cannot be wheeled down to a dot, and the Trip budget with #hotel expanded (0.196) zooms out to 0.1. The collapsed card
+text is 13px (type) and 12px (id, S/P/M counts).
 `src/graph/graph-readability.unit.test.ts` (real ELK on both showcases) and `e2e/graph-readability.spec.ts` pin the spacing, the
 Bezier paths, the arrowheads and "no edge behind a card"; the arrowhead size, the 0.95 Fit floor of the default Survey (card text 11px or more at 1440 x 900, near 11px at 1280 x 800), the dimming and
 the tags (on no card, no arrowhead and no other tag, nearer the focus, 11px or more, above every edge; a leader starts on its own edge, is short,
