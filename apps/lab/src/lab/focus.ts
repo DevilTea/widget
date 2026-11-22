@@ -152,7 +152,10 @@ export function createInspectorFocusStore<Plugins extends AnyWidgetPluginTuple>(
 		let keptNodeId: InspectionNodeId | null = null
 		if (previousFocus !== null) {
 			const identity = documentIdentity(previousBlueprint, previousFocus.nodeId)
-			keptNodeId = identity === null ? null : uniqueDocumentNodeForIdentity(document.blueprint, identity)
+			// The identity must name one widget on both sides: with a duplicate id+type in the old Document, "the same widget"
+			// in the new one could be another instance than the one that was selected.
+			const uniqueBefore = identity !== null && uniqueDocumentNodeForIdentity(previousBlueprint, identity) === previousFocus.nodeId
+			keptNodeId = uniqueBefore ? uniqueDocumentNodeForIdentity(document.blueprint, identity) : null
 		}
 		documentFocus = {
 			...(keptNodeId === null
