@@ -141,7 +141,10 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		if (place === null)
 			return
 		store.authorView.value = place.authorView
-		store.activeTab.value = place.tab
+		// `preview` is not a tool tab the user was reading (Dockview reports the Preview as active once it was touched, so it
+		// may be the active panel at start), and activating the Preview's own group again left the frame blank (e2e/trip-budget.spec.ts).
+		if (place.tab !== 'preview')
+			store.activeTab.value = place.tab
 	}
 
 	const welcomeVisible = shallowRef(!isWelcomeDismissed())
