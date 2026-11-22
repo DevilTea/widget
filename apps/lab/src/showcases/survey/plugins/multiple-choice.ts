@@ -14,31 +14,49 @@ import type { AnswerError, OptionState, QuestionText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkMultipleChoiceConfig, resolveMultipleChoiceConfig } from '../config'
 import { builtinError, questionText } from '../domain'
-import { multipleChoiceConfigSchema } from '../schemas'
 import { checkQuestion } from './check-question'
 import { computeOptions, computeRequired, computeVisible, optionReads, questionErrors, requiredReads, ruleReads, selectionOf, visibleReads } from './question-members'
 import { languageFrom, languageReads } from './reads'
 
+/**
+ * A pick-several question. The chosen option values are State `answer`. Properties: `text` (label, help and option labels
+ * in the survey language), `visible`, `required`, `options` (each option's visible and enabled flags), `value` (the
+ * effective answer: only the visible and enabled chosen options; null while hidden or when none remains) and `errors`
+ * (empty while hidden). Method `clear()` empties the answer.
+ */
 export interface MultipleChoiceInterfaces extends WidgetInterfaces {
+	/**
+	 * Label and help text per language, options (value, label per language, visibleWhen, enabledWhen), minSelected,
+	 * maxSelected, required (true, false or a condition), visibleWhen, and custom rules.
+	 */
 	config: { raw: MultipleChoiceRawConfig, resolved: MultipleChoiceConfig }
-	state: { answer: readonly string[] | null }
+	state: {
+		/** The chosen option values; `null` while nothing is chosen. */
+		answer: readonly string[] | null
+	}
 	properties: {
+		/** The label, help text and option labels in the survey language. */
 		text: QuestionText
+		/** `visibleWhen` evaluated against the other questions' effective answers; `true` without one. */
 		visible: boolean
+		/** Whether an answer is required (`required`, or its condition), whatever the visibility. */
 		required: boolean
+		/** Each option's value and its visible and enabled flags. */
 		options: readonly OptionState[]
+		/** The effective answer: only the visible and enabled chosen options; `null` while hidden or when none remains. */
 		value: readonly string[] | null
+		/** The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden. */
 		errors: readonly AnswerError[]
 	}
-	methods: { clear: () => void }
+	methods: {
+		/** Empties the answer. */
+		clear: () => void
+	}
 }
 
 export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
-	.description('A pick-several question. The chosen option values are State `answer`. Properties: `text` (label, help and option labels in the survey language), `visible`, `required`, `options` (each option\'s visible and enabled flags), `value` (the effective answer: only the visible and enabled chosen options; null while hidden or when none remains) and `errors` (empty while hidden). Method `clear()` empties the answer.')
 	.interfaces<MultipleChoiceInterfaces>()
 	.config({
-		description: 'Label and help text per language, options (value, label per language, visibleWhen, enabledWhen), minSelected, maxSelected, required (true, false or a condition), visibleWhen, and custom rules.',
-		schema: multipleChoiceConfigSchema,
 		validate: (input, ctx): input is MultipleChoiceRawConfig => {
 			checkMultipleChoiceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

@@ -1,3 +1,4 @@
+import type { WidgetChild } from '@deviltea/widget-core'
 import type { ConfigChecker, ConfigDiagnostic, MultipleChoiceConfig, MultipleChoiceRawConfig, NumericConfig, NumericRawConfig, ShortAnswerConfig, ShortAnswerRawConfig, SingleChoiceConfig, SingleChoiceRawConfig, SurveyConfig, SurveyRawConfig } from './config'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { describe, expect, it } from 'vitest'
@@ -619,10 +620,8 @@ describe('integration with Core', () => {
 	// Compiling these plugins is also the type-level check that the recursive `Condition` and the other
 	// raw config types satisfy `.interfaces<>()`'s JSON-domain check (design risk R5).
 	const Numeric = createWidgetPlugin('Numeric')
-		.description('Numeric config fixture')
 		.interfaces<{ config: { raw: NumericRawConfig, resolved: NumericConfig } }>()
 		.config({
-			description: 'Numeric config',
 			validate: (input, ctx): input is NumericRawConfig => {
 				checkNumericConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -631,10 +630,8 @@ describe('integration with Core', () => {
 		})
 		.done()
 	const ShortAnswer = createWidgetPlugin('ShortAnswer')
-		.description('ShortAnswer config fixture')
 		.interfaces<{ config: { raw: ShortAnswerRawConfig, resolved: ShortAnswerConfig } }>()
 		.config({
-			description: 'ShortAnswer config',
 			validate: (input, ctx): input is ShortAnswerRawConfig => {
 				checkShortAnswerConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -643,10 +640,8 @@ describe('integration with Core', () => {
 		})
 		.done()
 	const SingleChoice = createWidgetPlugin('SingleChoice')
-		.description('SingleChoice config fixture')
 		.interfaces<{ config: { raw: SingleChoiceRawConfig, resolved: SingleChoiceConfig } }>()
 		.config({
-			description: 'SingleChoice config',
 			validate: (input, ctx): input is SingleChoiceRawConfig => {
 				checkSingleChoiceConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -655,10 +650,8 @@ describe('integration with Core', () => {
 		})
 		.done()
 	const MultipleChoice = createWidgetPlugin('MultipleChoice')
-		.description('MultipleChoice config fixture')
 		.interfaces<{ config: { raw: MultipleChoiceRawConfig, resolved: MultipleChoiceConfig } }>()
 		.config({
-			description: 'MultipleChoice config',
 			validate: (input, ctx): input is MultipleChoiceRawConfig => {
 				checkMultipleChoiceConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -667,10 +660,8 @@ describe('integration with Core', () => {
 		})
 		.done()
 	const Survey = createWidgetPlugin('Survey')
-		.description('Survey config fixture')
 		.interfaces<{ config: { raw: SurveyRawConfig, resolved: SurveyConfig } }>()
 		.config({
-			description: 'Survey config',
 			validate: (input, ctx): input is SurveyRawConfig => {
 				checkSurveyConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -735,23 +726,19 @@ describe('compile-view nodes', () => {
 	const seen: { id: string, languages: readonly string[] | null, self: boolean, other: boolean | null }[] = []
 
 	const Survey = createWidgetPlugin('Survey')
-		.description('Survey fixture')
-		.interfaces<{ config: { raw: SurveyRawConfig, resolved: SurveyConfig }, slots: 'questions' }>()
+		.interfaces<{ config: { raw: SurveyRawConfig, resolved: SurveyConfig }, slots: { questions: WidgetChild } }>()
 		.config({
-			description: 'Survey config',
 			validate: (input, ctx): input is SurveyRawConfig => {
 				checkSurveyConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
 			},
 			resolve: resolveSurveyConfig,
 		})
-		.slots({ questions: { description: 'Questions' } })
+		.slots({ questions: {} })
 		.done()
 	const Question = createWidgetPlugin('Question')
-		.description('Question fixture reading the compile view')
 		.interfaces<{ config: { raw: NumericRawConfig, resolved: NumericConfig } }>()
 		.config({
-			description: 'Question config',
 			validate: (input, ctx): input is NumericRawConfig => {
 				checkNumericConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()

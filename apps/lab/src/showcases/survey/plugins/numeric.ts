@@ -12,30 +12,43 @@ import type { AnswerError, QuestionText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkNumericConfig, resolveNumericConfig } from '../config'
 import { builtinError, questionText } from '../domain'
-import { numericConfigSchema } from '../schemas'
 import { checkQuestion } from './check-question'
 import { computeRequired, computeVisible, questionErrors, requiredReads, ruleReads, visibleReads } from './question-members'
 import { languageFrom, languageReads } from './reads'
 
+/**
+ * A numeric question. The respondent's number is State `answer`. Properties: `text` (label and help in the survey
+ * language), `visible`, `required`, `value` (the effective answer: null while hidden) and `errors` (empty while hidden).
+ * Method `clear()` empties the answer.
+ */
 export interface NumericInterfaces extends WidgetInterfaces {
+	/** Label and help text per language, required (true, false or a condition), visibleWhen, min, max, integer, and custom rules. */
 	config: { raw: NumericRawConfig, resolved: NumericConfig }
-	state: { answer: number | null }
+	state: {
+		/** The respondent's number; `null` while unanswered. */
+		answer: number | null
+	}
 	properties: {
+		/** The label and help text in the survey language. */
 		text: QuestionText
+		/** `visibleWhen` evaluated against the other questions' effective answers; `true` without one. */
 		visible: boolean
+		/** Whether an answer is required (`required`, or its condition), whatever the visibility. */
 		required: boolean
+		/** The effective answer: `null` while hidden. */
 		value: number | null
+		/** The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden. */
 		errors: readonly AnswerError[]
 	}
-	methods: { clear: () => void }
+	methods: {
+		/** Empties the answer. */
+		clear: () => void
+	}
 }
 
 export const NumericPlugin = createWidgetPlugin('Numeric')
-	.description('A numeric question. The respondent\'s number is State `answer`. Properties: `text` (label and help in the survey language), `visible`, `required`, `value` (the effective answer: null while hidden) and `errors` (empty while hidden). Method `clear()` empties the answer.')
 	.interfaces<NumericInterfaces>()
 	.config({
-		description: 'Label and help text per language, required (true, false or a condition), visibleWhen, min, max, integer, and custom rules.',
-		schema: numericConfigSchema,
 		validate: (input, ctx): input is NumericRawConfig => {
 			checkNumericConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

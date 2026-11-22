@@ -11,31 +11,49 @@ import type { AnswerError, OptionState, QuestionText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkSingleChoiceConfig, resolveSingleChoiceConfig } from '../config'
 import { builtinError, questionText } from '../domain'
-import { singleChoiceConfigSchema } from '../schemas'
 import { checkQuestion } from './check-question'
 import { availableOptionValues, computeOptions, computeRequired, computeVisible, optionReads, questionErrors, requiredReads, ruleReads, selectionOf, visibleReads } from './question-members'
 import { languageFrom, languageReads } from './reads'
 
+/**
+ * A pick-one question. The chosen option value is State `answer`. Properties: `text` (label, help and option labels in the
+ * survey language), `visible`, `required`, `options` (each option's visible and enabled flags), `value` (the effective
+ * answer: null while hidden or when the chosen option is unavailable) and `errors` (empty while hidden). Method `clear()`
+ * empties the answer.
+ */
 export interface SingleChoiceInterfaces extends WidgetInterfaces {
+	/**
+	 * Label and help text per language, options (value, label per language, visibleWhen, enabledWhen), required (true, false
+	 * or a condition), visibleWhen, and custom rules.
+	 */
 	config: { raw: SingleChoiceRawConfig, resolved: SingleChoiceConfig }
-	state: { answer: string | null }
+	state: {
+		/** The chosen option value; `null` while nothing is chosen. */
+		answer: string | null
+	}
 	properties: {
+		/** The label, help text and option labels in the survey language. */
 		text: QuestionText
+		/** `visibleWhen` evaluated against the other questions' effective answers; `true` without one. */
 		visible: boolean
+		/** Whether an answer is required (`required`, or its condition), whatever the visibility. */
 		required: boolean
+		/** Each option's value and its visible and enabled flags. */
 		options: readonly OptionState[]
+		/** The effective answer: `null` while hidden or when the chosen option is unavailable. */
 		value: string | null
+		/** The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden. */
 		errors: readonly AnswerError[]
 	}
-	methods: { clear: () => void }
+	methods: {
+		/** Empties the answer. */
+		clear: () => void
+	}
 }
 
 export const SingleChoicePlugin = createWidgetPlugin('SingleChoice')
-	.description('A pick-one question. The chosen option value is State `answer`. Properties: `text` (label, help and option labels in the survey language), `visible`, `required`, `options` (each option\'s visible and enabled flags), `value` (the effective answer: null while hidden or when the chosen option is unavailable) and `errors` (empty while hidden). Method `clear()` empties the answer.')
 	.interfaces<SingleChoiceInterfaces>()
 	.config({
-		description: 'Label and help text per language, options (value, label per language, visibleWhen, enabledWhen), required (true, false or a condition), visibleWhen, and custom rules.',
-		schema: singleChoiceConfigSchema,
 		validate: (input, ctx): input is SingleChoiceRawConfig => {
 			checkSingleChoiceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
