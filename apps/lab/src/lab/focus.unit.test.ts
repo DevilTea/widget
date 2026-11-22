@@ -60,11 +60,14 @@ describe('createInspectorFocusStore', () => {
 
 		expect(store.getScopedFocus('preview'))
 			.toMatchObject({ scope: 'preview', revision: 0, ...previewFocus })
+		// The Document keeps the widget the user had selected (counter-1, found again by id and type in the new revision).
+		const counterAfter = inspectBlueprint(session.documentState.blueprint).nodes
+			.find(node => node.resolved && node.node.id === 'counter-1')!
 		expect(store.getScopedFocus('document'))
 			.toMatchObject({
 				scope: 'document',
 				revision: 1,
-				nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId,
+				nodeId: counterAfter.nodeId,
 			})
 
 		const documentFocusBefore = store.getScopedFocus('document')
@@ -81,7 +84,7 @@ describe('createInspectorFocusStore', () => {
 			.toEqual({ nodeId: inspectBlueprint(session.documentSnapshot.blueprint).rootNodeId })
 	})
 
-	it('resets focus to the new root after a committed Document change, discarding a prior member focus', async () => {
+	it('keeps the root selected after a preset when the root was the selection, and drops the member focus', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		const store = createInspectorFocusStore(session)
 
@@ -93,10 +96,10 @@ describe('createInspectorFocusStore', () => {
 			.toEqual({ nodeId: inspectBlueprint(session.documentSnapshot.blueprint).rootNodeId })
 	})
 
-	it('resets focus even when the newly applied Document Blueprint is invalid and Preview retains an older Runtime', async () => {
+	it('keeps the root selected (the selection was the root) when the new Document Blueprint is invalid and Preview retains an older Runtime', async () => {
 		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
 		const store = createInspectorFocusStore(session)
-		// A non-root member focus, so a reset is actually observable — `InspectionNodeId` allocation
+		// The root with a member focus, so dropping the member is observable — `InspectionNodeId` allocation
 		// restarts per Blueprint snapshot, so a bare root-vs-root comparison across snapshots would be
 		// coincidental (the type's own contract: no cross-snapshot equality guarantee).
 		store.setFocus({ nodeId: store.getFocus()!.nodeId, member: { type: 'state', name: 'count' } })
@@ -168,6 +171,65 @@ describe('createInspectorFocusStore', () => {
 			.toEqual({ nodeId: titleAfter.nodeId, member: { type: 'property', name: 'text' } })
 		expect(store.getScopedFocus('document'))
 			.toMatchObject({ revision: 1 })
+	})
+
+	it('keeps the selected widget (not its member) after a JSON Apply when the new Document still has it', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const store = createInspectorFocusStore(session)
+		const title = inspectBlueprint(session.documentState.blueprint).nodes.find(entry => entry.node.resolved && entry.node.id === 'title')!
+		store.setFocus({ nodeId: title.nodeId, member: { type: 'property', name: 'text' } })
+
+		const edited = JSON.parse(validSource) as { slots: { items: { id: string, config?: Record<string, unknown> }[] } }
+		edited.slots.items.find(item => item.id === 'title')!.config = { text: 'edited in JSON' }
+		session.setDraftSourceText(JSON.stringify(edited, null, 2))
+		const outcome = await session.apply()
+
+		expect(outcome.status)
+			.toBe('applied')
+		const titleAfter = inspectBlueprint(session.documentState.blueprint).nodes.find(entry => entry.node.resolved && entry.node.id === 'title')!
+		expect(store.getFocus())
+			.toEqual({ nodeId: titleAfter.nodeId })
+		expect(store.getScopedFocus('document'))
+			.toMatchObject({ revision: 1 })
+	})
+
+	it('goes back to the root after a JSON Apply that removed the selected widget', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const store = createInspectorFocusStore(session)
+		const title = inspectBlueprint(session.documentState.blueprint).nodes.find(entry => entry.node.resolved && entry.node.id === 'title')!
+		store.setFocus({ nodeId: title.nodeId })
+
+		const edited = JSON.parse(validSource) as { slots: { items: { id: string }[] } }
+		edited.slots.items = edited.slots.items.filter(item => item.id !== 'title')
+		session.setDraftSourceText(JSON.stringify(edited, null, 2))
+		await session.apply()
+
+		expect(store.getFocus())
+			.toEqual({ nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId })
+	})
+
+	it('goes back to the root when the selected widget\'s id and type were not unique in the old Document, even if they are in the new one', async () => {
+		const duplicated = {
+			id: 'root',
+			type: 'Stack',
+			slots: { items: [
+				{ id: 'same', type: 'Text', config: { text: 'a' } },
+				{ id: 'same', type: 'Text', config: { text: 'b' } },
+			] },
+		}
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: JSON.stringify(duplicated) })
+		const store = createInspectorFocusStore(session)
+		// The second "same" is selected; the Apply removes it and keeps the first, which is then the only "same".
+		const second = inspectBlueprint(session.documentState.blueprint).nodes.filter(entry => entry.node.resolved && entry.node.id === 'same')[1]!
+		store.setFocus({ nodeId: second.nodeId })
+
+		session.setDraftSourceText(JSON.stringify({ ...duplicated, slots: { items: [duplicated.slots.items[0]] } }))
+		const outcome = await session.apply()
+
+		expect(outcome.status)
+			.toBe('applied')
+		expect(store.getFocus())
+			.toEqual({ nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId })
 	})
 
 	it('goes back to the root when the widget cannot be found again by its id and type', async () => {

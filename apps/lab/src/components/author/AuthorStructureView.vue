@@ -17,7 +17,11 @@ const documentInspection = computed(() => inspectBlueprint(store.documentState.v
 const selectedNodeId = computed<InspectionNodeId | null>(() => store.documentFocus.value?.nodeId ?? null)
 const selectedNode = computed(() => selectedNodeId.value === null ? null : documentInspection.value.getNode(selectedNodeId.value))
 const busy = ref(false)
+/** An unapplied JSON draft exists: a Structure commit would be refused (`draft-dirty`), so the editor says so up front and sends nothing. */
+const draftLocked = computed(() => store.isDirty.value)
 const outcomeMessage = ref<string | null>(null)
+/** The Document revision a successful command produced (`data-revision` of the outcome line, for specs). */
+const outcomeRevision = ref<number | null>(null)
 const editorEl = useTemplateRef<HTMLElement>('editorEl')
 /** Set when a commit did not go through: the control at that path shows what the Document holds again (a switch or list the user already moved would not), the others keep their uncommitted text. */
 const resync = ref<{ readonly path: string, readonly tick: number, readonly message?: string } | null>(null)
@@ -54,7 +58,19 @@ const configAsJson = computed(() => typeof configValue.value !== 'object' || Arr
 
 watch([selectedNodeId, () => store.documentState.value.revision], () => {
 	outcomeMessage.value = null
+	outcomeRevision.value = null
 })
+
+/**
+ * The notice's button switches Author to JSON. This view (and the button with it) is unmounted by that, which would leave
+ * keyboard focus on the page: it goes to the JSON tab of the Author views instead, once the switch has rendered.
+ */
+async function openJsonView(): Promise<void> {
+	store.authorView.value = 'json'
+	await nextTick()
+	document.querySelector<HTMLElement>('[data-testid="author-view-json"]')
+		?.focus()
+}
 
 function selectNode(nodeId: InspectionNodeId): void {
 	store.setFocus('document', { nodeId })
@@ -110,6 +126,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 		return
 	busy.value = true
 	outcomeMessage.value = null
+	outcomeRevision.value = null
 	let applied = false
 	// Why the edit was not applied, for the control at its path: the reason alone, without the outcome line's own preamble.
 	let refusal: string | null = null
@@ -117,7 +134,10 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 		const outcome = await store.author(editConfig(store.documentState.value.revision, nodeId, path, edit))
 		applied = outcome.status === 'applied'
 		if (outcome.status === 'applied') {
-			outcomeMessage.value = i18n.t('Author command applied to Document r{revision}.', { revision: store.documentState.value.revision })
+			// Plain language: the revision is a developer detail (the header's details popover), kept here only as a
+			// machine-readable attribute of the outcome line.
+			outcomeMessage.value = i18n.t('Change applied. Use Undo to take it back.')
+			outcomeRevision.value = store.documentState.value.revision
 		}
 		else if (outcome.status === 'draft-dirty') {
 			outcomeMessage.value = i18n.t('Apply or Revert the JSON draft before using Structure commands.')
@@ -157,6 +177,24 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 			tabindex="-1"
 			class="min-w-0 overflow-auto p-2.5"
 		>
+			<!-- The JSON draft and Structure both edit the Document, and a Structure commit is refused while a draft exists
+				(it would be lost). Say so before anything is clicked, and lock the controls. -->
+			<div
+				v-if="draftLocked"
+				data-testid="structure-draft-notice"
+				role="note"
+				class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-(--lab-radius) border border-(--lab-color-warning) bg-(--lab-color-surface-alt) px-2 py-1.5 text-xs text-(--lab-color-text)"
+			>
+				<span class="min-w-0 flex-1">{{ i18n.t('The JSON view has unapplied changes. Apply or discard the JSON draft to edit here.') }}</span>
+				<button
+					type="button"
+					data-testid="structure-open-json"
+					class="min-h-6 cursor-pointer rounded-(--lab-radius) border border-default bg-default px-2 text-xs text-default focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+					@click="openJsonView"
+				>
+					{{ i18n.t('Open the JSON view') }}
+				</button>
+			</div>
 			<div
 				v-if="selectedNode === null"
 				class="text-xs text-muted"
@@ -184,24 +222,34 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 						<p class="m-0 mb-2 text-xs text-muted">
 							{{ i18n.t(configSchema === null ? 'This plugin publishes no config schema, so values are typed by what they hold and nothing can be added or removed here. Use JSON for that.' : 'Each change is applied to the Document at once and restarts the preview (its answers start over). Use Undo to take a change back.') }}
 						</p>
-						<ConfigFieldEditor
-							:key="selectedNodeId ?? 'none'"
-							bare
-							:resync="resync"
-							:asJson="configAsJson"
-							:root="configSchema"
-							:schema="configSchema"
-							:value="configValue"
-							:path="[]"
-							label="config"
-							:busy="busy"
-							@edit="onEdit"
-						/>
+						<!-- Locked by a JSON draft: the controls stay focusable and readable (as while a command runs: `aria-disabled`)
+							but send nothing, and look dimmed; the notice above says why. -->
+						<div
+							data-testid="structure-fields"
+							:data-locked="draftLocked ? 'true' : 'false'"
+							:class="draftLocked ? 'opacity-60' : undefined"
+						>
+							<ConfigFieldEditor
+								:key="selectedNodeId ?? 'none'"
+								bare
+								:resync="resync"
+								:asJson="configAsJson"
+								:root="configSchema"
+								:schema="configSchema"
+								:value="configValue"
+								:path="[]"
+								label="config"
+								:busy="busy || draftLocked"
+								:locked="draftLocked"
+								@edit="onEdit"
+							/>
+						</div>
 					</template>
 				</section>
 				<p
 					v-if="outcomeMessage !== null"
 					data-testid="author-command-outcome"
+					:data-revision="outcomeRevision ?? undefined"
 					role="status"
 					class="m-0 mt-3 text-xs text-muted"
 				>

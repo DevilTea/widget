@@ -122,7 +122,7 @@ function runConflictDemo(): void {
 				</p>
 				<template v-else>
 					<div class="mt-[6px] text-[11px] text-lab-text-muted">
-						{{ i18n.t(latestPatch.origin === 'json' ? 'JSON Apply' : latestPatch.origin === 'undo' ? 'Undo last apply' : 'Structure command') }} · {{ i18n.t('Document r{revision}', { revision: latestPatch.revision }) }}
+						{{ i18n.t(latestPatch.origin === 'json' ? 'JSON Apply' : latestPatch.origin === 'undo' ? 'Undo last change' : 'Structure command') }} · {{ i18n.t('Document r{revision}', { revision: latestPatch.revision }) }}
 					</div>
 					<pre
 						data-testid="document-tools-patch"

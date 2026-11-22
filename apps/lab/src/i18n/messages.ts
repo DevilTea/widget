@@ -16,26 +16,31 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Blueprint': 'Blueprint',
 	'Runtime': 'Runtime',
 	// Panel and view names are Lab navigation, so they are Taiwan Chinese; Widget vocabulary (Blueprint, Runtime,
-	// Preview, Document, State, Property, Method, Event) and the developer panels (Implementation, Document Tools)
-	// stay English, as they are in the docs and in Core's own text.
+	// Preview, Document, State, Property, Method, Event) stays English, as it is in the docs and in Core's own text. A tab
+	// whose name is navigation around such a word mixes the two, as 選取的 widget does: Events 紀錄, Document 工具; 實作 is
+	// the word the Lab already uses for Implementation elsewhere ("查看實作").
 	'Author': '編寫',
 	'Dependencies': '相依性',
 	'Relations': '關聯',
 	'Catalog': '目錄',
 	'Structure': '結構',
 	'JSON': 'JSON',
-	'Document Tools': 'Document Tools',
+	'Document Tools': 'Document 工具',
 	'active': '運作中',
 	'unavailable': '無法使用',
 	'valid': '有效',
 	'invalid': '無效',
 	'diagnostic': '問題',
 	'diagnostics': '問題',
-	'Revert': '還原',
+	// Revert discards the unapplied draft and Undo goes back one committed change: two different actions, so the zh-TW
+	// labels are not near-synonyms (還原 / 復原 were).
+	'Revert': '捨棄草稿',
 	'Format': '格式化',
 	'Apply': '套用',
 	'Applying…': '套用中…',
 	'Language': '語言',
+	// The overflow menu's language entry sets the Lab's own language, not a showcase's (the survey has its own select).
+	'Lab language': 'Lab 介面語言',
 	'English': 'English',
 	'Traditional Chinese (Taiwan)': '繁體中文（台灣）',
 	'Dismiss': '關閉說明',
@@ -87,7 +92,9 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Source': 'Source',
 	'Graph': '關係圖',
 	'Preview': 'Preview',
-	'Implementation': 'Implementation',
+	'Implementation': '實作',
+	// The Events log tab ("Events" in English); the Catalog's "Events" label keeps the bare Widget word.
+	'Events log': 'Events 紀錄',
 	'Try it yourself': '接下來自己試試看',
 	'You now know State, Property, Method, and dependency.': '你現在已經認識 State、Property、Method 與 dependency。',
 	'Open any inspector, or edit the Author JSON and press Apply.': '可以打開任一 inspector，或直接編輯 JSON 後按「套用」。',

@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { expandGraphWidget, expect, loadPreset, openDependenciesGraph, previewFrame, setLocale, test } from './fixtures'
+import { expandGraphWidget, expect, loadPreset, openAuthorJson, openDependenciesGraph, openDeveloperTool, previewFrame, setLocale, test } from './fixtures'
 
 /**
  * Issue #230 PR 3c: Graph readability (U11), grouped cycle problems (U16), target size and text size (U19), visible
@@ -206,6 +206,8 @@ test.describe('grouped cycle problems (U16)', () => {
 	test('four diagnostics of one cycle are one collapsed entry; opening it lists Core\'s four, verbatim', async ({ page }) => {
 		await openLab(page)
 		await loadPreset(page, 'survey-cycle')
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)
 			.toBeVisible()
@@ -259,6 +261,8 @@ test.describe('grouped cycle problems (U16)', () => {
 	test('a new list of problems starts collapsed again, and the members are listed without a direction', async ({ page }) => {
 		await openLab(page)
 		await loadPreset(page, 'survey-cycle')
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const group = page.getByTestId('author-problems')
 			.getByTestId('problem-group')
 		await group.click()
@@ -298,6 +302,8 @@ test.describe('grouped cycle problems (U16)', () => {
 	test('other diagnostics are never grouped', async ({ page }) => {
 		await openLab(page)
 		await loadPreset(page, 'survey-ai-draft')
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems.getByTestId('problem-row'))
 			.toHaveCount(5)
@@ -345,14 +351,138 @@ test.describe('visible keyboard focus (U20)', () => {
 	})
 })
 
+test.describe('inspector values stay inside their panel (Lab UX phase 1)', () => {
+	/** Every visible value summary of `panel` lies within the panel's box and has room to show something. */
+	async function expectValuesInside(panel: ReturnType<Page['locator']>): Promise<number> {
+		const panelBox = (await panel.boundingBox())!
+		const summaries = panel.getByTestId('value-summary')
+		const count = await summaries.count()
+		for (let index = 0; index < count; index++) {
+			const summary = summaries.nth(index)
+			const box = (await summary.boundingBox())!
+			const label = `${await summary.evaluate(element => element.closest('[data-member]')
+				?.getAttribute('data-member'))}`
+			expect(box.x, `${label} starts inside the panel`)
+				.toBeGreaterThanOrEqual(panelBox.x)
+			expect(box.x + box.width, `${label} ends inside the panel`)
+				.toBeLessThanOrEqual(panelBox.x + panelBox.width + 0.5)
+			expect(box.width, `${label} has room`)
+				.toBeGreaterThan(8)
+			// A cut value stays reachable: the row's tooltip is the whole summary.
+			const full = await summary.textContent()
+			await expect(summary.locator('xpath=ancestor::button[1]'))
+				.toHaveAttribute('title', full!)
+		}
+		return count
+	}
+
+	for (const [width, height] of [[1440, 900], [1280, 800]] as const) {
+		test(`Runtime, Selected widget and Blueprint at ${width}x${height}: no value is drawn past the panel's edge`, async ({ page }) => {
+			await page.setViewportSize({ width, height })
+			await openLab(page)
+
+			// The survey root holds long JSON values (its answers, `canSubmit`, ...): they used to stretch the Runtime grid to about 1500px.
+			await page.getByRole('tab', { name: 'Runtime', exact: true })
+				.click()
+			const runtime = page.getByTestId('inspector-split-layout')
+				.filter({ visible: true })
+			await expect(runtime.getByTestId('runtime-value-row')
+				.first())
+				.toBeVisible()
+			expect(await expectValuesInside(runtime))
+				.toBeGreaterThan(3)
+			expect(await runtime.evaluate(element => element.scrollWidth <= element.clientWidth), 'the Runtime grid does not grow past its panel')
+				.toBe(true)
+
+			await page.getByRole('tab', { name: 'Selected widget', exact: true })
+				.click()
+			const selected = page.getByTestId('selected-widget')
+			await expect(selected.getByTestId('runtime-value-row')
+				.first())
+				.toBeVisible()
+			expect(await expectValuesInside(selected))
+				.toBeGreaterThan(3)
+
+			await page.getByRole('tab', { name: 'Blueprint', exact: true })
+				.click()
+			const blueprint = page.getByTestId('inspector-split-layout')
+				.filter({ visible: true })
+			await expect(blueprint)
+				.toBeVisible()
+			expect(await blueprint.evaluate(element => element.scrollWidth <= element.clientWidth), 'the Blueprint grid does not grow past its panel')
+				.toBe(true)
+		})
+	}
+})
+
+test.describe('the selected workbench tab (Lab UX phase 1)', () => {
+	async function tabStyle(page: Page, name: string): Promise<{ background: string, shadow: string, color: string, borderBottom: string }> {
+		return page.getByRole('tab', { name, exact: true })
+			.evaluate((element) => {
+				const style = getComputedStyle(element)
+				return { background: style.backgroundColor, shadow: style.boxShadow, color: style.color, borderBottom: `${style.borderBottomWidth} ${style.borderBottomStyle}` }
+			})
+	}
+
+	for (const theme of ['light', 'dark'] as const) {
+		test(`looks selected in the ${theme} theme, with or without focus in its group, unlike the Author sub-tabs`, async ({ context, page }) => {
+			await context.addInitScript(([key, value]) => localStorage.setItem(key!, value!), [THEME_STORAGE_KEY, theme])
+			await openLab(page)
+			await expect(page.locator('html'))
+				.toHaveAttribute('data-lab-theme', theme)
+			const accent = await page.evaluate(() => {
+				const probe = document.createElement('i')
+				probe.style.color = 'var(--lab-color-accent)'
+				document.body.append(probe)
+				const color = getComputedStyle(probe).color
+				probe.remove()
+				return color
+			})
+
+			const check = async (): Promise<void> => {
+				const selected = await tabStyle(page, 'Author')
+				const other = await tabStyle(page, 'Blueprint')
+				expect(selected.shadow, 'an accent bar along the top edge')
+					.toBe(`${accent} 0px 2px 0px 0px inset`)
+				expect(other.shadow)
+					.toBe('none')
+				expect(selected.background)
+					.not
+					.toBe(other.background)
+				expect(selected.color)
+					.not
+					.toBe(other.color)
+			}
+			await check()
+			// Focus in the other group (the Preview): the tool group's selected tab must still look selected.
+			await page.getByRole('tab', { name: 'Preview', exact: true })
+				.click()
+			await check()
+
+			// The second level marks its selected view differently: a bottom border, no top bar.
+			const subTab = page.getByRole('tablist', { name: 'Author views' })
+				.getByRole('tab', { selected: true })
+			const sub = await subTab.evaluate((element) => {
+				const style = getComputedStyle(element)
+				return { shadow: style.boxShadow, borderBottom: `${style.borderBottomWidth} ${style.borderBottomStyle}`, borderColor: style.borderBottomColor }
+			})
+			expect(sub)
+				.toEqual({ shadow: 'none', borderBottom: '2px solid', borderColor: accent })
+			expect((await tabStyle(page, 'Author')).borderBottom)
+				.not
+				.toBe('2px solid')
+		})
+	}
+})
+
 test.describe('the Lab language in the chrome (U21)', () => {
 	test('panel, view and Graph names are Taiwan Chinese in zh-TW, and Widget vocabulary stays English', async ({ page }) => {
 		await openLab(page, 'showcase=survey&lang=zh-TW')
-		for (const name of ['編寫', '選取的 widget', '相依性', 'Blueprint', 'Runtime', 'Preview']) {
+		for (const name of ['編寫', '選取的 widget', 'Events 紀錄', '相依性', 'Blueprint', 'Runtime', 'Preview']) {
 			await expect(page.getByRole('tab', { name, exact: true }))
 				.toBeVisible()
 		}
-		for (const name of ['Author', 'Dependencies']) {
+		for (const name of ['Author', 'Dependencies', 'Events']) {
 			await expect(page.getByRole('tab', { name, exact: true }))
 				.toHaveCount(0)
 		}
@@ -384,6 +514,36 @@ test.describe('the Lab language in the chrome (U21)', () => {
 			.toBeVisible()
 		await setLocale(page, 'en')
 		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
+			.toBeVisible()
+	})
+
+	test('the panels opened on request are translated and follow a language switch too (Lab UX phase 1)', async ({ page }) => {
+		await openLab(page)
+		await openDeveloperTool(page, 'implementation')
+		await openDeveloperTool(page, 'document-tools')
+		await setLocale(page, 'zh-TW')
+		for (const name of ['實作', 'Document 工具', 'Events 紀錄']) {
+			await expect(page.getByRole('tab', { name, exact: true }))
+				.toBeVisible()
+		}
+		await setLocale(page, 'en')
+		for (const name of ['Implementation', 'Document Tools', 'Events']) {
+			await expect(page.getByRole('tab', { name, exact: true }))
+				.toBeVisible()
+		}
+	})
+
+	test('zh-TW names Revert and Undo so they cannot be confused, and the language entry is the Lab\'s (Lab UX phase 1)', async ({ page }) => {
+		await openLab(page, 'showcase=survey&lang=zh-TW')
+		await expect(page.getByTestId('revert-button'))
+			.toHaveText('捨棄草稿')
+		await expect(page.getByTestId('undo-button'))
+			.toHaveText('復原上一步')
+		await expect(page.getByRole('button', { name: '復原上一步', exact: true }))
+			.toHaveAttribute('data-testid', 'undo-button')
+		await page.getByTestId('overflow-menu')
+			.click()
+		await expect(page.getByRole('menuitem', { name: 'Lab 介面語言', exact: true }))
 			.toBeVisible()
 	})
 })

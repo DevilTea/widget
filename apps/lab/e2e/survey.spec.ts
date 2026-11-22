@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSurveyPreset, surveyPresets } from '../src/showcases/survey/presets'
-import { expect, expectDocumentStatus, expectPreviewStatus, loadPreset, openDependenciesGraph, openDeveloperTool, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectPreviewStatus, loadPreset, openAuthorJson, openDependenciesGraph, openDeveloperTool, previewFrame, test } from './fixtures'
 
 /**
  * Interactive Survey acceptance contract: the Maker Space open-day sign-up survey
@@ -82,8 +82,7 @@ test('1. JSON to UI: the default document renders as a form, Blueprint is valid,
 	await expect(preview.getByText('Guests coming with you'))
 		.toHaveCount(0)
 
-	await page.getByRole('tab', { name: 'Author' })
-		.click()
+	await openAuthorJson(page)
 	await expect(page.locator('.view-lines'))
 		.toContainText('Maker Space open day: sign-up')
 	await expectDocumentStatus(page, { valid: true })

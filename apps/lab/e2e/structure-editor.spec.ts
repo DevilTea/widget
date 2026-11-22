@@ -38,6 +38,29 @@ function configOf(source: unknown, id: string): Record<string, unknown> {
 	return questions.find(question => question.id === id)!.config
 }
 
+/**
+ * Makes the JSON draft dirty and acts on `control` in the SAME task, before Vue renders the lock that a draft puts on the
+ * editor (Lab UX phase 1: with a draft, Structure says so up front and its controls send nothing). The command therefore
+ * reaches the session, which refuses it (`draft-dirty`): this is how the specs below reach the refused-commit handling, which
+ * also serves patch errors and stale selections.
+ */
+async function actWithDraftAppearing(control: Locator, action: { click: true } | { choose: string } | { press: 'Enter' }): Promise<void> {
+	await control.evaluate((element, act) => {
+		(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }')
+		if ('click' in act) {
+			(element as HTMLElement).click()
+		}
+		else if ('choose' in act) {
+			const select = element as HTMLSelectElement
+			select.value = String([...select.options].findIndex(option => option.text === act.choose))
+			select.dispatchEvent(new Event('change', { bubbles: true }))
+		}
+		else {
+			element.dispatchEvent(new KeyboardEvent('keydown', { key: act.press, bubbles: true, cancelable: true }))
+		}
+	}, action)
+}
+
 test.describe('type-aware controls', () => {
 	test('a boolean is a switch: one click changes the Document, Undo takes it back', async ({ page }) => {
 		const editor = await openStructure(page, /guests : Numeric/)
@@ -48,7 +71,9 @@ test.describe('type-aware controls', () => {
 
 		await integer.click()
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied to Document r1.')
+			.toHaveText('Change applied. Use Undo to take it back.')
+		await expect(page.getByTestId('author-command-outcome'))
+			.toHaveAttribute('data-revision', '1')
 		await expect(integer)
 			.not
 			.toBeChecked()
@@ -81,7 +106,7 @@ test.describe('type-aware controls', () => {
 		await maxLength.fill('12')
 		await maxLength.press('Enter')
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied')
+			.toContainText('Change applied')
 		expect(configOf(await documentSource(page), 'phone').maxLength)
 			.toBe(12)
 
@@ -90,7 +115,7 @@ test.describe('type-aware controls', () => {
 		await maxLength.fill('2.5')
 		await maxLength.press('Enter')
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied')
+			.toContainText('Change applied')
 		expect(configOf(await documentSource(page), 'phone').maxLength)
 			.toBe(2.5)
 		await expect(page.getByTestId('document-status'))
@@ -117,7 +142,7 @@ test.describe('type-aware controls', () => {
 
 		await op.selectOption({ label: 'notEquals' })
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied')
+			.toContainText('Change applied')
 		expect((configOf(await documentSource(page), 'phone').required as { op: string }).op)
 			.toBe('notEquals')
 	})
@@ -133,7 +158,7 @@ test.describe('type-aware controls', () => {
 			.getByRole('button', { name: /Set value/ })
 			.click()
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied')
+			.toContainText('Change applied')
 		await expect(editor.getByRole('button', { name: /^Add/ }))
 			.toHaveCount(0)
 	})
@@ -212,12 +237,93 @@ test.describe('adding and removing where the schema allows it', () => {
 })
 
 test.describe('the Document stays the authority', () => {
-	test('an edit over an unapplied JSON draft is refused and keeps the draft', async ({ page }) => {
+	test('with an unapplied JSON draft, Structure says so before anything is clicked and its controls send nothing (Lab UX phase 1)', async ({ page }) => {
 		const editor = await openStructure(page, /guests : Numeric/)
-		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
-		await field(editor, 'integer')
+		const notice = editor.getByTestId('structure-draft-notice')
+		await expect(notice)
+			.toHaveCount(0)
+		await expect(editor.getByTestId('structure-fields'))
+			.toHaveAttribute('data-locked', 'false')
+		const integer = field(editor, 'integer')
 			.getByRole('switch')
+		const min = field(editor, 'min')
+			.getByRole('textbox')
+		const max = field(editor, 'max')
+			.getByRole('textbox')
+		const documentMax = String(configOf(await documentSource(page), 'guests').max)
+		// Typed before the draft appears and never committed.
+		await max.fill('99')
+
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
+		await expect(notice)
+			.toHaveText(/The JSON view has unapplied changes\. Apply or discard the JSON draft to edit here\./)
+		await expect(notice)
+			.toHaveAttribute('role', 'note')
+		await expect(editor.getByTestId('structure-fields'))
+			.toHaveAttribute('data-locked', 'true')
+		// Locked, not removed: the controls stay focusable and readable and say they are unavailable; the boxes take no typing.
+		await expect(integer)
+			.toHaveAttribute('aria-disabled', 'true')
+		await expect(min)
+			.toHaveAttribute('aria-disabled', 'true')
+		await expect(min)
+			.toHaveAttribute('readonly', '')
+		await expect(field(editor, 'min')
+			.getByRole('button', { name: 'Set value: min' }))
+			.toHaveAttribute('aria-disabled', 'true')
+
+		// Nothing is sent and nothing is typed: no refusal after the fact, the switch keeps the Document's value, the box keeps it
+		// too, the Document stays at r0. (Playwright treats `aria-disabled` as disabled, so the click is forced, as a user's would be.)
+		await integer.click({ force: true })
+		await min.focus()
+		await page.keyboard.type('3')
+		await page.keyboard.press('Enter')
+		await expect(min)
+			.toBeFocused()
+		await expect(min)
+			.toHaveValue('0')
+		await expect(integer)
+			.toBeChecked()
+		await expect(page.getByTestId('author-command-outcome'))
+			.toHaveCount(0)
+		await openStatusDetails(page)
+		await expect(page.getByTestId('status-document-revision'))
+			.toHaveText('r0')
+		await page.keyboard.press('Escape')
+
+		// Discarding the draft without leaving Structure unlocks it, and no box is left with text the Document does not hold.
+		await page.getByTestId('revert-button')
 			.click()
+		await expect(notice)
+			.toHaveCount(0)
+		await expect(editor.getByTestId('structure-fields'))
+			.toHaveAttribute('data-locked', 'false')
+		await expect(min)
+			.not
+			.toHaveAttribute('readonly', '')
+		await expect(min)
+			.toHaveValue('0')
+		await expect(max)
+			.toHaveValue(documentMax)
+		await expect(editor.getByTestId('not-applied'))
+			.toHaveCount(0)
+
+		// The notice leads to the JSON view, and keyboard focus goes with it (the button itself is gone).
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
+		await notice.getByRole('button', { name: 'Open the JSON view' })
+			.click()
+		const jsonTab = page.getByRole('tablist', { name: 'Author views' })
+			.getByRole('tab', { name: 'JSON', exact: true })
+		await expect(jsonTab)
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(jsonTab)
+			.toBeFocused()
+	})
+
+	test('an edit sent as the JSON draft appears is refused and keeps the draft', async ({ page }) => {
+		const editor = await openStructure(page, /guests : Numeric/)
+		await actWithDraftAppearing(field(editor, 'integer')
+			.getByRole('switch'), { click: true })
 		await expect(page.getByTestId('author-command-outcome'))
 			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
 		await openStatusDetails(page)
@@ -233,7 +339,7 @@ test.describe('the Document stays the authority', () => {
 		await min.fill('9')
 		await min.press('Enter')
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied')
+			.toContainText('Change applied')
 		await expect(page.getByTestId('document-status'))
 			.toHaveAttribute('data-state', 'problems')
 		await expect(page.getByTestId('preview-status'))
@@ -263,7 +369,7 @@ test.describe('keyboard focus stays through a commit', () => {
 		await integer.focus()
 		await page.keyboard.press('Space')
 		await expect(outcome)
-			.toContainText('applied to Document r1')
+			.toHaveAttribute('data-revision', '1')
 		await expect(integer)
 			.toBeFocused()
 
@@ -275,7 +381,7 @@ test.describe('keyboard focus stays through a commit', () => {
 		await page.keyboard.type('1')
 		await page.keyboard.press('Enter')
 		await expect(outcome)
-			.toContainText('applied to Document r2')
+			.toHaveAttribute('data-revision', '2')
 		await expect(min)
 			.toBeFocused()
 
@@ -284,7 +390,7 @@ test.describe('keyboard focus stays through a commit', () => {
 			.focus()
 		await page.keyboard.press('Enter')
 		await expect(outcome)
-			.toContainText('applied to Document r3')
+			.toHaveAttribute('data-revision', '3')
 		await expect(field(editor, 'max'))
 			.toHaveCount(0)
 		await expect(editor.locator(':focus'))
@@ -297,7 +403,7 @@ test.describe('keyboard focus stays through a commit', () => {
 			.focus()
 		await page.keyboard.press('Enter')
 		await expect(outcome)
-			.toContainText('applied to Document r4')
+			.toHaveAttribute('data-revision', '4')
 		await expect(field(editor, 'max')
 			.getByRole('textbox'))
 			.toBeFocused()
@@ -311,7 +417,7 @@ test.describe('keyboard focus stays through a commit', () => {
 		await op.focus()
 		await op.selectOption({ label: 'notEquals' })
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('applied to Document r1')
+			.toHaveAttribute('data-revision', '1')
 		await expect(op.locator('option:checked'))
 			.toHaveText('notEquals')
 		await expect(op)
@@ -353,7 +459,7 @@ test.describe('focus and triggers while a commit runs', () => {
 			;(document.querySelector('[data-testid="status-details"]') as HTMLElement).focus()
 		})
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('applied to Document r1')
+			.toHaveAttribute('data-revision', '1')
 		await expect(page.getByTestId('status-details'))
 			.toBeFocused()
 		await expect(editor.locator(':focus'))
@@ -370,7 +476,10 @@ test.describe('focus and triggers while a commit runs', () => {
 		})
 		const outcome = page.getByTestId('author-command-outcome')
 		await expect(outcome)
-			.toHaveText('Author command applied to Document r1.')
+			.toHaveText('Change applied. Use Undo to take it back.')
+		// One commit only: revision 1.
+		await expect(outcome)
+			.toHaveAttribute('data-revision', '1')
 		await expect(integer)
 			.not
 			.toBeChecked()
@@ -390,20 +499,21 @@ test.describe('focus and triggers while a commit runs', () => {
 		await label.getByRole('button', { name: 'Add key' })
 			.click()
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('applied to Document r1')
+			.toHaveAttribute('data-revision', '1')
 		await expect.poll(() => page.evaluate(() => (document.activeElement?.closest('[data-config-path]') as HTMLElement | null)?.dataset.configPath))
 			.toBe('label.a\\b"c')
 	})
 })
 
 test.describe('a commit that is refused: switches and lists show the Document, typed text and add choices are kept', () => {
+	// The draft appears in the same task as the edit (`actWithDraftAppearing`): with a draft already there, Structure is
+	// locked and sends nothing, so this is how a refusal is reached from the page.
 	test('a list and a switch snap back when the JSON draft is dirty', async ({ page }) => {
 		const editor = await openStructure(page, /phone : ShortAnswer/)
-		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
 
 		const op = field(editor, 'required.op')
 			.getByRole('combobox')
-		await op.selectOption({ label: 'notEquals' })
+		await actWithDraftAppearing(op, { choose: 'notEquals' })
 		await expect(page.getByTestId('author-command-outcome'))
 			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
 		await expect(op.locator('option:checked'))
@@ -411,13 +521,17 @@ test.describe('a commit that is refused: switches and lists show the Document, t
 		expect((configOf(await documentSource(page), 'phone').required as { op: string }).op)
 			.toBe('equals')
 
+		// Discard that draft, so the next edit is again one sent as a draft appears.
+		await page.getByTestId('revert-button')
+			.click()
 		await page.getByRole('button', { name: /guests : Numeric/ })
 			.click()
 		const integer = field(editor, 'integer')
 			.getByRole('switch')
 		await expect(integer)
 			.toBeChecked()
-		await integer.click()
+		await integer.focus()
+		await actWithDraftAppearing(integer, { click: true })
 		await expect(page.getByTestId('author-command-outcome'))
 			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
 		await expect(integer)
@@ -428,14 +542,13 @@ test.describe('a commit that is refused: switches and lists show the Document, t
 
 	test('a refused text keeps what was typed and says why; another field keeps its text; the Document value comes back on request', async ({ page }) => {
 		const editor = await openStructure(page, /guests : Numeric/)
-		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
 		const max = field(editor, 'max')
 			.getByRole('textbox')
 		await max.fill('42')
 		const min = field(editor, 'min')
 			.getByRole('textbox')
 		await min.fill('7')
-		await min.press('Enter')
+		await actWithDraftAppearing(min, { press: 'Enter' })
 		await expect(page.getByTestId('author-command-outcome'))
 			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
 		// Nothing typed is lost: the refused box keeps its input and says it was not applied.
@@ -464,11 +577,10 @@ test.describe('a commit that is refused: switches and lists show the Document, t
 
 	test('a refused text belongs to its widget: selecting another widget shows that widget\'s value and no note', async ({ page }) => {
 		const editor = await openStructure(page, /guests : Numeric/)
-		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
 		const min = field(editor, 'min')
 			.getByRole('textbox')
 		await min.fill('7')
-		await min.press('Enter')
+		await actWithDraftAppearing(min, { press: 'Enter' })
 		await expect(field(editor, 'min')
 			.getByTestId('not-applied'))
 			.toBeVisible()
@@ -492,11 +604,9 @@ test.describe('a commit that is refused: switches and lists show the Document, t
 			.click()
 		await expect(field(editor, 'max'))
 			.toHaveCount(0)
-		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
 		const optional = editor.getByRole('combobox', { name: 'Optional field to add to config' })
 		await optional.selectOption('max')
-		await editor.getByRole('button', { name: 'Add field' })
-			.click()
+		await actWithDraftAppearing(editor.getByRole('button', { name: 'Add field' }), { click: true })
 		await expect(page.getByTestId('author-command-outcome'))
 			.toHaveText('Apply or Revert the JSON draft before using Structure commands.')
 		await expect(optional)
@@ -539,7 +649,7 @@ test.describe('a config that is not an object, or is missing', () => {
 				.getByRole('button', { name: /Set value/ })
 				.click()
 			await expect(page.getByTestId('author-command-outcome'))
-				.toContainText('Author command applied')
+				.toContainText('Change applied')
 			expect(JSON.parse(await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.getDocumentSourceText())).config)
 				.toEqual({ text: 'fixed' })
 			await expect(page.getByTestId('document-status'))
@@ -560,7 +670,7 @@ test.describe('a config that is not an object, or is missing', () => {
 		await editor.getByRole('button', { name: 'Add field' })
 			.click()
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied')
+			.toContainText('Change applied')
 		expect(JSON.parse(await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.getDocumentSourceText())).config)
 			.toEqual({ languages: ['en'] })
 	})
@@ -574,7 +684,7 @@ test.describe('a config that is not an object, or is missing', () => {
 		await editor.getByRole('button', { name: 'Add field' })
 			.click()
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied')
+			.toContainText('Change applied')
 		await expect(field(editor, 'title'))
 			.toBeVisible()
 	})

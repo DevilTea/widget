@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
 
 /**
  * Trip budget splitter acceptance contract (issue #230, showcase 1): the Lisbon weekend trip
@@ -234,6 +234,8 @@ test.describe('failures', () => {
 
 		await expectDocumentStatus(page, { problems: 4 })
 		await expectPreviewStatus(page, 'stale')
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)
 			.toHaveAttribute('data-problem-count', '4')

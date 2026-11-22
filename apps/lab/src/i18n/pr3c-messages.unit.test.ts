@@ -50,12 +50,16 @@ describe('pR 3c strings', () => {
 		})
 	}
 
-	it('names the panels and views in Taiwan Chinese and keeps Widget vocabulary and developer panels in English', () => {
+	it('names the panels and views in Taiwan Chinese and keeps Widget vocabulary in English', () => {
 		const zh = (key: string): string => translatePresentationMessage('zh-TW', key)
 		expect([zh('Author'), zh('Dependencies'), zh('Relations'), zh('Graph'), zh('Catalog'), zh('Structure')])
 			.toEqual(['編寫', '相依性', '關聯', '關係圖', '目錄', '結構'])
-		expect([zh('Blueprint'), zh('Runtime'), zh('Preview'), zh('Implementation'), zh('Document Tools'), zh('JSON')])
-			.toEqual(['Blueprint', 'Runtime', 'Preview', 'Implementation', 'Document Tools', 'JSON'])
+		expect([zh('Blueprint'), zh('Runtime'), zh('Preview'), zh('JSON')])
+			.toEqual(['Blueprint', 'Runtime', 'Preview', 'JSON'])
+		// Lab UX phase 1: the developer panels' tabs are translated too (they were the half of the tab strip left in English);
+		// the Widget word inside a name stays English.
+		expect([zh('Implementation'), zh('Document Tools'), zh('Events log')])
+			.toEqual(['實作', 'Document 工具', 'Events 紀錄'])
 	})
 
 	it('leaves the strings verbatim in English', () => {

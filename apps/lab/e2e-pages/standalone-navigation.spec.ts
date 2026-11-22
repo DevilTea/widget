@@ -190,13 +190,16 @@ test('built Widget Lab runtime assets execute under the Pages base', async ({ pa
 		.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 		.toBeVisible({ timeout: 15_000 })
 
+	await page.getByRole('button', { name: 'Explore on my own' })
+		.click()
+	// Author opens on Structure (Lab UX phase 1): Monaco and its vendored engine load when the JSON view opens.
+	await page.getByRole('tablist', { name: 'Author views' })
+		.getByRole('tab', { name: 'JSON', exact: true })
+		.click()
 	await expect(page.locator('.monaco-editor'))
 		.toBeVisible({ timeout: 15_000 })
 	await expect.poll(() => requestedPaths.has('/widget/lab/vendor/modern-monaco/editor-core.mjs'))
 		.toBe(true)
-
-	await page.getByRole('button', { name: 'Explore on my own' })
-		.click()
 	await page.getByRole('tab', { name: 'Dependencies' })
 		.click()
 	// Relations is the default view; the Graph (and its layout Worker) is one click away.

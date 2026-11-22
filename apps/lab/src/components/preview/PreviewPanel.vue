@@ -217,11 +217,13 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 			>
 				{{ i18n.t('Inspect') }}
 			</button>
+			<!-- Names the panel a click opens (see `inspect.selected` above): Selected widget while linked, Runtime while diverged. -->
 			<span
 				v-if="inspectActive"
+				data-testid="inspect-hint"
 				class="text-[11px] text-lab-text-muted"
 			>
-				{{ i18n.t('Click a widget to focus it in {surface} — Esc to exit', { surface: i18n.t(store.revisionStatus.value.isLinked ? 'Blueprint' : 'Runtime') }) }}
+				{{ i18n.t('Click a widget to open it in {surface} — Esc to exit', { surface: i18n.t(store.revisionStatus.value.isLinked ? 'Selected widget' : 'Runtime') }) }}
 			</span>
 			<button
 				type="button"

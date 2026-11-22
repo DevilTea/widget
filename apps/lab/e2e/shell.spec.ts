@@ -34,7 +34,10 @@ test('app loads with header controls and all six panel tabs', async ({ page }) =
 			.toBeVisible()
 		switch (name) {
 			case 'Author':
-				await expect(panel.locator('.monaco-editor'))
+				// Structure is the view Author opens on (Lab UX phase 1; the JSON view and Monaco load on request).
+				await expect(panel.getByRole('tab', { name: 'Structure', exact: true }))
+					.toHaveAttribute('aria-selected', 'true')
+				await expect(panel.getByTestId('structure-editor'))
 					.toBeVisible()
 				break
 			case 'Selected widget':
@@ -137,6 +140,17 @@ test('Source editor initializes only from built preview assets (issues #30, #102
 	page.on('pageerror', error => pageErrors.push(error))
 
 	await page.goto('/?showcase=sandbox')
+	// Author opens on Structure (Lab UX phase 1); the editor mounts, and Monaco loads, only when the JSON view is opened.
+	await expect(page.getByRole('tablist', { name: 'Author views' })
+		.getByRole('tab', { name: 'Structure', exact: true }))
+		.toHaveAttribute('aria-selected', 'true')
+	await expect(page.getByTestId('structure-editor'))
+		.toBeVisible()
+	await expect(page.locator('.monaco-editor'))
+		.toHaveCount(0)
+	await page.getByRole('tablist', { name: 'Author views' })
+		.getByRole('tab', { name: 'JSON', exact: true })
+		.click()
 
 	const editor = page.locator('.monaco-editor')
 	await expect(editor)

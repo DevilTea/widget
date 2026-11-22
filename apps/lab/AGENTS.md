@@ -586,8 +586,8 @@ Renderer packs page (page-*.js + page-*.css)
 Renderer packs Nuxt UI pack (NuxtUiPack-*.js + NuxtUiPack-*.css)
                                          ~100.1 KB raw / ~23.9 KB gzip JS + ~197.7 KB / ~25.3 KB CSS — loaded the first time the Nuxt UI pack is chosen (its own
                                          nested Vue app, the eight Nuxt UI renderers, Tailwind utilities and the Nuxt UI component themes); the default frame never loads it
-modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON mounts
-vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON mounts
+modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON is first opened
+vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON is first opened
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
 Implementation panel + Shiki (ImplementationPanel-*.js)
@@ -614,20 +614,14 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
   force-enabled `useBuiltinLSP` and carried ~740 KB of unused LSP/grammar code is deliberately not
   imported anywhere), and
   `editor-core.mjs` is never in Vite's module graph at all (loaded by `modern-monaco` itself via the
-  importmap-resolved dynamic `import()` described in "Deployment" above). Both are still fetched
-  **during initial load today**, though: `AuthorJsonView.vue` renders `MonacoJsonEditor` when the JSON view is active,
-  Dockview mounts every one of the seven canonical panels' Vue components as soon as `Workbench.vue`'s
-  `onReady()` calls `addPanel()` for it (`inactive: true` only controls which tab is initially
-  *selected*, not whether Dockview mounts the panel's content — verified: dockview-vue keeps every
-  panel's rendered content in the DOM, not just the active one), and Author is the panel added first /
-  made the active tab. So `MonacoJsonEditor`'s `onMounted` runs immediately on app load regardless of
-  which tab a user looks at. This is an accepted, documented trade-off, not an oversight: Author JSON is
-  the Lab's default and most-used surface, so paying its cost immediately is preferable to adding a
-  mount-gate (`v-if` on tab activity) whose only benefit is deferring, never avoiding, that cost for the
-  overwhelmingly common path where a user opens Author JSON anyway. If onboarding/information-architecture
-  ever makes Author not the default active panel, revisit gating `MonacoJsonEditor`'s mount on the view
-  actually being active rather than merely present.
-- **ELK layout worker**: same eager-on-load shape as Monaco, for the same underlying reason, and this
+  importmap-resolved dynamic `import()` described in "Deployment" above). Both are fetched **when the Author JSON view is
+  first opened**: `AuthorPanel.vue` renders only the active view (`v-if`), and since Lab UX phase 1 the view Author opens on is
+  Structure, not JSON. (Before, JSON was the default and Dockview mounts every canonical panel's content at load, so
+  `MonacoJsonEditor` mounted, and both files were fetched, on every load whichever tab the user looked at; that was an accepted
+  trade-off while JSON was the default surface.) The JSON tab, the problems chip and "Show problems" are the ways in; `e2e/shell.spec.ts` asserts no `.monaco-editor` before JSON is opened and the Pages spec asserts
+  `editor-core.mjs` is requested once it is.
+- **ELK layout worker**: eager on load because Dockview mounts every canonical panel's content at load (the reason Monaco
+  was eager too until Lab UX phase 1 made Structure the first Author view; Monaco is now fetched when the JSON view is first opened), and this
   predates this issue's change — verified by loading the built app fresh (no tab interaction) and
   observing `layout.worker-*.js` requested immediately. `layout-client.ts`'s `ensureElk()` still only
   creates the `Worker` on the *first* `layoutGraph()` call rather than as an import-time side effect
@@ -641,10 +635,9 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
   that would mean gating panel *mount* (not just tab selection) on Dockview activity for Blueprint/
   Runtime/Graph, which is a Workbench/Dockview panel-lifecycle change out of scope for `DevilTea/deviltea-labs#30` — noted
   here as known, current-state behavior rather than silently left undocumented.
-- Neither of the two heavy, on-load fetches above is a *regression*: this document only makes explicit
-  what was already true before this issue's change (Monaco and ELK both already loaded on initial mount
-  before self-hosting), and self-hosting Monaco's engine does not move it into, or out of, that eager
-  path — it only removes the esm.sh dependency for the fetch that already happened at that same moment.
+- History: when Monaco's engine was self-hosted (`DevilTea/deviltea-labs#30`), Monaco and ELK were both fetched on initial mount, and
+  self-hosting moved neither into nor out of that path (it only removed the esm.sh dependency of a fetch that already happened). Since Lab UX
+  phase 1 Monaco is no longer part of it: Author opens on Structure and the editor mounts with the JSON view.
 - **Implementation panel + Shiki + curated raw-source chunks (`DevilTea/deviltea-labs#25` P3)**: unlike Monaco/ELK above,
   these genuinely stay lazy — `ImplementationPanel.vue` is registered in `Workbench.vue`'s `components`
   map through `defineAsyncComponent(() => import('./panels/ImplementationPanel.vue'))`, and the panel
@@ -1177,8 +1170,8 @@ the target session's already-authoritative revision-0 Runtime directly; re-apply
 source merely to trigger mounting is forbidden because Core correctly treats it as `changed:false`. All
 lifecycle-mutating operations remain serialized by the Lab store's transaction boundary.
 
-**Revert vs. Undo last apply.** Revert discards the unapplied draft only (disabled when there is none). *Undo last
-apply* (`LabSession.undoLastApply()`, `LabStore.undoLastApply()`) restores the source the Document held before its
+**Revert vs. Undo last change.** Revert discards the unapplied draft only (disabled when there is none). *Undo last
+change* (named "Undo last apply" until Lab UX phase 1: it also takes back Structure edits and presets, which the user never "applied") (`LabSession.undoLastApply()`, `LabStore.undoLastApply()`) restores the source the Document held before its
 last revision-advancing commit, as a NEW Document revision through the same root-replacement commit and Preview
 promotion path as Apply (origin `'undo'` in Document Tools): it never rewinds Core's Document, so revision numbers keep
 growing (r0 -> r1 -> undo -> r2) and the Preview is replaced like for any valid commit. The session keeps a bounded
@@ -1236,6 +1229,16 @@ an add that is not reported, or is reported and refused, keeps the choice for an
 selection) reaches only the control at the edit's path (`resync`, passed down the tree, with the outcome message): a list or a switch the user only moved is re-created and
 shows what the Document holds again; a text, number or JSON box keeps the rejected input (nothing typed is lost) and says "Not applied: <why>" (`data-testid="not-applied"`,
 the box's `aria-describedby`; the reason alone, the outcome line above is the live announcement), with **Use the Document value** to go back (focus returns to the box).
+**While a JSON draft exists** (`isDirty`) a Structure commit would be refused (`draft-dirty`: it would discard the draft), so since Lab UX phase 1
+Structure says so before anything is clicked: a notice above the editor ("The JSON view has unapplied changes. Apply or discard the JSON draft
+to edit here.", `structure-draft-notice`, `role="note"`, with **Open the JSON view**, which then puts keyboard focus on the JSON tab of the
+Author views, `author-view-json`) and the fields are locked (`structure-fields` `data-locked="true"`, dimmed; `ConfigFieldEditor` gets `busy`
+and `locked`, so the controls keep focus and readability, carry `aria-disabled` and send nothing, and the text, number and JSON boxes are
+`readonly`, so nothing can be typed that would sit unsent in a box). When the lock lifts (Apply or Revert, even without leaving Structure) every
+box shows the Document's value again, including text typed before the draft appeared. The tree stays usable. The `draft-dirty` refusal and the resync/"Not applied" handling stay for a draft that appears while a
+command is being sent (and serve patch errors and stale selections); `e2e/structure-editor.spec.ts` reaches them by setting the draft and
+acting in the same task (`actWithDraftAppearing`). A command that went through says so in plain language ("Change applied. Use Undo to take it back."; it said "Author command applied to Document rN"); the
+revision it produced is the outcome line's `data-revision`, for specs.
 A later change of the Document's value at that path replaces the text and clears the note (a JSON box compares by content, so the same config re-read as a new
 object changes nothing), and so does typing the Document's value back. Text typed into other fields is kept, and the root editor is keyed by the selected
 widget, so nothing typed or refused for one widget is shown for another.
@@ -1246,16 +1249,22 @@ snapshot node and lowers the command to a `SourcePatch` addressed by the node's 
 to an array uses the JSON Pointer form `.../-`, the only way a patch can say "append"; the first key of a widget that has no `config` yet
 creates it; so does a `null` config; an empty path replaces the whole config with any JSON value, or creates it). The component never constructs a patch and never targets a widget by id, which keeps duplicate authored ids and cross-revision focus
 safe. A path that no longer exists, an `add` over an existing key, a stale revision and a non-JSON value are explicit `unsupported` outcomes, each with its own message;
-mechanical patch failures are `patch-error`. After a **Structure** commit Document focus stays on the same widget and member (found again
-by id and type; an ambiguous or missing one goes back to the root), so edits can follow each other; every other commit (JSON Apply, preset,
-Undo, showcase switch) still resets to the root.
+mechanical patch failures are `patch-error`. After a commit Document focus stays on the same widget when the new Document still has it (found again
+by id and type; an ambiguous or missing one goes back to the root). After a **Structure** commit the member stays too, so edits can follow
+each other; after a JSON Apply, a preset or Undo only the widget is kept (the tree may have changed, and a member with it). Until Lab UX
+phase 1 those commits always reset to the root, which threw the user out of the widget they were editing after every Apply. A showcase
+switch builds a new focus store and starts at the root (`src/lab/focus.ts`, `focus.unit.test.ts`).
+**A Structure commit keeps key order**: the edited key and its ancestors stay where they were in the source JSON (`label.en` stays before
+`zh-TW`, `config` before `slots`), so the JSON view does not reshuffle after an edit. That is Core's `applyPatch` keeping a replaced member in
+place (`DevilTea/widget#260`); the Lab adds nothing for it. `author.unit.test.ts` ("a Structure commit keeps the key order of the source") commits through
+`LabSession.author()` and compares every object's key order before and after; it fails against a Core older than that change.
 
 Successful Structure commands and JSON Apply share `LabSession`'s Document commit and Runtime promotion
 boundary. A successful Structure commit rewrites both applied source text and the JSON draft to deterministic
 pretty JSON only when the draft still equals the command's captured clean text; a concurrent Monaco edit is
 preserved as dirty. Invalid Document commits advance the authored revision while retaining the prior valid
 Preview revision. No persistence, authoritative history, redo, collaboration, drag/drop, or Runtime-state migration
-belongs to this Phase 3 workspace (the bounded "Undo last apply" stack in "Apply lifecycle" is a convenience over the
+belongs to this Phase 3 workspace (the bounded "Undo last change" stack in "Apply lifecycle" is a convenience over the
 Document commit path, not a history).
 
 ### Author recovery and diagnostics (Phase 4)
@@ -1293,7 +1302,7 @@ implementation, or alternative authored source authority.
 
 `LabHeader.vue` is one row from 1280px up (`e2e/header-feedback.spec.ts` pins it at 1280/1440/1920), grouped by job:
 the title; the **Examples** menu; two plain-language **status chips** and a details popover; the edit actions
-**Apply / Revert / Undo / Format**; and an **overflow** menu with Tutorial, Theme, Language and a **Developer**
+**Apply / Revert / Undo / Format**; and an **overflow** menu with Tutorial, Theme, **Lab language** (labelled as the Lab's own, since the survey has a language select of its own in the Preview) and a **Developer**
 submenu (Implementation, Document Tools). Hidden test fixtures stay reachable only through `?showcase=`.
 
 - *Examples menu* (`UDropdownMenu`): a Showcase group and the current showcase's Preset group (checkbox items, the
@@ -1307,11 +1316,21 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   from that text) and preview (`data-state` `current` | `stale` | `unavailable`: "Preview up to date" / "Preview shows the
   last valid version" / "No preview yet"). `data-testid` stays `document-status` / `preview-status`. Revision numbers, the Blueprint
   status and Linked / Diverged are developer details in the info popover (`status-details`; `revision-link-status` lives there).
+  Both stay facts about the **committed** Document. A third fact, the **draft** (`LabStatus.draft`: `clean` | `unapplied`, from
+  `LabSession.isDirty`), adds the chip "Unapplied changes" (`draft-status`) while the JSON draft differs from the Document, and the
+  Preview chip, while `current`, then says "Preview shows the last applied version" instead of "Preview up to date"
+  (`data-behind-draft="true"`; `data-state` stays `current`), so nothing claims the Preview shows what the user is typing. The chips
+  are not live regions (no `role="status"`): nothing is announced when they change, on purpose for now, since a later phase replaces
+  them with one status chip and handles announcements there. With problems, the validity chip is a **button** (`UButton`, same test id and data
+  attributes) that runs `store.showProblems()`; its accessible name is "N problems: show them in the JSON view" (the visible text is
+  part of it). `e2e/header-feedback.spec.ts` pins the draft chip, the one-row header with it at 1280px (en and zh-TW, and zh-TW with the
+  problems button, the draft chip and the stale Preview label all shown) and the button.
 - *Edit actions*: a disabled action keeps `aria-disabled="true"` instead of `disabled` so it stays focusable and its tooltip
   can say why (nothing to apply / revert / undo, or "apply or revert your unapplied edits before undoing"); the click
   handler also refuses. Apply's tooltip shows the shortcut as key caps. Undo shows "Undo" and is
-  named "Undo last apply" for assistive technology (the visible text is contained in the name); because that name contains
-  "apply", specs and helpers must look the Apply button up with `exact: true` (or its test id).
+  named "Undo last change" for assistive technology (the visible text is contained in the name); specs and helpers look the Apply
+  button up with `exact: true` (or its test id). zh-TW: Revert is 捨棄草稿 and Undo 復原上一步 (they were 還原 / 復原, near-synonyms for two
+  different actions); every zh-TW string about reverting says 捨棄 (`i18n/ux-phase1-messages.unit.test.ts`).
 - *Cmd/Ctrl+Enter* applies from Monaco (an editor *action* registered in `use-monaco-editor.ts` and disposed with the editor; a
   `addCommand()` would leak a global keybinding per remount; Monaco binds the key to "insert line" otherwise) and from anywhere
   else through `App.vue`'s window listeners. Everything except Dockview tabs is handled in the **bubble** phase, so a control that
@@ -1329,7 +1348,9 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   Monaco, onto the other header menu; tracked with `onInteractOutside`, as Reka's own handler does for non-modal menus) focus is left
   where the user put it: refocusing the trigger there swallowed typing and closed the menu that click had just opened. A chosen item's
   action runs in both cases. e2e (`menu focus handling`) pins both, and the menu helpers click a menu path once, with no retry.
-- `LabStore.authorView` (Catalog / Structure / JSON) lives in the store, not in `AuthorPanel`, so other surfaces can
+- `LabStore.authorView` (Catalog / Structure / JSON) starts on **Structure** (Lab UX phase 1; it was JSON) and then keeps what the user
+  chose, also across showcase switches; it is not saved across reloads. Specs that need Monaco or the Problems list open it with
+  `openAuthorJson()` (`e2e/fixtures.ts`). It lives in the store, not in `AuthorPanel`, so other surfaces can
   open the JSON view; `showProblems()` sets `activeTab`, `authorView` and `problemsFocusPending`. `Workbench.vue` now also feeds
   Dockview's active panel back into `activeTab` (and never re-activates the panel already active, which moves DOM focus out of
   Monaco), so asking for a tab that is "already" `activeTab` in the store but no longer on screen still switches.
@@ -1347,7 +1368,7 @@ per-keystroke session tick, so typing re-runs neither the inspection nor the col
 recomputed from the current text on every edit, because they must follow it.
 
 The range is located by source path in the **current editor text**, so it stays on target while the user edits and an
-unapplied draft is still mapped (a note says the rows are "from the last Apply"; an unparsable draft has no ranges). The
+unapplied draft is still mapped (a note says the rows are "from the last change"; an unparsable draft has no ranges). The
 path is `blueprint.getSourcePath(node)` of the diagnostic's location node plus its own relative part (`invalid-widget-config`'s
 `path` is config-relative, the other diagnostics' `path` is node-relative, a `slot` / `slot-child` location adds
 `slots[slot][index]`, a source-level diagnostic's `path` is absolute). `problemSpan()` then highlights a primitive value whole,
@@ -1385,7 +1406,9 @@ current Document inspection surface for semantic status, diagnostics, recovery n
 focus; `RuntimePanel.vue` is the Preview-revision surface for passive Runtime state/property/method
 inspection and Preview focus. They must not gain a shared Blueprint/Runtime mode, shared revision state,
 or cross-revision `InspectionNodeId` mapping. Preview Inspect selects the Selected widget pane when
-Document/Preview revisions are linked (it selected Blueprint before) and Runtime when they diverge; Graph and Implementation retain
+Document/Preview revisions are linked (it selected Blueprint before) and Runtime when they diverge, and the hint next to the Inspect
+button names that panel ("Click a widget to open it in Selected widget / Runtime", `inspect-hint`; it said "focus it in Blueprint"
+until Lab UX phase 1, `e2e/inspect.spec.ts` pins both cases); Graph and Implementation retain
 their existing Document-scoped entry points.
 
 `src/components/inspector/InspectorPanelShell.vue` and `InspectorSplitLayout.vue` are intentionally
@@ -1486,7 +1509,11 @@ the room the row has (no fixed width; its full text is the tooltip), a separate 
 1000 nodes, 500 characters) belong to the Inspector snapshot, set in `packages/inspector`; the Lab does not change the protocol or work
 around them and instead marks every cut where it happened ("truncated by the Inspector snapshot (nested too deeply)", "more entries
 were left out", "cut"), with one note under a value that has any (`hasTruncation()`). `formatInspectableValue()` (the one-line
-summary) still prints `<truncated>`.
+summary) still prints `<truncated>`. The summary can only take "the room the row has" if the panel's grid does not grow with it:
+`InspectorSplitLayout.vue` (Blueprint and Runtime) uses `220px 1px minmax(0, 1fr)` with `min-w-0` columns. A plain `1fr` track has the
+content's min-content width as its minimum, so one long JSON preview stretched the Runtime grid to about 1500px in a 690px panel and
+`overflow: hidden` hid every value. `e2e/polish.spec.ts` ("inspector values stay inside their panel") checks that every summary in
+Runtime and Selected widget lies inside its panel at 1440 and 1280, keeps its full text as the tooltip, and that neither grid scrolls sideways.
 
 **Config (audit U25).** `ConfigView.vue` shows the resolved config by default and the authored one on request, and only when they
 differ (`lib/config-compare.ts`, structural equality; it names the top-level fields that differ); equal configs are one block with a note.
@@ -1519,14 +1546,20 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
   text nodes under 11px per surface, plus axe-core (tags wcag2a, wcag2aa, wcag21aa, wcag22aa and best-practice; both themes, 1440px) on Header, Author (JSON, Catalog,
   Structure), Selected widget, Blueprint, Runtime and Dependencies (Relations, Graph); axe is deliberately not a dependency of the repository.
   `e2e/polish.spec.ts` pins the Graph's sizes.
+- **Selected tab.** The selected Dockview tab of each group has the panel background and a 2px accent bar along its top edge (an inset
+  `box-shadow`, so its size does not change), in both themes and whether or not its group has focus (it used to look like its hidden
+  siblings in a group without focus). The Author sub-tabs mark their selected view with a 2px bottom border and bold text, so the two
+  levels never look alike. `e2e/polish.spec.ts` ("the selected workbench tab") reads the computed styles.
 - **Focus.** `dockview-theme.css` draws a 2px accent ring (inside the tab) on a Dockview tab or tab action reached with the keyboard (`:focus-visible`; Dockview's own
   1px divider-colour outline is `!important`, so the Lab's rule is too, and more specific). The Graph's expand/collapse toggles, cluster buttons and member
   cards have a 2px accent outline. Graph **edges** are one Tab stop walked with the arrow keys, with an accent band as
   the focus indicator (see "Dependencies inspector"); Relations remains the dense keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
 - **Language.** Navigation names are Taiwan Chinese: Author is 編寫, Dependencies 相依性, Relations 關聯, Graph 關係圖, Catalog 目錄, Structure 結構 (tab titles
-  follow a language switch). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source) and so do
-  the developer panels **Implementation** and **Document Tools** (they name features of the docs and Core, and the specs reach them by those names), `JSON` and the
-  product name. Source-owned text is never translated: Core diagnostics, plugin and schema descriptions, the survey's questions and the engine messages. The
+  follow a language switch). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source), and so do
+  `JSON` and the product name. Since Lab UX phase 1 every tab title is translated: a name that is navigation around a Widget word mixes the two, as 選取的 widget
+  already did: the Events log is "Events 紀錄" (its own message, `Events log`, so the Catalog's bare "Events" label stays), Document Tools "Document 工具", and
+  Implementation 實作 (the word "查看實作" already used). The panels opened on request follow a language switch like the canonical ones; specs reach them
+  through `openDeveloperTool()`, whose labels follow the page language. Source-owned text is never translated: Core diagnostics, plugin and schema descriptions, the survey's questions and the engine messages. The
   survey examples' names and descriptions in the Examples menu are Lab copy and are translated. `i18n/pr3c-messages.unit.test.ts` fails when a literal passed to
   `i18n.t()` in the PR 3c surfaces has no zh-TW entry.
 - **Monaco contrast (U18).** `theme/monaco-themes.ts` is One Light and One Dark Pro with the colours that failed 4.5:1 on the editor background replaced by
@@ -1555,7 +1588,7 @@ authority or validator; invalid/recovery Documents show that the Core preconditi
 
 The Document trace is a finite, session-only ring of Lab-observed parse/commit/patch/conflict metadata.
 It is explicitly telemetry: no persistence, replay, restore, redo, collaboration, or authoritative
-history semantics may be added (an "Undo last apply" commit is just another observed commit, origin `undo`). Runtime/Preview behavior, revision-scoped focus, Author recovery,
+history semantics may be added (an "Undo last change" commit is just another observed commit, origin `undo`). Runtime/Preview behavior, revision-scoped focus, Author recovery,
 Blueprint/Runtime separation, Dependencies, and Implementation entry points remain unchanged.
 
 ## Active follow-up backlog

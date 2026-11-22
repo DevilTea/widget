@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
 
 /**
  * Quote rules acceptance contract (issue #230, showcase 2): the Corner Press print job quote
@@ -238,6 +238,8 @@ test.describe('the schema library\'s own messages', () => {
 
 		await expectDocumentStatus(page, { problems: 6 })
 		await expectPreviewStatus(page, 'stale')
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)
 			.toHaveAttribute('data-problem-count', '6')
@@ -307,7 +309,7 @@ test.describe('the config JSON Schema', () => {
 			.getByRole('textbox')
 			.press('Enter')
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied')
+			.toContainText('Change applied')
 		expect((await documentSource(page)).slots.rules[0].config.tiers[1].percent)
 			.toBe(7)
 		// The change reaches the page: 752 pieces is in the 300 tier, now 7% of 10900 = 763 off.

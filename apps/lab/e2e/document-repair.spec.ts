@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
 
 /**
  * Legacy document repair acceptance contract (issue #230): the repair desk (`showcases/document-repair/presets.ts`, preset
@@ -278,6 +278,8 @@ test.describe('config diagnostics', () => {
 		await expect(previewFrame(page)
 			.getByRole('heading', { name: 'Notice board: drafts from older versions', level: 1 }))
 			.toBeVisible()
+		// Author opens on Structure: the Problems list is under the JSON editor.
+		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)
 			.toHaveAttribute('data-problem-count', '4')

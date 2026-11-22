@@ -124,16 +124,28 @@ onBeforeUnmount(() => {
 /** The panels whose activation is mirrored in `LabStore.activeTab` (see `watchTutorialTabActivation`). */
 const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview'])
 
-/** Tab titles follow the Lab language at the moment a layout is built or restored (as they always did). */
+/**
+ * Tab titles follow the Lab language at the moment a layout is built or restored (as they always did). Widget vocabulary
+ * (Blueprint, Runtime, Preview) stays English; the Events log is "Events" in English and "Events 紀錄" in Taiwan Chinese,
+ * through its own message so the Catalog's "Events" label keeps the bare word.
+ */
 function canonicalTitles(): Readonly<Record<string, string>> {
 	return {
 		author: i18n.t('Author'),
 		widget: i18n.t('Selected widget'),
 		blueprint: 'Blueprint',
 		runtime: 'Runtime',
-		events: 'Events',
+		events: i18n.locale.value === 'en' ? 'Events' : i18n.t('Events log'),
 		dependencies: i18n.t('Dependencies'),
 		preview: 'Preview',
+	}
+}
+
+/** Titles of the panels opened on request; they follow a language switch like the canonical ones. */
+function requestedPanelTitles(): Readonly<Record<string, string>> {
+	return {
+		'implementation': i18n.t('Implementation'),
+		'document-tools': i18n.t('Document Tools'),
 	}
 }
 
@@ -229,6 +241,8 @@ function watchTitleLocale(api: DockviewApi): void {
 		const titles = canonicalTitles()
 		for (const id of CANONICAL_PANEL_IDS)
 			api.getPanel(id)?.api.setTitle(titles[id] ?? id)
+		for (const [id, title] of Object.entries(requestedPanelTitles()))
+			api.getPanel(id)?.api.setTitle(title)
 	})
 }
 
@@ -312,7 +326,7 @@ function watchImplementationOpenRequests(api: DockviewApi): void {
 			api.addPanel({
 				id: 'implementation',
 				component: 'implementation',
-				title: 'Implementation',
+				title: requestedPanelTitles().implementation!,
 				position: { referencePanel: 'author', direction: 'within' },
 			})
 		},
@@ -332,7 +346,7 @@ function watchDocumentToolsOpenRequests(api: DockviewApi): void {
 			api.addPanel({
 				id: 'document-tools',
 				component: 'documentTools',
-				title: i18n.t('Document Tools'),
+				title: requestedPanelTitles()['document-tools']!,
 				position: { referencePanel: 'author', direction: 'within' },
 			})
 		},

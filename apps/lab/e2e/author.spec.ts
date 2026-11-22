@@ -24,7 +24,7 @@ test('Author workspace exposes Core catalog, Structure commands, and synchronize
 		.toHaveText('r1')
 	await page.keyboard.press('Escape')
 	await expect(page.getByTestId('author-command-outcome'))
-		.toContainText('Author command applied')
+		.toContainText('Change applied')
 
 	await page.getByRole('tab', { name: 'JSON' })
 		.click()
@@ -151,5 +151,5 @@ test('rejects blank numeric Structure values while preserving scalar editing beh
 		.getByRole('button', { name: 'Set value' })
 		.click()
 	await expect(page.getByTestId('author-command-outcome'))
-		.toContainText('Author command applied')
+		.toContainText('Change applied')
 })

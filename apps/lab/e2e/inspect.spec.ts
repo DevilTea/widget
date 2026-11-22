@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { expect, previewFrame, test } from './fixtures'
+import { expect, loadPreset, previewFrame, test } from './fixtures'
 
 /**
  * Issue #25 P2 "Preview -> semantic inspector bridge" (Inspect mode) contract.
@@ -140,6 +140,34 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.toBeVisible()
 		await expect(page.getByRole('heading', { name: 'root : Stack' }))
 			.toHaveCount(0)
+	})
+
+	test('the hint names the panel a click opens: Selected widget, or Runtime while the Preview lags the Document', async ({ page }) => {
+		await page.goto('/?showcase=sandbox')
+		await inspectToggle(page)
+			.click()
+		const hint = page.getByTestId('inspect-hint')
+		await expect(hint)
+			.toHaveText('Click a widget to open it in Selected widget — Esc to exit')
+		await previewFrame(page)
+			.getByText(COUNTER_TEXT_0, { exact: true })
+			.click()
+		await expect(page.getByRole('tab', { name: 'Selected widget' }))
+			.toHaveAttribute('aria-selected', 'true')
+
+		// An invalid Document leaves the Preview on the last valid revision: only the Runtime panel knows its widgets.
+		await loadPreset(page, 'invalid-semantic')
+		await expect(page.getByTestId('preview-status'))
+			.toHaveAttribute('data-state', 'stale')
+		await expect(inspectToggle(page))
+			.toHaveAttribute('aria-pressed', 'true')
+		await expect(hint)
+			.toHaveText('Click a widget to open it in Runtime — Esc to exit')
+		await previewFrame(page)
+			.getByText(COUNTER_TEXT_0, { exact: true })
+			.click()
+		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
+			.toHaveAttribute('aria-selected', 'true')
 	})
 
 	test('Escape exits Inspect mode: badge disappears and subsequent clicks act normally', async ({ page }) => {

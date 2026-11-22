@@ -2,44 +2,56 @@ import { describe, expect, it } from 'vitest'
 import { getLabRevisionStatus } from './revisions'
 import { deriveLabStatus } from './status'
 
-function status(options: { blueprint: 'valid' | 'invalid', diagnostics?: number, parseError?: boolean, document: number, preview: number | null, previewFailed?: boolean }) {
+function status(options: { blueprint: 'valid' | 'invalid', diagnostics?: number, parseError?: boolean, document: number, preview: number | null, previewFailed?: boolean, draft?: boolean }) {
 	return deriveLabStatus({
 		blueprintStatus: options.blueprint,
 		diagnosticCount: options.diagnostics ?? 0,
 		hasParseError: options.parseError ?? false,
 		revisions: getLabRevisionStatus(options.document, options.preview),
 		previewFailed: options.previewFailed,
+		hasUnappliedDraft: options.draft,
 	})
 }
 
 describe('deriveLabStatus', () => {
+	it('reports an unapplied draft without changing what it says about the committed Document and the Preview', () => {
+		expect(status({ blueprint: 'valid', document: 2, preview: 2, draft: true }))
+			.toEqual({ validity: { kind: 'valid' }, preview: 'current', draft: 'unapplied' })
+		expect(status({ blueprint: 'invalid', diagnostics: 3, document: 2, preview: 1, draft: true }))
+			.toEqual({ validity: { kind: 'problems', count: 3 }, preview: 'stale', draft: 'unapplied' })
+		expect(status({ blueprint: 'valid', document: 0, preview: null, draft: true }).draft)
+			.toBe('unapplied')
+		expect(status({ blueprint: 'valid', document: 2, preview: 2, draft: false }).draft)
+			.toBe('clean')
+	})
+
 	it('is valid with an up-to-date preview for a clean, promoted Document', () => {
 		expect(status({ blueprint: 'valid', document: 3, preview: 3 }))
-			.toEqual({ validity: { kind: 'valid' }, preview: 'current' })
+			.toEqual({ validity: { kind: 'valid' }, preview: 'current', draft: 'clean' })
 	})
 
 	it('counts the Blueprint diagnostics as problems and reports the preview as the last valid version', () => {
 		expect(status({ blueprint: 'invalid', diagnostics: 5, document: 1, preview: 0 }))
-			.toEqual({ validity: { kind: 'problems', count: 5 }, preview: 'stale' })
+			.toEqual({ validity: { kind: 'problems', count: 5 }, preview: 'stale', draft: 'clean' })
 		expect(status({ blueprint: 'invalid', diagnostics: 1, document: 2, preview: 0 }).validity)
 			.toEqual({ kind: 'problems', count: 1 })
 	})
 
 	it('counts a JSON syntax error of the last Apply as one more problem, even for a valid Document', () => {
 		expect(status({ blueprint: 'valid', parseError: true, document: 0, preview: 0 }))
-			.toEqual({ validity: { kind: 'problems', count: 1 }, preview: 'current' })
+			.toEqual({ validity: { kind: 'problems', count: 1 }, preview: 'current', draft: 'clean' })
 		expect(status({ blueprint: 'invalid', diagnostics: 2, parseError: true, document: 1, preview: 0 }).validity)
 			.toEqual({ kind: 'problems', count: 3 })
 	})
 
 	it('reports an unavailable preview when no valid Document was ever promoted', () => {
 		expect(status({ blueprint: 'invalid', diagnostics: 2, document: 0, preview: null }))
-			.toEqual({ validity: { kind: 'problems', count: 2 }, preview: 'unavailable' })
+			.toEqual({ validity: { kind: 'problems', count: 2 }, preview: 'unavailable', draft: 'clean' })
 	})
 
 	it('reports a Preview frame that failed as failed, whatever revisions the Lab holds', () => {
 		expect(status({ blueprint: 'valid', document: 0, preview: 0, previewFailed: true }))
-			.toEqual({ validity: { kind: 'valid' }, preview: 'failed' })
+			.toEqual({ validity: { kind: 'valid' }, preview: 'failed', draft: 'clean' })
 		expect(status({ blueprint: 'valid', document: 0, preview: null, previewFailed: true }).preview)
 			.toBe('failed')
 		expect(status({ blueprint: 'valid', document: 0, preview: 0, previewFailed: false }).preview)

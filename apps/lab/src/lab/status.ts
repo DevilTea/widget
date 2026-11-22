@@ -1,5 +1,5 @@
 /**
- * Plain-language header status: two independent facts a newcomer can act on, derived from state the Lab
+ * Plain-language header status: independent facts a newcomer can act on, derived from state the Lab
  * already owns. Revision numbers and the Linked/Diverged vocabulary stay available as developer details
  * (`LabRevisionStatus`), but are no longer what the primary status says.
  *
@@ -7,6 +7,9 @@
  *   syntax error of the last Apply counts as one problem, because no Document was committed from that text.
  * - Preview: does the Preview show that Document, or the last valid version before it? A Preview frame that
  *   failed to load or lost its connection (audit U22) is `failed`, whatever revisions the Lab holds.
+ * - Draft: does the JSON draft differ from the committed Document? Neither the Document nor the Preview shows
+ *   such a draft, so the header says so, and a `current` Preview must not be called "up to date" while it exists.
+ *   Validity and Preview stay facts about the committed Document: typing changes neither.
  */
 
 import type { LabRevisionStatus } from './revisions'
@@ -17,9 +20,13 @@ export type ValidityStatus
 
 export type PreviewStatus = 'current' | 'stale' | 'unavailable' | 'failed'
 
+/** `unapplied`: the JSON draft differs from the committed Document (`LabSession.isDirty`). */
+export type DraftStatus = 'clean' | 'unapplied'
+
 export interface LabStatus {
 	readonly validity: ValidityStatus
 	readonly preview: PreviewStatus
+	readonly draft: DraftStatus
 }
 
 export interface LabStatusInput {
@@ -29,6 +36,8 @@ export interface LabStatusInput {
 	readonly revisions: Pick<LabRevisionStatus, 'previewRevision' | 'isLinked'>
 	/** The Preview frame reported a failure (did not load, or closed by itself) that has not been retried successfully. */
 	readonly previewFailed?: boolean
+	/** The JSON draft differs from the committed Document (`LabSession.isDirty`). */
+	readonly hasUnappliedDraft?: boolean
 }
 
 export function deriveLabStatus(input: LabStatusInput): LabStatus {
@@ -42,5 +51,6 @@ export function deriveLabStatus(input: LabStatusInput): LabStatus {
 		: input.revisions.previewRevision === null
 			? 'unavailable'
 			: input.revisions.isLinked ? 'current' : 'stale'
-	return { validity, preview }
+	const draft: DraftStatus = input.hasUnappliedDraft === true ? 'unapplied' : 'clean'
+	return { validity, preview, draft }
 }

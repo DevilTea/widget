@@ -27,8 +27,8 @@ async function openLab(page: Page): Promise<void> {
 	await page.goto('/?showcase=sandbox')
 	await expect(page.getByTestId('apply-button'))
 		.toBeVisible()
-	await expect(page.getByTestId('json-editor')
-		.locator('.monaco-editor'))
+	// The page has settled: Author shows its first view (Structure since Lab UX phase 1).
+	await expect(page.getByTestId('structure-editor'))
 		.toBeVisible()
 }
 

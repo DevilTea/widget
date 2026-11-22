@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectShowcase, previewFrame, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectShowcase, openAuthorJson, previewFrame, test } from './fixtures'
 
 /**
  * Issue #25 P1 tutorial contract. `fixtures.ts` pre-dismisses the Welcome card for every test in this
@@ -214,6 +214,8 @@ test.describe('dirty-draft confirmation dialog', () => {
 	async function dirtyTheDraft(page: Page): Promise<void> {
 		await page.goto('/?lab-test&showcase=sandbox')
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+		// These tests read the preserved draft in Monaco, which mounts with the JSON view (Author opens on Structure).
+		await openAuthorJson(page)
 		// Dirty the (hidden Sandbox fixture) draft via the issue #28 interaction seam — never touches Monaco.
 		await page.evaluate((source) => {
 			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)

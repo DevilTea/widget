@@ -1,4 +1,4 @@
-import { expect, previewFrame, setTheme, test } from './fixtures'
+import { expect, openAuthorJson, previewFrame, setTheme, test } from './fixtures'
 
 const THEME_STORAGE_KEY = 'widget-lab:theme'
 
@@ -16,8 +16,8 @@ test.describe('lab theme (issue #44)', () => {
 
 		await expect(page.locator('html'))
 			.toHaveAttribute('data-lab-theme', 'light')
-		await expect(page.locator('.monaco-editor'))
-			.toBeVisible()
+		// Author opens on Structure: open the JSON view so Monaco is mounted.
+		await openAuthorJson(page)
 
 		const monacoLight = await page.locator('.monaco-editor')
 			.evaluate(element => getComputedStyle(element).backgroundColor)
