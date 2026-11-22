@@ -3,6 +3,7 @@ import { translateDocumentRepairMessage } from './document-repair-messages'
 import { translateMessage } from './messages'
 import { translateOnboardingMessage } from './onboarding-messages'
 import { translateQuoteRulesMessage } from './quote-rules-messages'
+import { translateRendererPacksMessage } from './renderer-packs-messages'
 import { translateTripBudgetMessage } from './trip-budget-messages'
 
 /**
@@ -338,9 +339,16 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Graph key': 'Graph 標記說明',
 	'A → B: A depends on B': 'A → B：A 依賴於 B',
 	'The arrowhead is on the target: A → B means A depends on B. In Relations, B is listed under "Depends on" for A, and A under "Used by" for B.': '箭頭在目標端：A → B 表示 A 依賴於 B。在 Relations 中，B 列在 A 的「依賴於」之下，A 列在 B 的「被誰使用」之下。',
-	'While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it); every other edge fades. A tag is left out where there is no room for it: the Relations view has the full list.': '選取 widget 或 member 時，它的 edges 會變成藍色，並標上「依賴於 #x」（從它出發）或「被 #x 使用」（指向它）；其他 edges 會淡出。空間不足的地方會省略標籤：完整清單請看 Relations 檢視。',
+	'While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it); every other edge fades. A tag with no room on its own edge is set beside it and joined to it by a short line, or left out where there is no room at all: the Relations view has the full list.': '選取 widget 或 member 時，它的 edges 會變成藍色，並標上「依賴於 #x」（從它出發）或「被 #x 使用」（指向它）；其他 edges 會淡出。自己的 edge 上放不下的標籤會移到旁邊，用一條短線連回去；完全沒有空間時則省略：完整清單請看 Relations 檢視。',
 	'Depends on {name}': '依賴於 {name}',
 	'Used by {name}': '被 {name} 使用',
+	'{source} depends on {target} ({label})': '{source} 依賴於 {target}（{label}）',
+	'{target} is used by {source} ({label})': '{target} 被 {source} 使用（{label}）',
+	'{source} depends on a target that is absent ({label})': '{source} 依賴的目標不存在（{label}）',
+	'{source} has an invalid dependency ({label})': '{source} 有一個無效的依賴（{label}）',
+	'{name}, invalid cycle': '{name}，無效循環',
+	'dependency': '依賴',
+	'Arrow keys move between the dependencies, Enter or Space shows the details, Escape clears the selection.': '用方向鍵在各個依賴之間移動，按 Enter 或空白鍵顯示詳細資料，按 Escape 清除選取。',
 	'writes State': '寫入 State',
 	'emits an Event': '發出 Event',
 	'in an invalid cycle': '位於無效循環中',
@@ -464,6 +472,9 @@ export function translatePresentationMessage(locale: LabLocale, source: string):
 		const repair = translateDocumentRepairMessage(locale, source)
 		if (repair !== undefined)
 			return repair
+		const packs = translateRendererPacksMessage(locale, source)
+		if (packs !== undefined)
+			return packs
 	}
 	return translateMessage(locale, source)
 }

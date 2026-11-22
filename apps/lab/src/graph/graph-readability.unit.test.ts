@@ -317,10 +317,16 @@ describe('focus tags', () => {
 					.toBeLessThanOrEqual(bottom + 0.01)
 			}
 
-			// On its edge, in the half nearer the focused card: measured along the curve, at the point of the curve nearest the tag.
+			// On its edge, in the half nearer the focused card: measured along the curve, at the point of the curve nearest the tag. A
+			// tag beside its edge is about the point its leader line starts from, so that point is measured (and must be on the curve).
 			for (const input of tags.filter(candidate => placed.has(candidate.id))) {
-				const tag = placed.get(input.id)!
+				const tag = placed.get(input.id)!.leader?.from ?? placed.get(input.id)!
 				const samples = sampleRoute(input.route, 48)
+				if (placed.get(input.id)!.leader !== undefined) {
+					expect(Math.min(...samples.map(point => Math.hypot(point.x - tag.x, point.y - tag.y))), `${input.id} leader starts on its edge`)
+						.toBeLessThan(Math.max(...samples.slice(1)
+							.map((point, index) => Math.hypot(point.x - samples[index]!.x, point.y - samples[index]!.y))))
+				}
 				const along = [0]
 				for (let index = 1; index < samples.length; index++)
 					along.push(along[index - 1]! + Math.hypot(samples[index]!.x - samples[index - 1]!.x, samples[index]!.y - samples[index - 1]!.y))

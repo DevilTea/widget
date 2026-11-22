@@ -17,9 +17,10 @@
 import type { NodeMouseEvent } from '@vue-flow/core'
 import type { GraphFlowEdge, GraphFlowNode } from '../../graph/vue-flow'
 import { Handle, Position, useVueFlow, VueFlow } from '@vue-flow/core'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useGraphTags } from '../../composables/use-graph-tags'
 import { useLabI18n } from '../../composables/use-lab-i18n'
+import { edgeKeyboardOrder, edgeName, edgeTabStop, isEdgeNavigationKey, nextEdgeId } from '../../graph/edge-a11y'
 import { tagSize } from '../../graph/tag-placement'
 import { GRAPH_EDGE_TYPE } from '../../graph/vue-flow'
 import { ARROW_KINDS, arrowMarkerId, ZOOM_BUCKETS, zoomBucket } from '../../graph/zoom-scale'
@@ -35,6 +36,7 @@ const props = defineProps<{
 const emit = defineEmits<{
 	nodeClick: [nodeId: string]
 	edgeClick: [edgeId: string]
+	edgeClear: []
 	clusterClick: [clusterId: string]
 	toggleCluster: [clusterId: string]
 }>()
@@ -52,11 +54,12 @@ const MANUAL_MIN_ZOOM = 0.1
 
 const i18n = useLabI18n()
 const vueFlowContainer = ref<HTMLElement | null>(null)
-const { fitBounds, fitView, getNodes, getSelectedEdges, onNodesChange, onNodesInitialized, setMinZoom, viewport, zoomIn, zoomOut } = useVueFlow()
+const { addSelectedEdges, findEdge, fitBounds, fitView, getNodes, getSelectedEdges, onNodesChange, onNodesInitialized, removeSelectedEdges, setMinZoom, viewport, zoomIn, zoomOut } = useVueFlow()
 
 /**
  * The tags of the edges around the focus ("Depends on #sessions", "Used by #phone"), placed together so that none covers a card,
- * an arrowhead or another tag; one that does not fit is left out (see `graph/tag-placement.ts`). They are re-placed only when
+ * an arrowhead or another tag; one with no room on its own edge is set beside it with a short leader line, and one that fits
+ * nowhere is left out (see `graph/tag-placement.ts`). They are re-placed only when
  * the graph, the focus or the zoom bucket changes, not on every wheel tick or pan step (see `composables/use-graph-tags.ts`).
  * They are drawn in one layer above every edge and card (the `zoom-pane` slot of Vue Flow), so no edge is drawn across their text.
  */
@@ -75,7 +78,9 @@ function tagBox(tag: { x: number, y: number, text: string }): { x: number, y: nu
 }
 /** The tag of an edge gives way to the edge's own label while the edge is hovered or selected. */
 const hoveredEdgeId = ref<string | null>(null)
-const tagIsHidden = (edgeId: string): boolean => edgeId === hoveredEdgeId.value || getSelectedEdges.value.some(edge => edge.id === edgeId)
+/** The edge that has keyboard focus: it shows what a hovered edge shows. */
+const focusedEdgeId = ref<string | null>(null)
+const tagIsHidden = (edgeId: string): boolean => edgeId === hoveredEdgeId.value || edgeId === focusedEdgeId.value || getSelectedEdges.value.some(edge => edge.id === edgeId)
 
 let fitted = false
 let resizeObserver: ResizeObserver | null = null
@@ -216,6 +221,133 @@ function onEdgeClick({ edge }: { edge: GraphFlowEdge }): void {
 	emit('edgeClick', edge.id)
 }
 
+/**
+ * Keyboard access to the edges (issue #230 follow-up; the pure part is `graph/edge-a11y.ts`).
+ *
+ * Vue Flow's own focusability is no use for a roving stop: a focusable edge gets `tabIndex: 0` as a DOM property (Vue sets it on
+ * the SVG `<g>` and it shows as `tabindex="0"`, on every edge, and it beats a `tabindex` attribute from `domAttributes`), and its
+ * key handler is bound as `onKeyDown`, which Vue turns into a listener for an event named `key-down` that never fires. So every
+ * edge is made `focusable: false` (the projection sets it on), which also takes away the `role="group"`, `aria-describedby` and
+ * key handler that came with it. Without a fork, `domAttributes` gives back the role and a real lowercase `tabindex`, and the keys
+ * are handled here, delegated on the canvas.
+ *
+ * The edges are one roving Tab stop: exactly one edge has `tabindex="0"`, the rest `-1`, and the arrow keys move between
+ * them, so a graph with dozens of edges costs one Tab press and Tab or Shift+Tab leaves the group from whichever edge the
+ * arrows reached. The stop starts on the first edge of the keyboard order (the rendered attribute) and follows focus after
+ * that: `focusin` rewrites the two `tabindex` attributes in the DOM directly, so moving does not rebuild the edges and Vue
+ * Flow is not handed a new edge list per key press (Vue leaves the attribute alone while the rendered value is unchanged).
+ * When the graph, the focused widget or member, or the language changes, the stop goes back to the first edge of the new
+ * order, unless an edge has focus. Enter or Space selects the edge as a click does (which opens its details under the
+ * canvas), Escape clears the selection.
+ *
+ * Vue Flow's own description of an edge ("Press enter or space to select an edge... press delete to remove it", English
+ * only, and wrong for a readonly inspector) and its role description ("edge") are replaced through the same `domAttributes`.
+ * The edge keeps Vue Flow's `role="group"`: a composite role (a `listbox` of `option`s) would need the role on Vue Flow's own
+ * `<svg>` containers, of which there is one per z-level and which it re-creates, so it is not set from outside.
+ */
+const edgeKeysId = useId()
+const keyboardOrder = computed(() => edgeKeyboardOrder(props.edges))
+
+function edgeAccessibleName(edge: GraphFlowEdge): string {
+	const { kind, source, target, label, invalidCycle } = edgeName(edge)
+	let name: string
+	if (kind === 'absent')
+		name = i18n.t('{source} depends on a target that is absent ({label})', { source, label })
+	else if (kind === 'invalid')
+		name = i18n.t('{source} has an invalid dependency ({label})', { source, label })
+	else if (kind === 'used-by')
+		name = i18n.t('{target} is used by {source} ({label})', { source, target, label })
+	else
+		name = i18n.t('{source} depends on {target} ({label})', { source, target, label })
+	return invalidCycle ? i18n.t('{name}, invalid cycle', { name }) : name
+}
+
+const flowEdges = computed<GraphFlowEdge[]>(() => {
+	const tabStop = edgeTabStop(props.edges)
+	const roleDescription = i18n.t('dependency')
+	return props.edges.map(edge => ({
+		...edge,
+		ariaLabel: edgeAccessibleName(edge),
+		// Vue Flow's own focusability is off (the projection sets it on): it would write `tabIndex=0` on every edge, and that DOM
+		// property wins over the roving `tabindex` attribute below. The role it would have set with it is given back here.
+		focusable: false,
+		domAttributes: {
+			'role': 'group',
+			'tabindex': edge.id === tabStop ? 0 : -1,
+			'aria-describedby': edgeKeysId,
+			'aria-roledescription': roleDescription,
+		},
+	}))
+})
+
+/** Makes `edgeId` the one edge in the Tab order, in the DOM only (see above). */
+function setEdgeTabStop(edgeId: string | null): void {
+	for (const element of vueFlowContainer.value?.querySelectorAll<SVGGElement>('.vue-flow__edge') ?? [])
+		element.setAttribute('tabindex', edgeId !== null && element.getAttribute('data-id') === edgeId ? '0' : '-1')
+}
+
+// A new graph, focus or language: back to the first edge of the new order, unless an edge has focus (then it stays the stop).
+watch(flowEdges, async () => {
+	await nextTick()
+	const focused = edgeIdOfTarget(document.activeElement)
+	setEdgeTabStop(focused !== null && keyboardOrder.value.includes(focused) ? focused : edgeTabStop(props.edges))
+}, { flush: 'post' })
+
+/** The id of the edge an event happened on, when its target is the edge element itself (not something inside or outside it). */
+function edgeIdOfTarget(target: EventTarget | null): string | null {
+	return target instanceof Element && target.classList.contains('vue-flow__edge') ? target.getAttribute('data-id') : null
+}
+
+function focusEdge(edgeId: string): void {
+	for (const element of vueFlowContainer.value?.querySelectorAll<SVGGElement>('.vue-flow__edge') ?? []) {
+		if (element.getAttribute('data-id') === edgeId) {
+			element.focus()
+			return
+		}
+	}
+}
+
+function onCanvasKeydown(event: KeyboardEvent): void {
+	const edgeId = edgeIdOfTarget(event.target)
+	if (edgeId === null || event.altKey || event.ctrlKey || event.metaKey)
+		return
+	if (event.key === 'Enter' || event.key === ' ') {
+		event.preventDefault()
+		const edge = findEdge(edgeId)
+		if (edge !== undefined)
+			addSelectedEdges([edge])
+		emit('edgeClick', edgeId)
+	}
+	else if (event.key === 'Escape') {
+		// Only an Escape that has something to clear is consumed, so it can still close whatever contains the Graph.
+		if (getSelectedEdges.value.length === 0)
+			return
+		event.preventDefault()
+		event.stopPropagation()
+		removeSelectedEdges(getSelectedEdges.value)
+		emit('edgeClear')
+	}
+	else if (isEdgeNavigationKey(event.key)) {
+		const next = nextEdgeId(keyboardOrder.value, edgeId, event.key)
+		if (next === null)
+			return
+		event.preventDefault()
+		focusEdge(next)
+	}
+}
+
+function onCanvasFocusin(event: FocusEvent): void {
+	const edgeId = edgeIdOfTarget(event.target)
+	focusedEdgeId.value = edgeId
+	// The roving Tab stop follows focus, however the edge was reached (Tab, an arrow key, a click).
+	if (edgeId !== null)
+		setEdgeTabStop(edgeId)
+}
+
+function onCanvasFocusout(): void {
+	focusedEdgeId.value = null
+}
+
 function memberKindShort(kind: string): string {
 	if (kind === 'state')
 		return 'S'
@@ -231,7 +363,16 @@ function memberKindShort(kind: string): string {
 	<div
 		ref="vueFlowContainer"
 		class="graph-canvas-surface w-full h-full relative"
+		@keydown="onCanvasKeydown"
+		@focusin="onCanvasFocusin"
+		@focusout="onCanvasFocusout"
 	>
+		<!-- What the keys do on an edge, for a screen reader: every edge points here with aria-describedby. -->
+		<span
+			:id="edgeKeysId"
+			class="graph-edge-keys"
+			hidden
+		>{{ i18n.t('Arrow keys move between the dependencies, Enter or Space shows the details, Escape clears the selection.') }}</span>
 		<!--
 			The arrowheads: one marker per colour family and zoom bucket (graph/zoom-scale.ts), a triangle whose tip is the end of the
 			edge. Vue Flow's own `arrowclosed` marker draws at a quarter of its nominal size (a 7 x 11px triangle at 28), so these are
@@ -269,15 +410,23 @@ function memberKindShort(kind: string): string {
 				</template>
 			</defs>
 		</svg>
+		<!--
+			deleteKeyCode: Vue Flow's default deletes the selected cards and edges on Backspace (a document-level listener), which a
+			readonly inspector must never do. selectionKeyCode / multiSelectionKeyCode: no Shift-drag selection box and no
+			Ctrl/Cmd multi-selection either; one card or one edge is selected at a time and the details show that one.
+		-->
 		<VueFlow
 			:nodes="nodes"
-			:edges="edges"
+			:edges="flowEdges"
 			:nodesDraggable="false"
 			:nodesConnectable="false"
 			:edgesUpdatable="false"
 			:elementsSelectable="true"
 			:zoomOnDoubleClick="false"
 			:minZoom="0.05"
+			:deleteKeyCode="null"
+			:selectionKeyCode="null"
+			:multiSelectionKeyCode="null"
 			class="graph-canvas-flow w-full h-full"
 			@nodeClick="onNodeClick"
 			@edgeClick="onEdgeClick"
@@ -294,10 +443,27 @@ function memberKindShort(kind: string): string {
 						v-for="[edgeId, tag] in tagPlacements"
 						:key="edgeId"
 						class="graph-tag"
-						:class="{ 'graph-tag--hidden': tagIsHidden(edgeId) }"
+						:class="{ 'graph-tag--hidden': tagIsHidden(edgeId), 'graph-tag--leader': tag.leader !== undefined }"
 						:data-edge-id="edgeId"
 						:data-relation="tag.relation"
 					>
+						<!-- A tag beside its edge: the leader line back to the point of the edge it is about, ending in a dot on the edge. -->
+						<template v-if="tag.leader !== undefined">
+							<line
+								class="graph-tag-leader"
+								:x1="tag.leader.from.x"
+								:y1="tag.leader.from.y"
+								:x2="tag.leader.to.x"
+								:y2="tag.leader.to.y"
+								:style="{ strokeWidth: `${1.2 * bucket.font / 11}px` }"
+							/>
+							<circle
+								class="graph-tag-leader-dot"
+								:cx="tag.leader.from.x"
+								:cy="tag.leader.from.y"
+								:r="2.5 * bucket.font / 11"
+							/>
+						</template>
 						<rect
 							class="graph-tag-bg"
 							:x="tagBox(tag).x"
@@ -881,8 +1047,43 @@ function memberKindShort(kind: string): string {
 }
 
 :deep(.graph-edge:hover .vue-flow__edge-path),
+:deep(.graph-edge:focus-visible .vue-flow__edge-path),
 :deep(.graph-edge.selected .vue-flow__edge-path) {
 	stroke-width: 2.4;
+}
+
+/*
+ * The focus indicator of an edge reached with the keyboard: a solid accent band, 7 screen px wide at any zoom, along the whole curve, under the line
+ * (`GraphDependencyEdge.vue` draws the path), instead of the browser's outline, which would be the box around the curve. The
+ * focused edge is also drawn at full opacity, so focus is visible on an edge the current selection dims.
+ */
+:deep(.graph-edge) {
+	outline: none;
+}
+
+:deep(.graph-edge-focus-ring) {
+	fill: none;
+	stroke: var(--lab-color-accent);
+	/* Screen px at any zoom: in flow units a band is a hairline once Fit has zoomed a large graph out. */
+	stroke-width: 7px;
+	vector-effect: non-scaling-stroke;
+	stroke-linecap: round;
+	opacity: 0;
+	pointer-events: none;
+}
+
+:deep(.graph-edge:focus-visible) {
+	opacity: 1;
+}
+
+:deep(.graph-edge:focus-visible .graph-edge-focus-ring) {
+	opacity: 1;
+}
+
+@media (forced-colors: active) {
+	:deep(.graph-edge-focus-ring) {
+		stroke: Highlight;
+	}
 }
 
 :deep(.graph-edge--dimmed) {
@@ -944,6 +1145,8 @@ function memberKindShort(kind: string): string {
 
 :deep(.graph-edge:hover .vue-flow__edge-text),
 :deep(.graph-edge:hover .vue-flow__edge-textbg),
+:deep(.graph-edge:focus-visible .vue-flow__edge-text),
+:deep(.graph-edge:focus-visible .vue-flow__edge-textbg),
 :deep(.graph-edge.selected .vue-flow__edge-text),
 :deep(.graph-edge.selected .vue-flow__edge-textbg) {
 	opacity: 1;
@@ -988,14 +1191,22 @@ function memberKindShort(kind: string): string {
 	font-weight: 700;
 }
 
+.graph-tag-leader {
+	stroke: var(--lab-color-accent);
+	fill: none;
+}
+
+.graph-tag-leader-dot {
+	fill: var(--lab-color-accent);
+}
+
 .graph-tag--hidden {
 	opacity: 0;
 }
 
 /*
- * Audit U20: a node reached with the keyboard gets a visible ring. Edges are not part of the Tab order: Vue Flow writes
- * their `tabIndex` attribute with a capital I, which an SVG element ignores, so they never take focus (the Relations view is the
- * keyboard route to the same facts).
+ * Audit U20: a node reached with the keyboard gets a visible ring. The edges are one Tab stop with their own indicator (the
+ * accent band above; see the keyboard section of the script).
  */
 :deep(.vue-flow__node:focus-visible) {
 	outline: 2px solid var(--lab-color-accent);

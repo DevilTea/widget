@@ -16,6 +16,8 @@ import { onboardingSources } from '../showcases/onboarding/sources'
 import { onboardingSystem } from '../showcases/onboarding/system'
 import { quoteSources } from '../showcases/quote-rules/sources'
 import { quoteSystem } from '../showcases/quote-rules/system'
+import { packsSources } from '../showcases/renderer-packs/sources'
+import { packsSystem } from '../showcases/renderer-packs/system'
 import { surveySources } from '../showcases/survey/sources'
 import { surveySystem } from '../showcases/survey/system'
 import { tripBudgetSources } from '../showcases/trip-budget/sources'
@@ -29,6 +31,7 @@ const showcases: readonly { readonly label: string, readonly system: WidgetSyste
 	{ label: 'quote-rules', system: quoteSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: quoteSources },
 	{ label: 'onboarding', system: onboardingSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: onboardingSources },
 	{ label: 'document-repair', system: repairSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: repairSources },
+	{ label: 'renderer-packs', system: packsSystem as unknown as WidgetSystem<AnyWidgetPluginTuple>, sources: packsSources },
 ]
 
 const fixtureEntry: SourcesRegistry[string] = {

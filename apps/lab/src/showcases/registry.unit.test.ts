@@ -80,9 +80,9 @@ describe('the documentation each showcase carries (Core 0.3 has no descriptions 
 })
 
 describe('showcase registry listing and ?showcase= selection', () => {
-	it('lists Interactive Survey (the default), then the Trip budget splitter, the Quote rules showcase, the Onboarding wizard and the Legacy document repair; sandbox is a registered hidden fixture', () => {
+	it('lists Interactive Survey (the default), then the Trip budget splitter, the Quote rules showcase, the Onboarding wizard, the Legacy document repair and the two renderer packs; sandbox is a registered hidden fixture', () => {
 		expect(listedShowcases.map(showcase => showcase.id))
-			.toEqual(['survey', 'trip-budget', 'quote-rules', 'onboarding', 'document-repair'])
+			.toEqual(['survey', 'trip-budget', 'quote-rules', 'onboarding', 'document-repair', 'renderer-packs'])
 		expect(defaultShowcase.id)
 			.toBe('survey')
 		expect(getShowcase('sandbox')?.hidden)
@@ -90,7 +90,7 @@ describe('showcase registry listing and ?showcase= selection', () => {
 		expect(getShowcase('trip-budget')?.hidden)
 			.toBeUndefined()
 		expect(showcases.map(showcase => showcase.id))
-			.toEqual(['survey', 'trip-budget', 'quote-rules', 'onboarding', 'document-repair', 'sandbox'])
+			.toEqual(['survey', 'trip-budget', 'quote-rules', 'onboarding', 'document-repair', 'renderer-packs', 'sandbox'])
 	})
 
 	it('selects any registered showcase, listed or hidden, from the query string', () => {
@@ -104,6 +104,8 @@ describe('showcase registry listing and ?showcase= selection', () => {
 			.toBe('onboarding')
 		expect(resolveInitialShowcase('?showcase=document-repair').id)
 			.toBe('document-repair')
+		expect(resolveInitialShowcase('?showcase=renderer-packs').id)
+			.toBe('renderer-packs')
 		expect(resolveInitialShowcase('?lab-test&showcase=survey').id)
 			.toBe('survey')
 	})

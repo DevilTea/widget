@@ -41,6 +41,11 @@ const labelBox = computed(() => {
 </script>
 
 <template>
+	<!-- The keyboard focus indicator: a wide band under the line, shown only while the edge has visible focus (styled in GraphCanvas.vue). -->
+	<path
+		class="graph-edge-focus-ring"
+		:d="path"
+	/>
 	<BaseEdge
 		:id="id"
 		:path="path"
