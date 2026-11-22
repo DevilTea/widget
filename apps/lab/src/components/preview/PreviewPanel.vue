@@ -10,6 +10,7 @@ import type { InspectorClient } from '@deviltea/widget-inspector/client'
 import UButton from '@nuxt/ui/components/Button.vue'
 import UIcon from '@nuxt/ui/components/Icon.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { useExplainVisible } from '../../composables/use-explain-visibility'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
@@ -49,6 +50,21 @@ async function retryPreview(): Promise<void> {
 		retrying.value = false
 	}
 }
+
+/** The tab a widget picked with Inspect opens: Explain while it is showing, Selected widget otherwise, Runtime while diverged. */
+const explainVisible = useExplainVisible()
+const inspectTarget = computed<'explain' | 'widget' | 'runtime'>(() => {
+	if (!store.revisionStatus.value.isLinked)
+		return 'runtime'
+	return explainVisible.value ? 'explain' : 'widget'
+})
+const inspectSurfaceLabel = computed(() => {
+	switch (inspectTarget.value) {
+		case 'explain': return i18n.t('Explain')
+		case 'widget': return i18n.t('Selected widget')
+		default: return 'Runtime'
+	}
+})
 
 const curatedEntryAvailable = computed(() => {
 	const widget = resolveFocusedWidget(store.documentState.value.blueprint, store.documentFocus.value)
@@ -106,9 +122,9 @@ watch(
 			if (inspectorClient !== client || selection.ref.runtimeId !== connection.runtimeId)
 				return
 			store.setFocus('preview', { nodeId: selection.ref.nodeId })
-			// Linked: the Selected widget pane explains the widget (declaration and values). Diverged: only the
-			// Preview Runtime knows it, so the Runtime panel opens.
-			store.activeTab.value = store.revisionStatus.value.isLinked ? 'widget' : 'runtime'
+			// Linked: the Selected widget pane explains the widget (declaration and values), or the Explain tab when it is
+			// the one showing (Lab UX phase 2). Diverged: only the Preview Runtime knows it, so the Runtime panel opens.
+			store.activeTab.value = inspectTarget.value
 		})
 
 		void (async () => {
@@ -218,13 +234,13 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 			>
 				{{ i18n.t('Inspect') }}
 			</button>
-			<!-- Names the panel a click opens (see `inspect.selected` above): Selected widget while linked, Runtime while diverged. -->
+			<!-- Names the panel a click opens (see `inspectTarget`): Explain or Selected widget while linked, Runtime while diverged. -->
 			<span
 				v-if="inspectActive"
 				data-testid="inspect-hint"
 				class="text-[11px] text-lab-text-muted"
 			>
-				{{ i18n.t('Click a widget to open it in {surface} — Esc to exit', { surface: i18n.t(store.revisionStatus.value.isLinked ? 'Selected widget' : 'Runtime') }) }}
+				{{ i18n.t('Click a widget to open it in {surface} — Esc to exit', { surface: inspectSurfaceLabel }) }}
 			</span>
 			<button
 				type="button"

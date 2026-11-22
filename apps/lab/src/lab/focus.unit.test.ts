@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
 import { replaceConfigScalar } from './author'
-import { createInspectorFocusStore } from './focus'
+import { createInspectorFocusStore, uniqueRemoteNodeIdForIdentity } from './focus'
 import { LabSession } from './session'
 
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText
@@ -25,6 +25,25 @@ function remoteSnapshotOf(session: LabSession, runtimeId = 'runtime-test'): Insp
 		invalidCycles: [],
 	}
 }
+
+describe('uniqueRemoteNodeIdForIdentity', () => {
+	const node = (nodeId: number, widgetId: string, widgetType: string, resolved = true) => ({ nodeId, resolved, ...(resolved ? { widgetId, widgetType } : {}), sourceSlots: [], diagnostics: [] })
+	const snapshot = (nodes: ReturnType<typeof node>[]): InspectorBlueprintSnapshot => ({ runtimeId: 'r', rootNodeId: 0, nodes, invalidCycles: [] }) as unknown as InspectorBlueprintSnapshot
+
+	it('finds the one resolved widget with this id and type', () => {
+		expect(uniqueRemoteNodeIdForIdentity(snapshot([node(0, 'root', 'Stack'), node(1, 'mode', 'SingleChoice'), node(2, 'mode', 'Text')]), 'mode', 'SingleChoice'))
+			.toBe(1)
+	})
+
+	it('is null when there is none, or when the identity is ambiguous (a duplicate id and type)', () => {
+		expect(uniqueRemoteNodeIdForIdentity(snapshot([node(0, 'root', 'Stack')]), 'mode', 'SingleChoice'))
+			.toBeNull()
+		expect(uniqueRemoteNodeIdForIdentity(snapshot([node(1, 'mode', 'SingleChoice'), node(2, 'mode', 'SingleChoice')]), 'mode', 'SingleChoice'))
+			.toBeNull()
+		expect(uniqueRemoteNodeIdForIdentity(snapshot([node(1, 'mode', 'SingleChoice', false)]), 'mode', 'SingleChoice'))
+			.toBeNull()
+	})
+})
 
 describe('createInspectorFocusStore', () => {
 	it('synchronizes Document and Preview focus only while their revisions are linked', () => {
@@ -206,6 +225,61 @@ describe('createInspectorFocusStore', () => {
 
 		expect(store.getFocus())
 			.toEqual({ nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId })
+	})
+
+	it('tells a chosen widget from the root it starts at and falls back to (Lab UX phase 2, Explain)', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const store = createInspectorFocusStore(session)
+		expect(store.isDocumentFocusChosen(), 'the starting root was not chosen')
+			.toBe(false)
+
+		const title = inspectBlueprint(session.documentState.blueprint).nodes.find(entry => entry.node.resolved && entry.node.id === 'title')!
+		store.setFocus('document', { nodeId: title.nodeId })
+		expect(store.isDocumentFocusChosen())
+			.toBe(true)
+
+		// A commit that keeps the widget keeps it chosen.
+		const edited = JSON.parse(validSource) as { slots: { items: { id: string, config?: Record<string, unknown> }[] } }
+		edited.slots.items.find(item => item.id === 'title')!.config = { text: 'edited in JSON' }
+		session.setDraftSourceText(JSON.stringify(edited, null, 2))
+		await session.apply()
+		expect(store.isDocumentFocusChosen())
+			.toBe(true)
+
+		// A commit that removes it falls back to the root, which nobody chose.
+		edited.slots.items = edited.slots.items.filter(item => item.id !== 'title')
+		session.setDraftSourceText(JSON.stringify(edited, null, 2))
+		await session.apply()
+		expect(store.getFocus())
+			.toEqual({ nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId })
+		expect(store.isDocumentFocusChosen())
+			.toBe(false)
+
+		// Choosing the root itself counts, and clearing the focus does not.
+		store.setFocus('document', { nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId })
+		expect(store.isDocumentFocusChosen())
+			.toBe(true)
+		store.setFocus('document', null)
+		expect(store.isDocumentFocusChosen())
+			.toBe(false)
+	})
+
+	it('counts an Inspect selection in a linked Preview as chosen, and not one made while the revisions diverge', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const store = createInspectorFocusStore(session)
+		store.setPreviewSnapshot(0, remoteSnapshotOf(session))
+		const counter = inspectBlueprint(session.preview!.blueprint).nodes.find(node => node.resolved && node.node.id === 'counter-1')!
+		store.setFocus('preview', { nodeId: Number(counter.nodeId) })
+		expect(store.isDocumentFocusChosen())
+			.toBe(true)
+
+		const diverged = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const divergedStore = createInspectorFocusStore(diverged)
+		divergedStore.setPreviewSnapshot(0, remoteSnapshotOf(diverged))
+		await diverged.applyPreset(invalidSource)
+		divergedStore.setFocus('preview', { nodeId: Number(counter.nodeId) })
+		expect(divergedStore.isDocumentFocusChosen(), 'a diverged Preview selection does not move the Document focus')
+			.toBe(false)
 	})
 
 	it('goes back to the root when the selected widget\'s id and type were not unique in the old Document, even if they are in the new one', async () => {

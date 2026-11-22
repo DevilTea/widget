@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Default two-column workbench (diagnostic #13 Widget Lab Phase 4 Checkpoint I, widened by issue #230 PR 3b): a
- * left tool group with tabs Author | Selected widget | Blueprint | Runtime | Events | Dependencies (Author initially
+ * left tool group with tabs Author | Explain | Selected widget | Blueprint | Runtime | Events | Dependencies (Author initially
  * active, about half the width) and a persistent Preview on the right. Dockview owns tabs/resize/docking only —
  * it never becomes the semantic model for the panels. The layout is saved to `localStorage` and restored on
  * reload (`lab/layout-storage.ts`); "Reset layout" in the overflow menu goes back to the default.
@@ -10,6 +10,7 @@ import type { DockviewApi, DockviewReadyEvent, DockviewTheme, SerializedDockview
 import type { LabToolTab } from '../composables/use-lab-store'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
 import { defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
+import { useDependenciesView } from '../composables/use-dependencies-view'
 import { useDocumentTools } from '../composables/use-document-tools'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabI18n } from '../composables/use-lab-i18n'
@@ -21,6 +22,7 @@ import AuthorPanel from './panels/AuthorPanel.vue'
 import BlueprintPanel from './panels/BlueprintPanel.vue'
 import DependenciesPanel from './panels/DependenciesPanel.vue'
 import EventsPanel from './panels/EventsPanel.vue'
+import ExplainPanel from './panels/ExplainPanel.vue'
 import RuntimePanel from './panels/RuntimePanel.vue'
 import SelectedWidgetPanel from './panels/SelectedWidgetPanel.vue'
 import PreviewPanel from './preview/PreviewPanel.vue'
@@ -30,6 +32,7 @@ const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
 const documentTools = useDocumentTools()
 const workbenchLayout = useWorkbenchLayout()
+const dependenciesView = useDependenciesView()
 
 /**
  * Dockview applies its theme via the `theme` option's `className` (dockview-core stamps it on its own
@@ -53,6 +56,7 @@ const labTheme: DockviewTheme = {
 // concern: every value below genuinely is a Vue component.
 const components: Record<string, VueComponent> = {
 	author: AuthorPanel as unknown as VueComponent,
+	explain: ExplainPanel as unknown as VueComponent,
 	blueprint: BlueprintPanel as unknown as VueComponent,
 	runtime: RuntimePanel as unknown as VueComponent,
 	events: EventsPanel as unknown as VueComponent,
@@ -122,7 +126,7 @@ onBeforeUnmount(() => {
 })
 
 /** The panels whose activation is mirrored in `LabStore.activeTab` (see `watchTutorialTabActivation`). */
-const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview'])
+const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview'])
 
 /**
  * Tab titles follow the Lab language at the moment a layout is built or restored (as they always did). Widget vocabulary
@@ -132,6 +136,7 @@ const CANONICAL_TAB_IDS: ReadonlySet<string> = new Set<LabToolTab>(['author', 'w
 function canonicalTitles(): Readonly<Record<string, string>> {
 	return {
 		author: i18n.t('Author'),
+		explain: i18n.t('Explain'),
 		widget: i18n.t('Selected widget'),
 		blueprint: 'Blueprint',
 		runtime: 'Runtime',
@@ -150,7 +155,7 @@ function requestedPanelTitles(): Readonly<Record<string, string>> {
 }
 
 /**
- * The default layout: the tool group (Author, Selected widget, Blueprint, Runtime, Events, Dependencies; Author active)
+ * The default layout: the tool group (Author, Explain, Selected widget, Blueprint, Runtime, Events, Dependencies; Author active)
  * left and the persistent Preview right. The tool area is wide on purpose (audit U12: Relations and the
  * Implementation source are clipped in a column of about 29%): about half the workbench, between 420 and 940px.
  * Users may resize the divider afterwards (Dockview owns that) and the result is remembered.
@@ -160,7 +165,7 @@ function buildDefaultLayout(api: DockviewApi): void {
 	// `tabComponent: 'nonClosable'` on every canonical panel (diagnostic #27 Finding 2) — see
 	// NonClosableTab.vue/tabComponents above for the mechanism.
 	api.addPanel({ id: 'author', component: 'author', tabComponent: 'nonClosable', title: titles.author })
-	for (const id of ['widget', 'blueprint', 'runtime', 'events', 'dependencies']) {
+	for (const id of ['explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies']) {
 		api.addPanel({
 			id,
 			component: id,
@@ -252,6 +257,8 @@ function watchLayoutResetRequests(api: DockviewApi): void {
 		() => workbenchLayout.resetRequestTick.value,
 		() => {
 			clearSavedLayout()
+			// The Dependencies view is shared per store, not the rebuilt panel's own state: a reset starts it over at Relations too.
+			dependenciesView.reset()
 			api.clear()
 			buildDefaultLayout(api)
 			store.activeTab.value = 'author'
