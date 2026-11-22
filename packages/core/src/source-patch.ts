@@ -323,11 +323,25 @@ function rebuildObject(
 	if (!target.ok)
 		return target
 
+	const replacement: PropertyDescriptor = {
+		value,
+		enumerable: true,
+		writable: true,
+		configurable: true,
+	}
 	for (const [entryKey, descriptor] of entries.value) {
 		if (entryKey === 'length' && isArray)
 			continue
-		if (action !== 'add' && entryKey === effectiveKey)
+		if (action === 'remove' && entryKey === effectiveKey)
 			continue
+		if (action === 'replace' && entryKey === effectiveKey) {
+			// Keep the member where it is: a replaced member, and every ancestor
+			// that `modifyAt` rebuilds with a replace, stays in its position.
+			const result = define(target.value, entryKey, replacement)
+			if (!result.ok)
+				return result
+			continue
+		}
 
 		let outputKey = entryKey
 		if (isArray && typeof entryKey === 'string' && arrayIndex !== null && isCanonicalArrayIndex(entryKey)) {
@@ -345,13 +359,8 @@ function rebuildObject(
 			return result
 	}
 
-	if (action !== 'remove') {
-		const result = define(target.value, isArray && arrayIndex !== null && action === 'add' ? String(arrayIndex) : effectiveKey, {
-			value,
-			enumerable: true,
-			writable: true,
-			configurable: true,
-		})
+	if (action === 'add') {
+		const result = define(target.value, isArray && arrayIndex !== null ? String(arrayIndex) : effectiveKey, replacement)
 		if (!result.ok)
 			return result
 	}
