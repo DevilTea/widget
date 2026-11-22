@@ -96,7 +96,7 @@ interface PublishedContracts {
 		readonly result: UseWidgetResult<AnyWidgetPlugin>
 		readonly slotAccessor: UseWidgetSlotAccessor<WidgetInterfaces>
 		readonly slotChildComponent: WidgetSlotChildComponent
-		readonly slotComponent: WidgetSlotComponent<string>
+		readonly slotComponent: WidgetSlotComponent<Readonly<Record<string, string>>>
 		readonly slotScope: WidgetSlotScope
 		readonly stateAccessor: UseWidgetStateAccessor<WidgetInterfaces>
 		readonly stateDiagnosticsAccessor: UseWidgetStateDiagnosticsAccessor<WidgetInterfaces>

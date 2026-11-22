@@ -56,7 +56,7 @@ if (anchor['data-widget-id'] !== 'root' || anchor['data-widget-type'] !== 'Packe
 // The installed Inspector must accept a Runtime built by the installed Core peer: a bundled second
 // Core copy would make `inspectRuntime` reject it as foreign.
 const system = createWidgetSystem({ plugins: [createWidgetPlugin('Packed')
-	.description('Packed smoke widget')
+	.interfaces()
 	.done()] })
 const blueprint = system.createBlueprint({ id: 'root', type: 'Packed' })
 if (blueprint.status !== 'valid')
