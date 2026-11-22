@@ -170,13 +170,14 @@ showcase host contract (it reads the host's locale and light/dark theme and the 
 
 The header is one row from 1280px up: the **Examples** menu (showcase and preset; it always names the showcase and the
 last loaded preset, or "edited" once the document changes), two plain-language status chips (the document is *Valid* or
-has *N problems*; the preview is *up to date* or *shows the last valid version*, with revisions and linkage in an info
-popover, which also holds the JSON draft, Source JSON compatibility, Blueprint status and recovery facts), the edit actions
-**Apply / Revert / Undo / Format**, and an overflow menu with Tutorial, Theme, Language, **Reset layout** and a Developer submenu
-(Implementation, Document Tools).
+has *N problems*, a button that opens the Problems list; the preview is *up to date* or *shows the last valid version*, with
+revisions and linkage in an info popover, which also holds the JSON draft, Source JSON compatibility, Blueprint status and recovery facts;
+while the JSON draft has unapplied edits a third chip says *Unapplied changes* and the preview chip *shows the last applied version*),
+the edit actions **Apply / Revert / Undo / Format**, and an overflow menu with Tutorial, Theme, **Lab language**, **Reset layout** and a
+Developer submenu (Implementation, Document Tools).
 
 - **Apply** is also Cmd/Ctrl+Enter, inside the Monaco editor and from any focused tab; its tooltip shows the keys.
-- **Revert** discards the unapplied editor draft. **Undo** ("Undo last apply") restores the previously applied source as a
+- **Revert** discards the unapplied editor draft. **Undo** ("Undo last change") restores the previous source as a
   *new* Document revision (through the same commit path as Apply, up to 20 steps back); it is unavailable while an
   unapplied draft exists, and a tooltip says why for every disabled action.
 - Loading a preset or switching showcase over an unapplied draft asks first (Keep editing / Discard changes).
@@ -188,8 +189,9 @@ popover, which also holds the JSON draft, Source JSON compatibility, Blueprint s
 
 - **Author > Structure** edits the selected widget's config with controls that follow the plugin's config JSON Schema: a switch for a boolean, a
   number box (Core checks the limits), a list for an enum, a text box for a string, and Add / Remove for optional fields and list items where the schema allows
-  them. Every change goes through the same Document commit as Apply (Undo, the status chips and Problems keep working; it asks you to Apply or Revert an
-  unapplied JSON draft first). Without a schema, values are typed by what they hold and anything else is edited as JSON.
+  them. Author opens on Structure. Every change goes through the same Document commit as Apply (Undo, the status chips and Problems keep working). While
+  the JSON view has an unapplied draft, Structure says so above the fields and locks them until the draft is applied or discarded. Without a schema, values
+  are typed by what they hold and anything else is edited as JSON.
 - Problems lists the several diagnostics Core reports for one evaluation cycle as one entry that expands to Core's own diagnostics.
 - If the Preview frame cannot load, the Preview pane says so with the cause and a **Try again** button, and the header chip reads "Preview failed to load".
 - Graph: an always-visible key explains the badges, the line styles and the direction of an edge, edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph. Cards are spread out, edges are Bezier curves that pass between the cards, and every edge ends in an arrowhead on the member it depends on (`A → B` means A depends on B: the Relations view lists B under "Depends on" for A and A under "Used by" for B). While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it), every other edge fades, and a tag with no room is left out (Relations has the full list).
