@@ -9,23 +9,35 @@ import type { Adjustment } from '../domain'
 import type { DeliveryRawConfig } from '../schemas'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveDeliveryConfig } from '../config'
-import { deliveryConfigJsonSchema, deliveryConfigSchema, deliveryMethodSchema } from '../schemas'
+import { deliveryConfigSchema, deliveryMethodSchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { subtotalReads, valueOr } from './reads'
 import { checkInsideQuote } from './structure'
 
+/**
+ * Pick-up or courier delivery. Config: `label`, `courierCents`, an optional `freeOverCents` and the starting `method`.
+ * State `method`: `pickup` or `courier`. Property `adjustment`: the courier fee, waived from `freeOverCents` on
+ * (`reason: free-over-threshold`).
+ */
 export interface DeliveryInterfaces extends WidgetInterfaces {
+	/**
+	 * The label, the courier fee, the subtotal from which it is free and the starting method. Validated by a Valibot schema
+	 * through Standard Schema.
+	 */
 	config: { raw: DeliveryRawConfig, resolved: DeliveryConfig }
-	state: { method: 'pickup' | 'courier' }
-	properties: { adjustment: Adjustment }
+	state: {
+		/** How the order reaches the customer: `pickup` or `courier`. */
+		method: 'pickup' | 'courier'
+	}
+	properties: {
+		/** The courier fee in minor units, waived from `freeOverCents` on; 0 for pick-up. */
+		adjustment: Adjustment
+	}
 }
 
 export const DeliveryPlugin = createWidgetPlugin('Delivery')
-	.description('Pick-up or courier delivery. Config: `label`, `courierCents`, an optional `freeOverCents` and the starting `method`. State `method`: `pickup` or `courier`. Property `adjustment`: the courier fee, waived from `freeOverCents` on (`reason: free-over-threshold`).')
 	.interfaces<DeliveryInterfaces>()
 	.config({
-		description: 'The label, the courier fee, the subtotal from which it is free and the starting method. Validated by a Valibot schema through Standard Schema.',
-		schema: deliveryConfigJsonSchema,
 		validate: guard(deliveryConfigSchema),
 		resolve: resolveDeliveryConfig,
 	})

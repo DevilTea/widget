@@ -12,22 +12,36 @@ import type { ItemLine } from '../domain'
 import type { ItemRawConfig } from '../schemas'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveItemConfig } from '../config'
-import { itemConfigJsonSchema, itemConfigSchema, paperSchema, quantitySchema } from '../schemas'
+import { itemConfigSchema, paperSchema, quantitySchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { checkInsideQuote } from './structure'
 
+/**
+ * One printed product of the quote. Config: title, `unitCents`, the `papers` on offer and the starting `quantity` and
+ * `paper`. State: `quantity` and `paper`, what the customer chooses. Property `line`: the quantity, the paper and the line
+ * price in minor units (it fails with `unknown-paper` when State `paper` is not one of the papers).
+ */
 export interface ItemInterfaces extends WidgetInterfaces {
+	/**
+	 * The product, its unit price, the papers on offer and the starting quantity and paper. Validated by a Valibot schema
+	 * through Standard Schema.
+	 */
 	config: { raw: ItemRawConfig, resolved: ItemConfig }
-	state: { quantity: number, paper: string }
-	properties: { line: ItemLine }
+	state: {
+		/** How many pieces the customer orders: a whole number from 1. */
+		quantity: number
+		/** The code of the paper the customer chose, one of the configured papers. */
+		paper: string
+	}
+	properties: {
+		/** The quantity, the paper and the line price in minor units. Fails with `unknown-paper` when `paper` is not on offer. */
+		line: ItemLine
+	}
 }
 
 export const ItemPlugin = createWidgetPlugin('Item')
-	.description('One printed product of the quote. Config: title, `unitCents`, the `papers` on offer and the starting `quantity` and `paper`. State: `quantity` and `paper`, what the customer chooses. Property `line`: the quantity, the paper and the line price in minor units (it fails with `unknown-paper` when State `paper` is not one of the papers).')
 	.interfaces<ItemInterfaces>()
 	.config({
-		description: 'The product, its unit price, the papers on offer and the starting quantity and paper. Validated by a Valibot schema through Standard Schema.',
-		schema: itemConfigJsonSchema,
 		validate: guard(itemConfigSchema),
 		resolve: resolveItemConfig,
 	})
