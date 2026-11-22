@@ -56,7 +56,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   application-level whole-context replacement operation (teardown old Runtime → create target
   revision-0 Document/Runtime → mount it), serialized with every command (JSON commit, Structure command, Undo, preset) through
   one `enqueue()` promise chain (`runCommand()`), and the JSON auto-commit (see "Commit lifecycle"). It also exposes the derived
-  header state (`hasJsonSyntaxError`, `canUndo`, `previewRestarted`, `status`, `problems`, `example`/`loadedPresetId`) and
+  header state (`jsonBlocked`, `canUndo`, `previewRestarted`, `status`, `problems`, `example`/`loadedPresetId`) and
   `authorView`/`showProblems()`.
   Also owns `graphShowAbsent`/`graphShowIsolatedMembers` — Dependencies/Graph
   presentation preferences that deliberately live as plain refs on the `LabStore` object
@@ -1169,10 +1169,16 @@ compiles/increments the Document revision first. If that committed Blueprint is 
 Host retains the exact last-valid Preview Runtime and its older revision, with its answers; there is no detach/dispose/mount. If it is
 valid, the host detaches/disposes the previous Preview Runtime, creates a fresh Runtime for the new revision, and mounts it: answers
 start over, the debounce keeps that from happening on every keystroke, and the status chip says "Preview restarted" for a moment.
-Runtime state is never migrated across valid revisions. **Text that does not parse is never committed**: Monaco shows the syntax
-error as a squiggle and a row of the Problems list, the JSON toolbar says "JSON has a syntax error — not applied", the status chip
-says "JSON syntax error — not applied", Structure is inert, and the header offers "Discard JSON changes" (`discardJsonChanges()`,
-`LabSession.revert()`). That text is the only "draft" left in the Lab. `LabSession.documentState` and `LabSession.preview` are
+Runtime state is never migrated across valid revisions. **Text that cannot be applied is never committed** (`LabSession.jsonBlock`,
+`LabStore.jsonBlocked`): text that does not parse, and — since the phase 3A review — text that parses but whose commit Core refused
+for exactly that text (`patch-error`, e.g. `1e400`, which parses to Infinity, outside the JSON domain, or nesting deeper than Core
+accepts). Such a text used to sit uncommitted under an "Up to date" chip, with nothing to discard and Undo refused. Now both are
+blocked alike: the Problems list has a row (the syntax error, or Core's failure code and message with its reason, located by its
+operand path) and the editor a squiggle, the JSON toolbar names why ("JSON has a syntax error — not applied" / "JSON can't be applied
+(<reason>) — Core refused it"), the status chip says "JSON syntax error — not applied" or "JSON can't be applied — <reason>" (the
+reason is Core's own token, verbatim), Structure is inert, Undo is unavailable, and the header offers "Discard JSON changes"
+(`discardJsonChanges()`, `LabSession.revert()`). A refused text is not tried again until it changes; any edit clears the block (and
+the new text gets its own try). That text is the only "draft" left in the Lab. `LabSession.documentState` and `LabSession.preview` are
 the explicit two snapshots; the deprecated `active` compatibility shape must not be used to infer that its current Document
 Blueprint and retained Runtime share a revision. See `src/lab/session.ts` and `use-lab-store.ts` and their tests.
 
@@ -1183,11 +1189,14 @@ session's already-authoritative revision-0 Runtime directly; re-applying identic
 forbidden because Core correctly treats it as `changed:false`. A switch drops pending JSON text (the guard asked first if it was an
 edit) and its timer.
 
-**One command at a time, and none is lost.** Every command goes through `LabStore`'s `runCommand()`: when nothing runs it starts
+**One command at a time.** Every command goes through `LabStore`'s `runCommand()`: when nothing runs it starts
 synchronously at call time (its capture and the session's own concurrency guard fire in that turn), while another command runs it
 **waits** for it inside the `enqueue()` chain (it used to be refused), and while a showcase switch occupies the lifecycle boundary
 it is refused. Waiting is what the model needs: leaving the JSON editor for the Undo button or a Structure control commits the
-JSON on blur, and the click lands while that commit is still promoting the Preview. `LabSession` keeps its own guards
+JSON on blur, and the click lands while that commit is still promoting the Preview. A command that waits must be built when it starts,
+not when it was asked: `LabStore.author()` takes a builder (`AuthorStructureView` passes one that reads the current revision and node
+and returns `null` when the edited widget is no longer selected, `stale-selection`). Built at call time, a Structure edit queued
+behind a commit or an Undo carried the old revision and was refused as `stale-selection`. `LabSession` keeps its own guards
 (`skipped-concurrent`, `draft-dirty`) as the last line.
 
 **Undo last change** (`LabSession.undo()`, `LabStore.undo()`) restores the source the Document held before its last
@@ -1199,10 +1208,15 @@ parse, not Undo itself, so repeated Undo walks back one step at a time). **A bur
 editor coalesces into one entry**: `beginJsonEdit()` (editor focus) starts a coalesce key, and a JSON commit whose key is the one
 that pushed the top entry pushes nothing, so one Undo restores the document from before the session; a new focus session, any other
 commit and Undo itself end the burst; a burst that lands back on the source before it drops its entry (there is nothing left to
-undo). The brief says "replace the top entry": an entry is the step from the source before the burst to the current one, and keeping
+undo), and gives back the entry its push evicted at `LAB_UNDO_LIMIT` (kept aside while the burst goes on; once anything else is
+pushed or undone the eviction is final), so a burst that changed nothing costs no history. The window or tab losing focus is not
+leaving the editor: `use-monaco-editor.ts` ignores a blur while `document.hasFocus()` is false, and the focus that comes back
+continues the open session (`beginJsonEdit()` keeps an open key), so alt-tab keeps one entry. The brief says "replace the top entry": an entry is the step from the source before the burst to the current one, and keeping
 the older source is that replacement, so it holds. Undo first commits pending JSON text that parses, within its burst (so the click on
 Undo that ends an editing session takes the whole session back), and is unavailable while the JSON text does not parse (it would
-replace text that was never committed; `draft-dirty`). A fresh showcase session starts with an empty stack. The stack is a
+replace text that was never committed; `draft-dirty`). **Undo requests that arrive while an Undo is on its way are that same Undo**
+(`LabStore.undo()` returns the pending one): a double-click undoes one step, and a click after it finished undoes the next. A fresh
+showcase session starts with an empty stack. The stack is a
 convenience over the Document commit path, not an authoritative history; redo does not exist and nothing persists.
 
 **Decisions made in phase 3 (recorded here, not in the design):**
@@ -1212,7 +1226,10 @@ convenience over the Document commit path, not an authoritative history; redo do
 - *Cmd/Ctrl+Enter* is remapped to "commit the JSON now" inside the editor (Monaco would insert a line otherwise, and the key keeps
   its "make it take effect" meaning); the window-wide shortcut is removed, since nothing else waits to be applied.
 - *A command that arrives while another runs waits* (above) instead of being refused, and Structure edits queue in order
-  (`AuthorStructureView`), so a click that causes a blur commit is never dropped.
+  (`AuthorStructureView`), built when they start, so a click that causes a blur commit is not lost to the commit it caused. An edit
+  can still be dropped on purpose: the same edit reported twice while it waits, or one whose widget is no longer selected.
+- *Undo while an Undo is on its way* is that Undo (a double-click is one step), not a second one.
+- *JSON that parses but cannot be applied* is blocked like a syntax error (above), with Core's reason in the chip.
 - *Status while a valid commit is promoted* is "Updating the preview…", and a valid Document the Preview has not caught up with
   while nothing runs (a promotion that failed while the old Runtime survived) is "Preview shows the last working version"; the
   design names only the five main states.
@@ -1279,7 +1296,7 @@ an add that is not reported, or is reported and refused, keeps the choice for an
 selection) reaches only the control at the edit's path (`resync`, passed down the tree, with the outcome message): a list or a switch the user only moved is re-created and
 shows what the Document holds again; a text, number or JSON box keeps the rejected input (nothing typed is lost) and says "Not applied: <why>" (`data-testid="not-applied"`,
 the box's `aria-describedby`; the reason alone, the outcome line above is the live announcement), with **Use the Document value** to go back (focus returns to the box).
-**While the JSON text does not parse** (`hasJsonSyntaxError`; until Lab UX phase 3 any unapplied JSON draft) a Structure commit would be refused
+**While the JSON text cannot be applied** (`jsonBlocked`: it does not parse, or Core refused it; until Lab UX phase 3 any unapplied JSON draft) a Structure commit would be refused
 (`draft-dirty`: it would replace that text), so Structure says so before anything is clicked: a notice above the editor ("The JSON has a syntax
 error, so nothing from it is applied. Fix it in the JSON view, or use Discard JSON changes, to edit here.", `structure-draft-notice`,
 `role="note"`, with **Open the JSON view**, which then puts keyboard focus on the JSON tab of the
@@ -1355,7 +1372,7 @@ implementation, or alternative authored source authority.
 
 `LabHeader.vue` is one row from 1280px up (`e2e/header-feedback.spec.ts` pins it at 1280/1440/1920), grouped by job:
 the title; the **Examples** menu; **one plain-language status chip** and a details popover; the edit actions (**Undo**, and
-**Discard JSON changes** only while the JSON text does not parse); and an **overflow** menu with Tutorial, Theme, **Lab language** (labelled as the Lab's own, since the survey has a language select of its own in the Preview) and a **Developer**
+**Discard JSON changes** only while the JSON text cannot be applied); and an **overflow** menu with Tutorial, Theme, **Lab language** (labelled as the Lab's own, since the survey has a language select of its own in the Preview) and a **Developer**
 submenu (Implementation, Document Tools). Hidden test fixtures stay reachable only through `?showcase=`. Lab UX phase 3 removed
 Apply, Revert and the header's Format (it is in the JSON view's toolbar).
 
@@ -1367,19 +1384,23 @@ Apply, Revert and the header's Format (it is in the JSON view's toolbar).
   document" compares JSON values (`lab/json-equal.ts` `sameJsonDocument()`: whitespace and object key order do not count, array order
   does; text that does not parse is compared as text), since Lab UX phase 2, so a formatted copy of an untouched preset still names it. `data-showcase-id`, `data-preset-id` and `data-example-kind` are the machine-readable hooks.
 - *The status chip* (`deriveLabStatus()` → `LabStatus.chip`, Lab UX phase 3; it merged the phase 1 validity, draft and Preview chips).
-  One state at a time, the first that holds: "JSON syntax error — not applied" (`syntax-error`); "N problems · Preview shows the last
+  One state at a time, the first that holds: "JSON syntax error — not applied" or "JSON can't be applied — <reason>"
+  (`json-not-applied`); "N problems · Preview shows the last
   working version" (`problems`; "N problems · Preview unavailable" when there is no Preview to fall back to); "Preview unavailable"
   (`preview-unavailable`: the frame failed, or no valid version was ever promoted); "Updating the preview…" (`updating`: a valid
   commit is being promoted); "Preview shows the last working version" (`stale`: a valid Document the Preview has not caught up with
   while nothing runs); "Preview restarted" (`restarted`, for `PREVIEW_RESTARTED_MS` = 2.5 s after a commit, Undo, preset or retry
-  replaced the Runtime of the same session: `LabStore.previewRestarted`, not set by the first mount or a showcase switch); "Up to
+  replaced the Runtime of the same session: `LabStore.previewRestarted`, not set by the first mount, and cleared with its timer by a
+  showcase switch); "Up to
   date" (`up-to-date`). `data-testid="lab-status"`, `data-state` is the state, and the facts stay machine-readable for specs:
   `data-validity` (`valid` | `problems`, the committed Document; a syntax error is no longer counted as a Document problem),
   `data-problem-count`, `data-preview` (`current` | `stale` | `unavailable` | `failed`). With problems or a syntax error the chip
   is a **button** (`UButton`, same attributes) that runs `store.showProblems()` in the current Author view; its accessible name is
   "<label>: show them". The chip itself is not a live region: a visually hidden `role="status"` next to it
-  (`lab-status-announcement`) announces the chip's text once it has held for 1 s (typing in JSON often breaks the syntax for a keystroke
-  or two) and stays quiet for "Up to date". Revision numbers, the Blueprint status, Linked / Diverged and the JSON text's state are developer
+  (`lab-status-announcement`) announces the chip's text as `announcementDelay()` (`lab/status.ts`) says: problems, an unavailable or
+  lagging Preview once the state has held for 1 s; JSON that cannot be applied once typing has paused for 1.5 s while the editor has
+  focus, or at once on blur (it flips with nearly every keystroke); "Preview restarted" only while the JSON editor does not have focus
+  (it would follow every typing pause); nothing for "Up to date". The chip state is `json-not-applied` for both kinds of JSON block. Revision numbers, the Blueprint status, Linked / Diverged and the JSON text's state are developer
   details in the info popover (`status-details`; `revision-link-status` and `status-json-draft` live there).
 - *Edit actions*: a disabled action keeps `aria-disabled="true"` instead of `disabled` so it stays focusable and its tooltip
   can say why ("Nothing to undo yet", "Fix or discard the JSON syntax error before undoing"); the click handler also refuses. A running
@@ -1390,8 +1411,8 @@ Apply, Revert and the header's Format (it is in the JSON view's toolbar).
   with the editor; a `addCommand()` would leak a global keybinding per remount; Monaco binds the key to "insert line" otherwise). The
   window-wide Apply shortcut of `App.vue` is gone (Lab UX phase 3): outside the editor nothing waits to be applied, and a Structure box
   commits on Enter itself.
-- *Protection of JSON text that does not parse* (until Lab UX phase 3 "unapplied-draft protection"; text that parses is committed,
-  so it is an ordinary committed edit): loading a preset or switching showcase while `hasJsonSyntaxError` asks first
+- *Protection of JSON text that cannot be applied* (until Lab UX phase 3 "unapplied-draft protection"; text that parses is committed,
+  so it is an ordinary committed edit): loading a preset or switching showcase while `jsonBlocked` asks first
   (`DraftGuardDialog`, a native `alertdialog` through `useModalDialog`, "Keep editing" first and focused, Escape = keep, "Discard
   changes" continues). The guard lives in the header/UI layer (`createDraftGuardStore`), never inside
   `LabStore.switchShowcase()`/`applyPreset()`, so the tutorial (which has its own dirty-draft confirmation and calls the store

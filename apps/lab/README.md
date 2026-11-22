@@ -181,10 +181,11 @@ layout** and a Developer submenu (Implementation, Document Tools).
 
 - **The JSON view** commits its text when it parses: when you stop typing for about 750 ms, and at once when you leave the editor
   (or press Cmd/Ctrl+Enter in it). All the commits of one visit to the editor are one Undo step. Text that does not parse is never
-  committed: it is marked in the editor, the status chip says so, Structure waits, and **Discard JSON changes** brings the document
+  committed, and neither is text that parses but that Core refuses (such as `1e400`): it is marked in the editor, the status chip
+  says so with the reason, Structure waits, and **Discard JSON changes** brings the document
   back. **Format** is in the JSON view's toolbar.
 - **Undo** ("Undo last change") restores the previous source as a *new* Document revision (through the same commit path, up to 20
-  steps back); it is unavailable while the JSON does not parse, and its tooltip says why.
+  steps back; a double-click is one step); it is unavailable while the JSON cannot be applied, and its tooltip says why.
 - Loading a preset or switching showcase while the JSON does not parse asks first (Keep editing / Discard changes).
 - Switching showcase away from an edited document (one that equals none of the showcase's presets) asks first too, because Undo
   cannot bring it back; with JSON that does not parse as well, one dialog names both. Loading a preset or starting the tutorial over an
