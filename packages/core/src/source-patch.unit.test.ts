@@ -830,6 +830,27 @@ describe('sourcePatch member order', () => {
 			.toEqual(['en', 'zh-TW', 'fr'])
 	})
 
+	it('keeps every ancestor in place for remove, move and copy', () => {
+		const patches = [
+			[{ op: 'remove', path: '/config/label/en' }],
+			[{ op: 'move', from: '/config/label/en', path: '/config/label/fr' }],
+			[{ op: 'copy', from: '/config/label/en', path: '/config/label/fr' }],
+		] as const
+		const expectedLabelKeys = [['zh-TW'], ['zh-TW', 'fr'], ['en', 'zh-TW', 'fr']]
+		patches.forEach((patch, index) => {
+			const result = applySourcePatch(source(), patch)
+			if (!result.ok)
+				throw new Error('patch failed')
+			const patched = result.value.source as ReturnType<typeof source>
+			expect(keys(patched))
+				.toEqual(['id', 'type', 'config', 'slots'])
+			expect(keys(patched.config))
+				.toEqual(['label', 'other'])
+			expect(keys(patched.config.label))
+				.toEqual(expectedLabelKeys[index])
+		})
+	})
+
 	it('keeps a replaced accessor or non-writable member in place, as a plain data member', () => {
 		let reads = 0
 		const withAccessor = Object.defineProperty({ a: 1, b: 2, c: 3 }, 'b', {

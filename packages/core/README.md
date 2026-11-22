@@ -290,8 +290,9 @@ compiled Blueprint together behind a monotonically increasing revision. A
 `SourcePatch` is one JSON-domain RFC6901/RFC6902 patch language: paths may be
 JSON Pointer strings or structured string/number segments, operands are
 `JsonValue`, and successful patches are applied copy-on-write. Reconstruction
-keeps object member order: a replaced member and its ancestors stay where they
-are, and a new member is appended (`move` and `copy` add at the target). Mechanical
+keeps object member order: the ancestors of the patched path and a replaced
+member stay where they are, and a new member is defined last (`move` and `copy`
+add at the target; JavaScript still lists integer-like keys first). Mechanical
 failure is atomic; a successful patch may still commit a semantically invalid
 Blueprint for inspection.
 
