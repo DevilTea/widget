@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * The Events a plugin declares: name and description, rendered verbatim (they are plugin-authored text and never
- * pass through the Lab's i18n). Core publishes nothing else about an Event, in particular no payload schema, so the
- * list says no more; what an Event carries is whatever its description says and what the live Events log shows.
+ * The Events a plugin declares: name and description, rendered verbatim (the description is the plugin's JSDoc on the Event,
+ * from the showcase's generated documentation, and never passes through the Lab's i18n; an undocumented Event shows its name
+ * only). Core publishes nothing else about an Event, in particular no payload schema, so the list says no more; what an
+ * Event carries is whatever its description says and what the live Events log shows.
  * Used by the Catalog and by the Blueprint / Selected widget declaration. Presentation only.
  */
 import { useLabI18n } from '../../composables/use-lab-i18n'
@@ -29,7 +30,9 @@ const i18n = useLabI18n()
 			:data-event="event.name"
 			class="mb-1 last:mb-0"
 		>
-			<code class="font-mono">{{ event.name }}</code><span class="text-muted">: </span>{{ event.description }}
+			<code class="font-mono">{{ event.name }}</code><template v-if="event.description !== ''">
+				<span class="text-muted">: </span>{{ event.description }}
+			</template>
 		</li>
 	</ul>
 	<p

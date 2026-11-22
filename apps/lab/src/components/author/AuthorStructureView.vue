@@ -7,6 +7,7 @@ import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { editConfig } from '../../lab/author'
+import { getShowcase } from '../../showcases/registry'
 import BlueprintTree from '../blueprint/BlueprintTree.vue'
 import ConfigFieldEditor from './ConfigFieldEditor.vue'
 
@@ -22,15 +23,23 @@ const editorEl = useTemplateRef<HTMLElement>('editorEl')
 const resync = ref<{ readonly path: string, readonly tick: number, readonly message?: string } | null>(null)
 let resyncTick = 0
 
-/** The plugin's public config metadata for the selected widget: `null` when it has no config capability. */
+/**
+ * The selected widget's config: `null` when its plugin has no config capability, else the config JSON Schema the showcase
+ * hands to the Lab for that plugin (`schema: null` without one; Core 0.3 publishes no config schema).
+ */
 const catalogConfig = computed(() => {
-	void store.showcaseId.value
 	const node = selectedNode.value
 	if (node === null || !node.resolved)
 		return undefined
-	return store.session.system.catalog.widgets.find(entry => entry.type === node.node.type)?.config
+	const entry = store.session.system.catalog.widgets.find(widget => widget.type === node.node.type)
+	if (entry === undefined)
+		return undefined
+	if (!entry.capabilities.config)
+		return null
+	const schemas = getShowcase(store.showcaseId.value)?.configSchemas ?? {}
+	return { schema: Object.hasOwn(schemas, entry.type) ? schemas[entry.type]! as JsonSchema : null }
 })
-const configSchema = computed(() => (catalogConfig.value?.schema ?? null) as JsonSchema | null)
+const configSchema = computed(() => catalogConfig.value?.schema ?? null)
 
 /** The widget's authored config (an empty object when it was written without one, or as `null`). */
 const configValue = computed<unknown>(() => {

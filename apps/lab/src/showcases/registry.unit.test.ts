@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { inspectPlugin } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { defaultShowcase, getShowcase, listedShowcases, resolveInitialShowcase, showcases, urlWithShowcase } from './registry'
 
@@ -12,6 +13,40 @@ describe('the frame isolation e2e covers every registered showcase', () => {
 			.toBeNull()
 		expect([...list![1]!.matchAll(/'([^']+)'/g)].map(match => match[1]))
 			.toEqual(showcases.map(showcase => showcase.id))
+	})
+})
+
+describe('the documentation each showcase carries (Core 0.3 has no descriptions at run time)', () => {
+	it.each(showcases.map(showcase => [showcase.id, showcase] as const))('%s: every plugin, config, slot and Event is documented in its generated docs', (_id, showcase) => {
+		expect(Object.keys(showcase.docs.plugins))
+			.toEqual(showcase.system.catalog.widgets.map(widget => widget.type))
+		for (const plugin of showcase.system.plugins) {
+			const docs = showcase.docs.plugins[plugin.type]!
+			expect(docs.summary, plugin.type).not.toBe('')
+			expect(docs.config === null, `${plugin.type} config`)
+				.toBe(!plugin.capabilities.config)
+			if (docs.config !== null)
+				expect(docs.config.summary, `${plugin.type} config`).not.toBe('')
+			const slots = showcase.system.catalog.widgets.find(widget => widget.type === plugin.type)!.slots ?? []
+			expect(Object.keys(docs.slots ?? {}), `${plugin.type} slots`)
+				.toEqual([...slots])
+			for (const name of slots)
+				expect(docs.slots![name]!.summary, `${plugin.type} slot ${name}`).not.toBe('')
+			const events = [...inspectPlugin(plugin).events?.keys() ?? []]
+			expect(Object.keys(docs.events ?? {}), `${plugin.type} events`)
+				.toEqual(events)
+			for (const name of events)
+				expect(docs.events![name]!.summary, `${plugin.type} event ${name}`).not.toBe('')
+		}
+	})
+
+	it('hands the Lab a config JSON Schema only for plugins with a config', () => {
+		for (const showcase of showcases) {
+			for (const type of Object.keys(showcase.configSchemas)) {
+				expect(showcase.system.catalog.widgets.find(widget => widget.type === type)?.capabilities.config, `${showcase.id} ${type}`)
+					.toBe(true)
+			}
+		}
 	})
 })
 

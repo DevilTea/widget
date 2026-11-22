@@ -8,28 +8,44 @@
  * pipeline." Deliberately minimal: no routing, no persistence — just an `{ id, label, system,
  * presets }` lookup table consumed by `use-lab-store.ts`'s `switchShowcase`.
  *
+ * Each entry also carries what Core 0.3 no longer publishes: the plugin documentation generated from the System's
+ * `Interfaces` JSDoc (`virtual:widget-docs/<id>`, served by `widgetDocs()`, see `../../widget-docs.ts`) and the config JSON
+ * Schemas the showcase hands to the Lab (`configSchemas`, by plugin type).
+ *
  * Shell-safe by construction: it imports no renderer, so no showcase component or stylesheet reaches the Lab shell
  * document. A showcase's renderer is loaded only inside the Preview frame, through `preview-frame-renderers.ts`.
  */
 
 import type { AnyWidgetPluginTuple, WidgetSystem } from '@deviltea/widget-core'
-import type { SourcesRegistry } from '../showcase-host'
+import type { WidgetDocs } from '../author/widget-docs'
+import type { ConfigSchemaMap, SourcesRegistry } from '../showcase-host'
+import documentRepairDocs from 'virtual:widget-docs/document-repair'
+import onboardingDocs from 'virtual:widget-docs/onboarding'
+import quoteRulesDocs from 'virtual:widget-docs/quote-rules'
+import sandboxDocs from 'virtual:widget-docs/sandbox'
+import surveyDocs from 'virtual:widget-docs/survey'
+import tripBudgetDocs from 'virtual:widget-docs/trip-budget'
 import { defaultSandboxPreset, sandboxPresets } from '../sandbox/presets'
 import { sandboxSources } from '../sandbox/sources'
 import { sandboxSystem } from '../sandbox/system'
 import { defaultRepairPreset, repairPresets } from './document-repair/presets'
+import { repairConfigSchemas } from './document-repair/schemas'
 import { repairSources } from './document-repair/sources'
 import { repairSystem } from './document-repair/system'
 import { defaultOnboardingPreset, onboardingPresets } from './onboarding/presets'
+import { onboardingConfigSchemas } from './onboarding/schemas'
 import { onboardingSources } from './onboarding/sources'
 import { onboardingSystem } from './onboarding/system'
 import { defaultQuotePreset, quotePresets } from './quote-rules/presets'
+import { quoteConfigSchemas } from './quote-rules/schemas'
 import { quoteSources } from './quote-rules/sources'
 import { quoteSystem } from './quote-rules/system'
 import { defaultSurveyPreset, surveyPresets } from './survey/presets'
+import { surveyConfigSchemas } from './survey/schemas'
 import { surveySources } from './survey/sources'
 import { surveySystem } from './survey/system'
 import { defaultTripBudgetPreset, tripBudgetPresets } from './trip-budget/presets'
+import { tripBudgetConfigSchemas } from './trip-budget/schemas'
 import { tripBudgetSources } from './trip-budget/sources'
 import { tripBudgetSystem } from './trip-budget/system'
 
@@ -58,6 +74,10 @@ export interface ShowcaseEntry {
 	 * source text or Shiki into the eager/shared chunk graph.
 	 */
 	readonly sources: SourcesRegistry
+	/** The documentation generated from the plugins' `Interfaces` JSDoc (`virtual:widget-docs/<id>`). */
+	readonly docs: WidgetDocs
+	/** The config JSON Schema of each plugin that has one, by plugin type (Core 0.3 carries no config schema). */
+	readonly configSchemas: ConfigSchemaMap
 }
 
 /**
@@ -78,6 +98,8 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: surveyPresets,
 		defaultPreset: defaultSurveyPreset,
 		sources: surveySources,
+		docs: surveyDocs,
+		configSchemas: surveyConfigSchemas,
 	},
 	{
 		id: 'trip-budget',
@@ -86,6 +108,8 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: tripBudgetPresets,
 		defaultPreset: defaultTripBudgetPreset,
 		sources: tripBudgetSources,
+		docs: tripBudgetDocs,
+		configSchemas: tripBudgetConfigSchemas,
 	},
 	{
 		id: 'quote-rules',
@@ -94,6 +118,8 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: quotePresets,
 		defaultPreset: defaultQuotePreset,
 		sources: quoteSources,
+		docs: quoteRulesDocs,
+		configSchemas: quoteConfigSchemas,
 	},
 	{
 		id: 'onboarding',
@@ -102,6 +128,8 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: onboardingPresets,
 		defaultPreset: defaultOnboardingPreset,
 		sources: onboardingSources,
+		docs: onboardingDocs,
+		configSchemas: onboardingConfigSchemas,
 	},
 	{
 		id: 'document-repair',
@@ -110,6 +138,8 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: repairPresets,
 		defaultPreset: defaultRepairPreset,
 		sources: repairSources,
+		docs: documentRepairDocs,
+		configSchemas: repairConfigSchemas,
 	},
 	{
 		id: 'sandbox',
@@ -119,6 +149,8 @@ export const showcases: readonly ShowcaseEntry[] = [
 		presets: sandboxPresets,
 		defaultPreset: defaultSandboxPreset,
 		sources: sandboxSources,
+		docs: sandboxDocs,
+		configSchemas: {},
 	},
 ]
 

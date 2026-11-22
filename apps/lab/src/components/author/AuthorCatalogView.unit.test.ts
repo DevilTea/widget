@@ -2,12 +2,19 @@
 
 import { createWidgetSystem } from '@deviltea/widget-core'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { shallowRef } from 'vue'
 import { LabStoreKey } from '../../composables/use-lab-store'
 import { NotifierPlugin, PlainPlugin } from '../../events/test-support'
 import { labI18nProvide } from '../../test-support-i18n'
 import AuthorCatalogView from './AuthorCatalogView.vue'
+
+// The fixture plugins are not a showcase: their documentation comes from a stand-in entry (see `eventsFixtureShowcase`).
+vi.mock('../../showcases/registry', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../../showcases/registry')>()
+	const { eventsFixtureShowcase } = await import('../../events/test-support')
+	return { ...actual, getShowcase: (id: string) => id === eventsFixtureShowcase.id ? eventsFixtureShowcase : actual.getShowcase(id) }
+})
 
 /** Issue #230 (audit U09): the Catalog lists the Events each plugin declares, with a chip for the capability. */
 function mountCatalog(locale: 'en' | 'zh-TW' = 'en') {
@@ -16,7 +23,7 @@ function mountCatalog(locale: 'en' | 'zh-TW' = 'en') {
 		global: {
 			provide: {
 				...labI18nProvide(locale),
-				[LabStoreKey as symbol]: { showcaseId: shallowRef('survey'), session: { system } },
+				[LabStoreKey as symbol]: { showcaseId: shallowRef('events-fixture'), session: { system } },
 			},
 		},
 	})

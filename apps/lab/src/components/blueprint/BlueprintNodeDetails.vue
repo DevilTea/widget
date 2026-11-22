@@ -9,6 +9,7 @@
 import type { WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { BlueprintInspection, BlueprintInspectionNode, InspectionNodeId } from '@deviltea/widget-core/inspection'
 import { computed } from 'vue'
+import { memberDocText, pluginDocsOf } from '../../author/widget-docs'
 import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
@@ -38,6 +39,15 @@ const curatedEntryAvailable = computed(() => {
 		return false
 	const showcase = getShowcase(store.showcaseId.value)
 	return showcase !== undefined && node.node.type in showcase.sources
+})
+
+/** The declared Events of the node with their documentation from the showcase's generated docs (`''` when undocumented). */
+const declaredEvents = computed(() => {
+	const node = props.node
+	if (node === null || !node.resolved)
+		return []
+	const events = pluginDocsOf(getShowcase(store.showcaseId.value)?.docs, node.node.type)?.events
+	return node.events.map(event => ({ name: event.name, description: memberDocText(events, event.name) }))
 })
 
 const locationLabel = computed(() => {
@@ -155,7 +165,7 @@ function readConfigFields(node: { readonly rawConfig?: unknown, readonly config?
 					Events ({{ node.events.length }})
 				</h5>
 				<DeclaredEvents
-					:events="node.events"
+					:events="declaredEvents"
 					:declared="node.capabilities.events"
 				/>
 			</section>
