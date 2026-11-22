@@ -141,7 +141,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	// Draft state and the clickable problems chip (Lab UX phase 1).
 	'Unapplied changes': '有尚未套用的變更',
 	'Preview shows the last applied version': '預覽顯示上次套用的版本',
-	'{problems}: show them in the JSON view': '{problems}：在 JSON 檢視中顯示',
+	// Lab UX phase 2: "Show problems" stays in the open Author view, so the name no longer says "in the JSON view".
+	'{problems}: show them': '{problems}：顯示問題',
 	'Document and preview details': 'Document 與預覽詳細資訊',
 	'Document': 'Document',
 	'Revisions': 'Revisions',
@@ -169,6 +170,12 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'The JSON editor has changes that were not applied, and you edited this document. Opening “{subject}” discards both, and Undo cannot bring them back.': 'JSON 編輯器中有尚未套用的變更，你也修改過這份文件。開啟「{subject}」會把兩者都捨棄，而且無法用「復原上一步」找回。',
 	'Loaded “{subject}”. Undo to get your edits back.': '已載入「{subject}」。按「復原上一步」可以找回你的修改。',
 	'Dismiss notice': '關閉提示',
+	// Lab UX phase 2: Problems in Structure.
+	'Problems elsewhere in the document': '文件中其他位置的問題',
+	'{count} problem elsewhere in the document': '文件中其他位置有 {count} 個問題',
+	'{count} problems elsewhere in the document': '文件中其他位置有 {count} 個問題',
+	'Select this widget': '選取這個 widget',
+	'Problems of this widget': '這個 widget 的問題',
 	'Problems': '問題',
 	'No problems': '沒有問題',
 	'From the last change': '來自上次變更',

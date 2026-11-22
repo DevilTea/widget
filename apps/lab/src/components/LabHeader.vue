@@ -191,7 +191,7 @@ const previewIcon = computed(() => {
 	}
 })
 /** The problems chip is a button that opens the Problems list; its name says so (the visible count is part of it). */
-const showProblemsLabel = computed(() => i18n.t('{problems}: show them in the JSON view', { problems: validityLabel.value }))
+const showProblemsLabel = computed(() => i18n.t('{problems}: show them', { problems: validityLabel.value }))
 
 function onShowProblems(): void {
 	store.showProblems()

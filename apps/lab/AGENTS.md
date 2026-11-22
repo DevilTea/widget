@@ -1322,8 +1322,8 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   (`data-behind-draft="true"`; `data-state` stays `current`), so nothing claims the Preview shows what the user is typing. The chips
   are not live regions (no `role="status"`): nothing is announced when they change, on purpose for now, since a later phase replaces
   them with one status chip and handles announcements there. With problems, the validity chip is a **button** (`UButton`, same test id and data
-  attributes) that runs `store.showProblems()`; its accessible name is "N problems: show them in the JSON view" (the visible text is
-  part of it). `e2e/header-feedback.spec.ts` pins the draft chip, the one-row header with it at 1280px (en and zh-TW, and zh-TW with the
+  attributes) that runs `store.showProblems()`; its accessible name is "N problems: show them" (the visible text is
+  part of it; it said "... in the JSON view" until Lab UX phase 2, when "Show problems" started staying in the open Author view). `e2e/header-feedback.spec.ts` pins the draft chip, the one-row header with it at 1280px (en and zh-TW, and zh-TW with the
   problems button, the draft chip and the stale Preview label all shown) and the button.
 - *Edit actions*: a disabled action keeps `aria-disabled="true"` instead of `disabled` so it stays focusable and its tooltip
   can say why (nothing to apply / revert / undo, or "apply or revert your unapplied edits before undoing"); the click
@@ -1367,7 +1367,8 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
 - `LabStore.authorView` (Catalog / Structure / JSON) starts on **Structure** (Lab UX phase 1; it was JSON) and then keeps what the user
   chose, also across showcase switches; it is not saved across reloads. Specs that need Monaco or the Problems list open it with
   `openAuthorJson()` (`e2e/fixtures.ts`). It lives in the store, not in `AuthorPanel`, so other surfaces can
-  open the JSON view; `showProblems()` sets `activeTab`, `authorView` and `problemsFocusPending`. `Workbench.vue` now also feeds
+  open the JSON view; `showProblems()` activates Author and sets `problemsFocusPending`, and since Lab UX phase 2 stays in the open
+  Author view (from the Catalog it opens Structure); the mounted view consumes the flag (see "Problems in Structure"). `Workbench.vue` now also feeds
   Dockview's active panel back into `activeTab` (and never re-activates the panel already active, which moves DOM focus out of
   Monaco), so asking for a tab that is "already" `activeTab` in the store but no longer on screen still switches.
 - The tutorial rail is a docked column: a 320px flex item beside `Workbench` in `.lab-body` (below the header), see "Workbench layout
@@ -1407,10 +1408,39 @@ Core's own diagnostics, one `problem-row` each, code, message and location verba
 the summary, `data-problem-count`, the header chip, the editor squiggles and the Blueprint panel's "All diagnostics" view keep Core's count and text
 (a cycle with a single diagnostic is an ordinary row).
 
+### Problems in Structure (Lab UX phase 2, report item 12)
+
+Structure shows the same problems as the JSON view, from the same source (`LabStore.problems`: the committed Document's diagnostics and the
+last Apply's syntax error; no second validation path). `LabProblem.configPath` is the part of a problem's source path inside its widget's
+`config` (`null` when the path does not run through `<node>.config`), and `placeStructureProblems()` splits the list for the selected widget:
+- **at a field**: the selected widget's problems with a `configPath`. `ConfigFieldEditor` gets them all and each field shows the ones it
+  claims (`claimsFieldProblem()`): its own path, or a path under it that no field below renders (inside a value edited as JSON, or a key
+  that is not there, such as a missing required key, which shows at its object). The text is Core's code and message, verbatim, in the
+  field-error style (`text-error`) under the control (`field-problems` / `field-problem`); the control is `aria-invalid` and its
+  `aria-describedby` names the list (and the "Not applied" note when there is one); a group's list is focusable and describes the group.
+- **at the widget header**: its other problems (dependency, structure and member diagnostics, which Core locates at the widget or a member,
+  not at a field), and its config problems when the widget has no config editor here (`node-problems`, focusable).
+- **in a compact list** at the top of the editor (`structure-problems`, "N problems elsewhere in the document"): other widgets' problems,
+  each a button that selects that widget and focuses the problem there, and problems with no widget (a JSON syntax error, a source-level
+  diagnostic), plain rows. The tree keeps its per-widget counts.
+
+"Show problems" (the header's problems button and the stale-preview notice's) in Structure selects the first problem's widget and focuses its
+field's control (or the field's or the header's problem list), or the list's first row for a problem with no widget. In JSON it moves focus to
+the Problems list as before. `lab/problems.unit.test.ts` pins the placement and claiming rules, `ConfigFieldEditor.unit.test.ts` the field markup,
+and `e2e/structure-problems.spec.ts` the browser behaviour (max below min at the field, a dependency diagnostic at the header, the list, "Show
+problems" from Structure, the Catalog and JSON).
+
+**Deferred: precise locations for dependency diagnostics.** The report found that the squiggle and "Go to location" for a broken
+`visibleWhen.question` mark the widget's `"id"` instead of the bad value. Core's dependency diagnostics (`missing-dependency-target` and
+friends) carry the widget, the member and the dependency reference (`dependency.target.widgetId`), but no source path into the config, so the
+Lab has no exact location to point at; finding the value by searching the text for the id would be a guess. It stays widget-level until Core
+reports a path.
+
 ### Stale-preview notice
 
 When the Preview lags the Document the notice above it says why and offers an action: "Your last change has N problems,
-so the preview still shows the last working version." with **Show problems** (`preview-show-problems`, `store.showProblems()`),
+so the preview still shows the last working version." with **Show problems** (`preview-show-problems`, `store.showProblems()`, which stays in
+the open Author view),
 or, if the Document is valid but the Preview has not caught up, a plain "does not show your latest change yet" line without
 the button (a valid Document has no problems to show).
 `data-testid="preview-diverged-status"`; revision numbers appear only in the header's details popover.

@@ -12,12 +12,14 @@
  * never committed.
  */
 import type { ConfigPath, JsonSchema } from '../../lab/config-schema'
+import type { LabProblem } from '../../lab/problems'
 import type { ConfigEdit } from '../../lab/types'
 import UButton from '@nuxt/ui/components/Button.vue'
 import USwitch from '@nuxt/ui/components/Switch.vue'
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { canAddItem, canRemoveItem, canRemoveKey, defaultValueFor, describeField, objectFieldKeys, parseNumberText } from '../../lab/config-schema'
+import { claimsFieldProblem } from '../../lab/problems'
 
 const props = defineProps<{
 	root: JsonSchema | null
@@ -44,6 +46,12 @@ const props = defineProps<{
 	 * repeat count.
 	 */
 	resync?: { readonly path: string, readonly tick: number, readonly message?: string } | null
+	/**
+	 * The selected widget's problems inside its config (Lab UX phase 2): each field shows the ones it claims
+	 * (`claimsFieldProblem()`), with Core's code and message, verbatim, under the control, which then is `aria-invalid` and
+	 * described by them. Passed down unchanged; every level picks its own.
+	 */
+	problems?: readonly LabProblem[]
 }>()
 
 const emit = defineEmits<{
@@ -177,6 +185,20 @@ const objectValue = computed(() => (typeof props.value === 'object' && props.val
 const arrayValue = computed(() => Array.isArray(props.value) ? props.value as unknown[] : [])
 
 const keys = computed(() => field.value.kind === 'object' ? objectFieldKeys(field.value, objectValue.value) : { present: [], addable: [] })
+
+/** The problems this field shows: its own, and those under it that no field below shows. */
+const ownProblems = computed(() => {
+	const all = props.problems ?? []
+	if (all.length === 0)
+		return []
+	const kind = field.value.kind
+	const childKeys = kind === 'object' ? keys.value.present : kind === 'array' ? arrayValue.value.map((_, index) => index) : null
+	return all.filter(problem => claimsFieldProblem(props.path, childKeys, problem))
+})
+const problemsId = computed(() => ownProblems.value.length > 0 ? `${id}-problems` : undefined)
+/** The control's description: the field's problems and a "not applied" note, whichever are shown. */
+const describedBy = computed(() => [problemsId.value, notApplied.value !== null ? `${id}-not-applied` : undefined].filter(Boolean)
+	.join(' ') || undefined)
 const newField = ref('')
 const newKey = ref('')
 
@@ -224,6 +246,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 	<div
 		:data-config-path="path.join('.')"
 		:data-config-kind="field.kind"
+		:data-has-problems="ownProblems.length > 0 ? 'true' : undefined"
 		class="min-w-0"
 	>
 		<!-- Leaf: switch, list, number, text or JSON -->
@@ -246,6 +269,8 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:key="controlKey"
 						:modelValue="value === true"
 						:aria-disabled="busy ? 'true' : undefined"
+						:aria-invalid="ownProblems.length > 0 ? 'true' : undefined"
+						:aria-describedby="describedBy"
 						size="xl"
 						@update:modelValue="emitEdit(path, { op: 'replace', value: $event })"
 					/>
@@ -260,6 +285,8 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					:key="controlKey"
 					:value="field.options.indexOf(value as never)"
 					:aria-disabled="busy ? 'true' : undefined"
+					:aria-invalid="ownProblems.length > 0 ? 'true' : undefined"
+					:aria-describedby="describedBy"
 					:class="controlClass"
 					@change="onChoice"
 				>
@@ -282,8 +309,8 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						v-model="text"
 						:readonly="locked === true"
 						:aria-disabled="busy ? 'true' : undefined"
-						:aria-invalid="invalid"
-						:aria-describedby="notApplied !== null ? `${id}-not-applied` : undefined"
+						:aria-invalid="invalid || ownProblems.length > 0"
+						:aria-describedby="describedBy"
 						rows="3"
 						class="h-auto flex-1 py-1"
 						:class="[controlClass]"
@@ -299,8 +326,8 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:inputmode="field.kind === 'number' ? 'decimal' : undefined"
 						:readonly="locked === true"
 						:aria-disabled="busy ? 'true' : undefined"
-						:aria-invalid="invalid"
-						:aria-describedby="notApplied !== null ? `${id}-not-applied` : undefined"
+						:aria-invalid="invalid || ownProblems.length > 0"
+						:aria-describedby="describedBy"
 						class="flex-1"
 						:class="[controlClass]"
 						@keydown.enter.prevent="commitText"
@@ -349,6 +376,23 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 				>
 					{{ i18n.t('This value has other forms; the JSON view edits those.') }}
 				</p>
+				<ul
+					v-if="ownProblems.length > 0"
+					:id="problemsId"
+					data-testid="field-problems"
+					:data-problem-keys="ownProblems.map(problem => problem.key).join(' ')"
+					class="m-0 flex list-none flex-col gap-0.5 p-0 text-xs text-error"
+				>
+					<li
+						v-for="problem in ownProblems"
+						:key="problem.key"
+						data-testid="field-problem"
+						:data-problem-code="problem.code ?? 'syntax-error'"
+						class="wrap-anywhere"
+					>
+						<span class="font-mono">{{ problem.code }}</span>: {{ problem.message }}
+					</li>
+				</ul>
 			</div>
 			<UButton
 				v-if="removable"
@@ -369,6 +413,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 			v-else
 			role="group"
 			:aria-label="label"
+			:aria-describedby="problemsId"
 			class="min-w-0"
 			:class="bare ? '' : 'mb-2'"
 		>
@@ -407,6 +452,26 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 			>
 				{{ i18n.t('This value has other forms; the JSON view edits those.') }}
 			</p>
+			<!-- A group shows the problems about itself, or about a key it does not hold (a missing required key). Focusable, so
+				"Show problems" can put focus on it. -->
+			<ul
+				v-if="ownProblems.length > 0"
+				:id="problemsId"
+				data-testid="field-problems"
+				:data-problem-keys="ownProblems.map(problem => problem.key).join(' ')"
+				tabindex="-1"
+				class="m-0 mb-1 flex list-none flex-col gap-0.5 p-0 text-xs text-error outline-none focus-visible:ring-2 focus-visible:ring-primary"
+			>
+				<li
+					v-for="problem in ownProblems"
+					:key="problem.key"
+					data-testid="field-problem"
+					:data-problem-code="problem.code ?? 'syntax-error'"
+					class="wrap-anywhere"
+				>
+					<span class="font-mono">{{ problem.code }}</span>: {{ problem.message }}
+				</li>
+			</ul>
 			<div :class="bare ? '' : 'ml-1 border-l border-default pl-3'">
 				<template v-if="field.kind === 'object'">
 					<ConfigFieldEditor
@@ -418,6 +483,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:path="[...path, key]"
 						:label="key"
 						:removable="canRemoveKey(field, key)"
+						:problems="problems"
 						:resync="resync"
 						:busy="busy"
 						:locked="locked"
@@ -500,6 +566,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:path="[...path, index]"
 						:label="`#${index + 1}`"
 						:removable="canRemoveItem(field, arrayValue.length)"
+						:problems="problems"
 						:resync="resync"
 						:busy="busy"
 						:locked="locked"

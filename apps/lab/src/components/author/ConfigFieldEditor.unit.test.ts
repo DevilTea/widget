@@ -229,3 +229,57 @@ describe('configFieldEditor after a refused commit', () => {
 			.toHaveLength(1)
 	})
 })
+
+describe('configFieldEditor shows the selected widget\'s problems at their fields (Lab UX phase 2)', () => {
+	const problem = (key: string, configPath: (string | number)[], code = 'invalid-widget-config', message = `bad ${configPath.join('.')}`) =>
+		({ key, kind: 'diagnostic' as const, code, message, locationLabel: null, nodeId: null, sourcePath: null, configPath, widgetLevel: false, syntaxSourceText: null, cycle: null })
+
+	it('puts a field\'s problem under its control, verbatim, and marks the control invalid and described by it', () => {
+		const editor = mountEditor({ problems: [problem('diagnostic-0', ['title'], 'invalid-widget-config', 'must be short.')] }, { title: 'T', note: 'n' })
+		const field = editor.get('[data-config-path="title"]')
+		expect(field.get('[data-testid="field-problem"]')
+			.text())
+			.toBe('invalid-widget-config: must be short.')
+		const input = field.get('input')
+		expect(input.attributes('aria-invalid'))
+			.toBe('true')
+		const list = field.get('[data-testid="field-problems"]')
+		expect(input.attributes('aria-describedby'))
+			.toBe(list.attributes('id'))
+		expect(list.attributes('data-problem-keys'))
+			.toBe('diagnostic-0')
+		// The other field is untouched.
+		expect(editor.get('[data-config-path="note"]')
+			.find('[data-testid="field-problem"]')
+			.exists())
+			.toBe(false)
+		expect(editor.get('[data-config-path="note"] input')
+			.attributes('aria-invalid'))
+			.toBe('false')
+	})
+
+	it('shows a problem about a key the config does not hold (a missing required key) at the config itself', () => {
+		const editor = mountEditor({ problems: [problem('diagnostic-1', ['note'])] }, { title: 'T' })
+		const root = editor.get('[data-config-path=""]')
+		expect(root.attributes('data-has-problems'))
+			.toBe('true')
+		expect(root.get('[role="group"]')
+			.attributes('aria-describedby'))
+			.toBe(root.get('[data-testid="field-problems"]')
+				.attributes('id'))
+		expect(editor.findAll('[data-testid="field-problem"]'))
+			.toHaveLength(1)
+	})
+
+	it('describes the control by both its problems and a "not applied" note', async () => {
+		const editor = mountEditor({ problems: [problem('diagnostic-0', ['title'])] }, { title: 'T' })
+		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'nope' } })
+		const described = editor.get('[data-config-path="title"] input')
+			.attributes('aria-describedby')!
+			.split(' ')
+		expect(described)
+			.toHaveLength(2)
+		expect(described[1])
+			.toMatch(/-not-applied$/)
+	})
+})

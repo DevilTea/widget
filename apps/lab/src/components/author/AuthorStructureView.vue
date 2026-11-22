@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { ConfigPath, JsonSchema } from '../../lab/config-schema'
+import type { LabProblem } from '../../lab/problems'
 import type { AuthorUnsupportedReason, ConfigEdit } from '../../lab/types'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
-import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { editConfig } from '../../lab/author'
+import { placeStructureProblems } from '../../lab/problems'
 import { getShowcase } from '../../showcases/registry'
 import BlueprintTree from '../blueprint/BlueprintTree.vue'
 import ConfigFieldEditor from './ConfigFieldEditor.vue'
@@ -55,6 +57,54 @@ const configValue = computed<unknown>(() => {
 })
 /** A config that is not an object (a string, a list, a number) has no keys to edit: it is edited whole, as JSON. */
 const configAsJson = computed(() => typeof configValue.value !== 'object' || Array.isArray(configValue.value))
+
+/**
+ * Problems in Structure (Lab UX phase 2, report item 12): the committed Document's problems, exactly the list the JSON view shows
+ * (`LabStore.problems`), placed by location. The selected widget's config problems go to their fields, its other problems to its
+ * header (also its config problems when it has no config editor here), and the rest to a compact list with a way to each widget.
+ */
+const placement = computed(() => placeStructureProblems(store.problems.value, selectedNodeId.value))
+const hasFieldEditor = computed(() => selectedNode.value?.resolved === true && catalogConfig.value !== null && catalogConfig.value !== undefined)
+const fieldProblems = computed(() => hasFieldEditor.value ? placement.value.atFields : [])
+const nodeProblems = computed(() => hasFieldEditor.value ? placement.value.atNode : [...placement.value.atFields, ...placement.value.atNode].sort((a, b) => store.problems.value.indexOf(a) - store.problems.value.indexOf(b)))
+const problemsList = useTemplateRef<HTMLElement>('problemsList')
+
+/**
+ * Shows one problem where Structure shows it: selects its widget, then puts keyboard focus on its field's control (or the
+ * field's problem text for an object or list), its widget header's problems, or, for a problem with no widget, its row in
+ * the list.
+ */
+async function revealProblem(problem: LabProblem | undefined): Promise<void> {
+	if (problem?.nodeId !== null && problem?.nodeId !== undefined)
+		store.setFocus('document', { nodeId: problem.nodeId })
+	// Dockview may still be activating the Author tab, and the selected widget's fields render on the next tick.
+	await nextTick()
+	await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+	const root = editorEl.value
+	if (root === null)
+		return
+	const host = problem === undefined ? null : root.querySelector<HTMLElement>(`[data-problem-keys~="${CSS.escape(problem.key)}"]`)
+	let target: HTMLElement | null = null
+	if (host !== null) {
+		target = host.hasAttribute('tabindex')
+			? host
+			: host.closest<HTMLElement>('[data-config-path]')
+				?.querySelector<HTMLElement>('button[role="switch"], select, textarea, input') ?? host
+	}
+	target ??= problemsList.value?.querySelector<HTMLElement>('[data-testid="structure-problem-row"]') ?? problemsList.value ?? null
+	target?.focus()
+	target?.scrollIntoView({ block: 'nearest' })
+}
+
+// "Show problems" (the header's problems button, the stale-preview notice) stays in Structure and asks for the first problem.
+async function focusProblemsIfRequested(): Promise<void> {
+	if (!store.problemsFocusPending.value)
+		return
+	store.problemsFocusPending.value = false
+	await revealProblem(store.problems.value[0])
+}
+watch(store.problemsFocusPending, focusProblemsIfRequested)
+onMounted(focusProblemsIfRequested)
 
 watch([selectedNodeId, () => store.documentState.value.revision], () => {
 	outcomeMessage.value = null
@@ -196,6 +246,53 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 					{{ i18n.t('Open the JSON view') }}
 				</button>
 			</div>
+			<!-- Problems not shown at the selected widget: other widgets' (a row selects that widget and shows the problem there)
+				and those with no widget (a JSON syntax error, a source-level diagnostic). Code and message are Core's, verbatim. -->
+			<section
+				v-if="placement.elsewhere.length > 0"
+				ref="problemsList"
+				data-testid="structure-problems"
+				:data-problem-count="placement.elsewhere.length"
+				tabindex="-1"
+				:aria-label="i18n.t('Problems elsewhere in the document')"
+				class="mb-3 rounded-(--lab-radius) border border-default bg-muted px-2 py-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
+			>
+				<h4 class="m-0 mb-1 text-xs font-semibold text-error">
+					{{ i18n.t(placement.elsewhere.length === 1 ? '{count} problem elsewhere in the document' : '{count} problems elsewhere in the document', { count: placement.elsewhere.length }) }}
+				</h4>
+				<ul class="m-0 flex max-h-32 list-none flex-col gap-1 overflow-y-auto p-0">
+					<li
+						v-for="problem in placement.elsewhere"
+						:key="problem.key"
+					>
+						<button
+							v-if="problem.nodeId !== null"
+							type="button"
+							data-testid="structure-problem-row"
+							:data-problem-code="problem.code ?? 'syntax-error'"
+							class="flex min-h-6 w-full cursor-pointer items-start gap-2 rounded-(--lab-radius) border border-default bg-default px-2 py-1 text-left text-default hover:bg-elevated focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+							:title="i18n.t('Select this widget')"
+							@click="revealProblem(problem)"
+						>
+							<span class="shrink-0 rounded-full bg-elevated px-1.5 font-mono text-[11px] text-muted">{{ problem.code }}</span>
+							<span class="min-w-0 flex-1">
+								<span class="block wrap-anywhere">{{ problem.message }}</span>
+								<span class="block wrap-anywhere font-mono text-[11px] text-muted">{{ problem.locationLabel }}</span>
+							</span>
+						</button>
+						<div
+							v-else
+							data-testid="structure-problem-row"
+							:data-problem-code="problem.code ?? 'syntax-error'"
+							tabindex="-1"
+							class="flex items-start gap-2 rounded-(--lab-radius) border border-default bg-default px-2 py-1 text-default outline-none focus-visible:ring-2 focus-visible:ring-primary"
+						>
+							<span class="shrink-0 rounded-full bg-elevated px-1.5 font-mono text-[11px] text-muted">{{ problem.code ?? i18n.t('JSON syntax') }}</span>
+							<span class="min-w-0 flex-1 wrap-anywhere">{{ problem.kind === 'syntax' ? `SyntaxError: ${problem.message}` : problem.message }}</span>
+						</div>
+					</li>
+				</ul>
+			</section>
 			<div
 				v-if="selectedNode === null"
 				class="text-xs text-muted"
@@ -206,6 +303,28 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 				<h3 class="m-0 mb-1 font-mono text-[13px] font-semibold">
 					{{ selectedNode.node.id }} : {{ selectedNode.node.type }}
 				</h3>
+				<ul
+					v-if="nodeProblems.length > 0"
+					data-testid="node-problems"
+					:data-problem-keys="nodeProblems.map(problem => problem.key).join(' ')"
+					tabindex="-1"
+					:aria-label="i18n.t('Problems of this widget')"
+					class="m-0 mb-2 flex list-none flex-col gap-0.5 p-0 text-xs text-error outline-none focus-visible:ring-2 focus-visible:ring-primary"
+				>
+					<li
+						v-for="problem in nodeProblems"
+						:key="problem.key"
+						data-testid="node-problem"
+						:data-problem-code="problem.code ?? 'syntax-error'"
+						class="wrap-anywhere"
+					>
+						<span class="font-mono">{{ problem.code }}</span>: {{ problem.message }}
+						<span
+							v-if="problem.locationLabel !== null"
+							class="block font-mono text-[11px] text-muted"
+						>{{ problem.locationLabel }}</span>
+					</li>
+				</ul>
 				<p class="m-0 mb-3 text-xs text-muted">
 					{{ i18n.t('Current committed Document structure') }} · {{ i18n.t('Document r{revision}', { revision: store.documentState.value.revision }) }}
 				</p>
@@ -242,6 +361,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 								label="config"
 								:busy="busy || draftLocked"
 								:locked="draftLocked"
+								:problems="fieldProblems"
 								@edit="onEdit"
 							/>
 						</div>
@@ -257,12 +377,29 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 					{{ outcomeMessage }}
 				</p>
 			</template>
-			<div
-				v-else
-				class="text-xs text-muted"
-			>
-				{{ i18n.t('Unresolved widgets are read-only in Structure.') }}
-			</div>
+			<template v-else>
+				<ul
+					v-if="nodeProblems.length > 0"
+					data-testid="node-problems"
+					:data-problem-keys="nodeProblems.map(problem => problem.key).join(' ')"
+					tabindex="-1"
+					:aria-label="i18n.t('Problems of this widget')"
+					class="m-0 mb-2 flex list-none flex-col gap-0.5 p-0 text-xs text-error outline-none focus-visible:ring-2 focus-visible:ring-primary"
+				>
+					<li
+						v-for="problem in nodeProblems"
+						:key="problem.key"
+						data-testid="node-problem"
+						:data-problem-code="problem.code ?? 'syntax-error'"
+						class="wrap-anywhere"
+					>
+						<span class="font-mono">{{ problem.code }}</span>: {{ problem.message }}
+					</li>
+				</ul>
+				<div class="text-xs text-muted">
+					{{ i18n.t('Unresolved widgets are read-only in Structure.') }}
+				</div>
+			</template>
 		</div>
 	</div>
 </template>

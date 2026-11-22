@@ -874,19 +874,22 @@ describe('createLabStore() header and feedback state', () => {
 		store.dispose()
 	})
 
-	it('showProblems() opens Author > JSON and flags the Problems list for focus', () => {
+	it('showProblems() activates Author, stays in the open view (Structure from the Catalog) and flags the problems for focus', () => {
 		const store = createSandboxStore()
-		store.activeTab.value = 'runtime'
-		store.authorView.value = 'catalog'
+		for (const [from, to] of [['catalog', 'structure'], ['structure', 'structure'], ['json', 'json']] as const) {
+			store.activeTab.value = 'runtime'
+			store.authorView.value = from
+			store.problemsFocusPending.value = false
 
-		store.showProblems()
+			store.showProblems()
 
-		expect(store.activeTab.value)
-			.toBe('author')
-		expect(store.authorView.value)
-			.toBe('json')
-		expect(store.problemsFocusPending.value)
-			.toBe(true)
+			expect(store.activeTab.value)
+				.toBe('author')
+			expect(store.authorView.value, `from ${from}`)
+				.toBe(to)
+			expect(store.problemsFocusPending.value)
+				.toBe(true)
+		}
 		store.dispose()
 	})
 })

@@ -170,7 +170,7 @@ showcase host contract (it reads the host's locale and light/dark theme and the 
 
 The header is one row from 1280px up: the **Examples** menu (showcase and preset; it always names the showcase and the
 last loaded preset, or "edited" once the document changes), two plain-language status chips (the document is *Valid* or
-has *N problems*, a button that opens the Problems list; the preview is *up to date* or *shows the last valid version*, with
+has *N problems*, a button that shows them in the open Author view; the preview is *up to date* or *shows the last valid version*, with
 revisions and linkage in an info popover, which also holds the JSON draft, Source JSON compatibility, Blueprint status and recovery facts;
 while the JSON draft has unapplied edits a third chip says *Unapplied changes* and the preview chip *shows the last applied version*),
 the edit actions **Apply / Revert / Undo / Format**, and an overflow menu with Tutorial, Theme, **Lab language**, **Reset layout** and a
@@ -185,9 +185,11 @@ Developer submenu (Implementation, Document Tools).
   cannot bring it back; with an unapplied draft as well, one dialog names both. Loading a preset or starting the tutorial over an
   edited document does not ask: it can be undone, and a notice above the preview says "Loaded “…”. Undo to get your edits back."
   with an **Undo** button.
-- After an Apply that leaves problems, the Author JSON view lists them under the editor (Core's code and message verbatim,
-  or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. The preview shows a
-  plain-language notice with **Show problems** while it still shows the last working version.
+- After a change that leaves problems, the Author JSON view lists them under the editor (Core's code and message verbatim,
+  or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. Structure shows the same
+  problems at the fields they are about, at the widget for the others, and lists the other widgets' problems with a way to each.
+  The preview shows a plain-language notice with **Show problems** while it still shows the last working version; it, and the
+  header's problems button, show the problems in the open Author view.
 
 ## Editing a widget's config (Structure) and what the Lab says when something fails
 

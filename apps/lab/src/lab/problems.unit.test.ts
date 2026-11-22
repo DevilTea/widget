@@ -3,7 +3,7 @@ import { createWidgetDocument } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { getShowcase } from '../showcases/registry'
-import { collectProblems, groupProblems, problemSpan } from './problems'
+import { claimsFieldProblem, collectProblems, groupProblems, placeStructureProblems, problemSpan } from './problems'
 
 function problemsOf(showcaseId: string, presetId: string, parseError: SourceParseError | null = null) {
 	const showcase = getShowcase(showcaseId)!
@@ -50,6 +50,93 @@ describe('collectProblems', () => {
 			.toMatchObject({ kind: 'syntax', code: null, message: parseError.message, nodeId: null })
 		expect(problems)
 			.toHaveLength(2)
+	})
+})
+
+describe('configPath and where Structure shows a problem (Lab UX phase 2)', () => {
+	it('gives a config diagnostic its config-relative path, and widget-level diagnostics none', () => {
+		const { problems } = problemsOf('survey', 'survey-ai-draft')
+		expect(problems.map(problem => problem.configPath))
+			.toEqual([['options'], null, null, null, null])
+	})
+
+	it('a max below min is a problem at the max field (report finding: Structure showed nothing there)', () => {
+		const showcase = getShowcase('survey')!
+		const source = JSON.parse(showcase.defaultPreset.sourceText) as { slots: { questions: { id: string, config: Record<string, unknown> }[] } }
+		Object.assign(source.slots.questions.find(question => question.id === 'guests')!.config, { min: 0, max: -1 })
+		const blueprint = createWidgetDocument({ system: showcase.system, source })
+			.getSnapshot()
+			.blueprint
+		const problems = collectProblems(blueprint, inspectBlueprint(blueprint), null)
+		expect(problems.map(({ code, configPath }) => ({ code, configPath })))
+			.toEqual([{ code: 'invalid-widget-config', configPath: ['max'] }])
+		const placed = placeStructureProblems(problems, problems[0]!.nodeId)
+		expect(placed.atFields)
+			.toEqual(problems)
+		expect(claimsFieldProblem(['max'], null, problems[0]!))
+			.toBe(true)
+		expect(claimsFieldProblem(['min'], null, problems[0]!))
+			.toBe(false)
+		// The config itself does not show it: its `max` field is rendered and does.
+		expect(claimsFieldProblem([], ['label', 'min', 'max'], problems[0]!))
+			.toBe(false)
+	})
+
+	it('places the selected widget\'s field and widget problems, and lists the rest', () => {
+		const parseError: SourceParseError = { message: 'Unexpected end of JSON input', sourceText: '{' }
+		const showcase = getShowcase('survey')!
+		const preset = showcase.presets.find(candidate => candidate.id === 'survey-ai-draft')!
+		const blueprint = createWidgetDocument({ system: showcase.system, source: JSON.parse(preset.sourceText) })
+			.getSnapshot()
+			.blueprint
+		const problems = collectProblems(blueprint, inspectBlueprint(blueprint), parseError)
+		const configProblem = problems.find(problem => problem.configPath !== null)!
+		const placed = placeStructureProblems(problems, configProblem.nodeId)
+		expect(placed.atFields)
+			.toEqual([configProblem])
+		expect(placed.atNode.every(problem => problem.nodeId === configProblem.nodeId && problem.configPath === null))
+			.toBe(true)
+		expect(placed.elsewhere[0]!.kind)
+			.toBe('syntax')
+		expect([...placed.atFields, ...placed.atNode, ...placed.elsewhere])
+			.toHaveLength(problems.length)
+		// Nothing selected: everything is listed.
+		expect(placeStructureProblems(problems, null).elsewhere)
+			.toEqual(problems)
+	})
+})
+
+describe('claimsFieldProblem', () => {
+	const at = (configPath: (string | number)[] | null) => ({ configPath }) as never
+
+	it('claims its own path, and paths under a leaf (a value edited as JSON)', () => {
+		expect(claimsFieldProblem(['label'], ['en', 'zh-TW'], at(['label'])))
+			.toBe(true)
+		expect(claimsFieldProblem(['rules'], null, at(['rules', 0, 'when'])))
+			.toBe(true)
+	})
+
+	it('leaves a path under a rendered child to that child, and claims a key it does not render (a missing key)', () => {
+		expect(claimsFieldProblem(['label'], ['en'], at(['label', 'en'])))
+			.toBe(false)
+		expect(claimsFieldProblem(['label'], ['en'], at(['label', 'zh-TW'])))
+			.toBe(true)
+		// Array indices compare with the numbers Core reports.
+		expect(claimsFieldProblem(['options'], [0, 1], at(['options', 1, 'value'])))
+			.toBe(false)
+		expect(claimsFieldProblem(['options', 1], ['value', 'label'], at(['options', 1, 'value'])))
+			.toBe(false)
+		expect(claimsFieldProblem(['options', 1, 'value'], null, at(['options', 1, 'value'])))
+			.toBe(true)
+	})
+
+	it('never claims a problem outside it or without a config path', () => {
+		expect(claimsFieldProblem(['min'], null, at(['max'])))
+			.toBe(false)
+		expect(claimsFieldProblem([], ['max'], at(null)))
+			.toBe(false)
+		expect(claimsFieldProblem(['label', 'en'], null, at(['label'])))
+			.toBe(false)
 	})
 })
 

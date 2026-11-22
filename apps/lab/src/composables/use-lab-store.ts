@@ -157,8 +157,9 @@ export interface LabStore {
 	 */
 	readonly authorView: Ref<'catalog' | 'structure' | 'json'>
 	/**
-	 * Set by `showProblems()`: `AuthorJsonView` moves focus to its Problems list (when it is already mounted, or
-	 * as soon as it mounts) and clears the flag.
+	 * Set by `showProblems()`: the open Author view consumes it (when it is already mounted, or as soon as it mounts) and
+	 * clears the flag. `AuthorJsonView` moves focus to its Problems list; `AuthorStructureView` selects the first problem's
+	 * widget and focuses its field, its header's problems or the Structure Problems list.
 	 */
 	readonly problemsFocusPending: Ref<boolean>
 	/** @deprecated Use `documentFocus` or `previewFocus` according to the surface's scope. */
@@ -196,7 +197,7 @@ export interface LabStore {
 	undoLastApply: () => Promise<UndoOutcome>
 	/** Mounts the Preview again after it failed to load or to take a change; see `LabSession.retryPreview()`. */
 	retryPreview: () => Promise<void>
-	/** Opens Author > JSON and moves focus to the Problems list. */
+	/** Activates Author and shows the problems in its open view (Structure from the Catalog); see `problemsFocusPending`. */
 	showProblems: () => void
 	applyPreset: (presetId: string) => Promise<ApplyOutcome | undefined>
 	demonstrateRevisionConflict: () => RevisionConflictDemoResult | null
@@ -592,9 +593,12 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			const outcome = session.undoLastApply()
 			return enqueue(() => outcome)
 		},
+		// Stays in the open Author view (Lab UX phase 2): Structure shows the problems at their fields and JSON in its list; the
+		// Catalog shows none, so it opens Structure. The view that is mounted consumes `problemsFocusPending`.
 		showProblems: () => {
 			activeTab.value = 'author'
-			authorView.value = 'json'
+			if (authorView.value === 'catalog')
+				authorView.value = 'structure'
 			problemsFocusPending.value = true
 		},
 		applyPreset: (presetId) => {
