@@ -247,19 +247,21 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 		:data-config-path="path.join('.')"
 		:data-config-kind="field.kind"
 		:data-has-problems="ownProblems.length > 0 ? 'true' : undefined"
-		class="min-w-0"
+		class="@container min-w-0"
 	>
-		<!-- Leaf: switch, list, number, text or JSON -->
+		<!-- Leaf: switch, list, number, text or JSON. Narrow (the tutorial rail open at 1280px, report item 15): below 20rem of
+			its own width the label goes on its own line above the control, and the box keeps at least 120px, with Set value
+			wrapping below it, so nothing is squeezed or covered. -->
 		<div
 			v-if="field.kind !== 'object' && field.kind !== 'array'"
-			class="mb-1.5 flex min-w-0 items-start gap-1.5"
+			class="mb-1.5 flex min-w-0 flex-wrap items-start gap-1.5"
 		>
 			<label
 				:for="`${id}-control`"
 				:title="description"
-				class="w-28 shrink-0 break-words pt-1 font-mono text-xs"
+				class="w-28 shrink-0 break-words pt-1 font-mono text-xs @max-xs:w-full @max-xs:pt-0"
 			>{{ label }}</label>
-			<div class="flex min-w-0 flex-1 flex-col gap-1">
+			<div class="flex min-w-30 flex-1 flex-col gap-1">
 				<div
 					v-if="field.kind === 'boolean'"
 					class="flex items-center gap-2"
@@ -300,7 +302,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 				</select>
 				<div
 					v-else
-					class="flex min-w-0 items-start gap-1.5"
+					class="flex min-w-0 flex-wrap items-start gap-1.5"
 				>
 					<textarea
 						v-if="field.kind === 'json'"
@@ -312,7 +314,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:aria-invalid="invalid || ownProblems.length > 0"
 						:aria-describedby="describedBy"
 						rows="3"
-						class="h-auto flex-1 py-1"
+						class="h-auto min-w-30 flex-[1_1_7.5rem] py-1"
 						:class="[controlClass]"
 						@keydown.meta.enter.prevent="commitText"
 						@keydown.ctrl.enter.prevent="commitText"
@@ -328,7 +330,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:aria-disabled="busy ? 'true' : undefined"
 						:aria-invalid="invalid || ownProblems.length > 0"
 						:aria-describedby="describedBy"
-						class="flex-1"
+						class="min-w-30 flex-[1_1_7.5rem]"
 						:class="[controlClass]"
 						@keydown.enter.prevent="commitText"
 					>
@@ -336,6 +338,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						type="button"
 						color="primary"
 						size="sm"
+						class="shrink-0"
 						:aria-disabled="busy ? 'true' : undefined"
 						:aria-label="`${i18n.t('Set value')}: ${label}`"
 						@click="commitText"
@@ -400,6 +403,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 				color="neutral"
 				variant="ghost"
 				size="sm"
+				class="shrink-0"
 				square
 				icon="i-lucide-trash-2"
 				:aria-disabled="busy ? 'true' : undefined"
@@ -497,13 +501,13 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					</p>
 					<div
 						v-if="keys.addable.length > 0"
-						class="mb-1.5 flex items-center gap-1.5"
+						class="mb-1.5 flex flex-wrap items-center gap-1.5"
 					>
 						<select
 							v-model="newField"
 							:aria-disabled="busy ? 'true' : undefined"
 							:aria-label="i18n.t('Optional field to add to {name}', { name: label })"
-							class="flex-1"
+							class="min-w-30 flex-1"
 							:class="[controlClass]"
 						>
 							<option value="">
@@ -531,7 +535,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					</div>
 					<div
 						v-if="field.additional !== null"
-						class="mb-1.5 flex items-center gap-1.5"
+						class="mb-1.5 flex flex-wrap items-center gap-1.5"
 					>
 						<input
 							v-model="newKey"
@@ -539,7 +543,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 							:aria-disabled="busy ? 'true' : undefined"
 							:aria-label="i18n.t('Name of the key to add to {name}', { name: label })"
 							:placeholder="i18n.t('New key')"
-							class="flex-1"
+							class="min-w-30 flex-1"
 							:class="[controlClass]"
 							@keydown.enter.prevent="addKey"
 						>

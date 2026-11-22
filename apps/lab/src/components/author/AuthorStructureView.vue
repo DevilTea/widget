@@ -214,7 +214,9 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 </script>
 
 <template>
-	<div class="grid h-full min-h-0 grid-cols-[220px_1px_1fr]">
+	<!-- The tree takes about a third of the view, between 9rem and 220px, so the editor keeps room when the panel is narrow
+		(the tutorial rail open at 1280px, report item 15). -->
+	<div class="grid h-full min-h-0 grid-cols-[clamp(9rem,32%,220px)_1px_minmax(0,1fr)]">
 		<BlueprintTree
 			:inspection="documentInspection"
 			:selectedNodeId="selectedNodeId"

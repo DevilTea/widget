@@ -1220,6 +1220,13 @@ remove, and anything else is edited as its JSON text (Set value / Cmd or Ctrl+En
 on Enter or **Set value**, and a refusal (not a number: `abc`, `0x10`, `Infinity`) is shown at the field and sends nothing. A config that is not an object (a string,
 a list, a number) has no keys: it is edited whole, as JSON, and replacing it is the empty-path edit.
 
+**Narrow panes (Lab UX phase 2, report item 15).** With the tutorial rail open at 1280px the Author panel is about 480px wide, and the
+fields were squeezed to about 18px with Set value over the remove button. The tree column is `clamp(9rem, 32%, 220px)`; every
+`ConfigFieldEditor` is a container (`@container`), and below 20rem of its own width a leaf's label goes on its own line above the control
+(`@max-xs:w-full`); boxes keep at least 120px (`min-w-30`), and the box row and the add rows wrap (Set value goes below the box) instead of
+overlapping. `e2e/structure-narrow.spec.ts` checks at 1280x800 with the rail open that every box is at least 120px wide, that no two
+controls overlap and that nothing scrolls sideways.
+
 The controls are never `disabled` while a command runs (a disabled control hands keyboard focus to the body at every commit); they carry `aria-disabled`
 and stop reporting edits. `AuthorStructureView.vue` then keeps keyboard focus in the editor: focus that is still on a control stays, a new field or item takes it,
 a removed one hands it to the control that took its place. It only ever moves focus that is on nothing (the body) or still inside the editor: focus the user moved to another
