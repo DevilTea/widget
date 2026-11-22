@@ -12,9 +12,11 @@
  * and the `Show absent references` filter without duplicating semantic state.
  */
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
+import type { DependenciesView } from '../../composables/use-dependencies-view'
 import type { GraphVertexKind } from '../../graph/types'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
-import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, useTemplateRef, watch } from 'vue'
+import { useDependenciesView } from '../../composables/use-dependencies-view'
 import { useDependencyGraph } from '../../composables/use-dependency-graph'
 import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selection'
 import { useLabI18n } from '../../composables/use-lab-i18n'
@@ -35,9 +37,9 @@ const { semanticGraph, layoutState, flow, layoutVersion } = useDependencyGraph()
 // Panel-local edge selection for Graph view
 const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdgeSelection(store)
 
-// View switcher: Relations first. With no widget focused it shows the root widget, so it never opens blank.
-type DependenciesView = 'graph' | 'relations'
-const activeView = ref<DependenciesView>('relations')
+// View switcher: Relations first. With no widget focused it shows the root widget, so it never opens blank. The view is
+// shared per store (`useDependenciesView`) so the Explain tab's "Open dependency graph" can switch it.
+const { view: activeView } = useDependenciesView()
 const relationsTab = useTemplateRef<HTMLButtonElement>('relationsTab')
 const graphTab = useTemplateRef<HTMLButtonElement>('graphTab')
 
