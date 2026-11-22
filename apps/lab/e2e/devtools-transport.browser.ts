@@ -1,4 +1,4 @@
-import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import type { InspectorRequestResult } from '@deviltea/widget-inspector/protocol'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
@@ -103,7 +103,7 @@ function parseRuntimeListResponseAttempt(message: unknown): InspectorResponseAtt
 	if (response === null
 		|| !response.ok
 		|| !isCompatibleProtocolVersion(response.protocol)
-		|| !isInspectorRequestResult('runtime.list', response.result, response.protocol.minor)) {
+		|| !isInspectorRequestResult('runtime.list', response.result)) {
 		return null
 	}
 
@@ -721,7 +721,7 @@ export interface DevtoolsGeometryBrowserContractResult {
 }
 
 interface GeometryFixtureRootInterfaces extends WidgetInterfaces {
-	slots: 'items'
+	slots: { items: WidgetChild }
 }
 
 interface GeometryFixtureCounterInterfaces extends WidgetInterfaces {
@@ -804,13 +804,11 @@ export async function runPreviewReadinessTimeoutContract(): Promise<PreviewReadi
 
 export async function runDevtoolsGeometryBrowserContracts(): Promise<DevtoolsGeometryBrowserContractResult> {
 	const RootPlugin = createWidgetPlugin('Root')
-		.description('Root fixture')
 		.interfaces<GeometryFixtureRootInterfaces>()
-		.slots({ items: { description: 'Items' } })
+		.slots({ items: {} })
 		.done()
 
 	const CounterPlugin = createWidgetPlugin('Counter')
-		.description('Counter fixture')
 		.interfaces<GeometryFixtureCounterInterfaces>()
 		.state(state => state.count({
 			validate: (input): input is number => typeof input === 'number',

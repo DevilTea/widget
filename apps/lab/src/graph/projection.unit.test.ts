@@ -5,6 +5,7 @@
  * cross-checked against the compiler's own fact, `invalidCycles` overlay, and deterministic output.
  */
 
+import type { WidgetChild } from '@deviltea/widget-core'
 import type { ResolvedBlueprintInspectionNode } from '@deviltea/widget-core/inspection'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
@@ -18,13 +19,12 @@ import { projectSemanticGraph } from './projection'
 // -------------------------------------------------------------------------------------------------
 
 interface ContainerInterfaces {
-	slots: 'children'
+	slots: { children: WidgetChild }
 }
 
 const containerPlugin = createWidgetPlugin('graph-container')
-	.description('Graph container fixture')
 	.interfaces<ContainerInterfaces>()
-	.slots({ children: { description: 'Child widgets' } })
+	.slots({ children: {} })
 	.done()
 
 interface TargetInterfaces {
@@ -34,7 +34,6 @@ interface TargetInterfaces {
 }
 
 const targetPlugin = createWidgetPlugin('graph-target')
-	.description('Graph target fixture')
 	.interfaces<TargetInterfaces>()
 	.state(state => state.value({ validate: (input): input is number => typeof input === 'number', default: () => 1 }))
 	.properties(properties => properties.val({ compute: () => 2 }))
@@ -54,7 +53,6 @@ interface ConsumerInterfaces {
 }
 
 const consumerPlugin = createWidgetPlugin('graph-consumer')
-	.description('Graph consumer fixture')
 	.interfaces<ConsumerInterfaces>()
 	.properties(properties => properties
 		.reader({
@@ -95,7 +93,6 @@ interface WriteChainInterfaces {
 
 /** `a` -> `b` -> `c` -> direct `state.set` — a 3-layer transitive write chain (mirrors core's own conformance fixture shape). */
 const writeChainPlugin = createWidgetPlugin('graph-write-chain')
-	.description('Graph write-chain fixture')
 	.interfaces<WriteChainInterfaces>()
 	.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
 	.methods(methods => methods
@@ -129,7 +126,6 @@ interface EmitterInterfaces {
 
 /** `ping` emits, `relay` only invokes `ping`, `bump` writes and emits, `quiet` does neither. */
 const emitterPlugin = createWidgetPlugin('graph-emitter')
-	.description('Graph emitter fixture')
 	.interfaces<EmitterInterfaces>()
 	.state(state => state.value({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 	.methods(methods => methods
@@ -146,7 +142,7 @@ const emitterPlugin = createWidgetPlugin('graph-emitter')
 			execute: ({ emit }) => { emit.pinged() },
 		})
 		.quiet({ registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }), validateArgs: (args): args is [] => args.length === 0, execute: () => null }))
-	.events(events => events.pinged({ description: 'The Method ran' }))
+	.events(['pinged'])
 	.done()
 
 interface CycleInterfaces {
@@ -158,7 +154,6 @@ interface CycleInterfaces {
 
 /** `p1` <-> `p2` — a 2-member Property<->Property invalid evaluation cycle. */
 const cyclePlugin = createWidgetPlugin('graph-cycle')
-	.description('Graph cycle fixture')
 	.interfaces<CycleInterfaces>()
 	.properties(properties => properties
 		.p1({ registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p2') }), compute: () => null })

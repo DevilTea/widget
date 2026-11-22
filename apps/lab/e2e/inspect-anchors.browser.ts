@@ -13,7 +13,7 @@
  *   Leaf     40,40 120x40    (inside Panel)   x 40..160, y 40..80
  *   Floater  120,40 80x40    (inside Panel, later sibling, z-index 5) overlaps Leaf for x 120..160
  */
-import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import type { InspectorClient } from '@deviltea/widget-inspector/client'
 import type { InspectorRequestMethod, InspectorRequestParams, InspectorRequestResult, WidgetRef } from '@deviltea/widget-inspector/protocol'
 import type { App } from 'vue'
@@ -28,7 +28,7 @@ import { createApp, defineComponent, Fragment, h } from 'vue'
 export type LeafMode = 'visible' | 'hidden' | 'replaced' | 'fragments' | 'wrapped'
 
 interface SlotInterfaces extends WidgetInterfaces {
-	slots: 'body'
+	slots: { body: WidgetChild }
 }
 
 interface LeafInterfaces extends WidgetInterfaces {
@@ -36,25 +36,21 @@ interface LeafInterfaces extends WidgetInterfaces {
 }
 
 const ShellPlugin = createWidgetPlugin('Shell')
-	.description('Anchor fixture shell')
 	.interfaces<SlotInterfaces>()
-	.slots({ body: { description: 'Body' } })
+	.slots({ body: {} })
 	.done()
 
 const PanelPlugin = createWidgetPlugin('Panel')
-	.description('Anchor fixture panel')
 	.interfaces<SlotInterfaces>()
-	.slots({ body: { description: 'Body' } })
+	.slots({ body: {} })
 	.done()
 
 const FloaterPlugin = createWidgetPlugin('Floater')
-	.description('Anchor fixture floating widget')
 	.interfaces<SlotInterfaces>()
-	.slots({ body: { description: 'Body' } })
+	.slots({ body: {} })
 	.done()
 
 const LeafPlugin = createWidgetPlugin('Leaf')
-	.description('Anchor fixture leaf whose rendered shape the spec switches')
 	.interfaces<LeafInterfaces>()
 	.state(state => state.mode({
 		validate: (input): input is LeafMode => input === 'visible' || input === 'hidden' || input === 'replaced' || input === 'fragments' || input === 'wrapped',
