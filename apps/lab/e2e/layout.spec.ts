@@ -8,7 +8,7 @@ import { chooseTutorialMenuItem, expect, loadPreset, openDeveloperTool, previewF
  */
 
 const LAYOUT_KEY = 'widget-lab:layout'
-const CANONICAL_PANELS = ['author', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview']
+const CANONICAL_PANELS = ['author', 'explain', 'widget', 'blueprint', 'runtime', 'dependencies', 'preview']
 
 /** The Dockview group (tool area or Preview) that holds the tab with this name. */
 function group(page: Page, tabName: string): Locator {
@@ -128,7 +128,7 @@ test.describe('saved layout', () => {
 			.toHaveAttribute('aria-selected', 'true')
 		expect(await toolWidth(page))
 			.toBeCloseTo(resized, -1)
-		for (const name of ['Author', 'Selected widget', 'Blueprint', 'Dependencies', 'Preview']) {
+		for (const name of ['Author', 'Explain', 'Selected widget', 'Blueprint', 'Dependencies', 'Preview']) {
 			await expect(page.getByRole('tab', { name, exact: true }))
 				.toBeVisible()
 		}
@@ -177,7 +177,7 @@ test.describe('saved layout', () => {
 			.toHaveAttribute('aria-selected', 'true')
 		expect(await toolWidth(page))
 			.toBeCloseTo(initial, -1)
-		for (const name of ['Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
+		for (const name of ['Explain', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 			await expect(page.getByRole('tab', { name, exact: true }))
 				.toBeVisible()
 		}
@@ -307,6 +307,8 @@ test.describe('unusable saved layouts fall back to the default', () => {
 		{ name: 'a newer layout version', stored: { version: 2, layout: { grid: grid(CANONICAL_PANELS), panels: goodPanels } }, rewritten: true },
 		{ name: 'a layout without the Selected widget panel (saved before it existed)', stored: { version: 1, layout: { grid: grid(['author', 'blueprint', 'runtime', 'dependencies', 'preview']), panels: Object.fromEntries(Object.entries(goodPanels)
 			.filter(([id]) => id !== 'widget')) } }, rewritten: true },
+		{ name: 'a layout without the Explain panel (saved before Lab UX phase 2)', stored: { version: 1, layout: { grid: grid(['author', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview']), panels: { ...Object.fromEntries(Object.entries(goodPanels)
+			.filter(([id]) => id !== 'explain')), events: { id: 'events', contentComponent: 'events', tabComponent: 'nonClosable', title: 'Events' } } } }, rewritten: true },
 		{ name: 'a panel naming a component the Lab does not have', stored: { version: 1, layout: { grid: grid(CANONICAL_PANELS), panels: { ...goodPanels, runtime: { id: 'runtime', contentComponent: 'gone', title: 'Runtime' } } } }, rewritten: true },
 		{ name: 'a layout that looks right but names a panel that does not exist', stored: { version: 1, layout: { grid: grid(['ghost']), panels: goodPanels } }, rewritten: true },
 		{ name: 'a number', stored: 42, rewritten: true },
@@ -327,7 +329,7 @@ test.describe('unusable saved layouts fall back to the default', () => {
 			// The default layout, fully working.
 			expect(await toolWidth(page) / 1440)
 				.toBeGreaterThan(0.44)
-			for (const tab of ['Author', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
+			for (const tab of ['Author', 'Explain', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 				await expect(page.getByRole('tab', { name: tab, exact: true }))
 					.toBeVisible()
 			}

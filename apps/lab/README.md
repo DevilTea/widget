@@ -2,7 +2,8 @@
 
 Private, never-published Widget Lab application shell for `@deviltea/widget-core` /
 `@deviltea/widget-vue` / `@deviltea/widget-inspector`: a workbench with a live JSON Source editor, an
-explicit Apply lifecycle, a persistent Preview (an isolated iframe realm that owns the Runtime), and
+explicit Apply lifecycle, a persistent Preview (an isolated iframe realm that owns the Runtime), an Explain tab that
+says what the selected widget is and why it behaves this way (its reads of other widgets with their live values), and
 readonly Blueprint/Runtime/Dependency Graph inspectors.
 
 See [AGENTS.md](AGENTS.md) for the architectural boundaries this app must keep (public-entry-point-only

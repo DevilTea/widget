@@ -16,6 +16,8 @@ const props = defineProps<{
 	client: InspectorClient | null
 	/** Inside a pane that scrolls as a whole (Selected widget): no scroll area or height of its own. */
 	embedded?: boolean
+	/** State and Properties only (the Explain tab's "Current values"); Methods have no value to show. */
+	hideMethods?: boolean
 }>()
 
 /** Under the Selected widget pane's section heading (h3) the groups are h4, so no heading level is skipped. */
@@ -134,7 +136,7 @@ function selectMember(type: InspectorFocusMember['type'], name: string): void {
 			</p>
 		</section>
 
-		<section>
+		<section v-if="!hideMethods">
 			<component
 				:is="memberHeading"
 				class="m-[0_0_4px] text-[11px] uppercase text-lab-text-muted"

@@ -90,10 +90,10 @@ import { defaultShowcase, listedShowcases, showcases } from '../showcases/regist
 /**
  * `'preview'` is included (diagnostic #25 P1) even though Preview lives in its own always-visible Dockview
  * group, never the same tab group as the other six: it lets `Workbench.vue`'s tab-activation bridge
- * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all seven canonical panels
+ * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all canonical panels
  * uniformly — activating Preview's own single-panel group is a harmless no-op, never a layout change.
  */
-export type LabToolTab = 'author' | 'widget' | 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'preview'
+export type LabToolTab = 'author' | 'explain' | 'widget' | 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'preview'
 
 export interface LabStore {
 	readonly session: LabSession
@@ -109,6 +109,8 @@ export interface LabStore {
 	readonly preview: Readonly<Ref<LabSession['preview']>>
 	/** Explicit focus attached to the current Document Blueprint revision. */
 	readonly documentFocus: Readonly<Ref<DocumentScopedInspectorFocus | null>>
+	/** Whether `documentFocus` is a widget someone chose, not the root the focus starts at or falls back to (`InspectorFocusStore.isDocumentFocusChosen`). */
+	readonly documentFocusChosen: Readonly<Ref<boolean>>
 	/** Explicit focus attached to the Preview Blueprint/Runtime revision, when one exists. */
 	readonly previewFocus: Readonly<Ref<PreviewScopedInspectorFocus | null>>
 	/** Whether Document and Preview are linked, diverged, or have no valid Preview. */
@@ -361,6 +363,10 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		void focusTick.value
 		return focusStore.getScopedFocus('document')
 	})
+	const documentFocusChosen = computed(() => {
+		void focusTick.value
+		return focusStore.isDocumentFocusChosen()
+	})
 	const previewFocus = computed(() => {
 		void focusTick.value
 		return focusStore.getScopedFocus('preview')
@@ -504,6 +510,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		documentState,
 		preview,
 		documentFocus,
+		documentFocusChosen,
 		previewFocus,
 		revisionStatus,
 		lastAppliedSourcePatch,

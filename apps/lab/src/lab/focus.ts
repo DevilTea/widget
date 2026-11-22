@@ -44,6 +44,12 @@ export type ScopedInspectorFocus = DocumentScopedInspectorFocus | PreviewScopedI
 
 export interface InspectorFocusStore {
 	getFocus: () => InspectorFocus | null
+	/**
+	 * Whether the Document focus is a widget someone chose (a `setFocus` call, or an Inspect selection mapped to the Document),
+	 * as opposed to the root the store starts at and falls back to when a commit drops the selected widget. The Explain tab
+	 * reads it so that it never explains the root nobody picked (Lab UX phase 2).
+	 */
+	isDocumentFocusChosen: () => boolean
 	getScopedFocus: {
 		(scope: 'document'): DocumentScopedInspectorFocus | null
 		(scope: 'preview'): PreviewScopedInspectorFocus | null
@@ -122,6 +128,7 @@ export function createInspectorFocusStore<Plugins extends AnyWidgetPluginTuple>(
 		revision: lastDocumentRevision,
 	}
 	let previewFocus: PreviewScopedInspectorFocus | null = null
+	let documentFocusChosen = false
 
 	function emit(): void {
 		for (const listener of listeners)
@@ -157,6 +164,8 @@ export function createInspectorFocusStore<Plugins extends AnyWidgetPluginTuple>(
 			const uniqueBefore = identity !== null && uniqueDocumentNodeForIdentity(previousBlueprint, identity) === previousFocus.nodeId
 			keptNodeId = uniqueBefore ? uniqueDocumentNodeForIdentity(document.blueprint, identity) : null
 		}
+		if (keptNodeId === null)
+			documentFocusChosen = false
 		documentFocus = {
 			...(keptNodeId === null
 				? rootFocusOf(document.blueprint)
@@ -253,6 +262,7 @@ export function createInspectorFocusStore<Plugins extends AnyWidgetPluginTuple>(
 					scope: 'document',
 					revision: lastDocumentRevision,
 				}
+		documentFocusChosen = documentFocus !== null
 		if (isLinked())
 			previewFocus = mapDocumentToPreview(documentFocus)
 		emit()
@@ -269,8 +279,10 @@ export function createInspectorFocusStore<Plugins extends AnyWidgetPluginTuple>(
 					revision: remoteRevision,
 					runtimeId: snapshot.runtimeId,
 				}
-		if (isLinked())
+		if (isLinked()) {
 			documentFocus = mapPreviewToDocument(previewFocus)
+			documentFocusChosen = documentFocus !== null
+		}
 		emit()
 	}
 
@@ -280,6 +292,7 @@ export function createInspectorFocusStore<Plugins extends AnyWidgetPluginTuple>(
 			: documentFocus.member === undefined
 				? { nodeId: documentFocus.nodeId }
 				: { nodeId: documentFocus.nodeId, member: documentFocus.member },
+		isDocumentFocusChosen: () => documentFocusChosen && documentFocus !== null,
 		getScopedFocus: ((scope: InspectorFocusScope) => scope === 'document' ? documentFocus : previewFocus) as InspectorFocusStore['getScopedFocus'],
 		setFocus: ((scopeOrFocus: InspectorFocusScope | InspectorFocus | null, next?: InspectorFocus | PreviewInspectorFocus | null) => {
 			if (typeof scopeOrFocus !== 'string') {
