@@ -71,6 +71,7 @@ export type LeafCondition
 		 * the question itself, but its `required` and `rules` may.
 		 *
 		 * @minLength 1
+		 * @widgetRef SingleChoice | MultipleChoice | Numeric | ShortAnswer
 		 */
 		readonly question: string
 		/** `answered` holds when the question has an effective answer, `unanswered` when it has none (or is hidden). */
@@ -83,6 +84,7 @@ export type LeafCondition
 		 * the question itself, but its `required` and `rules` may.
 		 *
 		 * @minLength 1
+		 * @widgetRef SingleChoice | MultipleChoice | Numeric | ShortAnswer
 		 */
 		readonly question: string
 		/** `equals` is true only for an identical answer; `notEquals` is also true for an unanswered or hidden question. */
@@ -97,6 +99,7 @@ export type LeafCondition
 		 * the question itself, but its `required` and `rules` may.
 		 *
 		 * @minLength 1
+		 * @widgetRef Numeric
 		 */
 		readonly question: string
 		/**
@@ -114,6 +117,7 @@ export type LeafCondition
 		 * the question itself, but its `required` and `rules` may.
 		 *
 		 * @minLength 1
+		 * @widgetRef MultipleChoice
 		 */
 		readonly question: string
 		/** Whether a MultipleChoice answer contains `value`; `excludes` is also true for an unanswered or hidden question. */

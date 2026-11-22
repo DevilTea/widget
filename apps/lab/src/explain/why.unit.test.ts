@@ -3,7 +3,7 @@ import type { WhySentence } from './why'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { getShowcase } from '../showcases/registry'
-import { buildWhySentences } from './why'
+import { buildWhySentences, widgetRefTypesOf } from './why'
 
 interface Compiled {
 	readonly inspection: BlueprintInspection
@@ -90,6 +90,29 @@ describe('buildWhySentences — Interactive Survey (open day)', () => {
 			.toEqual(['mode', 'guests', 'sessions', 'phone'].map(id => `response reads #${id} property:visible,property:required,property:value,property:errors []`))
 	})
 
+	it('does not take a string that merely equals the other widget\'s id for a reference to it', () => {
+		// A decoy: phone's help text is the word "mode", the id of the question its `required` condition reads.
+		const source = getShowcase('survey')!.defaultPreset.sourceText.replace(
+			'"help": { "en": "Needed for on-site visitors.", "zh-TW": "現場參加者必填。" }',
+			'"help": { "en": "mode", "zh-TW": "mode" }',
+		)
+		expect(source)
+			.toContain('"help": { "en": "mode", "zh-TW": "mode" }')
+		const decoy = compile('survey', source)
+		const required = decoy.sentencesOf('phone')
+			.find(sentence => sentence.property === 'required')!
+		expect(required.fields.map(field => field.name))
+			.toEqual(['required'])
+
+		// Without the schema's widget-reference mark, even the real condition field is not claimed.
+		const phone = decoy.inspection.getNode(decoy.nodeIdOf('phone'))!
+		const unmarked = { type: 'object', properties: { required: { description: 'Whether an answer is required.' }, help: { description: 'Help.' } } }
+		expect(buildWhySentences(decoy.inspection, phone.nodeId, unmarked)
+			.find(sentence => sentence.property === 'required')!
+			.fields)
+			.toEqual([])
+	})
+
 	it('has nothing to say about a widget that did not resolve', () => {
 		const draft = compile('survey', getShowcase('survey')!.presets.find(preset => preset.id === 'survey-ai-draft')!.sourceText)
 		const unresolved = draft.inspection.nodes.find(node => !node.resolved)!
@@ -107,10 +130,11 @@ describe('buildWhySentences — Trip budget splitter', () => {
 				'title reads #lisbon state:language []',
 				'view reads #lisbon state:language []',
 				'view reads #currency property:base []',
-				'roster reads #ana property:name [paidBy,split]',
-				'roster reads #ben property:name [split]',
-				'roster reads #chloe property:name [split]',
-				'roster reads #dev property:name [split]',
+				// `split.among` lists the people too, but its schema does not mark a widget reference and no dependency path names it.
+				'roster reads #ana property:name [paidBy]',
+				'roster reads #ben property:name []',
+				'roster reads #chloe property:name []',
+				'roster reads #dev property:name []',
 				'currencies reads #currency property:codes []',
 				'errors reads #lisbon state:language []',
 				'amountBase invokes #currency method:convert []',
@@ -141,6 +165,17 @@ describe('buildWhySentences — Trip budget splitter', () => {
 	})
 })
 
+describe('widgetRefTypesOf', () => {
+	it('reads the type list of the sentence widgetDocs() writes for @widgetRef', () => {
+		expect(widgetRefTypesOf('The id of the Person who paid at the start. Must be the id of a widget of type Person in the same document.'))
+			.toEqual(['Person'])
+		expect(widgetRefTypesOf('Must be the id of a widget of type SingleChoice | MultipleChoice in the same document.'))
+			.toEqual(['SingleChoice', 'MultipleChoice'])
+		expect(widgetRefTypesOf('The input type, for example "email".'))
+			.toBeNull()
+	})
+})
+
 describe('buildWhySentences — widgets with no dependencies', () => {
 	it('is empty for a widget whose Properties read no other widget (quote-rules `flyers`)', () => {
 		const quote = compile('quote-rules')
@@ -151,12 +186,13 @@ describe('buildWhySentences — widgets with no dependencies', () => {
 			.toEqual(['adjustment reads #quote property:subtotalCents,property:totalQuantity []'])
 	})
 
-	it('names a field without a schema description by its name only (the sandbox has no config schemas)', () => {
+	it('names no field without a schema that marks a widget reference (the sandbox has no config schemas)', () => {
 		const sandbox = compile('sandbox')
 		expect(sandbox.sentencesOf('title'))
 			.toEqual([])
 		expect(sandbox.sentencesOf('summary-1')
 			.map(sentence => sentence.fields))
-			.toEqual([[{ name: 'counterId', path: ['counterId'], description: '' }]])
+			// `counterId` does hold the id, but nothing says so: a dependency path that does not name it and no schema.
+			.toEqual([[]])
 	})
 })

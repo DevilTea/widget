@@ -10,10 +10,12 @@
  * Core does not say which config field produced a dependency (a dependency's `path` is the plugin's own container key, such
  * as a question id). So the config field is an inference, made the same way for every plugin: a string value of the
  * widget's authored config that equals the other widget's id names it. When the dependency's path starts with a top-level
- * config key (`["rules", "guests"]`), only that field is searched. The field shown is the top-level config field, or, inside
- * a list of objects, the field of the list item (`options[1].enabledWhen.question` -> `enabledWhen`), with the description
- * the generated schema has for it. A plugin whose reads come from its slots (no config value names the other widget) gets
- * no field, which is the honest answer.
+ * config key (`["rules", "guests"]`), only that field is searched. Otherwise a matching value counts only when the generated
+ * schema marks it as a widget reference (the sentence `widgetDocs()` writes for `@widgetRef`), preferring one that names the
+ * other widget's type, so a string that merely equals the id (`{ inputType: "email" }` beside a widget `email`) is not taken
+ * for one. The field shown is the top-level config field, or, inside a list of objects, the field of the list item
+ * (`options[1].enabledWhen.question` -> `enabledWhen`), with the description the generated schema has for it. A plugin whose
+ * reads come from its slots (no config value names the other widget) gets no field, which is the honest answer.
  *
  * Pure and framework-agnostic; the live values ("now: ...") are the view's job (they come from the Preview Runtime).
  */
@@ -128,13 +130,30 @@ function configScopeOf(rawConfig: Readonly<Record<string, unknown>>, path: reado
 	return typeof first === 'string' && Object.hasOwn(rawConfig, first) ? first : null
 }
 
+/**
+ * The sentence `widgetDocs()` appends to the description of a config value tagged `@widgetRef A | B` (`apps/widget-skills/src/schema.ts`):
+ * "Must be the id of a widget of type A | B in the same document." Group 1 is the type list.
+ */
+const WIDGET_REF_SENTENCE = /Must be the id of a widget of type (.+?) in the same document\./
+
+/** The plugin types a schema description names as a widget reference, or `null` when it marks no widget reference. */
+export function widgetRefTypesOf(description: string): readonly string[] | null {
+	const match = WIDGET_REF_SENTENCE.exec(description)
+	return match === null
+		? null
+		: match[1]!.split('|')
+				.map(type => type.trim())
+				.filter(type => type !== '')
+}
+
 function configFieldsNaming(
 	rawConfig: unknown,
 	schema: JsonSchema | null,
-	widgetId: string,
+	target: WhyTarget,
 	dependencyPaths: readonly (readonly (string | number)[])[],
 	claimedKeys: ReadonlySet<string>,
 ): WhyConfigField[] {
+	const widgetId = target.widgetId
 	if (!isRecord(rawConfig))
 		return []
 	const matches: ConfigPath[] = []
@@ -152,9 +171,26 @@ function configFieldsNaming(
 			stringLeafPaths(rawConfig[key!], widgetId, [key!], matches)
 	}
 
+	// A match inside a field a dependency path names is that dependency's field. Any other match is only a string that happens
+	// to equal the widget's id unless the schema marks the value as a widget reference; among those, one naming the target's
+	// type is preferred.
+	const candidates: { readonly match: ConfigPath, readonly typeMatches: boolean }[] = []
+	for (const match of matches) {
+		if (typeof match[0] === 'string' && scopes.has(match[0])) {
+			candidates.push({ match, typeMatches: true })
+			continue
+		}
+		const types = schema === null ? null : widgetRefTypesOf(describeAt(schema, rawConfig, match))
+		if (types !== null)
+			candidates.push({ match, typeMatches: types.includes(target.widgetType) })
+	}
+	const preferred = candidates.some(candidate => candidate.typeMatches)
+		? candidates.filter(candidate => candidate.typeMatches)
+		: candidates
+
 	const fields: WhyConfigField[] = []
 	const seen = new Set<string>()
-	for (const match of matches) {
+	for (const { match } of preferred) {
 		const fieldPath = fieldPathOf(match)
 		const name = String(fieldPath.at(-1))
 		const description = schema === null ? '' : describeAt(schema, rawConfig, fieldPath)
@@ -241,6 +277,6 @@ export function buildWhySentences(
 		operation: draft.operation,
 		target: draft.target,
 		members: draft.members,
-		fields: configFieldsNaming(rawConfig, configSchema, draft.target.widgetId, draft.paths, claimed.get(draft.target.nodeId) ?? new Set()),
+		fields: configFieldsNaming(rawConfig, configSchema, draft.target, draft.paths, claimed.get(draft.target.nodeId) ?? new Set()),
 	}))
 }
