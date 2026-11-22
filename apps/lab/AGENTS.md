@@ -620,7 +620,8 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
   `MonacoJsonEditor` mounted, and both files were fetched, on every load whichever tab the user looked at; that was an accepted
   trade-off while JSON was the default surface.) The JSON tab, the problems chip and "Show problems" are the ways in; `e2e/shell.spec.ts` asserts no `.monaco-editor` before JSON is opened and the Pages spec asserts
   `editor-core.mjs` is requested once it is.
-- **ELK layout worker**: same eager-on-load shape as Monaco, for the same underlying reason, and this
+- **ELK layout worker**: eager on load because Dockview mounts every canonical panel's content at load (the reason Monaco
+  was eager too until Lab UX phase 1 made Structure the first Author view; Monaco is now fetched when the JSON view is first opened), and this
   predates this issue's change — verified by loading the built app fresh (no tab interaction) and
   observing `layout.worker-*.js` requested immediately. `layout-client.ts`'s `ensureElk()` still only
   creates the `Worker` on the *first* `layoutGraph()` call rather than as an import-time side effect
@@ -634,10 +635,9 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
   that would mean gating panel *mount* (not just tab selection) on Dockview activity for Blueprint/
   Runtime/Graph, which is a Workbench/Dockview panel-lifecycle change out of scope for `DevilTea/deviltea-labs#30` — noted
   here as known, current-state behavior rather than silently left undocumented.
-- Neither of the two heavy, on-load fetches above is a *regression*: this document only makes explicit
-  what was already true before this issue's change (Monaco and ELK both already loaded on initial mount
-  before self-hosting), and self-hosting Monaco's engine does not move it into, or out of, that eager
-  path — it only removes the esm.sh dependency for the fetch that already happened at that same moment.
+- History: when Monaco's engine was self-hosted (`DevilTea/deviltea-labs#30`), Monaco and ELK were both fetched on initial mount, and
+  self-hosting moved neither into nor out of that path (it only removed the esm.sh dependency of a fetch that already happened). Since Lab UX
+  phase 1 Monaco is no longer part of it: Author opens on Structure and the editor mounts with the JSON view.
 - **Implementation panel + Shiki + curated raw-source chunks (`DevilTea/deviltea-labs#25` P3)**: unlike Monaco/ELK above,
   these genuinely stay lazy — `ImplementationPanel.vue` is registered in `Workbench.vue`'s `components`
   map through `defineAsyncComponent(() => import('./panels/ImplementationPanel.vue'))`, and the panel
