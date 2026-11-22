@@ -16,48 +16,85 @@ import { describeValue, isEmail, isIsoDate, isOptionId, isTime } from './domain'
 // Raw config (what the author writes) and resolved config (what the plugin reads)
 // -------------------------------------------------------------------------------------------------
 
+/** The authored config of an Onboarding. */
 export interface OnboardingRawConfig {
+	/** The title of the wizard. */
 	readonly title: I18nText
-	/** The index of the step the wizard opens on (0 = the first). */
+	/**
+	 * The index of the step the wizard opens on, counted from 0. Defaults to 0. Opening on a later step does not make the
+	 * earlier ones complete: the wizard still lets the visitor go back, and Next and Finish still check the steps.
+	 *
+	 * @minimum 0
+	 */
 	readonly startStep?: number
 }
 
+/** The authored config of an AccountStep. */
 export interface AccountRawConfig {
+	/** The title of the step. */
 	readonly title: I18nText
-	readonly prefill?: { readonly name?: string, readonly email?: string }
+	/** Values filled in at the start. A viewer can change them. */
+	readonly prefill?: {
+		/** The name filled in at the start. */
+		readonly name?: string
+		/** The e-mail address filled in at the start (empty or an address). */
+		readonly email?: string
+	}
 }
 
+/** One interest the visitor can pick. */
 export interface InterestOptionRaw {
+	/** An id: a lowercase letter, then lowercase letters, digits and "-". Unique within its list. */
 	readonly id: string
+	/** What the visitor reads for this interest. */
 	readonly label: I18nText
 }
 
+/** The authored config of an InterestsStep. */
 export interface InterestsRawConfig {
+	/** The title of the step. */
 	readonly title: I18nText
+	/** The interests the visitor can pick from. */
 	readonly options: readonly InterestOptionRaw[]
-	/** How many interests the visitor must pick (default 1). */
+	/**
+	 * How many interests the visitor must pick before the step is complete. Defaults to 1; it cannot be more than the number
+	 * of options.
+	 *
+	 * @minimum 0
+	 */
 	readonly minimum?: number
-	/** The ids picked at the start. */
+	/** The ids picked at the start; each must be the id of an option. */
 	readonly preselected?: readonly string[]
 }
 
+/** One safety rule the visitor acknowledges. */
 export interface SafetyRuleRaw {
+	/** An id: a lowercase letter, then lowercase letters, digits and "-". Unique within its list. */
 	readonly id: string
+	/** The safety rule the visitor acknowledges. */
 	readonly text: I18nText
 }
 
+/** The authored config of a SafetyStep. */
 export interface SafetyRawConfig {
+	/** The title of the step. */
 	readonly title: I18nText
+	/** The safety rules the visitor must acknowledge, one by one, before the step is complete. */
 	readonly rules: readonly SafetyRuleRaw[]
-	/** The ids of the rules acknowledged at the start. */
+	/** The ids of the rules acknowledged at the start; each must be the id of a rule. */
 	readonly acknowledged?: readonly string[]
 }
 
+/** The authored config of an InductionStep. */
 export interface InductionRawConfig {
+	/** The title of the step. */
 	readonly title: I18nText
-	/** The days an induction can be booked, `YYYY-MM-DD`. */
+	/**
+	 * The days an induction can be booked, written `YYYY-MM-DD`. Requesting any other date is an invalid Method call.
+	 * Whether the booking office still has room is not known here (the host asks it).
+	 */
 	readonly days: readonly string[]
-	/** The start times offered on each day, `HH:MM`. */
+	/** The start times offered on each day, written `HH:MM`. */
 	readonly times: readonly string[]
 }
 

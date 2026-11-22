@@ -58,7 +58,12 @@ export interface InductionInterfaces extends WidgetInterfaces {
 		/** The step title per language. */
 		title: I18nText
 		/** The days and start times the config offers. */
-		offered: { readonly days: readonly string[], readonly times: readonly string[] }
+		offered: {
+			/** The days an induction can be booked, `YYYY-MM-DD`. */
+			readonly days: readonly string[]
+			/** The start times offered on each day, `HH:MM`. */
+			readonly times: readonly string[]
+		}
 		/** `booking-pending` while a request waits, `booking` while no slot is confirmed, empty once one is. */
 		missing: readonly string[]
 		/** Whether a slot is confirmed. */

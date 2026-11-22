@@ -33,28 +33,84 @@ import {
 // Raw config (what the author writes) and resolved config (what the plugin reads)
 // -------------------------------------------------------------------------------------------------
 
+/** What every question's authored config has. */
 export interface QuestionRawBase {
+	/** The question text shown to the respondent, in every survey language. */
 	readonly label: I18nText
+	/** Optional hint under the label, in every survey language. */
 	readonly help?: I18nText
+	/**
+	 * Whether an answer is required: true or false, or a condition that makes it required only while it holds. Defaults to
+	 * false. Required is reported regardless of visibility, but a hidden question never has errors.
+	 */
 	readonly required?: boolean | Condition
+	/**
+	 * Show the question only while this holds; absent means always visible. A hidden question has no value. The stored answer
+	 * is kept while hidden and returns when the question is shown again.
+	 */
 	readonly visibleWhen?: Condition
+	/** Custom answer errors beyond the built-in checks. */
 	readonly rules?: readonly Rule[]
 }
 
-export type ShortAnswerRawConfig = QuestionRawBase & { readonly maxLength?: number }
-export type SingleChoiceRawConfig = QuestionRawBase & { readonly options: readonly OptionConfig[] }
-export type MultipleChoiceRawConfig = QuestionRawBase & {
+/** The authored config of a ShortAnswer. */
+export type ShortAnswerRawConfig = QuestionRawBase & {
+	/**
+	 * Maximum number of characters after trimming surrounding whitespace. Longer answers get a max-length error.
+	 *
+	 * @minimum 1
+	 */
+	readonly maxLength?: number
+}
+/** The authored config of a SingleChoice. */
+export type SingleChoiceRawConfig = QuestionRawBase & {
+	/**
+	 * The options in display order. At least one; values must be unique.
+	 *
+	 * @minItems 1
+	 */
 	readonly options: readonly OptionConfig[]
+}
+/** The authored config of a MultipleChoice. */
+export type MultipleChoiceRawConfig = QuestionRawBase & {
+	/**
+	 * The options in display order. At least one; values must be unique.
+	 *
+	 * @minItems 1
+	 */
+	readonly options: readonly OptionConfig[]
+	/**
+	 * Fewest options that must be selected once the question is answered; at most `maxSelected` and the number of options.
+	 *
+	 * @minimum 0
+	 */
 	readonly minSelected?: number
+	/**
+	 * Most options that may be selected; at least `minSelected` and at most the number of options.
+	 *
+	 * @minimum 1
+	 */
 	readonly maxSelected?: number
 }
+/** The authored config of a Numeric. */
 export type NumericRawConfig = QuestionRawBase & {
+	/** Smallest allowed answer. A smaller answer gets a min error. */
 	readonly min?: number
+	/** Largest allowed answer, not below `min`. A larger answer gets a max error. */
 	readonly max?: number
+	/** When true, only whole numbers are allowed. Defaults to false. */
 	readonly integer?: boolean
 }
+/** The authored config of a Survey. */
 export interface SurveyRawConfig {
+	/** The survey title in every language listed in `languages`. */
 	readonly title: I18nText
+	/**
+	 * The languages the survey is offered in; the first is the default. Every text in every question must be provided in each
+	 * of them.
+	 *
+	 * @minItems 1
+	 */
 	readonly languages: readonly string[]
 }
 
