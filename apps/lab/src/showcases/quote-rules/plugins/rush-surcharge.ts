@@ -6,7 +6,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { RushSurchargeConfig } from '../config'
 import type { Adjustment } from '../domain'
-import type { RushSurchargeRawConfig } from '../schemas'
+import type { RushSurchargeRawConfig } from '../raw-config'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveRushSurchargeConfig } from '../config'
 import { percentOf } from '../domain'

@@ -18,7 +18,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { VolumeDiscountConfig } from '../config'
 import type { Adjustment } from '../domain'
-import type { VolumeDiscountRawConfig } from '../schemas'
+import type { VolumeDiscountRawConfig } from '../raw-config'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveVolumeDiscountConfig } from '../config'
 import { percentOf } from '../domain'

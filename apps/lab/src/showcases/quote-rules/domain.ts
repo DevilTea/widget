@@ -9,7 +9,12 @@
  */
 
 /** Text per language, `{ "en": "Flyers", "zh-TW": "傳單" }`. `en` is required; a missing language falls back to it. */
-export type I18nText = Readonly<{ en: string } & Record<string, string>>
+export interface I18nText {
+	/** The English text, which every other language falls back to. */
+	readonly en: string
+	/** The text in the language this key names, such as `zh-TW`. */
+	readonly [language: string]: string
+}
 
 export const QUOTE_LANGUAGES = ['en', 'zh-TW'] as const
 
@@ -42,52 +47,74 @@ export function percentOf(cents: number, percent: number): number {
 	return (product < 0n ? -rounded : rounded) + 0
 }
 
+/**
+ * What a rule does to the quote: `discount` (VolumeDiscount), `surcharge` (RushSurcharge), `fee` (Delivery) or `tax`
+ * (SalesTax).
+ */
 export type RuleKind = 'discount' | 'surcharge' | 'fee' | 'tax'
 
 /** One rule's effect on the quote: what its Property `adjustment` returns. Negative `cents` is a reduction. */
 export interface Adjustment {
 	/** The plugin type of the rule that produced it, such as `VolumeDiscount`. */
 	readonly type: string
+	/** What the rule does to the quote. */
 	readonly kind: RuleKind
+	/** The rule's name on the quote, its config `label`. */
 	readonly label: I18nText
 	/** `false` when the rule did not apply to these answers (it still reports `cents: 0`). */
 	readonly applied: boolean
 	/** The percentage the rule used, or `null` for a flat amount or a rule that did not apply. */
 	readonly percent: number | null
+	/** The amount the rule adds to the quote, in minor units; negative for a reduction, 0 when it did not apply. */
 	readonly cents: number
 	/** A machine-readable note the renderer translates, or `null`. */
 	readonly reason: AdjustmentReason | null
 }
 
+/** Why an applied rule charges nothing: `free-over-threshold` is a Delivery whose courier fee is waived. */
 export type AdjustmentReason = 'free-over-threshold'
 
 /** One Item's priced line: what its Property `line` returns. */
 export interface ItemLine {
+	/** What is being printed, the Item's config `title`. */
 	readonly title: I18nText
+	/** How many pieces: State `quantity`, or the configured starting quantity while that is unreadable. */
 	readonly quantity: number
+	/** The code of the chosen paper: State `paper`, or the configured starting paper while that is unreadable. */
 	readonly paper: string
+	/** The chosen paper's name; the code itself as English text when the Item does not offer that paper. */
 	readonly paperLabel: I18nText
 	/** The price of one piece on this paper, in minor units. */
 	readonly unitCents: number
+	/** The line price, `quantity` times `unitCents`, in minor units. */
 	readonly cents: number
 }
 
+/** One line of the whole quote: an Item's `line` with the id of its widget. */
 export interface QuoteLine extends ItemLine {
+	/** The id of the Item widget. */
 	readonly id: string
 }
 
+/** One rule of the whole quote: a rule's `adjustment` with the id of its widget. */
 export interface QuoteAdjustment extends Adjustment {
+	/** The id of the rule widget. */
 	readonly id: string
 }
 
 /** The whole quote as plain JSON: the Quote widget's Property `quote`, and what the worker returns. */
 export interface QuoteResult {
+	/** The quote's currency code, such as `EUR`: every amount is in its minor units. */
 	readonly currency: string
+	/** The Items' lines, in document order. An Item whose line cannot be read is left out. */
 	readonly lines: readonly QuoteLine[]
+	/** The rules' adjustments, in document order, the tax included. A rule whose adjustment cannot be read is left out. */
 	readonly adjustments: readonly QuoteAdjustment[]
+	/** What the Items' lines add up to, in minor units. */
 	readonly subtotalCents: number
 	/** The amount the tax applies to: the subtotal plus every rule that is not the tax. */
 	readonly taxableCents: number
+	/** What the customer pays: `taxableCents` plus the tax, in minor units. */
 	readonly totalCents: number
 }
 

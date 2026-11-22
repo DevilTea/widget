@@ -4,7 +4,9 @@
  * - the **validator** of every plugin's `config` and of the State a customer writes (`guard()` in
  *   `./standard-schema.ts` turns a schema into the predicate Core takes; the library's own messages become the
  *   Core diagnostics, verbatim);
- * - the **TypeScript types** of the raw configs (`InferInput<...>`, read from the schema's Standard Schema types);
+ * - the check of the **TypeScript types** of the raw configs: they are written by hand with their documentation in
+ *   `./raw-config.ts`, and `RawConfigsMatchSchemas` below asserts that each is exactly the schema's `InferInput<...>`
+ *   (read from its Standard Schema types);
  * - the passive **config JSON Schema** (Draft 2020-12, handed to the Lab by plugin type as `quoteConfigSchemas`; Core 0.3
  *   carries no config schema), read from the same schema object through
  *   Standard JSON Schema (`~standard.jsonSchema`), so the Catalog and the Structure editor offer controls for
@@ -24,6 +26,7 @@
  * - that the discount tiers start at 1 (the buggy-rule preset relies on that gap, see `plugins/volume-discount.ts`).
  */
 
+import type { DeliveryRawConfig, ItemRawConfig, QuoteRawConfig, RushSurchargeRawConfig, SalesTaxRawConfig, VolumeDiscountRawConfig } from './raw-config'
 import type { ConfigJsonSchemaObject, InferInput } from './standard-schema'
 import { toStandardJsonSchema } from '@valibot/to-json-schema'
 import * as v from 'valibot'
@@ -96,12 +99,31 @@ export const salesTaxConfigSchema = toStandardJsonSchema(v.strictObject({
 	percent: percent('The tax rate, applied to the subtotal plus every other rule (delivery included).'),
 }))
 
-export type QuoteRawConfig = InferInput<typeof quoteConfigSchema>
-export type ItemRawConfig = InferInput<typeof itemConfigSchema>
-export type VolumeDiscountRawConfig = InferInput<typeof volumeDiscountConfigSchema>
-export type RushSurchargeRawConfig = InferInput<typeof rushSurchargeConfigSchema>
-export type DeliveryRawConfig = InferInput<typeof deliveryConfigSchema>
-export type SalesTaxRawConfig = InferInput<typeof salesTaxConfigSchema>
+// The hand-written raw configs (`./raw-config.ts`, what the plugins' `Interfaces` declare) must be exactly what these
+// schemas accept. `Exact` compares the two after removing `readonly` and flattening intersections (Valibot spells an
+// object with rest as one), and rejects `any`: a field added, removed, retyped or made optional on one side only fails
+// the compile here.
+
+/** Recursively drops `readonly` and flattens intersections, so two spellings of one shape become one type. */
+type Normalized<T> = T extends readonly (infer Element)[]
+	? Normalized<Element>[]
+	: T extends object ? { -readonly [Key in keyof T]: Normalized<T[Key]> } : T
+
+/** `true` when `A` and `B` are the same type once normalized (`any` equals only `any`). */
+type Exact<A, B> = (<T>() => T extends Normalized<A> ? 1 : 2) extends (<T>() => T extends Normalized<B> ? 1 : 2) ? true : false
+
+/** Compiles only when every entry is `true`. */
+type AllTrue<Checks extends readonly true[]> = Checks
+
+/** Fails to compile unless every entry is `true`: the hand-written raw config of each plugin is its schema's input type. */
+export type RawConfigsMatchSchemas = AllTrue<[
+	Exact<QuoteRawConfig, InferInput<typeof quoteConfigSchema>>,
+	Exact<ItemRawConfig, InferInput<typeof itemConfigSchema>>,
+	Exact<VolumeDiscountRawConfig, InferInput<typeof volumeDiscountConfigSchema>>,
+	Exact<RushSurchargeRawConfig, InferInput<typeof rushSurchargeConfigSchema>>,
+	Exact<DeliveryRawConfig, InferInput<typeof deliveryConfigSchema>>,
+	Exact<SalesTaxRawConfig, InferInput<typeof salesTaxConfigSchema>>,
+]>
 
 // ---------------------------------------------------------------------------------------------------------
 // State a customer writes
