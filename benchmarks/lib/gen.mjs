@@ -118,11 +118,9 @@ export function createPlugins(spec, units) {
 
 	// ----- unit ---------------------------------------------------------------------------------
 	let unit = createWidgetPlugin('unit')
-		.description('Synthetic leaf widget')
 		.interfaces()
 	if (spec.config) {
 		unit = unit.config({
-			description: 'Synthetic unit config',
 			validate: input => input === null || (typeof input === 'object' && input !== null && typeof input.step === 'number'),
 			resolve: raw => ({ step: raw?.step ?? 1 }),
 		})
@@ -230,23 +228,21 @@ export function createPlugins(spec, units) {
 		})
 	}
 	if (spec.events)
-		unit = unit.events(section => section.changed({ description: 'The unit changed' }))
+		unit = unit.events(['changed'])
 	const unitPlugin = unit.done()
 
 	// ----- group --------------------------------------------------------------------------------
 	let group = createWidgetPlugin('group')
-		.description('Synthetic container widget')
 		.interfaces()
 	group = group.slots({
 		children: spec.structure
 			? {
-					description: 'Child widgets',
 					validateStructure: ({ children, addDiagnostic }) => {
 						if (children.length < 0)
 							addDiagnostic({ message: 'negative length', index: 0 })
 					},
 				}
-			: { description: 'Child widgets' },
+			: {},
 	})
 	if (spec.structure) {
 		group = group.structure(({ widget, addDiagnostic }) => {

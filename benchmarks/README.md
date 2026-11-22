@@ -50,7 +50,9 @@ instead of the repository that contains the harness: `packages/core/dist`, `pack
 `packages/inspector/dist`, and for the Vue scenarios Vue and happy-dom resolved from that checkout's `packages/vue` (so the Vue
 instance is the one that checkout's built adapter imports, and Core is the one it resolves). `size.bytes` and `load.cold` read
 that checkout too. The packages must be built there (`pnpm install` and `pnpm --filter "./packages/*" build` inside the checkout).
-This lets one copy of the harness, the same for every commit, measure several commits checked out side by side:
+This lets one copy of the harness, the same for every commit, measure several commits checked out side by side.
+The scenarios use the Core 0.3 builder (no `.description()`, `.events([...names])`), so only checkouts from 0.3 on
+(`4496428`, #252, and later) can be measured; a 0.2 checkout fails when a scenario builds its plugins:
 
 ```bash
 git worktree add ../widget-base <commit>

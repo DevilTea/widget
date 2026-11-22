@@ -18,13 +18,12 @@ function makePlugins(count) {
 	const plugins = []
 	for (let i = 0; i < count; i++) {
 		plugins.push(createWidgetPlugin(`p${i}`)
-			.description('Synthetic plugin')
 			.interfaces()
 			.state(s => s.a({ validate: v => typeof v === 'number', default: () => 0 })
 				.b({ validate: v => typeof v === 'number' }))
 			.properties(p => p.c({ registerDeps: ({ dep }) => dep.self.state.get('a'), compute: ({ deps }) => deps().ok ? 1 : 0 }))
 			.methods(m => m.d({ validateArgs: a => a.length === 0, execute: () => 0 }))
-			.events(e => e.changed({ description: 'changed' }))
+			.events(['changed'])
 			.done())
 	}
 	return plugins
@@ -103,7 +102,6 @@ export const scenarios = [
 				const methodDef = { validateArgs: a => a.length === 0, execute: () => 0 }
 				return {
 					run: () => createWidgetPlugin('x')
-						.description('x')
 						.interfaces()
 						.state((s) => {
 							let t = s

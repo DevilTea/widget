@@ -8,19 +8,16 @@ import { loadCore } from './load.mjs'
 const { createWidgetPlugin, createWidgetSystem } = await loadCore()
 
 export const rootPlugin = createWidgetPlugin('root')
-	.description('root')
 	.interfaces()
-	.slots({ children: { description: 'children' } })
+	.slots({ children: {} })
 	.done()
 
 export const srcPlugin = createWidgetPlugin('src')
-	.description('source')
 	.interfaces()
 	.state(s => s.v({ validate: v => typeof v === 'number', default: () => 0 }))
 	.done()
 
 export const followerPlugin = createWidgetPlugin('follower')
-	.description('follower')
 	.interfaces()
 	.properties(p => p.p({
 		registerDeps: ({ dep }) => ({ v: dep.widget('src').state.get('v') }),
