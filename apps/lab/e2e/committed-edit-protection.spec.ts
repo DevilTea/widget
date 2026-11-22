@@ -130,8 +130,23 @@ test.describe('committed edits are protected (report item 10)', () => {
 			.toHaveAttribute('data-loss', 'draft')
 		await answerDraftGuard(page, 'discard')
 		await expectDocumentStatus(page, { problems: 5 })
-		await expect(page.getByTestId('replaced-document-notice'))
+		const notice = page.getByTestId('replaced-document-notice')
+		await expect(notice)
 			.toContainText('Loaded “AI draft — five mistakes”.')
+		// The notice lives in a real status region.
+		await expect(page.getByTestId('replaced-document-region'))
+			.toHaveAttribute('role', 'status')
+
+		// A new draft makes Undo unavailable: the notice says why, and the button is described by it.
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
+		const reason = notice.getByTestId('replaced-document-undo-reason')
+		await expect(reason)
+			.toHaveText('Apply or revert your unapplied edits before undoing')
+		const undo = notice.getByRole('button', { name: 'Undo last change' })
+		await expect(undo)
+			.toHaveAttribute('aria-disabled', 'true')
+		await expect(undo)
+			.toHaveAttribute('aria-describedby', (await reason.getAttribute('id'))!)
 	})
 
 	test('restarting the tutorial over committed edits on its own showcase asks nothing and offers Undo', async ({ page }) => {

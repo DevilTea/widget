@@ -1373,9 +1373,10 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
     committed edits alone do not ask (a draft still does). `LabStore.applyPreset()` records, before the load, whether it replaces committed
     edits, and after a load that advanced the revision sets `replacedNotice` (`{ subject: preset label, revision }`). `ReplacedDocumentNotice.vue`,
     above the Preview next to the stale-preview notice, then says "Loaded “<preset>”. Undo to get your edits back." with **Undo** (the header's
-    Undo, `aria-disabled` while it is unavailable) and **Dismiss notice**. It is inline and has no timer; it applies only while the Document is still at
-    that revision (`replacedNoticeVisible`), so Undo or any later commit ends it, and a showcase switch clears it. Its wrapper is a `role="status"`
-    region that stays in the page, so the message is announced. `e2e/committed-edit-protection.spec.ts` pins every case.
+    Undo, `aria-disabled` while it is unavailable, and then described by a short line saying why, in the header tooltip's words: an unapplied
+    JSON draft, a command running) and **Dismiss notice**. It is inline and has no timer; it applies only while the Document is still at
+    that revision (`replacedNoticeVisible`), so Undo or any later commit ends it, and a showcase switch clears it. Its wrapper is a real `role="status"`
+    element (not `display: contents`) that stays in the page, so the message is announced. `e2e/committed-edit-protection.spec.ts` pins every case.
 - `LabStore.authorView` (Catalog / Structure / JSON) starts on **Structure** (Lab UX phase 1; it was JSON) and then keeps what the user
   chose, also across showcase switches; it is not saved across reloads. Specs that need Monaco or the Problems list open it with
   `openAuthorJson()` (`e2e/fixtures.ts`). It lives in the store, not in `AuthorPanel`, so other surfaces can
