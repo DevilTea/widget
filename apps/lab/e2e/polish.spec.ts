@@ -345,6 +345,66 @@ test.describe('visible keyboard focus (U20)', () => {
 	})
 })
 
+test.describe('the selected workbench tab (Lab UX phase 1)', () => {
+	async function tabStyle(page: Page, name: string): Promise<{ background: string, shadow: string, color: string, borderBottom: string }> {
+		return page.getByRole('tab', { name, exact: true })
+			.evaluate((element) => {
+				const style = getComputedStyle(element)
+				return { background: style.backgroundColor, shadow: style.boxShadow, color: style.color, borderBottom: `${style.borderBottomWidth} ${style.borderBottomStyle}` }
+			})
+	}
+
+	for (const theme of ['light', 'dark'] as const) {
+		test(`looks selected in the ${theme} theme, with or without focus in its group, unlike the Author sub-tabs`, async ({ context, page }) => {
+			await context.addInitScript(([key, value]) => localStorage.setItem(key!, value!), [THEME_STORAGE_KEY, theme])
+			await openLab(page)
+			await expect(page.locator('html'))
+				.toHaveAttribute('data-lab-theme', theme)
+			const accent = await page.evaluate(() => {
+				const probe = document.createElement('i')
+				probe.style.color = 'var(--lab-color-accent)'
+				document.body.append(probe)
+				const color = getComputedStyle(probe).color
+				probe.remove()
+				return color
+			})
+
+			const check = async (): Promise<void> => {
+				const selected = await tabStyle(page, 'Author')
+				const other = await tabStyle(page, 'Blueprint')
+				expect(selected.shadow, 'an accent bar along the top edge')
+					.toBe(`${accent} 0px 2px 0px 0px inset`)
+				expect(other.shadow)
+					.toBe('none')
+				expect(selected.background)
+					.not
+					.toBe(other.background)
+				expect(selected.color)
+					.not
+					.toBe(other.color)
+			}
+			await check()
+			// Focus in the other group (the Preview): the tool group's selected tab must still look selected.
+			await page.getByRole('tab', { name: 'Preview', exact: true })
+				.click()
+			await check()
+
+			// The second level marks its selected view differently: a bottom border, no top bar.
+			const subTab = page.getByRole('tablist', { name: 'Author views' })
+				.getByRole('tab', { selected: true })
+			const sub = await subTab.evaluate((element) => {
+				const style = getComputedStyle(element)
+				return { shadow: style.boxShadow, borderBottom: `${style.borderBottomWidth} ${style.borderBottomStyle}`, borderColor: style.borderBottomColor }
+			})
+			expect(sub)
+				.toEqual({ shadow: 'none', borderBottom: '2px solid', borderColor: accent })
+			expect((await tabStyle(page, 'Author')).borderBottom)
+				.not
+				.toBe('2px solid')
+		})
+	}
+})
+
 test.describe('the Lab language in the chrome (U21)', () => {
 	test('panel, view and Graph names are Taiwan Chinese in zh-TW, and Widget vocabulary stays English', async ({ page }) => {
 		await openLab(page, 'showcase=survey&lang=zh-TW')

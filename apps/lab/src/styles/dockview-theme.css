@@ -12,12 +12,13 @@
 	--dv-tabs-and-actions-container-background-color: var(--lab-color-surface);
 	--dv-activegroup-visiblepanel-tab-background-color: var(--lab-color-bg);
 	--dv-activegroup-hiddenpanel-tab-background-color: var(--lab-color-surface);
-	--dv-inactivegroup-visiblepanel-tab-background-color: var(--lab-color-surface);
+	/* The selected tab of a group looks selected whichever group has focus (it used to match its hidden siblings in a group without focus). */
+	--dv-inactivegroup-visiblepanel-tab-background-color: var(--lab-color-bg);
 	--dv-inactivegroup-hiddenpanel-tab-background-color: var(--lab-color-surface);
 	--dv-tab-divider-color: var(--lab-color-border);
 	--dv-activegroup-visiblepanel-tab-color: var(--lab-color-text);
 	--dv-activegroup-hiddenpanel-tab-color: var(--lab-color-text-muted);
-	--dv-inactivegroup-visiblepanel-tab-color: var(--lab-color-text-muted);
+	--dv-inactivegroup-visiblepanel-tab-color: var(--lab-color-text);
 	--dv-inactivegroup-hiddenpanel-tab-color: var(--lab-color-text-muted);
 	--dv-separator-border: var(--lab-color-border);
 	--dv-paneview-active-outline-color: var(--lab-color-accent);
@@ -26,6 +27,16 @@
 	--dv-tabs-and-actions-container-height: 32px;
 	--dv-drag-over-background-color: color-mix(in srgb, var(--lab-color-accent) 25%, transparent);
 	--dv-drag-over-border-color: var(--lab-color-accent);
+}
+
+/*
+ * The selected tab of each group: the panel's own background (it reads as the front of the panel below it) and a 2px
+ * accent bar along its TOP edge. The Author sub-tabs mark the selected view with a bottom border and bold text, so the
+ * two levels never look alike. An inset shadow, not a border, so the tab keeps its size; `::after` stays free for the
+ * focus ring below.
+ */
+.dockview-theme-lab .dv-tab.dv-active-tab {
+	box-shadow: inset 0 2px 0 var(--lab-color-accent);
 }
 
 /*

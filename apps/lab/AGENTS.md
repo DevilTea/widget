@@ -1526,6 +1526,10 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
   text nodes under 11px per surface, plus axe-core (tags wcag2a, wcag2aa, wcag21aa, wcag22aa and best-practice; both themes, 1440px) on Header, Author (JSON, Catalog,
   Structure), Selected widget, Blueprint, Runtime and Dependencies (Relations, Graph); axe is deliberately not a dependency of the repository.
   `e2e/polish.spec.ts` pins the Graph's sizes.
+- **Selected tab.** The selected Dockview tab of each group has the panel background and a 2px accent bar along its top edge (an inset
+  `box-shadow`, so its size does not change), in both themes and whether or not its group has focus (it used to look like its hidden
+  siblings in a group without focus). The Author sub-tabs mark their selected view with a 2px bottom border and bold text, so the two
+  levels never look alike. `e2e/polish.spec.ts` ("the selected workbench tab") reads the computed styles.
 - **Focus.** `dockview-theme.css` draws a 2px accent ring (inside the tab) on a Dockview tab or tab action reached with the keyboard (`:focus-visible`; Dockview's own
   1px divider-colour outline is `!important`, so the Lab's rule is too, and more specific). The Graph's expand/collapse toggles, cluster buttons and member
   cards have a 2px accent outline. Graph **edges** are one Tab stop walked with the arrow keys, with an accent band as
