@@ -1,6 +1,7 @@
 /**
  * Draft 2020-12 JSON Schemas for the onboarding plugins' configs. They are passive authoring metadata
- * (`config.schema`): Core never validates against them, and the Catalog and the Structure editor show them. They state
+ * (handed to the Lab by plugin type as `onboardingConfigSchemas`; Core 0.3 carries no config schema): Core never validates
+ * against them, and the Catalog and the Structure editor show them. They state
  * shape only; the config checkers (`./config.ts`) enforce the rest and report it as located diagnostics:
  * - ids are unique within their list, and `preselected`/`acknowledged` name ids of the same list;
  * - `minimum` is not more than the number of options;
@@ -9,8 +10,8 @@
  * A unit test pins that each schema's top-level `properties` equal the key lists of `./config.ts`.
  */
 
-import type { WidgetConfigJsonSchema } from '@deviltea/widget-core'
-import { WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from '@deviltea/widget-core'
+import type { ConfigJsonSchema, ConfigSchemaMap } from '../../showcase-host'
+import { CONFIG_JSON_SCHEMA_DIALECT } from '../../showcase-host'
 import { ISO_DATE_PATTERN, OPTION_ID_PATTERN, TIME_PATTERN } from './domain'
 
 const I18nTextSchema = {
@@ -18,16 +19,16 @@ const I18nTextSchema = {
 	required: ['en'],
 	additionalProperties: { type: 'string' },
 	description: 'Text per language, such as { "en": "Account", "zh-TW": "帳號" }. "en" is required; a missing language falls back to it. The Preview offers en and zh-TW.',
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 const optionId = {
 	type: 'string',
 	pattern: OPTION_ID_PATTERN.source,
 	description: 'An id: a lowercase letter, then lowercase letters, digits and "-". Unique within its list.',
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const onboardingConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['title'],
@@ -35,10 +36,10 @@ export const onboardingConfigSchema = {
 		title: { ...I18nTextSchema, description: 'The title of the wizard.' },
 		startStep: { type: 'integer', minimum: 0, description: 'The index of the step the wizard opens on, counted from 0. Defaults to 0. Opening on a later step does not make the earlier ones complete: the wizard still lets the visitor go back, and Next and Finish still check the steps.' },
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const accountConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['title'],
@@ -54,10 +55,10 @@ export const accountConfigSchema = {
 			description: 'Values filled in at the start. A viewer can change them.',
 		},
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const interestsConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['title', 'options'],
@@ -80,10 +81,10 @@ export const interestsConfigSchema = {
 		minimum: { type: 'integer', minimum: 0, description: 'How many interests the visitor must pick before the step is complete. Defaults to 1; it cannot be more than the number of options.' },
 		preselected: { type: 'array', uniqueItems: true, items: optionId, description: 'The ids picked at the start; each must be the id of an option.' },
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const safetyConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['title', 'rules'],
@@ -105,10 +106,10 @@ export const safetyConfigSchema = {
 		},
 		acknowledged: { type: 'array', uniqueItems: true, items: optionId, description: 'The ids of the rules acknowledged at the start; each must be the id of a rule.' },
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const inductionConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['title', 'days', 'times'],
@@ -129,4 +130,13 @@ export const inductionConfigSchema = {
 			description: 'The start times offered on each day, written HH:MM.',
 		},
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
+
+/** Plugin type to config schema, for the Lab's Catalog and Structure editor. */
+export const onboardingConfigSchemas = {
+	Onboarding: onboardingConfigSchema,
+	AccountStep: accountConfigSchema,
+	InterestsStep: interestsConfigSchema,
+	SafetyStep: safetyConfigSchema,
+	InductionStep: inductionConfigSchema,
+} as const satisfies ConfigSchemaMap

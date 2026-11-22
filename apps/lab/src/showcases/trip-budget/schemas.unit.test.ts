@@ -2,11 +2,11 @@
  * The config JSON Schemas declare exactly the keys the checkers know, and the enums agree with the domain.
  */
 
-import { WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from '@deviltea/widget-core'
 import { describe, expect, it } from 'vitest'
+import { CONFIG_JSON_SCHEMA_DIALECT } from '../../showcase-host'
 import { CURRENCY_CONFIG_KEYS, EQUAL_SPLIT_KEYS, EXPENSE_CONFIG_KEYS, PERCENT_SPLIT_KEYS, PERSON_CONFIG_KEYS, TRIP_CONFIG_KEYS } from './config'
 import { ROUND_STEPS } from './domain'
-import { currencyConfigSchema, expenseConfigSchema, personConfigSchema, tripConfigSchema } from './schemas'
+import { currencyConfigSchema, expenseConfigSchema, personConfigSchema, tripBudgetConfigSchemas, tripConfigSchema } from './schemas'
 import { tripBudgetSystem } from './system'
 
 describe('trip-budget config schemas', () => {
@@ -19,7 +19,7 @@ describe('trip-budget config schemas', () => {
 
 	it.each(cases)('%s declares exactly the keys its checker accepts, in Draft 2020-12', (_type, schema, keys) => {
 		expect(schema.$schema)
-			.toBe(WIDGET_CONFIG_JSON_SCHEMA_DIALECT)
+			.toBe(CONFIG_JSON_SCHEMA_DIALECT)
 		expect(Object.keys(schema.properties)
 			.sort())
 			.toEqual([...keys].sort())
@@ -39,16 +39,20 @@ describe('trip-budget config schemas', () => {
 			.toEqual([...PERCENT_SPLIT_KEYS].sort())
 	})
 
-	it('reaches the catalog through the system, with a description, for every widget type with a config', () => {
+	it('reaches the Lab through the showcase\'s schema map for every widget type with a config (its documentation: `registry.unit.test.ts`)', () => {
 		const byType = new Map(tripBudgetSystem.catalog.widgets.map(entry => [entry.type, entry]))
 		expect([...byType.keys()])
 			.toEqual(['Trip', 'Currency', 'Person', 'Expense', 'Settlement'])
-		for (const type of ['Trip', 'Currency', 'Person', 'Expense']) {
-			expect(byType.get(type)?.config?.schema, type).not.toBeNull()
-			expect(byType.get(type)?.config?.description.length, type)
-				.toBeGreaterThan(0)
+		for (const [type, schema] of cases) {
+			expect(byType.get(type)?.capabilities.config, type)
+				.toBe(true)
+			expect(tripBudgetConfigSchemas[type], type)
+				.toBe(schema)
 		}
-		expect(byType.get('Settlement')?.config)
-			.toBeNull()
+		expect(byType.get('Settlement')?.capabilities.config)
+			.toBe(false)
+		expect(Object.keys(tripBudgetConfigSchemas))
+			.not
+			.toContain('Settlement')
 	})
 })

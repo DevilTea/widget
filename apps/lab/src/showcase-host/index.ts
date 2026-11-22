@@ -1,3 +1,5 @@
+export type { ConfigJsonSchema, ConfigSchemaMap } from './config-schemas'
+export { CONFIG_JSON_SCHEMA_DIALECT } from './config-schemas'
 /**
  * The showcase host contract: the only module outside its own directory a showcase may import.
  * See `host.ts` and `apps/lab/AGENTS.md` ("Showcase isolation").

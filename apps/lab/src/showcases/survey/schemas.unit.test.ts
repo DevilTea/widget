@@ -1,9 +1,9 @@
+import { describe, expect, it } from 'vitest'
 /**
  * Schema agreement. Part 1: the schemas' shape matches the exported key and operator lists. Part 2 (at the
  * end): every real preset config satisfies its schema, through a small test-only checker.
  */
-import { WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from '@deviltea/widget-core'
-import { describe, expect, it } from 'vitest'
+import { CONFIG_JSON_SCHEMA_DIALECT } from '../../showcase-host'
 import {
 	MULTIPLE_CHOICE_CONFIG_KEYS,
 	NUMERIC_CONFIG_KEYS,
@@ -67,7 +67,7 @@ describe('config schemas', () => {
 
 	it.each(schemas)('%s: declares the 2020-12 dialect and rejects unknown keys', (_type, schema) => {
 		expect(schema.$schema)
-			.toBe(WIDGET_CONFIG_JSON_SCHEMA_DIALECT)
+			.toBe(CONFIG_JSON_SCHEMA_DIALECT)
 		expect(schema.type)
 			.toBe('object')
 		expect(schema.additionalProperties)
