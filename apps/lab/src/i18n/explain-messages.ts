@@ -15,7 +15,11 @@ const zhTWExplainMessages: Readonly<Record<string, string>> = {
 	'Current values come from the running preview, which shows the current document (r{revision}).': '「目前」的值來自執行中的預覽，它顯示的就是目前的 document（r{revision}）。',
 	'None of this widget\'s Properties read another widget: what it shows depends only on its own config and State.': '這個 widget 的 Properties 沒有讀取其他 widget：它呈現的內容只取決於自己的 config 與 State。',
 	'Current values': '目前的值',
-	'Used by / Depends on': '被誰使用／依賴於',
+	'The preview shows an older version of the document, so Inspect opens Runtime instead. Select a widget in the Structure tree to see what it is and why it behaves this way.': '預覽顯示的是較舊版本的 document，所以「檢視」會改開 Runtime。請在「結構」樹中點選 widget，就能看到它是什麼，以及它為什麼會這樣運作。',
+	// Relations' own "Depends on" is 依賴於, which reads as unfinished on its own as a heading; Explain names the widgets.
+	'Used by / Depends on': '被誰使用／依賴的 widget',
+	'Used by these widgets': '使用它的 widget',
+	'Depends on these widgets': '它依賴的 widget',
 	'Open dependency graph': '開啟相依性關係圖',
 	'Declaration details': '宣告細節',
 	'config, slots, members and problems': 'config、slots、members 與問題',

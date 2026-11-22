@@ -25,6 +25,7 @@ import { useSelectedWidgetRuntime } from '../../composables/use-selected-widget-
 import { buildWhySentences } from '../../explain/why'
 import { projectSemanticGraph } from '../../graph/projection'
 import { projectRelations } from '../../graph/relations'
+import { uniqueRemoteNodeIdForIdentity } from '../../lab/focus'
 import { getShowcase } from '../../showcases/registry'
 import BlueprintNodeDetails from '../blueprint/BlueprintNodeDetails.vue'
 import ExplainIdentity from '../explain/ExplainIdentity.vue'
@@ -82,9 +83,8 @@ const live = computed<ExplainLiveSource | null>(() => {
 	return {
 		client: current.inspectorClient,
 		runtimeId: current.runtimeId,
-		previewNodeIdOf: (widgetId, widgetType) => snapshot.nodes.find(candidate => candidate.resolved
-			&& candidate.widgetId === widgetId
-			&& candidate.widgetType === widgetType)?.nodeId ?? null,
+		// Only an unambiguous widget (the focus store's rule): with a duplicate id+type no live value is shown.
+		previewNodeIdOf: (widgetId, widgetType) => uniqueRemoteNodeIdForIdentity(snapshot, widgetId, widgetType),
 	}
 })
 
@@ -124,8 +124,14 @@ function select(nodeId: InspectionNodeId): void {
 			<h3 class="m-0 mb-1 text-sm font-semibold">
 				{{ i18n.t('Nothing selected yet') }}
 			</h3>
-			<p class="m-0">
-				{{ i18n.t('Click a widget in the Preview (Inspect) or in the Structure tree to see what it is and why it behaves this way.') }}
+			<!-- While diverged, Inspect opens Runtime (the Preview's own revision), so only the Structure tree selects here. -->
+			<p
+				class="m-0"
+				data-testid="explain-empty-hint"
+			>
+				{{ store.revisionStatus.value.isDiverged
+					? i18n.t('The preview shows an older version of the document, so Inspect opens Runtime instead. Select a widget in the Structure tree to see what it is and why it behaves this way.')
+					: i18n.t('Click a widget in the Preview (Inspect) or in the Structure tree to see what it is and why it behaves this way.') }}
 			</p>
 		</div>
 
@@ -198,7 +204,6 @@ function select(nodeId: InspectionNodeId): void {
 				<p
 					v-else
 					data-testid="explain-values-message"
-					role="status"
 					class="m-0 text-xs text-muted"
 				>
 					{{ runtimeMessage }}

@@ -108,6 +108,23 @@ function remoteIdentity(snapshot: InspectorBlueprintSnapshot, nodeId: number): W
 		: null
 }
 
+/**
+ * The Preview node of the one resolved widget with this id and type, `null` when there is none or the identity is ambiguous
+ * (duplicate ids): the same uniqueness rule as `uniqueDocumentNodeForIdentity`, for code that reads another widget's live
+ * values by identity (the Explain tab), where the wrong instance would show the wrong value.
+ */
+export function uniqueRemoteNodeIdForIdentity(snapshot: InspectorBlueprintSnapshot, widgetId: string, widgetType: string): number | null {
+	let found: number | null = null
+	for (const node of snapshot.nodes) {
+		if (node.resolved && node.widgetId === widgetId && node.widgetType === widgetType) {
+			if (found !== null)
+				return null
+			found = node.nodeId
+		}
+	}
+	return found
+}
+
 function remoteNodeForIdentity(snapshot: InspectorBlueprintSnapshot, identity: WidgetIdentity): InspectorBlueprintNode | null {
 	return snapshot.nodes.find(node => node.resolved
 		&& node.widgetId === identity.widgetId

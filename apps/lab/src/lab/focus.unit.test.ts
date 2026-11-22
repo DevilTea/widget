@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
 import { sandboxSystem } from '../sandbox/system'
 import { replaceConfigScalar } from './author'
-import { createInspectorFocusStore } from './focus'
+import { createInspectorFocusStore, uniqueRemoteNodeIdForIdentity } from './focus'
 import { LabSession } from './session'
 
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText
@@ -25,6 +25,25 @@ function remoteSnapshotOf(session: LabSession, runtimeId = 'runtime-test'): Insp
 		invalidCycles: [],
 	}
 }
+
+describe('uniqueRemoteNodeIdForIdentity', () => {
+	const node = (nodeId: number, widgetId: string, widgetType: string, resolved = true) => ({ nodeId, resolved, ...(resolved ? { widgetId, widgetType } : {}), sourceSlots: [], diagnostics: [] })
+	const snapshot = (nodes: ReturnType<typeof node>[]): InspectorBlueprintSnapshot => ({ runtimeId: 'r', rootNodeId: 0, nodes, invalidCycles: [] }) as unknown as InspectorBlueprintSnapshot
+
+	it('finds the one resolved widget with this id and type', () => {
+		expect(uniqueRemoteNodeIdForIdentity(snapshot([node(0, 'root', 'Stack'), node(1, 'mode', 'SingleChoice'), node(2, 'mode', 'Text')]), 'mode', 'SingleChoice'))
+			.toBe(1)
+	})
+
+	it('is null when there is none, or when the identity is ambiguous (a duplicate id and type)', () => {
+		expect(uniqueRemoteNodeIdForIdentity(snapshot([node(0, 'root', 'Stack')]), 'mode', 'SingleChoice'))
+			.toBeNull()
+		expect(uniqueRemoteNodeIdForIdentity(snapshot([node(1, 'mode', 'SingleChoice'), node(2, 'mode', 'SingleChoice')]), 'mode', 'SingleChoice'))
+			.toBeNull()
+		expect(uniqueRemoteNodeIdForIdentity(snapshot([node(1, 'mode', 'SingleChoice', false)]), 'mode', 'SingleChoice'))
+			.toBeNull()
+	})
+})
 
 describe('createInspectorFocusStore', () => {
 	it('synchronizes Document and Preview focus only while their revisions are linked', () => {

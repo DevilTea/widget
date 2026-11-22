@@ -946,7 +946,7 @@ holds the same `getSnapshot()`/`subscribe()`-only discipline.
 
 ## Dependencies inspector
 
-The canonical readonly `Dependencies` Dockview panel owns two presentation views over the same current Document Blueprint facts. `Relations` (a focus-centric dependency inspector, readable at the default tool width) is the default view since issue #230 PR 3b; `Graph` is the opt-in topology view. Switching views is presentation-only: it preserves shared Document focus and never mutates semantic state. The active view is shared per store (`use-dependencies-view.ts`) so the Explain tab's "Open dependency graph" can switch it.
+The canonical readonly `Dependencies` Dockview panel owns two presentation views over the same current Document Blueprint facts. `Relations` (a focus-centric dependency inspector, readable at the default tool width) is the default view since issue #230 PR 3b; `Graph` is the opt-in topology view. Switching views is presentation-only: it preserves shared Document focus and never mutates semantic state. The active view is shared per store (`use-dependencies-view.ts`) so the Explain tab's "Open dependency graph" can switch it (and focus the Graph tab); "Reset layout" returns it to Relations.
 
 `src/graph/` implements the authoritative Lab-side dependency projections. The Graph view continues to use this pipeline:
 
@@ -1475,7 +1475,8 @@ one widget for a newcomer, in its final shape (the design's phase 3 keeps it; th
 or removes them). It explains only a widget someone **chose**: `InspectorFocusStore.isDocumentFocusChosen()` (`LabStore.documentFocusChosen`)
 is true after a `setFocus` call or a linked Inspect selection, and false for the root the focus starts at and falls back to when a commit drops
 the selected widget, so Explain never explains the root by default and shows one card instead ("Click a widget in the Preview (Inspect) or in the
-Structure tree..."). Top to bottom, each part its own component in `components/explain/` so phase 3 can show Selected widget, Blueprint and
+Structure tree..."; while the revisions diverge Inspect opens Runtime, so the card says the preview shows an older version and points to the
+Structure tree only). Top to bottom, each part its own component in `components/explain/` so phase 3 can show Selected widget, Blueprint and
 Runtime details through the same pieces:
 1. **Identity** (`ExplainIdentity.vue`): `#id` and the type, and the plugin's generated summary (`pluginDocsOf(docs, type).summary`, line wraps
    joined), whose Markdown code spans `DocProse.vue` draws as `<code>` instead of raw backticks. There is no generic "label" for a widget (a label
@@ -1484,21 +1485,30 @@ Runtime details through the same pieces:
    the widget, other widget, operation) from the Blueprint inspection: "options reads #mode's value (now: no value)", "amountBase calls
    #currency's convert". Dependencies on the widget itself, Methods (they are not why it shows something) and absent/invalid references are left
    out. The "now" values are live: each State or Property read is an `ExplainLiveValue.vue` subscribed through `useRemoteRuntimeMember` to the
-   other widget's member in the Preview (the widget is found by id and type in the linked Preview snapshot), so a Property shows "not evaluated yet"
+   other widget's member in the Preview (the widget is found by id and type in the linked Preview snapshot, and only when that identity is unique,
+   `uniqueRemoteNodeIdForIdentity` in `lab/focus.ts`, the focus store's rule: a duplicate id shows no value), so a Property shows "not evaluated yet"
    until the Preview evaluated it, `null` reads "no value" (generic wording: the design's "not answered" is survey vocabulary), and a failed one
    "failed". Core does not say which config field produced a dependency, so the **config field is an inference**: a string value of the authored
    config equal to the other widget's id names it; a dependency path that starts with a top-level config key (`["rules", "guests"]`) limits the search
    to that field, and keys another Property's dependency on the same widget claims that way are skipped (so `sessions.options` does not borrow
-   `rules`). The field shown is the top-level key, or, inside a list of objects, the item's key (`options[1].enabledWhen.question` -> `enabledWhen`),
+   `rules`). Outside such a field a matching value counts only when the generated schema marks it as a widget reference, the sentence
+   `widgetDocs()` writes for `@widgetRef` ("Must be the id of a widget of type A | B in the same document.", `widgetRefTypesOf`), preferring one
+   that names the other widget's type; otherwise no field is shown, so a string that only equals the id (`{ inputType: "email" }` beside a widget
+   `email`) is never taken for a reference. The survey's condition `question` carries `@widgetRef` for this (the four question types; `Numeric` for
+   `greaterThan`/`lessThan`, `MultipleChoice` for `includes`/`excludes`). The field shown is the top-level key, or, inside a list of objects, the item's key (`options[1].enabledWhen.question` -> `enabledWhen`),
    with its description from the generated config schema (`describeField`, the Structure editor's reader). A plugin that finds its widgets through its
-   slots (the trip's chain, quote-rules, onboarding) gets no field, which is the honest answer; the sandbox has no schemas, so a field is named without
-   a description. A widget whose Properties read no other widget says so.
+   slots (the trip's chain, quote-rules, onboarding) gets no field, which is the honest answer; so does the sandbox, which has no schemas. A widget
+   whose Properties read no other widget says so. The lists are `<ul role="list">` (Tailwind's `list-none` removes the list semantics in Safari), and
+   the widget buttons show `#id` with the accessible name "Select widget #id" (選取 widget #id).
 3. **Current values**: `RuntimeNodeDetails` (`embedded`, `hideMethods`), the same rows as Selected widget, only while `runtimeState` is `ready`;
    otherwise the shared message.
 4. **Used by / Depends on** (`ExplainRelations.vue`): the widget-focus `projectRelations()` model, one entry per other widget with its member pairs
    ("visible reads value"); a resolved widget is a button that sets the shared Document focus. "Open dependency graph" calls
-   `useDependenciesView().openGraph()`, which switches the Dependencies panel to Graph and activates its tab (the view is shared per store for this; it
-   used to be panel-local, and stays presentation-only).
+   `useDependenciesView().openGraph()`, which switches the Dependencies panel to Graph, activates its tab and moves keyboard focus to the Graph view
+   tab (the panel's own focus target for a view switch), so focus never falls back to the page. The view is shared per store for this (it used to be
+   panel-local) and stays presentation-only; "Reset layout" puts it back to Relations (`reset()`, called by `Workbench.vue`), as the rebuilt panel
+   did when it owned the view. The zh-TW headings are 被誰使用／依賴的 widget, 使用它的 widget and 它依賴的 widget: Relations' 依賴於 reads as
+   unfinished as a heading on its own.
 5. **Declaration details**: a collapsed `<details>` with `BlueprintNodeDetails` (`embedded`).
 
 Which version the values come from is one line under "Why it behaves this way" (`explain-values-source`): "Current values come from the running preview,

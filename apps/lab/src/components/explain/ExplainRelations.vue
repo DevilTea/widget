@@ -50,11 +50,12 @@ function external(groups: readonly RelationsWidgetGroup[]): readonly RelationsWi
 				:id="`explain-relations-${direction}`"
 				class="m-0 mb-1 text-[11px] font-semibold uppercase text-muted"
 			>
-				{{ direction === 'usedBy' ? i18n.t('Used by') : i18n.t('Depends on') }}
+				{{ direction === 'usedBy' ? i18n.t('Used by these widgets') : i18n.t('Depends on these widgets') }}
 			</h4>
 			<ul
 				v-if="external(direction === 'usedBy' ? usedBy : dependsOn).length > 0"
 				:aria-labelledby="`explain-relations-${direction}`"
+				role="list"
 				class="m-0 flex list-none flex-col gap-1 p-0 text-xs"
 			>
 				<li
@@ -69,7 +70,7 @@ function external(groups: readonly RelationsWidgetGroup[]): readonly RelationsWi
 						type="button"
 						data-testid="explain-relation-widget"
 						class="min-h-6 cursor-pointer rounded-(--lab-radius) border-0 bg-transparent p-0 font-lab-mono text-xs text-primary underline decoration-dotted underline-offset-2 hover:decoration-solid focus-visible:outline-2 focus-visible:outline-primary"
-						:title="i18n.t('Select widget {id}', { id: group.widgetId })"
+						:aria-label="i18n.t('Select widget {id}', { id: `#${group.widgetId}` })"
 						@click="emit('select', group.nodeId)"
 						v-text="`#${group.widgetId}`"
 					/>

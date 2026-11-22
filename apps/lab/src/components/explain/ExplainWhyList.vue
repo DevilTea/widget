@@ -56,6 +56,7 @@ function valueMember(member: WhyMember): { type: 'state' | 'property', name: str
 
 <template>
 	<ul
+		role="list"
 		class="m-0 flex list-none flex-col gap-1.5 p-0 text-xs leading-5"
 		data-testid="explain-why-list"
 	>
@@ -86,7 +87,7 @@ function valueMember(member: WhyMember): { type: 'state' | 'property', name: str
 						type="button"
 						data-testid="explain-why-target"
 						class="inline min-h-6 cursor-pointer rounded-(--lab-radius) border-0 bg-transparent p-0 font-lab-mono text-xs text-primary underline decoration-dotted underline-offset-2 hover:decoration-solid focus-visible:outline-2 focus-visible:outline-primary"
-						:title="i18n.t('Select widget {id}', { id: sentence.target.widgetId })"
+						:aria-label="i18n.t('Select widget {id}', { id: `#${sentence.target.widgetId}` })"
 						@click="emit('select', sentence.target.nodeId)"
 						v-text="`#${sentence.target.widgetId}`"
 					/>

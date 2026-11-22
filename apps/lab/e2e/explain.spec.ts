@@ -122,7 +122,7 @@ test.describe('explain tab', () => {
 		await expect(usedBy.getByTestId('explain-relation'))
 			.toHaveCount(4)
 		await usedBy.locator('[data-testid="explain-relation"][data-widget="guests"]')
-			.getByRole('button', { name: '#guests' })
+			.getByRole('button', { name: 'Select widget #guests' })
 			.click()
 
 		await expect(identity(page)
@@ -144,14 +144,20 @@ test.describe('explain tab', () => {
 		await explainTab(page)
 			.click()
 		await inspectWidget(page, 'Phone number')
+		// From the keyboard, as a keyboard user would.
 		await page.getByTestId('explain-open-graph')
-			.click()
+			.focus()
+		await page.keyboard.press('Enter')
 
 		await expect(page.getByRole('tab', { name: 'Dependencies', exact: true }))
 			.toHaveAttribute('aria-selected', 'true')
-		await expect(page.getByRole('tablist', { name: 'Dependencies views' })
-			.getByRole('tab', { name: 'Graph' }))
+		const graphTab = page.getByRole('tablist', { name: 'Dependencies views' })
+			.getByRole('tab', { name: 'Graph' })
+		await expect(graphTab)
 			.toHaveAttribute('aria-selected', 'true')
+		// Focus lands on the Graph tab, not on the page.
+		await expect(graphTab)
+			.toBeFocused()
 		await expect(page.locator('.vue-flow__node-cluster')
 			.first())
 			.toBeVisible({ timeout: 15_000 })
@@ -180,6 +186,19 @@ test.describe('explain tab', () => {
 			.toContainText('The preview shows the last valid version (r0)')
 	})
 
+	test('with nothing chosen while the Preview is older, the card points to the Structure tree (Inspect opens Runtime then)', async ({ page }) => {
+		await openLab(page)
+		await loadPreset(page, 'survey-ai-draft')
+		await explainTab(page)
+			.click()
+
+		await expect(page.getByTestId('explain-empty-hint'))
+			.toHaveText('The preview shows an older version of the document, so Inspect opens Runtime instead. Select a widget in the Structure tree to see what it is and why it behaves this way.')
+		await setLocale(page, 'zh-TW')
+		await expect(page.getByTestId('explain-empty-hint'))
+			.toHaveText('預覽顯示的是較舊版本的 document，所以「檢視」會改開 Runtime。請在「結構」樹中點選 widget，就能看到它是什麼，以及它為什麼會這樣運作。')
+	})
+
 	test('speaks Taiwan Chinese', async ({ page }) => {
 		await openLab(page)
 		await setLocale(page, 'zh-TW')
@@ -196,6 +215,11 @@ test.describe('explain tab', () => {
 			.toHaveText('options 讀取 #mode 的 value（目前：沒有值）')
 		await expect(page.getByTestId('explain-open-graph'))
 			.toHaveText('開啟相依性關係圖')
+		await expect(page.getByRole('heading', { name: '它依賴的 widget' }))
+			.toBeVisible()
+		await expect(why(page, 'options', 'mode')
+			.getByRole('button', { name: '選取 widget #mode' }))
+			.toBeVisible()
 		await expect(page.getByTestId('explain-declaration')
 			.locator('summary'))
 			.toContainText('宣告細節')
