@@ -1,8 +1,8 @@
 # widget-lab
 
 Private, never-published Widget Lab application shell for `@deviltea/widget-core` /
-`@deviltea/widget-vue` / `@deviltea/widget-inspector`: a workbench with a live JSON Source editor, an
-explicit Apply lifecycle, a persistent Preview (an isolated iframe realm that owns the Runtime), an Explain tab that
+`@deviltea/widget-vue` / `@deviltea/widget-inspector`: a workbench whose edits (Structure, or a live JSON Source editor)
+are committed as they are made, with Undo, a persistent Preview (an isolated iframe realm that owns the Runtime), an Explain tab that
 says what the selected widget is and why it behaves this way (its reads of other widgets with their live values), and
 readonly Blueprint/Runtime/Dependency Graph inspectors.
 
@@ -169,21 +169,25 @@ showcase host contract (it reads the host's locale and light/dark theme and the 
 
 ## Header, editing feedback and Undo
 
-The header is one row from 1280px up: the **Examples** menu (showcase and preset; it always names the showcase and the
-last loaded preset, or "edited" once the document changes), two plain-language status chips (the document is *Valid* or
-has *N problems*, a button that shows them in the open Author view; the preview is *up to date* or *shows the last valid version*, with
-revisions and linkage in an info popover, which also holds the JSON draft, Source JSON compatibility, Blueprint status and recovery facts;
-while the JSON draft has unapplied edits a third chip says *Unapplied changes* and the preview chip *shows the last applied version*),
-the edit actions **Apply / Revert / Undo / Format**, and an overflow menu with Tutorial, Theme, **Lab language**, **Reset layout** and a
-Developer submenu (Implementation, Document Tools).
+Every edit is committed to the Document when it is made, and **Undo** takes it back; there is no Apply or Revert (Lab UX phase 3).
 
-- **Apply** is also Cmd/Ctrl+Enter, inside the Monaco editor and from any focused tab; its tooltip shows the keys.
-- **Revert** discards the unapplied editor draft. **Undo** ("Undo last change") restores the previous source as a
-  *new* Document revision (through the same commit path as Apply, up to 20 steps back); it is unavailable while an
-  unapplied draft exists, and a tooltip says why for every disabled action.
-- Loading a preset or switching showcase over an unapplied draft asks first (Keep editing / Discard changes).
+The header is one row from 1280px up: the **Examples** menu (showcase and preset; it always names the showcase and the
+last loaded preset, or "edited" once the document changes), **one plain-language status chip** (*Up to date*, *N problems · Preview
+shows the last working version* — a button that shows them in the open Author view —, *JSON syntax error — not applied*, *Preview
+unavailable*, and for a moment after a change that restarted the preview *Preview restarted*), with revisions, linkage, the JSON
+text's state, Source JSON compatibility, Blueprint status and recovery facts in an info popover; the edit actions (**Undo**, and
+**Discard JSON changes** only while the JSON does not parse); and an overflow menu with Tutorial, Theme, **Lab language**, **Reset
+layout** and a Developer submenu (Implementation, Document Tools).
+
+- **The JSON view** commits its text when it parses: when you stop typing for about 750 ms, and at once when you leave the editor
+  (or press Cmd/Ctrl+Enter in it). All the commits of one visit to the editor are one Undo step. Text that does not parse is never
+  committed: it is marked in the editor, the status chip says so, Structure waits, and **Discard JSON changes** brings the document
+  back. **Format** is in the JSON view's toolbar.
+- **Undo** ("Undo last change") restores the previous source as a *new* Document revision (through the same commit path, up to 20
+  steps back); it is unavailable while the JSON does not parse, and its tooltip says why.
+- Loading a preset or switching showcase while the JSON does not parse asks first (Keep editing / Discard changes).
 - Switching showcase away from an edited document (one that equals none of the showcase's presets) asks first too, because Undo
-  cannot bring it back; with an unapplied draft as well, one dialog names both. Loading a preset or starting the tutorial over an
+  cannot bring it back; with JSON that does not parse as well, one dialog names both. Loading a preset or starting the tutorial over an
   edited document does not ask: it can be undone, and a notice above the preview says "Loaded “…”. Undo to get your edits back."
   with an **Undo** button.
 - After a change that leaves problems, the Author JSON view lists them under the editor (Core's code and message verbatim,
@@ -196,11 +200,12 @@ Developer submenu (Implementation, Document Tools).
 
 - **Author > Structure** edits the selected widget's config with controls that follow the plugin's config JSON Schema: a switch for a boolean, a
   number box (Core checks the limits), a list for an enum, a text box for a string, and Add / Remove for optional fields and list items where the schema allows
-  them. Author opens on Structure. Every change goes through the same Document commit as Apply (Undo, the status chips and Problems keep working). While
-  the JSON view has an unapplied draft, Structure says so above the fields and locks them until the draft is applied or discarded. Without a schema, values
+  them. Author opens on Structure. A switch or a list commits at once; a text or number box commits on Enter or when you leave it, and Esc puts the
+  document's value back. Every change goes through the same Document commit (Undo, the status chip and Problems keep working). While the JSON view has
+  a syntax error, Structure says so above the fields and locks them until the JSON parses or is discarded. Without a schema, values
   are typed by what they hold and anything else is edited as JSON.
 - Problems lists the several diagnostics Core reports for one evaluation cycle as one entry that expands to Core's own diagnostics.
-- If the Preview frame cannot load, the Preview pane says so with the cause and a **Try again** button, and the header chip reads "Preview failed to load".
+- If the Preview frame cannot load, the Preview pane says so with the cause and a **Try again** button, and the header chip reads "Preview unavailable".
 - Graph: an always-visible key explains the badges, the line styles and the direction of an edge, edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph. Cards are spread out, edges are Bezier curves that pass between the cards, and every edge ends in an arrowhead on the member it depends on (`A → B` means A depends on B: the Relations view lists B under "Depends on" for A and A under "Used by" for B). While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it), every other edge fades, and a tag with no room is left out (Relations has the full list).
 
 ## Layout, the Selected widget pane and the tutorial rail
