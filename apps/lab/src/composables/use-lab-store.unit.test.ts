@@ -874,19 +874,86 @@ describe('createLabStore() header and feedback state', () => {
 		store.dispose()
 	})
 
-	it('showProblems() opens Author > JSON and flags the Problems list for focus', () => {
+	it('showProblems() activates Author, stays in the open view (Structure from the Catalog) and flags the problems for focus', () => {
 		const store = createSandboxStore()
-		store.activeTab.value = 'runtime'
-		store.authorView.value = 'catalog'
+		for (const [from, to] of [['catalog', 'structure'], ['structure', 'structure'], ['json', 'json']] as const) {
+			store.activeTab.value = 'runtime'
+			store.authorView.value = from
+			store.problemsFocusPending.value = false
 
-		store.showProblems()
+			store.showProblems()
 
-		expect(store.activeTab.value)
-			.toBe('author')
-		expect(store.authorView.value)
-			.toBe('json')
-		expect(store.problemsFocusPending.value)
+			expect(store.activeTab.value)
+				.toBe('author')
+			expect(store.authorView.value, `from ${from}`)
+				.toBe(to)
+			expect(store.problemsFocusPending.value)
+				.toBe(true)
+		}
+		store.dispose()
+	})
+})
+
+describe('createLabStore() committed edits and the replaced-document notice (Lab UX phase 2)', () => {
+	it('has committed edits only while the applied source equals no preset of the showcase', async () => {
+		const store = createLabStore(getShowcase('survey')!)
+		expect(store.hasCommittedEdits.value)
+			.toBe(false)
+		await store.applyPreset('survey-ai-draft')
+		expect(store.hasCommittedEdits.value)
+			.toBe(false)
+
+		store.setDraftSourceText(store.documentState.value.sourceText.replace('How will you join?', 'Where will you be?'))
+		// The draft alone is not a committed edit.
+		expect(store.hasCommittedEdits.value)
+			.toBe(false)
+		await store.apply()
+		expect(store.hasCommittedEdits.value)
 			.toBe(true)
+
+		await store.undoLastApply()
+		expect(store.hasCommittedEdits.value)
+			.toBe(false)
+		store.dispose()
+	})
+
+	it('offers Undo after a preset load replaced committed edits, until Undo, a later commit or a showcase switch', async () => {
+		const store = createLabStore(getShowcase('survey')!)
+		// Nothing edited: reloading a preset replaces nothing worth a notice.
+		await store.applyPreset('survey-ai-draft')
+		expect(store.replacedNotice.value)
+			.toBeNull()
+
+		const edited = store.documentState.value.sourceText.replace('How will you join?', 'Where will you be?')
+		store.setDraftSourceText(edited)
+		await store.apply()
+		await store.applyPreset('survey-default')
+		expect(store.replacedNotice.value)
+			.toEqual({ subject: 'Default — open day sign-up', revision: store.documentState.value.revision })
+		expect(store.replacedNoticeVisible.value)
+			.toBe(true)
+
+		// Undo brings the edits back and ends the notice.
+		await store.undoLastApply()
+		expect(store.documentState.value.sourceText)
+			.toBe(edited)
+		expect(store.replacedNoticeVisible.value)
+			.toBe(false)
+
+		await store.applyPreset('survey-default')
+		expect(store.replacedNoticeVisible.value)
+			.toBe(true)
+		store.dismissReplacedNotice()
+		expect(store.replacedNoticeVisible.value)
+			.toBe(false)
+
+		await store.undoLastApply()
+		await store.applyPreset('survey-default')
+		expect(store.replacedNoticeVisible.value)
+			.toBe(true)
+		await store.switchShowcase('trip-budget')
+		expect(store.replacedNotice.value)
+			.toBeNull()
 		store.dispose()
 	})
 })

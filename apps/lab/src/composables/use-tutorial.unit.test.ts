@@ -190,3 +190,140 @@ describe('createTutorialStore() Preview recheck ordering', () => {
 		store.dispose()
 	})
 })
+describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)', () => {
+	/** Commits an edit of the survey's mode label, so the Document equals no preset. */
+	async function commitEdit(store: ReturnType<typeof createLabStore>): Promise<string> {
+		const edited = store.documentState.value.sourceText.replace('How will you join?', 'Where will you be?')
+		store.setDraftSourceText(edited)
+		await store.apply()
+		return edited
+	}
+
+	it('starting on the tour\'s own showcase over committed edits asks nothing and offers Undo afterwards', async () => {
+		const store = createLabStore(getShowcase('survey')!)
+		const edited = await commitEdit(store)
+		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+
+		tutorial.requestStart()
+		expect(tutorial.confirmVisible.value)
+			.toBe(false)
+		await flush()
+		expect(tutorial.snapshot.value.status)
+			.toBe('active')
+		expect(store.hasCommittedEdits.value)
+			.toBe(false)
+		expect(store.replacedNoticeVisible.value)
+			.toBe(true)
+		expect(store.replacedNotice.value?.subject)
+			.toBe('Default — open day sign-up')
+
+		await store.undoLastApply()
+		expect(store.documentState.value.sourceText)
+			.toBe(edited)
+		store.dispose()
+	})
+
+	it('starting from a showcase without a tour over committed edits asks first, naming that Undo cannot bring them back', async () => {
+		const store = createLabStore(getShowcase('sandbox')!)
+		store.setDraftSourceText('{ "id": "root", "type": "Text", "config": { "text": "mine" } }\n')
+		await store.apply()
+		const switchShowcase = vi.fn(async () => {})
+		store.switchShowcase = switchShowcase
+		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+
+		tutorial.requestStart()
+		expect(tutorial.confirmVisible.value)
+			.toBe(true)
+		expect(tutorial.confirmMessage.value)
+			.toBe('Starting the tutorial opens its teaching example in another showcase. Your edits to this document will be discarded, and Undo cannot bring them back.')
+		expect(switchShowcase).not.toHaveBeenCalled()
+
+		tutorial.cancelStart()
+		expect(tutorial.confirmMessage.value)
+			.toBe('Starting the tutorial will load the Survey teaching example and replace your unapplied changes.')
+
+		// With an unapplied draft as well, one message names both.
+		store.setDraftSourceText('{ "unapplied": true }')
+		tutorial.requestStart()
+		expect(tutorial.confirmMessage.value)
+			.toBe('Starting the tutorial opens its teaching example in another showcase. The JSON editor\'s unapplied changes and your edits to this document will be discarded, and Undo cannot bring them back.')
+		tutorial.cancelStart()
+		store.dispose()
+	})
+
+	it('puts the user back on the tool group\'s tab and the Author view they had when the tour ends with Finish or is skipped', async () => {
+		const store = createLabStore(getShowcase('survey')!)
+		// `Workbench.vue` keeps `toolGroupTab` from Dockview; `activeTab` is the Preview, the group the user touched last.
+		store.toolGroupTab.value = 'events'
+		store.activeTab.value = 'preview'
+		store.authorView.value = 'json'
+		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+		tutorial.requestStart()
+		await flush()
+		// A step moves the user around.
+		store.activeTab.value = 'author'
+		store.authorView.value = 'structure'
+
+		tutorial.skip()
+		expect(store.activeTab.value)
+			.toBe('events')
+		expect(store.authorView.value)
+			.toBe('json')
+
+		// Pausing keeps the tour's place; a later end still restores what the user had before the tour.
+		store.toolGroupTab.value = 'runtime'
+		tutorial.requestStart()
+		await flush()
+		store.activeTab.value = 'blueprint'
+		store.toolGroupTab.value = 'blueprint'
+		tutorial.pause()
+		expect(store.activeTab.value)
+			.toBe('blueprint')
+		tutorial.requestResume()
+		tutorial.skip()
+		expect(store.activeTab.value)
+			.toBe('runtime')
+
+		// A fresh start records the place again: the user moved since the last tour.
+		store.toolGroupTab.value = 'dependencies'
+		tutorial.requestStart()
+		await flush()
+		store.activeTab.value = 'author'
+		tutorial.skip()
+		expect(store.activeTab.value)
+			.toBe('dependencies')
+
+		// A non-canonical panel in the tool group (Implementation) records no tab: nothing is activated on the way back.
+		store.toolGroupTab.value = null
+		tutorial.requestStart()
+		await flush()
+		store.activeTab.value = 'blueprint'
+		tutorial.skip()
+		expect(store.activeTab.value)
+			.toBe('blueprint')
+		store.dispose()
+	})
+
+	it('forgets the place when the tour could not start (the reload failed)', async () => {
+		const store = createLabStore(getShowcase('survey')!)
+		store.applyPreset = vi.fn(async () => {
+			throw new Error('reload failed')
+		})
+		const unhandled = vi.fn()
+		process.on('unhandledRejection', unhandled)
+		store.toolGroupTab.value = 'events'
+		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+		tutorial.requestStart()
+		await flush()
+		await flush()
+		process.off('unhandledRejection', unhandled)
+		expect(tutorial.snapshot.value.status)
+			.toBe('idle')
+		// Nothing to give back: a later skip leaves the user where they are.
+		store.activeTab.value = 'blueprint'
+		tutorial.skip()
+		expect(store.activeTab.value)
+			.toBe('blueprint')
+		store.dispose()
+	})
+})

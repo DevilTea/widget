@@ -647,7 +647,7 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
   map through `defineAsyncComponent(() => import('./panels/ImplementationPanel.vue'))`, and the panel
   itself is only ever added to Dockview (`api.addPanel({ id: 'implementation', ... })`) the first time
   `ImplementationExplorerStore.open()` is called — from Preview's "View implementation" button,
-  Blueprint's selected-node detail, or the Survey tour's step 8 link — never at `onReady()` time the way
+  Blueprint's selected-node detail, or the Survey tour's map-of-the-views link (step 2) — never at `onReady()` time the way
   the seven canonical panels are. Verified by loading the built app fresh and driving each of those three
   entry points: no request for `ImplementationPanel-*.js` (which statically bundles
   `src/implementation/shiki-highlighter.ts` — `@shikijs/core`, `@shikijs/engine-javascript`, and the
@@ -1224,6 +1224,13 @@ remove, and anything else is edited as its JSON text (Set value / Cmd or Ctrl+En
 on Enter or **Set value**, and a refusal (not a number: `abc`, `0x10`, `Infinity`) is shown at the field and sends nothing. A config that is not an object (a string,
 a list, a number) has no keys: it is edited whole, as JSON, and replacing it is the empty-path edit.
 
+**Narrow panes (Lab UX phase 2, report item 15).** With the tutorial rail open at 1280px the Author panel is about 480px wide, and the
+fields were squeezed to about 18px with Set value over the remove button. The tree column is `clamp(9rem, 32%, 220px)`; every
+`ConfigFieldEditor` is a container (`@container`), and below 20rem of its own width a leaf's label goes on its own line above the control
+(`@max-xs:w-full`); boxes keep at least 120px (`min-w-30`), and the box row and the add rows wrap (Set value goes below the box) instead of
+overlapping. `e2e/structure-narrow.spec.ts` checks at 1280x800 with the rail open that every box is at least 120px wide, that no two
+controls overlap and that nothing scrolls sideways.
+
 The controls are never `disabled` while a command runs (a disabled control hands keyboard focus to the body at every commit); they carry `aria-disabled`
 and stop reporting edits. `AuthorStructureView.vue` then keeps keyboard focus in the editor: focus that is still on a control stays, a new field or item takes it,
 a removed one hands it to the control that took its place. It only ever moves focus that is on nothing (the body) or still inside the editor: focus the user moved to another
@@ -1312,9 +1319,10 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
 - *Examples menu* (`UDropdownMenu`): a Showcase group and the current showcase's Preset group (checkbox items, the
   current one checked). The trigger always names the showcase and the last loaded preset
   (`LabStore.loadedPresetId`: the showcase default on entry, then the last preset loaded), or "edited": `deriveExampleState()`
-  names the loaded preset only while there is no unapplied draft and the applied source text equals that preset's text (or
-  another preset of the showcase it exactly equals, so Undo back to the default names the default again), otherwise
-  `edited`. `data-showcase-id`, `data-preset-id` and `data-example-kind` are the machine-readable hooks.
+  names the loaded preset only while there is no unapplied draft and the applied source is the same document as that preset (or
+  another preset of the showcase it equals, so Undo back to the default names the default again), otherwise `edited`. "The same
+  document" compares JSON values (`lab/json-equal.ts` `sameJsonDocument()`: whitespace and object key order do not count, array order
+  does; text that does not parse is compared as text), since Lab UX phase 2, so Format + Apply on an untouched preset still names it. `data-showcase-id`, `data-preset-id` and `data-example-kind` are the machine-readable hooks.
 - *Status chips* (`deriveLabStatus()`): validity (`data-state` `valid` | `problems`, `data-problem-count`;
   "Valid" / "N problems"; a JSON syntax error of the last Apply counts as one problem, since no Document was committed
   from that text) and preview (`data-state` `current` | `stale` | `unavailable`: "Preview up to date" / "Preview shows the
@@ -1326,8 +1334,8 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   (`data-behind-draft="true"`; `data-state` stays `current`), so nothing claims the Preview shows what the user is typing. The chips
   are not live regions (no `role="status"`): nothing is announced when they change, on purpose for now, since a later phase replaces
   them with one status chip and handles announcements there. With problems, the validity chip is a **button** (`UButton`, same test id and data
-  attributes) that runs `store.showProblems()`; its accessible name is "N problems: show them in the JSON view" (the visible text is
-  part of it). `e2e/header-feedback.spec.ts` pins the draft chip, the one-row header with it at 1280px (en and zh-TW, and zh-TW with the
+  attributes) that runs `store.showProblems()`; its accessible name is "N problems: show them" (the visible text is
+  part of it; it said "... in the JSON view" until Lab UX phase 2, when "Show problems" started staying in the open Author view). `e2e/header-feedback.spec.ts` pins the draft chip, the one-row header with it at 1280px (en and zh-TW, and zh-TW with the
   problems button, the draft chip and the stale Preview label all shown) and the button.
 - *Edit actions*: a disabled action keeps `aria-disabled="true"` instead of `disabled` so it stays focusable and its tooltip
   can say why (nothing to apply / revert / undo, or "apply or revert your unapplied edits before undoing"); the click
@@ -1352,10 +1360,28 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   Monaco, onto the other header menu; tracked with `onInteractOutside`, as Reka's own handler does for non-modal menus) focus is left
   where the user put it: refocusing the trigger there swallowed typing and closed the menu that click had just opened. A chosen item's
   action runs in both cases. e2e (`menu focus handling`) pins both, and the menu helpers click a menu path once, with no retry.
+- *Committed-edit protection* (Lab UX phase 2, report item 10). **"The document differs from what was loaded"** means: the committed
+  Document's applied source is the same document as no preset of the open showcase, compared as JSON values (`hasCommittedEdits()` in
+  `lab/draft-guard.ts`, `LabStore.hasCommittedEdits`; the same rule that makes the Examples menu say "edited", without the draft). A
+  document that equals a preset again, for example after Undo, has nothing a preset load could not bring back; revision numbers are not
+  used because they only grow. What happens then depends on whether the replacement can be undone (`replacementLoss()`):
+  - A **showcase switch** starts a new session with an empty Undo stack, so it asks first: the same `DraftGuardDialog` with "Discard your
+    edits?" and "You edited this document. Opening “…” replaces it, and Undo cannot bring your edits back." (Keep editing / Discard
+    changes are the Cancel / Continue of the dialog pattern). With an unapplied draft as well, **one** dialog names both
+    ("Discard your changes?", `data-loss="draft-and-edits"` on the body; `draft` and `edits` otherwise).
+  - A **preset load** (the Examples menu) and a **tutorial start** on the tour's own showcase are ordinary commits that Undo takes back, so
+    committed edits alone do not ask (a draft still does). `LabStore.applyPreset()` records, before the load, whether it replaces committed
+    edits, and after a load that advanced the revision sets `replacedNotice` (`{ subject: preset label, revision }`). `ReplacedDocumentNotice.vue`,
+    above the Preview next to the stale-preview notice, then says "Loaded “<preset>”. Undo to get your edits back." with **Undo** (the header's
+    Undo, `aria-disabled` while it is unavailable, and then described by a short line saying why, in the header tooltip's words: an unapplied
+    JSON draft, a command running) and **Dismiss notice**. It is inline and has no timer; it applies only while the Document is still at
+    that revision (`replacedNoticeVisible`), so Undo or any later commit ends it, and a showcase switch clears it. Its wrapper is a real `role="status"`
+    element (not `display: contents`) that stays in the page, so the message is announced. `e2e/committed-edit-protection.spec.ts` pins every case.
 - `LabStore.authorView` (Catalog / Structure / JSON) starts on **Structure** (Lab UX phase 1; it was JSON) and then keeps what the user
   chose, also across showcase switches; it is not saved across reloads. Specs that need Monaco or the Problems list open it with
   `openAuthorJson()` (`e2e/fixtures.ts`). It lives in the store, not in `AuthorPanel`, so other surfaces can
-  open the JSON view; `showProblems()` sets `activeTab`, `authorView` and `problemsFocusPending`. `Workbench.vue` now also feeds
+  open the JSON view; `showProblems()` activates Author and sets `problemsFocusPending`, and since Lab UX phase 2 stays in the open
+  Author view (from the Catalog it opens Structure); the mounted view consumes the flag (see "Problems in Structure"). `Workbench.vue` now also feeds
   Dockview's active panel back into `activeTab` (and never re-activates the panel already active, which moves DOM focus out of
   Monaco), so asking for a tab that is "already" `activeTab` in the store but no longer on screen still switches.
 - The tutorial rail is a docked column: a 320px flex item beside `Workbench` in `.lab-body` (below the header), see "Workbench layout
@@ -1395,10 +1421,39 @@ Core's own diagnostics, one `problem-row` each, code, message and location verba
 the summary, `data-problem-count`, the header chip, the editor squiggles and the Blueprint panel's "All diagnostics" view keep Core's count and text
 (a cycle with a single diagnostic is an ordinary row).
 
+### Problems in Structure (Lab UX phase 2, report item 12)
+
+Structure shows the same problems as the JSON view, from the same source (`LabStore.problems`: the committed Document's diagnostics and the
+last Apply's syntax error; no second validation path). `LabProblem.configPath` is the part of a problem's source path inside its widget's
+`config` (`null` when the path does not run through `<node>.config`), and `placeStructureProblems()` splits the list for the selected widget:
+- **at a field**: the selected widget's problems with a `configPath`. `ConfigFieldEditor` gets them all and each field shows the ones it
+  claims (`claimsFieldProblem()`): its own path, or a path under it that no field below renders (inside a value edited as JSON, or a key
+  that is not there, such as a missing required key, which shows at its object). The text is Core's code and message, verbatim, in the
+  field-error style (`text-error`) under the control (`field-problems` / `field-problem`); the control is `aria-invalid` and its
+  `aria-describedby` names the list (and the "Not applied" note when there is one); a group's list is focusable and describes the group.
+- **at the widget header**: its other problems (dependency, structure and member diagnostics, which Core locates at the widget or a member,
+  not at a field), and its config problems when the widget has no config editor here (`node-problems`, focusable).
+- **in a compact list** at the top of the editor (`structure-problems`, "N problems elsewhere in the document"): other widgets' problems,
+  each a button that selects that widget and focuses the problem there, and problems with no widget (a JSON syntax error, a source-level
+  diagnostic), plain rows. The tree keeps its per-widget counts.
+
+"Show problems" (the header's problems button and the stale-preview notice's) in Structure selects the first problem's widget and focuses its
+field's control (or the field's or the header's problem list), or the list's first row for a problem with no widget. In JSON it moves focus to
+the Problems list as before. `lab/problems.unit.test.ts` pins the placement and claiming rules, `ConfigFieldEditor.unit.test.ts` the field markup,
+and `e2e/structure-problems.spec.ts` the browser behaviour (max below min at the field, a dependency diagnostic at the header, the list, "Show
+problems" from Structure, the Catalog and JSON).
+
+**Deferred: precise locations for dependency diagnostics.** The report found that the squiggle and "Go to location" for a broken
+`visibleWhen.question` mark the widget's `"id"` instead of the bad value. Core's dependency diagnostics (`missing-dependency-target` and
+friends) carry the widget, the member and the dependency reference (`dependency.target.widgetId`), but no source path into the config, so the
+Lab has no exact location to point at; finding the value by searching the text for the id would be a guess. It stays widget-level until Core
+reports a path.
+
 ### Stale-preview notice
 
 When the Preview lags the Document the notice above it says why and offers an action: "Your last change has N problems,
-so the preview still shows the last working version." with **Show problems** (`preview-show-problems`, `store.showProblems()`),
+so the preview still shows the last working version." with **Show problems** (`preview-show-problems`, `store.showProblems()`, which stays in
+the open Author view),
 or, if the Document is valid but the Preview has not caught up, a plain "does not show your latest change yet" line without
 the button (a valid Document has no problems to show).
 `data-testid="preview-diverged-status"`; revision numbers appear only in the header's details popover.
@@ -1456,6 +1511,33 @@ Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used b
 (a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
 
 **One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`, `onboarding`, `document-repair`, `renderer-packs`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts`, `i18n/quote-rules-messages.ts`, `i18n/onboarding-messages.ts` and `i18n/document-repair-messages.ts` are the models).
+
+**A tour gives the user's place and work back (Lab UX phase 2, report item 14).** `beginTour()` records the tool group's own tab and the
+Author view, and the tour's **Finish** or **Skip tour** restores both (`restorePlaceBeforeTour()`). The tab is `LabStore.toolGroupTab`, which
+`Workbench.vue` keeps from Dockview (the canonical panel shown in Author's group, `null` for Implementation or Document Tools), never
+`activeTab`: that one is shared by both Dockview groups and is `preview` once the Preview was touched, and activating the Preview's group
+again left its frame blank (the trip tour spec). The place is recorded afresh on every start or restart that begins outside a tour (idle
+or completed), so a user who moved since the last tour gets their new place back; a start while a tour runs or is paused keeps the place
+recorded when it began. A start whose reload fails forgets the place. Pausing keeps the tour's place, and a tour that ends because its
+showcase was left restores nothing (the user chose where to go). A start reloads the tour's
+default preset: on the tour's own showcase that is an ordinary preset commit, so committed edits are not asked about and the store's
+replaced-document notice offers Undo (see "Header, status chips and draft protection"); `decideDeterministicStart()` asks only about an
+unapplied draft, or, when the start switches showcase (from the hidden Sandbox, which has no tour), about committed edits too, with its own
+message (`START_DISCARDS_EDITS_MESSAGE`, or `START_DISCARDS_DRAFT_AND_EDITS_MESSAGE` naming the draft too). `TutorialActions.activateTab(tab, authorView?)` can also open an Author view.
+
+**The Survey tour teaches editing.** `survey-script.ts` has ten steps: the map of the views comes second (Author, Preview, Explain, Selected widget,
+Events, Blueprint, Runtime, Dependencies, Implementation, each a link), and `edit-and-undo` comes after the answer steps (a committed edit
+restarts the Preview, so the answers those steps build on would start over). It opens Author > Structure on `mode` (`data-tutorial-target`
+`author-structure` is the Structure editor pane) and is gated on the **committed Document**, not the Preview: the first stage completes when
+`mode`'s authored `config.label` differs from the default in any language or shape, the second when it is the default again (Undo). The
+survey's language is Runtime State and every commit restarts the Preview in the first language, so a Preview-side gate never completed for
+a visitor who read the survey in 中文 and edited `zh-TW`. `TutorialRuntimeReader.readAuthoredConfig` reads the Document's authored config;
+the parent's reader (`createDocumentReader()`) has it and the frame's does not, so `use-tutorial.ts` walks the stages whose predicate holds
+against the Document first, lets the frame continue from there, walks them again, and also rechecks on every Document revision (an invalid
+commit replaces no Runtime). The spotlight is applied after the render, in the next frame, and again when the Author view changes (the
+Structure pane is a new element after JSON). The map says that
+selecting a widget (Inspect, or the Structure tree) makes Explain show what it is and why it behaves this way; its TODO for phase 3 is
+only to drop the views the IA moves into Tools.
 
 **Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview

@@ -88,7 +88,14 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'The submitted copy kept its values and gained the "Answers changed since you submitted" marker. The submission is a stored State snapshot; the response is a live Property — open "Response — what a backend reads" below the form to see its current values.': '已送出的副本保留原本的值，並出現「Answers changed since you submitted」標記。送出的內容是儲存起來的 State snapshot；response 則是即時的 Property——展開表單下方的「回應——後端讀取的內容」即可看到它目前的值。',
 	'Map the views': '理解各個檢視',
 	'Each of these views is a real navigation shortcut — try one.': '這些檢視都是實際可用的導覽捷徑——選一個試試看。',
-	'Author = the declarative definition and structure you edit · Blueprint = what the applied Author source compiled into · Runtime = live State/Properties/Methods/Diagnostics · Dependencies = declared dependencies · Preview = the Vue presentation · Implementation = the plugin + renderer code behind this widget type.': '編寫 = 你編輯的 declarative definition 與結構 · Blueprint = 已套用的編寫內容 source 編譯後的結果 · Runtime = live State / Properties / Methods / Diagnostics · 相依性 = 已宣告 dependencies · Preview = Vue 呈現層 · Implementation = 這個 widget type 背後的 plugin + renderer 程式碼。',
+	'Author = the definition you edit (Structure, or the JSON) · Preview = the running app · Explain = select a widget (Inspect in the Preview, or the Structure tree) to see what it is and why it behaves this way · Selected widget = its config and live values side by side · Events = what the widgets announced · Blueprint = what the definition compiled into · Runtime = live State, Properties and Methods · Dependencies = which widget reads which · Implementation = the plugin and renderer code behind a widget type.': '編寫 = 你編輯的定義（結構或 JSON）· Preview = 正在執行的應用程式 · 說明 = 選取一個 widget（在 Preview 用「檢視」，或在結構樹中點選），看看它是什麼、為什麼會這樣運作 · 選取的 widget = 並排顯示它的 config 與即時值 · Events = widgets 發出的通知 · Blueprint = 定義編譯後的結果 · Runtime = 即時的 State、Properties 與 Methods · 相依性 = 哪個 widget 讀取哪個 · 實作 = widget type 背後的 plugin 與 renderer 程式碼。',
+	'Change the definition, then undo': '修改定義，再復原',
+	'Try it: in Author > Structure, change a text of the label of "How will you join?" (en or zh-TW), then press Enter. The Preview restarts after each change.': '試試看：在「編寫 > 結構」中修改「How will you join?」label 的其中一個文字（en 或 zh-TW），然後按 Enter。每次變更後 Preview 都會重新開始。',
+	'You changed the definition, not an answer: the change was committed to the Document at once and the Preview was rebuilt from it, so its answers started over and the survey is back in its first language.': '這次改的是定義，不是答案：變更會立刻寫入 Document，Preview 再依它重新建立，所以原本填的答案都重來了，問題也回到第一個語言。',
+	'Now press Undo in the header.': '現在按頁首的「復原上一步」。',
+	'The label is back. Undo restores the previous version of the definition, whether the change came from Structure, the JSON view or a preset.': 'label 回來了。「復原上一步」會還原定義的上一個版本，不論變更來自結構、JSON 檢視或預設範例。',
+	'Starting the tutorial opens its teaching example in another showcase. Your edits to this document will be discarded, and Undo cannot bring them back.': '開始教學會在另一個展示範例中開啟教學內容。你對這份文件的修改會被捨棄，而且無法用「復原上一步」找回。',
+	'Starting the tutorial opens its teaching example in another showcase. The JSON editor\'s unapplied changes and your edits to this document will be discarded, and Undo cannot bring them back.': '開始教學會在另一個展示範例中開啟教學內容。JSON 編輯器中尚未套用的變更，以及你對這份文件的修改都會被捨棄，而且無法用「復原上一步」找回。',
 	'Source': 'Source',
 	'Graph': '關係圖',
 	'Preview': 'Preview',
@@ -97,7 +104,7 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'Events log': 'Events 紀錄',
 	'Try it yourself': '接下來自己試試看',
 	'You now know State, Property, Method, and dependency.': '你現在已經認識 State、Property、Method 與 dependency。',
-	'Open any inspector, or edit the Author JSON and press Apply.': '可以打開任一 inspector，或直接編輯 JSON 後按「套用」。',
+	'Open any inspector, or keep editing in Author: Structure applies each change at once, and Undo takes it back.': '可以打開任一 inspector，或繼續在「編寫」中修改：結構的每個變更都會立刻套用，「復原上一步」可以撤回。',
 }
 
 export function translateMessage(locale: LabLocale, source: string): string {

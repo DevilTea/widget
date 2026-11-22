@@ -30,6 +30,9 @@ describe('app.vue teardown ordering', () => {
 				setTutorialSpotlight: vi.fn(),
 			},
 			showcaseId: shallowRef('sandbox'),
+			// Read by the tutorial store (rechecks on every Document revision) and App.vue's spotlight (the Author view).
+			documentState: shallowRef({ revision: 0 }),
+			authorView: shallowRef('structure'),
 			isDirty: shallowRef(false),
 			dispose: vi.fn(() => events.push('app-store-disposed')),
 		} as unknown as LabStore
@@ -128,6 +131,9 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 					setTutorialSpotlight: vi.fn(),
 				},
 				showcaseId: shallowRef('sandbox'),
+				// Read by the tutorial store (rechecks on every Document revision) and App.vue's spotlight (the Author view).
+				documentState: shallowRef({ revision: 0 }),
+				authorView: shallowRef('structure'),
 				isDirty,
 				isApplying,
 				canApply: computed(() => isDirty.value && !isApplying.value),

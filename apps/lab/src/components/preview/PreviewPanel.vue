@@ -20,6 +20,7 @@ import { previewReadinessTimeoutOverride } from '../../lab-test-seam'
 import { createPreviewFrameDriver } from '../../preview-host/frame-driver'
 import { getShowcase } from '../../showcases/registry'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
+import ReplacedDocumentNotice from './ReplacedDocumentNotice.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
@@ -255,6 +256,8 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 			data-tutorial-target="preview"
 			class="relative flex flex-col flex-auto overflow-hidden bg-lab-bg min-h-0"
 		>
+			<!-- Lab UX phase 2: a preset load replaced committed edits; says so and offers Undo. -->
+			<ReplacedDocumentNotice />
 			<!-- Stale-preview notice (audit U07): says why the Preview lags and offers the way out. -->
 			<div
 				v-if="store.revisionStatus.value.isDiverged"

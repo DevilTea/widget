@@ -31,6 +31,13 @@ export interface LabProblem {
 	readonly nodeId: InspectionNodeId | null
 	/** Absolute source path the diagnostic points at; `null` for a syntax error. */
 	readonly sourcePath: JsonPath | null
+	/**
+	 * Where the problem is inside its widget's `config`, relative to the config (`[]` for the config itself), when its source
+	 * path runs through `<node>.config`; else `null` (a syntax error, a source-level diagnostic, a widget-level one such as a
+	 * dependency or structure diagnostic, which Core locates at the widget or a member, not at a field). Structure shows a
+	 * problem with a `configPath` at that field, and one with only a `nodeId` at the widget's header (Lab UX phase 2).
+	 */
+	readonly configPath: JsonPath | null
 	/** `true` when the range should prefer the widget's `id`/`type` member over its whole object. */
 	readonly widgetLevel: boolean
 	/** Syntax problems only: the text that failed to parse, so the offset in the message maps onto it. */
@@ -99,6 +106,15 @@ export function diagnosticSourcePath(blueprint: WidgetSystemBlueprint, diagnosti
 	}
 }
 
+/** The part of `sourcePath` inside the node's `config` (`[]` for the config itself), or `null` when it does not run through it. */
+function configRelativePath(sourcePath: JsonPath | null, nodePath: JsonPath | null): JsonPath | null {
+	if (sourcePath === null || nodePath === null || sourcePath.length <= nodePath.length || sourcePath[nodePath.length] !== 'config')
+		return null
+	if (nodePath.some((segment, index) => sourcePath[index] !== segment))
+		return null
+	return sourcePath.slice(nodePath.length + 1)
+}
+
 /** `true` when the diagnostic is about a widget as a whole (or one of its members), not about a field inside it. */
 function isWidgetLevel(diagnostic: BlueprintDiagnostic): boolean {
 	const location = diagnostic.location
@@ -124,6 +140,7 @@ export function collectProblems(
 			locationLabel: null,
 			nodeId: null,
 			sourcePath: null,
+			configPath: null,
 			widgetLevel: false,
 			syntaxSourceText: parseError.sourceText,
 			cycle: null,
@@ -141,6 +158,7 @@ export function collectProblems(
 				cycles.set(diagnostic.related, cycle)
 			}
 		}
+		const sourcePath = diagnosticSourcePath(blueprint, diagnostic)
 		problems.push({
 			key: `diagnostic-${index}`,
 			kind: 'diagnostic',
@@ -148,7 +166,8 @@ export function collectProblems(
 			message: diagnostic.message,
 			locationLabel: describeLocation(location, inspection),
 			nodeId: location.type === 'source' ? null : inspection.getNodeId(location.node),
-			sourcePath: diagnosticSourcePath(blueprint, diagnostic),
+			sourcePath,
+			configPath: location.type === 'source' ? null : configRelativePath(sourcePath, blueprint.getSourcePath(location.node)),
 			widgetLevel: isWidgetLevel(diagnostic),
 			syntaxSourceText: null,
 			cycle,
@@ -162,6 +181,55 @@ function cycleMemberLabel(location: BlueprintDiagnosticLocation, inspection: Blu
 	const node = nodeId === null ? null : inspection.getNode(nodeId)
 	const widget = node === null ? '?' : node.resolved ? node.node.id : (node.id ?? '?')
 	return location.type === 'property' || location.type === 'method' ? `${widget}.${location.name}` : widget
+}
+
+/**
+ * Where the Structure view shows each problem while `selectedNodeId` is selected (Lab UX phase 2, report item 12). One
+ * source for both Author views: the same `LabStore.problems` the JSON view lists, split by location only.
+ * - `atFields`: the selected widget's problems inside its config (`configPath`); each config field claims its own
+ *   (`claimsFieldProblem()`).
+ * - `atNode`: the selected widget's other problems (a dependency, a structure check, a member), shown at its header.
+ * - `elsewhere`: problems of other widgets (a row selects that widget) and problems with no widget (a JSON syntax error,
+ *   a source-level diagnostic), in a compact list.
+ * Order is Core's (a syntax error first) in each group.
+ */
+export interface StructureProblemPlacement {
+	readonly atFields: readonly LabProblem[]
+	readonly atNode: readonly LabProblem[]
+	readonly elsewhere: readonly LabProblem[]
+}
+
+export function placeStructureProblems(problems: readonly LabProblem[], selectedNodeId: InspectionNodeId | null): StructureProblemPlacement {
+	const atFields: LabProblem[] = []
+	const atNode: LabProblem[] = []
+	const elsewhere: LabProblem[] = []
+	for (const problem of problems) {
+		if (selectedNodeId === null || problem.nodeId !== selectedNodeId)
+			elsewhere.push(problem)
+		else if (problem.configPath !== null)
+			atFields.push(problem)
+		else
+			atNode.push(problem)
+	}
+	return { atFields, atNode, elsewhere }
+}
+
+/**
+ * Whether the config field at `path` shows `problem`: the problem's `configPath` is that field, or lies under it and no
+ * field below shows it — `childKeys` are the keys (or indices) of the fields rendered under this one, `null` for a leaf (a
+ * switch, a list, a text, number or JSON box). So a problem inside a value edited as JSON shows at that box, and one about
+ * a key that is not there (a required key that is missing) shows at its object.
+ */
+export function claimsFieldProblem(path: readonly JsonPathSegment[], childKeys: readonly JsonPathSegment[] | null, problem: LabProblem): boolean {
+	const target = problem.configPath
+	if (target === null || target.length < path.length)
+		return false
+	if (path.some((segment, index) => String(target[index]) !== String(segment)))
+		return false
+	if (target.length === path.length || childKeys === null)
+		return true
+	const next = String(target[path.length])
+	return !childKeys.some(key => String(key) === next)
 }
 
 /**

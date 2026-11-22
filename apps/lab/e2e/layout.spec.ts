@@ -242,7 +242,10 @@ test.describe('saved layout', () => {
 			.click()
 		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
 			.toHaveAttribute('aria-selected', 'true')
-		await expect(page.getByTestId('author-problems'))
+		// Lab UX phase 2: "Show problems" stays in the open Author view (Structure, where Author opens), which shows the root's
+		// problem at its header; it used to open the JSON view's Problems list.
+		await expect(page.getByTestId('structure-editor')
+			.getByTestId('node-problems'))
 			.toBeVisible()
 	})
 

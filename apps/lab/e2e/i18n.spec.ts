@@ -145,26 +145,26 @@ test.describe('lab localization (issue #43)', () => {
 			.toBeVisible()
 		await expect(rail.getByText('This is the Interactive Survey', { exact: true }))
 			.toBeVisible()
-		await expect(rail.getByText('Step 1 of 9', { exact: true }))
+		await expect(rail.getByText('Step 1 of 10', { exact: true }))
 			.toBeVisible()
 
 		// Move off the initial step before switching locale. If locale changes rebuilt/reset the tutorial,
 		// a Step-1-only assertion would falsely pass; Step 2 pins preservation of real progress.
 		await rail.getByRole('button', { name: 'Next', exact: true })
 			.click()
-		await expect(rail.getByText('Step 2 of 9', { exact: true }))
+		await expect(rail.getByText('Step 2 of 10', { exact: true }))
 			.toBeVisible()
-		await expect(rail.getByText('One answer, stored as State', { exact: true }))
+		await expect(rail.getByText('Map the views', { exact: true }))
 			.toBeVisible()
 
 		await setLocale(page, 'zh-TW')
 
 		const translatedRail = page.getByRole('complementary', { name: '教學' })
-		await expect(translatedRail.getByText('第 2 步，共 9 步', { exact: true }))
+		await expect(translatedRail.getByText('第 2 步，共 10 步', { exact: true }))
 			.toBeVisible()
-		await expect(translatedRail.getByText('一個答案，儲存在 State', { exact: true }))
+		await expect(translatedRail.getByText('認識各個檢視', { exact: true }))
 			.toBeVisible()
-		await expect(translatedRail.getByText('第 1 步，共 9 步', { exact: true }))
+		await expect(translatedRail.getByText('第 1 步，共 10 步', { exact: true }))
 			.toHaveCount(0)
 	})
 

@@ -11,12 +11,15 @@
  */
 
 import type { TutorialActions, TutorialStepDefinition } from './types'
+import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it, vi } from 'vitest'
 import { translateMessage } from '../i18n/messages'
 import { surveyMessages } from '../showcases/survey/messages'
+import { defaultSurveyPreset } from '../showcases/survey/presets'
+import { surveySystem } from '../showcases/survey/system'
 import { createSurveyRuntime, widgetOfType } from '../showcases/survey/test-support'
 import { createTutorialEngine } from './engine'
-import { createRuntimeReader } from './inspection-reader'
+import { createDocumentReader, createRuntimeReader } from './inspection-reader'
 import { SURVEY_TOUR_ID, surveyTourScript } from './survey-script'
 
 function setup() {
@@ -41,6 +44,18 @@ function setup() {
 	return { runtime, mode, guests, sessions, phone, root, reader, observe }
 }
 
+/**
+ * A reader over the committed Document of `survey-default` with `mode`'s label texts replaced, as the parent builds it
+ * (`createDocumentReader()` over the Document's Blueprint inspection). The Blueprint may be invalid: the reader reads it anyway.
+ */
+function documentReader(label: Record<string, string>) {
+	const source = JSON.parse(defaultSurveyPreset.sourceText) as { slots: { questions: { id: string, config: { label: Record<string, string> } }[] } }
+	source.slots.questions.find(question => question.id === 'mode')!.config.label = label
+	return createDocumentReader(inspectBlueprint(surveySystem.createBlueprint(source)))
+}
+
+const DEFAULT_MODE_LABEL = { 'en': 'How will you join?', 'zh-TW': '您會如何參加？' }
+
 function step(id: string): TutorialStepDefinition {
 	const found = surveyTourScript.steps.find(candidate => candidate.id === id)
 	if (found === undefined)
@@ -57,13 +72,13 @@ function stage(id: string, index = 0) {
 }
 
 describe('surveyTourScript shape', () => {
-	it('has the nine steps under the tour id the showcase shares', () => {
+	it('has the ten steps under the tour id the showcase shares', () => {
 		expect(surveyTourScript.id)
 			.toBe(SURVEY_TOUR_ID)
 		expect(SURVEY_TOUR_ID)
 			.toBe('survey')
 		expect(surveyTourScript.steps.map(candidate => candidate.id))
-			.toEqual(['orient', 'state', 'property', 'error-and-recovery', 'dependency', 'direct-write-vs-method', 'stale-snapshot', 'map-the-views', 'hand-back'])
+			.toEqual(['orient', 'map-the-views', 'state', 'property', 'error-and-recovery', 'dependency', 'direct-write-vs-method', 'stale-snapshot', 'edit-and-undo', 'hand-back'])
 	})
 
 	it('observes exactly the members its predicates read', () => {
@@ -75,6 +90,23 @@ describe('surveyTourScript shape', () => {
 				{ widgetId: 'open-day', member: { type: 'state', key: 'submitted' } },
 				{ widgetId: 'open-day', member: { type: 'property', key: 'changedSinceSubmit' } },
 			])
+	})
+
+	it('maps the views early, naming Explain, Selected widget and Events too', () => {
+		const ids = surveyTourScript.steps.map(candidate => candidate.id)
+		expect(ids.indexOf('map-the-views'))
+			.toBe(1)
+		expect(step('map-the-views').links?.map(link => link.id))
+			.toEqual(['view-author', 'view-preview', 'view-explain', 'view-widget', 'view-events', 'view-blueprint', 'view-runtime', 'view-dependencies', 'view-implementation'])
+		const reveal = step('map-the-views').stages[0].reveal
+		expect(reveal)
+			.toContain('Explain = select a widget')
+		expect(reveal)
+			.toContain('why it behaves this way')
+		expect(reveal)
+			.toContain('Selected widget')
+		expect(reveal)
+			.toContain('Events')
 	})
 
 	it('only names widgets and members that exist in survey-default', () => {
@@ -308,8 +340,54 @@ describe('step "stale-snapshot"', () => {
 	})
 })
 
+describe('step "edit-and-undo" (change the definition, then Undo)', () => {
+	it('opens Author > Structure on the mode widget', () => {
+		const actions: TutorialActions = { setFocus: vi.fn(), activateTab: vi.fn(), openImplementation: vi.fn() }
+		step('edit-and-undo')
+			.onEnter?.(actions)
+		expect(actions.setFocus)
+			.toHaveBeenCalledWith('mode')
+		expect(actions.activateTab)
+			.toHaveBeenCalledWith('author', 'structure')
+	})
+
+	it('completes the edit stage once the committed label differs from the default, and the Undo stage once it is back', () => {
+		const edited = stage('edit-and-undo', 0)
+		const undone = stage('edit-and-undo', 1)
+		const unchanged = documentReader(DEFAULT_MODE_LABEL)
+		expect(edited(unchanged))
+			.toBe(false)
+		expect(undone(unchanged))
+			.toBe(true)
+
+		const changed = documentReader({ ...DEFAULT_MODE_LABEL, en: 'Where will you be?' })
+		expect(edited(changed))
+			.toBe(true)
+		expect(undone(changed))
+			.toBe(false)
+	})
+
+	it('counts an edit in any language, whatever the Preview shows: a zh-TW edit completes it (the Preview restarts in en)', () => {
+		const edited = stage('edit-and-undo', 0)
+		expect(edited(documentReader({ ...DEFAULT_MODE_LABEL, 'zh-TW': '您要怎麼來？' })))
+			.toBe(true)
+		// A removed language is an edit too (the Document is then invalid: a missing translation); the reader still reads it.
+		expect(edited(documentReader({ en: 'How will you join?' })))
+			.toBe(true)
+	})
+
+	it('fails closed without a committed Document: the Preview frame\'s Runtime reader never completes it', () => {
+		const { reader, mode } = setup()
+		mode.properties.text.get()
+		expect(stage('edit-and-undo', 0)(reader))
+			.toBe(false)
+		expect(stage('edit-and-undo', 1)(reader))
+			.toBe(false)
+	})
+})
+
 describe('the whole script on a real Runtime', () => {
-	it('walks nine steps with the scripted interactions, each revealing before Next enables', () => {
+	it('walks ten steps with the scripted interactions, each revealing before Next enables', () => {
 		const { mode, guests, sessions, phone, root, reader, observe } = setup()
 		const engine = createTutorialEngine(surveyTourScript)
 		const actions: TutorialActions = {
@@ -332,6 +410,10 @@ describe('the whole script on a real Runtime', () => {
 		engine.start(actions)
 		settle()
 		expectStep('orient', true)
+		advance()
+
+		settle()
+		expectStep('map-the-views', true)
 		advance()
 
 		settle()
@@ -386,7 +468,16 @@ describe('the whole script on a real Runtime', () => {
 		advance()
 
 		settle()
-		expectStep('map-the-views', true)
+		expectStep('edit-and-undo', false)
+		expect(actions.activateTab)
+			.toHaveBeenLastCalledWith('author', 'structure')
+		// The real edit replaces the Runtime; a step's predicate then reads the new one.
+		engine.recheck(documentReader({ ...DEFAULT_MODE_LABEL, en: 'Where will you be?' }))
+		expectStep('edit-and-undo', false)
+		expect(engine.getSnapshot().revealed)
+			.toHaveLength(1)
+		engine.recheck(documentReader(DEFAULT_MODE_LABEL))
+		expectStep('edit-and-undo', true)
 		advance()
 		settle()
 		expectStep('hand-back', true)

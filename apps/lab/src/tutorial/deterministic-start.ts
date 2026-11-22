@@ -1,32 +1,44 @@
 /**
  * Deterministic-start decision logic (diagnostic #25 OWNER decision, "deterministic tutorial start
- * accepted"): starting or restarting the Survey tour always reloads the known `survey-default` preset
- * through the normal preset -> Apply pipeline. The only product decision left to the visitor is whether
- * that reload is allowed to silently replace an unapplied Source draft — this module is exactly that
- * one decision, kept pure and separate from the actual `LabStore.applyPreset()`/`switchShowcase()` calls
- * (`use-tutorial.ts` owns those) so the "when do we need to ask" rule is independently testable.
+ * accepted"): starting or restarting a tour always reloads its known default preset through the normal
+ * preset -> Apply pipeline. The only product decision left to the visitor is whether that reload is allowed
+ * to replace something that cannot be brought back — this module is exactly that one decision, kept pure and
+ * separate from the actual `LabStore.applyPreset()`/`switchShowcase()` calls (`use-tutorial.ts` owns those) so
+ * the "when do we need to ask" rule is independently testable.
  *
- * Locked copy (verbatim, owned by the caller that renders the confirmation, not this module):
+ * It follows the replacement rule of `lab/draft-guard.ts` (Lab UX phase 2, report item 10):
+ * - an unapplied draft always asks (nothing brings it back);
+ * - committed edits ask only when the start switches showcase (a new session has an empty Undo stack). On the tour's own
+ *   showcase the reload is an ordinary preset commit: it does not ask, and `LabStore.applyPreset()` offers Undo afterwards.
+ *
+ * Locked copy for the draft case (verbatim, owned by the caller that renders the confirmation, not this module):
  * "Starting the tutorial will load the Survey teaching example and replace your unapplied changes."
  * Actions: "Start tour" / "Cancel".
  */
 
+import type { ReplacementLoss } from '../lab/draft-guard'
+import { replacementLoss } from '../lab/draft-guard'
+
 export interface DeterministicStartInput {
 	/**
 	 * `LabStore.isDirty.value` at the moment start/restart was requested — whether the CURRENT
-	 * showcase's draft Source text differs from its last applied snapshot. Switching away from a
-	 * different, non-dirty showcase is not itself a reason to confirm (the Examples menu switches showcases
-	 * unprompted too, and asks only about an unapplied draft, through the separate draft guard) — only an
-	 * unapplied draft edit is.
+	 * showcase's draft Source text differs from its last applied snapshot.
 	 */
 	readonly isDirty: boolean
+	/** `LabStore.hasCommittedEdits.value`: the committed Document equals no preset of the open showcase. */
+	readonly hasCommittedEdits: boolean
+	/** The tour belongs to another showcase than the open one, so starting it switches showcase (not undoable). */
+	readonly switchesShowcase: boolean
 }
 
 export interface DeterministicStartDecision {
-	/** `true` when the visitor must confirm before the Survey teaching preset replaces their draft. */
+	/** `true` when the visitor must confirm before the teaching preset replaces their work. */
 	readonly needsConfirmation: boolean
+	/** What confirming discards (`none` when nothing is asked): the message names the draft, committed edits Undo cannot restore, or both. */
+	readonly loss: ReplacementLoss
 }
 
 export function decideDeterministicStart(input: DeterministicStartInput): DeterministicStartDecision {
-	return { needsConfirmation: input.isDirty }
+	const loss = replacementLoss({ isDirty: input.isDirty, hasCommittedEdits: input.hasCommittedEdits, undoable: !input.switchesShowcase })
+	return { needsConfirmation: loss !== 'none', loss }
 }

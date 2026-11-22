@@ -615,38 +615,49 @@ test.describe('status chips and details (U02)', () => {
 		})
 	}
 
-	test('the problems chip is a named button that opens the Problems list', async ({ page }) => {
+	// Lab UX phase 2 (report item 12): "Show problems" stays in the open Author view. It used to force the JSON view; in
+	// Structure it now selects the first problem's widget and focuses the problem at its field.
+	test('the problems chip is a named button that shows the problems in the open Author view', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
 		// A valid Document has nothing to show: the chip is a status, not a button.
 		await expect(page.locator('header')
-			.getByRole('button', { name: /show them in the JSON view/ }))
+			.getByRole('button', { name: /show them$/ }))
 			.toHaveCount(0)
 		await expect(page.getByTestId('document-status'))
 			.not
 			.toHaveAttribute('role')
 
 		await loadPreset(page, 'survey-ai-draft')
+		// `openLab()` opened the JSON view; start from Structure, the view Author opens on.
+		await page.getByTestId('author-view-structure')
+			.click()
 		await page.getByRole('tab', { name: 'Runtime' })
 			.click()
-		const chip = page.getByRole('button', { name: '5 problems: show them in the JSON view', exact: true })
+		const chip = page.getByRole('button', { name: '5 problems: show them', exact: true })
 		await expect(chip)
 			.toHaveText('5 problems')
 		await chip.click()
 		await expect(page.getByRole('tab', { name: 'Author' }))
 			.toHaveAttribute('aria-selected', 'true')
-		await expect(page.getByRole('tab', { name: 'JSON' }))
+		await expect(page.getByTestId('author-view-structure'))
 			.toHaveAttribute('aria-selected', 'true')
-		await expect(page.getByTestId('author-problems')
-			.getByTestId('problem-row')
-			.first())
+		// The first problem is `mode`'s empty option list: its widget is selected and the problem at `options` has focus.
+		const editor = page.getByTestId('structure-editor')
+		await expect(editor.getByRole('heading', { name: 'mode : SingleChoice' }))
+			.toBeVisible()
+		const optionsProblem = editor.locator('[data-config-path="options"] [data-testid="field-problems"]')
+		await expect(optionsProblem)
 			.toBeFocused()
+		await expect(optionsProblem)
+			.toContainText('invalid-widget-config')
 
-		// From the keyboard too.
-		await page.getByRole('tab', { name: 'Structure' })
+		// In the JSON view it keeps doing what it did: the list under the editor, from the keyboard too.
+		await openAuthorJson(page)
+		await page.getByRole('tab', { name: 'Runtime' })
 			.click()
 		await chip.focus()
 		await page.keyboard.press('Enter')
-		await expect(page.getByRole('tab', { name: 'JSON' }))
+		await expect(page.getByTestId('author-view-json'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByTestId('author-problems')
 			.getByTestId('problem-row')
@@ -807,7 +818,10 @@ test.describe('stale-preview notice (U07)', () => {
 			.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 			.toBeVisible()
 
-		// From another workbench tab, and from the Structure view: the action brings the JSON problems forward.
+		// From another workbench tab the action opens Author and stays in its view (Lab UX phase 2; it used to force JSON):
+		// in Structure, the first problem at its field. (`openLab()` opened JSON; start from Structure.)
+		await page.getByTestId('author-view-structure')
+			.click()
 		await page.getByRole('tab', { name: 'Runtime' })
 			.click()
 		await expect(page.getByRole('tab', { name: 'Runtime' }))
@@ -816,16 +830,17 @@ test.describe('stale-preview notice (U07)', () => {
 			.click()
 		await expect(page.getByRole('tab', { name: 'Author' }))
 			.toHaveAttribute('aria-selected', 'true')
-		await expect(page.getByTestId('author-problems')
-			.getByTestId('problem-row')
-			.first())
+		await expect(page.getByTestId('author-view-structure'))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('structure-editor')
+			.locator('[data-config-path="options"] [data-testid="field-problems"]'))
 			.toBeFocused()
 
-		await page.getByRole('tab', { name: 'Structure' })
-			.click()
+		// In JSON, the list under the editor.
+		await openAuthorJson(page)
 		await notice.getByTestId('preview-show-problems')
 			.click()
-		await expect(page.getByRole('tab', { name: 'JSON' }))
+		await expect(page.getByTestId('author-view-json'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByTestId('author-problems')
 			.getByTestId('problem-row')

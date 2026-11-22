@@ -171,7 +171,7 @@ showcase host contract (it reads the host's locale and light/dark theme and the 
 
 The header is one row from 1280px up: the **Examples** menu (showcase and preset; it always names the showcase and the
 last loaded preset, or "edited" once the document changes), two plain-language status chips (the document is *Valid* or
-has *N problems*, a button that opens the Problems list; the preview is *up to date* or *shows the last valid version*, with
+has *N problems*, a button that shows them in the open Author view; the preview is *up to date* or *shows the last valid version*, with
 revisions and linkage in an info popover, which also holds the JSON draft, Source JSON compatibility, Blueprint status and recovery facts;
 while the JSON draft has unapplied edits a third chip says *Unapplied changes* and the preview chip *shows the last applied version*),
 the edit actions **Apply / Revert / Undo / Format**, and an overflow menu with Tutorial, Theme, **Lab language**, **Reset layout** and a
@@ -182,9 +182,15 @@ Developer submenu (Implementation, Document Tools).
   *new* Document revision (through the same commit path as Apply, up to 20 steps back); it is unavailable while an
   unapplied draft exists, and a tooltip says why for every disabled action.
 - Loading a preset or switching showcase over an unapplied draft asks first (Keep editing / Discard changes).
-- After an Apply that leaves problems, the Author JSON view lists them under the editor (Core's code and message verbatim,
-  or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. The preview shows a
-  plain-language notice with **Show problems** while it still shows the last working version.
+- Switching showcase away from an edited document (one that equals none of the showcase's presets) asks first too, because Undo
+  cannot bring it back; with an unapplied draft as well, one dialog names both. Loading a preset or starting the tutorial over an
+  edited document does not ask: it can be undone, and a notice above the preview says "Loaded “…”. Undo to get your edits back."
+  with an **Undo** button.
+- After a change that leaves problems, the Author JSON view lists them under the editor (Core's code and message verbatim,
+  or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. Structure shows the same
+  problems at the fields they are about, at the widget for the others, and lists the other widgets' problems with a way to each.
+  The preview shows a plain-language notice with **Show problems** while it still shows the last working version; it, and the
+  header's problems button, show the problems in the open Author view.
 
 ## Editing a widget's config (Structure) and what the Lab says when something fails
 
@@ -202,7 +208,9 @@ Developer submenu (Implementation, Document Tools).
 The tool area (Author, **Selected widget**, Blueprint, Runtime, **Events**, Dependencies) takes about half the window by default. The Dockview layout
 (divider position, active tab) is saved in the browser and restored on reload; a saved layout from an older Lab, or a corrupt one, is
 ignored. **Reset layout** in the overflow menu goes back to the default. The tutorial rail is a docked column beside the workbench: it
-never covers the header, menus or the Preview.
+never covers the header, menus or the Preview, and Structure stays usable beside it at 1280px (a field's label moves above the box when
+the pane is narrow). The Survey tour maps the views early (Explain included), then has you change a label in Structure, watch the Preview, and press Undo;
+when a tour ends or is skipped, the tab and Author view you had before it are back.
 
 **Selected widget** explains one widget in one place: what the source declares for it (identity, config, slots, members,
 diagnostics) next to its live State and Property values. Choose the widget with Inspect in the Preview, or in Blueprint or

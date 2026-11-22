@@ -35,6 +35,15 @@ export interface TutorialRuntimeReader {
 	readState: (widgetId: string, key: string) => unknown
 	/** `undefined` when the widget/property member cannot be resolved in the current Runtime. */
 	readProperty: (widgetId: string, key: string) => TutorialPropertySnapshot | undefined
+	/**
+	 * The authored `config` of the widget with this id in the parent's **committed Document** (Lab UX phase 2: a step about
+	 * editing the definition must not depend on the Preview, whose Runtime restarts in the default survey language after every
+	 * commit and lags an invalid Document). `undefined` where the Document is not available — the Preview frame's reader — or
+	 * the widget is not in it, so a predicate that reads it fails closed there. `use-tutorial.ts` evaluates the stages against
+	 * the Document reader (`createDocumentReader()`) in the parent first, then lets the frame continue with the Runtime reader
+	 * from there, and then walks the Document stages again.
+	 */
+	readAuthoredConfig?: (widgetId: string) => unknown
 }
 
 /**
@@ -51,7 +60,7 @@ export interface TutorialFocusMember {
  * (`LabToolTab`, widened to include `'preview'`) already models. Kept as its own literal union here so
  * this directory never imports `use-lab-store.ts`'s Vue-touching types.
  */
-export type TutorialTabId = 'author' | 'widget' | 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'preview'
+export type TutorialTabId = 'author' | 'explain' | 'widget' | 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'preview'
 
 /**
  * The abstract navigation surface a step's `onEnter`/link `run()` may call. `use-tutorial.ts` is the
@@ -59,9 +68,13 @@ export type TutorialTabId = 'author' | 'widget' | 'blueprint' | 'runtime' | 'eve
  * the shared `InspectorFocusStore.setFocus()`; `activateTab` assigns `LabStore.activeTab`, which
  * `Workbench.vue`'s bridge watch turns into a real `DockviewApi` panel activation.
  */
+/** The Author panel's views (`LabStore.authorView`), mirrored here for the same reason as `TutorialTabId`. */
+export type TutorialAuthorView = 'catalog' | 'structure' | 'json'
+
 export interface TutorialActions {
 	setFocus: (widgetId: string, member?: TutorialFocusMember) => void
-	activateTab: (tab: TutorialTabId) => void
+	/** Activates a tool tab; for `'author'`, `authorView` also opens that Author view (the survey tour's edit step opens Structure). */
+	activateTab: (tab: TutorialTabId, authorView?: TutorialAuthorView) => void
 	/**
 	 * Opens (or activates) the Implementation panel for the currently-focused widget (diagnostic #25 P3
 	 * Scope D, tutorial entry point 3). Deliberately narrower than `activateTab`: the Implementation

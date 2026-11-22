@@ -78,6 +78,7 @@ import type { PreviewHostCoordinator } from '../preview-host/coordinator'
 import type { ShowcaseEntry, ShowcasePreset } from '../showcases/registry'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, inject, shallowRef, watch } from 'vue'
+import { hasCommittedEdits } from '../lab/draft-guard'
 import { deriveExampleState } from '../lab/example'
 import { createInspectorFocusStore } from '../lab/focus'
 import { collectProblems } from '../lab/problems'
@@ -139,13 +140,28 @@ export interface LabStore {
 	/** What the Examples menu names: the loaded preset, or "edited" once the source no longer matches it. */
 	readonly example: Readonly<Ref<ExampleState<ShowcasePreset>>>
 	/**
+	 * The committed Document differs from what was loaded: its applied source text equals no preset of the open showcase
+	 * (`lab/draft-guard.ts`'s `hasCommittedEdits()`; the unapplied draft is not part of it). A showcase switch asks before it
+	 * drops such a document; a preset load (an ordinary commit) offers Undo afterwards through `replacedNotice`.
+	 */
+	readonly hasCommittedEdits: Readonly<Ref<boolean>>
+	/**
+	 * Set when a preset load (from the Examples menu or a tutorial start) replaced committed edits: the preset's label (an
+	 * English message id) and the Document revision the load produced. The notice applies only while the Document is still at
+	 * that revision (`replacedNoticeVisible`); Undo, any later commit or a showcase switch ends it.
+	 */
+	readonly replacedNotice: Readonly<Ref<{ readonly subject: string, readonly revision: number } | null>>
+	readonly replacedNoticeVisible: Readonly<Ref<boolean>>
+	dismissReplacedNotice: () => void
+	/**
 	 * Which Author view is open: Structure on first load (Lab UX phase 1; it was JSON), then whatever the user chose. Not
 	 * saved across reloads. Lives here (not in `AuthorPanel`) so other surfaces can open the JSON view.
 	 */
 	readonly authorView: Ref<'catalog' | 'structure' | 'json'>
 	/**
-	 * Set by `showProblems()`: `AuthorJsonView` moves focus to its Problems list (when it is already mounted, or
-	 * as soon as it mounts) and clears the flag.
+	 * Set by `showProblems()`: the open Author view consumes it (when it is already mounted, or as soon as it mounts) and
+	 * clears the flag. `AuthorJsonView` moves focus to its Problems list; `AuthorStructureView` selects the first problem's
+	 * widget and focuses its field, its header's problems or the Structure Problems list.
 	 */
 	readonly problemsFocusPending: Ref<boolean>
 	/** @deprecated Use `documentFocus` or `previewFocus` according to the surface's scope. */
@@ -155,6 +171,12 @@ export interface LabStore {
 	readonly showcaseId: Readonly<Ref<string>>
 	readonly presets: Readonly<Ref<readonly ShowcasePreset[]>>
 	readonly activeTab: Ref<LabToolTab>
+	/**
+	 * The canonical panel shown in the tool group (the group that holds Author), kept by `Workbench.vue` from Dockview; `null`
+	 * before the workbench is up or while a non-canonical panel (Implementation, Document Tools) is shown there. `activeTab` is
+	 * shared by both Dockview groups and is often `preview`; the tutorial records this one to give the user their tab back.
+	 */
+	readonly toolGroupTab: Ref<LabToolTab | null>
 	/**
 	 * Dependency Graph presentation preferences (diagnostic #13 Phase 5 "inspector panel interaction
 	 * contract"): panel-local, and — unlike snapshot-bound focus/selections — deliberately not reset by
@@ -183,7 +205,7 @@ export interface LabStore {
 	undoLastApply: () => Promise<UndoOutcome>
 	/** Mounts the Preview again after it failed to load or to take a change; see `LabSession.retryPreview()`. */
 	retryPreview: () => Promise<void>
-	/** Opens Author > JSON and moves focus to the Problems list. */
+	/** Activates Author and shows the problems in its open view (Structure from the Catalog); see `problemsFocusPending`. */
 	showProblems: () => void
 	applyPreset: (presetId: string) => Promise<ApplyOutcome | undefined>
 	demonstrateRevisionConflict: () => RevisionConflictDemoResult | null
@@ -401,6 +423,12 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			isDirty: session.isDirty,
 		})
 	})
+	const hasCommittedEditsRef = computed(() => {
+		void sessionTick.value
+		return hasCommittedEdits(session.documentState.sourceText, presets.value)
+	})
+	const replacedNotice = shallowRef<{ readonly subject: string, readonly revision: number } | null>(null)
+	const replacedNoticeVisible = computed(() => replacedNotice.value !== null && replacedNotice.value.revision === documentState.value.revision)
 	const lastAppliedSourcePatch = computed(() => {
 		void sessionTick.value
 		return session.lastAppliedSourcePatch
@@ -411,6 +439,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	})
 
 	const activeTab = shallowRef<LabToolTab>('author')
+	const toolGroupTab = shallowRef<LabToolTab | null>(null)
 	const graphShowAbsent = shallowRef(false)
 	const graphShowIsolatedMembers = shallowRef(false)
 	const graphExpandedClusterIds = shallowRef<ReadonlySet<string>>(new Set())
@@ -480,6 +509,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		showcaseId.value = target.id
 		presets.value = target.presets
 		loadedPresetId.value = target.defaultPreset.id
+		replacedNotice.value = null
 		graphExpandedClusterIds.value = new Set()
 		sessionTick.value++
 		documentTick.value++
@@ -524,6 +554,12 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		problems,
 		loadedPresetId,
 		example,
+		hasCommittedEdits: hasCommittedEditsRef,
+		replacedNotice,
+		replacedNoticeVisible,
+		dismissReplacedNotice: () => {
+			replacedNotice.value = null
+		},
 		authorView,
 		problemsFocusPending,
 		focus,
@@ -531,6 +567,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		showcaseId,
 		presets,
 		activeTab,
+		toolGroupTab,
 		graphShowAbsent,
 		graphShowIsolatedMembers,
 		graphExpandedClusterIds,
@@ -571,9 +608,12 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			const outcome = session.undoLastApply()
 			return enqueue(() => outcome)
 		},
+		// Stays in the open Author view (Lab UX phase 2): Structure shows the problems at their fields and JSON in its list; the
+		// Catalog shows none, so it opens Structure. The view that is mounted consumes `problemsFocusPending`.
 		showProblems: () => {
 			activeTab.value = 'author'
-			authorView.value = 'json'
+			if (authorView.value === 'catalog')
+				authorView.value = 'structure'
 			problemsFocusPending.value = true
 		},
 		applyPreset: (presetId) => {
@@ -589,13 +629,20 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			// and synchronously starts `session.apply()` (capture + concurrency guard) before this line
 			// returns. `enqueue()` only barriers a concurrent `switchShowcase()`/`apply()` behind it.
 			const targetSession = session
+			// Read before the load: whether this preset replaces committed edits that only Undo can bring back now.
+			const replacesEdits = hasCommittedEdits(session.documentState.sourceText, currentShowcase.presets)
+			const revisionBefore = session.documentState.revision
 			const outcome = session.applyPreset(preset.sourceText)
 			return enqueue(async () => {
 				const result = await outcome
 				// A switch queued behind this preset replaces the session only after it settled, so the check
 				// is a guard rather than an expected case: never name a preset in a showcase it does not belong to.
-				if (result.status === 'applied' && session === targetSession)
+				if (result.status === 'applied' && session === targetSession) {
 					loadedPresetId.value = presetId
+					const revision = session.documentState.revision
+					if (replacesEdits && revision !== revisionBefore)
+						replacedNotice.value = { subject: preset.label, revision }
+				}
 				return result
 			})
 		},

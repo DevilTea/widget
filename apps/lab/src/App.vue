@@ -47,7 +47,7 @@ installLabTestSeam(store)
 // diagnostic #25 P3: a small store of its own (see `use-implementation-explorer.ts`'s file header for why
 // this is a parallel mechanism rather than an extension of `LabStore.activeTab`), created/provided the
 // same way `LabStore`/`TutorialStore` are, and handed to `createTutorialStore()` below so the Survey
-// tour's step 8 "Implementation" link can open it too.
+// tour's map-of-the-views "Implementation" link can open it too.
 const implementationExplorer = createImplementationExplorerStore()
 provide(ImplementationExplorerKey, implementationExplorer)
 
@@ -76,17 +76,31 @@ const tutorialRailVisible = computed(() => tutorial.snapshot.value.status === 'a
 // current step's `data-tutorial-target` attribute — no position-cloned overlay. This lives in App.vue
 // (rather than a per-panel component) because it is the one place with an unobstructed `document`-wide
 // view across Preview renderers, panels, and the rail itself.
-watchEffect(() => {
-	const target = tutorialRailVisible.value ? (tutorial.snapshot.value.step?.target ?? null) : null
+function applySpotlight(target: string | null): void {
 	for (const el of document.querySelectorAll('.tutorial-spotlight'))
 		el.classList.remove('tutorial-spotlight')
 	if (target !== null) {
 		const el = document.querySelector(`[data-tutorial-target="${CSS.escape(target)}"]`)
 		el?.classList.add('tutorial-spotlight')
 	}
+}
+// After the render (`flush: 'post'`), and once more in the next frame: a step whose target is in a workbench panel (the survey tour's
+// Structure step, Lab UX phase 2) also activates that panel in its `onEnter`, and Dockview attaches an inactive panel's element to the
+// document only once it is active, so the element may not be in the page when the step changes.
+// The Author view is a dependency too: a target inside it (the Structure pane) is a new element after the view changes (JSON ->
+// Structure during the edit step), so the class is put on the new one. That is the only remount a target sees today.
+watchEffect(() => {
+	const target = tutorialRailVisible.value ? (tutorial.snapshot.value.step?.target ?? null) : null
+	void store.authorView.value
+	applySpotlight(target)
+	requestAnimationFrame(() => {
+		const current = tutorialRailVisible.value ? (tutorial.snapshot.value.step?.target ?? null) : null
+		if (current === target)
+			applySpotlight(target)
+	})
 	// Preview lives in a separate document; project the same semantic target through the host.
 	store.previewHost.setTutorialSpotlight(target)
-})
+}, { flush: 'post' })
 
 // Presentation mirror of the CSS narrow-viewport gate: while unsupported, the still-mounted workbench is
 // made `inert` so it cannot be focused or tabbed to behind the overlay (it stays mounted, per #27).

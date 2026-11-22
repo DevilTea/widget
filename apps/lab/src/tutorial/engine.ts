@@ -28,6 +28,22 @@ interface EngineState {
 	progress: number[]
 }
 
+/**
+ * How many of `step`'s stages are complete when walking forward from `progress` with `reader`: the first stage whose
+ * `isComplete` is false stops the walk (a stage without one counts as complete). Shared by `recheck()`, the Preview frame
+ * (Runtime reader) and `use-tutorial.ts` (committed-Document reader), so every evaluator walks the same way.
+ */
+export function advanceStageProgress(step: TutorialStepDefinition, progress: number, reader: TutorialRuntimeReader): number {
+	let next = Math.min(progress, step.stages.length)
+	while (next < step.stages.length) {
+		const stage = step.stages[next]!
+		if (stage.isComplete !== undefined && !stage.isComplete(reader))
+			break
+		next++
+	}
+	return next
+}
+
 function freshState(stepCount: number): EngineState {
 	const progress = Array.from<number>({ length: stepCount })
 		.fill(0)
@@ -163,15 +179,7 @@ export function createTutorialEngine(script: TutorialScript): TutorialEngine {
 			const step = currentStep()
 			if (step === null)
 				return
-			let progress = state.progress[state.stepIndex] ?? 0
-			while (progress < step.stages.length) {
-				const stage = step.stages[progress]!
-				const complete = stage.isComplete === undefined ? true : stage.isComplete(reader)
-				if (!complete)
-					break
-				progress++
-			}
-			acceptProgress(progress)
+			acceptProgress(advanceStageProgress(step, state.progress[state.stepIndex] ?? 0, reader))
 		},
 
 		acceptProgress,
