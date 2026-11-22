@@ -209,7 +209,7 @@ The tool area (Author, **Selected widget**, Blueprint, Runtime, **Events**, Depe
 (divider position, active tab) is saved in the browser and restored on reload; a saved layout from an older Lab, or a corrupt one, is
 ignored. **Reset layout** in the overflow menu goes back to the default. The tutorial rail is a docked column beside the workbench: it
 never covers the header, menus or the Preview, and Structure stays usable beside it at 1280px (a field's label moves above the box when
-the pane is narrow). The Survey tour maps the views early, then has you change a label in Structure, watch the Preview, and press Undo;
+the pane is narrow). The Survey tour maps the views early (Explain included), then has you change a label in Structure, watch the Preview, and press Undo;
 when a tour ends or is skipped, the tab and Author view you had before it are back.
 
 **Selected widget** explains one widget in one place: what the source declares for it (identity, config, slots, members,

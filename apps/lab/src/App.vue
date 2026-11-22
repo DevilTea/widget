@@ -47,7 +47,7 @@ installLabTestSeam(store)
 // diagnostic #25 P3: a small store of its own (see `use-implementation-explorer.ts`'s file header for why
 // this is a parallel mechanism rather than an extension of `LabStore.activeTab`), created/provided the
 // same way `LabStore`/`TutorialStore` are, and handed to `createTutorialStore()` below so the Survey
-// tour's step 8 "Implementation" link can open it too.
+// tour's map-of-the-views "Implementation" link can open it too.
 const implementationExplorer = createImplementationExplorerStore()
 provide(ImplementationExplorerKey, implementationExplorer)
 

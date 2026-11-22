@@ -1518,12 +1518,13 @@ replaced-document notice offers Undo (see "Header, status chips and draft protec
 unapplied draft, or, when the start switches showcase (from the hidden Sandbox, which has no tour), about committed edits too, with its own
 message (`START_DISCARDS_EDITS_MESSAGE`). `TutorialActions.activateTab(tab, authorView?)` can also open an Author view.
 
-**The Survey tour teaches editing.** `survey-script.ts` has ten steps: the map of the views comes second (Author, Preview, Selected widget,
+**The Survey tour teaches editing.** `survey-script.ts` has ten steps: the map of the views comes second (Author, Preview, Explain, Selected widget,
 Events, Blueprint, Runtime, Dependencies, Implementation, each a link), and `edit-and-undo` comes after the answer steps (a committed edit
 restarts the Preview, so the answers those steps build on would start over). It opens Author > Structure on `mode` (`data-tutorial-target`
 `author-structure` is the Structure editor pane) and is gated on `mode.text`, the label the Preview renders in the survey language: the first
-stage completes when it is neither default label (en or zh-TW), the second when it is a default again (Undo). The Explain tab (built in
-parallel) is not named yet; the map step carries a TODO for phase 3.
+stage completes when it is neither default label (en or zh-TW), the second when it is a default again (Undo). The map says that
+selecting a widget (Inspect, or the Structure tree) makes Explain show what it is and why it behaves this way; its TODO for phase 3 is
+only to drop the views the IA moves into Tools.
 
 **Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview

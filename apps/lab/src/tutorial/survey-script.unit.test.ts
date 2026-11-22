@@ -93,13 +93,17 @@ describe('surveyTourScript shape', () => {
 			])
 	})
 
-	it('maps the views early, naming Selected widget and Events too', () => {
+	it('maps the views early, naming Explain, Selected widget and Events too', () => {
 		const ids = surveyTourScript.steps.map(candidate => candidate.id)
 		expect(ids.indexOf('map-the-views'))
 			.toBe(1)
 		expect(step('map-the-views').links?.map(link => link.id))
-			.toEqual(['view-author', 'view-preview', 'view-widget', 'view-events', 'view-blueprint', 'view-runtime', 'view-dependencies', 'view-implementation'])
+			.toEqual(['view-author', 'view-preview', 'view-explain', 'view-widget', 'view-events', 'view-blueprint', 'view-runtime', 'view-dependencies', 'view-implementation'])
 		const reveal = step('map-the-views').stages[0].reveal
+		expect(reveal)
+			.toContain('Explain = select a widget')
+		expect(reveal)
+			.toContain('why it behaves this way')
 		expect(reveal)
 			.toContain('Selected widget')
 		expect(reveal)

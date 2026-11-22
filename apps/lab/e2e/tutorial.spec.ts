@@ -513,10 +513,14 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 2 — map the views (moved up by Lab UX phase 2, and naming Selected widget and Events): each name is a real
-	// navigation affordance.
-	await expect(rail.getByText('Selected widget = the widget you clicked', { exact: false }))
+	// Step 2 — map the views (moved up by Lab UX phase 2, and naming Explain, Selected widget and Events): each name is a
+	// real navigation affordance.
+	await expect(rail.getByText('Explain = select a widget (Inspect in the Preview, or the Structure tree) to see what it is and why it behaves this way', { exact: false }))
 		.toBeVisible()
+	await rail.getByRole('button', { name: 'Explain', exact: true })
+		.click()
+	await expect(page.getByRole('tab', { name: 'Explain', exact: true }))
+		.toHaveAttribute('aria-selected', 'true')
 	await rail.getByRole('button', { name: 'Selected widget', exact: true })
 		.click()
 	await expect(page.getByRole('tab', { name: 'Selected widget' }))

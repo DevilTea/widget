@@ -78,17 +78,18 @@ export const surveyTourScript: TutorialScript = {
 		},
 		{
 			// Early (Lab UX phase 2): the visitor knows where things are before the steps send them there.
-			// TODO(phase 3): name the Explain tab here once it is on main, and drop the views the IA moves into Tools.
+			// TODO(phase 3): drop the views the IA moves into Tools.
 			id: 'map-the-views',
 			title: 'Map the views',
 			target: null,
 			stages: [{
 				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Author = the definition you edit (Structure, or the JSON) · Preview = the running app · Selected widget = the widget you clicked: its config and live values · Events = what the widgets announced · Blueprint = what the definition compiled into · Runtime = live State, Properties and Methods · Dependencies = which widget reads which · Implementation = the plugin and renderer code behind a widget type.',
+				reveal: 'Author = the definition you edit (Structure, or the JSON) · Preview = the running app · Explain = select a widget (Inspect in the Preview, or the Structure tree) to see what it is and why it behaves this way · Selected widget = its config and live values side by side · Events = what the widgets announced · Blueprint = what the definition compiled into · Runtime = live State, Properties and Methods · Dependencies = which widget reads which · Implementation = the plugin and renderer code behind a widget type.',
 			}],
 			links: [
 				{ id: 'view-author', label: 'Author', run: actions => actions.activateTab('author') },
 				{ id: 'view-preview', label: 'Preview', run: actions => actions.activateTab('preview') },
+				{ id: 'view-explain', label: 'Explain', run: actions => actions.activateTab('explain') },
 				{ id: 'view-widget', label: 'Selected widget', run: actions => actions.activateTab('widget') },
 				{ id: 'view-events', label: 'Events', run: actions => actions.activateTab('events') },
 				{ id: 'view-blueprint', label: 'Blueprint', run: actions => actions.activateTab('blueprint') },
