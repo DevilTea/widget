@@ -345,6 +345,70 @@ test.describe('visible keyboard focus (U20)', () => {
 	})
 })
 
+test.describe('inspector values stay inside their panel (Lab UX phase 1)', () => {
+	/** Every visible value summary of `panel` lies within the panel's box and has room to show something. */
+	async function expectValuesInside(page: Page, panel: ReturnType<Page['locator']>): Promise<number> {
+		const panelBox = (await panel.boundingBox())!
+		const summaries = panel.getByTestId('value-summary')
+		const count = await summaries.count()
+		for (let index = 0; index < count; index++) {
+			const summary = summaries.nth(index)
+			const box = (await summary.boundingBox())!
+			const label = `${await summary.evaluate(element => element.closest('[data-member]')
+				?.getAttribute('data-member'))}`
+			expect(box.x, `${label} starts inside the panel`)
+				.toBeGreaterThanOrEqual(panelBox.x)
+			expect(box.x + box.width, `${label} ends inside the panel`)
+				.toBeLessThanOrEqual(panelBox.x + panelBox.width + 0.5)
+			expect(box.width, `${label} has room`)
+				.toBeGreaterThan(8)
+			// A cut value stays reachable: the row's tooltip is the whole summary.
+			const full = await summary.textContent()
+			await expect(summary.locator('xpath=ancestor::button[1]'))
+				.toHaveAttribute('title', full!)
+		}
+		return count
+	}
+
+	for (const [width, height] of [[1440, 900], [1280, 800]] as const) {
+		test(`Runtime, Selected widget and Blueprint at ${width}x${height}: no value is drawn past the panel's edge`, async ({ page }) => {
+			await page.setViewportSize({ width, height })
+			await openLab(page)
+
+			// The survey root holds long JSON values (its answers, `canSubmit`, ...): they used to stretch the Runtime grid to about 1500px.
+			await page.getByRole('tab', { name: 'Runtime', exact: true })
+				.click()
+			const runtime = page.getByTestId('inspector-split-layout')
+				.filter({ visible: true })
+			await expect(runtime.getByTestId('runtime-value-row')
+				.first())
+				.toBeVisible()
+			expect(await expectValuesInside(page, runtime))
+				.toBeGreaterThan(3)
+			expect(await runtime.evaluate(element => element.scrollWidth <= element.clientWidth), 'the Runtime grid does not grow past its panel')
+				.toBe(true)
+
+			await page.getByRole('tab', { name: 'Selected widget', exact: true })
+				.click()
+			const selected = page.getByTestId('selected-widget')
+			await expect(selected.getByTestId('runtime-value-row')
+				.first())
+				.toBeVisible()
+			expect(await expectValuesInside(page, selected))
+				.toBeGreaterThan(3)
+
+			await page.getByRole('tab', { name: 'Blueprint', exact: true })
+				.click()
+			const blueprint = page.getByTestId('inspector-split-layout')
+				.filter({ visible: true })
+			await expect(blueprint)
+				.toBeVisible()
+			expect(await blueprint.evaluate(element => element.scrollWidth <= element.clientWidth), 'the Blueprint grid does not grow past its panel')
+				.toBe(true)
+		})
+	}
+})
+
 test.describe('the selected workbench tab (Lab UX phase 1)', () => {
 	async function tabStyle(page: Page, name: string): Promise<{ background: string, shadow: string, color: string, borderBottom: string }> {
 		return page.getByRole('tab', { name, exact: true })

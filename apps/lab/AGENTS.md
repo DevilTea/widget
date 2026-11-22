@@ -1493,7 +1493,11 @@ the room the row has (no fixed width; its full text is the tooltip), a separate 
 1000 nodes, 500 characters) belong to the Inspector snapshot, set in `packages/inspector`; the Lab does not change the protocol or work
 around them and instead marks every cut where it happened ("truncated by the Inspector snapshot (nested too deeply)", "more entries
 were left out", "cut"), with one note under a value that has any (`hasTruncation()`). `formatInspectableValue()` (the one-line
-summary) still prints `<truncated>`.
+summary) still prints `<truncated>`. The summary can only take "the room the row has" if the panel's grid does not grow with it:
+`InspectorSplitLayout.vue` (Blueprint and Runtime) uses `220px 1px minmax(0, 1fr)` with `min-w-0` columns. A plain `1fr` track has the
+content's min-content width as its minimum, so one long JSON preview stretched the Runtime grid to about 1500px in a 690px panel and
+`overflow: hidden` hid every value. `e2e/polish.spec.ts` ("inspector values stay inside their panel") checks that every summary in
+Runtime and Selected widget lies inside its panel at 1440 and 1280, keeps its full text as the tooltip, and that neither grid scrolls sideways.
 
 **Config (audit U25).** `ConfigView.vue` shows the resolved config by default and the authored one on request, and only when they
 differ (`lib/config-compare.ts`, structural equality; it names the top-level fields that differ); equal configs are one block with a note.
