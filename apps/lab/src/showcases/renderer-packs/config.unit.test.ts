@@ -1,38 +1,18 @@
 /**
- * The config checkers report located, machine-readable diagnostics (path and reason), the JSON Schemas list exactly the keys the
- * checkers accept, and a config that failed its own validation is compiled with a recovered fallback.
+ * The config checkers report located, machine-readable diagnostics (path and reason), and a config that failed its own validation
+ * is compiled with a recovered fallback. That the generated config schemas list exactly the keys the checkers accept is pinned by
+ * `lab/showcase-config-schemas.unit.test.ts`.
  */
 
 import type { ConfigDiagnostic } from './config'
 import { describe, expect, it } from 'vitest'
-import { APPEARANCE_CONFIG_KEYS, checkAppearanceConfig, checkChoiceConfig, checkDangerActionConfig, checkNotifierConfig, checkSectionConfig, checkSettingsPageConfig, checkTextFieldConfig, checkToggleConfig, CHOICE_CONFIG_KEYS, DANGER_ACTION_CONFIG_KEYS, NOTIFIER_CONFIG_KEYS, resolveChoiceConfig, resolveDangerActionConfig, SECTION_CONFIG_KEYS, SETTINGS_PAGE_CONFIG_KEYS, TEXT_FIELD_CONFIG_KEYS, TOGGLE_CONFIG_KEYS } from './config'
-import { appearanceConfigSchema, choiceConfigSchema, dangerActionConfigSchema, notifierConfigSchema, sectionConfigSchema, settingsPageConfigSchema, textFieldConfigSchema, toggleConfigSchema } from './schemas'
+import { checkAppearanceConfig, checkChoiceConfig, checkDangerActionConfig, checkNotifierConfig, checkSectionConfig, checkSettingsPageConfig, checkTextFieldConfig, checkToggleConfig, resolveChoiceConfig, resolveDangerActionConfig } from './config'
 
 function reasons(check: (input: unknown, report: (diagnostic: ConfigDiagnostic) => void) => void, input: unknown): readonly (readonly [string | undefined, string])[] {
 	const found: (readonly [string | undefined, string])[] = []
 	check(input, diagnostic => found.push([diagnostic.reason, (diagnostic.path ?? []).join('.')]))
 	return found
 }
-
-describe('schemas and checkers agree on the keys', () => {
-	it('lists exactly the checker\'s keys in every schema\'s properties', () => {
-		const pairs = [
-			[settingsPageConfigSchema, SETTINGS_PAGE_CONFIG_KEYS],
-			[appearanceConfigSchema, APPEARANCE_CONFIG_KEYS],
-			[notifierConfigSchema, NOTIFIER_CONFIG_KEYS],
-			[sectionConfigSchema, SECTION_CONFIG_KEYS],
-			[textFieldConfigSchema, TEXT_FIELD_CONFIG_KEYS],
-			[toggleConfigSchema, TOGGLE_CONFIG_KEYS],
-			[choiceConfigSchema, CHOICE_CONFIG_KEYS],
-			[dangerActionConfigSchema, DANGER_ACTION_CONFIG_KEYS],
-		] as const
-		for (const [schema, keys] of pairs) {
-			expect(Object.keys(schema.properties)
-				.sort())
-				.toEqual([...keys].sort())
-		}
-	})
-})
 
 describe('config checkers', () => {
 	it('report a non-object, unknown keys and missing keys', () => {

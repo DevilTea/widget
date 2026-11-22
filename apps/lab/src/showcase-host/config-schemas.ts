@@ -1,8 +1,9 @@
 /**
- * Config JSON Schemas a showcase hands to the Lab. Core 0.3 no longer carries a config schema (`config.schema` is gone), so a
- * host that renders config controls keeps its own map from plugin `type` to schema (`docs/site/migration/0.3.md`,
- * "`config.schema` is removed"). The Lab's Structure editor reads it (`lab/config-schema.ts`) and the Author Catalog shows and
- * copies it. It is presentation only: Core never validates against it.
+ * Config JSON Schemas by plugin type. Core 0.3 no longer carries a config schema (`config.schema` is gone), so a host that
+ * renders config controls keeps its own map from plugin `type` to schema (`docs/site/migration/0.3.md`, "`config.schema` is
+ * removed"). The Lab generates it from each plugin's `Interfaces` (`widgetDocs()`, `ShowcaseEntry.configSchemas`); a showcase
+ * may hand its own instead (quote-rules: the JSON Schemas of its Valibot validators). The Lab's Structure editor reads it
+ * (`lab/config-schema.ts`) and the Author Catalog shows and copies it. It is presentation only: Core never validates against it.
  */
 
 /** The JSON Schema dialect of every config schema: Draft 2020-12. */
