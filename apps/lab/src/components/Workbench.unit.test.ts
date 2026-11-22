@@ -73,7 +73,7 @@ describe('workbench layout restore', () => {
 		const spy = vi.spyOn as unknown as (target: object, key: string, access: 'get') => { mockReturnValue: (value: unknown) => void }
 		spy(DockviewApi.prototype, 'onDidActivePanelChange', 'get')
 			.mockReturnValue(() => ({ dispose: () => {} }))
-		const store = { activeTab: shallowRef('author') } as unknown as LabStore
+		const store = { activeTab: shallowRef('author'), toolGroupTab: shallowRef(null) } as unknown as LabStore
 		const wrapper = mount(Workbench, {
 			attachTo: document.body,
 			global: {
@@ -87,6 +87,9 @@ describe('workbench layout restore', () => {
 			},
 		})
 		expect(store.activeTab.value)
+			.toBe('runtime')
+		// The tool group's own tab (Lab UX phase 2: what a tour gives back) is read from Dockview at setup too.
+		expect(store.toolGroupTab.value)
 			.toBe('runtime')
 		wrapper.unmount()
 	})

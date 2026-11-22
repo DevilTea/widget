@@ -30,6 +30,25 @@ export function findBlueprintNodeId(
 	return null
 }
 
+/**
+ * The parent's reader over the committed Document (Lab UX phase 2): it reads authored config only, from the Blueprint inspection
+ * of the Document's current revision, whether that Blueprint is valid or not. It has no Runtime, so `readState`/`readProperty`
+ * resolve nothing and every Runtime predicate fails closed against it.
+ */
+export function createDocumentReader(blueprint: BlueprintInspection<AnyWidgetPluginTuple>): TutorialRuntimeReader {
+	return {
+		readState: () => undefined,
+		readProperty: () => undefined,
+		readAuthoredConfig: (widgetId) => {
+			const nodeId = findBlueprintNodeId(blueprint, widgetId)
+			const node = nodeId === null ? null : blueprint.getNode(nodeId)
+			if (node === null || !node.resolved)
+				return undefined
+			return (node.node.source as { readonly config?: unknown } | null)?.config
+		},
+	}
+}
+
 function findRuntimeWidget(
 	inspection: RuntimeInspection<AnyWidgetPluginTuple>,
 	widgetId: string,

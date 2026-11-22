@@ -302,9 +302,17 @@ function watchTutorialTabActivation(api: DockviewApi): void {
 				api.getPanel(tab)?.api.setActive()
 		},
 	)
+	// The tool group's own shown panel (Lab UX phase 2): `activeTab` follows whichever group is active, often the Preview's, so the
+	// tutorial records this one to restore. The tool group is the group that holds Author.
+	const syncToolGroupTab = (): void => {
+		const shown = api.getPanel('author')?.group.activePanel?.id
+		store.toolGroupTab.value = shown !== undefined && shown !== 'preview' && CANONICAL_TAB_IDS.has(shown) ? shown as LabToolTab : null
+	}
+	syncToolGroupTab()
 	const activePanelChange = api.onDidActivePanelChange(({ panel }) => {
 		if (panel !== undefined && CANONICAL_TAB_IDS.has(panel.id))
 			store.activeTab.value = panel.id as LabToolTab
+		syncToolGroupTab()
 	})
 	stopTutorialTabActivationWatch = () => {
 		stopWatch()

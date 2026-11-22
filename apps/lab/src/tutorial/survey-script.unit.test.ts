@@ -11,13 +11,15 @@
  */
 
 import type { TutorialActions, TutorialStepDefinition } from './types'
+import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it, vi } from 'vitest'
 import { translateMessage } from '../i18n/messages'
 import { surveyMessages } from '../showcases/survey/messages'
 import { defaultSurveyPreset } from '../showcases/survey/presets'
-import { createRuntimeFor, createSurveyRuntime, widgetOfType } from '../showcases/survey/test-support'
+import { surveySystem } from '../showcases/survey/system'
+import { createSurveyRuntime, widgetOfType } from '../showcases/survey/test-support'
 import { createTutorialEngine } from './engine'
-import { createRuntimeReader } from './inspection-reader'
+import { createDocumentReader, createRuntimeReader } from './inspection-reader'
 import { SURVEY_TOUR_ID, surveyTourScript } from './survey-script'
 
 function setup() {
@@ -43,18 +45,16 @@ function setup() {
 }
 
 /**
- * A reader over a fresh Runtime of `survey-default` with `mode`'s en label replaced, as a Structure edit commits it (a new
- * Document revision, so a new Runtime), with `mode.text` evaluated the way the Preview's renderer does.
+ * A reader over the committed Document of `survey-default` with `mode`'s label texts replaced, as the parent builds it
+ * (`createDocumentReader()` over the Document's Blueprint inspection). The Blueprint may be invalid: the reader reads it anyway.
  */
-function editedModeReader(enLabel: string, language: 'en' | 'zh-TW' = 'en') {
+function documentReader(label: Record<string, string>) {
 	const source = JSON.parse(defaultSurveyPreset.sourceText) as { slots: { questions: { id: string, config: { label: Record<string, string> } }[] } }
-	source.slots.questions.find(question => question.id === 'mode')!.config.label.en = enLabel
-	const { runtime } = createRuntimeFor(source)
-	if (language !== 'en')
-		widgetOfType(runtime, 'open-day', 'Survey').state.language.set(language)
-	widgetOfType(runtime, 'mode', 'SingleChoice').properties.text.get()
-	return createRuntimeReader(runtime)
+	source.slots.questions.find(question => question.id === 'mode')!.config.label = label
+	return createDocumentReader(inspectBlueprint(surveySystem.createBlueprint(source)))
 }
+
+const DEFAULT_MODE_LABEL = { 'en': 'How will you join?', 'zh-TW': '您會如何參加？' }
 
 function step(id: string): TutorialStepDefinition {
 	const found = surveyTourScript.steps.find(candidate => candidate.id === id)
@@ -89,7 +89,6 @@ describe('surveyTourScript shape', () => {
 				{ widgetId: 'guests', member: { type: 'property', key: 'visible' } },
 				{ widgetId: 'open-day', member: { type: 'state', key: 'submitted' } },
 				{ widgetId: 'open-day', member: { type: 'property', key: 'changedSinceSubmit' } },
-				{ widgetId: 'mode', member: { type: 'property', key: 'text' } },
 			])
 	})
 
@@ -352,33 +351,34 @@ describe('step "edit-and-undo" (change the definition, then Undo)', () => {
 			.toHaveBeenCalledWith('author', 'structure')
 	})
 
-	it('completes the edit stage once the Preview shows another label, and the Undo stage once the default is back', () => {
+	it('completes the edit stage once the committed label differs from the default, and the Undo stage once it is back', () => {
 		const edited = stage('edit-and-undo', 0)
 		const undone = stage('edit-and-undo', 1)
-		const unchanged = editedModeReader('How will you join?')
+		const unchanged = documentReader(DEFAULT_MODE_LABEL)
 		expect(edited(unchanged))
 			.toBe(false)
 		expect(undone(unchanged))
 			.toBe(true)
 
-		const changed = editedModeReader('Where will you be?')
+		const changed = documentReader({ ...DEFAULT_MODE_LABEL, en: 'Where will you be?' })
 		expect(edited(changed))
 			.toBe(true)
 		expect(undone(changed))
 			.toBe(false)
 	})
 
-	it('reads the label in the survey language: the default zh-TW label is not an edit', () => {
+	it('counts an edit in any language, whatever the Preview shows: a zh-TW edit completes it (the Preview restarts in en)', () => {
 		const edited = stage('edit-and-undo', 0)
-		expect(edited(editedModeReader('How will you join?', 'zh-TW')))
-			.toBe(false)
-		// An en edit does not show in a zh-TW survey: the Preview shows the zh-TW default, so nothing changed yet.
-		expect(edited(editedModeReader('Where will you be?', 'zh-TW')))
-			.toBe(false)
+		expect(edited(documentReader({ ...DEFAULT_MODE_LABEL, 'zh-TW': '您要怎麼來？' })))
+			.toBe(true)
+		// A removed language is an edit too (the Document is then invalid: a missing translation); the reader still reads it.
+		expect(edited(documentReader({ en: 'How will you join?' })))
+			.toBe(true)
 	})
 
-	it('does not read a label nothing evaluated yet', () => {
-		const { reader } = setup()
+	it('fails closed without a committed Document: the Preview frame\'s Runtime reader never completes it', () => {
+		const { reader, mode } = setup()
+		mode.properties.text.get()
 		expect(stage('edit-and-undo', 0)(reader))
 			.toBe(false)
 		expect(stage('edit-and-undo', 1)(reader))
@@ -472,11 +472,11 @@ describe('the whole script on a real Runtime', () => {
 		expect(actions.activateTab)
 			.toHaveBeenLastCalledWith('author', 'structure')
 		// The real edit replaces the Runtime; a step's predicate then reads the new one.
-		engine.recheck(editedModeReader('Where will you be?'))
+		engine.recheck(documentReader({ ...DEFAULT_MODE_LABEL, en: 'Where will you be?' }))
 		expectStep('edit-and-undo', false)
 		expect(engine.getSnapshot().revealed)
 			.toHaveLength(1)
-		engine.recheck(editedModeReader('How will you join?'))
+		engine.recheck(documentReader(DEFAULT_MODE_LABEL))
 		expectStep('edit-and-undo', true)
 		advance()
 		settle()

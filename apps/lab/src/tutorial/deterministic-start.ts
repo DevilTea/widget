@@ -16,6 +16,7 @@
  * Actions: "Start tour" / "Cancel".
  */
 
+import type { ReplacementLoss } from '../lab/draft-guard'
 import { replacementLoss } from '../lab/draft-guard'
 
 export interface DeterministicStartInput {
@@ -33,11 +34,11 @@ export interface DeterministicStartInput {
 export interface DeterministicStartDecision {
 	/** `true` when the visitor must confirm before the teaching preset replaces their work. */
 	readonly needsConfirmation: boolean
-	/** `true` when confirming also discards committed edits that Undo cannot restore (the message must say so). */
-	readonly discardsEdits: boolean
+	/** What confirming discards (`none` when nothing is asked): the message names the draft, committed edits Undo cannot restore, or both. */
+	readonly loss: ReplacementLoss
 }
 
 export function decideDeterministicStart(input: DeterministicStartInput): DeterministicStartDecision {
 	const loss = replacementLoss({ isDirty: input.isDirty, hasCommittedEdits: input.hasCommittedEdits, undoable: !input.switchesShowcase })
-	return { needsConfirmation: loss !== 'none', discardsEdits: loss === 'edits' || loss === 'draft-and-edits' }
+	return { needsConfirmation: loss !== 'none', loss }
 }

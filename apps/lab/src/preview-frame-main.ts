@@ -29,6 +29,7 @@ import {
 } from './preview-host/protocol'
 import { ShowcaseHostKey } from './showcase-host'
 import { getShowcase } from './showcases/registry'
+import { advanceStageProgress } from './tutorial/engine'
 import { createRuntimeReader, subscribeObservationTargets } from './tutorial/inspection-reader'
 import { getTour } from './tutorial/tours'
 import './styles/lab-tokens.css'
@@ -114,15 +115,9 @@ function progressForRequest(request: Extract<PreviewHostRequest, { kind: 'tutori
 	const step = script?.steps[request.stepIndex]
 	if (step === undefined)
 		return request.progress
-	let progress = Math.min(request.progress, step.stages.length)
-	const reader = createRuntimeReader(current.runtime)
-	while (progress < step.stages.length) {
-		const stage = step.stages[progress]!
-		if (stage.isComplete !== undefined && !stage.isComplete(reader))
-			break
-		progress++
-	}
-	return progress
+	// The frame's reader has no committed Document (`readAuthoredConfig` is absent), so a stage gated on it stops the walk here;
+	// the parent evaluates those (`use-tutorial.ts`).
+	return advanceStageProgress(step, request.progress, createRuntimeReader(current.runtime))
 }
 
 window.addEventListener('message', (event) => {

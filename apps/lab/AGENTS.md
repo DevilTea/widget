@@ -1512,19 +1512,30 @@ Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used b
 
 **One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`, `onboarding`, `document-repair`, `renderer-packs`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts`, `i18n/quote-rules-messages.ts`, `i18n/onboarding-messages.ts` and `i18n/document-repair-messages.ts` are the models).
 
-**A tour gives the user's place and work back (Lab UX phase 2, report item 14).** `beginTour()` records the tool tab and the Author view
-(`LabStore.activeTab`, `authorView`) and the tour's **Finish** or **Skip tour** restores both (`restorePlaceBeforeTour()`; a recorded `preview` is not restored: activating the Preview group again left the Preview frame blank in the trip tour spec); pausing keeps the
-tour's place, and a tour that ends because its showcase was left restores nothing (the user chose where to go). A start reloads the tour's
+**A tour gives the user's place and work back (Lab UX phase 2, report item 14).** `beginTour()` records the tool group's own tab and the
+Author view, and the tour's **Finish** or **Skip tour** restores both (`restorePlaceBeforeTour()`). The tab is `LabStore.toolGroupTab`, which
+`Workbench.vue` keeps from Dockview (the canonical panel shown in Author's group, `null` for Implementation or Document Tools), never
+`activeTab`: that one is shared by both Dockview groups and is `preview` once the Preview was touched, and activating the Preview's group
+again left its frame blank (the trip tour spec). The place is recorded afresh on every start or restart that begins outside a tour (idle
+or completed), so a user who moved since the last tour gets their new place back; a start while a tour runs or is paused keeps the place
+recorded when it began. A start whose reload fails forgets the place. Pausing keeps the tour's place, and a tour that ends because its
+showcase was left restores nothing (the user chose where to go). A start reloads the tour's
 default preset: on the tour's own showcase that is an ordinary preset commit, so committed edits are not asked about and the store's
 replaced-document notice offers Undo (see "Header, status chips and draft protection"); `decideDeterministicStart()` asks only about an
 unapplied draft, or, when the start switches showcase (from the hidden Sandbox, which has no tour), about committed edits too, with its own
-message (`START_DISCARDS_EDITS_MESSAGE`). `TutorialActions.activateTab(tab, authorView?)` can also open an Author view.
+message (`START_DISCARDS_EDITS_MESSAGE`, or `START_DISCARDS_DRAFT_AND_EDITS_MESSAGE` naming the draft too). `TutorialActions.activateTab(tab, authorView?)` can also open an Author view.
 
 **The Survey tour teaches editing.** `survey-script.ts` has ten steps: the map of the views comes second (Author, Preview, Explain, Selected widget,
 Events, Blueprint, Runtime, Dependencies, Implementation, each a link), and `edit-and-undo` comes after the answer steps (a committed edit
 restarts the Preview, so the answers those steps build on would start over). It opens Author > Structure on `mode` (`data-tutorial-target`
-`author-structure` is the Structure editor pane) and is gated on `mode.text`, the label the Preview renders in the survey language: the first
-stage completes when it is neither default label (en or zh-TW), the second when it is a default again (Undo). The map says that
+`author-structure` is the Structure editor pane) and is gated on the **committed Document**, not the Preview: the first stage completes when
+`mode`'s authored `config.label` differs from the default in any language or shape, the second when it is the default again (Undo). The
+survey's language is Runtime State and every commit restarts the Preview in the first language, so a Preview-side gate never completed for
+a visitor who read the survey in 中文 and edited `zh-TW`. `TutorialRuntimeReader.readAuthoredConfig` reads the Document's authored config;
+the parent's reader (`createDocumentReader()`) has it and the frame's does not, so `use-tutorial.ts` walks the stages whose predicate holds
+against the Document first, lets the frame continue from there, walks them again, and also rechecks on every Document revision (an invalid
+commit replaces no Runtime). The spotlight is applied after the render, in the next frame, and again when the Author view changes (the
+Structure pane is a new element after JSON). The map says that
 selecting a widget (Inspect, or the Structure tree) makes Explain show what it is and why it behaves this way; its TODO for phase 3 is
 only to drop the views the IA moves into Tools.
 

@@ -241,12 +241,21 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 		tutorial.cancelStart()
 		expect(tutorial.confirmMessage.value)
 			.toBe('Starting the tutorial will load the Survey teaching example and replace your unapplied changes.')
+
+		// With an unapplied draft as well, one message names both.
+		store.setDraftSourceText('{ "unapplied": true }')
+		tutorial.requestStart()
+		expect(tutorial.confirmMessage.value)
+			.toBe('Starting the tutorial opens its teaching example in another showcase. The JSON editor\'s unapplied changes and your edits to this document will be discarded, and Undo cannot bring them back.')
+		tutorial.cancelStart()
 		store.dispose()
 	})
 
-	it('puts the user back on the tab and Author view they had when the tour ends with Finish or is skipped', async () => {
+	it('puts the user back on the tool group\'s tab and the Author view they had when the tour ends with Finish or is skipped', async () => {
 		const store = createLabStore(getShowcase('survey')!)
-		store.activeTab.value = 'events'
+		// `Workbench.vue` keeps `toolGroupTab` from Dockview; `activeTab` is the Preview, the group the user touched last.
+		store.toolGroupTab.value = 'events'
+		store.activeTab.value = 'preview'
 		store.authorView.value = 'json'
 		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
 		tutorial.requestStart()
@@ -262,10 +271,11 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 			.toBe('json')
 
 		// Pausing keeps the tour's place; a later end still restores what the user had before the tour.
-		store.activeTab.value = 'runtime'
+		store.toolGroupTab.value = 'runtime'
 		tutorial.requestStart()
 		await flush()
 		store.activeTab.value = 'blueprint'
+		store.toolGroupTab.value = 'blueprint'
 		tutorial.pause()
 		expect(store.activeTab.value)
 			.toBe('blueprint')
@@ -274,10 +284,42 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 		expect(store.activeTab.value)
 			.toBe('runtime')
 
-		// The Preview is not a tool tab to go back to (activating its group again left the frame blank).
-		store.activeTab.value = 'preview'
+		// A fresh start records the place again: the user moved since the last tour.
+		store.toolGroupTab.value = 'dependencies'
 		tutorial.requestStart()
 		await flush()
+		store.activeTab.value = 'author'
+		tutorial.skip()
+		expect(store.activeTab.value)
+			.toBe('dependencies')
+
+		// A non-canonical panel in the tool group (Implementation) records no tab: nothing is activated on the way back.
+		store.toolGroupTab.value = null
+		tutorial.requestStart()
+		await flush()
+		store.activeTab.value = 'blueprint'
+		tutorial.skip()
+		expect(store.activeTab.value)
+			.toBe('blueprint')
+		store.dispose()
+	})
+
+	it('forgets the place when the tour could not start (the reload failed)', async () => {
+		const store = createLabStore(getShowcase('survey')!)
+		store.applyPreset = vi.fn(async () => {
+			throw new Error('reload failed')
+		})
+		const unhandled = vi.fn()
+		process.on('unhandledRejection', unhandled)
+		store.toolGroupTab.value = 'events'
+		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
+		tutorial.requestStart()
+		await flush()
+		await flush()
+		process.off('unhandledRejection', unhandled)
+		expect(tutorial.snapshot.value.status)
+			.toBe('idle')
+		// Nothing to give back: a later skip leaves the user where they are.
 		store.activeTab.value = 'blueprint'
 		tutorial.skip()
 		expect(store.activeTab.value)

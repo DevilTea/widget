@@ -35,6 +35,15 @@ export interface TutorialRuntimeReader {
 	readState: (widgetId: string, key: string) => unknown
 	/** `undefined` when the widget/property member cannot be resolved in the current Runtime. */
 	readProperty: (widgetId: string, key: string) => TutorialPropertySnapshot | undefined
+	/**
+	 * The authored `config` of the widget with this id in the parent's **committed Document** (Lab UX phase 2: a step about
+	 * editing the definition must not depend on the Preview, whose Runtime restarts in the default survey language after every
+	 * commit and lags an invalid Document). `undefined` where the Document is not available — the Preview frame's reader — or
+	 * the widget is not in it, so a predicate that reads it fails closed there. `use-tutorial.ts` evaluates the stages against
+	 * the Document reader (`createDocumentReader()`) in the parent first, then lets the frame continue with the Runtime reader
+	 * from there, and then walks the Document stages again.
+	 */
+	readAuthoredConfig?: (widgetId: string) => unknown
 }
 
 /**

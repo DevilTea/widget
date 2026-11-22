@@ -16,7 +16,7 @@
  *
  * Property predicates see only values the Preview has already evaluated (`inspection-reader.ts` never
  * forces evaluation), so the survey renderers always read `guests.visible`, `guests.errors` while visible,
- * `open-day.changedSinceSubmit` and `mode.text` (the label the edit step watches; `mode` is always visible).
+ * and `open-day.changedSinceSubmit`. The edit step reads the committed Document instead (`readAuthoredConfig`), not the Preview.
  */
 
 import type { TutorialRuntimeReader, TutorialScript } from './types'
@@ -37,16 +37,25 @@ function guestsErrors(reader: TutorialRuntimeReader): readonly { readonly code?:
 	return errors.result.value as readonly { readonly code?: unknown }[]
 }
 
-/** `mode`'s label in `survey-default`, in each survey language: the edit step compares against both. */
-export const MODE_DEFAULT_LABELS: readonly string[] = ['How will you join?', '您會如何參加？']
+/** `mode`'s authored label in `survey-default`, every language: the edit step compares the committed Document against it. */
+export const MODE_DEFAULT_LABEL: Readonly<Record<string, string>> = { 'en': 'How will you join?', 'zh-TW': '您會如何參加？' }
 
-/** The label the Preview shows for `mode` (its `text` Property, which the renderer always reads), else `undefined`. */
-function modeLabel(reader: TutorialRuntimeReader): string | undefined {
-	const text = reader.readProperty('mode', 'text')
-	if (text?.status !== 'completed' || !text.result.ok)
+/**
+ * Whether the committed Document's `mode` label is still the default (`default`), differs from it in any language or shape
+ * (`edited`), or cannot be read (`undefined`: no Document, which is the Preview frame's reader, or no `mode` widget), so both
+ * stages fail closed where the Document is not available.
+ */
+function modeLabelState(reader: TutorialRuntimeReader): 'default' | 'edited' | undefined {
+	const config = reader.readAuthoredConfig?.('mode')
+	if (typeof config !== 'object' || config === null)
 		return undefined
-	const label = (text.result.value as { readonly label?: unknown } | null)?.label
-	return typeof label === 'string' ? label : undefined
+	const label = (config as { readonly label?: unknown }).label
+	if (typeof label !== 'object' || label === null || Array.isArray(label))
+		return 'edited'
+	const entries = Object.entries(label as Record<string, unknown>)
+	const same = entries.length === Object.keys(MODE_DEFAULT_LABEL).length
+		&& entries.every(([language, text]) => MODE_DEFAULT_LABEL[language] === text)
+	return same ? 'default' : 'edited'
 }
 
 /** The successful `guests.visible` value, else `undefined`. */
@@ -63,7 +72,6 @@ export const surveyTourScript: TutorialScript = {
 		{ widgetId: 'guests', member: { type: 'property', key: 'visible' } },
 		{ widgetId: 'open-day', member: { type: 'state', key: 'submitted' } },
 		{ widgetId: 'open-day', member: { type: 'property', key: 'changedSinceSubmit' } },
-		{ widgetId: 'mode', member: { type: 'property', key: 'text' } },
 	],
 	steps: [
 		{
@@ -197,7 +205,9 @@ export const surveyTourScript: TutorialScript = {
 		{
 			// Lab UX phase 2 (report item 14): every step above changes answers; this one changes the definition. A Structure
 			// edit is a Document commit, so the Preview is rebuilt from it (its answers start over), and Undo takes it back as a
-			// new revision. Gated on what the Preview shows: `mode.text` is the label the renderer reads, in the survey language.
+			// new revision. Gated on the committed Document (`mode`'s authored `config.label`), not on the Preview: the survey's
+			// language is Runtime State and every commit restarts the Preview in the first language, so a visitor who switched to
+			// 中文 and edited `zh-TW` would never see the edit there, and an edit that made the Document invalid would never reach it.
 			id: 'edit-and-undo',
 			title: 'Change the definition, then undo',
 			target: 'author-structure',
@@ -207,19 +217,13 @@ export const surveyTourScript: TutorialScript = {
 			},
 			stages: [
 				{
-					prompt: 'Try it: in Author > Structure, change the label of "How will you join?" (its en text, or zh-TW if the survey shows Chinese), then press Enter.',
-					isComplete: (reader) => {
-						const label = modeLabel(reader)
-						return label !== undefined && !MODE_DEFAULT_LABELS.includes(label)
-					},
-					reveal: 'The Preview shows your new label. You changed the definition, not an answer: the change was committed to the Document at once and the Preview was rebuilt from it, which is why its answers started over.',
+					prompt: 'Try it: in Author > Structure, change a text of the label of "How will you join?" (en or zh-TW), then press Enter. The Preview restarts after each change.',
+					isComplete: reader => modeLabelState(reader) === 'edited',
+					reveal: 'You changed the definition, not an answer: the change was committed to the Document at once and the Preview was rebuilt from it, so its answers started over and the survey is back in its first language.',
 				},
 				{
 					prompt: 'Now press Undo in the header.',
-					isComplete: (reader) => {
-						const label = modeLabel(reader)
-						return label !== undefined && MODE_DEFAULT_LABELS.includes(label)
-					},
+					isComplete: reader => modeLabelState(reader) === 'default',
 					reveal: 'The label is back. Undo restores the previous version of the definition, whether the change came from Structure, the JSON view or a preset.',
 				},
 			],

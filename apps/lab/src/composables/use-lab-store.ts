@@ -172,6 +172,12 @@ export interface LabStore {
 	readonly presets: Readonly<Ref<readonly ShowcasePreset[]>>
 	readonly activeTab: Ref<LabToolTab>
 	/**
+	 * The canonical panel shown in the tool group (the group that holds Author), kept by `Workbench.vue` from Dockview; `null`
+	 * before the workbench is up or while a non-canonical panel (Implementation, Document Tools) is shown there. `activeTab` is
+	 * shared by both Dockview groups and is often `preview`; the tutorial records this one to give the user their tab back.
+	 */
+	readonly toolGroupTab: Ref<LabToolTab | null>
+	/**
 	 * Dependency Graph presentation preferences (diagnostic #13 Phase 5 "inspector panel interaction
 	 * contract"): panel-local, and — unlike snapshot-bound focus/selections — deliberately not reset by
 	 * `session.subscribe()`/Apply, since these plain refs live on the `LabStore` object itself rather than
@@ -433,6 +439,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	})
 
 	const activeTab = shallowRef<LabToolTab>('author')
+	const toolGroupTab = shallowRef<LabToolTab | null>(null)
 	const graphShowAbsent = shallowRef(false)
 	const graphShowIsolatedMembers = shallowRef(false)
 	const graphExpandedClusterIds = shallowRef<ReadonlySet<string>>(new Set())
@@ -560,6 +567,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		showcaseId,
 		presets,
 		activeTab,
+		toolGroupTab,
 		graphShowAbsent,
 		graphShowIsolatedMembers,
 		graphExpandedClusterIds,

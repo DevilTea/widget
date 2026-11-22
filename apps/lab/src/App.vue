@@ -87,8 +87,11 @@ function applySpotlight(target: string | null): void {
 // After the render (`flush: 'post'`), and once more in the next frame: a step whose target is in a workbench panel (the survey tour's
 // Structure step, Lab UX phase 2) also activates that panel in its `onEnter`, and Dockview attaches an inactive panel's element to the
 // document only once it is active, so the element may not be in the page when the step changes.
+// The Author view is a dependency too: a target inside it (the Structure pane) is a new element after the view changes (JSON ->
+// Structure during the edit step), so the class is put on the new one. That is the only remount a target sees today.
 watchEffect(() => {
 	const target = tutorialRailVisible.value ? (tutorial.snapshot.value.step?.target ?? null) : null
+	void store.authorView.value
 	applySpotlight(target)
 	requestAnimationFrame(() => {
 		const current = tutorialRailVisible.value ? (tutorial.snapshot.value.step?.target ?? null) : null

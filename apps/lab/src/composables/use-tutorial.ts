@@ -18,14 +18,15 @@
  */
 
 import type { InjectionKey, Ref } from 'vue'
-import type { TutorialActions, TutorialAuthorView, TutorialEngine, TutorialEngineSnapshot, TutorialTabId } from '../tutorial/types'
+import type { ReplacementLoss } from '../lab/draft-guard'
+import type { TutorialActions, TutorialAuthorView, TutorialEngine, TutorialEngineSnapshot, TutorialStepDefinition, TutorialTabId } from '../tutorial/types'
 import type { ImplementationExplorerStore } from './use-implementation-explorer'
 import type { LabStore, LabToolTab } from './use-lab-store'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, inject, onUnmounted, shallowRef, watch } from 'vue'
 import { decideDeterministicStart } from '../tutorial/deterministic-start'
 import { createTutorialEngine } from '../tutorial/engine'
-import { findBlueprintNodeId } from '../tutorial/inspection-reader'
+import { createDocumentReader, findBlueprintNodeId } from '../tutorial/inspection-reader'
 import { isTourCompleted, isWelcomeDismissed, markTourCompleted, markWelcomeDismissed } from '../tutorial/session-flags'
 import { createStartRequestGuard } from '../tutorial/start-request'
 import { DEFAULT_TOUR_ID, getTour, tourForShowcase, tours } from '../tutorial/tours'
@@ -81,6 +82,8 @@ export const TutorialStoreKey: InjectionKey<TutorialStore> = Symbol('widget-lab:
  * without a tour of its own, such as the hidden Sandbox): a switch starts a new session, so Undo cannot bring them back.
  */
 export const START_DISCARDS_EDITS_MESSAGE = 'Starting the tutorial opens its teaching example in another showcase. Your edits to this document will be discarded, and Undo cannot bring them back.'
+/** The same start with an unapplied JSON draft as well: one message names both, as `DraftGuardDialog` does. */
+export const START_DISCARDS_DRAFT_AND_EDITS_MESSAGE = 'Starting the tutorial opens its teaching example in another showcase. The JSON editor\'s unapplied changes and your edits to this document will be discarded, and Undo cannot bring them back.'
 
 /**
  * Loads a tour's known default preset through the exact same Apply pipeline every other Source mutation
@@ -124,27 +127,36 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		return activeEngine()
 			.getSnapshot()
 	})
-	/** The pending start also discards committed edits Undo cannot restore (it switches showcase): the message says so. */
-	const confirmDiscardsEdits = shallowRef(false)
-	const confirmMessage = computed(() => confirmDiscardsEdits.value
-		? START_DISCARDS_EDITS_MESSAGE
-		: getTour(activeTourId.value)?.startConfirmMessage ?? tourForShowcase(DEFAULT_TOUR_ID).startConfirmMessage)
+	/** What the pending start discards: committed edits Undo cannot restore (it switches showcase), with or without the draft. */
+	const confirmLoss = shallowRef<ReplacementLoss>('none')
+	const confirmMessage = computed(() => confirmLoss.value === 'draft-and-edits'
+		? START_DISCARDS_DRAFT_AND_EDITS_MESSAGE
+		: confirmLoss.value === 'edits'
+			? START_DISCARDS_EDITS_MESSAGE
+			: getTour(activeTourId.value)?.startConfirmMessage ?? tourForShowcase(DEFAULT_TOUR_ID).startConfirmMessage)
 
 	/**
 	 * Where the user was before the tour started (the tool tab and the Author view), restored when the tour ends with Finish or
 	 * is skipped (Lab UX phase 2, report item 14): the tour's own steps move both around. Pausing keeps the tour's place.
 	 */
-	let placeBeforeTour: { readonly tab: LabToolTab, readonly authorView: LabStore['authorView']['value'] } | null = null
+	let placeBeforeTour: { readonly tab: LabToolTab | null, readonly authorView: LabStore['authorView']['value'] } | null = null
 	function restorePlaceBeforeTour(): void {
 		const place = placeBeforeTour
 		placeBeforeTour = null
 		if (place === null)
 			return
 		store.authorView.value = place.authorView
-		// `preview` is not a tool tab the user was reading (Dockview reports the Preview as active once it was touched, so it
-		// may be the active panel at start), and activating the Preview's own group again left the frame blank (e2e/trip-budget.spec.ts).
-		if (place.tab !== 'preview')
+		if (place.tab !== null)
 			store.activeTab.value = place.tab
+	}
+
+	/**
+	 * Where the user is now: the tool group's own shown panel (`LabStore.toolGroupTab`, from Dockview), never `activeTab`, which is
+	 * shared by both groups and is `preview` as soon as the Preview was touched (activating the Preview's group again left the
+	 * frame blank, e2e/trip-budget.spec.ts). `null` while a non-canonical panel is shown there: nothing is restored then.
+	 */
+	function currentPlace(): NonNullable<typeof placeBeforeTour> {
+		return { tab: store.toolGroupTab.value, authorView: store.authorView.value }
 	}
 
 	const welcomeVisible = shallowRef(!isWelcomeDismissed())
@@ -211,24 +223,46 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	}
 
 	let recheckSequence = 0
+	/**
+	 * Walks forward from `progress` over the stages whose predicate holds against the committed Document
+	 * (`createDocumentReader()`). It stops at a stage without a predicate: narration stays the frame's to reveal, as before.
+	 */
+	function documentProgress(step: TutorialStepDefinition, progress: number): number {
+		const reader = createDocumentReader(inspectBlueprint(store.documentState.value.blueprint))
+		let next = progress
+		while (next < step.stages.length) {
+			const stage = step.stages[next]!
+			if (stage.isComplete === undefined || !stage.isComplete(reader))
+				break
+			next++
+		}
+		return next
+	}
+
 	function recheckNow(): void {
 		const engine = activeEngine()
 		const tourId = activeTourId.value
 		const before = engine.getSnapshot()
 		if (before.status !== 'active' || before.step === null || store.showcaseId.value !== tourId)
 			return
+		const step = before.step
+		// Stages gated on the committed Document (Lab UX phase 2) are evaluated here, where the Document is; the frame's reader
+		// cannot read it and stops at them. Walk them first, let the frame continue from there, then walk them again.
+		const local = documentProgress(step, before.revealed.length)
+		if (local > before.revealed.length)
+			engine.acceptProgress(local)
 		const connection = store.previewHost.connection.value
 		if (connection === null)
 			return
 		const sequence = ++recheckSequence
-		void store.previewHost.evaluateTutorial(tourId, before.stepIndex, before.revealed.length)
+		void store.previewHost.evaluateTutorial(tourId, before.stepIndex, local)
 			.then((progress) => {
 				if (sequence !== recheckSequence || activeTourId.value !== tourId)
 					return
 				const current = engine.getSnapshot()
 				if (current.status !== 'active' || current.stepIndex !== before.stepIndex)
 					return
-				engine.acceptProgress(progress)
+				engine.acceptProgress(documentProgress(step, Math.max(progress, local)))
 			})
 			.catch(() => {
 				// A frame replacement/disconnect is retried by the connection watch below.
@@ -236,8 +270,13 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	}
 
 	function beginTour(tourId: string, isRestart: boolean): void {
-		// A restart from a completed tour or a start over a running one keeps the place recorded first.
-		placeBeforeTour ??= { tab: store.activeTab.value, authorView: store.authorView.value }
+		// Recorded afresh for every start or restart that begins outside a tour (idle or completed: the user may have moved since
+		// the last one). A start while a tour is running or paused keeps the place recorded when that tour began, since the
+		// current place is then one the tour chose.
+		const status = engineOf(tourId)
+			.getSnapshot().status
+		if (status !== 'active' && status !== 'paused')
+			placeBeforeTour = currentPlace()
 		void loadTourDefault(store, tourId)
 			.then(() => {
 				activeTourId.value = tourId
@@ -247,6 +286,11 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 				else
 					engine.start(actions())
 				recheckNow()
+			})
+			.catch((error: unknown) => {
+				// The tour did not start: there is no place to give back later.
+				placeBeforeTour = null
+				throw error
 			})
 			.finally(() => {
 				// Settles the guard only once the deterministic reload AND the engine transition it gates
@@ -276,7 +320,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			return
 
 		if (decision.needsConfirmation) {
-			confirmDiscardsEdits.value = decision.discardsEdits
+			confirmLoss.value = decision.loss
 			pendingConfirmAction = () => beginTour(tourId, isRestart)
 			confirmVisible.value = true
 			return
@@ -302,6 +346,9 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	)
 
 	watch(() => store.showcaseId.value, showcaseId => followShowcase(showcaseId))
+	// A commit (valid or not) is what a Document-gated stage waits for; an invalid one replaces no Runtime, so the watch above
+	// would not fire for it.
+	watch(() => store.documentState.value.revision, () => recheckNow())
 
 	onUnmounted(() => {
 		stopRemoteObservation()
@@ -349,7 +396,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 		// is accepted afterward, and the draft is left completely untouched.
 		cancelStart: () => {
 			confirmVisible.value = false
-			confirmDiscardsEdits.value = false
+			confirmLoss.value = 'none'
 			pendingConfirmAction = null
 			startRequestGuard.cancel()
 			syncPending()
