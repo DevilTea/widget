@@ -18,7 +18,6 @@ const { createWidgetPlugin, createWidgetSystem } = core
 /** One State `x`, then L Properties c0..c{L-1}, each depending on the previous one. */
 function createChain(length) {
 	const chain = createWidgetPlugin('chain')
-		.description('chain')
 		.interfaces()
 		.state(s => s.x({ validate: v => typeof v === 'number', default: () => 0 }))
 		.properties((s) => {
@@ -45,7 +44,6 @@ function createChain(length) {
 /** N `checked` widgets whose State reports a diagnostic for a negative value. */
 function createChecked(n) {
 	const checked = createWidgetPlugin('checked')
-		.description('checked')
 		.interfaces()
 		.state(s => s.v({
 			validate: (input, ctx) => {

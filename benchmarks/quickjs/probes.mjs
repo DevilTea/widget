@@ -75,7 +75,6 @@ function buildChain(length, variant) {
 	if (variant === 'state-first')
 		return buildStateFirstChain(length)
 	const plugin = createWidgetPlugin('chain')
-		.description('chain')
 		.interfaces()
 		.state(s => s.x({ validate: v => typeof v === 'number', default: () => 0 }))
 		.properties((s) => {
@@ -111,7 +110,6 @@ function buildChain(length, variant) {
 /** The chain whose every Property reads a State of its own first (see the header); the head reads `L + sum of s{i}`. */
 function buildStateFirstChain(length) {
 	const plugin = createWidgetPlugin('chain')
-		.description('chain')
 		.interfaces()
 		.state((s) => {
 			let t = s
@@ -158,12 +156,10 @@ function buildSurvey(widgets, variant) {
 	const live = variant === 'live' || variant === 'state-first'
 	const stateFirst = variant === 'state-first'
 	const root = createWidgetPlugin('qroot')
-		.description('survey root')
 		.interfaces()
-		.slots({ children: { description: 'questions' } })
+		.slots({ children: {} })
 		.done()
 	const question = createWidgetPlugin('q')
-		.description('survey question')
 		.interfaces()
 		.state(s => s.answer({ validate: v => typeof v === 'number', default: () => 0 }))
 		.properties(s => s
