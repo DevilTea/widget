@@ -1231,9 +1231,11 @@ shows what the Document holds again; a text, number or JSON box keeps the reject
 the box's `aria-describedby`; the reason alone, the outcome line above is the live announcement), with **Use the Document value** to go back (focus returns to the box).
 **While a JSON draft exists** (`isDirty`) a Structure commit would be refused (`draft-dirty`: it would discard the draft), so since Lab UX phase 1
 Structure says so before anything is clicked: a notice above the editor ("The JSON view has unapplied changes. Apply or discard the JSON draft
-to edit here.", `structure-draft-notice`, `role="note"`, with **Open the JSON view**) and the fields are locked (`structure-fields`
-`data-locked="true"`, dimmed; `ConfigFieldEditor` gets `busy`, so the controls keep focus and readability, carry `aria-disabled` and send
-nothing). The tree stays usable. The `draft-dirty` refusal and the resync/"Not applied" handling stay for a draft that appears while a
+to edit here.", `structure-draft-notice`, `role="note"`, with **Open the JSON view**, which then puts keyboard focus on the JSON tab of the
+Author views, `author-view-json`) and the fields are locked (`structure-fields` `data-locked="true"`, dimmed; `ConfigFieldEditor` gets `busy`
+and `locked`, so the controls keep focus and readability, carry `aria-disabled` and send nothing, and the text, number and JSON boxes are
+`readonly`, so nothing can be typed that would sit unsent in a box). When the lock lifts (Apply or Revert, even without leaving Structure) every
+box shows the Document's value again, including text typed before the draft appeared. The tree stays usable. The `draft-dirty` refusal and the resync/"Not applied" handling stay for a draft that appears while a
 command is being sent (and serve patch errors and stale selections); `e2e/structure-editor.spec.ts` reaches them by setting the draft and
 acting in the same task (`actWithDraftAppearing`). A command that went through says so in plain language ("Change applied. Use Undo to take it back."; it said "Author command applied to Document rN"); the
 revision it produced is the outcome line's `data-revision`, for specs.

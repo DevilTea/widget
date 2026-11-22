@@ -31,6 +31,11 @@ const props = defineProps<{
 	/** May be removed from its parent (an optional object key, or an array item above the minimum). */
 	removable?: boolean
 	busy: boolean
+	/**
+	 * Locked by an unapplied JSON draft (`busy` is set too, so nothing is sent): the text, number and JSON boxes are `readonly`,
+	 * so they stay focusable and readable but take no typing, and when the lock lifts they show the Document's value again.
+	 */
+	locked?: boolean
 	/** Edit the value as its JSON text whatever it is (the config of a widget whose config is not an object). */
 	asJson?: boolean
 	/**
@@ -98,6 +103,16 @@ watch(() => props.resync, (resync) => {
 		return
 	}
 	controlKey.value++
+})
+
+// The lock lifted (the draft was applied or discarded): no text typed before it is left in a box as if it were the Document's.
+// Only on lifting: a refusal that arrives while the lock is coming on must keep its rejected text and note.
+watch(() => props.locked === true, (locked, wasLocked) => {
+	if (locked || !wasLocked)
+		return
+	text.value = toText(props.value)
+	invalid.value = false
+	notApplied.value = null
 })
 
 async function useDocumentValue(): Promise<void> {
@@ -265,6 +280,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:id="`${id}-control`"
 						:key="controlKey"
 						v-model="text"
+						:readonly="locked === true"
 						:aria-disabled="busy ? 'true' : undefined"
 						:aria-invalid="invalid"
 						:aria-describedby="notApplied !== null ? `${id}-not-applied` : undefined"
@@ -281,6 +297,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						v-model="text"
 						type="text"
 						:inputmode="field.kind === 'number' ? 'decimal' : undefined"
+						:readonly="locked === true"
 						:aria-disabled="busy ? 'true' : undefined"
 						:aria-invalid="invalid"
 						:aria-describedby="notApplied !== null ? `${id}-not-applied` : undefined"
@@ -403,6 +420,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:removable="canRemoveKey(field, key)"
 						:resync="resync"
 						:busy="busy"
+						:locked="locked"
 						@edit="(p, e) => emitEdit(p, e)"
 					/>
 					<p
@@ -484,6 +502,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 						:removable="canRemoveItem(field, arrayValue.length)"
 						:resync="resync"
 						:busy="busy"
+						:locked="locked"
 						@edit="(p, e) => emitEdit(p, e)"
 					/>
 					<p

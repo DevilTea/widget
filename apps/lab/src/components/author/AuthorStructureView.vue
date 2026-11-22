@@ -61,6 +61,17 @@ watch([selectedNodeId, () => store.documentState.value.revision], () => {
 	outcomeRevision.value = null
 })
 
+/**
+ * The notice's button switches Author to JSON. This view (and the button with it) is unmounted by that, which would leave
+ * keyboard focus on the page: it goes to the JSON tab of the Author views instead, once the switch has rendered.
+ */
+async function openJsonView(): Promise<void> {
+	store.authorView.value = 'json'
+	await nextTick()
+	document.querySelector<HTMLElement>('[data-testid="author-view-json"]')
+		?.focus()
+}
+
 function selectNode(nodeId: InspectionNodeId): void {
 	store.setFocus('document', { nodeId })
 }
@@ -179,7 +190,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 					type="button"
 					data-testid="structure-open-json"
 					class="min-h-6 cursor-pointer rounded-(--lab-radius) border border-default bg-default px-2 text-xs text-default focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
-					@click="store.authorView.value = 'json'"
+					@click="openJsonView"
 				>
 					{{ i18n.t('Open the JSON view') }}
 				</button>
@@ -229,6 +240,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 								:path="[]"
 								label="config"
 								:busy="busy || draftLocked"
+								:locked="draftLocked"
 								@edit="onEdit"
 							/>
 						</div>

@@ -30,6 +30,7 @@ const view = store.authorView
 				:key="tab"
 				type="button"
 				role="tab"
+				:data-testid="`author-view-${tab}`"
 				:aria-selected="view === tab"
 				class="flex-auto p-[6px] text-[11px] [border:none] bg-transparent text-lab-text cursor-pointer"
 				:style="{ fontWeight: view === tab ? '600' : 'normal', borderBottom: view === tab ? '2px solid var(--lab-color-accent)' : 'none' }"
