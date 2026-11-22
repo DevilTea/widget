@@ -113,6 +113,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			const primitive = createStatePrimitive(context, {
 				widgetId: node.id,
 				key,
+				pluginType: node.type,
 				definition: member.definition,
 				buildConfigFragment,
 				onDiagnosticsCommitted,
@@ -194,6 +195,7 @@ export function createWidgetSystemRuntime<Plugins extends AnyWidgetPluginTuple>(
 			const primitive = createPropertyPrimitive(context, {
 				widgetId: node.id,
 				name,
+				pluginType: node.type,
 				definition: member.definition,
 				buildConfigFragment,
 				selfNode: node.publicNode,
