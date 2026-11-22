@@ -6,7 +6,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { DeliveryConfig } from '../config'
 import type { Adjustment } from '../domain'
-import type { DeliveryRawConfig } from '../schemas'
+import type { DeliveryRawConfig } from '../raw-config'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveDeliveryConfig } from '../config'
 import { deliveryConfigSchema, deliveryMethodSchema } from '../schemas'

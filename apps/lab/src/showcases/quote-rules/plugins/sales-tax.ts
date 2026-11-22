@@ -7,7 +7,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { SalesTaxConfig } from '../config'
 import type { Adjustment } from '../domain'
-import type { SalesTaxRawConfig } from '../schemas'
+import type { SalesTaxRawConfig } from '../raw-config'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveSalesTaxConfig } from '../config'
 import { percentOf } from '../domain'

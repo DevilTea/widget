@@ -655,14 +655,44 @@ describe('createLabStore() graph cluster expansion', () => {
 			.toBe(false)
 	})
 
-	it('supports expandAll and collapseAll', () => {
+	it('keeps at most one cluster expanded: expanding B collapses A, collapsing the expanded one leaves none (issue #254)', () => {
 		const store = createSandboxStore()
-		store.expandAllGraphClusters()
+		store.expandGraphCluster('cluster:a')
+		expect([...store.graphExpandedClusterIds.value])
+			.toEqual(['cluster:a'])
+
+		store.expandGraphCluster('cluster:b')
+		expect([...store.graphExpandedClusterIds.value])
+			.toEqual(['cluster:b'])
+
+		store.toggleGraphCluster('cluster:a')
+		expect([...store.graphExpandedClusterIds.value])
+			.toEqual(['cluster:a'])
+
+		// Collapsing a widget that is not the expanded one changes nothing.
+		store.collapseGraphCluster('cluster:b')
+		expect([...store.graphExpandedClusterIds.value])
+			.toEqual(['cluster:a'])
+
+		store.toggleGraphCluster('cluster:a')
 		expect(store.graphExpandedClusterIds.value.size)
-			.toBeGreaterThan(0)
+			.toBe(0)
+
+		store.expandGraphCluster('cluster:b')
 		store.collapseAllGraphClusters()
 		expect(store.graphExpandedClusterIds.value.size)
 			.toBe(0)
+		expect('expandAllGraphClusters' in store)
+			.toBe(false)
+	})
+
+	it('does not replace the expanded set when the expanded cluster is expanded again (no relayout)', () => {
+		const store = createSandboxStore()
+		store.expandGraphCluster('cluster:a')
+		const before = store.graphExpandedClusterIds.value
+		store.expandGraphCluster('cluster:a')
+		expect(store.graphExpandedClusterIds.value)
+			.toBe(before)
 	})
 
 	it('keeps graph cluster presentation state unchanged when a member is focused', () => {

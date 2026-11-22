@@ -336,6 +336,8 @@ export interface PropertyPrimitive {
 export interface CreatePropertyPrimitiveParams {
 	readonly widgetId: WidgetId
 	readonly name: WidgetMemberKey
+	/** The owning widget's plugin type, named by contract-violation errors. */
+	readonly pluginType: string
 	readonly definition: ErasedWidgetPropertyDefinition
 	readonly buildConfigFragment: () => Record<string, unknown>
 	readonly selfNode: unknown
@@ -494,7 +496,7 @@ export function createPropertyPrimitive(context: RuntimeContext, params: CreateP
 				context,
 				owner,
 			})
-			const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimePropertyDiagnostic>()
+			const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimePropertyDiagnostic>(params.pluginType, 'Property', params.name, 'compute')
 			const sink: ActiveDiagnosticSink = {
 				addFinalizedDiagnostic: (diagnostic, dedupe) => collector.addFinalizedDiagnostic(diagnostic as RuntimePropertyDiagnostic, dedupe),
 			}

@@ -47,7 +47,10 @@ const emit = defineEmits<{
  */
 const FIT_OPTIONS = { padding: 0.04 } as const
 
-/** Fit may go this far out (the whole expanded Trip budget fits at about 0.06). */
+/**
+ * Fit may go this far out. One widget is expanded at a time (issue #254): the Trip budget with its largest widget expanded fits
+ * at about 0.2, but a larger Document may need less (the fully expanded Trip budget, no longer offered, fitted at about 0.06).
+ */
 const FIT_MIN_ZOOM = 0.05
 /** Whatever Fit settled on, a person can zoom out to about a quarter of it, but never below this unless Fit itself is lower: a small graph is not wheeled down to a dot. */
 const MANUAL_MIN_ZOOM = 0.1
@@ -207,7 +210,21 @@ function zoomGraph(direction: 'in' | 'out'): void {
 	void (direction === 'in' ? zoomIn() : zoomOut())
 }
 
-defineExpose({ fitGraph, zoomGraph })
+/**
+ * Focuses the expand/collapse button of a widget card in the given state (`expanded`: the card shows its members). Returns
+ * false while there is no such button or it cannot take focus yet (Vue Flow keeps a card hidden until it has measured it).
+ */
+function focusClusterToggle(clusterId: string, expanded: boolean): boolean {
+	const toggle = vueFlowContainer.value?.querySelector<HTMLButtonElement>(
+		`.vue-flow__node[data-id="${CSS.escape(clusterId)}"] .graph-cluster-toggle[aria-expanded="${expanded}"]`,
+	)
+	if (toggle === null || toggle === undefined)
+		return false
+	toggle.focus({ preventScroll: true })
+	return document.activeElement === toggle
+}
+
+defineExpose({ fitGraph, zoomGraph, focusClusterToggle })
 
 function onNodeClick({ node }: NodeMouseEvent): void {
 	if (node.type === 'cluster') {
@@ -515,6 +532,7 @@ function memberKindShort(kind: string): string {
 							class="graph-cluster-toggle"
 							:aria-label="i18n.t('Collapse')"
 							:title="i18n.t('Collapse')"
+							aria-expanded="true"
 							@click.stop="emit('toggleCluster', id)"
 						>
 							<span aria-hidden="true">−</span>
@@ -557,6 +575,7 @@ function memberKindShort(kind: string): string {
 							class="graph-cluster-toggle"
 							:aria-label="i18n.t('Expand')"
 							:title="i18n.t('Expand')"
+							aria-expanded="false"
 							@click.stop="emit('toggleCluster', id)"
 						>
 							<span aria-hidden="true">+</span>

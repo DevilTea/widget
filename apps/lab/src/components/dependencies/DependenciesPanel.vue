@@ -14,7 +14,7 @@
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { GraphVertexKind } from '../../graph/types'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
-import { computed, nextTick, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 import { useDependencyGraph } from '../../composables/use-dependency-graph'
 import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selection'
 import { useLabI18n } from '../../composables/use-lab-i18n'
@@ -119,9 +119,45 @@ function onClusterClick(clusterId: string): void {
 		store.setFocus('document', { nodeId: cluster.nodeId })
 }
 
+/**
+ * Expand/collapse keeps keyboard focus on the toggled widget (issue #254). A toggle asks for a new layout, and while the worker
+ * lays it out the canvas is not drawn (`flow` is null), so the button that was pressed leaves the DOM and focus falls back to the
+ * page. Once the new layout is drawn, the toggled card's button (now in its new state) takes focus again, unless focus has moved
+ * somewhere else meanwhile. One widget is expanded at a time, so expanding B also collapses A, and focus follows B.
+ */
+const graphView = useTemplateRef<HTMLElement>('graphView')
+let pendingToggleFocus: { clusterId: string, expanded: boolean } | null = null
+
 function onToggleCluster(clusterId: string): void {
+	pendingToggleFocus = { clusterId, expanded: !store.graphExpandedClusterIds.value.has(clusterId) }
 	store.toggleGraphCluster(clusterId)
 }
+
+/** Vue Flow shows a card a frame or two after mounting it (once measured): try for about a second, then give up. */
+const TOGGLE_FOCUS_FRAMES = 60
+
+watch(layoutVersion, () => {
+	const pending = pendingToggleFocus
+	pendingToggleFocus = null
+	if (pending === null)
+		return
+	let frames = 0
+	const attempt = (): void => {
+		const active = document.activeElement
+		const focusIsFree = active === null || active === document.body || graphView.value?.contains(active) === true
+		if (!focusIsFree || graphCanvas.value?.focusClusterToggle(pending.clusterId, pending.expanded) === true)
+			return
+		if (++frames < TOGGLE_FOCUS_FRAMES)
+			requestAnimationFrame(attempt)
+	}
+	void nextTick(attempt)
+}, { flush: 'post' })
+
+// A failed layout draws nothing to focus; a later layout (another filter, another Document) must not pull focus to the card.
+watch(() => layoutState.value.status, (status) => {
+	if (status === 'error')
+		pendingToggleFocus = null
+})
 
 function onEdgeClick(edgeId: string): void {
 	for (const edge of flow.value?.edges ?? []) {
@@ -242,15 +278,7 @@ const statusLabel = computed(() => {
 				>
 					<span aria-hidden="true">{{ direction === 'in' ? '+' : '−' }}</span>
 				</button>
-				<button
-					type="button"
-					:disabled="flow === null"
-					:aria-label="i18n.t('Expand all')"
-					class="p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-					@click="store.expandAllGraphClusters()"
-				>
-					{{ i18n.t('Expand all') }}
-				</button>
+				<!-- No "Expand all": one widget is expanded at a time (issue #254), so this collapses that one. -->
 				<button
 					type="button"
 					:disabled="flow === null"
@@ -274,6 +302,7 @@ const statusLabel = computed(() => {
 			<div
 				v-show="activeView === 'graph'"
 				id="dependencies-view-panel-graph"
+				ref="graphView"
 				role="tabpanel"
 				aria-labelledby="dependencies-view-tab-graph"
 				tabindex="0"

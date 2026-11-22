@@ -65,6 +65,8 @@ export interface StatePrimitive {
 export interface CreateStatePrimitiveParams {
 	readonly widgetId: WidgetId
 	readonly key: WidgetMemberKey
+	/** The owning widget's plugin type, named by contract-violation errors. */
+	readonly pluginType: string
 	readonly definition: ErasedWidgetStateMemberDefinition
 	/** Returns `{ config }` when the owning widget has config capability, `{}` otherwise. */
 	readonly buildConfigFragment: () => Record<string, unknown>
@@ -230,7 +232,7 @@ export function createStatePrimitive(context: RuntimeContext, params: CreateStat
 	}
 
 	function attemptSetUnmarked(candidate: unknown): ExecutionResult<unknown, RuntimeStateDiagnostic> {
-		const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeStateDiagnostic>()
+		const collector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeStateDiagnostic>(params.pluginType, 'State', params.key, 'validate')
 		const ctx = {
 			...params.buildConfigFragment(),
 			addDiagnostic: collector.addDiagnostic,

@@ -9,7 +9,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { ItemConfig } from '../config'
 import type { ItemLine } from '../domain'
-import type { ItemRawConfig } from '../schemas'
+import type { ItemRawConfig } from '../raw-config'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveItemConfig } from '../config'
 import { itemConfigSchema, paperSchema, quantitySchema } from '../schemas'

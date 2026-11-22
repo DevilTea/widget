@@ -15,7 +15,7 @@
 import type { WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import type { QuoteConfig } from '../config'
 import type { Adjustment, ItemLine, QuoteAdjustment, QuoteAnswers, QuoteLine, QuoteResult } from '../domain'
-import type { QuoteRawConfig } from '../schemas'
+import type { QuoteRawConfig } from '../raw-config'
 import type { RuleType } from './reads'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveQuoteConfig } from '../config'

@@ -88,7 +88,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 	function invokeWithinOperation(args: readonly unknown[]): ExecutionResult<unknown, RuntimeMethodDiagnostic> {
 		startBatch()
 		try {
-			const argsCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>()
+			const argsCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>(params.pluginType, 'Method', params.name, 'validateArgs')
 			const argsCtx = {
 				...params.buildConfigFragment(),
 				addDiagnostic: argsCollector.addDiagnostic,
@@ -134,7 +134,7 @@ export function createMethodPrimitive(context: RuntimeContext, params: CreateMet
 				owner: params.owner,
 			})
 			emitFragment ??= createMethodEmitFragment(context, params.owner, params.pluginType, params.eventDefinitions, params.events, params.definition.emits)
-			const execCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>()
+			const execCollector = createOperationCollector<RelativeValueDiagnosticInput, RuntimeMethodDiagnostic>(params.pluginType, 'Method', params.name, 'execute')
 			const sink: ActiveDiagnosticSink = {
 				addFinalizedDiagnostic: (diagnostic, dedupe) => execCollector.addFinalizedDiagnostic(diagnostic as RuntimeMethodDiagnostic, dedupe),
 			}

@@ -294,7 +294,7 @@ function buildNode(
 				// An omitted config is the candidate `null`: required-ness is expressed by the plugin's raw
 				// config type and validator, not by presence.
 				const rawConfigValue = configProperty.found ? configProperty.value : null
-				const { collector, items, close } = createCollector<{ message: string, path?: readonly PropertyKey[], reason?: string, details?: JsonValue }>()
+				const { collector, items, close } = createCollector<{ message: string, path?: readonly PropertyKey[], reason?: string, details?: JsonValue }>(rawType as string, 'config.validate')
 				let ok = false
 				try {
 					const rawValidateResult: unknown = definition.config.validate(rawConfigValue, collector)

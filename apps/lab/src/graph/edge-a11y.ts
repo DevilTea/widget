@@ -2,7 +2,7 @@
  * Keyboard access to the Graph's edges (issue #230 follow-up), the pure part: which edge is the Tab stop to begin with, the
  * order the arrow keys walk, and what an edge is announced as. `GraphCanvas.vue` applies them.
  *
- * The edges are one composite for the keyboard: a graph has dozens of edges (the expanded Trip budget has hundreds), so only
+ * The edges are one composite for the keyboard: a graph has dozens of edges (the Trip budget draws 71, and 111 with #hotel expanded), so only
  * one of them is in the Tab order at a time and the arrow keys move between them. It is a roving Tab stop: the edge that has
  * (or last had) focus is the stop, so Tab and Shift+Tab leave the group from wherever the arrows went. Until an edge was
  * focused, and again whenever the graph or the focused widget or member changes, the stop is the first edge of the keyboard

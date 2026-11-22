@@ -258,7 +258,10 @@ export function toVueFlow(
 		const isExpanded = expandedClusterIds.has(cluster.id)
 		const clusterMembers = graph.vertices.filter(v => v.clusterId === cluster.id)
 		const hasInvalidCycle = clusterMembers.some(v => graph.invalidCycleVertexIds.has(v.id))
+		// A focused member of a collapsed widget is not drawn, so its card shows the focus (one widget is expanded at a time,
+		// issue #254, so the focused member is often inside a collapsed one).
 		const isFocused = cluster.id === activeClusterId
+			|| (!isExpanded && activeMemberKey !== null && clusterIdByVertex.get(activeMemberKey) === cluster.id)
 		const isDimmed = hasActiveInspection && !relatedNodeIds.has(cluster.id)
 		let stateCount = 0
 		let propertyCount = 0

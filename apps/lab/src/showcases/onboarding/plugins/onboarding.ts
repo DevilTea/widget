@@ -122,7 +122,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 		steps: {
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length === 0)
-					addDiagnostic({ message: 'An Onboarding needs at least one step.', index: 0, reason: 'no-steps' })
+					addDiagnostic({ message: 'An Onboarding needs at least one step.', reason: 'no-steps' })
 				children.forEach((child, index) => {
 					if (child.resolved && !isStepType(child.type))
 						addDiagnostic({ message: `"${child.type}" is not a step type.`, index, reason: 'not-a-step' })

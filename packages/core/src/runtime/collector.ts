@@ -65,7 +65,12 @@ export interface OperationCollector<RelativeInput, FinalDiagnostic> extends Diag
 	close: () => void
 }
 
-export function createOperationCollector<RelativeInput, FinalDiagnostic>(): OperationCollector<RelativeInput, FinalDiagnostic> {
+/**
+ * `pluginType`, `kind`, `name` and `what` name the callback the collector belongs to (for example
+ * `"counter"`, `State`, `"count"`, `validate`), for the error a non-JSON `details` throws. They are kept as
+ * parts and only formatted when that error is thrown (see `assertDiagnosticDetails`).
+ */
+export function createOperationCollector<RelativeInput, FinalDiagnostic>(pluginType: string, kind: string, name: string, what: string): OperationCollector<RelativeInput, FinalDiagnostic> {
 	// Allocated on first use: most operations complete without any diagnostic.
 	let entries: CollectorEntry<RelativeInput, FinalDiagnostic>[] | null = null
 	// Operation-local (this collector's lifetime only, discarded with it): never a module-global table,
@@ -77,7 +82,7 @@ export function createOperationCollector<RelativeInput, FinalDiagnostic>(): Oper
 		addDiagnostic(input: RelativeInput) {
 			if (closed)
 				throwClosedCollector('addDiagnostic')
-			assertDiagnosticDetails(input)
+			assertDiagnosticDetails(input, pluginType, kind, name, what)
 			;(entries ??= []).push({ kind: 'relative', input })
 		},
 		addFinalizedDiagnostic(diagnostic: FinalDiagnostic, dedupe?: DedupeDescriptor) {
