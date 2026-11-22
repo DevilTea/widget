@@ -68,7 +68,9 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   confirmation for the unapplied-draft guard (see "Header, status chips and draft protection" below).
 - `src/showcase-host/` — the showcase host contract (see "Showcase isolation" below): the one module outside its own
   directory a showcase may import. `host.ts` (`ShowcaseHost`: locale and theme), `messages.ts` (showcase-local messages
-  selected by the host locale), `sources.ts` (the curated Implementation registry types) and `inspect-anchor.ts`
+  selected by the host locale), `sources.ts` (the curated Implementation registry types), `config-schemas.ts`
+  (`ConfigJsonSchema`, `ConfigSchemaMap`, `CONFIG_JSON_SCHEMA_DIALECT`: the types of the config schema map a showcase hands
+  the Lab) and `inspect-anchor.ts`
   (`useInspectAnchor`), the one-line-per-renderer projection of `useWidget()` identity onto a
   renderer's root element. It only wraps `inspectAnchorAttributes` from `@deviltea/widget-inspector/anchor`, which owns
   the attribute contract (names, identity-only shape, nesting/multi-fragment semantics); `@deviltea/widget-vue` itself
@@ -149,15 +151,16 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   tests import them directly and e2e opens them with `?showcase=sandbox`. Product-shaped showcases live
   in `src/showcases/`, never here; sandbox fixtures must stay small.
 - `src/showcases/` — the showcases and their registry:
-  - `registry.ts` — the deliberately minimal `{ id, label, hidden?, system, presets, sources }` lookup
+  - `registry.ts` — the deliberately minimal `{ id, label, hidden?, system, presets, sources, docs, configSchemas }` lookup
     table (no routing, no persistence; shell-safe: it imports no renderer, see "Showcase isolation") consumed by `use-lab-store.ts`'s `switchShowcase`. Plugin-tuple
     types are erased to `WidgetSystem<AnyWidgetPluginTuple>` on purpose — consumers only need object
-    identity.
+    identity. `docs` and `configSchemas` are what Core 0.3 no longer publishes, see "Plugin documentation and config
+    schemas (Core 0.3)" below.
   - `survey/` — Interactive Survey (the default showcase), the Maker Space open-day sign-up form (a survey rendered
     from one JSON definition; five plugin types `Survey`, `SingleChoice`, `MultipleChoice`, `Numeric`,
     `ShortAnswer`; root widget `open-day`; languages `en` and `zh-TW`). `domain.ts` (pure types,
     condition evaluation, built-in messages), `config.ts` (config checkers reporting located diagnostics),
-    `schemas.ts` (Draft 2020-12 config schemas the Author Catalog shows and copies), `plugins/` (semantic
+    `schemas.ts` (Draft 2020-12 config schemas the Author Catalog shows and copies, handed to the Lab as `surveyConfigSchemas`), `plugins/` (semantic
     plugins, unit-tested; a condition in the JSON becomes a declared dependency, so Core reports an
     evaluation cycle instead of the plugin guessing), `presets.ts` (`survey-default`, `survey-ai-draft`
     with one located diagnostic per widget, `survey-cycle`), `evaluate.ts` (the JSON-in/JSON-out
@@ -234,9 +237,9 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
       `invalid-widget-config` diagnostics in five widgets whose text is Valibot's, verbatim (pinned in `evaluate.unit.test.ts` and
       `e2e/quote-rules.spec.ts`). A paper an Item does not list is State, not config, so it is a plugin diagnostic on `Item.line`
       (`unknown-paper`) rather than a schema error.
-    - **The config JSON Schema.** Each `config.schema` is `~standard.jsonSchema.input({ target: 'draft-2020-12' })` of the same schema
-      object (`jsonSchemaOf()`), with the field descriptions as `v.description(...)`. `schemas.unit.test.ts` pins its shape, that the
-      catalog publishes exactly it, and what `describeField` (`lab/config-schema.ts`) makes of it: a list of tiers with Add and Remove,
+    - **The config JSON Schema.** Each entry of `quoteConfigSchemas` is `~standard.jsonSchema.input({ target: 'draft-2020-12' })` of the
+      same schema object (`jsonSchemaOf()`), with the field descriptions as `v.description(...)`. `schemas.unit.test.ts` pins its shape, that the
+      showcase hands exactly it to the Lab, and what `describeField` (`lab/config-schema.ts`) makes of it: a list of tiers with Add and Remove,
       number boxes, a switch, a choice list and free `papers` keys; `e2e/quote-rules.spec.ts` drives those controls in Author >
       Structure and shows the schema in Author > Catalog. The schema says no more than the validator can express: it cannot say that
       the smallest discount tier starts at 1 (and the validator does not either, which is the next point).
@@ -442,7 +445,7 @@ pnpm typecheck   # generates the Nuxt UI theme templates, then vue-tsc over app,
 pnpm test        # vitest run for this app's colocated *.unit.test.ts
 ```
 
-`vite.config.ts`/`vitest.config.ts`/`nuxt-ui.ts` and Playwright config files themselves are not
+`vite.config.ts`/`vitest.config.ts`/`nuxt-ui.ts`/`widget-docs.ts` and Playwright config files themselves are not
 part of `pnpm typecheck`'s program, matching every other package in this repo (none type-check their
 own bundler config files). Browser/Page specs under `e2e/` and `e2e-pages/` are typechecked through
 `tsconfig.browser-tests.json`, including the preset fixtures they import (`src/sandbox/presets.ts` and
@@ -754,6 +757,38 @@ types, and nothing else of the Lab. Declare colour tokens on the renderer root k
 in `showcases/registry.ts` and its renderer loader in `preview-frame-renderers.ts`. Test renderers with a plain-ref `ShowcaseHost` (`survey/renderers/test-harness.ts` shows how), and run
 `pnpm exec vitest run src/styles` to check the isolation guard.
 
+## Plugin documentation and config schemas (Core 0.3)
+
+Core 0.3 makes a plugin's `Interfaces` type, with its JSDoc, the single source of its documentation: there is no
+`.description()`, no `description` on a config, slot or Event, no `config.schema`, and the catalog, `inspectPlugin` and the
+Inspector snapshot (protocol 1.0) carry names and capabilities only (`docs/site/migration/0.3.md`). So:
+
+- **Write documentation as JSDoc on the Interfaces.** Every showcase and sandbox plugin documents its `Interfaces` type (the
+  plugin), its `config` member, every slot, State member, Property, Method (with `@param`/`@returns`) and Event, and its
+  authored config types (`*RawConfig`), with the tags of `apps/widget-skills/tsdoc.json` (`@minimum`, `@pattern`, `@widgetRef`,
+  ...). A slot's expectation is the most precise one its `validateStructure` upholds: a plugin-type union, or a
+  `WidgetContract<Shape, Types>` where the parent reads its children's members (`Onboarding.steps`, `Survey.questions`, the
+  two `Quote` slots), so `createWidgetSystem` checks each child plugin against that shape; the reads themselves stay on
+  `dep.widget(id)` with the existing `.validate()` refinements. `registry.unit.test.ts` fails when a plugin, config, slot or
+  Event of a showcase has no documentation. `widget-skills --check` (see `apps/widget-skills/README.md`) reports 0 errors for
+  every showcase except `quote-rules`, whose raw config types are inferred from Valibot (`InferInput`) and keep their field
+  prose in `v.description()`.
+- **The docs reach the Lab through `widgetDocs()`.** `widget-docs.ts` (`labWidgetDocs()`) configures the widget-skills Vite
+  plugin for the six showcase Systems with `tsconfig.app.json`; `vite.config.ts`, `vitest.config.ts` and the root
+  `vitest.config.ts` (project `lab`) all load it, importing the plugin by relative path (`../widget-skills/src/vite`): Vite hands
+  a bare `@deviltea/widget-skills/vite` to Node, which cannot load its TypeScript sources. `virtual:widget-docs/<showcase id>`
+  is that showcase's `WidgetDocs`, imported by `showcases/registry.ts` as `ShowcaseEntry.docs`; `src/virtual-widget-docs.d.ts`
+  declares the modules (the Lab has no dependency on the private package; `author/widget-docs.ts` takes the types from the
+  virtual module, because importing the generator's `docs-types.ts` from a Lab source is TS6307 in this composite project).
+  Generating imports each System module in a worker thread; the result is cached in `node_modules/.cache/widget-docs/` of
+  this app (delete it to clear it). Documentation gaps are Vite warnings, a name mismatch between types and runtime fails the
+  load. A showcase file never imports a virtual module (`showcase-isolation.unit.test.ts`); the Lab side reads `docs` through
+  `author/widget-docs.ts` (`pluginDocsOf`, `docText`, `memberDocText`), which read an undocumented member as `''`.
+- **The config schemas stay Lab data.** Each showcase hands the Lab a map from plugin type to its Draft 2020-12 config JSON
+  Schema (`<showcase>ConfigSchemas` in its `schemas.ts`, typed by the host contract's `ConfigSchemaMap`; the quote-rules files,
+  which the Web Worker bundles, use their own structurally equal type), registered as `ShowcaseEntry.configSchemas`. The
+  Structure editor and the Catalog read it; Core never sees it.
+
 ## Package boundaries
 
 This app is a private downstream consumer and architecture probe. It owns the Lab shell, inspectors,
@@ -1008,13 +1043,17 @@ The canonical authored surface is the outer `Author` panel with three Lab-owned 
 `Structure`, and `JSON`. `AuthorJsonView.vue` contains the existing Monaco draft workflow; header
 `Apply`/`Format`/`Revert` controls continue to operate on that same draft. `Catalog` reads the immutable
 public `session.system.catalog` and public `WidgetPlugin.capabilities`; it never reads or derives from the
-curated `ShowcaseEntry.sources` Implementation Explorer registry. Catalog entries carry the plugin and config
-descriptions, slot descriptions, and optional passive Draft 2020-12 config JSON Schema metadata (Event descriptions
-are not in `system.catalog`: `author/catalog.ts` reads them per plugin through `inspectPlugin` from `@deviltea/widget-core/inspection`
-and lists them, name and description verbatim, in an `Events` section; Core publishes no Event payload schema, so the Catalog shows none);
-capability-presence facts come from `WidgetPlugin.capabilities`. An entry with a schema shows it in a collapsed `<details>`, and "Copy catalog JSON"
-copies the whole public catalog as plain JSON (`{ widgets: [{ type, description, config: { description, schema } | null,
-slots: { name: description } | null, events: { name: description } | null }] }`; `events` is added by the Lab from `inspectPlugin` and is `null` without the Events capability) so the plugin definitions can be handed to an AI as authoring context.
+curated `ShowcaseEntry.sources` Implementation Explorer registry. The names and capabilities come from Core (`system.catalog`;
+the declared Events per plugin through `inspectPlugin` from `@deviltea/widget-core/inspection`, since they are not in the
+catalog); the prose comes from the showcase's generated documentation (`ShowcaseEntry.docs`) and the config schema from its
+`ShowcaseEntry.configSchemas`, because Core 0.3 publishes neither (see "Plugin documentation and config schemas (Core 0.3)").
+`author/catalog.ts` joins them: each entry shows the plugin's description, its config description, its slot descriptions,
+an `Events` section (name and description verbatim; Core publishes no Event payload schema, so the Catalog shows none) and,
+when the showcase has a schema for the plugin, the schema in a collapsed `<details>`. A member without documentation shows no text.
+"Copy catalog JSON" copies the whole catalog as plain JSON (`{ widgets: [{ type, description, config: { description, schema } | null,
+slots: { name: description } | null, events: { name: description } | null }] }`: `config` is `null` without the config capability and
+`schema` `null` without a schema, `events` `null` without the Events capability, an undocumented description `''`) so the plugin
+definitions can be handed to an AI as authoring context.
 The view must not invent state/property/method schemas or member definitions that Core does not publish
 through the catalog contracts; config schema metadata is authoring guidance, not Runtime validation truth.
 
@@ -1023,7 +1062,7 @@ Since issue #230 PR 3c (audit U15) it edits the selected widget's whole authored
 (`ConfigFieldEditor.vue`, recursive, inside `AuthorStructureView.vue`): a switch for a boolean, a number box (decimal
 notation only; `integer`/`minimum`/`maximum` are Core's to check), a list for an `enum`, a text box for a string, an object with its optional keys (add from a list, remove with
 a button; free keys of an `additionalProperties` object are added by name) and an array with Add and Remove. The controls
-come from the plugin's passive config JSON Schema (`WidgetCatalogEntry.config.schema`, read by `src/lab/config-schema.ts`: `$ref`,
+come from the plugin's passive config JSON Schema (the showcase's `ShowcaseEntry.configSchemas[type]`, read by `src/lab/config-schema.ts`: `$ref`,
 `type`, `enum`/`const`, `oneOf`/`anyOf` by a shallow "does the value look like this branch" test, `properties`, `required`,
 `additionalProperties`, `items`, `minItems`/`maxItems`, `default`, `description`; `$ref` is any local JSON Pointer, with `~0`, `~1` and percent escapes decoded). That reading chooses a
 control and what may be added or removed and never validates (the numeric limits are not checked in the editor, so the schema and the compiler cannot
@@ -1249,9 +1288,9 @@ shared source (`use-selected-runtime-widget.ts`, one per store): requested once 
 to the remote Runtime, are not rendered and hold no subscription.
 
 **Events (audit U09).** Events are visible in two places. *Declared*: `components/events/DeclaredEvents.vue` lists a plugin's Events
-(name and description, verbatim and untranslated, no payload schema because Core publishes none) in the Catalog and in
-`BlueprintNodeDetails` (so also the Selected widget declaration and the Blueprint panel), from `inspectPlugin` / the Blueprint inspection's
-`events`. *Occurring*: `EventsPanel.vue` (canonical panel `events`, tab `Events`, after Runtime) is a live log over the Inspector
+(name and description, verbatim and untranslated, no payload schema because Core publishes none; an Event without documentation shows its
+name only) in the Catalog and in `BlueprintNodeDetails` (so also the Selected widget declaration and the Blueprint panel): the names from
+`inspectPlugin` / the Blueprint inspection's `events`, the descriptions from the showcase's generated documentation (`ShowcaseEntry.docs`). *Occurring*: `EventsPanel.vue` (canonical panel `events`, tab `Events`, after Runtime) is a live log over the Inspector
 protocol only (`runtime.subscribeEvent` / `runtime.eventOccurred`, never a Core Runtime; it cannot emit). `composables/use-event-log.ts` is
 one shared source per store: it subscribes to every Event of every resolved widget in the current Preview connection's Blueprint
 snapshot, **whenever the Lab has a Preview connection and a consumer is mounted**, not only while the Events tab is the visible one: Events are
