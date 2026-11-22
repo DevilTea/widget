@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, loadPreset, openDeveloperTool, previewFrame, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, loadPreset, openDependenciesGraph, openDeveloperTool, previewFrame, test } from './fixtures'
 
 /**
  * Issue #230 PR 3b (audit U12, U13): the workbench's default width, the layout that survives a reload (and what
@@ -163,6 +163,7 @@ test.describe('saved layout', () => {
 		await openLab(page)
 		const initial = await toolWidth(page)
 		await dragDivider(page, 150)
+		await openDependenciesGraph(page)
 		await page.getByRole('tab', { name: 'Blueprint', exact: true })
 			.click()
 		await expect.poll(() => savedToolSize(page))
@@ -181,6 +182,12 @@ test.describe('saved layout', () => {
 			await expect(page.getByRole('tab', { name, exact: true }))
 				.toBeVisible()
 		}
+		// The Dependencies view starts over at Relations too (it is shared per store since Lab UX phase 2, so the reset says so).
+		await page.getByRole('tab', { name: 'Dependencies', exact: true })
+			.click()
+		await expect(page.getByRole('tablist', { name: 'Dependencies views' })
+			.getByRole('tab', { name: 'Relations' }))
+			.toHaveAttribute('aria-selected', 'true')
 		// The default is what is saved now: a reload keeps it.
 		await expect.poll(() => savedToolSize(page))
 			.toBeCloseTo(initial, -1)

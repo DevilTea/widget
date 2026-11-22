@@ -10,6 +10,7 @@ import type { DockviewApi, DockviewReadyEvent, DockviewTheme, SerializedDockview
 import type { LabToolTab } from '../composables/use-lab-store'
 import { DockviewVue, themeAbyss } from 'dockview-vue'
 import { defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
+import { useDependenciesView } from '../composables/use-dependencies-view'
 import { useDocumentTools } from '../composables/use-document-tools'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
 import { useLabI18n } from '../composables/use-lab-i18n'
@@ -31,6 +32,7 @@ const i18n = useLabI18n()
 const implementationExplorer = useImplementationExplorer()
 const documentTools = useDocumentTools()
 const workbenchLayout = useWorkbenchLayout()
+const dependenciesView = useDependenciesView()
 
 /**
  * Dockview applies its theme via the `theme` option's `className` (dockview-core stamps it on its own
@@ -255,6 +257,8 @@ function watchLayoutResetRequests(api: DockviewApi): void {
 		() => workbenchLayout.resetRequestTick.value,
 		() => {
 			clearSavedLayout()
+			// The Dependencies view is shared per store, not the rebuilt panel's own state: a reset starts it over at Relations too.
+			dependenciesView.reset()
 			api.clear()
 			buildDefaultLayout(api)
 			store.activeTab.value = 'author'
