@@ -42,12 +42,13 @@ function createFixture(withDom: boolean) {
 }
 
 describe('inspectorAgent without a DOM root', () => {
-	it.each([1, 2, 3, 4])('does not advertise the DOM methods at protocol 0.%i', async (minor) => {
+	it('does not advertise the DOM methods or the geometry methods and events', async () => {
 		const { agent, client } = createFixture(false)
 		try {
-			const handshake = await client.request('handshake', { protocol: { major: 0, minor } })
-			for (const method of DOM_METHODS)
+			const handshake = await client.handshake()
+			for (const method of [...DOM_METHODS, 'inspect.hitTest', 'geometry.resolve'])
 				expect(handshake.capabilities.methods).not.toContain(method)
+			expect(handshake.capabilities.events).not.toContain('geometry.invalidated')
 			expect(handshake.capabilities.methods)
 				.toContain('runtime.list')
 		}

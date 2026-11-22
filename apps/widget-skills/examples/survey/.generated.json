@@ -1,0 +1,22 @@
+{
+	"files": [
+		"ir.json",
+		"schema/document.llm.schema.json",
+		"schema/document.schema.json",
+		"skills/survey-system-renderer-implementation/SKILL.md",
+		"skills/survey-system-renderer-implementation/references/choice.md",
+		"skills/survey-system-renderer-implementation/references/note.md",
+		"skills/survey-system-renderer-implementation/references/rating.md",
+		"skills/survey-system-renderer-implementation/references/survey.md",
+		"skills/survey-system-source-json-authoring/SKILL.md",
+		"skills/survey-system-source-json-authoring/references/choice.md",
+		"skills/survey-system-source-json-authoring/references/document.llm.schema.json",
+		"skills/survey-system-source-json-authoring/references/document.schema.json",
+		"skills/survey-system-source-json-authoring/references/note.md",
+		"skills/survey-system-source-json-authoring/references/rating.md",
+		"skills/survey-system-source-json-authoring/references/survey.md",
+		"skills/widget-plugin-authoring/SKILL.md",
+		"skills/widget-plugin-authoring/references/example-interfaces.md",
+		"skills/widget-plugin-authoring/references/jsdoc-tags.md"
+	]
+}

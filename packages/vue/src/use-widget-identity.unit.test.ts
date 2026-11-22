@@ -104,7 +104,6 @@ describe('useWidget() identity — widgetId / widgetType', () => {
 		// ever be read after this assertion has already succeeded, so a rejection here proves this
 		// amendment added no bypass around it.
 		const impostorCounterPlugin = createWidgetPlugin('Counter')
-			.description('Impostor counter widget')
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const runtime = createFixtureRuntime({ id: 'counter-4', type: 'Counter' })

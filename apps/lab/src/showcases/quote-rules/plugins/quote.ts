@@ -12,25 +12,42 @@
  * reads `quote`.
  */
 
-import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import type { QuoteConfig } from '../config'
 import type { Adjustment, ItemLine, QuoteAdjustment, QuoteAnswers, QuoteLine, QuoteResult } from '../domain'
 import type { QuoteRawConfig } from '../schemas'
+import type { RuleType } from './reads'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveQuoteConfig } from '../config'
 import { isPlainObject } from '../domain'
-import { quoteConfigJsonSchema, quoteConfigSchema } from '../schemas'
+import { quoteConfigSchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { childIds, isNumber, PRE_TAX_RULE_TYPES, RULE_TYPES, valueOr } from './reads'
 
+/**
+ * The root of a price quote. Slots: `items` (the Items) and `rules` (VolumeDiscount, RushSurcharge, Delivery and SalesTax,
+ * each at most once). Properties: `subtotalCents`, `totalQuantity`, `taxableCents`, `answers` (every answer the customer
+ * gave, by widget id and State name) and `quote` (the whole priced quote as plain JSON).
+ */
 export interface QuoteInterfaces extends WidgetInterfaces {
+	/** The quote title and the currency. Validated by a Valibot schema through Standard Schema. */
 	config: { raw: QuoteRawConfig, resolved: QuoteConfig }
-	slots: 'items' | 'rules'
+	slots: {
+		/** The printed products, in display order: Item widgets (at least one). */
+		items: WidgetContract<{ state: { quantity: number, paper: string }, properties: { line: ItemLine } }, 'Item'>
+		/** The pricing rules, in display order: VolumeDiscount, RushSurcharge, Delivery and SalesTax, each at most once. */
+		rules: WidgetContract<{ properties: { adjustment: Adjustment } }, RuleType>
+	}
 	properties: {
+		/** What the Items' lines add up to, in minor units. */
 		subtotalCents: number
+		/** The number of pieces over every Item. */
 		totalQuantity: number
+		/** The subtotal plus every rule that is not the tax, in minor units (`SalesTax` reads it). */
 		taxableCents: number
+		/** Every answer the customer gave, by widget id and State name: the request half of a JSON-in call. */
 		answers: QuoteAnswers
+		/** The whole priced quote as plain JSON: the response half. */
 		quote: QuoteResult
 	}
 }
@@ -44,17 +61,13 @@ function isAdjustment(input: unknown): input is Adjustment {
 }
 
 export const QuotePlugin = createWidgetPlugin('Quote')
-	.description('The root of a price quote. Slots: `items` (the Items) and `rules` (VolumeDiscount, RushSurcharge, Delivery and SalesTax, each at most once). Properties: `subtotalCents`, `totalQuantity`, `taxableCents`, `answers` (every answer the customer gave, by widget id and State name) and `quote` (the whole priced quote as plain JSON).')
 	.interfaces<QuoteInterfaces>()
 	.config({
-		description: 'The quote title and the currency. Validated by a Valibot schema through Standard Schema.',
-		schema: quoteConfigJsonSchema,
 		validate: guard(quoteConfigSchema),
 		resolve: resolveQuoteConfig,
 	})
 	.slots({
 		items: {
-			description: 'The printed products, in display order: Item widgets (at least one).',
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length === 0)
 					addDiagnostic({ message: 'A quote needs at least one Item.', reason: 'needs-an-item' })
@@ -65,7 +78,6 @@ export const QuotePlugin = createWidgetPlugin('Quote')
 			},
 		},
 		rules: {
-			description: 'The pricing rules, in display order: VolumeDiscount, RushSurcharge, Delivery and SalesTax, each at most once.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				const seen = new Set<string>()
 				children.forEach((child, index) => {

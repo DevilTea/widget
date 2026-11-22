@@ -32,7 +32,6 @@ interface CounterInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const recursivePlugin = createWidgetPlugin('recursive')
-	.description('Test widget')
 	.interfaces<RecursiveInterfaces>()
 	.state(state => state.a({ validate: isNumber, default: () => 0 }))
 	.properties(properties => properties.sum({
@@ -63,7 +62,6 @@ const recursivePlugin = createWidgetPlugin('recursive')
 	.done()
 
 const counterPlugin = createWidgetPlugin('counter')
-	.description('Test widget')
 	.interfaces<CounterInterfaces>()
 	.state(state => state.n({ validate: isNumber, default: () => 0 }))
 	.done()

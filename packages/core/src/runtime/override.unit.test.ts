@@ -20,7 +20,6 @@ interface CounterInterfaces {
 }
 
 const counterPlugin = createWidgetPlugin('counter')
-	.description('Test widget')
 	.interfaces<CounterInterfaces>()
 	.state(section => section.count({
 		validate: (input): input is number => typeof input === 'number',
@@ -29,7 +28,6 @@ const counterPlugin = createWidgetPlugin('counter')
 	.done()
 
 const statelessPlugin = createWidgetPlugin('stateless')
-	.description('Test widget')
 	.interfaces<Record<never, never>>()
 	.done()
 

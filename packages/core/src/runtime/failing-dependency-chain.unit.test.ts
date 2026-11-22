@@ -9,6 +9,7 @@
  */
 
 import type { ExecutionResult } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -35,10 +36,8 @@ function numberOf(result: ExecutionResult<unknown, unknown>): number {
 const stats = { computeCalls: 0 }
 
 const linkPlugin = createWidgetPlugin('link')
-	.description('Test widget')
 	.interfaces<LinkInterfaces>()
 	.config({
-		description: 'Link',
 		validate: (input): input is LinkConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
@@ -68,9 +67,8 @@ const linkPlugin = createWidgetPlugin('link')
 	.done()
 
 const listPlugin = createWidgetPlugin('list')
-	.description('Test widget')
-	.interfaces<{ slots: 'items' }>()
-	.slots({ items: { description: 'Items' } })
+	.interfaces<{ slots: { items: WidgetChild } }>()
+	.slots({ items: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [linkPlugin, listPlugin] })

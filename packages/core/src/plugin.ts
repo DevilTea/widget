@@ -6,8 +6,7 @@
  * consolidated handoff §2/§3/§4.
  */
 
-import type { JSONSchema as Draft202012JSONSchema } from 'json-schema-typed/draft-2020-12'
-import type { DependencyBuilder, DependencyConsumer, EmptyRegisteredDeps, RegisteredDeps, ToExecutedDeps } from './dep'
+import type { DependencyBuilder, DependencyConsumer, EmptyRegisteredDeps, RegisteredDeps, SlotChildDependencyTarget, ToExecutedDeps } from './dep'
 import type {
 	DiagnosticCollector,
 	RelativePluginStructureDiagnosticInput,
@@ -35,11 +34,11 @@ import type {
 	WidgetPropertyValueOf,
 	WidgetRawConfigOf,
 	WidgetResolvedConfigOf,
+	WidgetSlotExpectedOf,
 	WidgetSlotNameOf,
 	WidgetStateKeyOf,
 	WidgetStateValueOf,
 } from './types'
-import { createReadonlyMap } from './readonly-map'
 
 /**
  * Framework-private brand carrying the plugin's phantom interfaces and its erased definition record.
@@ -88,25 +87,12 @@ export function createWidgetValueContract<Value>(id: string): WidgetValueContrac
 // Erased definition records (framework-internal, consumed by Blueprint/Runtime)
 // -------------------------------------------------------------------------------------------------
 
-type DeepReadonlySchema<T> = T extends readonly (infer Item)[]
-	? readonly DeepReadonlySchema<Item>[]
-	: T extends object
-		? { readonly [Key in keyof T]: DeepReadonlySchema<T[Key]> }
-		: T
-
-export type WidgetConfigJsonSchema = DeepReadonlySchema<Draft202012JSONSchema>
-
-export const WIDGET_CONFIG_JSON_SCHEMA_DIALECT = 'https://json-schema.org/draft/2020-12/schema' as const
-
 export interface ErasedWidgetConfigDefinition {
-	readonly description: string
-	readonly schema: WidgetConfigJsonSchema | null
 	readonly validate: (input: unknown, ctx: any) => boolean
 	readonly resolve: (rawConfig: any) => unknown
 }
 
 export interface ErasedWidgetSlotDefinition {
-	readonly description: string
 	readonly validateStructure?: (ctx: any) => void
 }
 
@@ -130,9 +116,8 @@ export interface ErasedWidgetMethodDefinition {
 	readonly execute: (ctx: any) => unknown
 }
 
-export interface ErasedWidgetEventDefinition {
-	readonly description: string
-}
+/** A declared Event carries no definition of its own: its name is the whole declaration. */
+export type ErasedWidgetEventDefinition = Readonly<Record<never, never>>
 
 /**
  * Erased plugin definition record.
@@ -142,7 +127,6 @@ export interface ErasedWidgetEventDefinition {
  */
 export interface WidgetPluginDefinition {
 	readonly type: string
-	readonly description: string
 	readonly config: ErasedWidgetConfigDefinition | null
 	readonly slots: ReadonlyMap<WidgetMemberKey, ErasedWidgetSlotDefinition> | null
 	readonly validateStructure: ((ctx: any) => void) | null
@@ -176,12 +160,6 @@ export interface WidgetPluginCapabilities {
 	readonly events: boolean
 }
 
-/** Passive RawConfig authoring metadata of a plugin with a config capability. */
-export interface WidgetPluginConfigMetadata {
-	readonly description: string
-	readonly schema: WidgetConfigJsonSchema | null
-}
-
 /**
  * A completed plugin. Plugin-specific integration options are captured by the plugin factory's
  * closure; there is no `pluginConfig` / `globalConfig`.
@@ -195,15 +173,8 @@ export interface WidgetPlugin<
 	Interfaces extends WidgetInterfaces = WidgetInterfaces,
 > {
 	readonly type: Type
-	readonly description: string
 	/** Compiler/plugin-builder-authoritative declaration-presence facts. Immutable, stable for the plugin's lifetime. */
 	readonly capabilities: WidgetPluginCapabilities
-	/** Passive RawConfig authoring metadata. Null means no config capability. */
-	readonly config: WidgetPluginConfigMetadata | null
-	readonly descriptions: {
-		readonly config: string | null
-		readonly slots: ReadonlyMap<WidgetMemberKey, string> | null
-	}
 	readonly [widgetPluginBrand]: WidgetPluginBrand<Interfaces>
 }
 
@@ -252,16 +223,16 @@ export type WidgetResolvedConfigContext<Interfaces extends WidgetInterfaces> = H
 		}
 	: unknown
 
-export type WidgetConfigValidateContext = DiagnosticCollector<RelativeValueDiagnosticInput>
+export type WidgetConfigValidateContext<Interfaces extends WidgetInterfaces = WidgetInterfaces> = DiagnosticCollector<RelativeValueDiagnosticInput<Interfaces>>
 
 export type WidgetStateValidateContext<Interfaces extends WidgetInterfaces>
-	= & DiagnosticCollector<RelativeValueDiagnosticInput>
+	= & DiagnosticCollector<RelativeValueDiagnosticInput<Interfaces>>
 		& WidgetResolvedConfigContext<Interfaces>
 
 export type WidgetStateDefaultContext<Interfaces extends WidgetInterfaces> = WidgetResolvedConfigContext<Interfaces>
 
 export type WidgetMethodValidateArgsContext<Interfaces extends WidgetInterfaces>
-	= & DiagnosticCollector<RelativeValueDiagnosticInput>
+	= & DiagnosticCollector<RelativeValueDiagnosticInput<Interfaces>>
 		& WidgetResolvedConfigContext<Interfaces>
 
 export type WidgetSlotValidateStructureContext<
@@ -274,7 +245,7 @@ export type WidgetSlotValidateStructureContext<
 		readonly children: readonly BlueprintWidgetNodeView[]
 		readonly blueprint: BlueprintCompileView
 	}
-	& DiagnosticCollector<RelativeSlotStructureDiagnosticInput>
+	& DiagnosticCollector<RelativeSlotStructureDiagnosticInput<Interfaces>>
 	& WidgetResolvedConfigContext<Interfaces>
 
 export type WidgetPluginValidateStructureContext<Interfaces extends WidgetInterfaces>
@@ -282,8 +253,23 @@ export type WidgetPluginValidateStructureContext<Interfaces extends WidgetInterf
 		readonly widget: SelfBlueprintWidgetNodeView<Interfaces>
 		readonly blueprint: BlueprintCompileView
 	}
-	& DiagnosticCollector<RelativePluginStructureDiagnosticInput<WidgetSlotNameOf<Interfaces>>>
+	& DiagnosticCollector<RelativePluginStructureDiagnosticInput<WidgetSlotNameOf<Interfaces>, Interfaces>>
 	& WidgetResolvedConfigContext<Interfaces>
+
+/**
+ * The `slot(name)` of a `registerDeps` context: the resolved children of the widget's own slot `name`, in
+ * Blueprint order, each as a dependency target. A target is the one `dep.widget(child.id)` returns (not a new
+ * target kind), typed by what the slot expects (see {@link SlotChildDependencyTarget}); the types are the
+ * declaration's and are not checked at run time, so `.validate()` stays available on every read.
+ */
+export type WidgetRegisterDepsSlotContext<
+	Interfaces extends WidgetInterfaces,
+	Consumer extends DependencyConsumer,
+> = HasWidgetCapability<Interfaces, 'slots'> extends true
+	? {
+			readonly slot: <Name extends WidgetSlotNameOf<Interfaces>>(name: Name) => readonly SlotChildDependencyTarget<WidgetSlotExpectedOf<Interfaces, Name>, Consumer>[]
+		}
+	: unknown
 
 /**
  * `registerDeps` runs once per Blueprint snapshot. It sees the compile semantic view and resolved
@@ -298,6 +284,7 @@ export type WidgetRegisterDepsContext<
 		readonly blueprint: BlueprintCompileView
 		readonly dep: DependencyBuilder<Interfaces, Consumer>
 	}
+	& WidgetRegisterDepsSlotContext<Interfaces, Consumer>
 	& WidgetResolvedConfigContext<Interfaces>
 
 export type WidgetPropertyComputeContext<
@@ -309,7 +296,7 @@ export type WidgetPropertyComputeContext<
 		readonly blueprint: BlueprintRuntimeView
 		readonly deps: ToExecutedDeps<Deps, 'property'>
 	}
-	& DiagnosticCollector<RelativeValueDiagnosticInput>
+	& DiagnosticCollector<RelativeValueDiagnosticInput<Interfaces>>
 	& WidgetResolvedConfigContext<Interfaces>
 
 export type WidgetEventEmitter<Interfaces extends WidgetInterfaces> = {
@@ -337,7 +324,7 @@ export type WidgetMethodExecuteContext<
 		readonly blueprint: BlueprintRuntimeView
 		readonly deps: ToExecutedDeps<Deps, 'method'>
 	}
-	& DiagnosticCollector<RelativeValueDiagnosticInput>
+	& DiagnosticCollector<RelativeValueDiagnosticInput<Interfaces>>
 	& WidgetResolvedConfigContext<Interfaces>
 	& WidgetEventEmitterContext<Interfaces, Emits>
 
@@ -399,10 +386,7 @@ type WidgetMethodExecuteResult<Declared, Result> = IsAny<Declared> extends true
 // -------------------------------------------------------------------------------------------------
 
 export interface WidgetConfigDefinition<Interfaces extends WidgetInterfaces> {
-	readonly description: string
-	/** Passive Draft 2020-12 authoring metadata. Core does not validate or execute this schema. */
-	readonly schema?: WidgetConfigJsonSchema
-	readonly validate: (input: unknown, ctx: WidgetConfigValidateContext) => input is WidgetRawConfigOf<Interfaces>
+	readonly validate: (input: unknown, ctx: WidgetConfigValidateContext<Interfaces>) => input is WidgetRawConfigOf<Interfaces>
 	readonly resolve: (rawConfig: WidgetRawConfigOf<Interfaces> | null) => WidgetResolvedConfigOf<Interfaces>
 }
 
@@ -412,7 +396,6 @@ export interface WidgetSlotDefinition<
 	SlotName extends WidgetMemberKey,
 	Result = unknown,
 > {
-	readonly description: string
 	readonly validateStructure?: (ctx: WidgetSlotValidateStructureContext<Interfaces, SlotName>) => WidgetSynchronousResult<Result>
 }
 
@@ -495,9 +478,30 @@ export type WidgetMethodDefinition<
 	= & WidgetMethodDefinitionFields<Interfaces, Name, Deps, Result, Emits>
 		& ([Emits] extends [never] ? unknown : { readonly emits: readonly Emits[] })
 
-export interface WidgetEventDefinition {
-	readonly description: string
+/** What a `.events()` list that leaves declared Events out is checked against; `Missing` names them. */
+export interface WidgetEventNamesViolation<Missing extends string> {
+	readonly 'widget-core: .events() must list every declared Event; missing': Missing
 }
+
+/**
+ * What a `.events()` list whose length is not known statically is checked against: a widened array such as
+ * `('a' | 'b')[]` may hold only some of the names, which neither the types nor the builder can see.
+ */
+export interface WidgetEventNamesTupleViolation {
+	readonly 'widget-core: .events() takes a tuple of Event names (a list literal or an `as const` array), not a widened array': never
+}
+
+/**
+ * `unknown` (an intersection identity) when `Names` is a tuple that lists every Event the interfaces
+ * declare; a {@link WidgetEventNamesTupleViolation} for a widened array, a {@link WidgetEventNamesViolation}
+ * for a tuple that leaves Events out. A name the interfaces do not declare is already rejected by the list's
+ * element type.
+ */
+export type ExactWidgetEventNames<Interfaces extends WidgetInterfaces, Names extends readonly WidgetMemberKey[]> = number extends Names['length']
+	? WidgetEventNamesTupleViolation
+	: [WidgetEventKeyOf<Interfaces>] extends [Names[number]]
+			? unknown
+			: WidgetEventNamesViolation<Exclude<WidgetEventKeyOf<Interfaces>, Names[number]>>
 
 // -------------------------------------------------------------------------------------------------
 // Section keyed-chain typestate
@@ -543,17 +547,6 @@ export type WidgetMethodsSection<
 			[Name in Remaining]: <const Deps extends RegisteredDeps = EmptyRegisteredDeps, Result = unknown, const Emits extends WidgetEventKeyOf<Interfaces> = never>(
 				definition: WidgetMethodDefinition<Interfaces, Name, Deps, Result, Emits>,
 			) => WidgetMethodsSection<Interfaces, Exclude<Remaining, Name>>
-		}
-
-export type WidgetEventsSection<
-	Interfaces extends WidgetInterfaces,
-	Remaining extends WidgetEventKeyOf<Interfaces>,
->
-	= & WidgetSectionMarker<'events', Remaining>
-		& {
-			[Name in Remaining]: (
-				definition: WidgetEventDefinition,
-			) => WidgetEventsSection<Interfaces, Exclude<Remaining, Name>>
 		}
 
 // -------------------------------------------------------------------------------------------------
@@ -620,16 +613,16 @@ type WidgetPluginMisplacedArguments<Interfaces extends WidgetInterfaces, Phase e
 				: Phase extends 'state' ? [build: Violation & ((section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>) => unknown)]
 					: Phase extends 'properties' ? [build: Violation & ((section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>) => unknown)]
 						: Phase extends 'methods' ? [build: Violation & ((section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>) => unknown)]
-							: [build: Violation & ((section: WidgetEventsSection<Interfaces, WidgetEventKeyOf<Interfaces>>) => unknown)]
+							: [names: Violation & readonly WidgetEventKeyOf<Interfaces>[]]
 
 type WidgetPluginPhaseOrderReason<
 	Phase extends WidgetPluginPhaseName,
 	Stage extends WidgetPluginPhaseName | 'done',
 > = Stage extends WidgetPluginPhaseName
 	? WidgetPluginPhaseIsBefore<Phase, Stage> extends true
-		? `'.${Phase}()' was already called or must be called earlier; the next phase is '.${Stage}()'. Order: description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
-		: `'.${Phase}()' is called too early; call '.${Stage}()' first. Order: description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
-	: `'.${Phase}()' cannot be called here; the declared phases are already complete, so only '.done()' remains. Order: description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
+		? `'.${Phase}()' was already called or must be called earlier; the next phase is '.${Stage}()'. Order: interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
+		: `'.${Phase}()' is called too early; call '.${Stage}()' first. Order: interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
+	: `'.${Phase}()' cannot be called here; the declared phases are already complete, so only '.done()' remains. Order: interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
 
 /**
  * Adds type-only order markers for every available phase that is not in `Callable` (by default just
@@ -654,10 +647,9 @@ export type WidgetPluginOrderedPhase<
 	}
 
 interface WidgetPluginEventsPhaseMembers<Type extends string, Interfaces extends WidgetInterfaces> {
-	events: (
-		build: (
-			section: WidgetEventsSection<Interfaces, WidgetEventKeyOf<Interfaces>>,
-		) => WidgetEventsSection<Interfaces, never>,
+	/** Declares the Events: the list of every Event name of `Interfaces['events']`, each exactly once. */
+	events: <const Names extends readonly WidgetEventKeyOf<Interfaces>[]>(
+		names: Names & ExactWidgetEventNames<Interfaces, Names>,
 	) => WidgetPluginOrderedPhase<WidgetPluginDonePhase<Type, Interfaces>, Interfaces, 'done'>
 }
 
@@ -757,16 +749,11 @@ export interface WidgetPluginInterfacesPhase<Type extends string> {
 		: WidgetInterfacesViolation<WidgetInterfacesViolationOf<Interfaces>>
 }
 
-export interface WidgetPluginDescriptionPhase<Type extends string> {
-	description: (description: string) => WidgetPluginInterfacesPhase<Type>
-}
-
 // -------------------------------------------------------------------------------------------------
 // Builder implementation
 // -------------------------------------------------------------------------------------------------
 
 interface WidgetPluginDraft {
-	description: string
 	config: ErasedWidgetConfigDefinition | null
 	slots: Map<WidgetMemberKey, ErasedWidgetSlotDefinition> | null
 	validateStructure: ((ctx: any) => void) | null
@@ -780,31 +767,34 @@ interface WidgetPluginDraft {
 
 type WidgetPluginSectionName = 'config' | 'slots' | 'state' | 'properties' | 'methods' | 'events'
 
-type WidgetPluginMemberSectionName = Exclude<WidgetPluginSectionName, 'config' | 'slots'>
+/** The sections declared with definition objects; Events are declared by name only. */
+type WidgetPluginDefinitionSectionName = Exclude<WidgetPluginSectionName, 'events'>
 
-type WidgetPluginFieldKind = 'function' | 'string' | 'boolean' | 'schema' | 'value-contract'
+type WidgetPluginMemberSectionName = Exclude<WidgetPluginDefinitionSectionName, 'config' | 'slots'>
+
+type WidgetPluginFieldKind = 'function' | 'boolean' | 'value-contract'
 
 type WidgetPluginFieldRule = readonly [field: string, kind: WidgetPluginFieldKind, required: boolean]
 
 /**
- * The callbacks and description fields each section's definition type requires, plus its optional
+ * The callbacks each section's definition type requires, plus its optional
  * fields. Untyped (JavaScript / dynamically loaded) plugins are checked against these at registration,
  * so a malformed plugin fails before `done()` returns instead of at its first interaction.
  */
-const definitionFieldRules: Readonly<Record<WidgetPluginSectionName, readonly WidgetPluginFieldRule[]>> = {
-	config: [['description', 'string', true], ['validate', 'function', true], ['resolve', 'function', true], ['schema', 'schema', false]],
-	slots: [['description', 'string', true], ['validateStructure', 'function', false]],
+const definitionFieldRules: Readonly<Record<WidgetPluginDefinitionSectionName, readonly WidgetPluginFieldRule[]>> = {
+	config: [['validate', 'function', true], ['resolve', 'function', true]],
+	slots: [['validateStructure', 'function', false]],
 	state: [['validate', 'function', true], ['default', 'function', false], ['authorWritable', 'boolean', false]],
 	properties: [['compute', 'function', true], ['registerDeps', 'function', false], ['valueContract', 'value-contract', false]],
 	methods: [['validateArgs', 'function', true], ['execute', 'function', true], ['registerDeps', 'function', false]],
-	events: [['description', 'string', true]],
 }
+
+/** The one definition every declared Event shares. */
+const EVENT_DEFINITION: ErasedWidgetEventDefinition = Object.freeze({})
 
 const fieldKindExpectations: Readonly<Record<WidgetPluginFieldKind, string>> = {
 	'function': 'a function',
-	'string': 'a string',
 	'boolean': 'a boolean',
-	'schema': 'a JSON Schema (a boolean or an object)',
 	'value-contract': 'a value contract created by createWidgetValueContract()',
 }
 
@@ -823,13 +813,8 @@ function matchesFieldKind(value: unknown, kind: WidgetPluginFieldKind): boolean 
 	switch (kind) {
 		case 'function':
 			return typeof value === 'function'
-		case 'string':
-			return typeof value === 'string'
 		case 'boolean':
 			return typeof value === 'boolean'
-		case 'schema':
-			// `null` is the erased "no schema" form.
-			return value === null || typeof value === 'boolean' || (typeof value === 'object' && !Array.isArray(value))
 		case 'value-contract':
 			return typeof value === 'object' && value !== null && typeof (value as { readonly id?: unknown }).id === 'string'
 	}
@@ -853,7 +838,7 @@ function pluginContractViolation(pluginType: string, subject: string, problem: s
  * after checking that it is an object carrying the fields its section requires. Optional fields are
  * type-checked only when present (not `undefined`).
  */
-function captureDefinition(pluginType: string, section: WidgetPluginSectionName, subject: string, definition: unknown): any {
+function captureDefinition(pluginType: string, section: WidgetPluginDefinitionSectionName, subject: string, definition: unknown): any {
 	if (typeof definition !== 'object' || definition === null)
 		throw pluginContractViolation(pluginType, subject, `must be declared with a definition object, got ${describeValue(definition)}`)
 
@@ -935,15 +920,14 @@ function buildSection(
 /**
  * Starts the plugin builder for one plugin `type`.
  *
- * Phase order is `description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`;
+ * Phase order is `interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`;
  * a capability phase exists only when its capability is declared, while the optional `structure` phase
  * (the plugin-level structure validator) is available to every plugin. Calling a phase out of order (or
  * repeating it) fails type-checking with an order-specific diagnostic; the runtime builder itself is
  * order-agnostic.
  */
-export function createWidgetPlugin<const Type extends string>(type: Type): WidgetPluginDescriptionPhase<Type> {
+export function createWidgetPlugin<const Type extends string>(type: Type): WidgetPluginInterfacesPhase<Type> {
 	const draft: WidgetPluginDraft = {
-		description: '',
 		config: null,
 		slots: null,
 		validateStructure: null,
@@ -955,18 +939,10 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 	}
 
 	const builder = {
-		description(description: string) {
-			draft.description = description
-			return builder
-		},
 		interfaces: () => builder,
 
 		config(definition: ErasedWidgetConfigDefinition) {
-			const captured: ErasedWidgetConfigDefinition = captureDefinition(type, 'config', 'section "config"', definition)
-			draft.config = Object.freeze({
-				...captured,
-				schema: captured.schema ?? null,
-			})
+			draft.config = captureDefinition(type, 'config', 'section "config"', definition)
 			return builder
 		},
 
@@ -1017,10 +993,17 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 			return builder
 		},
 
-		events(build: (section: any) => unknown) {
+		events(names: readonly WidgetMemberKey[]) {
+			if (!isNameArray(names))
+				throw pluginContractViolation(type, 'section "events"', `must be declared with an array of Event names, got ${describeValue(names)}`)
+
 			const members = new Map<WidgetMemberKey, ErasedWidgetEventDefinition>()
+			for (const name of names) {
+				if (members.has(name))
+					throw pluginContractViolation(type, memberSubject('events', name), 'is listed more than once')
+				members.set(name, EVENT_DEFINITION)
+			}
 			draft.events = members
-			buildSection(type, 'events', members, build)
 			return builder
 		},
 
@@ -1044,7 +1027,6 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 
 			const definition: WidgetPluginDefinition = Object.freeze({
 				type,
-				description: draft.description,
 				config: draft.config,
 				slots: draft.slots,
 				validateStructure: draft.validateStructure,
@@ -1068,30 +1050,13 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 				events: definition.events !== null,
 			})
 
-			const config = definition.config === null
-				? null
-				: Object.freeze({
-						description: definition.config.description,
-						schema: definition.config.schema,
-					})
-
-			const descriptions = Object.freeze({
-				config: config?.description ?? null,
-				slots: definition.slots === null
-					? null
-					: createReadonlyMap([...definition.slots].map(([key, slot]) => [key, slot.description] as const)),
-			})
-
 			return Object.freeze({
 				type,
-				description: draft.description,
 				capabilities,
-				config,
-				descriptions,
 				[widgetPluginBrand]: Object.freeze({ definition }),
 			})
 		},
 	}
 
-	return builder as unknown as WidgetPluginDescriptionPhase<Type>
+	return builder as unknown as WidgetPluginInterfacesPhase<Type>
 }

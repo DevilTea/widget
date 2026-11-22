@@ -4,6 +4,7 @@ import Vue from 'unplugin-vue/vite'
 import { defineConfig } from 'vite'
 import { labNuxtUi } from './nuxt-ui'
 import { vendorModernMonacoEditorCore } from './vite-plugin-vendor-modern-monaco-editor-core'
+import { labWidgetDocs } from './widget-docs'
 
 export default defineConfig({
 	// Root-relative ('/') in dev and any standalone build. The combined GitHub Pages deploy
@@ -20,6 +21,9 @@ export default defineConfig({
 		// Self-hosts `modern-monaco`'s editor engine (issue #30 Scope A) — see the plugin's own
 		// file-level comment for the full mechanism.
 		vendorModernMonacoEditorCore(),
+		// `virtual:widget-docs/<showcase id>`: each showcase's plugin documentation, generated from its Interfaces JSDoc
+		// (Core 0.3 carries no descriptions at run time). See `widget-docs.ts`.
+		labWidgetDocs(),
 	],
 	// The persistent ELK layout Worker (`src/graph/layout.worker.ts`, issue #13 Phase 5 "Dependency
 	// Graph worker loading" comment) is a native Vite module Worker — `format: 'es'` keeps its own

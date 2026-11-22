@@ -26,11 +26,10 @@ function buildSlots(plugin: AnyWidgetPlugin): PluginInspection['slots'] {
 		return null
 
 	const slots: Array<readonly [string, PluginInspectionSlot]> = []
-	for (const [name, definition] of definitions) {
+	for (const name of definitions.keys()) {
 		slots.push([name, Object.freeze({
 			type: 'slot' as const,
 			name,
-			description: definition.description,
 		})])
 	}
 	return createReadonlyMap(slots)
@@ -74,11 +73,10 @@ function buildEventMembers(plugin: AnyWidgetPlugin): PluginInspection['events'] 
 		return null
 
 	const members: Array<readonly [string, PluginInspectionEventMember]> = []
-	for (const [name, definition] of definitions) {
+	for (const name of definitions.keys()) {
 		members.push([name, Object.freeze({
 			type: 'event' as const,
 			name,
-			description: definition.description,
 		})])
 	}
 	return createReadonlyMap(members)
@@ -97,9 +95,7 @@ export function inspectPlugin(plugin: AnyWidgetPlugin): PluginInspection {
 
 	const inspection: PluginInspection = Object.freeze({
 		type: plugin.type,
-		description: plugin.description,
 		capabilities: plugin.capabilities,
-		config: plugin.config,
 		slots: buildSlots(plugin),
 		state: buildStateMembers(plugin),
 		properties: buildPropertyMembers(plugin),

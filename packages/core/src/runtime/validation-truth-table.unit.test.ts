@@ -27,7 +27,6 @@ interface StateInterfaces {
 
 function createStateHarness(validate: (input: unknown, addDiagnostic: (message: string) => void) => boolean) {
 	const plugin = createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<StateInterfaces>()
 		.state(state => state.count({
 			validate: (input, ctx): input is number => validate(input, message => ctx.addDiagnostic({ message })),
@@ -58,7 +57,6 @@ function createMethodHarness(validateArgs: (args: readonly unknown[], addDiagnos
 	let executeCount = 0
 
 	const plugin = createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<MethodInterfaces>()
 		.methods(methods => methods.guarded({
 			validateArgs: (args, ctx): args is [number] => validateArgs(args, message => ctx.addDiagnostic({ message })),

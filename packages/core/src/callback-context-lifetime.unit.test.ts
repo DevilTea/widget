@@ -5,6 +5,7 @@
  */
 
 import type { DiagnosticCollector } from './index'
+import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from './index'
 
@@ -16,17 +17,15 @@ interface ProbeInterfaces {
 		raw: { readonly ok: boolean }
 		resolved: { readonly ok: boolean }
 	}
-	slots: 'items'
+	slots: { items: WidgetChild }
 	state: { value: number }
 	properties: { doubled: number }
 	methods: { run: () => number }
 }
 
 const probePlugin = createWidgetPlugin('probe')
-	.description('Test widget')
 	.interfaces<ProbeInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input, ctx): input is { ok: boolean } => {
 			retained.config = ctx as DiagnosticCollector<never>
 			return typeof input === 'object' && input !== null
@@ -35,7 +34,6 @@ const probePlugin = createWidgetPlugin('probe')
 	})
 	.slots({
 		items: {
-			description: 'Test slot',
 			validateStructure: (ctx) => {
 				retained.slot = ctx as DiagnosticCollector<never>
 			},

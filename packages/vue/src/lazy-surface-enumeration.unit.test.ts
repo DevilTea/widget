@@ -28,14 +28,8 @@ interface EventInterfaces {
 }
 
 const EventPlugin = createWidgetPlugin('EnumerableEvents')
-	.description('Enumerable events fixture')
 	.interfaces<EventInterfaces>()
-	.events((events) => {
-		const beforeProto = events
-			.press({ description: 'Pressed' })
-			.change({ description: 'Changed' })
-		return beforeProto[PROTO_KEY]({ description: 'Prototype-safe' })
-	})
+	.events(['press', 'change', PROTO_KEY])
 	.done()
 
 function mountCounter() {

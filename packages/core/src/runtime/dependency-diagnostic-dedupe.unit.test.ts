@@ -31,7 +31,6 @@ function createHarness() {
 	let lastMethodCallResults: readonly boolean[] = []
 
 	const plugin = createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<DedupeInterfaces>()
 		.properties(properties => properties
 			.flaky({
@@ -173,7 +172,6 @@ describe('dedupe anchor identity is collision-free for Symbols (review finding 3
 		const stableSymbol = Symbol('x')
 
 		const plugin = createWidgetPlugin('symbol-dedupe')
-			.description('Test widget')
 			.interfaces<SymbolDedupeInterfaces>()
 			.methods(methods => methods
 				// A fresh `Symbol('x')` every call: same description, different instance each time.

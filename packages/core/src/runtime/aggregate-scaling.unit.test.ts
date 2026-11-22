@@ -8,6 +8,7 @@
  * per N changes behavior this guards against) makes the counts differ.
  */
 
+import type { WidgetChild } from '../types'
 import { endBatch, startBatch } from 'alien-signals'
 import { describe, expect, it, vi } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
@@ -37,7 +38,6 @@ interface LeafInterfaces {
 }
 
 const leaf = createWidgetPlugin('leaf')
-	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.state(state => state.n({
 		validate: (input, ctx): input is number => {
@@ -52,9 +52,8 @@ const leaf = createWidgetPlugin('leaf')
 	.done()
 
 const group = createWidgetPlugin('group')
-	.description('Test widget')
-	.interfaces<{ slots: 'children' }>()
-	.slots({ children: { description: 'Children' } })
+	.interfaces<{ slots: { children: WidgetChild } }>()
+	.slots({ children: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [leaf, group] })

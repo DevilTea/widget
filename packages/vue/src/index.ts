@@ -22,8 +22,10 @@ export type {
 
 export type {
 	ReadonlyRef,
+	ReasonedDiagnostic,
 	UseWidgetConfigAccessor,
 	UseWidgetDiagnosticsAccessor,
+	UseWidgetEventEmitter,
 	UseWidgetEventEmitterAccessor,
 	UseWidgetIdentityAccessor,
 	UseWidgetMethodDiagnosticsAccessor,
@@ -41,6 +43,8 @@ export type {
 	UseWidgetStateDiagnosticsSurface,
 	UseWidgetStateSurface,
 	WidgetSlotChildComponent,
+	WidgetSlotChildTypeOf,
+	WidgetSlotChildTypesOf,
 	WidgetSlotComponent,
 	WidgetSlotScope,
 } from './types'

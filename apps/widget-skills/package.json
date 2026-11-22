@@ -1,0 +1,36 @@
+{
+	"name": "@deviltea/widget-skills",
+	"type": "module",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Private prototype: turns a Widget System's TypeScript types and JSDoc into AI-facing artifacts (IR, JSON Schemas, flat/tree converters, Agent Skills).",
+	"license": "MIT",
+	"exports": {
+		".": "./src/index.ts",
+		"./docs": "./src/docs-types.ts",
+		"./vite": "./src/vite.ts",
+		"./virtual-widget-docs": {
+			"types": "./virtual-widget-docs.d.ts"
+		}
+	},
+	"scripts": {
+		"generate:example": "tsx --tsconfig ./tsconfig.json ./src/cli.ts --module ./fixtures/survey-system.ts --export surveySystem --tsconfig ./tsconfig.json --root ../.. --example ./fixtures/survey-example.json --out ./examples/survey",
+		"check:example": "tsx --tsconfig ./tsconfig.json ./src/cli.ts --check --module ./fixtures/survey-system.ts --export surveySystem --tsconfig ./tsconfig.json --root ../..",
+		"test": "vitest run --config vitest.config.ts",
+		"typecheck": "tsc --project ./tsconfig.json --noEmit"
+	},
+	"peerDependencies": {
+		"vite": "catalog:"
+	},
+	"dependencies": {
+		"tsx": "catalog:",
+		"typescript": "catalog:"
+	},
+	"devDependencies": {
+		"@deviltea/tsconfig": "catalog:",
+		"@deviltea/widget-core": "workspace:*",
+		"@types/node": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
+	}
+}

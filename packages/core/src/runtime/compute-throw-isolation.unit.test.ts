@@ -39,7 +39,6 @@ function numberOf(result: ExecutionResult<number | null, unknown>): number {
 
 function createHarness(initial?: number) {
 	const plugin = createWidgetPlugin('host')
-		.description('Test widget')
 		.interfaces<HostInterfaces>()
 		.state(state => state.n({
 			validate: (input): input is number => typeof input === 'number',

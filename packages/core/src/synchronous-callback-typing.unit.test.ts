@@ -14,12 +14,13 @@
  */
 
 import type { EmptyRegisteredDeps, ExecutionResult, WidgetInterfaces, WidgetMethodDefinition, WidgetPluginValidateStructure, WidgetSlotDefinition, WidgetSystemValidateStructure } from './index'
+import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from './index'
 
 interface VoidInterfaces extends WidgetInterfaces {
 	state: { n: number }
-	slots: 'items'
+	slots: { items: WidgetChild }
 	methods: { submit: () => void }
 }
 
@@ -42,9 +43,8 @@ const valueOf = (result: ExecutionResult<unknown, unknown>): unknown => result.o
 /** The builder up to its `.methods()` phase, so each test writes `execute` inline. */
 function voidMethodsPhase() {
 	return createWidgetPlugin('void')
-		.description('Test widget')
 		.interfaces<VoidInterfaces>()
-		.slots({ items: { description: 'Items' } })
+		.slots({ items: {} })
 		.state(state => state.n({ validate: isNumber }))
 }
 
@@ -90,9 +90,8 @@ describe('a void Method\'s execute written into the builder', () => {
 	it('accepts a value of a type parameter', () => {
 		function create<Value>(value: Value) {
 			return createWidgetPlugin('generic')
-				.description('Test widget')
 				.interfaces<VoidInterfaces>()
-				.slots({ items: { description: 'Items', validateStructure: () => value } })
+				.slots({ items: { validateStructure: () => value } })
 				.structure(() => value)
 				.state(state => state.n({ validate: isNumber }))
 				.methods(methods => methods.submit({ validateArgs: noArgs, execute: () => value }))
@@ -105,9 +104,8 @@ describe('a void Method\'s execute written into the builder', () => {
 
 	it('rejects an async function and a thenable', () => {
 		const asyncPlugin = createWidgetPlugin('async')
-			.description('Test widget')
 			.interfaces<VoidInterfaces>()
-			.slots({ items: { description: 'Items' } })
+			.slots({ items: {} })
 			.state(state => state.n({ validate: isNumber }))
 			.methods(methods => methods.submit({
 				validateArgs: noArgs,
@@ -115,9 +113,8 @@ describe('a void Method\'s execute written into the builder', () => {
 				execute: async () => {},
 			}))
 		const thenablePlugin = createWidgetPlugin('thenable')
-			.description('Test widget')
 			.interfaces<VoidInterfaces>()
-			.slots({ items: { description: 'Items' } })
+			.slots({ items: {} })
 			.state(state => state.n({ validate: isNumber }))
 			.methods(methods => methods.submit({
 				validateArgs: noArgs,
@@ -134,12 +131,10 @@ describe('a Method declared to return unknown or undefined', () => {
 	it('rejects an async execute for an unknown return and accepts synchronous values', () => {
 		const opaque: unknown = 1
 		const sync = createWidgetPlugin('unknown')
-			.description('Test widget')
 			.interfaces<UnknownInterfaces>()
 			.methods(methods => methods.submit({ validateArgs: noArgs, execute: () => opaque }))
 			.done()
 		const asyncPlugin = createWidgetPlugin('unknown-async')
-			.description('Test widget')
 			.interfaces<UnknownInterfaces>()
 			// @ts-expect-error `unknown` does not reopen the synchronous boundary
 			.methods(methods => methods.submit({ validateArgs: noArgs, execute: async () => 1 }))
@@ -150,12 +145,10 @@ describe('a Method declared to return unknown or undefined', () => {
 
 	it('rejects an async execute for an undefined return', () => {
 		const sync = createWidgetPlugin('undefined')
-			.description('Test widget')
 			.interfaces<UndefinedInterfaces>()
 			.methods(methods => methods.submit({ validateArgs: noArgs, execute: () => undefined }))
 			.done()
 		const asyncPlugin = createWidgetPlugin('undefined-async')
-			.description('Test widget')
 			.interfaces<UndefinedInterfaces>()
 			// @ts-expect-error `undefined` does not admit a Promise
 			.methods(methods => methods.submit({ validateArgs: noArgs, execute: async () => undefined }))
@@ -169,9 +162,8 @@ describe('structure validators written into the builder or the System options', 
 	it('accept synchronous results, including unknown-typed ones', () => {
 		const opaque: unknown = 1
 		const plugin = createWidgetPlugin('structure')
-			.description('Test widget')
 			.interfaces<VoidInterfaces>()
-			.slots({ items: { description: 'Items', validateStructure: () => opaque } })
+			.slots({ items: { validateStructure: () => opaque } })
 			.structure(ctx => ctx.addDiagnostic({ message: 'sync' }))
 			.state(state => state.n({ validate: isNumber }))
 			.methods(methods => methods.submit({ validateArgs: noArgs, execute: () => {} }))
@@ -184,14 +176,12 @@ describe('structure validators written into the builder or the System options', 
 
 	it('reject an async validator at the slot, plugin and system level', () => {
 		const slot = createWidgetPlugin('async-slot')
-			.description('Test widget')
 			.interfaces<VoidInterfaces>()
 			// @ts-expect-error an async slot validator would report diagnostics after compilation ended
-			.slots({ items: { description: 'Items', validateStructure: async () => {} } })
+			.slots({ items: { validateStructure: async () => {} } })
 		const plugin = createWidgetPlugin('async-plugin')
-			.description('Test widget')
 			.interfaces<VoidInterfaces>()
-			.slots({ items: { description: 'Items' } })
+			.slots({ items: {} })
 			// @ts-expect-error the plugin-level validator must stay synchronous
 			.structure(async () => {})
 		// @ts-expect-error the system-level validator must stay synchronous
@@ -214,7 +204,7 @@ describe('the standalone definition types', () => {
 			() => ({ then: 'not-callable' }),
 			fromTypeParameter(1),
 		]
-		const slot: WidgetSlotDefinition<VoidInterfaces, 'items'> = { description: 'Items', validateStructure: () => opaque }
+		const slot: WidgetSlotDefinition<VoidInterfaces, 'items'> = { validateStructure: () => opaque }
 		const plugin: WidgetPluginValidateStructure<VoidInterfaces> = () => opaque
 		const system: WidgetSystemValidateStructure<[]> = () => opaque
 

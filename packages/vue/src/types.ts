@@ -24,18 +24,17 @@ import type {
 	RuntimePropertyDiagnostic,
 	RuntimeStateDiagnostic,
 	RuntimeWidgetDiagnostic,
-	WidgetEventEmitter,
+	WidgetEventsOf,
 	WidgetInterfaces,
 	WidgetInterfacesOf,
-	WidgetMethodArgsOf,
-	WidgetMethodKeyOf,
-	WidgetMethodReturnOf,
-	WidgetPropertyKeyOf,
-	WidgetPropertyValueOf,
+	WidgetMemberKey,
+	WidgetMethodsOf,
+	WidgetPropertiesOf,
+	WidgetReasonsOf,
 	WidgetResolvedConfigOf,
 	WidgetSlotNameOf,
-	WidgetStateKeyOf,
-	WidgetStateValueOf,
+	WidgetSlotPluginTypeOf,
+	WidgetStateOf,
 } from '@deviltea/widget-core'
 import type { Ref, Slot } from 'vue'
 
@@ -47,6 +46,61 @@ import type { Ref, Slot } from 'vue'
  * `Readonly<Ref<T>>` types exactly the `{ readonly value: T }` shape a `customRef` genuinely provides.
  */
 export type ReadonlyRef<T> = Readonly<Ref<T>>
+
+// -------------------------------------------------------------------------------------------------
+// Keyed surfaces
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * Every keyed surface below is a homomorphic mapped type over `keyof` the Interfaces section, not over a
+ * union of its keys. TypeScript carries a property's JSDoc from the source of a homomorphic mapping to the
+ * mapped property, so hovering `useState().count` (or `useMethods().increment`, `emit.pressed`, ...) shows
+ * the JSDoc written on the member in the plugin's Interfaces. A mapping over a key union has no source
+ * property and would drop it. The `as` clause keeps the `WidgetMemberKey` (string) filter and, being a
+ * key remapping of the same `keyof`, keeps the documentation too. An absent or `never` section maps to
+ * an empty surface.
+ *
+ * Every mapping removes `?` (`-?`): a homomorphic mapping would otherwise copy an optional member's `?` onto the
+ * surface, but every declared member has its accessor at run time, so the key is always present. The value type is
+ * unchanged (an optional State member's value still admits `undefined`); the Method and Event mappings drop the
+ * `undefined` an optional member adds to the function or tuple type itself.
+ */
+type KeyedSurface<Members, Value> = [Members] extends [never]
+	? Record<never, never>
+	: { readonly [Key in keyof Members as Key extends WidgetMemberKey ? Key : never]-?: Value }
+
+// -------------------------------------------------------------------------------------------------
+// Diagnostic reasons and details
+// -------------------------------------------------------------------------------------------------
+
+type DeclaredReasonFields<Reasons> = { readonly reason?: undefined, readonly details?: undefined }
+	| ([Reasons] extends [never]
+		? never
+		: {
+				[Reason in Extract<keyof Reasons, string>]: [Reasons[Reason]] extends [void]
+					? { readonly reason: Reason, readonly details?: undefined }
+					: { readonly reason: Reason, readonly details: Reasons[Reason] }
+			}[Extract<keyof Reasons, string>])
+
+/**
+ * A diagnostic of this widget's own State, Property or Method, with `reason` and `details` typed by the
+ * plugin's `Interfaces['reasons']`.
+ *
+ * When the plugin declares `reasons`, a diagnostic that carries a plugin-authored `reason` is a union
+ * discriminated by it: `details` is that reason's payload (always present when the payload is not `void`),
+ * and a diagnostic without a `reason` (Core's default validation message, for one) has neither field.
+ * Without a `reasons` declaration the diagnostic keeps Core's shape (`reason?: string`,
+ * `details?: JsonValue`). Dependency diagnostics (`dependency-target-failed`, `dependency-value-rejected`)
+ * carry no `reason` and are unchanged. The typing is a declaration: Core checks the payload when the plugin
+ * reports it, and does not re-check it on the way out.
+ */
+export type ReasonedDiagnostic<Diagnostic, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'reasons'> extends true
+	? Diagnostic extends unknown
+		? 'reason' extends keyof Diagnostic
+			? Omit<Diagnostic, 'reason' | 'details'> & DeclaredReasonFields<WidgetReasonsOf<Interfaces>>
+			: Diagnostic
+		: never
+	: Diagnostic
 
 // -------------------------------------------------------------------------------------------------
 // Config
@@ -76,9 +130,12 @@ export type UseWidgetConfigAccessor<Interfaces extends WidgetInterfaces> = HasWi
 // State
 // -------------------------------------------------------------------------------------------------
 
-export type UseWidgetStateSurface<Interfaces extends WidgetInterfaces> = {
-	readonly [Key in WidgetStateKeyOf<Interfaces>]: Ref<WidgetStateValueOf<Interfaces, Key> | null>
-}
+type StateSurface<Members> = [Members] extends [never]
+	? Record<never, never>
+	: { readonly [Key in keyof Members as Key extends WidgetMemberKey ? Key : never]-?: Ref<Members[Key] | null> }
+
+/** One writable `Ref` per declared State member, carrying the member's JSDoc. `null` while the value is failing. */
+export type UseWidgetStateSurface<Interfaces extends WidgetInterfaces> = StateSurface<WidgetStateOf<Interfaces>>
 
 export type UseWidgetStateAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
 	? {
@@ -86,9 +143,11 @@ export type UseWidgetStateAccessor<Interfaces extends WidgetInterfaces> = HasWid
 		}
 	: unknown
 
-export type UseWidgetStateDiagnosticsSurface<Interfaces extends WidgetInterfaces> = {
-	readonly [Key in WidgetStateKeyOf<Interfaces>]: ReadonlyRef<readonly RuntimeStateDiagnostic[]>
-}
+/** One readonly diagnostics `Ref` per declared State member. */
+export type UseWidgetStateDiagnosticsSurface<Interfaces extends WidgetInterfaces> = KeyedSurface<
+	WidgetStateOf<Interfaces>,
+	ReadonlyRef<readonly ReasonedDiagnostic<RuntimeStateDiagnostic, Interfaces>[]>
+>
 
 export type UseWidgetStateDiagnosticsAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'state'> extends true
 	? {
@@ -100,9 +159,12 @@ export type UseWidgetStateDiagnosticsAccessor<Interfaces extends WidgetInterface
 // Properties
 // -------------------------------------------------------------------------------------------------
 
-export type UseWidgetPropertiesSurface<Interfaces extends WidgetInterfaces> = {
-	readonly [Name in WidgetPropertyKeyOf<Interfaces>]: ReadonlyRef<WidgetPropertyValueOf<Interfaces, Name> | null>
-}
+type PropertiesSurface<Members> = [Members] extends [never]
+	? Record<never, never>
+	: { readonly [Name in keyof Members as Name extends WidgetMemberKey ? Name : never]-?: ReadonlyRef<Members[Name] | null> }
+
+/** One readonly `Ref` per declared Property, carrying the Property's JSDoc. `null` while the Property is failing. */
+export type UseWidgetPropertiesSurface<Interfaces extends WidgetInterfaces> = PropertiesSurface<WidgetPropertiesOf<Interfaces>>
 
 export type UseWidgetPropertiesAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'properties'> extends true
 	? {
@@ -110,9 +172,11 @@ export type UseWidgetPropertiesAccessor<Interfaces extends WidgetInterfaces> = H
 		}
 	: unknown
 
-export type UseWidgetPropertyDiagnosticsSurface<Interfaces extends WidgetInterfaces> = {
-	readonly [Name in WidgetPropertyKeyOf<Interfaces>]: ReadonlyRef<readonly RuntimePropertyDiagnostic[]>
-}
+/** One readonly diagnostics `Ref` per declared Property. */
+export type UseWidgetPropertyDiagnosticsSurface<Interfaces extends WidgetInterfaces> = KeyedSurface<
+	WidgetPropertiesOf<Interfaces>,
+	ReadonlyRef<readonly ReasonedDiagnostic<RuntimePropertyDiagnostic, Interfaces>[]>
+>
 
 export type UseWidgetPropertyDiagnosticsAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'properties'> extends true
 	? {
@@ -124,19 +188,35 @@ export type UseWidgetPropertyDiagnosticsAccessor<Interfaces extends WidgetInterf
 // Events
 // -------------------------------------------------------------------------------------------------
 
+type EventEmitterSurface<Members> = [Members] extends [never]
+	? Record<never, never>
+	: {
+			readonly [Name in keyof Members as Name extends WidgetMemberKey ? Name : never]-?: Exclude<Members[Name], undefined> extends infer Args extends readonly unknown[]
+				? (...args: Args) => void
+				: never
+		}
+
+/** One emit function per declared Event, carrying the Event's JSDoc. Takes the Event's argument tuple. */
+export type UseWidgetEventEmitter<Interfaces extends WidgetInterfaces> = EventEmitterSurface<WidgetEventsOf<Interfaces>>
+
 export type UseWidgetEventEmitterAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'events'> extends true
-	? { readonly emit: WidgetEventEmitter<Interfaces> }
+	? { readonly emit: UseWidgetEventEmitter<Interfaces> }
 	: unknown
 
 // -------------------------------------------------------------------------------------------------
 // Methods
 // -------------------------------------------------------------------------------------------------
 
-export type UseWidgetMethodsSurface<Interfaces extends WidgetInterfaces> = {
-	readonly [Name in WidgetMethodKeyOf<Interfaces>]: (
-		...args: WidgetMethodArgsOf<Interfaces, Name>
-	) => WidgetMethodReturnOf<Interfaces, Name> | null
-}
+type MethodsSurface<Members> = [Members] extends [never]
+	? Record<never, never>
+	: {
+			readonly [Name in keyof Members as Name extends WidgetMemberKey ? Name : never]-?: Exclude<Members[Name], undefined> extends (...args: infer Args) => infer Return
+				? (...args: Args) => Return | null
+				: never
+		}
+
+/** One function per declared Method, carrying the Method's JSDoc. Returns `null` when the Method fails. */
+export type UseWidgetMethodsSurface<Interfaces extends WidgetInterfaces> = MethodsSurface<WidgetMethodsOf<Interfaces>>
 
 export type UseWidgetMethodsAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
 	? {
@@ -144,9 +224,11 @@ export type UseWidgetMethodsAccessor<Interfaces extends WidgetInterfaces> = HasW
 		}
 	: unknown
 
-export type UseWidgetMethodDiagnosticsSurface<Interfaces extends WidgetInterfaces> = {
-	readonly [Name in WidgetMethodKeyOf<Interfaces>]: ReadonlyRef<readonly RuntimeMethodDiagnostic[]>
-}
+/** One readonly diagnostics `Ref` per declared Method. */
+export type UseWidgetMethodDiagnosticsSurface<Interfaces extends WidgetInterfaces> = KeyedSurface<
+	WidgetMethodsOf<Interfaces>,
+	ReadonlyRef<readonly ReasonedDiagnostic<RuntimeMethodDiagnostic, Interfaces>[]>
+>
 
 export type UseWidgetMethodDiagnosticsAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
 	? {
@@ -158,8 +240,8 @@ export type UseWidgetMethodDiagnosticsAccessor<Interfaces extends WidgetInterfac
 // Widget-level aggregate diagnostics (unconditional — present regardless of declared capabilities)
 // -------------------------------------------------------------------------------------------------
 
-export interface UseWidgetDiagnosticsAccessor {
-	readonly useDiagnostics: () => ReadonlyRef<readonly RuntimeWidgetDiagnostic[]>
+export interface UseWidgetDiagnosticsAccessor<Interfaces extends WidgetInterfaces = WidgetInterfaces> {
+	readonly useDiagnostics: () => ReadonlyRef<readonly ReasonedDiagnostic<RuntimeWidgetDiagnostic, Interfaces>[]>
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -187,20 +269,29 @@ export interface UseWidgetIdentityAccessor<Plugin extends AnyWidgetPlugin> {
 // -------------------------------------------------------------------------------------------------
 
 /**
- * `WidgetSlot`'s public component type: a `name` prop narrowed to the exact widget's declared
- * slot-name union (`never` for an explicitly-declared-empty `slots: never` capability, since no legal
- * slot name exists to pass). The underlying value returned at runtime is always the same shared
- * internal component identity (diagnostic #13 checkpoint D) — only this type differs per `useWidget(Plugin)`
- * call.
+ * `WidgetSlot`'s public component type. `Slots` maps each declared slot name to the plugin types the
+ * plugin expects in it (`string` when the slot accepts any widget, see {@link WidgetSlotChildTypeOf}).
+ * The `name` prop is narrowed to the slot names (`never` for an explicitly-declared-empty `slots: never`
+ * capability, since no legal slot name exists to pass), and the `type` of the scoped default slot is
+ * narrowed to the named slot's expected plugin types. The underlying value returned at runtime is always the
+ * same shared internal component identity (diagnostic #13 checkpoint D); only this type differs per
+ * `useWidget(Plugin)` call.
  *
- * Typed as a non-callable component/constructor shape — mirroring `WidgetVueRenderer` in
- * `renderer.ts` — rather than `FunctionalComponent`: the actual shared value is a `defineComponent()`
- * output, which is not safely invocable as a plain function the way a real `FunctionalComponent`
- * value is.
+ * Typed as a generic non-callable component/constructor shape (the generic is the chosen slot name) —
+ * mirroring `WidgetVueRenderer` in `renderer.ts` — rather than `FunctionalComponent`: the actual shared
+ * value is a `defineComponent()` output, which is not safely invocable as a plain function the way a real
+ * `FunctionalComponent` value is.
+ *
+ * The constructor takes the props so that a call infers `Name` from them: vue-tsc checks
+ * `<WidgetSlot name="header">` as `new WidgetSlot({ name: 'header' })`, and a constructor without parameters
+ * would leave `Name` at its constraint (every slot name), widening the scope's `type` to all slots' types.
+ * `h(WidgetSlot, props, slots)` checks `props` the same way, but Vue's `RawSlots` does not check the slot
+ * function, so a scope annotation there (`default: (scope: WidgetSlotScope<'Label'>) => ...`) is an unchecked
+ * assertion.
  */
-export type WidgetSlotComponent<SlotName extends string> = new () => {
-	$props: { readonly name: SlotName }
-	$slots: { default?: Slot<WidgetSlotScope> }
+export type WidgetSlotComponent<Slots extends Readonly<Record<string, string>>> = new <Name extends keyof Slots & string>(props: { readonly name: Name }) => {
+	$props: { readonly name: Name }
+	$slots: { default?: Slot<WidgetSlotScope<Slots[Name]>> }
 }
 
 /**
@@ -219,20 +310,41 @@ export type WidgetSlotChildComponent = new () => {
  * What the `WidgetSlot` default slot receives, once per child in Blueprint order. No Runtime handle
  * is exposed: the renderer decides how to wrap each child and whether to render it at all.
  */
-export interface WidgetSlotScope {
+export interface WidgetSlotScope<Type extends string = string> {
 	/** Renders this child widget through the normal host. */
 	readonly Child: WidgetSlotChildComponent
 	/** The child's widget id. */
 	readonly id: string
-	/** The child's plugin type. */
-	readonly type: string
+	/**
+	 * The child's plugin type. Typed by what the slot expects (a plain union of plugin types or a
+	 * `WidgetContract`'s `Types`), or `string` when the slot accepts any widget. The expectation is
+	 * type-level only: Core checks nothing at run time, so this is as trustworthy as the plugin's own
+	 * `validateStructure`.
+	 */
+	readonly type: Type
 	/** The child's position in this slot, counting children the renderer chooses to skip. */
 	readonly index: number
 }
 
+/**
+ * The plugin types slot `Name` expects, or `string` when it accepts any widget (`WidgetChild`) and
+ * `WidgetSlotPluginTypeOf` is therefore `never`. Resolved per slot name, so a union of slot names that
+ * includes an any-widget slot is `string` and is not narrowed by the other slots.
+ */
+export type WidgetSlotChildTypeOf<Interfaces extends WidgetInterfaces, Name extends WidgetMemberKey> = Name extends unknown
+	? [WidgetSlotPluginTypeOf<Interfaces, Name>] extends [never]
+			? string
+			: WidgetSlotPluginTypeOf<Interfaces, Name>
+	: never
+
+/** The record `WidgetSlotComponent` takes: every slot name of the plugin, with the plugin types it expects. */
+export type WidgetSlotChildTypesOf<Interfaces extends WidgetInterfaces> = {
+	readonly [Name in WidgetSlotNameOf<Interfaces>]: WidgetSlotChildTypeOf<Interfaces, Name>
+}
+
 export type UseWidgetSlotAccessor<Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'slots'> extends true
 	? {
-			readonly WidgetSlot: WidgetSlotComponent<WidgetSlotNameOf<Interfaces>>
+			readonly WidgetSlot: WidgetSlotComponent<WidgetSlotChildTypesOf<Interfaces>>
 		}
 	: unknown
 
@@ -249,7 +361,7 @@ export type UseWidgetResult<Plugin extends AnyWidgetPlugin> = WidgetInterfacesOf
 	& UseWidgetStateDiagnosticsAccessor<Interfaces>
 	& UseWidgetPropertyDiagnosticsAccessor<Interfaces>
 	& UseWidgetMethodDiagnosticsAccessor<Interfaces>
-	& UseWidgetDiagnosticsAccessor
+	& UseWidgetDiagnosticsAccessor<Interfaces>
 	& UseWidgetSlotAccessor<Interfaces>
 	& UseWidgetIdentityAccessor<Plugin>
 	: never

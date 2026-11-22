@@ -1,11 +1,11 @@
 import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetSystem, WidgetSystemConfigurationErrorCode } from './index'
+import type { WidgetChild } from './types'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import * as core from './index'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemConfigurationError } from './index'
 
 function plain(type: string) {
 	return createWidgetPlugin(type)
-		.description(type)
 		.interfaces<Record<never, never>>()
 		.done()
 }
@@ -35,7 +35,6 @@ describe('createWidgetSystem plugin registration errors', () => {
 	it('rejects a plugin completed by another module instance with foreign-plugin', async () => {
 		const foreign = await loadForeignCore()
 		const foreignPlugin = foreign.createWidgetPlugin('alien')
-			.description('Alien')
 			.interfaces<Record<never, never>>()
 			.done()
 
@@ -54,7 +53,7 @@ describe('createWidgetSystem plugin registration errors', () => {
 		expect(nullError)
 			.toMatchObject({ code: 'foreign-plugin', pluginIndex: 0, pluginType: null })
 
-		const lookAlike = { type: 'X', description: 'X', capabilities: {}, config: null, descriptions: { config: null, slots: null } }
+		const lookAlike = { type: 'X', capabilities: {} }
 		const lookAlikeError = capture(() => createWidgetSystem({ plugins: [plain('ok'), lookAlike] as never }))
 		expect(lookAlikeError)
 			.toBeInstanceOf(WidgetSystemConfigurationError)
@@ -145,7 +144,6 @@ describe('createWidgetSystem plugin registration errors', () => {
 describe('widgetSystem.getPlugin', () => {
 	function literal<const Type extends string>(type: Type) {
 		return createWidgetPlugin(type)
-			.description(type)
 			.interfaces<Record<never, never>>()
 			.done()
 	}
@@ -202,11 +200,9 @@ describe('widgetSystem.getPlugin', () => {
 describe('widgetSystem catalog', () => {
 	it('rejects plugins with duplicate types', () => {
 		const first = createWidgetPlugin('duplicate')
-			.description('First')
 			.interfaces<Record<never, never>>()
 			.done()
 		const second = createWidgetPlugin('duplicate')
-			.description('Second')
 			.interfaces<Record<never, never>>()
 			.done()
 
@@ -214,13 +210,13 @@ describe('widgetSystem catalog', () => {
 			.toBeInstanceOf(WidgetSystemConfigurationError)
 	})
 
-	it('projects intrinsic plugin, config, and slot descriptions in registration order', () => {
+	it('projects the type, capability presence and slot names in registration order', () => {
 		interface CardInterfaces {
 			config: {
 				raw: { readonly label?: string }
 				resolved: { readonly label: string }
 			}
-			slots: 'content'
+			slots: { content: WidgetChild }
 			events: {
 				press: []
 				change: [value: string]
@@ -228,42 +224,40 @@ describe('widgetSystem catalog', () => {
 		}
 
 		const card = createWidgetPlugin('card')
-			.description('Card widget')
 			.interfaces<CardInterfaces>()
 			.config({
-				description: 'Card configuration',
 				validate: (input): input is { readonly label?: string } => typeof input === 'object' && input !== null,
 				resolve: raw => ({ label: raw?.label ?? 'Card' }),
 			})
-			.slots({ content: { description: 'Card content' } })
-			.events(events => events
-				.press({ description: 'Card pressed' })
-				.change({ description: 'Card value changed' }))
+			.slots({ content: {} })
+			.events(['press', 'change'])
 			.done()
 		const label = createWidgetPlugin('label')
-			.description('Label widget')
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [card, label] })
 
 		expect(system.catalog.widgets.map(widget => widget.type))
 			.toEqual(['card', 'label'])
+		// Semantic facts only: type, capability presence and slot names.
 		expect(system.catalog.widgets[0])
-			.toMatchObject({
+			.toEqual({
 				type: 'card',
-				description: 'Card widget',
-				descriptions: { config: 'Card configuration' },
+				capabilities: { config: true, slots: true, state: false, properties: false, methods: false, events: true },
+				slots: ['content'],
 			})
-		expect(system.catalog.widgets[0]?.descriptions.slots?.get('content'))
-			.toBe('Card content')
-		expect(system.catalog.widgets[0]!.descriptions)
-			.not.toHaveProperty('events')
+		expect(system.catalog.widgets[0]!.capabilities)
+			.toBe(card.capabilities)
 		expect(system.catalog.widgets[1])
-			.toMatchObject({
+			.toEqual({
 				type: 'label',
-				description: 'Label widget',
-				descriptions: { config: null, slots: null },
+				capabilities: { config: false, slots: false, state: false, properties: false, methods: false, events: false },
+				slots: null,
 			})
+		expect(Object.isFrozen(system.catalog.widgets[0]))
+			.toBe(true)
+		expect(Object.isFrozen(system.catalog.widgets[0]!.slots))
+			.toBe(true)
 		expect(Object.isFrozen(system.catalog))
 			.toBe(true)
 		expect(Object.isFrozen(system.catalog.widgets))

@@ -90,14 +90,16 @@ describe('encodeInspectableValue key truncation', () => {
 		expect(byValue[2]).not.toHaveProperty('keyTruncated')
 	})
 
-	it('emits keys in full, unmarked, when the marker is off, so distinct long keys never collide', () => {
-		const encoded = encodeInspectableValue({ abcdef: 1, abcxyz: 2 }, { maxStringLength: 3, markTruncatedKeys: false })
+	it('marks every cut key, so a collision of two cut keys stays visible', () => {
+		const encoded = encodeInspectableValue({ abcdef: 1, abcxyz: 2 }, { maxStringLength: 3 })
 		if (encoded.type !== 'object')
 			throw new Error('Expected object encoding.')
 		expect(encoded.entries.map(entry => entry.key))
-			.toEqual(['abcdef', 'abcxyz'])
-		for (const entry of encoded.entries)
-			expect(entry).not.toHaveProperty('keyTruncated')
+			.toEqual(['abc', 'abc'])
+		for (const entry of encoded.entries) {
+			expect(entry.keyTruncated)
+				.toBe(true)
+		}
 	})
 
 	it('validates the optional marker on the wire', () => {
@@ -168,7 +170,6 @@ describe('inspectorAgent valueLimits', () => {
 		}
 		big['x'.repeat(600)] = 'long-key'
 		const plugin = createWidgetPlugin('BlobFixture')
-			.description('Blob fixture')
 			.interfaces<BlobInterfaces>()
 			.state(state => state.blob({ validate: (input): input is Record<string, unknown> => typeof input === 'object', default: () => big }))
 			.done()
@@ -216,21 +217,14 @@ describe('inspectorAgent valueLimits', () => {
 		}
 	})
 
-	it('cuts and marks long keys only for peers negotiated at 0.4 or newer; older peers see them in full', async () => {
+	it('cuts and marks long keys for every peer', async () => {
 		const { agent, client } = createFixture({ valueLimits: { maxEntries: 200 } })
 		try {
-			await client.request('handshake', { protocol: { major: 0, minor: 3 } })
-			const previous = await blobValue(client)
-			const previousLong = previous.entries.find(entry => entry.key.length === 600)!
-			expect(previousLong.key)
-				.toBe('x'.repeat(600))
-			expect(previousLong).not.toHaveProperty('keyTruncated')
-			expect(previous.entries.some(entry => entry.key.length === 500))
+			await client.handshake()
+			const value = await blobValue(client)
+			expect(value.entries.some(entry => entry.key.length === 600))
 				.toBe(false)
-
-			await client.request('handshake', { protocol: { major: 0, minor: 4 } })
-			const current = await blobValue(client)
-			expect(current.entries.find(entry => entry.key.length === 500))
+			expect(value.entries.find(entry => entry.key.length === 500))
 				.toMatchObject({ keyTruncated: true })
 		}
 		finally {

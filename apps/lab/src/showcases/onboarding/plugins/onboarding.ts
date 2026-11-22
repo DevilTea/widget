@@ -16,45 +16,102 @@
  * ordinary visitor input (Next on an empty form), not an exception.
  */
 
-import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import type { OnboardingConfig, OnboardingRawConfig } from '../config'
-import type { Completion, I18nText, Progress, StepChange, StepSummary } from '../domain'
+import type { Completion, I18nText, Progress, StepChange, StepSummary, StepType } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkOnboardingConfig, resolveOnboardingConfig } from '../config'
 import { describeValue, isBoolean, isNumber, isStepType } from '../domain'
-import { onboardingConfigSchema } from '../schemas'
 import { stepAnswerReads, stepSummaryReads } from './reads'
 import { stepChildrenOfView } from './structure'
 
-export interface OnboardingInterfaces extends WidgetInterfaces {
-	config: { raw: OnboardingRawConfig, resolved: OnboardingConfig }
-	slots: 'steps'
-	state: { current: number, finished: boolean }
+/**
+ * The four Properties every step exposes: the whole contract between the root and a step (`./reads.ts` reads them, and
+ * `createWidgetSystem` checks every step plugin against it).
+ */
+export interface StepContract {
 	properties: {
 		title: I18nText
+		missing: readonly string[]
+		complete: boolean
+		answers: unknown
+	}
+}
+
+/**
+ * The root of the onboarding wizard. State: `current` (the index of the current step) and `finished`. Properties:
+ * `title`, `steps` (each step's title, `complete` and `missing`), `progress` and `answers`. Methods: `canEnter(index)`
+ * (read-only), `next()`, `back()`, `goTo(index)` (each writes `current` and emits `stepChanged`) and `finish()` (emits
+ * `completed`). A refused move is a Method diagnostic and changes nothing.
+ */
+export interface OnboardingInterfaces extends WidgetInterfaces {
+	/** The wizard title per language and, optionally, the index of the step it opens on. */
+	config: { raw: OnboardingRawConfig, resolved: OnboardingConfig }
+	slots: {
+		/** The steps in order: AccountStep, InterestsStep, SafetyStep or InductionStep. At least one. */
+		steps: WidgetContract<StepContract, StepType>
+	}
+	state: {
+		/** The index of the current step, counted from 0. Starts at config `startStep`. */
+		current: number
+		/** Whether the visitor finished the wizard. */
+		finished: boolean
+	}
+	properties: {
+		/** The wizard title per language. */
+		title: I18nText
+		/** Each step's id, type, title, `complete` and `missing`, in order. */
 		steps: readonly StepSummary[]
+		/** Where the visitor is: the step count, the current and furthest reachable step, the first incomplete one. */
 		progress: Progress
+		/** Every step's answers, by step id. */
 		answers: Completion['answers']
 	}
 	methods: {
+		/**
+		 * Whether the step at `index` may be entered: it exists and every step before it is complete. Read-only.
+		 *
+		 * @param index - The step index, counted from 0.
+		 */
 		canEnter: (index: number) => boolean
+		/**
+		 * Moves to the next step and emits `stepChanged`. Refused while the current step is incomplete, on the last step, when
+		 * the next step is locked and once the wizard is finished.
+		 *
+		 * @returns The index of the step the visitor is on afterwards.
+		 */
 		next: () => number
+		/**
+		 * Moves to the previous step and emits `stepChanged`. Refused on the first step and once the wizard is finished.
+		 *
+		 * @returns The index of the step the visitor is on afterwards.
+		 */
 		back: () => number
+		/**
+		 * Moves to the step at `index` and emits `stepChanged`. Refused for a step that does not exist or is locked.
+		 *
+		 * @param index - The step index, a whole number counted from 0.
+		 * @returns The index of the step the visitor is on afterwards.
+		 */
 		goTo: (index: number) => number
+		/**
+		 * Finishes the wizard: needs every step complete, writes `finished` and emits `completed` with every step's answers.
+		 *
+		 * @returns Whether the wizard was finished by this call.
+		 */
 		finish: () => boolean
 	}
 	events: {
+		/** The visitor moved to another step. Carries the step ids and indexes it left and entered, and how (next, back or jump). */
 		stepChanged: [change: StepChange]
+		/** The visitor finished the wizard. Carries every step's answers by step id. */
 		completed: [completion: Completion]
 	}
 }
 
 export const OnboardingPlugin = createWidgetPlugin('Onboarding')
-	.description('The root of the onboarding wizard. State: `current` (the index of the current step) and `finished`. Properties: `title`, `steps` (each step\'s title, `complete` and `missing`), `progress` and `answers`. Methods: `canEnter(index)` (read-only), `next()`, `back()`, `goTo(index)` (each writes `current` and emits `stepChanged`) and `finish()` (emits `completed`). A refused move is a Method diagnostic and changes nothing.')
 	.interfaces<OnboardingInterfaces>()
 	.config({
-		description: 'The wizard title per language and, optionally, the index of the step it opens on.',
-		schema: onboardingConfigSchema,
 		validate: (input, ctx): input is OnboardingRawConfig => {
 			checkOnboardingConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -63,7 +120,6 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 	})
 	.slots({
 		steps: {
-			description: 'The steps in order: AccountStep, InterestsStep, SafetyStep or InductionStep. At least one.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length === 0)
 					addDiagnostic({ message: 'An Onboarding needs at least one step.', index: 0, reason: 'no-steps' })
@@ -296,7 +352,5 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 				return true
 			},
 		}))
-	.events(events => events
-		.stepChanged({ description: 'The visitor moved to another step. Carries the step ids and indexes it left and entered, and how (next, back or jump).' })
-		.completed({ description: 'The visitor finished the wizard. Carries every step\'s answers by step id.' }))
+	.events(['stepChanged', 'completed'])
 	.done()

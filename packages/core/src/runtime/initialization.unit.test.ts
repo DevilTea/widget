@@ -31,7 +31,6 @@ function createCounterBlueprint(params: {
 	default?: (ctx: unknown) => unknown
 }): ValidWidgetSystemBlueprint {
 	const plugin = createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<CounterInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => params.validate(input),
@@ -154,10 +153,8 @@ describe('runtime initialization — state precedence (diagnostic #10 §7 / §11
 	it('the default callback receives the resolved config, not the raw config', () => {
 		let capturedConfig: unknown
 		const plugin = createWidgetPlugin('configured')
-			.description('Test widget')
 			.interfaces<ConfiguredInterfaces>()
 			.config({
-				description: 'Test config',
 				validate: (input): input is { multiplier: number } => typeof input === 'object' && input !== null && typeof (input as any).multiplier === 'number',
 				resolve: raw => raw === null ? { multiplier: 1 } : raw,
 			})

@@ -29,12 +29,13 @@ import type {
 	WidgetPluginStructurePhase,
 	WidgetPluginValidateStructureContext,
 } from './index'
+import type { WidgetChild } from './types'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { createWidgetPlugin } from './index'
 
 interface AllInterfaces extends WidgetInterfaces {
 	config: { raw: { label?: string }, resolved: { label: string } }
-	slots: 'body'
+	slots: { body: WidgetChild }
 	state: { count: number }
 	properties: { doubled: number }
 	methods: { reset: () => void }
@@ -182,7 +183,7 @@ describe('builder phase-order markers (type-level)', () => {
 			afterState.events(
 				// @ts-expect-error `events` is declared but must come after `properties` and `methods`
 				(events) => {
-					return events.changed({ description: 'changed' })
+					return events.changed({})
 				},
 			)
 		}
@@ -212,14 +213,14 @@ describe('builder phase-order markers (type-level)', () => {
 			afterEvents.events(
 				// @ts-expect-error `events` is declared but was already called
 				(events) => {
-					return events.changed({ description: 'changed' })
+					return events.changed({})
 				},
 			)
 		}
 		const tooEarlySlots = (afterInterfaces: Stages['config']): void => {
 			afterInterfaces.slots(
 				// @ts-expect-error `slots` is declared but must come after `config`
-				{ body: { description: 'body' } },
+				{ body: {} },
 			)
 		}
 		const tooEarlyStructure = (afterInterfaces: Stages['config']): void => {
@@ -282,7 +283,6 @@ describe('builder phase-order markers (type-level)', () => {
 			.toBeNever()
 
 		const plugin = createWidgetPlugin('structure-without-slots')
-			.description('Test widget')
 			.interfaces<StateOnlyInterfaces>()
 			.structure((ctx) => {
 				expectTypeOf(ctx)
@@ -302,7 +302,7 @@ describe('builder phase-order markers (type-level)', () => {
 	it('takes only the slot definitions in `.slots()`; the plugin-level validator moved to `.structure()`', () => {
 		const withValidator = (afterConfig: Stages['slots']): void => {
 			afterConfig.slots(
-				{ body: { description: 'body' } },
+				{ body: {} },
 				// @ts-expect-error `.slots()` no longer accepts a plugin-level validateStructure argument
 				(ctx: WidgetPluginValidateStructureContext<AllInterfaces>) => {
 					ctx.addDiagnostic({ message: 'plugin' })
@@ -339,7 +339,6 @@ describe('builder phase-order markers (type-level)', () => {
 			.toEqualTypeOf<true>()
 
 		const plugin = createWidgetPlugin('empty-slots')
-			.description('Test widget')
 			.interfaces<EmptySlotsAndStateInterfaces>()
 			.slots({})
 			.state(state => state.count({
@@ -364,14 +363,12 @@ describe('builder phase-order markers (type-level)', () => {
 
 	it('leaves correct chains, including skipped optional phases, with unchanged inferred types', () => {
 		const full = createWidgetPlugin('full')
-			.description('Test widget')
 			.interfaces<AllInterfaces>()
 			.config({
-				description: 'config',
 				validate: (input): input is { label?: string } => typeof input === 'object' && input !== null,
 				resolve: raw => ({ label: raw?.label ?? '' }),
 			})
-			.slots({ body: { description: 'body' } })
+			.slots({ body: {} })
 			.structure(ctx => ctx.addDiagnostic({ message: 'structure' }))
 			.state(state => state.count({
 				validate: (value): value is number => typeof value === 'number',
@@ -382,19 +379,18 @@ describe('builder phase-order markers (type-level)', () => {
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => {},
 			}))
-			.events(events => events.changed({ description: 'changed' }))
+			.events(['changed'])
 			.done()
 		expectTypeOf(full)
 			.toEqualTypeOf<WidgetPlugin<'full', AllInterfaces>>()
 
 		const skipping = createWidgetPlugin('skipping')
-			.description('Test widget')
 			.interfaces<StateAndEventsInterfaces>()
 			.state(state => state.count({
 				validate: (value): value is number => typeof value === 'number',
 				default: () => 0,
 			}))
-			.events(events => events.changed({ description: 'changed' }))
+			.events(['changed'])
 			.done()
 		expectTypeOf(skipping)
 			.toEqualTypeOf<WidgetPlugin<'skipping', StateAndEventsInterfaces>>()

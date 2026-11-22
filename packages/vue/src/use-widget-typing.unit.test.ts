@@ -8,6 +8,7 @@ import type {
 	RuntimePropertyDiagnostic,
 	RuntimeStateDiagnostic,
 	RuntimeWidgetDiagnostic,
+	WidgetPlugin,
 } from '@deviltea/widget-core'
 import type { Ref } from 'vue'
 import type {
@@ -161,5 +162,32 @@ describe('useWidget(Plugin) — type-level conformance', () => {
 			.toEqualTypeOf<ReadonlyRef<readonly RuntimeMethodDiagnostic[]>>()
 		expectTypeOf<ReturnType<CounterResult['useDiagnostics']>>()
 			.toEqualTypeOf<ReadonlyRef<readonly RuntimeWidgetDiagnostic[]>>()
+	})
+
+	it('keeps every key of an optional member required, as every declared member exists at run time', () => {
+		interface OptionalInterfaces {
+			state: { count?: number }
+			properties: { doubled?: number }
+			methods: { increment?: (step: number) => number }
+			events: { pressed?: [at: number] }
+		}
+		type OptionalResult = UseWidgetResult<WidgetPlugin<'Optional', OptionalInterfaces>>
+
+		// The key loses its `?`; the State and Property value types are the declared ones (`undefined` included).
+		expectTypeOf<ReturnType<OptionalResult['useState']>>()
+			.toEqualTypeOf<{ readonly count: Ref<number | undefined | null> }>()
+		expectTypeOf<ReturnType<OptionalResult['useProperties']>>()
+			.toEqualTypeOf<{ readonly doubled: ReadonlyRef<number | undefined | null> }>()
+		// A Method or Event function itself is never `undefined`.
+		expectTypeOf<ReturnType<OptionalResult['useMethods']>>()
+			.toEqualTypeOf<{ readonly increment: (step: number) => number | null }>()
+		expectTypeOf<OptionalResult['emit']>()
+			.toEqualTypeOf<{ readonly pressed: (at: number) => void }>()
+		expectTypeOf<ReturnType<OptionalResult['useStateDiagnostics']>>()
+			.toEqualTypeOf<{ readonly count: ReadonlyRef<readonly RuntimeStateDiagnostic[]> }>()
+		expectTypeOf<ReturnType<OptionalResult['usePropertyDiagnostics']>>()
+			.toEqualTypeOf<{ readonly doubled: ReadonlyRef<readonly RuntimePropertyDiagnostic[]> }>()
+		expectTypeOf<ReturnType<OptionalResult['useMethodDiagnostics']>>()
+			.toEqualTypeOf<{ readonly increment: ReadonlyRef<readonly RuntimeMethodDiagnostic[]> }>()
 	})
 })

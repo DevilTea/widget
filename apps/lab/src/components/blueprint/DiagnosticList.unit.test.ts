@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import type { WidgetChild } from '@deviltea/widget-core'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { mount } from '@vue/test-utils'
@@ -90,7 +91,6 @@ describe('diagnostic list related locations', () => {
 
 	/** `p1` and `p2` depend on each other. */
 	const cyclePlugin = createWidgetPlugin('cycle')
-		.description('cycle fixture')
 		.interfaces<FixtureInterfaces>()
 		.state(state => state.value({ validate: validateValue, default: () => 0 }))
 		.properties(properties => properties
@@ -102,7 +102,6 @@ describe('diagnostic list related locations', () => {
 
 	/** `p1` depends on itself. */
 	const selfPlugin = createWidgetPlugin('self-dependent')
-		.description('self-dependent fixture')
 		.interfaces<FixtureInterfaces>()
 		.state(state => state.value({ validate: validateValue, default: () => 0 }))
 		.properties(properties => properties
@@ -114,7 +113,6 @@ describe('diagnostic list related locations', () => {
 
 	/** `viaMethod` depends on a Method that writes State. */
 	const sideEffectPlugin = createWidgetPlugin('side-effect')
-		.description('side-effect fixture')
 		.interfaces<FixtureInterfaces>()
 		.state(state => state.value({ validate: validateValue, default: () => 0 }))
 		.properties(properties => properties
@@ -125,7 +123,7 @@ describe('diagnostic list related locations', () => {
 		.done()
 
 	interface HostInterfaces {
-		slots: 'children'
+		slots: { children: WidgetChild }
 	}
 
 	interface SideInterfaces {
@@ -133,14 +131,12 @@ describe('diagnostic list related locations', () => {
 	}
 
 	const hostPlugin = createWidgetPlugin('host')
-		.description('host fixture')
 		.interfaces<HostInterfaces>()
-		.slots({ children: { description: 'Children' } })
+		.slots({ children: {} })
 		.done()
 
 	/** Two widgets that each have a Property named `a`, depending on each other. */
 	const sidePlugin = (type: string, peer: string) => createWidgetPlugin(type)
-		.description(`${type} fixture`)
 		.interfaces<SideInterfaces>()
 		.properties(properties => properties.a({ registerDeps: ({ dep }) => ({ other: dep.widget(peer).properties.get('a') }), compute: () => null }))
 		.done()
@@ -151,7 +147,6 @@ describe('diagnostic list related locations', () => {
 
 	/** One member of a three-widget ring: its `value` depends on the `value` of widget `peer`. */
 	const ringPlugin = (type: string, peer: string) => createWidgetPlugin(type)
-		.description(`${type} fixture`)
 		.interfaces<RingInterfaces>()
 		.properties(properties => properties.value({ registerDeps: ({ dep }) => ({ next: dep.widget(peer).properties.get('value') }), compute: () => null }))
 		.done()
@@ -166,7 +161,6 @@ describe('diagnostic list related locations', () => {
 
 	/** guests.visible -> sessions.options -> sessions.value -> guests.value -> guests.visible: four Properties on two widgets. */
 	const guestsPlugin = createWidgetPlugin('guests-q')
-		.description('guests fixture')
 		.interfaces<GuestsInterfaces>()
 		.properties(properties => properties
 			.visible({ registerDeps: ({ dep }) => ({ next: dep.widget('sessions').properties.get('options') }), compute: () => null })
@@ -174,7 +168,6 @@ describe('diagnostic list related locations', () => {
 		.done()
 
 	const sessionsPlugin = createWidgetPlugin('sessions-q')
-		.description('sessions fixture')
 		.interfaces<SessionsInterfaces>()
 		.properties(properties => properties
 			.options({ registerDeps: ({ dep }) => ({ next: dep.self.properties.get('value') }), compute: () => null })

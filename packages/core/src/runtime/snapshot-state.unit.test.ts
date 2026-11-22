@@ -5,11 +5,12 @@
  */
 
 import type { WidgetId } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
 
 interface FormInterfaces {
-	slots: 'children'
+	slots: { children: WidgetChild }
 	state: {
 		label: string
 		count: number
@@ -26,9 +27,8 @@ interface NoteInterfaces {
 }
 
 const form = createWidgetPlugin('form')
-	.description('Test widget')
 	.interfaces<FormInterfaces>()
-	.slots({ children: { description: 'Children' } })
+	.slots({ children: {} })
 	.state(state => state
 		.label({ validate: (input): input is string => typeof input === 'string', default: () => 'initial' })
 		.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 })
@@ -40,7 +40,6 @@ const form = createWidgetPlugin('form')
 	.done()
 
 const note = createWidgetPlugin('note')
-	.description('Test widget')
 	.interfaces<NoteInterfaces>()
 	.properties(properties => properties.text({ compute: () => 'note' }))
 	.done()

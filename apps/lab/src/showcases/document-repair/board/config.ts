@@ -9,15 +9,29 @@ import type { I18nText, Tone } from '../domain'
 import { checkObject, checkString, checkText, formatConfigPath } from '../config'
 import { describeValue, isIsoDate, isTone, TONES } from '../domain'
 
+/** The authored config of a Board. */
 export interface BoardRawConfig {
+	/** The title of the board per language, such as { "en": "Notices", "zh-TW": "公告" }. "en" is required. */
 	readonly title: I18nText
 }
 
+/** The authored config of a Notice. */
 export interface NoticeRawConfig {
+	/**
+	 * The headline of the notice.
+	 *
+	 * @minLength 1
+	 */
 	readonly title: string
+	/** The text of the notice. */
 	readonly body: string
-	/** `YYYY-MM-DD`. */
+	/**
+	 * The last day the notice is shown, written `YYYY-MM-DD`.
+	 *
+	 * @pattern ^\d{4}-\d{2}-\d{2}$
+	 */
 	readonly until: string
+	/** How the notice is drawn. */
 	readonly tone: Tone
 }
 

@@ -1,4 +1,5 @@
 import type { WidgetEventEmitter } from '../index'
+import type { WidgetChild } from '../types'
 import { computed, signal } from 'alien-signals'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
@@ -6,7 +7,7 @@ import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedErro
 const PROTO_KEY = '__proto__' as const
 
 interface EventInterfaces {
-	slots: 'children'
+	slots: { children: WidgetChild }
 	methods: {
 		emitPing: () => void
 		emitChange: (value: string) => void
@@ -29,9 +30,8 @@ function readCapturedEmitter(): WidgetEventEmitter<EventInterfaces> | null {
 }
 
 const eventPlugin = createWidgetPlugin('event-widget')
-	.description('Event widget')
 	.interfaces<EventInterfaces>()
-	.slots({ children: { description: 'Children' } })
+	.slots({ children: {} })
 	.methods(methods => methods
 		.emitPing({
 			validateArgs: (args): args is [] => args.length === 0,
@@ -60,13 +60,7 @@ const eventPlugin = createWidgetPlugin('event-widget')
 				capturedEmitter = emit
 			},
 		}))
-	.events((events) => {
-		const beforeProto = events
-			.ping({ description: 'Ping' })
-			.change({ description: 'Changed value' })
-			.chain({ description: 'Chain event' })
-		return beforeProto[PROTO_KEY]({ description: 'Prototype-safe event' })
-	})
+	.events(['ping', 'change', 'chain', PROTO_KEY])
 	.done()
 
 function createRuntime() {

@@ -13,27 +13,65 @@
  * cycle, because conditions cannot name `errors`.
  */
 
-import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import type { SurveyConfig, SurveyRawConfig } from '../config'
-import type { SurveyResponse, SurveyText } from '../domain'
+import type { AnswerError, AnswerValue, QuestionType, SurveyResponse, SurveyText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkSurveyConfig, resolveSurveyConfig } from '../config'
 import { isAnswerErrors, isAnswerValue, isQuestionType, isSurveyResponse, sameAnswerValues, surveyText } from '../domain'
-import { surveyConfigSchema } from '../schemas'
 import { languageOf } from './reads'
 
-export interface SurveyInterfaces extends WidgetInterfaces {
-	config: { raw: SurveyRawConfig, resolved: SurveyConfig }
-	slots: 'questions'
-	state: { language: string, submitted: SurveyResponse | null }
+/** The four Properties of a question the root reads: the whole contract between the root and a question. */
+export interface QuestionContract {
 	properties: {
+		visible: boolean
+		required: boolean
+		value: AnswerValue
+		errors: readonly AnswerError[]
+	}
+}
+
+/**
+ * The root of a survey. Holds the active language and the submitted snapshot, aggregates every question's
+ * visible/required/value/errors into `response`, reports `canSubmit` (no question has errors) and `changedSinceSubmit`, and
+ * `submit()` is blocked while any question has errors.
+ */
+export interface SurveyInterfaces extends WidgetInterfaces {
+	/** The survey title per language and the survey languages (the first is the default; en and zh-TW are supported). */
+	config: { raw: SurveyRawConfig, resolved: SurveyConfig }
+	slots: {
+		/** The questions in display order: ShortAnswer, SingleChoice, MultipleChoice or Numeric. */
+		questions: WidgetContract<QuestionContract, QuestionType>
+	}
+	state: {
+		/** The active language: one of config `languages`. Starts at the first. */
+		language: string
+		/** The response `submit()` last stored; `null` before any. */
+		submitted: SurveyResponse | null
+	}
+	properties: {
+		/** The survey title and the survey's own messages in the active language. */
 		text: SurveyText
+		/** Every question's visible, required, value and errors, by question id: the one object a backend reads. */
 		response: SurveyResponse
+		/** Whether no question has errors. */
 		canSubmit: boolean
+		/** Whether an answer changed since the last submit. */
 		changedSinceSubmit: boolean
 	}
-	methods: { submit: () => SurveyResponse }
-	events: { submitted: [response: SurveyResponse] }
+	methods: {
+		/**
+		 * Stores the response in `submitted` and emits `submitted`. Refused (`answer-errors`, message in the survey language)
+		 * while any question has errors; it then writes and emits nothing.
+		 *
+		 * @returns The response.
+		 */
+		submit: () => SurveyResponse
+	}
+	events: {
+		/** An answer set with no errors was submitted. Carries the response: visible, required, value and errors per question. */
+		submitted: [response: SurveyResponse]
+	}
 }
 
 /** What a failed `submit()` returns: the failure is the diagnostic, the value is only context. */
@@ -44,11 +82,8 @@ function isBoolean(input: unknown): input is boolean {
 }
 
 export const SurveyPlugin = createWidgetPlugin('Survey')
-	.description('The root of a survey. Holds the active language and the submitted snapshot, aggregates every question\'s visible/required/value/errors into `response`, reports `canSubmit` (no question has errors) and `changedSinceSubmit`, and `submit()` is blocked while any question has errors.')
 	.interfaces<SurveyInterfaces>()
 	.config({
-		description: 'The survey title per language and the survey languages (the first is the default; en and zh-TW are supported).',
-		schema: surveyConfigSchema,
 		validate: (input, ctx): input is SurveyRawConfig => {
 			checkSurveyConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -57,7 +92,6 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 	})
 	.slots({
 		questions: {
-			description: 'The questions in display order: ShortAnswer, SingleChoice, MultipleChoice or Numeric.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && !isQuestionType(child.type))
@@ -168,5 +202,5 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			return response.value
 		},
 	}))
-	.events(events => events.submitted({ description: 'An answer set with no errors was submitted. Carries the response: visible, required, value and errors per question.' }))
+	.events(['submitted'])
 	.done()

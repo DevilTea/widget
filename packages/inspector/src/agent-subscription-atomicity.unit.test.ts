@@ -4,6 +4,7 @@ import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
+import { INSPECTOR_PROTOCOL_VERSION } from './protocol'
 import { createInProcessInspectorTransportPair } from './transport'
 
 interface AtomicInterfaces extends WidgetInterfaces {
@@ -13,7 +14,6 @@ interface AtomicInterfaces extends WidgetInterfaces {
 }
 
 const AtomicPlugin = createWidgetPlugin('AtomicFixture')
-	.description('Subscription atomicity fixture')
 	.interfaces<AtomicInterfaces>()
 	.state(state => state.count({
 		validate: (input): input is number => typeof input === 'number',
@@ -26,7 +26,7 @@ const AtomicPlugin = createWidgetPlugin('AtomicFixture')
 			emit.changed(value)
 		},
 	}))
-	.events(events => events.changed({ description: 'Changed' }))
+	.events(['changed'])
 	.done()
 
 afterEach(() => {
@@ -86,7 +86,7 @@ describe('inspectorAgent subscription registration is atomic with its response',
 		const { widget, pair, agent, client, ref, responses, events, allowResponses } = await setup()
 		try {
 			pair.client.send({
-				protocol: { major: 0, minor: 4 },
+				protocol: INSPECTOR_PROTOCOL_VERSION,
 				kind: 'request',
 				requestId: 'a',
 				method: 'runtime.subscribeMember',
@@ -116,7 +116,7 @@ describe('inspectorAgent subscription registration is atomic with its response',
 		const { widget, pair, agent, client, ref, responses, events, allowResponses } = await setup()
 		try {
 			pair.client.send({
-				protocol: { major: 0, minor: 4 },
+				protocol: INSPECTOR_PROTOCOL_VERSION,
 				kind: 'request',
 				requestId: 'a',
 				method: 'runtime.subscribeEvent',

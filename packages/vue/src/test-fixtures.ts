@@ -6,7 +6,7 @@
  * `tsconfig.package.json` program (see that file's `exclude`).
  */
 
-import type { AnyWidgetPlugin, AnyWidgetPluginTuple, CreateWidgetSystemRuntimeOptions, RuntimeWidgetFor, WidgetInterfaces, WidgetSystemRuntime } from '@deviltea/widget-core'
+import type { AnyWidgetPlugin, AnyWidgetPluginTuple, CreateWidgetSystemRuntimeOptions, RuntimeWidgetFor, WidgetChild, WidgetInterfaces, WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { RuntimeWidgetLike } from './context'
 import type { UseWidgetResult } from './types'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
@@ -37,7 +37,6 @@ export interface CounterInterfaces extends WidgetInterfaces {
 export const COUNTER_CRASH_ERROR = new Error('crash() always throws — an implementation exception, not an Diagnostic.')
 
 export const CounterPlugin = createWidgetPlugin('Counter')
-	.description('Counter widget')
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
@@ -94,7 +93,6 @@ export interface LabelInterfaces extends WidgetInterfaces {
 }
 
 export const LabelPlugin = createWidgetPlugin('Label')
-	.description('Label widget')
 	.interfaces<LabelInterfaces>()
 	.properties(properties =>
 		properties
@@ -110,16 +108,15 @@ export const LabelPlugin = createWidgetPlugin('Label')
 	.done()
 
 export interface ContainerInterfaces extends WidgetInterfaces {
-	slots: 'header' | 'body' | 'slot-one'
+	slots: { 'header': WidgetChild, 'body': WidgetChild, 'slot-one': WidgetChild }
 }
 
 export const ContainerPlugin = createWidgetPlugin('Container')
-	.description('Container widget')
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		'header': { description: 'Header widgets' },
-		'body': { description: 'Body widgets' },
-		'slot-one': { description: 'First slot widgets' },
+		'header': {},
+		'body': {},
+		'slot-one': {},
 	})
 	.done()
 
@@ -130,7 +127,6 @@ export interface LeafInterfaces extends WidgetInterfaces {
 }
 
 export const LeafPlugin = createWidgetPlugin('Leaf')
-	.description('Leaf widget')
 	.interfaces<LeafInterfaces>()
 	.state(state =>
 		state.label({
@@ -144,7 +140,6 @@ export interface EmptyStateInterfaces extends WidgetInterfaces {
 }
 
 export const EmptyStatePlugin = createWidgetPlugin('EmptyState')
-	.description('Empty-state widget')
 	.interfaces<EmptyStateInterfaces>()
 	.state(state => state)
 	.done()
@@ -154,7 +149,6 @@ export interface EmptyPropertiesInterfaces extends WidgetInterfaces {
 }
 
 export const EmptyPropertiesPlugin = createWidgetPlugin('EmptyProperties')
-	.description('Empty-properties widget')
 	.interfaces<EmptyPropertiesInterfaces>()
 	.properties(properties => properties)
 	.done()
@@ -164,7 +158,6 @@ export interface EmptyMethodsInterfaces extends WidgetInterfaces {
 }
 
 export const EmptyMethodsPlugin = createWidgetPlugin('EmptyMethods')
-	.description('Empty-methods widget')
 	.interfaces<EmptyMethodsInterfaces>()
 	.methods(methods => methods)
 	.done()
@@ -181,7 +174,6 @@ export interface EmptySlotsInterfaces extends WidgetInterfaces {
 }
 
 export const EmptySlotsPlugin = createWidgetPlugin('EmptySlots')
-	.description('Empty-slots widget')
 	.interfaces<EmptySlotsInterfaces>()
 	.slots({})
 	.done()
@@ -194,7 +186,6 @@ export const EmptySlotsPlugin = createWidgetPlugin('EmptySlots')
 export interface BareInterfaces extends WidgetInterfaces {}
 
 export const BarePlugin = createWidgetPlugin('Bare')
-	.description('Bare widget')
 	.interfaces<BareInterfaces>()
 	.done()
 

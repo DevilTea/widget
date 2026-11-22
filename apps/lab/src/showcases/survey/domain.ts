@@ -56,26 +56,97 @@ export function isSupportedLanguage(input: unknown): input is SupportedLanguage 
 /** Text per language: `{ "en": "...", "zh-TW": "..." }`. Must contain every language of the survey. */
 export interface I18nText { readonly [language: string]: string }
 
+/** A condition on one question's effective answer. A hidden question has no value: every condition reads it as unanswered. */
 export type LeafCondition
-	= | { readonly question: string, readonly op: 'answered' | 'unanswered' }
-		| { readonly question: string, readonly op: 'equals' | 'notEquals', readonly value: string | number }
-		| { readonly question: string, readonly op: 'greaterThan' | 'lessThan', readonly value: number }
-		| { readonly question: string, readonly op: 'includes' | 'excludes', readonly value: string }
+	= | {
+		/**
+		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
+		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 */
+		readonly question: string
+		/** `answered` holds when the question has an effective answer, `unanswered` when it has none (or is hidden). */
+		readonly op: 'answered' | 'unanswered'
+	}
+	| {
+		/**
+		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
+		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 */
+		readonly question: string
+		/** `equals` is true only for an identical answer; `notEquals` is also true for an unanswered or hidden question. */
+		readonly op: 'equals' | 'notEquals'
+		/** A choice option value or short text, or a number for a numeric answer. */
+		readonly value: string | number
+	}
+	| {
+		/**
+		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
+		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 */
+		readonly question: string
+		/** Compares a numeric answer; false for a hidden or unanswered question. */
+		readonly op: 'greaterThan' | 'lessThan'
+		/** The number the answer is compared with. */
+		readonly value: number
+	}
+	| {
+		/**
+		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
+		 * and conditions must not form a loop (`property-evaluation-cycle`).
+		 */
+		readonly question: string
+		/** Whether a MultipleChoice answer contains `value`; `excludes` is also true for an unanswered or hidden question. */
+		readonly op: 'includes' | 'excludes'
+		/** One of that question's option values. */
+		readonly value: string
+	}
 
+/**
+ * A condition on other questions' answers: a leaf `{ question, op, value? }` or a combinator `{ all }` (every one holds),
+ * `{ any }` (at least one holds) or `{ not }`. A hidden question has no value: every condition reads it as unanswered.
+ */
 export type Condition
 	= | LeafCondition
-		| { readonly all: readonly Condition[] }
-		| { readonly any: readonly Condition[] }
-		| { readonly not: Condition }
+		| {
+			/** Holds when every listed condition holds. */
+			readonly all: readonly Condition[]
+		}
+		| {
+			/** Holds when at least one listed condition holds. */
+			readonly any: readonly Condition[]
+		}
+		| {
+			/** Holds when the inner condition does not hold. */
+			readonly not: Condition
+		}
 
 /** A custom answer error: when `when` holds on a visible question, `message` is one of its `errors`. */
-export interface Rule { readonly when: Condition, readonly message: I18nText }
+export interface Rule {
+	/** While the question is visible and this holds, the question's errors include `{ code: "rule", message }`. */
+	readonly when: Condition
+	/** The error message, in every survey language. */
+	readonly message: I18nText
+}
 
 /** An option of a choice question. Options are config, not widgets. */
 export interface OptionConfig {
+	/**
+	 * The stored answer for this option. Unique within the question.
+	 *
+	 * @minLength 1
+	 */
 	readonly value: string
+	/** The option text, in every survey language. */
 	readonly label: I18nText
+	/**
+	 * Show the option only while this holds. A selected option that becomes hidden is dropped from the effective answer and
+	 * reported as an invalid-option error.
+	 */
 	readonly visibleWhen?: Condition
+	/**
+	 * Allow choosing the option only while this holds (it is shown disabled otherwise). A selected option that becomes
+	 * disabled is dropped from the effective answer and reported as an invalid-option error.
+	 */
 	readonly enabledWhen?: Condition
 }
 

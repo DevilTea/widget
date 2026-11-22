@@ -20,7 +20,6 @@ interface SpecialMemberInterfaces {
 }
 
 const SpecialMemberPlugin = createWidgetPlugin('SpecialMemberProjection')
-	.description('Prototype-sensitive useWidget member projection fixture')
 	.interfaces<SpecialMemberInterfaces>()
 	.state(state => state[PROTO_KEY]({
 		validate: (input): input is number => typeof input === 'number',

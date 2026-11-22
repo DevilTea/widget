@@ -10,7 +10,6 @@ import { inspectBlueprint, inspectPlugin, inspectRuntime, WidgetInspectionError 
 
 function build(api: typeof core) {
 	const plugin = api.createWidgetPlugin('plain')
-		.description('Plain')
 		.interfaces<Record<never, never>>()
 		.done()
 	const system = api.createWidgetSystem({ plugins: [plugin] as const })
@@ -72,7 +71,6 @@ describe('inspection provenance errors', () => {
 
 	it('still inspects genuine objects, including after disposal', () => {
 		const plugin = createWidgetPlugin('p')
-			.description('P')
 			.interfaces<Record<never, never>>()
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [plugin] as const })

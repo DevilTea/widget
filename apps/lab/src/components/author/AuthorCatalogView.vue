@@ -3,13 +3,14 @@ import { computed, onUnmounted, ref } from 'vue'
 import { catalogToJson, createAuthorCatalogViewModel } from '../../author/catalog'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
+import { getShowcase } from '../../showcases/registry'
 import DeclaredEvents from '../events/DeclaredEvents.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
 const viewModel = computed(() => {
-	void store.showcaseId.value
-	return createAuthorCatalogViewModel(store.session.system)
+	const showcase = getShowcase(store.showcaseId.value)
+	return createAuthorCatalogViewModel(store.session.system, { docs: showcase?.docs, configSchemas: showcase?.configSchemas })
 })
 
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
@@ -53,10 +54,6 @@ function copyLabel(): string {
 		default: return i18n.t('Copy catalog JSON')
 	}
 }
-
-function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel>['widgets'][number]): readonly [string, string][] {
-	return widget.entry.descriptions.slots === null ? [] : [...widget.entry.descriptions.slots.entries()]
-}
 </script>
 
 <template>
@@ -84,8 +81,11 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 				<h3 class="m-[0_0_3px] text-[13px] font-lab-mono">
 					{{ widget.entry.type }}
 				</h3>
-				<p class="m-[0_0_8px] text-[12px]">
-					{{ widget.entry.description }}
+				<p
+					v-if="widget.description !== ''"
+					class="m-[0_0_8px] text-[12px] whitespace-pre-line"
+				>
+					{{ widget.description }}
 				</p>
 				<div class="flex flex-wrap gap-[4px] mb-[7px]">
 					<span
@@ -98,10 +98,10 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 					</span>
 				</div>
 				<div
-					v-if="widget.entry.descriptions.config !== null"
-					class="text-[11px] mb-[5px]"
+					v-if="widget.configDescription"
+					class="text-[11px] mb-[5px] whitespace-pre-line"
 				>
-					<strong>{{ i18n.t('Config description') }}:</strong> {{ widget.entry.descriptions.config }}
+					<strong>{{ i18n.t('Config description') }}:</strong> {{ widget.configDescription }}
 				</div>
 				<details
 					v-if="widget.configSchemaText !== null"
@@ -114,16 +114,16 @@ function slotDescriptions(widget: ReturnType<typeof createAuthorCatalogViewModel
 					<pre class="m-[4px_0_0] p-[6px] max-h-[240px] overflow-auto text-[11px] font-lab-mono border border-lab-border rounded-lab">{{ widget.configSchemaText }}</pre>
 				</details>
 				<div
-					v-if="slotDescriptions(widget).length > 0"
+					v-if="widget.slots.some(slot => slot.description !== '')"
 					class="text-[11px]"
 				>
 					<strong>{{ i18n.t('Slot descriptions') }}:</strong>
 					<ul class="m-[4px_0_0] pl-[18px]">
 						<li
-							v-for="([name, description]) in slotDescriptions(widget)"
-							:key="name"
+							v-for="slot in widget.slots.filter(entry => entry.description !== '')"
+							:key="slot.name"
 						>
-							<code>{{ name }}</code>: {{ description }}
+							<code>{{ slot.name }}</code>: {{ slot.description }}
 						</li>
 					</ul>
 				</div>

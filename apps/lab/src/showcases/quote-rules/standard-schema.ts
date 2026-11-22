@@ -15,7 +15,7 @@
  *   and would read as success, so the guard throws instead.
  */
 
-import type { DiagnosticCollector, RelativeValueDiagnosticInput, WidgetConfigJsonSchema } from '@deviltea/widget-core'
+import type { DiagnosticCollector, RelativeValueDiagnosticInput } from '@deviltea/widget-core'
 
 export interface StandardIssue {
 	readonly message: string
@@ -63,12 +63,21 @@ export function guard<Schema extends StandardSchema>(schema: Schema & KeepsInput
 }
 
 /**
- * The schema's JSON Schema (Draft 2020-12) for `config.schema`, taken from the library through Standard JSON
- * Schema. Core never runs it: it is authoring guidance for the Catalog, the Structure editor and an AI. The
- * validator stays the authority, and a refinement the library cannot express as JSON Schema is not in it.
+ * A JSON Schema document (the object form), with its `properties` typed for readers. Written out here rather than taken
+ * from the host contract's `ConfigJsonSchema`, which it satisfies: this file is part of the Web Worker bundle, whose
+ * import graph must not reach `showcase-host` (`styles/quote-worker-isolation.unit.test.ts`).
  */
-/** A JSON Schema document (the object form: `WidgetConfigJsonSchema` also allows a bare boolean). */
-export type ConfigJsonSchemaObject = Exclude<WidgetConfigJsonSchema, boolean>
+export interface ConfigJsonSchemaObject {
+	readonly [keyword: string]: unknown
+	readonly properties?: Readonly<Record<string, ConfigJsonSchemaObject>>
+}
+
+/**
+ * The schema's JSON Schema (Draft 2020-12) for the showcase's config schema map (`quoteConfigSchemas`), taken from the
+ * library through Standard JSON Schema. Core never runs it (Core 0.3 carries no config schema): it is authoring guidance for
+ * the Catalog, the Structure editor and an AI. The validator stays the authority, and a refinement the library cannot express
+ * as JSON Schema is not in it.
+ */
 
 export function jsonSchemaOf(schema: StandardSchema): ConfigJsonSchemaObject {
 	const jsonSchema = schema['~standard'].jsonSchema

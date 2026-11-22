@@ -25,9 +25,12 @@ function fence(code: string, indent = '') {
  * one. The migration guide is already complete, so it is held at zero.
  */
 const expectations: Record<string, DocumentExpectation> = {
-	// 17 samples written against the published 0.0.6 and 19 against the workspace packages.
-	'docs/site/migration/0.1.md': { before: 17, after: 11, run: 8, unmarked: 0 },
-	'docs/site/packages/widget-core.md': { before: 0, after: 0, run: 26, unmarked: 28 },
+	// 17 samples written against the published 0.0.6. The 20 that were compiled against the workspace packages are
+	// historical since 0.3 (written against 0.1) and are marked `skip`.
+	'docs/site/migration/0.1.md': { before: 17, after: 0, run: 0, unmarked: 0 },
+	// The Core section of the 0.3 guide; the Inspector and Vue sections are added by their own changes.
+	'docs/site/migration/0.3.md': { before: 6, after: 6, run: 0, unmarked: 0 },
+	'docs/site/packages/widget-core.md': { before: 0, after: 1, run: 27, unmarked: 28 },
 	'packages/core/README.md': { before: 0, after: 0, run: 3, unmarked: 3 },
 	// No marked sample yet: these pages hold unmarked fragments only.
 	'docs/site/packages/widget-vue.md': { before: 0, after: 0, run: 0, unmarked: 11 },
@@ -332,9 +335,11 @@ describe.skipIf(missingBuild !== null)('documentation samples', () => {
 			.join('\n'))
 			.toBe('')
 		// The samples state their output in comments; they were compared, not skipped. Raise this when comments are
-		// added; a drop means output stopped being compared.
+		// added; a drop means output stopped being compared. The floor is the measured count (74). It was 90 until the
+		// 0.1 migration guide's samples became historical (written against 0.1, no longer compiled, marked `skip`),
+		// which removed their compared output.
 		expect(result.compared.length)
-			.toBeGreaterThanOrEqual(90)
+			.toBeGreaterThanOrEqual(74)
 		// An exemption that is no longer needed has to be removed.
 		const used = new Set(result.exempted.map(claim => `${claim.document}\n${claim.sample}\n${claim.text}`))
 		expect(exemptComments.filter(entry => !used.has(`${entry.document}\n${entry.sample}\n${entry.comment}`)))

@@ -7,7 +7,7 @@
  * plugin is built exclusively through `@deviltea/widget-core`'s public `createWidgetPlugin` contract.
  */
 
-import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -20,21 +20,25 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 // through a Property.
 // -------------------------------------------------------------------------------------------------
 
+/** Sandbox text widget. */
 export interface TextInterfaces extends WidgetInterfaces {
+	/** Sandbox text configuration. */
 	config: {
-		raw: { text: string }
+		raw: {
+			/** The text the widget shows. */
+			text: string
+		}
 		resolved: { text: string }
 	}
 	properties: {
+		/** The configured text, projected so a renderer can read it. */
 		content: string
 	}
 }
 
 export const TextPlugin = createWidgetPlugin('Text')
-	.description('Sandbox text widget')
 	.interfaces<TextInterfaces>()
 	.config({
-		description: 'Sandbox text configuration',
 		validate: (input): input is { text: string } => isPlainObject(input) && typeof input.text === 'string',
 		resolve: raw => ({ text: raw?.text ?? '' }),
 	})
@@ -48,21 +52,30 @@ export const TextPlugin = createWidgetPlugin('Text')
 // Counter — state + a self-dependent Property + Methods (one read-modify-write, one write-only).
 // -------------------------------------------------------------------------------------------------
 
+/** Sandbox counter widget. */
 export interface CounterInterfaces extends WidgetInterfaces {
 	state: {
+		/** The current count, a finite number. Starts at 0. */
 		count: number
 	}
 	properties: {
+		/** Twice the count. */
 		doubled: number
 	}
 	methods: {
+		/**
+		 * Adds `step` to the count.
+		 *
+		 * @param step - The amount to add.
+		 * @returns The new count.
+		 */
 		increment: (step: number) => number
+		/** Sets the count back to 0. */
 		reset: () => void
 	}
 }
 
 export const CounterPlugin = createWidgetPlugin('Counter')
-	.description('Sandbox counter widget')
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
@@ -105,27 +118,34 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 // Section — one declared slot ("body") plus a config-projected heading Property.
 // -------------------------------------------------------------------------------------------------
 
+/** Sandbox section widget. */
 export interface SectionInterfaces extends WidgetInterfaces {
+	/** Sandbox section configuration. */
 	config: {
-		raw: { title?: string }
+		raw: {
+			/** The section heading. Defaults to "Section". */
+			title?: string
+		}
 		resolved: { title: string }
 	}
-	slots: 'body'
+	slots: {
+		/** Sandbox section body. */
+		body: WidgetChild
+	}
 	properties: {
+		/** The configured heading. */
 		heading: string
 	}
 }
 
 export const SectionPlugin = createWidgetPlugin('Section')
-	.description('Sandbox section widget')
 	.interfaces<SectionInterfaces>()
 	.config({
-		description: 'Sandbox section configuration',
 		validate: (input): input is { title?: string } =>
 			isPlainObject(input) && (input.title === undefined || typeof input.title === 'string'),
 		resolve: raw => ({ title: raw?.title ?? 'Section' }),
 	})
-	.slots({ body: { description: 'Sandbox section body' } })
+	.slots({ body: {} })
 	.properties(properties =>
 		properties.heading({
 			compute: ({ config }) => config.title,
@@ -136,14 +156,17 @@ export const SectionPlugin = createWidgetPlugin('Section')
 // Stack — one declared slot ("items") for an arbitrary-length list of children. No config/state.
 // -------------------------------------------------------------------------------------------------
 
+/** Sandbox stack widget. */
 export interface StackInterfaces extends WidgetInterfaces {
-	slots: 'items'
+	slots: {
+		/** Sandbox stack items. */
+		items: WidgetChild
+	}
 }
 
 export const StackPlugin = createWidgetPlugin('Stack')
-	.description('Sandbox stack widget')
 	.interfaces<StackInterfaces>()
-	.slots({ items: { description: 'Sandbox stack items' } })
+	.slots({ items: {} })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -152,21 +175,29 @@ export const StackPlugin = createWidgetPlugin('Stack')
 // (via the "invalid-semantic" preset) the Blueprint-invalid case when `counterId` names no widget.
 // -------------------------------------------------------------------------------------------------
 
+/** Sandbox summary widget. */
 export interface SummaryInterfaces extends WidgetInterfaces {
+	/** Sandbox summary configuration. */
 	config: {
-		raw: { counterId: string }
+		raw: {
+			/**
+			 * The id of the Counter whose doubled count is shown.
+			 *
+			 * @widgetRef Counter
+			 */
+			counterId: string
+		}
 		resolved: { counterId: string }
 	}
 	properties: {
+		/** The doubled count of the referenced Counter; 0 when it cannot be read. */
 		total: number
 	}
 }
 
 export const SummaryPlugin = createWidgetPlugin('Summary')
-	.description('Sandbox summary widget')
 	.interfaces<SummaryInterfaces>()
 	.config({
-		description: 'Sandbox summary configuration',
 		validate: (input): input is { counterId: string } => isPlainObject(input) && typeof input.counterId === 'string',
 		resolve: raw => ({ counterId: raw?.counterId ?? '' }),
 	})

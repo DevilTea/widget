@@ -25,7 +25,7 @@ async function counterRef(client: ReturnType<typeof createFixture>['client']) {
 }
 
 describe('requests on a disposed Runtime', () => {
-	it('answers runtime-disposed to every method that depends on the live Runtime from 0.4, including the DOM methods', async () => {
+	it('answers runtime-disposed to every method that depends on the live Runtime, including the DOM methods', async () => {
 		const { runtime, agent, client } = createFixture()
 		try {
 			await client.handshake()
@@ -67,25 +67,6 @@ describe('requests on a disposed Runtime', () => {
 		const { agent, client } = createFixture()
 		try {
 			await client.handshake()
-			expect(await client.request('inspect.enable', {}))
-				.toEqual({ enabled: true })
-			expect(await client.request('highlight.clear', {}))
-				.toEqual({ highlighted: false })
-			expect(await client.request('inspect.hitTest', { coordinateSpace: 'preview-viewport', x: 1, y: 1 }))
-				.toBeDefined()
-		}
-		finally {
-			client.dispose()
-			agent.dispose()
-		}
-	})
-
-	it('keeps the previous behavior for a peer negotiated below 0.4', async () => {
-		const { runtime, agent, client } = createFixture()
-		try {
-			await client.request('handshake', { protocol: { major: 0, minor: 3 } })
-			runtime.dispose()
-
 			expect(await client.request('inspect.enable', {}))
 				.toEqual({ enabled: true })
 			expect(await client.request('highlight.clear', {}))

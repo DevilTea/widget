@@ -20,6 +20,7 @@ import type {
 	UnknownTargetDependencyOperations,
 	WidgetSystemBlueprint,
 } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -28,13 +29,12 @@ import { createWidgetPlugin, createWidgetSystem } from '../index'
 // -------------------------------------------------------------------------------------------------
 
 interface ContainerInterfaces {
-	slots: 'child'
+	slots: { child: WidgetChild }
 }
 
 const containerPlugin = createWidgetPlugin('container')
-	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
-	.slots({ child: { description: 'Test slot' } })
+	.slots({ child: {} })
 	.done()
 
 interface LeafInterfaces {
@@ -51,7 +51,6 @@ interface LeafInterfaces {
 
 /** A target with every capability, used for "missing member" (capability present, member absent). */
 const leafPlugin = createWidgetPlugin('leaf')
-	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.state(state => state.count({
 		validate: (input): input is number => typeof input === 'number',
@@ -97,10 +96,8 @@ function pickProberTarget(
  * every parent/widget resolution scenario below is just a different raw `config` payload.
  */
 const proberPlugin = createWidgetPlugin('prober')
-	.description('Test widget')
 	.interfaces<ProberInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input): input is ProbeRawConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { widgetId: null, optional: false, op: 'property', key: '__missing__' },
 	})
@@ -512,7 +509,6 @@ describe('dependency expression shape', () => {
 	it('exposes `validate` only on readable expressions, string keys before the brand, and chains refinements', () => {
 		const seen: { readable: object, refined: object, writable: object }[] = []
 		const shapePlugin = createWidgetPlugin('shape')
-			.description('Test widget')
 			.interfaces<ShapeInterfaces>()
 			.state(state => state.count({
 				validate: (input): input is number => typeof input === 'number',

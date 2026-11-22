@@ -21,17 +21,14 @@ interface NoteInterfaces extends WidgetInterfaces {
 }
 
 const notePlugin = createWidgetPlugin('note')
-	.description('Test widget')
 	.interfaces<NoteInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (_input): _input is Record<string, JsonValue> | null => true,
 		resolve: raw => raw ?? {},
 	})
 	.done()
 
 const leafPlugin = createWidgetPlugin('leaf')
-	.description('Test widget')
 	.interfaces()
 	.done()
 

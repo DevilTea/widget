@@ -31,7 +31,6 @@ interface BlueprintViewInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('blueprint-view-probe')
-		.description('Test widget')
 		.interfaces<BlueprintViewInterfaces>()
 		.properties(properties => properties.probeProperty({
 			compute: (ctx) => {
@@ -136,7 +135,6 @@ describe('ctx.blueprint is a real restricted BlueprintRuntimeView facade, not th
 		const { widget } = createHarness()
 
 		const plugin = createWidgetPlugin('navigation-check')
-			.description('Test widget')
 			.interfaces<{ properties: { self: unknown } }>()
 			.properties(properties => properties.self({
 				compute: ctx => ctx.blueprint.getWidget('root')?.id ?? null,

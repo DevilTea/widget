@@ -21,7 +21,6 @@ interface ObservedInterfaces {
 }
 
 const plugin = createWidgetPlugin('observed')
-	.description('Event observation fixture')
 	.interfaces<ObservedInterfaces>()
 	.methods(methods => methods
 		.fire({
@@ -34,13 +33,10 @@ const plugin = createWidgetPlugin('observed')
 			emits: ['object'],
 			execute: ({ args, emit }) => emit.object(args[0]),
 		}))
-	.events(events => events
-		.change({ description: 'Changed value' })
-		.object({ description: 'Object occurrence' }))
+	.events(['change', 'object'])
 	.done()
 
 const stateOnlyPlugin = createWidgetPlugin('observed-no-events')
-	.description('No events fixture')
 	.interfaces<{ state: { value: number } }>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',

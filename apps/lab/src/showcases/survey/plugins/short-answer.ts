@@ -10,30 +10,43 @@ import type { AnswerError, QuestionText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkShortAnswerConfig, resolveShortAnswerConfig } from '../config'
 import { builtinError, questionText } from '../domain'
-import { shortAnswerConfigSchema } from '../schemas'
 import { checkQuestion } from './check-question'
 import { computeRequired, computeVisible, questionErrors, requiredReads, ruleReads, visibleReads } from './question-members'
 import { languageFrom, languageReads } from './reads'
 
+/**
+ * A free-text question. The respondent's text is State `answer`. Properties: `text` (label and help in the survey
+ * language), `visible`, `required`, `value` (the effective answer: the trimmed text, null while hidden or empty) and
+ * `errors` (empty while hidden). Method `clear()` empties the answer.
+ */
 export interface ShortAnswerInterfaces extends WidgetInterfaces {
+	/** Label and help text per language, required (true, false or a condition), visibleWhen, maxLength, and custom rules. */
 	config: { raw: ShortAnswerRawConfig, resolved: ShortAnswerConfig }
-	state: { answer: string | null }
+	state: {
+		/** The respondent's text, as typed; `null` while unanswered. */
+		answer: string | null
+	}
 	properties: {
+		/** The label and help text in the survey language. */
 		text: QuestionText
+		/** `visibleWhen` evaluated against the other questions' effective answers; `true` without one. */
 		visible: boolean
+		/** Whether an answer is required (`required`, or its condition), whatever the visibility. */
 		required: boolean
+		/** The effective answer: the trimmed text; `null` while hidden or empty. */
 		value: string | null
+		/** The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden. */
 		errors: readonly AnswerError[]
 	}
-	methods: { clear: () => void }
+	methods: {
+		/** Empties the answer. */
+		clear: () => void
+	}
 }
 
 export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
-	.description('A free-text question. The respondent\'s text is State `answer`. Properties: `text` (label and help in the survey language), `visible`, `required`, `value` (the effective answer: the trimmed text, null while hidden or empty) and `errors` (empty while hidden). Method `clear()` empties the answer.')
 	.interfaces<ShortAnswerInterfaces>()
 	.config({
-		description: 'Label and help text per language, required (true, false or a condition), visibleWhen, maxLength, and custom rules.',
-		schema: shortAnswerConfigSchema,
 		validate: (input, ctx): input is ShortAnswerRawConfig => {
 			checkShortAnswerConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

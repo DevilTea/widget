@@ -1,0 +1,304 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "surveySystem document (flat node list)",
+	"description": "A widget document as a flat list of nodes. Exactly one node has no parent (the root). Convert it to the tree, compile the Blueprint, and repair from its diagnostics.",
+	"type": "object",
+	"properties": {
+		"nodes": {
+			"type": "array",
+			"description": "Every widget of the document, parents before their children.",
+			"items": {
+				"anyOf": [
+					{
+						"$ref": "#/$defs/node_Survey"
+					},
+					{
+						"$ref": "#/$defs/node_Rating"
+					},
+					{
+						"$ref": "#/$defs/node_Choice"
+					},
+					{
+						"$ref": "#/$defs/node_Note"
+					}
+				]
+			}
+		}
+	},
+	"required": [
+		"nodes"
+	],
+	"additionalProperties": false,
+	"$defs": {
+		"node_Survey": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document. Other nodes name it in \"parent\"."
+				},
+				"type": {
+					"type": "string",
+					"const": "Survey"
+				},
+				"parent": {
+					"type": "string",
+					"description": "The id of the parent node. Leave the key out on the one root node."
+				},
+				"slot": {
+					"type": "string",
+					"enum": [
+						"header",
+						"questions",
+						"footer"
+					],
+					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". A Survey may go into: Survey.header."
+				},
+				"config": {
+					"$ref": "#/$defs/type_SurveyRawConfig",
+					"description": "How the survey is titled and where it is sent."
+				},
+				"slots": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"enum": [
+							"header",
+							"questions",
+							"footer"
+						]
+					},
+					"description": "Only needed to declare a slot that has no children; otherwise leave the key out. The slot names of this node, in order."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "A survey: a header, the questions in order, and a footer note. The root of a survey document. It counts the answered questions through the `questions` contract. Slots: header (any widget): Anything shown above the questions.; questions (Rating, Choice): The questions, in order.; footer (Note): Closing notes shown under the questions."
+		},
+		"node_Rating": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document. Other nodes name it in \"parent\"."
+				},
+				"type": {
+					"type": "string",
+					"const": "Rating"
+				},
+				"parent": {
+					"type": "string",
+					"description": "The id of the parent node. Leave the key out on the one root node."
+				},
+				"slot": {
+					"type": "string",
+					"enum": [
+						"header",
+						"questions",
+						"footer"
+					],
+					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". A Rating may go into: Survey.header, Survey.questions."
+				},
+				"config": {
+					"type": "object",
+					"properties": {
+						"question": {
+							"$ref": "#/$defs/type_I18nText",
+							"description": "The question asked."
+						},
+						"scale": {
+							"type": "number",
+							"description": "The highest value of the scale; the lowest is 1. Constraints: minimum: 3. maximum: 10. default: 5. Optional: leave the key out when unused."
+						}
+					},
+					"required": [
+						"question"
+					],
+					"additionalProperties": false,
+					"description": "The question and its scale."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "A rating question: pick a number on a scale. No slots: it cannot be a parent."
+		},
+		"node_Choice": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document. Other nodes name it in \"parent\"."
+				},
+				"type": {
+					"type": "string",
+					"const": "Choice"
+				},
+				"parent": {
+					"type": "string",
+					"description": "The id of the parent node. Leave the key out on the one root node."
+				},
+				"slot": {
+					"type": "string",
+					"enum": [
+						"header",
+						"questions",
+						"footer"
+					],
+					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". A Choice may go into: Survey.header, Survey.questions."
+				},
+				"config": {
+					"type": "object",
+					"properties": {
+						"question": {
+							"$ref": "#/$defs/type_I18nText",
+							"description": "The question asked."
+						},
+						"options": {
+							"type": "array",
+							"items": {
+								"$ref": "#/$defs/type_ChoiceOption"
+							},
+							"description": "The options, in the order shown. Constraints: minItems: 2."
+						},
+						"multiple": {
+							"type": "boolean",
+							"description": "Whether more than one option may be chosen. Optional: leave the key out when unused."
+						},
+						"followUp": {
+							"type": "string",
+							"description": "A question shown once this one is answered. Constraints: Must be the id of a widget of type Rating | Choice in the same document. Optional: leave the key out when unused."
+						}
+					},
+					"required": [
+						"question",
+						"options"
+					],
+					"additionalProperties": false,
+					"description": "The question and its options."
+				}
+			},
+			"required": [
+				"id",
+				"type",
+				"config"
+			],
+			"additionalProperties": false,
+			"description": "A choice question: pick one or more options. No slots: it cannot be a parent."
+		},
+		"node_Note": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique within the document. Other nodes name it in \"parent\"."
+				},
+				"type": {
+					"type": "string",
+					"const": "Note"
+				},
+				"parent": {
+					"type": "string",
+					"description": "The id of the parent node. Leave the key out on the one root node."
+				},
+				"slot": {
+					"type": "string",
+					"enum": [
+						"header",
+						"questions",
+						"footer"
+					],
+					"description": "The parent's slot this node goes into. Leave the key out on the root node. Children of one slot keep the order they have in \"nodes\". A Note may go into: Survey.header, Survey.footer."
+				},
+				"config": {
+					"type": "object",
+					"properties": {
+						"text": {
+							"$ref": "#/$defs/type_I18nText",
+							"description": "The text shown."
+						}
+					},
+					"required": [
+						"text"
+					],
+					"additionalProperties": false,
+					"description": "The text of the note. Leave the config out for an empty note. Optional: leave the key out when unused."
+				}
+			},
+			"required": [
+				"id",
+				"type"
+			],
+			"additionalProperties": false,
+			"description": "A short text. No slots: it cannot be a parent."
+		},
+		"type_ChoiceOption": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "The option's identifier, unique within the question. Constraints: pattern: ^[a-z][a-z0-9-]*$."
+				},
+				"label": {
+					"$ref": "#/$defs/type_I18nText",
+					"description": "The label shown for the option."
+				}
+			},
+			"required": [
+				"id",
+				"label"
+			],
+			"additionalProperties": false,
+			"description": "One option of a choice question."
+		},
+		"type_I18nText": {
+			"type": "array",
+			"description": "Text per language, keyed by language tag (`en`, `zh-TW`). At least one language should be present; the renderer falls back to the first one. A dictionary: in this schema it is written as a list of { \"key\", \"value\" } entries with unique keys, for example [{ \"key\": \"a\", \"value\": ... }], not as an object. Where the text above shows the object form, write the entry list instead.",
+			"items": {
+				"type": "object",
+				"properties": {
+					"key": {
+						"type": "string"
+					},
+					"value": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"key",
+					"value"
+				],
+				"additionalProperties": false
+			}
+		},
+		"type_SurveyRawConfig": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"$ref": "#/$defs/type_I18nText",
+					"description": "The survey's title."
+				},
+				"maxQuestions": {
+					"type": "number",
+					"description": "The most questions the survey may hold. Constraints: minimum: 1. maximum: 20. default: 10. Optional: leave the key out when unused."
+				},
+				"submitUrl": {
+					"type": "string",
+					"description": "Where the answers are sent. Constraints: format: uri. Optional: leave the key out when unused."
+				}
+			},
+			"required": [
+				"title"
+			],
+			"additionalProperties": false,
+			"description": "The raw config of a survey."
+		}
+	}
+}

@@ -22,22 +22,32 @@ import type { VolumeDiscountRawConfig } from '../schemas'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveVolumeDiscountConfig } from '../config'
 import { percentOf } from '../domain'
-import { volumeDiscountConfigJsonSchema, volumeDiscountConfigSchema } from '../schemas'
+import { volumeDiscountConfigSchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { quantityReads, subtotalReads, valueOr } from './reads'
 import { checkInsideQuote } from './structure'
 
+/**
+ * A percentage off the subtotal by the total number of pieces. Config: `label` and the `tiers` (`minQuantity`, `percent`).
+ * Property `adjustment`: the (negative) amount. Tiers may be in any order and the tier with the largest `minQuantity` that
+ * the total quantity reaches applies. Known defect: it assumes the smallest tier starts at 1, so a quantity below every tier
+ * makes `adjustment` throw instead of reporting a diagnostic.
+ */
 export interface VolumeDiscountInterfaces extends WidgetInterfaces {
+	/**
+	 * The label and the volume tiers (in any order; percentages count to two decimals). Validated by a Valibot schema through
+	 * Standard Schema; the schema does not say that the smallest tier must start at 1.
+	 */
 	config: { raw: VolumeDiscountRawConfig, resolved: VolumeDiscountConfig }
-	properties: { adjustment: Adjustment }
+	properties: {
+		/** The discount: a negative amount in minor units. Throws when the total quantity is below every tier. */
+		adjustment: Adjustment
+	}
 }
 
 export const VolumeDiscountPlugin = createWidgetPlugin('VolumeDiscount')
-	.description('A percentage off the subtotal by the total number of pieces. Config: `label` and the `tiers` (`minQuantity`, `percent`). Property `adjustment`: the (negative) amount. Tiers may be in any order and the tier with the largest `minQuantity` that the total quantity reaches applies. Known defect: it assumes the smallest tier starts at 1, so a quantity below every tier makes `adjustment` throw instead of reporting a diagnostic.')
 	.interfaces<VolumeDiscountInterfaces>()
 	.config({
-		description: 'The label and the volume tiers (in any order; percentages count to two decimals). Validated by a Valibot schema through Standard Schema; the schema does not say that the smallest tier must start at 1.',
-		schema: volumeDiscountConfigJsonSchema,
 		validate: guard(volumeDiscountConfigSchema),
 		resolve: resolveVolumeDiscountConfig,
 	})

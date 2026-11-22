@@ -8,7 +8,7 @@ export default defineConfig({
 	themeConfig: {
 		nav: [
 			{ text: 'Packages', link: '/packages/' },
-			{ text: 'Migration', link: '/migration/0.2' },
+			{ text: 'Migration', link: '/migration/0.3' },
 			{ text: 'Widget Lab', link: '/lab/', target: '_self' },
 		],
 		sidebar: {
@@ -28,6 +28,7 @@ export default defineConfig({
 					items: [
 						{ text: 'From 0.0.x to 0.1', link: '/migration/0.1' },
 						{ text: 'From 0.1 to 0.2', link: '/migration/0.2' },
+						{ text: 'From 0.2 to 0.3', link: '/migration/0.3' },
 					],
 				},
 			],

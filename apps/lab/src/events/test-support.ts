@@ -3,31 +3,37 @@
  * Inspector Agent, reached through the in-process transport, so the log is tested against the real protocol and the
  * real payload encoding rather than against hand-written DTOs.
  */
-import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import type { InspectorClient } from '@deviltea/widget-inspector/client'
 import type { InspectorBlueprintSnapshot } from '@deviltea/widget-inspector/protocol'
+import type { ShowcaseEntry } from '../showcases/registry'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
 import { createInspectorClient } from '@deviltea/widget-inspector/client'
 import { createInProcessInspectorTransportPair } from '@deviltea/widget-inspector/transport'
 
+/** Event log fixture. */
 interface NotifierInterfaces extends WidgetInterfaces {
-	slots: 'children'
+	slots: {
+		/** Nested notifiers. */
+		children: WidgetChild
+	}
 	methods: {
 		fire: (value: number) => void
 		ping: () => void
 		check: (ok: boolean) => boolean
 	}
 	events: {
+		/** The value changed. */
 		changed: [payload: { value: number, label: string }]
+		/** Pinged. */
 		pinged: []
 	}
 }
 
 export const NotifierPlugin = createWidgetPlugin('Notifier')
-	.description('Event log fixture')
 	.interfaces<NotifierInterfaces>()
-	.slots({ children: { description: 'Nested notifiers' } })
+	.slots({ children: {} })
 	.methods(methods => methods
 		.fire({
 			validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
@@ -51,9 +57,7 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 				return ok
 			},
 		}))
-	.events(events => events
-		.changed({ description: 'The value changed.' })
-		.pinged({ description: 'Pinged.' }))
+	.events(['changed', 'pinged'])
 	.done()
 
 /** Declares Methods but no Events: the log has nothing to listen to except Method failures. */
@@ -64,7 +68,6 @@ interface CheckerInterfaces extends WidgetInterfaces {
 }
 
 export const CheckerPlugin = createWidgetPlugin('Checker')
-	.description('Methods only')
 	.interfaces<CheckerInterfaces>()
 	.methods(methods => methods
 		.check({
@@ -78,9 +81,36 @@ export const CheckerPlugin = createWidgetPlugin('Checker')
 	.done()
 
 export const PlainPlugin = createWidgetPlugin('Plain')
-	.description('No events')
 	.interfaces<WidgetInterfaces>()
 	.done()
+
+/** The prose fields of a documented member, the way `widgetDocs()` emits them. */
+function docText(summary: string) {
+	return { summary, remarks: '', tags: {}, example: [], deprecated: null, see: [], defaultValue: null }
+}
+
+/**
+ * A stand-in showcase for the fixture plugins, for views that read the documentation of the current showcase
+ * (`getShowcase(showcaseId).docs`): its `docs` is what `widgetDocs()` would generate from the JSDoc above, reduced to the
+ * fields the Lab reads. A test swaps it in with `vi.mock('…/showcases/registry')` and selects it by `id`.
+ */
+export const eventsFixtureShowcase = {
+	id: 'events-fixture',
+	sources: {},
+	configSchemas: {},
+	docs: {
+		docsVersion: 2,
+		system: 'eventsFixtureSystem',
+		types: {},
+		plugins: {
+			Notifier: {
+				...docText('Event log fixture.'),
+				slots: { children: docText('Nested notifiers.') },
+				events: { changed: docText('The value changed.'), pinged: docText('Pinged.') },
+			},
+		},
+	},
+} as unknown as ShowcaseEntry
 
 export interface Preview {
 	readonly connection: {

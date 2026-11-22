@@ -1,6 +1,7 @@
 /**
  * Draft 2020-12 JSON Schemas for the trip-budget plugins' configs. They are passive authoring metadata
- * (`config.schema`): Core never validates against them, and the Catalog and AI context show them. They state
+ * (handed to the Lab by plugin type as `tripBudgetConfigSchemas`; Core 0.3 carries no config schema): Core never validates
+ * against them, and the Catalog and AI context show them. They state
  * shape* only; the compiler enforces the rest and reports it as located diagnostics:
  * - the percentages of a percent split add up to 100;
  * - `paidBy` and every participant name a Person of the same trip;
@@ -10,8 +11,8 @@
  * A unit test pins that each schema's top-level `properties` equal the key lists of `./config.ts`.
  */
 
-import type { WidgetConfigJsonSchema } from '@deviltea/widget-core'
-import { WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from '@deviltea/widget-core'
+import type { ConfigJsonSchema, ConfigSchemaMap } from '../../showcase-host'
+import { CONFIG_JSON_SCHEMA_DIALECT } from '../../showcase-host'
 import { CURRENCY_CODE_PATTERN, PERSON_ID_PATTERN, ROUND_STEPS } from './domain'
 
 const I18nTextSchema = {
@@ -19,42 +20,42 @@ const I18nTextSchema = {
 	required: ['en'],
 	additionalProperties: { type: 'string' },
 	description: 'Text per language, such as { "en": "Hotel", "zh-TW": "旅館" }. "en" is required; a missing language falls back to it. The trip offers en and zh-TW.',
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 const currencyCode = {
 	type: 'string',
 	pattern: CURRENCY_CODE_PATTERN.source,
 	description: 'A three-letter capital currency code such as "EUR".',
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 const personId = {
 	type: 'string',
 	pattern: PERSON_ID_PATTERN.source,
 	description: 'The widget id of a Person in the same trip (lowercase letters, digits and "-").',
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const tripConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['title'],
 	properties: {
 		title: { ...I18nTextSchema, description: 'The trip title. "en" is required; "zh-TW" is optional.' },
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const personConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['name'],
 	properties: {
 		name: { type: 'string', minLength: 1, description: 'The name shown for this person. The widget id (not the name) is what expenses refer to.' },
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const currencyConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['base', 'rates'],
@@ -71,10 +72,10 @@ export const currencyConfigSchema = {
 			description: 'The starting "round transfers to" step in minor units: 1 = the cent, 100 = a whole unit, 500 = the nearest 5 units. A viewer can change it; Start over restores this value. Defaults to 1.',
 		},
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const expenseConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['title', 'amount', 'currency', 'paidBy', 'split'],
@@ -112,4 +113,12 @@ export const expenseConfigSchema = {
 			],
 		},
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
+
+/** Plugin type to config schema, for the Lab's Catalog and Structure editor. */
+export const tripBudgetConfigSchemas = {
+	Trip: tripConfigSchema,
+	Person: personConfigSchema,
+	Currency: currencyConfigSchema,
+	Expense: expenseConfigSchema,
+} as const satisfies ConfigSchemaMap

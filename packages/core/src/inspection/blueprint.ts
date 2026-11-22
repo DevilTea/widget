@@ -186,8 +186,8 @@ function buildEventMembers(compiledNode: CompiledResolvedWidgetNode): readonly B
 	if (definitions === null)
 		return Object.freeze([])
 	const result: BlueprintInspectionEventMember[] = []
-	for (const [name, definition] of definitions)
-		result.push(Object.freeze({ type: 'event' as const, name, description: definition.description }))
+	for (const name of definitions.keys())
+		result.push(Object.freeze({ type: 'event' as const, name }))
 	return Object.freeze(result)
 }
 
@@ -239,7 +239,6 @@ function buildNode<Plugins extends AnyWidgetPluginTuple>(compiledNode: CompiledW
 		sourcePath: compiledNode.sourcePath,
 		resolved: true,
 		capabilities: buildCapabilities(compiledNode),
-		config: compiledNode.plugin.config,
 		semanticSlots: buildSemanticSlots(compiledNode),
 		state: buildStateMembers(compiledNode),
 		properties: buildPropertyMembers(compiledNode),

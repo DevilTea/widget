@@ -3,7 +3,6 @@ import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from './
 
 function createFixture() {
 	const plugin = createWidgetPlugin('panel')
-		.description('A panel')
 		.interfaces<Record<never, never>>()
 		.done()
 	const system = createWidgetSystem({ plugins: [plugin] })

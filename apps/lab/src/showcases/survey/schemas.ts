@@ -1,6 +1,7 @@
 /**
  * Draft 2020-12 JSON Schemas for the survey-form plugins' configs. They are passive authoring metadata
- * (`config.schema`): Core never validates against them, and the Catalog and AI context show them. They
+ * (handed to the Lab by plugin type as `surveyConfigSchemas`; Core 0.3 carries no config schema): Core never validates
+ * against them, and the Catalog and AI context show them. They
  * state *shape* only; the compiler enforces the rest and reports it as located diagnostics:
  * - the target question of a condition exists, is a question, and has a type the operator fits;
  * - an option value used in a condition exists in the target;
@@ -15,8 +16,8 @@
  * equal the operator lists of `./domain.ts`.
  */
 
-import type { WidgetConfigJsonSchema } from '@deviltea/widget-core'
-import { WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from '@deviltea/widget-core'
+import type { ConfigJsonSchema, ConfigSchemaMap } from '../../showcase-host'
+import { CONFIG_JSON_SCHEMA_DIALECT } from '../../showcase-host'
 import { ANSWER_OPS, EQUALITY_OPS, MEMBERSHIP_OPS, ORDER_OPS, SUPPORTED_LANGUAGES } from './domain'
 
 const HIDDEN_NOTE = 'A hidden question has no value: every condition reads it as unanswered (answered, equals, greaterThan, lessThan and includes are false; unanswered, notEquals and excludes are true).'
@@ -32,7 +33,7 @@ const I18nTextSchema = {
 	minProperties: 1,
 	additionalProperties: { type: 'string', minLength: 1 },
 	description: `Text per language, such as { "en": "...", "zh-TW": "..." }. It must contain every language listed in the Survey's "languages" (${SUPPORTED_LANGUAGES.join(', ')} are supported); a missing language is reported as a located diagnostic.`,
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 /**
  * `oneOf` has seven mutually exclusive branches: four leaf operator groups (told apart by the `op` enum)
@@ -112,7 +113,7 @@ const ConditionSchema = {
 			},
 		},
 	],
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 const RuleSchema = {
 	type: 'object',
@@ -123,7 +124,7 @@ const RuleSchema = {
 		when: { $ref: '#/$defs/Condition' },
 		message: { $ref: '#/$defs/I18nText' },
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 const OptionSchema = {
 	type: 'object',
@@ -136,7 +137,7 @@ const OptionSchema = {
 		visibleWhen: { $ref: '#/$defs/Condition', description: 'Show the option only while this holds. A selected option that becomes hidden is dropped from the effective answer and reported as an invalid-option error.' },
 		enabledWhen: { $ref: '#/$defs/Condition', description: 'Allow choosing the option only while this holds (it is shown disabled otherwise). A selected option that becomes disabled is dropped from the effective answer and reported as an invalid-option error.' },
 	},
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 const SHARED_DEFS = {
 	I18nText: I18nTextSchema,
@@ -165,21 +166,21 @@ const questionProperties = {
 		items: { $ref: '#/$defs/Rule' },
 		description: 'Custom answer errors beyond the built-in checks.',
 	},
-} as const satisfies Record<string, WidgetConfigJsonSchema>
+} as const satisfies Record<string, ConfigJsonSchema>
 
-function questionSchema<Properties extends Record<string, WidgetConfigJsonSchema>, const Names extends readonly DefName[]>(
+function questionSchema<Properties extends Record<string, ConfigJsonSchema>, const Names extends readonly DefName[]>(
 	required: readonly string[],
 	extra: Properties,
 	names: Names,
 ) {
 	return {
-		$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+		$schema: CONFIG_JSON_SCHEMA_DIALECT,
 		type: 'object',
 		additionalProperties: false,
 		required: [...required],
 		properties: { ...questionProperties, ...extra },
 		$defs: defs(...names),
-	} as const satisfies WidgetConfigJsonSchema
+	} as const satisfies ConfigJsonSchema
 }
 
 const optionsProperty = {
@@ -187,7 +188,7 @@ const optionsProperty = {
 	minItems: 1,
 	items: { $ref: '#/$defs/Option' },
 	description: 'The options in display order. At least one; values must be unique.',
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
 
 export const shortAnswerConfigSchema = questionSchema(['label'], {
 	maxLength: { type: 'integer', minimum: 1, description: 'Maximum number of characters after trimming surrounding whitespace. Longer answers get a max-length error.' },
@@ -210,7 +211,7 @@ export const numericConfigSchema = questionSchema(['label'], {
 }, ['I18nText', 'Condition', 'Rule'])
 
 export const surveyConfigSchema = {
-	$schema: WIDGET_CONFIG_JSON_SCHEMA_DIALECT,
+	$schema: CONFIG_JSON_SCHEMA_DIALECT,
 	type: 'object',
 	additionalProperties: false,
 	required: ['title', 'languages'],
@@ -225,4 +226,13 @@ export const surveyConfigSchema = {
 		},
 	},
 	$defs: defs('I18nText'),
-} as const satisfies WidgetConfigJsonSchema
+} as const satisfies ConfigJsonSchema
+
+/** Plugin type to config schema, for the Lab's Catalog and Structure editor. */
+export const surveyConfigSchemas = {
+	Survey: surveyConfigSchema,
+	SingleChoice: singleChoiceConfigSchema,
+	MultipleChoice: multipleChoiceConfigSchema,
+	Numeric: numericConfigSchema,
+	ShortAnswer: shortAnswerConfigSchema,
+} as const satisfies ConfigSchemaMap

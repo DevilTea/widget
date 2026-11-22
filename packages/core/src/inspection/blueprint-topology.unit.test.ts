@@ -4,6 +4,7 @@
  * amendment "inspection exact API v1 (part 1)".
  */
 
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectBlueprint } from './index'
@@ -15,7 +16,6 @@ interface LeafInterfaces {
 }
 
 const leafPlugin = createWidgetPlugin('topology-leaf')
-	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -24,24 +24,22 @@ const leafPlugin = createWidgetPlugin('topology-leaf')
 	.done()
 
 interface ContainerInterfaces {
-	slots: 'left' | 'right'
+	slots: { left: WidgetChild, right: WidgetChild }
 }
 
 /** Declared in reverse-alphabetic order to prove `semanticSlots` preserves declaration order verbatim. */
 const containerPlugin = createWidgetPlugin('topology-container')
-	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
-	.slots({ right: { description: 'Test slot' }, left: { description: 'Test slot' } })
+	.slots({ right: {}, left: {} })
 	.done()
 
 interface ZebraApplePluginInterfaces {
-	slots: 'zebra' | 'apple'
+	slots: { zebra: WidgetChild, apple: WidgetChild }
 }
 
 const zebraApplePlugin = createWidgetPlugin('zebra-apple')
-	.description('Test widget')
 	.interfaces<ZebraApplePluginInterfaces>()
-	.slots({ zebra: { description: 'Test slot' }, apple: { description: 'Test slot' } })
+	.slots({ zebra: {}, apple: {} })
 	.done()
 
 interface ConfiguredInterfaces {
@@ -52,10 +50,8 @@ interface ConfiguredInterfaces {
 }
 
 const configuredPlugin = createWidgetPlugin('configured')
-	.description('Test widget')
 	.interfaces<ConfiguredInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input): input is { readonly label?: string } => input === undefined || (typeof input === 'object' && input !== null),
 		resolve: raw => ({ label: raw?.label ?? 'default' }),
 	})
@@ -77,7 +73,6 @@ interface ExplicitEmptyInterfaces {
  * (diagnostic #10 amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`").
  */
 const explicitEmptyPlugin = createWidgetPlugin('explicit-empty')
-	.description('Test widget')
 	.interfaces<ExplicitEmptyInterfaces>()
 	.slots({})
 	.state(state => state)

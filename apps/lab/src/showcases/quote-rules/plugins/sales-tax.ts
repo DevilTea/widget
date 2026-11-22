@@ -11,22 +11,27 @@ import type { SalesTaxRawConfig } from '../schemas'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveSalesTaxConfig } from '../config'
 import { percentOf } from '../domain'
-import { salesTaxConfigJsonSchema, salesTaxConfigSchema } from '../schemas'
+import { salesTaxConfigSchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { taxableReads, valueOr } from './reads'
 import { checkInsideQuote } from './structure'
 
+/**
+ * A percentage of the taxable amount (the subtotal plus every other rule). Config: `label` and `percent`. Property
+ * `adjustment`: the tax.
+ */
 export interface SalesTaxInterfaces extends WidgetInterfaces {
+	/** The label and the tax rate (counted to two decimals). Validated by a Valibot schema through Standard Schema. */
 	config: { raw: SalesTaxRawConfig, resolved: SalesTaxConfig }
-	properties: { adjustment: Adjustment }
+	properties: {
+		/** The tax on `Quote.taxableCents`, in minor units. */
+		adjustment: Adjustment
+	}
 }
 
 export const SalesTaxPlugin = createWidgetPlugin('SalesTax')
-	.description('A percentage of the taxable amount (the subtotal plus every other rule). Config: `label` and `percent`. Property `adjustment`: the tax.')
 	.interfaces<SalesTaxInterfaces>()
 	.config({
-		description: 'The label and the tax rate (counted to two decimals). Validated by a Valibot schema through Standard Schema.',
-		schema: salesTaxConfigJsonSchema,
 		validate: guard(salesTaxConfigSchema),
 		resolve: resolveSalesTaxConfig,
 	})

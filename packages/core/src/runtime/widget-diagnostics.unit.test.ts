@@ -13,6 +13,7 @@
  * Only the public entry (`../index`) is imported; no internal module or `blueprintInternals` access.
  */
 
+import type { WidgetChild } from '../types'
 import { describe, expect, it, vi } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS, WidgetSystemRuntimeDisposedError } from '../index'
 
@@ -47,7 +48,6 @@ function createOrderHarness() {
 	let lazyComputeCount = 0
 
 	const plugin = createWidgetPlugin('order-probe')
-		.description('Test widget')
 		.interfaces<OrderInterfaces>()
 		.state(state => state
 			.two({
@@ -201,7 +201,6 @@ describe('runtimeWidget.getDiagnostics() — widgets without every capability', 
 
 		let shouldFail = false
 		const plugin = createWidgetPlugin('props-only-probe')
-			.description('Test widget')
 			.interfaces<PropsOnlyInterfaces>()
 			.properties(properties => properties.flaky({
 				compute: ({ addDiagnostic }) => {
@@ -235,7 +234,6 @@ describe('runtimeWidget.getDiagnostics() — widgets without every capability', 
 
 	it('a widget declaring no capabilities at all still exposes getDiagnostics()/subscribeDiagnostics(), aggregating to the canonical empty array', () => {
 		const plugin = createWidgetPlugin('capability-less-probe')
-			.description('Test widget')
 			.interfaces<Record<never, never>>()
 			.done()
 
@@ -446,7 +444,6 @@ describe('runtime.getDiagnostics() composes runtime-level diagnostics + each Run
 	// is a union keyed by literal `type`, and a widened `string` type would collapse `getWidget()`'s
 	// return narrowing.
 	const leafAPlugin = createWidgetPlugin('leaf-a-probe')
-		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.properties(properties => properties.flaky({
 			compute: ({ addDiagnostic }) => {
@@ -457,7 +454,6 @@ describe('runtime.getDiagnostics() composes runtime-level diagnostics + each Run
 		.done()
 
 	const leafBPlugin = createWidgetPlugin('leaf-b-probe')
-		.description('Test widget')
 		.interfaces<LeafInterfaces>()
 		.properties(properties => properties.flaky({
 			compute: ({ addDiagnostic }) => {
@@ -468,16 +464,15 @@ describe('runtime.getDiagnostics() composes runtime-level diagnostics + each Run
 		.done()
 
 	interface ContainerInterfaces {
-		slots: 'children'
+		slots: { children: WidgetChild }
 		state: {
 			count: number
 		}
 	}
 
 	const containerPlugin = createWidgetPlugin('container-probe')
-		.description('Test widget')
 		.interfaces<ContainerInterfaces>()
-		.slots({ children: { description: 'Test slot' } })
+		.slots({ children: {} })
 		.state(state => state.count({
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,

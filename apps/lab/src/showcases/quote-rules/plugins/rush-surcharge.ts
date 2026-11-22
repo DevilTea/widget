@@ -10,23 +10,34 @@ import type { RushSurchargeRawConfig } from '../schemas'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveRushSurchargeConfig } from '../config'
 import { percentOf } from '../domain'
-import { enabledSchema, rushSurchargeConfigJsonSchema, rushSurchargeConfigSchema } from '../schemas'
+import { enabledSchema, rushSurchargeConfigSchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { subtotalReads, valueOr } from './reads'
 import { checkInsideQuote } from './structure'
 
+/**
+ * A percentage of the subtotal added for rush production. Config: `label`, `percent` and the starting `enabled`. State
+ * `enabled`: the customer's choice. Property `adjustment`: the surcharge (0 while it is off).
+ */
 export interface RushSurchargeInterfaces extends WidgetInterfaces {
+	/**
+	 * The label, the percentage (counted to two decimals) and whether rush starts switched on. Validated by a Valibot schema
+	 * through Standard Schema.
+	 */
 	config: { raw: RushSurchargeRawConfig, resolved: RushSurchargeConfig }
-	state: { enabled: boolean }
-	properties: { adjustment: Adjustment }
+	state: {
+		/** Whether the customer asks for rush production. */
+		enabled: boolean
+	}
+	properties: {
+		/** The surcharge in minor units; 0 and not applied while `enabled` is off. */
+		adjustment: Adjustment
+	}
 }
 
 export const RushSurchargePlugin = createWidgetPlugin('RushSurcharge')
-	.description('A percentage of the subtotal added for rush production. Config: `label`, `percent` and the starting `enabled`. State `enabled`: the customer\'s choice. Property `adjustment`: the surcharge (0 while it is off).')
 	.interfaces<RushSurchargeInterfaces>()
 	.config({
-		description: 'The label, the percentage (counted to two decimals) and whether rush starts switched on. Validated by a Valibot schema through Standard Schema.',
-		schema: rushSurchargeConfigJsonSchema,
 		validate: guard(rushSurchargeConfigSchema),
 		resolve: resolveRushSurchargeConfig,
 	})

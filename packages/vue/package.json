@@ -47,9 +47,10 @@
 		"build:pack": "pnpm build && pnpm pack",
 		"dev": "tsdown --watch",
 		"test": "vitest run --config vitest.config.ts",
-		"typecheck": "pnpm typecheck:package && pnpm typecheck:test",
+		"typecheck": "pnpm typecheck:package && pnpm typecheck:test && pnpm typecheck:vue",
 		"typecheck:package": "tsc --project ./tsconfig.package.json --noEmit",
-		"typecheck:test": "tsc --project ./tsconfig.tests.json --noEmit"
+		"typecheck:test": "tsc --project ./tsconfig.tests.json --noEmit",
+		"typecheck:vue": "vue-tsc --project ./tsconfig.vue-fixtures.json --noEmit"
 	},
 	"peerDependencies": {
 		"@deviltea/widget-core": "workspace:^",
@@ -62,6 +63,7 @@
 		"happy-dom": "catalog:",
 		"tsdown": "catalog:",
 		"vitest": "catalog:",
-		"vue": "catalog:"
+		"vue": "catalog:",
+		"vue-tsc": "catalog:"
 	}
 }

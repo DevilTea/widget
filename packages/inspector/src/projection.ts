@@ -15,7 +15,6 @@ import type {
 } from '@deviltea/widget-core/inspection'
 import type {
 	InspectorBlueprintSnapshot,
-	InspectorConfigSchema,
 	InspectorDependency,
 	InspectorDependencyReference,
 	InspectorDiagnostic,
@@ -29,9 +28,6 @@ import type {
 } from './protocol'
 import type { InspectableValue, InspectableValueEncodingOptions } from './value'
 import { encodeInspectableValue } from './value'
-
-/** `authorWritable`, `valueContractId` and `transitivelyEmits` are emitted from protocol 0.4 on. */
-const MEMBER_METADATA_PROTOCOL_MINOR: number = 4
 
 function wireNodeId(nodeId: InspectionNodeId): number {
 	return nodeId
@@ -120,7 +116,11 @@ function projectDiagnosticLocation(
 	}
 }
 
-function projectDiagnostic(inspection: BlueprintInspection, diagnostic: BlueprintNodeDiagnostic): InspectorDiagnostic | null {
+function projectDiagnostic(
+	inspection: BlueprintInspection,
+	diagnostic: BlueprintNodeDiagnostic,
+	encoding: InspectableValueEncodingOptions,
+): InspectorDiagnostic | null {
 	const location = projectDiagnosticLocation(inspection, diagnostic.location)
 	if (location === null)
 		return null
@@ -140,6 +140,7 @@ function projectDiagnostic(inspection: BlueprintInspection, diagnostic: Blueprin
 			? { path: diagnostic.path.map(segment => typeof segment === 'symbol' ? segment.description ?? 'Symbol()' : segment) as (string | number)[] }
 			: {}),
 		...('reason' in diagnostic && typeof diagnostic.reason === 'string' ? { reason: diagnostic.reason } : {}),
+		...('details' in diagnostic && diagnostic.details !== undefined ? { details: encodeInspectableValue(diagnostic.details, encoding) } : {}),
 		...('dependency' in diagnostic ? { dependency: projectDependencyReference(diagnostic.dependency) } : {}),
 	}
 }
@@ -155,14 +156,14 @@ function projectSourceSlots(sourceSlots: BlueprintInspection['nodes'][number]['s
 export function projectBlueprintSnapshot(
 	runtimeId: string,
 	inspection: BlueprintInspection,
-	protocolMinor = 2,
+	encoding: InspectableValueEncodingOptions,
 ): InspectorBlueprintSnapshot {
 	return {
 		runtimeId,
 		rootNodeId: wireNodeId(inspection.rootNodeId),
 		nodes: inspection.nodes.map((node) => {
 			const diagnostics = node.node.diagnostics
-				.map(diagnostic => projectDiagnostic(inspection, diagnostic))
+				.map(diagnostic => projectDiagnostic(inspection, diagnostic, encoding))
 				.filter((diagnostic): diagnostic is InspectorDiagnostic => diagnostic !== null)
 			const base = {
 				nodeId: wireNodeId(node.nodeId),
@@ -177,31 +178,15 @@ export function projectBlueprintSnapshot(
 				...base,
 				widgetId: node.node.id,
 				widgetType: node.node.type,
-				capabilities: protocolMinor < 2
-					? {
-							config: node.capabilities.config,
-							slots: node.capabilities.slots,
-							state: node.capabilities.state,
-							properties: node.capabilities.properties,
-							methods: node.capabilities.methods,
-						}
-					: {
-							config: node.capabilities.config,
-							slots: node.capabilities.slots,
-							state: node.capabilities.state,
-							properties: node.capabilities.properties,
-							methods: node.capabilities.methods,
-							events: node.capabilities.events,
-						},
-				...(protocolMinor < 2
-					? {}
-					: {
-							config: node.config === null
-								? null
-								// Core types the schema document precisely; on the wire it is plain JSON (see `InspectorConfigSchema`).
-								: { description: node.config.description, schema: node.config.schema as InspectorConfigSchema | null },
-							events: node.events.map(event => ({ type: 'event' as const, name: event.name, description: event.description })),
-						}),
+				capabilities: {
+					config: node.capabilities.config,
+					slots: node.capabilities.slots,
+					state: node.capabilities.state,
+					properties: node.capabilities.properties,
+					methods: node.capabilities.methods,
+					events: node.capabilities.events,
+				},
+				events: node.events.map(event => ({ type: 'event' as const, name: event.name })),
 				semanticSlots: node.semanticSlots.map(slot => ({
 					name: slot.name,
 					children: slot.children.map(wireNodeId),
@@ -209,19 +194,19 @@ export function projectBlueprintSnapshot(
 				state: node.state.map(member => ({
 					type: 'state' as const,
 					name: member.name,
-					...(protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR ? {} : { authorWritable: member.authorWritable }),
+					authorWritable: member.authorWritable,
 				})),
 				properties: node.properties.map(member => ({
 					type: 'property' as const,
 					name: member.name,
-					...(protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR ? {} : { valueContractId: member.valueContractId }),
+					valueContractId: member.valueContractId,
 					dependencies: member.dependencies.map(projectDependency),
 				})),
 				methods: node.methods.map(member => ({
 					type: 'method' as const,
 					name: member.name,
 					transitivelyWrites: member.transitivelyWrites,
-					...(protocolMinor < MEMBER_METADATA_PROTOCOL_MINOR ? {} : { transitivelyEmits: member.transitivelyEmits }),
+					transitivelyEmits: member.transitivelyEmits,
 					dependencies: member.dependencies.map(projectDependency),
 				})),
 			}
@@ -252,6 +237,7 @@ function projectRuntimeDiagnostic(diagnostic: RuntimeWidgetDiagnostic, encoding:
 			? { path: diagnostic.path.map(segment => typeof segment === 'symbol' ? segment.description ?? 'Symbol()' : segment) as (string | number)[] }
 			: {}),
 		...('reason' in diagnostic && typeof diagnostic.reason === 'string' ? { reason: diagnostic.reason } : {}),
+		...('details' in diagnostic && diagnostic.details !== undefined ? { details: encodeInspectableValue(diagnostic.details, encoding) } : {}),
 		...('dependency' in diagnostic ? { dependency: projectDependencyReference(diagnostic.dependency) } : {}),
 		...('candidate' in diagnostic ? { candidate: encodeInspectableValue(diagnostic.candidate, encoding) } : {}),
 		...('received' in diagnostic ? { received: encodeInspectableValue(diagnostic.received, encoding) } : {}),
@@ -279,9 +265,9 @@ function projectPropertySnapshot(name: string, snapshot: RuntimePropertyInspecti
 }
 
 /**
- * Projects a Method's current diagnostic snapshot (protocol 0.5+). Each diagnostic goes through the same
- * field-by-field projection as a Property failure, so `args`, `result`, `dependency`, `related` and `cause`
- * are named and every value is encoded within the Agent's value limits.
+ * Projects a Method's current diagnostic snapshot. Each diagnostic goes through the same
+ * field-by-field projection as a Property failure, so `args`, `result`, `details`, `dependency`, `related` and
+ * `cause` are named and every value is encoded within the Agent's value limits.
  */
 export function projectRuntimeMethodSnapshot(
 	name: string,
@@ -320,11 +306,8 @@ export function projectRuntimeWidgetSnapshot(
 	runtimeInspection: RuntimeInspection,
 	nodeId: InspectionNodeId,
 	encoding: InspectableValueEncodingOptions,
-	/**
-	 * Reads a Method's current diagnostics from the public Runtime, or `null` when the Method cannot be read.
-	 * Pass `null` itself for a peer negotiated below 0.5, which sees no Method members.
-	 */
-	readMethodDiagnostics: ((name: string) => readonly RuntimeMethodDiagnostic[] | null) | null = null,
+	/** Reads a Method's current diagnostics from the public Runtime, or `null` when the Method cannot be read. */
+	readMethodDiagnostics: (name: string) => readonly RuntimeMethodDiagnostic[] | null,
 ): InspectorRuntimeWidgetSnapshot | null {
 	const widget = runtimeInspection.getWidget(nodeId)
 	if (widget === null || !widget.blueprintNode.resolved)
@@ -341,12 +324,10 @@ export function projectRuntimeWidgetSnapshot(
 		if (projected !== null)
 			members.push(projected)
 	}
-	if (readMethodDiagnostics !== null) {
-		for (const method of widget.blueprintNode.methods) {
-			const diagnostics = readMethodDiagnostics(method.name)
-			if (diagnostics !== null)
-				members.push(projectRuntimeMethodSnapshot(method.name, diagnostics, encoding))
-		}
+	for (const method of widget.blueprintNode.methods) {
+		const diagnostics = readMethodDiagnostics(method.name)
+		if (diagnostics !== null)
+			members.push(projectRuntimeMethodSnapshot(method.name, diagnostics, encoding))
 	}
 
 	return {

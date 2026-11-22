@@ -9,6 +9,7 @@
  * `"__proto__"` container key for `registerDeps()` to return.
  */
 
+import type { WidgetChild } from '../types'
 import type { BlueprintInspectionDependency, ResolvedBlueprintInspectionNode } from './types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
@@ -29,7 +30,6 @@ interface DepTargetInterfaces {
 }
 
 const depTargetPlugin = createWidgetPlugin('dep-target')
-	.description('Test widget')
 	.interfaces<DepTargetInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -49,13 +49,12 @@ interface DepTargetNoStateInterfaces {
 }
 
 const depTargetNoStatePlugin = createWidgetPlugin('dep-target-no-state')
-	.description('Test widget')
 	.interfaces<DepTargetNoStateInterfaces>()
 	.properties(properties => properties.val({ compute: () => 9 }))
 	.done()
 
 interface DepConsumerInterfaces {
-	slots: 'children'
+	slots: { children: WidgetChild }
 	state: {
 		local: number
 	}
@@ -76,9 +75,8 @@ interface DepConsumerInterfaces {
 }
 
 const depConsumerPlugin = createWidgetPlugin('dep-consumer')
-	.description('Test widget')
 	.interfaces<DepConsumerInterfaces>()
-	.slots({ children: { description: 'Test slot' } })
+	.slots({ children: {} })
 	.state(state => state.local({
 		validate: (input): input is number => typeof input === 'number',
 	}))

@@ -13,6 +13,7 @@
  */
 
 import type { ExecutionResult } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 
@@ -49,10 +50,8 @@ function numberOf(result: ExecutionResult<unknown, unknown> | null): number {
 const readerComputes = { count: 0 }
 
 const nodePlugin = createWidgetPlugin('node')
-	.description('Test widget')
 	.interfaces<NodeInterfaces>()
 	.config({
-		description: 'Where the node reads from',
 		validate: (input): input is NodeConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
@@ -118,9 +117,8 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const graphPlugin = createWidgetPlugin('graph')
-	.description('Test widget')
-	.interfaces<{ slots: 'nodes' }>()
-	.slots({ nodes: { description: 'Nodes' } })
+	.interfaces<{ slots: { nodes: WidgetChild } }>()
+	.slots({ nodes: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, graphPlugin] })

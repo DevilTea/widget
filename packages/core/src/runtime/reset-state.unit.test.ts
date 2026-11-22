@@ -8,6 +8,7 @@
  */
 
 import type { WidgetInterfaces } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
 
@@ -29,7 +30,6 @@ let validateCalls = 0
 let summaryComputes = 0
 
 const resetPlugin = createWidgetPlugin('reset')
-	.description('Test widget')
 	.interfaces<ResetInterfaces>()
 	.state(state => state
 		.plain({
@@ -208,9 +208,8 @@ describe('resetState', () => {
 
 describe('runtimeWidget.resetState', () => {
 	const group = createWidgetPlugin('group')
-		.description('Test widget')
-		.interfaces<{ slots: 'children' }>()
-		.slots({ children: { description: 'Children' } })
+		.interfaces<{ slots: { children: WidgetChild } }>()
+		.slots({ children: {} })
 		.done()
 	const groupSystem = createWidgetSystem({ plugins: [resetPlugin, group] })
 	const compiledGroup = groupSystem.createBlueprint({

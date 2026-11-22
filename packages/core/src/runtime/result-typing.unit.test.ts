@@ -33,7 +33,6 @@ interface TypedInterfaces {
 }
 
 const plugin = createWidgetPlugin('typed')
-	.description('Test widget')
 	.interfaces<TypedInterfaces>()
 	.state(state => state.count({
 		validate: (input): input is number => typeof input === 'number',

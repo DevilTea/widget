@@ -7,20 +7,21 @@
 
 import type { DiagnosticCollector, RelativeSystemStructureDiagnosticInput } from './diagnostic'
 import type { BlueprintCompileView, WidgetSystemBlueprint } from './internal/contract'
-import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetPluginConfigMetadata, WidgetPluginTypeOf, WidgetSynchronousResult } from './plugin'
+import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetInterfacesOf, WidgetPluginCapabilities, WidgetPluginTypeOf, WidgetSynchronousResult } from './plugin'
+import type { WidgetContract, WidgetExpectedPluginTypeOf, WidgetInterfaces, WidgetMemberKey, WidgetSlotsOf } from './types'
 import { compileBlueprint } from './blueprint/index'
-import { isCoreWidgetPlugin } from './plugin'
-import { createReadonlyMap } from './readonly-map'
+import { isCoreWidgetPlugin, readWidgetPluginDefinition } from './plugin'
 
+/**
+ * The semantic facts of one registered plugin. Prose and schema are not carried by Core: they are generated
+ * from the plugin's `Interfaces` type by tooling.
+ */
 export interface WidgetCatalogEntry {
 	readonly type: string
-	readonly description: string
-	/** Null means no config capability; otherwise schema may itself be null. */
-	readonly config: WidgetPluginConfigMetadata | null
-	readonly descriptions: {
-		readonly config: string | null
-		readonly slots: ReadonlyMap<string, string> | null
-	}
+	/** Declaration presence; the same object as `plugin.capabilities`. */
+	readonly capabilities: WidgetPluginCapabilities
+	/** The declared slot names in declaration order. Null means no slots capability; empty means explicitly empty. */
+	readonly slots: readonly WidgetMemberKey[] | null
 }
 
 export interface WidgetCatalog {
@@ -40,6 +41,157 @@ export interface CreateWidgetSystemOptions<Plugins extends AnyWidgetPluginTuple,
 	readonly plugins: Plugins
 	readonly validateStructure?: WidgetSystemValidateStructure<Plugins, Result>
 }
+
+/** The plugin types the slots of `Interfaces` name: the members of a plain union and the `Types` of a contract. */
+type ExpectedPluginTypeOfSlots<Interfaces extends WidgetInterfaces> = WidgetSlotsOf<Interfaces> extends infer Slots
+	? [Slots] extends [never]
+			? never
+			: { [Name in keyof Slots]-?: WidgetExpectedPluginTypeOf<Slots[Name]> }[keyof Slots]
+	: never
+
+/**
+ * The plugin types some registered plugin's slot expects but `Plugins` does not register. `never` for a
+ * loosely typed System (a plugin typed with a broad `string` may be any of them).
+ */
+export type UnregisteredSlotPluginTypeOf<Plugins extends AnyWidgetPluginTuple> = Exclude<
+	Plugins[number] extends infer Plugin
+		? Plugin extends AnyWidgetPlugin ? ExpectedPluginTypeOfSlots<WidgetInterfacesOf<Plugin>> : never
+		: never,
+	WidgetPluginTypeOf<Plugins[number]>
+>
+
+/**
+ * What `plugins` is checked against when a slot expects a plugin type the System does not register;
+ * `Type` names it. Type-level only: nothing is checked at run time.
+ */
+export interface WidgetSystemSlotTypeViolation<Type extends string> {
+	readonly 'widget-core: a slot expects a plugin type that is not registered in this System': Type
+}
+
+type ContractSectionName = 'state' | 'properties' | 'methods' | 'events'
+
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+
+/**
+ * Whether a plugin's Method can stand in for the contract's. Compared as argument tuples and results, not as
+ * function types, so a method-style signature (`run(arg: T): R`, whose parameters TypeScript compares
+ * bivariantly) is held to the same rule as a property-style one: every argument list the contract allows is one
+ * the Method accepts (parameters contravariant, arity included), and the Method's result is assignable to the
+ * contract's (covariant; a contract result of `void` accepts any result).
+ */
+type ContractMethodSatisfied<Actual, Expected> = Actual extends (...args: infer ActualArgs) => infer ActualResult
+	? Expected extends (...args: infer ExpectedArgs) => infer ExpectedResult
+		? [ExpectedArgs] extends [ActualArgs]
+				? [ExpectedResult] extends [void] ? true : [ActualResult] extends [ExpectedResult] ? true : false
+				: false
+		: false
+	: false
+
+/**
+ * Whether a plugin's member satisfies the contract's, by the variance of its section:
+ *
+ * - `state`: invariant. A parent may read and write a child's State through its dependencies, so the two
+ *   types must be mutually assignable.
+ * - `properties`: covariant. A Property is only read.
+ * - `methods`: see {@link ContractMethodSatisfied}.
+ * - `events`: existence only. An Event is not reachable through a dependency, so its payload types nothing a
+ *   parent does.
+ */
+type ContractMemberSatisfied<Section extends ContractSectionName, Actual, Expected> = Section extends 'state'
+	? MutuallyAssignable<Actual, Expected>
+	: Section extends 'properties'
+		? [Actual] extends [Expected] ? true : false
+		: Section extends 'methods'
+			? ContractMethodSatisfied<Actual, Expected>
+			: true
+
+type ContractMemberMismatch<Section extends ContractSectionName> = Section extends 'state'
+	? 'with a type that is not the contract\'s (State is read and written, so the two types must be mutually assignable)'
+	: Section extends 'methods'
+		? 'with a signature that does not accept the contract\'s arguments or whose result is not assignable to the contract\'s'
+		: 'with a type that is not assignable to the contract\'s'
+
+/**
+ * The members of one section of a contract's `Shape` that `Target` does not satisfy, as messages: a member
+ * the plugin does not declare, or one whose type breaks the section's variance rule.
+ */
+type ContractSectionViolation<Shape, Target, Section extends ContractSectionName, Subject extends string> = Shape extends Record<Section, infer Expected>
+	// An explicit-empty section (`never`, the canonical spelling, or an empty record) declares no member: `keyof never` would
+	// otherwise cover every member name.
+	? (Target extends Record<Section, infer Declared> ? [Declared] extends [never] ? Record<never, never> : Declared : Record<never, never>) extends infer Actual
+			? {
+					[Member in Extract<keyof Expected, string>]: Member extends keyof Actual
+						? ContractMemberSatisfied<Section, Actual[Member], Expected[Member]> extends true
+							? never
+							: `${Subject} declares the ${Section} member "${Member}" ${ContractMemberMismatch<Section>}`
+						: `${Subject} declares no ${Section} member "${Member}"`
+				}[Extract<keyof Expected, string>]
+			: never
+	: never
+
+type ContractViolation<Shape, Target, Subject extends string>
+	= | ContractSectionViolation<Shape, Target, 'state', Subject>
+		| ContractSectionViolation<Shape, Target, 'properties', Subject>
+		| ContractSectionViolation<Shape, Target, 'methods', Subject>
+		| ContractSectionViolation<Shape, Target, 'events', Subject>
+
+/** The contract violations of the slots of one registered plugin (`Parent`), against the plugins its contracts name. */
+type SlotContractViolationOfPlugin<Plugins extends AnyWidgetPluginTuple, Parent extends AnyWidgetPlugin> = WidgetSlotsOf<WidgetInterfacesOf<Parent>> extends infer Slots
+	? [Slots] extends [never]
+			? never
+			: {
+					[Name in Extract<keyof Slots, string>]: Slots[Name] extends WidgetContract<infer Shape, infer Types>
+						? Types extends string
+							// An unregistered name selects no plugin here; it is reported by the registration check.
+							? Extract<Plugins[number], { readonly type: Types }> extends infer Target
+								? Target extends AnyWidgetPlugin
+									? ContractViolation<Shape, WidgetInterfacesOf<Target>, `plugin "${Types}" (expected by slot "${Name}" of plugin "${WidgetPluginTypeOf<Parent>}")`>
+									: never
+								: never
+							: never
+						: never
+				}[Extract<keyof Slots, string>]
+	: never
+
+/**
+ * Every way a registered plugin fails the `WidgetContract` of a slot that names it, as messages naming the
+ * plugin and the member; `never` when every listed plugin satisfies its contracts. A contract without `Types`
+ * names no plugin and is not checked.
+ */
+export type SlotContractViolationOf<Plugins extends AnyWidgetPluginTuple> = Plugins[number] extends infer Parent
+	? Parent extends AnyWidgetPlugin ? SlotContractViolationOfPlugin<Plugins, Parent> : never
+	: never
+
+/**
+ * What `plugins` is checked against when a plugin named by a slot's `WidgetContract` does not have the members
+ * the contract's `Shape` declares; `Reason` names the plugin and the member. Type-level only.
+ */
+export interface WidgetSystemSlotContractViolation<Reason extends string> {
+	readonly 'widget-core: a plugin does not satisfy the WidgetContract of a slot that expects it': Reason
+}
+
+type IsAnyType<T> = 0 extends 1 & T ? true : false
+
+type WidgetSystemSlotTypeCheck<Plugins extends AnyWidgetPluginTuple> = [UnregisteredSlotPluginTypeOf<Plugins>] extends [never]
+	? unknown
+	: { readonly plugins: WidgetSystemSlotTypeViolation<UnregisteredSlotPluginTypeOf<Plugins>> }
+
+type WidgetSystemSlotContractCheck<Plugins extends AnyWidgetPluginTuple> = [SlotContractViolationOf<Plugins>] extends [never]
+	? unknown
+	: { readonly plugins: WidgetSystemSlotContractViolation<SlotContractViolationOf<Plugins>> }
+
+/**
+ * `unknown` (an intersection identity) when every plugin type a slot names is registered and every plugin
+ * named by a slot's `WidgetContract` satisfies the contract's `Shape`. A loosely typed System (an `any`-typed
+ * entry, or a plugin typed with a broad `string`) is left unchecked.
+ */
+export type WidgetSystemPluginsCheck<Plugins extends AnyWidgetPluginTuple> = IsAnyType<Plugins[number]> extends true
+	? unknown
+	: IsAnyType<UnregisteredSlotPluginTypeOf<Plugins>> extends true
+		? unknown
+		: string extends WidgetPluginTypeOf<Plugins[number]>
+			? unknown
+			: WidgetSystemSlotTypeCheck<Plugins> & WidgetSystemSlotContractCheck<Plugins>
 
 /**
  * Selects one registered plugin by its `type` discriminator.
@@ -170,10 +322,12 @@ function readForeignPluginType(entry: unknown): string | null {
 
 /**
  * Creates an instance-scoped, immutable widget system. Malformed options, foreign plugins and duplicate
- * `plugin.type` are rejected with a `WidgetSystemConfigurationError`.
+ * `plugin.type` are rejected with a `WidgetSystemConfigurationError`. A slot that names a plugin type the
+ * System does not register, and a plugin that does not satisfy the `WidgetContract` of a slot that names it,
+ * are type errors on `plugins` (type-level only).
  */
 export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple, Result = unknown>(
-	options: CreateWidgetSystemOptions<Plugins, Result>,
+	options: CreateWidgetSystemOptions<Plugins, Result> & WidgetSystemPluginsCheck<Plugins>,
 ): WidgetSystem<Plugins> {
 	assertWidgetSystemOptions(options)
 
@@ -196,17 +350,14 @@ export function createWidgetSystem<const Plugins extends AnyWidgetPluginTuple, R
 	}
 
 	const catalog: WidgetCatalog = Object.freeze({
-		widgets: Object.freeze(plugins.map(plugin => Object.freeze({
-			type: plugin.type,
-			description: plugin.description,
-			config: plugin.config,
-			descriptions: Object.freeze({
-				config: plugin.descriptions.config,
-				slots: plugin.descriptions.slots === null
-					? null
-					: createReadonlyMap(plugin.descriptions.slots),
-			}),
-		}))),
+		widgets: Object.freeze(plugins.map((plugin) => {
+			const slots = readWidgetPluginDefinition(plugin).slots
+			return Object.freeze({
+				type: plugin.type,
+				capabilities: plugin.capabilities,
+				slots: slots === null ? null : Object.freeze([...slots.keys()]),
+			})
+		})),
 	})
 
 	const system: WidgetSystem<Plugins> = {

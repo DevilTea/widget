@@ -90,7 +90,6 @@ describe('blueprint sourceJsonCompatible proof', () => {
 
 describe('valid blueprint source typing', () => {
 	const leaf = createWidgetPlugin('leaf')
-		.description('Leaf')
 		.interfaces<Record<never, never>>()
 		.done()
 	const typedSystem = createWidgetSystem({ plugins: [leaf] })

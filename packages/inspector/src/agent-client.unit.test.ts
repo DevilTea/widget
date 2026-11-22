@@ -14,7 +14,6 @@ interface FixtureInterfaces {
 function createFixture() {
 	let computeCalls = 0
 	const plugin = createWidgetPlugin('devtools-fixture')
-		.description('DevTools fixture')
 		.interfaces<FixtureInterfaces>()
 		.state(state => state.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -118,7 +117,7 @@ describe('inspector client/agent protocol boundary', () => {
 		agent.dispose()
 	})
 
-	it('accepts a valid legacy Blueprint snapshot from a 0.1 response but rejects it as a 0.2 response', async () => {
+	it('rejects a 0.1-shaped Blueprint snapshot in a 1.0 envelope and any response of the older major', async () => {
 		const pair = createInProcessInspectorTransportPair()
 		const client = createInspectorClient(pair.client)
 		const requests: InspectorRequestMessage[] = []
@@ -135,7 +134,8 @@ describe('inspector client/agent protocol boundary', () => {
 				ok: true,
 				result: legacy,
 			})
-			await expect(legacyResult).resolves.toEqual(legacy)
+			await expect(legacyResult)
+				.rejects.toMatchObject({ code: 'unsupported-version' })
 
 			const currentResult = client.request('blueprint.getSnapshot', { runtimeId: 'runtime-legacy' })
 			const currentRequest = requests.shift()!

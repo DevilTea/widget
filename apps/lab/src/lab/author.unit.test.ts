@@ -73,10 +73,8 @@ describe('author command lowering', () => {
 			config: { raw: { readonly 'a/b~c': string }, resolved: { readonly 'a/b~c': string } }
 		}
 		const plugin = createWidgetPlugin('Special')
-			.description('Special')
 			.interfaces<SpecialInterfaces>()
 			.config({
-				description: 'Special config',
 				validate: (input): input is { readonly 'a/b~c': string } => typeof input === 'object' && input !== null && typeof (input as Record<string, unknown>)['a/b~c'] === 'string',
 				resolve: raw => ({ 'a/b~c': raw?.['a/b~c'] ?? '' }),
 			})

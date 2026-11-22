@@ -39,7 +39,6 @@ const isNumber = (input: unknown): input is number => typeof input === 'number'
 describe('the `emit` of a Method carries exactly the declared Events', () => {
 	it('narrows `emit` to the declared keys and keeps each argument tuple typed', () => {
 		const plugin = createWidgetPlugin('counter')
-			.description('Counter')
 			.interfaces<CounterInterfaces>()
 			.state(state => state.count({ validate: isNumber, default: () => 0 }))
 			.methods(methods => methods
@@ -87,9 +86,7 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 						return numberOf(deps.count())
 					},
 				}))
-			.events(events => events
-				.changed({ description: 'The count changed' })
-				.cleared({ description: 'Cleared' }))
+			.events(['changed', 'cleared'])
 			.done()
 		expectTypeOf(plugin)
 			.not.toBeAny()
@@ -99,7 +96,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 
 	it('treats an empty declaration like none', () => {
 		const plugin = createWidgetPlugin('counter')
-			.description('Counter')
 			.interfaces<CounterInterfaces>()
 			.state(state => state.count({ validate: isNumber, default: () => 0 }))
 			.methods(methods => methods
@@ -114,9 +110,7 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 						return 1
 					},
 				}))
-			.events(events => events
-				.changed({ description: 'The count changed' })
-				.cleared({ description: 'Cleared' }))
+			.events(['changed', 'cleared'])
 			.done()
 		expect(plugin.type)
 			.toBe('counter')
@@ -124,7 +118,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 
 	it('infers the declaration wherever `emits` sits in the definition object', () => {
 		const plugin = createWidgetPlugin('counter')
-			.description('Counter')
 			.interfaces<CounterInterfaces>()
 			.state(state => state.count({ validate: isNumber, default: () => 0 }))
 			.methods(methods => methods
@@ -139,9 +132,7 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 				})
 				.reset({ validateArgs: noArgs, execute: () => {} })
 				.peek({ validateArgs: noArgs, execute: () => 1 }))
-			.events(events => events
-				.changed({ description: 'The count changed' })
-				.cleared({ description: 'Cleared' }))
+			.events(['changed', 'cleared'])
 			.done()
 		expect(plugin.type)
 			.toBe('counter')
@@ -150,7 +141,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 	it('rejects an entry that is not an Event of the plugin, and a broad string array', () => {
 		function declare(names: string[]) {
 			return createWidgetPlugin('counter')
-				.description('Counter')
 				.interfaces<CounterInterfaces>()
 				.state(state => state.count({ validate: isNumber, default: () => 0 }))
 				.methods(methods => methods
@@ -175,7 +165,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 	it('has no `emit` and no declarable Event in a plugin without an events capability', () => {
 		function declare() {
 			return createWidgetPlugin('quiet')
-				.description('Quiet')
 				.interfaces<NoEventsInterfaces>()
 				.methods(methods => methods
 					.run({
@@ -187,7 +176,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 		}
 		function without() {
 			return createWidgetPlugin('quiet')
-				.description('Quiet')
 				.interfaces<NoEventsInterfaces>()
 				.methods(methods => methods
 					.run({
@@ -208,7 +196,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 	it('accepts a declaration held in a typed constant, and special member names', () => {
 		const emits = ['change', PROTO_KEY] as const
 		const plugin = createWidgetPlugin('notifier')
-			.description('Notifier')
 			.interfaces<NotifierInterfaces>()
 			.methods(methods => methods.fire({
 				validateArgs: oneString,
@@ -220,10 +207,7 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 					emit[PROTO_KEY](args[0])
 				},
 			}))
-			.events((events) => {
-				const beforeProto = events.change({ description: 'Changed' })
-				return beforeProto[PROTO_KEY]({ description: 'Special' })
-			})
+			.events(['change', PROTO_KEY])
 			.done()
 		expect(plugin.type)
 			.toBe('notifier')
@@ -232,7 +216,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 	it('keeps the thenable gate on `execute`', () => {
 		function declare() {
 			return createWidgetPlugin('notifier')
-				.description('Notifier')
 				.interfaces<NotifierInterfaces>()
 				.methods(methods => methods.fire({
 					validateArgs: oneString,
@@ -276,7 +259,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 		}
 		function annotated() {
 			return createWidgetPlugin('notifier')
-				.description('Notifier')
 				.interfaces<NotifierInterfaces>()
 				// @ts-expect-error an `execute` annotated with an `emit` that has `change` needs `emits: ['change']`
 				.methods(methods => methods.fire({
@@ -286,7 +268,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 		}
 		function passed() {
 			return createWidgetPlugin('notifier')
-				.description('Notifier')
 				.interfaces<NotifierInterfaces>()
 				.methods(methods => methods.fire(forgotten))
 		}
@@ -300,7 +281,6 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 
 	it('still accepts the normal literal forms: `emits` before or after `execute`, a constant, `emits: []`, no `emits`', () => {
 		const plugin = createWidgetPlugin('counter')
-			.description('Counter')
 			.interfaces<CounterInterfaces>()
 			.state(state => state.count({ validate: isNumber, default: () => 0 }))
 			.methods(methods => methods
@@ -314,9 +294,7 @@ describe('the `emit` of a Method carries exactly the declared Events', () => {
 				})
 				.reset({ validateArgs: noArgs, emits: [], execute: () => {} })
 				.peek({ validateArgs: noArgs, execute: () => 1 }))
-			.events(events => events
-				.changed({ description: 'The count changed' })
-				.cleared({ description: 'Cleared' }))
+			.events(['changed', 'cleared'])
 			.done()
 		expect(plugin.type)
 			.toBe('counter')
@@ -332,7 +310,6 @@ interface ListInterfaces<Item> extends WidgetInterfaces {
 /** The guide's generic-factory pattern (a cast of `.interfaces()`). */
 function createListPlugin<const Type extends string, Item>(type: Type, isItem: (input: unknown) => input is Item) {
 	return (createWidgetPlugin(type)
-		.description('A list')
 		.interfaces<ListInterfaces<Item>>() as WidgetPluginConfigPhase<Type, ListInterfaces<Item>>)
 		.state(state => state.items({ validate: (input): input is Item[] => Array.isArray(input) && input.every(isItem), default: () => [] }))
 		.methods(methods => methods.add({
@@ -349,9 +326,7 @@ function createListPlugin<const Type extends string, Item>(type: Type, isItem: (
 					.toThrow('emitted Event "cleared" without declaring it')
 			},
 		}))
-		.events(events => events
-			.added({ description: 'Added' })
-			.cleared({ description: 'Cleared' }))
+		.events(['added', 'cleared'])
 		.done()
 }
 

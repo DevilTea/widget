@@ -72,24 +72,6 @@ describe('runtime disposal is announced when it happens', () => {
 		}
 	})
 
-	it('sends nothing to a peer negotiated below 0.4, neither at disposal nor afterwards', async () => {
-		const { runtime, agent, client, disposedEvents } = createFixture({ closeTransportOnDispose: false })
-		try {
-			await client.request('handshake', { protocol: { major: 0, minor: 3 } })
-			runtime.dispose()
-			expect(disposedEvents())
-				.toHaveLength(0)
-
-			await client.request('runtime.list', {})
-			agent.dispose()
-			expect(disposedEvents())
-				.toHaveLength(0)
-		}
-		finally {
-			client.dispose()
-		}
-	})
-
 	it('sends nothing at runtime.dispose() to a peer the Agent has never heard from', async () => {
 		const { runtime, agent, client, pair, disposedEvents } = createFixture()
 		try {
@@ -109,18 +91,16 @@ describe('runtime disposal is announced when it happens', () => {
 		}
 	})
 
-	it('tells a peer that sends its first request after disposal, once, at the Agent\'s own minor', async () => {
+	it('tells a peer that sends its first request after disposal, once', async () => {
 		const { runtime, agent, client, disposedEvents, events } = createFixture()
 		try {
 			runtime.dispose()
 
-			// The first request (here the handshake) triggers the announcement, before it is processed, so
-			// the Agent still serves events at its highest minor.
-			const handshake = await client.request('handshake', { protocol: { major: 0, minor: 3 } })
+			// The first request (here the handshake) triggers the announcement, before it is processed.
+			const handshake = await client.handshake()
 			expect(disposedEvents())
 				.toEqual([DISPOSED_EVENT])
 			expect(handshake.capabilities.events)
-				.not
 				.toContain('runtime.disposed')
 			await client.request('runtime.list', {})
 			expect(events.filter(event => event.event === 'runtime.disposed'))

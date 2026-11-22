@@ -7,21 +7,30 @@ import type { SectionConfig, SectionRawConfig } from '../config'
 import type { I18nText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkSectionConfig, resolveSectionConfig } from '../config'
-import { sectionConfigSchema } from '../schemas'
 import { isFieldType } from './structure'
 
+/**
+ * A titled group of fields (slot `fields`: TextField, Toggle, Choice or DangerAction). Properties `title` and `description`
+ * are its config.
+ */
 export interface SectionInterfaces extends WidgetInterfaces {
+	/** The heading of the section and, optionally, a sentence under it. */
 	config: { raw: SectionRawConfig, resolved: SectionConfig }
-	slots: 'fields'
-	properties: { title: I18nText, description: I18nText | null }
+	slots: {
+		/** The fields of the section, in order: TextField, Toggle, Choice or DangerAction. */
+		fields: 'TextField' | 'Toggle' | 'Choice' | 'DangerAction'
+	}
+	properties: {
+		/** The heading per language. */
+		title: I18nText
+		/** The sentence under the heading per language; `null` without one. */
+		description: I18nText | null
+	}
 }
 
 export const SectionPlugin = createWidgetPlugin('Section')
-	.description('A titled group of fields (slot `fields`: TextField, Toggle, Choice or DangerAction). Properties `title` and `description` are its config.')
 	.interfaces<SectionInterfaces>()
 	.config({
-		description: 'The heading of the section and, optionally, a sentence under it.',
-		schema: sectionConfigSchema,
 		validate: (input, ctx): input is SectionRawConfig => {
 			checkSectionConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -30,7 +39,6 @@ export const SectionPlugin = createWidgetPlugin('Section')
 	})
 	.slots({
 		fields: {
-			description: 'The fields of the section, in order: TextField, Toggle, Choice or DangerAction.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && !isFieldType(child.type))

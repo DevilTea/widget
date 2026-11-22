@@ -107,7 +107,6 @@ describe('both are read-only, as Core derives it', () => {
 
 	it('is what lets a Property depend on them: Core rejects a Property that depends on a Method that writes State', () => {
 		const writer = createWidgetPlugin('writer')
-			.description('A widget whose Method writes State and whose Property tries to depend on it.')
 			.interfaces<{ state: { n: number }, properties: { bad: number }, methods: { bump: () => void } }>()
 			.state(state => state.n({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 			.properties(properties => properties.bad({

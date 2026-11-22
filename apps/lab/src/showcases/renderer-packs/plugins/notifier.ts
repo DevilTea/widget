@@ -20,32 +20,56 @@ import type { I18nText, NotifierItem, Tone } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkNotifierConfig, resolveNotifierConfig } from '../config'
 import { announcementsOf, appendNotification, describeValue, isI18nText, isNotifierItems, isTone } from '../domain'
-import { notifierConfigSchema } from '../schemas'
 
+/**
+ * A capability widget: the page's notifications (State `items`, the newest `limit` of them). Methods: `notify(message, tone)`
+ * (appends one, writes State and emits `notified`) and `dismiss(id)` (removes one; an unknown id is refused). Properties:
+ * `alert` (the newest `danger` notification), `status` (the newest of any other tone), `count` and `limit`. A DangerAction
+ * reports to it by naming it in its `notifier` config.
+ */
 export interface NotifierInterfaces extends WidgetInterfaces {
+	/** How many notifications are kept. */
 	config: { raw: NotifierRawConfig, resolved: NotifierConfig }
-	state: { items: readonly NotifierItem[] }
+	state: {
+		/** The notifications, newest last, at most `limit`. */
+		items: readonly NotifierItem[]
+	}
 	properties: {
+		/** How many notifications are kept. */
 		limit: number
+		/** The newest `danger` notification; `null` without one. */
 		alert: NotifierItem | null
+		/** The newest notification of any other tone; `null` without one. */
 		status: NotifierItem | null
+		/** How many notifications are kept now. */
 		count: number
 	}
 	methods: {
+		/**
+		 * Appends a notification (dropping the oldest beyond `limit`), writes State and emits `notified`.
+		 *
+		 * @param message - The text per language, with a non-empty "en".
+		 * @param tone - `info`, `success` or `danger`.
+		 * @returns The id of the new notification.
+		 */
 		notify: (message: I18nText, tone: Tone) => number
+		/**
+		 * Removes a notification. An id that is not there is refused (`no-such-item`) and changes nothing.
+		 *
+		 * @param id - The id `notify` returned.
+		 * @returns Whether a notification was removed.
+		 */
 		dismiss: (id: number) => boolean
 	}
 	events: {
+		/** A notification was added. Carries its id, its text per language and its tone. */
 		notified: [notification: NotifierItem]
 	}
 }
 
 export const NotifierPlugin = createWidgetPlugin('Notifier')
-	.description('A capability widget: the page\'s notifications (State `items`, the newest `limit` of them). Methods: `notify(message, tone)` (appends one, writes State and emits `notified`) and `dismiss(id)` (removes one; an unknown id is refused). Properties: `alert` (the newest `danger` notification), `status` (the newest of any other tone), `count` and `limit`. A DangerAction reports to it by naming it in its `notifier` config.')
 	.interfaces<NotifierInterfaces>()
 	.config({
-		description: 'How many notifications are kept.',
-		schema: notifierConfigSchema,
 		validate: (input, ctx): input is NotifierRawConfig => {
 			checkNotifierConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -137,6 +161,5 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 				return true
 			},
 		}))
-	.events(events => events
-		.notified({ description: 'A notification was added. Carries its id, its text per language and its tone.' }))
+	.events(['notified'])
 	.done()

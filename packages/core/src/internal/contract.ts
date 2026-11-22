@@ -41,6 +41,7 @@ import type {
 	HasWidgetCapability,
 	WidgetEventArgsOf,
 	WidgetEventKeyOf,
+	WidgetExpectedPluginTypeOf,
 	WidgetId,
 	WidgetInterfaces,
 	WidgetMemberKey,
@@ -50,6 +51,7 @@ import type {
 	WidgetPropertyValueOf,
 	WidgetRawConfigOf,
 	WidgetResolvedConfigOf,
+	WidgetSlotExpectedOf,
 	WidgetSlotNameOf,
 	WidgetStateKeyOf,
 	WidgetStateValueOf,
@@ -293,6 +295,17 @@ export interface BlueprintRuntimeView<Plugins extends AnyWidgetPluginTuple = Any
 export type WidgetSourceFor<
 	Plugin extends AnyWidgetPlugin,
 	Plugins extends AnyWidgetPluginTuple,
+> = WidgetSourceNodeFor<Plugin, Plugins, false>
+
+/**
+ * One widget's source. `Narrow` selects what a slot accepts: any registered plugin's source (`false`, what
+ * a compiled Blueprint's `source` is typed as, because slot expectations are never checked), or only the
+ * sources the slot expects (`true`, for TypeScript-authored sources; see {@link WidgetSourceOf}).
+ */
+type WidgetSourceNodeFor<
+	Plugin extends AnyWidgetPlugin,
+	Plugins extends AnyWidgetPluginTuple,
+	Narrow extends boolean,
 >
 	= & {
 		readonly id: WidgetId
@@ -315,7 +328,9 @@ export type WidgetSourceFor<
 				// `{}` (zero valid names) — present but only satisfiable by an empty object, distinct from a
 				// plugin without slots capability, which has no `slots` field on its authored source at all.
 				readonly slots?: {
-					readonly [Name in WidgetSlotNameOf<WidgetInterfacesOf<Plugin>>]?: readonly WidgetSource<Plugins>[]
+					readonly [Name in WidgetSlotNameOf<WidgetInterfacesOf<Plugin>>]?: readonly (Narrow extends true
+						? WidgetSlotChildSource<Plugins, WidgetSlotExpectedOf<WidgetInterfacesOf<Plugin>, Name>>
+						: WidgetSource<Plugins>)[]
 				}
 			}
 		: unknown)
@@ -324,6 +339,50 @@ export type WidgetSource<Plugins extends AnyWidgetPluginTuple> = Plugins[number]
 	? Plugin extends AnyWidgetPlugin
 		? WidgetSourceFor<Plugin, Plugins>
 		: never
+	: never
+
+/**
+ * The typed source of one widget of `Plugin` for TypeScript-authored sources: {@link WidgetSourceFor} with
+ * the children of each slot narrowed to what the slot expects, at every depth.
+ */
+export type WidgetTypedSourceFor<
+	Plugin extends AnyWidgetPlugin,
+	Plugins extends AnyWidgetPluginTuple,
+> = WidgetSourceNodeFor<Plugin, Plugins, true>
+
+/** The typed source of any registered plugin's widget; see {@link WidgetTypedSourceFor}. */
+export type WidgetTypedSource<Plugins extends AnyWidgetPluginTuple> = Plugins[number] extends infer Plugin
+	? Plugin extends AnyWidgetPlugin
+		? WidgetTypedSourceFor<Plugin, Plugins>
+		: never
+	: never
+
+/**
+ * The authored source a slot accepts for one child in a TypeScript-authored source. A slot that names plugin
+ * types (a plain union, or the `Types` of a `WidgetContract`) takes the sources of exactly those registered
+ * plugins; a slot that names none (`WidgetChild`, a contract without `Types`), and every slot of a loosely
+ * typed System (a plugin typed with a broad `string`), takes any registered plugin's source. It is an authoring aid only: the compiler input stays `unknown`, Core
+ * checks no slot expectation at run time, and a compiled Blueprint's `source` is typed by the unnarrowed
+ * {@link WidgetSource}.
+ */
+export type WidgetSlotChildSource<Plugins extends AnyWidgetPluginTuple, Expected> = string extends WidgetPluginTypeOf<Plugins[number]>
+	? WidgetTypedSource<Plugins>
+	: [WidgetExpectedPluginTypeOf<Expected>] extends [never]
+			? WidgetTypedSource<Plugins>
+			: Extract<Plugins[number], { readonly type: WidgetExpectedPluginTypeOf<Expected> }> extends infer Plugin
+				? Plugin extends AnyWidgetPlugin
+					? WidgetTypedSourceFor<Plugin, Plugins>
+					: never
+				: never
+
+/**
+ * The typed source of one widget of `System`, for sources written in TypeScript: the node grammar (`id`,
+ * `type`, `config`, `slots`, `meta`) with `config` typed per plugin `type` (its `raw` config) and the
+ * children of each slot typed by what the slot expects. Assignable to {@link WidgetSource}, which is what
+ * `blueprint.source` of a valid Blueprint is typed as.
+ */
+export type WidgetSourceOf<System extends WidgetSystem<any>> = System extends WidgetSystem<infer Plugins extends AnyWidgetPluginTuple>
+	? WidgetTypedSource<Plugins>
 	: never
 
 export interface WidgetSystemBlueprintBase<Plugins extends AnyWidgetPluginTuple, Source = unknown> {

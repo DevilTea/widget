@@ -15,8 +15,8 @@ import type {
 	DiagnosticPath,
 } from '../diagnostic'
 import type { BlueprintWidgetNode, ResolvedBlueprintWidgetNode } from '../internal/contract'
-import type { NonEmptyReadonlyArray, WidgetMemberKey } from '../types'
-import { throwClosedCollector } from '../runtime/sync'
+import type { JsonValue, NonEmptyReadonlyArray, WidgetMemberKey } from '../types'
+import { assertDiagnosticDetails, throwClosedCollector } from '../runtime/sync'
 
 /**
  * A compile-time callback's collector. `close()` ends its plugin-facing lifetime once the callback has
@@ -31,6 +31,7 @@ export function createCollector<Input>(): { readonly collector: DiagnosticCollec
 			addDiagnostic: (diagnostic) => {
 				if (closed)
 					throwClosedCollector('addDiagnostic')
+				assertDiagnosticDetails(diagnostic)
 				items.push(diagnostic)
 			},
 			hasAnyDiagnostic: () => {
@@ -96,17 +97,18 @@ export function definitionDiagnostic(node: BlueprintWidgetNode, code: BlueprintD
 	} as BlueprintDiagnostic
 }
 
-export function configDiagnostic(node: ResolvedBlueprintWidgetNode, message: string, path?: DiagnosticPath, reason?: string): BlueprintConfigDiagnostic {
+export function configDiagnostic(node: ResolvedBlueprintWidgetNode, message: string, path?: DiagnosticPath, reason?: string, details?: JsonValue): BlueprintConfigDiagnostic {
 	return {
 		code: 'invalid-widget-config',
 		location: widgetLocation(node),
 		message,
 		...(path === undefined ? {} : { path }),
 		...(reason === undefined ? {} : { reason }),
+		...(details === undefined ? {} : { details }),
 	}
 }
 
-export function structureDiagnostic(node: ResolvedBlueprintWidgetNode, message: string, slot?: WidgetMemberKey, index?: number, related?: readonly BlueprintStructureDiagnosticLocation[], reason?: string): BlueprintStructureDiagnostic {
+export function structureDiagnostic(node: ResolvedBlueprintWidgetNode, message: string, slot?: WidgetMemberKey, index?: number, related?: readonly BlueprintStructureDiagnosticLocation[], reason?: string, details?: JsonValue): BlueprintStructureDiagnostic {
 	const location: BlueprintStructureDiagnosticLocation = slot === undefined
 		? widgetLocation(node)
 		: index === undefined ? slotLocation(node, slot) : slotChildLocation(node, slot, index)
@@ -116,6 +118,7 @@ export function structureDiagnostic(node: ResolvedBlueprintWidgetNode, message: 
 		message,
 		...(toNonEmpty(related ?? []) === undefined ? {} : { related: toNonEmpty(related ?? []) }),
 		...(reason === undefined ? {} : { reason }),
+		...(details === undefined ? {} : { details }),
 	}
 }
 

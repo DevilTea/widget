@@ -13,25 +13,43 @@ import type { I18nText, Tone } from '../domain'
 import type { BoardConfig, BoardRawConfig, NoticeConfig, NoticeRawConfig } from './config'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkBoardConfig, checkNoticeConfig, resolveBoardConfig, resolveNoticeConfig } from './config'
-import { boardConfigSchema, noticeConfigSchema } from './schemas'
 
+/** The root of a notice board (format v3). Slot `notices` holds the Notice widgets; Property `title` is the board title per language. */
 export interface BoardInterfaces extends WidgetInterfaces {
+	/** The board title per language. */
 	config: { raw: BoardRawConfig, resolved: BoardConfig }
-	slots: 'notices'
-	properties: { title: I18nText }
+	slots: {
+		/** The notices, in order. Only Notice widgets. */
+		notices: 'Notice'
+	}
+	properties: {
+		/** The board title per language. */
+		title: I18nText
+	}
 }
 
+/**
+ * One notice of a board (format v3): `title`, `body`, `until` (the last day it is shown, YYYY-MM-DD) and `tone`
+ * (`info` or `warning`), each also a Property.
+ */
 export interface NoticeInterfaces extends WidgetInterfaces {
+	/** The notice text, the last day it is shown and its tone. */
 	config: { raw: NoticeRawConfig, resolved: NoticeConfig }
-	properties: { title: string, body: string, until: string, tone: Tone }
+	properties: {
+		/** The notice title. */
+		title: string
+		/** The notice text. */
+		body: string
+		/** The last day the notice is shown, YYYY-MM-DD. */
+		until: string
+		/** `info` or `warning`. */
+		tone: Tone
+	}
 }
 
 export const BoardPlugin = createWidgetPlugin('Board')
-	.description('The root of a notice board (format v3). Slot `notices` holds the Notice widgets; Property `title` is the board title per language.')
 	.interfaces<BoardInterfaces>()
 	.config({
-		description: 'The board title per language.',
-		schema: boardConfigSchema,
 		validate: (input, ctx): input is BoardRawConfig => {
 			checkBoardConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -40,7 +58,6 @@ export const BoardPlugin = createWidgetPlugin('Board')
 	})
 	.slots({
 		notices: {
-			description: 'The notices, in order. Only Notice widgets.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'Notice')
@@ -58,11 +75,8 @@ export const BoardPlugin = createWidgetPlugin('Board')
 	.done()
 
 export const NoticePlugin = createWidgetPlugin('Notice')
-	.description('One notice of a board (format v3): `title`, `body`, `until` (the last day it is shown, YYYY-MM-DD) and `tone` (`info` or `warning`), each also a Property.')
 	.interfaces<NoticeInterfaces>()
 	.config({
-		description: 'The notice text, the last day it is shown and its tone.',
-		schema: noticeConfigSchema,
 		validate: (input, ctx): input is NoticeRawConfig => {
 			checkNoticeConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

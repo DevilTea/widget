@@ -6,6 +6,7 @@
  * `member-inventories.unit.test.ts` and `dependencies.unit.test.ts`.
  */
 
+import type { WidgetChild } from '../types'
 import { describe, expect, it, vi } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectBlueprint, inspectRuntime } from './index'
@@ -23,7 +24,6 @@ interface HarnessInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('disposal-harness')
-		.description('Test widget')
 		.interfaces<HarnessInterfaces>()
 		.state(state => state.count({
 			validate: (input): input is number => typeof input === 'number',
@@ -161,7 +161,7 @@ describe('disposal / post-mortem', () => {
 
 describe('immutability', () => {
 	interface ImmutInterfaces {
-		slots: 'items'
+		slots: { items: WidgetChild }
 		state: {
 			value: number
 		}
@@ -174,9 +174,8 @@ describe('immutability', () => {
 	}
 
 	const immutContainerPlugin = createWidgetPlugin('immut-container')
-		.description('Test widget')
 		.interfaces<ImmutInterfaces>()
-		.slots({ items: { description: 'Test slot' } })
+		.slots({ items: {} })
 		.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
 		.properties(properties => properties.p({
 			registerDeps: ({ dep }) => ({ v: dep.self.state.get('value') }),
@@ -199,7 +198,6 @@ describe('immutability', () => {
 	}
 
 	const immutLeafPlugin = createWidgetPlugin('immut-leaf')
-		.description('Test widget')
 		.interfaces<ImmutLeafInterfaces>()
 		.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
 		.done()
@@ -212,7 +210,6 @@ describe('immutability', () => {
 
 	/** A Property self-loop, used only to populate `invalidCycles` for the nested-member-freeze test. */
 	const immutCyclePlugin = createWidgetPlugin('immut-cycle')
-		.description('Test widget')
 		.interfaces<ImmutCycleInterfaces>()
 		.properties(properties => properties.loop({
 			registerDeps: ({ dep }) => ({ self: dep.self.properties.get('loop') }),
@@ -395,14 +392,13 @@ describe('arbitrary-string safety: WidgetId as a dependency target', () => {
 	}
 
 	interface ConsumerInterfaces {
-		slots: 'children'
+		slots: { children: WidgetChild }
 		properties: {
 			viaProtoId: unknown
 		}
 	}
 
 	const targetPlugin = createWidgetPlugin('special-id-target')
-		.description('Test widget')
 		.interfaces<TargetInterfaces>()
 		.state(state => state.value({
 			validate: (input): input is number => typeof input === 'number',
@@ -411,9 +407,8 @@ describe('arbitrary-string safety: WidgetId as a dependency target', () => {
 		.done()
 
 	const consumerPlugin = createWidgetPlugin('special-id-consumer')
-		.description('Test widget')
 		.interfaces<ConsumerInterfaces>()
-		.slots({ children: { description: 'Test slot' } })
+		.slots({ children: {} })
 		.properties(properties => properties.viaProtoId({
 			registerDeps: ({ dep }) => ({ v: dep.widget(PROTO_KEY).state.get('value') }),
 			compute: () => null,

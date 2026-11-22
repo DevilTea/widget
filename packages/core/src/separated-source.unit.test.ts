@@ -1,4 +1,5 @@
 import type { WidgetSource } from './index'
+import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, MAX_JSON_DEPTH, normalizeSeparatedWidgetSource, separateWidgetSource } from './index'
 
@@ -8,21 +9,18 @@ function createPlugins() {
 			raw: { readonly label?: string, readonly flags?: { readonly enabled: boolean } }
 			resolved: { readonly label: string }
 		}
-		slots: 'items'
+		slots: { items: WidgetChild }
 	}
 
 	const container = createWidgetPlugin('container')
-		.description('Container')
 		.interfaces<ContainerInterfaces>()
 		.config({
-			description: 'Container configuration',
 			validate: (input): input is { readonly label?: string, readonly flags?: { readonly enabled: boolean } } => typeof input === 'object' && input !== null,
 			resolve: raw => ({ label: raw?.label ?? 'Container' }),
 		})
-		.slots({ items: { description: 'Items' } })
+		.slots({ items: {} })
 		.done()
 	const leaf = createWidgetPlugin('leaf')
-		.description('Leaf')
 		.interfaces<Record<never, never>>()
 		.done()
 	return { container, leaf }

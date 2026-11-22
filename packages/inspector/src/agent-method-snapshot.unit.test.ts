@@ -1,5 +1,5 @@
 /* eslint-disable no-proto, no-restricted-properties -- `__proto__` is a legitimate Method name that must survive the Agent's lookups */
-import type { WidgetInterfaces } from '@deviltea/widget-core'
+import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import type { CreateInspectorAgentOptions } from './agent'
 import type { InspectorEventMessage, InspectorResponseMessage } from './protocol'
 import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
@@ -35,7 +35,6 @@ const executeSpies = {
 }
 
 const MethodPlugin = createWidgetPlugin('MethodSnapshotFixture')
-	.description('Method snapshot fixture')
 	.interfaces<MethodInterfaces>()
 	.state(state => state.count({ validate: validateCount, default: () => 1 }))
 	.properties(properties => properties.doubled({
@@ -111,14 +110,16 @@ const MethodPlugin = createWidgetPlugin('MethodSnapshotFixture')
 	.done()
 
 const NoMethodPlugin = createWidgetPlugin('NoMethodFixture')
-	.description('A widget without Methods')
 	.interfaces<WidgetInterfaces>()
 	.done()
 
+interface MethodRootInterfaces extends WidgetInterfaces {
+	slots: { body: WidgetChild }
+}
+
 const RootPlugin = createWidgetPlugin('MethodSnapshotRoot')
-	.description('Root')
-	.interfaces<WidgetInterfaces & { slots: 'body' }>()
-	.slots({ body: { description: 'Body' } })
+	.interfaces<MethodRootInterfaces>()
+	.slots({ body: {} })
 	.done()
 
 const RUNTIME_ID = 'runtime-method'
@@ -149,10 +150,10 @@ function createFixture(agentOptions: Partial<CreateInspectorAgentOptions> = {}) 
 		return { runtimeId: RUNTIME_ID, nodeId: snapshot.nodes.find(node => node.widgetId === widgetId)!.nodeId }
 	}
 
-	// A raw peer for requests at an exact envelope minor; the in-process transport answers synchronously.
+	// A raw peer for requests at an exact envelope version; the in-process transport answers synchronously.
 	const responses: InspectorResponseMessage[] = []
-	// Events exactly as sent, unparsed: a 0.5 parser would hide a Method member sent in a 0.4 envelope.
-	const rawEvents: { readonly event: string, readonly protocol: { readonly minor: number } }[] = []
+	// Events exactly as sent, unparsed.
+	const rawEvents: { readonly event: string, readonly protocol: { readonly major: number, readonly minor: number } }[] = []
 	pair.client.subscribe((raw) => {
 		const response = parseInspectorResponseMessage(raw)
 		if (response !== null)
@@ -161,9 +162,9 @@ function createFixture(agentOptions: Partial<CreateInspectorAgentOptions> = {}) 
 			rawEvents.push(raw as (typeof rawEvents)[number])
 	})
 	let sequence = 0
-	function raw(minor: number, method: string, params: unknown): InspectorResponseMessage {
+	function raw(minor: number, method: string, params: unknown, major: number = INSPECTOR_PROTOCOL_VERSION.major): InspectorResponseMessage {
 		const requestId = `raw-${sequence++}`
-		pair.client.send({ protocol: { major: 0, minor }, kind: 'request', requestId, method, params })
+		pair.client.send({ protocol: { major, minor }, kind: 'request', requestId, method, params })
 		return responses.find(response => response.requestId === requestId)!
 	}
 
@@ -182,7 +183,7 @@ async function methodMember(fixture: Fixture, name: string) {
 	return snapshot.members.find(member => member.type === 'method' && member.name === name)
 }
 
-describe('runtime widget snapshot Method members (protocol 0.5)', () => {
+describe('runtime widget snapshot Method members', () => {
 	it('lists State, Property then Method members in declaration order, with empty diagnostics before any call', async () => {
 		const fixture = createFixture()
 		try {
@@ -553,176 +554,72 @@ describe('runtime.subscribeMember for a Method', () => {
 	})
 })
 
-describe('method members and the negotiated minor', () => {
-	it('gives a peer negotiated at 0.4 exactly the 0.4 shapes', async () => {
+describe('method members and the protocol major', () => {
+	it('answers a 0.5 peer unsupported-version to the handshake and to Method requests, at the Agent\'s own version', async () => {
 		const fixture = createFixture()
 		try {
 			const ref = await fixture.refOf('probe')
-			const full = await fixture.client.request('runtime.getWidgetSnapshot', { ref })
-			expect(full.members.some(member => member.type === 'method'))
-				.toBe(true)
-
-			expect(fixture.raw(4, 'handshake', { protocol: { major: 0, minor: 4 } }))
-				.toMatchObject({ ok: true, protocol: { major: 0, minor: 4 }, result: { protocol: { major: 0, minor: 4 } } })
-			const legacy = fixture.raw(4, 'runtime.getWidgetSnapshot', { ref })
-			expect(legacy)
-				.toMatchObject({ ok: true, protocol: { major: 0, minor: 4 } })
-			const members = (legacy as { result: { members: { type: string, name: string }[] } }).result.members
-			expect(members.map(member => `${member.type}:${member.name}`))
-				.toEqual(['state:count', 'property:doubled'])
-			// The same Runtime read by a 0.5 peer differs only by the Method members.
-			expect(full.members.filter(member => member.type !== 'method'))
-				.toEqual(members)
-
-			const rejected = fixture.raw(4, 'runtime.subscribeMember', { ref, member: { type: 'method', name: 'check' } })
-			expect(rejected)
-				.toEqual({
-					protocol: { major: 0, minor: 4 },
-					kind: 'response',
-					requestId: rejected.requestId,
-					ok: false,
-					error: { code: 'invalid-params', message: 'Invalid parameters for the requested Inspector method.' },
-				})
-			// An unknown Method name is answered the same way below 0.5 (the type is not known there).
-			expect(fixture.raw(4, 'runtime.subscribeMember', { ref, member: { type: 'method', name: 'missing' } }))
-				.toMatchObject({ ok: false, error: { code: 'invalid-params' } })
-			expect(fixture.raw(4, 'runtime.subscribeMember', { ref, member: { type: 'state', name: 'count' } }))
-				.toMatchObject({ ok: true })
+			for (const [method, params] of [
+				['handshake', { protocol: { major: 0, minor: 5 } }],
+				['runtime.getWidgetSnapshot', { ref }],
+				['runtime.subscribeMember', { ref, member: { type: 'method', name: 'check' } }],
+			] as const) {
+				const answer = fixture.raw(5, method, params, 0)
+				expect(answer)
+					.toEqual({
+						protocol: INSPECTOR_PROTOCOL_VERSION,
+						kind: 'response',
+						requestId: answer.requestId,
+						ok: false,
+						error: { code: 'unsupported-version', message: 'Unsupported Inspector protocol major 0.' },
+					})
+			}
+			// The handshake params alone carrying the older major is refused too.
+			expect(fixture.raw(0, 'handshake', { protocol: { major: 0, minor: 5 } }))
+				.toMatchObject({ ok: false, error: { code: 'unsupported-version', message: 'Unsupported Inspector protocol major 0.' } })
 		}
 		finally {
 			fixture.dispose()
 		}
 	})
 
-	it('answers a request rejected while it is classified in the lower of the negotiated and the envelope minor', async () => {
+	it('answers a request rejected while it is classified at the request\'s envelope version when the major matches', async () => {
 		const fixture = createFixture()
 		try {
 			const ref = await fixture.refOf('probe')
-			// Never handshaken: the negotiated minor is the Agent's own, so the envelope minor decides.
-			expect(fixture.raw(3, 'runtime.subscribeMember', { ref, member: { type: 'bogus', name: 'x' } }))
-				.toMatchObject({ ok: false, protocol: { major: 0, minor: 3 }, error: { code: 'invalid-params' } })
-			expect(fixture.raw(2, 'runtime.noSuchMethod', {}))
-				.toMatchObject({ ok: false, protocol: { major: 0, minor: 2 }, error: { code: 'unknown-method' } })
+			expect(fixture.raw(0, 'runtime.subscribeMember', { ref, member: { type: 'bogus', name: 'x' } }))
+				.toMatchObject({ ok: false, protocol: INSPECTOR_PROTOCOL_VERSION, error: { code: 'invalid-params' } })
+			expect(fixture.raw(0, 'runtime.noSuchMethod', {}))
+				.toMatchObject({ ok: false, protocol: INSPECTOR_PROTOCOL_VERSION, error: { code: 'unknown-method' } })
 			// An invalid message whose envelope still carries a valid version (the method is not a string).
-			expect(fixture.raw(2, 1 as unknown as string, {}))
-				.toMatchObject({ ok: false, protocol: { major: 0, minor: 2 }, error: { code: 'invalid-message' } })
-			// An incompatible major is answered as before, at the negotiated minor.
+			expect(fixture.raw(0, 1 as unknown as string, {}))
+				.toMatchObject({ ok: false, protocol: INSPECTOR_PROTOCOL_VERSION, error: { code: 'invalid-message' } })
+			// An incompatible major is answered at the Agent's own version, whatever minor it names.
 			fixture.pair.client.send({ protocol: { major: 9, minor: 0 }, kind: 'request', requestId: 'major-9', method: 'runtime.list', params: {} })
 			expect(fixture.responses()
 				.find(response => response.requestId === 'major-9'))
-				.toMatchObject({ ok: false, protocol: { major: 0, minor: 5 }, error: { code: 'unsupported-version' } })
-			// After a handshake at 0.4, a 0.5 envelope is still answered at 0.4.
-			fixture.raw(4, 'handshake', { protocol: { major: 0, minor: 4 } })
-			expect(fixture.raw(5, 'runtime.subscribeMember', { ref, member: { type: 'bogus', name: 'x' } }))
-				.toMatchObject({ ok: false, protocol: { major: 0, minor: 4 }, error: { code: 'invalid-params' } })
-			// A later well-formed request is unaffected.
-			expect(fixture.raw(5, 'runtime.list', {}))
-				.toMatchObject({ ok: true, protocol: { major: 0, minor: 4 } })
+				.toMatchObject({ ok: false, protocol: INSPECTOR_PROTOCOL_VERSION, error: { code: 'unsupported-version' } })
+			// A newer minor of the same major is answered at this Agent's minor.
+			expect(fixture.raw(4, 'runtime.list', {}))
+				.toMatchObject({ ok: true, protocol: INSPECTOR_PROTOCOL_VERSION })
 		}
 		finally {
 			fixture.dispose()
 		}
 	})
 
-	it('answers a 0.4-envelope request on a 0.5 session with the 0.4 shapes', async () => {
-		const fixture = createFixture()
-		try {
-			const ref = await fixture.refOf('probe')
-			expect(fixture.raw(5, 'handshake', { protocol: INSPECTOR_PROTOCOL_VERSION }))
-				.toMatchObject({ ok: true, result: { protocol: { major: 0, minor: 5 } } })
-			const legacy = fixture.raw(4, 'runtime.getWidgetSnapshot', { ref }) as { result: { members: { type: string }[] } }
-			expect(legacy.result.members.some(member => member.type === 'method'))
-				.toBe(false)
-			expect(fixture.raw(4, 'runtime.subscribeMember', { ref, member: { type: 'method', name: 'check' } }))
-				.toMatchObject({ ok: false, protocol: { major: 0, minor: 4 }, error: { code: 'invalid-params' } })
-			const current = fixture.raw(5, 'runtime.getWidgetSnapshot', { ref }) as { result: { members: { type: string }[] } }
-			expect(current.result.members.some(member => member.type === 'method'))
-				.toBe(true)
-		}
-		finally {
-			fixture.dispose()
-		}
-	})
-
-	it('sends no Method memberChanged after a re-handshake lowers the minor, and resumes when it is raised again', async () => {
-		const fixture = createFixture()
-		try {
-			const ref = await fixture.refOf('probe')
-			expect(fixture.raw(5, 'handshake', { protocol: INSPECTOR_PROTOCOL_VERSION }))
-				.toMatchObject({ ok: true })
-			expect(fixture.raw(5, 'runtime.subscribeMember', { ref, member: { type: 'method', name: 'check' } }))
-				.toMatchObject({ ok: true })
-			fixture.probe.methods.check(false)
-			expect(fixture.rawEvents.filter(event => event.event === 'runtime.memberChanged'))
-				.toHaveLength(1)
-
-			fixture.raw(4, 'handshake', { protocol: { major: 0, minor: 4 } })
-			fixture.probe.methods.check(true)
-			fixture.probe.methods.check(false)
-			expect(fixture.rawEvents.filter(event => event.event === 'runtime.memberChanged'))
-				.toHaveLength(1)
-
-			fixture.raw(5, 'handshake', { protocol: INSPECTOR_PROTOCOL_VERSION })
-			fixture.probe.methods.check(true)
-			expect(fixture.rawEvents.filter(event => event.event === 'runtime.memberChanged'))
-				.toHaveLength(2)
-		}
-		finally {
-			fixture.dispose()
-		}
-	})
-
-	// A 0.4 Agent (fe06189) rejected the Method member type while classifying the request, before the runtime id, the
-	// widget and the disposal were looked at. The answer, message and envelope minor must not depend on what else is wrong.
-	describe.each([
-		{ ref: 'valid', dispose: false },
-		{ ref: 'stale runtime id', dispose: false },
-		{ ref: 'unknown node id', dispose: false },
-		{ ref: 'valid', dispose: true },
-		{ ref: 'stale runtime id', dispose: true },
-	] as const)('a 0.4 peer subscribing to a Method (ref: $ref, Runtime disposed: $dispose)', ({ ref: kind, dispose }) => {
-		it.each([true, false])('is answered invalid-params exactly as a 0.4 Agent did, with a handshake: %s', async (handshake) => {
-			const fixture = createFixture()
-			try {
-				const widget = await fixture.refOf('probe')
-				const ref = kind === 'stale runtime id' ? { runtimeId: 'gone', nodeId: widget.nodeId } : kind === 'unknown node id' ? { runtimeId: widget.runtimeId, nodeId: 999 } : widget
-				if (handshake)
-					fixture.raw(4, 'handshake', { protocol: { major: 0, minor: 4 } })
-				if (dispose)
-					fixture.runtime.dispose()
-				const eventsBefore = fixture.rawEvents.length
-
-				for (const name of ['check', 'missing']) {
-					const answer = fixture.raw(4, 'runtime.subscribeMember', { ref, member: { type: 'method', name } })
-					expect(answer)
-						.toEqual({
-							protocol: { major: 0, minor: 4 },
-							kind: 'response',
-							requestId: answer.requestId,
-							ok: false,
-							error: { code: 'invalid-params', message: 'Invalid parameters for the requested Inspector method.' },
-						})
-				}
-				// The rejection never observes the Runtime, so it announces nothing either.
-				expect(fixture.rawEvents.length)
-					.toBe(eventsBefore)
-			}
-			finally {
-				fixture.dispose()
-			}
-		})
-	})
-
-	it('answers a 0.5 peer addressing a stale Runtime or an unknown node as before: runtime-not-found, widget-not-found', async () => {
+	it('answers a peer addressing a stale Runtime, an unknown node or a disposed Runtime with the ordinary codes', async () => {
 		const fixture = createFixture()
 		try {
 			const widget = await fixture.refOf('probe')
-			expect(fixture.raw(5, 'runtime.subscribeMember', { ref: { runtimeId: 'gone', nodeId: widget.nodeId }, member: { type: 'method', name: 'check' } }))
+			expect(fixture.raw(0, 'runtime.subscribeMember', { ref: { runtimeId: 'gone', nodeId: widget.nodeId }, member: { type: 'method', name: 'check' } }))
 				.toMatchObject({ ok: false, error: { code: 'runtime-not-found' } })
-			expect(fixture.raw(5, 'runtime.subscribeMember', { ref: { runtimeId: widget.runtimeId, nodeId: 999 }, member: { type: 'method', name: 'check' } }))
+			expect(fixture.raw(0, 'runtime.subscribeMember', { ref: { runtimeId: widget.runtimeId, nodeId: 999 }, member: { type: 'method', name: 'check' } }))
 				.toMatchObject({ ok: false, error: { code: 'widget-not-found' } })
+			expect(fixture.raw(0, 'runtime.subscribeMember', { ref: widget, member: { type: 'method', name: 'missing' } }))
+				.toMatchObject({ ok: false, error: { code: 'member-not-found' } })
 			fixture.runtime.dispose()
-			expect(fixture.raw(5, 'runtime.subscribeMember', { ref: widget, member: { type: 'method', name: 'check' } }))
+			expect(fixture.raw(0, 'runtime.subscribeMember', { ref: widget, member: { type: 'method', name: 'check' } }))
 				.toMatchObject({ ok: false, error: { code: 'runtime-disposed' } })
 		}
 		finally {
@@ -730,16 +627,25 @@ describe('method members and the negotiated minor', () => {
 		}
 	})
 
-	it('keeps State and Property subscriptions of a 0.4 peer working', async () => {
+	it('sends one Method memberChanged per change after a re-handshake, at the negotiated version', async () => {
 		const fixture = createFixture()
 		try {
 			const ref = await fixture.refOf('probe')
-			fixture.raw(4, 'handshake', { protocol: { major: 0, minor: 4 } })
-			expect(fixture.raw(4, 'runtime.subscribeMember', { ref, member: { type: 'state', name: 'count' } }))
+			expect(fixture.raw(0, 'handshake', { protocol: INSPECTOR_PROTOCOL_VERSION }))
 				.toMatchObject({ ok: true })
-			fixture.probe.methods.bump()
-			expect(fixture.rawEvents.filter(event => event.event === 'runtime.memberChanged'))
-				.toHaveLength(1)
+			expect(fixture.raw(0, 'runtime.subscribeMember', { ref, member: { type: 'method', name: 'check' } }))
+				.toMatchObject({ ok: true })
+			fixture.probe.methods.check(false)
+			fixture.raw(0, 'handshake', { protocol: INSPECTOR_PROTOCOL_VERSION })
+			fixture.probe.methods.check(true)
+			fixture.probe.methods.check(false)
+			const changes = fixture.rawEvents.filter(event => event.event === 'runtime.memberChanged')
+			expect(changes)
+				.toHaveLength(3)
+			for (const change of changes) {
+				expect(change.protocol)
+					.toEqual(INSPECTOR_PROTOCOL_VERSION)
+			}
 		}
 		finally {
 			fixture.dispose()

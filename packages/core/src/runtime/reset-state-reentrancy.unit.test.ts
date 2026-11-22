@@ -17,7 +17,6 @@ describe('resetState inside a listener of the write that is still running', () =
 	}
 
 	const badDefault = createWidgetPlugin('bad-default')
-		.description('Test widget')
 		.interfaces<BadDefaultInterfaces>()
 		.state(state => state.a({ validate: isNumber, default: () => 'bad' as unknown as number }))
 		.done()
@@ -57,7 +56,6 @@ describe('resetState inside a listener of the write that is still running', () =
 	}
 
 	const unset = createWidgetPlugin('unset')
-		.description('Test widget')
 		.interfaces<UnsetInterfaces>()
 		.state(state => state
 			.n({ validate: isNumber, default: () => Number.NaN })
@@ -101,7 +99,6 @@ describe('resetState inside a Property compute', () => {
 	let runtimeRef: { resetState: () => void } | null = null
 	let computes = 0
 	const plugin = createWidgetPlugin('reset-in-compute')
-		.description('Test widget')
 		.interfaces<ComputeInterfaces>()
 		.state(state => state
 			.a({ validate: isNumber, default: () => 1 })
@@ -149,7 +146,6 @@ describe('resetState after a reset ran inside the flush of a Method write', () =
 	}
 
 	const put = createWidgetPlugin('put')
-		.description('Test widget')
 		.interfaces<PutInterfaces>()
 		.state(state => state.t({ validate: (input): input is unknown => typeof input === 'string' || typeof input === 'object', default: () => 'x' }))
 		.methods(methods => methods.put({
@@ -193,7 +189,6 @@ describe('resetState inside an effect created outside Core', () => {
 	}
 
 	const pair = createWidgetPlugin('pair')
-		.description('Test widget')
 		.interfaces<PairInterfaces>()
 		.state(state => state
 			.a({ validate: isNumber, default: () => 1 })

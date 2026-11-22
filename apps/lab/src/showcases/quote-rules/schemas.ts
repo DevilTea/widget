@@ -5,7 +5,8 @@
  *   `./standard-schema.ts` turns a schema into the predicate Core takes; the library's own messages become the
  *   Core diagnostics, verbatim);
  * - the **TypeScript types** of the raw configs (`InferInput<...>`, read from the schema's Standard Schema types);
- * - the passive **config JSON Schema** (`config.schema`, Draft 2020-12), read from the same schema object through
+ * - the passive **config JSON Schema** (Draft 2020-12, handed to the Lab by plugin type as `quoteConfigSchemas`; Core 0.3
+ *   carries no config schema), read from the same schema object through
  *   Standard JSON Schema (`~standard.jsonSchema`), so the Catalog and the Structure editor offer controls for
  *   exactly what the validator accepts. Valibot exposes it through `toStandardJsonSchema()` from
  *   `@valibot/to-json-schema`, which every config schema below goes through. Core never runs the JSON Schema, and a
@@ -23,7 +24,7 @@
  * - that the discount tiers start at 1 (the buggy-rule preset relies on that gap, see `plugins/volume-discount.ts`).
  */
 
-import type { InferInput } from './standard-schema'
+import type { ConfigJsonSchemaObject, InferInput } from './standard-schema'
 import { toStandardJsonSchema } from '@valibot/to-json-schema'
 import * as v from 'valibot'
 import { CURRENCY_CODE_PATTERN, MAX_CENTS, MAX_QUANTITY, PAPER_CODE_PATTERN } from './domain'
@@ -122,3 +123,13 @@ export const volumeDiscountConfigJsonSchema = jsonSchemaOf(volumeDiscountConfigS
 export const rushSurchargeConfigJsonSchema = jsonSchemaOf(rushSurchargeConfigSchema)
 export const deliveryConfigJsonSchema = jsonSchemaOf(deliveryConfigSchema)
 export const salesTaxConfigJsonSchema = jsonSchemaOf(salesTaxConfigSchema)
+
+/** Plugin type to config JSON Schema, for the Lab's Catalog and Structure editor. */
+export const quoteConfigSchemas = {
+	Quote: quoteConfigJsonSchema,
+	Item: itemConfigJsonSchema,
+	VolumeDiscount: volumeDiscountConfigJsonSchema,
+	RushSurcharge: rushSurchargeConfigJsonSchema,
+	Delivery: deliveryConfigJsonSchema,
+	SalesTax: salesTaxConfigJsonSchema,
+} as const satisfies Readonly<Record<string, ConfigJsonSchemaObject>>

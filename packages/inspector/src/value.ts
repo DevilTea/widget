@@ -11,12 +11,6 @@ export interface InspectableValueEncodingOptions {
 	 * reports `truncated: true`. The root is always emitted. Default 1000.
 	 */
 	readonly maxNodes?: number
-	/**
-	 * Cut object keys longer than `maxStringLength` and mark the entry with `keyTruncated: true`. Default true.
-	 * When false, keys are emitted in full and never cut: the Agent turns it off for peers negotiated below
-	 * protocol 0.4, which predate the marker and must see the same shapes as before.
-	 */
-	readonly markTruncatedKeys?: boolean
 }
 
 export type InspectableValue
@@ -35,12 +29,12 @@ export type InspectableValue
 
 export interface InspectableObjectEntry {
 	readonly key: string
-	/** Present (and `true`) only when `key` was cut to the string limit. Added in protocol 0.4. */
+	/** Present (and `true`) only when `key` was cut to the string limit. */
 	readonly keyTruncated?: boolean
 	readonly value: InspectableValue
 }
 
-export const DEFAULT_INSPECTABLE_VALUE_LIMITS: Readonly<Required<Omit<InspectableValueEncodingOptions, 'markTruncatedKeys'>>> = Object.freeze({
+export const DEFAULT_INSPECTABLE_VALUE_LIMITS: Readonly<Required<InspectableValueEncodingOptions>> = Object.freeze({
 	maxDepth: 4,
 	maxEntries: 50,
 	maxStringLength: 500,
@@ -159,7 +153,6 @@ export function encodeInspectableValue(
 	const maxEntries = options.maxEntries ?? DEFAULT_INSPECTABLE_VALUE_LIMITS.maxEntries
 	const maxStringLength = options.maxStringLength ?? DEFAULT_INSPECTABLE_VALUE_LIMITS.maxStringLength
 	const maxNodes = options.maxNodes ?? DEFAULT_INSPECTABLE_VALUE_LIMITS.maxNodes
-	const markTruncatedKeys = options.markTruncatedKeys ?? true
 	const seen = new WeakMap<object, number>()
 	let nextId = 1
 	// Every value this encoding emits, leaves and placeholders included, spends one unit of `maxNodes`.
@@ -284,9 +277,7 @@ export function encodeInspectableValue(
 			}
 			if (descriptor === undefined)
 				continue
-			// Without the marker (peers below 0.4) a cut key would be indistinguishable from a real one and two
-			// distinct long keys could collide, so such peers keep receiving keys in full, as before 0.4.
-			const keyTruncated = markTruncatedKeys && key.length > maxStringLength
+			const keyTruncated = key.length > maxStringLength
 			let entryValue: InspectableValue
 			if ('value' in descriptor) {
 				entryValue = encode(descriptor.value, depth + 1)

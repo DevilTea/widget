@@ -66,7 +66,6 @@ function applyAllMembers(section: unknown, definitionFor: (key: string) => unkno
 }
 
 const orderedPlugin = createWidgetPlugin('ordered-members')
-	.description('Test widget')
 	.interfaces<OrderedInterfaces>()
 	.state(state => applyAllMembers(state, () => ({ validate: (input: unknown): input is number => typeof input === 'number' })) as any)
 	.properties(properties => applyAllMembers(properties, () => ({ compute: () => 0 })) as any)

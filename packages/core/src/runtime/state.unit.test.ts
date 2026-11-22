@@ -19,7 +19,6 @@ function createCounterRuntime(params: {
 	const validate = params.validate ?? ((input: unknown): boolean => typeof input === 'number')
 
 	const plugin = createWidgetPlugin('counter')
-		.description('Test widget')
 		.interfaces<CounterInterfaces>()
 		.state(section => section.count({
 			validate: (input): input is number => validate(input),

@@ -8,21 +8,30 @@ import type { Density, I18nText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkToggleConfig, resolveToggleConfig } from '../config'
 import { isBoolean, isDensity } from '../domain'
-import { toggleConfigSchema } from '../schemas'
 import { checkInsideSection, checkProvider, densityReads } from './structure'
 
+/**
+ * A labelled on/off switch. State `on`. Properties: `label` and `density` (read from the Appearance named in the `appearance`
+ * config, through dep.widget(id)).
+ */
 export interface ToggleInterfaces extends WidgetInterfaces {
+	/** The label, the Appearance it reads and whether it is on at the start. */
 	config: { raw: ToggleRawConfig, resolved: ToggleConfig }
-	state: { on: boolean }
-	properties: { label: I18nText, density: Density }
+	state: {
+		/** Whether the switch is on. */
+		on: boolean
+	}
+	properties: {
+		/** The label per language. */
+		label: I18nText
+		/** `comfortable` or `compact`: the `density` State of the Appearance named in the `appearance` config, read through `dep.widget(id)`; `comfortable` when it cannot be read. */
+		density: Density
+	}
 }
 
 export const TogglePlugin = createWidgetPlugin('Toggle')
-	.description('A labelled on/off switch. State `on`. Properties: `label` and `density` (read from the Appearance named in the `appearance` config, through dep.widget(id)).')
 	.interfaces<ToggleInterfaces>()
 	.config({
-		description: 'The label, the Appearance it reads and whether it is on at the start.',
-		schema: toggleConfigSchema,
 		validate: (input, ctx): input is ToggleRawConfig => {
 			checkToggleConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

@@ -11,6 +11,7 @@
  */
 
 import type { ExecutionResult } from '../index'
+import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectRuntime } from '../inspection'
@@ -73,10 +74,8 @@ interface QuestionInterfaces {
 }
 
 const questionPlugin = createWidgetPlugin('question')
-	.description('Test widget')
 	.interfaces<QuestionInterfaces>()
 	.config({
-		description: 'Question',
 		validate: (input): input is QuestionConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
@@ -112,9 +111,8 @@ const questionPlugin = createWidgetPlugin('question')
 	.done()
 
 const listPlugin = createWidgetPlugin('list')
-	.description('Test widget')
-	.interfaces<{ slots: 'items' }>()
-	.slots({ items: { description: 'Items' } })
+	.interfaces<{ slots: { items: WidgetChild } }>()
+	.slots({ items: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [questionPlugin, listPlugin] })

@@ -10,6 +10,7 @@
  */
 
 import type { ExecutionResult } from '../index'
+import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectRuntime } from '../inspection'
@@ -59,10 +60,8 @@ const env = {
 }
 
 const nodePlugin = createWidgetPlugin('node')
-	.description('Test widget')
 	.interfaces<NodeInterfaces>()
 	.config({
-		description: 'Node',
 		validate: (input): input is NodeConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
@@ -141,9 +140,8 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const listPlugin = createWidgetPlugin('list')
-	.description('Test widget')
-	.interfaces<{ slots: 'items' }>()
-	.slots({ items: { description: 'Items' } })
+	.interfaces<{ slots: { items: WidgetChild } }>()
+	.slots({ items: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, listPlugin] })

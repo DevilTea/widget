@@ -11,6 +11,7 @@
  */
 
 import type { AnyWidgetPluginTuple, BlueprintDependencyDiagnostic, BlueprintDependencyReference, BlueprintDiagnostic, WidgetSystemBlueprint } from '../index'
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectBlueprint } from '../inspection'
@@ -34,7 +35,6 @@ interface WriteDirectInterfaces {
 
 /** Property `reader` directly invokes the directly-writeful method `write`. */
 const writeDirectPlugin = createWidgetPlugin('write-direct')
-	.description('Test widget')
 	.interfaces<WriteDirectInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -61,7 +61,6 @@ interface WriteNoInvokeInterfaces {
 
 /** A directly-writeful method that no Property depends on: writeful methods are valid by themselves. */
 const writeNoInvokePlugin = createWidgetPlugin('write-no-invoke')
-	.description('Test widget')
 	.interfaces<WriteNoInvokeInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -89,7 +88,6 @@ interface WriteChain3Interfaces {
 
 /** Property `reader` -> method `a` -> method `b` -> method `c` -> direct `state.set` (3-layer chain). */
 const writeChain3Plugin = createWidgetPlugin('write-chain-3')
-	.description('Test widget')
 	.interfaces<WriteChain3Interfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -129,7 +127,6 @@ interface CrossWidgetWriterInterfaces {
 
 /** A child Widget whose Method writes State directly. */
 const crossWidgetWriterPlugin = createWidgetPlugin('cross-widget-writer')
-	.description('Cross-widget writer')
 	.interfaces<CrossWidgetWriterInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -142,7 +139,7 @@ const crossWidgetWriterPlugin = createWidgetPlugin('cross-widget-writer')
 	.done()
 
 interface CrossWidgetRelayInterfaces {
-	slots: 'children'
+	slots: { children: WidgetChild }
 	properties: {
 		reader: unknown
 	}
@@ -153,9 +150,8 @@ interface CrossWidgetRelayInterfaces {
 
 /** Parent `reader` -> `outer` -> child `write` -> child `state.set`. */
 const crossWidgetRelayPlugin = createWidgetPlugin('cross-widget-relay')
-	.description('Cross-widget relay')
 	.interfaces<CrossWidgetRelayInterfaces>()
-	.slots({ children: { description: 'Child widgets' } })
+	.slots({ children: {} })
 	.properties(properties => properties.reader({
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('outer') }),
 		compute: () => null,
@@ -181,7 +177,6 @@ interface DedupEdgeInterfaces {
 
 /** Property `reader` registers the *same* Property->Method edge twice, through different container placements. */
 const dedupEdgePlugin = createWidgetPlugin('dedup-edge')
-	.description('Test widget')
 	.interfaces<DedupEdgeInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -210,7 +205,6 @@ interface SelfLoopInterfaces {
 
 /** Property `loop` depends on its own `properties.get`: a self-loop singleton SCC. */
 const selfLoopPlugin = createWidgetPlugin('self-loop-prop')
-	.description('Test widget')
 	.interfaces<SelfLoopInterfaces>()
 	.properties(properties => properties.loop({
 		registerDeps: ({ dep }) => ({ self: dep.self.properties.get('loop') }),
@@ -229,7 +223,6 @@ interface PropMethodCycleInterfaces {
 
 /** Property `p` -> method `m` -> property `p`: a 2-member cyclic SCC containing one Property. */
 const propMethodCyclePlugin = createWidgetPlugin('prop-method-cycle')
-	.description('Test widget')
 	.interfaces<PropMethodCycleInterfaces>()
 	.properties(properties => properties.p({
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m') }),
@@ -251,7 +244,6 @@ interface MethodOnlyPureInterfaces {
 
 /** `m1` <-> `m2` mutual recursion with no Property participant: a standalone method-only cyclic SCC. */
 const methodOnlyPurePlugin = createWidgetPlugin('method-only-pure')
-	.description('Test widget')
 	.interfaces<MethodOnlyPureInterfaces>()
 	.methods(methods =>
 		methods
@@ -284,7 +276,6 @@ interface PropReachSafeInterfaces {
  * invalidate; COMMENT 18 requires it to stay valid.
  */
 const propReachSafePlugin = createWidgetPlugin('prop-reach-method-only-safe')
-	.description('Test widget')
 	.interfaces<PropReachSafeInterfaces>()
 	.properties(properties => properties.p({
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m1') }),
@@ -317,7 +308,6 @@ interface MultiPropertyCycleInterfaces {
 
 /** `p1` -> `p2` -> `m` -> `p1`: a 3-member cyclic SCC containing two Properties and one Method. */
 const multiPropertyCyclePlugin = createWidgetPlugin('multi-property-cycle')
-	.description('Test widget')
 	.interfaces<MultiPropertyCycleInterfaces>()
 	.properties(properties =>
 		properties
@@ -585,10 +575,8 @@ interface ChainLinkInterfaces {
  * config says so, so one chain can end in a write while another one stays pure.
  */
 const chainLinkPlugin = createWidgetPlugin('chain-link')
-	.description('Test widget')
 	.interfaces<ChainLinkInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input): input is ChainLinkInterfaces['config']['raw'] => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { next: null, writes: false },
 	})
@@ -607,9 +595,8 @@ const chainLinkPlugin = createWidgetPlugin('chain-link')
 	.done()
 
 const chainHolderPlugin = createWidgetPlugin('chain-holder')
-	.description('Test widget')
-	.interfaces<{ slots: 'items' }>()
-	.slots({ items: { description: 'Test slot' } })
+	.interfaces<{ slots: { items: WidgetChild } }>()
+	.slots({ items: {} })
 	.done()
 
 describe('write-effect propagation along a long Method chain', () => {
@@ -673,10 +660,8 @@ interface RingInterfaces {
 
 /** Property `p` reads the next ring member's `p`; the member without a successor reads its own State. */
 const ringPlugin = createWidgetPlugin('ring')
-	.description('Test widget')
 	.interfaces<RingInterfaces>()
 	.config({
-		description: 'Test config',
 		validate: (input): input is RingInterfaces['config']['raw'] => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { next: null },
 	})

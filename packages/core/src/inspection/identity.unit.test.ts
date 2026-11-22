@@ -3,6 +3,7 @@
  * handling) from diagnostic #10's inspection amendment "inspection exact API v1 (part 2)".
  */
 
+import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
 import { createWidgetPlugin, createWidgetSystem } from '../index'
 import { inspectBlueprint, inspectRuntime } from './index'
@@ -14,7 +15,6 @@ interface LeafInterfaces {
 }
 
 const leafPlugin = createWidgetPlugin('identity-leaf')
-	.description('Test widget')
 	.interfaces<LeafInterfaces>()
 	.state(state => state.value({
 		validate: (input): input is number => typeof input === 'number',
@@ -23,13 +23,12 @@ const leafPlugin = createWidgetPlugin('identity-leaf')
 	.done()
 
 interface ContainerInterfaces {
-	slots: 'items'
+	slots: { items: WidgetChild }
 }
 
 const containerPlugin = createWidgetPlugin('identity-container')
-	.description('Test widget')
 	.interfaces<ContainerInterfaces>()
-	.slots({ items: { description: 'Test slot' } })
+	.slots({ items: {} })
 	.done()
 
 const system = createWidgetSystem({ plugins: [leafPlugin, containerPlugin] })

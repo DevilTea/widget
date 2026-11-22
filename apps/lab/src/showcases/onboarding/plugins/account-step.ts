@@ -13,26 +13,37 @@ import type { AccountAnswers, I18nText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkAccountConfig, resolveAccountConfig } from '../config'
 import { isEmail, isString } from '../domain'
-import { accountConfigSchema } from '../schemas'
 import { checkInsideOnboarding } from './structure'
 
+/**
+ * Step 1 of the onboarding wizard: the visitor's name and e-mail address (State `name` and `email`, filled in as they
+ * type). Properties: `title`, `missing` (`name` and/or `email` while they are empty or not an address), `complete` and
+ * `answers`.
+ */
 export interface AccountInterfaces extends WidgetInterfaces {
+	/** The step title per language and, optionally, the name and e-mail address filled in at the start. */
 	config: { raw: AccountRawConfig, resolved: AccountConfig }
-	state: { name: string, email: string }
+	state: {
+		/** The visitor's name, as typed. Any text: a keystroke is never refused. */
+		name: string
+		/** The visitor's e-mail address, as typed. Any text: a keystroke is never refused. */
+		email: string
+	}
 	properties: {
+		/** The step title per language. */
 		title: I18nText
+		/** `name` and/or `email` while they are empty or not an address. */
 		missing: readonly string[]
+		/** Whether nothing is missing. */
 		complete: boolean
+		/** The trimmed name and e-mail address. */
 		answers: AccountAnswers
 	}
 }
 
 export const AccountStepPlugin = createWidgetPlugin('AccountStep')
-	.description('Step 1 of the onboarding wizard: the visitor\'s name and e-mail address (State `name` and `email`, filled in as they type). Properties: `title`, `missing` (`name` and/or `email` while they are empty or not an address), `complete` and `answers`.')
 	.interfaces<AccountInterfaces>()
 	.config({
-		description: 'The step title per language and, optionally, the name and e-mail address filled in at the start.',
-		schema: accountConfigSchema,
 		validate: (input, ctx): input is AccountRawConfig => {
 			checkAccountConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

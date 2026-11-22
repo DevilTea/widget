@@ -2,17 +2,18 @@
  * The config JSON Schemas and the Standard Schema guard, against a REAL system.
  *
  * The JSON Schemas are produced from the very schema objects that validate (`schemas.ts`), so these tests pin the
- * shape the Catalog and the Structure editor read, that Core publishes exactly that document, and that the guard
+ * shape the Catalog and the Structure editor read, that the showcase hands exactly that document to the Lab, and that the guard
  * reports what the library says, verbatim, one diagnostic per issue.
  */
 
-import { WIDGET_CONFIG_JSON_SCHEMA_DIALECT } from '@deviltea/widget-core'
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
+import { CONFIG_JSON_SCHEMA_DIALECT } from '../../showcase-host'
 import {
 	deliveryConfigJsonSchema,
 	itemConfigJsonSchema,
 	quoteConfigJsonSchema,
+	quoteConfigSchemas,
 	rushSurchargeConfigJsonSchema,
 	salesTaxConfigJsonSchema,
 	volumeDiscountConfigJsonSchema,
@@ -32,7 +33,7 @@ const expectations = [
 describe('config JSON Schemas', () => {
 	it.each(expectations)('$type: a closed Draft 2020-12 object naming exactly the keys of its config', ({ schema, properties, required }) => {
 		expect(schema.$schema)
-			.toBe(WIDGET_CONFIG_JSON_SCHEMA_DIALECT)
+			.toBe(CONFIG_JSON_SCHEMA_DIALECT)
 		expect(schema.type)
 			.toBe('object')
 		expect(schema.additionalProperties)
@@ -43,11 +44,12 @@ describe('config JSON Schemas', () => {
 			.toEqual(required)
 	})
 
-	it('is what Core publishes in the catalog, for every plugin', () => {
+	it('is what the showcase hands to the Lab, for every plugin of the system (Core 0.3 publishes no config schema)', () => {
+		expect(quoteSystem.catalog.widgets.map(widget => widget.type))
+			.toEqual(expectations.map(({ type }) => type))
 		for (const { type, schema } of expectations) {
-			const entry = quoteSystem.catalog.widgets.find(widget => widget.type === type)
-			expect(entry?.config?.schema, type)
-				.toEqual(schema)
+			expect(quoteConfigSchemas[type], type)
+				.toBe(schema)
 		}
 	})
 

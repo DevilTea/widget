@@ -20,6 +20,7 @@
  */
 
 import type { ExecutionResult, IsolatedErrorHandler } from '../index'
+import type { WidgetChild } from '../types'
 import { effect as alienEffect, endBatch, startBatch } from 'alien-signals'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, setIsolatedErrorHandler, WidgetSystemRuntimeDisposedError } from '../index'
@@ -55,9 +56,8 @@ const isNumber = (input: unknown): input is number => typeof input === 'number'
 const numberOf = (result: ExecutionResult<unknown, unknown>): number => (result.ok && typeof result.value === 'number' ? result.value : 0)
 
 const linkPlugin = createWidgetPlugin('link')
-	.description('One link of a chain')
 	.interfaces<LinkInterfaces>()
-	.config({ description: 'The previous link', validate: (input): input is LinkConfig => typeof input === 'object' && input !== null, resolve: raw => raw! })
+	.config({ validate: (input): input is LinkConfig => typeof input === 'object' && input !== null, resolve: raw => raw! })
 	.state(state => state.n({ validate: isNumber, default: () => 1 }))
 	.properties(properties => properties
 		.total({
@@ -110,12 +110,11 @@ const linkPlugin = createWidgetPlugin('link')
 				throw methodError
 			},
 		}))
-	.events(events => events.change({ description: 'A change' }))
+	.events(['change'])
 	.done()
 const listPlugin = createWidgetPlugin('list')
-	.description('A list')
-	.interfaces<{ slots: 'items' }>()
-	.slots({ items: { description: 'Links' } })
+	.interfaces<{ slots: { items: WidgetChild } }>()
+	.slots({ items: {} })
 	.done()
 const system = createWidgetSystem({ plugins: [linkPlugin, listPlugin] })
 

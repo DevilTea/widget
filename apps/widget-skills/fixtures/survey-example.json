@@ -1,0 +1,32 @@
+{
+	"id": "survey",
+	"type": "Survey",
+	"config": {
+		"title": { "en": "How was the workshop?", "zh-TW": "工作坊體驗如何？" },
+		"maxQuestions": 5
+	},
+	"slots": {
+		"header": [
+			{ "id": "intro", "type": "Note", "config": { "text": { "en": "Two questions, one minute." } } }
+		],
+		"questions": [
+			{ "id": "overall", "type": "Rating", "config": { "question": { "en": "Overall, how was it?" }, "scale": 5 } },
+			{
+				"id": "topics",
+				"type": "Choice",
+				"config": {
+					"question": { "en": "Which topics helped?" },
+					"options": [
+						{ "id": "plugins", "label": { "en": "Writing plugins" } },
+						{ "id": "renderers", "label": { "en": "Renderers" } }
+					],
+					"multiple": true,
+					"followUp": "overall"
+				}
+			}
+		],
+		"footer": [
+			{ "id": "thanks", "type": "Note" }
+		]
+	}
+}

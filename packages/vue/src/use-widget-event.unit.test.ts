@@ -16,14 +16,8 @@ interface EventInterfaces {
 }
 
 const EventPlugin = createWidgetPlugin('EventProjection')
-	.description('Event projection fixture')
 	.interfaces<EventInterfaces>()
-	.events((events) => {
-		const beforeProto = events
-			.press({ description: 'Pressed' })
-			.change({ description: 'Changed' })
-		return beforeProto[PROTO_KEY]({ description: 'Prototype-safe' })
-	})
+	.events(['press', 'change', PROTO_KEY])
 	.done()
 
 interface EmptyEventsInterfaces {
@@ -31,13 +25,11 @@ interface EmptyEventsInterfaces {
 }
 
 const EmptyEventsPlugin = createWidgetPlugin('EmptyEventProjection')
-	.description('Empty events fixture')
 	.interfaces<EmptyEventsInterfaces>()
-	.events(events => events)
+	.events([])
 	.done()
 
 const NoEventsPlugin = createWidgetPlugin('NoEventProjection')
-	.description('No events fixture')
 	.interfaces<Record<never, never>>()
 	.done()
 

@@ -159,7 +159,7 @@ export function createInspectorClient(transport: InspectorTransport, options: Cr
 		if (!response.ok || closed || transport.closed || !isCompatibleProtocolVersion(response.protocol))
 			return
 		try {
-			if (!isInspectorRequestResult(method, response.result, response.protocol.minor))
+			if (!isInspectorRequestResult(method, response.result))
 				return
 			const subscriptionId = (response.result as { readonly subscriptionId: string }).subscriptionId
 			transport.send({
@@ -224,7 +224,7 @@ export function createInspectorClient(transport: InspectorTransport, options: Cr
 		}
 		let valid: boolean
 		try {
-			valid = isInspectorRequestResult(entry.method, response.result, response.protocol.minor)
+			valid = isInspectorRequestResult(entry.method, response.result)
 		}
 		catch {
 			valid = false

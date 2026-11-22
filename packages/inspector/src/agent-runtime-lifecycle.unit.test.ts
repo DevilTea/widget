@@ -28,7 +28,7 @@ async function counterRef(client: ReturnType<typeof createFixture>['client']) {
 	return { runtimeId: 'runtime-x', nodeId: snapshot.nodes.find(node => node.widgetId === 'counter')!.nodeId }
 }
 
-describe('runtime lifecycle visibility (protocol 0.4)', () => {
+describe('runtime lifecycle visibility', () => {
 	it('tells the client when the Runtime is disposed and stops listing it', async () => {
 		const { runtime, agent, client, disposedEvents } = createFixture()
 		try {
@@ -69,36 +69,11 @@ describe('runtime lifecycle visibility (protocol 0.4)', () => {
 		}
 	})
 
-	it('keeps the previous behaviour for a peer negotiated below 0.4', async () => {
-		const { runtime, agent, client, disposedEvents } = createFixture()
-		try {
-			const handshake = await client.request('handshake', { protocol: { major: 0, minor: 3 } })
-			expect(handshake.capabilities.events).not.toContain('runtime.disposed')
-			const ref = await counterRef(client)
-			runtime.dispose()
-
-			const { runtimes } = await client.request('runtime.list', {})
-			expect(runtimes)
-				.toHaveLength(1)
-			await expect(client.request('runtime.subscribeMember', { ref, member: { type: 'state', name: 'count' } }))
-				.rejects.toMatchObject({ code: 'internal-error' })
-			expect((await client.request('blueprint.getSnapshot', { runtimeId: 'runtime-x' })).runtimeId)
-				.toBe('runtime-x')
-			expect(disposedEvents())
-				.toHaveLength(0)
-		}
-		finally {
-			client.dispose()
-			agent.dispose()
-		}
-	})
-
-	it('advertises the event only from 0.4 on', async () => {
+	it('advertises the event', async () => {
 		const { agent, client } = createFixture()
 		try {
 			expect((await client.request('handshake', { protocol: INSPECTOR_PROTOCOL_VERSION })).capabilities.events)
 				.toContain('runtime.disposed')
-			expect((await client.request('handshake', { protocol: { major: 0, minor: 3 } })).capabilities.events).not.toContain('runtime.disposed')
 		}
 		finally {
 			client.dispose()
@@ -140,18 +115,7 @@ describe('runtime lifecycle visibility (protocol 0.4)', () => {
 		}
 	})
 
-	it('sends no disposal event to a peer negotiated below 0.4 or when it closes the transport', async () => {
-		const legacy = createFixture({ closeTransportOnDispose: false })
-		try {
-			await legacy.client.request('handshake', { protocol: { major: 0, minor: 3 } })
-			legacy.agent.dispose()
-			expect(legacy.disposedEvents())
-				.toHaveLength(0)
-		}
-		finally {
-			legacy.client.dispose()
-		}
-
+	it('sends no disposal event when the Agent closes the transport', async () => {
 		const closing = createFixture()
 		try {
 			await closing.client.handshake()
@@ -184,16 +148,14 @@ describe('runtime lifecycle visibility (protocol 0.4)', () => {
 		}
 	})
 
-	it('only accepts the new code and event on envelopes of 0.4 or newer', () => {
+	it('accepts the code and the event in a 1.0 envelope and validates the event payload', () => {
 		const error = { code: 'runtime-disposed', message: 'gone' }
-		expect(parseInspectorResponseMessage({ protocol: { major: 0, minor: 4 }, kind: 'response', requestId: 'r', ok: false, error }))
+		expect(parseInspectorResponseMessage({ protocol: INSPECTOR_PROTOCOL_VERSION, kind: 'response', requestId: 'r', ok: false, error }))
 			.not
-			.toBeNull()
-		expect(parseInspectorResponseMessage({ protocol: { major: 0, minor: 3 }, kind: 'response', requestId: 'r', ok: false, error }))
 			.toBeNull()
 
 		const event = {
-			protocol: { major: 0, minor: 4 },
+			protocol: INSPECTOR_PROTOCOL_VERSION,
 			kind: 'event',
 			event: 'runtime.disposed',
 			payload: { runtimeId: 'r', reason: 'agent-disposed' },
