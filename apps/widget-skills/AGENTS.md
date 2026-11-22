@@ -124,7 +124,7 @@ TSDoc-compatible; the custom tags are declared in `tsdoc.json`. `CONSTRAINT_TAGS
 - `@integer` (bare): the number is a whole number (the full profile's `type: "integer"`).
 - `@minItems`, `@maxItems`, `@uniqueItems` (bare): arrays.
 - `@minProperties`, `@maxProperties`, `@propertyNames <pattern>` (every key matches): dictionaries.
-- A string or number tag (`@format`, `@pattern`, the length and numeric bounds, `@integer`) written on an array or a dictionary applies to each item or value, since it cannot apply to the container: `@pattern` on a `readonly string[]` constrains every item, `@exclusiveMinimum 0` on a `Record<string, number>` every value.
+- A string or number tag (`@format`, `@pattern`, the length and numeric bounds, `@integer`) written on an array or a dictionary applies to each item or value, since it cannot apply to the container: `@pattern` on a `readonly string[]` constrains every item, `@exclusiveMinimum 0` on a `Record<string, number>` every value. A tag reaches its value through a union with `null` and through a named type (`placeConstraints` in `src/schema.ts`): a keyword about the value itself sits beside the `anyOf` or `$ref` (it only constrains instances of its own type), one about the items or values goes into the inline `items`/`additionalProperties` or beside the `anyOf`/`$ref`, and `@integer` turns the number branches into `integer` (beside a `$ref` only when the referenced type has no `null`). A tag that constrains nothing on its value (`@pattern` on a list of objects, `@uniqueItems` on a string) is left out of both schemas and `--check` reports it (`misplaced-tag`). The LLM profile words each tag for where it lands: `each item: pattern: ...`, `each value: exclusiveMinimum: 0.`, `every key matches ...`, `at least N entries` (a dictionary is an entry list there; `keys` for an object).
 - `@default`, `@examples`: JSON values.
 - `@widgetRef A | B`: the string is the id of a widget of one of these types.
 - `@param name - text`, `@returns`: Methods.
@@ -140,6 +140,7 @@ Prints one line per problem plus the documented/total count, and exits 1 when th
 - `missing-doc`, error: a plugin (the JSDoc of its Interfaces type), its `config` member, a slot, State member, Property, Method, Method parameter (`@param`), Event or reason without documentation; a field of an inline object type one of them uses (a reason's payload included); a named type reachable from `config.raw` or from a reason's payload, or one of its fields.
 - `missing-doc`, warning: a named type (or one of its fields) reachable only from a resolved config, a State or Property value, a Method signature or an Event payload. Renderer authors read those; document authors do not write them.
 - `unknown-tag`, error: a tag outside `CONSTRAINT_TAGS` and `PROSE_TAGS`.
+- `misplaced-tag` (the severity of the member: error for what `config.raw` reaches): a constraint tag on a field, State member, Property or named type that constrains nothing on its value, so neither schema states it.
 - `name-mismatch`: a capability declared on one side only (all six), or a plugin type, slot, State member, Property or Event the types and the runtime disagree on. Neither the catalog nor `inspectPlugin` has a Method inventory, so Method names are not cross-checked.
 
 Generating (the CLI without `--check`, and the Vite plugin) refuses only on a name mismatch.

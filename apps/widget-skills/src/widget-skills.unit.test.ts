@@ -315,6 +315,8 @@ describe('array and dictionary constraints, named types behind optional properti
 		constraintsIr = extractIr({ modulePath: resolve(here, 'fixtures/constraints-system.ts'), exportName: 'constraintsSystem', tsconfigPath, cwd: root })
 	}, 180_000)
 
+	const validForm = { fields: ['a', 'b'], weights: { a: 1 }, retries: null, extraFields: null, hidden: ['h'], step: 1, people: [], limit: null, title: 't' }
+
 	const formProperties = (): Record<string, JsonSchema> => {
 		const schema = emitConfigSchema(constraintsIr, constraintsIr.plugins[0]!)!
 		return ((schema.$defs as Record<string, JsonSchema>).type_FormRawConfig!.properties) as Record<string, JsonSchema>
@@ -339,11 +341,11 @@ describe('array and dictionary constraints, named types behind optional properti
 
 	it('validates the new keywords', () => {
 		const schema = emitConfigSchema(constraintsIr, constraintsIr.plugins[0]!)!
-		expect(validateSchema(schema, { fields: ['a', 'b'], weights: { a: 1 }, pageSize: 2 }))
+		expect(validateSchema(schema, { ...validForm, pageSize: 2 }))
 			.toEqual([])
-		expect(validateSchema(schema, { fields: ['a', 'a'], weights: {}, pageSize: 1.5 }))
+		expect(validateSchema(schema, { ...validForm, fields: ['a', 'a'], weights: {}, pageSize: 1.5 }))
 			.toEqual(['/fields: items are not unique', '/weights: fewer than 1 properties', '/pageSize: expected integer, got number'])
-		expect(validateSchema(schema, { fields: ['a'], weights: { a: 1, b: 1, c: 1, d: 1, e: 1, f: 1, g: 1, h: 1, Hi: 0 } }))
+		expect(validateSchema(schema, { ...validForm, weights: { a: 1, b: 1, c: 1, d: 1, e: 1, f: 1, g: 1, h: 1, Hi: 0 } }))
 			.toEqual(['/weights: more than 8 properties', '/weights/Hi: not above 0'])
 	})
 
@@ -360,17 +362,57 @@ describe('array and dictionary constraints, named types behind optional properti
 			.toEqual({ description: 'Anything the host stores with the form.' })
 	})
 
-	it('states the new tags as prose in the LLM profile', () => {
+	it('places a tag through a union with null: beside the anyOf, or in its number branch for @integer', () => {
+		const properties = formProperties()
+		expect(properties.retries)
+			.toEqual({ anyOf: [{ type: 'integer' }, { type: 'null' }], minimum: 0, description: 'Retries, or `null` for the default.' })
+		expect(properties.extraFields)
+			.toEqual({ anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }], uniqueItems: true, items: { pattern: '^[a-z]+$' }, description: 'Extra field names, or `null` for none.' })
+	})
+
+	it('places a tag through a named type beside the $ref, items included, and @integer on a literal enum', () => {
+		const properties = formProperties()
+		expect(properties.hidden)
+			.toEqual({ $ref: '#/$defs/type_Names', minItems: 1, items: { pattern: '^[a-z]+$' }, description: 'Hidden field names.' })
+		expect(properties.step)
+			.toEqual({ enum: [1, 100, 500], type: 'integer', description: 'The step.' })
+		const schema = emitConfigSchema(constraintsIr, constraintsIr.plugins[0]!)!
+		expect(validateSchema(schema, { ...validForm, retries: 1.5, extraFields: ['a', 'a'], hidden: [] }))
+			.toEqual(['/retries: matches no anyOf branch (/retries: expected integer, got number | /retries: expected null, got number)', '/extraFields: items are not unique', '/hidden: fewer than 1 items'])
+	})
+
+	it('emits nothing for a tag that lands nowhere, and --check reports it', () => {
+		const properties = formProperties()
+		expect(properties.people)
+			.toEqual({ type: 'array', items: { $ref: '#/$defs/type_Person' }, description: 'The people (a pattern on a list of objects lands nowhere).' })
+		expect(properties.limit)
+			.toEqual({ $ref: '#/$defs/type_MaybeCount', description: 'The limit (`@integer` beside a reference to a type with `null` lands nowhere).' })
+		expect(properties.title)
+			.toEqual({ type: 'string', description: 'The title (`@uniqueItems` on a string lands nowhere).' })
+		expect(checkIr(constraintsIr).problems.filter(problem => problem.kind === 'misplaced-tag')
+			.map(problem => problem.message))
+			.toEqual([
+				'type FormRawConfig.people: @pattern constrains nothing on this value, so no schema states it.',
+				'type FormRawConfig.limit: @integer constrains nothing on this value, so no schema states it.',
+				'type FormRawConfig.title: @uniqueItems constrains nothing on this value, so no schema states it.',
+			])
+	})
+
+	it('states the tags as prose in the LLM profile, saying where each one lands', () => {
 		const schema = emitLlmSchema(constraintsIr)
 		expect(profileViolations(schema))
 			.toEqual([])
 		const properties = ((schema.$defs as Record<string, JsonSchema>).type_FormRawConfig!.properties) as Record<string, JsonSchema>
 		expect(properties.fields!.description)
-			.toBe('The field names, each once. Constraints: minItems: 1. uniqueItems. pattern: ^[a-z]+$.')
+			.toBe('The field names, each once. Constraints: minItems: 1. no two items are equal. each item: pattern: ^[a-z]+$.')
 		expect(properties.pageSize)
 			.toEqual({ type: 'number', description: 'How many fields are shown per page. Constraints: integer. minimum: 1. Optional: leave the key out when unused.' })
 		expect(properties.weights!.description)
-			.toContain('Constraints: propertyNames: ^[a-z]+$. minProperties: 1. maxProperties: 8. exclusiveMinimum: 0.')
+			.toContain('Constraints: every key matches ^[a-z]+$. at least 1 entries. at most 8 entries. each value: exclusiveMinimum: 0.')
+		expect(properties.hidden!.description)
+			.toBe('Hidden field names. Constraints: minItems: 1. each item: pattern: ^[a-z]+$.')
+		expect(properties.people!.description)
+			.toBe('The people (a pattern on a list of objects lands nowhere).')
 	})
 })
 
