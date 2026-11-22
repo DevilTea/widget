@@ -18,6 +18,8 @@ const selectedNodeId = computed<InspectionNodeId | null>(() => store.documentFoc
 const selectedNode = computed(() => selectedNodeId.value === null ? null : documentInspection.value.getNode(selectedNodeId.value))
 const busy = ref(false)
 const outcomeMessage = ref<string | null>(null)
+/** The Document revision a successful command produced (`data-revision` of the outcome line, for specs). */
+const outcomeRevision = ref<number | null>(null)
 const editorEl = useTemplateRef<HTMLElement>('editorEl')
 /** Set when a commit did not go through: the control at that path shows what the Document holds again (a switch or list the user already moved would not), the others keep their uncommitted text. */
 const resync = ref<{ readonly path: string, readonly tick: number, readonly message?: string } | null>(null)
@@ -54,6 +56,7 @@ const configAsJson = computed(() => typeof configValue.value !== 'object' || Arr
 
 watch([selectedNodeId, () => store.documentState.value.revision], () => {
 	outcomeMessage.value = null
+	outcomeRevision.value = null
 })
 
 function selectNode(nodeId: InspectionNodeId): void {
@@ -110,6 +113,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 		return
 	busy.value = true
 	outcomeMessage.value = null
+	outcomeRevision.value = null
 	let applied = false
 	// Why the edit was not applied, for the control at its path: the reason alone, without the outcome line's own preamble.
 	let refusal: string | null = null
@@ -117,7 +121,10 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 		const outcome = await store.author(editConfig(store.documentState.value.revision, nodeId, path, edit))
 		applied = outcome.status === 'applied'
 		if (outcome.status === 'applied') {
-			outcomeMessage.value = i18n.t('Author command applied to Document r{revision}.', { revision: store.documentState.value.revision })
+			// Plain language: the revision is a developer detail (the header's details popover), kept here only as a
+			// machine-readable attribute of the outcome line.
+			outcomeMessage.value = i18n.t('Change applied. Use Undo to take it back.')
+			outcomeRevision.value = store.documentState.value.revision
 		}
 		else if (outcome.status === 'draft-dirty') {
 			outcomeMessage.value = i18n.t('Apply or Revert the JSON draft before using Structure commands.')
@@ -202,6 +209,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 				<p
 					v-if="outcomeMessage !== null"
 					data-testid="author-command-outcome"
+					:data-revision="outcomeRevision ?? undefined"
 					role="status"
 					class="m-0 mt-3 text-xs text-muted"
 				>

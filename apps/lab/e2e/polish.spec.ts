@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { expandGraphWidget, expect, loadPreset, openDependenciesGraph, previewFrame, setLocale, test } from './fixtures'
+import { expandGraphWidget, expect, loadPreset, openDependenciesGraph, openDeveloperTool, previewFrame, setLocale, test } from './fixtures'
 
 /**
  * Issue #230 PR 3c: Graph readability (U11), grouped cycle problems (U16), target size and text size (U19), visible
@@ -472,11 +472,11 @@ test.describe('the selected workbench tab (Lab UX phase 1)', () => {
 test.describe('the Lab language in the chrome (U21)', () => {
 	test('panel, view and Graph names are Taiwan Chinese in zh-TW, and Widget vocabulary stays English', async ({ page }) => {
 		await openLab(page, 'showcase=survey&lang=zh-TW')
-		for (const name of ['編寫', '選取的 widget', '相依性', 'Blueprint', 'Runtime', 'Preview']) {
+		for (const name of ['編寫', '選取的 widget', 'Events 紀錄', '相依性', 'Blueprint', 'Runtime', 'Preview']) {
 			await expect(page.getByRole('tab', { name, exact: true }))
 				.toBeVisible()
 		}
-		for (const name of ['Author', 'Dependencies']) {
+		for (const name of ['Author', 'Dependencies', 'Events']) {
 			await expect(page.getByRole('tab', { name, exact: true }))
 				.toHaveCount(0)
 		}
@@ -508,6 +508,36 @@ test.describe('the Lab language in the chrome (U21)', () => {
 			.toBeVisible()
 		await setLocale(page, 'en')
 		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
+			.toBeVisible()
+	})
+
+	test('the panels opened on request are translated and follow a language switch too (Lab UX phase 1)', async ({ page }) => {
+		await openLab(page)
+		await openDeveloperTool(page, 'implementation')
+		await openDeveloperTool(page, 'document-tools')
+		await setLocale(page, 'zh-TW')
+		for (const name of ['實作', 'Document 工具', 'Events 紀錄']) {
+			await expect(page.getByRole('tab', { name, exact: true }))
+				.toBeVisible()
+		}
+		await setLocale(page, 'en')
+		for (const name of ['Implementation', 'Document Tools', 'Events']) {
+			await expect(page.getByRole('tab', { name, exact: true }))
+				.toBeVisible()
+		}
+	})
+
+	test('zh-TW names Revert and Undo so they cannot be confused, and the language entry is the Lab\'s (Lab UX phase 1)', async ({ page }) => {
+		await openLab(page, 'showcase=survey&lang=zh-TW')
+		await expect(page.getByTestId('revert-button'))
+			.toHaveText('捨棄草稿')
+		await expect(page.getByTestId('undo-button'))
+			.toHaveText('復原上一步')
+		await expect(page.getByRole('button', { name: '復原上一步', exact: true }))
+			.toHaveAttribute('data-testid', 'undo-button')
+		await page.getByTestId('overflow-menu')
+			.click()
+		await expect(page.getByRole('menuitem', { name: 'Lab 介面語言', exact: true }))
 			.toBeVisible()
 	})
 })

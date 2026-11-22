@@ -210,7 +210,7 @@ const revertTooltip = computed(() => store.isDirty.value
 	: i18n.t('Nothing to revert: no unapplied edits'))
 const undoTooltip = computed(() => {
 	if (store.canUndo.value)
-		return i18n.t('Undo last apply: restore the previously applied version as a new revision')
+		return i18n.t('Undo last change: restore the previous version as a new revision')
 	if (store.isApplying.value)
 		return i18n.t('Wait for the current Apply to finish')
 	if (store.isDirty.value)
@@ -295,7 +295,9 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 			})),
 		},
 		{
-			label: i18n.t('Language'),
+			// The Lab's own language. A showcase may have a language of its own in the Preview (the survey's select): that
+			// one is the showcase's State, so this entry says whose language it sets.
+			label: i18n.t('Lab language'),
 			icon: 'i-lucide-languages',
 			children: localeOptions.map(option => ({
 				type: 'checkbox' as const,
@@ -482,7 +484,7 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 					variant="outline"
 					icon="i-lucide-undo-2"
 					:label="i18n.t('Undo')"
-					:aria-label="i18n.t('Undo last apply')"
+					:aria-label="i18n.t('Undo last change')"
 					:aria-disabled="!store.canUndo.value"
 					class="aria-disabled:opacity-50"
 					@click="onUndo"

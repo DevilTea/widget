@@ -73,7 +73,7 @@ defineExpose({ focusList })
 				v-if="problems.length > 0"
 				class="ml-auto truncate text-muted"
 			>
-				{{ i18n.t(draftIsDirty ? 'From the last Apply. Locations follow your current text.' : 'From the last Apply') }}
+				{{ i18n.t(draftIsDirty ? 'From the last change. Locations follow your current text.' : 'From the last change') }}
 			</span>
 		</div>
 		<ul

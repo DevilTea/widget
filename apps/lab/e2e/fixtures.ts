@@ -139,8 +139,8 @@ const PRESET_LABELS_ZH_TW: ReadonlyMap<string, string> = new Map([
 
 // Menu item names follow the page locale; the language names themselves never translate.
 const OVERFLOW_LABELS: Readonly<Record<LabLocaleId, { theme: string, language: string, developer: string, light: string, dark: string, implementation: string, documentTools: string }>> = {
-	'en': { theme: 'Theme', language: 'Language', developer: 'Developer', light: 'Light', dark: 'Dark', implementation: 'Implementation', documentTools: 'Document Tools' },
-	'zh-TW': { theme: '主題', language: '語言', developer: '開發者', light: '亮色', dark: '深色', implementation: 'Implementation', documentTools: 'Document Tools' },
+	'en': { theme: 'Theme', language: 'Lab language', developer: 'Developer', light: 'Light', dark: 'Dark', implementation: 'Implementation', documentTools: 'Document Tools' },
+	'zh-TW': { theme: '主題', language: 'Lab 介面語言', developer: '開發者', light: '亮色', dark: '深色', implementation: '實作', documentTools: 'Document 工具' },
 }
 const LANGUAGE_NAMES: Readonly<Record<LabLocaleId, string>> = { 'en': 'English', 'zh-TW': '繁體中文' }
 
@@ -254,7 +254,8 @@ export async function openDeveloperTool(page: Page, tool: 'implementation' | 'do
 		() => page.getByRole('menuitem', { name: tool === 'implementation' ? labels.implementation : labels.documentTools }),
 	])
 	// The panel is added and activated asynchronously and takes focus: wait for that before the next menu is opened.
-	await expect(page.getByRole('tab', { name: tool === 'implementation' ? 'Implementation' : 'Document Tools', exact: true }))
+	// The tab is named like the menu item, in the page's language.
+	await expect(page.getByRole('tab', { name: tool === 'implementation' ? labels.implementation : labels.documentTools, exact: true }))
 		.toHaveAttribute('aria-selected', 'true')
 }
 

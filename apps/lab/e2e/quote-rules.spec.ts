@@ -307,7 +307,7 @@ test.describe('the config JSON Schema', () => {
 			.getByRole('textbox')
 			.press('Enter')
 		await expect(page.getByTestId('author-command-outcome'))
-			.toContainText('Author command applied')
+			.toContainText('Change applied')
 		expect((await documentSource(page)).slots.rules[0].config.tiers[1].percent)
 			.toBe(7)
 		// The change reaches the page: 752 pieces is in the 300 tier, now 7% of 10900 = 763 off.

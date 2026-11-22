@@ -1177,8 +1177,8 @@ the target session's already-authoritative revision-0 Runtime directly; re-apply
 source merely to trigger mounting is forbidden because Core correctly treats it as `changed:false`. All
 lifecycle-mutating operations remain serialized by the Lab store's transaction boundary.
 
-**Revert vs. Undo last apply.** Revert discards the unapplied draft only (disabled when there is none). *Undo last
-apply* (`LabSession.undoLastApply()`, `LabStore.undoLastApply()`) restores the source the Document held before its
+**Revert vs. Undo last change.** Revert discards the unapplied draft only (disabled when there is none). *Undo last
+change* (named "Undo last apply" until Lab UX phase 1: it also takes back Structure edits and presets, which the user never "applied") (`LabSession.undoLastApply()`, `LabStore.undoLastApply()`) restores the source the Document held before its
 last revision-advancing commit, as a NEW Document revision through the same root-replacement commit and Preview
 promotion path as Apply (origin `'undo'` in Document Tools): it never rewinds Core's Document, so revision numbers keep
 growing (r0 -> r1 -> undo -> r2) and the Preview is replaced like for any valid commit. The session keeps a bounded
@@ -1236,6 +1236,8 @@ an add that is not reported, or is reported and refused, keeps the choice for an
 selection) reaches only the control at the edit's path (`resync`, passed down the tree, with the outcome message): a list or a switch the user only moved is re-created and
 shows what the Document holds again; a text, number or JSON box keeps the rejected input (nothing typed is lost) and says "Not applied: <why>" (`data-testid="not-applied"`,
 the box's `aria-describedby`; the reason alone, the outcome line above is the live announcement), with **Use the Document value** to go back (focus returns to the box).
+A command that went through says so in plain language ("Change applied. Use Undo to take it back."; it said "Author command applied to Document rN"); the
+revision it produced is the outcome line's `data-revision`, for specs.
 A later change of the Document's value at that path replaces the text and clears the note (a JSON box compares by content, so the same config re-read as a new
 object changes nothing), and so does typing the Document's value back. Text typed into other fields is kept, and the root editor is keyed by the selected
 widget, so nothing typed or refused for one widget is shown for another.
@@ -1255,7 +1257,7 @@ boundary. A successful Structure commit rewrites both applied source text and th
 pretty JSON only when the draft still equals the command's captured clean text; a concurrent Monaco edit is
 preserved as dirty. Invalid Document commits advance the authored revision while retaining the prior valid
 Preview revision. No persistence, authoritative history, redo, collaboration, drag/drop, or Runtime-state migration
-belongs to this Phase 3 workspace (the bounded "Undo last apply" stack in "Apply lifecycle" is a convenience over the
+belongs to this Phase 3 workspace (the bounded "Undo last change" stack in "Apply lifecycle" is a convenience over the
 Document commit path, not a history).
 
 ### Author recovery and diagnostics (Phase 4)
@@ -1293,7 +1295,7 @@ implementation, or alternative authored source authority.
 
 `LabHeader.vue` is one row from 1280px up (`e2e/header-feedback.spec.ts` pins it at 1280/1440/1920), grouped by job:
 the title; the **Examples** menu; two plain-language **status chips** and a details popover; the edit actions
-**Apply / Revert / Undo / Format**; and an **overflow** menu with Tutorial, Theme, Language and a **Developer**
+**Apply / Revert / Undo / Format**; and an **overflow** menu with Tutorial, Theme, **Lab language** (labelled as the Lab's own, since the survey has a language select of its own in the Preview) and a **Developer**
 submenu (Implementation, Document Tools). Hidden test fixtures stay reachable only through `?showcase=`.
 
 - *Examples menu* (`UDropdownMenu`): a Showcase group and the current showcase's Preset group (checkbox items, the
@@ -1317,8 +1319,9 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
 - *Edit actions*: a disabled action keeps `aria-disabled="true"` instead of `disabled` so it stays focusable and its tooltip
   can say why (nothing to apply / revert / undo, or "apply or revert your unapplied edits before undoing"); the click
   handler also refuses. Apply's tooltip shows the shortcut as key caps. Undo shows "Undo" and is
-  named "Undo last apply" for assistive technology (the visible text is contained in the name); because that name contains
-  "apply", specs and helpers must look the Apply button up with `exact: true` (or its test id).
+  named "Undo last change" for assistive technology (the visible text is contained in the name); specs and helpers look the Apply
+  button up with `exact: true` (or its test id). zh-TW: Revert is 捨棄草稿 and Undo 復原上一步 (they were 還原 / 復原, near-synonyms for two
+  different actions); every zh-TW string about reverting says 捨棄 (`i18n/ux-phase1-messages.unit.test.ts`).
 - *Cmd/Ctrl+Enter* applies from Monaco (an editor *action* registered in `use-monaco-editor.ts` and disposed with the editor; a
   `addCommand()` would leak a global keybinding per remount; Monaco binds the key to "insert line" otherwise) and from anywhere
   else through `App.vue`'s window listeners. Everything except Dockview tabs is handled in the **bubble** phase, so a control that
@@ -1354,7 +1357,7 @@ per-keystroke session tick, so typing re-runs neither the inspection nor the col
 recomputed from the current text on every edit, because they must follow it.
 
 The range is located by source path in the **current editor text**, so it stays on target while the user edits and an
-unapplied draft is still mapped (a note says the rows are "from the last Apply"; an unparsable draft has no ranges). The
+unapplied draft is still mapped (a note says the rows are "from the last change"; an unparsable draft has no ranges). The
 path is `blueprint.getSourcePath(node)` of the diagnostic's location node plus its own relative part (`invalid-widget-config`'s
 `path` is config-relative, the other diagnostics' `path` is node-relative, a `slot` / `slot-child` location adds
 `slots[slot][index]`, a source-level diagnostic's `path` is absolute). `problemSpan()` then highlights a primitive value whole,
@@ -1392,7 +1395,9 @@ current Document inspection surface for semantic status, diagnostics, recovery n
 focus; `RuntimePanel.vue` is the Preview-revision surface for passive Runtime state/property/method
 inspection and Preview focus. They must not gain a shared Blueprint/Runtime mode, shared revision state,
 or cross-revision `InspectionNodeId` mapping. Preview Inspect selects the Selected widget pane when
-Document/Preview revisions are linked (it selected Blueprint before) and Runtime when they diverge; Graph and Implementation retain
+Document/Preview revisions are linked (it selected Blueprint before) and Runtime when they diverge, and the hint next to the Inspect
+button names that panel ("Click a widget to open it in Selected widget / Runtime", `inspect-hint`; it said "focus it in Blueprint"
+until Lab UX phase 1, `e2e/inspect.spec.ts` pins both cases); Graph and Implementation retain
 their existing Document-scoped entry points.
 
 `src/components/inspector/InspectorPanelShell.vue` and `InspectorSplitLayout.vue` are intentionally
@@ -1539,9 +1544,11 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
   cards have a 2px accent outline. Graph **edges** are one Tab stop walked with the arrow keys, with an accent band as
   the focus indicator (see "Dependencies inspector"); Relations remains the dense keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
 - **Language.** Navigation names are Taiwan Chinese: Author is 編寫, Dependencies 相依性, Relations 關聯, Graph 關係圖, Catalog 目錄, Structure 結構 (tab titles
-  follow a language switch). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source) and so do
-  the developer panels **Implementation** and **Document Tools** (they name features of the docs and Core, and the specs reach them by those names), `JSON` and the
-  product name. Source-owned text is never translated: Core diagnostics, plugin and schema descriptions, the survey's questions and the engine messages. The
+  follow a language switch). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source), and so do
+  `JSON` and the product name. Since Lab UX phase 1 every tab title is translated: a name that is navigation around a Widget word mixes the two, as 選取的 widget
+  already did: the Events log is "Events 紀錄" (its own message, `Events log`, so the Catalog's bare "Events" label stays), Document Tools "Document 工具", and
+  Implementation 實作 (the word "查看實作" already used). The panels opened on request follow a language switch like the canonical ones; specs reach them
+  through `openDeveloperTool()`, whose labels follow the page language. Source-owned text is never translated: Core diagnostics, plugin and schema descriptions, the survey's questions and the engine messages. The
   survey examples' names and descriptions in the Examples menu are Lab copy and are translated. `i18n/pr3c-messages.unit.test.ts` fails when a literal passed to
   `i18n.t()` in the PR 3c surfaces has no zh-TW entry.
 - **Monaco contrast (U18).** `theme/monaco-themes.ts` is One Light and One Dark Pro with the colours that failed 4.5:1 on the editor background replaced by
@@ -1570,7 +1577,7 @@ authority or validator; invalid/recovery Documents show that the Core preconditi
 
 The Document trace is a finite, session-only ring of Lab-observed parse/commit/patch/conflict metadata.
 It is explicitly telemetry: no persistence, replay, restore, redo, collaboration, or authoritative
-history semantics may be added (an "Undo last apply" commit is just another observed commit, origin `undo`). Runtime/Preview behavior, revision-scoped focus, Author recovery,
+history semantics may be added (an "Undo last change" commit is just another observed commit, origin `undo`). Runtime/Preview behavior, revision-scoped focus, Author recovery,
 Blueprint/Runtime separation, Dependencies, and Implementation entry points remain unchanged.
 
 ## Active follow-up backlog

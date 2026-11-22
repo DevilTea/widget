@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 import { answerDraftGuard, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openStatusDetails, previewFrame, selectShowcase, setLocale, test } from './fixtures'
 
 /**
- * Issue #230 PR 3a (audit U01-U07, U24): the grouped header, unapplied-draft protection, Undo last apply,
+ * Issue #230 PR 3a (audit U01-U07, U24): the grouped header, unapplied-draft protection, Undo last change,
  * Cmd/Ctrl+Enter, the plain-language status chips, the Problems list with jump + squiggles, and the
  * stale-preview notice. The draft is dirtied through the `?lab-test` seam (`src/lab-test-seam.ts`) except where
  * the point is the real Monaco editor.
@@ -83,7 +83,7 @@ test.describe('header layout (U01)', () => {
 		await page.getByTestId('overflow-menu')
 			.click()
 		const menu = page.locator('[role="menu"][data-state="open"]')
-		for (const name of ['Tutorial', 'Theme', 'Language', 'Developer']) {
+		for (const name of ['Tutorial', 'Theme', 'Lab language', 'Developer']) {
 			await expect(menu.getByRole('menuitem', { name, exact: true }))
 				.toBeVisible()
 		}
@@ -355,7 +355,7 @@ test.describe('unapplied draft protection (U03)', () => {
 	})
 })
 
-test.describe('Undo last apply (U04)', () => {
+test.describe('Undo last change (U04)', () => {
 	test('restores the previously applied source as a new revision and explains its disabled states', async ({ page }) => {
 		await openLab(page, 'showcase=sandbox')
 		const undo = page.getByTestId('undo-button')
@@ -363,7 +363,7 @@ test.describe('Undo last apply (U04)', () => {
 		const apply = page.getByTestId('apply-button')
 
 		// The visible text is "Undo"; the accessible name says what it does, and does not collide with Apply's name.
-		await expect(page.getByRole('button', { name: 'Undo last apply', exact: true }))
+		await expect(page.getByRole('button', { name: 'Undo last change', exact: true }))
 			.toBeVisible()
 		await expect(page.getByRole('button', { name: 'Apply', exact: true }))
 			.toHaveCount(1)
