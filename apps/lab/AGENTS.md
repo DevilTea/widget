@@ -1254,9 +1254,10 @@ by id and type; an ambiguous or missing one goes back to the root). After a **St
 each other; after a JSON Apply, a preset or Undo only the widget is kept (the tree may have changed, and a member with it). Until Lab UX
 phase 1 those commits always reset to the root, which threw the user out of the widget they were editing after every Apply. A showcase
 switch builds a new focus store and starts at the root (`src/lab/focus.ts`, `focus.unit.test.ts`).
-**Key order is not kept** by a Structure commit: Core's `applyPatch` rebuilds every object on the patched path and appends the replaced key, so
-the edited key and each of its ancestors move to the end of their object (`config.label.en` puts `en` after `zh-TW`, `label` last in `config` and
-`config` after `slots`). That is Core behaviour (`packages/core/src/source-patch.ts`, `rebuildObject`); the Lab does not work around it.
+**A Structure commit keeps key order**: the edited key and its ancestors stay where they were in the source JSON (`label.en` stays before
+`zh-TW`, `config` before `slots`), so the JSON view does not reshuffle after an edit. That is Core's `applyPatch` keeping a replaced member in
+place (`DevilTea/widget#260`); the Lab adds nothing for it. `author.unit.test.ts` ("a Structure commit keeps the key order of the source") commits through
+`LabSession.author()` and compares every object's key order before and after; it fails against a Core older than that change.
 
 Successful Structure commands and JSON Apply share `LabSession`'s Document commit and Runtime promotion
 boundary. A successful Structure commit rewrites both applied source text and the JSON draft to deterministic

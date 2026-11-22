@@ -8,6 +8,7 @@ import { sandboxSystem } from '../sandbox/system'
 import { surveyPresets } from '../showcases/survey/presets'
 import { surveySystem } from '../showcases/survey/system'
 import { createAuthorPatch, editConfig, replaceConfigScalar } from './author'
+import { LabSession } from './session'
 
 const validSource = sandboxPresets.find(preset => preset.id === 'valid-interactive')!.sourceText
 
@@ -197,5 +198,58 @@ describe('edit-config lowering (issue #230 PR 3c, audit U15)', () => {
 			expect(createAuthorPatch(blueprint, editConfig(0, title.nodeId, [], { op: 'add', value: {} }), 0))
 				.toEqual({ ok: false, reason: 'config-path-exists' })
 		})
+	})
+})
+
+describe('a Structure commit keeps the key order of the source (Lab UX phase 1, Core #260)', () => {
+	/** Every object's keys, in order, by path: what a reorder would change. */
+	function keyOrders(value: unknown, path = '$', out: Record<string, string[]> = {}): Record<string, string[]> {
+		if (Array.isArray(value)) {
+			value.forEach((item, index) => keyOrders(item, `${path}[${index}]`, out))
+		}
+		else if (typeof value === 'object' && value !== null) {
+			out[path] = Object.keys(value)
+			for (const [key, child] of Object.entries(value))
+				keyOrders(child, `${path}.${key}`, out)
+		}
+		return out
+	}
+
+	it('replacing the root\'s title.en leaves en before zh-TW, title before languages and config before slots', async () => {
+		const sourceText = surveyPresets.find(preset => preset.id === 'survey-default')!.sourceText
+		const session = new LabSession({ system: surveySystem, initialSourceText: sourceText })
+		const root = inspectBlueprint(session.documentState.blueprint).rootNodeId
+
+		const outcome = await session.author(editConfig(0, root, ['title', 'en'], { op: 'replace', value: 'Open day' }))
+
+		expect(outcome.status)
+			.toBe('applied')
+		const after = JSON.parse(session.documentState.sourceText) as { config: { title: Record<string, string> } }
+		expect(after.config.title.en)
+			.toBe('Open day')
+		expect(Object.keys(after))
+			.toEqual(['id', 'type', 'config', 'slots'])
+		expect(Object.keys(after.config))
+			.toEqual(['title', 'languages'])
+		expect(Object.keys(after.config.title))
+			.toEqual(['en', 'zh-TW'])
+		// Nothing else moved either, anywhere in the document; the JSON draft is the same text.
+		expect(keyOrders(after))
+			.toEqual(keyOrders(JSON.parse(sourceText)))
+		expect(session.draftSourceText)
+			.toBe(session.documentState.sourceText)
+	})
+
+	it('replacing a nested question\'s label.en keeps that question\'s keys and its label\'s keys in place', async () => {
+		const sourceText = surveyPresets.find(preset => preset.id === 'survey-default')!.sourceText
+		const session = new LabSession({ system: surveySystem, initialSourceText: sourceText })
+		const mode = inspectBlueprint(session.documentState.blueprint).nodes.find(entry => entry.node.resolved && entry.node.id === 'mode')!
+
+		const outcome = await session.author(editConfig(0, mode.nodeId, ['label', 'en'], { op: 'replace', value: 'Joining how?' }))
+
+		expect(outcome.status)
+			.toBe('applied')
+		expect(keyOrders(JSON.parse(session.documentState.sourceText)))
+			.toEqual(keyOrders(JSON.parse(sourceText)))
 	})
 })
