@@ -20,31 +20,55 @@ import type { TripView } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkCurrencyConfig, resolveCurrencyConfig } from '../config'
 import { isRoundStep, roundToStep, toBaseCents } from '../domain'
-import { currencyConfigSchema } from '../schemas'
 import { languageReads, viewFrom } from './reads'
 import { checkInsideTrip } from './structure'
 
+/**
+ * The trip's money settings. Config: the base currency and the rates of the others. State `roundStep` (1, 100 or 500 minor
+ * units) is how finely payments are rounded. Properties: `base`, `rates`, `codes` and `view`. Read-only Methods:
+ * `convert(amount, currency)` (an amount in minor units of the base currency; fails for a currency without a rate) and
+ * `roundTransfer(cents)` (rounded to `roundStep`). Other widgets' Properties call both.
+ */
 export interface CurrencyInterfaces extends WidgetInterfaces {
+	/** The base currency, the rates of other currencies (base units per one unit) and the starting rounding step. */
 	config: { raw: CurrencyRawConfig, resolved: CurrencyConfig }
-	state: { roundStep: number }
+	state: {
+		/** How finely payments are rounded, in minor units: 1, 100 or 500. */
+		roundStep: number
+	}
 	properties: {
+		/** The base currency code. */
 		base: string
+		/** The rate of each other currency: base units per one unit. */
 		rates: Readonly<Record<string, number>>
+		/** Every currency code the trip supports: the base first, then the rated ones. */
 		codes: readonly string[]
+		/** The trip language and the base currency, derived from the root Trip and the Currency. */
 		view: TripView
 	}
 	methods: {
+		/**
+		 * Converts an amount into minor units of the base currency. Read-only. Fails (`unknown-currency`) for a currency
+		 * without a rate.
+		 *
+		 * @param amount - The amount in minor units of `currency`.
+		 * @param currency - A currency code the trip lists.
+		 * @returns The amount in minor units of the base currency.
+		 */
 		convert: (amount: number, currency: string) => number
+		/**
+		 * Rounds a payment to the current `roundStep`. Read-only.
+		 *
+		 * @param cents - The exact payment in minor units of the base currency.
+		 * @returns The rounded payment.
+		 */
 		roundTransfer: (cents: number) => number
 	}
 }
 
 export const CurrencyPlugin = createWidgetPlugin('Currency')
-	.description('The trip\'s money settings. Config: the base currency and the rates of the others. State `roundStep` (1, 100 or 500 minor units) is how finely payments are rounded. Properties: `base`, `rates`, `codes` and `view`. Read-only Methods: `convert(amount, currency)` (an amount in minor units of the base currency; fails for a currency without a rate) and `roundTransfer(cents)` (rounded to `roundStep`). Other widgets\' Properties call both.')
 	.interfaces<CurrencyInterfaces>()
 	.config({
-		description: 'The base currency, the rates of other currencies (base units per one unit) and the starting rounding step.',
-		schema: currencyConfigSchema,
 		validate: (input, ctx): input is CurrencyRawConfig => {
 			checkCurrencyConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

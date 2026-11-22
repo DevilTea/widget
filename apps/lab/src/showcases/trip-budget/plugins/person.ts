@@ -17,28 +17,36 @@ import type { PersonConfig, PersonRawConfig } from '../config'
 import type { LedgerEntry, PersonLedger, TripView } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkPersonConfig, resolvePersonConfig } from '../config'
-import { personConfigSchema } from '../schemas'
 import { childIds, isBoolean, isNullableString, isNumber, isNumberRecord, isString, viewFrom, viewReads } from './reads'
 import { checkInsideTrip, checkPersonId } from './structure'
 
+/**
+ * One member of the trip. Properties (all derived from the Expense widgets): `name`, `view`, `paid` (cents they paid),
+ * `owed` (their share of the costs), `balance` (`paid - owed`: positive means they get money back) and `ledger` (one line
+ * per expense; only evaluated when a viewer opens it).
+ */
 export interface PersonInterfaces extends WidgetInterfaces {
+	/** The name shown for this person. */
 	config: { raw: PersonRawConfig, resolved: PersonConfig }
 	properties: {
+		/** The name shown for this person. */
 		name: string
+		/** The trip language and the base currency, derived from the root Trip and the Currency. */
 		view: TripView
+		/** The base-currency cents this person paid, over every counted expense. */
 		paid: number
+		/** Their share of every counted expense, in cents. */
 		owed: number
+		/** `paid - owed`: positive means they get money back, negative that they owe money. */
 		balance: number
+		/** A line per expense with what they paid and their share. Lazy: only evaluated when a viewer opens it. */
 		ledger: PersonLedger
 	}
 }
 
 export const PersonPlugin = createWidgetPlugin('Person')
-	.description('One member of the trip. Properties (all derived from the Expense widgets): `name`, `view`, `paid` (cents they paid), `owed` (their share of the costs), `balance` (`paid - owed`: positive means they get money back) and `ledger` (one line per expense; only evaluated when a viewer opens it).')
 	.interfaces<PersonInterfaces>()
 	.config({
-		description: 'The name shown for this person.',
-		schema: personConfigSchema,
 		validate: (input, ctx): input is PersonRawConfig => {
 			checkPersonConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

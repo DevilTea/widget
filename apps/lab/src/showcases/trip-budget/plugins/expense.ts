@@ -28,39 +28,61 @@ import type { ExpenseBreakdown, ExpenseProblem, ExpenseProblemCode, RosterEntry,
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkExpenseConfig, resolveExpenseConfig } from '../config'
 import { CURRENCY_CODE_PATTERN, equalLeftover, expenseProblemCode, expenseProblemText, isPersonId, localize, percentLeftover, splitByPercent, splitEqually, tripText } from '../domain'
-import { expenseConfigSchema } from '../schemas'
 import { childIds, codesRead, currencyIdOf, isNumber, isNumberRecord, isString, languageFrom, languageReads, viewFrom, viewReads } from './reads'
 import { checkInsideTrip, isPersonIn } from './structure'
 
+/**
+ * One expense line. State: `amount`, `currency`, `paidBy` and (equal split) `among`, each starting at the authored value.
+ * Properties: `title`, `view`, `roster` (the people), `currencies` (the codes the Currency supports), `participants`,
+ * `problem`/`counted`/`errors` (whether the input can be counted), `amountBase` (cents in the base currency, converted by
+ * the Currency's read-only Method `convert`), `shares` (each person's cents) and `breakdown` (the conversion and split in
+ * detail; only evaluated when a viewer opens it).
+ */
 export interface ExpenseInterfaces extends WidgetInterfaces {
+	/**
+	 * The title per language, the starting amount and currency, who paid, and how it is split: equally among some people or
+	 * by percentages that add up to 100.
+	 */
 	config: { raw: ExpenseRawConfig, resolved: ExpenseConfig }
 	state: {
+		/** The amount in minor units of `currency`; `null` while missing. A negative amount is stored and reported, never refused. */
 		amount: number | null
+		/** The currency of the amount. */
 		currency: string
+		/** The id of the Person who paid; `null` while nobody is chosen. */
 		paidBy: string | null
+		/** The ids of the Persons who share the expense (equal split). */
 		among: readonly string[]
 	}
 	properties: {
+		/** The title in the trip language. */
 		title: string
+		/** The trip language and the base currency, derived from the root Trip and the Currency. */
 		view: TripView
+		/** The people of the trip. */
 		roster: readonly RosterEntry[]
+		/** The currency codes the Currency supports. */
 		currencies: readonly string[]
+		/** The ids of the Persons who share the expense. */
 		participants: readonly string[]
+		/** Why the input cannot be counted; `null` when it can. */
 		problem: ExpenseProblemCode | null
+		/** Whether the input can be counted. Depends on nothing that can fail. */
 		counted: boolean
+		/** The input problems, in the trip language. */
 		errors: readonly ExpenseProblem[]
+		/** The amount in minor units of the base currency, converted by the Currency's `convert`. */
 		amountBase: number
+		/** Each participant's share in cents, by Person id; they add up to `amountBase`. */
 		shares: Readonly<Record<string, number>>
+		/** How the amount was converted and split, line by line. Lazy: only evaluated when a viewer opens it. */
 		breakdown: ExpenseBreakdown
 	}
 }
 
 export const ExpensePlugin = createWidgetPlugin('Expense')
-	.description('One expense line. State: `amount`, `currency`, `paidBy` and (equal split) `among`, each starting at the authored value. Properties: `title`, `view`, `roster` (the people), `currencies` (the codes the Currency supports), `participants`, `problem`/`counted`/`errors` (whether the input can be counted), `amountBase` (cents in the base currency, converted by the Currency\'s read-only Method `convert`), `shares` (each person\'s cents) and `breakdown` (the conversion and split in detail; only evaluated when a viewer opens it).')
 	.interfaces<ExpenseInterfaces>()
 	.config({
-		description: 'The title per language, the starting amount and currency, who paid, and how it is split: equally among some people or by percentages that add up to 100.',
-		schema: expenseConfigSchema,
 		validate: (input, ctx): input is ExpenseRawConfig => {
 			checkExpenseConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
