@@ -549,8 +549,10 @@ test.describe('status chips and details (U02)', () => {
 		await setDraft(page, textDocument('typing in progress'))
 		await expect(draftChip)
 			.toHaveText('Unapplied changes')
+		// Not a live region: the chips announce nothing in this phase (phase 3 replaces them with one status chip).
 		await expect(draftChip)
-			.toHaveAttribute('role', 'status')
+			.not
+			.toHaveAttribute('role')
 		await expect(previewChip)
 			.toHaveText('Preview shows the last applied version')
 		// The Preview still shows the committed Document: the state is a fact about it and does not change while typing.
@@ -582,10 +584,17 @@ test.describe('status chips and details (U02)', () => {
 			.toHaveAttribute('data-behind-draft', 'false')
 	})
 
-	for (const lang of ['en', 'zh-TW'] as const) {
-		test(`with the draft chip shown the header stays on one row at 1280x800 (${lang})`, async ({ page }) => {
+	// The widest header: zh-TW with the problems button, the draft chip and the stale Preview label all shown at once.
+	for (const [lang, withProblems] of [['en', false], ['zh-TW', false], ['zh-TW', true]] as const) {
+		test(`with the draft chip shown the header stays on one row at 1280x800 (${lang}${withProblems ? ', problems and a stale preview too' : ''})`, async ({ page }) => {
 			await page.setViewportSize({ width: 1280, height: 800 })
 			await openLab(page, `showcase=survey&lang=${lang}`)
+			if (withProblems) {
+				await loadPreset(page, 'survey-ai-draft')
+				await expectPreviewStatus(page, 'stale')
+				await expect(page.getByTestId('document-status'))
+					.toHaveRole('button')
+			}
 			await setDraft(page, '{ "id": "x", "type": "Survey" }')
 			await expect(page.getByTestId('draft-status'))
 				.toBeVisible()
@@ -613,7 +622,8 @@ test.describe('status chips and details (U02)', () => {
 			.getByRole('button', { name: /show them in the JSON view/ }))
 			.toHaveCount(0)
 		await expect(page.getByTestId('document-status'))
-			.toHaveAttribute('role', 'status')
+			.not
+			.toHaveAttribute('role')
 
 		await loadPreset(page, 'survey-ai-draft')
 		await page.getByRole('tab', { name: 'Runtime' })

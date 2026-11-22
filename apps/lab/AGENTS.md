@@ -1319,9 +1319,11 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   `LabSession.isDirty`), adds the chip "Unapplied changes" (`draft-status`) while the JSON draft differs from the Document, and the
   Preview chip, while `current`, then says "Preview shows the last applied version" instead of "Preview up to date"
   (`data-behind-draft="true"`; `data-state` stays `current`), so nothing claims the Preview shows what the user is typing. The chips
-  that are not buttons carry `role="status"`. With problems, the validity chip is a **button** (`UButton`, same test id and data
+  are not live regions (no `role="status"`): nothing is announced when they change, on purpose for now, since a later phase replaces
+  them with one status chip and handles announcements there. With problems, the validity chip is a **button** (`UButton`, same test id and data
   attributes) that runs `store.showProblems()`; its accessible name is "N problems: show them in the JSON view" (the visible text is
-  part of it). `e2e/header-feedback.spec.ts` pins the draft chip, the one-row header with it at 1280px (en and zh-TW) and the button.
+  part of it). `e2e/header-feedback.spec.ts` pins the draft chip, the one-row header with it at 1280px (en and zh-TW, and zh-TW with the
+  problems button, the draft chip and the stale Preview label all shown) and the button.
 - *Edit actions*: a disabled action keeps `aria-disabled="true"` instead of `disabled` so it stays focusable and its tooltip
   can say why (nothing to apply / revert / undo, or "apply or revert your unapplied edits before undoing"); the click
   handler also refuses. Apply's tooltip shows the shortcut as key caps. Undo shows "Undo" and is
