@@ -853,8 +853,10 @@ Inspector snapshot (protocol 1.0) carry names and capabilities only (`docs/site/
   two `Quote` slots), so `createWidgetSystem` checks each child plugin against that shape; the reads themselves stay on
   `dep.widget(id)` with the existing `.validate()` refinements. `registry.unit.test.ts` fails when a plugin, config, slot or
   Event of a showcase has no documentation. `widget-skills --check` (see `apps/widget-skills/README.md`) reports 0 errors for
-  every showcase except `quote-rules`, whose raw config types are inferred from Valibot (`InferInput`) and keep their field
-  prose in `v.description()`.
+  every showcase (`quote-rules` also 0 warnings). `quote-rules` writes its raw config types by hand in `raw-config.ts`, with the
+  field prose of its Valibot schemas' `v.description()` repeated and the schema constraints as tags; `schemas.ts`
+  (`RawConfigsMatchSchemas`) asserts that each is exactly the schema's `InferInput`, so a shape drift fails `vue-tsc` (the prose
+  and the tags are not checked: change both sides together).
 - **The docs reach the Lab through `widgetDocs()`.** `widget-docs.ts` (`labWidgetDocs()`) configures the widget-skills Vite
   plugin for the seven showcase Systems with `tsconfig.app.json`; `vite.config.ts`, `vitest.config.ts` and the root
   `vitest.config.ts` (project `lab`) all load it, importing the plugin by relative path (`../widget-skills/src/vite`): Vite hands
