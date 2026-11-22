@@ -189,3 +189,76 @@ describe('helpers', () => {
 			.toBeUndefined()
 	})
 })
+
+describe('generated schemas: $ref roots, anyOf and anyOf with null', () => {
+	// The shape `widgetDocs()` generates for a config: a `$ref` root with `$defs`, the config's description as a sibling,
+	// an `anyOf` with `null` when the config may be left out, and object unions as `anyOf` of `$ref`s.
+	const defs = {
+		type_Raw: {
+			type: 'object',
+			properties: {
+				title: { type: 'string', description: 'The title.' },
+				split: { anyOf: [{ $ref: '#/$defs/type_Equal' }, { $ref: '#/$defs/type_Percent' }], description: 'How it is split.' },
+				note: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'A note, or null.' },
+			},
+			required: ['title'],
+			additionalProperties: false,
+			description: 'The authored config.',
+		},
+		type_Equal: { type: 'object', properties: { mode: { const: 'equal' }, among: { type: 'array', items: { type: 'string' } } }, required: ['mode', 'among'], additionalProperties: false },
+		type_Percent: { type: 'object', properties: { mode: { const: 'percent' }, percents: { type: 'object', additionalProperties: { type: 'number' } } }, required: ['mode', 'percents'], additionalProperties: false },
+	}
+	const required: JsonSchema = { $schema: 'https://json-schema.org/draft/2020-12/schema', title: 'X config', $ref: '#/$defs/type_Raw', description: 'The config.', $defs: defs }
+	const omittable: JsonSchema = { $schema: 'https://json-schema.org/draft/2020-12/schema', title: 'X config', anyOf: [{ $ref: '#/$defs/type_Raw' }, { type: 'null' }], description: 'The config.', $defs: defs }
+
+	it('reads a $ref root as its target, with the config description', () => {
+		const model = describeField(required, required, { title: 'a' })
+		expect(model.field)
+			.toMatchObject({ kind: 'object', known: true, required: new Set(['title']) })
+		expect(model.description)
+			.toBe('The config.')
+		expect(model.viaUnion)
+			.toBeUndefined()
+	})
+
+	it('edits a config that may be null as its object form, without the other-forms hint', () => {
+		const model = describeField(omittable, omittable, { title: 'a' })
+		expect(model.field)
+			.toMatchObject({ kind: 'object', known: true, required: new Set(['title']) })
+		if (model.field.kind !== 'object')
+			throw new Error('expected an object field')
+		expect(Object.keys(model.field.properties))
+			.toEqual(['title', 'split', 'note'])
+		expect(model.description)
+			.toBe('The config.')
+		expect(model.viaUnion)
+			.toBeUndefined()
+		// `{}` misses the required title: still the object form, so the title can be added.
+		expect(describeField(omittable, omittable, {}).field)
+			.toMatchObject({ kind: 'object', known: true })
+		const note = describeField(omittable, model.field.properties.note!, 'text')
+		expect([note.field, note.viaUnion, note.description])
+			.toEqual([{ kind: 'string', maxLength: null }, undefined, 'A note, or null.'])
+	})
+
+	it('reads an anyOf of $refs as the branch the value fits, and says other forms exist', () => {
+		const split = (resolveSchema(required, required)!.properties as Record<string, JsonSchema>).split!
+		const equal = describeField(required, split, { mode: 'equal', among: ['a'] })
+		expect(equal.field)
+			.toMatchObject({ kind: 'object', required: new Set(['mode', 'among']) })
+		expect([equal.viaUnion, equal.description])
+			.toEqual([true, 'How it is split.'])
+		const percent = describeField(required, split, { mode: 'percent', percents: { a: 100 } })
+		expect(percent.field)
+			.toMatchObject({ kind: 'object', required: new Set(['mode', 'percents']) })
+		expect(describeField(required, split, { mode: 'other' }).field)
+			.toEqual({ kind: 'json' })
+	})
+
+	it('starts a new value from the branch that is not null', () => {
+		expect(defaultValueFor(omittable, { anyOf: [{ type: 'null' }, { type: 'string' }] }))
+			.toBe('')
+		expect(defaultValueFor(omittable, omittable))
+			.toEqual({ title: '' })
+	})
+})
