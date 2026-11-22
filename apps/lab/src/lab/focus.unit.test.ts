@@ -60,11 +60,14 @@ describe('createInspectorFocusStore', () => {
 
 		expect(store.getScopedFocus('preview'))
 			.toMatchObject({ scope: 'preview', revision: 0, ...previewFocus })
+		// The Document keeps the widget the user had selected (counter-1, found again by id and type in the new revision).
+		const counterAfter = inspectBlueprint(session.documentState.blueprint).nodes
+			.find(node => node.resolved && node.node.id === 'counter-1')!
 		expect(store.getScopedFocus('document'))
 			.toMatchObject({
 				scope: 'document',
 				revision: 1,
-				nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId,
+				nodeId: counterAfter.nodeId,
 			})
 
 		const documentFocusBefore = store.getScopedFocus('document')
@@ -168,6 +171,41 @@ describe('createInspectorFocusStore', () => {
 			.toEqual({ nodeId: titleAfter.nodeId, member: { type: 'property', name: 'text' } })
 		expect(store.getScopedFocus('document'))
 			.toMatchObject({ revision: 1 })
+	})
+
+	it('keeps the selected widget (not its member) after a JSON Apply when the new Document still has it', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const store = createInspectorFocusStore(session)
+		const title = inspectBlueprint(session.documentState.blueprint).nodes.find(entry => entry.node.resolved && entry.node.id === 'title')!
+		store.setFocus({ nodeId: title.nodeId, member: { type: 'property', name: 'text' } })
+
+		const edited = JSON.parse(validSource) as { slots: { items: { id: string, config?: Record<string, unknown> }[] } }
+		edited.slots.items.find(item => item.id === 'title')!.config = { text: 'edited in JSON' }
+		session.setDraftSourceText(JSON.stringify(edited, null, 2))
+		const outcome = await session.apply()
+
+		expect(outcome.status)
+			.toBe('applied')
+		const titleAfter = inspectBlueprint(session.documentState.blueprint).nodes.find(entry => entry.node.resolved && entry.node.id === 'title')!
+		expect(store.getFocus())
+			.toEqual({ nodeId: titleAfter.nodeId })
+		expect(store.getScopedFocus('document'))
+			.toMatchObject({ revision: 1 })
+	})
+
+	it('goes back to the root after a JSON Apply that removed the selected widget', async () => {
+		const session = new LabSession({ system: sandboxSystem, initialSourceText: validSource })
+		const store = createInspectorFocusStore(session)
+		const title = inspectBlueprint(session.documentState.blueprint).nodes.find(entry => entry.node.resolved && entry.node.id === 'title')!
+		store.setFocus({ nodeId: title.nodeId })
+
+		const edited = JSON.parse(validSource) as { slots: { items: { id: string }[] } }
+		edited.slots.items = edited.slots.items.filter(item => item.id !== 'title')
+		session.setDraftSourceText(JSON.stringify(edited, null, 2))
+		await session.apply()
+
+		expect(store.getFocus())
+			.toEqual({ nodeId: inspectBlueprint(session.documentState.blueprint).rootNodeId })
 	})
 
 	it('goes back to the root when the widget cannot be found again by its id and type', async () => {

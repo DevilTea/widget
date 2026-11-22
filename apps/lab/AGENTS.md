@@ -1254,9 +1254,14 @@ snapshot node and lowers the command to a `SourcePatch` addressed by the node's 
 to an array uses the JSON Pointer form `.../-`, the only way a patch can say "append"; the first key of a widget that has no `config` yet
 creates it; so does a `null` config; an empty path replaces the whole config with any JSON value, or creates it). The component never constructs a patch and never targets a widget by id, which keeps duplicate authored ids and cross-revision focus
 safe. A path that no longer exists, an `add` over an existing key, a stale revision and a non-JSON value are explicit `unsupported` outcomes, each with its own message;
-mechanical patch failures are `patch-error`. After a **Structure** commit Document focus stays on the same widget and member (found again
-by id and type; an ambiguous or missing one goes back to the root), so edits can follow each other; every other commit (JSON Apply, preset,
-Undo, showcase switch) still resets to the root.
+mechanical patch failures are `patch-error`. After a commit Document focus stays on the same widget when the new Document still has it (found again
+by id and type; an ambiguous or missing one goes back to the root). After a **Structure** commit the member stays too, so edits can follow
+each other; after a JSON Apply, a preset or Undo only the widget is kept (the tree may have changed, and a member with it). Until Lab UX
+phase 1 those commits always reset to the root, which threw the user out of the widget they were editing after every Apply. A showcase
+switch builds a new focus store and starts at the root (`src/lab/focus.ts`, `focus.unit.test.ts`).
+**Key order is not kept** by a Structure commit: Core's `applyPatch` rebuilds every object on the patched path and appends the replaced key, so
+the edited key and each of its ancestors move to the end of their object (`config.label.en` puts `en` after `zh-TW`, `label` last in `config` and
+`config` after `slots`). That is Core behaviour (`packages/core/src/source-patch.ts`, `rebuildObject`); the Lab does not work around it.
 
 Successful Structure commands and JSON Apply share `LabSession`'s Document commit and Runtime promotion
 boundary. A successful Structure commit rewrites both applied source text and the JSON draft to deterministic

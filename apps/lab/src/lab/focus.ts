@@ -141,20 +141,23 @@ export function createInspectorFocusStore<Plugins extends AnyWidgetPluginTuple>(
 		const previousFocus = documentFocus
 		lastDocumentRevision = document.revision
 		lastDocumentBlueprint = document.blueprint
-		// A Structure command edits one widget's config and nothing else: the user stays on that widget (and member), so
-		// several edits in a row do not each send them back to the root. Every other kind of commit (JSON Apply, a preset,
-		// Undo, a showcase switch) can replace the whole tree and resets to the root, as before. The widget is found again
-		// by its id and type; an ambiguous or missing one also means the root.
+		// The selected widget survives a commit when the new Document still has it: it is found again by its id and type,
+		// and an ambiguous or missing one means the root. A Structure command edits one widget's config and nothing else,
+		// so the member stays selected too and several edits can follow each other. Every other commit (JSON Apply, a
+		// preset, Undo) can replace the whole tree, so only the widget is kept: a member the user picked may be gone.
+		// (Until Lab UX phase 1 those commits always went back to the root, which threw the user out of what they were
+		// editing after every Apply.) A showcase switch builds a new store, so it starts at the root.
 		const lastPatch = session.lastAppliedSourcePatch
+		const fromStructure = lastPatch?.origin === 'structure' && lastPatch.revision === document.revision
 		let keptNodeId: InspectionNodeId | null = null
-		if (lastPatch?.origin === 'structure' && lastPatch.revision === document.revision && previousFocus !== null) {
+		if (previousFocus !== null) {
 			const identity = documentIdentity(previousBlueprint, previousFocus.nodeId)
 			keptNodeId = identity === null ? null : uniqueDocumentNodeForIdentity(document.blueprint, identity)
 		}
 		documentFocus = {
 			...(keptNodeId === null
 				? rootFocusOf(document.blueprint)
-				: { nodeId: keptNodeId, ...(previousFocus?.member === undefined ? {} : { member: previousFocus.member }) }),
+				: { nodeId: keptNodeId, ...(previousFocus?.member === undefined || !fromStructure ? {} : { member: previousFocus.member }) }),
 			scope: 'document',
 			revision: document.revision,
 		}
