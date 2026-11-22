@@ -158,11 +158,15 @@ export interface LabStore {
 	 */
 	readonly graphShowAbsent: Ref<boolean>
 	readonly graphShowIsolatedMembers: Ref<boolean>
-	readonly graphExpandedClusterIds: Ref<ReadonlySet<string>>
+	/**
+	 * The expanded widget clusters of the Graph: at most one (issue #254). The fully expanded Graph was measured unreadable
+	 * (issue #230), so expanding a widget collapses the one expanded before, and there is no "expand all".
+	 */
+	readonly graphExpandedClusterIds: Readonly<Ref<ReadonlySet<string>>>
+	/** Expands `clusterId` and collapses the widget expanded before it, if any. */
 	expandGraphCluster: (clusterId: string) => void
 	collapseGraphCluster: (clusterId: string) => void
 	toggleGraphCluster: (clusterId: string) => void
-	expandAllGraphClusters: (clusterIds?: readonly string[]) => void
 	collapseAllGraphClusters: () => void
 	setDraftSourceText: (text: string) => void
 	apply: () => Promise<ApplyOutcome>
@@ -401,18 +405,15 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	const graphShowIsolatedMembers = shallowRef(false)
 	const graphExpandedClusterIds = shallowRef<ReadonlySet<string>>(new Set())
 
+	// At most one expanded widget (issue #254): expanding one replaces the set, so the one expanded before collapses.
 	function expandGraphCluster(clusterId: string): void {
-		if (!graphExpandedClusterIds.value.has(clusterId)) {
-			graphExpandedClusterIds.value = new Set([...graphExpandedClusterIds.value, clusterId])
-		}
+		if (!graphExpandedClusterIds.value.has(clusterId))
+			graphExpandedClusterIds.value = new Set([clusterId])
 	}
 
 	function collapseGraphCluster(clusterId: string): void {
-		if (graphExpandedClusterIds.value.has(clusterId)) {
-			const next = new Set(graphExpandedClusterIds.value)
-			next.delete(clusterId)
-			graphExpandedClusterIds.value = next
-		}
+		if (graphExpandedClusterIds.value.has(clusterId))
+			graphExpandedClusterIds.value = new Set()
 	}
 
 	function toggleGraphCluster(clusterId: string): void {
@@ -420,18 +421,6 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			collapseGraphCluster(clusterId)
 		else
 			expandGraphCluster(clusterId)
-	}
-
-	function expandAllGraphClusters(clusterIds?: readonly string[]): void {
-		if (clusterIds !== undefined) {
-			graphExpandedClusterIds.value = new Set(clusterIds)
-		}
-		else {
-			const inspection = inspectBlueprint(session.documentState.blueprint)
-			const allClusterIds = inspection.nodes.filter(n => n.resolved)
-				.map(n => `cluster:${n.nodeId}`)
-			graphExpandedClusterIds.value = new Set(allClusterIds)
-		}
 	}
 
 	function collapseAllGraphClusters(): void {
@@ -537,7 +526,6 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		expandGraphCluster,
 		collapseGraphCluster,
 		toggleGraphCluster,
-		expandAllGraphClusters,
 		collapseAllGraphClusters,
 		setDraftSourceText: text => session.setDraftSourceText(text),
 		// `session.apply()` is invoked here, synchronously, at command-call time — never deferred behind

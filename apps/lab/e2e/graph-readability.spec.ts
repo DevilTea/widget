@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, openDependenciesGraph, setLocale, test } from './fixtures'
+import { expandGraphWidget, expect, openDependenciesGraph, setLocale, test } from './fixtures'
 
 /**
  * Issue #230, "the Graph is hard to read": what a person sees in the real browser. The cards are spread out, every dependency
@@ -35,15 +35,15 @@ interface RenderedGraph {
 	}[]
 }
 
-async function openGraph(page: Page, showcase: 'survey' | 'trip-budget', options: { expanded?: boolean } = {}): Promise<void> {
+/** `expand`: the id of the one widget to expand (one widget is expanded at a time, issue #254). */
+async function openGraph(page: Page, showcase: 'survey' | 'trip-budget', options: { expand?: string } = {}): Promise<void> {
 	await page.goto(`/?showcase=${showcase}`)
 	await openDependenciesGraph(page)
 	await expect(page.locator('.graph-node--cluster')
 		.first())
 		.toBeVisible({ timeout: 15_000 })
-	if (options.expanded === true) {
-		await page.getByRole('button', { name: 'Expand all' })
-			.click()
+	if (options.expand !== undefined) {
+		await expandGraphWidget(page, options.expand)
 		await expect(page.locator('.graph-node--member')
 			.first())
 			.toBeVisible({ timeout: 15_000 })
@@ -200,11 +200,12 @@ for (const showcase of ['survey', 'trip-budget'] as const) {
 	})
 }
 
-test('survey expanded Graph: Bezier edges, each with an arrowhead', async ({ page }) => {
-	await openGraph(page, 'survey', { expanded: true })
+test('survey Graph with #sessions expanded: Bezier edges, each with an arrowhead', async ({ page }) => {
+	await openGraph(page, 'survey', { expand: 'sessions' })
 	const { edges } = await readGraph(page)
+	// 25 edges: the 8 members of #sessions with their own dependencies, and the other widgets' as cards.
 	expect(edges.length)
-		.toBeGreaterThan(50)
+		.toBeGreaterThan(20)
 	for (const edge of edges) {
 		expect(edge.d, edge.id)
 			.toMatch(BEZIER_PATH)
@@ -238,20 +239,40 @@ test('the default Survey Fit at 1280 x 800 keeps the card text close to 11px (it
 		.toBeGreaterThanOrEqual(9.8)
 })
 
-test('Fit reaches the whole expanded Trip budget, and a person cannot wheel a small graph down to a dot', async ({ page }) => {
+// Issue #254: one widget is expanded at a time, and expanding it refits the whole new layout. The largest widgets (the lowest Fit,
+// measured with the real ELK in `graph-readability.unit.test.ts`) are the Survey's #sessions (0.415 at 1440 x 900) and the Trip
+// budget's #hotel (0.196); fully expanded they were 0.27 and about 0.06.
+for (const { showcase, widget, fit } of [
+	{ showcase: 'survey', widget: 'sessions', fit: 0.415 },
+	{ showcase: 'trip-budget', widget: 'hotel', fit: 0.196 },
+] as const) {
+	test(`expanding #${widget} fits the whole ${showcase} at about ${fit}, every card in view`, async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 })
+		await openGraph(page, showcase, { expand: widget })
+		const canvas = (await page.locator('.vue-flow')
+			.boundingBox())!
+		const { zoom, cards } = await readGraph(page)
+		expect(zoom)
+			.toBeGreaterThan(fit - 0.03)
+		expect(zoom)
+			.toBeLessThan(fit + 0.03)
+		expect(cards.length)
+			.toBeGreaterThan(10)
+		for (const card of cards) {
+			expect(card.rect.x, card.id)
+				.toBeGreaterThanOrEqual(canvas.x - 1)
+			expect(card.rect.x + card.rect.width, card.id)
+				.toBeLessThanOrEqual(canvas.x + canvas.width + 1)
+			expect(card.rect.y, card.id)
+				.toBeGreaterThanOrEqual(canvas.y - 1)
+			expect(card.rect.y + card.rect.height, card.id)
+				.toBeLessThanOrEqual(canvas.y + canvas.height + 1)
+		}
+	})
+}
+
+test('a person cannot wheel a small graph down to a dot', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 })
-	await openGraph(page, 'trip-budget', { expanded: true })
-	const canvas = (await page.locator('.vue-flow')
-		.boundingBox())!
-	const { zoom, cards } = await readGraph(page)
-	expect(zoom)
-		.toBeLessThan(0.1)
-	for (const card of cards) {
-		expect(card.rect.x, card.id)
-			.toBeGreaterThanOrEqual(canvas.x - 1)
-		expect(card.rect.x + card.rect.width, card.id)
-			.toBeLessThanOrEqual(canvas.x + canvas.width + 1)
-	}
 
 	// The collapsed Survey fits at 0.95: Zoom out stops at about a quarter of that, not at 0.05.
 	await page.goto('/?showcase=survey')

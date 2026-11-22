@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, setTheme, test } from './fixtures'
+import { expandGraphWidget, expect, setTheme, test } from './fixtures'
 
 /** Opens the Survey's Dependencies tab; most tests here are about the Graph, so it is switched to unless asked not to. */
 async function openSurveyDependencies(page: Page, options: { graph?: boolean } = {}) {
@@ -51,8 +51,7 @@ test('Relations inspects shared Document focus and switching back to Graph prese
 	// Use the existing Graph interaction path to select a real member with both incoming and
 	// outgoing dependencies.
 	await graphViewTab.click()
-	await page.getByRole('button', { name: 'Expand all' })
-		.click()
+	await expandGraphWidget(page, 'phone')
 	// `phone.required` reads `mode.value` and is read by the root's `response` and by its own `errors`.
 	const phoneRequired = page.locator('.vue-flow__node[data-id="4:property:required"] .graph-node--member')
 	await expect(phoneRequired)
@@ -90,10 +89,13 @@ test('Relations inspects shared Document focus and switching back to Graph prese
 		.toContainText('response')
 
 	// Switching views is presentation-only. The Graph keeps its viewport and projects the new
-	// shared focus instead of triggering a layout/refit.
+	// shared focus instead of triggering a layout/refit. Only #phone is expanded (one widget at a time,
+	// issue #254), so the Survey's `response` is not drawn and its collapsed #open-day card shows the focus.
 	await graphViewTab.click()
 	await expect(page.locator('.graph-node--focused'))
-		.toContainText('response')
+		.toHaveCount(1)
+	await expect(page.locator('.graph-node--focused'))
+		.toContainText('#open-day')
 	await expect(graphTransform)
 		.toHaveAttribute('style', transformBeforeRelations ?? '')
 })
@@ -199,8 +201,7 @@ test('Relations keeps page-level width contained at the 900px minimum in light a
 	await openSurveyDependencies(page)
 
 	const viewTabs = page.getByRole('tablist', { name: 'Dependencies views' })
-	await page.getByRole('button', { name: 'Expand all' })
-		.click()
+	await expandGraphWidget(page, 'phone')
 	const member = page.locator('.vue-flow__node[data-id="4:property:required"] .graph-node--member')
 	await expect(member)
 		.toBeVisible({ timeout: 15_000 })

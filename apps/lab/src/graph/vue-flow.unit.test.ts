@@ -226,6 +226,29 @@ describe('toVueFlow', () => {
 			.toBe(false)
 	})
 
+	it('marks the collapsed card of a focused member as focused, and only a collapsed one (issue #254)', () => {
+		const graph = fixtureGraph()
+		const layout = fixtureLayout()
+		const focused = { nodeId: 1 as InspectionNodeId, member: { type: 'property' as const, name: 'reader' } }
+
+		const collapsed = toVueFlow(graph, layout, { expandedClusterIds: new Set(['cluster:2']), focused }).nodes
+		expect(collapsed.find(n => n.id === 'cluster:1')?.data?.isFocused)
+			.toBe(true)
+		expect(collapsed.find(n => n.id === 'cluster:1')?.data?.isDimmed)
+			.toBe(false)
+		expect(collapsed.find(n => n.id === 'cluster:2')?.data?.isFocused)
+			.toBe(false)
+		expect(collapsed.find(n => n.id === 'cluster:3')?.data?.isFocused)
+			.toBe(false)
+
+		// Expanded, the member card itself shows the focus and the widget's shell does not.
+		const expanded = toVueFlow(graph, layout, { expandedClusterIds: new Set(['cluster:1']), focused }).nodes
+		expect(expanded.find(n => n.id === 'cluster:1')?.data?.isFocused)
+			.toBe(false)
+		expect(expanded.find(n => n.id === '1:property:reader')?.data?.isFocused)
+			.toBe(true)
+	})
+
 	it('applies deemphasis to unrelated clusters when a cluster is focused', () => {
 		const graph = fixtureGraph()
 		const layout = fixtureLayout()

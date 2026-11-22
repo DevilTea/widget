@@ -202,7 +202,6 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Depends on:': '依賴於：',
 	'members': '個成員',
 	'Fit graph': '縮放至完整圖形',
-	'Expand all': '全部展開',
 	'Collapse all': '全部收合',
 	'Expand': '展開',
 	'Collapse': '收合',
