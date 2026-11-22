@@ -454,7 +454,7 @@ test('9. AI context: Catalog shows the Numeric config schema and copies the cata
 	await expect(schema)
 		.toContainText('"$defs"')
 	await expect(schema)
-		.toContainText('"Condition"')
+		.toContainText('"type_Condition"')
 
 	await page.evaluate(() => {
 		Object.defineProperty(navigator, 'clipboard', {
@@ -472,7 +472,7 @@ test('9. AI context: Catalog shows the Numeric config schema and copies the cata
 	expect(copied.widgets.map(widget => widget.type))
 		.toEqual(['Survey', 'SingleChoice', 'MultipleChoice', 'Numeric', 'ShortAnswer'])
 	expect(Object.keys(copied.widgets.find(widget => widget.type === 'Numeric')!.config!.schema!.$defs!))
-		.toContain('Condition')
+		.toContain('type_Condition')
 
 	// Implementation for `Numeric` curates its plugin file.
 	await openDeveloperTool(page, 'implementation')
