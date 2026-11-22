@@ -213,7 +213,6 @@ describe('why the waiting is not in Core', () => {
 	it('a Method\'s emit stops working when the Method returns, so an async tail could never emit', async () => {
 		let later: () => void = () => {}
 		const plugin = createWidgetPlugin('Waiter')
-			.description('A widget that tries to emit after waiting')
 			.interfaces<{ methods: { start: () => null }, events: { done: [] } }>()
 			.methods(methods => methods.start({
 				validateArgs: (args): args is [] => args.length === 0,
@@ -223,7 +222,7 @@ describe('why the waiting is not in Core', () => {
 					return null
 				},
 			}))
-			.events(events => events.done({ description: 'The work finished' }))
+			.events(['done'])
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [plugin] })
 			.createBlueprint({ id: 'waiter', type: 'Waiter' })

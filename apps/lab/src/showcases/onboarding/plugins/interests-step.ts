@@ -10,27 +10,37 @@ import type { I18nText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkInterestsConfig, resolveInterestsConfig } from '../config'
 import { isStringArray } from '../domain'
-import { interestsConfigSchema } from '../schemas'
 import { checkInsideOnboarding } from './structure'
 
+/**
+ * Step 2 of the onboarding wizard: the interests the new member picks from the configured options (State `selected`: the
+ * picked ids). Properties: `title`, `options`, `missing` (`interests:<n>` while `n` more must be picked to reach
+ * `minimum`), `complete` and `answers` (the picked ids).
+ */
 export interface InterestsInterfaces extends WidgetInterfaces {
+	/** The step title, the options (an id and a label per language), how many must be picked and which are picked at the start. */
 	config: { raw: InterestsRawConfig, resolved: InterestsConfig }
-	state: { selected: readonly string[] }
+	state: {
+		/** The picked option ids, in the order of the options. */
+		selected: readonly string[]
+	}
 	properties: {
+		/** The step title per language. */
 		title: I18nText
+		/** The configured options: an id and a label per language. */
 		options: readonly InterestOptionRaw[]
+		/** `interests:<n>` while `n` more must be picked to reach `minimum`. */
 		missing: readonly string[]
+		/** Whether at least `minimum` interests are picked. */
 		complete: boolean
+		/** The picked ids. */
 		answers: readonly string[]
 	}
 }
 
 export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
-	.description('Step 2 of the onboarding wizard: the interests the new member picks from the configured options (State `selected`: the picked ids). Properties: `title`, `options`, `missing` (`interests:<n>` while `n` more must be picked to reach `minimum`), `complete` and `answers` (the picked ids).')
 	.interfaces<InterestsInterfaces>()
 	.config({
-		description: 'The step title, the options (an id and a label per language), how many must be picked and which are picked at the start.',
-		schema: interestsConfigSchema,
 		validate: (input, ctx): input is InterestsRawConfig => {
 			checkInterestsConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()

@@ -9,27 +9,37 @@ import type { I18nText } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkSafetyConfig, resolveSafetyConfig } from '../config'
 import { isStringArray } from '../domain'
-import { safetyConfigSchema } from '../schemas'
 import { checkInsideOnboarding } from './structure'
 
+/**
+ * Step 3 of the onboarding wizard: the safety briefing. The visitor acknowledges each configured rule (State
+ * `acknowledged`: the ids acknowledged so far). Properties: `title`, `rules`, `missing` (one `rule:<id>` per rule not yet
+ * acknowledged), `complete` and `answers` (the acknowledged ids).
+ */
 export interface SafetyInterfaces extends WidgetInterfaces {
+	/** The step title, the safety rules (an id and a text per language) and which are acknowledged at the start. */
 	config: { raw: SafetyRawConfig, resolved: SafetyConfig }
-	state: { acknowledged: readonly string[] }
+	state: {
+		/** The ids of the rules acknowledged so far. */
+		acknowledged: readonly string[]
+	}
 	properties: {
+		/** The step title per language. */
 		title: I18nText
+		/** The configured rules: an id and a text per language. */
 		rules: readonly SafetyRuleRaw[]
+		/** One `rule:<id>` per rule not yet acknowledged. */
 		missing: readonly string[]
+		/** Whether every rule is acknowledged. */
 		complete: boolean
+		/** The acknowledged ids. */
 		answers: readonly string[]
 	}
 }
 
 export const SafetyStepPlugin = createWidgetPlugin('SafetyStep')
-	.description('Step 3 of the onboarding wizard: the safety briefing. The visitor acknowledges each configured rule (State `acknowledged`: the ids acknowledged so far). Properties: `title`, `rules`, `missing` (one `rule:<id>` per rule not yet acknowledged), `complete` and `answers` (the acknowledged ids).')
 	.interfaces<SafetyInterfaces>()
 	.config({
-		description: 'The step title, the safety rules (an id and a text per language) and which are acknowledged at the start.',
-		schema: safetyConfigSchema,
 		validate: (input, ctx): input is SafetyRawConfig => {
 			checkSafetyConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
