@@ -21,17 +21,35 @@ import type { Findings, RepairStep, SavedWith } from '../domain'
 import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkSavedDraftConfig, resolveSavedDraftConfig } from '../config'
 import { planRepair } from '../domain'
-import { savedDraftConfigSchema } from '../schemas'
 import { projectFindings } from './findings'
 
+/**
+ * A draft that an older version of the app saved: config `title`, `savedWith` and `source` (the stored document, any
+ * JSON). Properties: `title`, `savedWith`, `source`, `findings` (what Core says about `source`, compiled with the
+ * notice board system) and `plan` (the application's migration steps). State `revision`, `appRevision` and `repaired`
+ * mirror the host's editing session.
+ */
 export interface SavedDraftInterfaces extends WidgetInterfaces {
+	/** The draft title, the format version that saved it and the stored document. */
 	config: { raw: SavedDraftRawConfig, resolved: SavedDraftConfig }
-	state: { revision: number, appRevision: number, repaired: boolean }
+	state: {
+		/** The revision of the document the host's editing session holds; -1 while no session is open. */
+		revision: number
+		/** The document revision the app last read; -1 while no session is open. */
+		appRevision: number
+		/** Whether the session's document is valid; false while no session is open. */
+		repaired: boolean
+	}
 	properties: {
+		/** The draft title (config `title`). */
 		title: string
+		/** The format version that saved the draft (config `savedWith`). */
 		savedWith: SavedWith
+		/** The stored document, exactly as saved (config `source`). */
 		source: JsonValue
+		/** What Core says about `source`, compiled with the notice board system: status, located diagnostics and the recovered nodes. */
 		findings: Findings
+		/** The application's migration plan for `savedWith`: ordered `SourcePatch` steps guarded by `test` operations. */
 		plan: readonly RepairStep[]
 	}
 }
@@ -41,11 +59,8 @@ function isRevision(input: unknown): input is number {
 }
 
 export const SavedDraftPlugin = createWidgetPlugin('SavedDraft')
-	.description('A draft that an older version of the app saved: config `title`, `savedWith` and `source` (the stored document, any JSON). Properties: `title`, `savedWith`, `source`, `findings` (what Core says about `source`, compiled with the notice board system) and `plan` (the application\'s migration steps). State `revision`, `appRevision` and `repaired` mirror the host\'s editing session.')
 	.interfaces<SavedDraftInterfaces>()
 	.config({
-		description: 'The draft title, the format version that saved it and the stored document.',
-		schema: savedDraftConfigSchema,
 		validate: (input, ctx): input is SavedDraftRawConfig => {
 			checkSavedDraftConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
