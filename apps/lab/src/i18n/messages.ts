@@ -32,12 +32,7 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'invalid': '無效',
 	'diagnostic': '問題',
 	'diagnostics': '問題',
-	// Revert discards the unapplied draft and Undo goes back one committed change: two different actions, so the zh-TW
-	// labels are not near-synonyms (還原 / 復原 were).
-	'Revert': '捨棄草稿',
 	'Format': '格式化',
-	'Apply': '套用',
-	'Applying…': '套用中…',
 	'Language': '語言',
 	// The overflow menu's language entry sets the Lab's own language, not a showcase's (the survey has its own select).
 	'Lab language': 'Lab 介面語言',

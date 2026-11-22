@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 
 import type { LabStore } from './composables/use-lab-store'
-import type { TutorialStore } from './composables/use-tutorial'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, defineComponent, h, inject, onUnmounted, shallowRef } from 'vue'
@@ -71,17 +70,14 @@ describe('app.vue teardown ordering', () => {
 	})
 })
 
-describe('app.vue shortcut and narrow-viewport gate', () => {
-	let apply: ReturnType<typeof vi.fn>
-	let isDirty: ReturnType<typeof shallowRef<boolean>>
-	let isApplying: ReturnType<typeof shallowRef<boolean>>
-	let tutorial: TutorialStore | undefined
+describe('app.vue narrow-viewport gate and the retired Apply shortcut', () => {
 	let media: { matches: boolean, listeners: Set<(e: { matches: boolean }) => void> }
+	let flushJson: ReturnType<typeof vi.fn>
 
 	const TutorialProbe = defineComponent({
 		name: 'WelcomeCard',
 		setup() {
-			tutorial = inject(TutorialStoreKey)
+			inject(TutorialStoreKey)
 			return () => h('div')
 		},
 	})
@@ -102,20 +98,9 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 		})
 	}
 
-	function press(init: KeyboardEventInit & { keyCode?: number } = {}): KeyboardEvent {
-		const event = new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true, ...init })
-		if (init.keyCode !== undefined)
-			Object.defineProperty(event, 'keyCode', { value: init.keyCode })
-		window.dispatchEvent(event)
-		return event
-	}
-
 	beforeEach(() => {
 		sessionStorage.clear()
-		tutorial = undefined
-		apply = vi.fn(async () => undefined)
-		isDirty = shallowRef(true)
-		isApplying = shallowRef(false)
+		flushJson = vi.fn(async () => null)
 		media = { matches: true, listeners: new Set() }
 		vi.stubGlobal('matchMedia', () => ({
 			get matches() { return media.matches },
@@ -134,10 +119,9 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 				// Read by the tutorial store (rechecks on every Document revision) and App.vue's spotlight (the Author view).
 				documentState: shallowRef({ revision: 0 }),
 				authorView: shallowRef('structure'),
-				isDirty,
-				isApplying,
-				canApply: computed(() => isDirty.value && !isApplying.value),
-				apply,
+				isDirty: shallowRef(true),
+				hasJsonSyntaxError: computed(() => false),
+				flushJson,
 				dispose: vi.fn(),
 			} as unknown as LabStore)
 	})
@@ -146,138 +130,19 @@ describe('app.vue shortcut and narrow-viewport gate', () => {
 		vi.unstubAllGlobals()
 	})
 
-	it('applies on Cmd+Enter and Ctrl+Enter in the normal case', () => {
+	// Lab UX phase 3: there is no Apply, so Cmd/Ctrl+Enter has no window-wide meaning. The JSON editor's own action commits
+	// (`use-monaco-editor.unit.test.ts`); everywhere else the key is left to the focused control and the browser.
+	it('leaves Cmd/Ctrl+Enter outside the JSON editor alone: nothing is committed and the event is not claimed', () => {
 		const wrapper = mountApp()
-		tutorial!.dismissWelcome()
-		const event = press()
-		press({ metaKey: false, ctrlKey: true })
-
-		expect(apply)
-			.toHaveBeenCalledTimes(2)
-		expect(event.defaultPrevented)
-			.toBe(true)
-		wrapper.unmount()
-	})
-
-	it('ignores IME composition, key repeat, and already-handled events', () => {
-		const wrapper = mountApp()
-		tutorial!.dismissWelcome()
-		press({ isComposing: true })
-		press({ keyCode: 229 })
-		press({ repeat: true })
-		const handled = new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true })
-		handled.preventDefault()
-		window.dispatchEvent(handled)
-
-		expect(apply).not.toHaveBeenCalled()
-		wrapper.unmount()
-	})
-
-	it('applies from a focused Dockview tab although the tab prevents Enter itself, and only once', () => {
-		const wrapper = mountApp()
-		tutorial!.dismissWelcome()
-		const tab = document.createElement('div')
-		tab.className = 'dv-tab'
-		tab.addEventListener('keydown', event => event.preventDefault())
-		document.body.append(tab)
-
-		const event = new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true })
-		tab.dispatchEvent(event)
-
-		// The capture-phase handler claimed it; the bubble-phase one saw the claimed event and skipped it.
-		expect(apply)
-			.toHaveBeenCalledTimes(1)
-		expect(event.defaultPrevented)
-			.toBe(true)
-		tab.remove()
-		wrapper.unmount()
-	})
-
-	it('leaves Enter to a control that owns it (a Graph node prevents and stops it), even though Apply is available', () => {
-		const wrapper = mountApp()
-		tutorial!.dismissWelcome()
-		const owner = document.createElement('div')
-		owner.addEventListener('keydown', (event) => {
-			event.preventDefault()
-			event.stopPropagation()
-		})
-		const claimedOnly = document.createElement('div')
-		claimedOnly.addEventListener('keydown', event => event.preventDefault())
-		document.body.append(owner, claimedOnly)
-
-		for (const target of [owner, claimedOnly])
-			target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }))
-
-		expect(apply).not.toHaveBeenCalled()
-		owner.remove()
-		claimedOnly.remove()
-		wrapper.unmount()
-	})
-
-	it('leaves the shortcut to the editor command inside Monaco and to open menus', () => {
-		const wrapper = mountApp()
-		tutorial!.dismissWelcome()
-		const editor = document.createElement('div')
-		editor.className = 'monaco-editor'
-		const menu = document.createElement('div')
-		menu.setAttribute('role', 'menu')
-		document.body.append(editor, menu)
-
-		for (const target of [editor, menu])
-			target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }))
-
-		expect(apply).not.toHaveBeenCalled()
-		editor.remove()
-		menu.remove()
-		wrapper.unmount()
-	})
-
-	it('ignores the shortcut while the welcome dialog is open', () => {
-		const wrapper = mountApp()
-		expect(tutorial!.welcomeVisible.value)
-			.toBe(true)
-		press()
-		expect(apply).not.toHaveBeenCalled()
-
-		tutorial!.dismissWelcome()
-		press()
-		expect(apply)
-			.toHaveBeenCalledTimes(1)
-		wrapper.unmount()
-	})
-
-	it('follows the header Apply button: skips when not dirty or already applying', () => {
-		const wrapper = mountApp()
-		tutorial!.dismissWelcome()
-		isDirty.value = false
-		press()
-		isDirty.value = true
-		isApplying.value = true
-		press()
-
-		expect(apply).not.toHaveBeenCalled()
-		wrapper.unmount()
-	})
-
-	it('ignores the shortcut while the narrow-viewport gate is active and resumes afterwards', async () => {
-		const wrapper = mountApp()
-		tutorial!.dismissWelcome()
-		media.matches = false
-		for (const l of media.listeners)
-			l({ matches: false })
-		await wrapper.vm.$nextTick()
-		const gated = press()
-		expect(apply).not.toHaveBeenCalled()
-		expect(gated.defaultPrevented)
+		const meta = new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true })
+		const ctrl = new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true })
+		window.dispatchEvent(meta)
+		window.dispatchEvent(ctrl)
+		expect(flushJson).not.toHaveBeenCalled()
+		expect(meta.defaultPrevented)
 			.toBe(false)
-
-		media.matches = true
-		for (const l of media.listeners)
-			l({ matches: true })
-		await wrapper.vm.$nextTick()
-		press()
-		expect(apply)
-			.toHaveBeenCalledTimes(1)
+		expect(ctrl.defaultPrevented)
+			.toBe(false)
 		wrapper.unmount()
 	})
 

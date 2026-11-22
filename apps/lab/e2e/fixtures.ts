@@ -167,8 +167,8 @@ async function chooseFromMenu(page: Page, triggerTestId: string, path: readonly 
 }
 
 /**
- * Answers the unapplied-draft confirmation that a showcase switch or preset load raises over an unapplied
- * draft: `discard` continues (and drops the draft), `keep` cancels. Resolves once the dialog is gone.
+ * Answers the confirmation that a showcase switch or preset load raises over JSON text that does not parse (or a switch over
+ * committed edits): `discard` continues (and drops what it names), `keep` cancels. Resolves once the dialog is gone.
  */
 export async function answerDraftGuard(page: Page, answer: 'discard' | 'keep'): Promise<void> {
 	const dialog = page.getByTestId('draft-guard-dialog')
@@ -180,14 +180,14 @@ export async function answerDraftGuard(page: Page, answer: 'discard' | 'keep'): 
 		.toBeHidden()
 }
 
-/** Switches showcase through the Examples menu. Pass `discardDraft` when an unapplied draft exists. */
+/** Switches showcase through the Examples menu. Pass `discardDraft` when the switch asks first (JSON with a syntax error, committed edits). */
 export async function selectShowcase(page: Page, id: ShowcaseId, options: { discardDraft?: boolean } = {}): Promise<void> {
 	await chooseFromMenu(page, 'examples-menu', [() => page.getByRole('menuitemcheckbox', { name: SHOWCASE_LABELS[id] })])
 	if (options.discardDraft === true)
 		await answerDraftGuard(page, 'discard')
 }
 
-/** Loads a preset of the current showcase through the Examples menu. Pass `discardDraft` when an unapplied draft exists. */
+/** Loads a preset of the current showcase through the Examples menu. Pass `discardDraft` when the JSON text has a syntax error. */
 export async function loadPreset(page: Page, id: string, options: { discardDraft?: boolean } = {}): Promise<void> {
 	const english = PRESET_LABELS.get(id)
 	if (english === undefined)
@@ -206,28 +206,68 @@ export async function expectShowcase(page: Page, id: ShowcaseId): Promise<void> 
 		.toHaveURL(new RegExp(`[?&]showcase=${id}(&|$)`))
 }
 
-/** The header's validity chip: `{ valid: true }`, or `{ problems: n }` (a JSON syntax error counts as a problem). */
+/** The header's one status chip (Lab UX phase 3). `data-state` is what it says (`LabStatus.chip.kind`). */
+export function labStatus(page: Page): Locator {
+	return page.getByTestId('lab-status')
+}
+
+export type LabStatusState = 'up-to-date' | 'restarted' | 'updating' | 'problems' | 'syntax-error' | 'preview-unavailable' | 'stale'
+
+/** What the status chip says. "Preview restarted" is the brief state after a commit that replaced the Runtime; pass both when either may show. */
+export async function expectLabStatus(page: Page, expected: LabStatusState | readonly LabStatusState[]): Promise<void> {
+	const states = typeof expected === 'string' ? [expected] : expected
+	await expect(labStatus(page))
+		.toHaveAttribute('data-state', new RegExp(`^(?:${states.join('|')})$`))
+}
+
+/**
+ * Whether the committed Document is valid, or has `n` problems (the chip's `data-validity` and `data-problem-count`; with problems
+ * the chip says "N problems · …"). A JSON syntax error is not a Document problem since Lab UX phase 3: see `expectLabStatus`.
+ */
 export async function expectDocumentStatus(page: Page, expected: { valid: true } | { problems: number }): Promise<void> {
-	const chip = page.getByTestId('document-status')
+	const chip = labStatus(page)
 	if ('valid' in expected) {
 		await expect(chip)
-			.toHaveAttribute('data-state', 'valid')
-		await expect(chip)
-			.toHaveText('Valid')
+			.toHaveAttribute('data-validity', 'valid')
 		return
 	}
 	await expect(chip)
-		.toHaveAttribute('data-state', 'problems')
+		.toHaveAttribute('data-validity', 'problems')
 	await expect(chip)
 		.toHaveAttribute('data-problem-count', String(expected.problems))
-	await expect(chip)
-		.toHaveText(expected.problems === 1 ? '1 problem' : `${expected.problems} problems`)
 }
 
-/** The header's preview chip: up to date (`current`), showing the last valid version (`stale`), or `unavailable`. */
+/** What the Preview shows (the chip's `data-preview`): the Document (`current`), the last valid version (`stale`), none, or a failed frame. */
 export async function expectPreviewStatus(page: Page, expected: 'current' | 'stale' | 'unavailable' | 'failed'): Promise<void> {
-	await expect(page.getByTestId('preview-status'))
-		.toHaveAttribute('data-state', expected)
+	await expect(labStatus(page))
+		.toHaveAttribute('data-preview', expected)
+}
+
+interface LabTestSeamWindow {
+	__WIDGET_LAB_TEST__?: { editJson: (text: string) => void, typeJson: (text: string) => void, getDocumentSourceText: () => string }
+}
+
+/** Waits for the `?lab-test` seam (the page must be opened with `lab-test` in its query). */
+export async function waitForLabTestSeam(page: Page): Promise<void> {
+	await page.waitForFunction(() => typeof (window as unknown as LabTestSeamWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
+}
+
+/**
+ * Types `text` into the JSON view and leaves it, through the `?lab-test` seam: committed at once when it parses (as on blur);
+ * text that does not parse stays the JSON view's text with its syntax error.
+ */
+export async function editJson(page: Page, text: string): Promise<void> {
+	await page.evaluate(source => (window as unknown as LabTestSeamWindow).__WIDGET_LAB_TEST__!.editJson(source), text)
+}
+
+/** Types `text` into the JSON view and stays there: committed after the typing pause when it parses. */
+export async function typeJson(page: Page, text: string): Promise<void> {
+	await page.evaluate(source => (window as unknown as LabTestSeamWindow).__WIDGET_LAB_TEST__!.typeJson(source), text)
+}
+
+/** The committed Document source, through the `?lab-test` seam. */
+export async function documentSourceText(page: Page): Promise<string> {
+	return page.evaluate(() => (window as unknown as LabTestSeamWindow).__WIDGET_LAB_TEST__!.getDocumentSourceText())
 }
 
 export async function setTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {

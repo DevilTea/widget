@@ -161,7 +161,7 @@ export const quoteRulesTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You have seen the same rules in a page and a Web Worker, a schema library through Standard Schema and an isolated exception.',
-				reveal: 'Edit the JSON (change a tier, add a paper, set a tax rate) and press Apply, or open the Implementation of any widget type.',
+				reveal: 'Edit the JSON (change a tier, add a paper, set a tax rate) and watch the Preview update, or open the Implementation of any widget type.',
 			}],
 		},
 	],

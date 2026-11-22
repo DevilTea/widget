@@ -2,18 +2,19 @@
 /**
  * Lab header (audit U01, U02, U04, U05, U24), grouped by job and kept on one row from 1280px up:
  *
- *   Widget Lab | Examples menu | status chips ... | Apply / Revert / Undo / Format | overflow menu
+ *   Widget Lab | Examples menu | status chip ⓘ ... | (Discard JSON changes) / Undo | overflow menu
  *
  * - The Examples menu combines showcase and preset and always names what is open: the showcase plus the last
- *   loaded preset, or "edited" once the source no longer matches it. Loading either with an unapplied editor
- *   draft first asks (`DraftGuardDialog`), and so does switching showcase away from committed edits (Lab UX phase 2).
- * - Two plain-language chips replace the internal-vocabulary ones: is the Document valid, and does the
- *   Preview show it. With problems, the validity chip is a button that opens the Problems list. A third chip,
- *   "Unapplied changes", is shown while the JSON draft differs from the Document, and the Preview chip then names the
- *   version it shows instead of "up to date". Revision numbers, Linked/Diverged and the draft/recovery facts that the
- *   Author panel used to show in its own box are developer details in a popover (`StatusDetails.vue`).
- * - Apply, Revert, Undo (the previously applied source, as a new revision) and Format are the edit actions.
- *   A disabled one stays focusable (`aria-disabled`) so its tooltip can say why.
+ *   loaded preset, or "edited" once the source no longer matches it. Loading either while the JSON text does not parse
+ *   first asks (`DraftGuardDialog`), and so does switching showcase away from committed edits (Lab UX phase 2).
+ * - One plain-language status chip (Lab UX phase 3, `LabStatus.chip`): "Up to date", "N problems · Preview shows the last
+ *   working version", "JSON syntax error — not applied", "Preview unavailable", "Updating the preview…" and, briefly after
+ *   a commit replaced the Runtime, "Preview restarted". With problems or a syntax error it is a button that shows them in
+ *   the current Author view. Revision numbers, Linked/Diverged and the recovery facts are developer details in a popover
+ *   (`StatusDetails.vue`).
+ * - There is no Apply or Revert: every edit is committed when it is made (Lab UX phase 3). Undo (the previously committed
+ *   source, as a new revision) stays; "Discard JSON changes" appears only while the JSON text does not parse. Format lives
+ *   in the JSON view's own toolbar. A disabled action stays focusable (`aria-disabled`) so its tooltip can say why.
  * - The overflow menu holds the tutorial, theme, language, Reset layout (the Dockview layout is remembered across
  *   reloads) and the Developer submenu (Implementation and Document Tools).
  *
@@ -31,7 +32,7 @@ import UDropdownMenu from '@nuxt/ui/components/DropdownMenu.vue'
 import UFieldGroup from '@nuxt/ui/components/FieldGroup.vue'
 import UPopover from '@nuxt/ui/components/Popover.vue'
 import UTooltip from '@nuxt/ui/components/Tooltip.vue'
-import { computed, useTemplateRef } from 'vue'
+import { computed, onBeforeUnmount, shallowRef, useTemplateRef, watch } from 'vue'
 import { useDocumentTools } from '../composables/use-document-tools'
 import { useDraftGuard } from '../composables/use-draft-guard'
 import { useImplementationExplorer } from '../composables/use-implementation-explorer'
@@ -157,82 +158,100 @@ const exampleItems = computed<DropdownMenuItem[][]>(() => [
 ])
 
 // ---------------------------------------------------------------------------------------------------------
-// Status chips
+// The status chip (Lab UX phase 3): one plain-language state at a time (`LabStatus.chip`, see `lab/status.ts`), replacing
+// the validity, draft and preview chips of phases 1 and 2. The ⓘ popover keeps the technical facts.
 
-const validity = computed(() => store.status.value.validity)
-const previewState = computed(() => store.status.value.preview)
-const validityLabel = computed(() => {
-	const value = validity.value
-	if (value.kind === 'valid')
-		return i18n.t('Valid')
-	return i18n.t(value.count === 1 ? '{count} problem' : '{count} problems', { count: value.count })
-})
-const hasDraft = computed(() => store.status.value.draft === 'unapplied')
-// While an unapplied draft exists, a Preview that shows the committed Document is not "up to date" with what the user
-// is looking at: it says which version it shows instead (the state itself stays `current`, a fact about the Document).
-const previewBehindDraft = computed(() => hasDraft.value && previewState.value === 'current')
-const previewLabel = computed(() => {
-	switch (previewState.value) {
-		case 'current': return i18n.t(previewBehindDraft.value ? 'Preview shows the last applied version' : 'Preview up to date')
-		case 'stale': return i18n.t('Preview shows the last valid version')
-		case 'failed': return i18n.t('Preview failed to load')
-		default: return i18n.t('No preview yet')
+const chip = computed(() => store.status.value.chip)
+const chipLabel = computed(() => {
+	const value = chip.value
+	switch (value.kind) {
+		case 'syntax-error': return i18n.t('JSON syntax error — not applied')
+		case 'problems':
+			if (value.previewShown)
+				return i18n.t(value.count === 1 ? '{count} problem · Preview shows the last working version' : '{count} problems · Preview shows the last working version', { count: value.count })
+			return i18n.t(value.count === 1 ? '{count} problem · Preview unavailable' : '{count} problems · Preview unavailable', { count: value.count })
+		case 'preview-unavailable': return i18n.t('Preview unavailable')
+		case 'updating': return i18n.t('Updating the preview…')
+		case 'stale': return i18n.t('Preview shows the last working version')
+		case 'restarted': return i18n.t('Preview restarted')
+		default: return i18n.t('Up to date')
 	}
 })
-const previewColor = computed(() => previewState.value === 'current'
-	? previewBehindDraft.value ? 'neutral' : 'success'
-	: previewState.value === 'stale' ? 'warning' : previewState.value === 'failed' ? 'error' : 'neutral')
-const previewIcon = computed(() => {
-	switch (previewState.value) {
-		case 'current': return previewBehindDraft.value ? 'i-lucide-circle-dot' : 'i-lucide-circle-check'
+const chipColor = computed(() => {
+	switch (chip.value.kind) {
+		case 'syntax-error': return 'error' as const
+		case 'problems': return 'error' as const
+		case 'preview-unavailable': return 'warning' as const
+		case 'stale': return 'warning' as const
+		case 'up-to-date': return 'success' as const
+		default: return 'info' as const
+	}
+})
+const chipIcon = computed(() => {
+	switch (chip.value.kind) {
+		case 'syntax-error': return 'i-lucide-braces'
+		case 'problems': return 'i-lucide-circle-alert'
+		case 'preview-unavailable': return 'i-lucide-circle-x'
+		case 'updating': return 'i-lucide-loader-circle'
 		case 'stale': return 'i-lucide-triangle-alert'
-		case 'failed': return 'i-lucide-circle-x'
-		default: return 'i-lucide-circle-dashed'
+		case 'restarted': return 'i-lucide-rotate-cw'
+		default: return 'i-lucide-circle-check'
 	}
 })
-/** The problems chip is a button that opens the Problems list; its name says so (the visible count is part of it). */
-const showProblemsLabel = computed(() => i18n.t('{problems}: show them', { problems: validityLabel.value }))
+/** With problems or a syntax error the chip is a button that shows them in the current view; its name says so. */
+const chipIsButton = computed(() => chip.value.kind === 'problems' || chip.value.kind === 'syntax-error')
+/** The committed Document's problem count (`data-problem-count`, also while a syntax error is what the chip says). */
+const problemCount = computed(() => {
+	const validity = store.status.value.validity
+	return validity.kind === 'problems' ? validity.count : 0
+})
+const showProblemsLabel = computed(() => i18n.t('{problems}: show them', { problems: chipLabel.value }))
+
+/**
+ * What the polite live region announces: the chip's text once it has held for a moment, so typing in the JSON view (whose text
+ * often stops parsing for a keystroke or two) does not announce every flip. "Up to date" is not announced; it is the quiet
+ * state after the others.
+ */
+const ANNOUNCE_AFTER_MS = 1000
+const announcement = shallowRef('')
+let announceTimer: ReturnType<typeof setTimeout> | null = null
+watch(chipLabel, (label) => {
+	if (announceTimer !== null)
+		clearTimeout(announceTimer)
+	announceTimer = setTimeout(() => {
+		announceTimer = null
+		announcement.value = chip.value.kind === 'up-to-date' ? '' : label
+	}, ANNOUNCE_AFTER_MS)
+})
+onBeforeUnmount(() => {
+	if (announceTimer !== null)
+		clearTimeout(announceTimer)
+})
 
 function onShowProblems(): void {
 	store.showProblems()
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// Edit actions. Disabled buttons use `aria-disabled` (not `disabled`) so they stay focusable and keep their
-// tooltip, which explains why they are unavailable.
+// Edit actions. A disabled button uses `aria-disabled` (not `disabled`) so it stays focusable and keeps its tooltip, which
+// explains why it is unavailable. "Discard JSON changes" exists only while the JSON text does not parse.
 
-const applyLabel = computed(() => i18n.t(store.isApplying.value ? 'Applying…' : 'Apply'))
-const applyTooltip = computed(() => {
-	if (store.isApplying.value)
-		return i18n.t('Applying…')
-	return store.isDirty.value ? i18n.t('Apply your edits to the document and preview') : i18n.t('Nothing to apply: no unapplied edits')
-})
-const revertTooltip = computed(() => store.isDirty.value
-	? i18n.t('Discard your unapplied edits')
-	: i18n.t('Nothing to revert: no unapplied edits'))
 const undoTooltip = computed(() => {
 	if (store.canUndo.value)
 		return i18n.t('Undo last change: restore the previous version as a new revision')
-	if (store.isApplying.value)
-		return i18n.t('Wait for the current Apply to finish')
-	if (store.isDirty.value)
-		return i18n.t('Apply or revert your unapplied edits before undoing')
+	if (store.hasJsonSyntaxError.value)
+		return i18n.t('Fix or discard the JSON syntax error before undoing')
 	return i18n.t('Nothing to undo yet')
 })
 
-function onApply(): void {
-	if (store.canApply.value)
-		void store.apply()
-}
-
-function onRevert(): void {
-	if (store.isDirty.value)
-		store.revert()
+function onDiscardJson(): void {
+	if (store.hasJsonSyntaxError.value)
+		store.discardJsonChanges()
 }
 
 function onUndo(): void {
 	if (store.canUndo.value)
-		void store.undoLastApply()
+		void store.undo()
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -374,21 +393,24 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 
 		<span class="flex-1" />
 
-		<!-- With problems the validity chip is a button that opens the Problems list (the action of the stale-preview
-			notice's "Show problems"); a valid Document has nothing to show, so it stays a status chip. -->
+		<!-- One status chip. With problems or a JSON syntax error it is a button that shows them in the current Author view
+			(the action of the stale-preview notice's "Show problems"); otherwise it is a plain chip. It is not a live region
+			itself: the visually hidden region next to it announces the state once it has settled. -->
 		<UTooltip
-			v-if="validity.kind === 'problems'"
+			v-if="chipIsButton"
 			:text="i18n.t('Show problems')"
 		>
 			<UButton
-				data-testid="document-status"
-				data-state="problems"
-				:data-problem-count="validity.count"
-				color="error"
+				data-testid="lab-status"
+				:data-state="chip.kind"
+				:data-problem-count="problemCount"
+				:data-validity="store.status.value.validity.kind"
+				:data-preview="store.status.value.preview"
+				:color="chipColor"
 				variant="subtle"
 				size="sm"
-				icon="i-lucide-circle-alert"
-				:label="validityLabel"
+				:icon="chipIcon"
+				:label="chipLabel"
 				:aria-label="showProblemsLabel"
 				:ui="{ label: 'text-default' }"
 				class="whitespace-nowrap"
@@ -397,41 +419,24 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 		</UTooltip>
 		<UBadge
 			v-else
-			data-testid="document-status"
-			data-state="valid"
-			:data-problem-count="0"
-			color="success"
+			data-testid="lab-status"
+			:data-state="chip.kind"
+			:data-problem-count="problemCount"
+			:data-validity="store.status.value.validity.kind"
+			:data-preview="store.status.value.preview"
+			:color="chipColor"
 			variant="subtle"
 			size="md"
-			icon="i-lucide-circle-check"
-			:label="validityLabel"
-			:ui="{ label: 'text-default' }"
+			:icon="chipIcon"
+			:label="chipLabel"
+			:ui="{ label: 'text-default', leadingIcon: chip.kind === 'updating' ? 'animate-spin motion-reduce:animate-none' : '' }"
 			class="whitespace-nowrap"
 		/>
-		<UBadge
-			v-if="hasDraft"
-			data-testid="draft-status"
-			data-state="unapplied"
-			color="info"
-			variant="subtle"
-			size="md"
-			icon="i-lucide-pencil"
-			:label="i18n.t('Unapplied changes')"
-			:ui="{ label: 'text-default' }"
-			class="whitespace-nowrap"
-		/>
-		<UBadge
-			data-testid="preview-status"
-			:data-state="previewState"
-			:data-behind-draft="previewBehindDraft ? 'true' : 'false'"
-			:color="previewColor"
-			variant="subtle"
-			size="md"
-			:icon="previewIcon"
-			:label="previewLabel"
-			:ui="{ label: 'text-default' }"
-			class="whitespace-nowrap"
-		/>
+		<span
+			data-testid="lab-status-announcement"
+			role="status"
+			class="sr-only"
+		>{{ announcement }}</span>
 
 		<UPopover :content="{ align: 'end' }">
 			<UButton
@@ -450,30 +455,16 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 
 		<UFieldGroup size="sm">
 			<UTooltip
-				:text="applyTooltip"
-				:kbds="['meta', 'enter']"
+				v-if="store.hasJsonSyntaxError.value"
+				:text="i18n.t('Throw away the JSON text that does not parse and show the document again')"
 			>
 				<UButton
-					data-testid="apply-button"
-					color="primary"
-					variant="solid"
-					icon="i-lucide-check"
-					:label="applyLabel"
-					:aria-disabled="!store.canApply.value"
-					class="aria-disabled:opacity-50"
-					@click="onApply"
-				/>
-			</UTooltip>
-			<UTooltip :text="revertTooltip">
-				<UButton
-					data-testid="revert-button"
-					color="neutral"
+					data-testid="discard-json-button"
+					color="error"
 					variant="outline"
-					icon="i-lucide-rotate-ccw"
-					:label="i18n.t('Revert')"
-					:aria-disabled="!store.isDirty.value"
-					class="aria-disabled:opacity-50"
-					@click="onRevert"
+					icon="i-lucide-x"
+					:label="i18n.t('Discard JSON changes')"
+					@click="onDiscardJson"
 				/>
 			</UTooltip>
 			<UTooltip :text="undoTooltip">
@@ -487,16 +478,6 @@ const overflowItems = computed<DropdownMenuItem[][]>(() => [
 					:aria-disabled="!store.canUndo.value"
 					class="aria-disabled:opacity-50"
 					@click="onUndo"
-				/>
-			</UTooltip>
-			<UTooltip :text="i18n.t('Format the JSON draft')">
-				<UButton
-					data-testid="format-button"
-					color="neutral"
-					variant="outline"
-					icon="i-lucide-align-left"
-					:label="i18n.t('Format')"
-					@click="store.format()"
 				/>
 			</UTooltip>
 		</UFieldGroup>

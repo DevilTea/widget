@@ -7,7 +7,8 @@
  * the "when do we need to ask" rule is independently testable.
  *
  * It follows the replacement rule of `lab/draft-guard.ts` (Lab UX phase 2, report item 10):
- * - an unapplied draft always asks (nothing brings it back);
+ * - JSON text that does not parse always asks (it was never committed, so nothing brings it back; text that parses is
+ *   committed before the start, Lab UX phase 3);
  * - committed edits ask only when the start switches showcase (a new session has an empty Undo stack). On the tour's own
  *   showcase the reload is an ordinary preset commit: it does not ask, and `LabStore.applyPreset()` offers Undo afterwards.
  *
@@ -20,11 +21,8 @@ import type { ReplacementLoss } from '../lab/draft-guard'
 import { replacementLoss } from '../lab/draft-guard'
 
 export interface DeterministicStartInput {
-	/**
-	 * `LabStore.isDirty.value` at the moment start/restart was requested — whether the CURRENT
-	 * showcase's draft Source text differs from its last applied snapshot.
-	 */
-	readonly isDirty: boolean
+	/** `LabStore.hasJsonSyntaxError.value` at the moment start/restart was requested: the JSON view's text does not parse. */
+	readonly jsonSyntaxError: boolean
 	/** `LabStore.hasCommittedEdits.value`: the committed Document equals no preset of the open showcase. */
 	readonly hasCommittedEdits: boolean
 	/** The tour belongs to another showcase than the open one, so starting it switches showcase (not undoable). */
@@ -39,6 +37,6 @@ export interface DeterministicStartDecision {
 }
 
 export function decideDeterministicStart(input: DeterministicStartInput): DeterministicStartDecision {
-	const loss = replacementLoss({ isDirty: input.isDirty, hasCommittedEdits: input.hasCommittedEdits, undoable: !input.switchesShowcase })
+	const loss = replacementLoss({ jsonSyntaxError: input.jsonSyntaxError, hasCommittedEdits: input.hasCommittedEdits, undoable: !input.switchesShowcase })
 	return { needsConfirmation: loss !== 'none', loss }
 }

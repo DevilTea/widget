@@ -11,13 +11,13 @@ import { expect, expectDocumentStatus, expectPreviewStatus, loadPreset, openAuth
  * The question renderers write `answer` on the native `input`/`change` event, so a plain `.fill()` or
  * `.check()` is enough: no blur is needed before asserting its effect.
  *
- * Editing steps go through the `?lab-test` draft seam (`src/lab-test-seam.ts`), which calls the exact
- * `LabStore.setDraftSourceText()` Monaco's change handler calls, so no test types into Monaco.
+ * Editing steps go through the `?lab-test` seam (`src/lab-test-seam.ts`), which calls the exact
+ * `LabStore.editJson()` Monaco's change handler calls and commits as its blur does, so no test types into Monaco.
  */
 
 interface LabTestWindow {
 	__WIDGET_LAB_TEST__?: {
-		setDraftSourceText: (text: string) => void
+		editJson: (text: string) => void
 	}
 }
 
@@ -25,7 +25,7 @@ const REQUIRED_MESSAGE = 'This question is required.'
 
 async function openSurvey(page: Page): Promise<void> {
 	await page.goto('/?lab-test')
-	await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+	await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
 	await expect(previewFrame(page)
 		.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 		.toBeVisible()
@@ -33,13 +33,8 @@ async function openSurvey(page: Page): Promise<void> {
 
 async function setDraft(page: Page, text: string): Promise<void> {
 	await page.evaluate((source) => {
-		(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)
+		(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson(source)
 	}, text)
-}
-
-async function apply(page: Page): Promise<void> {
-	await page.getByRole('button', { name: 'Apply', exact: true })
-		.click()
 }
 
 /** The default preset's definition, parsed so a test can change one part and re-serialize it. */
@@ -179,7 +174,7 @@ test('3. multi-language: the survey switches to 繁體中文 while the Lab chrom
 		.toHaveText(new RegExp(REQUIRED_MESSAGE))
 
 	// The Lab's own chrome is unaffected by the survey's language.
-	await expect(page.getByRole('button', { name: 'Apply', exact: true }))
+	await expect(page.getByRole('button', { name: 'Undo last change', exact: true }))
 		.toBeVisible()
 	await expectDocumentStatus(page, { valid: true })
 
@@ -196,7 +191,6 @@ test('4. editor: a fifth question without a zh-TW label is a located error until
 	const document = defaultDocument()
 	document.slots.questions.push({ id: 'feedback', type: 'ShortAnswer', config: { label: { en: 'Anything else we should know?' } } })
 	await setDraft(page, JSON.stringify(document, null, 2))
-	await apply(page)
 
 	await expectDocumentStatus(page, { problems: 1 })
 	// The previous revision keeps running in Preview: the new question is not rendered.
@@ -220,7 +214,6 @@ test('4. editor: a fifth question without a zh-TW label is a located error until
 	// Adding the missing text makes the Document valid and the question renders.
 	document.slots.questions[4].config.label['zh-TW'] = '還有什麼想讓我們知道的嗎？'
 	await setDraft(page, JSON.stringify(document, null, 2))
-	await apply(page)
 	await expectDocumentStatus(page, { valid: true })
 	await expectPreviewStatus(page, 'current')
 	await expect(preview.getByText('Anything else we should know?'))
@@ -271,7 +264,6 @@ test('5. located diagnostics: the AI draft preset lists five, and fixing "mod" r
 		.not
 		.toBe(surveyPresets.find(preset => preset.id === 'survey-ai-draft')!.sourceText)
 	await setDraft(page, fixed)
-	await apply(page)
 	await expectDocumentStatus(page, { problems: 4 })
 	await openBlueprintDiagnostics(page)
 	expect((await diagnosticRows(page)).map(row => row.code))
@@ -286,7 +278,6 @@ test('6. cycle: an edit that makes Guests and the kids\' corner depend on each o
 	const document = defaultDocument()
 	question(document, 'guests').config.visibleWhen = { question: 'sessions', op: 'includes', value: 'kids' }
 	await setDraft(page, JSON.stringify(document, null, 2))
-	await apply(page)
 	await expectDocumentStatus(page, { problems: 4 })
 
 	await openBlueprintDiagnostics(page)
@@ -323,7 +314,6 @@ test('6. cycle: an edit that makes Guests and the kids\' corner depend on each o
 
 	// Reverting the edit makes the Document valid again.
 	await setDraft(page, defaultSurveyPreset.sourceText)
-	await apply(page)
 	await expectDocumentStatus(page, { valid: true })
 })
 

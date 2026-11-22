@@ -146,16 +146,16 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 	 * `ImplementationPanel` + `LabStore` integration boundary — `applied-instance.unit.test.ts` only
 	 * proves the pure extractor walks whatever string it is handed; it cannot catch a one-line regression
 	 * from `store.active.value.sourceText` to `store.draftSourceText.value` at the call site. Reuses the
-	 * `?lab-test` seam / dirty-draft-without-Apply pattern already established by
+	 * `?lab-test` seam / dirty-draft pattern already established by
 	 * `tutorial.spec.ts`'s `dirtyTheDraft()`. The hidden Sandbox fixture (`?showcase=sandbox`) and its
 	 * `title` (`Text`) widget are the fixture — simple enough to hand-author a one-field-changed draft
 	 * string for.
 	 */
 	test('Applied instance always reflects the APPLIED snapshot, never an unapplied draft edit to the same widget (issue #25 P3 locked identity boundary)', async ({ page }) => {
-		interface LabTestWindow { __WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void } }
+		interface LabTestWindow { __WIDGET_LAB_TEST__?: { editJson: (text: string) => void } }
 
 		await page.goto('/?lab-test&showcase=sandbox')
-		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
 
 		// Focus the `title` (`Text`) widget via the Blueprint tree and open its Applied instance.
 		await page.getByRole('tab', { name: 'Blueprint' })
@@ -171,10 +171,11 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 		await expect(appliedInstanceCode)
 			.toContainText('"text": "Widget Lab sandbox"')
 
-		// Dirty the DRAFT (never applied) — the same `title` widget, a distinctive marker in its `text`.
+		// Dirty the DRAFT (never applied) — the same `title` widget, a distinctive marker in its `text`. Since Lab UX phase 3
+		// JSON that parses is committed at once, so the draft is left without its closing brace: it does not parse, and stays a draft.
 		const marker = 'DRAFT_ONLY_MARKER_never_applied_9f3c1a'
 		await page.evaluate((text) => {
-			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(JSON.stringify({
+			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson(JSON.stringify({
 				id: 'root',
 				type: 'Stack',
 				slots: {
@@ -183,7 +184,8 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 						{ id: 'counter-1', type: 'Counter' },
 					],
 				},
-			}))
+			})
+				.slice(0, -1))
 		}, marker)
 
 		// The Source editor (Monaco, in Author > JSON) shows the dirtied draft.

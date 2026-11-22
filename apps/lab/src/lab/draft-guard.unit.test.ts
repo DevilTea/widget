@@ -17,7 +17,7 @@ describe('draft guard', () => {
 		expect(onChange).not.toHaveBeenCalled()
 	})
 
-	it('holds the action behind a confirmation while a draft is unapplied, then runs it once on confirm', () => {
+	it('holds the action behind a confirmation while the JSON text does not parse, then runs it once on confirm', () => {
 		const onChange = vi.fn()
 		const run = vi.fn()
 		const guard = createDraftGuard(onChange)
@@ -77,30 +77,30 @@ describe('draft guard', () => {
 })
 
 describe('replacementLoss: what an action would discard for good', () => {
-	it('asks about a draft whatever the action, because nothing brings an unapplied draft back', () => {
-		expect(replacementLoss({ isDirty: true, hasCommittedEdits: false, undoable: true }))
+	it('asks about a JSON text that does not parse whatever the action, because nothing brings it back', () => {
+		expect(replacementLoss({ jsonSyntaxError: true, hasCommittedEdits: false, undoable: true }))
 			.toBe('draft')
-		expect(replacementLoss({ isDirty: true, hasCommittedEdits: false, undoable: false }))
+		expect(replacementLoss({ jsonSyntaxError: true, hasCommittedEdits: false, undoable: false }))
 			.toBe('draft')
 	})
 
 	it('asks about committed edits only when the action cannot be undone (a showcase switch)', () => {
-		expect(replacementLoss({ isDirty: false, hasCommittedEdits: true, undoable: false }))
+		expect(replacementLoss({ jsonSyntaxError: false, hasCommittedEdits: true, undoable: false }))
 			.toBe('edits')
 		// A preset load is an ordinary commit: Undo brings the edits back, so it does not ask.
-		expect(replacementLoss({ isDirty: false, hasCommittedEdits: true, undoable: true }))
+		expect(replacementLoss({ jsonSyntaxError: false, hasCommittedEdits: true, undoable: true }))
 			.toBe('none')
 	})
 
 	it('names a draft and committed edits in one question', () => {
-		expect(replacementLoss({ isDirty: true, hasCommittedEdits: true, undoable: false }))
+		expect(replacementLoss({ jsonSyntaxError: true, hasCommittedEdits: true, undoable: false }))
 			.toBe('draft-and-edits')
-		expect(replacementLoss({ isDirty: true, hasCommittedEdits: true, undoable: true }))
+		expect(replacementLoss({ jsonSyntaxError: true, hasCommittedEdits: true, undoable: true }))
 			.toBe('draft')
 	})
 
 	it('has nothing to ask when neither exists', () => {
-		expect(replacementLoss({ isDirty: false, hasCommittedEdits: false, undoable: false }))
+		expect(replacementLoss({ jsonSyntaxError: false, hasCommittedEdits: false, undoable: false }))
 			.toBe('none')
 	})
 

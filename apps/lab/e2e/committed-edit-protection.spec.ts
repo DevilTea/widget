@@ -3,11 +3,12 @@ import { answerDraftGuard, chooseTutorialMenuItem, expect, expectDocumentStatus,
 
 /**
  * Lab UX phase 2, report item 10: committed edits are not lost silently. A showcase switch (a new session, nothing to undo) asks
- * first; a preset load or a tutorial start (ordinary commits) runs and offers Undo. With a draft and edits, one dialog names both.
+ * first; a preset load or a tutorial start (ordinary commits) runs and offers Undo. With a draft (since Lab UX phase 3: JSON text
+ * that does not parse) and edits, one dialog names both.
  */
 
 interface LabTestWindow {
-	__WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void }
+	__WIDGET_LAB_TEST__?: { editJson: (text: string) => void }
 }
 
 const field = (editor: Locator, path: string): Locator => editor.locator(`[data-config-path="${path}"]`)
@@ -70,9 +71,9 @@ test.describe('committed edits are protected (report item 10)', () => {
 	test('a draft and committed edits ask once, naming both', async ({ page }) => {
 		await page.goto('/?lab-test&showcase=survey')
 		await editSurveyTitle(page, 'My open day')
-		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
-		await expect(page.getByTestId('draft-status'))
-			.toBeVisible()
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.editJson('{ "unapplied": '))
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-state', 'syntax-error')
 
 		await selectShowcase(page, 'trip-budget')
 		await expect(page.getByTestId('draft-guard-dialog')
@@ -123,7 +124,7 @@ test.describe('committed edits are protected (report item 10)', () => {
 	test('a preset load over a draft still asks about the draft only, then offers Undo for the edits', async ({ page }) => {
 		await page.goto('/?lab-test&showcase=survey')
 		await editSurveyTitle(page, 'My open day')
-		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.editJson('{ "unapplied": '))
 
 		await loadPreset(page, 'survey-ai-draft')
 		await expect(page.locator('#draft-guard-dialog-body'))
@@ -137,11 +138,11 @@ test.describe('committed edits are protected (report item 10)', () => {
 		await expect(page.getByTestId('replaced-document-region'))
 			.toHaveAttribute('role', 'status')
 
-		// A new draft makes Undo unavailable: the notice says why, and the button is described by it.
-		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.setDraftSourceText('{ "unapplied": true }'))
+		// JSON that does not parse makes Undo unavailable: the notice says why, and the button is described by it.
+		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.editJson('{ "unapplied": '))
 		const reason = notice.getByTestId('replaced-document-undo-reason')
 		await expect(reason)
-			.toHaveText('Apply or revert your unapplied edits before undoing')
+			.toHaveText('Fix or discard the JSON syntax error before undoing')
 		const undo = notice.getByRole('button', { name: 'Undo last change' })
 		await expect(undo)
 			.toHaveAttribute('aria-disabled', 'true')

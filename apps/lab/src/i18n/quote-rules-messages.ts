@@ -47,7 +47,7 @@ export const zhTWQuoteRulesMessages: Readonly<Record<string, string>> = {
 	'See volume in Selected widget': '在 Selected widget 查看 volume',
 	'Dependencies (Relations, Graph) = the declared chain between widgets · Selected widget = one widget\'s declaration and Runtime values · Runtime = every widget\'s State and Properties · Events = Method failures and Events as they happen · Implementation = the plugin, schema and renderer code behind this widget type.': '相依性（Relations、關係圖）= widget 之間已宣告的鏈 · Selected widget = 一個 widget 的宣告與 Runtime 的值 · Runtime = 每個 widget 的 State 與 Properties · Events = 即時的 Method failure 與 Events · Implementation = 這個 widget type 背後的 plugin、schema 與 renderer 程式碼。',
 	'You have seen the same rules in a page and a Web Worker, a schema library through Standard Schema and an isolated exception.': '你已經看過同一組規則在頁面和 Web Worker 裡執行、透過 Standard Schema 使用的 schema 函式庫，以及被隔離的例外。',
-	'Edit the JSON (change a tier, add a paper, set a tax rate) and press Apply, or open the Implementation of any widget type.': '可以編輯 JSON（改一個級距、新增一種紙張、設定稅率）後按「套用」，或打開任一 widget type 的 Implementation。',
+	'Edit the JSON (change a tier, add a paper, set a tax rate) and watch the Preview update, or open the Implementation of any widget type.': '可以編輯 JSON（改一個級距、新增一種紙張、設定稅率），看 Preview 跟著更新，或打開任一 widget type 的 Implementation。',
 }
 
 export function translateQuoteRulesMessage(locale: LabLocale, source: string): string | undefined {

@@ -45,11 +45,12 @@ describe('lab UX phase 1 wording', () => {
 			.toMatch(/^復原上一步：/)
 	})
 
-	it('gives Revert a zh-TW label that cannot be read as Undo', () => {
-		expect(zh('Revert'))
-			.toBe('捨棄草稿')
-		// Every zh-TW string about reverting the draft says 捨棄 and never 還原 (the old label, a near-synonym of 復原).
-		for (const key of ['Revert', 'Nothing to revert: no unapplied edits', 'Apply or revert your unapplied edits before undoing', 'Apply or Revert the JSON draft before using Structure commands.']) {
+	// Lab UX phase 3 removed Revert; "Discard JSON changes" took its place (only while the JSON does not parse), and keeps the rule.
+	it('gives discarding a zh-TW label that cannot be read as Undo', () => {
+		expect(zh('Discard JSON changes'))
+			.toBe('捨棄 JSON 變更')
+		// Every zh-TW string about discarding JSON text says 捨棄 and never 還原 (the old Revert label, a near-synonym of 復原).
+		for (const key of ['Discard JSON changes', 'Fix or discard the JSON syntax error before undoing', 'The JSON view has changes that are not in the document yet. Fix or discard them, then try again.', 'The JSON has a syntax error, so nothing from it is applied. Fix it in the JSON view, or use Discard JSON changes, to edit here.']) {
 			expect(zh(key), key)
 				.toContain('捨棄')
 			expect(zh(key), key)

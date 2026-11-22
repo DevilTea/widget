@@ -16,8 +16,7 @@ test('Author workspace exposes Core catalog, Structure commands, and synchronize
 		.click()
 	await page.getByLabel('text', { exact: true })
 		.fill('edited in Structure')
-	await page.getByRole('button', { name: 'Set value' })
-		.click()
+	await page.keyboard.press('Enter')
 
 	await openStatusDetails(page)
 	await expect(page.getByTestId('status-document-revision'))
@@ -112,13 +111,11 @@ test('semantic diagnostics navigate to current Document focus while source-only 
 		.not.toBe(summaryBackgroundAfter)
 
 	await page.goto('/?lab-test&lang=en')
-	await page.waitForFunction(() => typeof (window as any).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
-	await page.evaluate(() => (window as any).__WIDGET_LAB_TEST__.setDraftSourceText('{'))
-	await page.getByRole('button', { name: 'Apply', exact: true })
-		.click()
+	await page.waitForFunction(() => typeof (window as any).__WIDGET_LAB_TEST__?.editJson === 'function')
+	await page.evaluate(() => (window as any).__WIDGET_LAB_TEST__.editJson('{'))
 	await openStatusDetails(page)
 	await expect(page.getByTestId('status-json-draft'))
-		.toContainText('Syntax error (Lab-only draft)')
+		.toContainText('Syntax error, not applied (Lab-only)')
 	await expect(page.getByTestId('status-source-compat'))
 		.toContainText('Compatible (Core)')
 	await expect(page.getByTestId('status-blueprint'))
@@ -136,9 +133,8 @@ test('rejects blank numeric Structure values while preserving scalar editing beh
 
 	const maxField = page.getByLabel('max', { exact: true })
 	await maxField.fill('   ')
-	await maxField.locator('..')
-		.getByRole('button', { name: 'Set value' })
-		.click()
+	// Leaving the box commits it (Lab UX phase 3); what is not a number is refused there too.
+	await maxField.blur()
 	// The refusal is shown at the field, and nothing was sent to the Document.
 	await expect(page.locator('[data-config-path="max"]')
 		.getByRole('alert'))
@@ -147,9 +143,7 @@ test('rejects blank numeric Structure values while preserving scalar editing beh
 		.toHaveCount(0)
 
 	await maxField.fill('2')
-	await maxField.locator('..')
-		.getByRole('button', { name: 'Set value' })
-		.click()
+	await maxField.press('Enter')
 	await expect(page.getByTestId('author-command-outcome'))
 		.toContainText('Change applied')
 })

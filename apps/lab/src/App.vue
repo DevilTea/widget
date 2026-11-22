@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, onUnmounted, provide, watch, watchEffect } from 'vue'
+import { computed, onUnmounted, provide, watch, watchEffect } from 'vue'
 import DraftGuardDialog from './components/DraftGuardDialog.vue'
 import LabHeader from './components/LabHeader.vue'
 import TutorialConfirmDialog from './components/tutorial/TutorialConfirmDialog.vue'
@@ -66,7 +66,7 @@ provide(WorkbenchLayoutKey, createWorkbenchLayoutStore())
 const tutorial = createTutorialStore(store, implementationExplorer)
 provide(TutorialStoreKey, tutorial)
 
-// Unapplied-draft confirmation for loading a preset / switching showcase (audit U03).
+// Confirmation for loading a preset / switching showcase over JSON text that does not parse or committed edits (audit U03).
 const draftGuard = createDraftGuardStore(store)
 provide(DraftGuardKey, draftGuard)
 
@@ -106,52 +106,9 @@ watchEffect(() => {
 // made `inert` so it cannot be focused or tabbed to behind the overlay (it stays mounted, per #27).
 const supportedViewport = useSupportedWorkbenchViewport()
 
-/**
- * Cmd/Ctrl+Enter is a UX shortcut for the same Apply command the header button invokes, so it honors the
- * button's enabled condition (`canApply`). Who gets the event first is deliberate:
- *
- * - Everything except Dockview tabs is handled in the BUBBLE phase, so a control that owns Enter wins
- *   (`defaultPrevented` is honoured; a Graph node's `@keydown.enter.prevent.stop` never reaches here at all).
- * - Dockview's tab buttons preventDefault Enter themselves (it activates the tab), so by the bubble phase a focused
- *   tab's event always looks "already handled" and Apply would never fire from it (audit U05). Events whose
- *   target is inside a tab are therefore handled in the CAPTURE phase, which runs before the tab's own handler;
- *   the handler then prevents the default, so the bubble listener below skips the same event.
- *
- * It yields to IME composition (keyCode 229 covers engines that report it without `isComposing`), key repeat, the
- * editor itself (Monaco binds Cmd/Ctrl+Enter to "insert line"; `use-monaco-editor.ts` registers the same
- * Apply as an editor action, so letting both run would Apply twice), open menus (Enter selects an item there),
- * open modal dialogs, and the narrow-viewport gate (the workbench is `inert` behind it).
- */
-function applyOnShortcut(event: KeyboardEvent): void {
-	if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey))
-		return
-	if (event.isComposing || event.keyCode === 229 || event.repeat || event.defaultPrevented)
-		return
-	if (event.target instanceof Element && event.target.closest('.monaco-editor, [role="menu"]') !== null)
-		return
-	if (tutorial.welcomeVisible.value || tutorial.confirmVisible.value || draftGuard.confirmVisible.value)
-		return
-	if (!supportedViewport.value)
-		return
-	if (!store.canApply.value)
-		return
-	event.preventDefault()
-	void store.apply()
-}
+// Lab UX phase 3: there is no Apply, so Cmd/Ctrl+Enter has no window-wide meaning any more. Inside the JSON editor it commits
+// the text at once (an editor action, `use-monaco-editor.ts`); a Structure text box commits on Enter itself.
 
-function onKeydownCapture(event: KeyboardEvent): void {
-	if (event.target instanceof Element && event.target.closest('.dv-tab') !== null)
-		applyOnShortcut(event)
-}
-
-onMounted(() => {
-	window.addEventListener('keydown', onKeydownCapture, true)
-	window.addEventListener('keydown', applyOnShortcut)
-})
-onBeforeUnmount(() => {
-	window.removeEventListener('keydown', onKeydownCapture, true)
-	window.removeEventListener('keydown', applyOnShortcut)
-})
 // `store.dispose()` (which disposes the final active Runtime) runs from `onUnmounted`, not
 // `onBeforeUnmount`: Vue only guarantees every descendant — including Workbench's Preview
 // `WidgetRenderer` subtree — has fully unmounted by the time a component's own `onUnmounted` fires.

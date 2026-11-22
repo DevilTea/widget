@@ -5,7 +5,7 @@ const GATE_TEXT = 'Widget Lab is designed for a desktop-sized viewport. Widen th
 
 interface LabTestWindow {
 	__WIDGET_LAB_TEST__?: {
-		setDraftSourceText: (text: string) => void
+		editJson: (text: string) => void
 	}
 }
 
@@ -40,17 +40,18 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 
 	test('the dirty-draft confirmation survives shrink/widen without applying, losing the draft, or losing its focus-return target', async ({ page }) => {
 		await page.goto('/?lab-test&showcase=sandbox')
-		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText === 'function')
+		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
 		// The end of this test reads the draft in Monaco; Author opens on Structure.
 		await openAuthorJson(page)
 
-		// Use a known-valid Source fixture through the same LabStore seam as the Apply contracts. Reading
-		// Monaco's tokenized DOM to reconstruct Source would couple this viewport test to editor painting
-		// and could produce invalid JSON before the modal contract is even exercised.
+		// Use a known Source fixture through the same LabStore seam as the commit contracts. Reading Monaco's tokenized DOM to
+		// reconstruct Source would couple this viewport test to editor painting. Since Lab UX phase 3 text that parses is committed
+		// at once, so the draft that the confirmation protects is the fixture with its closing brace cut off (it does not parse).
 		const draft = defaultSandboxPreset.sourceText.replace('Widget Lab sandbox', 'Widget Lab sandbox dirtied by viewport test')
+			.replace(/\}\s*$/, '')
 		await page.evaluate((source) => {
 			const seam = (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__
-			seam?.setDraftSourceText(source)
+			seam?.editJson(source)
 		}, draft)
 
 		const initiator = page.getByTestId('overflow-menu')

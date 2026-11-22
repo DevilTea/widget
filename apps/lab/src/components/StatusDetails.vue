@@ -2,7 +2,7 @@
 /**
  * The header's "Document and preview details" popover content: the developer-vocabulary half of the status chips
  * (Document and Preview revision, whether they are linked) plus what used to be the Author panel's own
- * "Document / recovery status" box (JSON draft, Source JSON compatibility, Blueprint status, recovery topology;
+ * "Document / recovery status" box (JSON text, Source JSON compatibility, Blueprint status, recovery topology;
  * issue #230 PR 3b folded it in so the same facts are not shown twice). Values that describe the Blueprint are
  * read from Core's public Blueprint and inspection contracts; nothing here validates JSON or reinterprets a
  * diagnostic code.
@@ -19,7 +19,7 @@ const blueprint = computed(() => store.documentState.value.blueprint)
 const inspection = computed(() => inspectBlueprint(blueprint.value))
 const draftStatus = computed(() => store.parseError.value !== null
 	? 'syntax-error'
-	: store.isDirty.value ? 'unapplied' : 'committed')
+	: store.isDirty.value ? 'pending' : 'committed')
 const unresolvedCount = computed(() => inspection.value.nodes.filter(node => !node.resolved).length)
 const rawSlotCount = computed(() => inspection.value.nodes.reduce(
 	(count, node) => count + node.sourceSlots.filter(slot => slot.placement === 'raw-slot').length,
@@ -65,14 +65,14 @@ const linkLabel = computed(() => {
 			{{ linkLabel }}
 		</dd>
 		<dt class="text-muted">
-			{{ i18n.t('JSON draft') }}
+			{{ i18n.t('JSON text') }}
 		</dt>
 		<dd
 			data-testid="status-json-draft"
 			class="m-0"
 			:class="draftStatus === 'syntax-error' ? 'text-error' : ''"
 		>
-			{{ i18n.t(draftStatus === 'syntax-error' ? 'Syntax error (Lab-only draft)' : draftStatus === 'unapplied' ? 'Unapplied draft' : 'Matches committed Document') }}
+			{{ i18n.t(draftStatus === 'syntax-error' ? 'Syntax error, not applied (Lab-only)' : draftStatus === 'pending' ? 'Applies when you pause typing' : 'Matches committed Document') }}
 		</dd>
 		<dt class="text-muted">
 			{{ i18n.t('Source JSON compatibility') }}

@@ -51,8 +51,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 			.click()
 		await page.getByLabel('text', { exact: true })
 			.fill('Document Tools structure patch')
-		await page.getByRole('button', { name: 'Set value' })
-			.click()
+		await page.keyboard.press('Enter')
 
 		await openDeveloperTool(page, 'document-tools')
 		await expect(page.getByTestId('document-tools-latest-patch'))
@@ -60,18 +59,19 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 		await expect(page.getByTestId('document-tools-patch'))
 			.toContainText('replace')
 
-		const documentStatusBeforeConflict = await page.getByTestId('document-status')
-			.textContent()
-		const previewStatusBeforeConflict = await page.getByTestId('preview-status')
-			.textContent()
+		// The facts the status chip reports (its text may still be the brief "Preview restarted" of the Structure commit).
+		const documentStatusBeforeConflict = await page.getByTestId('lab-status')
+			.getAttribute('data-validity')
+		const previewStatusBeforeConflict = await page.getByTestId('lab-status')
+			.getAttribute('data-preview')
 		await page.getByTestId('document-tools-run-conflict')
 			.click()
 		await expect(page.getByTestId('document-tools-conflict-result'))
 			.toContainText('document-revision-conflict')
-		await expect(page.getByTestId('document-status'))
-			.toHaveText(documentStatusBeforeConflict!)
-		await expect(page.getByTestId('preview-status'))
-			.toHaveText(previewStatusBeforeConflict!)
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-validity', documentStatusBeforeConflict!)
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-preview', previewStatusBeforeConflict!)
 		await expect(previewFrame(page)
 			.getByText('Document Tools structure patch'))
 			.toBeVisible()
@@ -91,16 +91,14 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 		))
 			.toBe(displayedPatch)
 
-		await page.evaluate(() => (window as any).__WIDGET_LAB_TEST__.setDraftSourceText(JSON.stringify({
+		await page.evaluate(() => (window as any).__WIDGET_LAB_TEST__.editJson(JSON.stringify({
 			id: 'root',
 			type: 'Text',
 			config: { text: 'Document Tools JSON patch' },
 		})))
-		await page.getByRole('button', { name: 'Apply', exact: true })
-			.click()
 		await openDeveloperTool(page, 'document-tools')
 		await expect(page.getByTestId('document-tools-latest-patch'))
-			.toContainText('JSON Apply')
+			.toContainText('JSON edit')
 		await expect(page.getByTestId('document-tools-patch'))
 			.toContainText('Document Tools JSON patch')
 		await expect(page.getByTestId('document-tools-trace')

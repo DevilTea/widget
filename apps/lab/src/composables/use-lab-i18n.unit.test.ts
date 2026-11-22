@@ -34,8 +34,8 @@ describe('lab i18n store', () => {
 		localStorage.setItem(STORAGE_KEY, 'zh-TW')
 		const store = createLabI18nStore()
 
-		expect(store.t('Apply'))
-			.toBe('套用')
+		expect(store.t('Undo'))
+			.toBe('復原上一步')
 		expect(location.search)
 			.toBe('?probe=keep&lang=zh-TW')
 
@@ -43,8 +43,8 @@ describe('lab i18n store', () => {
 
 		expect(store.locale.value)
 			.toBe('en')
-		expect(store.t('Apply'))
-			.toBe('Apply')
+		expect(store.t('Undo'))
+			.toBe('Undo')
 		expect(localStorage.getItem(STORAGE_KEY))
 			.toBe('en')
 		expect(document.documentElement.lang)

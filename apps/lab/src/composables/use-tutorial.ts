@@ -310,7 +310,7 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 	function requestStartOrRestart(isRestart: boolean): void {
 		const tourId = activeTourId.value
 		const decision = decideDeterministicStart({
-			isDirty: store.isDirty.value,
+			jsonSyntaxError: store.hasJsonSyntaxError.value,
 			hasCommittedEdits: store.hasCommittedEdits.value,
 			switchesShowcase: store.showcaseId.value !== tourId,
 		})

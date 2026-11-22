@@ -7,7 +7,7 @@
  *
  * The wrapper is a real element that is always in the page and is the live region, so the message is announced when it appears
  * (a region inserted together with its text is not reliably read, and a `display: contents` element has no box some assistive
- * technology needs). While Undo is unavailable (an unapplied JSON draft, a command running) the notice says why, and the
+ * technology needs). While Undo is unavailable (JSON text that does not parse) the notice says why, and the
  * button is described by that text. It is inline, above the Preview, like the stale-preview notice: nothing is
  * covered and nothing goes away on a timer. The phase 3 commit model can reuse it for other "this happened, Undo" notes.
  */
@@ -24,16 +24,14 @@ const reasonId = useId()
 const undoUnavailableReason = computed(() => {
 	if (store.canUndo.value)
 		return null
-	if (store.isApplying.value)
-		return i18n.t('Wait for the current Apply to finish')
-	if (store.isDirty.value)
-		return i18n.t('Apply or revert your unapplied edits before undoing')
+	if (store.hasJsonSyntaxError.value)
+		return i18n.t('Fix or discard the JSON syntax error before undoing')
 	return i18n.t('Nothing to undo yet')
 })
 
 function onUndo(): void {
 	if (store.canUndo.value)
-		void store.undoLastApply()
+		void store.undo()
 }
 </script>
 

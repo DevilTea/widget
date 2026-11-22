@@ -15,6 +15,7 @@ import type { AnyWidgetPluginTuple, JsonValue, SourcePatch, WidgetDocument, Widg
 import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentState, LabDocumentTraceEvent, LabPatchOrigin, LabPreviewSnapshot, LabSessionHooks, LabSessionListener, RevisionConflictDemoResult, SourceParseError, UndoOutcome } from './types'
 import { createWidgetDocument } from '@deviltea/widget-core'
 import { createAuthorPatch } from './author'
+import { sameJsonDocument } from './json-equal'
 
 export interface LabSessionOptions<Plugins extends AnyWidgetPluginTuple> {
 	readonly system: WidgetSystem<Plugins>
@@ -43,8 +44,31 @@ function snapshotPatch(patch: SourcePatch): SourcePatch {
 }
 
 export const LAB_DOCUMENT_TRACE_LIMIT = 20
-/** How many applied sources "Undo last apply" can step back through. */
+/** How many committed sources "Undo last change" can step back through. */
 export const LAB_UNDO_LIMIT = 20
+
+/**
+ * Identifies one burst of JSON commits (Lab UX phase 3: one focus session of the JSON view). Consecutive JSON commits with
+ * the same key share one Undo entry; `null` never coalesces.
+ */
+export type LabCoalesceKey = string | number | null
+
+export interface CommitJsonOptions {
+	readonly coalesceKey?: LabCoalesceKey
+}
+
+type DraftParse
+	= | { readonly ok: true, readonly value: JsonValue }
+		| { readonly ok: false, readonly error: SourceParseError }
+
+function parseDraft(text: string): DraftParse {
+	try {
+		return { ok: true, value: JSON.parse(text) as JsonValue }
+	}
+	catch (error) {
+		return { ok: false, error: toParseError(text, error) }
+	}
+}
 
 export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTuple> {
 	private readonly document: WidgetDocument<Plugins>
@@ -52,17 +76,20 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	private readonly listeners = new Set<LabSessionListener>()
 
 	private draftText: string
-	private parseErrorValue: SourceParseError | null = null
+	/** The current JSON text, parsed once (Lab UX phase 3: the syntax state is live, and the commit reuses this value). */
+	private draftParse: DraftParse
 	private documentStateValue: LabDocumentState<Plugins>
 	private previewSnapshotValue: LabPreviewSnapshot<Plugins> | null
 	private lastAppliedSourcePatchValue: LabAppliedSourcePatch | null = null
 	private readonly documentTraceValue: LabDocumentTraceEvent[] = []
 	/**
 	 * Source texts the Document held before each of its last `LAB_UNDO_LIMIT` revision-advancing commits,
-	 * oldest first. It is a convenience for "Undo last apply" only: restoring one goes back through the
+	 * oldest first. It is a convenience for "Undo last change" only: restoring one goes back through the
 	 * ordinary `WidgetDocument` commit path as a new revision, so this is never an authoritative history.
 	 */
 	private readonly undoStack: string[] = []
+	/** The coalesce key of the JSON commit that pushed the top Undo entry; `null` when another kind of commit did, or after Undo. */
+	private topUndoKey: LabCoalesceKey = null
 	private applying = false
 
 	constructor(options: LabSessionOptions<Plugins>) {
@@ -81,6 +108,7 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 			? { revision, sourceText: options.initialSourceText, blueprint }
 			: null
 		this.draftText = options.initialSourceText
+		this.draftParse = { ok: true, value: definition }
 	}
 
 	get draftSourceText(): string {
@@ -91,8 +119,12 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		return this.documentStateValue.blueprint.system
 	}
 
+	/**
+	 * The syntax error of the current JSON text, or `null` when it parses (Lab UX phase 3: live, no longer "of the last
+	 * Apply"). Lab-only: never a Core diagnostic, and nothing is committed from such a text.
+	 */
 	get parseError(): SourceParseError | null {
-		return this.parseErrorValue
+		return this.draftParse.ok ? null : this.draftParse.error
 	}
 
 	/** Current Lab-owned representation of the authoritative Document revision. */
@@ -114,11 +146,12 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		return this.applying
 	}
 
+	/** The JSON text differs from the committed Document's source text: a commit is pending, or the text does not parse. */
 	get isDirty(): boolean {
 		return this.draftText !== this.documentStateValue.sourceText
 	}
 
-	/** How many applied sources "Undo last apply" can still restore. */
+	/** How many committed sources "Undo last change" can still restore. */
 	get undoDepth(): number {
 		return this.undoStack.length
 	}
@@ -146,44 +179,45 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	}
 
 	/**
-	 * Ordinary editing never recompiles. Clears a stale Apply-time parse error, since it no longer
-	 * describes the current draft.
+	 * Editing the JSON text never recompiles; it only parses the text (once, and the commit reuses the value), so the syntax
+	 * state (`parseError`) always describes the current text. Committing is the caller's decision (`commitJson()`).
 	 */
 	setDraftSourceText(text: string): void {
-		this.draftText = text
-		this.parseErrorValue = null
+		if (text !== this.draftText) {
+			this.draftText = text
+			this.draftParse = text === this.documentStateValue.sourceText
+				? { ok: true, value: this.documentStateValue.definition as JsonValue }
+				: parseDraft(text)
+		}
 		this.emit()
 	}
 
 	/**
-	 * Draft-only. Never applies, compiles, or disposes anything. A draft that fails to parse is left
-	 * untouched — Format has no diagnostic surface of its own.
+	 * Rewrites the JSON text as pretty JSON. Never commits, compiles, or disposes anything. A text that fails to parse is
+	 * left untouched — Format has no diagnostic surface of its own.
 	 */
 	format(): void {
-		let parsed: unknown
-		try {
-			parsed = JSON.parse(this.draftText)
-		}
-		catch {
+		if (!this.draftParse.ok)
 			return
-		}
-		this.setDraftSourceText(JSON.stringify(parsed, null, 2))
+		this.setDraftSourceText(JSON.stringify(this.draftParse.value, null, 2))
 	}
 
 	/**
-	 * Restores `draftSourceText = documentState.sourceText` and clears the Lab parse error. Never touches
-	 * the committed Document revision or the independently owned remote Preview.
+	 * Discards the JSON text: `draftSourceText = documentState.sourceText` (the header's "Discard JSON changes" while the text
+	 * does not parse). Never touches the committed Document revision or the independently owned remote Preview.
 	 */
 	revert(): void {
 		this.setDraftSourceText(this.documentStateValue.sourceText)
 	}
 
 	/**
-	 * The deterministic Apply command (diagnostic #13 Phase 4 Apply-lifecycle comment):
+	 * Commits the JSON text (diagnostic #13 Phase 4 Apply-lifecycle comment; since Lab UX phase 3 the store calls it when the
+	 * text parses, after a pause in typing and on blur, instead of from an Apply button):
 	 *
-	 * - captures the draft at command start; concurrent edits stay in the draft and are not applied;
-	 * - concurrent Apply is disabled — a call while one is already running is a no-op;
-	 * - a `JSON.parse` failure sets a Lab-only `SourceParseError` and leaves committed state/Preview untouched;
+	 * - captures the text at command start; concurrent edits stay in the text and are not committed;
+	 * - a concurrent commit is disabled — a call while one is already running is a no-op;
+	 * - a `JSON.parse` failure leaves committed state/Preview untouched (`parse-error`, the Lab-only `SourceParseError`);
+	 * - consecutive commits with the same non-null `coalesceKey` share one Undo entry (`recordUndo()`);
 	 * - parsed JSON is submitted to the authoritative `WidgetDocument` as one root replacement;
 	 * - a structural no-op (`changed:false`) accepts the Lab-local text representation without
 	 *   inventing a Document revision or replacing the existing Runtime/Preview;
@@ -191,31 +225,27 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	 * - a changed valid Document commits/compiles first, then awaits one remote Preview replacement hook;
 	 * - no Runtime exists in this parent session, and no Runtime state is migrated between revisions.
 	 */
-	async apply(): Promise<ApplyOutcome> {
+	async commitJson(options: CommitJsonOptions = {}): Promise<ApplyOutcome> {
 		if (this.applying)
 			return { status: 'skipped-concurrent' }
 
 		const capturedText = this.draftText
+		const parsed = this.draftParse
 		this.applying = true
 		this.emit()
 
 		try {
-			let definition: JsonValue
-			try {
-				definition = JSON.parse(capturedText) as JsonValue
-			}
-			catch (error) {
-				this.parseErrorValue = toParseError(capturedText, error)
+			if (!parsed.ok) {
 				this.recordDocumentTrace({ kind: 'parse-error', revision: this.documentStateValue.revision })
-				return { status: 'parse-error', error: this.parseErrorValue }
+				return { status: 'parse-error', error: parsed.error }
 			}
 
-			this.parseErrorValue = null
 			return await this.commitPatch(
-				[{ op: 'replace', path: '', value: definition }],
+				[{ op: 'replace', path: '', value: parsed.value }],
 				capturedText,
-				definition,
+				parsed.value,
 				'json',
+				options.coalesceKey ?? null,
 			)
 		}
 		finally {
@@ -226,8 +256,8 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 
 	/**
 	 * Applies a high-level Author command against the current committed Document. Structure commands are
-	 * intentionally unavailable while JSON has an unapplied draft, so a semantic action can never discard
-	 * expert edits silently. The command's patch then enters the same commit/promotion path as JSON Apply.
+	 * intentionally unavailable while the JSON text differs from the Document (`draft-dirty`), so a semantic action can
+	 * never discard expert edits silently. The command's patch then enters the same commit/promotion path as a JSON commit.
 	 */
 	async author(command: AuthorCommand): Promise<AuthorOutcome> {
 		if (this.applying)
@@ -246,11 +276,8 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 			const outcome = await this.commitPatch(prepared.patch, null, null, 'structure')
 			// Structure owns a deterministic JSON representation. Only synchronize the draft if Monaco (or
 			// another caller) has not changed it while Runtime promotion was awaiting the Preview seam.
-			if (outcome.status === 'applied' && this.draftText === capturedDraftText) {
-				this.draftText = this.documentStateValue.sourceText
-				this.parseErrorValue = null
-				this.emit()
-			}
+			if (outcome.status === 'applied' && this.draftText === capturedDraftText)
+				this.setDraftSourceText(this.documentStateValue.sourceText)
 			if (outcome.status === 'patch-error')
 				return outcome
 			if (outcome.status === 'applied')
@@ -265,15 +292,15 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 
 	/**
 	 * Restores the source the Document held before its last revision-advancing commit, as a NEW Document
-	 * revision through the same root-replacement commit and Preview promotion path as Apply (never by
-	 * rewinding Core's Document). Distinct from `revert()`, which only discards the unapplied draft:
+	 * revision through the same root-replacement commit and Preview promotion path as a JSON commit (never by
+	 * rewinding Core's Document). Distinct from `revert()`, which only discards the JSON text:
 	 *
-	 * - unavailable while an unapplied draft exists (`draft-dirty`: Revert or Apply it first, so Undo can
-	 *   never discard typing silently) and while another command runs;
-	 * - the restored source becomes the draft too (clean afterwards), unless the user typed during the commit;
+	 * - unavailable while the JSON text differs from the Document (`draft-dirty`; the store commits a pending text first and
+	 *   refuses while the text does not parse, so Undo never discards typing silently) and while another command runs;
+	 * - the restored source becomes the JSON text too, unless the user typed during the commit;
 	 * - Undo itself pushes no history, so repeated Undo walks back through the stack one step at a time.
 	 */
-	async undoLastApply(): Promise<UndoOutcome> {
+	async undo(): Promise<UndoOutcome> {
 		if (this.applying)
 			return { status: 'skipped-concurrent' }
 		if (this.isDirty)
@@ -286,7 +313,7 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		this.applying = true
 		this.emit()
 		try {
-			// Every stacked text was parsed by an earlier Apply (or is the constructor's valid initial text).
+			// Every stacked text was parsed by an earlier commit (or is the constructor's valid initial text).
 			const definition = JSON.parse(previousText) as JsonValue
 			const outcome = await this.commitPatch([{ op: 'replace', path: '', value: definition }], previousText, definition, 'undo')
 			if (outcome.status === 'patch-error')
@@ -294,10 +321,9 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 			if (outcome.status !== 'applied')
 				return { status: 'skipped-concurrent' }
 			this.undoStack.pop()
-			if (this.draftText === capturedDraftText) {
-				this.draftText = this.documentStateValue.sourceText
-				this.parseErrorValue = null
-			}
+			this.topUndoKey = null
+			if (this.draftText === capturedDraftText)
+				this.setDraftSourceText(this.documentStateValue.sourceText)
 			return { status: 'undone', blueprintStatus: outcome.blueprintStatus }
 		}
 		finally {
@@ -339,6 +365,7 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		sourceText: string | null,
 		definition: JsonValue | null,
 		origin: LabPatchOrigin,
+		coalesceKey: LabCoalesceKey = null,
 	): Promise<ApplyOutcome> {
 		const previousDocument = this.documentStateValue
 		const patchResult = this.document.applyPatch(patch, { expectedRevision: previousDocument.revision })
@@ -377,11 +404,8 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 			return { status: 'applied', blueprintStatus: previousDocument.blueprint.status }
 		}
 
-		if (origin !== 'undo') {
-			this.undoStack.push(previousDocument.sourceText)
-			if (this.undoStack.length > LAB_UNDO_LIMIT)
-				this.undoStack.splice(0, this.undoStack.length - LAB_UNDO_LIMIT)
-		}
+		if (origin !== 'undo')
+			this.recordUndo(previousDocument.sourceText, nextSourceText, coalesceKey)
 		this.documentStateValue = {
 			sourceText: nextSourceText,
 			definition: nextDefinition,
@@ -437,6 +461,25 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 		}
 	}
 
+	/**
+	 * Pushes the source a revision-advancing commit replaced. A JSON commit whose coalesce key is the one that pushed the top
+	 * entry pushes nothing: that entry already holds the source from before the burst (Lab UX phase 3), so one Undo takes the
+	 * whole burst back. If such a commit lands back on that source, the entry has nothing left to undo and is dropped.
+	 */
+	private recordUndo(previousSourceText: string, nextSourceText: string, coalesceKey: LabCoalesceKey): void {
+		if (coalesceKey !== null && coalesceKey === this.topUndoKey && this.undoStack.length > 0) {
+			if (sameJsonDocument(this.undoStack.at(-1)!, nextSourceText)) {
+				this.undoStack.pop()
+				this.topUndoKey = null
+			}
+			return
+		}
+		this.undoStack.push(previousSourceText)
+		if (this.undoStack.length > LAB_UNDO_LIMIT)
+			this.undoStack.splice(0, this.undoStack.length - LAB_UNDO_LIMIT)
+		this.topUndoKey = coalesceKey
+	}
+
 	private recordDocumentTrace(event: LabDocumentTraceEvent): void {
 		this.documentTraceValue.push(Object.freeze(event))
 		if (this.documentTraceValue.length > LAB_DOCUMENT_TRACE_LIMIT)
@@ -444,12 +487,12 @@ export class LabSession<Plugins extends AnyWidgetPluginTuple = AnyWidgetPluginTu
 	}
 
 	/**
-	 * Presets are source text through the same Apply pipeline: no bypass of `JSON.parse` or the
-	 * authoritative Document mutation boundary.
+	 * Presets are source text through the same JSON commit pipeline: no bypass of `JSON.parse` or the
+	 * authoritative Document mutation boundary. A preset load never coalesces.
 	 */
 	async applyPreset(sourceText: string): Promise<ApplyOutcome> {
 		this.setDraftSourceText(sourceText)
-		return this.apply()
+		return this.commitJson()
 	}
 
 	private emit(): void {

@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { expandGraphWidget, expect, loadPreset, openAuthorJson, openDependenciesGraph, openDeveloperTool, previewFrame, setLocale, test } from './fixtures'
+import { editJson, expandGraphWidget, expect, loadPreset, openAuthorJson, openDependenciesGraph, openDeveloperTool, previewFrame, setLocale, test, waitForLabTestSeam } from './fixtures'
 
 /**
  * Issue #230 PR 3c: Graph readability (U11), grouped cycle problems (U16), target size and text size (U19), visible
@@ -216,7 +216,7 @@ test.describe('grouped cycle problems (U16)', () => {
 			.toHaveAttribute('data-problem-count', '4')
 		await expect(problems.getByTestId('author-problems-summary'))
 			.toHaveText('4 problems')
-		await expect(page.getByTestId('document-status'))
+		await expect(page.getByTestId('lab-status'))
 			.toHaveAttribute('data-problem-count', '4')
 
 		const group = problems.getByTestId('problem-group')
@@ -533,10 +533,13 @@ test.describe('the Lab language in the chrome (U21)', () => {
 		}
 	})
 
-	test('zh-TW names Revert and Undo so they cannot be confused, and the language entry is the Lab\'s (Lab UX phase 1)', async ({ page }) => {
-		await openLab(page, 'showcase=survey&lang=zh-TW')
-		await expect(page.getByTestId('revert-button'))
-			.toHaveText('捨棄草稿')
+	// Lab UX phase 3 replaced Revert with "Discard JSON changes" (only while the JSON does not parse); the rule stays: 捨棄, never a near-synonym of 復原.
+	test('zh-TW names Discard and Undo so they cannot be confused, and the language entry is the Lab\'s (Lab UX phase 1)', async ({ page }) => {
+		await openLab(page, 'lab-test&showcase=survey&lang=zh-TW')
+		await waitForLabTestSeam(page)
+		await editJson(page, '{ "id": ')
+		await expect(page.getByTestId('discard-json-button'))
+			.toHaveText('捨棄 JSON 變更')
 		await expect(page.getByTestId('undo-button'))
 			.toHaveText('復原上一步')
 		await expect(page.getByRole('button', { name: '復原上一步', exact: true }))
@@ -568,10 +571,10 @@ test.describe('a Preview that cannot load (U22)', () => {
 			.toContainText('The preview could not be loaded')
 		await expect(page.getByTestId('preview-error-detail'))
 			.toContainText('did not become ready within 1500 ms')
-		await expect(page.getByTestId('preview-status'))
-			.toHaveAttribute('data-state', 'failed')
-		await expect(page.getByTestId('preview-status'))
-			.toHaveText('Preview failed to load')
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-preview', 'failed')
+		await expect(page.getByTestId('lab-status'))
+			.toHaveText('Preview unavailable')
 		// The dead frame is not left on screen.
 		await expect(page.getByTestId('preview-frame'))
 			.toBeHidden()
@@ -584,8 +587,8 @@ test.describe('a Preview that cannot load (U22)', () => {
 		await expect(previewFrame(page)
 			.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 			.toBeVisible()
-		await expect(page.getByTestId('preview-status'))
-			.toHaveAttribute('data-state', 'current')
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-preview', 'current')
 	})
 
 	test('a showcase renderer chunk that fails to load once: Retry replaces the frame and the Preview comes back', async ({ page }) => {
@@ -626,8 +629,8 @@ test.describe('a Preview that cannot load (U22)', () => {
 			.toContainText('The preview could not be loaded')
 		await expect(page.getByTestId('preview-error-detail'))
 			.toContainText('renderer for "survey"')
-		await expect(page.getByTestId('preview-status'))
-			.toHaveAttribute('data-state', 'failed')
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-preview', 'failed')
 		expect(frameDocumentRequests)
 			.toBe(1)
 
@@ -639,8 +642,8 @@ test.describe('a Preview that cannot load (U22)', () => {
 		await expect(previewFrame(page)
 			.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 			.toBeVisible()
-		await expect(page.getByTestId('preview-status'))
-			.toHaveAttribute('data-state', 'current')
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-preview', 'current')
 		// Recovery needed a new frame document and a new request for the chunk.
 		expect(frameDocumentRequests)
 			.toBe(2)
@@ -654,8 +657,8 @@ test.describe('a Preview that cannot load (U22)', () => {
 			.locator('[data-widget-id]')
 			.first())
 			.toBeVisible({ timeout: 15_000 })
-		await expect(page.getByTestId('preview-status'))
-			.toHaveAttribute('data-state', 'current')
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-preview', 'current')
 
 		// The frame loses its mount point: the next valid change is compiled and its renderer loaded, the running Preview is
 		// taken down, and only then does the mount fail. The frame says so, so the Lab must not claim the old Preview still runs.
@@ -673,8 +676,8 @@ test.describe('a Preview that cannot load (U22)', () => {
 			.toContainText('The preview could not be loaded')
 		await expect(page.getByTestId('preview-error-detail'))
 			.toContainText('Preview frame root disappeared during mount.')
-		await expect(page.getByTestId('preview-status'))
-			.toHaveAttribute('data-state', 'failed')
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-preview', 'failed')
 	})
 
 	test('the failure state is announced in Taiwan Chinese too', async ({ page }) => {

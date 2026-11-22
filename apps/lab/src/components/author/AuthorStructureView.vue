@@ -18,9 +18,13 @@ const i18n = useLabI18n()
 const documentInspection = computed(() => inspectBlueprint(store.documentState.value.blueprint))
 const selectedNodeId = computed<InspectionNodeId | null>(() => store.documentFocus.value?.nodeId ?? null)
 const selectedNode = computed(() => selectedNodeId.value === null ? null : documentInspection.value.getNode(selectedNodeId.value))
+/** A Structure edit is being committed or waits for one (`onEdit()` runs them one at a time). */
 const busy = ref(false)
-/** An unapplied JSON draft exists: a Structure commit would be refused (`draft-dirty`), so the editor says so up front and sends nothing. */
-const draftLocked = computed(() => store.isDirty.value)
+/**
+ * The JSON view's text does not parse (Lab UX phase 3: the only "draft"): a Structure commit would be refused (`draft-dirty`),
+ * since it would replace that text, so the editor says so up front and sends nothing until the JSON parses or is discarded.
+ */
+const draftLocked = computed(() => store.hasJsonSyntaxError.value)
 const outcomeMessage = ref<string | null>(null)
 /** The Document revision a successful command produced (`data-revision` of the outcome line, for specs). */
 const outcomeRevision = ref<number | null>(null)
@@ -166,45 +170,91 @@ async function keepFocus(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 	target?.focus()
 }
 
-async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
-	// Synchronous, so a second trigger in the same task is dropped here without touching the message, the controls or `busy`
-	// (the controls' own `busy` prop only updates with the next render).
-	if (busy.value)
+/** The selected widget as a stable identity: its inspection node id changes with every revision, its id and type do not. */
+function widgetKey(): string | null {
+	const node = selectedNode.value
+	return node === null || !node.resolved ? null : `${node.node.id}\u0000${node.node.type}`
+}
+
+interface QueuedEdit {
+	readonly path: ConfigPath
+	readonly edit: ConfigEdit
+	readonly widget: string
+	readonly signature: string
+}
+
+/**
+ * Edits run one at a time, in the order they were made (Lab UX phase 3). With commits on blur, the edit that a click or Tab
+ * causes routinely arrives while the previous field's blur commit is still promoting the Preview: it waits for it instead of
+ * being dropped. The same edit reported twice while it waits or runs (a control that reports one click twice in a task) is
+ * dropped, so it never commits twice. A waiting edit whose widget is no longer selected is dropped too: its path belongs to
+ * that widget.
+ */
+const editQueue: QueuedEdit[] = []
+let runningSignature: string | null = null
+
+function onEdit(path: ConfigPath, edit: ConfigEdit): void {
+	// No check of the JSON lock here: the locked controls report nothing once rendered, and an edit sent in the same task as the
+	// JSON stopped parsing reaches the session, which refuses it (`draft-dirty`) and the field says so.
+	const widget = widgetKey()
+	if (widget === null)
 		return
-	const nodeId = selectedNodeId.value
-	if (nodeId === null || selectedNode.value?.resolved !== true)
+	const signature = JSON.stringify([widget, path, edit])
+	if (runningSignature === signature || editQueue.some(queued => queued.signature === signature))
 		return
+	editQueue.push({ path, edit, widget, signature })
+	if (!busy.value)
+		void runQueuedEdits()
+}
+
+async function runQueuedEdits(): Promise<void> {
 	busy.value = true
-	outcomeMessage.value = null
-	outcomeRevision.value = null
-	let applied = false
-	// Why the edit was not applied, for the control at its path: the reason alone, without the outcome line's own preamble.
-	let refusal: string | null = null
 	try {
-		const outcome = await store.author(editConfig(store.documentState.value.revision, nodeId, path, edit))
-		applied = outcome.status === 'applied'
-		if (outcome.status === 'applied') {
-			// Plain language: the revision is a developer detail (the header's details popover), kept here only as a
-			// machine-readable attribute of the outcome line.
-			outcomeMessage.value = i18n.t('Change applied. Use Undo to take it back.')
-			outcomeRevision.value = store.documentState.value.revision
-		}
-		else if (outcome.status === 'draft-dirty') {
-			outcomeMessage.value = i18n.t('Apply or Revert the JSON draft before using Structure commands.')
-		}
-		else if (outcome.status === 'patch-error') {
-			outcomeMessage.value = i18n.t('The author command could not be applied: {message}', { message: outcome.failure.message })
-			refusal = outcome.failure.message
-		}
-		else if (outcome.status === 'unsupported') {
-			outcomeMessage.value = unsupportedMessage(outcome.reason)
-		}
-		else {
-			outcomeMessage.value = i18n.t('The author command is unavailable while another lifecycle command is running.')
+		for (let next = editQueue.shift(); next !== undefined; next = editQueue.shift()) {
+			if (next.widget !== widgetKey())
+				continue
+			runningSignature = next.signature
+			try {
+				await runEdit(next.path, next.edit)
+			}
+			finally {
+				runningSignature = null
+			}
 		}
 	}
 	finally {
 		busy.value = false
+	}
+}
+
+async function runEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
+	const nodeId = selectedNodeId.value
+	if (nodeId === null || selectedNode.value?.resolved !== true)
+		return
+	outcomeMessage.value = null
+	outcomeRevision.value = null
+	// Why the edit was not applied, for the control at its path: the reason alone, without the outcome line's own preamble.
+	let refusal: string | null = null
+	const outcome = await store.author(editConfig(store.documentState.value.revision, nodeId, path, edit))
+	const applied = outcome.status === 'applied'
+	if (outcome.status === 'applied') {
+		// Plain language: the revision is a developer detail (the header's details popover), kept here only as a
+		// machine-readable attribute of the outcome line.
+		outcomeMessage.value = i18n.t('Change applied. Use Undo to take it back.')
+		outcomeRevision.value = store.documentState.value.revision
+	}
+	else if (outcome.status === 'draft-dirty') {
+		outcomeMessage.value = i18n.t('The JSON view has changes that are not in the document yet. Fix or discard them, then try again.')
+	}
+	else if (outcome.status === 'patch-error') {
+		outcomeMessage.value = i18n.t('The author command could not be applied: {message}', { message: outcome.failure.message })
+		refusal = outcome.failure.message
+	}
+	else if (outcome.status === 'unsupported') {
+		outcomeMessage.value = unsupportedMessage(outcome.reason)
+	}
+	else {
+		outcomeMessage.value = i18n.t('The author command is unavailable while another lifecycle command is running.')
 	}
 	refusal ??= outcomeMessage.value
 	if (!applied && edit.op === 'replace')
@@ -230,15 +280,15 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 			tabindex="-1"
 			class="min-w-0 overflow-auto p-2.5"
 		>
-			<!-- The JSON draft and Structure both edit the Document, and a Structure commit is refused while a draft exists
-				(it would be lost). Say so before anything is clicked, and lock the controls. -->
+			<!-- JSON text that does not parse was never committed, and a Structure commit would replace it (`draft-dirty`). Say so
+				before anything is clicked, and lock the controls until the JSON parses or is discarded (Lab UX phase 3). -->
 			<div
 				v-if="draftLocked"
 				data-testid="structure-draft-notice"
 				role="note"
 				class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-(--lab-radius) border border-(--lab-color-warning) bg-(--lab-color-surface-alt) px-2 py-1.5 text-xs text-(--lab-color-text)"
 			>
-				<span class="min-w-0 flex-1">{{ i18n.t('The JSON view has unapplied changes. Apply or discard the JSON draft to edit here.') }}</span>
+				<span class="min-w-0 flex-1">{{ i18n.t('The JSON has a syntax error, so nothing from it is applied. Fix it in the JSON view, or use Discard JSON changes, to edit here.') }}</span>
 				<button
 					type="button"
 					data-testid="structure-open-json"
@@ -344,8 +394,8 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 						<p class="m-0 mb-2 text-xs text-muted">
 							{{ i18n.t(configSchema === null ? 'This plugin publishes no config schema, so values are typed by what they hold and nothing can be added or removed here. Use JSON for that.' : 'Each change is applied to the Document at once and restarts the preview (its answers start over). Use Undo to take a change back.') }}
 						</p>
-						<!-- Locked by a JSON draft: the controls stay focusable and readable (as while a command runs: `aria-disabled`)
-							but send nothing, and look dimmed; the notice above says why. -->
+						<!-- Locked while the JSON text does not parse: the controls stay focusable and readable (`aria-disabled`) but send
+							nothing, and look dimmed; the notice above says why. While a commit runs they stay live: edits wait their turn. -->
 						<div
 							data-testid="structure-fields"
 							:data-locked="draftLocked ? 'true' : 'false'"
@@ -361,7 +411,7 @@ async function onEdit(path: ConfigPath, edit: ConfigEdit): Promise<void> {
 								:value="configValue"
 								:path="[]"
 								label="config"
-								:busy="busy || draftLocked"
+								:busy="draftLocked"
 								:locked="draftLocked"
 								:problems="fieldProblems"
 								@edit="onEdit"

@@ -15,7 +15,7 @@ import { expect, expectPreviewStatus, previewFrame, selectShowcase, setLocale, t
 const SUBMITTED_DESCRIPTION = 'An answer set with no errors was submitted. Carries the response: visible, required, value and errors per question.'
 
 interface LabTestWindow {
-	__WIDGET_LAB_TEST__?: { setDraftSourceText: (text: string) => void }
+	__WIDGET_LAB_TEST__?: { editJson: (text: string) => void }
 }
 
 async function openLab(page: Page, query = 'lab-test'): Promise<void> {
@@ -296,7 +296,7 @@ test.describe('events log', () => {
 			.toHaveCount(0)
 	})
 
-	test('listens to the new Preview after Apply, and tags each entry with the revision that emitted it', async ({ page }) => {
+	test('listens to the new Preview after a commit, and tags each entry with the revision that emitted it', async ({ page }) => {
 		await openLab(page)
 		await openEvents(page)
 		await answerSurvey(page)
@@ -306,10 +306,8 @@ test.describe('events log', () => {
 		const changed = JSON.parse(defaultSurveyPreset.sourceText)
 		changed.config.title.en = 'Maker Space open day: sign-up (v2)'
 		await page.evaluate((source) => {
-			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.setDraftSourceText(source)
+			(window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson(source)
 		}, JSON.stringify(changed, null, 2))
-		await page.getByRole('button', { name: 'Apply', exact: true })
-			.click()
 		await expectPreviewStatus(page, 'current')
 		await expect(previewFrame(page)
 			.getByRole('heading', { name: 'Maker Space open day: sign-up (v2)' }))
