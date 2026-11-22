@@ -1,0 +1,10 @@
+// The virtual modules of `widgetDocs()` (`../widget-docs.ts`): `virtual:widget-docs/<showcase id>` is that showcase's
+// generated plugin documentation. This is the declaration `@deviltea/widget-skills/virtual-widget-docs` ships, with the
+// `WidgetDocs` type read by relative path: the Lab does not depend on the private generator package, it only loads its
+// Vite plugin by relative path from its configs.
+
+declare module 'virtual:widget-docs/*' {
+	/** The documentation of the System this module is named after, generated from its types and JSDoc. */
+	const docs: import('../../widget-skills/src/docs-types').WidgetDocs
+	export default docs
+}

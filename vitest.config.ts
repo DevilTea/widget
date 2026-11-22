@@ -1,6 +1,7 @@
 import Vue from 'unplugin-vue/vite'
 import { defineConfig } from 'vitest/config'
 import { labNuxtUi } from './apps/lab/nuxt-ui'
+import { labWidgetDocs } from './apps/lab/widget-docs'
 import { widgetDocs } from './apps/widget-skills/src/vite'
 
 export default defineConfig({
@@ -9,7 +10,7 @@ export default defineConfig({
 		// The retention tests observe garbage collection, which needs the collector exposed to the workers.
 		execArgv: ['--expose-gc'],
 		// Three projects share everything above and below (plugins, `execArgv`, coverage, typecheck). Only the Lab's
-		// realm loads its Nuxt UI plugin and offline-icons setup, so a Lab or Iconify break cannot fail the
+		// realm loads its Nuxt UI and widget docs plugins and offline-icons setup, so a Lab or Iconify break cannot fail the
 		// package tests or the widget-skills tests at setup.
 		projects: [
 			{
@@ -30,7 +31,8 @@ export default defineConfig({
 			},
 			{
 				extends: true,
-				plugins: [labNuxtUi()],
+				// `virtual:widget-docs/<showcase id>` (see apps/lab/widget-docs.ts), which the showcase registry imports.
+				plugins: [labNuxtUi(), labWidgetDocs()],
 				test: {
 					name: 'lab',
 					include: ['apps/lab/src/**/*.unit.test.ts'],
