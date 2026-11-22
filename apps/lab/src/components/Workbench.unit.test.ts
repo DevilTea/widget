@@ -33,7 +33,7 @@ function savedLayoutWithRuntimeActive(): string {
 					type: 'branch',
 					size: 800,
 					data: [
-						{ type: 'leaf', data: { views: ['author', 'widget', 'blueprint', 'runtime', 'events', 'dependencies'], activeView: 'runtime', id: '1' }, size: 700 },
+						{ type: 'leaf', data: { views: ['author', 'explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies'], activeView: 'runtime', id: '1' }, size: 700 },
 						{ type: 'leaf', data: { views: ['preview'], activeView: 'preview', id: '2' }, size: 740 },
 					],
 				},
@@ -43,6 +43,7 @@ function savedLayoutWithRuntimeActive(): string {
 			},
 			panels: Object.fromEntries([
 				panel('author', 'Author'),
+				panel('explain', 'Explain'),
 				panel('widget', 'Selected widget'),
 				panel('blueprint', 'Blueprint'),
 				panel('runtime', 'Runtime'),

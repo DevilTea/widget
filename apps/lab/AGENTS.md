@@ -15,7 +15,7 @@ stale prose here or historical `DevilTea/deviltea-labs#13` checkpoints that `Dev
 
 Private, never-published workspace application with two roles:
 
-1. **Lab shell** — the two-column workbench's `Author` workspace (Catalog/Structure/JSON), Preview, the
+1. **Lab shell** — the two-column workbench's `Author` workspace (Catalog/Structure/JSON), Preview, the `Explain` tab, the
    `Selected widget` pane, the live `Events` log, and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
    `@deviltea/widget-vue`.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
@@ -109,6 +109,10 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   use-implementation-explorer.ts` is the small, deliberately parallel open/activate bridge to
   `Workbench.vue`'s Dockview instance (see that file's header for why it is not an extension of
   `LabStore.activeTab`).
+- `src/explain/why.ts` — the Explain tab's "why" sentences (Lab UX phase 2, see "The Explain tab" below): pure, built from the
+  Blueprint inspection and the plugin's config JSON Schema, unit-tested over the Survey, Trip budget, quote-rules and Sandbox
+  presets. `src/lib/prose.ts` splits generated documentation into text and Markdown code spans (`splitInlineCode`) and a
+  translated template into text and placeholders (`templateParts`).
 - `src/lib/diagnostic-format.ts` — shared structured-diagnostic formatting helpers (`formatDiagnosticPath`,
   `formatDependencyReference`, `formatSeparatedSourceLocation`, ...) reused by `blueprint/DiagnosticList.vue`,
   `runtime/RuntimePropertyDiagnosticList.vue`, the Dependencies/Graph detail views, and the Document Tools
@@ -942,7 +946,7 @@ holds the same `getSnapshot()`/`subscribe()`-only discipline.
 
 ## Dependencies inspector
 
-The canonical readonly `Dependencies` Dockview panel owns two presentation views over the same current Document Blueprint facts. `Relations` (a focus-centric dependency inspector, readable at the default tool width) is the default view since issue #230 PR 3b; `Graph` is the opt-in topology view. Switching views is presentation-only: it preserves shared Document focus and never mutates semantic state.
+The canonical readonly `Dependencies` Dockview panel owns two presentation views over the same current Document Blueprint facts. `Relations` (a focus-centric dependency inspector, readable at the default tool width) is the default view since issue #230 PR 3b; `Graph` is the opt-in topology view. Switching views is presentation-only: it preserves shared Document focus and never mutates semantic state. The active view is shared per store (`use-dependencies-view.ts`) so the Explain tab's "Open dependency graph" can switch it (and focus the Graph tab); "Reset layout" returns it to Relations.
 
 `src/graph/` implements the authoritative Lab-side dependency projections. The Graph view continues to use this pipeline:
 
@@ -1408,7 +1412,9 @@ inspection and Preview focus. They must not gain a shared Blueprint/Runtime mode
 or cross-revision `InspectionNodeId` mapping. Preview Inspect selects the Selected widget pane when
 Document/Preview revisions are linked (it selected Blueprint before) and Runtime when they diverge, and the hint next to the Inspect
 button names that panel ("Click a widget to open it in Selected widget / Runtime", `inspect-hint`; it said "focus it in Blueprint"
-until Lab UX phase 1, `e2e/inspect.spec.ts` pins both cases); Graph and Implementation retain
+until Lab UX phase 1, `e2e/inspect.spec.ts` pins both cases). Since Lab UX phase 2 a linked Inspect selection made while the Explain tab is
+the visible one stays in Explain (and the hint names Explain): the Explain panel reports its Dockview visibility through
+`use-explain-visibility.ts`, which `PreviewPanel.vue` reads (`e2e/explain.spec.ts`); Graph and Implementation retain
 their existing Document-scoped entry points.
 
 `src/components/inspector/InspectorPanelShell.vue` and `InspectorSplitLayout.vue` are intentionally
@@ -1420,7 +1426,7 @@ do not merge the two outer panels merely to remove presentation duplication.
 
 ### Workbench layout and the Selected widget pane (issue #230 PR 3b)
 
-**Layout.** The default layout is two Dockview groups: the tool group (Author, Selected widget, Blueprint, Runtime, Events, Dependencies;
+**Layout.** The default layout is two Dockview groups: the tool group (Author, Explain, Selected widget, Blueprint, Runtime, Events, Dependencies;
 Author active) and Preview. The tool group is about half the workbench (48%, clamped to 420-940px; it was about 29%, which clipped
 Relations and the Implementation source). The layout is saved to `localStorage` (`widget-lab:layout`, value
 `{ version, layout }` where `layout` is `DockviewApi.toJSON()`) 250ms after it settles and on `pagehide`, and restored by
@@ -1461,7 +1467,57 @@ revision (Preview focus is the linked mapping of Document focus); otherwise the 
 they were; the pane reuses their detail components and does not replace them. Both panels stay mounted while their tab is hidden, so the Runtime snapshot is one
 shared source (`use-selected-runtime-widget.ts`, one per store): requested once per selection, and only while at least one panel reports itself visible
 (`usePanelVisibility(params.api)`, Dockview's `isVisible`/`onDidVisibilityChange`). A panel that is not visible reads `null`, so the member rows under it, which subscribe
-to the remote Runtime, are not rendered and hold no subscription.
+to the remote Runtime, are not rendered and hold no subscription. The linked/diverged rules (`runtimeState`, the message that says why there are no values)
+live in `use-selected-widget-runtime.ts` since Lab UX phase 2, shared with the Explain tab.
+
+**The Explain tab (Lab UX phase 2, M13).** `ExplainPanel.vue` (canonical panel `explain`, tab "Explain" / 說明, right after Author) explains
+one widget for a newcomer, in its final shape (the design's phase 3 keeps it; the Selected widget and Dependencies tabs stay until phase 3 moves
+or removes them). It explains only a widget someone **chose**: `InspectorFocusStore.isDocumentFocusChosen()` (`LabStore.documentFocusChosen`)
+is true after a `setFocus` call or a linked Inspect selection, and false for the root the focus starts at and falls back to when a commit drops
+the selected widget, so Explain never explains the root by default and shows one card instead ("Click a widget in the Preview (Inspect) or in the
+Structure tree..."; while the revisions diverge Inspect opens Runtime, so the card says the preview shows an older version and points to the
+Structure tree only). Top to bottom, each part its own component in `components/explain/` so phase 3 can show Selected widget, Blueprint and
+Runtime details through the same pieces:
+1. **Identity** (`ExplainIdentity.vue`): `#id` and the type, and the plugin's generated summary (`pluginDocsOf(docs, type).summary`, line wraps
+   joined), whose Markdown code spans `DocProse.vue` draws as `<code>` instead of raw backticks. There is no generic "label" for a widget (a label
+   is a plugin's own config, such as the survey's `{ en, zh-TW }` objects), so the id is shown.
+2. **Why it behaves this way** (`ExplainWhyList.vue`, a `<ul>`): `buildWhySentences()` (`explain/why.ts`) makes one sentence per (Property of
+   the widget, other widget, operation) from the Blueprint inspection: "options reads #mode's value (now: no value)", "amountBase calls
+   #currency's convert". Dependencies on the widget itself, Methods (they are not why it shows something) and absent/invalid references are left
+   out. The "now" values are live: each State or Property read is an `ExplainLiveValue.vue` subscribed through `useRemoteRuntimeMember` to the
+   other widget's member in the Preview (the widget is found by id and type in the linked Preview snapshot, and only when that identity is unique,
+   `uniqueRemoteNodeIdForIdentity` in `lab/focus.ts`, the focus store's rule: a duplicate id shows no value), so a Property shows "not evaluated yet"
+   until the Preview evaluated it, `null` reads "no value" (generic wording: the design's "not answered" is survey vocabulary), and a failed one
+   "failed". Core does not say which config field produced a dependency, so the **config field is an inference**: a string value of the authored
+   config equal to the other widget's id names it; a dependency path that starts with a top-level config key (`["rules", "guests"]`) limits the search
+   to that field, and keys another Property's dependency on the same widget claims that way are skipped (so `sessions.options` does not borrow
+   `rules`). Outside such a field a matching value counts only when the generated schema marks it as a widget reference, the sentence
+   `widgetDocs()` writes for `@widgetRef` ("Must be the id of a widget of type A | B in the same document.", `widgetRefTypesOf`), preferring one
+   that names the other widget's type; otherwise no field is shown, so a string that only equals the id (`{ inputType: "email" }` beside a widget
+   `email`) is never taken for a reference. The survey's condition `question` carries `@widgetRef` for this (the four question types; `Numeric` for
+   `greaterThan`/`lessThan`, `MultipleChoice` for `includes`/`excludes`). The field shown is the top-level key, or, inside a list of objects, the item's key (`options[1].enabledWhen.question` -> `enabledWhen`),
+   with its description from the generated config schema (`describeField`, the Structure editor's reader). A plugin that finds its widgets through its
+   slots (the trip's chain, quote-rules, onboarding) gets no field, which is the honest answer; so does the sandbox, which has no schemas. A widget
+   whose Properties read no other widget says so. The lists are `<ul role="list">` (Tailwind's `list-none` removes the list semantics in Safari), and
+   the widget buttons show `#id` with the accessible name "Select widget #id" (選取 widget #id).
+3. **Current values**: `RuntimeNodeDetails` (`embedded`, `hideMethods`), the same rows as Selected widget, only while `runtimeState` is `ready`;
+   otherwise the shared message.
+4. **Used by / Depends on** (`ExplainRelations.vue`): the widget-focus `projectRelations()` model, one entry per other widget with its member pairs
+   ("visible reads value"); a resolved widget is a button that sets the shared Document focus. "Open dependency graph" calls
+   `useDependenciesView().openGraph()`, which switches the Dependencies panel to Graph, activates its tab and moves keyboard focus to the Graph view
+   tab (the panel's own focus target for a view switch), so focus never falls back to the page. The view is shared per store for this (it used to be
+   panel-local) and stays presentation-only; "Reset layout" puts it back to Relations (`reset()`, called by `Workbench.vue`), as the rebuilt panel
+   did when it owned the view. The zh-TW headings are 被誰使用／依賴的 widget, 使用它的 widget and 它依賴的 widget: Relations' 依賴於 reads as
+   unfinished as a heading on its own.
+5. **Declaration details**: a collapsed `<details>` with `BlueprintNodeDetails` (`embedded`).
+
+Which version the values come from is one line under "Why it behaves this way" (`explain-values-source`): "Current values come from the running preview,
+which shows the current document (rN)", or, while diverged or without a Preview, why there are none; no value from another revision is shown (the
+Selected widget rules). `data-runtime-state` on `data-testid=explain` is `none` with nothing chosen. Tests: `explain/why.unit.test.ts`,
+`lib/prose.unit.test.ts`, `lab/focus.unit.test.ts` (chosen focus), `i18n/explain-messages.unit.test.ts` (every literal has zh-TW with the same
+placeholders) and `e2e/explain.spec.ts` (empty card and tab order, Inspect with a live value that changes after answering, Used by moves the selection,
+Open dependency graph, the diverged wording, zh-TW). A new canonical panel needed no `LAYOUT_VERSION` bump: a saved layout without it fails the
+canonical-panel check and the default is built once (`layout-storage.unit.test.ts`, `e2e/layout.spec.ts`).
 
 **Events (audit U09).** Events are visible in two places. *Declared*: `components/events/DeclaredEvents.vue` lists a plugin's Events
 (name and description, verbatim and untranslated, no payload schema because Core publishes none; an Event without documentation shows its
@@ -1554,7 +1610,7 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
   1px divider-colour outline is `!important`, so the Lab's rule is too, and more specific). The Graph's expand/collapse toggles, cluster buttons and member
   cards have a 2px accent outline. Graph **edges** are one Tab stop walked with the arrow keys, with an accent band as
   the focus indicator (see "Dependencies inspector"); Relations remains the dense keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
-- **Language.** Navigation names are Taiwan Chinese: Author is 編寫, Dependencies 相依性, Relations 關聯, Graph 關係圖, Catalog 目錄, Structure 結構 (tab titles
+- **Language.** Navigation names are Taiwan Chinese: Author is 編寫, Explain 說明, Dependencies 相依性, Relations 關聯, Graph 關係圖, Catalog 目錄, Structure 結構 (tab titles
   follow a language switch). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source), and so do
   `JSON` and the product name. Since Lab UX phase 1 every tab title is translated: a name that is navigation around a Widget word mixes the two, as 選取的 widget
   already did: the Events log is "Events 紀錄" (its own message, `Events log`, so the Catalog's bare "Events" label stays), Document Tools "Document 工具", and

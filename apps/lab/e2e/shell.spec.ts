@@ -2,7 +2,7 @@ import { expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, prev
 
 /**
  * Issue #28 Lab shell / workbench contract: the app loads with the header's showcase/preset/Apply
- * controls and all six workbench panel tabs (`Workbench.vue`'s Author/Selected widget/Blueprint/Runtime/
+ * controls and the workbench panel tabs (`Workbench.vue`'s Author/Explain/Selected widget/Blueprint/Runtime/
  * Dependencies/Preview) available.
  *
  * Loaded against the network-blocked BUILT app (see `fixtures.ts`/`playwright.config.ts`) — Source is
@@ -24,7 +24,7 @@ test('app loads with header controls and all six panel tabs', async ({ page }) =
 	await expect(page.getByRole('button', { name: 'Format' }))
 		.toBeVisible()
 
-	for (const name of ['Author', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
+	for (const name of ['Author', 'Explain', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
 		const tab = page.getByRole('tab', { name })
 		await expect(tab)
 			.toBeVisible()
@@ -38,6 +38,11 @@ test('app loads with header controls and all six panel tabs', async ({ page }) =
 				await expect(panel.getByRole('tab', { name: 'Structure', exact: true }))
 					.toHaveAttribute('aria-selected', 'true')
 				await expect(panel.getByTestId('structure-editor'))
+					.toBeVisible()
+				break
+			case 'Explain':
+				// Nothing was chosen yet, so Explain asks for a widget instead of explaining the root (Lab UX phase 2).
+				await expect(panel.getByTestId('explain-empty'))
 					.toBeVisible()
 				break
 			case 'Selected widget':
@@ -182,7 +187,7 @@ test('Source editor initializes only from built preview assets (issues #30, #102
 test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => {
 	await page.goto('/')
 
-	const panelNames = ['Author', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']
+	const panelNames = ['Author', 'Explain', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']
 
 	// The five canonical panels use a custom Dockview tab renderer (`NonClosableTab.vue`) that never
 	// renders a close control — so there is no in-tab button affordance to find at all.

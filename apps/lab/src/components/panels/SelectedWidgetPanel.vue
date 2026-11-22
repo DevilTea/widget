@@ -12,13 +12,11 @@
  */
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { PanelVisibilityApi } from '../../composables/use-panel-visibility'
-import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { usePanelVisibility } from '../../composables/use-panel-visibility'
-import { useSelectedRuntimeWidget } from '../../composables/use-selected-runtime-widget'
-import { getRuntimeInspectorSource } from '../../runtime-inspector/source'
+import { useSelectedWidgetRuntime } from '../../composables/use-selected-widget-runtime'
 import BlueprintNodeDetails from '../blueprint/BlueprintNodeDetails.vue'
 import InspectorPanelShell from '../inspector/InspectorPanelShell.vue'
 import RuntimeNodeDetails from '../runtime/RuntimeNodeDetails.vue'
@@ -28,39 +26,17 @@ const store = useLabStore()
 const i18n = useLabI18n()
 
 const blueprint = computed(() => store.documentState.value.blueprint)
-const inspection = computed(() => inspectBlueprint(blueprint.value))
-const selectedNode = computed(() => {
-	const nodeId = store.documentFocus.value?.nodeId
-	return nodeId === undefined ? null : inspection.value.getNode(nodeId)
-})
-
-const source = computed(() => getRuntimeInspectorSource(store.preview.value, store.documentState.value.revision))
 const visible = usePanelVisibility(props.params?.api)
-const { connection, selectedNode: runtimeNode, widgetSnapshot } = useSelectedRuntimeWidget(visible)
-
-type RuntimeState = 'ready' | 'loading' | 'no-preview' | 'diverged' | 'unresolved' | 'unavailable'
-const runtimeState = computed<RuntimeState>(() => {
-	if (selectedNode.value !== null && !selectedNode.value.resolved)
-		return 'unresolved'
-	if (connection.value === null || store.preview.value === null)
-		return 'no-preview'
-	if (source.value.isDiverged)
-		return 'diverged'
-	if (runtimeNode.value === null)
-		return 'unavailable'
-	return widgetSnapshot.value === null ? 'loading' : 'ready'
-})
-
-const runtimeMessage = computed(() => {
-	switch (runtimeState.value) {
-		case 'unresolved': return i18n.t('This widget did not resolve, so it has no Runtime.')
-		case 'no-preview': return i18n.t('No Runtime values yet: there is no valid preview to read them from.')
-		case 'diverged': return i18n.t('The preview shows the last valid version (r{preview}), not the current document (r{document}). Runtime values come from the preview: fix the problems and Apply to see this widget\'s values.', { preview: source.value.previewRevision ?? '', document: store.documentState.value.revision })
-		case 'unavailable': return i18n.t('This widget is not in the running preview.')
-		case 'loading': return i18n.t('Loading Runtime values…')
-		default: return ''
-	}
-})
+// The linked/diverged rules are shared with the Explain tab (`use-selected-widget-runtime.ts`).
+const {
+	inspection,
+	documentNode: selectedNode,
+	connection,
+	selectedNode: runtimeNode,
+	widgetSnapshot,
+	runtimeState,
+	runtimeMessage,
+} = useSelectedWidgetRuntime(visible)
 
 function navigate(nodeId: InspectionNodeId): void {
 	store.setFocus('document', { nodeId })

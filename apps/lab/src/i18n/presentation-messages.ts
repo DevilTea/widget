@@ -1,5 +1,6 @@
 import type { LabLocale } from './locale'
 import { translateDocumentRepairMessage } from './document-repair-messages'
+import { translateExplainMessage } from './explain-messages'
 import { translateMessage } from './messages'
 import { translateOnboardingMessage } from './onboarding-messages'
 import { translateQuoteRulesMessage } from './quote-rules-messages'
@@ -479,6 +480,9 @@ export function translatePresentationMessage(locale: LabLocale, source: string):
 		const packs = translateRendererPacksMessage(locale, source)
 		if (packs !== undefined)
 			return packs
+		const explain = translateExplainMessage(locale, source)
+		if (explain !== undefined)
+			return explain
 	}
 	return translateMessage(locale, source)
 }
