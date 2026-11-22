@@ -781,3 +781,92 @@ describe('sourcePatch non-JSON operands', () => {
 		})
 	})
 })
+
+describe('sourcePatch member order', () => {
+	function keys(value: unknown): string[] {
+		return Object.keys(value as object)
+	}
+
+	function source() {
+		return {
+			id: 'a',
+			type: 'panel',
+			config: { label: { 'en': 'Hi', 'zh-TW': '嗨' }, other: 1 },
+			slots: {},
+		}
+	}
+
+	it('keeps a replaced member and every ancestor in place, for pointer and structured paths', () => {
+		for (const path of ['/config/label/en', ['config', 'label', 'en']] as const) {
+			const result = applySourcePatch(source(), [{ op: 'replace', path, value: 'Hello' }])
+			if (!result.ok)
+				throw new Error('patch failed')
+			const patched = result.value.source as ReturnType<typeof source>
+			expect(keys(patched))
+				.toEqual(['id', 'type', 'config', 'slots'])
+			expect(keys(patched.config))
+				.toEqual(['label', 'other'])
+			expect(keys(patched.config.label))
+				.toEqual(['en', 'zh-TW'])
+			expect(patched.config.label.en)
+				.toBe('Hello')
+		}
+	})
+
+	it('keeps an existing member in place for add, and appends a new member', () => {
+		const existing = applySourcePatch(source(), [{ op: 'add', path: '/config/label/en', value: 'Hello' }])
+		const added = applySourcePatch(source(), [{ op: 'add', path: '/config/label/fr', value: 'Salut' }])
+		if (!existing.ok || !added.ok)
+			throw new Error('patch failed')
+		const existingSource = existing.value.source as ReturnType<typeof source>
+		const addedSource = added.value.source as ReturnType<typeof source>
+		expect(keys(existingSource))
+			.toEqual(['id', 'type', 'config', 'slots'])
+		expect(keys(existingSource.config.label))
+			.toEqual(['en', 'zh-TW'])
+		expect(keys(addedSource))
+			.toEqual(['id', 'type', 'config', 'slots'])
+		expect(keys(addedSource.config.label))
+			.toEqual(['en', 'zh-TW', 'fr'])
+	})
+
+	it('keeps a replaced accessor or non-writable member in place, as a plain data member', () => {
+		let reads = 0
+		const withAccessor = Object.defineProperty({ a: 1, b: 2, c: 3 }, 'b', {
+			get() {
+				reads += 1
+				return 2
+			},
+			enumerable: true,
+			configurable: true,
+		})
+		const frozen = Object.freeze({ a: 1, b: 2, c: 3 })
+		for (const input of [withAccessor, frozen]) {
+			const result = applySourcePatch(input, [{ op: 'replace', path: '/b', value: 9 }])
+			if (!result.ok)
+				throw new Error('patch failed')
+			expect(keys(result.value.source))
+				.toEqual(['a', 'b', 'c'])
+			expect(Object.getOwnPropertyDescriptor(result.value.source, 'b'))
+				.toEqual({ value: 9, enumerable: true, writable: true, configurable: true })
+		}
+		expect(reads)
+			.toBe(0)
+	})
+
+	it('keeps the Document source order after a nested replace', () => {
+		const plugin = createWidgetPlugin('panel')
+			.interfaces<Record<never, never>>()
+			.done()
+		const system = createWidgetSystem({ plugins: [plugin] })
+		const document = createWidgetDocument({ system, source: source() })
+
+		expect(document.applyPatch([{ op: 'replace', path: '/config/label/en', value: 'Hello' }]))
+			.toEqual({ ok: true, changed: true })
+		const committed = document.getSnapshot().blueprint.source as ReturnType<typeof source>
+		expect(keys(committed))
+			.toEqual(['id', 'type', 'config', 'slots'])
+		expect(keys(committed.config.label))
+			.toEqual(['en', 'zh-TW'])
+	})
+})
