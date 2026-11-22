@@ -122,10 +122,23 @@ describe('hasCommittedEdits: the document differs from what was loaded', () => {
 			.toBe(false)
 	})
 
-	it('is true for any other text, also an equal value written differently (text, not semantics)', () => {
+	it('compares JSON values: whitespace and key order are not edits (Format + Apply on an untouched preset), other values are', () => {
 		expect(hasCommittedEdits('{"a":2}', presets))
 			.toBe(true)
 		expect(hasCommittedEdits('{ "a": 1 }', presets))
+			.toBe(false)
+		expect(hasCommittedEdits('{"k":1,"j":[1,{"z":null,"y":"s"}]}', [{ sourceText: '{\n  "j": [1, { "y": "s", "z": null }],\n  "k": 1\n}' }]))
+			.toBe(false)
+		expect(hasCommittedEdits('{"j":[{"y":"s"},1]}', [{ sourceText: '{"j":[1,{"y":"s"}]}' }]))
+			.toBe(true)
+		expect(hasCommittedEdits('{"a":1,"extra":null}', presets))
+			.toBe(true)
+	})
+
+	it('compares as text when a source does not parse', () => {
+		expect(hasCommittedEdits('{ broken', [{ sourceText: '{ broken' }]))
+			.toBe(false)
+		expect(hasCommittedEdits('{ broken', [{ sourceText: '{  broken' }]))
 			.toBe(true)
 	})
 })

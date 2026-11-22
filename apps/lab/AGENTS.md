@@ -1319,9 +1319,10 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
 - *Examples menu* (`UDropdownMenu`): a Showcase group and the current showcase's Preset group (checkbox items, the
   current one checked). The trigger always names the showcase and the last loaded preset
   (`LabStore.loadedPresetId`: the showcase default on entry, then the last preset loaded), or "edited": `deriveExampleState()`
-  names the loaded preset only while there is no unapplied draft and the applied source text equals that preset's text (or
-  another preset of the showcase it exactly equals, so Undo back to the default names the default again), otherwise
-  `edited`. `data-showcase-id`, `data-preset-id` and `data-example-kind` are the machine-readable hooks.
+  names the loaded preset only while there is no unapplied draft and the applied source is the same document as that preset (or
+  another preset of the showcase it equals, so Undo back to the default names the default again), otherwise `edited`. "The same
+  document" compares JSON values (`lab/json-equal.ts` `sameJsonDocument()`: whitespace and object key order do not count, array order
+  does; text that does not parse is compared as text), since Lab UX phase 2, so Format + Apply on an untouched preset still names it. `data-showcase-id`, `data-preset-id` and `data-example-kind` are the machine-readable hooks.
 - *Status chips* (`deriveLabStatus()`): validity (`data-state` `valid` | `problems`, `data-problem-count`;
   "Valid" / "N problems"; a JSON syntax error of the last Apply counts as one problem, since no Document was committed
   from that text) and preview (`data-state` `current` | `stale` | `unavailable`: "Preview up to date" / "Preview shows the
@@ -1360,7 +1361,7 @@ submenu (Implementation, Document Tools). Hidden test fixtures stay reachable on
   where the user put it: refocusing the trigger there swallowed typing and closed the menu that click had just opened. A chosen item's
   action runs in both cases. e2e (`menu focus handling`) pins both, and the menu helpers click a menu path once, with no retry.
 - *Committed-edit protection* (Lab UX phase 2, report item 10). **"The document differs from what was loaded"** means: the committed
-  Document's applied source text equals no preset of the open showcase, compared as exact text (`hasCommittedEdits()` in
+  Document's applied source is the same document as no preset of the open showcase, compared as JSON values (`hasCommittedEdits()` in
   `lab/draft-guard.ts`, `LabStore.hasCommittedEdits`; the same rule that makes the Examples menu say "edited", without the draft). A
   document that equals a preset again, for example after Undo, has nothing a preset load could not bring back; revision numbers are not
   used because they only grow. What happens then depends on whether the replacement can be undone (`replacementLoss()`):

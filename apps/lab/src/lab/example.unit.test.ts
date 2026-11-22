@@ -7,6 +7,15 @@ const presets = [
 ]
 
 describe('deriveExampleState', () => {
+	it('still names the preset after Format + Apply: whitespace and key order are not edits (Lab UX phase 2)', () => {
+		const formatted = [{ id: 'p', sourceText: '{"b":[1,2],"a":{"x":true}}' }]
+		expect(deriveExampleState({ loadedPresetId: 'p', presets: formatted, appliedSourceText: '{\n  "a": { "x": true },\n  "b": [1, 2]\n}\n', isDirty: false }))
+			.toEqual({ kind: 'preset', preset: formatted[0] })
+		// Array order is content.
+		expect(deriveExampleState({ loadedPresetId: 'p', presets: formatted, appliedSourceText: '{"a":{"x":true},"b":[2,1]}', isDirty: false }))
+			.toEqual({ kind: 'edited' })
+	})
+
 	it('names the loaded preset while the applied source is exactly its text and nothing is unapplied', () => {
 		expect(deriveExampleState({ loadedPresetId: 'other', presets, appliedSourceText: '{ "a": 2 }\n', isDirty: false }))
 			.toEqual({ kind: 'preset', preset: presets[1] })

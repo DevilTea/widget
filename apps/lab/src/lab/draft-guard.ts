@@ -15,6 +15,8 @@
  * modal, so a second one can only come from a double activation).
  */
 
+import { sameJsonDocument } from './json-equal'
+
 /** What confirming would discard: nothing, the unapplied draft, committed edits that Undo cannot restore, or both. */
 export type ReplacementLoss = 'none' | 'draft' | 'edits' | 'draft-and-edits'
 
@@ -39,13 +41,14 @@ export function replacementLoss({ isDirty, hasCommittedEdits, undoable }: Replac
 }
 
 /**
- * "The current document differs from what was loaded": its applied source text equals no preset of the open showcase,
- * compared as exact text (the same rule the Examples menu uses to say "edited", `example.ts`, without the draft). A
- * document that equals a preset, including one reached with Undo, has nothing a preset load could not bring back.
+ * "The current document differs from what was loaded": its applied source is the same document as no preset of the open
+ * showcase, compared as JSON values (`sameJsonDocument()`: whitespace and key order do not count, so Format + Apply on an
+ * untouched preset is not an edit). The Examples menu uses the same rule to say "edited" (`example.ts`, which also counts the
+ * draft). A document that equals a preset, including one reached with Undo, has nothing a preset load could not bring back.
  * Revision numbers are not used: they only grow, so an edit undone back to the preset would still count.
  */
 export function hasCommittedEdits(appliedSourceText: string, presets: readonly { readonly sourceText: string }[]): boolean {
-	return !presets.some(preset => preset.sourceText === appliedSourceText)
+	return !presets.some(preset => sameJsonDocument(preset.sourceText, appliedSourceText))
 }
 
 export type DraftGuardRequestResult = 'ran' | 'confirming' | 'ignored'

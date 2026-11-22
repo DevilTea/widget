@@ -1,8 +1,11 @@
 /**
  * What the header's Examples menu says the current document is: the last loaded preset while the document
- * still is exactly that preset's source (or whichever preset of the showcase it exactly equals), otherwise "edited". Pure presentation logic over state the Lab
+ * still is that preset (or whichever preset of the showcase it equals), otherwise "edited". "Equals" compares JSON values
+ * (`sameJsonDocument()`: whitespace and key order do not count), the rule the committed-edit protection uses too. Pure presentation logic over state the Lab
  * store already has; it never decides what is applied.
  */
+
+import { sameJsonDocument } from './json-equal'
 
 export interface ExamplePresetRef {
 	readonly id: string
@@ -29,8 +32,8 @@ export function deriveExampleState<Preset extends ExamplePresetRef>(input: Examp
 	const loaded = input.loadedPresetId === null ? undefined : input.presets.find(candidate => candidate.id === input.loadedPresetId)
 	// The loaded preset wins; otherwise any preset of the showcase the source is exactly equal to (Undo back
 	// to the default after loading another preset names the default again instead of saying "edited").
-	const preset = loaded !== undefined && input.appliedSourceText === loaded.sourceText
+	const preset = loaded !== undefined && sameJsonDocument(input.appliedSourceText, loaded.sourceText)
 		? loaded
-		: input.presets.find(candidate => candidate.sourceText === input.appliedSourceText)
+		: input.presets.find(candidate => sameJsonDocument(candidate.sourceText, input.appliedSourceText))
 	return preset === undefined ? { kind: 'edited' } : { kind: 'preset', preset }
 }
