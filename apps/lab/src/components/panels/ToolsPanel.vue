@@ -89,7 +89,7 @@ function choose(tool: ToolId): void {
 					:data-tool="tool"
 					:data-testid="`tools-entry-${tool}`"
 					:data-open="String(store.openTools.value.has(tool))"
-					:aria-labelledby="`tools-entry-${tool}-label${tool === 'events' && eventLog.unseen.value > 0 ? ' tools-entry-events-unseen' : ''}`"
+					:aria-labelledby="tool === 'events' && eventLog.unseen.value > 0 ? 'tools-entry-events-name' : `tools-entry-${tool}-label`"
 					:aria-describedby="`tools-entry-${tool}-description${store.openTools.value.has(tool) ? ` tools-entry-${tool}-open` : ''}`"
 					class="flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lab border border-lab-border bg-lab-surface px-2.5 py-1.5 text-left text-lab-text hover:bg-lab-surface-alt focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-lab-accent"
 					@click="choose(tool)"
@@ -103,15 +103,15 @@ function choose(tool: ToolId): void {
 								class="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] leading-4 font-semibold text-inverted"
 							>{{ unseenText }}</span>
 							<span
-								id="tools-entry-events-unseen"
+								id="tools-entry-events-name"
 								class="sr-only"
-							>{{ i18n.t('{count} new', { count: eventLog.unseen.value }) }}</span>
+							>{{ i18n.t('{name}, {count} new', { name: i18n.t(TOOL_TEXT[tool].menuLabel), count: eventLog.unseen.value }) }}</span>
 						</template>
 						<span
 							v-if="store.openTools.value.has(tool)"
 							:id="`tools-entry-${tool}-open`"
 							class="ml-auto text-[11px] font-normal text-lab-text-muted"
-						>{{ i18n.t('Open') }}</span>
+						>{{ i18n.t('(open)') }}</span>
 					</span>
 					<span
 						:id="`tools-entry-${tool}-description`"

@@ -60,7 +60,7 @@ const zhTWMessages: Readonly<Record<string, string>> = {
 	'One answer, stored as State': '一個答案，儲存在 State',
 	'Try it: choose "On site" for "How will you join?".': '試試看：在「How will you join?」選擇「On site」。',
 	'Guests and Phone reacted. Your choice is stored as State on the mode widget — the radio buttons present that State and forward your click to it, but the Runtime owns the value.': 'Guests 與 Phone 跟著變了。你的選擇以 State 儲存在 mode widget 上——選項按鈕只是呈現這個 State，並把你的點擊轉交給它，真正擁有這個值的是 Runtime。',
-	'See it in Runtime': '到 Runtime 查看',
+	'See it in the Runtime tree': '到 Runtime 樹查看',
 	'A derived value': '衍生出的值',
 	'The required message under "How will you join?" went away by itself — no action needed here.': '「How will you join?」下方的必填提示自己消失了——這一步不需要操作。',
 	'The required message under "How will you join?" disappeared, and Phone now says it is required. errors and required are Properties: values derived from State by rules in the definition. The Runtime owns the rule — no Vue code computed them.': '「How will you join?」下方的必填提示消失了，而 Phone 現在標示為必填。errors 與 required 都是 Properties：由定義裡的規則從 State 推導出來的值。規則屬於 Runtime——沒有任何 Vue 程式碼計算它們。',

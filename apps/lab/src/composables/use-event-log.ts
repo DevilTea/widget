@@ -6,7 +6,7 @@
  * - it records while the Lab has a Preview connection and at least one consumer is mounted (the Events panel; Dockview
  *   mounts every canonical panel at load and keeps it mounted while its tab is hidden), not only while the tab is the
  *   visible one: Events are push-only, cost nothing while idle and Core has no replay, so a Submit pressed while another
- *   tab is open must still be there when the Events tab is opened. Entries that arrive while no consumer is visible are
+ *   view is shown must still be there when the Events log is opened (the Tools menu is a consumer from the start). Entries that arrive while no consumer is visible are
  *   counted as unseen (`unseen`), so the tab can say so;
  * - every subscription is released when the connection is replaced (Apply, a retry, a showcase switch, a Preview
  *   remount) or the last consumer goes away;

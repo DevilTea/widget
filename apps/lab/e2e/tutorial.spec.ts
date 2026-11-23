@@ -568,7 +568,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await expect(nextButton)
 		.toBeEnabled()
 
-	await rail.getByRole('button', { name: 'See it in Runtime' })
+	await rail.getByRole('button', { name: 'See it in the Runtime tree' })
 		.click()
 	// The Runtime tree opens beside the Preview; the tool group keeps the tab it had (Tools, from opening Implementation above).
 	await expect(toolTab(page, 'runtime'))
@@ -654,7 +654,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.check()
 	await preview.getByLabel('Phone number')
 		.fill('0912 345 678')
-	// `exact: true` on purpose: the Runtime tab (activated via step 3's "See it in Runtime" link, and
+	// `exact: true` on purpose: the Runtime tree (opened via step 3's "See it in the Runtime tree" link, and
 	// still mounted though inactive) has its own "submit() writes ..." Method-row text, which a
 	// non-exact substring match on "Submit" would ambiguously also match.
 	await preview.getByRole('button', { name: 'Submit', exact: true })

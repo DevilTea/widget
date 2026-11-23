@@ -99,7 +99,7 @@ test.describe('the tool group: Edit, Explain, Tools', () => {
 			.toHaveAttribute('data-open', 'true')
 		await expect(toolsMenu(page)
 			.getByTestId('tools-entry-runtime'))
-			.toHaveAccessibleDescription(/Open$/)
+			.toHaveAccessibleDescription(/\(open\)$/)
 	})
 })
 

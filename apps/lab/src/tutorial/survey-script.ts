@@ -113,7 +113,7 @@ export const surveyTourScript: TutorialScript = {
 			}],
 			links: [{
 				id: 'see-in-runtime',
-				label: 'See it in Runtime',
+				label: 'See it in the Runtime tree',
 				run: (actions) => {
 					actions.setFocus('mode', { type: 'state', name: 'answer' })
 					actions.openTool('runtime')

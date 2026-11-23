@@ -68,7 +68,7 @@ export const rendererPacksTourScript: TutorialScript = {
 			target: 'packs-chooser',
 			stages: [{
 				prompt: 'Choose "Nuxt UI" in the renderer pack chooser, then look at the Workspace name box.',
-				reveal: 'The same text is in the Nuxt UI input. The chooser is a choice of the host, not widget State: the Runtime panel shows no pack, no Method can change it, and the Runtime was neither disposed nor created again. Switching unmounts one pack\'s renderers and mounts the other\'s over the same State. The Nuxt UI pack runs in a nested Vue app of its own, with its own Nuxt UI instance, so the page does not depend on the frame having one.',
+				reveal: 'The same text is in the Nuxt UI input. The chooser is a choice of the host, not widget State: the Runtime tree shows no pack, no Method can change it, and the Runtime was neither disposed nor created again. Switching unmounts one pack\'s renderers and mounts the other\'s over the same State. The Nuxt UI pack runs in a nested Vue app of its own, with its own Nuxt UI instance, so the page does not depend on the frame having one.',
 			}],
 			links: [
 				{ id: 'open-runtime', label: 'Open the Runtime tree', run: actions => actions.openTool('runtime') },

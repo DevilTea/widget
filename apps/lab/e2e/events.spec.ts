@@ -271,7 +271,7 @@ test.describe('events log', () => {
 			.toHaveText('1')
 		await expect(toolsMenu(page)
 			.getByTestId('tools-entry-events'))
-			.toHaveAccessibleName('Events log 1 new')
+			.toHaveAccessibleName('Events log, 1 new')
 
 		await openTool(page, 'events')
 		await expectEntries(page, 1)

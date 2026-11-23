@@ -346,7 +346,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 				v-if="store.preview.value === null"
 				class="p-[16px] m-0 text-lab-text-muted text-[13px]"
 			>
-				{{ i18n.t('Preview unavailable — there is no valid Preview revision. See the Blueprint tab for diagnostics.') }}
+				{{ i18n.t('Preview unavailable — there is no valid Preview revision. Open the Blueprint tree from Tools for diagnostics.') }}
 			</p>
 		</div>
 	</div>
