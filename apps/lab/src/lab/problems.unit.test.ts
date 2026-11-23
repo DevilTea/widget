@@ -3,7 +3,7 @@ import { createWidgetDocument } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { getShowcase } from '../showcases/registry'
-import { claimsFieldProblem, collectProblems, groupProblems, placeStructureProblems, problemSpan } from './problems'
+import { claimsFieldProblem, collectProblems, groupProblems, placeStructureProblems, problemSpan, problemSpans } from './problems'
 
 function problemsOf(showcaseId: string, presetId: string, parseError: SourceParseError | null = null) {
 	const showcase = getShowcase(showcaseId)!
@@ -122,6 +122,92 @@ describe('configPath and where Structure shows a problem (Lab UX phase 2)', () =
 		// Nothing selected: everything is listed.
 		expect(placeStructureProblems(problems, null).elsewhere)
 			.toEqual(problems)
+	})
+})
+
+describe('a broken widget reference is located at its config value (reference-locations.ts)', () => {
+	function compiled(source: unknown) {
+		const showcase = getShowcase('survey')!
+		const blueprint = createWidgetDocument({ system: showcase.system, source })
+			.getSnapshot()
+			.blueprint
+		return {
+			withSchemas: collectProblems(blueprint, inspectBlueprint(blueprint), null, showcase.configSchemas),
+			withoutSchemas: collectProblems(blueprint, inspectBlueprint(blueprint), null),
+		}
+	}
+
+	it('puts the AI draft\'s condition on a missing question at `visibleWhen.question`, and its range on the value', () => {
+		const showcase = getShowcase('survey')!
+		const text = showcase.presets.find(candidate => candidate.id === 'survey-ai-draft')!.sourceText
+		const { withSchemas, withoutSchemas } = compiled(JSON.parse(text))
+		const dependency = withSchemas.find(problem => problem.code === 'missing-dependency-target')!
+		expect(dependency)
+			.toMatchObject({ configPath: ['visibleWhen', 'question'], widgetLevel: false, moreLocations: [] })
+		expect(dependency.sourcePath)
+			.toEqual(['slots', 'questions', 1, 'config', 'visibleWhen', 'question'])
+		expect(textOf(text, problemSpan(dependency, text)))
+			.toBe('"mod"')
+		// Core's code, message and location label are untouched; the other problems are as before.
+		const before = withoutSchemas.find(problem => problem.code === 'missing-dependency-target')!
+		expect({ code: dependency.code, message: dependency.message, locationLabel: dependency.locationLabel, nodeId: dependency.nodeId })
+			.toEqual({ code: before.code, message: before.message, locationLabel: before.locationLabel, nodeId: before.nodeId })
+		expect(before)
+			.toMatchObject({ configPath: null, widgetLevel: true })
+		expect(withSchemas.filter(problem => problem !== dependency))
+			.toEqual(withoutSchemas.filter(problem => problem !== before))
+		// Structure: at the field now, no longer at the header.
+		const placed = placeStructureProblems(withSchemas, dependency.nodeId)
+		expect(placed.atFields)
+			.toContain(dependency)
+		expect(placed.atNode)
+			.not
+			.toContain(dependency)
+		expect(claimsFieldProblem(['visibleWhen'], ['question', 'op', 'value'], dependency))
+			.toBe(false)
+		expect(claimsFieldProblem(['visibleWhen', 'question'], null, dependency))
+			.toBe(true)
+	})
+
+	it('gives a reference written twice both locations: two fields, two ranges, one row', () => {
+		const showcase = getShowcase('survey')!
+		const text = showcase.defaultPreset.sourceText
+			.replace('"visibleWhen": { "question": "guests", "op": "greaterThan", "value": 0 }', '"visibleWhen": { "question": "gusets", "op": "greaterThan", "value": 0 }')
+			.replace('{ "question": "guests", "op": "greaterThan", "value": 2 }', '{ "question": "gusets", "op": "greaterThan", "value": 2 }')
+		const { withSchemas } = compiled(JSON.parse(text))
+		expect(withSchemas.length)
+			.toBeGreaterThan(0)
+		for (const problem of withSchemas) {
+			expect(problem.code)
+				.toBe('missing-dependency-target')
+			expect([problem.configPath, ...(problem.moreLocations ?? []).map(location => location.configPath)])
+				.toEqual([['options', 2, 'visibleWhen', 'question'], ['rules', 0, 'when', 'all', 1, 'question']])
+			expect(problemSpans(problem, text)
+				.map(span => text.slice(span.start, span.end)))
+				.toEqual(['"gusets"', '"gusets"'])
+			expect(claimsFieldProblem(['options', 2, 'visibleWhen', 'question'], null, problem))
+				.toBe(true)
+			expect(claimsFieldProblem(['rules', 0, 'when', 'all', 1, 'question'], null, problem))
+				.toBe(true)
+			expect(claimsFieldProblem(['options', 1, 'enabledWhen', 'question'], null, problem))
+				.toBe(false)
+		}
+	})
+
+	it('keeps a dependency diagnostic the rule does not apply to at the widget: a condition on an unresolved widget', () => {
+		// `rating` is the AI draft's question of an unknown type: the reference is right, the target is broken
+		// (`unresolved-dependency-target`, which has its own `unknown-widget-type` there), so it stays widget-level.
+		const showcase = getShowcase('survey')!
+		const text = showcase.presets.find(candidate => candidate.id === 'survey-ai-draft')!.sourceText
+			.replace('"visibleWhen": { "question": "mod",', '"visibleWhen": { "question": "rating",')
+		const { withSchemas, withoutSchemas } = compiled(JSON.parse(text))
+		const unresolved = withSchemas.find(problem => problem.code === 'unresolved-dependency-target')!
+		expect(unresolved)
+			.toMatchObject({ configPath: null, widgetLevel: true })
+		expect(textOf(text, problemSpan(unresolved, text)))
+			.toBe('"id": "guests"')
+		expect(withSchemas)
+			.toEqual(withoutSchemas)
 	})
 })
 

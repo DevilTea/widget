@@ -399,6 +399,22 @@ describe('configFieldEditor shows the selected widget\'s problems at their field
 			.toHaveLength(1)
 	})
 
+	it('shows a problem with several locations (a broken widget reference written twice) at each of its fields', () => {
+		const twice = { ...problem('diagnostic-2', ['title'], 'missing-dependency-target', 'Dependency target was not found.'), moreLocations: [{ sourcePath: [], configPath: ['note'] }] }
+		const editor = mountEditor({ problems: [twice] }, { title: 'mdoe', note: 'mdoe' })
+		for (const path of ['title', 'note']) {
+			const field = editor.get(`[data-config-path="${path}"]`)
+			expect(field.get('[data-testid="field-problem"]')
+				.text())
+				.toBe('missing-dependency-target: Dependency target was not found.')
+			expect(field.get('input')
+				.attributes('aria-invalid'))
+				.toBe('true')
+		}
+		expect(editor.findAll('[data-testid="field-problem"]'))
+			.toHaveLength(2)
+	})
+
 	it('describes the control by both its problems and a "not applied" note', async () => {
 		const editor = mountEditor({ problems: [problem('diagnostic-0', ['title'])] }, { title: 'T' })
 		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'nope' } })

@@ -1,5 +1,5 @@
 import type { Locator } from '@playwright/test'
-import { expect, expectDocumentStatus, loadPreset, openAuthorJson, openExplain, test } from './fixtures'
+import { documentSourceText, editJson, expect, expectDocumentStatus, loadPreset, openAuthorJson, openExplain, test, waitForLabTestSeam } from './fixtures'
 
 /**
  * Lab UX phase 2, report item 12: Structure shows the committed Document's problems at their fields, at the widget, or in a
@@ -51,17 +51,22 @@ test.describe('problems in Structure (report item 12)', () => {
 			.toBeFocused()
 	})
 
-	test('a widget-level problem shows at the widget header, and "Show problems" stays in Structure and focuses the first problem', async ({ page }) => {
+	test('a broken widget reference shows at its field, and "Show problems" stays in Structure and focuses the first problem', async ({ page }) => {
 		await page.goto('/?showcase=survey')
 		await loadPreset(page, 'survey-ai-draft')
 		const editor = page.getByTestId('structure-editor')
 		await page.getByRole('button', { name: /^guests : Numeric/ })
 			.click()
-		// guests' condition names a question that does not exist: a dependency diagnostic at the widget, not at a field.
-		const nodeProblems = editor.getByTestId('node-problems')
-		await expect(nodeProblems.getByTestId('node-problem'))
-			.toContainText('missing-dependency-target')
+		// guests' condition names a question that does not exist (`"mod"`). Core reports the dependency at the widget; the config
+		// value the schema marks as a widget reference (`@widgetRef`) is where it is written, so it shows there, not at the header.
+		const question = field(editor, 'visibleWhen.question')
+		await expect(question.getByTestId('field-problem'))
+			.toHaveText(/^missing-dependency-target: /)
+		await expect(question.locator('input'))
+			.toHaveAttribute('aria-invalid', 'true')
 		await expect(editor.getByTestId('field-problem'))
+			.toHaveCount(1)
+		await expect(editor.getByTestId('node-problems'))
 			.toHaveCount(0)
 		await expect(editor.getByTestId('structure-problems'))
 			.toContainText('4 problems elsewhere in the document')
@@ -76,6 +81,113 @@ test.describe('problems in Structure (report item 12)', () => {
 		await expect(field(editor, 'options')
 			.getByTestId('field-problems'))
 			.toBeFocused()
+	})
+
+	test('a rule condition naming a missing question shows at that question field, and "Show problems" focuses it', async ({ page }) => {
+		await page.goto('/?lab-test&showcase=survey')
+		await waitForLabTestSeam(page)
+		const editor = page.getByTestId('structure-editor')
+		// sessions' rule: rules -> when -> all -> question, the second condition's question typed wrong.
+		const text = await documentSourceText(page)
+		await editJson(page, text.replace('{ "question": "guests", "op": "greaterThan", "value": 2 }', '{ "question": "gusets", "op": "greaterThan", "value": 2 }'))
+		await expectDocumentStatus(page, { problems: 1 })
+
+		await page.getByRole('button', { name: /^sessions : MultipleChoice/ })
+			.click()
+		const question = field(editor, 'rules.0.when.all.1.question')
+		await expect(question.getByTestId('field-problem'))
+			.toHaveText(/^missing-dependency-target: /)
+		await expect(editor.getByTestId('field-problem'))
+			.toHaveCount(1)
+		await expect(editor.getByTestId('node-problems'))
+			.toHaveCount(0)
+
+		// From another widget, "Show problems" selects sessions and focuses the question's control.
+		await page.getByRole('button', { name: /^mode : SingleChoice/ })
+			.click()
+		await page.getByTestId('lab-status')
+			.click()
+		await expect(editor.getByRole('heading', { name: 'sessions : MultipleChoice' }))
+			.toBeVisible()
+		await expect(question.locator('input'))
+			.toBeFocused()
+	})
+
+	test('a dependency diagnostic with no config location stays at the widget header', async ({ page }) => {
+		await page.goto('/?lab-test&showcase=survey')
+		await waitForLabTestSeam(page)
+		await loadPreset(page, 'survey-ai-draft')
+		const editor = page.getByTestId('structure-editor')
+		// guests' condition now names `rating`, a question of an unknown type: the reference is right and the target is broken
+		// (`unresolved-dependency-target`, a code the config location does not apply to), so the problem stays at the widget.
+		await expectDocumentStatus(page, { problems: 5 })
+		const text = await documentSourceText(page)
+		expect(text)
+			.toContain('"visibleWhen": { "question": "mod",')
+		await editJson(page, text.replace('"visibleWhen": { "question": "mod",', '"visibleWhen": { "question": "rating",'))
+		await expect.poll(() => documentSourceText(page))
+			.toContain('"question": "rating"')
+		await page.getByRole('button', { name: /^guests : Numeric/ })
+			.click()
+		await expect(editor.getByTestId('node-problems')
+			.getByTestId('node-problem'))
+			.toContainText('unresolved-dependency-target')
+		await expect(editor.getByTestId('field-problem'))
+			.toHaveCount(0)
+	})
+
+	test('in JSON, the squiggle covers the broken reference\'s value, not the widget id, and "Go to location" selects it', async ({ page }) => {
+		await page.goto('/?lab-test&showcase=survey')
+		await waitForLabTestSeam(page)
+		await loadPreset(page, 'survey-ai-draft')
+		await openAuthorJson(page)
+		const editor = page.getByTestId('json-editor')
+		await expect(editor)
+			.toHaveAttribute('data-marker-count', '5')
+
+		await page.getByTestId('author-problems')
+			.locator('[data-testid="problem-row"][data-problem-code="missing-dependency-target"]')
+			.click()
+		await expect(editor.locator('.monaco-editor'))
+			.toHaveClass(/focused/)
+		// The value `"mod"` on guests' visibleWhen line, as Monaco renders it (one string token).
+		const line = editor.locator('.view-line')
+			.filter({ hasText: '"question": "mod"' })
+		await expect(line)
+			.toHaveCount(1)
+		const value = line.locator('span span')
+			.filter({ hasText: /^"mod"$/ })
+		const valueBox = (await value.boundingBox())!
+		const selected = editor.locator('.selected-text')
+		await expect(selected)
+			.toHaveCount(1)
+		const selectedBox = (await selected.boundingBox())!
+		expect(Math.abs(selectedBox.x - valueBox.x), 'the selection starts at the value')
+			.toBeLessThan(2)
+		expect(Math.abs(selectedBox.width - valueBox.width), 'the selection is the value, quotes included')
+			.toBeLessThan(2)
+		expect(Math.abs(selectedBox.y - valueBox.y), 'on the visibleWhen line, not the "id" line')
+			.toBeLessThan(4)
+
+		// The squiggle on that line covers the same range.
+		const squiggles = await editor.locator('.squiggly-error')
+			.all()
+		const boxes = await Promise.all(squiggles.map(squiggle => squiggle.boundingBox()))
+		const onLine = boxes.filter(box => box !== null && Math.abs(box.y - valueBox.y) < 4)
+		expect(onLine)
+			.toHaveLength(1)
+		expect(Math.abs(onLine[0]!.x - valueBox.x))
+			.toBeLessThan(2)
+		expect(Math.abs(onLine[0]!.width - valueBox.width))
+			.toBeLessThan(2)
+		// And no squiggle sits on guests' `"id"` line any more.
+		const idLine = editor.locator('.view-line')
+			.filter({ hasText: '"id": "guests"' })
+		if (await idLine.count() > 0) {
+			const idBox = (await idLine.boundingBox())!
+			expect(boxes.filter(box => box !== null && Math.abs(box.y - idBox.y) < 4))
+				.toHaveLength(0)
+		}
 	})
 
 	// The Catalog is a modal slide-over since Lab UX phase 3B, not a view "Show problems" could be pressed from.
