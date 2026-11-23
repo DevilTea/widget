@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSurveyPreset, surveyPresets } from '../src/showcases/survey/presets'
-import { expect, expectDocumentStatus, expectPreviewStatus, loadPreset, openAuthorJson, openDependenciesGraph, openDeveloperTool, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectPreviewStatus, loadPreset, openAuthorJson, openDependenciesGraph, openDeveloperTool, openTool, previewFrame, test } from './fixtures'
 
 /**
  * Interactive Survey acceptance contract: the Maker Space open-day sign-up survey
@@ -47,8 +47,7 @@ function question(document: any, id: string): any {
 }
 
 async function openBlueprintDiagnostics(page: Page): Promise<void> {
-	await page.getByRole('tab', { name: 'Blueprint' })
-		.click()
+	await openTool(page, 'blueprint')
 	await page.getByRole('button', { name: /All diagnostics/ })
 		.click()
 }
@@ -366,8 +365,7 @@ test('7. submission: a blocked Submit writes nothing; a valid one stores the res
 		.toHaveCount(0)
 
 	// The Runtime panel's Method row shows the compiler's facts for `submit()`.
-	await page.getByRole('tab', { name: 'Runtime' })
-		.click()
+	await openTool(page, 'runtime')
 	const submitRow = page.getByRole('button', { name: /^submit\(\)/ })
 	await expect(submitRow)
 		.toContainText('writes')
@@ -429,9 +427,7 @@ test('8. backend view: the Response block shows what the form computed', async (
 
 test('9. AI context: Catalog shows the Numeric config schema and copies the catalog JSON', async ({ page }) => {
 	await openSurvey(page)
-	await page.getByRole('tab', { name: 'Author' })
-		.click()
-	await page.getByRole('tab', { name: 'Catalog' })
+	await page.getByTestId('browse-widget-types')
 		.click()
 
 	const numeric = page.getByTestId('author-catalog-Numeric')
@@ -462,6 +458,10 @@ test('9. AI context: Catalog shows the Numeric config schema and copies the cata
 		.toEqual(['Survey', 'SingleChoice', 'MultipleChoice', 'Numeric', 'ShortAnswer'])
 	expect(Object.keys(copied.widgets.find(widget => widget.type === 'Numeric')!.config!.schema!.$defs!))
 		.toContain('type_Condition')
+	// The Catalog is a modal slide-over (Lab UX phase 3B): close it before using the header.
+	await page.keyboard.press('Escape')
+	await expect(page.getByTestId('catalog-dialog'))
+		.toBeHidden()
 
 	// Implementation for `Numeric` curates its plugin file.
 	await openDeveloperTool(page, 'implementation')

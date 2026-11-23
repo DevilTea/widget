@@ -75,7 +75,7 @@ export const quoteRulesTourScript: TutorialScript = {
 				label: 'See answers and quote in Selected widget',
 				run: (actions) => {
 					actions.setFocus('quote', { type: 'property', name: 'answers' })
-					actions.activateTab('widget')
+					actions.openTool('widget')
 				},
 			}],
 		},
@@ -94,7 +94,7 @@ export const quoteRulesTourScript: TutorialScript = {
 				label: 'Follow the chain in Relations',
 				run: (actions) => {
 					actions.setFocus('tax', { type: 'property', name: 'adjustment' })
-					actions.activateTab('dependencies')
+					actions.openTool('dependencies')
 				},
 			}],
 		},
@@ -104,11 +104,11 @@ export const quoteRulesTourScript: TutorialScript = {
 			target: null,
 			onEnter: actions => actions.setFocus('volume'),
 			stages: [{
-				prompt: 'Open Author, then Structure, and look at the volume widget\'s config.',
+				prompt: 'Open Edit, then Structure, and look at the volume widget\'s config.',
 				reveal: 'The config of every rule is a Valibot schema used through Standard Schema. It is the validator (one small guard turns each issue into a diagnostic), the TypeScript type, and, through Standard JSON Schema, the config JSON Schema that Core publishes in the Catalog. That is why Structure offers a list of tiers with Add and Remove and number boxes: the controls are built from the schema. Core never runs the JSON Schema, and a refinement it cannot express would be missing from it.',
 			}],
 			links: [
-				{ id: 'open-author', label: 'Open Author', run: actions => actions.activateTab('author') },
+				{ id: 'open-edit', label: 'Open Edit', run: actions => actions.activateTab('edit', 'structure') },
 			],
 		},
 		{
@@ -134,7 +134,7 @@ export const quoteRulesTourScript: TutorialScript = {
 				label: 'See volume in Selected widget',
 				run: (actions) => {
 					actions.setFocus('volume', { type: 'property', name: 'adjustment' })
-					actions.activateTab('widget')
+					actions.openTool('widget')
 				},
 			}],
 		},
@@ -144,14 +144,14 @@ export const quoteRulesTourScript: TutorialScript = {
 			target: null,
 			stages: [{
 				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Dependencies (Relations, Graph) = the declared chain between widgets · Selected widget = one widget\'s declaration and Runtime values · Runtime = every widget\'s State and Properties · Events = Method failures and Events as they happen · Implementation = the plugin, schema and renderer code behind this widget type.',
+				reveal: 'Tools, beside the Preview: Dependencies (Relations, Graph) = the declared chain between widgets · Selected widget = one widget\'s declaration and Runtime values · Runtime tree = every widget\'s State and Properties · Events log = Method failures and Events as they happen · Implementation = the plugin, schema and renderer code behind this widget type.',
 			}],
 			links: [
-				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.activateTab('dependencies') },
-				{ id: 'view-widget-tab', label: 'Selected widget', run: actions => actions.activateTab('widget') },
-				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
-				{ id: 'view-events-tab', label: 'Events', run: actions => actions.activateTab('events') },
-				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
+				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.openTool('dependencies') },
+				{ id: 'view-widget-tab', label: 'Selected widget', run: actions => actions.openTool('widget') },
+				{ id: 'view-runtime', label: 'Runtime tree', run: actions => actions.openTool('runtime') },
+				{ id: 'view-events-tab', label: 'Events log', run: actions => actions.openTool('events') },
+				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openTool('implementation') },
 			],
 		},
 		{

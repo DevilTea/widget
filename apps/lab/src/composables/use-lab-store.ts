@@ -79,6 +79,7 @@ import type { ExampleState } from '../lab/example'
 import type { DocumentScopedInspectorFocus, InspectorFocus, InspectorFocusScope, InspectorFocusStore, PreviewInspectorFocus, PreviewScopedInspectorFocus } from '../lab/focus'
 import type { LabProblem } from '../lab/problems'
 import type { LabStatus } from '../lab/status'
+import type { ToolId } from '../lab/tools'
 import type { ApplyOutcome, AuthorCommand, AuthorOutcome, LabAppliedSourcePatch, LabDocumentTraceEvent, RevisionConflictDemoResult, UndoOutcome } from '../lab/types'
 import type { PreviewHostCoordinator } from '../preview-host/coordinator'
 import type { ShowcaseEntry, ShowcasePreset } from '../showcases/registry'
@@ -95,12 +96,24 @@ import { createPreviewHostCoordinator } from '../preview-host/coordinator'
 import { defaultShowcase, listedShowcases, showcases } from '../showcases/registry'
 
 /**
- * `'preview'` is included (diagnostic #25 P1) even though Preview lives in its own always-visible Dockview
- * group, never the same tab group as the other six: it lets `Workbench.vue`'s tab-activation bridge
- * (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all canonical panels
- * uniformly — activating Preview's own single-panel group is a harmless no-op, never a layout change.
+ * The canonical (never closed) panels: the tool group's Edit, Explain and Tools tabs (Lab UX phase 3B) and the Preview.
+ * `'preview'` is included (diagnostic #25 P1) even though Preview lives in its own always-visible Dockview group: it lets
+ * `Workbench.vue`'s tab-activation bridge (`activeTab` -> `DockviewApi.getPanel(id)?.api.setActive()`) treat all canonical
+ * panels uniformly. The expert views are not tabs of this kind: they open on request in the Tools group (`openTool()`).
  */
-export type LabToolTab = 'author' | 'explain' | 'widget' | 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'preview'
+export type LabToolTab = 'edit' | 'explain' | 'tools' | 'preview'
+
+/** One request to open (or focus) an expert view in the Tools group; `tick` makes a repeated request a new one. */
+/** One request to show a canonical tab (`showTab()`); `tick` makes a repeated request for the same tab a new one. */
+export interface TabRequest {
+	readonly tab: LabToolTab
+	readonly tick: number
+}
+
+export interface ToolOpenRequest {
+	readonly tool: ToolId
+	readonly tick: number
+}
 
 export interface LabStore {
 	readonly session: LabSession
@@ -173,10 +186,11 @@ export interface LabStore {
 	readonly replacedNoticeVisible: Readonly<Ref<boolean>>
 	dismissReplacedNotice: () => void
 	/**
-	 * Which Author view is open: Structure on first load (Lab UX phase 1; it was JSON), then whatever the user chose. Not
-	 * saved across reloads. Lives here (not in `AuthorPanel`) so other surfaces can open the JSON view.
+	 * Which view of the Edit tab is open: Structure on first load (Lab UX phase 1; it was JSON), then whatever the user chose.
+	 * Not saved across reloads. Lives here (not in `AuthorPanel`) so other surfaces can open the JSON view. The Catalog is no
+	 * longer a view (Lab UX phase 3B): it is the "Browse widget types" slide-over of the Edit tab.
 	 */
-	readonly authorView: Ref<'catalog' | 'structure' | 'json'>
+	readonly authorView: Ref<'structure' | 'json'>
 	/**
 	 * Set by `showProblems()`: the open Author view consumes it (when it is already mounted, or as soon as it mounts) and
 	 * clears the flag. `AuthorJsonView` moves focus to its Problems list; `AuthorStructureView` selects the first problem's
@@ -189,13 +203,35 @@ export interface LabStore {
 	readonly showcases: readonly ShowcaseEntry[]
 	readonly showcaseId: Readonly<Ref<string>>
 	readonly presets: Readonly<Ref<readonly ShowcasePreset[]>>
+	/**
+	 * The canonical panel Dockview shows as active, kept by `Workbench.vue` (a mirror: writing it does nothing). To bring a tab to
+	 * the front, call `showTab()`.
+	 */
 	readonly activeTab: Ref<LabToolTab>
 	/**
-	 * The canonical panel shown in the tool group (the group that holds Author), kept by `Workbench.vue` from Dockview; `null`
-	 * before the workbench is up or while a non-canonical panel (Implementation, Document Tools) is shown there. `activeTab` is
-	 * shared by both Dockview groups and is often `preview`; the tutorial records this one to give the user their tab back.
+	 * The latest request to show a canonical tab (`showTab()`). `Workbench.vue` handles every request, the same tab again included:
+	 * it restores a maximized Tools group first, then activates the tab. Until phase 3B review it watched `activeTab` itself, and a
+	 * request for the tab that already was `activeTab` (Show problems from Edit while the Tools group was maximized) did nothing.
+	 */
+	readonly tabRequest: Readonly<Ref<TabRequest | null>>
+	/** Brings a canonical tab to the front (Show problems, Inspect, the tutorial). */
+	showTab: (tab: LabToolTab) => void
+	/**
+	 * The canonical panel shown in the tool group (the group that holds Edit), kept by `Workbench.vue` from Dockview; `null`
+	 * before the workbench is up or while something else is shown there (an expert view the user dragged into it). `activeTab` is
+	 * shared by every Dockview group and is often `preview`; the tutorial records this one to give the user their tab back.
 	 */
 	readonly toolGroupTab: Ref<LabToolTab | null>
+	/**
+	 * The latest request to open an expert view (`openTool()`); `Workbench.vue` adds its tab to the Tools group beside the
+	 * Preview, or focuses the tab that is already open. Implementation and Document Tools keep their own request stores
+	 * (`use-implementation-explorer.ts`, `use-document-tools.ts`); `useOpenTool()` routes to the right one.
+	 */
+	readonly toolOpenRequest: Readonly<Ref<ToolOpenRequest | null>>
+	/** Opens (or focuses) an expert view in the Tools group. Implementation and Document Tools go through `useOpenTool()`. */
+	openTool: (tool: Exclude<ToolId, 'implementation' | 'document-tools'>) => void
+	/** The expert views open right now, kept by `Workbench.vue` (the Tools menu marks them). */
+	readonly openTools: Ref<ReadonlySet<ToolId>>
 	/**
 	 * Dependency Graph presentation preferences (diagnostic #13 Phase 5 "inspector panel interaction
 	 * contract"): panel-local, and — unlike snapshot-bound focus/selections — deliberately not reset by
@@ -247,7 +283,7 @@ export interface LabStore {
 	undo: () => Promise<UndoOutcome>
 	/** Mounts the Preview again after it failed to load or to take a change; see `LabSession.retryPreview()`. */
 	retryPreview: () => Promise<void>
-	/** Activates Author and shows the problems in its open view (Structure from the Catalog); see `problemsFocusPending`. */
+	/** Activates Edit and shows the problems in its open view (Structure or JSON); see `problemsFocusPending`. */
 	showProblems: () => void
 	applyPreset: (presetId: string) => Promise<ApplyOutcome | undefined>
 	demonstrateRevisionConflict: () => RevisionConflictDemoResult | null
@@ -274,7 +310,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	const showcaseId = shallowRef(initialShowcase.id)
 	const presets = shallowRef<readonly ShowcasePreset[]>(initialShowcase.presets)
 	const loadedPresetId = shallowRef<string | null>(initialShowcase.defaultPreset.id)
-	const authorView = shallowRef<'catalog' | 'structure' | 'json'>('structure')
+	const authorView = shallowRef<'structure' | 'json'>('structure')
 	const problemsFocusPending = shallowRef(false)
 
 	const sessionTick = shallowRef(0)
@@ -591,8 +627,14 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		return session.documentTrace
 	})
 
-	const activeTab = shallowRef<LabToolTab>('author')
+	const activeTab = shallowRef<LabToolTab>('edit')
 	const toolGroupTab = shallowRef<LabToolTab | null>(null)
+	const toolOpenRequest = shallowRef<ToolOpenRequest | null>(null)
+	const tabRequest = shallowRef<TabRequest | null>(null)
+	const showTab = (tab: LabToolTab): void => {
+		tabRequest.value = { tab, tick: (tabRequest.value?.tick ?? 0) + 1 }
+	}
+	const openTools = shallowRef<ReadonlySet<ToolId>>(new Set())
 	const graphShowAbsent = shallowRef(false)
 	const graphShowIsolatedMembers = shallowRef(false)
 	const graphExpandedClusterIds = shallowRef<ReadonlySet<string>>(new Set())
@@ -728,6 +770,13 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		presets,
 		activeTab,
 		toolGroupTab,
+		tabRequest,
+		showTab,
+		toolOpenRequest,
+		openTool: (tool) => {
+			toolOpenRequest.value = { tool, tick: (toolOpenRequest.value?.tick ?? 0) + 1 }
+		},
+		openTools,
 		graphShowAbsent,
 		graphShowIsolatedMembers,
 		graphExpandedClusterIds,
@@ -798,12 +847,10 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 			undoInFlight = settled
 			return settled
 		},
-		// Stays in the open Author view (Lab UX phase 2): Structure shows the problems at their fields and JSON in its list; the
-		// Catalog shows none, so it opens Structure. The view that is mounted consumes `problemsFocusPending`.
+		// Stays in the open Edit view (Lab UX phase 2): Structure shows the problems at their fields and JSON in its list. The view
+		// that is mounted consumes `problemsFocusPending`.
 		showProblems: () => {
-			activeTab.value = 'author'
-			if (authorView.value === 'catalog')
-				authorView.value = 'structure'
+			showTab('edit')
 			problemsFocusPending.value = true
 		},
 		applyPreset: (presetId) => {

@@ -2,7 +2,7 @@
 /**
  * What the host did about the widgets' Events, as a plain list: it heard `stepChanged` and moved focus, it heard
  * `slotRequested` and asked the office, the office answered, `settleBooking` applied or ignored the answer. It is the
- * page's own log and complements the Lab's Events tab, which shows the same Events from outside.
+ * page's own log and complements the Lab's Events log (Tools), which shows the same Events from outside.
  *
  * No live region: the list is a record to read, not an announcement.
  */

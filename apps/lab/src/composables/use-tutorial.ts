@@ -19,8 +19,7 @@
 
 import type { InjectionKey, Ref } from 'vue'
 import type { ReplacementLoss } from '../lab/draft-guard'
-import type { TutorialActions, TutorialAuthorView, TutorialEngine, TutorialEngineSnapshot, TutorialStepDefinition, TutorialTabId } from '../tutorial/types'
-import type { ImplementationExplorerStore } from './use-implementation-explorer'
+import type { TutorialActions, TutorialAuthorView, TutorialEngine, TutorialEngineSnapshot, TutorialStepDefinition, TutorialTabId, TutorialToolId } from '../tutorial/types'
 import type { LabStore, LabToolTab } from './use-lab-store'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, inject, onUnmounted, shallowRef, watch } from 'vue'
@@ -103,7 +102,7 @@ async function loadTourDefault(store: LabStore, tourId: string): Promise<void> {
 		await store.switchShowcase(tourId)
 }
 
-export function createTutorialStore(store: LabStore, implementationExplorer: ImplementationExplorerStore): TutorialStore {
+export function createTutorialStore(store: LabStore, openTool: (tool: TutorialToolId) => void): TutorialStore {
 	const engines = new Map<string, TutorialEngine>(tours.map(tour => [tour.id, createTutorialEngine(tour.script)]))
 	for (const tour of tours) {
 		if (isTourCompleted(tour.id))
@@ -136,8 +135,10 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			: getTour(activeTourId.value)?.startConfirmMessage ?? tourForShowcase(DEFAULT_TOUR_ID).startConfirmMessage)
 
 	/**
-	 * Where the user was before the tour started (the tool tab and the Author view), restored when the tour ends with Finish or
-	 * is skipped (Lab UX phase 2, report item 14): the tour's own steps move both around. Pausing keeps the tour's place.
+	 * Where the user was before the tour started (the tool group's tab, Edit, Explain or Tools, and the Edit view), restored when
+	 * the tour ends with Finish or is skipped (Lab UX phase 2, report item 14): the tour's own steps move both around. Pausing
+	 * keeps the tour's place. Expert views the tour opened in the Tools group stay open (they are beside the Preview, named and
+	 * closable, and closing what the user may still be reading would replace it).
 	 */
 	let placeBeforeTour: { readonly tab: LabToolTab | null, readonly authorView: LabStore['authorView']['value'] } | null = null
 	function restorePlaceBeforeTour(): void {
@@ -147,13 +148,14 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 			return
 		store.authorView.value = place.authorView
 		if (place.tab !== null)
-			store.activeTab.value = place.tab
+			store.showTab(place.tab)
 	}
 
 	/**
 	 * Where the user is now: the tool group's own shown panel (`LabStore.toolGroupTab`, from Dockview), never `activeTab`, which is
 	 * shared by both groups and is `preview` as soon as the Preview was touched (activating the Preview's group again left the
-	 * frame blank, e2e/trip-budget.spec.ts). `null` while a non-canonical panel is shown there: nothing is restored then.
+	 * frame blank, e2e/trip-budget.spec.ts). `null` while an expert view dragged into that group is shown there: nothing is
+	 * restored then.
 	 */
 	function currentPlace(): NonNullable<typeof placeBeforeTour> {
 		return { tab: store.toolGroupTab.value, authorView: store.authorView.value }
@@ -212,12 +214,12 @@ export function createTutorialStore(store: LabStore, implementationExplorer: Imp
 					store.setFocus('document', { nodeId, member })
 			},
 			activateTab: (tab: TutorialTabId, authorView?: TutorialAuthorView) => {
-				if (tab === 'author' && authorView !== undefined)
+				if (tab === 'edit' && authorView !== undefined)
 					store.authorView.value = authorView
-				store.activeTab.value = tab
+				store.showTab(tab)
 			},
-			openImplementation: () => {
-				implementationExplorer.open()
+			openTool: (tool: TutorialToolId) => {
+				openTool(tool)
 			},
 		}
 	}

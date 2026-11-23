@@ -293,25 +293,118 @@ export async function openDeveloperTool(page: Page, tool: 'implementation' | 'do
 		() => page.getByRole('menuitem', { name: labels.developer }),
 		() => page.getByRole('menuitem', { name: tool === 'implementation' ? labels.implementation : labels.documentTools }),
 	])
-	// The panel is added and activated asynchronously and takes focus: wait for that before the next menu is opened.
-	// The tab is named like the menu item, in the page's language.
-	await expect(page.getByRole('tab', { name: tool === 'implementation' ? labels.implementation : labels.documentTools, exact: true }))
-		.toHaveAttribute('aria-selected', 'true')
+	// The view is added to the Tools group beside the Preview and its tab takes focus: wait for that before the next menu is
+	// opened. The tab is named like the menu item, in the page's language (Implementation also names what it shows).
+	await expect(toolTab(page, tool))
+		.toBeFocused()
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Workbench navigation (Lab UX phase 3B). The tool group has three tabs, Edit, Explain and Tools; the expert views open from
+// the Tools menu as tabs of the Tools group beside the Preview. Specs go through these helpers, never through tab names, so a
+// later change of the layout touches this block only. They work in either Lab language.
+
+export type ToolId = 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'widget' | 'document-tools' | 'implementation'
+
+/** The tab names of the workbench in both Lab languages (the expert views' Dockview tabs, and the three canonical ones). */
+const TOOL_TAB_NAMES: Readonly<Record<ToolId, RegExp>> = {
+	'blueprint': /^(?:Blueprint tree|Blueprint 樹)$/,
+	'runtime': /^(?:Runtime tree|Runtime 樹)$/,
+	'events': /^(?:Events log|Events 紀錄)$/,
+	'dependencies': /^(?:Dependencies|相依性)$/,
+	'widget': /^(?:Selected widget|選取的 widget)$/,
+	'document-tools': /^(?:Document Tools|Document 工具)$/,
+	'implementation': /^(?:Implementation|實作)(?: — .+)?$/,
+}
+const CANONICAL_TAB_NAMES = {
+	edit: /^(?:Edit|編輯)$/,
+	explain: /^(?:Explain|說明)$/,
+	tools: /^(?:Tools|工具)(?:, .+)?$/,
+} as const
+
+/** The Dockview tab of the tool group's Edit, Explain or Tools panel. */
+export function workbenchTab(page: Page, tab: keyof typeof CANONICAL_TAB_NAMES): Locator {
+	return page.getByRole('tab', { name: CANONICAL_TAB_NAMES[tab] })
+}
+
+/** The Dockview tab of an expert view in the Tools group (absent until the view is opened). */
+export function toolTab(page: Page, tool: ToolId): Locator {
+	return page.getByRole('tab', { name: TOOL_TAB_NAMES[tool] })
 }
 
 /**
- * Opens Author > JSON and waits for Monaco. Author opens on Structure since Lab UX phase 1, and Monaco is only mounted
- * (and loaded) once the JSON view is open. Works in either Lab language.
+ * The content of an expert view (its Dockview tabpanel, named by its tab). Use it to scope a locator: the Edit tab beside the
+ * Tools group lists the same widgets in its Structure tree.
+ */
+export function toolPanel(page: Page, tool: ToolId): Locator {
+	return page.getByRole('tabpanel', { name: TOOL_TAB_NAMES[tool] })
+}
+
+/** Brings the Edit tab to the front (Structure or JSON, whichever view it has open). */
+export async function openEdit(page: Page): Promise<void> {
+	await workbenchTab(page, 'edit')
+		.click()
+}
+
+/** Brings the Explain tab to the front. */
+export async function openExplain(page: Page): Promise<void> {
+	await workbenchTab(page, 'explain')
+		.click()
+}
+
+/** Opens Edit > Structure (the default view). */
+export async function openEditStructure(page: Page): Promise<void> {
+	await openEdit(page)
+	await page.getByTestId('author-view-structure')
+		.click()
+}
+
+/**
+ * Opens Edit > JSON and waits for Monaco. Edit opens on Structure since Lab UX phase 1, and Monaco is only mounted (and
+ * loaded) once the JSON view is open.
  */
 export async function openAuthorJson(page: Page): Promise<void> {
-	await page.getByRole('tab', { name: /^(?:Author|編寫)$/ })
-		.click()
-	await page.getByRole('tablist', { name: /^(?:Author views|編寫檢視)$/ })
-		.getByRole('tab', { name: 'JSON', exact: true })
+	await openEdit(page)
+	await page.getByTestId('author-view-json')
 		.click()
 	await expect(page.getByTestId('json-editor')
 		.locator('.monaco-editor'))
 		.toBeVisible()
+}
+
+/**
+ * Opens an expert view from the Tools menu (or brings its open tab to the front) and waits until its tab in the Tools group is
+ * selected and focused. Returns that tab. The Tools tab is left showing the menu, as a user's click leaves it.
+ */
+export async function openTool(page: Page, tool: ToolId): Promise<Locator> {
+	await workbenchTab(page, 'tools')
+		.click()
+	await page.getByTestId(`tools-entry-${tool}`)
+		.click()
+	const tab = toolTab(page, tool)
+	await expect(tab)
+		.toHaveAttribute('aria-selected', 'true')
+	await expect(tab)
+		.toBeFocused()
+	return tab
+}
+
+/** The Tools group's Maximize / Restore button (its header action; there is none while no view is open). */
+export function toolsMaximizeButton(page: Page): Locator {
+	return page.getByTestId('tools-maximize')
+}
+
+/** Maximizes the Tools group over the workbench and waits until it is. */
+export async function maximizeTools(page: Page): Promise<void> {
+	await toolsMaximizeButton(page)
+		.click()
+	await expect(toolsMaximizeButton(page))
+		.toHaveAttribute('data-maximized', 'true')
+}
+
+/** The content of the Tools menu (the Tools tab's panel). */
+export function toolsMenu(page: Page): Locator {
+	return page.getByTestId('tools-menu')
 }
 
 /** The tutorial entry of the overflow menu (its label follows the tutorial state: Tutorial, Pause, Resume, Restart). */
@@ -319,10 +412,9 @@ export async function chooseTutorialMenuItem(page: Page, name = 'Tutorial'): Pro
 	await chooseFromMenu(page, 'overflow-menu', [() => page.getByRole('menuitem', { name, exact: true })])
 }
 
-/** Opens Dependencies and switches it to the Graph view (Relations is the default view, issue #230 PR 3b). */
+/** Opens Dependencies (Tools) and switches it to the Graph view (Relations is the default view, issue #230 PR 3b). */
 export async function openDependenciesGraph(page: Page): Promise<void> {
-	await page.getByRole('tab', { name: 'Dependencies', exact: true })
-		.click()
+	await openTool(page, 'dependencies')
 	await page.getByRole('tablist', { name: 'Dependencies views' })
 		.getByRole('tab', { name: 'Graph' })
 		.click()

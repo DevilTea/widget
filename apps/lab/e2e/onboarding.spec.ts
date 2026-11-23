@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, openTool, previewFrame, selectShowcase, setLocale, setTheme, test, toolTab } from './fixtures'
 
 /**
  * Onboarding acceptance contract (issue #230, showcase 3): the Tidepool Makers wizard
@@ -32,10 +32,9 @@ async function openReady(page: Page, query = ''): Promise<void> {
 		.toBeVisible()
 }
 
-/** The Events tab: its accessible name gains ", N new" while entries arrived since it was last visible. */
+/** The Events log (Tools); the Tools tab's accessible name gains ", N new" while entries arrived since the log was last visible. */
 async function openEvents(page: Page): Promise<Locator> {
-	await page.getByRole('tab', { name: /^Events(, \d+ new)?$/ })
-		.click()
+	await openTool(page, 'events')
 	await expect(page.getByTestId('events-listening'))
 		.toContainText('declared Events on 2 widgets.')
 	await expect(page.getByTestId('events-methods-listening'))
@@ -46,15 +45,13 @@ async function openEvents(page: Page): Promise<Locator> {
 const eventEntries = (page: Page): Locator => page.getByTestId('event-entry')
 const failureEntries = (page: Page): Locator => page.getByTestId('method-failure-entry')
 
-/** Selects a widget in the Blueprint tree and opens the Selected widget pane (or another tab) on it. */
-async function selectWidget(page: Page, label: RegExp, tab: 'Selected widget' | 'Runtime' = 'Selected widget'): Promise<void> {
-	await page.getByRole('tab', { name: 'Blueprint', exact: true })
-		.click()
+/** Selects a widget in the Blueprint tree and opens the Selected widget pane (or another expert view) on it. */
+async function selectWidget(page: Page, label: RegExp, tool: 'widget' | 'runtime' = 'widget'): Promise<void> {
+	await openTool(page, 'blueprint')
 	await page.getByRole('button', { name: label })
 		.first()
 		.click()
-	await page.getByRole('tab', { name: tab, exact: true })
-		.click()
+	await openTool(page, tool)
 }
 
 function methodRow(page: Page, scope: 'selected-widget-runtime' | 'runtime-panel', member: string): Locator {
@@ -319,8 +316,7 @@ test.describe('refused moves are Method failures', () => {
 			.getByTestId('method-status'))
 			.toHaveText('No failure recorded')
 
-		await page.getByRole('tab', { name: 'Runtime', exact: true })
-			.click()
+		await openTool(page, 'runtime')
 		await expect(methodRow(page, 'runtime-panel', 'next')
 			.getByTestId('method-diagnostic-message'))
 			.toHaveText('The "account" step is not complete yet: name, email.')
@@ -456,15 +452,14 @@ test.describe('argument validation', () => {
 test.describe('read-only and writing Methods in Relations', () => {
 	test('canEnter is read-only (no W, no E) while the Methods that write State and emit Events carry both', async ({ page }) => {
 		await openOnboarding(page)
-		await selectWidget(page, /onboarding : Onboarding/, 'Runtime')
+		await selectWidget(page, /onboarding : Onboarding/, 'runtime')
 		// Focus the Property the Methods read: Relations then lists them as its consumers.
 		await page.locator('[data-testid="runtime-value-row"]')
 			.filter({ visible: true })
 			.filter({ hasText: 'progress' })
 			.first()
 			.click()
-		await page.getByRole('tab', { name: 'Dependencies', exact: true })
-			.click()
+		await openTool(page, 'dependencies')
 		const relations = page.locator('.dependencies-relations-view')
 		const writes = relations.getByTitle('Writes State directly or through the Methods it invokes')
 		const emits = relations.getByTitle('Emits an Event directly or through the Methods it invokes')
@@ -480,15 +475,13 @@ test.describe('read-only and writing Methods in Relations', () => {
 
 		for (const name of ['next', 'goTo', 'finish']) {
 			// Back to the Property, then to the Method: Relations shows the focused member's own flags.
-			await page.getByRole('tab', { name: 'Runtime', exact: true })
-				.click()
+			await openTool(page, 'runtime')
 			await page.locator('[data-testid="runtime-value-row"]')
 				.filter({ visible: true })
 				.filter({ hasText: 'progress' })
 				.first()
 				.click()
-			await page.getByRole('tab', { name: 'Dependencies', exact: true })
-				.click()
+			await openTool(page, 'dependencies')
 			await relations.getByTitle(`Focus method ${name} in Onboarding #onboarding`)
 				.click()
 			await expect(writes, name)
@@ -549,7 +542,7 @@ test.describe('async work kept at the host', () => {
 			.last())
 			.toHaveText('settleBooking(1) applied the answer.')
 
-		await selectWidget(page, /induction : InductionStep/, 'Runtime')
+		await selectWidget(page, /induction : InductionStep/, 'runtime')
 		await expect(page.locator('[data-testid="runtime-value-row"][data-member="reference"]')
 			.filter({ visible: true }))
 			.toContainText('TM-20261212-1400')
@@ -691,7 +684,7 @@ test.describe('config diagnostics', () => {
 		await expect(previewFrame(page)
 			.getByRole('heading', { name: 'Welcome to Tidepool Makers', level: 1 }))
 			.toBeVisible()
-		// Author opens on Structure: the Problems list is under the JSON editor.
+		// Edit opens on Structure: the Problems list is under the JSON editor.
 		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)
@@ -819,7 +812,7 @@ test.describe('tutorial', () => {
 			.toBeVisible()
 		await rail.getByRole('button', { name: 'See the declared Events in Selected widget' })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Selected widget', exact: true }))
+		await expect(toolTab(page, 'widget'))
 			.toHaveAttribute('aria-selected', 'true')
 		await next.click()
 
@@ -836,9 +829,9 @@ test.describe('tutorial', () => {
 			.click()
 		await expect(moveObservation)
 			.toBeVisible()
-		await rail.getByRole('button', { name: 'Open the Events tab' })
+		await rail.getByRole('button', { name: 'Open the Events log' })
 			.click()
-		await expect(page.getByRole('tab', { name: /^Events/ }))
+		await expect(toolTab(page, 'events'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(eventEntries(page))
 			.toHaveCount(1)
@@ -923,9 +916,9 @@ test.describe('tutorial', () => {
 		// 9 map the views, 10 hand back
 		await expect(rail.getByText('Dependencies (Relations, Graph)', { exact: false }))
 			.toBeVisible()
-		await rail.getByRole('button', { name: 'Runtime', exact: true })
+		await rail.getByRole('button', { name: 'Runtime tree', exact: true })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
+		await expect(toolTab(page, 'runtime'))
 			.toHaveAttribute('aria-selected', 'true')
 		await next.click()
 		await page.getByRole('button', { name: 'Finish', exact: true })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { endOfLine, jsonSyntaxErrorOffset, jsonSyntaxErrorSpan, locateJsonMember, locateJsonPath, scanJsonSyntaxError } from './json-locate'
+import { endOfLine, jsonSyntaxErrorOffset, jsonSyntaxErrorSpan, locateJsonMember, locateJsonPath, locateJsonValue, scanJsonSyntaxError } from './json-locate'
 
 const text = `{
   "id": "root",
@@ -91,6 +91,21 @@ describe('locateJsonPath', () => {
 		expect(locateJsonMember(text, itemPath, 'missing'))
 			.toBeNull()
 		expect(locateJsonMember(text, ['meta'], '0'))
+			.toBeNull()
+	})
+})
+
+describe('locateJsonValue (the JSON toggle of the Edit tab reveals the selected widget)', () => {
+	it('spans the whole object of the widget at the path', () => {
+		const span = locateJsonValue(text, ['slots', 'items', 1])!
+		expect(text.slice(span.start, span.end))
+			.toBe('{ "id": "b", "type": "Counter" }')
+	})
+
+	it('is null for a path the text does not have, or text that does not parse: it never lands on an ancestor', () => {
+		expect(locateJsonValue(text, ['slots', 'items', 5]))
+			.toBeNull()
+		expect(locateJsonValue('{ "id": ', []))
 			.toBeNull()
 	})
 })

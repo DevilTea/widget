@@ -14,9 +14,12 @@ function fakeApi(id: string, title: string) {
 	return { id, title, onDidTitleChange: () => ({ dispose: () => {} }) }
 }
 
-/** Issue #230 (audit U09): the Events tab shows how many Events arrived while its panel was not visible. */
+/**
+ * Issue #230 (audit U09): the tab shows how many Events arrived while the Events log was not visible. Since Lab UX phase 3B the
+ * log is an expert view in the Tools group, opened on request, so the count is on the Tools tab, which is always there.
+ */
 describe('nonClosableTab unseen Events', () => {
-	it('draws the count on the Events tab only, hides it from the accessibility tree and gives it to assistive technology as text', async () => {
+	it('draws the count on the Tools tab only, hides it from the accessibility tree and gives it to assistive technology as text', async () => {
 		const preview = await createPreview(1)
 		const store = {
 			previewHost: { connection: shallowRef(preview.connection), error: shallowRef(null) },
@@ -34,15 +37,15 @@ describe('nonClosableTab unseen Events', () => {
 			},
 		})
 		const panel = mount(Panel, { global })
-		const events = mount(NonClosableTab, { props: { params: { api: fakeApi('events', 'Events') as never } }, global })
-		const runtime = mount(NonClosableTab, { props: { params: { api: fakeApi('runtime', 'Runtime') as never } }, global })
+		const events = mount(NonClosableTab, { props: { params: { api: fakeApi('tools', 'Tools') as never } }, global })
+		const runtime = mount(NonClosableTab, { props: { params: { api: fakeApi('explain', 'Explain') as never } }, global })
 		await new Promise(resolve => setTimeout(resolve, 0))
 		await nextTick()
 		expect(events.find('[data-testid="events-unseen"]')
 			.exists())
 			.toBe(false)
 		expect(events.text())
-			.toBe('Events')
+			.toBe('Tools')
 
 		preview.ping()
 		preview.ping()
@@ -55,13 +58,13 @@ describe('nonClosableTab unseen Events', () => {
 		// One hidden text names the tab; the drawn title and badge are hidden from assistive technology.
 		expect(events.get('[data-testid="events-tab-name"]')
 			.text())
-			.toBe('Events, 2 new')
+			.toBe('Tools, 2 new')
 		expect(events.findAll('[aria-hidden="true"]')
 			.map(node => node.text()))
-			.toEqual(['Events', '2'])
+			.toEqual(['Tools', '2'])
 		// Another tab has no count.
 		expect(runtime.text())
-			.toBe('Runtime')
+			.toBe('Explain')
 
 		visible.value = true
 		await nextTick()

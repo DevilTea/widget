@@ -1,11 +1,10 @@
 import type { Page } from '@playwright/test'
-import { expandGraphWidget, expect, setTheme, test } from './fixtures'
+import { expandGraphWidget, expect, openTool, setTheme, test } from './fixtures'
 
-/** Opens the Survey's Dependencies tab; most tests here are about the Graph, so it is switched to unless asked not to. */
+/** Opens the Survey's Dependencies view (Tools); most tests here are about the Graph, so it is switched to unless asked not to. */
 async function openSurveyDependencies(page: Page, options: { graph?: boolean } = {}) {
 	await page.goto('/')
-	await page.getByRole('tab', { name: 'Dependencies' })
-		.click()
+	await openTool(page, 'dependencies')
 	if (options.graph !== false) {
 		await page.getByRole('tablist', { name: 'Dependencies views' })
 			.getByRole('tab', { name: 'Graph' })

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { answerDraftGuard, editJson, expect, expectDocumentStatus, expectLabStatus, expectPreviewStatus, expectShowcase, labStatus, loadPreset, openAuthorJson, openStatusDetails, previewFrame, selectShowcase, setLocale, test, waitForLabTestSeam } from './fixtures'
+import { answerDraftGuard, editJson, expect, expectDocumentStatus, expectLabStatus, expectPreviewStatus, expectShowcase, labStatus, loadPreset, openAuthorJson, openExplain, openStatusDetails, openTool, previewFrame, selectShowcase, setLocale, test, waitForLabTestSeam, workbenchTab } from './fixtures'
 
 /**
  * Issue #230 PR 3a (audit U01-U07, U24), rewritten for Lab UX phase 3 (one commit model): the grouped header, the protection of
@@ -12,7 +12,7 @@ import { answerDraftGuard, editJson, expect, expectDocumentStatus, expectLabStat
 async function openLab(page: Page, query: string): Promise<void> {
 	await page.goto(`/?lab-test&${query}`)
 	await waitForLabTestSeam(page)
-	// Author opens on Structure; most of this file is about the JSON view, its Problems list and Monaco (imported lazily:
+	// Edit opens on Structure; most of this file is about the JSON view, its Problems list and Monaco (imported lazily:
 	// interact with it only once it is up).
 	await openAuthorJson(page)
 }
@@ -497,7 +497,7 @@ test.describe('Cmd/Ctrl+Enter in the JSON editor (U05)', () => {
 
 	test('does nothing outside the editor: a focused Dockview tab keeps Enter, and nothing is committed', async ({ page }) => {
 		await openLab(page, 'showcase=sandbox')
-		await page.getByRole('tab', { name: 'Runtime' })
+		await workbenchTab(page, 'explain')
 			.focus()
 		await page.keyboard.press('ControlOrMeta+Enter')
 		await openStatusDetails(page)
@@ -596,9 +596,9 @@ test.describe('the status chip and details (U02)', () => {
 		})
 	}
 
-	// Lab UX phase 2 (report item 12): "Show problems" stays in the open Author view. It used to force the JSON view; in
+	// Lab UX phase 2 (report item 12): "Show problems" stays in the open Edit view. It used to force the JSON view; in
 	// Structure it now selects the first problem's widget and focuses the problem at its field.
-	test('the problems chip is a named button that shows the problems in the open Author view', async ({ page }) => {
+	test('the problems chip is a named button that shows the problems in the open Edit view', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
 		// A valid Document has nothing to show: the chip is a status, not a button.
 		await expect(page.locator('header')
@@ -609,16 +609,15 @@ test.describe('the status chip and details (U02)', () => {
 			.toHaveAttribute('role')
 
 		await loadPreset(page, 'survey-ai-draft')
-		// `openLab()` opened the JSON view; start from Structure, the view Author opens on.
+		// `openLab()` opened the JSON view; start from Structure, the view Edit opens on, then go to another tab.
 		await page.getByTestId('author-view-structure')
 			.click()
-		await page.getByRole('tab', { name: 'Runtime' })
-			.click()
+		await openExplain(page)
 		const chip = page.getByRole('button', { name: '5 problems · Preview shows the last working version: show them', exact: true })
 		await expect(chip)
 			.toHaveText('5 problems · Preview shows the last working version')
 		await chip.click()
-		await expect(page.getByRole('tab', { name: 'Author' }))
+		await expect(workbenchTab(page, 'edit'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByTestId('author-view-structure'))
 			.toHaveAttribute('aria-selected', 'true')
@@ -634,8 +633,7 @@ test.describe('the status chip and details (U02)', () => {
 
 		// In the JSON view it keeps doing what it did: the list under the editor, from the keyboard too.
 		await openAuthorJson(page)
-		await page.getByRole('tab', { name: 'Runtime' })
-			.click()
+		await openExplain(page)
 		await chip.focus()
 		await page.keyboard.press('Enter')
 		await expect(page.getByTestId('author-view-json'))
@@ -775,8 +773,7 @@ test.describe('Problems list, jump and squiggles (U06)', () => {
 	test('keeps the Blueprint "All diagnostics" view working next to the Problems list', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
 		await loadPreset(page, 'survey-ai-draft')
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
+		await openTool(page, 'blueprint')
 		await page.getByRole('button', { name: /All diagnostics \(5\)/ })
 			.click()
 		await expect(page.locator('[data-testid^="blueprint-diagnostic-location-"]'))
@@ -799,17 +796,16 @@ test.describe('stale-preview notice (U07)', () => {
 			.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 			.toBeVisible()
 
-		// From another workbench tab the action opens Author and stays in its view (Lab UX phase 2; it used to force JSON):
+		// From another workbench tab the action opens Edit and stays in its view (Lab UX phase 2; it used to force JSON):
 		// in Structure, the first problem at its field. (`openLab()` opened JSON; start from Structure.)
 		await page.getByTestId('author-view-structure')
 			.click()
-		await page.getByRole('tab', { name: 'Runtime' })
-			.click()
-		await expect(page.getByRole('tab', { name: 'Runtime' }))
+		await openExplain(page)
+		await expect(workbenchTab(page, 'explain'))
 			.toHaveAttribute('aria-selected', 'true')
 		await notice.getByTestId('preview-show-problems')
 			.click()
-		await expect(page.getByRole('tab', { name: 'Author' }))
+		await expect(workbenchTab(page, 'edit'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByTestId('author-view-structure'))
 			.toHaveAttribute('aria-selected', 'true')
@@ -865,7 +861,7 @@ test.describe('plain-language wording follows the locale', () => {
 })
 
 test.describe('status details popover (the former Author status box, folded in)', () => {
-	test('the Author panel no longer carries its own copy of the status', async ({ page }) => {
+	test('the Edit panel no longer carries its own copy of the status', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
 		await expect(page.getByTestId('author-document-status'))
 			.toHaveCount(0)

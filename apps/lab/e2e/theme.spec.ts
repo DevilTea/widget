@@ -1,4 +1,4 @@
-import { expect, openAuthorJson, previewFrame, setTheme, test } from './fixtures'
+import { expect, openAuthorJson, openTool, previewFrame, setTheme, test, toolPanel } from './fixtures'
 
 const THEME_STORAGE_KEY = 'widget-lab:theme'
 
@@ -16,7 +16,7 @@ test.describe('lab theme (issue #44)', () => {
 
 		await expect(page.locator('html'))
 			.toHaveAttribute('data-lab-theme', 'light')
-		// Author opens on Structure: open the JSON view so Monaco is mounted.
+		// Edit opens on Structure: open the JSON view so Monaco is mounted.
 		await openAuthorJson(page)
 
 		const monacoLight = await page.locator('.monaco-editor')
@@ -99,9 +99,9 @@ test.describe('lab theme (issue #44)', () => {
 	test('rehighlights already-loaded Implementation source when theme changes without reloading source text', async ({ context, page, blockedRequestUrls }) => {
 		await seedTheme(context, 'light')
 		await page.goto('/?showcase=sandbox')
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
-		await page.getByRole('button', { name: 'title : Text' })
+		await openTool(page, 'blueprint')
+		await toolPanel(page, 'blueprint')
+			.getByRole('button', { name: 'title : Text' })
 			.click()
 		await page.getByTestId('blueprint-view-implementation')
 			.click()

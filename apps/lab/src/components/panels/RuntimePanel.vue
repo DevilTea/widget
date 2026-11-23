@@ -42,7 +42,7 @@ function selectNode(nodeId: number): void {
 			v-if="blueprint === null"
 			class="p-[16px] text-[12px] text-lab-text-muted"
 		>
-			<p>{{ i18n.t('Runtime unavailable — there is no valid Preview revision to inspect. Open Blueprint to see current diagnostics, fix the definition in Author and the Preview follows.') }}</p>
+			<p>{{ i18n.t('Runtime unavailable — there is no valid Preview revision to inspect. Open the Blueprint tree from Tools to see current diagnostics, fix the definition in Edit and the Preview follows.') }}</p>
 		</div>
 		<InspectorSplitLayout v-else>
 			<template #tree>

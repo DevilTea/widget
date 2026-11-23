@@ -1,17 +1,17 @@
-import { expect, loadPreset, openStatusDetails, test } from './fixtures'
+import { expect, loadPreset, openEditStructure, openStatusDetails, openTool, test } from './fixtures'
 
-test('Author workspace exposes Core catalog, Structure commands, and synchronized JSON', async ({ page }) => {
+test('Edit exposes the Core catalog (Browse widget types), Structure commands, and synchronized JSON', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
 
-	await page.getByRole('tab', { name: 'Author' })
-		.click()
-	await page.getByRole('tab', { name: 'Catalog' })
+	await page.getByTestId('browse-widget-types')
 		.click()
 	await expect(page.getByTestId('author-catalog-Stack'))
 		.toContainText('Sandbox stack widget')
+	await page.keyboard.press('Escape')
+	await expect(page.getByTestId('catalog-dialog'))
+		.toBeHidden()
 
-	await page.getByRole('tab', { name: 'Structure' })
-		.click()
+	await openEditStructure(page)
 	await page.getByRole('button', { name: 'title : Text' })
 		.click()
 	await page.getByLabel('text', { exact: true })
@@ -25,7 +25,7 @@ test('Author workspace exposes Core catalog, Structure commands, and synchronize
 	await expect(page.getByTestId('author-command-outcome'))
 		.toContainText('Change applied')
 
-	await page.getByRole('tab', { name: 'JSON' })
+	await page.getByTestId('author-view-json')
 		.click()
 	await expect(page.locator('.view-lines'))
 		.toContainText('edited in Structure')
@@ -40,16 +40,17 @@ test('recovery keeps unresolved/raw-slot nodes visible and navigates node diagno
 	await expect(page.getByTestId('status-recovery'))
 		.toContainText('1 raw-slot placements')
 	await page.keyboard.press('Escape')
-	await page.getByRole('tab', { name: 'Blueprint' })
-		.click()
-	await page.getByRole('button', { name: /All diagnostics/ })
+	await openTool(page, 'blueprint')
+	// Scoped to the Blueprint tree: the Edit tab beside it lists the same widgets in its Structure tree.
+	const blueprint = page.getByRole('tabpanel', { name: 'Blueprint tree' })
+	await blueprint.getByRole('button', { name: /All diagnostics/ })
 		.click()
 
-	await expect(page.getByRole('button', { name: 'mystery-1 : MysteryWidget' }))
+	await expect(blueprint.getByRole('button', { name: 'mystery-1 : MysteryWidget' }))
 		.toBeVisible()
-	await expect(page.getByRole('button', { name: 'orphan-1 : Text' }))
+	await expect(blueprint.getByRole('button', { name: 'orphan-1 : Text' }))
 		.toBeVisible()
-	await expect(page.getByText('sidebar · raw-slot', { exact: true }))
+	await expect(blueprint.getByText('sidebar · raw-slot', { exact: true }))
 		.toBeVisible()
 
 	const unresolvedDiagnostic = page.locator('[data-testid^="blueprint-diagnostic-"]')
@@ -59,8 +60,8 @@ test('recovery keeps unresolved/raw-slot nodes visible and navigates node diagno
 		.toBeVisible()
 	await expect(unresolvedDiagnostic.getByRole('button', { name: 'jump to node' }))
 		.toBeVisible()
-	const mysteryNode = page.getByRole('button', { name: 'mystery-1 : MysteryWidget' })
-	const orphanNode = page.getByRole('button', { name: 'orphan-1 : Text' })
+	const mysteryNode = blueprint.getByRole('button', { name: 'mystery-1 : MysteryWidget' })
+	const orphanNode = blueprint.getByRole('button', { name: 'orphan-1 : Text' })
 	const mysteryBackgroundBefore = await mysteryNode.evaluate(element => getComputedStyle(element).backgroundColor)
 	await unresolvedDiagnostic.getByRole('button', { name: 'jump to node' })
 		.click()
@@ -85,9 +86,10 @@ test('recovery keeps unresolved/raw-slot nodes visible and navigates node diagno
 test('semantic diagnostics navigate to current Document focus while source-only diagnostics remain non-navigable', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
 	await loadPreset(page, 'invalid-semantic')
-	await page.getByRole('tab', { name: 'Blueprint' })
-		.click()
-	await page.getByRole('button', { name: /All diagnostics/ })
+	await openTool(page, 'blueprint')
+	// Scoped to the Blueprint tree: the Edit tab beside it lists the same widgets in its Structure tree.
+	const blueprint = page.getByRole('tabpanel', { name: 'Blueprint tree' })
+	await blueprint.getByRole('button', { name: /All diagnostics/ })
 		.click()
 
 	const semanticDiagnostic = page.locator('[data-testid^="blueprint-diagnostic-"]')
@@ -95,8 +97,8 @@ test('semantic diagnostics navigate to current Document focus while source-only 
 		.first()
 	await expect(semanticDiagnostic.getByRole('button', { name: 'jump to node' }))
 		.toBeVisible()
-	const summaryNode = page.getByRole('button', { name: 'summary-1 : Summary' })
-	const counterNode = page.getByRole('button', { name: 'counter-1 : Counter' })
+	const summaryNode = blueprint.getByRole('button', { name: 'summary-1 : Summary' })
+	const counterNode = blueprint.getByRole('button', { name: 'counter-1 : Counter' })
 	const summaryBackgroundBefore = await summaryNode.evaluate(element => getComputedStyle(element).backgroundColor)
 	await semanticDiagnostic.getByRole('button', { name: 'jump to node' })
 		.click()
@@ -124,10 +126,7 @@ test('semantic diagnostics navigate to current Document focus while source-only 
 
 test('rejects blank numeric Structure values while preserving scalar editing behavior', async ({ page }) => {
 	await page.goto('/')
-	await page.getByRole('tab', { name: 'Author' })
-		.click()
-	await page.getByRole('tab', { name: 'Structure' })
-		.click()
+	await openEditStructure(page)
 	await page.getByRole('button', { name: 'guests : Numeric' })
 		.click()
 

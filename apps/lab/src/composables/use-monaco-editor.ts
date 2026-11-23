@@ -57,9 +57,22 @@ export interface UseMonacoJsonEditorOptions {
 
 export interface UseMonacoJsonEditorResult {
 	readonly ready: Readonly<Ref<boolean>>
-	/** Selects the range, scrolls it into view and focuses the editor. No-op before the editor is ready. */
+	/** Selects the range, scrolls it into view and focuses the editor (a Problems row's jump). Replayed once the editor is ready. */
 	revealRange: (start: number, end: number) => void
+	/**
+	 * Marks the range with a highlight (a decoration, `lab-json-highlight`), puts the cursor at its start and scrolls its first
+	 * lines into view, without selecting anything and without taking focus: the Edit tab's JSON view shows the selected widget this
+	 * way. A selection would be replaced by the first key a keyboard user types after tabbing into the editor (and committed on
+	 * blur). The highlight goes away when the user edits the text or leaves the editor, and a new one replaces it. Replayed once the
+	 * editor is ready.
+	 */
+	highlightRange: (start: number, end: number) => void
+	/** Whether the editor (any of its widgets) has keyboard focus. */
+	hasFocus: () => boolean
 }
+
+/** The class of the highlight `highlightRange()` draws (styled in `styles/global.css`). */
+export const JSON_HIGHLIGHT_CLASS = 'lab-json-highlight'
 
 const COMMIT_ACTION_ID = 'widget-lab.commit-json'
 const ERROR_RULER_COLOR = '#e5484d'
@@ -78,6 +91,7 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 	let applyingExternalChange = false
 	let commitAction: { dispose: () => void } | null = null
 	let markerCollection: ReturnType<MonacoEditor['createDecorationsCollection']> | null = null
+	let highlightCollection: ReturnType<MonacoEditor['createDecorationsCollection']> | null = null
 
 	/**
 	 * Renders the markers as error squiggles. They are model decorations with Monaco's own `squiggly-error`
@@ -107,20 +121,41 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		}))
 	}
 
-	// A reveal asked for before the editor finished loading (Monaco is imported lazily) is replayed once it is up.
-	let pendingReveal: { readonly start: number, readonly end: number } | null = null
+	// A reveal or highlight asked for before the editor finished loading (Monaco is imported lazily) is replayed once it is up.
+	let pendingReveal: { readonly start: number, readonly end: number, readonly kind: 'reveal' | 'highlight' } | null = null
+
+	function rangeOf(current: MonacoModel, start: number, end: number) {
+		const from = current.getPositionAt(start)
+		const to = current.getPositionAt(end)
+		return { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column }
+	}
 
 	function revealRange(start: number, end: number): void {
 		if (editor === null || model === null) {
-			pendingReveal = { start, end }
+			pendingReveal = { start, end, kind: 'reveal' }
 			return
 		}
-		const from = model.getPositionAt(start)
-		const to = model.getPositionAt(end)
-		const range = { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column }
+		const range = rangeOf(model, start, end)
 		editor.setSelection(range)
 		editor.revealRangeInCenterIfOutsideViewport(range)
 		editor.focus()
+	}
+
+	function clearHighlight(): void {
+		highlightCollection?.clear()
+	}
+
+	function highlightRange(start: number, end: number): void {
+		if (editor === null || model === null) {
+			pendingReveal = { start, end, kind: 'highlight' }
+			return
+		}
+		const range = rangeOf(model, start, end)
+		highlightCollection ??= editor.createDecorationsCollection()
+		highlightCollection.set([{ range, options: { isWholeLine: true, className: JSON_HIGHLIGHT_CLASS } }])
+		editor.setPosition({ lineNumber: range.startLineNumber, column: range.startColumn })
+		// A whole widget can be taller than the editor: its first lines go to the top.
+		editor.revealRangeNearTopIfOutsideViewport(range)
 	}
 
 	/**
@@ -161,6 +196,8 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		editor.onDidChangeModelContent(() => {
 			if (applyingExternalChange || model === null)
 				return
+			// The user edits: the highlight of the selected widget no longer marks what it marked.
+			clearHighlight()
 			options.onChange(model.getValue())
 		})
 		// The editor widget, not only its text area: Find and the other editor widgets belong to the same editing session.
@@ -169,15 +206,21 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		// session, one Undo entry): only a blur within a focused document counts. Focus coming back reports a focus again,
 		// which continues the open session (`LabStore.beginJsonEdit()`).
 		editor.onDidBlurEditorWidget(() => {
-			if (document.hasFocus())
-				options.onBlur?.()
+			if (!document.hasFocus())
+				return
+			clearHighlight()
+			options.onBlur?.()
 		})
 		registerCommitAction()
 		syncMarkers()
 		ready.value = true
 		if (pendingReveal !== null) {
-			revealRange(pendingReveal.start, pendingReveal.end)
+			const { start, end, kind } = pendingReveal
 			pendingReveal = null
+			if (kind === 'reveal')
+				revealRange(start, end)
+			else
+				highlightRange(start, end)
 		}
 	})
 
@@ -210,5 +253,5 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		model?.dispose()
 	})
 
-	return { ready, revealRange }
+	return { ready, revealRange, highlightRange, hasFocus: () => editor?.hasWidgetFocus() === true }
 }

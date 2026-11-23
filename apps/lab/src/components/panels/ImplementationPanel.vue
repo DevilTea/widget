@@ -24,6 +24,8 @@ import ImplementationFile from '../implementation/ImplementationFile.vue'
 import ImplementationSourceView from '../implementation/ImplementationSourceView.vue'
 import PanelDescriptionBar from '../PanelDescriptionBar.vue'
 
+const props = defineProps<{ params?: { api?: { setTitle: (title: string) => void } } }>()
+
 const APPLIED_INSTANCE_TAB = 'applied-instance'
 
 const store = useLabStore()
@@ -90,6 +92,19 @@ watch(
 )
 
 const selectedFile = computed(() => entry.value?.files.find(file => file.path === selectedTabId.value) ?? null)
+
+/**
+ * The tab names what it shows (Lab UX phase 3B): "Implementation — sessions (MultipleChoice)" for the selected widget, the plugin
+ * type in the Registered plugins mode, plain "Implementation" with nothing to show. It follows the selection and the language.
+ */
+const tabTitle = computed(() => {
+	if (mode.value === 'focused' && focusedWidget.value !== null)
+		return i18n.t('Implementation — {subject}', { subject: `${focusedWidget.value.id} (${focusedWidget.value.type})` })
+	if (mode.value === 'catalog' && selectedCatalogType.value !== null)
+		return i18n.t('Implementation — {subject}', { subject: selectedCatalogType.value })
+	return i18n.t('Implementation')
+})
+watch(tabTitle, title => props.params?.api?.setTitle(title), { immediate: true })
 </script>
 
 <template>

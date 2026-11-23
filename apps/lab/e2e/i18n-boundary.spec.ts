@@ -1,4 +1,4 @@
-import { expect, setLocale, test } from './fixtures'
+import { expect, openTool, setLocale, test } from './fixtures'
 
 interface LabTestWindow {
 	__WIDGET_LAB_TEST__?: {
@@ -13,8 +13,7 @@ test('core diagnostic text is not localized when presentation locale changes (is
 		const seam = (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__
 		seam?.editJson(JSON.stringify({ id: 'root', type: 'UnknownForI18nContract' }, null, 2))
 	})
-	await page.getByRole('tab', { name: 'Blueprint' })
-		.click()
+	await openTool(page, 'blueprint')
 	await page.getByRole('button', { name: /All diagnostics/ })
 		.click()
 

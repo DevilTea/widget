@@ -1,9 +1,9 @@
 import type { Locator } from '@playwright/test'
-import { expect, expectDocumentStatus, loadPreset, openAuthorJson, test } from './fixtures'
+import { expect, expectDocumentStatus, loadPreset, openAuthorJson, openExplain, test } from './fixtures'
 
 /**
  * Lab UX phase 2, report item 12: Structure shows the committed Document's problems at their fields, at the widget, or in a
- * compact list, and "Show problems" stays in the open Author view.
+ * compact list, and "Show problems" stays in the open Edit view.
  */
 
 const field = (editor: Locator, path: string): Locator => editor.locator(`[data-config-path="${path}"]`)
@@ -66,8 +66,7 @@ test.describe('problems in Structure (report item 12)', () => {
 		await expect(editor.getByTestId('structure-problems'))
 			.toContainText('4 problems elsewhere in the document')
 
-		await page.getByRole('tab', { name: 'Events', exact: true })
-			.click()
+		await openExplain(page)
 		await page.getByTestId('preview-show-problems')
 			.click()
 		await expect(page.getByTestId('author-view-structure'))
@@ -79,15 +78,10 @@ test.describe('problems in Structure (report item 12)', () => {
 			.toBeFocused()
 	})
 
-	test('from the Catalog, "Show problems" opens Structure; in JSON it keeps the list under the editor', async ({ page }) => {
+	// The Catalog is a modal slide-over since Lab UX phase 3B, not a view "Show problems" could be pressed from.
+	test('in JSON, "Show problems" keeps the list under the editor', async ({ page }) => {
 		await page.goto('/?showcase=survey')
 		await loadPreset(page, 'survey-ai-draft')
-		await page.getByTestId('author-view-catalog')
-			.click()
-		await page.getByTestId('lab-status')
-			.click()
-		await expect(page.getByTestId('author-view-structure'))
-			.toHaveAttribute('aria-selected', 'true')
 
 		await openAuthorJson(page)
 		await page.getByTestId('lab-status')

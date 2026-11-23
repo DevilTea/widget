@@ -1,15 +1,15 @@
-import { expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, previewFrame, test } from './fixtures'
+import { expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, openTool, previewFrame, test, toolTab, workbenchTab } from './fixtures'
 
 /**
  * Issue #28 Lab shell / workbench contract: the app loads with the header's showcase/preset/Apply
- * controls and the workbench panel tabs (`Workbench.vue`'s Author/Explain/Selected widget/Blueprint/Runtime/
- * Dependencies/Preview) available.
+ * controls and the workbench panel tabs (`Workbench.vue`'s Edit/Explain/Tools and Preview; Lab UX phase 3B) available, and
+ * every expert view of the Tools menu opens.
  *
  * Loaded against the network-blocked BUILT app (see `fixtures.ts`/`playwright.config.ts`) — Source is
  * the initially active tab, so this also exercises the Source editor initializing under that block.
  */
 
-test('app loads with header controls and all six panel tabs', async ({ page }) => {
+test('app loads with header controls, the three tool tabs and the Preview, and every expert view opens from Tools', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
 
 	await expectShowcase(page, 'sandbox')
@@ -29,17 +29,17 @@ test('app loads with header controls and all six panel tabs', async ({ page }) =
 			.toHaveCount(0)
 	}
 
-	for (const name of ['Author', 'Explain', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
-		const tab = page.getByRole('tab', { name })
+	for (const name of ['Edit', 'Explain', 'Tools', 'Preview']) {
+		const tab = page.getByRole('tab', { name, exact: true })
 		await expect(tab)
 			.toBeVisible()
 		await tab.click()
-		const panel = page.getByRole('tabpanel', { name })
+		const panel = page.getByRole('tabpanel', { name, exact: true })
 		await expect(panel)
 			.toBeVisible()
 		switch (name) {
-			case 'Author':
-				// Structure is the view Author opens on (Lab UX phase 1; the JSON view and Monaco load on request).
+			case 'Edit':
+				// Structure is the view Edit opens on (Lab UX phase 1; the JSON view and Monaco load on request).
 				await expect(panel.getByRole('tab', { name: 'Structure', exact: true }))
 					.toHaveAttribute('aria-selected', 'true')
 				await expect(panel.getByTestId('structure-editor'))
@@ -50,26 +50,10 @@ test('app loads with header controls and all six panel tabs', async ({ page }) =
 				await expect(panel.getByTestId('explain-empty'))
 					.toBeVisible()
 				break
-			case 'Selected widget':
-				await expect(panel.getByTestId('selected-widget-declaration'))
-					.toBeVisible()
-				await expect(panel.getByTestId('selected-widget-runtime'))
-					.toBeVisible()
-				break
-			case 'Blueprint':
-				await expect(panel.getByTestId('inspector-panel-shell'))
-					.toBeVisible()
-				await expect(panel.getByText('Selected node', { exact: true }))
-					.toBeVisible()
-				break
-			case 'Runtime':
-				await expect(panel.getByText('Live State, Properties, Methods, and Diagnostics of the running widgets', { exact: true }))
-					.toBeVisible()
-				break
-			case 'Dependencies':
-				// Relations is the default view; the Graph canvas only mounts once it is chosen.
-				await expect(panel.getByRole('tabpanel', { name: 'Relations' }))
-					.toBeVisible()
+			case 'Tools':
+				await expect(panel.getByTestId('tools-menu')
+					.getByRole('button'))
+					.toHaveCount(7)
 				break
 			case 'Preview':
 				await expect(previewFrame(page)
@@ -78,14 +62,42 @@ test('app loads with header controls and all six panel tabs', async ({ page }) =
 				break
 		}
 	}
+
+	const content = async (tool: Parameters<typeof toolTab>[1]) => page.getByRole('tabpanel', { name: (await toolTab(page, tool)
+		.textContent())!.trim(), exact: true })
+	await openTool(page, 'widget')
+	await expect((await content('widget')).getByTestId('selected-widget-declaration'))
+		.toBeVisible()
+	await expect((await content('widget')).getByTestId('selected-widget-runtime'))
+		.toBeVisible()
+	await openTool(page, 'blueprint')
+	await expect((await content('blueprint')).getByTestId('inspector-panel-shell'))
+		.toBeVisible()
+	await expect((await content('blueprint')).getByText('Selected node', { exact: true }))
+		.toBeVisible()
+	await openTool(page, 'runtime')
+	await expect((await content('runtime')).getByText('Live State, Properties, Methods, and Diagnostics of the running widgets', { exact: true }))
+		.toBeVisible()
+	await openTool(page, 'dependencies')
+	// Relations is the default view; the Graph canvas only mounts once it is chosen.
+	await expect((await content('dependencies')).getByRole('tabpanel', { name: 'Relations' }))
+		.toBeVisible()
+	await openTool(page, 'events')
+	await expect(page.getByTestId('events-panel'))
+		.toBeVisible()
+	await openTool(page, 'document-tools')
+	await expect(page.getByTestId('document-tools-panel'))
+		.toBeVisible()
+	await openTool(page, 'implementation')
+	await expect(page.getByRole('button', { name: 'Applied instance', exact: true }))
+		.toBeVisible()
 })
 
 test('Blueprint and Runtime keep separate outer inspector surfaces', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
 
-	await page.getByRole('tab', { name: 'Blueprint' })
-		.click()
-	const blueprintPanel = page.getByRole('tabpanel', { name: 'Blueprint' })
+	await openTool(page, 'blueprint')
+	const blueprintPanel = page.getByRole('tabpanel', { name: 'Blueprint tree' })
 	await expect(blueprintPanel.getByTestId('inspector-panel-shell'))
 		.toHaveCount(1)
 	await expect(blueprintPanel.getByTestId('inspector-split-layout'))
@@ -101,9 +113,8 @@ test('Blueprint and Runtime keep separate outer inspector surfaces', async ({ pa
 	await expect(blueprintPanel.getByText(/^Preview r\d+/))
 		.toHaveCount(0)
 
-	await page.getByRole('tab', { name: 'Runtime' })
-		.click()
-	const runtimePanel = page.getByRole('tabpanel', { name: 'Runtime' })
+	await openTool(page, 'runtime')
+	const runtimePanel = page.getByRole('tabpanel', { name: 'Runtime tree' })
 	await expect(runtimePanel.getByTestId('inspector-panel-shell'))
 		.toHaveCount(1)
 	await expect(runtimePanel.getByTestId('inspector-split-layout'))
@@ -150,15 +161,15 @@ test('Source editor initializes only from built preview assets (issues #30, #102
 	page.on('pageerror', error => pageErrors.push(error))
 
 	await page.goto('/?showcase=sandbox')
-	// Author opens on Structure (Lab UX phase 1); the editor mounts, and Monaco loads, only when the JSON view is opened.
-	await expect(page.getByRole('tablist', { name: 'Author views' })
+	// Edit opens on Structure (Lab UX phase 1); the editor mounts, and Monaco loads, only when the JSON view is opened.
+	await expect(page.getByRole('tablist', { name: 'Edit views' })
 		.getByRole('tab', { name: 'Structure', exact: true }))
 		.toHaveAttribute('aria-selected', 'true')
 	await expect(page.getByTestId('structure-editor'))
 		.toBeVisible()
 	await expect(page.locator('.monaco-editor'))
 		.toHaveCount(0)
-	await page.getByRole('tablist', { name: 'Author views' })
+	await page.getByRole('tablist', { name: 'Edit views' })
 		.getByRole('tab', { name: 'JSON', exact: true })
 		.click()
 
@@ -176,10 +187,7 @@ test('Source editor initializes only from built preview assets (issues #30, #102
 	// Every other panel/header control is unaffected (unchanged from before self-hosting).
 	await expectDocumentStatus(page, { valid: true })
 	await expectPreviewStatus(page, 'current')
-	await page.getByRole('tab', { name: 'Blueprint' })
-		.click()
-	await expect(page.getByRole('tab', { name: 'Blueprint' }))
-		.toHaveAttribute('aria-selected', 'true')
+	await openTool(page, 'blueprint')
 
 	expect(pageErrors)
 		.toEqual([])
@@ -192,12 +200,12 @@ test('Source editor initializes only from built preview assets (issues #30, #102
 test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => {
 	await page.goto('/')
 
-	const panelNames = ['Author', 'Explain', 'Selected widget', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']
+	const panelNames = ['Edit', 'Explain', 'Tools', 'Preview']
 
-	// The five canonical panels use a custom Dockview tab renderer (`NonClosableTab.vue`) that never
+	// The canonical panels use a custom Dockview tab renderer (`NonClosableTab.vue`) that never
 	// renders a close control — so there is no in-tab button affordance to find at all.
 	for (const name of panelNames) {
-		const tab = page.getByRole('tab', { name })
+		const tab = page.getByRole('tab', { name, exact: true })
 		await expect(tab)
 			.toBeVisible()
 		await expect(tab.getByRole('button'))
@@ -206,12 +214,12 @@ test('panel close/recovery policy is enforced (issue #27)', async ({ page }) => 
 
 	// Attempt the interaction that used to close a panel — clicking where a close "x" used to sit, at
 	// the tab's trailing edge — and confirm it is a no-op: every canonical tab remains present.
-	const dependenciesTab = page.getByRole('tab', { name: 'Dependencies' })
-	const box = (await dependenciesTab.boundingBox())!
+	const toolsTab = page.getByRole('tab', { name: 'Tools', exact: true })
+	const box = (await toolsTab.boundingBox())!
 	await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2)
 
 	for (const name of panelNames) {
-		await expect(page.getByRole('tab', { name }))
+		await expect(page.getByRole('tab', { name, exact: true }))
 			.toBeVisible()
 	}
 })
@@ -233,6 +241,6 @@ test('narrow-viewport behavior is intentional (issue #27)', async ({ page }) => 
 	await page.setViewportSize({ width: 1280, height: 800 })
 	await expect(gateMessage)
 		.toBeHidden()
-	await expect(page.getByRole('tab', { name: 'Author' }))
+	await expect(workbenchTab(page, 'edit'))
 		.toBeVisible()
 })

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, openTool, previewFrame, selectShowcase, setLocale, setTheme, test, toolPanel } from './fixtures'
 
 /**
  * Legacy document repair acceptance contract (issue #230): the repair desk (`showcases/document-repair/presets.ts`, preset
@@ -178,13 +178,12 @@ test.describe('repairing the 1.x draft', () => {
 		await openRepair(page)
 		await openV1(page)
 		await applyNext(page)
-		await page.getByRole('tab', { name: 'Blueprint', exact: true })
-			.click()
-		await page.getByRole('button', { name: /draft-v1/ })
+		await openTool(page, 'blueprint')
+		await toolPanel(page, 'blueprint')
+			.getByRole('button', { name: /draft-v1/ })
 			.first()
 			.click()
-		await page.getByRole('tab', { name: 'Runtime', exact: true })
-			.click()
+		await openTool(page, 'runtime')
 		const row = page.locator('[data-testid="runtime-value-row"][data-member="revision"]')
 			.filter({ visible: true })
 		await expect(row)
@@ -278,7 +277,7 @@ test.describe('config diagnostics', () => {
 		await expect(previewFrame(page)
 			.getByRole('heading', { name: 'Notice board: drafts from older versions', level: 1 }))
 			.toBeVisible()
-		// Author opens on Structure: the Problems list is under the JSON editor.
+		// Edit opens on Structure: the Problems list is under the JSON editor.
 		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)

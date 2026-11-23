@@ -6,15 +6,14 @@
  * Against the REAL `createLabStore()`, like `use-tutorial.unit.test.ts`.
  */
 
-import type { ImplementationExplorerStore } from './use-implementation-explorer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { shallowRef } from 'vue'
 import { getShowcase } from '../showcases/registry'
 import { createLabStore } from './use-lab-store'
 import { createTutorialStore } from './use-tutorial'
 
-function explorer(): ImplementationExplorerStore {
-	return { openRequestTick: shallowRef(0), requestedMode: shallowRef<'focused' | 'catalog'>('focused'), open: () => {} }
+/** The tutorial store opens expert views through this (`createToolOpener()` in the app); these tests open none. */
+function explorer(): () => void {
+	return () => {}
 }
 
 async function flush(): Promise<void> {

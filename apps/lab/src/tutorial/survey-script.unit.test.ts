@@ -92,21 +92,32 @@ describe('surveyTourScript shape', () => {
 			])
 	})
 
-	it('maps the views early, naming Explain, Selected widget and Events too', () => {
+	it('maps the four areas early (Lab UX phase 3B): Edit, Preview, Explain and Tools, which names the expert views', () => {
 		const ids = surveyTourScript.steps.map(candidate => candidate.id)
 		expect(ids.indexOf('map-the-views'))
 			.toBe(1)
 		expect(step('map-the-views').links?.map(link => link.id))
-			.toEqual(['view-author', 'view-preview', 'view-explain', 'view-widget', 'view-events', 'view-blueprint', 'view-runtime', 'view-dependencies', 'view-implementation'])
+			.toEqual(['view-edit', 'view-preview', 'view-explain', 'view-tools'])
+		const actions: TutorialActions = { setFocus: vi.fn(), activateTab: vi.fn(), openTool: vi.fn() }
+		for (const link of step('map-the-views').links ?? [])
+			link.run?.(actions)
+		expect((actions.activateTab as ReturnType<typeof vi.fn>).mock.calls.map(call => call[0]))
+			.toEqual(['edit', 'preview', 'explain', 'tools'])
+		expect(actions.openTool)
+			.not
+			.toHaveBeenCalled()
 		const reveal = step('map-the-views').stages[0].reveal
 		expect(reveal)
 			.toContain('Explain = select a widget')
 		expect(reveal)
 			.toContain('why it behaves this way')
+		for (const view of ['Blueprint tree', 'Runtime tree', 'Events log', 'Dependencies', 'Selected widget', 'Document Tools', 'Implementation']) {
+			expect(reveal)
+				.toContain(view)
+		}
 		expect(reveal)
-			.toContain('Selected widget')
-		expect(reveal)
-			.toContain('Events')
+			.not
+			.toContain('Author')
 	})
 
 	it('only names widgets and members that exist in survey-default', () => {
@@ -341,14 +352,14 @@ describe('step "stale-snapshot"', () => {
 })
 
 describe('step "edit-and-undo" (change the definition, then Undo)', () => {
-	it('opens Author > Structure on the mode widget', () => {
-		const actions: TutorialActions = { setFocus: vi.fn(), activateTab: vi.fn(), openImplementation: vi.fn() }
+	it('opens Edit > Structure on the mode widget', () => {
+		const actions: TutorialActions = { setFocus: vi.fn(), activateTab: vi.fn(), openTool: vi.fn() }
 		step('edit-and-undo')
 			.onEnter?.(actions)
 		expect(actions.setFocus)
 			.toHaveBeenCalledWith('mode')
 		expect(actions.activateTab)
-			.toHaveBeenCalledWith('author', 'structure')
+			.toHaveBeenCalledWith('edit', 'structure')
 	})
 
 	it('completes the edit stage once the committed label differs from the default, and the Undo stage once it is back', () => {
@@ -393,7 +404,7 @@ describe('the whole script on a real Runtime', () => {
 		const actions: TutorialActions = {
 			setFocus: vi.fn(),
 			activateTab: vi.fn(),
-			openImplementation: vi.fn(),
+			openTool: vi.fn(),
 		}
 		const settle = (): void => {
 			observe()
@@ -470,7 +481,7 @@ describe('the whole script on a real Runtime', () => {
 		settle()
 		expectStep('edit-and-undo', false)
 		expect(actions.activateTab)
-			.toHaveBeenLastCalledWith('author', 'structure')
+			.toHaveBeenLastCalledWith('edit', 'structure')
 		// The real edit replaces the Runtime; a step's predicate then reads the new one.
 		engine.recheck(documentReader({ ...DEFAULT_MODE_LABEL, en: 'Where will you be?' }))
 		expectStep('edit-and-undo', false)

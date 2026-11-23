@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { documentSourceText, editJson, expect, expectDocumentStatus, expectLabStatus, expectPreviewStatus, openAuthorJson, openStatusDetails, previewFrame, test, waitForLabTestSeam } from './fixtures'
+import { documentSourceText, editJson, expect, expectDocumentStatus, expectLabStatus, expectPreviewStatus, openAuthorJson, openExplain, openStatusDetails, openTool, previewFrame, test, toolPanel, waitForLabTestSeam } from './fixtures'
 
 /**
  * Lab UX phase 3, one commit model (it replaced issue #28's Apply lifecycle contract, `apply.spec.ts`): the JSON view commits
@@ -86,13 +86,21 @@ test('typing commits after the pause, once, not on every keystroke', async ({ pa
 })
 
 test('leaving the editor commits at once, without waiting for the pause', async ({ page }) => {
+	await page.clock.install()
 	await openAuthorJson(page)
 	await selectRootIdInMonaco(page, 'root')
+	// The page's clock stops before the keystroke, so the pause's 750 ms timer it starts cannot fire while the editor is left.
+	// (Ahead of the page's time: the clock cannot be set back, and time passes until the call arrives.)
+	await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000))
 	await page.keyboard.insertText('left')
 	await leaveEditor(page)
-	// Read right away: the blur commit is synchronous up to the Preview promotion.
+	// Monaco reports the editor's blur one task after the DOM blur that drops its `focused` class (its focus tracker defers
+	// the event with a 0 ms timer, so a focus move within the editor is no blur), and the blur commit runs in that task: let
+	// the short timers run, well short of the pause, then the Document already holds the text.
+	await page.clock.runFor(300)
 	expect(rootId(await documentSourceText(page)))
 		.toBe('left')
+	await page.clock.resume()
 	await expectDocumentStatus(page, { valid: true })
 })
 
@@ -102,7 +110,8 @@ test('one focus session is one Undo entry; a new focus session is a new one', as
 	await selectRootIdInMonaco(page, 'root')
 	await page.keyboard.insertText('one')
 	await leaveEditor(page)
-	expect(rootId(await documentSourceText(page)))
+	// The blur commit lands one task after the `focused` class drops (see the test above).
+	await expect.poll(async () => rootId(await documentSourceText(page)))
 		.toBe('one')
 
 	// Session 2: two bursts with a pause between them (two commits), then a third edit committed by the click on Undo.
@@ -234,14 +243,14 @@ test('an invalid Document keeps the last working Preview and explains the diverg
 	await expect(page.getByTestId('lab-status'))
 		.toHaveText('1 problem · Preview shows the last working version')
 
-	await page.getByRole('tab', { name: 'Runtime' })
-		.click()
+	await openExplain(page)
 	await expect(page.getByTestId('preview-diverged-status'))
 		.toContainText('Your last change has 1 problem, so the preview still shows the last working version.')
-	await expect(page.getByRole('tabpanel', { name: 'Runtime' })
+	await openTool(page, 'runtime')
+	await expect(toolPanel(page, 'runtime')
 		.getByText('Preview r0', { exact: true }))
 		.toBeVisible()
-	await expect(page.getByRole('tabpanel', { name: 'Runtime' })
+	await expect(toolPanel(page, 'runtime')
 		.getByText('Diverged / Unlinked', { exact: true }))
 		.toBeVisible()
 })

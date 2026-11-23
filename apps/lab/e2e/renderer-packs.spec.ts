@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, openTool, previewFrame, selectShowcase, setLocale, setTheme, test, toolPanel } from './fixtures'
 
 /**
  * "One document, two renderer packs" acceptance contract (issue #230): the workspace settings page
@@ -50,10 +50,9 @@ async function choosePack(page: Page, pack: Pack): Promise<void> {
 	}
 }
 
-/** The Events tab: its accessible name gains ", N new" while entries arrived since it was last visible. */
+/** The Events log (an expert view of Tools since Lab UX phase 3B). */
 async function openEvents(page: Page): Promise<Locator> {
-	await page.getByRole('tab', { name: /^Events(, \d+ new)?$/ })
-		.click()
+	await openTool(page, 'events')
 	await expect(page.getByTestId('events-listening'))
 		.toBeVisible()
 	return page.getByTestId('events-panel')
@@ -178,9 +177,8 @@ test.describe('one Runtime, two packs', () => {
 		await openPacks(page)
 		await choosePack(page, 'nui')
 		await expectPreviewStatus(page, 'current')
-		await page.getByRole('tab', { name: 'Runtime', exact: true })
-			.click()
-		await expect(page.getByRole('tabpanel', { name: 'Runtime' }))
+		await openTool(page, 'runtime')
+		await expect(toolPanel(page, 'runtime'))
 			.not
 			.toContainText(/renderer pack|packs-choice/i)
 	})
@@ -551,7 +549,7 @@ test.describe('diagnostics', () => {
 		await expect(previewFrame(page)
 			.getByTestId('hand-page'))
 			.toBeVisible()
-		// Author opens on Structure: the Problems list is under the JSON editor.
+		// Edit opens on Structure: the Problems list is under the JSON editor.
 		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)

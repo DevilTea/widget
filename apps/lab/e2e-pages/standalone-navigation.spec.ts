@@ -192,15 +192,18 @@ test('built Widget Lab runtime assets execute under the Pages base', async ({ pa
 
 	await page.getByRole('button', { name: 'Explore on my own' })
 		.click()
-	// Author opens on Structure (Lab UX phase 1): Monaco and its vendored engine load when the JSON view opens.
-	await page.getByRole('tablist', { name: 'Author views' })
+	// Edit opens on Structure (Lab UX phase 1): Monaco and its vendored engine load when the JSON view opens.
+	await page.getByRole('tablist', { name: 'Edit views' })
 		.getByRole('tab', { name: 'JSON', exact: true })
 		.click()
 	await expect(page.locator('.monaco-editor'))
 		.toBeVisible({ timeout: 15_000 })
 	await expect.poll(() => requestedPaths.has('/widget/lab/vendor/modern-monaco/editor-core.mjs'))
 		.toBe(true)
-	await page.getByRole('tab', { name: 'Dependencies' })
+	// Dependencies is an expert view of the Tools menu (Lab UX phase 3B), opened beside the Preview.
+	await page.getByRole('tab', { name: 'Tools', exact: true })
+		.click()
+	await page.getByTestId('tools-entry-dependencies')
 		.click()
 	// Relations is the default view; the Graph (and its layout Worker) is one click away.
 	await page.getByRole('tablist', { name: 'Dependencies views' })

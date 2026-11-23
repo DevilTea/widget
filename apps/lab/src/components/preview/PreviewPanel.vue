@@ -10,11 +10,10 @@ import type { InspectorClient } from '@deviltea/widget-inspector/client'
 import UButton from '@nuxt/ui/components/Button.vue'
 import UIcon from '@nuxt/ui/components/Icon.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
-import { useExplainVisible } from '../../composables/use-explain-visibility'
-import { useImplementationExplorer } from '../../composables/use-implementation-explorer'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { useLabTheme } from '../../composables/use-lab-theme'
+import { useOpenTool } from '../../composables/use-open-tool'
 import { resolveFocusedWidget } from '../../implementation/focused-widget'
 import { previewReadinessTimeoutOverride } from '../../lab-test-seam'
 import { createPreviewFrameDriver } from '../../preview-host/frame-driver'
@@ -25,7 +24,7 @@ import ReplacedDocumentNotice from './ReplacedDocumentNotice.vue'
 const store = useLabStore()
 const i18n = useLabI18n()
 const theme = useLabTheme()
-const implementationExplorer = useImplementationExplorer()
+const openTool = useOpenTool()
 const previewFrame = useTemplateRef<HTMLIFrameElement>('previewFrame')
 const inspectActive = shallowRef(false)
 const inspectRequested = shallowRef(false)
@@ -51,19 +50,30 @@ async function retryPreview(): Promise<void> {
 	}
 }
 
-/** The tab a widget picked with Inspect opens: Explain while it is showing, Selected widget otherwise, Runtime while diverged. */
-const explainVisible = useExplainVisible()
-const inspectTarget = computed<'explain' | 'widget' | 'runtime'>(() => {
+/**
+ * Where a widget picked with Inspect is shown (Lab UX phase 3B). Linked: the Edit tab when it is the one showing (Structure
+ * selects the widget, so the user keeps editing what they picked), otherwise Explain, the newcomer's view of one widget.
+ * Diverged: only the Preview Runtime knows the widget, so the Runtime tree opens in the Tools group, and the Edit or Explain
+ * tab the user was reading stays.
+ */
+const inspectTarget = computed<'edit' | 'explain' | 'runtime'>(() => {
 	if (!store.revisionStatus.value.isLinked)
 		return 'runtime'
-	return explainVisible.value ? 'explain' : 'widget'
+	return store.toolGroupTab.value === 'edit' ? 'edit' : 'explain'
 })
 const inspectSurfaceLabel = computed(() => {
 	switch (inspectTarget.value) {
+		case 'edit': return i18n.t('Edit')
 		case 'explain': return i18n.t('Explain')
-		case 'widget': return i18n.t('Selected widget')
-		default: return 'Runtime'
+		default: return i18n.t('Runtime tree')
 	}
+})
+
+/** The widget "View implementation" opens, named on the button for assistive technology and in its tooltip. */
+const implementationTarget = computed(() => resolveFocusedWidget(store.documentState.value.blueprint, store.documentFocus.value))
+const implementationLabel = computed(() => {
+	const widget = implementationTarget.value
+	return widget === null ? i18n.t('View implementation') : i18n.t('View implementation of {widget}', { widget: `${widget.id} (${widget.type})` })
 })
 
 const curatedEntryAvailable = computed(() => {
@@ -122,9 +132,11 @@ watch(
 			if (inspectorClient !== client || selection.ref.runtimeId !== connection.runtimeId)
 				return
 			store.setFocus('preview', { nodeId: selection.ref.nodeId })
-			// Linked: the Selected widget pane explains the widget (declaration and values), or the Explain tab when it is
-			// the one showing (Lab UX phase 2). Diverged: only the Preview Runtime knows it, so the Runtime panel opens.
-			store.activeTab.value = inspectTarget.value
+			// See `inspectTarget`: Edit stays, Explain is brought to the front, or (diverged) the Runtime tree opens beside the Preview.
+			if (inspectTarget.value === 'runtime')
+				openTool('runtime')
+			else if (inspectTarget.value === 'explain')
+				store.showTab('explain')
 		})
 
 		void (async () => {
@@ -234,7 +246,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 			>
 				{{ i18n.t('Inspect') }}
 			</button>
-			<!-- Names the panel a click opens (see `inspectTarget`): Explain or Selected widget while linked, Runtime while diverged. -->
+			<!-- Names the panel a click opens (see `inspectTarget`): Edit or Explain while linked, the Runtime tree while diverged. -->
 			<span
 				v-if="inspectActive"
 				data-testid="inspect-hint"
@@ -245,9 +257,11 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 			<button
 				type="button"
 				data-testid="preview-view-implementation"
+				:aria-label="implementationLabel"
+				:title="implementationLabel"
 				:disabled="!curatedEntryAvailable"
 				class="ml-auto p-[3px_10px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-				@click="implementationExplorer.open()"
+				@click="openTool('implementation')"
 			>
 				{{ i18n.t('View implementation') }}
 			</button>
@@ -332,7 +346,7 @@ onUnmounted(() => window.removeEventListener('keydown', onParentKeydown, true))
 				v-if="store.preview.value === null"
 				class="p-[16px] m-0 text-lab-text-muted text-[13px]"
 			>
-				{{ i18n.t('Preview unavailable — there is no valid Preview revision. See the Blueprint tab for diagnostics.') }}
+				{{ i18n.t('Preview unavailable — there is no valid Preview revision. Open the Blueprint tree from Tools for diagnostics.') }}
 			</p>
 		</div>
 	</div>

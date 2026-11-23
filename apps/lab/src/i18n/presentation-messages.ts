@@ -6,6 +6,7 @@ import { translateOnboardingMessage } from './onboarding-messages'
 import { translateQuoteRulesMessage } from './quote-rules-messages'
 import { translateRendererPacksMessage } from './renderer-packs-messages'
 import { translateTripBudgetMessage } from './trip-budget-messages'
+import { translateWorkbenchMessage } from './workbench-messages'
 
 /**
  * #43 audit of non-tutorial Lab-owned chrome. Keep semantic/source payloads out of this table: plugin
@@ -13,7 +14,6 @@ import { translateTripBudgetMessage } from './trip-budget-messages'
  * rendered verbatim by their owning inspectors/renderers.
  */
 const zhTWPresentationMessages: Readonly<Record<string, string>> = {
-	'Author workspace for the current Document: browse Core catalog metadata, edit Structure, or use expert JSON': '目前 Document 的編寫區：瀏覽 Core 的 catalog、編輯結構，或直接用 JSON 編輯',
 	'Matches committed Document': '與已提交 Document 相符',
 	'Source JSON compatibility': 'Source JSON 相容性',
 	'Compatible (Core)': '相容（Core）',
@@ -35,7 +35,6 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Properties': 'Properties',
 	'Methods': 'Methods',
 	'Slots': 'Slots',
-	'Author views': '編寫檢視',
 	'Select an authored widget to see its editable scalar config fields.': '選取 authored widget 以查看可編輯的 scalar config 欄位。',
 	'No existing scalar config fields on this widget.': '這個 widget 沒有現有的 scalar config 欄位。',
 	'Not applied: {reason}': '未套用：{reason}',
@@ -44,9 +43,9 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Enter a valid value of the same scalar type.': '請輸入相同 scalar 型別的有效值。',
 	'Change applied. Use Undo to take it back.': '已套用變更。可用「復原上一步」撤回。',
 	'Open the JSON view': '開啟 JSON 檢視',
-	'The author command could not be applied: {message}': 'Author command 無法套用：{message}',
+	'The author command could not be applied: {message}': '這項變更無法套用：{message}',
 	'This selected value is no longer available in the current Document.': '目前 Document 已找不到這個選取的值。',
-	'The author command is unavailable while another lifecycle command is running.': '其他 lifecycle command 執行期間無法使用 Author command。',
+	'The author command is unavailable while another lifecycle command is running.': '另一項變更正在套用，暫時無法執行這項變更。',
 	'Unresolved widgets are read-only in Structure.': '未解析的 widget 在 Structure 中為唯讀。',
 	'What the applied Source compiled into — declarations, never live values': '已套用 Source 編譯出的結果——這裡只看 declarations，不是 live values',
 	'Live State, Properties, Methods, and Diagnostics of the running widgets': '目前執行中 widgets 的 live State、Properties、Methods 與 Diagnostics',
@@ -110,8 +109,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Raw definition': 'Raw definition',
 	'Diagnostics': 'Diagnostics',
 
-	'Runtime unavailable — there is no valid Preview revision to inspect. Open Blueprint to see current diagnostics, fix the definition in Author and the Preview follows.': 'Runtime 無法使用——目前沒有可檢視的有效 Preview revision。請到 Blueprint 查看目前 diagnostics，在「編寫」中修正定義，Preview 就會跟著更新。',
-	'Preview unavailable — there is no valid Preview revision. See the Blueprint tab for diagnostics.': 'Preview 無法使用——目前沒有有效的 Preview revision。請到 Blueprint 查看 diagnostics。',
+	'Runtime unavailable — there is no valid Preview revision to inspect. Open the Blueprint tree from Tools to see current diagnostics, fix the definition in Edit and the Preview follows.': 'Runtime 無法使用——目前沒有可檢視的有效 Preview revision。請從「工具」打開 Blueprint 樹查看目前 diagnostics，在「編輯」中修正定義，Preview 就會跟著更新。',
+	'Preview unavailable — there is no valid Preview revision. Open the Blueprint tree from Tools for diagnostics.': 'Preview 無法使用——目前沒有有效的 Preview revision。請從「工具」打開 Blueprint 樹查看 diagnostics。',
 	'Preview unavailable': '無法預覽',
 	'Document r{revision}': 'Document r{revision}',
 	'Preview r{revision}': 'Preview r{revision}',
@@ -231,7 +230,6 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 
 	'Inspect': '檢視',
 	'View implementation': '查看實作',
-	'Preview unavailable — the current Blueprint is invalid. See the Blueprint tab for diagnostics.': 'Preview 無法使用——目前 Blueprint 無效。請到 Blueprint 查看 diagnostics。',
 
 	'Focused instance': '聚焦的 instance',
 	'Registered plugins': '已註冊 plugins',
@@ -497,6 +495,9 @@ export function translatePresentationMessage(locale: LabLocale, source: string):
 		const packs = translateRendererPacksMessage(locale, source)
 		if (packs !== undefined)
 			return packs
+		const workbench = translateWorkbenchMessage(locale, source)
+		if (workbench !== undefined)
+			return workbench
 		const explain = translateExplainMessage(locale, source)
 		if (explain !== undefined)
 			return explain

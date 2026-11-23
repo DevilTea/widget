@@ -11,19 +11,14 @@
  */
 
 import type { PreviewFrameConnection, PreviewFrameDriver } from '../preview-host/frame-driver'
-import type { ImplementationExplorerStore } from './use-implementation-explorer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { shallowRef } from 'vue'
 import { getShowcase } from '../showcases/registry'
 import { createLabStore } from './use-lab-store'
 import { createTutorialStore } from './use-tutorial'
 
-function createFakeImplementationExplorer(): ImplementationExplorerStore {
-	return {
-		openRequestTick: shallowRef(0),
-		requestedMode: shallowRef<'focused' | 'catalog'>('focused'),
-		open: () => {},
-	}
+/** The tutorial store opens expert views through this (`createToolOpener()` in the app). */
+function createFakeImplementationExplorer(): () => void {
+	return () => {}
 }
 
 /** A resolvable/rejectable promise whose settlement the test controls explicitly. */
@@ -251,56 +246,61 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 		store.dispose()
 	})
 
-	it('puts the user back on the tool group\'s tab and the Author view they had when the tour ends with Finish or is skipped', async () => {
+	it('puts the user back on the tool group\'s tab and the Edit view they had when the tour ends with Finish or is skipped', async () => {
 		const store = createLabStore(getShowcase('survey')!)
-		// `Workbench.vue` keeps `toolGroupTab` from Dockview; `activeTab` is the Preview, the group the user touched last.
-		store.toolGroupTab.value = 'events'
+		// `Workbench.vue` keeps `toolGroupTab` from Dockview; `activeTab` is the Preview, the group the user touched last. The
+		// tour gives the tab back through `showTab()` requests (each a new object, even for the same tab), which these read.
+		const requests = (): number => store.tabRequest.value?.tick ?? 0
+		const requested = (): string | null => store.tabRequest.value?.tab ?? null
+		store.toolGroupTab.value = 'tools'
 		store.activeTab.value = 'preview'
 		store.authorView.value = 'json'
 		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
 		tutorial.requestStart()
 		await flush()
 		// A step moves the user around.
-		store.activeTab.value = 'author'
+		store.showTab('edit')
 		store.authorView.value = 'structure'
 
 		tutorial.skip()
-		expect(store.activeTab.value)
-			.toBe('events')
+		expect(requested())
+			.toBe('tools')
 		expect(store.authorView.value)
 			.toBe('json')
 
 		// Pausing keeps the tour's place; a later end still restores what the user had before the tour.
-		store.toolGroupTab.value = 'runtime'
+		store.toolGroupTab.value = 'explain'
 		tutorial.requestStart()
 		await flush()
-		store.activeTab.value = 'blueprint'
-		store.toolGroupTab.value = 'blueprint'
+		store.showTab('tools')
+		store.toolGroupTab.value = 'tools'
+		const beforePause = requests()
 		tutorial.pause()
-		expect(store.activeTab.value)
-			.toBe('blueprint')
+		expect(requests())
+			.toBe(beforePause)
 		tutorial.requestResume()
 		tutorial.skip()
-		expect(store.activeTab.value)
-			.toBe('runtime')
+		expect(requested())
+			.toBe('explain')
 
 		// A fresh start records the place again: the user moved since the last tour.
-		store.toolGroupTab.value = 'dependencies'
+		store.toolGroupTab.value = 'tools'
 		tutorial.requestStart()
 		await flush()
-		store.activeTab.value = 'author'
+		store.showTab('edit')
 		tutorial.skip()
-		expect(store.activeTab.value)
-			.toBe('dependencies')
+		expect(requested())
+			.toBe('tools')
 
-		// A non-canonical panel in the tool group (Implementation) records no tab: nothing is activated on the way back.
+		// An expert view the user dragged into the tool group records no tab: nothing is requested on the way back.
 		store.toolGroupTab.value = null
 		tutorial.requestStart()
 		await flush()
-		store.activeTab.value = 'blueprint'
+		store.showTab('explain')
+		const beforeSkip = requests()
 		tutorial.skip()
-		expect(store.activeTab.value)
-			.toBe('blueprint')
+		expect(requests())
+			.toBe(beforeSkip)
 		store.dispose()
 	})
 
@@ -311,7 +311,7 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 		})
 		const unhandled = vi.fn()
 		process.on('unhandledRejection', unhandled)
-		store.toolGroupTab.value = 'events'
+		store.toolGroupTab.value = 'tools'
 		const tutorial = createTutorialStore(store, createFakeImplementationExplorer())
 		tutorial.requestStart()
 		await flush()
@@ -319,11 +319,11 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 		process.off('unhandledRejection', unhandled)
 		expect(tutorial.snapshot.value.status)
 			.toBe('idle')
-		// Nothing to give back: a later skip leaves the user where they are.
-		store.activeTab.value = 'blueprint'
+		// Nothing to give back: a later skip asks for no tab.
+		const before = store.tabRequest.value
 		tutorial.skip()
-		expect(store.activeTab.value)
-			.toBe('blueprint')
+		expect(store.tabRequest.value)
+			.toBe(before)
 		store.dispose()
 	})
 })

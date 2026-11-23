@@ -1,4 +1,4 @@
-import { expect, expectDocumentStatus, expectShowcase, loadPreset, openDeveloperTool, previewFrame, selectShowcase, test } from './fixtures'
+import { expect, expectDocumentStatus, expectShowcase, loadPreset, openDeveloperTool, openEditStructure, previewFrame, selectShowcase, test, toolTab } from './fixtures'
 
 test.describe('Document Tools developer panel (Phase 6)', () => {
 	test('is lazy-added, closable, and reopenable without changing canonical panels', async ({ page }) => {
@@ -6,14 +6,14 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 		page.on('request', request => requestedUrls.push(request.url()))
 		await page.goto('/')
 
-		await expect(page.getByRole('tab', { name: 'Document Tools' }))
+		await expect(toolTab(page, 'document-tools'))
 			.toHaveCount(0)
 		const documentToolsChunk = /\/assets\/DocumentToolsPanel-[^/]+\.js(?:\?.*)?$/
 		expect(requestedUrls.some(url => documentToolsChunk.test(url)))
 			.toBe(false)
 		await openDeveloperTool(page, 'document-tools')
 
-		const toolsTab = page.getByRole('tab', { name: 'Document Tools' })
+		const toolsTab = toolTab(page, 'document-tools')
 		await expect(toolsTab)
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByTestId('document-tools-panel'))
@@ -31,10 +31,10 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 			.toHaveCount(0)
 
 		await openDeveloperTool(page, 'document-tools')
-		await expect(page.getByRole('tab', { name: 'Document Tools' }))
+		await expect(toolTab(page, 'document-tools'))
 			.toHaveAttribute('aria-selected', 'true')
-		for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
-			await expect(page.getByRole('tab', { name }))
+		for (const name of ['Edit', 'Explain', 'Tools', 'Preview']) {
+			await expect(page.getByRole('tab', { name, exact: true }))
 				.toBeVisible()
 		}
 	})
@@ -43,10 +43,7 @@ test.describe('Document Tools developer panel (Phase 6)', () => {
 		await page.goto('/?lab-test&showcase=sandbox')
 		await openDeveloperTool(page, 'document-tools')
 
-		await page.getByRole('tab', { name: 'Author' })
-			.click()
-		await page.getByRole('tab', { name: 'Structure' })
-			.click()
+		await openEditStructure(page)
 		await page.getByRole('button', { name: 'title : Text' })
 			.click()
 		await page.getByLabel('text', { exact: true })

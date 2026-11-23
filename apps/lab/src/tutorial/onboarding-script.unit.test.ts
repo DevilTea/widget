@@ -220,7 +220,7 @@ describe('the whole script on real Runtimes', () => {
 		const actions: TutorialActions = {
 			setFocus: vi.fn(),
 			activateTab: vi.fn(),
-			openImplementation: vi.fn(),
+			openTool: vi.fn(),
 		}
 		let reader = first.reader
 		const settle = (): void => {

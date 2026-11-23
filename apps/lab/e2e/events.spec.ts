@@ -1,11 +1,12 @@
 import type { Locator, Page } from '@playwright/test'
 import { defaultSurveyPreset } from '../src/showcases/survey/presets'
-import { expect, expectPreviewStatus, previewFrame, selectShowcase, setLocale, test } from './fixtures'
+import { expect, expectPreviewStatus, openEdit, openTool, previewFrame, selectShowcase, setLocale, test, toolsMenu, toolTab, workbenchTab } from './fixtures'
 
 /**
  * Issue #230 (audit U09): Events are visible in the Lab. The survey's `submit()` Method emits `submitted` once the
  * answers have no errors, so these specs drive the real Preview: the declared Events in the Catalog and in the
- * Selected widget declaration, and the live Events log fed by the Inspector protocol's `runtime.subscribeEvent`.
+ * Selected widget declaration, and the live Events log fed by the Inspector protocol's `runtime.subscribeEvent`. Since Lab UX
+ * phase 3B the log is an expert view of the Tools menu, and the count of unseen Events is on the Tools tab and in the menu.
  *
  * Nothing waits a fixed time: the log says when it is listening (`events-listening`), and a negative claim (not
  * recorded while hidden, while paused) is made after a positive one on the same Runtime that proves the Event
@@ -26,8 +27,7 @@ async function openLab(page: Page, query = 'lab-test'): Promise<void> {
 }
 
 async function openEvents(page: Page): Promise<Locator> {
-	await eventsTab(page)
-		.click()
+	await openTool(page, 'events')
 	await expect(page.getByTestId('events-listening'))
 		.toHaveText('Listening to 1 declared Event on 1 widget.')
 	return page.getByTestId('events-panel')
@@ -52,9 +52,9 @@ async function submit(page: Page): Promise<void> {
 		.click()
 }
 
-/** The Events tab: its accessible name gains ", N new" while entries arrived since it was last visible. */
-function eventsTab(page: Page): Locator {
-	return page.getByRole('tab', { name: /^Events(, \d+ new)?$/ })
+/** The Tools tab: its accessible name gains ", N new" while Events arrived since the Events log was last visible. */
+function toolsTabOf(page: Page): Locator {
+	return workbenchTab(page, 'tools')
 }
 
 const entries = (page: Page): Locator => page.getByTestId('event-entry')
@@ -68,7 +68,7 @@ async function expectEntries(page: Page, count: number): Promise<void> {
 test.describe('declared Events', () => {
 	test('the Catalog lists the Events each plugin declares, with the plugin\'s description verbatim', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
-		await page.getByRole('tab', { name: 'Catalog' })
+		await page.getByTestId('browse-widget-types')
 			.click()
 		const survey = page.getByTestId('author-catalog-Survey')
 		const events = survey.getByTestId('declared-event')
@@ -86,8 +86,7 @@ test.describe('declared Events', () => {
 
 	test('the Selected widget declaration and Blueprint list them for the widget that declares them', async ({ page }) => {
 		await openLab(page, 'showcase=survey')
-		await page.getByRole('tab', { name: 'Blueprint', exact: true })
-			.click()
+		await openTool(page, 'blueprint')
 		await page.getByRole('button', { name: /open-day : Survey/ })
 			.first()
 			.click()
@@ -97,20 +96,17 @@ test.describe('declared Events', () => {
 			.getByTestId('declared-event'))
 			.toHaveText(`submitted: ${SUBMITTED_DESCRIPTION}`)
 
-		await page.getByRole('tab', { name: 'Selected widget', exact: true })
-			.click()
+		await openTool(page, 'widget')
 		await expect(page.getByTestId('selected-widget-declaration')
 			.getByTestId('declared-event'))
 			.toHaveText(`submitted: ${SUBMITTED_DESCRIPTION}`)
 
 		// A widget whose plugin declares no Events says so.
-		await page.getByRole('tab', { name: 'Blueprint', exact: true })
-			.click()
+		await openTool(page, 'blueprint')
 		await page.getByRole('button', { name: /mode : SingleChoice/ })
 			.first()
 			.click()
-		await page.getByRole('tab', { name: 'Selected widget', exact: true })
-			.click()
+		await openTool(page, 'widget')
 		await expect(page.getByTestId('selected-widget-declaration')
 			.getByTestId('declared-events-none'))
 			.toHaveText('No Events capability.')
@@ -221,13 +217,11 @@ test.describe('events log', () => {
 			.selectOption('')
 
 		// Another widget selected in the Preview: its (empty) Events only.
-		await page.getByRole('tab', { name: 'Blueprint', exact: true })
-			.click()
+		await openTool(page, 'blueprint')
 		await page.getByRole('button', { name: /mode : SingleChoice/ })
 			.first()
 			.click()
-		await eventsTab(page)
-			.click()
+		await openTool(page, 'events')
 		await panel.getByTestId('events-only-selected')
 			.check()
 		await expectEntries(page, 0)
@@ -245,18 +239,19 @@ test.describe('events log', () => {
 		await panel.getByTestId('events-only-selected')
 			.check()
 		await expectEntries(page, 1)
-		await page.getByRole('tab', { name: 'Selected widget', exact: true })
-			.click()
+		await openTool(page, 'widget')
 		await expect(page.getByTestId('selected-widget-declaration')
 			.getByRole('heading', { name: 'open-day : Survey' }))
 			.toBeVisible()
 	})
 
-	test('records while its tab is hidden, counts what arrived on the tab, and has it all when the tab is opened', async ({ page }) => {
+	test('records before the log is ever opened, counts what arrived on the Tools tab and in its menu, and has it all when the log is opened', async ({ page }) => {
 		await openLab(page)
-		// The Events tab was never opened. The panel is mounted and listening all the same (its DOM is not in the page
-		// while hidden, so the tab says whether the log is recording).
-		await expect(eventsTab(page)
+		// The Events log was never opened (Lab UX phase 3B: it is an expert view, opened on request). The log listens all the
+		// same, and the Tools tab, which is always there, says whether it is recording.
+		await expect(toolTab(page, 'events'))
+			.toHaveCount(0)
+		await expect(toolsTabOf(page)
 			.locator('[data-recording]'))
 			.toHaveAttribute('data-recording', 'true')
 		await answerSurvey(page)
@@ -266,31 +261,41 @@ test.describe('events log', () => {
 			.toBeVisible()
 		await expect(page.getByTestId('events-unseen'))
 			.toHaveText('1')
-		await expect(eventsTab(page))
-			.toHaveAccessibleName('Events, 1 new')
-
-		await eventsTab(page)
+		await expect(toolsTabOf(page))
+			.toHaveAccessibleName('Tools, 1 new')
+		// The menu says it next to the Events log entry too.
+		await toolsTabOf(page)
 			.click()
+		await expect(toolsMenu(page)
+			.getByTestId('tools-events-unseen'))
+			.toHaveText('1')
+		await expect(toolsMenu(page)
+			.getByTestId('tools-entry-events'))
+			.toHaveAccessibleName('Events log, 1 new')
+
+		await openTool(page, 'events')
 		await expectEntries(page, 1)
 		await expect(page.getByTestId('events-unseen'))
 			.toHaveCount(0)
-		await expect(eventsTab(page))
-			.toHaveAccessibleName('Events')
+		await expect(toolsMenu(page)
+			.getByTestId('tools-events-unseen'))
+			.toHaveCount(0)
+		await expect(toolsTabOf(page))
+			.toHaveAccessibleName('Tools')
 
-		// Seen while the tab is open: no count.
+		// Seen while the log is open: no count, whatever the tool group shows.
+		await openEdit(page)
 		await submit(page)
 		await expectEntries(page, 2)
 		await expect(page.getByTestId('events-unseen'))
 			.toHaveCount(0)
 
-		// Hidden again: recorded, and counted on the tab; the log was not announced Event by Event.
-		await page.getByRole('tab', { name: 'Author', exact: true })
-			.click()
+		// Hidden again behind another expert view: recorded, and counted on the tab; the log was not announced Event by Event.
+		await openTool(page, 'runtime')
 		await submit(page)
 		await expect(page.getByTestId('events-unseen'))
 			.toHaveText('1')
-		await eventsTab(page)
-			.click()
+		await openTool(page, 'events')
 		await expectEntries(page, 3)
 		await expect(page.getByTestId('events-unseen'))
 			.toHaveCount(0)
@@ -331,10 +336,7 @@ test.describe('events log', () => {
 	test('says when a Preview declares no Events, and listens to the survey after a showcase switch', async ({ page }) => {
 		// The Sandbox (a hidden fixture, opened by URL) declares no Events (it has Methods, whose failures are still recorded); the Examples menu switches to the survey.
 		await page.goto('/?showcase=sandbox')
-		await expect(eventsTab(page))
-			.toBeVisible()
-		await eventsTab(page)
-			.click()
+		await openTool(page, 'events')
 		const panel = page.getByTestId('events-panel')
 		await expect(panel.getByTestId('events-listening'))
 			.toHaveText('The widgets in this preview declare no Events. Failed Method calls are still recorded.')

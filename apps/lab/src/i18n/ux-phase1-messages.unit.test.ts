@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { TOOL_TEXT } from '../lab/tools'
 import { translatePresentationMessage } from './presentation-messages'
 
 /**
@@ -91,8 +92,13 @@ describe('lab UX phase 1 wording', () => {
 		const workbench = readFileSync(join(SRC, 'components/Workbench.vue'), 'utf8')
 		const titles = literalsPassedToT(workbench)
 		expect(titles)
-			.toEqual(expect.arrayContaining(['Author', 'Selected widget', 'Dependencies', 'Events log', 'Implementation', 'Document Tools']))
-		expect(titles.filter(title => zh(title) === title))
+			.toEqual(['Edit', 'Explain', 'Tools'])
+		// The expert views' titles come from `lab/tools.ts` (Lab UX phase 3B); Implementation sets its own, naming its widget.
+		const toolTitles = Object.values(TOOL_TEXT)
+			.flatMap(text => [text.title, text.menuLabel, text.description])
+		expect(toolTitles)
+			.toEqual(expect.arrayContaining(['Blueprint tree', 'Runtime tree', 'Selected widget', 'Dependencies', 'Events log', 'Implementation', 'Document Tools']))
+		expect([...titles, ...toolTitles, 'Implementation — {subject}'].filter(title => zh(title) === title))
 			.toEqual([])
 	})
 })

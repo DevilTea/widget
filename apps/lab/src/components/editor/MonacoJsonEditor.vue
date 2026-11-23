@@ -39,7 +39,7 @@ const i18n = useLabI18n()
 // The command-palette name of the commit action, in the Lab language.
 const commitLabel = computed(() => i18n.t('Apply the JSON now'))
 
-const { revealRange } = useMonacoJsonEditor(container, {
+const { revealRange, highlightRange, hasFocus } = useMonacoJsonEditor(container, {
 	modelValue: modelValueRef,
 	onChange: text => emit('update:modelValue', text),
 	markers: markersRef,
@@ -49,7 +49,7 @@ const { revealRange } = useMonacoJsonEditor(container, {
 	onBlur: () => emit('blur'),
 })
 
-defineExpose({ revealRange })
+defineExpose({ revealRange, highlightRange, hasFocus })
 </script>
 
 <template>
