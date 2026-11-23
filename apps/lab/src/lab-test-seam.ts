@@ -30,6 +30,8 @@ export interface WidgetLabTestSeam {
 	typeJson: (text: string) => void
 	/** The applied Document source, as the Document holds it (read-only: for specs that check what an edit wrote). */
 	getDocumentSourceText: () => string
+	/** The JSON view's text, committed or not (read-only: for specs that check what typing changed). */
+	getJsonText: () => string
 }
 
 declare global {
@@ -64,5 +66,6 @@ export function installLabTestSeam(store: LabStore): void {
 		},
 		typeJson: text => store.editJson(text),
 		getDocumentSourceText: () => store.documentState.value.sourceText,
+		getJsonText: () => store.draftSourceText.value,
 	}
 }

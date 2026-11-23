@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 import type { ToolId } from './fixtures'
-import { chooseTutorialMenuItem, expect, loadPreset, maximizeTools, openDeveloperTool, openEditStructure, openExplain, openTool, previewFrame, setLocale, test, toolsMaximizeButton, toolsMenu, toolTab, workbenchTab } from './fixtures'
+import { chooseTutorialMenuItem, expect, loadPreset, maximizeTools, openDeveloperTool, openEditStructure, openExplain, openTool, previewFrame, setLocale, test, toolsMaximizeButton, toolsMenu, toolTab, waitForLabTestSeam, workbenchTab } from './fixtures'
 
 /**
  * Lab UX phase 3B (design "information architecture"): the tool group is Edit / Explain / Tools. Tools is a menu of the expert
@@ -407,7 +407,7 @@ test.describe('the Catalog slide-over (Browse widget types)', () => {
 })
 
 test.describe('the JSON toggle reveals the selected widget', () => {
-	test('switching Edit to JSON selects and scrolls to the selected widget\'s lines, and leaves focus on the toggle', async ({ page }) => {
+	test('switching Edit to JSON highlights and scrolls to the selected widget\'s lines, selects nothing, and leaves focus on the toggle', async ({ page }) => {
 		await page.setViewportSize({ width: 1280, height: 800 })
 		await openLab(page)
 		await openEditStructure(page)
@@ -419,18 +419,58 @@ test.describe('the JSON toggle reveals the selected widget', () => {
 		const editor = page.getByTestId('json-editor')
 		await expect(editor.locator('.monaco-editor'))
 			.toBeVisible()
-		// Its lines are on screen and highlighted as the selection.
+		// Its lines are on screen and highlighted by a decoration; nothing is selected.
 		await expect(editor.locator('.view-line')
 			.filter({ hasText: '"id": "phone"' }))
 			.toBeVisible()
-		await expect(editor.locator('.selected-text')
+		await expect(editor.locator('.lab-json-highlight')
 			.first())
 			.toBeAttached()
+		await expect(editor.locator('.selected-text'))
+			.toHaveCount(0)
 		await expect(jsonTab)
 			.toBeFocused()
 		// The document starts far above: its first line is scrolled out of view.
 		await expect(editor.locator('.view-line')
 			.filter({ hasText: '"type": "Survey"' }))
+			.toHaveCount(0)
+	})
+
+	test('a key typed after tabbing into the editor inserts one character: the highlighted widget is not replaced', async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 800 })
+		await page.goto('/?showcase=survey&lab-test')
+		await waitForLabTestSeam(page)
+		await openEditStructure(page)
+		await page.getByRole('button', { name: 'phone : ShortAnswer' })
+			.click()
+		await page.getByTestId('author-view-json')
+			.click()
+		const editor = page.getByTestId('json-editor')
+		await expect(editor.locator('.lab-json-highlight')
+			.first())
+			.toBeAttached()
+		const before = await page.evaluate(() => (window as unknown as { __WIDGET_LAB_TEST__: { getJsonText: () => string } }).__WIDGET_LAB_TEST__.getJsonText())
+		// Tab moves on from the toggle to the next controls until the editor has the keyboard (Monaco's editing element).
+		const monaco = editor.locator('.monaco-editor')
+		const editorHasFocus = (): Promise<boolean> => monaco.evaluate(element => element.contains(document.activeElement))
+		for (let press = 0; press < 25 && !(await editorHasFocus()); press++)
+			await page.keyboard.press('Tab')
+		expect(await editorHasFocus())
+			.toBe(true)
+		await page.keyboard.type('x')
+		const after = await page.evaluate(() => (window as unknown as { __WIDGET_LAB_TEST__: { getJsonText: () => string } }).__WIDGET_LAB_TEST__.getJsonText())
+		expect(after.length)
+			.toBe(before.length + 1)
+		// One character went in at the cursor, the start of the widget; every widget is still there, the phone widget whole.
+		const at = [...after].findIndex((character, index) => character !== before[index])
+		expect(after.slice(0, at) + after.slice(at + 1))
+			.toBe(before)
+		for (const id of ['open-day', 'mode', 'guests', 'sessions', 'phone']) {
+			expect(after)
+				.toContain(`"id": "${id}"`)
+		}
+		// The user is editing: the highlight is gone.
+		await expect(editor.locator('.lab-json-highlight'))
 			.toHaveCount(0)
 	})
 
@@ -443,6 +483,8 @@ test.describe('the JSON toggle reveals the selected widget', () => {
 			.filter({ hasText: '"type": "Survey"' }))
 			.toBeVisible()
 		await expect(editor.locator('.selected-text'))
+			.toHaveCount(0)
+		await expect(editor.locator('.lab-json-highlight'))
 			.toHaveCount(0)
 	})
 })

@@ -75,14 +75,16 @@ async function focusProblemsIfRequested(): Promise<void> {
 watch(store.problemsFocusPending, focusProblemsIfRequested)
 
 /**
- * Toggling to JSON (this view mounts then) reveals the selected widget's lines (Lab UX phase 3B): its whole object is selected
- * and scrolled into view, located by its Core source path in the current text. Focus stays on the toggle. Nothing is revealed
- * for the root the focus starts at (only a widget someone chose), or when the text does not have that path (it does not
- * parse, or the widget is not there any more).
+ * The JSON view shows the selected widget's lines (Lab UX phase 3B): when it opens (toggling to JSON mounts it) and when the
+ * user picks another widget while it is open (Inspect in the Preview, the tree of a view). Its whole object is highlighted, the
+ * cursor goes to its start and its first lines are scrolled into view, located by its Core source path in the current text; nothing
+ * is selected (a typed key would replace a selection) and focus stays where it is. Nothing happens for the root the focus starts at
+ * (only a widget someone chose), while the user types in the editor (a commit keeps the same widget focused under a new node, and
+ * the cursor must not jump), or when the text does not have that path (it does not parse, or the widget is not there any more).
  */
 function revealSelectedWidget(): void {
 	const focus = store.documentFocus.value
-	if (!store.documentFocusChosen.value || focus === null)
+	if (!store.documentFocusChosen.value || focus === null || editor.value?.hasFocus() === true)
 		return
 	const path = inspectBlueprint(store.documentState.value.blueprint)
 		.getNode(focus.nodeId)?.sourcePath
@@ -90,8 +92,22 @@ function revealSelectedWidget(): void {
 		return
 	const span = locateJsonValue(store.draftSourceText.value, path)
 	if (span !== null)
-		editor.value?.revealRange(span.start, span.end, { focus: false })
+		editor.value?.highlightRange(span.start, span.end)
 }
+
+/** The chosen widget by identity: a commit that keeps the same widget focused under a new node is not a new choice. */
+const chosenWidget = computed(() => {
+	const focus = store.documentFocus.value
+	if (!store.documentFocusChosen.value || focus === null)
+		return null
+	const node = inspectBlueprint(store.documentState.value.blueprint)
+		.getNode(focus.nodeId)
+	return node === null || !node.resolved ? null : `${node.node.id}\u0000${node.node.type}`
+})
+watch(chosenWidget, (next, previous) => {
+	if (next !== null && next !== previous)
+		revealSelectedWidget()
+})
 
 onMounted(() => {
 	if (store.problemsFocusPending.value)

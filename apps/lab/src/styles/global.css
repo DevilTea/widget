@@ -59,3 +59,11 @@ dialog {
 		overflow-x: hidden;
 	}
 }
+
+/*
+ * The selected widget's lines in the Edit tab's JSON view (Lab UX phase 3B, `highlightRange()` in `use-monaco-editor.ts`): a
+ * decoration, not a selection, so a key typed after tabbing into the editor never replaces the widget.
+ */
+.monaco-editor .lab-json-highlight {
+	background: color-mix(in srgb, var(--lab-color-accent) 14%, transparent);
+}
