@@ -1,6 +1,21 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
 import { expect, loadPreset, openTool, previewFrame, test, toolTab, workbenchTab } from './fixtures'
+
+/**
+ * The text of the editor lines the JSON highlight covers. Monaco draws a whole-line decoration as an element in its overlay layer
+ * at the line's top, apart from the text, so the two are matched by their vertical position.
+ */
+async function highlightedLines(editor: Locator): Promise<string[]> {
+	return editor.evaluate((element) => {
+		const tops = new Set([...element.querySelectorAll<HTMLElement>('.lab-json-highlight')]
+			.map(highlight => Math.round(highlight.getBoundingClientRect().top)))
+		return [...element.querySelectorAll<HTMLElement>('.view-line')]
+			.filter(line => tops.has(Math.round(line.getBoundingClientRect().top)))
+			.map(line => line.textContent!.replace(/\u00A0/g, ' ')
+				.trim())
+	})
+}
 
 /**
  * Issue #25 P2 "Preview -> semantic inspector bridge" (Inspect mode) contract.
@@ -222,7 +237,7 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		expect(await editor.locator('.monaco-editor')
 			.evaluate(element => element.contains(document.activeElement)))
 			.toBe(false)
-		// Another pick moves the highlight.
+		// Another pick moves the highlight: the highlighted lines now include mode's `"id"` line, and no longer phone's.
 		await previewFrame(page)
 			.getByText('How will you join?')
 			.first()
@@ -230,6 +245,11 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await expect(editor.locator('.view-line')
 			.filter({ hasText: '"id": "mode"' }))
 			.toBeVisible()
+		await expect.poll(() => highlightedLines(editor))
+			.toContain('"id": "mode",')
+		expect(await highlightedLines(editor))
+			.not
+			.toContain('"id": "phone",')
 	})
 
 	test('Escape exits Inspect mode: badge disappears and subsequent clicks act normally', async ({ page }) => {

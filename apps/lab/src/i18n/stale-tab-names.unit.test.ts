@@ -9,9 +9,11 @@ import { describe, expect, it } from 'vitest'
  * this reads the string literals of the message tables (en keys and zh-TW values), the tours, the showcases' own messages and the
  * expert views' names, and the literals the components pass to `i18n.t()`.
  *
- * What counts as stale: "Author" as a word (the tab; the lower-case "author command" of Core's vocabulary is not it), "Author >",
- * "<view> tab" for a view that is now an expert view, the old zh-TW tab name 編寫 and "<view> 分頁" for the same views, and "the
- * Runtime panel" (the view is "the Runtime tree" now). Comments are not read; quoted literals only.
+ * What counts as stale: names of tabs that are gone. "Author" as a word (the tab; the lower-case "author command" is not it), the
+ * Blueprint, Runtime, Events, Selected widget and Catalog tabs (the first four are expert views named differently now, the Catalog a
+ * slide-over), the old zh-TW tab name 編寫 and "<view> 分頁" for the same views, and "the Runtime panel" (now "the Runtime tree").
+ * Dependencies, Implementation and Document Tools are still tabs, in the Tools group, so they are not stale. Comments are not read;
+ * quoted literals only.
  */
 const SRC = fileURLToPath(new URL('..', import.meta.url))
 
@@ -51,9 +53,9 @@ function literalsPassedToT(source: string): string[] {
 
 const STALE: readonly RegExp[] = [
 	/\bAuthor\b/,
-	/\b(?:Blueprint|Runtime|Events|Dependencies|Selected widget|Implementation|Document Tools|Catalog) tab\b/,
+	/\b(?:Blueprint|Runtime|Events|Selected widget|Catalog) tab\b/,
 	/編寫/,
-	/(?:Blueprint|Runtime|Events|Dependencies|相依性|選取的 widget) ?分頁/,
+	/(?:Blueprint|Runtime|Events|選取的 widget) ?分頁/,
 	/\bthe Runtime panel\b/,
 	/Runtime 面板/,
 ]
@@ -85,7 +87,7 @@ describe('no visible text names a tab that phase 3B removed', () => {
 	it('catches the names it is meant to catch', () => {
 		expect(staleIn(['Open the Events tab', 'in Author > Structure', '打開 Blueprint 分頁', '編寫', 'the Runtime panel shows', 'Runtime 面板']))
 			.toHaveLength(6)
-		expect(staleIn(['The author command could not be applied', 'Open the Events log', 'Edit > Structure', 'Runtime tree', 'the Runtime shows']))
+		expect(staleIn(['The author command could not be applied', 'Open the Events log', 'Edit > Structure', 'Runtime tree', 'the Runtime shows', 'the Implementation tab', 'the Dependencies tab', '相依性分頁']))
 			.toEqual([])
 	})
 })

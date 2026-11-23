@@ -1678,8 +1678,10 @@ replace what the user is reading, plain language first) where the design left a 
   tool group (that would shrink what the user is editing). The Graph gets a short pane there (the collapsed Survey fits at about 0.37
   at 1440 x 900), so the Tools group has **Maximize / Restore** (above): maximized, the Graph fits at about 1.07, and
   `e2e/graph-readability.spec.ts` reads it maximized with issue #230's thresholds (1440: zoom 0.95, title and id 10.9px; 1280: 0.82,
-  10.5px, 9.8px; the expanded #sessions and #hotel Fits 0.415 and 0.196 as floors, about 0.65 and 0.33 maximized). An earlier version of
-  this phase measured with the divider dragged up and lowered those thresholds; that was undone.
+  10.5px, 9.8px; the expanded #sessions and #hotel Fits, 0.415 and 0.196 in #230's pane, are bands around what was measured maximized,
+  0.65 +/- 0.05 and 0.33 +/- 0.04). An earlier version of this phase measured with the divider dragged up and lowered those thresholds;
+  that was undone. The default half-column pane keeps a floor too (the collapsed Survey's Fit 0.3 or more, measured 0.37), so it does not
+  shrink further unnoticed.
 - *Maximize while a view is opened from elsewhere:* the view joins the maximized Tools group, which stays maximized; a canonical tab asked
   for restores first (above).
 - *The Preview keeps its iframe* through Dockview's `always` renderer, which the split above needs (above).
