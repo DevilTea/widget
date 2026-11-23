@@ -214,14 +214,15 @@ layout** and a Developer submenu (Implementation, Document Tools).
 
 The tool group on the left has three tabs and takes about half the window by default (Lab UX phase 3B):
 
-- **Edit** (the default): the document as **Structure**, or as **JSON** with the in-panel toggle. Switching to JSON selects and scrolls
-  to the lines of the widget you selected. **Browse widget types** opens the Catalog (every widget type with its documentation, config
+- **Edit** (the default): the document as **Structure**, or as **JSON** with the in-panel toggle. The JSON view highlights and scrolls
+  to the lines of the widget you selected (also when you pick another one with Inspect), without selecting them. **Browse widget types** opens the Catalog (every widget type with its documentation, config
   schema and Events, and **Copy catalog JSON**) in a slide-over: Escape or its close button puts you back where you were.
 - **Explain**: what the selected widget is and why it behaves this way.
 - **Tools**: a menu of expert views, each with one line saying what it shows: Blueprint tree, Runtime tree, Events log, Dependency
   graph and Relations, Selected widget, Document Tools and Implementation. Choosing one opens it as its own named, closable tab in a
   **Tools group below the Preview** (the first one splits the Preview's column; closing the last gives it back), and asking again for
-  an open view brings its tab to the front. What you were reading on the left stays where it is.
+  an open view brings its tab to the front. What you were reading on the left stays where it is. **Maximize tools** in the Tools
+  group's header gives it the whole workbench (the Graph needs it to be readable) and **Restore tools** puts everything back.
 
 Inspect in the Preview selects the widget in Structure while Edit is open and opens Explain otherwise; while the Preview shows an
 older version than the document, it opens the Runtime tree instead. "View implementation" (the Preview's, and the Blueprint tree's)

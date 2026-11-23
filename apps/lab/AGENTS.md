@@ -1244,12 +1244,19 @@ dialogs: the page behind is inert (Tab stays in it), focus starts on its close b
 returns to the button that opened it, and it gives way to the narrow-viewport gate. It is a left-edge sheet over the Edit tab, never a
 view that replaces Structure or JSON. Its content is `AuthorCatalogView.vue`, unchanged.
 
-**Toggling to JSON reveals the selected widget** (Lab UX phase 3B): `AuthorJsonView.vue` mounts with the view, and on mount (unless
-it is there to show the problems, `problemsFocusPending`) it locates the chosen widget's Core source path
-(`inspectBlueprint(blueprint).getNode(focus).sourcePath`) in the current editor text (`locateJsonValue()`, `lab/json-locate.ts`,
-exact paths only) and asks Monaco to select that whole object and scroll it near the top (`revealRange(start, end, { focus: false })`):
-keyboard focus stays on the toggle. Nothing is revealed for the root the focus starts at (only a widget someone chose,
-`documentFocusChosen`), for text that does not parse, or for a widget that is not in the text.
+**The JSON view shows the selected widget** (Lab UX phase 3B): when it mounts (toggling to JSON; unless it is there to show the
+problems, `problemsFocusPending`) and whenever the chosen widget changes while it is open (Inspect in the Preview, a view's tree),
+`AuthorJsonView.vue` locates the widget's Core source path (`inspectBlueprint(blueprint).getNode(focus).sourcePath`) in the current
+editor text (`locateJsonValue()`, `lab/json-locate.ts`, exact paths only) and calls `highlightRange()`: a whole-line decoration
+(`lab-json-highlight`, styled in `styles/global.css`), the cursor at the widget's start (`setPosition`) and its first lines scrolled
+near the top. **Nothing is selected and focus does not move**: with a selection, a keyboard user who tabbed into the editor and typed
+one key replaced the whole widget, and leaving the editor committed that (review of phase 3B). The highlight goes when the user edits
+the text or leaves the editor, and the next one replaces it. Nothing happens for the root the focus starts at (only a widget someone
+chose, `documentFocusChosen`), while the editor has focus, for a commit that keeps the same widget focused under a new node (the
+watch is on the widget's id and type, so auto-commits never move the cursor), for text that does not parse, or for a widget that is
+not in the text. `revealRange()` (select, scroll, focus) is left to the Problems list's jumps. Tests: `e2e/workbench-tools.spec.ts`
+(the decoration and no selection; Tab into the editor and one typed key inserts one character), `e2e/inspect.spec.ts` (Edit > JSON
+with Inspect).
 
 `AuthorJsonView.vue` holds the Monaco editor, its toolbar (the commit state and **Format**, which lives
 there since Lab UX phase 3) and the Problems list; its text commits as "Commit lifecycle" says. `Catalog` reads the immutable
@@ -1590,19 +1597,29 @@ subscription is made later), so the store and the screen agree about the open ta
 `Workbench.unit.test.ts` mounts the real Workbench over a saved layout with that event silenced and fails when the write is removed. Saved sizes are proportional on restore, so a layout from a wide window fits a narrow one. Tab titles are
 set when a layout is built or restored and follow a language switch. **Reset layout** (overflow menu; `WorkbenchLayoutStore` is a request
 bridge like Document Tools) clears the saved layout and rebuilds the default, which closes every expert view (Dockview's `clear()` can
-leave the same two columns saved one branch deeper, with the root's orientation kept; a restore reads either). The selected showcase is
-restored separately, by `?showcase=`.
+leave the same two columns saved one branch deeper, with the root's orientation kept; a restore reads either). It leaves a maximized
+Tools group first, and forces a Dockview layout in the next frame: the rebuilt grid has the old size, so Dockview saw no resize and never
+positioned the Preview's overlay, which stayed hidden until the window was resized. The selected showcase is restored separately, by
+`?showcase=`.
 
 **The Preview is rendered with Dockview's `always` renderer** (`renderer: 'always'` when it is added, and set again after a restore): its
 content lives in Dockview's overlay container and is positioned over its group. Splitting the Preview's column for the Tools group moves
 the group's element into a new grid branch; with the default renderer that moved the iframe in the DOM, which reloads it (the Preview
-went blank and lost its Runtime connection). Checked in a real browser: a marker set in the frame's window survives opening a view.
+went blank and lost its Runtime connection). Keeping the overlay in place is Dockview's job, so `e2e/preview-geometry.spec.ts` checks
+after each change (first view, tutorial rail, Maximize and Restore, last view closed, Reset layout) that the iframe lies inside the
+Preview group's content area within 1px, and that a marker set in the frame's window survives (except after Reset layout, which
+rebuilds the panel). The overlay has a z-index of its own, but the Lab's modal dialogs are in the top layer and still cover it:
+`e2e/modal-guard.spec.ts` pins, for the Catalog and the draft guard, that the top document hits the dialog at the Preview's centre and a
+click there reaches nothing in the frame (a review read the Catalog screenshot as the Preview above the backdrop; its pixels were
+dimmed like the rest, the Preview's high-contrast content made it look otherwise). The menus, the status popover and tooltips open
+above it too (checked by hand with `elementFromPoint`).
 
 **The Tools tab and the Tools group.** The Tools tab (`ToolsPanel.vue`, canonical panel `tools`) is a list of the expert views
 (`lab/tools.ts`: Blueprint tree, Runtime tree, Events log, Dependency graph and Relations, Selected widget, Document Tools,
 Implementation), each a button with its name and a one-line description (`aria-describedby`); the list is named "Expert views", Tab /
-Enter / Space operate it and the arrow keys, Home and End move between the entries. An open view is marked "Open" (`data-open`, also in its
-description); the Events log entry carries the unseen-Events count. Choosing one calls `useOpenTool()`. `Workbench.vue`'s
+Enter / Space operate it and the arrow keys, Home and End move between the entries. An open view is marked "(open)" (`data-open`, also in
+its description); the Events log entry carries the unseen-Events count, and its accessible name is then one text, "Events log, 1 new",
+like the Tools tab's. Choosing one calls `useOpenTool()`. `Workbench.vue`'s
 `openToolPanel()` then:
 - focuses the view's tab when the view is open (`setActive()`), so asking again never adds a second tab;
 - otherwise adds it `within` the **Tools group**: a group that holds an expert view and none of the canonical panels;
@@ -1619,8 +1636,29 @@ menu which are open. A view is mounted only while it is open (it used to be moun
 Runtime snapshot and the Events log are shared per store, so nothing is lost by that. Tab titles come from `lab/tools.ts` and follow a
 language switch; **Implementation sets its own title** from what it shows ("Implementation — sessions (MultipleChoice)", the plugin type
 in the Registered plugins mode, plain "Implementation" with nothing to show), through its panel API, so it follows the selection.
-`e2e/workbench-tools.spec.ts` pins the three tool tabs, every entry, re-open focus, the group's place, the keyboard, the Catalog
-slide-over, the JSON reveal, the version reset, 1280 with the rail and zh-TW.
+`e2e/workbench-tools.spec.ts` pins the three tool tabs, every entry, re-open focus, the group's place, the keyboard, Maximize, the
+Catalog slide-over, the JSON reveal, the version reset, 1280 with the rail and zh-TW.
+
+**Maximize / Restore.** The Tools group's right header action (`ToolsGroupActions.vue`, Dockview's `rightHeaderActionsComponent`, which
+draws nothing on the other groups) maximizes the group over the workbench with Dockview's own group maximize (`group.api.maximize()` /
+`exitMaximized()`), so a view that needs room gets it without the user dragging dividers; the Graph above all (at the default half of the
+column it fits at about 0.37 at 1440 x 900, maximized at about 1.07). The button is named by what a press does ("Maximize tools" /
+"Restore tools", 放大工具區 / 還原工具區), so it has no `aria-pressed` (a pressed state would contradict a label that changes);
+`data-maximized` says the state. Enter and Space work and keyboard focus stays on it across the toggle. **Escape is not bound**: Dockview
+binds none for maximize (its only Escape handling is its own context menus), and Escape already belongs to the Catalog dialog, the menus
+and Monaco. While maximized the Edit/Explain group and the Preview get no room (the Preview's iframe is hidden with its group, not
+reloaded). The maximized state is never saved (`saveLayout()` leaves `grid.maximizedNode` out), like the Tools group itself. It ends:
+- with Restore;
+- when the last view is closed (Dockview leaves the maximized group when it goes; `Workbench.vue` also makes sure no maximized state
+  outlives the last view), so the workbench is never blank;
+- on Reset layout (left before the rebuild);
+- when a canonical tab is asked for: Show problems, a tour step (`watchTabActivation` restores before it activates, so the tab is not
+  activated behind the maximized group; Dockview does the same for a panel activated in another group).
+
+A view opened while maximized (the header's Developer menu, a tour link) joins the maximized Tools group, which stays maximized: the user
+chose to work with the tools. Explain's "Open dependency graph" and the Preview's "View implementation" cannot be pressed then, their
+groups are hidden. `e2e/workbench-tools.spec.ts` ("maximizing the Tools group") covers all of it, and `e2e/graph-readability.spec.ts`
+reads the Graph maximized, with issue #230's thresholds.
 
 Everything that used to switch the tool group to an expert tab now opens or focuses its view in the Tools group: Inspect while diverged
 (the Runtime tree), Explain's "Open dependency graph" (`useDependenciesView().openGraph()` switches the view to Graph and opens
@@ -1631,11 +1669,13 @@ the tooltip: "View implementation of sessions (MultipleChoice)"), the overflow m
 **Decisions made in phase 3B (recorded here, not in the design).** Each serves the design's principles (progressive disclosure, never
 replace what the user is reading, plain language first) where the design left a choice open:
 - *Where the Tools group goes:* below the Preview, half of its column (above). Not to its right (three narrow columns) and not under the
-  tool group (that would shrink what the user is editing). **Known cost:** the Graph gets a short pane. The collapsed Survey fits at about
-  0.37 at 1440 x 900 (about 0.95 while Dependencies was a tab of the full-height tool group), so card text is small and the focus tags
-  often find no room until the user drags the divider up (at the Preview's minimum the Fit is about 0.84). `e2e/graph-readability.spec.ts`
-  measures the Graph's drawing with the Tools group given the column for that reason. A follow-up could open the Dependencies view with
-  more height or add a maximize action to the Tools group; neither is in this phase.
+  tool group (that would shrink what the user is editing). The Graph gets a short pane there (the collapsed Survey fits at about 0.37
+  at 1440 x 900), so the Tools group has **Maximize / Restore** (above): maximized, the Graph fits at about 1.07, and
+  `e2e/graph-readability.spec.ts` reads it maximized with issue #230's thresholds (1440: zoom 0.95, title and id 10.9px; 1280: 0.82,
+  10.5px, 9.8px; the expanded #sessions and #hotel Fits 0.415 and 0.196 as floors, about 0.65 and 0.33 maximized). An earlier version of
+  this phase measured with the divider dragged up and lowered those thresholds; that was undone.
+- *Maximize while a view is opened from elsewhere:* the view joins the maximized Tools group, which stays maximized; a canonical tab asked
+  for restores first (above).
 - *The Preview keeps its iframe* through Dockview's `always` renderer, which the split above needs (above).
 - *Linked Inspect* stays in Edit while Edit is showing (Structure selects the widget), and opens Explain otherwise; Selected widget is no
   longer a tab it can open. Diverged, it opens the Runtime tree beside the Preview, as the brief asks.
@@ -1869,7 +1909,7 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
   cards have a 2px accent outline. Graph **edges** are one Tab stop walked with the arrow keys, with an accent band as
   the focus indicator (see "Dependencies inspector"); Relations remains the dense keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
 - **Language.** Navigation names are Taiwan Chinese: Edit is 編輯 (Author was 編寫 until Lab UX phase 3B; the tab edits, so it says so),
-  Explain 說明, Tools 工具, Dependencies 相依性, Relations 關聯, Graph 關係圖, Structure 結構, Browse widget types 瀏覽 widget 類型, and the expert
+  Explain 說明, Tools 工具, Dependencies 相依性, Relations 關聯, Graph 關係圖, Structure 結構, Browse widget types 瀏覽 widget 類型, Maximize tools / Restore tools 放大工具區 / 還原工具區 (還原 here is a size, not a discard), and the expert
   views Blueprint 樹 and Runtime 樹 (tab titles follow a language switch; `i18n/workbench-messages.ts`). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source), and so do
   `JSON` and the product name. Since Lab UX phase 1 every tab title is translated: a name that is navigation around a Widget word mixes the two, as 選取的 widget
   already did: the Events log is "Events 紀錄" (its own message, `Events log`, so the Catalog's bare "Events" label stays), Document Tools "Document 工具", and
@@ -1946,7 +1986,9 @@ clicks, so a future header change touches one file. They reach the workbench the
 `openEdit`, `openEditStructure`, `openAuthorJson` (Edit > JSON with Monaco loaded), `openExplain`, `openTool(page, id)` (the Tools menu
 entry, then waits until the view's tab is selected and focused; it leaves the Tools tab showing, as a click does), and the locators
 `workbenchTab(page, 'edit' | 'explain' | 'tools')`, `toolTab(page, id)` and `toolPanel(page, id)` (scope a locator to a view: the Edit tab
-beside the Tools group lists the same widgets in its Structure tree), all language-independent. JSON edits go through the `?lab-test` seam helpers `editJson` (type the text and leave
+beside the Tools group lists the same widgets in its Structure tree), `toolsMaximizeButton(page)` and `maximizeTools(page)`, all
+language-independent. `i18n/stale-tab-names.unit.test.ts` fails when a message table, a tour, a showcase's messages or a literal passed
+to `i18n.t()` names a tab phase 3B removed ("Author", "<view> tab", 編寫, "<view> 分頁", "the Runtime panel"). JSON edits go through the `?lab-test` seam helpers `editJson` (type the text and leave
 the editor: committed at once when it parses) and `typeJson` (stay: committed after the pause); `e2e/json-commit.spec.ts` types into the
 real editor for the timing itself (pause, blur, coalescing). Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
 Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a
