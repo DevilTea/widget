@@ -24,6 +24,7 @@ catalog:
   '@valibot/to-json-schema': ^1.8.0
   '@vitest/coverage-v8': ^4.1.9
   '@vue-flow/core': 1.48.2
+  '@vue-flow/minimap': 1.5.4
   '@vue/test-utils': ^2.4.11
   alien-signals: 3.2.1
   bumpp: 11.1.0

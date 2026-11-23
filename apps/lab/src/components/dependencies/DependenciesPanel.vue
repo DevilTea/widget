@@ -15,7 +15,7 @@ import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { DependenciesView } from '../../composables/use-dependencies-view'
 import type { GraphVertexKind } from '../../graph/types'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
-import { computed, nextTick, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, useTemplateRef, watch } from 'vue'
 import { useDependenciesView } from '../../composables/use-dependencies-view'
 import { useDependencyGraph } from '../../composables/use-dependency-graph'
 import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selection'
@@ -32,7 +32,7 @@ import RelationsView from './relations/RelationsView.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
-const { semanticGraph, layoutState, flow, layoutVersion } = useDependencyGraph()
+const { semanticGraph, layoutState, flow, layoutVersion, frameClusterId } = useDependencyGraph()
 
 // Panel-local edge selection for Graph view
 const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdgeSelection(store)
@@ -159,6 +159,42 @@ watch(layoutVersion, () => {
 watch(() => layoutState.value.status, (status) => {
 	if (status === 'error')
 		pendingToggleFocus = null
+})
+
+/**
+ * The Graph key folds away in a short pane. The key is a row above the canvas that wraps to two lines at the width of the default
+ * Tools pane, where it took about 50 of the 300px the Graph has. While the view area (key plus canvas) is shorter than
+ * `KEY_FOLD_BELOW_PX` it starts folded; the Graph key button shows it, and a press is kept as the person's choice for this panel.
+ * The view area is measured whichever view is showing, so the key is usually decided before the Graph is first drawn; a fold in the
+ * same frame as the first fit is laid out before it, because `GraphCanvas.vue` waits a frame before its automatic fit. A fold or
+ * unfold after the fit (a press of the button) does not refit: Fit graph does.
+ */
+const KEY_FOLD_BELOW_PX = 360
+const viewArea = useTemplateRef<HTMLElement>('viewArea')
+const viewAreaHeight = ref(0)
+const keyChoice = ref<boolean | null>(null)
+const keyShown = computed(() => keyChoice.value ?? !(viewAreaHeight.value > 0 && viewAreaHeight.value < KEY_FOLD_BELOW_PX))
+const graphKeyId = useId()
+let viewAreaObserver: ResizeObserver | null = null
+
+function measureViewArea(): void {
+	const height = viewArea.value?.getBoundingClientRect().height ?? 0
+	// A hidden Dockview tab measures 0: keep the last real height.
+	if (height > 0)
+		viewAreaHeight.value = height
+}
+
+onMounted(() => {
+	measureViewArea()
+	if (viewArea.value !== null) {
+		viewAreaObserver = new ResizeObserver(measureViewArea)
+		viewAreaObserver.observe(viewArea.value)
+	}
+})
+
+onBeforeUnmount(() => {
+	viewAreaObserver?.disconnect()
+	viewAreaObserver = null
 })
 
 function onEdgeClick(edgeId: string): void {
@@ -291,6 +327,20 @@ const statusLabel = computed(() => {
 					{{ i18n.t('Collapse all') }}
 				</button>
 				<GraphLegend />
+				<!-- "Graph key", not "Key": next to Legend a bare "Key" read as the same thing. Expanded, it is drawn pressed (accent). -->
+				<button
+					type="button"
+					data-testid="graph-key-toggle"
+					:aria-expanded="keyShown"
+					:aria-controls="graphKeyId"
+					class="p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border cursor-pointer"
+					:class="keyShown
+						? 'border-lab-accent bg-[color-mix(in_srgb,var(--lab-color-accent)_14%,var(--lab-color-surface))] text-lab-text font-semibold'
+						: 'border-lab-border bg-lab-surface-alt text-lab-text'"
+					@click="keyChoice = !keyShown"
+				>
+					{{ i18n.t('Graph key') }}
+				</button>
 				<span
 					v-if="statusLabel"
 					class="ml-auto"
@@ -299,7 +349,10 @@ const statusLabel = computed(() => {
 		</div>
 
 		<!-- Main view area (v-show preserves Graph DOM state & zoom/pan across view switching) -->
-		<div class="flex-auto min-h-0 relative flex flex-col">
+		<div
+			ref="viewArea"
+			class="flex-auto min-h-0 relative flex flex-col"
+		>
 			<!-- Graph View -->
 			<div
 				v-show="activeView === 'graph'"
@@ -310,7 +363,10 @@ const statusLabel = computed(() => {
 				tabindex="0"
 				class="dependencies-graph-view flex-auto min-h-0 relative flex flex-col"
 			>
-				<GraphKey />
+				<GraphKey
+					v-show="keyShown"
+					:id="graphKeyId"
+				/>
 				<div class="flex-auto min-h-0 relative">
 					<GraphCanvas
 						v-if="flow !== null"
@@ -318,6 +374,7 @@ const statusLabel = computed(() => {
 						:nodes="flow.nodes"
 						:edges="flow.edges"
 						:layoutVersion="layoutVersion"
+						:frameClusterId="frameClusterId"
 						@nodeClick="onNodeClick"
 						@edgeClick="onEdgeClick"
 						@edgeClear="setSelectedEdgeData(null)"
@@ -345,7 +402,7 @@ const statusLabel = computed(() => {
 				role="tabpanel"
 				aria-labelledby="dependencies-view-tab-relations"
 				tabindex="0"
-				class="dependencies-relations-view flex-auto min-h-0 relative flex flex-col"
+				class="dependencies-relations-view flex-auto min-h-0 relative flex flex-col overflow-hidden"
 			>
 				<RelationsView
 					:model="relationsModel"

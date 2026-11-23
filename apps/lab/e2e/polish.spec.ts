@@ -40,10 +40,16 @@ function lazyFrameChunks(): Set<string> {
 }
 
 test.describe('Graph readability (U11)', () => {
-	test('explains W, E and the line styles in a key that is always visible, without the Legend', async ({ page }) => {
+	// The key is a row above the canvas, shown whenever there is room for it; in the default Tools pane (shorter than 360px) it starts
+	// folded behind the Graph key button so the canvas keeps its height, and one press shows it.
+	test('explains W, E and the line styles in a key above the canvas, without the Legend', async ({ page }) => {
 		await page.goto('/')
 		await openDependenciesGraph(page)
 		const key = page.getByTestId('graph-key')
+		const toggle = page.getByRole('button', { name: 'Graph key', exact: true })
+		await expect(toggle)
+			.toHaveAttribute('aria-expanded', 'false')
+		await toggle.click()
 		await expect(key)
 			.toBeVisible()
 		await expect(key)
@@ -504,6 +510,10 @@ test.describe('the Lab language in the chrome (U21)', () => {
 			.toBeVisible()
 		await views.getByRole('tab', { name: '關係圖' })
 			.click()
+		await page.getByRole('button', { name: '標記說明', exact: true })
+			.click()
+		await expect(page.getByTestId('graph-key'))
+			.toBeVisible()
 		await expect(page.getByTestId('graph-key'))
 			.toContainText('寫入 State')
 		await expect(page.getByTestId('graph-key'))

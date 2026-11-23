@@ -13,12 +13,14 @@
 import type { Ref } from 'vue'
 import type { LayoutSessionState } from '../graph/layout-session'
 import type { SemanticGraph } from '../graph/types'
+import type { LayoutGeneration } from '../graph/viewport-plan'
 import type { GraphFlowEdge, GraphFlowNode } from '../graph/vue-flow'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { computed, onUnmounted, shallowRef, watch } from 'vue'
 import { layoutGraph } from '../graph/layout-client'
 import { createLayoutSession } from '../graph/layout-session'
 import { projectSemanticGraph } from '../graph/projection'
+import { clusterToFrame } from '../graph/viewport-plan'
 import { toVueFlow } from '../graph/vue-flow'
 import { useLabI18n } from './use-lab-i18n'
 import { useLabStore } from './use-lab-store'
@@ -29,6 +31,11 @@ export interface DependencyGraphView {
 	readonly layoutState: Readonly<Ref<LayoutSessionState>>
 	readonly flow: Readonly<Ref<{ nodes: GraphFlowNode[], edges: GraphFlowEdge[] } | null>>
 	readonly layoutVersion: Readonly<Ref<number>>
+	/**
+	 * The widget the current layout generation should frame at a readable zoom (it was just expanded), or null to fit the whole
+	 * layout (`graph/viewport-plan.ts` `clusterToFrame()`). Set together with `layoutVersion`.
+	 */
+	readonly frameClusterId: Readonly<Ref<string | null>>
 }
 
 export function useDependencyGraph(): DependencyGraphView {
@@ -38,10 +45,18 @@ export function useDependencyGraph(): DependencyGraphView {
 
 	const tick = shallowRef(0)
 	const layoutVersion = shallowRef(0)
+	const frameClusterId = shallowRef<string | null>(null)
+	let previousGeneration: LayoutGeneration<SemanticGraph> | null = null
 	const unsubscribeSession = session.subscribe(() => {
 		tick.value++
-		if (session.getState().status === 'ready')
+		const state = session.getState()
+		if (state.status === 'ready') {
+			const [expandedClusterId = null] = state.options?.expandedClusterIds ?? []
+			const generation = { graph: state.graph, expandedClusterId }
+			frameClusterId.value = clusterToFrame(previousGeneration, generation)
+			previousGeneration = generation
 			layoutVersion.value++
+		}
 	})
 
 	const semanticGraph = computed(() => {
@@ -83,5 +98,5 @@ export function useDependencyGraph(): DependencyGraphView {
 		session.dispose()
 	})
 
-	return { semanticGraph, layoutState, flow, layoutVersion }
+	return { semanticGraph, layoutState, flow, layoutVersion, frameClusterId }
 }

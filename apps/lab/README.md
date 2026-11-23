@@ -18,7 +18,7 @@ persistence/editor-domain state, sandbox fixtures vs. showcases).
   dependency (local `tm-themes`/`tm-grammars` assets), isolated behind `use-monaco-editor.ts` /
   `MonacoJsonEditor.vue`.
 - **`dockview-vue`** for the workbench layout (tabs/resize/docking) only — never the semantic model.
-- **`@vue-flow/core` + `elkjs`** (both pinned exact versions) for the readonly Dependency Graph panel —
+- **`@vue-flow/core` (with `@vue-flow/minimap`) + `elkjs`** (all pinned exact versions) for the readonly Dependency Graph panel —
   Vue Flow is viewer-only (pan/zoom/fit/readonly selection, no editing), ELK Layered runs the automatic
   compound layout inside a persistent Vite module Worker (`src/graph/layout.worker.ts`). See "Dependency
   Graph" below and AGENTS.md's worker-boundary section.
@@ -210,7 +210,7 @@ layout** and a Developer submenu (Implementation, Document Tools).
   are typed by what they hold and anything else is edited as JSON.
 - Problems lists the several diagnostics Core reports for one evaluation cycle as one entry that expands to Core's own diagnostics.
 - If the Preview frame cannot load, the Preview pane says so with the cause and a **Try again** button, and the header chip reads "Preview unavailable".
-- Graph: an always-visible key explains the badges, the line styles and the direction of an edge, edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph. Cards are spread out, edges are Bezier curves that pass between the cards, and every edge ends in an arrowhead on the member it depends on (`A → B` means A depends on B: the Relations view lists B under "Depends on" for A and A under "Used by" for B). While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it), every other edge fades, and a tag with no room is left out (Relations has the full list).
+- Graph: a key above the canvas explains the badges, the line styles and the direction of an edge (in a short pane it starts folded; the Graph key button shows it), edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph. Cards are spread out, edges are Bezier curves that pass between the cards, and every edge ends in an arrowhead on the member it depends on (`A → B` means A depends on B: the Relations view lists B under "Depends on" for A and A under "Used by" for B). While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it), every other edge fades, and a tag with no room is left out (Relations has the full list). Expanding a widget zooms to where its member text is readable (11px) and shows the widget from its header; Fit graph shows the whole layout again. While part of the graph is out of view, a minimap in the bottom right corner shows where the view is (it steps aside for a tag under it and in a very small canvas): drag it to pan, or click a spot to go there.
 
 ## Layout: Edit, Explain and Tools, the expert views and the tutorial rail
 
