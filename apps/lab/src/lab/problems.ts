@@ -10,13 +10,19 @@
  * node's absolute source path, so the range is `getSourcePath(node)` plus the diagnostic's own relative
  * part, resolved against the JSON text by `json-locate.ts`. A diagnostic with no resolvable range falls back
  * to the nearest existing ancestor in the text.
+ *
+ * One refinement: a dependency diagnostic whose target id the owner widget's config writes in a value its schema marks as a
+ * widget reference is located at that value (every such value, when there are several), not at the widget
+ * (`reference-locations.ts`). The schema is the showcase's generated config schema, so `collectProblems()` takes the map.
  */
 
 import type { BlueprintDiagnostic, BlueprintDiagnosticLocation, WidgetSystemBlueprint } from '@deviltea/widget-core'
 import type { BlueprintInspection, InspectionNodeId } from '@deviltea/widget-core/inspection'
+import type { JsonSchema } from './config-schema'
 import type { JsonPath, JsonPathSegment, JsonSpan } from './json-locate'
 import type { LabJsonBlock } from './types'
 import { endOfLine, jsonSyntaxErrorSpan, locateJsonMember, locateJsonPath } from './json-locate'
+import { referenceConfigPaths, schemaWidgetRefs } from './reference-locations'
 
 export interface LabProblem {
 	/** Stable within one list: the position in `collectProblems()`'s result. */
@@ -38,8 +44,16 @@ export interface LabProblem {
 	 * path runs through `<node>.config`; else `null` (a syntax error, a source-level diagnostic, a widget-level one such as a
 	 * dependency or structure diagnostic, which Core locates at the widget or a member, not at a field). Structure shows a
 	 * problem with a `configPath` at that field, and one with only a `nodeId` at the widget's header (Lab UX phase 2).
+	 * A dependency diagnostic whose target id is written in a widget reference of the config has the reference's path here
+	 * (`reference-locations.ts`).
 	 */
 	readonly configPath: JsonPath | null
+	/**
+	 * The problem's other locations, after `sourcePath` / `configPath`: only a dependency diagnostic whose target id the config
+	 * writes in more than one widget reference has any (each value is wrong). Absent or empty for every other problem. Each one is
+	 * a squiggle and is shown at its field in Structure; the Problems row still jumps to the first.
+	 */
+	readonly moreLocations?: readonly LabProblemLocation[]
 	/** `true` when the range should prefer the widget's `id`/`type` member over its whole object. */
 	readonly widgetLevel: boolean
 	/** Syntax problems only: the text that failed to parse, so the offset in the message maps onto it. */
@@ -50,6 +64,11 @@ export interface LabProblem {
 	 * `id.member` labels, in Core's member order. Presentation only: the row's own code and message stay Core's.
 	 */
 	readonly cycle: LabProblemCycle | null
+}
+
+export interface LabProblemLocation {
+	readonly sourcePath: JsonPath
+	readonly configPath: JsonPath
 }
 
 export interface LabProblemCycle {
@@ -127,10 +146,53 @@ function isWidgetLevel(diagnostic: BlueprintDiagnostic): boolean {
 	return location.type !== 'slot'
 }
 
+/**
+ * The plugin type of the widget a dependency diagnostic's target id names: Core lists the target as a `related` widget
+ * location (`missing-dependency-capability`, `missing-dependency-member`); `null` when it does not.
+ */
+function targetTypeOf(diagnostic: BlueprintDiagnostic): string | null {
+	if (!('dependency' in diagnostic) || diagnostic.dependency.target.type !== 'widget' || !('related' in diagnostic) || diagnostic.related === undefined)
+		return null
+	const widgetId = diagnostic.dependency.target.widgetId
+	for (const related of diagnostic.related) {
+		if (related.type === 'widget' && related.node.resolved && related.node.id === widgetId)
+			return related.node.type
+	}
+	return null
+}
+
+/**
+ * The config paths of a dependency diagnostic's broken widget reference in its owner widget's authored config (`source.config`,
+ * the committed Document's fragment), read with the owner plugin's config schema; `null` when it stays at the widget.
+ */
+function referenceLocations(
+	blueprint: WidgetSystemBlueprint,
+	diagnostic: BlueprintDiagnostic,
+	configSchemas: Readonly<Record<string, JsonSchema>>,
+): readonly LabProblemLocation[] | null {
+	const location = diagnostic.location
+	if (location.type === 'source' || !('dependency' in diagnostic) || !location.node.resolved)
+		return null
+	const owner = location.node
+	const schema = Object.hasOwn(configSchemas, owner.type) ? configSchemas[owner.type]! : null
+	const nodePath = blueprint.getSourcePath(owner)
+	if (schema === null || nodePath === null)
+		return null
+	const source: unknown = owner.source
+	const rawConfig = typeof source === 'object' && source !== null && !Array.isArray(source) ? (source as { readonly config?: unknown }).config : undefined
+	const paths = referenceConfigPaths({ code: diagnostic.code, dependency: diagnostic.dependency, targetType: targetTypeOf(diagnostic) }, rawConfig, schemaWidgetRefs(schema, rawConfig))
+	return paths === null ? null : paths.map(configPath => ({ sourcePath: [...nodePath, 'config', ...configPath], configPath }))
+}
+
+/**
+ * `configSchemas` is the showcase's config JSON Schema map (`ShowcaseEntry.configSchemas`); without one, no dependency
+ * diagnostic is located inside a config.
+ */
 export function collectProblems(
 	blueprint: WidgetSystemBlueprint,
 	inspection: BlueprintInspection,
 	jsonBlock: LabJsonBlock | null,
+	configSchemas: Readonly<Record<string, JsonSchema>> = {},
 ): readonly LabProblem[] {
 	const problems: LabProblem[] = []
 	if (jsonBlock?.kind === 'commit') {
@@ -179,6 +241,26 @@ export function collectProblems(
 				cycles.set(diagnostic.related, cycle)
 			}
 		}
+		const nodeId = location.type === 'source' ? null : inspection.getNodeId(location.node)
+		const references = referenceLocations(blueprint, diagnostic, configSchemas)
+		if (references !== null) {
+			const [first, ...more] = references
+			problems.push({
+				key: `diagnostic-${index}`,
+				kind: 'diagnostic',
+				code: diagnostic.code,
+				message: diagnostic.message,
+				locationLabel: describeLocation(location, inspection),
+				nodeId,
+				sourcePath: first!.sourcePath,
+				configPath: first!.configPath,
+				moreLocations: more,
+				widgetLevel: false,
+				syntaxSourceText: null,
+				cycle,
+			})
+			return
+		}
 		const sourcePath = diagnosticSourcePath(blueprint, diagnostic)
 		problems.push({
 			key: `diagnostic-${index}`,
@@ -186,7 +268,7 @@ export function collectProblems(
 			code: diagnostic.code,
 			message: diagnostic.message,
 			locationLabel: describeLocation(location, inspection),
-			nodeId: location.type === 'source' ? null : inspection.getNodeId(location.node),
+			nodeId,
 			sourcePath,
 			configPath: location.type === 'source' ? null : configRelativePath(sourcePath, blueprint.getSourcePath(location.node)),
 			widgetLevel: isWidgetLevel(diagnostic),
@@ -239,11 +321,18 @@ export function placeStructureProblems(problems: readonly LabProblem[], selected
  * Whether the config field at `path` shows `problem`: the problem's `configPath` is that field, or lies under it and no
  * field below shows it — `childKeys` are the keys (or indices) of the fields rendered under this one, `null` for a leaf (a
  * switch, a list, a text, number or JSON box). So a problem inside a value edited as JSON shows at that box, and one about
- * a key that is not there (a required key that is missing) shows at its object.
+ * a key that is not there (a required key that is missing) shows at its object. A problem with several locations
+ * (`moreLocations`) is claimed by the field of each.
  */
 export function claimsFieldProblem(path: readonly JsonPathSegment[], childKeys: readonly JsonPathSegment[] | null, problem: LabProblem): boolean {
-	const target = problem.configPath
-	if (target === null || target.length < path.length)
+	if (problem.configPath === null)
+		return false
+	return [problem.configPath, ...(problem.moreLocations ?? []).map(location => location.configPath)]
+		.some(target => claimsConfigPath(path, childKeys, target))
+}
+
+function claimsConfigPath(path: readonly JsonPathSegment[], childKeys: readonly JsonPathSegment[] | null, target: JsonPath): boolean {
+	if (target.length < path.length)
 		return false
 	if (path.some((segment, index) => String(target[index]) !== String(segment)))
 		return false
@@ -294,7 +383,69 @@ export function groupProblems(problems: readonly LabProblem[]): readonly LabProb
 export function problemSpan(problem: LabProblem, text: string): JsonSpan | null {
 	if (problem.kind === 'syntax')
 		return jsonSyntaxErrorSpan(problem.message, problem.syntaxSourceText ?? text)
-	const path = problem.sourcePath ?? []
+	return pathSpan(problem, problem.sourcePath ?? [], text)
+}
+
+/**
+ * Every text range a problem points at inside `text`: `problemSpan()`'s, then one per `moreLocations` entry, located the same
+ * way (each is a squiggle). Empty when the text does not parse.
+ */
+export function problemSpans(problem: LabProblem, text: string): readonly JsonSpan[] {
+	const first = problemSpan(problem, text)
+	if (first === null)
+		return []
+	const more = (problem.moreLocations ?? []).flatMap((location) => {
+		const span = pathSpan(problem, location.sourcePath, text)
+		return span === null ? [] : [span]
+	})
+	return [first, ...more]
+}
+
+/** One editor squiggle: a range of the text with the code and message its hover shows. */
+export interface ProblemMarker {
+	readonly start: number
+	readonly end: number
+	readonly code: string | null
+	readonly message: string
+}
+
+/**
+ * The squiggles for `problems` over `text`: one per location of each problem (`problemSpans()`), with the same range, code and
+ * message drawn once. Two diagnostics of one widget that name the same missing widget (one per member that reads it) are located
+ * at the same values (`reference-locations.ts` cannot tell which value a member read), so each value gets one squiggle, not one per
+ * diagnostic; the Problems list keeps both rows.
+ */
+export function problemMarkers(problems: readonly LabProblem[], text: string): readonly ProblemMarker[] {
+	const seen = new Set<string>()
+	const markers: ProblemMarker[] = []
+	for (const problem of problems) {
+		for (const span of problemSpans(problem, text)) {
+			const key = JSON.stringify([span.start, span.end, problem.code, problem.message])
+			if (seen.has(key))
+				continue
+			seen.add(key)
+			markers.push({ start: span.start, end: span.end, code: problem.code, message: problem.message })
+		}
+	}
+	return markers
+}
+
+/**
+ * `problems` with each code and message once (the first one kept, order unchanged): what one field lists, so two diagnostics of
+ * one widget about the same reference read as one line there.
+ */
+export function uniqueProblemTexts(problems: readonly LabProblem[]): readonly LabProblem[] {
+	const seen = new Set<string>()
+	return problems.filter((problem) => {
+		const key = JSON.stringify([problem.code, problem.message])
+		if (seen.has(key))
+			return false
+		seen.add(key)
+		return true
+	})
+}
+
+function pathSpan(problem: LabProblem, path: JsonPath, text: string): JsonSpan | null {
 	const location = locateJsonPath(text, path)
 	if (location === null)
 		return null

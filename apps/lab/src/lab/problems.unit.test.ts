@@ -3,7 +3,7 @@ import { createWidgetDocument } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { getShowcase } from '../showcases/registry'
-import { claimsFieldProblem, collectProblems, groupProblems, placeStructureProblems, problemSpan } from './problems'
+import { claimsFieldProblem, collectProblems, groupProblems, placeStructureProblems, problemMarkers, problemSpan, problemSpans, uniqueProblemTexts } from './problems'
 
 function problemsOf(showcaseId: string, presetId: string, parseError: SourceParseError | null = null) {
 	const showcase = getShowcase(showcaseId)!
@@ -122,6 +122,163 @@ describe('configPath and where Structure shows a problem (Lab UX phase 2)', () =
 		// Nothing selected: everything is listed.
 		expect(placeStructureProblems(problems, null).elsewhere)
 			.toEqual(problems)
+	})
+})
+
+describe('a broken widget reference is located at its config value (reference-locations.ts)', () => {
+	function compiled(source: unknown) {
+		const showcase = getShowcase('survey')!
+		const blueprint = createWidgetDocument({ system: showcase.system, source })
+			.getSnapshot()
+			.blueprint
+		return {
+			withSchemas: collectProblems(blueprint, inspectBlueprint(blueprint), null, showcase.configSchemas),
+			withoutSchemas: collectProblems(blueprint, inspectBlueprint(blueprint), null),
+		}
+	}
+
+	it('puts the AI draft\'s condition on a missing question at `visibleWhen.question`, and its range on the value', () => {
+		const showcase = getShowcase('survey')!
+		const text = showcase.presets.find(candidate => candidate.id === 'survey-ai-draft')!.sourceText
+		const { withSchemas, withoutSchemas } = compiled(JSON.parse(text))
+		const dependency = withSchemas.find(problem => problem.code === 'missing-dependency-target')!
+		expect(dependency)
+			.toMatchObject({ configPath: ['visibleWhen', 'question'], widgetLevel: false, moreLocations: [] })
+		expect(dependency.sourcePath)
+			.toEqual(['slots', 'questions', 1, 'config', 'visibleWhen', 'question'])
+		expect(textOf(text, problemSpan(dependency, text)))
+			.toBe('"mod"')
+		// Core's code, message and location label are untouched; the other problems are as before.
+		const before = withoutSchemas.find(problem => problem.code === 'missing-dependency-target')!
+		expect({ code: dependency.code, message: dependency.message, locationLabel: dependency.locationLabel, nodeId: dependency.nodeId })
+			.toEqual({ code: before.code, message: before.message, locationLabel: before.locationLabel, nodeId: before.nodeId })
+		expect(before)
+			.toMatchObject({ configPath: null, widgetLevel: true })
+		expect(withSchemas.filter(problem => problem !== dependency))
+			.toEqual(withoutSchemas.filter(problem => problem !== before))
+		// Structure: at the field now, no longer at the header.
+		const placed = placeStructureProblems(withSchemas, dependency.nodeId)
+		expect(placed.atFields)
+			.toContain(dependency)
+		expect(placed.atNode)
+			.not
+			.toContain(dependency)
+		expect(claimsFieldProblem(['visibleWhen'], ['question', 'op', 'value'], dependency))
+			.toBe(false)
+		expect(claimsFieldProblem(['visibleWhen', 'question'], null, dependency))
+			.toBe(true)
+	})
+
+	it('gives each diagnostic about a reference written twice both locations (Core reports one per member that reads it): two rows, one line per field, one squiggle per value', () => {
+		const showcase = getShowcase('survey')!
+		const text = showcase.defaultPreset.sourceText
+			.replace('"visibleWhen": { "question": "guests", "op": "greaterThan", "value": 0 }', '"visibleWhen": { "question": "gusets", "op": "greaterThan", "value": 0 }')
+			.replace('{ "question": "guests", "op": "greaterThan", "value": 2 }', '{ "question": "gusets", "op": "greaterThan", "value": 2 }')
+		const { withSchemas } = compiled(JSON.parse(text))
+		// sessions' `options` (the kids option's visibleWhen) and `errors` (the rule) each read `gusets`: two diagnostics, which the
+		// matcher cannot tell apart by value, so both carry both locations. The list keeps Core's two rows.
+		expect(withSchemas)
+			.toHaveLength(2)
+		expect(withSchemas[0]!.locationLabel)
+			.not
+			.toBe(withSchemas[1]!.locationLabel)
+		for (const problem of withSchemas) {
+			expect(problem.code)
+				.toBe('missing-dependency-target')
+			expect([problem.configPath, ...(problem.moreLocations ?? []).map(location => location.configPath)])
+				.toEqual([['options', 2, 'visibleWhen', 'question'], ['rules', 0, 'when', 'all', 1, 'question']])
+			expect(problemSpans(problem, text)
+				.map(span => text.slice(span.start, span.end)))
+				.toEqual(['"gusets"', '"gusets"'])
+			expect(claimsFieldProblem(['options', 2, 'visibleWhen', 'question'], null, problem))
+				.toBe(true)
+			expect(claimsFieldProblem(['rules', 0, 'when', 'all', 1, 'question'], null, problem))
+				.toBe(true)
+			expect(claimsFieldProblem(['options', 1, 'enabledWhen', 'question'], null, problem))
+				.toBe(false)
+		}
+		// Drawn once: one squiggle per value, not one per diagnostic.
+		const markers = problemMarkers(withSchemas, text)
+		expect(markers.map(marker => text.slice(marker.start, marker.end)))
+			.toEqual(['"gusets"', '"gusets"'])
+		expect(markers.map(marker => marker.code))
+			.toEqual(['missing-dependency-target', 'missing-dependency-target'])
+		// And listed once at each field: the two diagnostics have the same code and message.
+		expect(withSchemas[0]!.message)
+			.toBe(withSchemas[1]!.message)
+		expect(uniqueProblemTexts(withSchemas))
+			.toEqual([withSchemas[0]])
+	})
+
+	it('keeps an ambiguous target at the widget: two widgets share the id, and no value can choose between them', () => {
+		const showcase = getShowcase('survey')!
+		const source = JSON.parse(showcase.defaultPreset.sourceText) as { slots: { questions: { id: string }[] } }
+		source.slots.questions.push(structuredClone(source.slots.questions.find(question => question.id === 'mode')!))
+		const { withSchemas, withoutSchemas } = compiled(source)
+		const ambiguous = withSchemas.filter(problem => problem.code === 'ambiguous-dependency-target')
+		expect(ambiguous.length)
+			.toBeGreaterThan(0)
+		expect(ambiguous.every(problem => problem.configPath === null && problem.widgetLevel && (problem.moreLocations ?? []).length === 0))
+			.toBe(true)
+		expect(withSchemas.some(problem => problem.code === 'duplicate-widget-id'))
+			.toBe(true)
+		expect(withSchemas)
+			.toEqual(withoutSchemas)
+	})
+
+	it('locates a missing member at the value when the target\'s type is not one the reference allows (a condition on the Survey itself)', () => {
+		const showcase = getShowcase('survey')!
+		const text = showcase.defaultPreset.sourceText
+			.replace('"visibleWhen": { "question": "mode", "op": "equals", "value": "onsite" }', '"visibleWhen": { "question": "open-day", "op": "equals", "value": "onsite" }')
+		const { withSchemas } = compiled(JSON.parse(text))
+		const located = withSchemas.filter(problem => problem.code === 'missing-dependency-member' || problem.code === 'missing-dependency-capability')
+		expect(located)
+			.toHaveLength(1)
+		expect(located[0])
+			.toMatchObject({ configPath: ['visibleWhen', 'question'], widgetLevel: false })
+		expect(textOf(text, problemSpan(located[0]!, text)))
+			.toBe('"open-day"')
+	})
+
+	it('keeps a dependency diagnostic the rule does not apply to at the widget: a condition on an unresolved widget', () => {
+		// `rating` is the AI draft's question of an unknown type: the reference is right, the target is broken
+		// (`unresolved-dependency-target`, which has its own `unknown-widget-type` there), so it stays widget-level.
+		const showcase = getShowcase('survey')!
+		const text = showcase.presets.find(candidate => candidate.id === 'survey-ai-draft')!.sourceText
+			.replace('"visibleWhen": { "question": "mod",', '"visibleWhen": { "question": "rating",')
+		const { withSchemas, withoutSchemas } = compiled(JSON.parse(text))
+		const unresolved = withSchemas.find(problem => problem.code === 'unresolved-dependency-target')!
+		expect(unresolved)
+			.toMatchObject({ configPath: null, widgetLevel: true })
+		expect(textOf(text, problemSpan(unresolved, text)))
+			.toBe('"id": "guests"')
+		expect(withSchemas)
+			.toEqual(withoutSchemas)
+	})
+})
+
+describe('problemMarkers and uniqueProblemTexts', () => {
+	const text = '{ "a": "x", "b": "y" }'
+	const at = (key: string, sourcePath: string[], code: string, message: string) =>
+		({ key, kind: 'diagnostic', code, message, locationLabel: null, nodeId: null, sourcePath, configPath: null, widgetLevel: false, syntaxSourceText: null, cycle: null }) as const
+
+	it('draws a range once per code and message, and keeps a different code or message on the same range', () => {
+		const markers = problemMarkers([
+			at('diagnostic-0', ['a'], 'missing-dependency-target', 'm'),
+			at('diagnostic-1', ['a'], 'missing-dependency-target', 'm'),
+			at('diagnostic-2', ['a'], 'missing-dependency-target', 'other'),
+			at('diagnostic-3', ['a'], 'invalid-widget-config', 'm'),
+			at('diagnostic-4', ['b'], 'missing-dependency-target', 'm'),
+		], text)
+		expect(markers.map(marker => `${text.slice(marker.start, marker.end)} ${marker.code} ${marker.message}`))
+			.toEqual(['"x" missing-dependency-target m', '"x" missing-dependency-target other', '"x" invalid-widget-config m', '"y" missing-dependency-target m'])
+	})
+
+	it('lists each code and message once, in order', () => {
+		const problems = [at('diagnostic-0', ['a'], 'c', 'm'), at('diagnostic-1', ['b'], 'c', 'm'), at('diagnostic-2', ['a'], 'c', 'n')]
+		expect(uniqueProblemTexts(problems)
+			.map(problem => problem.key))
+			.toEqual(['diagnostic-0', 'diagnostic-2'])
 	})
 })
 

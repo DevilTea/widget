@@ -598,7 +598,9 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	// collection runs again; the inspection is its own computed and follows commits only.
 	const committedBlueprint = computed(() => documentState.value.blueprint)
 	const committedInspection = computed(() => inspectBlueprint(committedBlueprint.value))
-	const problems = computed(() => collectProblems(committedBlueprint.value, committedInspection.value, jsonBlock.value))
+	// The showcase's generated config schemas mark widget references (`@widgetRef`), which locate a broken one at its config value.
+	const configSchemas = computed(() => showcases.find(showcase => showcase.id === showcaseId.value)?.configSchemas ?? {})
+	const problems = computed(() => collectProblems(committedBlueprint.value, committedInspection.value, jsonBlock.value, configSchemas.value))
 	const example = computed(() => {
 		void sessionTick.value
 		return deriveExampleState({

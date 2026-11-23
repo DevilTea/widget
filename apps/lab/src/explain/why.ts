@@ -11,7 +11,8 @@
  * as a question id). So the config field is an inference, made the same way for every plugin: a string value of the
  * widget's authored config that equals the other widget's id names it. When the dependency's path starts with a top-level
  * config key (`["rules", "guests"]`), only that field is searched. Otherwise a matching value counts only when the generated
- * schema marks it as a widget reference (the sentence `widgetDocs()` writes for `@widgetRef`), preferring one that names the
+ * schema marks it as a widget reference (the sentence `widgetDocs()` writes for `@widgetRef`, read by `lab/reference-locations.ts`,
+ * which the Problems list's precise locations share), preferring one that names the
  * other widget's type, so a string that merely equals the id (`{ inputType: "email" }` beside a widget `email`) is not taken
  * for one. The field shown is the top-level config field, or, inside a list of objects, the field of the list item
  * (`options[1].enabledWhen.question` -> `enabledWhen`), with the description the generated schema has for it. A plugin whose
@@ -20,9 +21,9 @@
  * Pure and framework-agnostic; the live values ("now: ...") are the view's job (they come from the Preview Runtime).
  */
 import type { BlueprintInspection, BlueprintInspectionDependency, InspectionNodeId, ResolvedBlueprintInspectionNode } from '@deviltea/widget-core/inspection'
-import type { ConfigPath, FieldModel, JsonSchema } from '../lab/config-schema'
+import type { ConfigPath, JsonSchema } from '../lab/config-schema'
 import { docText } from '../author/widget-docs'
-import { describeField } from '../lab/config-schema'
+import { fieldModelAt, stringValuePaths, widgetRefTypesOf } from '../lab/reference-locations'
 
 export type WhyOperation = 'reads' | 'invokes'
 
@@ -76,25 +77,6 @@ function operationOf(dependency: BlueprintInspectionDependency): WhyOperation | 
 	}
 }
 
-/** Every path below `value` (prefixed by `prefix`) whose value is exactly the string `needle`. */
-function stringLeafPaths(value: unknown, needle: string, prefix: ConfigPath, out: ConfigPath[], depth = 0): void {
-	if (depth > 32)
-		return
-	if (typeof value === 'string') {
-		if (value === needle)
-			out.push(prefix)
-		return
-	}
-	if (Array.isArray(value)) {
-		value.forEach((item, index) => stringLeafPaths(item, needle, [...prefix, index], out, depth + 1))
-		return
-	}
-	if (isRecord(value)) {
-		for (const [key, child] of Object.entries(value))
-			stringLeafPaths(child, needle, [...prefix, key], out, depth + 1)
-	}
-}
-
 /** The field a reference at `path` belongs to: the top-level key, or the key inside an item of a top-level list. */
 function fieldPathOf(path: ConfigPath): ConfigPath {
 	if (path.length >= 3 && typeof path[1] === 'number' && typeof path[2] === 'string')
@@ -104,46 +86,14 @@ function fieldPathOf(path: ConfigPath): ConfigPath {
 
 /** The schema's description of the value at `path`, read the way the Structure editor reads it; `''` when there is none. */
 function describeAt(schema: JsonSchema, rawConfig: unknown, path: ConfigPath): string {
-	let model: FieldModel = describeField(schema, schema, rawConfig)
-	let value: unknown = rawConfig
-	for (const segment of path) {
-		const field = model.field
-		let child: JsonSchema | null = null
-		if (typeof segment === 'string' && field.kind === 'object' && isRecord(value)) {
-			child = Object.hasOwn(field.properties, segment) ? field.properties[segment]! : field.additional
-			value = value[segment]
-		}
-		else if (typeof segment === 'number' && field.kind === 'array' && Array.isArray(value)) {
-			child = field.items
-			value = value[segment]
-		}
-		if (child === null)
-			return ''
-		model = describeField(schema, child, value)
-	}
-	return model.description === null ? '' : docText({ summary: model.description, remarks: '' })
+	const description = fieldModelAt(schema, rawConfig, path)?.description ?? null
+	return description === null ? '' : docText({ summary: description, remarks: '' })
 }
 
 /** The top-level config key a dependency path starts with, or `null` when it starts with something else. */
 function configScopeOf(rawConfig: Readonly<Record<string, unknown>>, path: readonly (string | number)[]): string | null {
 	const first = path[0]
 	return typeof first === 'string' && Object.hasOwn(rawConfig, first) ? first : null
-}
-
-/**
- * The sentence `widgetDocs()` appends to the description of a config value tagged `@widgetRef A | B` (`apps/widget-skills/src/schema.ts`):
- * "Must be the id of a widget of type A | B in the same document." Group 1 is the type list.
- */
-const WIDGET_REF_SENTENCE = /Must be the id of a widget of type (.+?) in the same document\./
-
-/** The plugin types a schema description names as a widget reference, or `null` when it marks no widget reference. */
-export function widgetRefTypesOf(description: string): readonly string[] | null {
-	const match = WIDGET_REF_SENTENCE.exec(description)
-	return match === null
-		? null
-		: match[1]!.split('|')
-				.map(type => type.trim())
-				.filter(type => type !== '')
 }
 
 function configFieldsNaming(
@@ -163,12 +113,12 @@ function configFieldsNaming(
 		// belong to that Property (`sessions.errors` reads `guests` through `rules`, so `rules` is not why `options` does).
 		for (const [key, child] of Object.entries(rawConfig)) {
 			if (!claimedKeys.has(key) || scopes.has(key))
-				stringLeafPaths(child, widgetId, [key], matches)
+				matches.push(...stringValuePaths(child, widgetId, [key]))
 		}
 	}
 	else {
 		for (const key of scopes)
-			stringLeafPaths(rawConfig[key!], widgetId, [key!], matches)
+			matches.push(...stringValuePaths(rawConfig[key!], widgetId, [key!]))
 	}
 
 	// A match inside a field a dependency path names is that dependency's field. Any other match is only a string that happens

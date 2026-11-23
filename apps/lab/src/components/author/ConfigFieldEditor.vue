@@ -20,7 +20,7 @@ import USwitch from '@nuxt/ui/components/Switch.vue'
 import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { canAddItem, canRemoveItem, canRemoveKey, defaultValueFor, describeField, objectFieldKeys, parseNumberText } from '../../lab/config-schema'
-import { claimsFieldProblem } from '../../lab/problems'
+import { claimsFieldProblem, uniqueProblemTexts } from '../../lab/problems'
 
 const props = defineProps<{
 	root: JsonSchema | null
@@ -232,6 +232,12 @@ const ownProblems = computed(() => {
 	const childKeys = kind === 'object' ? keys.value.present : kind === 'array' ? arrayValue.value.map((_, index) => index) : null
 	return all.filter(problem => claimsFieldProblem(props.path, childKeys, problem))
 })
+/**
+ * The lines the field lists: its problems with each code and message once. Two diagnostics of one widget about the same broken
+ * reference (one per member that reads it) are one line; `data-problem-keys` still names both, so "Show problems" finds the field
+ * from either.
+ */
+const shownProblems = computed(() => uniqueProblemTexts(ownProblems.value))
 const problemsId = computed(() => ownProblems.value.length > 0 ? `${id}-problems` : undefined)
 /** The control's description: the field's problems and a "not applied" note, whichever are shown. */
 const describedBy = computed(() => [problemsId.value, notApplied.value !== null ? `${id}-not-applied` : undefined].filter(Boolean)
@@ -419,7 +425,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 					class="m-0 flex list-none flex-col gap-0.5 p-0 text-xs text-error"
 				>
 					<li
-						v-for="problem in ownProblems"
+						v-for="problem in shownProblems"
 						:key="problem.key"
 						data-testid="field-problem"
 						:data-problem-code="problem.code ?? 'syntax-error'"
@@ -499,7 +505,7 @@ const controlClass = 'h-7 min-w-0 rounded-(--lab-radius) border border-default b
 				class="m-0 mb-1 flex list-none flex-col gap-0.5 p-0 text-xs text-error outline-none focus-visible:ring-2 focus-visible:ring-primary"
 			>
 				<li
-					v-for="problem in ownProblems"
+					v-for="problem in shownProblems"
 					:key="problem.key"
 					data-testid="field-problem"
 					:data-problem-code="problem.code ?? 'syntax-error'"

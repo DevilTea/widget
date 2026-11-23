@@ -3,7 +3,7 @@ import type { WhySentence } from './why'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { getShowcase } from '../showcases/registry'
-import { buildWhySentences, widgetRefTypesOf } from './why'
+import { buildWhySentences } from './why'
 
 interface Compiled {
 	readonly inspection: BlueprintInspection
@@ -162,17 +162,6 @@ describe('buildWhySentences — Trip budget splitter', () => {
 				...['hotel', 'dinner', 'museum', 'taxi', 'market'].map(id => `total reads #${id} property:counted,property:amountBase []`),
 				'transfers invokes #currency method:roundTransfer []',
 			])
-	})
-})
-
-describe('widgetRefTypesOf', () => {
-	it('reads the type list of the sentence widgetDocs() writes for @widgetRef', () => {
-		expect(widgetRefTypesOf('The id of the Person who paid at the start. Must be the id of a widget of type Person in the same document.'))
-			.toEqual(['Person'])
-		expect(widgetRefTypesOf('Must be the id of a widget of type SingleChoice | MultipleChoice in the same document.'))
-			.toEqual(['SingleChoice', 'MultipleChoice'])
-		expect(widgetRefTypesOf('The input type, for example "email".'))
-			.toBeNull()
 	})
 })
 

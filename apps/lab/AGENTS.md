@@ -1491,7 +1491,8 @@ path is `blueprint.getSourcePath(node)` of the diagnostic's location node plus i
 `path` is config-relative, the other diagnostics' `path` is node-relative, a `slot` / `slot-child` location adds
 `slots[slot][index]`, a source-level diagnostic's `path` is absolute). `problemSpan()` then highlights a primitive value whole,
 a widget (or one of its Property/Method members) by its `"id"` (else `"type"`) member, any other object/array by its property key
-(or, for an array item or the root, the line it opens on), never a whole subtree; a path that no longer exists resolves to its
+(or, for an array item or the root, the line it opens on), never a whole subtree (a broken widget reference the Lab locates at its config
+value is that primitive value, see "Precise locations for broken widget references"); a path that no longer exists resolves to its
 nearest existing ancestor. A syntax error is located by the engine's message position when it has one (V8 does not always:
 "Unexpected token ..." has none) and otherwise by `json-locate.ts`'s own scan of the same text. A Core diagnostic with no node
 (`getSourcePath()` returns `null`) points at the root.
@@ -1506,8 +1507,9 @@ shared by those diagnostics). `collectProblems()` tags such a problem with its c
 as `widget.member` labels) and `groupProblems()` turns two or more problems of one cycle into one `cycle` entry; `AuthorProblems.vue` shows it collapsed
 (`data-testid=problem-group`, `aria-expanded`, the code, "N members depend on each other in a loop" and the members in Core's order) and expanding it lists
 Core's own diagnostics, one `problem-row` each, code, message and location verbatim, each still a jump. Only the presentation is grouped: the list,
-the summary, `data-problem-count`, the header chip, the editor squiggles and the Blueprint panel's "All diagnostics" view keep Core's count and text
-(a cycle with a single diagnostic is an ordinary row).
+the summary, `data-problem-count`, the header chip and the Blueprint panel's "All diagnostics" view keep Core's count and text (a cycle with a
+single diagnostic is an ordinary row). The editor squiggles are not grouped either, but they are drawn per location, not per diagnostic: one per
+range, code and message (`problemMarkers()`, see "Precise locations for broken widget references"), so their count is not Core's.
 
 ### Problems in Structure (Lab UX phase 2, report item 12)
 
@@ -1520,7 +1522,8 @@ JSON text's syntax error; no second validation path). `LabProblem.configPath` is
   field-error style (`text-error`) under the control (`field-problems` / `field-problem`); the control is `aria-invalid` and its
   `aria-describedby` names the list (and the "Not applied" note when there is one); a group's list is focusable and describes the group.
 - **at the widget header**: its other problems (dependency, structure and member diagnostics, which Core locates at the widget or a member,
-  not at a field), and its config problems when the widget has no config editor here (`node-problems`, focusable).
+  not at a field, except a broken widget reference the Lab locates at its config value, see "Precise locations for broken widget
+  references" below), and its config problems when the widget has no config editor here (`node-problems`, focusable).
 - **in a compact list** at the top of the editor (`structure-problems`, "N problems elsewhere in the document"): other widgets' problems,
   each a button that selects that widget and focuses the problem there, and problems with no widget (a JSON syntax error, a source-level
   diagnostic), plain rows. The tree keeps its per-widget counts.
@@ -1528,14 +1531,64 @@ JSON text's syntax error; no second validation path). `LabProblem.configPath` is
 "Show problems" (the header's problems button and the stale-preview notice's) in Structure selects the first problem's widget and focuses its
 field's control (or the field's or the header's problem list), or the list's first row for a problem with no widget. In JSON it moves focus to
 the Problems list as before. `lab/problems.unit.test.ts` pins the placement and claiming rules, `ConfigFieldEditor.unit.test.ts` the field markup,
-and `e2e/structure-problems.spec.ts` the browser behaviour (max below min at the field, a dependency diagnostic at the header, the list, "Show
-problems" from Structure and JSON; the Catalog is a modal slide-over since Lab UX phase 3B, so nothing can be pressed from it).
+and `e2e/structure-problems.spec.ts` the browser behaviour (max below min at the field, a broken widget reference at its field and one
+that cannot be located at the header, the list, "Show problems" from Structure and JSON; the Catalog is a modal slide-over since Lab UX phase 3B, so nothing can be pressed from it).
 
-**Deferred: precise locations for dependency diagnostics.** The report found that the squiggle and "Go to location" for a broken
-`visibleWhen.question` mark the widget's `"id"` instead of the bad value. Core's dependency diagnostics (`missing-dependency-target` and
-friends) carry the widget, the member and the dependency reference (`dependency.target.widgetId`), but no source path into the config, so the
-Lab has no exact location to point at; finding the value by searching the text for the id would be a guess. It stays widget-level until Core
-reports a path.
+**Precise locations for broken widget references.** Core's dependency diagnostics (`missing-dependency-target` and friends) carry the
+widget, the member and the dependency reference (`dependency.target.widgetId`), but no config path, by design: a plugin builds its
+dependencies in code from config values, and only a tool that reads the config can say where an id is written (Core does not change for
+this; the owner agreed). The Lab derives the location from public facts only, in `src/lab/reference-locations.ts`
+(`referenceConfigPaths()`, pure and framework-free: no Vue, no store, no i18n; its only import is the pure `config-schema.ts`, so a later
+shared inspector-tools package can take it as it is):
+1. in the owner widget's authored config (`node.source.config` of the committed Document), every value the plugin's generated config
+   schema marks as a widget reference (the sentence `widgetDocs()` writes for `@widgetRef`, `widgetRefTypesOf()`, read along the value
+   the way the Structure editor reads it, union branches chosen by the value) and that equals the target id;
+2. with at least one match the problem is at those paths: the first is `LabProblem.sourcePath` / `configPath` (`widgetLevel: false`), the
+   others are `LabProblem.moreLocations` (all of them are wrong values);
+3. with none, the placement stays widget-level, unchanged: no `@widgetRef` tag (quote-rules' Valibot schemas have none), an id that does
+   not come from config (a slot child, the root), a `self`, `root` or `parent` target, or a code the rule leaves out;
+4. the text is never searched.
+
+The codes (`LOCATED_DEPENDENCY_CODES`), by what Core says each one means: `missing-dependency-target` (no widget of the Document has the
+target id) is located at the value. `missing-dependency-capability` and `missing-dependency-member` (the widget with that id exists and its
+plugin lacks the capability or member the dependency's operation needs) are located at the value only when that widget's type, from Core's
+`related` location of the target, is not one of the types the value's `@widgetRef` allows: the value names a widget the plugin's own
+contract rules out. When the type is allowed, the value keeps the contract, the fault is in what the plugin reads, and the problem stays at the
+widget. Left out: `ambiguous-dependency-target` (several widgets share the id; no value can choose between them, the fix is a unique id, and
+those widgets already carry `duplicate-widget-id`), `unresolved-dependency-target` (the target widget did not resolve and has its own
+diagnostic there) and `property-dependency-has-side-effects` (a Property depends on a Method that writes or emits: the plugin's code).
+
+Where it shows: in Structure at the field through `placeStructureProblems()` / `claimsFieldProblem()` (which claims each location, so a
+reference written twice shows at both fields) and no longer at the header; in JSON one squiggle per location over the value and "Go to
+location" selects the first location (`problemSpan()`). The code, message and location label stay Core's, verbatim; the Problems list's rows
+and count, the header chip and the Blueprint panel's "All diagnostics" (which Explain's Declaration details embed) keep Core's facts and
+Core's widget/member location. Explain's Relations and "Why" list resolved dependencies only, so a broken reference is not in them either
+way. `collectProblems()` takes the showcase's `configSchemas` (the store passes `ShowcaseEntry.configSchemas`); without it nothing is
+located inside a config. `explain/why.ts` reads the `@widgetRef` mark and walks the schema through the same helpers (`fieldModelAt()`,
+`stringValuePaths()`).
+
+Several diagnostics about one target: Core reports one per member that depends on it (sessions' `options` and `errors` both read a
+mistyped `gusets` when the kids option and the rule name it), and the matcher cannot tell which value a member read, so **every diagnostic
+of that widget about that target carries all the locations** and "Go to location" on either row selects the first. The Problems list keeps
+Core's two rows; what is drawn is deduplicated: one squiggle per range, code and message (`problemMarkers()`; `data-marker-count` is the
+number after deduplication), and one line per code and message at a field (`uniqueProblemTexts()`; the list's `data-problem-keys` still
+names every diagnostic, so "Show problems" finds the field from either).
+
+Limits:
+- The paths are the committed Document's and the JSON view locates them in the current text (like every problem, see "Problems list and
+  editor squiggles"), so after an uncommitted insertion or removal in an array a squiggle can sit on the neighbouring value until the text is
+  committed; `invalid-widget-config` paths behave the same way.
+- "Show problems" in Structure focuses the first field in the page that shows the first problem (`[data-problem-keys~=key]` in document
+  order), which is not necessarily its first location.
+- Only a string value whose own schema carries the mark is found: an id written as an object key (trip-budget's `percents`), a `string[]`
+  item or a dictionary value (the generator writes the mark on the list or the dictionary, not on the value) is not, and the problem stays at
+  the widget; nothing is located wrongly.
+
+`lab/reference-locations.unit.test.ts` pins the rule, `lab/problems.unit.test.ts` the problems built from Core's diagnostics (a typo, a
+reference written twice, an ambiguous id, a missing member on a widget of a type the reference does not allow, an unresolved target) and the
+deduplication, and `e2e/structure-problems.spec.ts` the browser behaviour (the AI draft's `visibleWhen.question`, a rule's
+`rules.0.when.all.1.question`, the JSON squiggle and selection over `"mod"` and none on the `"id"` line, a reference written twice shown
+once per field with two squiggles and two rows, and an `unresolved-dependency-target` that stays at the header).
 
 ### Stale-preview notice
 

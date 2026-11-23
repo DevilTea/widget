@@ -968,6 +968,16 @@ describe('createLabStore() expert views (Lab UX phase 3B)', () => {
 	})
 })
 
+describe('createLabStore() problems use the showcase\'s config schemas', () => {
+	it('locates a broken widget reference at its config value with the survey\'s generated schemas', async () => {
+		const store = createLabStore(getShowcase('survey')!)
+		await store.applyPreset('survey-ai-draft')
+		expect(store.problems.value.find(problem => problem.code === 'missing-dependency-target'))
+			.toMatchObject({ configPath: ['visibleWhen', 'question'], widgetLevel: false })
+		store.dispose()
+	})
+})
+
 describe('createLabStore() committed edits and the replaced-document notice (Lab UX phase 2)', () => {
 	it('has committed edits only while the applied source equals no preset of the showcase', async () => {
 		const store = createLabStore(getShowcase('survey')!)
