@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expandGraphWidget, expect, maximizeTools, openDependenciesGraph, setLocale, test } from './fixtures'
+import { expandGraphWidget, expect, graphWidgetCard, maximizeTools, openDependenciesGraph, setLocale, test } from './fixtures'
 
 /**
  * Issue #230, "the Graph is hard to read": what a person sees in the real browser. The cards are spread out, every dependency
@@ -10,7 +10,8 @@ import { expandGraphWidget, expect, maximizeTools, openDependenciesGraph, setLoc
  * Since Lab UX phase 3B the Graph is an expert view in the Tools group below the Preview, which opens with half of the Preview's
  * column (there the collapsed Survey fits at about 0.37 at 1440 x 900). The Tools group has a Maximize action for that, and these
  * specs read the Graph the way a person reading it would: with the Tools group maximized over the workbench (`giveGraphTheWorkbench`).
- * The thresholds are issue #230's.
+ * The thresholds are issue #230's. Expanding a widget goes to a readable zoom on that widget (member text 11px) in both panes, and
+ * the minimap shows where the viewport is; those are read in the default pane and maximized.
  */
 
 /** Maximizes the Tools group, then asks the Graph to fit the room it has now. */
@@ -63,15 +64,7 @@ async function openGraph(page: Page, showcase: 'survey' | 'trip-budget', options
 			.toBeVisible({ timeout: 15_000 })
 	}
 	// The automatic fit has settled once the viewport stops changing between two frames.
-	await expect(async () => {
-		const first = await page.locator('.vue-flow__transformationpane')
-			.getAttribute('style')
-		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-		expect(await page.locator('.vue-flow__transformationpane')
-			.getAttribute('style'))
-			.toBe(first)
-	})
-		.toPass()
+	await settleViewport(page)
 }
 
 /** Reads the cards and every edge's curve (as screen points along the path) out of the rendered Graph. */
@@ -263,37 +256,311 @@ test('the Survey Fit at 1280 x 800 (Tools maximized) keeps the card text close t
 		.toBeGreaterThanOrEqual(9.8)
 })
 
-// Issue #254: one widget is expanded at a time, and expanding it refits the whole new layout. The largest widgets (the lowest Fit,
-// measured with the real ELK in `graph-readability.unit.test.ts`) are the Survey's #sessions and the Trip budget's #hotel; fully
-// expanded they were 0.27 and about 0.06. In issue #230's full-height tool group their Fit was 0.415 and 0.196; with the Tools group
-// maximized (Lab UX phase 3B) it is measured at 0.649 and 0.331 at 1440 x 900, the centres of the bands below. A band on both sides,
-// so a Fit that grows past the graph fails as well as one that shrinks.
-for (const { showcase, widget, fit, band } of [
+/** Waits until the viewport stops changing between two frames (an automatic fit or a Fit graph has settled). */
+async function settleViewport(page: Page): Promise<void> {
+	await expect(async () => {
+		const first = await page.locator('.vue-flow__transformationpane')
+			.getAttribute('style')
+		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+		expect(await page.locator('.vue-flow__transformationpane')
+			.getAttribute('style'))
+			.toBe(first)
+	})
+		.toPass()
+}
+
+/** Every card (members included; not the shell of an expanded widget) lies inside the canvas. */
+async function expectWholeLayoutInView(page: Page): Promise<void> {
+	const canvas = (await page.locator('.vue-flow')
+		.boundingBox())!
+	const { cards } = await readGraph(page)
+	// The collapsed Survey has five widgets.
+	expect(cards.length)
+		.toBeGreaterThanOrEqual(5)
+	for (const card of cards) {
+		expect(card.rect.x, card.id)
+			.toBeGreaterThanOrEqual(canvas.x - 1)
+		expect(card.rect.x + card.rect.width, card.id)
+			.toBeLessThanOrEqual(canvas.x + canvas.width + 1)
+		expect(card.rect.y, card.id)
+			.toBeGreaterThanOrEqual(canvas.y - 1)
+		expect(card.rect.y + card.rect.height, card.id)
+			.toBeLessThanOrEqual(canvas.y + canvas.height + 1)
+	}
+}
+
+/** The on-screen size of member text, and where the expanded widget's type and id are, relative to the canvas. */
+async function readExpanded(page: Page): Promise<{ zoom: number, memberPx: number, title: Rect, collapse: Rect, canvas: Rect }> {
+	return page.evaluate(() => {
+		const pane = document.querySelector<HTMLElement>('.vue-flow__transformationpane')!
+		const zoom = Number(/scale\(([-\d.]+)\)/.exec(pane.style.transform)?.[1] ?? 1)
+		const member = document.querySelector('.graph-member-label')!
+		const title = document.querySelector('.graph-cluster-card--expanded .graph-cluster-identity')!
+			.getBoundingClientRect()
+		const collapse = document.querySelector('.graph-cluster-card--expanded .graph-cluster-toggle')!
+			.getBoundingClientRect()
+		const canvas = document.querySelector('.vue-flow')!
+			.getBoundingClientRect()
+		return {
+			zoom,
+			memberPx: Number.parseFloat(getComputedStyle(member).fontSize) * zoom,
+			title: { x: title.x, y: title.y, width: title.width, height: title.height },
+			collapse: { x: collapse.x, y: collapse.y, width: collapse.width, height: collapse.height },
+			canvas: { x: canvas.x, y: canvas.y, width: canvas.width, height: canvas.height },
+		}
+	})
+}
+
+// Issue #254: one widget is expanded at a time. The largest widgets (the lowest Fit, measured with the real ELK in
+// `graph-readability.unit.test.ts`) are the Survey's #sessions and the Trip budget's #hotel. Fitting the whole layout with one of them
+// expanded puts member text far under 11px (in issue #230's pane 0.415 and 0.196: about 5px and 2.4px), so expanding goes to the
+// readable zoom instead (11 / 12, member text 11px on screen) and frames the expanded widget: its header at the top of the canvas.
+// Fit graph afterwards returns to the whole layout. Maximized at 1440 x 900 that Fit is measured at 0.649 and 0.331, the centres of the
+// bands below (a band on both sides, so a Fit that grows past the graph fails as well as one that shrinks).
+const largestWidgets = [
 	{ showcase: 'survey', widget: 'sessions', fit: 0.65, band: 0.05 },
 	{ showcase: 'trip-budget', widget: 'hotel', fit: 0.33, band: 0.04 },
-] as const) {
-	test(`expanding #${widget} fits the whole ${showcase} at about ${fit} (Tools maximized), every card in view`, async ({ page }) => {
-		await page.setViewportSize({ width: 1440, height: 900 })
-		await openGraph(page, showcase, { expand: widget })
-		const canvas = (await page.locator('.vue-flow')
-			.boundingBox())!
-		const { zoom, cards } = await readGraph(page)
-		expect(zoom)
-			.toBeGreaterThan(fit - band)
-		expect(zoom)
-			.toBeLessThan(fit + band)
-		expect(cards.length)
-			.toBeGreaterThan(10)
-		for (const card of cards) {
-			expect(card.rect.x, card.id)
-				.toBeGreaterThanOrEqual(canvas.x - 1)
-			expect(card.rect.x + card.rect.width, card.id)
-				.toBeLessThanOrEqual(canvas.x + canvas.width + 1)
-			expect(card.rect.y, card.id)
-				.toBeGreaterThanOrEqual(canvas.y - 1)
-			expect(card.rect.y + card.rect.height, card.id)
-				.toBeLessThanOrEqual(canvas.y + canvas.height + 1)
+] as const
+for (const size of [{ width: 1440, height: 900 }, { width: 1280, height: 800 }] as const) {
+	for (const maximize of [false, true]) {
+		for (const { showcase, widget, fit, band } of largestWidgets) {
+			const pane = maximize ? 'Tools maximized' : 'the default Tools pane'
+			test(`expanding #${widget} (${showcase}) at ${size.width} x ${size.height} in ${pane}: member text 11px, header in view; Fit graph shows the whole layout`, async ({ page }) => {
+				await page.setViewportSize(size)
+				await openGraph(page, showcase, { expand: widget, maximize })
+
+				const expanded = await readExpanded(page)
+				expect(expanded.zoom)
+					.toBeCloseTo(11 / 12, 3)
+				expect(expanded.memberPx)
+					.toBeGreaterThanOrEqual(10.99)
+				// The type and id of the expanded widget are in view, at the top of the canvas.
+				expect(expanded.title.y)
+					.toBeGreaterThanOrEqual(expanded.canvas.y)
+				expect(expanded.title.y + expanded.title.height)
+					.toBeLessThanOrEqual(expanded.canvas.y + 60)
+				expect(expanded.title.x)
+					.toBeGreaterThanOrEqual(expanded.canvas.x)
+				expect(expanded.title.x)
+					.toBeLessThan(expanded.canvas.x + expanded.canvas.width / 2)
+				// So is its Collapse button, which has the keyboard focus after the expansion (the header keeps it at the left).
+				expect(expanded.collapse.y)
+					.toBeGreaterThanOrEqual(expanded.canvas.y)
+				expect(expanded.collapse.x + expanded.collapse.width)
+					.toBeLessThanOrEqual(expanded.canvas.x + expanded.canvas.width)
+				await expect(graphWidgetCard(page, widget)
+					.getByRole('button', { name: 'Collapse', exact: true }))
+					.toBeFocused()
+
+				await page.getByRole('button', { name: 'Fit graph' })
+					.click()
+				await settleViewport(page)
+				const { zoom } = await readGraph(page)
+				expect(zoom)
+					.toBeLessThan(11 / 12)
+				if (maximize && size.width === 1440) {
+					expect(zoom)
+						.toBeGreaterThan(fit - band)
+					expect(zoom)
+						.toBeLessThan(fit + band)
+				}
+				await expectWholeLayoutInView(page)
+			})
 		}
+	}
+}
+
+test('collapsing, Collapse all and a new semantic graph fit the whole layout; re-expanding frames again; focus never zooms', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'survey', { expand: 'sessions' })
+	const transform = page.locator('.vue-flow__transformationpane')
+	expect((await readGraph(page)).zoom)
+		.toBeCloseTo(11 / 12, 3)
+
+	// Selecting a member (shared focus) neither refits nor zooms.
+	const framed = await transform.getAttribute('style')
+	await page.locator('.graph-member-card', { hasText: 'errors' })
+		.click()
+	await expect(page.locator('.graph-node--focused'))
+		.toHaveCount(1)
+	await expect(transform)
+		.toHaveAttribute('style', framed ?? '')
+
+	// Collapsing with the card's own button: the whole collapsed Survey (about 1.07 maximized).
+	await graphWidgetCard(page, 'sessions')
+		.getByRole('button', { name: 'Collapse', exact: true })
+		.click()
+	await expect(page.locator('.graph-member-card'))
+		.toHaveCount(0)
+	await settleViewport(page)
+	expect((await readGraph(page)).zoom)
+		.toBeGreaterThan(0.95)
+	await expectWholeLayoutInView(page)
+
+	// The same widget again: framed again.
+	await expandGraphWidget(page, 'sessions')
+	await settleViewport(page)
+	expect((await readGraph(page)).zoom)
+		.toBeCloseTo(11 / 12, 3)
+
+	// A new semantic graph (a filter) with #sessions still expanded: a layout not caused by expanding, so the whole layout.
+	await page.getByRole('checkbox', { name: 'Show isolated members' })
+		.check()
+	await expect(async () => {
+		await settleViewport(page)
+		expect((await readGraph(page)).zoom)
+			.toBeLessThan(0.75)
+	})
+		.toPass()
+	await expect(graphWidgetCard(page, 'sessions')
+		.getByRole('button', { name: 'Collapse', exact: true }))
+		.toBeVisible()
+	await expectWholeLayoutInView(page)
+
+	// Collapse all: the whole layout.
+	await page.getByRole('checkbox', { name: 'Show isolated members' })
+		.uncheck()
+	await expandGraphWidget(page, 'mode')
+	await page.getByRole('button', { name: 'Collapse all' })
+		.click()
+	await expect(page.locator('.graph-member-card'))
+		.toHaveCount(0)
+	await settleViewport(page)
+	expect((await readGraph(page)).zoom)
+		.toBeGreaterThan(0.95)
+	await expectWholeLayoutInView(page)
+})
+
+/**
+ * The minimap (`@vue-flow/minimap`): shown while part of the graph is out of view in a canvas of at least 360 x 260, aria-hidden and
+ * without tab stops, in a corner of the canvas (so it covers neither the key nor the toolbar), themed with the Lab tokens.
+ */
+const minimap = (page: Page) => page.getByTestId('graph-minimap')
+
+test('the minimap shows while the expanded widget is framed, and hides when the whole layout is in view', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'trip-budget', { expand: 'hotel' })
+	await expect(minimap(page))
+		.toBeVisible()
+	await expect(minimap(page))
+		.toHaveAttribute('aria-hidden', 'true')
+	expect(await minimap(page)
+		.locator('[tabindex], a, button, input')
+		.count())
+		.toBe(0)
+
+	// In the canvas's bottom right corner: below the key and the toolbar, inside the canvas.
+	const canvas = (await page.locator('.vue-flow')
+		.boundingBox())!
+	const map = (await minimap(page)
+		.boundingBox())!
+	const key = (await page.getByTestId('graph-key')
+		.boundingBox())!
+	expect(map.x)
+		.toBeGreaterThan(canvas.x + canvas.width / 2)
+	expect(map.y)
+		.toBeGreaterThan(canvas.y + canvas.height / 2)
+	expect(map.x + map.width)
+		.toBeLessThanOrEqual(canvas.x + canvas.width)
+	expect(map.y + map.height)
+		.toBeLessThanOrEqual(canvas.y + canvas.height)
+	expect(map.y)
+		.toBeGreaterThan(key.y + key.height)
+
+	// Fit graph: everything in view, nothing for the minimap to add.
+	await page.getByRole('button', { name: 'Fit graph' })
+		.click()
+	await expect(minimap(page))
+		.toHaveCount(0)
+
+	// Zooming in on the whole layout brings it back.
+	await page.getByTestId('graph-zoom-in')
+		.click()
+	await expect(minimap(page))
+		.toBeVisible()
+})
+
+test('the minimap is hidden in a canvas smaller than 360 x 260, the default Tools pane at 1440 x 900', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'trip-budget', { expand: 'hotel', maximize: false })
+	const canvas = (await page.locator('.vue-flow')
+		.boundingBox())!
+	expect(canvas.height)
+		.toBeLessThan(260)
+	expect((await readGraph(page)).zoom)
+		.toBeCloseTo(11 / 12, 3)
+	await expect(minimap(page))
+		.toHaveCount(0)
+})
+
+test('dragging the minimap pans the canvas at the same zoom, and a click centres the viewport on that point', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'trip-budget', { expand: 'hotel' })
+	await expect(minimap(page))
+		.toBeVisible()
+	const translate = async (): Promise<{ x: number, y: number, zoom: number }> => page.locator('.vue-flow__transformationpane')
+		.evaluate((element) => {
+			const matrix = new DOMMatrix(getComputedStyle(element).transform)
+			return { x: matrix.e, y: matrix.f, zoom: matrix.a }
+		})
+	const before = await translate()
+	const map = (await minimap(page)
+		.boundingBox())!
+	await page.mouse.move(map.x + map.width / 2, map.y + map.height / 2)
+	await page.mouse.down()
+	await page.mouse.move(map.x + map.width / 2 + 20, map.y + map.height / 2 + 10, { steps: 5 })
+	await page.mouse.up()
+	const dragged = await translate()
+	// Dragging the viewport rectangle right and down moves the view right and down: the content moves left and up.
+	expect(dragged.zoom)
+		.toBeCloseTo(before.zoom, 5)
+	expect(dragged.x)
+		.toBeLessThan(before.x - 50)
+	expect(dragged.y)
+		.toBeLessThan(before.y)
+
+	// A click centres the viewport on the point clicked, at the same zoom.
+	await page.mouse.click(map.x + 12, map.y + 12)
+	await expect.poll(async () => (await translate()).x)
+		.not
+		.toBe(dragged.x)
+	expect((await translate()).zoom)
+		.toBeCloseTo(before.zoom, 5)
+})
+
+for (const theme of ['light', 'dark'] as const) {
+	test(`the minimap takes the ${theme} theme's tokens`, async ({ context, page }) => {
+		await context.addInitScript((value) => {
+			localStorage.setItem('widget-lab:theme', value)
+		}, theme)
+		await page.setViewportSize({ width: 1440, height: 900 })
+		await openGraph(page, 'survey', { expand: 'sessions' })
+		await expect(page.locator('html'))
+			.toHaveAttribute('data-lab-theme', theme)
+		await expect(minimap(page))
+			.toBeVisible()
+		const colours = await page.evaluate(() => {
+			const resolve = (property: 'color' | 'backgroundColor', value: string): string => {
+				const probe = document.createElement('span')
+				probe.style[property] = value
+				document.body.append(probe)
+				const colour = getComputedStyle(probe)[property]
+				probe.remove()
+				return colour
+			}
+			const map = document.querySelector('[data-testid="graph-minimap"]')!
+			const mask = map.querySelector('.vue-flow__minimap-mask')!
+			return {
+				background: getComputedStyle(map).backgroundColor,
+				surface: resolve('backgroundColor', 'var(--lab-color-surface)'),
+				viewport: getComputedStyle(mask).stroke,
+				accent: resolve('color', 'var(--lab-color-accent)'),
+			}
+		})
+		expect(colours.background)
+			.toBe(colours.surface)
+		expect(colours.viewport)
+			.toBe(colours.accent)
 	})
 }
 

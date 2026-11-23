@@ -32,7 +32,7 @@ import RelationsView from './relations/RelationsView.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
-const { semanticGraph, layoutState, flow, layoutVersion } = useDependencyGraph()
+const { semanticGraph, layoutState, flow, layoutVersion, frameClusterId } = useDependencyGraph()
 
 // Panel-local edge selection for Graph view
 const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdgeSelection(store)
@@ -318,6 +318,7 @@ const statusLabel = computed(() => {
 						:nodes="flow.nodes"
 						:edges="flow.edges"
 						:layoutVersion="layoutVersion"
+						:frameClusterId="frameClusterId"
 						@nodeClick="onNodeClick"
 						@edgeClick="onEdgeClick"
 						@edgeClear="setSelectedEdgeData(null)"

@@ -13,15 +13,21 @@
  * the panel acquires non-zero dimensions. Automatic fit also runs when layoutVersion increments
  * (semantic graph replacement or hierarchy view changes), while avoiding refitting on unrelated
  * Runtime activity or focus deemphasis.
+ *
+ * After a widget is expanded (`frameClusterId`), the automatic fit goes to a readable zoom on that widget instead of the whole
+ * layout when the whole layout would make its member text smaller than 11px (`graph/viewport-plan.ts`); the minimap then shows
+ * where the viewport is.
  */
-import type { NodeMouseEvent } from '@vue-flow/core'
+import type { GraphNode, NodeMouseEvent } from '@vue-flow/core'
 import type { GraphFlowEdge, GraphFlowNode } from '../../graph/vue-flow'
 import { Handle, Position, useVueFlow, VueFlow } from '@vue-flow/core'
+import { MiniMap } from '@vue-flow/minimap'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useGraphTags } from '../../composables/use-graph-tags'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { edgeKeyboardOrder, edgeName, edgeTabStop, isEdgeNavigationKey, nextEdgeId } from '../../graph/edge-a11y'
 import { tagSize } from '../../graph/tag-placement'
+import { isMinimapUseful, manualMinZoom, MEMBER_FONT_PX, planExpandViewport } from '../../graph/viewport-plan'
 import { GRAPH_EDGE_TYPE } from '../../graph/vue-flow'
 import { ARROW_KINDS, arrowMarkerId, ZOOM_BUCKETS, zoomBucket } from '../../graph/zoom-scale'
 import GraphDependencyEdge from './GraphDependencyEdge.vue'
@@ -31,6 +37,8 @@ const props = defineProps<{
 	nodes: GraphFlowNode[]
 	edges: GraphFlowEdge[]
 	layoutVersion?: number
+	/** The widget this layout generation frames at a readable zoom (it was just expanded); null fits the whole layout. */
+	frameClusterId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -45,19 +53,23 @@ const emit = defineEmits<{
  * Fit leaves 4% around the graph (it used to leave 20%, then 8%: a fitted graph used about 40% of the canvas, audit U11, and the
  * Survey's card text was under 11px on screen at 1280 x 800). Everything is still in view afterwards, curves included.
  */
-const FIT_OPTIONS = { padding: 0.04 } as const
+const FIT_PADDING = 0.04
+const FIT_OPTIONS = { padding: FIT_PADDING } as const
 
 /**
  * Fit may go this far out. One widget is expanded at a time (issue #254): the Trip budget with its largest widget expanded fits
  * at about 0.2, but a larger Document may need less (the fully expanded Trip budget, no longer offered, fitted at about 0.06).
  */
 const FIT_MIN_ZOOM = 0.05
-/** Whatever Fit settled on, a person can zoom out to about a quarter of it, but never below this unless Fit itself is lower: a small graph is not wheeled down to a dot. */
-const MANUAL_MIN_ZOOM = 0.1
+/** Vue Flow's own default, stated so the readable zoom on expand is clamped to the same limit the canvas has. */
+const MAX_ZOOM = 2
+const ZOOM_LIMITS = { min: FIT_MIN_ZOOM, max: MAX_ZOOM } as const
+/** The member cards' font size, bound into the stylesheet below, so the readable zoom and the CSS cannot disagree. */
+const memberFontSize = `${MEMBER_FONT_PX}px`
 
 const i18n = useLabI18n()
 const vueFlowContainer = ref<HTMLElement | null>(null)
-const { addSelectedEdges, findEdge, fitBounds, fitView, getNodes, getSelectedEdges, onNodesChange, onNodesInitialized, removeSelectedEdges, setMinZoom, viewport, zoomIn, zoomOut } = useVueFlow()
+const { addSelectedEdges, dimensions, findEdge, fitBounds, fitView, getNodes, getSelectedEdges, onNodesChange, onNodesInitialized, removeSelectedEdges, setCenter, setMinZoom, setViewport, viewport, zoomIn, zoomOut } = useVueFlow()
 
 /**
  * The tags of the edges around the focus ("Depends on #sessions", "Used by #phone"), placed together so that none covers a card,
@@ -116,10 +128,10 @@ function areCurrentNodesMeasured(): boolean {
 }
 
 /**
- * Fits the cards and the curves between them. A long edge runs in a corridor ELK reserved beside the cards, so fitting only
- * the cards would cut those curves off at the edge of the canvas.
+ * The box of the cards and the curves between them, in flow units (null before anything is measured). A long edge runs in a
+ * corridor ELK reserved beside the cards, so fitting only the cards would cut those curves off at the edge of the canvas.
  */
-async function fitContent(): Promise<boolean> {
+const contentBounds = computed<{ x: number, y: number, width: number, height: number } | null>(() => {
 	let minX = Infinity
 	let minY = Infinity
 	let maxX = -Infinity
@@ -138,14 +150,41 @@ async function fitContent(): Promise<boolean> {
 			maxY = Math.max(maxY, point.y)
 		}
 	}
-	// Fit may reach far out; afterwards the manual zoom floor follows the zoom Fit settled on.
+	return Number.isFinite(minX) ? { x: minX, y: minY, width: maxX - minX, height: maxY - minY } : null
+})
+
+/** Fits the whole layout (`contentBounds`). Afterwards the manual zoom floor follows the zoom Fit settled on. */
+async function fitContent(): Promise<boolean> {
+	// Fit may reach far out.
 	setMinZoom(FIT_MIN_ZOOM)
-	const success = Number.isFinite(minX)
-		? await fitBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, FIT_OPTIONS)
-		: await fitView(FIT_OPTIONS)
-	const fitZoom = viewport.value.zoom
-	setMinZoom(Math.max(FIT_MIN_ZOOM, Math.min(fitZoom, Math.max(MANUAL_MIN_ZOOM, fitZoom * 0.25))))
+	const bounds = contentBounds.value
+	const success = bounds !== null ? await fitBounds(bounds, FIT_OPTIONS) : await fitView(FIT_OPTIONS)
+	setMinZoom(manualMinZoom(viewport.value.zoom, ZOOM_LIMITS))
 	return success
+}
+
+/**
+ * The automatic fit of a new layout generation. After an expansion (`frameClusterId`) whose whole layout would put member text
+ * under 11px, it shows the expanded widget at the readable zoom instead, top edge at the top of the pane
+ * (`graph/viewport-plan.ts`); the manual zoom floor still follows the whole layout's Fit. Otherwise it fits the whole layout.
+ */
+async function fitGeneration(): Promise<boolean> {
+	const frameId = props.frameClusterId ?? null
+	const expanded = frameId === null ? undefined : getNodes.value.find(node => node.id === frameId)
+	const bounds = contentBounds.value
+	if (expanded === undefined || bounds === null)
+		return fitContent()
+	const plan = planExpandViewport({
+		content: bounds,
+		expanded: { x: expanded.computedPosition.x, y: expanded.computedPosition.y, width: expanded.dimensions.width, height: expanded.dimensions.height },
+		pane: { width: dimensions.value.width, height: dimensions.value.height },
+		padding: FIT_PADDING,
+		limits: ZOOM_LIMITS,
+	})
+	if (plan.kind === 'fit')
+		return fitContent()
+	setMinZoom(manualMinZoom(plan.fitZoom, ZOOM_LIMITS))
+	return setViewport(plan.viewport)
 }
 
 async function attemptFit(): Promise<boolean> {
@@ -162,7 +201,7 @@ async function attemptFit(): Promise<boolean> {
 	if (!areCurrentNodesMeasured())
 		return false
 
-	const success = await fitContent()
+	const success = await fitGeneration()
 	if (success) {
 		fitted = true
 		return true
@@ -204,6 +243,25 @@ watch(() => props.layoutVersion, () => {
 	fitted = false
 	void nextTick(attemptFit)
 })
+
+/**
+ * The minimap (`@vue-flow/minimap`): the cards in miniature with the viewport as a rectangle; dragging it pans, a click centres the
+ * viewport on that point at the current zoom. Shown only while part of the graph is out of view and the canvas is at least 360 x 260
+ * (`isMinimapUseful()`). It is `aria-hidden`: it repeats what the canvas shows, has no keyboard operation and no tab stop, and the
+ * zoom buttons, Fit graph and Relations are the keyboard and screen-reader routes.
+ */
+const MINIMAP_SIZE = { width: 168, height: 112 } as const
+const showMinimap = computed(() => isMinimapUseful(contentBounds.value, dimensions.value, viewport.value))
+
+function minimapNodeClass(node: GraphNode): string {
+	if (node.type === 'cluster')
+		return node.data?.isExpanded === true ? 'graph-minimap-node graph-minimap-node--expanded' : 'graph-minimap-node graph-minimap-node--cluster'
+	return 'graph-minimap-node'
+}
+
+function onMinimapClick({ position }: { position: { x: number, y: number } }): void {
+	void setCenter(position.x, position.y, { zoom: viewport.value.zoom })
+}
 
 /** Keyboard route to zooming (the wheel and pinch already zoom): a fitted large graph is read by zooming in. */
 function zoomGraph(direction: 'in' | 'out'): void {
@@ -440,7 +498,8 @@ function memberKindShort(kind: string): string {
 			:edgesUpdatable="false"
 			:elementsSelectable="true"
 			:zoomOnDoubleClick="false"
-			:minZoom="0.05"
+			:minZoom="FIT_MIN_ZOOM"
+			:maxZoom="MAX_ZOOM"
 			:deleteKeyCode="null"
 			:selectionKeyCode="null"
 			:multiSelectionKeyCode="null"
@@ -501,6 +560,22 @@ function memberKindShort(kind: string): string {
 					</g>
 				</svg>
 			</template>
+
+			<MiniMap
+				v-if="showMinimap"
+				class="graph-minimap"
+				data-testid="graph-minimap"
+				aria-hidden="true"
+				position="bottom-right"
+				pannable
+				:width="MINIMAP_SIZE.width"
+				:height="MINIMAP_SIZE.height"
+				:ariaLabel="null"
+				:nodeClassName="minimapNodeClass"
+				:nodeBorderRadius="6"
+				:nodeStrokeWidth="0"
+				@click="onMinimapClick"
+			/>
 
 			<template #[`edge-${GRAPH_EDGE_TYPE}`]="edge">
 				<GraphDependencyEdge v-bind="edge" />
@@ -806,6 +881,15 @@ function memberKindShort(kind: string): string {
 	color: var(--lab-color-text-muted);
 }
 
+/*
+ * An expanded widget's header keeps its type, id, member count and Collapse button together at the left. Expanding frames the widget
+ * from its left edge when it is wider than the canvas (graph/viewport-plan.ts), so a Collapse button at the far right would be out
+ * of view, and so would the keyboard focus that moves to it after the expansion.
+ */
+.graph-cluster-header > .graph-cluster-identity {
+	flex: 0 1 auto;
+}
+
 .graph-cluster-meta {
 	flex-shrink: 0;
 	font-size: 11px;
@@ -921,7 +1005,8 @@ function memberKindShort(kind: string): string {
 	background: var(--lab-color-surface);
 	color: var(--lab-color-text);
 	font-family: var(--lab-font-mono);
-	font-size: 12px;
+	/* MEMBER_FONT_PX (graph/viewport-plan.ts): the readable zoom on expand is computed from it. */
+	font-size: v-bind(memberFontSize);
 	cursor: pointer;
 	box-shadow: 0 1px 3px color-mix(in srgb, var(--lab-color-text) 6%, transparent);
 	transition: border-color 120ms ease, box-shadow 120ms ease, opacity 160ms ease;
@@ -1221,6 +1306,47 @@ function memberKindShort(kind: string): string {
 
 .graph-tag--hidden {
 	opacity: 0;
+}
+
+/*
+ * The minimap, in the Lab tokens (it follows the light and dark themes): a surface panel with the cards in the border colour, the
+ * expanded widget as an outline, the area outside the viewport shaded and the viewport itself outlined in the accent colour. CSS
+ * fills beat the presentation attributes the component sets.
+ */
+.graph-minimap {
+	margin: 8px;
+	overflow: hidden;
+	border: 1px solid var(--lab-color-border);
+	border-radius: var(--lab-radius);
+	background: var(--lab-color-surface);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--lab-color-text) 10%, transparent);
+	line-height: 0;
+}
+
+.graph-minimap.pannable {
+	cursor: grab;
+}
+
+.graph-minimap.dragging {
+	cursor: grabbing;
+}
+
+.graph-minimap :deep(.graph-minimap-node) {
+	fill: color-mix(in srgb, var(--lab-color-text-muted) 45%, var(--lab-color-surface));
+}
+
+.graph-minimap :deep(.graph-minimap-node--expanded) {
+	fill: color-mix(in srgb, var(--lab-color-accent) 8%, var(--lab-color-surface));
+	stroke: color-mix(in srgb, var(--lab-color-accent) 55%, var(--lab-color-border));
+	stroke-width: 1px;
+	vector-effect: non-scaling-stroke;
+}
+
+.graph-minimap :deep(.vue-flow__minimap-mask) {
+	fill: color-mix(in srgb, var(--lab-color-text) 14%, transparent);
+	stroke: var(--lab-color-accent);
+	stroke-width: 1.5px;
+	vector-effect: non-scaling-stroke;
 }
 
 /*

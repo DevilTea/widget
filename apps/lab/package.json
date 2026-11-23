@@ -25,6 +25,7 @@
 		"@shikijs/engine-javascript": "catalog:",
 		"@valibot/to-json-schema": "catalog:",
 		"@vue-flow/core": "catalog:",
+		"@vue-flow/minimap": "catalog:",
 		"dockview-vue": "catalog:",
 		"elkjs": "catalog:",
 		"modern-monaco": "catalog:",

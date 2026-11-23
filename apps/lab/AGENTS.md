@@ -954,6 +954,7 @@ The readonly `Dependencies` panel (an expert view of the Tools menu since Lab UX
 BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> toVueFlow()
 ```
 
+- `viewport-plan.ts` — pure viewport geometry for the Graph canvas: the readable zoom on expand, framing the expanded widget, Fit's zoom and margin, the manual zoom floor, which layout generation frames (`clusterToFrame()`), and when the minimap is shown. See "Readable zoom on expand" and "Minimap" below.
 - `relations.ts` — pure `projectRelations()`: `SemanticGraph + InspectorFocus + rootNodeId` -> a framework-agnostic Relations view model. It imports neither Vue Flow nor ELK. Root/no usable focus yields an explicit empty state; member focus exposes exact incoming **Used by** and outgoing **Depends on** facts grouped by remote widget; widget focus treats all members as the selected set, keeps cross-widget incoming/outgoing separate, and lists same-widget dependencies in an internal section. Every row retains the original semantic edge/reference/path/operation; unresolved stubs remain unresolved and non-focusable. Relations shares `graphShowAbsent`, but deliberately projects with isolated members present so the Graph-only `graphShowIsolatedMembers` presentation preference can never erase a focused member from this inspector. Resolved member/widget clicks write through the existing Document-scoped focus API; they do not request ELK layout.
 - `src/components/dependencies/DependenciesPanel.vue` owns the internal `Relations | Graph` switcher and view-specific toolbar. The switcher follows the WAI-ARIA tabs pattern (roving tab stop plus Arrow/Home/End keyboard navigation and labelled tabpanels). The Graph DOM stays mounted with `v-show`, preserving pan/zoom across view changes. Shared focus changes never mutate Graph expansion state or request layout/refit; cluster identity selection and the explicit expand/collapse toggle are separate actions. `RelationsView.vue` renders the dense three-column inspector and the widget/internal-dependency mode without a canvas layout engine; same-widget unresolved stubs stay in the internal section rather than leaking into cross-widget outgoing dependencies. A selected Method whose `transitivelyWrites` and `transitivelyEmits` are both `false` is tagged "read-only" next to where W and E would be (issue #230: it used to be told only by the missing badges); the compact member chips keep W and E only.
 - `types.ts` / `projection.ts` — the Lab's semantic graph shape and its pure, deterministic projection.
@@ -1013,7 +1014,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   - Vue Flow is strictly viewer-only: every node is `draggable: false`/`connectable: false` and no edge
     is `updatable`.
 - `src/components/graph/GraphCanvas.vue` — the only place in this app that imports `@vue-flow/core`
-  (and its structural `dist/style.css`); custom node templates for `cluster`, `member`, and `stub`,
+  (and its structural `dist/style.css`) and `@vue-flow/minimap`; custom node templates for `cluster`, `member`, and `stub`,
   themed through the Lab palette tokens. Collapsed and expanded cluster identities and expanded member cards are keyboard-focusable/selectable without changing expansion state. The expand/collapse button of a card carries `aria-expanded`
   (localized names "Expand"/"Collapse", 展開/收合). A toggle requests a new layout and the canvas is not drawn while the worker lays it out
   (`flow` is null), so the pressed button leaves the DOM; `DependenciesPanel.vue` remembers the toggled card and, once the next layout is
@@ -1107,20 +1108,57 @@ a new layout generation is still being measured. This prevents `fitView()` from 
 partially measured subset and then incorrectly marking that generation fitted. `useDependencyGraph` exposes
 `layoutVersion` (incremented only when ELK layout succeeds), which resets fit tracking so the graph
 automatically refits on semantic graph replacements and cluster expansion/collapse, while ordinary
-Runtime activity and focus deemphasis never trigger a refit. `DependenciesPanel.vue`'s Graph view also exposes an explicit
+Runtime activity and focus deemphasis never trigger a refit. With it, `useDependencyGraph` sets `frameClusterId`: the widget that layout
+generation was made to expand (`graph/viewport-plan.ts` `clusterToFrame()`: the expanded id changed to a new one over the same
+`SemanticGraph` object), or null. `DependenciesPanel.vue`'s Graph view also exposes an explicit
 **Fit graph** button along with **Zoom in** / **Zoom out** and **Collapse all** controls in the toolbar (no **Expand all**: one widget is expanded at a
 time, issue #254). Fit leaves 4% around the graph (it used to leave 20%, then 8%) and fits the curves as well as the cards (`fitBounds` over both),
-because a long edge runs in a corridor beside the cards. Expanding or collapsing a widget refits the whole new layout (the expanded widget and the
-other widgets as cards), as **Fit graph** does. Expanding every widget at once could not be made readable by layout options (issue #230, measured
+because a long edge runs in a corridor beside the cards. Collapsing a widget, **Collapse all**, a new semantic graph (another Document, a filter;
+also when a widget stays expanded through it) and the first layout fit the whole layout, as **Fit graph** does; **expanding** a widget goes to a
+readable zoom on it (below). Expanding every widget at once could not be made readable by layout options (issue #230, measured
 with the real ELK at a 691 x 681 canvas: `COFFMAN_GRAHAM` layering with `layerBound` 2 to 5, a tighter root, `BRANDES_KOEPF` placement; the best
 expanded Survey Fit was 0.306, member text about 3.7px, and the expanded Trip budget stayed between 0.047 and 0.076: 37 or 112 member cards at
 once), so the Lab expands one widget at a time (issue #254). Measured the same way (real ELK, the 691 x 681 canvas of a 1440 x 900 window;
 `graph-readability.unit.test.ts` "fitted size" pins the floors and that the largest widget is the lowest Fit, `e2e/graph-readability.spec.ts` reads
 the same zoom in the browser: 0.416 and 0.197 for the two largest), one expanded widget fits the Survey at 0.415 to 0.651 (the largest, #sessions with 8 members, is 0.415: member text,
 12px, about 5.0px on screen; #mode 0.651, about 7.8px) and the Trip budget at 0.196 to 0.389 (the largest, the Expense #hotel with 15 members, is
-0.196: about 2.4px; a Person about 0.31, #settlement 0.389), against 0.27 and about 0.06 fully expanded. Fitting only the expanded widget's own box
-would give #sessions 0.575 (about 6.9px) and #hotel 0.363 (about 4.4px), so member text reaches 11px only by zooming in (above about 0.92) either
-way; Fit keeps the whole layout so the expanded widget's dependencies on the other cards stay in view. Fit may reach 0.05 (for a Document larger
+0.196: about 2.4px; a Person about 0.31, #settlement 0.389), against 0.27 and about 0.06 fully expanded. Those are the whole layout's Fits, which Fit graph still gives; expanding
+no longer settles on them.
+
+**Readable zoom on expand (owner decision, option C plus a minimap).** Neither the whole layout's Fit nor a Fit of the expanded widget's own
+box (#sessions 0.575, about 6.9px; #hotel 0.363, about 4.4px) puts member text at 11px, so expanding uses the zoom that does. After an expansion, once its layout is measured, the automatic fit computes the whole layout's Fit
+(`fitZoom()`, Vue Flow's own formula) and the *readable zoom*, `MIN_SCREEN_TEXT_PX / MEMBER_FONT_PX` = 11 / 12 (about 0.917, clamped to the
+canvas limits 0.05 to 2; the member card's CSS font size is bound to `MEMBER_FONT_PX` with `v-bind`, so the two cannot drift). When the whole
+layout fits at the readable zoom or more it is fitted as before; otherwise (`planExpandViewport()`) the viewport goes to the readable zoom
+and frames the expanded widget's own box: its top edge at Fit's top margin (`fitMargin()`, Vue Flow's rule for padding 0.04, so a framed
+widget starts as far from the top as a fitted graph), centred across, or from its left edge after the same margin when it is wider than the
+canvas. Edges to the other cards run off-screen; the minimap (below) shows where the viewport is. The expanded widget's header keeps its
+type, id, member count and Collapse button together at the left (the identity button no longer stretches): framed from its left edge, a
+Collapse button at the far right would be out of view, and so would the keyboard focus that moves to it after the expansion. Re-expanding a
+widget after a collapse frames it again. Shared focus changes and Runtime activity still never refit or zoom. The manual zoom floor still
+follows the whole layout's Fit (`manualMinZoom()`), also after framing. Measured in the browser (`e2e/graph-readability.spec.ts`):
+expanding #sessions or #hotel gives 0.917 (member text 11.0px) in the default Tools pane (749 x 252 at 1440 x 900, 666 x 202 at 1280 x 800)
+and maximized (1440 x 739, 1280 x 639); **Fit graph** afterwards gives the whole layout (maximized at 1440 x 900: #sessions 0.649, #hotel
+0.331; in the default pane 0.223 and 0.114). The cost: an expanded widget's edges to the other widgets are not all in view; Fit graph shows
+them, and Relations lists them all. `e2e/graph.spec.ts` and `e2e/dependencies.spec.ts` press Fit graph where they then click a card the
+framing leaves out of view, as a person would.
+
+**Minimap.** `GraphCanvas.vue` draws `@vue-flow/minimap`'s `MiniMap` (pinned in the catalog at 1.5.4, peer `@vue-flow/core` ^1.23.0
+against our 1.48.2; it bundles its own d3-zoom) in the canvas's bottom right corner, inside the canvas, so it covers neither the Graph key nor
+the toolbar (both are above the canvas). It is 168 x 112, themed with the Lab tokens (surface panel, cards in a muted mix, the expanded widget
+outlined, the area outside the viewport shaded, the viewport rectangle in the accent colour; CSS fills beat the component's presentation
+attributes, and its own white stylesheet is not imported). Dragging it pans (its `pannable` option, the zoom unchanged); a click centres the
+viewport on that point at the current zoom (`setCenter()`; d3-zoom swallows the click that ends a drag); wheel zoom on it is off. It is
+`aria-hidden="true"` with no accessible name: it repeats what the canvas shows, has no keyboard operation and no tab stop, and the zoom
+buttons, Fit graph and Relations are the keyboard and screen-reader routes. It is shown only while part of the graph (the cards and curves,
+as Fit sees them) is out of view by more than a pixel *and* the canvas is at least 360 x 260 (`isMinimapUseful()`, `MINIMAP_MIN_PANE`):
+with everything in view it adds nothing, and in a smaller canvas it would hide much of what it maps. So it shows after expanding a large
+widget with the Tools group maximized, or after zooming in, and never in the default Tools pane (252px high at 1440 x 900). It can cover a
+focus tag in its corner; the tags are placed before the minimap is known and are not moved for it. `e2e/graph-readability.spec.ts` covers
+when it shows and hides, its place, dragging and clicking it, and its light and dark colours; `src/graph/viewport-plan.unit.test.ts` the
+geometry.
+
+Fit may reach 0.05 (for a Document larger
 than the showcases); afterwards the manual zoom floor (wheel, pinch, **Zoom out**) is `min(fit, max(0.1, fit / 4))`, so a small graph (the Survey
 fits at 0.99, so about 0.25) cannot be wheeled down to a dot, and the Trip budget with #hotel expanded (0.196) zooms out to 0.1. The collapsed card
 text is 13px (type) and 12px (id, S/P/M counts).
@@ -1731,8 +1769,9 @@ replace what the user is reading, plain language first) where the design left a 
   tool group (that would shrink what the user is editing). The Graph gets a short pane there (the collapsed Survey fits at about 0.37
   at 1440 x 900), so the Tools group has **Maximize / Restore** (above): maximized, the Graph fits at about 1.07, and
   `e2e/graph-readability.spec.ts` reads it maximized with issue #230's thresholds (1440: zoom 0.95, title and id 10.9px; 1280: 0.82,
-  10.5px, 9.8px; the expanded #sessions and #hotel Fits, 0.415 and 0.196 in #230's pane, are bands around what was measured maximized,
-  0.65 +/- 0.05 and 0.33 +/- 0.04). An earlier version of this phase measured with the divider dragged up and lowered those thresholds;
+  10.5px, 9.8px; the whole-layout Fits with #sessions and #hotel expanded, 0.415 and 0.196 in #230's pane, are bands around what was
+  measured maximized, 0.65 +/- 0.05 and 0.33 +/- 0.04, read after **Fit graph** since expanding goes to the readable zoom, 0.917, in both
+  panes; see "Readable zoom on expand"). An earlier version of this phase measured with the divider dragged up and lowered those thresholds;
   that was undone. The default half-column pane keeps a floor too (the collapsed Survey's Fit 0.3 or more, measured 0.37), so it does not
   shrink further unnoticed.
 - *Maximize while a view is opened from elsewhere:* the view joins the maximized Tools group, which stays maximized; a canonical tab asked

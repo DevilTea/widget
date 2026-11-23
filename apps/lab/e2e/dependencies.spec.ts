@@ -204,6 +204,10 @@ test('Relations keeps page-level width contained at the 900px minimum in light a
 	const member = page.locator('.vue-flow__node[data-id="4:property:required"] .graph-node--member')
 	await expect(member)
 		.toBeVisible({ timeout: 15_000 })
+	// Expanding frames #phone at a readable zoom from its left edge; at 900px the canvas is narrower than #phone, so Fit graph
+	// brings the member into view before it is clicked.
+	await page.getByRole('button', { name: 'Fit graph' })
+		.click()
 	await member.click()
 	await viewTabs.getByRole('tab', { name: 'Relations' })
 		.click()

@@ -255,7 +255,12 @@ test('progressive disclosure collapses clusters initially, expands one widget at
 	]
 	const seen: string[] = []
 	for (const [index, widgetId] of widgetIds.entries()) {
-		// Clicking a collapsed card's Expand button expands it and collapses the widget expanded before.
+		// Expanding frames the expanded widget at a readable zoom, so the other cards may be out of view: Fit graph brings them
+		// back, as a person would. Clicking a collapsed card's Expand button expands it and collapses the widget expanded before.
+		if (index > 0) {
+			await page.getByRole('button', { name: 'Fit graph' })
+				.click()
+		}
 		await expandGraphWidget(page, widgetId)
 		const own = expectedMemberIds.filter(id => id.startsWith(`${index}:`))
 		await expect(members)
