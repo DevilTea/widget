@@ -166,6 +166,24 @@ test.describe('the Tools group beside the Preview', () => {
 			.toHaveCount(2)
 	})
 
+	test('Delete closes a focused expert view\'s tab, never a canonical one', async ({ page }) => {
+		await openLab(page)
+		for (const name of ['Edit', 'Explain', 'Tools', 'Preview']) {
+			const tab = page.getByRole('tab', { name, exact: true })
+			await tab.focus()
+			await page.keyboard.press('Delete')
+			await page.keyboard.press('Backspace')
+			await expect(tab, name)
+				.toBeVisible()
+		}
+		const runtime = await openTool(page, 'runtime')
+		await page.keyboard.press('Delete')
+		await expect(runtime)
+			.toHaveCount(0)
+		await expect(page.locator('.dv-groupview'))
+			.toHaveCount(2)
+	})
+
 	test('opening a view keeps Edit or Explain on screen', async ({ page }) => {
 		await openLab(page)
 		await openEditStructure(page)

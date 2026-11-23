@@ -327,6 +327,22 @@ function watchTabActivation(api: DockviewApi): void {
 	})
 }
 
+/**
+ * Dockview closes the focused tab on Delete or Backspace (its tab strip's own keyboard handling), whatever its tab renderer draws, so a
+ * canonical tab (Edit, Explain, Tools, Preview) could be closed from the keyboard and never come back short of "Reset layout". Opening a
+ * view now moves focus onto tabs often, so the key is stopped here, in the capture phase, before it reaches the tab strip, for a tab
+ * drawn by `NonClosableTab.vue` (`data-non-closable`). An expert view's tab still closes with it.
+ */
+function guardCanonicalTabClose(event: KeyboardEvent): void {
+	if (event.key !== 'Delete' && event.key !== 'Backspace')
+		return
+	const target = event.target
+	if (!(target instanceof HTMLElement) || !target.matches('.dv-tab'))
+		return
+	if (target.querySelector('[data-non-closable]') !== null)
+		event.stopPropagation()
+}
+
 /** Moves keyboard focus to the tab of `panel` (its group's selected tab), once Dockview has laid it out. */
 function focusTabOf(panel: IDockviewPanel): void {
 	void nextTick(() => requestAnimationFrame(() => {
@@ -393,6 +409,7 @@ function watchToolOpenRequests(api: DockviewApi): void {
 	<div
 		ref="workbenchEl"
 		class="workbench"
+		@keydown.capture="guardCanonicalTabClose"
 	>
 		<DockviewVue
 			class="workbench__dockview"

@@ -59,6 +59,7 @@ const unseenLabel = computed(() => {
 
 <template>
 	<span
+		data-non-closable
 		:data-recording="eventsTab === null ? undefined : String(eventsTab.recording.value)"
 		class="relative flex items-center h-full w-full whitespace-nowrap overflow-hidden text-ellipsis"
 	><template v-if="unseen !== null && unseen > 0"><span aria-hidden="true">{{ title }}</span><span
