@@ -190,6 +190,36 @@ test.describe('problems in Structure (report item 12)', () => {
 		}
 	})
 
+	test('two diagnostics about one reference written twice: two rows, one line per field, one squiggle per value', async ({ page }) => {
+		await page.goto('/?lab-test&showcase=survey')
+		await waitForLabTestSeam(page)
+		const editor = page.getByTestId('structure-editor')
+		// sessions reads `gusets` twice, from the kids option's visibleWhen and from its rule: Core reports one diagnostic per member
+		// (`options`, `errors`), and each is located at both values.
+		const text = (await documentSourceText(page))
+			.replace('"visibleWhen": { "question": "guests", "op": "greaterThan", "value": 0 }', '"visibleWhen": { "question": "gusets", "op": "greaterThan", "value": 0 }')
+			.replace('{ "question": "guests", "op": "greaterThan", "value": 2 }', '{ "question": "gusets", "op": "greaterThan", "value": 2 }')
+		await editJson(page, text)
+		await expectDocumentStatus(page, { problems: 2 })
+
+		await page.getByRole('button', { name: /^sessions : MultipleChoice/ })
+			.click()
+		for (const path of ['options.2.visibleWhen.question', 'rules.0.when.all.1.question']) {
+			await expect(field(editor, path)
+				.getByTestId('field-problem'))
+				.toHaveCount(1)
+		}
+		await expect(editor.getByTestId('field-problem'))
+			.toHaveCount(2)
+
+		await openAuthorJson(page)
+		await expect(page.getByTestId('author-problems')
+			.getByTestId('problem-row'))
+			.toHaveCount(2)
+		await expect(page.getByTestId('json-editor'))
+			.toHaveAttribute('data-marker-count', '2')
+	})
+
 	// The Catalog is a modal slide-over since Lab UX phase 3B, not a view "Show problems" could be pressed from.
 	test('in JSON, "Show problems" keeps the list under the editor', async ({ page }) => {
 		await page.goto('/?showcase=survey')

@@ -386,6 +386,50 @@ export function problemSpans(problem: LabProblem, text: string): readonly JsonSp
 	return [first, ...more]
 }
 
+/** One editor squiggle: a range of the text with the code and message its hover shows. */
+export interface ProblemMarker {
+	readonly start: number
+	readonly end: number
+	readonly code: string | null
+	readonly message: string
+}
+
+/**
+ * The squiggles for `problems` over `text`: one per location of each problem (`problemSpans()`), with the same range, code and
+ * message drawn once. Two diagnostics of one widget that name the same missing widget (one per member that reads it) are located
+ * at the same values (`reference-locations.ts` cannot tell which value a member read), so each value gets one squiggle, not one per
+ * diagnostic; the Problems list keeps both rows.
+ */
+export function problemMarkers(problems: readonly LabProblem[], text: string): readonly ProblemMarker[] {
+	const seen = new Set<string>()
+	const markers: ProblemMarker[] = []
+	for (const problem of problems) {
+		for (const span of problemSpans(problem, text)) {
+			const key = JSON.stringify([span.start, span.end, problem.code, problem.message])
+			if (seen.has(key))
+				continue
+			seen.add(key)
+			markers.push({ start: span.start, end: span.end, code: problem.code, message: problem.message })
+		}
+	}
+	return markers
+}
+
+/**
+ * `problems` with each code and message once (the first one kept, order unchanged): what one field lists, so two diagnostics of
+ * one widget about the same reference read as one line there.
+ */
+export function uniqueProblemTexts(problems: readonly LabProblem[]): readonly LabProblem[] {
+	const seen = new Set<string>()
+	return problems.filter((problem) => {
+		const key = JSON.stringify([problem.code, problem.message])
+		if (seen.has(key))
+			return false
+		seen.add(key)
+		return true
+	})
+}
+
 function pathSpan(problem: LabProblem, path: JsonPath, text: string): JsonSpan | null {
 	const location = locateJsonPath(text, path)
 	if (location === null)

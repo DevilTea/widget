@@ -415,6 +415,16 @@ describe('configFieldEditor shows the selected widget\'s problems at their field
 			.toHaveLength(2)
 	})
 
+	it('lists two diagnostics with the same code and message once at a field, and names both in its problem keys', () => {
+		const message = 'Dependency target widget "mdoe" does not exist.'
+		const editor = mountEditor({ problems: [problem('diagnostic-0', ['title'], 'missing-dependency-target', message), problem('diagnostic-1', ['title'], 'missing-dependency-target', message)] }, { title: 'mdoe' })
+		const list = editor.get('[data-config-path="title"] [data-testid="field-problems"]')
+		expect(list.findAll('[data-testid="field-problem"]'))
+			.toHaveLength(1)
+		expect(list.attributes('data-problem-keys'))
+			.toBe('diagnostic-0 diagnostic-1')
+	})
+
 	it('describes the control by both its problems and a "not applied" note', async () => {
 		const editor = mountEditor({ problems: [problem('diagnostic-0', ['title'])] }, { title: 'T' })
 		await editor.setProps({ resync: { path: 'title', tick: 1, message: 'nope' } })

@@ -22,7 +22,7 @@ import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { locateJsonValue } from '../../lab/json-locate'
-import { problemSpan, problemSpans } from '../../lab/problems'
+import { problemMarkers, problemSpan } from '../../lab/problems'
 import MonacoJsonEditor from '../editor/MonacoJsonEditor.vue'
 import AuthorProblems from './AuthorProblems.vue'
 
@@ -33,9 +33,9 @@ const problemsList = useTemplateRef('problemsList')
 
 const markers = computed<readonly EditorMarker[]>(() => {
 	const text = store.draftSourceText.value
-	// A problem with several locations (a broken widget reference written more than once) is one squiggle per location.
-	return store.problems.value.flatMap(problem => problemSpans(problem, text)
-		.map(span => ({ start: span.start, end: span.end, message: problem.message, code: problem.code ?? undefined })))
+	// One squiggle per location of each problem, each range, code and message drawn once (`problemMarkers()`).
+	return problemMarkers(store.problems.value, text)
+		.map(marker => ({ start: marker.start, end: marker.end, message: marker.message, code: marker.code ?? undefined }))
 })
 
 function jumpTo(problem: LabProblem): void {

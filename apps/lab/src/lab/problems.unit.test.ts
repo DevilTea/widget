@@ -3,7 +3,7 @@ import { createWidgetDocument } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { getShowcase } from '../showcases/registry'
-import { claimsFieldProblem, collectProblems, groupProblems, placeStructureProblems, problemSpan, problemSpans } from './problems'
+import { claimsFieldProblem, collectProblems, groupProblems, placeStructureProblems, problemMarkers, problemSpan, problemSpans, uniqueProblemTexts } from './problems'
 
 function problemsOf(showcaseId: string, presetId: string, parseError: SourceParseError | null = null) {
 	const showcase = getShowcase(showcaseId)!
@@ -169,14 +169,19 @@ describe('a broken widget reference is located at its config value (reference-lo
 			.toBe(true)
 	})
 
-	it('gives a reference written twice both locations: two fields, two ranges, one row', () => {
+	it('gives each diagnostic about a reference written twice both locations (Core reports one per member that reads it): two rows, one line per field, one squiggle per value', () => {
 		const showcase = getShowcase('survey')!
 		const text = showcase.defaultPreset.sourceText
 			.replace('"visibleWhen": { "question": "guests", "op": "greaterThan", "value": 0 }', '"visibleWhen": { "question": "gusets", "op": "greaterThan", "value": 0 }')
 			.replace('{ "question": "guests", "op": "greaterThan", "value": 2 }', '{ "question": "gusets", "op": "greaterThan", "value": 2 }')
 		const { withSchemas } = compiled(JSON.parse(text))
-		expect(withSchemas.length)
-			.toBeGreaterThan(0)
+		// sessions' `options` (the kids option's visibleWhen) and `errors` (the rule) each read `gusets`: two diagnostics, which the
+		// matcher cannot tell apart by value, so both carry both locations. The list keeps Core's two rows.
+		expect(withSchemas)
+			.toHaveLength(2)
+		expect(withSchemas[0]!.locationLabel)
+			.not
+			.toBe(withSchemas[1]!.locationLabel)
 		for (const problem of withSchemas) {
 			expect(problem.code)
 				.toBe('missing-dependency-target')
@@ -192,6 +197,17 @@ describe('a broken widget reference is located at its config value (reference-lo
 			expect(claimsFieldProblem(['options', 1, 'enabledWhen', 'question'], null, problem))
 				.toBe(false)
 		}
+		// Drawn once: one squiggle per value, not one per diagnostic.
+		const markers = problemMarkers(withSchemas, text)
+		expect(markers.map(marker => text.slice(marker.start, marker.end)))
+			.toEqual(['"gusets"', '"gusets"'])
+		expect(markers.map(marker => marker.code))
+			.toEqual(['missing-dependency-target', 'missing-dependency-target'])
+		// And listed once at each field: the two diagnostics have the same code and message.
+		expect(withSchemas[0]!.message)
+			.toBe(withSchemas[1]!.message)
+		expect(uniqueProblemTexts(withSchemas))
+			.toEqual([withSchemas[0]])
 	})
 
 	it('keeps a dependency diagnostic the rule does not apply to at the widget: a condition on an unresolved widget', () => {
@@ -208,6 +224,31 @@ describe('a broken widget reference is located at its config value (reference-lo
 			.toBe('"id": "guests"')
 		expect(withSchemas)
 			.toEqual(withoutSchemas)
+	})
+})
+
+describe('problemMarkers and uniqueProblemTexts', () => {
+	const text = '{ "a": "x", "b": "y" }'
+	const at = (key: string, sourcePath: string[], code: string, message: string) =>
+		({ key, kind: 'diagnostic', code, message, locationLabel: null, nodeId: null, sourcePath, configPath: null, widgetLevel: false, syntaxSourceText: null, cycle: null }) as const
+
+	it('draws a range once per code and message, and keeps a different code or message on the same range', () => {
+		const markers = problemMarkers([
+			at('diagnostic-0', ['a'], 'missing-dependency-target', 'm'),
+			at('diagnostic-1', ['a'], 'missing-dependency-target', 'm'),
+			at('diagnostic-2', ['a'], 'missing-dependency-target', 'other'),
+			at('diagnostic-3', ['a'], 'invalid-widget-config', 'm'),
+			at('diagnostic-4', ['b'], 'missing-dependency-target', 'm'),
+		], text)
+		expect(markers.map(marker => `${text.slice(marker.start, marker.end)} ${marker.code} ${marker.message}`))
+			.toEqual(['"x" missing-dependency-target m', '"x" missing-dependency-target other', '"x" invalid-widget-config m', '"y" missing-dependency-target m'])
+	})
+
+	it('lists each code and message once, in order', () => {
+		const problems = [at('diagnostic-0', ['a'], 'c', 'm'), at('diagnostic-1', ['b'], 'c', 'm'), at('diagnostic-2', ['a'], 'c', 'n')]
+		expect(uniqueProblemTexts(problems)
+			.map(problem => problem.key))
+			.toEqual(['diagnostic-0', 'diagnostic-2'])
 	})
 })
 
