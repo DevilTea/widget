@@ -125,12 +125,13 @@ describe('referenceConfigPaths', () => {
 	it('applies to the codes whose target id names nothing usable, and not to the others', () => {
 		const config = { visibleWhen: { question: 'mdoe', op: 'answered' } }
 		expect([...LOCATED_DEPENDENCY_CODES].sort())
-			.toEqual(['ambiguous-dependency-target', 'missing-dependency-capability', 'missing-dependency-member', 'missing-dependency-target'])
+			.toEqual(['missing-dependency-capability', 'missing-dependency-member', 'missing-dependency-target'])
 		for (const code of LOCATED_DEPENDENCY_CODES) {
 			expect(locate(missing('mdoe', code), config))
 				.toEqual([['visibleWhen', 'question']])
 		}
-		for (const code of ['unresolved-dependency-target', 'property-dependency-has-side-effects', 'invalid-widget-config']) {
+		// ambiguous: no value can choose between widgets that share the id (they carry duplicate-widget-id).
+		for (const code of ['ambiguous-dependency-target', 'unresolved-dependency-target', 'property-dependency-has-side-effects', 'invalid-widget-config']) {
 			expect(locate(missing('mdoe', code), config))
 				.toBeNull()
 		}

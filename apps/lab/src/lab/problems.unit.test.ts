@@ -210,6 +210,22 @@ describe('a broken widget reference is located at its config value (reference-lo
 			.toEqual([withSchemas[0]])
 	})
 
+	it('keeps an ambiguous target at the widget: two widgets share the id, and no value can choose between them', () => {
+		const showcase = getShowcase('survey')!
+		const source = JSON.parse(showcase.defaultPreset.sourceText) as { slots: { questions: { id: string }[] } }
+		source.slots.questions.push(structuredClone(source.slots.questions.find(question => question.id === 'mode')!))
+		const { withSchemas, withoutSchemas } = compiled(source)
+		const ambiguous = withSchemas.filter(problem => problem.code === 'ambiguous-dependency-target')
+		expect(ambiguous.length)
+			.toBeGreaterThan(0)
+		expect(ambiguous.every(problem => problem.configPath === null && problem.widgetLevel && (problem.moreLocations ?? []).length === 0))
+			.toBe(true)
+		expect(withSchemas.some(problem => problem.code === 'duplicate-widget-id'))
+			.toBe(true)
+		expect(withSchemas)
+			.toEqual(withoutSchemas)
+	})
+
 	it('keeps a dependency diagnostic the rule does not apply to at the widget: a condition on an unresolved widget', () => {
 		// `rating` is the AI draft's question of an unknown type: the reference is right, the target is broken
 		// (`unresolved-dependency-target`, which has its own `unknown-widget-type` there), so it stays widget-level.

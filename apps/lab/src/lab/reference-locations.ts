@@ -23,15 +23,14 @@ import { describeField } from './config-schema'
  * The dependency diagnostic codes whose target id, when the config writes it in a widget reference, is located at that value.
  * Each says the id names nothing this dependency can use, so changing the value is a fix:
  * - `missing-dependency-target`: no widget has the id (a typo);
- * - `ambiguous-dependency-target`: several widgets have it;
  * - `missing-dependency-capability`, `missing-dependency-member`: the widget it names has no such capability or member (the
  *   wrong widget is named).
- * Left out: `unresolved-dependency-target` (the reference is right, the target widget is broken and has its own diagnostic
+ * Left out: `ambiguous-dependency-target` (several widgets share the id; no value can choose between them, the fix is a unique
+ * id, and those widgets already carry `duplicate-widget-id`), `unresolved-dependency-target` (the reference is right, the target widget is broken and has its own diagnostic
  * there) and `property-dependency-has-side-effects` (the plugin's code reads a Method that writes; no config value is wrong).
  */
 export const LOCATED_DEPENDENCY_CODES: ReadonlySet<string> = new Set([
 	'missing-dependency-target',
-	'ambiguous-dependency-target',
 	'missing-dependency-capability',
 	'missing-dependency-member',
 ])
