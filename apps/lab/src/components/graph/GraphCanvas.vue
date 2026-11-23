@@ -21,8 +21,7 @@
 import type { GraphNode, NodeMouseEvent } from '@vue-flow/core'
 import type { GraphFlowEdge, GraphFlowNode } from '../../graph/vue-flow'
 import { Handle, Position, useVueFlow, VueFlow } from '@vue-flow/core'
-import { MiniMap } from '@vue-flow/minimap'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useGraphTags } from '../../composables/use-graph-tags'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { edgeKeyboardOrder, edgeName, edgeTabStop, isEdgeNavigationKey, nextEdgeId } from '../../graph/edge-a11y'
@@ -251,6 +250,11 @@ watch(() => props.layoutVersion, () => {
  * zoom buttons, Fit graph and Relations are the keyboard and screen-reader routes.
  */
 const MINIMAP_SIZE = { width: 168, height: 112 } as const
+/**
+ * Loaded the first time it is shown: the package bundles its own copy of d3-zoom, about 57 KB raw / 19 KB gzip on the eager main
+ * chunk when imported statically, for a panel most sessions never see.
+ */
+const MiniMap = defineAsyncComponent(async () => (await import('@vue-flow/minimap')).MiniMap)
 const showMinimap = computed(() => isMinimapUseful(contentBounds.value, dimensions.value, viewport.value))
 
 function minimapNodeClass(node: GraphNode): string {

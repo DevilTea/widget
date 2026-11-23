@@ -602,6 +602,8 @@ modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded 
 vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Edit > JSON is first opened
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
+Graph minimap (vue-flow-minimap-*.js)   ~55 KB raw / ~18.5 KB gzip  — loaded the first time the minimap is shown (it bundles its own d3-zoom;
+                                         imported statically it added ~57 KB / ~19 KB gzip to lab-*.js; the readable-zoom code adds ~3.3 KB / ~1.2 KB there)
 Implementation panel + Shiki (ImplementationPanel-*.js)
                                          ~375 KB raw / ~75 KB gzip  — loaded on first Implementation open
 Quote Web Worker (quote.worker-*.js)       ~111 KB raw / ~32 KB gzip   — loaded when the quote Preview first evaluates (Core, the plugins and Valibot;
@@ -1144,7 +1146,7 @@ them, and Relations lists them all. `e2e/graph.spec.ts` and `e2e/dependencies.sp
 framing leaves out of view, as a person would.
 
 **Minimap.** `GraphCanvas.vue` draws `@vue-flow/minimap`'s `MiniMap` (pinned in the catalog at 1.5.4, peer `@vue-flow/core` ^1.23.0
-against our 1.48.2; it bundles its own d3-zoom) in the canvas's bottom right corner, inside the canvas, so it covers neither the Graph key nor
+against our 1.48.2; it bundles its own d3-zoom, so it is a `defineAsyncComponent` loaded the first time it is shown) in the canvas's bottom right corner, inside the canvas, so it covers neither the Graph key nor
 the toolbar (both are above the canvas). It is 168 x 112, themed with the Lab tokens (surface panel, cards in a muted mix, the expanded widget
 outlined, the area outside the viewport shaded, the viewport rectangle in the accent colour; CSS fills beat the component's presentation
 attributes, and its own white stylesheet is not imported). Dragging it pans (its `pannable` option, the zoom unchanged); a click centres the
