@@ -1507,8 +1507,9 @@ shared by those diagnostics). `collectProblems()` tags such a problem with its c
 as `widget.member` labels) and `groupProblems()` turns two or more problems of one cycle into one `cycle` entry; `AuthorProblems.vue` shows it collapsed
 (`data-testid=problem-group`, `aria-expanded`, the code, "N members depend on each other in a loop" and the members in Core's order) and expanding it lists
 Core's own diagnostics, one `problem-row` each, code, message and location verbatim, each still a jump. Only the presentation is grouped: the list,
-the summary, `data-problem-count`, the header chip, the editor squiggles and the Blueprint panel's "All diagnostics" view keep Core's count and text
-(a cycle with a single diagnostic is an ordinary row).
+the summary, `data-problem-count`, the header chip and the Blueprint panel's "All diagnostics" view keep Core's count and text (a cycle with a
+single diagnostic is an ordinary row). The editor squiggles are not grouped either, but they are drawn per location, not per diagnostic: one per
+range, code and message (`problemMarkers()`, see "Precise locations for broken widget references"), so their count is not Core's.
 
 ### Problems in Structure (Lab UX phase 2, report item 12)
 
