@@ -104,6 +104,12 @@ import { defaultShowcase, listedShowcases, showcases } from '../showcases/regist
 export type LabToolTab = 'edit' | 'explain' | 'tools' | 'preview'
 
 /** One request to open (or focus) an expert view in the Tools group; `tick` makes a repeated request a new one. */
+/** One request to show a canonical tab (`showTab()`); `tick` makes a repeated request for the same tab a new one. */
+export interface TabRequest {
+	readonly tab: LabToolTab
+	readonly tick: number
+}
+
 export interface ToolOpenRequest {
 	readonly tool: ToolId
 	readonly tick: number
@@ -197,7 +203,19 @@ export interface LabStore {
 	readonly showcases: readonly ShowcaseEntry[]
 	readonly showcaseId: Readonly<Ref<string>>
 	readonly presets: Readonly<Ref<readonly ShowcasePreset[]>>
+	/**
+	 * The canonical panel Dockview shows as active, kept by `Workbench.vue` (a mirror: writing it does nothing). To bring a tab to
+	 * the front, call `showTab()`.
+	 */
 	readonly activeTab: Ref<LabToolTab>
+	/**
+	 * The latest request to show a canonical tab (`showTab()`). `Workbench.vue` handles every request, the same tab again included:
+	 * it restores a maximized Tools group first, then activates the tab. Until phase 3B review it watched `activeTab` itself, and a
+	 * request for the tab that already was `activeTab` (Show problems from Edit while the Tools group was maximized) did nothing.
+	 */
+	readonly tabRequest: Readonly<Ref<TabRequest | null>>
+	/** Brings a canonical tab to the front (Show problems, Inspect, the tutorial). */
+	showTab: (tab: LabToolTab) => void
 	/**
 	 * The canonical panel shown in the tool group (the group that holds Edit), kept by `Workbench.vue` from Dockview; `null`
 	 * before the workbench is up or while something else is shown there (an expert view the user dragged into it). `activeTab` is
@@ -612,6 +630,10 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 	const activeTab = shallowRef<LabToolTab>('edit')
 	const toolGroupTab = shallowRef<LabToolTab | null>(null)
 	const toolOpenRequest = shallowRef<ToolOpenRequest | null>(null)
+	const tabRequest = shallowRef<TabRequest | null>(null)
+	const showTab = (tab: LabToolTab): void => {
+		tabRequest.value = { tab, tick: (tabRequest.value?.tick ?? 0) + 1 }
+	}
 	const openTools = shallowRef<ReadonlySet<ToolId>>(new Set())
 	const graphShowAbsent = shallowRef(false)
 	const graphShowIsolatedMembers = shallowRef(false)
@@ -748,6 +770,8 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		presets,
 		activeTab,
 		toolGroupTab,
+		tabRequest,
+		showTab,
 		toolOpenRequest,
 		openTool: (tool) => {
 			toolOpenRequest.value = { tool, tick: (toolOpenRequest.value?.tick ?? 0) + 1 }
@@ -826,7 +850,7 @@ export function createLabStore(initialShowcase: ShowcaseEntry = defaultShowcase)
 		// Stays in the open Edit view (Lab UX phase 2): Structure shows the problems at their fields and JSON in its list. The view
 		// that is mounted consumes `problemsFocusPending`.
 		showProblems: () => {
-			activeTab.value = 'edit'
+			showTab('edit')
 			problemsFocusPending.value = true
 		},
 		applyPreset: (presetId) => {

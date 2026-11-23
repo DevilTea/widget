@@ -309,26 +309,28 @@ function onReady(event: DockviewReadyEvent): void {
 }
 
 /**
- * The tab-activation bridge (diagnostic #25 P1): assigning `LabStore.activeTab` activates that canonical panel
- * (`DockviewPanelApi.setActive()`). It is also followed the other way (Dockview -> `activeTab`): a canonical tab the
- * user clicks becomes `activeTab`, so a later request for a tab that is already `activeTab` in the store but no longer
- * on screen ("Show problems" asking for Edit after the user opened Explain) still switches. Both directions only ever set
- * the same value, so they cannot loop.
+ * The tab-activation bridge (diagnostic #25 P1): `LabStore.showTab()` requests activate that canonical panel
+ * (`DockviewPanelApi.setActive()`), and Dockview's active canonical panel is mirrored into `LabStore.activeTab`. Requests are
+ * objects with a tick (since the phase 3B review), so asking for the tab that is already `activeTab` still restores a
+ * maximized Tools group and shows it; `activeTab` itself is only state.
  */
 function watchTabActivation(api: DockviewApi): void {
+	// Every `LabStore.showTab()` request is handled, the same tab as the active one included (a request object, like
+	// `toolOpenRequest`): a maximized Tools group hides the tab even when it is the active one, so a request is first a restore.
 	const stopWatch = watch(
-		() => store.activeTab.value,
-		(tab) => {
-			// Activating moves DOM focus (into the panel's group), so never re-activate what the user already
-			// activated themselves: that is what a tab click echoed through `activeTab` would otherwise do,
-			// stealing focus from, say, the Monaco editor the user just clicked into.
-			const panel = api.getPanel(tab)
-			// A canonical tab asked for while the Tools group is maximized (Show problems, a tour step) is shown: the maximized
-			// group is restored first, so the tab is not activated behind it.
-			if (panel !== undefined && api.hasMaximizedGroup() && !panel.group.api.isMaximized())
+		() => store.tabRequest.value,
+		(request) => {
+			if (request === null)
+				return
+			const panel = api.getPanel(request.tab)
+			if (panel === undefined)
+				return
+			if (api.hasMaximizedGroup() && !panel.group.api.isMaximized())
 				api.exitMaximizedGroup()
-			if (api.activePanel?.id !== tab)
-				panel?.api.setActive()
+			// Activating moves DOM focus (into the panel's group), so a tab that is already shown and active is left alone: the
+			// requester (Show problems) moves focus where it belongs itself.
+			if (api.activePanel?.id !== request.tab || panel.group.activePanel?.id !== request.tab)
+				panel.api.setActive()
 		},
 	)
 	// The tool group's own shown panel (Lab UX phase 2): `activeTab` follows whichever group is active, often the Preview's

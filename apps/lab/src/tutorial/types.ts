@@ -71,8 +71,8 @@ export type TutorialAuthorView = 'structure' | 'json'
 /**
  * The abstract navigation surface a step's `onEnter`/link `run()` may call. `use-tutorial.ts` is the
  * concrete Vue implementation: `setFocus` resolves `widgetId` against the current Blueprint and calls
- * the shared `InspectorFocusStore.setFocus()`; `activateTab` assigns `LabStore.activeTab`, which
- * `Workbench.vue`'s bridge watch turns into a real `DockviewApi` panel activation; `openTool` opens an expert view in the
+ * the shared `InspectorFocusStore.setFocus()`; `activateTab` calls `LabStore.showTab()`, which
+ * `Workbench.vue` turns into a real `DockviewApi` panel activation; `openTool` opens an expert view in the
  * Tools group beside the Preview (`useOpenTool()`), so the tab the tour was showing on the left stays.
  */
 export interface TutorialActions {

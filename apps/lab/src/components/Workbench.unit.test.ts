@@ -62,6 +62,7 @@ function fakeStore(): LabStore {
 	return {
 		activeTab: shallowRef('edit'),
 		toolGroupTab: shallowRef(null),
+		tabRequest: shallowRef(null),
 		toolOpenRequest,
 		openTool: (tool: ToolId) => {
 			toolOpenRequest.value = { tool, tick: (toolOpenRequest.value?.tick ?? 0) + 1 }

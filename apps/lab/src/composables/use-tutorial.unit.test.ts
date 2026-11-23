@@ -248,7 +248,10 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 
 	it('puts the user back on the tool group\'s tab and the Edit view they had when the tour ends with Finish or is skipped', async () => {
 		const store = createLabStore(getShowcase('survey')!)
-		// `Workbench.vue` keeps `toolGroupTab` from Dockview; `activeTab` is the Preview, the group the user touched last.
+		// `Workbench.vue` keeps `toolGroupTab` from Dockview; `activeTab` is the Preview, the group the user touched last. The
+		// tour gives the tab back through `showTab()` requests (each a new object, even for the same tab), which these read.
+		const requests = (): number => store.tabRequest.value?.tick ?? 0
+		const requested = (): string | null => store.tabRequest.value?.tab ?? null
 		store.toolGroupTab.value = 'tools'
 		store.activeTab.value = 'preview'
 		store.authorView.value = 'json'
@@ -256,11 +259,11 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 		tutorial.requestStart()
 		await flush()
 		// A step moves the user around.
-		store.activeTab.value = 'edit'
+		store.showTab('edit')
 		store.authorView.value = 'structure'
 
 		tutorial.skip()
-		expect(store.activeTab.value)
+		expect(requested())
 			.toBe('tools')
 		expect(store.authorView.value)
 			.toBe('json')
@@ -269,33 +272,35 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 		store.toolGroupTab.value = 'explain'
 		tutorial.requestStart()
 		await flush()
-		store.activeTab.value = 'tools'
+		store.showTab('tools')
 		store.toolGroupTab.value = 'tools'
+		const beforePause = requests()
 		tutorial.pause()
-		expect(store.activeTab.value)
-			.toBe('tools')
+		expect(requests())
+			.toBe(beforePause)
 		tutorial.requestResume()
 		tutorial.skip()
-		expect(store.activeTab.value)
+		expect(requested())
 			.toBe('explain')
 
 		// A fresh start records the place again: the user moved since the last tour.
 		store.toolGroupTab.value = 'tools'
 		tutorial.requestStart()
 		await flush()
-		store.activeTab.value = 'edit'
+		store.showTab('edit')
 		tutorial.skip()
-		expect(store.activeTab.value)
+		expect(requested())
 			.toBe('tools')
 
-		// An expert view the user dragged into the tool group records no tab: nothing is activated on the way back.
+		// An expert view the user dragged into the tool group records no tab: nothing is requested on the way back.
 		store.toolGroupTab.value = null
 		tutorial.requestStart()
 		await flush()
-		store.activeTab.value = 'explain'
+		store.showTab('explain')
+		const beforeSkip = requests()
 		tutorial.skip()
-		expect(store.activeTab.value)
-			.toBe('explain')
+		expect(requests())
+			.toBe(beforeSkip)
 		store.dispose()
 	})
 
@@ -314,11 +319,11 @@ describe('createTutorialStore() and the user\'s work and place (Lab UX phase 2)'
 		process.off('unhandledRejection', unhandled)
 		expect(tutorial.snapshot.value.status)
 			.toBe('idle')
-		// Nothing to give back: a later skip leaves the user where they are.
-		store.activeTab.value = 'explain'
+		// Nothing to give back: a later skip asks for no tab.
+		const before = store.tabRequest.value
 		tutorial.skip()
-		expect(store.activeTab.value)
-			.toBe('explain')
+		expect(store.tabRequest.value)
+			.toBe(before)
 		store.dispose()
 	})
 })

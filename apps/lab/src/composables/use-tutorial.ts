@@ -148,7 +148,7 @@ export function createTutorialStore(store: LabStore, openTool: (tool: TutorialTo
 			return
 		store.authorView.value = place.authorView
 		if (place.tab !== null)
-			store.activeTab.value = place.tab
+			store.showTab(place.tab)
 	}
 
 	/**
@@ -216,7 +216,7 @@ export function createTutorialStore(store: LabStore, openTool: (tool: TutorialTo
 			activateTab: (tab: TutorialTabId, authorView?: TutorialAuthorView) => {
 				if (tab === 'edit' && authorView !== undefined)
 					store.authorView.value = authorView
-				store.activeTab.value = tab
+				store.showTab(tab)
 			},
 			openTool: (tool: TutorialToolId) => {
 				openTool(tool)

@@ -1465,9 +1465,13 @@ Apply, Revert and the header's Format (it is in the JSON view's toolbar).
   it was JSON) and then keeps what the user chose, also across showcase switches; it is not saved across reloads. Specs that need Monaco
   or the Problems list open it with `openAuthorJson()` (`e2e/fixtures.ts`). It lives in the store, not in `AuthorPanel`, so other
   surfaces can open the JSON view; `showProblems()` activates Edit and sets `problemsFocusPending`, and since Lab UX phase 2 stays in
-  the open Edit view; the mounted view consumes the flag (see "Problems in Structure"). `Workbench.vue` now also feeds
-  Dockview's active panel back into `activeTab` (and never re-activates the panel already active, which moves DOM focus out of
-  Monaco), so asking for a tab that is "already" `activeTab` in the store but no longer on screen still switches.
+  the open Edit view; the mounted view consumes the flag (see "Problems in Structure"). A tab is brought to the front with
+  `LabStore.showTab(tab)`, a request object with a tick (`tabRequest`, like `toolOpenRequest`): `Workbench.vue` handles every request,
+  the same tab again included, restoring a maximized Tools group first and activating the tab unless it already is the shown, active one
+  (activating moves DOM focus, out of Monaco for instance). `LabStore.activeTab` is only a mirror of Dockview's active canonical panel;
+  until the phase 3B review the Workbench watched it, so a request for the tab that already was `activeTab` (Show problems from Edit,
+  or a tour step showing Edit, while the Tools group was maximized) did nothing and Edit stayed hidden. Show
+  problems, Inspect (linked, to Explain) and the tutorial (`activateTab`, the restore after a tour) all go through `showTab()`.
 - The tutorial rail is a docked column: a 320px flex item beside `Workbench` in `.lab-body` (below the header), see "Workbench layout". It was `position: fixed`, then `absolute`, and covered what was under it both times.
 
 ### Problems list and editor squiggles
@@ -1652,8 +1656,10 @@ reloaded). The maximized state is never saved (`saveLayout()` leaves `grid.maxim
 - when the last view is closed (Dockview leaves the maximized group when it goes; `Workbench.vue` also makes sure no maximized state
   outlives the last view), so the workbench is never blank;
 - on Reset layout (left before the rebuild);
-- when a canonical tab is asked for: Show problems, a tour step (`watchTabActivation` restores before it activates, so the tab is not
-  activated behind the maximized group; Dockview does the same for a panel activated in another group).
+- when a canonical tab is asked for with `LabStore.showTab()`: Show problems, a tour step, the restore after a tour. Every request is
+  handled, also for the tab that already is the active one (hidden behind the maximized group), and the group is restored before the tab
+  is activated (Dockview does the same for a panel activated in another group). `e2e/workbench-tools.spec.ts` covers Show problems and a
+  tour link for Edit while Edit is the active tab; both failed before the phase 3B review fix.
 
 A view opened while maximized (the header's Developer menu, a tour link) joins the maximized Tools group, which stays maximized: the user
 chose to work with the tools. Explain's "Open dependency graph" and the Preview's "View implementation" cannot be pressed then, their

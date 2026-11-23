@@ -924,14 +924,17 @@ describe('createLabStore() header and feedback state', () => {
 	it('showProblems() activates Edit, stays in the open view and flags the problems for focus', () => {
 		const store = createSandboxStore()
 		for (const [from, to] of [['structure', 'structure'], ['json', 'json']] as const) {
-			store.activeTab.value = 'tools'
+			const before = store.tabRequest.value?.tick ?? 0
 			store.authorView.value = from
 			store.problemsFocusPending.value = false
 
 			store.showProblems()
 
-			expect(store.activeTab.value)
+			// A new request every time, also when Edit already is the active tab (it may be hidden behind a maximized Tools group).
+			expect(store.tabRequest.value?.tab)
 				.toBe('edit')
+			expect(store.tabRequest.value!.tick)
+				.toBeGreaterThan(before)
 			expect(store.authorView.value, `from ${from}`)
 				.toBe(to)
 			expect(store.problemsFocusPending.value)

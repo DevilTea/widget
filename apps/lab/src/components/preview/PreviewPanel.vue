@@ -136,7 +136,7 @@ watch(
 			if (inspectTarget.value === 'runtime')
 				openTool('runtime')
 			else if (inspectTarget.value === 'explain')
-				store.activeTab.value = 'explain'
+				store.showTab('explain')
 		})
 
 		void (async () => {
