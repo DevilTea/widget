@@ -180,14 +180,17 @@ test.describe('problems in Structure (report item 12)', () => {
 			.toBeLessThan(2)
 		expect(Math.abs(onLine[0]!.width - valueBox.width))
 			.toBeLessThan(2)
-		// And no squiggle sits on guests' `"id"` line any more.
+		// And no squiggle sits on guests' `"id"` line any more. The line is four lines above the revealed value, so it is on screen
+		// (Monaco renders only visible lines; the assertion fails rather than passing silently if it is not).
 		const idLine = editor.locator('.view-line')
 			.filter({ hasText: '"id": "guests"' })
-		if (await idLine.count() > 0) {
-			const idBox = (await idLine.boundingBox())!
-			expect(boxes.filter(box => box !== null && Math.abs(box.y - idBox.y) < 4))
-				.toHaveLength(0)
-		}
+		await expect(idLine)
+			.toBeVisible()
+		const idBox = (await idLine.boundingBox())!
+		const allBoxes = await Promise.all((await editor.locator('.squiggly-error')
+			.all()).map(squiggle => squiggle.boundingBox()))
+		expect(allBoxes.filter(box => box !== null && Math.abs(box.y - idBox.y) < 4))
+			.toHaveLength(0)
 	})
 
 	test('two diagnostics about one reference written twice: two rows, one line per field, one squiggle per value', async ({ page }) => {
