@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, openTool, previewFrame, selectShowcase, setLocale, setTheme, test, toolTab, workbenchTab } from './fixtures'
 
 /**
  * Trip budget splitter acceptance contract (issue #230, showcase 1): the Lisbon weekend trip
@@ -35,13 +35,11 @@ async function transfers(page: Page): Promise<string[]> {
 
 /** Selects a widget in the Blueprint tree and opens the Selected widget pane on it. */
 async function selectWidget(page: Page, label: RegExp): Promise<void> {
-	await page.getByRole('tab', { name: 'Blueprint', exact: true })
-		.click()
+	await openTool(page, 'blueprint')
 	await page.getByRole('button', { name: label })
 		.first()
 		.click()
-	await page.getByRole('tab', { name: 'Selected widget', exact: true })
-		.click()
+	await openTool(page, 'widget')
 }
 
 function runtimeRow(page: Page, member: string): Locator {
@@ -108,15 +106,12 @@ test.describe('the default trip', () => {
 			.toHaveText('+ gets back €237.44')
 
 		// Relations (the default Dependencies view) follows the chain from the settlement back to the expenses.
-		await page.getByRole('tab', { name: 'Dependencies', exact: true })
-			.click()
-		await page.getByRole('tab', { name: 'Blueprint', exact: true })
-			.click()
+		await openTool(page, 'dependencies')
+		await openTool(page, 'blueprint')
 		await page.getByRole('button', { name: /settlement : Settlement/ })
 			.first()
 			.click()
-		await page.getByRole('tab', { name: 'Dependencies', exact: true })
-			.click()
+		await openTool(page, 'dependencies')
 		await expect(page.getByRole('tablist', { name: 'Dependencies views' })
 			.getByRole('tab', { name: 'Relations' }))
 			.toHaveAttribute('aria-selected', 'true')
@@ -201,7 +196,7 @@ test.describe('the default trip', () => {
 			.toBeVisible()
 		await expect(preview.getByTestId('trip-start-over'))
 			.toHaveText('重新開始')
-		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
+		await expect(workbenchTab(page, 'edit'))
 			.toBeVisible()
 	})
 })
@@ -234,7 +229,7 @@ test.describe('failures', () => {
 
 		await expectDocumentStatus(page, { problems: 4 })
 		await expectPreviewStatus(page, 'stale')
-		// Author opens on Structure: the Problems list is under the JSON editor.
+		// Edit opens on Structure: the Problems list is under the JSON editor.
 		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)
@@ -508,7 +503,7 @@ test.describe('tutorial', () => {
 			.toBeVisible()
 		await rail.getByRole('button', { name: 'Follow the chain in Relations' })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Dependencies', exact: true }))
+		await expect(toolTab(page, 'dependencies'))
 			.toHaveAttribute('aria-selected', 'true')
 		await next.click()
 
@@ -576,9 +571,9 @@ test.describe('tutorial', () => {
 		await next.click()
 		await expect(rail.getByText('Dependencies (Relations, Graph)', { exact: false }))
 			.toBeVisible()
-		await rail.getByRole('button', { name: 'Runtime', exact: true })
+		await rail.getByRole('button', { name: 'Runtime tree', exact: true })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
+		await expect(toolTab(page, 'runtime'))
 			.toHaveAttribute('aria-selected', 'true')
 		await next.click()
 		await page.getByRole('button', { name: 'Finish', exact: true })

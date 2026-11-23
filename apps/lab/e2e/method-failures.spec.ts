@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { expect, previewFrame, test } from './fixtures'
+import { expect, openTool, previewFrame, test } from './fixtures'
 
 /**
  * Issue #230 (audit U08): a Method failure is visible in the Lab. The survey's `submit()` reports `invalid-method-result`
@@ -39,25 +39,22 @@ async function submit(page: Page, name = 'Submit'): Promise<void> {
 		.click()
 }
 
-/** The Events tab is mounted from the start and records while another tab is open; this opens it. */
+/** The Events log records from the start, before it is opened (Lab UX phase 3B: an expert view of Tools); this opens it. */
 async function openEvents(page: Page): Promise<void> {
-	await page.getByRole('tab', { name: /^Events(, \d+ new)?$/ })
-		.click()
+	await openTool(page, 'events')
 	await expect(page.getByTestId('events-listening'))
 		.toHaveText('Listening to 1 declared Event on 1 widget.')
 	await expect(page.getByTestId('events-methods-listening'))
 		.toHaveText(/^Watching \d+ Methods for failed calls\.$/)
 }
 
-/** Selects the survey root in the Blueprint tree, then opens the pane that shows its Methods. */
-async function selectRoot(page: Page, tab: 'Selected widget' | 'Runtime'): Promise<void> {
-	await page.getByRole('tab', { name: 'Blueprint', exact: true })
-		.click()
+/** Selects the survey root in the Blueprint tree, then opens the view that shows its Methods. */
+async function selectRoot(page: Page, tool: 'widget' | 'runtime'): Promise<void> {
+	await openTool(page, 'blueprint')
 	await page.getByRole('button', { name: /open-day : Survey/ })
 		.first()
 		.click()
-	await page.getByRole('tab', { name: tab, exact: true })
-		.click()
+	await openTool(page, tool)
 }
 
 function submitRow(page: Page, scope: 'selected-widget-runtime' | 'runtime-panel'): Locator {
@@ -117,7 +114,7 @@ test.describe('method failures', () => {
 		await openLab(page)
 		await submit(page)
 
-		await selectRoot(page, 'Selected widget')
+		await selectRoot(page, 'widget')
 		const selected = submitRow(page, 'selected-widget-runtime')
 		await expect(selected.getByTestId('method-status'))
 			.toHaveText('Last call failed')
@@ -128,8 +125,7 @@ test.describe('method failures', () => {
 		await expect(selected.getByTestId('method-diagnostic-message'))
 			.toHaveText(BLOCKED_EN)
 
-		await page.getByRole('tab', { name: 'Runtime', exact: true })
-			.click()
+		await openTool(page, 'runtime')
 		const runtime = submitRow(page, 'runtime-panel')
 		await expect(runtime.getByTestId('method-status'))
 			.toHaveText('Last call failed')
@@ -146,8 +142,7 @@ test.describe('method failures', () => {
 			.toHaveText('No failure recorded')
 		await expect(runtime.getByTestId('method-diagnostic-message'))
 			.toHaveCount(0)
-		await page.getByRole('tab', { name: 'Selected widget', exact: true })
-			.click()
+		await openTool(page, 'widget')
 		await expect(selected.getByTestId('method-status'))
 			.toHaveText('No failure recorded')
 	})

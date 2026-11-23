@@ -17,7 +17,6 @@ import type { ExplainLiveSource } from '../explain/ExplainWhyList.vue'
 import { computed } from 'vue'
 import { docText, pluginDocsOf } from '../../author/widget-docs'
 import { useDependenciesView } from '../../composables/use-dependencies-view'
-import { reportExplainVisibility } from '../../composables/use-explain-visibility'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
 import { usePanelVisibility } from '../../composables/use-panel-visibility'
@@ -39,7 +38,6 @@ const i18n = useLabI18n()
 const dependenciesView = useDependenciesView()
 
 const visible = usePanelVisibility(props.params?.api)
-reportExplainVisibility(visible)
 const {
 	inspection,
 	documentNode,

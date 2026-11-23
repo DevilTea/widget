@@ -1,4 +1,4 @@
-import { expect, openDeveloperTool, selectShowcase, test } from './fixtures'
+import { expect, openDeveloperTool, openTool, selectShowcase, test, toolPanel, toolTab } from './fixtures'
 
 /** Issue #42: passive registered-plugin browsing alongside the existing focused-instance inspector. */
 test.describe('implementation registered-plugin catalog (issue #42)', () => {
@@ -6,8 +6,11 @@ test.describe('implementation registered-plugin catalog (issue #42)', () => {
 		await page.goto('/?showcase=sandbox')
 		await openDeveloperTool(page, 'implementation')
 
-		await expect(page.getByRole('tab', { name: 'Implementation' }))
+		await expect(toolTab(page, 'implementation'))
 			.toHaveAttribute('aria-selected', 'true')
+		// The tab names the plugin type the catalog shows (Lab UX phase 3B).
+		await expect(toolTab(page, 'implementation'))
+			.toHaveAccessibleName(/^Implementation — \S/)
 		await expect(page.getByRole('button', { name: 'Registered plugins' }))
 			.toHaveAttribute('aria-pressed', 'true')
 
@@ -58,9 +61,10 @@ test.describe('implementation registered-plugin catalog (issue #42)', () => {
 	test('catalog browsing never changes shared focus, and contextual View implementation requests return to Focused instance', async ({ page }) => {
 		await page.goto('/?showcase=sandbox')
 
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
-		await page.getByRole('button', { name: 'title : Text' })
+		await openTool(page, 'blueprint')
+		// Scoped to the Blueprint tree: the Edit tab beside it lists the same widgets in its Structure tree.
+		await toolPanel(page, 'blueprint')
+			.getByRole('button', { name: 'title : Text' })
 			.click()
 
 		await openDeveloperTool(page, 'implementation')
@@ -79,8 +83,7 @@ test.describe('implementation registered-plugin catalog (issue #42)', () => {
 
 		await page.getByRole('button', { name: 'Registered plugins' })
 			.click()
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
+		await openTool(page, 'blueprint')
 		await page.getByTestId('blueprint-view-implementation')
 			.click()
 		await expect(page.getByRole('button', { name: 'Focused instance' }))

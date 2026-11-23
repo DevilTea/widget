@@ -1,12 +1,40 @@
 import type { Page } from '@playwright/test'
-import { expandGraphWidget, expect, openDependenciesGraph, setLocale, test } from './fixtures'
+import { expandGraphWidget, expect, openDependenciesGraph, setLocale, test, toolTab } from './fixtures'
 
 /**
  * Issue #230, "the Graph is hard to read": what a person sees in the real browser. The cards are spread out, every dependency
  * is a Bezier curve (not an orthogonal route with rounded corners) that ends in an arrowhead on the member it depends on,
  * and no curve disappears behind a card. The same properties are measured on the layout alone in
  * `src/graph/graph-readability.unit.test.ts`; here they are read from the rendered SVG, in screen coordinates.
+ *
+ * Since Lab UX phase 3B the Graph is an expert view in the Tools group below the Preview, which opens with half of the Preview's
+ * column; there the collapsed Survey fits at about 0.37 at 1440 x 900 (a known cost of keeping the Preview and the Edit/Explain
+ * tab on screen, see apps/lab/AGENTS.md). These specs are about the Graph's own drawing, so they first give the Tools group the
+ * column by dragging the divider up to the Preview's minimum, as a person reading the Graph would (`giveGraphTheColumn`).
  */
+
+/** Drags the divider between the Preview and the Tools group as far up as it goes, then waits for the Graph to fit again. */
+async function giveGraphTheColumn(page: Page): Promise<void> {
+	const tools = page.locator('.dv-groupview')
+		.filter({ has: toolTab(page, 'dependencies') })
+	const before = (await tools.boundingBox())!
+	const sash = page.locator('.dv-sash')
+		.filter({ visible: true })
+	const boxes = await sash.evaluateAll(elements => elements.map((element) => {
+		const rect = element.getBoundingClientRect()
+		return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+	}))
+	// The horizontal divider just above the Tools group.
+	const divider = boxes.find(box => box.width > box.height && Math.abs(box.y + box.height / 2 - before.y) < 6)!
+	await page.mouse.move(divider.x + divider.width / 2, divider.y + divider.height / 2)
+	await page.mouse.down()
+	await page.mouse.move(divider.x + divider.width / 2, 0, { steps: 8 })
+	await page.mouse.up()
+	await expect.poll(async () => (await tools.boundingBox())!.height)
+		.toBeGreaterThan(before.height + 200)
+	await page.getByRole('button', { name: 'Fit graph' })
+		.click()
+}
 
 interface Rect { x: number, y: number, width: number, height: number }
 interface Point { x: number, y: number }
@@ -42,6 +70,7 @@ async function openGraph(page: Page, showcase: 'survey' | 'trip-budget', options
 	await expect(page.locator('.graph-node--cluster')
 		.first())
 		.toBeVisible({ timeout: 15_000 })
+	await giveGraphTheColumn(page)
 	if (options.expand !== undefined) {
 		await expandGraphWidget(page, options.expand)
 		await expect(page.locator('.graph-node--member')
@@ -215,35 +244,39 @@ test('survey Graph with #sessions expanded: Bezier edges, each with an arrowhead
 	}
 })
 
-test('the default Survey Fit at 1440 x 900 keeps the card text at 11px or more', async ({ page }) => {
+// Lab UX phase 3B: measured with the Tools group given the Preview's column (`giveGraphTheColumn`). While Dependencies was a
+// full-height tab of the tool group these were 0.95 (11px and up) at 1440 x 900 and 0.82 (10.5px, 9.8px) at 1280 x 800; at the Tools
+// group's default half of the column the Fit is about 0.37, see the file header.
+test('the Survey Fit at 1440 x 900, with the Tools group given the column, keeps the card title at 11px and the id near 10px', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 })
-	await openGraph(page, 'survey')
-	const { zoom, cardTitlePx, cardIdPx } = await readGraph(page)
-	expect(zoom)
-		.toBeGreaterThanOrEqual(0.95)
-	expect(cardTitlePx!)
-		.toBeGreaterThanOrEqual(10.9)
-	expect(cardIdPx!)
-		.toBeGreaterThanOrEqual(10.9)
-})
-
-test('the default Survey Fit at 1280 x 800 keeps the card text close to 11px (it was 9.7px and 8.9px)', async ({ page }) => {
-	await page.setViewportSize({ width: 1280, height: 800 })
 	await openGraph(page, 'survey')
 	const { zoom, cardTitlePx, cardIdPx } = await readGraph(page)
 	expect(zoom)
 		.toBeGreaterThanOrEqual(0.82)
 	expect(cardTitlePx!)
-		.toBeGreaterThanOrEqual(10.5)
+		.toBeGreaterThanOrEqual(10.9)
 	expect(cardIdPx!)
-		.toBeGreaterThanOrEqual(9.8)
+		.toBeGreaterThanOrEqual(10)
+})
+
+test('the Survey Fit at 1280 x 800, with the Tools group given the column, keeps the card text near 9px', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 })
+	await openGraph(page, 'survey')
+	const { zoom, cardTitlePx, cardIdPx } = await readGraph(page)
+	expect(zoom)
+		.toBeGreaterThanOrEqual(0.68)
+	expect(cardTitlePx!)
+		.toBeGreaterThanOrEqual(9)
+	expect(cardIdPx!)
+		.toBeGreaterThanOrEqual(8.3)
 })
 
 // Issue #254: one widget is expanded at a time, and expanding it refits the whole new layout. The largest widgets (the lowest Fit,
 // measured with the real ELK in `graph-readability.unit.test.ts`) are the Survey's #sessions (0.415 at 1440 x 900) and the Trip
-// budget's #hotel (0.196); fully expanded they were 0.27 and about 0.06.
+// budget's #hotel (0.196); fully expanded they were 0.27 and about 0.06. In the Tools group given the column (Lab UX phase 3B) the
+// Survey's is about 0.45: the pane is wider and a little shorter than the tool group was.
 for (const { showcase, widget, fit } of [
-	{ showcase: 'survey', widget: 'sessions', fit: 0.415 },
+	{ showcase: 'survey', widget: 'sessions', fit: 0.45 },
 	{ showcase: 'trip-budget', widget: 'hotel', fit: 0.196 },
 ] as const) {
 	test(`expanding #${widget} fits the whole ${showcase} at about ${fit}, every card in view`, async ({ page }) => {
@@ -280,6 +313,7 @@ test('a person cannot wheel a small graph down to a dot', async ({ page }) => {
 	await expect(page.locator('.graph-node--cluster')
 		.first())
 		.toBeVisible({ timeout: 15_000 })
+	await giveGraphTheColumn(page)
 	for (let press = 0; press < 25; press++) {
 		await page.getByRole('button', { name: 'Zoom out' })
 			.click()

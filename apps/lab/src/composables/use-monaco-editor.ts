@@ -57,8 +57,16 @@ export interface UseMonacoJsonEditorOptions {
 
 export interface UseMonacoJsonEditorResult {
 	readonly ready: Readonly<Ref<boolean>>
-	/** Selects the range, scrolls it into view and focuses the editor. No-op before the editor is ready. */
-	revealRange: (start: number, end: number) => void
+	/**
+	 * Selects the range and scrolls it into view, and focuses the editor unless `focus` is `false` (the Edit tab's JSON toggle
+	 * reveals the selected widget without taking focus from the toggle). Asked for before the editor is ready, it is replayed then.
+	 */
+	revealRange: (start: number, end: number, options?: RevealOptions) => void
+}
+
+export interface RevealOptions {
+	/** Defaults to `true`. */
+	readonly focus?: boolean
 }
 
 const COMMIT_ACTION_ID = 'widget-lab.commit-json'
@@ -108,17 +116,22 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 	}
 
 	// A reveal asked for before the editor finished loading (Monaco is imported lazily) is replayed once it is up.
-	let pendingReveal: { readonly start: number, readonly end: number } | null = null
+	let pendingReveal: { readonly start: number, readonly end: number, readonly options?: RevealOptions } | null = null
 
-	function revealRange(start: number, end: number): void {
+	function revealRange(start: number, end: number, revealOptions?: RevealOptions): void {
 		if (editor === null || model === null) {
-			pendingReveal = { start, end }
+			pendingReveal = { start, end, options: revealOptions }
 			return
 		}
 		const from = model.getPositionAt(start)
 		const to = model.getPositionAt(end)
 		const range = { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column }
 		editor.setSelection(range)
+		if (revealOptions?.focus === false) {
+			// A whole widget can be taller than the editor: its first lines go to the top.
+			editor.revealRangeNearTopIfOutsideViewport(range)
+			return
+		}
 		editor.revealRangeInCenterIfOutsideViewport(range)
 		editor.focus()
 	}
@@ -176,7 +189,7 @@ export function useMonacoJsonEditor(container: Ref<HTMLElement | null>, options:
 		syncMarkers()
 		ready.value = true
 		if (pendingReveal !== null) {
-			revealRange(pendingReveal.start, pendingReveal.end)
+			revealRange(pendingReveal.start, pendingReveal.end, pendingReveal.options)
 			pendingReveal = null
 		}
 	})

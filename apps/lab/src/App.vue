@@ -13,6 +13,7 @@ import { createLabI18nStore, LabI18nKey } from './composables/use-lab-i18n'
 import { createLabStore, LabStoreKey } from './composables/use-lab-store'
 import { createLabThemeStore, LabThemeKey } from './composables/use-lab-theme'
 import { useNuxtUiThemeBridge } from './composables/use-nuxt-ui-theme-bridge'
+import { createToolOpener } from './composables/use-open-tool'
 import { useSupportedWorkbenchViewport } from './composables/use-supported-workbench-viewport'
 import { createTutorialStore, TutorialStoreKey } from './composables/use-tutorial'
 import { createWorkbenchLayoutStore, WorkbenchLayoutKey } from './composables/use-workbench-layout'
@@ -46,8 +47,8 @@ installLabTestSeam(store)
 
 // diagnostic #25 P3: a small store of its own (see `use-implementation-explorer.ts`'s file header for why
 // this is a parallel mechanism rather than an extension of `LabStore.activeTab`), created/provided the
-// same way `LabStore`/`TutorialStore` are, and handed to `createTutorialStore()` below so the Survey
-// tour's map-of-the-views "Implementation" link can open it too.
+// same way `LabStore`/`TutorialStore` are. With Document Tools and `LabStore.openTool()` it is how the expert views of the
+// Tools tab are opened (Lab UX phase 3B, `use-open-tool.ts`), also by the tutorial (below).
 const implementationExplorer = createImplementationExplorerStore()
 provide(ImplementationExplorerKey, implementationExplorer)
 
@@ -59,11 +60,10 @@ provide(DocumentToolsKey, documentTools)
 // "Reset layout" (overflow menu) is a request that Workbench carries out on its Dockview instance.
 provide(WorkbenchLayoutKey, createWorkbenchLayoutStore())
 
-// diagnostic #25 P1: `createTutorialStore(store, ...)` takes the already-created `LabStore`/
-// `ImplementationExplorerStore` directly rather than injecting them back via `useLabStore()`/
-// `useImplementationExplorer()` — `inject()` resolves against a component's *parent* provides, so a
+// diagnostic #25 P1: `createTutorialStore(store, ...)` takes the already-created `LabStore` and a tool opener over the
+// request stores directly rather than injecting them back via `useLabStore()`/`useOpenTool()` — `inject()` resolves against a component's *parent* provides, so a
 // component can never see its own `provide()` call; passing them directly sidesteps that entirely.
-const tutorial = createTutorialStore(store, implementationExplorer)
+const tutorial = createTutorialStore(store, createToolOpener(store, implementationExplorer, documentTools))
 provide(TutorialStoreKey, tutorial)
 
 // Confirmation for loading a preset / switching showcase over JSON text that does not parse or committed edits (audit U03).

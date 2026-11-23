@@ -15,11 +15,13 @@
  */
 import type { EditorMarker } from '../../composables/use-monaco-editor'
 import type { LabProblem } from '../../lab/problems'
+import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import UButton from '@nuxt/ui/components/Button.vue'
 import UIcon from '@nuxt/ui/components/Icon.vue'
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { useLabStore } from '../../composables/use-lab-store'
+import { locateJsonValue } from '../../lab/json-locate'
 import { problemSpan } from '../../lab/problems'
 import MonacoJsonEditor from '../editor/MonacoJsonEditor.vue'
 import AuthorProblems from './AuthorProblems.vue'
@@ -71,7 +73,32 @@ async function focusProblemsIfRequested(): Promise<void> {
 	problemsList.value?.focusList()
 }
 watch(store.problemsFocusPending, focusProblemsIfRequested)
-onMounted(focusProblemsIfRequested)
+
+/**
+ * Toggling to JSON (this view mounts then) reveals the selected widget's lines (Lab UX phase 3B): its whole object is selected
+ * and scrolled into view, located by its Core source path in the current text. Focus stays on the toggle. Nothing is revealed
+ * for the root the focus starts at (only a widget someone chose), or when the text does not have that path (it does not
+ * parse, or the widget is not there any more).
+ */
+function revealSelectedWidget(): void {
+	const focus = store.documentFocus.value
+	if (!store.documentFocusChosen.value || focus === null)
+		return
+	const path = inspectBlueprint(store.documentState.value.blueprint)
+		.getNode(focus.nodeId)?.sourcePath
+	if (path === undefined)
+		return
+	const span = locateJsonValue(store.draftSourceText.value, path)
+	if (span !== null)
+		editor.value?.revealRange(span.start, span.end, { focus: false })
+}
+
+onMounted(() => {
+	if (store.problemsFocusPending.value)
+		void focusProblemsIfRequested()
+	else
+		revealSelectedWidget()
+})
 </script>
 
 <template>

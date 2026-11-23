@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { expect, loadPreset, previewFrame, test } from './fixtures'
+import { expect, loadPreset, openTool, previewFrame, test, toolTab, workbenchTab } from './fixtures'
 
 /**
  * Issue #25 P2 "Preview -> semantic inspector bridge" (Inspect mode) contract.
@@ -102,8 +102,8 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.getByText(COUNTER_TEXT_0, { exact: true }))
 			.toBeVisible()
 
-		// Drives the existing shared focus + opens the Selected widget pane for immediate visible feedback.
-		await expect(page.getByRole('tab', { name: 'Selected widget' }))
+		// Drives the existing shared focus; the Edit tab the user is in shows the widget in Structure (Lab UX phase 3B).
+		await expect(workbenchTab(page, 'edit'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
 			.toBeVisible()
@@ -111,10 +111,10 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		// Runtime reflects the exact same shared focus once opened: the same tree row is the selected
 		// (highlighted) one there too — relative to a sibling row's own background, rather than any
 		// specific color value.
-		await page.getByRole('tab', { name: 'Runtime' })
-			.click()
-		const counterRow = page.getByRole('button', { name: 'counter-1 : Counter' })
-		const summaryRow = page.getByRole('button', { name: 'summary-1 : Summary' })
+		await openTool(page, 'runtime')
+		const runtime = page.getByRole('tabpanel', { name: 'Runtime tree' })
+		const counterRow = runtime.getByRole('button', { name: 'counter-1 : Counter' })
+		const summaryRow = runtime.getByRole('button', { name: 'summary-1 : Summary' })
 		const [selectedBackground, otherBackground] = await Promise.all([
 			counterRow.evaluate(el => getComputedStyle(el).backgroundColor),
 			summaryRow.evaluate(el => getComputedStyle(el).backgroundColor),
@@ -134,7 +134,8 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.getByText(COUNTER_TEXT_0, { exact: true })
 			.click()
 
-		await expect(page.getByRole('tab', { name: 'Selected widget' }))
+		// Lab UX phase 3B: a linked Inspect in the Edit tab stays there; Structure shows the widget that was picked.
+		await expect(workbenchTab(page, 'edit'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
 			.toBeVisible()
@@ -142,18 +143,34 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 			.toHaveCount(0)
 	})
 
-	test('the hint names the panel a click opens: Selected widget, or Runtime while the Preview lags the Document', async ({ page }) => {
+	test('the hint names where a click shows the widget: Edit or Explain, or the Runtime tree while the Preview lags the Document', async ({ page }) => {
 		await page.goto('/?showcase=sandbox')
 		await inspectToggle(page)
 			.click()
 		const hint = page.getByTestId('inspect-hint')
+		// Lab UX phase 3B: from the Edit tab a click selects the widget in Structure, and the Edit tab stays.
 		await expect(hint)
-			.toHaveText('Click a widget to open it in Selected widget — Esc to exit')
+			.toHaveText('Click a widget to open it in Edit — Esc to exit')
 		await previewFrame(page)
 			.getByText(COUNTER_TEXT_0, { exact: true })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Selected widget' }))
+		await expect(workbenchTab(page, 'edit'))
 			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('structure-editor')
+			.getByRole('heading', { name: 'counter-1 : Counter' }))
+			.toBeVisible()
+		// From any other tab of the tool group (Tools here) a click brings Explain, the newcomer's view of one widget.
+		await workbenchTab(page, 'tools')
+			.click()
+		await expect(hint)
+			.toHaveText('Click a widget to open it in Explain — Esc to exit')
+		await previewFrame(page)
+			.getByText('Widget Lab sandbox', { exact: true })
+			.click()
+		await expect(workbenchTab(page, 'explain'))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('explain'))
+			.toContainText('title')
 
 		// An invalid Document leaves the Preview on the last valid revision: only the Runtime panel knows its widgets.
 		await loadPreset(page, 'invalid-semantic')
@@ -162,12 +179,19 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await expect(inspectToggle(page))
 			.toHaveAttribute('aria-pressed', 'true')
 		await expect(hint)
-			.toHaveText('Click a widget to open it in Runtime — Esc to exit')
+			.toHaveText('Click a widget to open it in Runtime tree — Esc to exit')
 		await previewFrame(page)
 			.getByText(COUNTER_TEXT_0, { exact: true })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
+		// The Runtime tree opens beside the Preview, focused, and Explain (what the user was reading) stays.
+		await expect(toolTab(page, 'runtime'))
 			.toHaveAttribute('aria-selected', 'true')
+		await expect(toolTab(page, 'runtime'))
+			.toBeFocused()
+		await expect(workbenchTab(page, 'explain'))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('explain'))
+			.toBeVisible()
 	})
 
 	test('Escape exits Inspect mode: badge disappears and subsequent clicks act normally', async ({ page }) => {
@@ -254,7 +278,8 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 		await phoneInput.click()
 
 		// (a) the correct semantic widget is selected/focused in the inspector.
-		await expect(page.getByRole('tab', { name: 'Selected widget' }))
+		// Lab UX phase 3B: a linked Inspect in the Edit tab stays there; Structure shows the widget that was picked.
+		await expect(workbenchTab(page, 'edit'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByRole('heading', { name: 'phone : ShortAnswer' }))
 			.toBeVisible()
@@ -318,7 +343,8 @@ test.describe('Inspect mode (issue #25 P2)', () => {
 
 		await counterValue.click()
 
-		await expect(page.getByRole('tab', { name: 'Selected widget' }))
+		// Lab UX phase 3B: a linked Inspect in the Edit tab stays there; Structure shows the widget that was picked.
+		await expect(workbenchTab(page, 'edit'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByRole('heading', { name: 'counter-1 : Counter' }))
 			.toBeVisible()

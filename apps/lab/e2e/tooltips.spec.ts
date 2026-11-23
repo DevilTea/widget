@@ -29,7 +29,7 @@ async function openLab(page: Page): Promise<void> {
 	await editJson(page, '{ "id": "root"')
 	await expect(page.getByTestId('discard-json-button'))
 		.toBeVisible()
-	// The page has settled: Author shows its first view (Structure since Lab UX phase 1).
+	// The page has settled: Edit shows its first view (Structure since Lab UX phase 1).
 	await expect(page.getByTestId('structure-editor'))
 		.toBeVisible()
 }

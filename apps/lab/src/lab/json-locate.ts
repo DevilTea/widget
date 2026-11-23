@@ -208,6 +208,15 @@ export function locateJsonPath(text: string, path: JsonPath): JsonLocation | nul
 	}
 }
 
+/**
+ * The `[start, end)` span of the value at `path` (a widget's whole object, for the Edit tab's JSON toggle), or `null` when
+ * the text is not valid JSON or the path is not in it: a reveal never lands on an ancestor the user did not select.
+ */
+export function locateJsonValue(text: string, path: JsonPath): JsonSpan | null {
+	const location = locateJsonPath(text, path)
+	return location === null || !location.exact ? null : location.value
+}
+
 /** The `[start, end)` span of the member `name` of the object at `path` (key through value), or `null` when absent. */
 export function locateJsonMember(text: string, path: JsonPath, name: string): JsonSpan | null {
 	const location = locateJsonPath(text, [...path, name])

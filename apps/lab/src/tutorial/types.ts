@@ -56,33 +56,34 @@ export interface TutorialFocusMember {
 }
 
 /**
- * The five canonical Dockview panels plus Preview — the same tab space `LabStore.activeTab`
- * (`LabToolTab`, widened to include `'preview'`) already models. Kept as its own literal union here so
- * this directory never imports `use-lab-store.ts`'s Vue-touching types.
+ * The canonical Dockview panels: the tool group's Edit, Explain and Tools tabs (Lab UX phase 3B) and the Preview — the same
+ * tab space `LabStore.activeTab` (`LabToolTab`) models. Kept as its own literal union here so this directory never imports
+ * `use-lab-store.ts`'s Vue-touching types.
  */
-export type TutorialTabId = 'author' | 'explain' | 'widget' | 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'preview'
+export type TutorialTabId = 'edit' | 'explain' | 'tools' | 'preview'
+
+/** The expert views of the Tools tab (`lab/tools.ts` `ToolId`), mirrored here for the same reason as `TutorialTabId`. */
+export type TutorialToolId = 'blueprint' | 'runtime' | 'events' | 'dependencies' | 'widget' | 'document-tools' | 'implementation'
+
+/** The Edit tab's views (`LabStore.authorView`), mirrored here for the same reason as `TutorialTabId`. */
+export type TutorialAuthorView = 'structure' | 'json'
 
 /**
  * The abstract navigation surface a step's `onEnter`/link `run()` may call. `use-tutorial.ts` is the
  * concrete Vue implementation: `setFocus` resolves `widgetId` against the current Blueprint and calls
  * the shared `InspectorFocusStore.setFocus()`; `activateTab` assigns `LabStore.activeTab`, which
- * `Workbench.vue`'s bridge watch turns into a real `DockviewApi` panel activation.
+ * `Workbench.vue`'s bridge watch turns into a real `DockviewApi` panel activation; `openTool` opens an expert view in the
+ * Tools group beside the Preview (`useOpenTool()`), so the tab the tour was showing on the left stays.
  */
-/** The Author panel's views (`LabStore.authorView`), mirrored here for the same reason as `TutorialTabId`. */
-export type TutorialAuthorView = 'catalog' | 'structure' | 'json'
-
 export interface TutorialActions {
 	setFocus: (widgetId: string, member?: TutorialFocusMember) => void
-	/** Activates a tool tab; for `'author'`, `authorView` also opens that Author view (the survey tour's edit step opens Structure). */
+	/** Activates a canonical tab; for `'edit'`, `authorView` also opens that view (the survey tour's edit step opens Structure). */
 	activateTab: (tab: TutorialTabId, authorView?: TutorialAuthorView) => void
 	/**
-	 * Opens (or activates) the Implementation panel for the currently-focused widget (diagnostic #25 P3
-	 * Scope D, tutorial entry point 3). Deliberately narrower than `activateTab`: the Implementation
-	 * panel is not one of the five canonical `TutorialTabId` surfaces (it is closable, and only ever
-	 * added lazily) — see `use-implementation-explorer.ts`'s file header for why this is a parallel
-	 * mechanism rather than a widened `TutorialTabId` union.
+	 * Opens (or focuses) an expert view in the Tools group (Lab UX phase 3B). Implementation shows the currently-focused widget
+	 * (diagnostic #25 P3 Scope D, tutorial entry point 3).
 	 */
-	openImplementation: () => void
+	openTool: (tool: TutorialToolId) => void
 }
 
 /**

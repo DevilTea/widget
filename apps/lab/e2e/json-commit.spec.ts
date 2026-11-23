@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { defaultSandboxPreset } from '../src/sandbox/presets'
-import { documentSourceText, editJson, expect, expectDocumentStatus, expectLabStatus, expectPreviewStatus, openAuthorJson, openStatusDetails, previewFrame, test, waitForLabTestSeam } from './fixtures'
+import { documentSourceText, editJson, expect, expectDocumentStatus, expectLabStatus, expectPreviewStatus, openAuthorJson, openExplain, openStatusDetails, openTool, previewFrame, test, toolPanel, waitForLabTestSeam } from './fixtures'
 
 /**
  * Lab UX phase 3, one commit model (it replaced issue #28's Apply lifecycle contract, `apply.spec.ts`): the JSON view commits
@@ -234,14 +234,14 @@ test('an invalid Document keeps the last working Preview and explains the diverg
 	await expect(page.getByTestId('lab-status'))
 		.toHaveText('1 problem · Preview shows the last working version')
 
-	await page.getByRole('tab', { name: 'Runtime' })
-		.click()
+	await openExplain(page)
 	await expect(page.getByTestId('preview-diverged-status'))
 		.toContainText('Your last change has 1 problem, so the preview still shows the last working version.')
-	await expect(page.getByRole('tabpanel', { name: 'Runtime' })
+	await openTool(page, 'runtime')
+	await expect(toolPanel(page, 'runtime')
 		.getByText('Preview r0', { exact: true }))
 		.toBeVisible()
-	await expect(page.getByRole('tabpanel', { name: 'Runtime' })
+	await expect(toolPanel(page, 'runtime')
 		.getByText('Diverged / Unlinked', { exact: true }))
 		.toBeVisible()
 })

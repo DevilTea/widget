@@ -11,7 +11,7 @@ import {
 	stripLazyPanels,
 } from './layout-storage'
 
-/** A layout exactly as `DockviewApi.toJSON()` produced it in the browser (Runtime tab active, 691px tool group). */
+/** A layout exactly as `DockviewApi.toJSON()` produced it in the browser (Tools tab active, 691px tool group). */
 function realLayout(): Record<string, unknown> {
 	const panel = (id: string, title: string, contentComponent = id) => [id, { id, contentComponent, tabComponent: 'nonClosable', title }] as const
 	return {
@@ -19,7 +19,7 @@ function realLayout(): Record<string, unknown> {
 			root: {
 				type: 'branch',
 				data: [
-					{ type: 'leaf', data: { views: ['author', 'explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies'], activeView: 'runtime', id: '1' }, size: 691 },
+					{ type: 'leaf', data: { views: ['edit', 'explain', 'tools'], activeView: 'tools', id: '1' }, size: 691 },
 					{ type: 'leaf', data: { views: ['preview'], activeView: 'preview', id: '2' }, size: 749 },
 				],
 				size: 859,
@@ -29,13 +29,9 @@ function realLayout(): Record<string, unknown> {
 			orientation: 'HORIZONTAL',
 		},
 		panels: Object.fromEntries([
-			panel('author', 'Author'),
+			panel('edit', 'Edit'),
 			panel('explain', 'Explain'),
-			panel('widget', 'Selected widget'),
-			panel('blueprint', 'Blueprint'),
-			panel('runtime', 'Runtime'),
-			panel('events', 'Events'),
-			panel('dependencies', 'Dependencies'),
+			panel('tools', 'Tools'),
 			panel('preview', 'Preview'),
 		]),
 		activeGroup: '1',
@@ -98,48 +94,46 @@ describe('parseSavedLayout', () => {
 })
 
 describe('isPlausibleLayout', () => {
-	it('requires every canonical panel (a layout from before the Selected widget panel is incompatible)', () => {
-		const layout = realLayout()
-		delete (layout.panels as Record<string, unknown>).widget
-		expect(isPlausibleLayout(layout))
-			.toBe(false)
+	it('requires every canonical panel: Edit, Explain, Tools and Preview', () => {
+		for (const id of ['edit', 'explain', 'tools', 'preview']) {
+			const layout = realLayout()
+			delete (layout.panels as Record<string, unknown>)[id]
+			expect(isPlausibleLayout(layout), id)
+				.toBe(false)
+		}
 	})
 
-	it('requires the Explain panel (Lab UX phase 2): a layout saved before it existed is not used, with no version bump needed', () => {
-		const layout = realLayout()
-		delete (layout.panels as Record<string, unknown>).explain
-		expect(isPlausibleLayout(layout))
-			.toBe(false)
-		expect(parseSavedLayout(stored(layout)))
+	it('does not use the six-tab layout of version 1 (Lab UX phase 3B), whatever version it is stored with', () => {
+		const panel = (id: string) => [id, { id, contentComponent: id, tabComponent: 'nonClosable', title: id }] as const
+		const old = {
+			...realLayout(),
+			panels: Object.fromEntries(['author', 'explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview'].map(panel)),
+		}
+		expect(LAYOUT_VERSION)
+			.toBe(2)
+		expect(parseSavedLayout(stored(old, 1)))
 			.toBeNull()
-	})
-
-	it('requires the Events panel: a layout saved before it existed is not used, with no version bump needed', () => {
-		const layout = realLayout()
-		delete (layout.panels as Record<string, unknown>).events
-		expect(isPlausibleLayout(layout))
+		// Even under the current version its panels are not the canonical ones, and Author is no longer a registered component.
+		expect(isPlausibleLayout(old))
 			.toBe(false)
-		// Stored with the current version, exactly as an older Lab wrote it: still read as "no saved layout".
-		expect(parseSavedLayout(stored(layout)))
-			.toBeNull()
-		expect(loadSavedLayout({ getItem: () => stored(layout), setItem: () => {}, removeItem: () => {} }))
+		expect(loadSavedLayout({ getItem: () => stored(old, 1), setItem: () => {}, removeItem: () => {} }))
 			.toBeNull()
 	})
 
 	it('rejects a panel that names a component the Lab does not register', () => {
 		const layout = realLayout()
-		;(layout.panels as Record<string, Record<string, unknown>>).runtime!.contentComponent = 'somethingElse'
+		;(layout.panels as Record<string, Record<string, unknown>>).tools!.contentComponent = 'somethingElse'
 		expect(isPlausibleLayout(layout))
 			.toBe(false)
 	})
 
 	it('rejects a panel whose id does not match its key, or with an unknown tab component', () => {
 		const mismatched = realLayout()
-		;(mismatched.panels as Record<string, Record<string, unknown>>).runtime!.id = 'other'
+		;(mismatched.panels as Record<string, Record<string, unknown>>).tools!.id = 'other'
 		expect(isPlausibleLayout(mismatched))
 			.toBe(false)
 		const tab = realLayout()
-		;(tab.panels as Record<string, Record<string, unknown>>).runtime!.tabComponent = 'closable'
+		;(tab.panels as Record<string, Record<string, unknown>>).tools!.tabComponent = 'closable'
 		expect(isPlausibleLayout(tab))
 			.toBe(false)
 	})
@@ -243,24 +237,24 @@ describe('stripLazyPanels', () => {
 	it('removes panels opened on request from the groups and the panel table', () => {
 		const stripped = stripLazyPanels(layoutWithLazyPanels() as never)!
 		expect(toolGroup(stripped).views)
-			.toEqual(['author', 'explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies'])
+			.toEqual(['edit', 'explain', 'tools'])
 		expect(Object.keys((stripped as unknown as GridLayout).panels))
-			.toEqual(['author', 'explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview'])
+			.toEqual(['edit', 'explain', 'tools', 'preview'])
 		expect(isPlausibleLayout(stripped))
 			.toBe(true)
 	})
 
 	it('makes the first canonical panel active when the saved active panel was one of them', () => {
-		// Closing Implementation after the restore would have left its neighbour (Dependencies) active.
+		// Closing Implementation after the restore would have left its neighbour (Tools) active.
 		expect(toolGroup(stripLazyPanels(layoutWithLazyPanels('implementation') as never)).activeView)
-			.toBe('author')
+			.toBe('edit')
 		expect(toolGroup(stripLazyPanels(layoutWithLazyPanels('document-tools') as never)).activeView)
-			.toBe('author')
+			.toBe('edit')
 	})
 
 	it('keeps a canonical active panel, and leaves a layout without such panels as it was', () => {
-		expect(toolGroup(stripLazyPanels(layoutWithLazyPanels('runtime') as never)).activeView)
-			.toBe('runtime')
+		expect(toolGroup(stripLazyPanels(layoutWithLazyPanels('explain') as never)).activeView)
+			.toBe('explain')
 		expect(stripLazyPanels(realLayout()))
 			.toEqual(realLayout())
 	})
@@ -276,7 +270,7 @@ describe('stripLazyPanels', () => {
 	describe('a lazy panel alone in its group (the rest of the layout is kept)', () => {
 		const lazyLeaf = (size: number, id = '9') => ({ type: 'leaf', data: { views: ['implementation'], activeView: 'implementation', id }, size })
 		const canonicalLeaf = (views: string[], size: number, id: string) => ({ type: 'leaf', data: { views, activeView: views[0], id }, size })
-		const TOOLS = ['author', 'explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies']
+		const TOOLS = ['edit', 'explain', 'tools']
 		const grid = (layout: unknown) => (layout as { grid: { root: { data: { type: string, size: number, data: unknown }[], size: number }, orientation: string } }).grid
 		const withRoot = (root: unknown, extra: Record<string, unknown> = {}) => ({ ...layoutWithLazyPanels(), ...extra, grid: { ...(realLayout().grid as object), root } })
 
@@ -326,7 +320,7 @@ describe('stripLazyPanels', () => {
 		it('flips the root axis when its only remaining child is a branch', () => {
 			// root(H): [ column(V): [ row(H), row(H) ], lazy ]  ->  root(V): [ row(H), row(H) ]
 			const top = { type: 'branch', size: 400, data: [canonicalLeaf(TOOLS, 700, '1'), canonicalLeaf(['preview'], 740, '2')] }
-			const bottom = { type: 'branch', size: 459, data: [canonicalLeaf(['author'], 1440, '3')] }
+			const bottom = { type: 'branch', size: 459, data: [canonicalLeaf(['edit'], 1440, '3')] }
 			const layout = withRoot({ type: 'branch', size: 859, data: [{ type: 'branch', size: 1240, data: [top, bottom] }, lazyLeaf(200)] })
 			const stripped = stripLazyPanels(layout as never)!
 			expect(grid(stripped).orientation)
@@ -339,7 +333,7 @@ describe('stripLazyPanels', () => {
 
 		it('lifts the children of a branch that is left with a single branch into its parent, scaled to fill it', () => {
 			// root(H): [ A(V): [ B(H): [x, y], lazy ], preview ] -> root(H): [ x, y, preview ]
-			const b = { type: 'branch', size: 600, data: [canonicalLeaf(['author', 'explain', 'widget'], 200, '1'), canonicalLeaf(['blueprint', 'runtime', 'events', 'dependencies'], 200, '3')] }
+			const b = { type: 'branch', size: 600, data: [canonicalLeaf(['edit', 'explain'], 200, '1'), canonicalLeaf(['tools'], 200, '3')] }
 			const a = { type: 'branch', size: 800, data: [b, lazyLeaf(200)] }
 			const layout = withRoot({ type: 'branch', size: 859, data: [a, canonicalLeaf(['preview'], 640, '2')] })
 			const stripped = stripLazyPanels(layout as never)!
@@ -364,14 +358,14 @@ describe('stripLazyPanels', () => {
 			...layoutWithLazyPanels(),
 			floatingGroups: [
 				{ data: { views: ['implementation'], activeView: 'implementation', id: '9' }, position: {} },
-				{ data: { views: ['runtime', 'document-tools'], activeView: 'document-tools', id: '10' }, position: {} },
+				{ data: { views: ['explain', 'document-tools'], activeView: 'document-tools', id: '10' }, position: {} },
 			],
 		}
 		const stripped = stripLazyPanels(layout as never) as unknown as { floatingGroups: { data: GroupData }[] }
 		expect(stripped.floatingGroups)
 			.toHaveLength(1)
 		expect(stripped.floatingGroups[0]!.data)
-			.toMatchObject({ views: ['runtime'], activeView: 'runtime' })
+			.toMatchObject({ views: ['explain'], activeView: 'explain' })
 	})
 
 	it('is applied when a saved layout is loaded', () => {
@@ -380,6 +374,21 @@ describe('stripLazyPanels', () => {
 			.not
 			.toContain('implementation')
 		expect(toolGroup(loaded).activeView)
-			.toBe('author')
+			.toBe('edit')
+	})
+
+	it('removes the Tools group below the Preview with every expert view in it, so a reload starts without it', () => {
+		// root(H): [ left, column(V): [ preview, tools group ] ]  ->  root(H): [ left, preview ]
+		const toolsGroup = { type: 'leaf', data: { views: ['runtime', 'events', 'implementation'], activeView: 'events', id: '3' }, size: 430 }
+		const column = { type: 'branch', size: 749, data: [{ type: 'leaf', data: { views: ['preview'], activeView: 'preview', id: '2' }, size: 429 }, toolsGroup] }
+		const layout = realLayout() as unknown as { grid: { root: { data: unknown[] } }, panels: Record<string, unknown> }
+		layout.grid.root.data[1] = column
+		for (const id of ['runtime', 'events', 'implementation'])
+			layout.panels[id] = { id, contentComponent: id, title: id }
+		const stripped = stripLazyPanels(layout as never) as unknown as { grid: { root: { data: { type: string, size: number, data: GroupData }[] } }, panels: Record<string, unknown> }
+		expect(stripped.grid.root.data.map(child => [child.type, child.size, child.data.views]))
+			.toEqual([['leaf', 691, ['edit', 'explain', 'tools']], ['leaf', 749, ['preview']]])
+		expect(Object.keys(stripped.panels))
+			.toEqual(['edit', 'explain', 'tools', 'preview'])
 	})
 })

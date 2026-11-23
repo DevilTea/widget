@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { expect, openStatusDetails, test } from './fixtures'
+import { expect, openEditStructure, openStatusDetails, test } from './fixtures'
 
 /**
  * Issue #230 PR 3c (audit U15): the Structure editor picks its control from the plugin's config JSON Schema (a switch
@@ -14,12 +14,9 @@ interface LabTestWindow {
 	__WIDGET_LAB_TEST__?: { editJson: (text: string) => void, getDocumentSourceText: () => string }
 }
 
-async function openStructure(page: Page, widget: RegExp, query = 'showcase=survey', tabs = { author: 'Author', structure: 'Structure' }): Promise<Locator> {
+async function openStructure(page: Page, widget: RegExp, query = 'showcase=survey'): Promise<Locator> {
 	await page.goto(`/?lab-test&${query}`)
-	await page.getByRole('tab', { name: tabs.author, exact: true })
-		.click()
-	await page.getByRole('tab', { name: tabs.structure, exact: true })
-		.click()
+	await openEditStructure(page)
 	await page.getByRole('button', { name: widget })
 		.click()
 	const editor = page.getByTestId('structure-editor')
@@ -369,7 +366,7 @@ test.describe('the Document stays the authority', () => {
 		await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.editJson('{ "unapplied": '))
 		await notice.getByRole('button', { name: 'Open the JSON view' })
 			.click()
-		const jsonTab = page.getByRole('tablist', { name: 'Author views' })
+		const jsonTab = page.getByRole('tablist', { name: 'Edit views' })
 			.getByRole('tab', { name: 'JSON', exact: true })
 		await expect(jsonTab)
 			.toHaveAttribute('aria-selected', 'true')
@@ -404,7 +401,7 @@ test.describe('the Document stays the authority', () => {
 	})
 
 	test('the controls and every new name are in the Lab language', async ({ page }) => {
-		const editor = await openStructure(page, /guests : Numeric/, 'showcase=survey&lang=zh-TW', { author: '編寫', structure: '結構' })
+		const editor = await openStructure(page, /guests : Numeric/, 'showcase=survey&lang=zh-TW')
 		await expect(field(editor, 'integer')
 			.getByRole('switch'))
 			.toHaveAccessibleName('integer')
@@ -681,10 +678,7 @@ test.describe('a config that is not an object, or is missing', () => {
 			.toBe(text)
 	}
 	const openRoot = async (page: Page): Promise<Locator> => {
-		await page.getByRole('tab', { name: 'Author', exact: true })
-			.click()
-		await page.getByRole('tab', { name: 'Structure', exact: true })
-			.click()
+		await openEditStructure(page)
 		const editor = page.getByTestId('structure-editor')
 		await expect(editor)
 			.toBeVisible()

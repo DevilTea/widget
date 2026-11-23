@@ -1,4 +1,4 @@
-import { expect, openAuthorJson, test } from './fixtures'
+import { expect, openAuthorJson, openTool, test, toolPanel } from './fixtures'
 
 /** Issue #46: literal U+0009 tabs have one four-column presentation contract in both code surfaces. */
 test.describe('code-view tab width (issue #46)', () => {
@@ -52,9 +52,9 @@ test.describe('code-view tab width (issue #46)', () => {
 
 	test('readonly Implementation/Shiki source inherits the four-column CSS tab width', async ({ page }) => {
 		await page.goto('/?showcase=sandbox')
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
-		await page.getByRole('button', { name: 'title : Text' })
+		await openTool(page, 'blueprint')
+		await toolPanel(page, 'blueprint')
+			.getByRole('button', { name: 'title : Text' })
 			.click()
 		await page.getByTestId('blueprint-view-implementation')
 			.click()

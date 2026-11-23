@@ -41,7 +41,7 @@ test.describe('narrow-viewport native-dialog ownership (issue #45)', () => {
 	test('the dirty-draft confirmation survives shrink/widen without applying, losing the draft, or losing its focus-return target', async ({ page }) => {
 		await page.goto('/?lab-test&showcase=sandbox')
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
-		// The end of this test reads the draft in Monaco; Author opens on Structure.
+		// The end of this test reads the draft in Monaco; Edit opens on Structure.
 		await openAuthorJson(page)
 
 		// Use a known Source fixture through the same LabStore seam as the commit contracts. Reading Monaco's tokenized DOM to

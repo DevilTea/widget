@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { expect, loadPreset, previewFrame, setLocale, test } from './fixtures'
+import { expect, loadPreset, openTool, previewFrame, setLocale, test, toolTab } from './fixtures'
 
 /**
  * Lab UX phase 2, M13: the Explain tab. It explains one chosen widget (never the root by default): what it is, why it behaves
@@ -43,14 +43,14 @@ async function inspectWidget(page: Page, text: string, inspectLabel = 'Inspect')
 }
 
 test.describe('explain tab', () => {
-	test('sits right after Author and shows one card while nothing is chosen, never the root', async ({ page }) => {
+	test('sits right after Edit and shows one card while nothing is chosen, never the root', async ({ page }) => {
 		await openLab(page)
-		// The Dockview tabs of the tool group (not the Author panel's own Catalog/Structure/JSON tabs).
+		// The Dockview tabs of the tool group (not the Edit panel's own Structure/JSON toggle).
 		const toolTabs = page.locator('.dv-groupview')
-			.filter({ has: page.getByRole('tab', { name: 'Author', exact: true }) })
+			.filter({ has: page.getByRole('tab', { name: 'Edit', exact: true }) })
 			.locator('.dv-tab')
 		await expect(toolTabs)
-			.toHaveText(['Author', 'Explain', 'Selected widget', 'Blueprint', 'Runtime', 'Events', 'Dependencies'])
+			.toHaveText(['Edit', 'Explain', 'Tools'])
 
 		await explainTab(page)
 			.click()
@@ -131,15 +131,14 @@ test.describe('explain tab', () => {
 		await expect(why(page, 'visible', 'mode')
 			.getByTestId('explain-why-field'))
 			.toContainText('visibleWhen')
-		// Shared selection: the Selected widget pane follows.
-		await page.getByRole('tab', { name: 'Selected widget', exact: true })
-			.click()
+		// Shared selection: the Selected widget view follows.
+		await openTool(page, 'widget')
 		await expect(page.getByTestId('selected-widget-declaration')
 			.getByRole('heading', { name: 'guests : Numeric' }))
 			.toBeVisible()
 	})
 
-	test('Open dependency graph shows the Graph in the Dependencies tab', async ({ page }) => {
+	test('Open dependency graph shows the Graph in the Dependencies view beside the Preview, and Explain stays', async ({ page }) => {
 		await openLab(page)
 		await explainTab(page)
 			.click()
@@ -149,15 +148,20 @@ test.describe('explain tab', () => {
 			.focus()
 		await page.keyboard.press('Enter')
 
-		await expect(page.getByRole('tab', { name: 'Dependencies', exact: true }))
+		// Lab UX phase 3B: the Dependencies view opens in the Tools group and its tab takes focus (not the page); the Explain tab the
+		// user was reading stays on screen.
+		await expect(toolTab(page, 'dependencies'))
 			.toHaveAttribute('aria-selected', 'true')
+		await expect(toolTab(page, 'dependencies'))
+			.toBeFocused()
+		await expect(explainTab(page))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(explain(page))
+			.toBeVisible()
 		const graphTab = page.getByRole('tablist', { name: 'Dependencies views' })
 			.getByRole('tab', { name: 'Graph' })
 		await expect(graphTab)
 			.toHaveAttribute('aria-selected', 'true')
-		// Focus lands on the Graph tab, not on the page.
-		await expect(graphTab)
-			.toBeFocused()
 		await expect(page.locator('.vue-flow__node-cluster')
 			.first())
 			.toBeVisible({ timeout: 15_000 })

@@ -39,16 +39,9 @@ const { selected: selectedEdgeData, select: setSelectedEdgeData } = useGraphEdge
 
 // View switcher: Relations first. With no widget focused it shows the root widget, so it never opens blank. The view is
 // shared per store (`useDependenciesView`) so the Explain tab's "Open dependency graph" can switch it.
-const { view: activeView, focusGraphRequest } = useDependenciesView()
+const { view: activeView } = useDependenciesView()
 const relationsTab = useTemplateRef<HTMLButtonElement>('relationsTab')
 const graphTab = useTemplateRef<HTMLButtonElement>('graphTab')
-
-// "Open dependency graph" (Explain) activates this panel from elsewhere: keyboard focus lands on the Graph tab instead of
-// falling back to the page. Dockview activates the panel (and moves focus into its group) in the same tick, so this waits
-// for the next frame, after that.
-watch(focusGraphRequest, () => {
-	void nextTick(() => requestAnimationFrame(() => graphTab.value?.focus()))
-})
 
 function activateView(view: DependenciesView, moveFocus = false): void {
 	activeView.value = view

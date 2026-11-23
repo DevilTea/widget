@@ -63,7 +63,7 @@ export const tripBudgetTourScript: TutorialScript = {
 				label: 'Follow the chain in Relations',
 				run: (actions) => {
 					actions.setFocus('settlement', { type: 'property', name: 'transfers' })
-					actions.activateTab('dependencies')
+					actions.openTool('dependencies')
 				},
 			}],
 		},
@@ -82,7 +82,7 @@ export const tripBudgetTourScript: TutorialScript = {
 				label: 'Follow the Method in Relations',
 				run: (actions) => {
 					actions.setFocus('currency', { type: 'method', name: 'convert' })
-					actions.activateTab('dependencies')
+					actions.openTool('dependencies')
 				},
 			}],
 		},
@@ -104,7 +104,7 @@ export const tripBudgetTourScript: TutorialScript = {
 			onEnter: actions => actions.setFocus('hotel', { type: 'property', name: 'breakdown' }),
 			stages: [
 				{
-					prompt: 'Select the Runtime tab: on the hotel widget, breakdown says Never evaluated.',
+					prompt: 'Open the Runtime tree (in Tools): on the hotel widget, breakdown says Never evaluated.',
 					reveal: 'On the hotel widget, breakdown says Never evaluated (Runtime or Selected widget). It is a Property, and Properties are lazy: Core runs one only when something reads it, and nothing in the page does yet. The same holds for each person\'s ledger.',
 				},
 				{
@@ -121,7 +121,7 @@ export const tripBudgetTourScript: TutorialScript = {
 				label: 'See breakdown in Selected widget',
 				run: (actions) => {
 					actions.setFocus('hotel', { type: 'property', name: 'breakdown' })
-					actions.activateTab('widget')
+					actions.openTool('widget')
 				},
 			}],
 		},
@@ -152,7 +152,7 @@ export const tripBudgetTourScript: TutorialScript = {
 				reveal: 'Draft with mistakes has four located diagnostics (a rate of 0, percentages that add up to 90, a negative amount, a payer who is not on the trip): they appear in Problems, and the Preview keeps the last valid version. Run-time failure compiles, but its museum currency has no rate: Currency.convert fails when it runs, and every Property that depends on it fails too. Select the museum widget in Selected widget: amountBase and shares say Failed, with the diagnostic.',
 			}],
 			links: [
-				{ id: 'view-widget', label: 'Selected widget', run: actions => actions.activateTab('widget') },
+				{ id: 'view-widget', label: 'Selected widget', run: actions => actions.openTool('widget') },
 			],
 		},
 		{
@@ -161,14 +161,14 @@ export const tripBudgetTourScript: TutorialScript = {
 			target: null,
 			stages: [{
 				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Dependencies (Relations, Graph) = the declared chain between widgets · Selected widget = one widget\'s declaration and Runtime values · Runtime = every widget\'s State and Properties (Never evaluated until something reads them) · Events = Method failures and Events as they happen · Implementation = the plugin and renderer code behind this widget type.',
+				reveal: 'Tools, beside the Preview: Dependencies (Relations, Graph) = the declared chain between widgets · Selected widget = one widget\'s declaration and Runtime values · Runtime tree = every widget\'s State and Properties (Never evaluated until something reads them) · Events log = Method failures and Events as they happen · Implementation = the plugin and renderer code behind this widget type.',
 			}],
 			links: [
-				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.activateTab('dependencies') },
-				{ id: 'view-widget-tab', label: 'Selected widget', run: actions => actions.activateTab('widget') },
-				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
-				{ id: 'view-events-tab', label: 'Events', run: actions => actions.activateTab('events') },
-				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
+				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.openTool('dependencies') },
+				{ id: 'view-widget-tab', label: 'Selected widget', run: actions => actions.openTool('widget') },
+				{ id: 'view-runtime', label: 'Runtime tree', run: actions => actions.openTool('runtime') },
+				{ id: 'view-events-tab', label: 'Events log', run: actions => actions.openTool('events') },
+				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openTool('implementation') },
 			],
 		},
 		{

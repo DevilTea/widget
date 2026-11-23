@@ -1,10 +1,13 @@
 import { expect, test } from './fixtures'
 
-test('Author Catalog copies the catalog JSON and shows no schema block for schema-less entries', async ({ page }) => {
+/**
+ * The Catalog (Lab UX phase 3B: a slide-over of the Edit tab, opened with "Browse widget types", no longer a view of its own):
+ * its content is unchanged. The dialog behaviour (focus, Escape, focus return) is in `e2e/workbench-tools.spec.ts`.
+ */
+
+test('the Catalog copies the catalog JSON and shows no schema block for schema-less entries', async ({ page }) => {
 	await page.goto('/?showcase=sandbox')
-	await page.getByRole('tab', { name: 'Author' })
-		.click()
-	await page.getByRole('tab', { name: 'Catalog' })
+	await page.getByTestId('browse-widget-types')
 		.click()
 	await expect(page.getByTestId('author-catalog-Stack'))
 		.toBeVisible()
@@ -36,11 +39,9 @@ test('Author Catalog copies the catalog JSON and shows no schema block for schem
 		.toHaveText('Copy catalog JSON')
 })
 
-test('Author Catalog shows a failure state when the clipboard rejects', async ({ page }) => {
+test('the Catalog shows a failure state when the clipboard rejects', async ({ page }) => {
 	await page.goto('/')
-	await page.getByRole('tab', { name: 'Author' })
-		.click()
-	await page.getByRole('tab', { name: 'Catalog' })
+	await page.getByTestId('browse-widget-types')
 		.click()
 	await page.evaluate(() => {
 		Object.defineProperty(navigator, 'clipboard', {

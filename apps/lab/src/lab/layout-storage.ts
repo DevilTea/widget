@@ -12,19 +12,27 @@
  * error that stops the Lab from loading.
  */
 
-/** Bump when a change to the panels or their components makes an older saved layout meaningless. */
-export const LAYOUT_VERSION = 1
+import { TOOL_COMPONENTS, TOOL_IDS } from './tools'
+
+/**
+ * Bump when a change to the panels or their components makes an older saved layout meaningless. Version 2 (Lab UX phase 3B):
+ * the tool group became Edit / Explain / Tools, and the expert views moved into a Tools group that is opened on request.
+ */
+export const LAYOUT_VERSION = 2
 
 export const LAYOUT_STORAGE_KEY = 'widget-lab:layout'
 
 /** The panels every layout holds; none of them can be closed. */
-export const CANONICAL_PANEL_IDS: readonly string[] = ['author', 'explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview']
+export const CANONICAL_PANEL_IDS: readonly string[] = ['edit', 'explain', 'tools', 'preview']
 
-/** Panels a user may open and close (added lazily); they are never restored, see `stripLazyPanels`. */
-export const LAZY_PANEL_IDS: readonly string[] = ['implementation', 'document-tools']
+/**
+ * Panels a user may open and close (added on request): the expert views of the Tools tab (`lab/tools.ts`). They are never
+ * restored, see `stripLazyPanels`, so the Tools group beside the Preview is created on demand.
+ */
+export const LAZY_PANEL_IDS: readonly string[] = TOOL_IDS
 
 /** Every Dockview component name `Workbench.vue` registers. */
-const KNOWN_COMPONENTS: ReadonlySet<string> = new Set(['author', 'explain', 'widget', 'blueprint', 'runtime', 'events', 'dependencies', 'preview', 'implementation', 'documentTools'])
+const KNOWN_COMPONENTS: ReadonlySet<string> = new Set(['edit', 'explain', 'tools', 'preview', ...Object.values(TOOL_COMPONENTS)])
 const KNOWN_TAB_COMPONENTS: ReadonlySet<string> = new Set(['nonClosable'])
 
 /** The subset of the Web Storage API this module needs. */
@@ -168,7 +176,7 @@ function pruneGridNode(node: unknown, removedIds: Set<string>): GridNode[] | nul
 }
 
 /**
- * The layout without the panels that are opened on request (Implementation, Document Tools), which are never
+ * The layout without the panels that are opened on request (the Tools views), which are never
  * restored: their content depends on a request a page load did not make. Done on the data, before Dockview sees
  * it, so no such panel is ever created, and a group whose active panel was one of them activates its first
  * remaining panel instead of whatever neighbour closing it would have left active. A group that held only such

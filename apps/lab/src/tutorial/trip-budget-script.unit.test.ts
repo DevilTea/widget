@@ -208,7 +208,7 @@ describe('the whole script on a real Runtime', () => {
 		const actions: TutorialActions = {
 			setFocus: vi.fn(),
 			activateTab: vi.fn(),
-			openImplementation: vi.fn(),
+			openTool: vi.fn(),
 		}
 		const settle = (): void => {
 			observe()

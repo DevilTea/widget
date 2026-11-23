@@ -4,9 +4,9 @@
  *
  * What is kept from Proposal v2 is the structure and the do -> observe -> name pairing, the direct-State-
  * write-vs-Method contrast, staleness-as-an-interaction and the map of the views. Lab UX phase 2 (report item 14)
- * moved the map to step 2 (it names Selected widget and Events too) and added `edit-and-undo` near the end: the
+ * moved the map to step 2 (Lab UX phase 3B: it names Edit, Preview, Explain and Tools) and added `edit-and-undo` near the end: the
  * earlier steps only change Preview answers (Runtime State), and this one changes the definition itself (a label in
- * Author > Structure), shows the Preview rebuilt from it, and takes it back with Undo. It comes after the answer steps
+ * Edit > Structure), shows the Preview rebuilt from it, and takes it back with Undo. It comes after the answer steps
  * because a committed edit restarts the Preview, so the answers those steps build on start over.
  * The error step's lesson changed from Proposal v2: the sign-up form keeps answer errors as values (a Numeric answer
  * above its `max` is stored and reported through the `errors` Property), so it teaches "an answer error,
@@ -85,27 +85,20 @@ export const surveyTourScript: TutorialScript = {
 			}],
 		},
 		{
-			// Early (Lab UX phase 2): the visitor knows where things are before the steps send them there.
-			// TODO(phase 3): drop the views the IA moves into Tools.
+			// Early (Lab UX phase 2): the visitor knows where things are before the steps send them there. Lab UX phase 3B: the four
+			// areas of the workbench; the expert views are one link away, in the Tools menu.
 			id: 'map-the-views',
 			title: 'Map the views',
 			target: null,
 			stages: [{
 				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Author = the definition you edit (Structure, or the JSON) · Preview = the running app · Explain = select a widget (Inspect in the Preview, or the Structure tree) to see what it is and why it behaves this way · Selected widget = its config and live values side by side · Events = what the widgets announced · Blueprint = what the definition compiled into · Runtime = live State, Properties and Methods · Dependencies = which widget reads which · Implementation = the plugin and renderer code behind a widget type.',
+				reveal: 'Edit = the definition you edit (Structure, or the JSON; Browse widget types lists every widget type) · Preview = the running app · Explain = select a widget (Inspect in the Preview, or the Structure tree) to see what it is and why it behaves this way · Tools = the expert views, each opened in its own tab beside the Preview: Blueprint tree, Runtime tree, Events log, Dependencies, Selected widget, Document Tools and Implementation.',
 			}],
 			links: [
-				{ id: 'view-author', label: 'Author', run: actions => actions.activateTab('author') },
+				{ id: 'view-edit', label: 'Edit', run: actions => actions.activateTab('edit') },
 				{ id: 'view-preview', label: 'Preview', run: actions => actions.activateTab('preview') },
 				{ id: 'view-explain', label: 'Explain', run: actions => actions.activateTab('explain') },
-				{ id: 'view-widget', label: 'Selected widget', run: actions => actions.activateTab('widget') },
-				{ id: 'view-events', label: 'Events', run: actions => actions.activateTab('events') },
-				{ id: 'view-blueprint', label: 'Blueprint', run: actions => actions.activateTab('blueprint') },
-				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
-				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.activateTab('dependencies') },
-				// diagnostic #25 P3: opens the Implementation panel for whichever widget is currently held in shared focus
-				// (this step never changes focus itself, matching every other link in this step).
-				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
+				{ id: 'view-tools', label: 'Tools', run: actions => actions.activateTab('tools') },
 			],
 		},
 		{
@@ -123,7 +116,7 @@ export const surveyTourScript: TutorialScript = {
 				label: 'See it in Runtime',
 				run: (actions) => {
 					actions.setFocus('mode', { type: 'state', name: 'answer' })
-					actions.activateTab('runtime')
+					actions.openTool('runtime')
 				},
 			}],
 		},
@@ -213,11 +206,11 @@ export const surveyTourScript: TutorialScript = {
 			target: 'author-structure',
 			onEnter: (actions) => {
 				actions.setFocus('mode')
-				actions.activateTab('author', 'structure')
+				actions.activateTab('edit', 'structure')
 			},
 			stages: [
 				{
-					prompt: 'Try it: in Author > Structure, change a text of the label of "How will you join?" (en or zh-TW), then press Enter. The Preview restarts after each change.',
+					prompt: 'Try it: in Edit > Structure, change a text of the label of "How will you join?" (en or zh-TW), then press Enter. The Preview restarts after each change.',
 					isComplete: reader => modeLabelState(reader) === 'edited',
 					reveal: 'You changed the definition, not an answer: the change was committed to the Document at once and the Preview was rebuilt from it, so its answers started over and the survey is back in its first language.',
 				},
@@ -235,7 +228,7 @@ export const surveyTourScript: TutorialScript = {
 			finishLabel: 'Finish',
 			stages: [{
 				prompt: 'You now know State, Property, Method, and dependency.',
-				reveal: 'Open any inspector, or keep editing in Author: Structure applies each change at once, and Undo takes it back.',
+				reveal: 'Open an expert view from Tools, or keep editing in Edit: Structure applies each change at once, and Undo takes it back.',
 			}],
 		},
 	],

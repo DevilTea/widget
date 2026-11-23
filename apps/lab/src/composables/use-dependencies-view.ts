@@ -1,7 +1,7 @@
 /**
  * Which view the Dependencies panel shows (Relations or Graph), shared per store so another panel can ask for the Graph:
- * the Explain tab's "Open dependency graph" (Lab UX phase 2) switches the view, activates the Dependencies tab and asks the
- * panel to move keyboard focus to its Graph tab (the control the user's activation lands on, as with the arrow keys).
+ * the Explain tab's "Open dependency graph" (Lab UX phase 2) switches the view and opens the Dependencies view of the Tools
+ * group (Lab UX phase 3B), whose tab then takes keyboard focus like every view opened from elsewhere.
  *
  * Presentation state only, like `graphShowAbsent`: it never touches the Document or the focus. It lives beside the store
  * (one per store, created on first use), not in `LabStore` itself, because only these panels read it. "Reset layout" puts
@@ -18,39 +18,30 @@ export type DependenciesView = 'graph' | 'relations'
 export interface DependenciesViewState {
 	/** Relations is the default (issue #230 PR 3b). */
 	readonly view: Ref<DependenciesView>
-	/** Bumped by `openGraph()`; the Dependencies panel focuses its Graph tab when it changes. */
-	readonly focusGraphRequest: Readonly<Ref<number>>
-	/** Shows the Graph, brings the Dependencies tab to the front and asks for focus on the Graph tab. */
+	/** Shows the Graph and opens (or focuses) the Dependencies view in the Tools group. */
 	openGraph: () => void
 	/** Back to the default view (Relations). */
 	reset: () => void
 }
 
-interface Shared {
-	readonly view: Ref<DependenciesView>
-	readonly focusGraphRequest: Ref<number>
-}
-
-const states = new WeakMap<LabStore, Shared>()
+const views = new WeakMap<LabStore, Ref<DependenciesView>>()
 
 export function useDependenciesView(): DependenciesViewState {
 	const store = useLabStore()
-	let shared = states.get(store)
-	if (shared === undefined) {
-		shared = { view: shallowRef<DependenciesView>('relations'), focusGraphRequest: shallowRef(0) }
-		states.set(store, shared)
+	let view = views.get(store)
+	if (view === undefined) {
+		view = shallowRef<DependenciesView>('relations')
+		views.set(store, view)
 	}
-	const { view, focusGraphRequest } = shared
+	const shared = view
 	return {
-		view,
-		focusGraphRequest,
+		view: shared,
 		openGraph: () => {
-			view.value = 'graph'
-			store.activeTab.value = 'dependencies'
-			focusGraphRequest.value++
+			shared.value = 'graph'
+			store.openTool('dependencies')
 		},
 		reset: () => {
-			view.value = 'relations'
+			shared.value = 'relations'
 		},
 	}
 }

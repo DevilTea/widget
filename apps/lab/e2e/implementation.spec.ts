@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, openAuthorJson, previewFrame, test } from './fixtures'
+import { expect, openAuthorJson, openTool, previewFrame, test, toolTab, workbenchTab } from './fixtures'
 
 /**
  * Issue #25 P3 "curated Implementation source explorer" contract.
@@ -32,10 +32,22 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 	test('Survey: Inspect-select the ShortAnswer widget, open Implementation, see the curated plugin/renderer files highlighted, and the Applied instance JSON', async ({ page }) => {
 		await focusPhoneViaInspect(page)
 
+		// Lab UX phase 3B: the button names its widget, and the tab it opens in the Tools group does too.
+		await expect(page.getByTestId('preview-view-implementation'))
+			.toHaveAccessibleName('View implementation of phone (ShortAnswer)')
 		await page.getByTestId('preview-view-implementation')
 			.click()
-		await expect(page.getByRole('tab', { name: 'Implementation' }))
+		await expect(toolTab(page, 'implementation'))
 			.toHaveAttribute('aria-selected', 'true')
+		await expect(toolTab(page, 'implementation'))
+			.toHaveAccessibleName('Implementation — phone (ShortAnswer)')
+		await expect(toolTab(page, 'implementation'))
+			.toBeFocused()
+		// The Edit tab the user was in stays on screen.
+		await expect(workbenchTab(page, 'edit'))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('structure-editor'))
+			.toBeVisible()
 		await expect(page.getByText('ShortAnswer', { exact: true }))
 			.toBeVisible()
 
@@ -59,14 +71,15 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 	})
 
 	test('entry from Blueprint\'s selected-node detail works', async ({ page }) => {
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
+		await openTool(page, 'blueprint')
 		await page.getByRole('button', { name: 'phone : ShortAnswer' })
 			.click()
 
+		await expect(page.getByTestId('blueprint-view-implementation'))
+			.toHaveAccessibleName('View implementation of phone (ShortAnswer)')
 		await page.getByTestId('blueprint-view-implementation')
 			.click()
-		await expect(page.getByRole('tab', { name: 'Implementation' }))
+		await expect(toolTab(page, 'implementation'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByText('ShortAnswer', { exact: true }))
 			.toBeVisible()
@@ -77,7 +90,7 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 		await page.getByTestId('preview-view-implementation')
 			.click()
 
-		const implementationTab = page.getByRole('tab', { name: 'Implementation' })
+		const implementationTab = toolTab(page, 'implementation')
 		await expect(implementationTab)
 			.toBeVisible()
 		const closeAction = implementationTab.locator('.dv-default-tab-action')
@@ -85,23 +98,22 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 			.toHaveCount(1)
 
 		// No canonical-panel regression (issue #27's non-closable policy stays untouched).
-		for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
-			await expect(page.getByRole('tab', { name })
+		for (const name of ['Edit', 'Explain', 'Tools', 'Preview']) {
+			await expect(page.getByRole('tab', { name, exact: true })
 				.locator('.dv-default-tab-action'))
 				.toHaveCount(0)
 		}
 
 		await closeAction.click()
-		await expect(page.getByRole('tab', { name: 'Implementation' }))
+		await expect(toolTab(page, 'implementation'))
 			.toHaveCount(0)
 
 		// Reopen from a DIFFERENT entry point (Blueprint's selected-node detail) — same widget is still
 		// held in shared focus, so the button is enabled without reselecting anything.
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
+		await openTool(page, 'blueprint')
 		await page.getByTestId('blueprint-view-implementation')
 			.click()
-		await expect(page.getByRole('tab', { name: 'Implementation' }))
+		await expect(toolTab(page, 'implementation'))
 			.toHaveAttribute('aria-selected', 'true')
 	})
 
@@ -158,8 +170,7 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
 
 		// Focus the `title` (`Text`) widget via the Blueprint tree and open its Applied instance.
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
+		await openTool(page, 'blueprint')
 		await page.getByRole('button', { name: 'title : Text' })
 			.click()
 		await page.getByTestId('blueprint-view-implementation')
@@ -188,7 +199,7 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 				.slice(0, -1))
 		}, marker)
 
-		// The Source editor (Monaco, in Author > JSON) shows the dirtied draft.
+		// The Source editor (Monaco, in Edit > JSON) shows the dirtied draft.
 		await openAuthorJson(page)
 		await expect(page.locator('.view-lines')
 			.getByText(marker, { exact: false }))
@@ -199,7 +210,7 @@ test.describe('Implementation explorer (issue #25 P3)', () => {
 		// panel's own code view, not a page-wide assertion, since the marker legitimately lives in
 		// Monaco's `.view-lines` DOM above — same scoping precedent as `tutorial.spec.ts`'s dirty-draft
 		// tests).
-		await page.getByRole('tab', { name: 'Implementation' })
+		await toolTab(page, 'implementation')
 			.click()
 		await expect(appliedInstanceCode)
 			.toContainText('"text": "Widget Lab sandbox"')

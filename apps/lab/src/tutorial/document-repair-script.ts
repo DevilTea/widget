@@ -60,9 +60,9 @@ export const documentRepairTourScript: TutorialScript = {
 			links: [
 				{ id: 'see-findings', label: 'See findings in Selected widget', run: (actions) => {
 					actions.setFocus('draft-v1', { type: 'property', name: 'findings' })
-					actions.activateTab('widget')
+					actions.openTool('widget')
 				} },
-				{ id: 'open-blueprint', label: 'Open the Blueprint tab', run: actions => actions.activateTab('blueprint') },
+				{ id: 'open-blueprint', label: 'Open the Blueprint tree', run: actions => actions.openTool('blueprint') },
 			],
 		},
 		{
@@ -78,7 +78,7 @@ export const documentRepairTourScript: TutorialScript = {
 			links: [
 				{ id: 'see-session-state', label: 'See the draft State in Selected widget', run: (actions) => {
 					actions.setFocus('draft-v1', { type: 'state', name: 'revision' })
-					actions.activateTab('widget')
+					actions.openTool('widget')
 				} },
 			],
 		},
@@ -94,7 +94,7 @@ export const documentRepairTourScript: TutorialScript = {
 			links: [
 				{ id: 'see-plan', label: 'See plan in Selected widget', run: (actions) => {
 					actions.setFocus('draft-v1', { type: 'property', name: 'plan' })
-					actions.activateTab('widget')
+					actions.openTool('widget')
 				} },
 			],
 		},
@@ -175,7 +175,7 @@ export const documentRepairTourScript: TutorialScript = {
 			links: [
 				{ id: 'see-poll-findings', label: 'See findings in Selected widget', run: (actions) => {
 					actions.setFocus('draft-poll', { type: 'property', name: 'findings' })
-					actions.activateTab('widget')
+					actions.openTool('widget')
 				} },
 			],
 		},
@@ -185,14 +185,14 @@ export const documentRepairTourScript: TutorialScript = {
 			target: null,
 			stages: [{
 				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Blueprint = the repair desk\'s own widgets and diagnostics, not the notice board\'s · Selected widget = a draft\'s Properties findings and plan, and the State that mirrors the session · Runtime = every draft\'s State and Properties · Dependencies = this showcase has none between widgets: each draft is independent · Implementation = the plan, the host\'s session code and the notice board plugins behind these widgets.',
+				reveal: 'Tools, beside the Preview: Blueprint tree = the repair desk\'s own widgets and diagnostics, not the notice board\'s · Selected widget = a draft\'s Properties findings and plan, and the State that mirrors the session · Runtime tree = every draft\'s State and Properties · Dependencies = this showcase has none between widgets: each draft is independent · Implementation = the plan, the host\'s session code and the notice board plugins behind these widgets.',
 			}],
 			links: [
-				{ id: 'view-blueprint', label: 'Blueprint', run: actions => actions.activateTab('blueprint') },
-				{ id: 'view-widget-tab', label: 'Selected widget', run: actions => actions.activateTab('widget') },
-				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
-				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.activateTab('dependencies') },
-				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
+				{ id: 'view-blueprint', label: 'Blueprint tree', run: actions => actions.openTool('blueprint') },
+				{ id: 'view-widget-tab', label: 'Selected widget', run: actions => actions.openTool('widget') },
+				{ id: 'view-runtime', label: 'Runtime tree', run: actions => actions.openTool('runtime') },
+				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.openTool('dependencies') },
+				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openTool('implementation') },
 			],
 		},
 		{

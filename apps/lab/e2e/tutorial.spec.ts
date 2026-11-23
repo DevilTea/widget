@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectShowcase, openAuthorJson, previewFrame, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectShowcase, openAuthorJson, openEdit, openTool, previewFrame, test, toolTab, workbenchTab } from './fixtures'
 
 /**
  * Issue #25 P1 tutorial contract. `fixtures.ts` pre-dismisses the Welcome card for every test in this
@@ -138,12 +138,9 @@ test.describe('welcome card', () => {
 			.toHaveCount(0)
 
 		// Never blocks ordinary Lab use.
-		await expect(page.getByRole('tab', { name: 'Author' }))
+		await expect(workbenchTab(page, 'edit'))
 			.toBeVisible()
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
-		await expect(page.getByRole('tab', { name: 'Blueprint' }))
-			.toHaveAttribute('aria-selected', 'true')
+		await openTool(page, 'blueprint')
 	})
 
 	test('Escape is a safe dismiss equivalent to "Explore on my own" — never leaves tutorial state inconsistent with the closed DOM', async ({ page }) => {
@@ -168,7 +165,7 @@ test.describe('welcome card', () => {
 		await page.keyboard.press('Escape')
 
 		// Lab use is fully unaffected.
-		await expect(page.getByRole('tab', { name: 'Author' }))
+		await expect(workbenchTab(page, 'edit'))
 			.toBeVisible()
 	})
 
@@ -196,24 +193,21 @@ test('skipping the tour leaves the Lab fully usable', async ({ page }) => {
 	await expect(page.getByRole('complementary', { name: RAIL_LABEL }))
 		.toHaveCount(0)
 
-	for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
-		await expect(page.getByRole('tab', { name }))
+	for (const name of ['Edit', 'Explain', 'Tools', 'Preview']) {
+		await expect(page.getByRole('tab', { name, exact: true }))
 			.toBeVisible()
 	}
-	await page.getByRole('tab', { name: 'Runtime' })
-		.click()
-	await expect(page.getByRole('tab', { name: 'Runtime' }))
-		.toHaveAttribute('aria-selected', 'true')
+	await openTool(page, 'runtime')
 	await expect(page.getByRole('button', { name: 'Undo last change', exact: true }))
 		.toBeVisible()
 })
 
-test('skipping or finishing the tour puts the user back on the tab and Author view they had before it (Lab UX phase 2)', async ({ page }) => {
+test('skipping or finishing the tour puts the user back on the tab and Edit view they had before it (Lab UX phase 2)', async ({ page }) => {
 	await page.goto('/')
 	await openAuthorJson(page)
-	await page.getByRole('tab', { name: 'Events', exact: true })
+	await workbenchTab(page, 'tools')
 		.click()
-	// The Preview is the active Dockview panel when the tour starts (the user touched it last); Events stays open in the tool
+	// The Preview is the active Dockview panel when the tour starts (the user touched it last); Tools stays open in the tool
 	// group. The tour gives back the tool group's tab, not the shared active panel.
 	await page.getByRole('tab', { name: 'Preview', exact: true })
 		.click()
@@ -225,23 +219,22 @@ test('skipping or finishing the tour puts the user back on the tab and Author vi
 	// The map step's links move the user around.
 	await rail.getByRole('button', { name: 'Next', exact: true })
 		.click()
-	await rail.getByRole('button', { name: 'Runtime', exact: true })
+	await rail.getByRole('button', { name: 'Explain', exact: true })
 		.click()
-	await expect(page.getByRole('tab', { name: 'Runtime' }))
+	await expect(workbenchTab(page, 'explain'))
 		.toHaveAttribute('aria-selected', 'true')
 
 	await rail.getByRole('button', { name: 'Skip tour' })
 		.click()
 	await expect(rail)
 		.toHaveCount(0)
-	await expect(page.getByRole('tab', { name: 'Events', exact: true }))
+	await expect(workbenchTab(page, 'tools'))
 		.toHaveAttribute('aria-selected', 'true')
 	// The Preview still runs (activating its group again had left it blank).
 	await expect(previewFrame(page)
 		.getByRole('heading', { name: 'Maker Space open day: sign-up' }))
 		.toBeVisible()
-	await page.getByRole('tab', { name: 'Author' })
-		.click()
+	await openEdit(page)
 	await expect(page.getByTestId('author-view-json'))
 		.toHaveAttribute('aria-selected', 'true')
 })
@@ -279,7 +272,7 @@ test.describe('dirty-draft confirmation dialog', () => {
 	async function dirtyTheDraft(page: Page): Promise<void> {
 		await page.goto('/?lab-test&showcase=sandbox')
 		await page.waitForFunction(() => typeof (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__?.editJson === 'function')
-		// These tests read the preserved draft in Monaco, which mounts with the JSON view (Author opens on Structure).
+		// These tests read the preserved draft in Monaco, which mounts with the JSON view (Edit opens on Structure).
 		await openAuthorJson(page)
 		// Dirty the (hidden Sandbox fixture) JSON via the issue #28 interaction seam — never touches Monaco. Since Lab UX phase 3
 		// only text that does not parse is a draft (text that parses is committed), so the text is left unfinished.
@@ -432,14 +425,11 @@ test('rail geometry: at the 900px minimum-supported width, the real action-beari
 	expect(hasHorizontalOverflow)
 		.toBe(false)
 
-	for (const name of ['Author', 'Blueprint', 'Runtime', 'Dependencies', 'Preview']) {
-		await expect(page.getByRole('tab', { name }))
+	for (const name of ['Edit', 'Explain', 'Tools', 'Preview']) {
+		await expect(page.getByRole('tab', { name, exact: true }))
 			.toBeVisible()
 	}
-	await page.getByRole('tab', { name: 'Blueprint' })
-		.click()
-	await expect(page.getByRole('tab', { name: 'Blueprint' }))
-		.toHaveAttribute('aria-selected', 'true')
+	await openTool(page, 'blueprint')
 
 	// The rail itself must also be fully on-screen, not clipped past the viewport's own right edge.
 	const rail = page.getByRole('complementary', { name: RAIL_LABEL })
@@ -524,40 +514,30 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 2 — map the views (moved up by Lab UX phase 2, and naming Explain, Selected widget and Events): each name is a
-	// real navigation affordance.
+	// Step 2 — map the views (moved up by Lab UX phase 2; Lab UX phase 3B: Edit, Preview, Explain and Tools, which names the
+	// expert views): each name is a real navigation affordance.
 	await expect(rail.getByText('Explain = select a widget (Inspect in the Preview, or the Structure tree) to see what it is and why it behaves this way', { exact: false }))
+		.toBeVisible()
+	await expect(rail.getByText('Tools = the expert views, each opened in its own tab beside the Preview', { exact: false }))
 		.toBeVisible()
 	await rail.getByRole('button', { name: 'Explain', exact: true })
 		.click()
-	await expect(page.getByRole('tab', { name: 'Explain', exact: true }))
+	await expect(workbenchTab(page, 'explain'))
 		.toHaveAttribute('aria-selected', 'true')
-	await rail.getByRole('button', { name: 'Selected widget', exact: true })
+	await rail.getByRole('button', { name: 'Tools', exact: true })
 		.click()
-	await expect(page.getByRole('tab', { name: 'Selected widget' }))
+	await expect(workbenchTab(page, 'tools'))
 		.toHaveAttribute('aria-selected', 'true')
-	await rail.getByRole('button', { name: 'Events', exact: true })
+	await rail.getByRole('button', { name: 'Edit', exact: true })
 		.click()
-	await expect(page.getByRole('tab', { name: 'Events', exact: true }))
+	await expect(workbenchTab(page, 'edit'))
 		.toHaveAttribute('aria-selected', 'true')
-	await rail.getByRole('button', { name: 'Runtime', exact: true })
-		.click()
-	await expect(page.getByRole('tab', { name: 'Runtime' }))
-		.toHaveAttribute('aria-selected', 'true')
-	await rail.getByRole('button', { name: 'Author', exact: true })
-		.click()
-	await expect(page.getByRole('tab', { name: 'Author' }))
-		.toHaveAttribute('aria-selected', 'true')
-	// "Implementation" is a real affordance (issue #25 P3): opens the closable Implementation panel for whichever widget
-	// is currently held in shared focus — `open-day` (a `Survey`), from step 1's `onEnter`. The locator is scoped to the
-	// Implementation panel on purpose: the plain word "Survey" also appears elsewhere on the page.
-	await rail.getByRole('button', { name: 'Implementation', exact: true })
-		.click()
-	await expect(page.getByRole('tab', { name: 'Implementation' }))
-		.toHaveAttribute('aria-selected', 'true')
-	const implementationPanel = page.getByRole('tabpanel', { name: 'Implementation' })
-	await expect(implementationPanel.getByText('Survey', { exact: true }))
-		.toBeVisible()
+	// The expert views are in the Tools menu: "Implementation" opens the Implementation view for whichever widget is currently
+	// held in shared focus — `open-day` (a `Survey`), from step 1's `onEnter`, and its tab names it.
+	await openTool(page, 'implementation')
+	await expect(toolTab(page, 'implementation'))
+		.toHaveAccessibleName('Implementation — open-day (Survey)')
+	const implementationPanel = page.getByRole('tabpanel', { name: 'Implementation — open-day (Survey)' })
 	await expect(implementationPanel.getByRole('button', { name: 'SurveyRootRenderer.vue', exact: true }))
 		.toBeVisible()
 	await nextButton.click()
@@ -590,7 +570,10 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 
 	await rail.getByRole('button', { name: 'See it in Runtime' })
 		.click()
-	await expect(page.getByRole('tab', { name: 'Runtime' }))
+	// The Runtime tree opens beside the Preview; the tool group keeps the tab it had (Tools, from opening Implementation above).
+	await expect(toolTab(page, 'runtime'))
+		.toHaveAttribute('aria-selected', 'true')
+	await expect(workbenchTab(page, 'tools'))
 		.toHaveAttribute('aria-selected', 'true')
 	await nextButton.click()
 
@@ -704,8 +687,8 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 		.toBeEnabled()
 	await nextButton.click()
 
-	// Step 9 — change the definition, then Undo (Lab UX phase 2): the step opens Author > Structure on `mode`.
-	await expect(page.getByRole('tab', { name: 'Author' }))
+	// Step 9 — change the definition, then Undo (Lab UX phase 2): the step opens Edit > Structure on `mode`.
+	await expect(workbenchTab(page, 'edit'))
 		.toHaveAttribute('aria-selected', 'true')
 	await expect(page.getByTestId('author-view-structure'))
 		.toHaveAttribute('aria-selected', 'true')
@@ -755,7 +738,7 @@ test('full Survey tour end-to-end via real interactions, each observation appear
 	await nextButton.click()
 
 	// Step 10 — hand-back: "Finish" replaces "Next" on the last step.
-	await expect(rail.getByText('Open any inspector, or keep editing in Author: Structure applies each change at once, and Undo takes it back.'))
+	await expect(rail.getByText('Open an expert view from Tools, or keep editing in Edit: Structure applies each change at once, and Undo takes it back.'))
 		.toBeVisible()
 	await expect(finishButton)
 		.toBeEnabled()

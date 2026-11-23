@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, previewFrame, selectShowcase, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, expectDocumentStatus, expectPreviewStatus, expectShowcase, loadPreset, openAuthorJson, openEditStructure, openTool, previewFrame, selectShowcase, setLocale, setTheme, test, toolTab, workbenchTab } from './fixtures'
 
 /**
  * Quote rules acceptance contract (issue #230, showcase 2): the Corner Press print job quote
@@ -49,13 +49,11 @@ async function openBuggy(page: Page): Promise<void> {
 
 /** Selects a widget in the Blueprint tree and opens the Selected widget pane on it. */
 async function selectWidget(page: Page, label: RegExp): Promise<void> {
-	await page.getByRole('tab', { name: 'Blueprint', exact: true })
-		.click()
+	await openTool(page, 'blueprint')
 	await page.getByRole('button', { name: label })
 		.first()
 		.click()
-	await page.getByRole('tab', { name: 'Selected widget', exact: true })
-		.click()
+	await openTool(page, 'widget')
 }
 
 function runtimeRow(page: Page, member: string): Locator {
@@ -238,7 +236,7 @@ test.describe('the schema library\'s own messages', () => {
 
 		await expectDocumentStatus(page, { problems: 6 })
 		await expectPreviewStatus(page, 'stale')
-		// Author opens on Structure: the Problems list is under the JSON editor.
+		// Edit opens on Structure: the Problems list is under the JSON editor.
 		await openAuthorJson(page)
 		const problems = page.getByTestId('author-problems')
 		await expect(problems)
@@ -276,10 +274,7 @@ test.describe('the config JSON Schema', () => {
 		await expect(previewFrame(page)
 			.getByRole('heading', { name: 'Corner Press: print job', level: 1 }))
 			.toBeVisible()
-		await page.getByRole('tab', { name: 'Author', exact: true })
-			.click()
-		await page.getByRole('tab', { name: 'Structure', exact: true })
-			.click()
+		await openEditStructure(page)
 		await page.getByRole('button', { name: widgetLabel })
 			.click()
 		const editor = page.getByTestId('structure-editor')
@@ -357,7 +352,7 @@ test.describe('the config JSON Schema', () => {
 			.getByRole('switch'))
 			.toBeVisible()
 
-		await page.getByRole('tab', { name: 'Catalog', exact: true })
+		await page.getByTestId('browse-widget-types')
 			.click()
 		const entry = page.getByTestId('author-catalog-VolumeDiscount')
 		await expect(entry)
@@ -576,7 +571,7 @@ test.describe('tutorial', () => {
 			.toBeVisible()
 		await rail.getByRole('button', { name: 'See answers and quote in Selected widget' })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Selected widget', exact: true }))
+		await expect(toolTab(page, 'widget'))
 			.toHaveAttribute('aria-selected', 'true')
 		await next.click()
 
@@ -598,16 +593,18 @@ test.describe('tutorial', () => {
 			.toBeVisible()
 		await rail.getByRole('button', { name: 'Follow the chain in Relations' })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Dependencies', exact: true }))
+		await expect(toolTab(page, 'dependencies'))
 			.toHaveAttribute('aria-selected', 'true')
 		await next.click()
 
 		// 4 one schema, three jobs
 		await expect(rail.getByText('The config of every rule is a Valibot schema used through Standard Schema.', { exact: false }))
 			.toBeVisible()
-		await rail.getByRole('button', { name: 'Open Author' })
+		await rail.getByRole('button', { name: 'Open Edit' })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Author', exact: true }))
+		await expect(workbenchTab(page, 'edit'))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('author-view-structure'))
 			.toHaveAttribute('aria-selected', 'true')
 		await next.click()
 
@@ -642,9 +639,9 @@ test.describe('tutorial', () => {
 		// 7 map the views, 8 hand back
 		await expect(rail.getByText('Dependencies (Relations, Graph)', { exact: false }))
 			.toBeVisible()
-		await rail.getByRole('button', { name: 'Runtime', exact: true })
+		await rail.getByRole('button', { name: 'Runtime tree', exact: true })
 			.click()
-		await expect(page.getByRole('tab', { name: 'Runtime', exact: true }))
+		await expect(toolTab(page, 'runtime'))
 			.toHaveAttribute('aria-selected', 'true')
 		await next.click()
 		await page.getByRole('button', { name: 'Finish', exact: true })

@@ -6,6 +6,7 @@ import { translateOnboardingMessage } from './onboarding-messages'
 import { translateQuoteRulesMessage } from './quote-rules-messages'
 import { translateRendererPacksMessage } from './renderer-packs-messages'
 import { translateTripBudgetMessage } from './trip-budget-messages'
+import { translateWorkbenchMessage } from './workbench-messages'
 
 /**
  * #43 audit of non-tutorial Lab-owned chrome. Keep semantic/source payloads out of this table: plugin
@@ -13,7 +14,6 @@ import { translateTripBudgetMessage } from './trip-budget-messages'
  * rendered verbatim by their owning inspectors/renderers.
  */
 const zhTWPresentationMessages: Readonly<Record<string, string>> = {
-	'Author workspace for the current Document: browse Core catalog metadata, edit Structure, or use expert JSON': '目前 Document 的編寫區：瀏覽 Core 的 catalog、編輯結構，或直接用 JSON 編輯',
 	'Matches committed Document': '與已提交 Document 相符',
 	'Source JSON compatibility': 'Source JSON 相容性',
 	'Compatible (Core)': '相容（Core）',
@@ -35,7 +35,6 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'Properties': 'Properties',
 	'Methods': 'Methods',
 	'Slots': 'Slots',
-	'Author views': '編寫檢視',
 	'Select an authored widget to see its editable scalar config fields.': '選取 authored widget 以查看可編輯的 scalar config 欄位。',
 	'No existing scalar config fields on this widget.': '這個 widget 沒有現有的 scalar config 欄位。',
 	'Not applied: {reason}': '未套用：{reason}',
@@ -497,6 +496,9 @@ export function translatePresentationMessage(locale: LabLocale, source: string):
 		const packs = translateRendererPacksMessage(locale, source)
 		if (packs !== undefined)
 			return packs
+		const workbench = translateWorkbenchMessage(locale, source)
+		if (workbench !== undefined)
+			return workbench
 		const explain = translateExplainMessage(locale, source)
 		if (explain !== undefined)
 			return explain

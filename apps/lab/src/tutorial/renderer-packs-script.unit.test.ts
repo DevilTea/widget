@@ -78,7 +78,7 @@ describe('rendererPacksTourScript shape', () => {
 		const actions: TutorialActions = {
 			setFocus: (widgetId, member) => focused.push([widgetId, member]),
 			activateTab: () => {},
-			openImplementation: () => {},
+			openTool: () => {},
 		}
 		for (const candidate of rendererPacksTourScript.steps) {
 			candidate.onEnter?.(actions)
@@ -189,7 +189,7 @@ describe('the whole script on a real Runtime', () => {
 		const actions: TutorialActions = {
 			setFocus: vi.fn(),
 			activateTab: vi.fn(),
-			openImplementation: vi.fn(),
+			openTool: vi.fn(),
 		}
 		const settle = (): void => {
 			engine.recheck(reader)

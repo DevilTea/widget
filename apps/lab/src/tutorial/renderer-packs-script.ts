@@ -58,7 +58,7 @@ export const rendererPacksTourScript: TutorialScript = {
 			links: [
 				{ id: 'see-value', label: 'See the State in Selected widget', run: (actions) => {
 					actions.setFocus('workspace-name', { type: 'state', name: 'value' })
-					actions.activateTab('widget')
+					actions.openTool('widget')
 				} },
 			],
 		},
@@ -71,7 +71,7 @@ export const rendererPacksTourScript: TutorialScript = {
 				reveal: 'The same text is in the Nuxt UI input. The chooser is a choice of the host, not widget State: the Runtime panel shows no pack, no Method can change it, and the Runtime was neither disposed nor created again. Switching unmounts one pack\'s renderers and mounts the other\'s over the same State. The Nuxt UI pack runs in a nested Vue app of its own, with its own Nuxt UI instance, so the page does not depend on the frame having one.',
 			}],
 			links: [
-				{ id: 'open-runtime', label: 'Open the Runtime tab', run: actions => actions.activateTab('runtime') },
+				{ id: 'open-runtime', label: 'Open the Runtime tree', run: actions => actions.openTool('runtime') },
 			],
 		},
 		{
@@ -82,12 +82,12 @@ export const rendererPacksTourScript: TutorialScript = {
 			stages: [{
 				prompt: 'Choose "Compact" density in the Appearance panel.',
 				isComplete: reader => reader.readState('appearance', 'density') === 'compact',
-				reveal: 'Every field became denser, in whichever pack is on screen. The fields did not look the Appearance up: each one names it in its own config (appearance) and declares a dependency with dep.widget(id), so its Property density follows the Appearance\'s State. Core has no nearest-ancestor or provider lookup, so there is no provider shadowing either: a field reads exactly the widget it names. The Dependencies tab lists those reads.',
+				reveal: 'Every field became denser, in whichever pack is on screen. The fields did not look the Appearance up: each one names it in its own config (appearance) and declares a dependency with dep.widget(id), so its Property density follows the Appearance\'s State. Core has no nearest-ancestor or provider lookup, so there is no provider shadowing either: a field reads exactly the widget it names. Dependencies, in Tools, lists those reads.',
 			}],
 			links: [
-				{ id: 'see-dependencies', label: 'Open the Dependencies tab', run: (actions) => {
+				{ id: 'see-dependencies', label: 'Open Dependencies', run: (actions) => {
 					actions.setFocus('workspace-name', { type: 'property', name: 'density' })
-					actions.activateTab('dependencies')
+					actions.openTool('dependencies')
 				} },
 			],
 		},
@@ -119,18 +119,18 @@ export const rendererPacksTourScript: TutorialScript = {
 			target: 'packs-notifier',
 			onEnter: actions => actions.setFocus('archive-workspace', { type: 'method', name: 'confirm' }),
 			stages: [{
-				prompt: 'Press "Confirm" in the dialog, and keep the Events tab open.',
+				prompt: 'Press "Confirm" in the dialog, and keep the Events log open.',
 				isComplete: (reader) => {
 					const items = reader.readState('notifier', 'items')
 					return Array.isArray(items) && items.length >= 1
 				},
-				reveal: 'confirm did three things: it invoked the Notifier\'s Method notify through a dependency on the widget its config names (notifier), it closed the question, and it emitted confirmed. The Notifier wrote State and emitted notified. The Events tab lists both Events with their payloads, and Relations marks confirm as W and E. The page announces the new warning as its one alert; a notification of any other tone would be its one status.',
+				reveal: 'confirm did three things: it invoked the Notifier\'s Method notify through a dependency on the widget its config names (notifier), it closed the question, and it emitted confirmed. The Notifier wrote State and emitted notified. The Events log lists both Events with their payloads, and Relations marks confirm as W and E. The page announces the new warning as its one alert; a notification of any other tone would be its one status.',
 			}],
 			links: [
-				{ id: 'open-events', label: 'Open the Events tab', run: actions => actions.activateTab('events') },
-				{ id: 'see-relations', label: 'Open the Dependencies tab', run: (actions) => {
+				{ id: 'open-events', label: 'Open the Events log', run: actions => actions.openTool('events') },
+				{ id: 'see-relations', label: 'Open Dependencies', run: (actions) => {
 					actions.setFocus('archive-workspace', { type: 'method', name: 'confirm' })
-					actions.activateTab('dependencies')
+					actions.openTool('dependencies')
 				} },
 			],
 		},
@@ -149,14 +149,14 @@ export const rendererPacksTourScript: TutorialScript = {
 			target: null,
 			stages: [{
 				prompt: 'Each of these views is a real navigation shortcut — try one.',
-				reveal: 'Blueprint = the settings document and its diagnostics · Selected widget = a widget\'s State, Properties and Methods · Runtime = every widget\'s State and Properties, and no renderer pack: that is the host\'s · Dependencies = the reads and Method calls between widgets, which are the named providers · Implementation = the plugin and both renderers of a widget type, side by side.',
+				reveal: 'Tools, beside the Preview: Blueprint tree = the settings document and its diagnostics · Selected widget = a widget\'s State, Properties and Methods · Runtime tree = every widget\'s State and Properties, and no renderer pack: that is the host\'s · Dependencies = the reads and Method calls between widgets, which are the named providers · Implementation = the plugin and both renderers of a widget type, side by side.',
 			}],
 			links: [
-				{ id: 'view-blueprint', label: 'Blueprint', run: actions => actions.activateTab('blueprint') },
-				{ id: 'view-widget-tab', label: 'Selected widget', run: actions => actions.activateTab('widget') },
-				{ id: 'view-runtime', label: 'Runtime', run: actions => actions.activateTab('runtime') },
-				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.activateTab('dependencies') },
-				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openImplementation() },
+				{ id: 'view-blueprint', label: 'Blueprint tree', run: actions => actions.openTool('blueprint') },
+				{ id: 'view-widget-tab', label: 'Selected widget', run: actions => actions.openTool('widget') },
+				{ id: 'view-runtime', label: 'Runtime tree', run: actions => actions.openTool('runtime') },
+				{ id: 'view-dependencies', label: 'Dependencies', run: actions => actions.openTool('dependencies') },
+				{ id: 'view-implementation', label: 'Implementation', run: actions => actions.openTool('implementation') },
 			],
 		},
 		{

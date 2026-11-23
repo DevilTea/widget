@@ -907,10 +907,10 @@ describe('createLabStore() header and feedback state', () => {
 		store.dispose()
 	})
 
-	it('opens Author on the Structure view by default, for a fresh store and after a showcase switch (Lab UX phase 1)', async () => {
+	it('opens Edit on the Structure view by default, for a fresh store and after a showcase switch (Lab UX phase 1)', async () => {
 		const store = createSandboxStore()
 		expect(store.activeTab.value)
-			.toBe('author')
+			.toBe('edit')
 		expect(store.authorView.value)
 			.toBe('structure')
 		// A view the user chose stays when the showcase changes: only the first load picks the default.
@@ -921,22 +921,46 @@ describe('createLabStore() header and feedback state', () => {
 		store.dispose()
 	})
 
-	it('showProblems() activates Author, stays in the open view (Structure from the Catalog) and flags the problems for focus', () => {
+	it('showProblems() activates Edit, stays in the open view and flags the problems for focus', () => {
 		const store = createSandboxStore()
-		for (const [from, to] of [['catalog', 'structure'], ['structure', 'structure'], ['json', 'json']] as const) {
-			store.activeTab.value = 'runtime'
+		for (const [from, to] of [['structure', 'structure'], ['json', 'json']] as const) {
+			store.activeTab.value = 'tools'
 			store.authorView.value = from
 			store.problemsFocusPending.value = false
 
 			store.showProblems()
 
 			expect(store.activeTab.value)
-				.toBe('author')
+				.toBe('edit')
 			expect(store.authorView.value, `from ${from}`)
 				.toBe(to)
 			expect(store.problemsFocusPending.value)
 				.toBe(true)
 		}
+		store.dispose()
+	})
+})
+
+describe('createLabStore() expert views (Lab UX phase 3B)', () => {
+	it('openTool() makes every call a new request, so asking again for an open view focuses it again', () => {
+		const store = createSandboxStore()
+		expect(store.toolOpenRequest.value)
+			.toBeNull()
+		store.openTool('runtime')
+		const first = store.toolOpenRequest.value
+		expect(first?.tool)
+			.toBe('runtime')
+		store.openTool('runtime')
+		expect(store.toolOpenRequest.value?.tool)
+			.toBe('runtime')
+		expect(store.toolOpenRequest.value)
+			.not
+			.toBe(first)
+		expect(store.toolOpenRequest.value!.tick)
+			.toBeGreaterThan(first!.tick)
+		// Opening a view never switches the tool group's tab: what the user was reading on the left stays.
+		expect(store.activeTab.value)
+			.toBe('edit')
 		store.dispose()
 	})
 })

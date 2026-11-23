@@ -16,12 +16,12 @@
  * panel's own title is not forwarded separately, so it is read from `api.title`
  * (`DockviewPanelApi.title`) instead.
  *
- * The Events tab also carries a small count of Events recorded while it was not the visible tab (issue #230, audit
- * U09): drawn, not announced (a tab is not a live region, so nothing is read out per Event), with the same count as
+ * The Tools tab also carries a small count of Events recorded while the Events log was not visible (issue #230, audit U09;
+ * on the Tools tab since Lab UX phase 3B, which moved the log into the Tools group): drawn, not announced (a tab is not a live region, so nothing is read out per Event), with the same count as
  * text for assistive technology in the tab's name, and `data-recording` says whether the log is subscribed. Read without subscribing
- * to anything. While there is a count, the name comes from one visually hidden text ("Events, 1 new") and the drawn title
+ * to anything. While there is a count, the name comes from one visually hidden text ("Tools, 1 new") and the drawn title
  * and badge are hidden from assistive technology: a name built from the title plus a separate hidden span reads
- * "Events , 1 new" in Chromium, which puts a space before an absolutely positioned (`sr-only`) element.
+ * "Tools , 1 new" in Chromium, which puts a space before an absolutely positioned (`sr-only`) element.
  */
 import type { DockviewPanelApi } from 'dockview-vue'
 import { computed, inject, onBeforeUnmount, ref } from 'vue'
@@ -44,8 +44,8 @@ const titleChange = props.params.api.onDidTitleChange((event) => {
 onBeforeUnmount(() => titleChange.dispose())
 
 const i18n = inject(LabI18nKey, null)
-// Only the Events tab has a count, and only where the Lab store is provided (it is not in an isolated mount).
-const eventsTab = props.params.api.id === 'events' && inject(LabStoreKey, null) !== null ? useEventLogTabState() : null
+// Only the Tools tab has a count, and only where the Lab store is provided (it is not in an isolated mount).
+const eventsTab = props.params.api.id === 'tools' && inject(LabStoreKey, null) !== null ? useEventLogTabState() : null
 const unseen = eventsTab?.unseen ?? null
 const unseenText = computed(() => {
 	const count = unseen?.value ?? 0

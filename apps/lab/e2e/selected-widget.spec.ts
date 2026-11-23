@@ -1,27 +1,26 @@
 import type { Locator, Page } from '@playwright/test'
-import { expect, loadPreset, previewFrame, setLocale, test } from './fixtures'
+import { expect, loadPreset, openTool, previewFrame, setLocale, test, toolTab, workbenchTab } from './fixtures'
 
 /**
  * Issue #230 PR 3b (audit U10, U25): the Selected widget pane shows the Blueprint declaration and the Runtime
  * values of the inspected widget together; Runtime values expand instead of clipping, and what the Inspector
- * snapshot cut is marked as such; raw and resolved config are not printed twice.
+ * snapshot cut is marked as such; raw and resolved config are not printed twice. Since Lab UX phase 3B it is an expert view of the
+ * Tools menu, opened in the Tools group beside the Preview.
  */
 
 async function openLab(page: Page, query = 'showcase=survey'): Promise<void> {
 	await page.goto(`/?${query}`)
-	await expect(page.getByRole('tab', { name: 'Author', exact: true }))
+	await expect(workbenchTab(page, 'edit'))
 		.toBeVisible()
 }
 
 /** Selects a widget in the Blueprint tree and opens the Selected widget pane on it. */
 async function selectWidget(page: Page, label: RegExp): Promise<void> {
-	await page.getByRole('tab', { name: 'Blueprint', exact: true })
-		.click()
+	await openTool(page, 'blueprint')
 	await page.getByRole('button', { name: label })
 		.first()
 		.click()
-	await page.getByRole('tab', { name: 'Selected widget', exact: true })
-		.click()
+	await openTool(page, 'widget')
 }
 
 const declaration = (page: Page): Locator => page.getByTestId('selected-widget-declaration')
@@ -74,7 +73,8 @@ test.describe('selected widget pane', () => {
 			.boundingBox())!
 		await page.mouse.move(sash.x + 2, sash.y + 120)
 		await page.mouse.down()
-		await page.mouse.move(sash.x - 130, sash.y + 120, { steps: 6 })
+		// The view is in the Tools group, in the Preview's column (Lab UX phase 3B): moving the divider right narrows it.
+		await page.mouse.move(sash.x + 130, sash.y + 120, { steps: 6 })
 		await page.mouse.up()
 
 		const pane = page.getByTestId('selected-widget')
@@ -89,15 +89,18 @@ test.describe('selected widget pane', () => {
 			.toBe(true)
 	})
 
-	test('follows what Inspect selects in the Preview and opens itself', async ({ page }) => {
+	test('follows what Inspect selects in the Preview', async ({ page }) => {
 		await openLab(page)
+		await openTool(page, 'widget')
 		await page.getByRole('button', { name: 'Inspect', exact: true })
 			.click()
 		await previewFrame(page)
 			.getByText('Phone number', { exact: true })
 			.click()
 
-		await expect(page.getByRole('tab', { name: 'Selected widget', exact: true }))
+		// Lab UX phase 3B: a linked Inspect no longer opens this expert view (Explain is the newcomer's view of the widget), but the
+		// open view follows the selection.
+		await expect(toolTab(page, 'widget'))
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(declaration(page)
 			.getByRole('heading', { name: 'phone : ShortAnswer' }))
@@ -124,8 +127,7 @@ test.describe('selected widget pane', () => {
 	test('says why there are no Runtime values while the Preview shows an older version', async ({ page }) => {
 		await openLab(page)
 		await loadPreset(page, 'survey-ai-draft')
-		await page.getByRole('tab', { name: 'Selected widget', exact: true })
-			.click()
+		await openTool(page, 'widget')
 
 		await expect(page.getByTestId('selected-widget'))
 			.toHaveAttribute('data-runtime-state', 'diverged')
@@ -140,13 +142,7 @@ test.describe('selected widget pane', () => {
 	test('says an unresolved widget has no Runtime', async ({ page }) => {
 		await openLab(page)
 		await loadPreset(page, 'survey-ai-draft')
-		await page.getByRole('tab', { name: 'Blueprint', exact: true })
-			.click()
-		await page.getByRole('button', { name: /rating : StarRating/ })
-			.first()
-			.click()
-		await page.getByRole('tab', { name: 'Selected widget', exact: true })
-			.click()
+		await selectWidget(page, /rating : StarRating/)
 
 		await expect(page.getByTestId('selected-widget'))
 			.toHaveAttribute('data-runtime-state', 'unresolved')
@@ -271,13 +267,7 @@ test.describe('runtime values do not clip (U10)', () => {
 			.toBeVisible()
 
 		// `sessions` has an `options` Property too: it starts closed.
-		await page.getByRole('tab', { name: 'Blueprint', exact: true })
-			.click()
-		await page.getByRole('button', { name: /sessions : MultipleChoice/ })
-			.first()
-			.click()
-		await page.getByRole('tab', { name: 'Selected widget', exact: true })
-			.click()
+		await selectWidget(page, /sessions : MultipleChoice/)
 		await expect(declaration(page)
 			.getByRole('heading', { name: 'sessions : MultipleChoice' }))
 			.toBeVisible()
@@ -359,12 +349,11 @@ test.describe('config view (U25)', () => {
 
 	test('the Blueprint panel shows the same single config view', async ({ page }) => {
 		await openLab(page)
-		await page.getByRole('tab', { name: 'Blueprint', exact: true })
-			.click()
+		await openTool(page, 'blueprint')
 		await page.getByRole('button', { name: /open-day : Survey/ })
 			.first()
 			.click()
-		await expect(page.getByRole('tabpanel', { name: 'Blueprint' })
+		await expect(page.getByRole('tabpanel', { name: 'Blueprint tree' })
 			.getByTestId('config-view')
 			.locator('pre'))
 			.toHaveCount(1)
@@ -390,12 +379,8 @@ test.describe('zh-TW', () => {
 	})
 
 	async function selectWidgetZh(page: Page): Promise<void> {
-		await page.getByRole('tab', { name: 'Blueprint', exact: true })
-			.click()
-		await page.getByRole('button', { name: /mode : SingleChoice/ })
-			.first()
-			.click()
-		await page.getByRole('tab', { name: '選取的 widget', exact: true })
-			.click()
+		await selectWidget(page, /mode : SingleChoice/)
+		await expect(toolTab(page, 'widget'))
+			.toHaveAccessibleName('選取的 widget')
 	}
 })

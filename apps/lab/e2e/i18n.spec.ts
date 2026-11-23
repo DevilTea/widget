@@ -1,4 +1,4 @@
-import { chooseTutorialMenuItem, expect, openDeveloperTool, previewFrame, setLocale, setTheme, test } from './fixtures'
+import { chooseTutorialMenuItem, expect, openDeveloperTool, openTool, previewFrame, setLocale, setTheme, test, toolPanel } from './fixtures'
 
 const LOCALE_STORAGE_KEY = 'widget-lab:locale'
 const THEME_STORAGE_KEY = 'widget-lab:theme'
@@ -111,9 +111,10 @@ test.describe('lab localization (issue #43)', () => {
 			.getByText('count: 1 · doubled: 2', { exact: true }))
 			.toBeVisible()
 
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
-		await page.getByRole('button', { name: 'title : Text' })
+		await openTool(page, 'blueprint')
+		// Scoped to the Blueprint tree: the Edit tab beside it lists the same widgets in its Structure tree.
+		await toolPanel(page, 'blueprint')
+			.getByRole('button', { name: 'title : Text' })
 			.click()
 		await expect(page.getByTestId('blueprint-view-implementation'))
 			.toBeVisible()
@@ -127,8 +128,7 @@ test.describe('lab localization (issue #43)', () => {
 		await expect(previewFrame(page)
 			.getByText('count: 1 · doubled: 2', { exact: true }))
 			.toBeVisible()
-		await page.getByRole('tab', { name: 'Blueprint' })
-			.click()
+		await openTool(page, 'blueprint')
 		const blueprintImplementationButton = page.getByTestId('blueprint-view-implementation')
 		await expect(blueprintImplementationButton)
 			.toBeVisible()
